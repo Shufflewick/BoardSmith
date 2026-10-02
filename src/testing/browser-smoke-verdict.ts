@@ -58,6 +58,32 @@ function checkedSeeds(seeds: string[], from: string): string[] {
   return seeds;
 }
 
+/**
+ * The world seats a walk plays (#471), in order: `seats` in the spec, a count of the first seats the
+ * world gives (1, 2...) or a list naming them, so a spec can choose seats the world brings together.
+ * Undefined when the spec names none: the walk plays the one seat the world gives its page. Throws,
+ * saying what to write instead, on a count or seat that is not a whole number from 1, an empty list
+ * or a seat listed twice.
+ */
+export function smokeWorldSeats(seats: number | readonly number[] | undefined): number[] | undefined {
+  if (seats === undefined) return undefined;
+  const from = `\`seats\` in ${SMOKE_SPEC_PATH}`;
+  if (typeof seats === 'number') {
+    if (!Number.isInteger(seats) || seats < 1) {
+      throw new Error(
+        `${from} is ${seats}, which is not a number of seats. Give how many seats the walk plays, such as 2, or list them, such as [1, 4].`,
+      );
+    }
+    return Array.from({ length: seats }, (_, i) => i + 1);
+  }
+  if (seats.length === 0) throw new Error(`${from} is an empty list, so the walk would play no seat. List at least one, or leave \`seats\` out to play one.`);
+  const notASeat = seats.find((seat) => !Number.isInteger(seat) || seat < 1);
+  if (notASeat !== undefined) throw new Error(`${from} lists ${notASeat}, which is not a seat. Seats are numbered from 1.`);
+  const twice = seats.find((seat, i) => seats.indexOf(seat) !== i);
+  if (twice !== undefined) throw new Error(`${from} lists seat ${twice} twice. List each seat once.`);
+  return [...seats];
+}
+
 /** Where a walk stopped because no seat was offered anything for `seconds`. */
 interface SmokeStall {
   /** The step it stopped at, counted within its deal. */
@@ -77,13 +103,21 @@ export interface SmokeInputView {
    * player reads it: whitespace collapsed, blank ones left out.
    */
   texts(selector: string): Promise<string[]>;
+  /**
+   * The other seats the walk plays in a world (`seats`, #471), so an input can name a player standing
+   * with this one, as a friend playing alongside knows their name. Empty at a table, and in a world
+   * walked from one seat.
+   */
+  readonly otherSeats: readonly number[];
 }
 
 /**
  * The value the walk types in one text or number field (#470): the text or number itself, or a
  * function of what the page shows, for a value only known once the game is under way (the name of
  * a player standing in the same square). The function returns nothing when the page gives no value
- * yet; the walk then cancels the action and takes it again once the game has moved on.
+ * yet; the walk then cancels the action and takes it again once it gives one, or once the game has
+ * moved on. The walk may ask it before opening the action as well as when typing (#471), so it only
+ * reads the page.
  */
 export type SmokeInput =
   | string
@@ -143,6 +177,32 @@ function answerOf(text: string, kind: FieldKind, action: string, field: string):
 }
 
 /**
+ * Whether the action `name` is ready to take because the page gives a value now (#471): it has an
+ * input that reads the page, and every such input gives one, read as a number for a field the walk
+ * has met as a number field. What such an input reads, such as another player standing here, may be
+ * gone a few steps on, so the walk takes the action before anything else.
+ */
+export async function readyToTake(walk: SmokeWalk, name: string, view: SmokeInputView): Promise<boolean> {
+  if (!Object.hasOwn(walk.inputs, name)) return false;
+  const reads = Object.keys(walk.inputs[name]).filter((field) => typeof walk.inputs[name][field] === 'function');
+  if (reads.length === 0) return false;
+  const kinds = walk.fieldsMet.get(name);
+  const given = await Promise.all(reads.map((field) => inputFor(walk.inputs, name, field, kinds?.get(field) ?? 'text', view)));
+  return given.every((answer) => answer !== undefined && 'value' in answer);
+}
+
+/**
+ * Records the reasons the panel gave for the actions it showed greyed out (#472): each once, the one
+ * given most recently moved last, so a report quoting the latest few quotes the current ones.
+ */
+export function recordGreyed(walk: SmokeWalk, greyed: ReadonlyArray<readonly [string, string | undefined]>): void {
+  for (const [name, reason] of greyed) {
+    if (reason === undefined) continue;
+    walk.greyed.set(name, [...(walk.greyed.get(name) ?? []).filter((given) => given !== reason), reason]);
+  }
+}
+
+/**
  * Why the walk reports that taking `action` failed: what the game said, how many numbers it refused
  * when it refused each one the walk tried (`refused` before the last), and what the walk typed, so a
  * refused value from the spec's `inputs` is named as such and one the walk chose says how to give
@@ -195,14 +255,27 @@ export interface SmokeWalk {
    */
   readonly wanting: Map<string, string>;
   /**
-   * The fields the walk met in each action it opened, by pick name (#470), so an input naming a
-   * field none of them has (a misspelt pick name) is reported once the walk met any of the action's
-   * fields or took it.
+   * The fields the walk met in each action it opened, by pick name, with the kind of each (#470), so
+   * an input naming a field none of them has (a misspelt pick name) is reported once the walk met any
+   * of the action's fields or took it, and an input for a number field is read as a number before
+   * the action is opened (`readyToTake`).
    */
-  readonly fieldsMet: Map<string, Set<string>>;
+  readonly fieldsMet: Map<string, Map<string, FieldKind>>;
+  /**
+   * The reasons the panel gave for each action it showed greyed out (#472), each once, the one it
+   * gave most recently last (`recordGreyed`), so an action never seen ready to take is reported with
+   * them.
+   */
+  readonly greyed: Map<string, string[]>;
+  /** The world seats the walk played, when the spec named them (#471); none at a table. */
+  readonly seats: number[];
 }
 
 const quoted = (names: readonly string[]) => names.map((n) => `"${n}"`).join(', ');
+
+/** "1 and 4", or "2, 7 and 9". */
+const listed = (items: readonly (string | number)[]) =>
+  items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 
 /** Records a problem on the walk, once. */
 export function note(walk: SmokeWalk, problem: string): void {
@@ -242,10 +315,11 @@ const NUMBER_TRIES = 3;
  * and taken, and the deal remembers it; a failed one is reported and not tried again, unless the
  * game refused a number the walk chose and typed in it (`refusedANumber`). What the walk typed is
  * spent either way, so a later failure of the action is never taken for a refusal of a number it did
- * not type, and a failure is reported with it (`actionFailed`, #470). Either way the action no longer
- * waits on an input, and a taken one counts as the game moving on.
+ * not type, and a failure is reported with it (`actionFailed`, #470), after `where`, the browser it
+ * was taken in when a world walk plays several seats (#471). Either way the action no longer waits on
+ * an input, and a taken one counts as the game moving on.
  */
-export function recordResolved(resolved: readonly ResolvedAction[], walk: SmokeWalk, memory: ResolvedMemory): void {
+export function recordResolved(resolved: readonly ResolvedAction[], walk: SmokeWalk, memory: ResolvedMemory, where = ''): void {
   for (const { action, success, error } of resolved) {
     walk.offered.add(action);
     walk.enabled.add(action);
@@ -259,7 +333,7 @@ export function recordResolved(resolved: readonly ResolvedAction[], walk: SmokeW
       memory.lastResolved = action;
     } else if (!refusedANumber(action, error, typed, memory)) {
       memory.failed.add(action);
-      note(walk, actionFailed(action, error, typed, memory.refused.get(action) ?? 0));
+      note(walk, `${where}${actionFailed(action, error, typed, memory.refused.get(action) ?? 0)}`);
     }
   }
 }
@@ -287,29 +361,83 @@ function dealtFrom(seeds: readonly string[], then = 'then'): string {
   return seeds.length === 0 ? '' : `dealt from ${seeds.map((seed) => `seed "${seed}"`).join(`, ${then} from `)}`;
 }
 
+/** Whether a walk was dealt at a table: a world's is dealt by `boardsmith dev`, and names no seed. */
+const atATable = (walk: SmokeWalk) => walk.seeds.length > 0;
+
+/** The stall that ended a table walk (#473): a table game offering no seat anything while it is not over has hung. */
+const tableStall = (walk: SmokeWalk) => walk.stalls.find((stall) => stall.seed !== null);
+
+/** Why a table game that stalled fails the walk (#473), whether or not listed actions remain. */
+function stalled(stall: SmokeStall): string {
+  return (
+    `The game stalled at step ${stall.step} of the game dealt from seed "${stall.seed}": no seat was offered anything for ` +
+    `${stall.seconds}s, and the game was not over, so the players at that table could never finish it. Run \`boardsmith ` +
+    'smoke` to watch where the game stops offering actions: a step no seat can act in, or one waiting on something no player does.'
+  );
+}
+
+/**
+ * What to do about a listed action the walk could not take, after `opening` (which says why): more
+ * steps, a seed whose deal brings it about, at a table, a second seat in a world walked from one, or
+ * naming it in `unreachable`. `bringsIt` says what a deal does for it ("offers it").
+ */
+function whatToDo(walk: SmokeWalk, opening: string, gettingThere: string, bringsIt: string): string {
+  const chooseASeed = atATable(walk)
+    ? ` If the deal decides ${bringsIt === 'offers it' ? 'whether it is offered' : 'it'} (the cards a player is dealt, say), ` +
+      `choose a seed whose deal ${bringsIt}, and list it in \`seed\` there.`
+    : '';
+  const secondSeat =
+    !atATable(walk) && walk.seats.length < 2
+      ? ' If it needs another player there too, list the seats the walk plays in `seats` there, choosing seats the world brings together.'
+      : '';
+  return (
+    `${opening} If a fresh game takes longer to ${gettingThere}, raise \`steps\` in ${SMOKE_SPEC_PATH}.${chooseASeed}${secondSeat} ` +
+    `If no walk from a fresh game can reach it ${atATable(walk) ? 'whatever the deal ' : ''}(it needs a long game, or a position ` +
+    'play does not get to), name it in `unreachable` there with the reason.'
+  );
+}
+
+/** "in 12 steps from a fresh game dealt from seed "a"", or with no seed for a world. */
+function freshGames(walk: SmokeWalk): string {
+  return `in ${walk.steps} steps from a fresh game${atATable(walk) ? ` ${dealtFrom(walk.seeds, 'nor')}` : ''}`;
+}
+
 /** Why the walk never saw a listed action offered, and what to do about it. */
 function neverOffered(walk: SmokeWalk, name: string): string {
+  if (tableStall(walk) !== undefined) {
+    return `The walk never saw "${name}" offered: the game stalled first (above), so more \`steps\` would not help. Fix the stall, then run it again.`;
+  }
   const [stall] = walk.stalls;
   if (stall !== undefined) {
-    const where = stall.seed === null ? `step ${stall.step}` : `step ${stall.step} of the game dealt from seed "${stall.seed}"`;
     return (
-      `The walk never saw "${name}" offered. It stopped at ${where}, because no seat had been offered anything for ` +
+      `The walk never saw "${name}" offered. It stopped at step ${stall.step}, because no seat had been offered anything for ` +
       `${stall.seconds}s, so more \`steps\` would not help. Run \`boardsmith smoke\` to watch where the game stops offering ` +
       'actions: a step no seat can act in, or one waiting on something no player does. Fix that, then run it again.'
     );
   }
-  const deals = walk.seeds.length === 0 ? '' : ` ${dealtFrom(walk.seeds, 'nor')}`;
-  const chooseASeed =
-    walk.seeds.length === 0
-      ? ''
-      : ' If the deal decides whether it is offered (the cards a player is dealt, say), choose a seed whose deal offers it, ' +
-        'and list it in `seed` there.';
-  return (
-    `The walk never saw "${name}" offered in ${walk.steps} steps from a fresh game${deals}. If a fresh game takes ` +
-    `longer to reach it, raise \`steps\` in ${SMOKE_SPEC_PATH}.${chooseASeed} If no walk from a fresh game can reach it ` +
-    `${walk.seeds.length === 0 ? '' : 'whatever the deal '}(it needs a long game, or a position play does not get to), name ` +
-    'it in `unreachable` there with the reason. If the game no longer has it, remove it from `actions`.'
-  );
+  const advice = whatToDo(walk, `The walk never saw "${name}" offered ${freshGames(walk)}.`, 'reach it', 'offers it');
+  return `${advice} If the game no longer has it, remove it from \`actions\`.`;
+}
+
+/** How many of the reasons the panel gave for a greyed-out action a report quotes: the latest. */
+const GREYED_REASONS = 3;
+
+/**
+ * Why the walk never took a listed action the panel only ever showed greyed out (#472): the reasons
+ * the panel gave, and what to do about it.
+ */
+function onlyGreyed(walk: SmokeWalk, name: string): string {
+  const reasons = walk.greyed.get(name) ?? [];
+  const latest = reasons.slice(-GREYED_REASONS).map((reason) => `"${reason}"`);
+  const more = reasons.length > GREYED_REASONS ? ` (and ${reasons.length - GREYED_REASONS} more)` : '';
+  const said =
+    reasons.length === 0
+      ? 'The panel gave no reason.'
+      : reasons.length === 1
+        ? `The panel said why: ${latest[0]}`
+        : `The panel gave these reasons, the latest last: ${latest.join('; ')}${more}`;
+  const opening = `The panel offered "${name}" only greyed out ${freshGames(walk)}, so the walk could never take it. ${said}`;
+  return whatToDo(walk, opening, 'get past that', 'lets a player take it');
 }
 
 /** Whether the spec declares `name` out of reach and the walk never saw it enabled, so it is not required. */
@@ -354,7 +482,7 @@ function fieldInputProblem(walk: SmokeWalk, action: string, field: string, input
   if (met !== undefined && (met.size > 0 || walk.taken.has(action)) && !met.has(field)) {
     return (
       `${inputName(action, field)} in ${SMOKE_SPEC_PATH} names a field the walk never met in "${action}", whose fields it ` +
-      `met are ${met.size === 0 ? 'none' : quoted([...met].sort())}. Name the field by the pick name its rules give it.`
+      `met are ${met.size === 0 ? 'none' : quoted([...met.keys()].sort())}. Name the field by the pick name its rules give it.`
     );
   }
   if (typeof input === 'string' && input.trim() === '') {
@@ -388,9 +516,29 @@ function declarationProblems(walk: SmokeWalk): string[] {
   return problems;
 }
 
+/**
+ * Why the walk never took the required action `name`: it never saw it offered, saw it only greyed
+ * out (#472), cancelled it for want of an input (#470), or saw it ready and still did not take it.
+ */
+function whyNotTaken(walk: SmokeWalk, name: string): string {
+  if (!walk.offered.has(name)) return neverOffered(walk, name);
+  if (!walk.enabled.has(name)) return onlyGreyed(walk, name);
+  const field = walk.wanting.get(name);
+  if (field !== undefined) {
+    return (
+      `The panel offered "${name}", but the walk never took it in ${walk.steps} steps: when it last opened it, ` +
+      `${inputName(name, field)} in ${SMOKE_SPEC_PATH} gave no text for its field "${field}", so the walk cancelled it. ` +
+      'Make it return the text a player would type there whenever the game offers the action.'
+    );
+  }
+  return `The panel offered "${name}", but the walk never took it in ${walk.steps} steps. The errors above, if any, say why.`;
+}
+
 /** Everything that fails the walk, errors first. An empty list is a pass. */
 export function smokeProblems(walk: SmokeWalk): string[] {
   const problems = [...walk.errors, ...declarationProblems(walk), ...inputProblems(walk)];
+  const stall = tableStall(walk);
+  if (stall !== undefined) problems.push(stalled(stall));
   const unlisted = [...walk.offered].filter((name) => !walk.listed.includes(name)).sort();
   if (unlisted.length > 0) {
     problems.push(
@@ -398,18 +546,7 @@ export function smokeProblems(walk: SmokeWalk): string[] {
         `Add ${unlisted.length === 1 ? 'it' : 'them'} to \`actions\` there.`,
     );
   }
-  for (const name of requiredUntaken(walk)) {
-    const field = walk.wanting.get(name);
-    problems.push(
-      !walk.offered.has(name)
-        ? neverOffered(walk, name)
-        : field !== undefined
-          ? `The panel offered "${name}", but the walk never took it in ${walk.steps} steps: when it last opened it, ` +
-            `${inputName(name, field)} in ${SMOKE_SPEC_PATH} gave no text for its field "${field}", so the walk cancelled it. ` +
-            'Make it return the text a player would type there whenever the game offers the action.'
-          : `The panel offered "${name}", but the walk never took it in ${walk.steps} steps. The errors above, if any, say why.`,
-    );
-  }
+  for (const name of requiredUntaken(walk)) problems.push(whyNotTaken(walk, name));
   return problems;
 }
 
@@ -427,6 +564,8 @@ export function smokeFailure(walk: SmokeWalk, problems: readonly string[]): stri
 export interface SmokeRecord {
   /** The seeds the spec's deals were dealt from, in order; none in a world. */
   readonly seeds: string[];
+  /** The world seats the walk played, when the spec named them (#471); none at a table. */
+  readonly seats: number[];
   /** The actions taken, sorted. */
   readonly taken: string[];
   /** How many board controls were pressed. */
@@ -444,6 +583,7 @@ export function smokeRecord(walk: SmokeWalk, played: { controls: number; games: 
   const declared = Object.keys(walk.unreachable).sort();
   return {
     seeds: [...walk.seeds],
+    seats: [...walk.seats],
     taken: [...walk.taken].sort(),
     controls: played.controls,
     games: played.games,
@@ -473,7 +613,12 @@ export function smokeSummary(record: SmokeRecord): string {
         `reach: remove ${record.reachedAnyway.length === 1 ? 'it' : 'them'} from \`unreachable\` there, so the walk requires ` +
         `${record.reachedAnyway.length === 1 ? 'it' : 'them'}.`
       : '';
-  return `Served by \`boardsmith dev\` from a fresh start${dealt}, a seated player took ${took} and pressed ${pressed}, with no error${games}.${excused}${reached}`;
+  return `Served by \`boardsmith dev\` from a fresh start${dealt}, ${whoPlayed(record)} took ${took} and pressed ${pressed}, with no error${games}.${excused}${reached}`;
+}
+
+/** Who a passing walk played as: the world seats it played (#471), or one seated player. */
+function whoPlayed(record: SmokeRecord): string {
+  return record.seats.length > 1 ? `players at seats ${listed(record.seats)}` : 'a seated player';
 }
 
 /** How many presses one open action may take before the walk gives up on it (#463). */

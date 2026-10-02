@@ -207,6 +207,19 @@ describe('#167: the seat switcher', () => {
     wrapper.unmount();
   });
 
+  it('#471: names the seat it holds and each seat it offers by number, so a smoke walk can take a given seat', async () => {
+    const wrapper = await open();
+    socket!.deliver(stateFrame({ seat: 2 }));
+    await wrapper.vm.$nextTick();
+    const switcher = wrapper.find('[data-testid="world-seat-switcher"]');
+    expect(switcher.attributes('data-seat')).toBe('2');
+    await switcher.trigger('click');
+    expect(wrapper.findAll('[data-testid="world-take-seat"]').map((seat) => seat.attributes('data-seat'))).toEqual(['1', '2', '3', '4']);
+    await wrapper.find('[data-testid="world-take-seat"][data-seat="3"]').trigger('click');
+    expect(frames('attach')).toEqual([{ type: 'attach', seat: 3 }]);
+    wrapper.unmount();
+  });
+
   it('marks which seats somebody is looking through', async () => {
     const wrapper = await open();
     socket!.deliver(statusFrame({ presence: [2] }));

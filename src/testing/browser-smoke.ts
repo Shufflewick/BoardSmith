@@ -7,7 +7,9 @@
  *
  *   1. opens the dev host and takes a seat, at a table or in a world, as a player's browser does. At
  *      a table it then follows the active seat (the dev host's "Follow active seat"), so it acts
- *      for every seat in turn and reaches an action one seat has only after another acts;
+ *      for every seat in turn and reaches an action one seat has only after another acts. In a world
+ *      it plays the seats the spec's `seats` names, each in a browser of its own, a step each in
+ *      turn (#471), so an action that needs another player there can be taken;
  *   2. takes every action the action panel offers, following the panel's own offers so it keeps
  *      up with the game: it answers each choice the panel asks for, pressing the board's own
  *      candidate for a pick the board shows and typing the value the spec's `inputs` give a field
@@ -20,8 +22,10 @@
  *   4. starts a new game when a game ends with listed actions still to take, and stops taking an
  *      action again once taking it has ended every game it was taken in;
  *   5. fails on any uncaught error in the page, any console error, any failed request to the dev
- *      host, and any offered action that then fails, and on an action the game offers that the
- *      spec does not list, or one it lists that the walk never took.
+ *      host, and any offered action that then fails, on an action the game offers that the spec
+ *      does not list, or one it lists that the walk never took (with the panel's reason, for one it
+ *      only ever showed greyed out, #472), and on a table game that offers no seat anything while
+ *      it is not over (#473).
  *
  * A game with no actions yet lists none, and its walk still loads, seats a player and fails on
  * any error. Each chunk that adds an action adds its name to `actions`. One the deal decides (offered
@@ -33,7 +37,7 @@
  *
  * @module
  */
-import { test, type Frame, type Locator, type Page } from '@playwright/test';
+import { test, type Browser, type BrowserContext, type Frame, type Locator, type Page } from '@playwright/test';
 import {
   clickReached,
   guardClicks,
@@ -50,6 +54,8 @@ import {
   DEFAULT_SMOKE_SEED,
   inputFor,
   note,
+  readyToTake,
+  recordGreyed,
   recordResolved,
   requiredUntaken,
   SMOKE_ANNOTATION,
@@ -59,6 +65,7 @@ import {
   smokeProblems,
   smokeRecord,
   smokeSeeds,
+  smokeWorldSeats,
   startAnswering,
   walkStopped,
   type ResolvedAction,
@@ -93,7 +100,7 @@ export interface SmokeTestOptions {
    * walk does not require them unless it sees one enabled, which it then must take like any other;
    * it fails if one fails. One it takes anyway is reported, so the declaration can be removed. An action that ends the game, or
    * that needs another seat to act first, does not belong here: the walk starts a new game when a
-   * game ends, and acts for every seat at a table.
+   * game ends, acts for every seat at a table, and plays the {@link seats} a world's spec names.
    */
   readonly unreachable?: Readonly<Record<string, string>>;
   /** How many actions the walk takes at most on each deal. The default is {@link DEFAULT_SMOKE_STEPS}. */
@@ -105,10 +112,24 @@ export interface SmokeTestOptions {
    * least number in a number field. A value is the text or number itself, or a function of what the
    * page shows (`texts(selector)`), for a value known only once the game is under way, such as the
    * name of a player standing in the same square. A function that returns nothing has the walk
-   * cancel the action and take it again once the game has moved on; it is still required. The game
-   * refusing a value given here fails the walk, as any failed action does.
+   * cancel the action and take it again once it gives a value, or once the game has moved on; it is
+   * still required. The walk asks a function before opening its action too, to take it while the
+   * page shows its value (#471), so a function only reads the page. The game refusing a value given
+   * here fails the walk, as any failed action does.
    */
   readonly inputs?: SmokeInputs;
+  /**
+   * The seats the walk plays in a world (#471): how many (the first seats the world gives, 1, 2...),
+   * or which, by number. Each plays in a browser of its own, a step each in turn, so an action that
+   * needs another player there (one that names a player standing in the same place) can be taken.
+   * The first walks the world; each other takes what only it is offered first, and otherwise
+   * follows the first, taking the action it took last, so the seats stay together. Choose seats the
+   * world brings together, as a seed is chosen at a table: seats that arrive in the same place, say.
+   * An input can name the others (`otherSeats` in what it reads), and an action whose input reads a
+   * value off the page now is taken first, while what it reads is there. The default is the one
+   * seat the world gives the page. A table takes none: the walk already acts for every seat there.
+   */
+  readonly seats?: number | readonly number[];
 }
 
 /** How many actions a walk takes at most on each deal, unless the spec asks for more. */
@@ -134,11 +155,13 @@ const IDLE_STEPS = 5;
  * once, at the top level of `tests/browser/smoke.spec.ts`.
  */
 export function defineSmokeTest(options: SmokeTestOptions): void {
-  test('seat a player, take every offered action, press every board control', async ({ page }) => {
+  test('seat a player, take every offered action, press every board control', async ({ page, browser }) => {
     const chosen = process.env[SMOKE_SEEDS_ENV];
     const seeds = smokeSeeds(options.seed, chosen === undefined ? undefined : (JSON.parse(chosen) as string[]));
+    const seats = smokeWorldSeats(options.seats);
     const walk = newWalk(options);
     const memories: WalkMemory[] = [];
+    const browsers: BrowserContext[] = [];
     watchForErrors(page, walk);
     await recordResolvedActions(page);
     try {
@@ -146,20 +169,19 @@ export function defineSmokeTest(options: SmokeTestOptions): void {
       await takeASeat(page);
       await followTheActiveSeat(page);
       if (await canDeal(page)) {
-        for (const seed of seeds) {
-          walk.seeds.push(seed);
-          await dealFrom(page, seed);
-          memories.push(newMemory(seed));
-          await walkTheGame(page, walk, memories[memories.length - 1]);
-        }
+        if (seats !== undefined) note(walk, TABLE_TAKES_NO_SEATS);
+        await walkEveryDeal(page, seeds, walk, memories);
       } else {
         if (options.seed !== undefined || chosen !== undefined) note(walk, WORLD_TAKES_NO_SEED);
+        const plays = await seatTheWorld(page, browser, seats, walk, browsers);
         memories.push(newMemory(null));
-        await walkTheGame(page, walk, memories[0]);
+        await walkTheGame(plays, walk, memories[0]);
       }
     } catch (error) {
       // Reported after the errors the page showed first, which usually say why the walk stopped.
       note(walk, walkStopped(error, PRESS_MS / 1000));
+    } finally {
+      for (const opened of browsers) await opened.close();
     }
     const played = memories.reduce((sum, m) => ({ controls: sum.controls + m.controls, games: sum.games + m.games }), { controls: 0, games: 0 });
     const record = smokeRecord(walk, played);
@@ -168,6 +190,21 @@ export function defineSmokeTest(options: SmokeTestOptions): void {
     if (problems.length > 0) throw new Error(smokeFailure(walk, problems));
   });
 }
+
+/** Walks a table's game dealt from each of `seeds` in turn (#460), remembering each deal's walk in `memories`. */
+async function walkEveryDeal(page: Page, seeds: readonly string[], walk: SmokeWalk, memories: WalkMemory[]): Promise<void> {
+  for (const seed of seeds) {
+    walk.seeds.push(seed);
+    await dealFrom(page, seed);
+    memories.push(newMemory(seed));
+    await walkTheGame([newPlay(page, null)], walk, memories[memories.length - 1]);
+  }
+}
+
+/** Why a table's spec cannot name seats (#471). */
+const TABLE_TAKES_NO_SEATS =
+  `This game is played at a table, where the walk acts for every seat in turn, so \`seats\` in ${SMOKE_SPEC_PATH} has ` +
+  'nothing to choose. Remove `seats` there.';
 
 /** Why a world's spec cannot name a seed. */
 const WORLD_TAKES_NO_SEED =
@@ -188,6 +225,8 @@ function newWalk(options: SmokeTestOptions): SmokeWalk {
     inputs: { ...options.inputs },
     wanting: new Map(),
     fieldsMet: new Map(),
+    greyed: new Map(),
+    seats: [],
   };
 }
 
@@ -195,28 +234,41 @@ function newWalk(options: SmokeTestOptions): SmokeWalk {
 // What counts as an error
 // -------------------------------------------------------------------------------------------
 
+/**
+ * What each browser of a world walk of several seats is called in a problem found in it (#471): "In
+ * seat 4's browser: ", set when the seats are taken (`seatTheWorld`). A browser with none, the one
+ * browser of a table or of a world walked from one seat, reports its problems unnamed.
+ */
+const browserNames = new WeakMap<Page, string>();
+
+/** Records `problem`, found in `page`'s browser, on the walk once, after the name of that browser. */
+function noteIn(page: Page, walk: SmokeWalk, problem: string): void {
+  note(walk, `${browserNames.get(page) ?? ''}${problem}`);
+}
+
 /** Records every uncaught error, console error and failed request to the dev host, once each. */
 function watchForErrors(page: Page, walk: SmokeWalk): void {
   const devHost = (url: string) => {
     const base = page.url();
     return base.startsWith('http') && new URL(url).origin === new URL(base).origin;
   };
-  page.on('pageerror', (error) => note(walk, `An uncaught error in the page: ${error.message}`));
+  const noted = (problem: string) => noteIn(page, walk, problem);
+  page.on('pageerror', (error) => noted(`An uncaught error in the page: ${error.message}`));
   page.on('console', (message) => {
     if (message.type() !== 'error') return;
     const { url } = message.location();
-    note(walk, `A console error: ${message.text()}${url ? ` (from ${new URL(url).pathname})` : ''}`);
+    noted(`A console error: ${message.text()}${url ? ` (from ${new URL(url).pathname})` : ''}`);
   });
   page.on('response', (response) => {
     if (response.status() >= 400 && devHost(response.url())) {
-      note(walk, `${response.request().method()} ${new URL(response.url()).pathname} was answered ${response.status()}.`);
+      noted(`${response.request().method()} ${new URL(response.url()).pathname} was answered ${response.status()}.`);
     }
   });
   page.on('requestfailed', (request) => {
     const reason = request.failure()?.errorText ?? 'no reason given';
     // An aborted request is one the page itself stopped, by navigating on; nothing failed.
     if (reason !== 'net::ERR_ABORTED' && devHost(request.url())) {
-      note(walk, `${request.method()} ${new URL(request.url()).pathname} failed: ${reason}.`);
+      noted(`${request.method()} ${new URL(request.url()).pathname} failed: ${reason}.`);
     }
   });
 }
@@ -236,14 +288,14 @@ async function drainResolved(frame: Frame, walk: SmokeWalk, memory: WalkMemory):
     const log = (window as unknown as { __boardsmithSmokeResolved?: unknown[] }).__boardsmithSmokeResolved ?? [];
     return log.splice(0, log.length) as ResolvedAction[];
   });
-  recordResolved(resolved, walk, memory);
+  recordResolved(resolved, walk, memory, browserNames.get(frame.page()));
   return resolved.length;
 }
 
 /** Reports each error toast the game shows a player, once, except one repeating a refused number (#466). */
 async function noteErrorToasts(frame: Frame, walk: SmokeWalk, memory: WalkMemory): Promise<void> {
   for (const text of await frame.locator('.toast.error').allInnerTexts()) {
-    if (![...memory.refusals].some((refusal) => text.includes(refusal))) note(walk, `The game showed an error: ${text.trim()}`);
+    if (![...memory.refusals].some((refusal) => text.includes(refusal))) noteIn(frame.page(), walk, `The game showed an error: ${text.trim()}`);
   }
 }
 
@@ -334,12 +386,117 @@ async function dealFrom(page: Page, seed: string): Promise<void> {
   await tableSetup(page).click({ timeout: PRESS_MS });
 }
 
+/**
+ * One browser the walk plays in, what its panel last offered, and what the last step in it did. At
+ * a table there is one, which follows the active seat; in a world, one for each seat the spec's
+ * `seats` names (#471): the first walks the world, and the others follow it (`companionStep`).
+ */
+interface SeatPlay {
+  readonly page: Page;
+  /** The world seat it plays, or null where the dev host chose it: at a table, and in a world walked from one seat. */
+  readonly seat: number | null;
+  /** The actions its panel offered ready to take when the walk last saw its buttons. */
+  offered: readonly string[];
+  /** The action it took last from the panel's buttons, and the step it took it at. */
+  took: { readonly name: string; readonly step: number } | undefined;
+  /** The step of the first seat's action this one last followed (`companionStep`). */
+  followed: number;
+  /** The panel's action groups the walk has opened in this browser, by label. */
+  readonly opened: Set<string>;
+  /** Whether the last step here found a modal dialog open (#461). */
+  inDialog: boolean;
+  /** The board control the last step here pressed, which opened a dialog the next step finds open. */
+  boardPress: string | undefined;
+  /** The dialog control the last step here pressed, which closed its dialog when the next step finds none. */
+  dialogPress: string | undefined;
+  /**
+   * The dialog the last step here pressed a control to close, and that control by name: one that did
+   * not close it leaves the next step finding the same dialog still open.
+   */
+  closing: { readonly dialog: string; readonly closer: string } | undefined;
+}
+
+function newPlay(page: Page, seat: number | null): SeatPlay {
+  return { page, seat, offered: [], took: undefined, followed: 0, opened: new Set(), inDialog: false, boardPress: undefined, dialogPress: undefined, closing: undefined };
+}
+
+/**
+ * The browsers a world walk plays in (#471): `page` alone, at the seat the world gave it, when the
+ * spec names no `seats`; else one for each seat it names, `page` taking the first and a browser of
+ * its own (`browsers`, closed when the walk ends) taking each other, as players in different places do.
+ */
+async function seatTheWorld(
+  page: Page,
+  browser: Browser,
+  seats: readonly number[] | undefined,
+  walk: SmokeWalk,
+  browsers: BrowserContext[],
+): Promise<SeatPlay[]> {
+  if (seats === undefined) return [newPlay(page, null)];
+  const plays: SeatPlay[] = [];
+  for (const [i, seat] of seats.entries()) {
+    console.log(`smoke: seat ${seat} joins the world in a browser of its own`);
+    let seated = page;
+    if (i === 0 && seats.length > 1) browserNames.set(page, `In seat ${seat}'s browser: `);
+    if (i > 0) {
+      const opened = await browser.newContext({ baseURL: test.info().project.use.baseURL, viewport: page.viewportSize() });
+      browsers.push(opened);
+      seated = await opened.newPage();
+      browserNames.set(seated, `In seat ${seat}'s browser: `);
+      watchForErrors(seated, walk);
+      await recordResolvedActions(seated);
+      await seated.goto('/');
+      await takeASeat(seated);
+    }
+    await takeWorldSeat(seated, seat);
+    plays.push(newPlay(seated, seat));
+    walk.seats.push(seat);
+  }
+  return plays;
+}
+
+/**
+ * Seats `page` at world seat `seat` with the dev host's seat switcher, as an author being two players
+ * does, unless the world already seated it there. Throws, naming the seats the world has, for one it
+ * has not.
+ */
+async function takeWorldSeat(page: Page, seat: number): Promise<void> {
+  const switcher = page.getByTestId('world-seat-switcher');
+  const holding = (held: number) => page.locator(`[data-testid="world-seat-switcher"][data-seat="${held}"]`);
+  await page.locator('[data-testid="world-seat-switcher"][data-seat]').waitFor({ timeout: TURN_WAIT_MS }).catch(() => {
+    throw new Error(`The dev host had not seated the page ${TURN_WAIT_MS / 1000}s after it opened. Run \`boardsmith dev\` and open it to see why.`);
+  });
+  if ((await holding(seat).count()) > 0) return;
+  await switcher.click({ timeout: PRESS_MS });
+  const offered = page.getByTestId('world-take-seat');
+  await offered.first().waitFor({ timeout: PRESS_MS });
+  const choice = page.locator(`[data-testid="world-take-seat"][data-seat="${seat}"]`);
+  if ((await choice.count()) === 0) {
+    throw new Error(`\`seats\` in ${SMOKE_SPEC_PATH} names seat ${seat}, but this world has seats 1 to ${await offered.count()}. Name seats it has.`);
+  }
+  await choice.click({ timeout: PRESS_MS });
+  await holding(seat).waitFor({ timeout: TURN_WAIT_MS }).catch(() => {
+    throw new Error(
+      `The dev host had not seated the page at seat ${seat} ${TURN_WAIT_MS / 1000}s after the walk chose it. ` +
+        'Run `boardsmith dev` and choose it in the seat switcher to see why.',
+    );
+  });
+}
+
 // -------------------------------------------------------------------------------------------
 // The walk
 // -------------------------------------------------------------------------------------------
 
-/** Waits until the panel has its offers, and the page has painted what the last press changed. */
+/**
+ * Waits until the panel has sent the action in flight, if any, and has its offers, and the page has
+ * painted what the last press changed. While an action is in flight the panel greys every button
+ * (`data-bs-submitting`), and a world's offers arrive after it in a frame of their own: read in
+ * between, the panel would seem to offer nothing (#474).
+ */
 async function settle(frame: Frame): Promise<void> {
+  await frame.locator('[data-bs-submitting]').waitFor({ state: 'detached', timeout: TURN_WAIT_MS }).catch(() => {
+    throw new Error(`The panel was still sending the last action after ${TURN_WAIT_MS / 1000}s.`);
+  });
   await frame.locator('[data-testid="bs-actions-pending"]').waitFor({ state: 'detached', timeout: TURN_WAIT_MS }).catch(() => {
     throw new Error(`The panel was still loading its actions after ${TURN_WAIT_MS / 1000}s.`);
   });
@@ -356,29 +513,58 @@ async function settle(frame: Frame): Promise<void> {
 /** What the page offers now: its action buttons, the open action, and the board's untried controls. */
 interface Offers {
   /** The actions the panel shows that may be taken now. */
-  enabled: string[];
+  readonly enabled: string[];
   /** The groups the panel shows, each a menu of more actions. */
-  groups: string[];
+  readonly groups: string[];
   /** Whether the panel is showing a group's menu, which has a way back. */
-  inGroup: boolean;
+  readonly inGroup: boolean;
   /** The action the panel has open, if any. */
-  open: string | null;
+  readonly open: string | null;
+  /** Whether the panel had settled when read: no action in flight, and its offers not on their way (#474). */
+  readonly settled: boolean;
 }
 
+/**
+ * What the panel offers now, recorded on the walk: every action it shows, those ready to take, and
+ * the reasons it gives for those greyed out (#472), unless an action in flight greys them all.
+ */
 async function readOffers(frame: Frame, walk: SmokeWalk): Promise<Offers> {
   const offers = await frame.evaluate(() => {
     const buttons = [...document.querySelectorAll<HTMLElement>('[data-bs-action]')];
+    const greyed = buttons.filter((b) => b.getAttribute('aria-disabled') === 'true');
     return {
       all: buttons.map((b) => b.dataset.bsAction ?? ''),
-      enabled: buttons.filter((b) => b.getAttribute('aria-disabled') !== 'true').map((b) => b.dataset.bsAction ?? ''),
+      enabled: buttons.filter((b) => !greyed.includes(b)).map((b) => b.dataset.bsAction ?? ''),
+      greyed: greyed.map((b) => [b.dataset.bsAction ?? '', b.dataset.bsDisabledReason] as const),
+      submitting: document.querySelector('[data-bs-submitting]') !== null,
+      pending: document.querySelector('[data-testid="bs-actions-pending"]') !== null,
       groups: [...document.querySelectorAll<HTMLElement>('[data-bs-action-group]')].map((g) => g.dataset.bsActionGroup ?? ''),
       inGroup: document.querySelector('[data-bs-menu-back]') !== null,
       open: document.querySelector<HTMLElement>('[data-bs-open-action]')?.dataset.bsOpenAction ?? null,
     };
   });
-  for (const name of [...offers.all, ...(offers.open ? [offers.open] : [])]) walk.offered.add(name);
-  for (const name of [...offers.enabled, ...(offers.open ? [offers.open] : [])]) walk.enabled.add(name);
-  return { enabled: offers.enabled, groups: offers.groups, inGroup: offers.inGroup, open: offers.open };
+  const open = offers.open === null ? [] : [offers.open];
+  for (const name of [...offers.all, ...open]) walk.offered.add(name);
+  for (const name of [...offers.enabled, ...open]) walk.enabled.add(name);
+  // An action in flight greys every button for itself, which is no reason of the action's own.
+  if (!offers.submitting) recordGreyed(walk, offers.greyed);
+  return { enabled: offers.enabled, groups: offers.groups, inGroup: offers.inGroup, open: offers.open, settled: !offers.submitting && !offers.pending };
+}
+
+/** How many times the walk settles a panel that was unsettled again by the time it was read. */
+const SETTLE_TRIES = 5;
+
+/**
+ * What the panel offers once it has settled (`settle`), read again when it was unsettled by the time
+ * it was read: in a world, any seat's command pushes every page a new state whose offers follow, at
+ * any moment (#474).
+ */
+async function settledOffers(frame: Frame, walk: SmokeWalk): Promise<Offers> {
+  for (let tries = 1; ; tries++) {
+    await settle(frame);
+    const offers = await readOffers(frame, walk);
+    if (offers.settled || tries >= SETTLE_TRIES) return offers;
+  }
 }
 
 /**
@@ -531,11 +717,11 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
       }
     }
   } catch (error) {
-    note(walk, control.frame.isDetached() ? replaced : `Pressing ${what} did not work: ${await whyNotPressed(control.target, error)}.`);
+    noteIn(control.frame.page(), walk, control.frame.isDetached() ? replaced : `Pressing ${what} did not work: ${await whyNotPressed(control.target, error)}.`);
     return false;
   } finally {
     // The marks went with the page that was replaced; the press is reported once, whichever read saw it go.
-    await unmark(control.frame).catch(() => note(walk, replaced));
+    await unmark(control.frame).catch(() => noteIn(control.frame.page(), walk, replaced));
   }
 }
 
@@ -757,7 +943,7 @@ async function pressThePanels(frame: Frame, selector: string, what: string, walk
     if (Date.now() - started > PRESS_MS) break;
     await frame.waitForTimeout(100);
   }
-  note(walk, `The panel showed its ${what}, and it was still gone ${PRESS_MS / 1000}s later, when the walk went to press it.`);
+  noteIn(frame.page(), walk, `The panel showed its ${what}, and it was still gone ${PRESS_MS / 1000}s later, when the walk went to press it.`);
   return false;
 }
 
@@ -771,6 +957,8 @@ interface Answering {
   readonly memory: WalkMemory;
   readonly name: string;
   readonly step: number;
+  /** The other world seats the walk plays (#471), which the spec's `inputs` may name. */
+  readonly otherSeats: readonly number[];
   readonly picked: Set<string>;
   /** The refused board candidates that name the same choice wherever they are pointed at (#468). */
   readonly refused: Set<string>;
@@ -890,13 +1078,17 @@ async function asItStandsNow(control: Control): Promise<Control> {
   return { ...control, label: now.label, key: now.key, enabled: now.enabled, target: visibleMatches(frame, selector, within).nth(control.index) };
 }
 
-/** What a spec's `inputs` function reads of the game's frame (#470): the visible text a player reads. */
-function inputView(frame: Frame): SmokeInputView {
+/**
+ * What a spec's `inputs` function reads of the game's frame (#470): the visible text a player reads,
+ * and the other world seats the walk plays (#471).
+ */
+function inputView(frame: Frame, otherSeats: readonly number[]): SmokeInputView {
   return {
     texts: async (selector) =>
       (await frame.locator(selector).filter({ visible: true }).allInnerTexts())
         .map((text) => text.replace(/\s+/g, ' ').trim())
         .filter((text) => text !== ''),
+    otherSeats,
   };
 }
 
@@ -928,13 +1120,13 @@ async function fillAnEmptyField(answering: Answering): Promise<void> {
  * stopped (`Answering.stop`), when the spec's input gives no value yet or fails.
  */
 async function valueToType(answering: Answering, field: Control): Promise<TypedValue | undefined> {
-  const { frame, walk, memory, name } = answering;
+  const { frame, walk, memory, name, otherSeats } = answering;
   const pick = await field.target.evaluate((input) => input.closest('[data-bs-pick]')?.getAttribute('data-bs-pick') ?? '', undefined, {
     timeout: PRESS_MS,
   });
-  walk.fieldsMet.get(name)?.add(pick);
   const kind = (await field.target.getAttribute('type', { timeout: PRESS_MS })) === 'number' ? 'number' : 'text';
-  const given = await inputFor(walk.inputs, name, pick, kind, inputView(frame));
+  walk.fieldsMet.get(name)?.set(pick, kind);
+  const given = await inputFor(walk.inputs, name, pick, kind, inputView(frame, otherSeats));
   if (given !== undefined) {
     if ('value' in given) return { field: pick, value: given.value, from: 'inputs', kind };
     answering.stop = 'wanting' in given ? { wanting: pick } : given;
@@ -966,7 +1158,7 @@ async function openActionState(frame: Frame): Promise<string> {
  * the rest of the game still gets its steps.
  */
 async function abandon(frame: Frame, walk: SmokeWalk, memory: WalkMemory, name: string, problem: string): Promise<void> {
-  note(walk, problem);
+  noteIn(frame.page(), walk, problem);
   memory.failed.add(name);
   // An action that closed by itself, or that has no way to back out of it, has no Cancel to press.
   const cancel = '.action-config .cancel-btn';
@@ -989,14 +1181,21 @@ async function putOff(frame: Frame, walk: SmokeWalk, memory: WalkMemory, name: s
 /**
  * Fills the open action one choice at a time until it resolves or closes, and gives up on it when
  * {@link answered} says to (#463): nothing to press, no change, a loop back to a state it showed, or
- * too many presses.
+ * too many presses. `otherSeats` are the other world seats the walk plays, for the spec's `inputs`.
  */
-async function finishOpenAction(frame: Frame, walk: SmokeWalk, memory: WalkMemory, name: string, step: number): Promise<void> {
-  const answering: Answering = { frame, walk, memory, name, step, picked: new Set(), refused: new Set() };
+async function finishOpenAction(
+  frame: Frame,
+  walk: SmokeWalk,
+  memory: WalkMemory,
+  name: string,
+  step: number,
+  otherSeats: readonly number[],
+): Promise<void> {
+  const answering: Answering = { frame, walk, memory, name, step, otherSeats, picked: new Set(), refused: new Set() };
   const where = `at step ${step}${memory.dealt === null ? '' : ` of the game dealt from seed "${memory.dealt}"`}`;
   const trail = startAnswering(name, where, await openActionState(frame));
   memory.typed.delete(name);
-  if (!walk.fieldsMet.has(name)) walk.fieldsMet.set(name, new Set());
+  if (!walk.fieldsMet.has(name)) walk.fieldsMet.set(name, new Map());
   while ((await readOffers(frame, walk)).open === name) {
     const answer = await answerWhenOffered(answering);
     if (answering.stop !== undefined) {
@@ -1043,12 +1242,22 @@ async function pressABoardControl(
   return landed;
 }
 
-/** Presses one board control the walk has not pressed yet. Returns false when every one was pressed. */
-async function pressAnUntriedControl(frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean> {
+/**
+ * Presses one board control the walk has not pressed yet, other than those `leftToTheLead` names.
+ * Returns false when every one was pressed.
+ */
+async function pressAnUntriedControl(
+  play: SeatPlay,
+  frame: Frame,
+  walk: SmokeWalk,
+  memory: WalkMemory,
+  step: number,
+  leftToTheLead: ReadonlySet<string>,
+): Promise<boolean> {
   for (const control of await boardControls(frame)) {
-    if (memory.pressed.has(control.key)) continue;
+    if (memory.pressed.has(control.key) || leftToTheLead.has(control.key)) continue;
     memory.pressed.add(control.key);
-    memory.boardPress = control.key;
+    play.boardPress = control.key;
     await pressABoardControl(control, `the board's "${nameOf(control)}"`, walk, memory, step);
     return true;
   }
@@ -1064,14 +1273,14 @@ const REOPENS = 2;
  * first does, shows the rest only to a player who opens it again. Returns false when no dialog has a
  * control left to reach, or what opened it is no longer on the board.
  */
-async function reopenADialog(frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean> {
+async function reopenADialog(play: SeatPlay, frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean> {
   for (const [key, opener] of memory.dialogControls) {
     const tries = memory.reopened.get(key) ?? 0;
     if (memory.pressed.has(`dialog:${key}`) || opener === undefined || tries >= REOPENS) continue;
     const control = (await boardControls(frame)).find((c) => c.key === opener);
     if (control === undefined) continue;
     memory.reopened.set(key, tries + 1);
-    memory.boardPress = control.key;
+    play.boardPress = control.key;
     await pressABoardControl(control, `the board's "${nameOf(control)}" again, to reach what is left in the dialog it opens`, walk, memory, step);
     return true;
   }
@@ -1085,7 +1294,7 @@ async function openDialog(frame: Frame): Promise<{ name: string; target: Locator
   return top === undefined ? undefined : { name: top.name, target: dialogs.nth(top.index) };
 }
 
-/** What the last step did to the dialog found open now, as the walk remembers it (`WalkMemory`). */
+/** What the last step did to the dialog found open now, as the walk remembers it (`SeatPlay`). */
 interface LastStep {
   /** The board control the last step pressed, which opened this dialog. */
   readonly opener: string | undefined;
@@ -1104,6 +1313,7 @@ interface LastStep {
  * walk: a player in it has no way back to the game. Returns whether the walk goes on.
  */
 async function answerTheDialog(
+  play: SeatPlay,
   frame: Frame,
   dialog: { name: string; target: Locator },
   last: LastStep,
@@ -1111,8 +1321,8 @@ async function answerTheDialog(
   memory: WalkMemory,
   step: number,
 ): Promise<boolean> {
-  const opening = !memory.inDialog;
-  memory.inDialog = true;
+  const opening = !play.inDialog;
+  play.inDialog = true;
   const controls = (await controlsOf(frame, BOARD_CONTROLS, dialog.target)).filter((c) => c.enabled);
   for (const control of controls) {
     if (!memory.dialogControls.has(control.key)) memory.dialogControls.set(control.key, opening ? last.opener : undefined);
@@ -1120,11 +1330,11 @@ async function answerTheDialog(
   const untried = controls.find((control) => !memory.pressed.has(`dialog:${control.key}`));
   if (untried !== undefined) {
     memory.pressed.add(`dialog:${untried.key}`);
-    memory.dialogPress = untried.key;
+    play.dialogPress = untried.key;
     await pressABoardControl(untried, `"${nameOf(untried)}" in the dialog "${dialog.name}"`, walk, memory, step);
     return true;
   }
-  return closeTheDialog(frame, dialog, controls, last, walk, memory, step);
+  return closeTheDialog(play, dialog, controls, last, walk, memory, step);
 }
 
 /**
@@ -1133,7 +1343,7 @@ async function answerTheDialog(
  * still open, which is reported; else with Escape. Returns whether the walk goes on.
  */
 async function closeTheDialog(
-  frame: Frame,
+  play: SeatPlay,
   dialog: { name: string; target: Locator },
   controls: readonly Control[],
   last: LastStep,
@@ -1143,21 +1353,22 @@ async function closeTheDialog(
 ): Promise<boolean> {
   const closer = last.didNotClose === undefined ? controls.find((control) => memory.closers.has(control.key)) : undefined;
   if (closer !== undefined) {
-    memory.dialogPress = closer.key;
+    play.dialogPress = closer.key;
     const said = `closing the dialog "${dialog.name}" with "${nameOf(closer)}"`;
     if (await pressABoardControl(closer, `"${nameOf(closer)}" to close the dialog "${dialog.name}"`, walk, memory, step, said)) {
-      memory.closing = { dialog: dialog.name, closer: nameOf(closer) };
+      play.closing = { dialog: dialog.name, closer: nameOf(closer) };
     }
     return true;
   }
   if (last.didNotClose !== undefined) {
-    note(
+    noteIn(
+      dialog.target.page(),
       walk,
       `The dialog "${dialog.name}" stayed open after the walk pressed "${last.didNotClose}" in it to close it, as that had closed ` +
         'a dialog before, so a player who presses it stays in the dialog.',
     );
   }
-  memory.dialogPress = undefined;
+  play.dialogPress = undefined;
   narrate(step, `closing the dialog "${dialog.name}" with Escape`);
   await dialog.target.press('Escape', { timeout: PRESS_MS }).catch(() => undefined);
   const closed = await dialog.target.waitFor({ state: 'hidden', timeout: PRESS_MS }).then(
@@ -1165,7 +1376,8 @@ async function closeTheDialog(
     () => false,
   );
   if (closed) return true;
-  note(
+  noteIn(
+    dialog.target.page(),
     walk,
     `The dialog "${dialog.name}" stayed open after the walk pressed everything in it and then Escape, so a player in it ` +
       'has no way back to the game.',
@@ -1199,19 +1411,37 @@ function puttingOff(name: string, memory: WalkMemory): boolean {
 }
 
 /**
- * An action not taken, failed or put off for want of an input (#470) yet, else a group of actions
- * not opened yet, else the way back out of a group, else the action taken least, preferring one
- * that has neither ended the game nor failed, nor been put off with no action taken since. So an
- * action put off is tried again in turn with the actions taken before, not after every move, and
- * however many are put off, the rest of the game keeps its steps. Undefined when the panel offers
- * nothing.
+ * The actions in `offered` not taken nor failed yet, whether or not they were put off for want of an
+ * input (#470), that are ready to take because the page gives their inputs a value now
+ * (`readyToTake`, #471). One taken already is not hurried again: once is what the walk requires. The
+ * spec's functions are asked here as well as when the walk types, so they only read the page.
  */
-function nextPress(offers: Offers, walk: SmokeWalk, memory: WalkMemory): NextPress {
+async function readyNow(offered: readonly string[], view: SmokeInputView, walk: SmokeWalk, memory: WalkMemory): Promise<Set<string>> {
+  const ready = new Set<string>();
+  for (const name of offered) {
+    if (memory.failed.has(name) || walk.taken.has(name)) continue;
+    if (await readyToTake(walk, name, view)) ready.add(name);
+  }
+  return ready;
+}
+
+/**
+ * An action whose input reads a value off the page now (`ready`, #471), else an action not taken,
+ * failed or put off for want of an input (#470) yet, else a group of actions this browser has not
+ * opened yet (`opened`), else the way back out of a group, else the action taken least, preferring
+ * one that has neither ended the game nor failed, nor been put off with no action taken since. So an
+ * action put off whose input still gives nothing is tried again in turn with the actions taken
+ * before, not after every move, and however many are put off, the rest of the game keeps its steps.
+ * Undefined when the panel offers nothing.
+ */
+function nextPress(offers: Offers, walk: SmokeWalk, memory: WalkMemory, ready: ReadonlySet<string>, opened: Set<string>): NextPress {
+  const now = offers.enabled.find((name) => ready.has(name));
+  if (now !== undefined) return { take: now };
   const untaken = offers.enabled.find((name) => !walk.taken.has(name) && !memory.failed.has(name) && !memory.putOff.has(name));
-  if (untaken) return { take: untaken };
-  const group = offers.groups.find((label) => !memory.opened.has(label));
+  if (untaken !== undefined) return { take: untaken };
+  const group = offers.groups.find((label) => !opened.has(label));
   if (group !== undefined) {
-    memory.opened.add(group);
+    opened.add(group);
     return { press: `[data-bs-action-group=${JSON.stringify(group)}]`, what: `group "${group}"` };
   }
   if (offers.inGroup) return { press: '[data-bs-menu-back]', what: 'way back' };
@@ -1221,16 +1451,17 @@ function nextPress(offers: Offers, walk: SmokeWalk, memory: WalkMemory): NextPre
   return least === undefined ? undefined : { take: least };
 }
 
-/** Waits for the panel to offer this seat something: its turn at a table, its offers in a world. */
-async function waitForATurn(frame: Frame): Promise<boolean> {
-  return frame
-    .locator('[data-bs-action]:not([aria-disabled="true"]), [data-bs-open-action], .game-over-card')
-    .first()
-    .waitFor({ timeout: TURN_WAIT_MS })
-    .then(
-      () => true,
-      () => false,
-    );
+/**
+ * Waits for the panel to offer a seat something, in any of `frames`: its turn at a table, its offers
+ * in a world. Returns whether one was offered something within {@link TURN_WAIT_MS}.
+ */
+async function waitForATurn(frames: readonly Frame[]): Promise<boolean> {
+  const offered = (frame: Frame) =>
+    frame.locator('[data-bs-action]:not([aria-disabled="true"]), [data-bs-open-action], .game-over-card').first().waitFor({ timeout: TURN_WAIT_MS });
+  return Promise.any(frames.map(offered)).then(
+    () => true,
+    () => false,
+  );
 }
 
 /**
@@ -1242,8 +1473,6 @@ interface WalkMemory extends ResolvedMemory {
   readonly pressed: Set<string>;
   /** How many board and dialog control presses landed. */
   controls: number;
-  /** The panel's action groups opened, by label. */
-  readonly opened: Set<string>;
   /** How many times each action was pressed. */
   readonly times: Map<string, number>;
   /** How many games ended right after each action resolved. */
@@ -1254,17 +1483,8 @@ interface WalkMemory extends ResolvedMemory {
   readonly seed: string | null;
   /** The seed the game being played was dealt from: `seed`, then `seed/2`, `seed/3`... for each new game. */
   dealt: string | null;
-  /** Whether the last step found a modal dialog open (#461). */
-  inDialog: boolean;
-  /** The board control the last step pressed, which opened a dialog the next step finds open. */
-  boardPress: string | undefined;
-  /** The dialog control the last step pressed, which closed its dialog when the next step finds none. */
-  dialogPress: string | undefined;
-  /**
-   * The dialog the last step pressed a control to close, and that control by name: one that did not
-   * close it leaves the next step finding the same dialog still open.
-   */
-  closing: { readonly dialog: string; readonly closer: string } | undefined;
+  /** Which of the walk's browsers (`SeatPlay`) the next step is tried in first: each takes a step in turn (#471). */
+  turn: number;
   /** Every control seen in a dialog, with the board control that opened the dialog it was seen in. */
   readonly dialogControls: Map<string, string | undefined>;
   /** The dialog controls that closed their dialog when pressed. */
@@ -1281,17 +1501,13 @@ function newMemory(seed: string | null): WalkMemory {
     dealt: seed,
     pressed: new Set(),
     controls: 0,
-    opened: new Set(),
     times: new Map(),
     resolved: new Map(),
     endings: new Map(),
     failed: new Set(),
     lastResolved: undefined,
     games: 1,
-    inDialog: false,
-    boardPress: undefined,
-    dialogPress: undefined,
-    closing: undefined,
+    turn: 0,
     dialogControls: new Map(),
     closers: new Set(),
     reopened: new Map(),
@@ -1303,28 +1519,96 @@ function newMemory(seed: string | null): WalkMemory {
   };
 }
 
+/** A browser whose panel offers nothing now: the walk tries the next, and waits for a turn once none has anything. */
+const IDLE = 'idle';
+
 /**
- * Presses what the panel offers next (see `nextPress`), after waiting for a turn when it offers
- * nothing. Returns false when it still offers nothing, which ends the walk.
+ * Presses what `play`'s panel offers next (see `nextPress`), reading the page through `view` for the
+ * actions whose input reads it. Returns {@link IDLE} when it offers nothing, else that the walk goes on.
  */
-async function pressWhatThePanelOffers(frame: Frame, walk: SmokeWalk, memory: WalkMemory, offers: Offers, step: number): Promise<boolean> {
-  const next = nextPress(offers, walk, memory);
-  if (next === undefined) {
-    narrate(step, 'nothing is offered; waiting for a turn');
-    if (await waitForATurn(frame)) return true;
-    narrate(step, `nothing was offered for ${TURN_WAIT_MS / 1000}s; the walk stops`);
-    walk.stalls.push({ step, seed: memory.dealt, seconds: TURN_WAIT_MS / 1000 });
-    return false;
-  }
+async function pressWhatThePanelOffers(
+  play: SeatPlay,
+  frame: Frame,
+  walk: SmokeWalk,
+  memory: WalkMemory,
+  offers: Offers,
+  step: number,
+  view: SmokeInputView,
+): Promise<true | typeof IDLE> {
+  const next = nextPress(offers, walk, memory, await readyNow(offers.enabled, view, walk, memory), play.opened);
+  if (next === undefined) return IDLE;
   if ('take' in next) {
-    memory.times.set(next.take, (memory.times.get(next.take) ?? 0) + 1);
-    narrate(step, `taking "${next.take}"`);
-    await pressThePanels(frame, `[data-bs-action=${JSON.stringify(next.take)}]`, `"${next.take}"`, walk, memory);
+    await takeAction(play, frame, next.take, walk, memory, step);
     return true;
   }
   narrate(step, `opening the panel's ${next.what}`);
   await pressThePanels(frame, next.press, next.what, walk, memory);
   return true;
+}
+
+/** Presses the panel's button for the action `name` in `play`'s browser, saying so (`said`, else "taking" it). */
+async function takeAction(
+  play: SeatPlay,
+  frame: Frame,
+  name: string,
+  walk: SmokeWalk,
+  memory: WalkMemory,
+  step: number,
+  said = `taking "${name}"`,
+): Promise<void> {
+  memory.times.set(name, (memory.times.get(name) ?? 0) + 1);
+  play.took = { name, step };
+  narrate(step, said);
+  await pressThePanels(frame, `[data-bs-action=${JSON.stringify(name)}]`, `"${name}"`, walk, memory);
+}
+
+/**
+ * What a world seat after the first does in its step once it has nothing open (#471). It may take
+ * only what the first seat's (`lead`) panel does not offer now (accepting what another seat offered
+ * it, or what the place it is in offers when the two have come apart), as read once that panel has
+ * settled (`settledOffers`), or as it last showed its buttons while it has an action open; one of
+ * those not taken yet comes first, and so does opening a group of its panel it has not opened, and
+ * leaving the one it is in, as the first seat does. Otherwise it follows the first seat: it takes the action that
+ * seat took last, when its own panel offers it, so the two go where the other goes and see what the
+ * other sees, as players travelling together do. Returns true when it followed, else what it may
+ * choose from.
+ */
+async function companionStep(
+  play: SeatPlay,
+  lead: SeatPlay,
+  frame: Frame,
+  offers: Offers,
+  walk: SmokeWalk,
+  memory: WalkMemory,
+  step: number,
+): Promise<true | Offers> {
+  const leading = await settledOffers(await gameFrame(lead.page), walk);
+  if (leading.open === null) lead.offered = leading.enabled;
+  const mine = offers.enabled.filter((name) => !lead.offered.includes(name));
+  const untaken = mine.some((name) => !walk.taken.has(name) && !memory.failed.has(name) && !memory.putOff.has(name));
+  // A group this browser has not opened may hold what only it is offered, and one open is left first.
+  const ownBusiness = untaken || offers.inGroup || offers.groups.some((label) => !play.opened.has(label));
+  const { took } = lead;
+  if (!ownBusiness && took !== undefined && took.step !== play.followed && offers.enabled.includes(took.name)) {
+    play.followed = took.step;
+    await takeAction(play, frame, took.name, walk, memory, step, `taking "${took.name}", as seat ${lead.seat} did`);
+    return true;
+  }
+  return { ...offers, enabled: mine };
+}
+
+/**
+ * Waits for a turn when no browser of the walk is offered anything. Returns false when none is for
+ * {@link TURN_WAIT_MS}, which ends the walk as a stall: at a table, a game that hangs (#473).
+ */
+async function waitOutAQuietWorld(plays: readonly SeatPlay[], walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean> {
+  // No seat acts while the walk waits, so none is announced.
+  acting.now = acting.said;
+  narrate(step, 'nothing is offered; waiting for a turn');
+  if (await waitForATurn(await Promise.all(plays.map((play) => gameFrame(play.page))))) return true;
+  narrate(step, `nothing was offered for ${TURN_WAIT_MS / 1000}s; the walk stops`);
+  walk.stalls.push({ step, seed: memory.dealt, seconds: TURN_WAIT_MS / 1000 });
+  return false;
 }
 
 /**
@@ -1353,50 +1637,99 @@ async function afterTheGame(page: Page, walk: SmokeWalk, memory: WalkMemory, ste
 }
 
 /**
- * Answers the modal dialog open now, if any (`answerTheDialog`), with what the last step did to it:
- * pressed the board control that opened it, or pressed a control to close it that did not. With no
- * dialog open, a dialog control the last step pressed closed its dialog, and is remembered as a
- * closer. Returns whether the walk goes on, or undefined when no dialog is open.
+ * Answers the modal dialog open now in `play`'s browser, if any (`answerTheDialog`), with what the
+ * last step there did to it: pressed the board control that opened it, or pressed a control to close
+ * it that did not. With no dialog open, a dialog control the last step pressed closed its dialog, and
+ * is remembered as a closer. Returns whether the walk goes on, or undefined when no dialog is open.
  */
-async function answerAnOpenDialog(frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean | undefined> {
-  const { boardPress, dialogPress, closing } = memory;
-  memory.boardPress = undefined;
-  memory.dialogPress = undefined;
-  memory.closing = undefined;
+async function answerAnOpenDialog(play: SeatPlay, frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean | undefined> {
+  const { boardPress, dialogPress, closing } = play;
+  play.boardPress = undefined;
+  play.dialogPress = undefined;
+  play.closing = undefined;
   const dialog = await openDialog(frame);
   if (dialog !== undefined) {
     const didNotClose = closing?.dialog === dialog.name ? closing.closer : undefined;
-    return answerTheDialog(frame, dialog, { opener: boardPress, didNotClose }, walk, memory, step);
+    return answerTheDialog(play, frame, dialog, { opener: boardPress, didNotClose }, walk, memory, step);
   }
-  if (memory.inDialog && dialogPress !== undefined) memory.closers.add(dialogPress);
-  memory.inDialog = false;
+  if (play.inDialog && dialogPress !== undefined) memory.closers.add(dialogPress);
+  play.inDialog = false;
   return undefined;
 }
 
 /**
- * One step of the walk: deal a new game after one that ended, press a control of an open modal
- * dialog (#461), press an untried board control, answer the open action, or press what the panel
- * offers. Game over is looked for first, and the game-over card's own controls are never the
- * board's (#462), so the walk cannot dismiss the end of a game it has not seen. A board control
- * comes before the open action because a player can press the board while a pick is open, and
- * because the walk acts for every seat at a table, where a game that opens each turn's action by
- * itself never has a moment with nothing open.
+ * One step in `play`'s browser: deal a new game after one that ended, press a control of an open
+ * modal dialog (#461), press an untried board control, answer the open action, or press what the
+ * panel offers; {@link IDLE} when it offers nothing. Game over is looked for first, and the game-over
+ * card's own controls are never the board's (#462), so the walk cannot dismiss the end of a game it
+ * has not seen. A board control comes before the open action because a player can press the board
+ * while a pick is open, and because the walk acts for every seat at a table, where a game that opens
+ * each turn's action by itself never has a moment with nothing open.
  */
-async function walkOneStep(page: Page, frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean> {
+async function stepIn(play: SeatPlay, plays: readonly SeatPlay[], walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean | typeof IDLE> {
+  // Looked up at every step: the dev host puts up a new frame when the game restarts.
+  const frame = await gameFrame(play.page);
+  await settle(frame);
+  acting.now = play.seat;
   await drainResolved(frame, walk, memory);
   await noteErrorToasts(frame, walk, memory);
-  if (await frame.locator('.game-over-card').isVisible()) return afterTheGame(page, walk, memory, step);
-  const inDialog = await answerAnOpenDialog(frame, walk, memory, step);
+  if (await frame.locator('.game-over-card').isVisible()) return afterTheGame(play.page, walk, memory, step);
+  const inDialog = await answerAnOpenDialog(play, frame, walk, memory, step);
   if (inDialog !== undefined) return inDialog;
-  const offers = await readOffers(frame, walk);
-  if (await reopenADialog(frame, walk, memory, step)) return true;
-  if (await pressAnUntriedControl(frame, walk, memory, step)) return true;
-  if (offers.open) {
+  const offers = await settledOffers(frame, walk);
+  if (offers.open === null) play.offered = offers.enabled;
+  if (await reopenADialog(play, frame, walk, memory, step)) return true;
+  if (await pressAnUntriedControl(play, frame, walk, memory, step, await leftToTheLead(play, plays))) return true;
+  return answerOrTake(play, plays, frame, offers, walk, memory, step);
+}
+
+/** The board controls a world seat after the first leaves to the first seat (#471): one may take it away. None for the first seat. */
+async function leftToTheLead(play: SeatPlay, plays: readonly SeatPlay[]): Promise<Set<string>> {
+  const [lead] = plays;
+  return play === lead ? new Set() : new Set((await boardControls(await gameFrame(lead.page))).map((control) => control.key));
+}
+
+/**
+ * The rest of a step in `play`'s browser (`stepIn`), once no dialog or board control called for it:
+ * answers the open action, or takes what the panel offers, as the first seat or as one following it
+ * (`companionStep`). Returns {@link IDLE} when it offers nothing, else that the walk goes on.
+ */
+async function answerOrTake(
+  play: SeatPlay,
+  plays: readonly SeatPlay[],
+  frame: Frame,
+  offers: Offers,
+  walk: SmokeWalk,
+  memory: WalkMemory,
+  step: number,
+): Promise<boolean | typeof IDLE> {
+  const [lead] = plays;
+  const otherSeats = plays.flatMap((other) => (other === play || other.seat === null ? [] : [other.seat]));
+  if (offers.open !== null) {
     narrate(step, `answering "${offers.open}"`);
-    await finishOpenAction(frame, walk, memory, offers.open, step);
+    await finishOpenAction(frame, walk, memory, offers.open, step, otherSeats);
     return true;
   }
-  return pressWhatThePanelOffers(frame, walk, memory, offers, step);
+  const choices = play === lead ? offers : await companionStep(play, lead, frame, offers, walk, memory, step);
+  if (choices === true) return true;
+  return pressWhatThePanelOffers(play, frame, walk, memory, choices, step, inputView(frame, otherSeats));
+}
+
+/**
+ * One step of the walk (`stepIn`), in the browser whose turn it is, or the next one that has
+ * something to do: each of a world's seats takes a step in turn (#471). With nothing offered in any,
+ * it waits for a turn (`waitOutAQuietWorld`). Returns whether the walk goes on.
+ */
+async function walkOneStep(plays: readonly SeatPlay[], walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean> {
+  for (let tried = 0; tried < plays.length; tried++) {
+    const at = (memory.turn + tried) % plays.length;
+    const went = await stepIn(plays[at], plays, walk, memory, step);
+    if (went !== IDLE) {
+      memory.turn = (at + 1) % plays.length;
+      return went;
+    }
+  }
+  return waitOutAQuietWorld(plays, walk, memory, step);
 }
 
 /**
@@ -1405,15 +1738,12 @@ async function walkOneStep(page: Page, frame: Frame, walk: SmokeWalk, memory: Wa
  * A step that cannot go on (a page that stops answering, #464) is reported with the step it was,
  * and ends the walk of this deal.
  */
-async function walkTheGame(page: Page, walk: SmokeWalk, memory: WalkMemory): Promise<void> {
+async function walkTheGame(plays: readonly SeatPlay[], walk: SmokeWalk, memory: WalkMemory): Promise<void> {
   let idle = 0;
   for (let step = 1; step <= walk.steps && idle < IDLE_STEPS; step++) {
     try {
-      // Looked up at every step: the dev host puts up a new frame when the game restarts.
-      const frame = await gameFrame(page);
-      await settle(frame);
       const seenBefore = walk.offered.size + memory.pressed.size;
-      if (!(await walkOneStep(page, frame, walk, memory, step))) break;
+      if (!(await walkOneStep(plays, walk, memory, step))) break;
       const nothingNew = walk.offered.size + memory.pressed.size === seenBefore;
       const allTaken =
         stillToTake(walk, memory).length === 0 && [...walk.offered].every((name) => walk.taken.has(name) || memory.failed.has(name));
@@ -1423,15 +1753,28 @@ async function walkTheGame(page: Page, walk: SmokeWalk, memory: WalkMemory): Pro
       return;
     }
   }
-  const frame = await gameFrame(page);
-  await settle(frame);
-  await drainResolved(frame, walk, memory);
-  await noteErrorToasts(frame, walk, memory);
+  for (const play of plays) {
+    const frame = await gameFrame(play.page);
+    await settle(frame);
+    await drainResolved(frame, walk, memory);
+    await noteErrorToasts(frame, walk, memory);
+  }
   // Errors the last press raised reach the page's listeners a moment after it; let them land.
-  await page.waitForTimeout(250);
+  await plays[0].page.waitForTimeout(250);
 }
+
+/**
+ * The world seat the walk acts as now, and the one it last said it acts as, so a world walk of
+ * several seats (#471) says so each time it moves to another; null for the one browser of a table
+ * or of a world walked from one seat, which never says it.
+ */
+const acting: { now: number | null; said: number | null } = { now: null, said: null };
 
 /** Says what the walk does at each step, for whoever watches `boardsmith smoke`. */
 function narrate(step: number, what: string): void {
+  if (acting.now !== acting.said) {
+    acting.said = acting.now;
+    console.log(`smoke step ${step}: acting as seat ${acting.now}`);
+  }
   console.log(`smoke step ${step}: ${what}`);
 }

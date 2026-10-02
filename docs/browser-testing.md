@@ -352,7 +352,10 @@ markers this page documents, so it keeps up with any game without knowing it:
   (`[data-testid="seat-switcher"]`, then `[data-testid="follow-active-seat"]`),
   so it acts for whichever seat is due and the bots stand down. That is how it
   reaches an action one seat has only after another acts, such as accepting a
-  draw the other seat offered (#458). A world's dev host has no seats to follow.
+  draw the other seat offered (#458). A world's dev host has no seats to follow:
+  in a world the walk plays the seats the spec's `seats` names, each in a browser
+  of its own, a step each in turn (#471); see
+  [Several seats in a world](#several-seats-in-a-world-seats).
 - At a table it then deals a game from a seed (#460): it opens Table setup
   (`[data-testid="table-setup-toggle"]`), types the seed into
   `[data-testid="deal-seed"]`, presses `[data-testid="deal"]`, and waits until
@@ -360,10 +363,19 @@ markers this page documents, so it keeps up with any game without knowing it:
   the dealt game's state has reached the game frame. Follow-mode carries over a
   new game, so no bot moves in it, and the same seed walked the same way is the
   same game. See [Choosing the deal](#choosing-the-deal-seed).
+- Each step first waits for the panel to send the action in flight, if any
+  (the panel root carries `data-bs-submitting` while every button is greyed for
+  it), and for its offers to arrive (`[data-testid="bs-actions-pending"]`), so a
+  world, whose offers come after its state in a frame of their own, is never
+  read as offering nothing in between, and no step is spent waiting for them
+  (#474). A panel found unsettled again by the time it is read (in a world,
+  another seat's command pushes every page a new state at any moment) is
+  settled and read again.
 - Each step it presses a board control it has not pressed, answers the open
   action (the panel marks it `data-bs-open-action="<name>"`), or takes the next
-  `[data-bs-action]` button, preferring one not taken yet and opening
-  `[data-bs-action-group]` menus to reach the actions inside them. A board
+  `[data-bs-action]` button, preferring one whose `inputs` read a value off the
+  page now (#471), then one not taken yet, and opening `[data-bs-action-group]`
+  menus to reach the actions inside them. A board
   control comes first because a player can press the board while a pick is
   open, and because a game that opens each turn's action by itself never has a
   moment with nothing open once the walk acts for every seat.
@@ -474,6 +486,16 @@ markers this page documents, so it keeps up with any game without knowing it:
   listed action it never saw offered is reported with why the walk stopped: a
   deal that stopped because nothing was offered says so and where, since more
   `steps` would not help it.
+- At a table, where the walk acts for every seat, no seat offered anything for
+  30 seconds while the game is not over is a game that hangs, and fails the
+  walk, naming the step and the deal, whether or not listed actions remain
+  (#473): the players at that table could never finish it. A world may rightly
+  offer nothing until its clock moves, so a quiet world only stops the walk.
+- A listed action the panel only ever showed greyed out is reported as such,
+  with the reason the panel gave for it (`data-bs-disabled-reason`), and what to
+  do: more `steps`, a `seed` whose deal lets a player take it, a second seat in
+  a world, or `unreachable` with the reason (#472). One it saw ready to take and
+  never took is reported as offered and not taken.
 - It prints each step as it goes (`smoke step 4: pressing "6S" for "play"`), so
   `boardsmith smoke` shows exactly what the walk did, and the same seeds print
   the same steps.
@@ -502,6 +524,72 @@ editing it, and `--seed smoke/3` walks again the third game a failing run dealt.
 
 A world is dealt by `boardsmith dev` from the one seed it gives that world, so a
 world's spec names no `seed`, and the check fails one that does.
+
+### Several seats in a world: `seats`
+
+In a world the walk plays one seat unless the spec says otherwise. An action
+that needs another player there (one that names a survivor standing in the same
+square, say) can never be taken by one seat alone: the panel greys it out, and
+the walk reports the reason it gives. `seats` says how many seats the walk
+plays, or which:
+
+```ts
+import { defineSmokeTest, type SmokeInputView } from 'boardsmith/testing/browser';
+
+// Another seat the walk plays, as the board's "Who else is here" list shows it.
+const anotherSeatHere = async ({ texts, otherSeats }: SmokeInputView) =>
+  (await texts('.nearby li')).find((name) => otherSeats.some((seat) => name === `p${seat}`));
+
+defineSmokeTest({
+  actions: ['enterWorld', 'look', 'move', 'shoutAtPlayer', 'healPlayer'],
+  seats: [12, 138],
+  inputs: {
+    shoutAtPlayer: { target: anotherSeatHere },
+    healPlayer: { target: anotherSeatHere },
+  },
+});
+```
+
+`seats: 2` plays the first two seats the world gives (1 and 2); a list names
+them. Each seat plays in a browser of its own, as two players in different
+places do: the first page takes the first seat, and each other seat opens a
+browser, is attached by the world, and takes its seat with the world dev host's
+seat switcher (`[data-testid="world-seat-switcher"]`, then
+`[data-testid="world-take-seat"][data-seat="<n>"]`). The seats take a step each
+in turn; one with nothing to do passes its step to the next, and the walk waits
+for a turn only when none has anything. When it moves to another seat it says
+so (`smoke step 5: acting as seat 138`). Every problem found in a seat's
+browser, the first seat's included (a page error, a console error, a failed
+request, an error toast, an action that failed, a press that did not land), is
+reported with the seat it happened in: `In seat 4's browser: ...`.
+
+The first seat walks the world as a walk of one seat does. Each other seat
+travels with it: it takes what only it is offered first (arriving, reading mail
+the first seat sent it, accepting what the first seat offered it), opening the
+panel's action groups it has not opened to find it, and otherwise follows, taking the action the first seat took last whenever its own
+panel offers it (`smoke step 8: taking "look", as seat 12 did`). So the seats go
+where the other goes and each sees what the other sees, the way players
+travelling together do, and an action that needs the other there has them
+there. A board control on the first seat's board is left to the first seat.
+
+The world decides where a seat arrives, so choose seats the world brings
+together, the way a seed is chosen at a table: seats that arrive in the same
+place. A world where everybody arrives in one place needs only `seats: 2`. In
+one where each seat arrives somewhere of its own (a spawn drawn from the seat
+number), find two seats that arrive together and list them. A seat the world
+does not have fails the walk, naming the seats it has.
+
+What the seats do together is found from the page, as a player finds it:
+`otherSeats` in what an input reads lists the other seats the walk plays, so an
+input can name a player standing with this one, and gives nothing while nobody
+is (the action is put off). An action whose input reads a value off the page
+now is taken before anything else, while what it reads is there: two seats
+that arrive together act on each other as soon as either sees the other. A value
+for a field the walk has met as a number field must be a number to count. Once
+an action has been taken it is not hurried again.
+
+A table takes no `seats`: the walk already acts for every seat there, and the
+check fails a table spec that names them.
 
 ### Actions no walk from a fresh game can reach: `unreachable`
 
@@ -571,7 +659,9 @@ defineSmokeTest({
 A value is the text or number itself, or a function of the page, for a value
 known only once the game is under way. The function is given `texts(selector)`,
 the visible text of each element the selector matches in the game's frame, as
-a player reads it, blank ones left out; it can read the page, not press it. At
+a player reads it, blank ones left out, and `otherSeats`, the other world seats
+the walk plays (`seats`; empty at a table and in a world walked from one seat);
+it can read the page, not press it. At
 a table the walk acts for every seat in turn, so "the other player's name" is
 whichever seat it is not acting for: the players panel marks the seat the page
 is in with `.you-badge`, so
@@ -588,8 +678,10 @@ The walk fails on everything it would fail on without them:
   typed and that a value the game needs goes in `inputs`.
 - A function that returns nothing (or blank text) says the page gives no value
   yet: the board shows nobody in the square, say. The walk cancels the action,
-  narrates that it did, and takes it again in turn with the actions it has
-  taken before, once another action has been taken.
+  narrates that it did, and takes it again as soon as the function gives a
+  value, else in turn with the actions it has taken before, once another action
+  has been taken. The walk asks a function before it opens the action as well
+  as when it types (#471), so a function only reads the page.
   The action stays required, so an input that never gives a value fails the
   walk, naming the input.
 - A function that throws fails the walk, naming the input. So does an input for

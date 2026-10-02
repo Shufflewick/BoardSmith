@@ -30,9 +30,13 @@ import {
   boardThatKeepsReordering,
   boardWithDialogs,
   candidateBoard,
+  ALONE_REASON,
   fieldsGame,
+  gladeSpec,
+  gladeWorld,
   greetingsGame,
   greetingsSpec,
+  kettleGame,
   NOBODY_CALLED_THAT,
   pointerAimedGame,
   PLAYERS_GET_THE_TABLE,
@@ -484,12 +488,12 @@ describe('boardsmith verify: the smoke check', () => {
 
   it(
     "#470: types the value a spec's `inputs` give a field, reading the page when the spec says how, and its own text in " +
-      'any other field; one the page gives no value for yet is cancelled and taken once the game has moved on',
+      'any other field; one the page gives no value for yet is cancelled and taken once the page gives one',
     async () => {
       const { outcome, steps } = await walkGreetings(`{
     greet: { whom: theOther },
-    // Nothing the first time it is asked, as a page that does not show the name yet gives none.
-    wave: { whom: async (view) => (++wavesAsked === 1 ? undefined : theOther(view)) },
+    // Nothing until the log shows a card drawn, as a page that does not show the name yet gives none.
+    wave: { whom: async (view) => ((await view.texts(LOG)).some((line) => line.endsWith('drew a card.')) ? theOther(view) : undefined) },
     pledge: { coins: 7 },
   }`);
 
@@ -572,6 +576,109 @@ describe('boardsmith verify: the smoke check', () => {
       expect(steps.filter((line) => /: entering "\d+" for "pledge"/.test(line))).toEqual([expect.stringMatching(/: entering "3" for "pledge", from `inputs`$/)]);
     },
   );
+
+  it('#473: fails a table game that hangs once every listed action was taken, naming the step and the deal it stalled at', async () => {
+    const { outcome } = await smokeOf(false, {
+      ...kettleGame(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'wait'], { wait: 'Greyed out until the kettle boils, and in this game it never does.' }),
+    });
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toMatch(
+      /^The smoke walk, dealt from seed "smoke", found a problem: - The game stalled at step \d+ of the game dealt from seed "smoke": no seat was offered anything for 30s, and the game was not over, so the players at that table could never finish it\./,
+    );
+  });
+
+  it(
+    '#472, #474: in a world walked from one seat, says why an action the panel only greyed out was never taken, and waits ' +
+      'out a slow command within its step rather than spending the next one waiting for a turn',
+    async () => {
+      const { outcome, steps } = await smokeOf(true, { ...gladeWorld(), 'tests/browser/smoke.spec.ts': gladeSpec({ steps: 8 }) });
+
+      expect(outcome.passed).toBe(false);
+      expect(outcome.summary).toMatch(
+        new RegExp(
+          '^The smoke walk found a problem: - The panel offered "greet" only greyed out in 8 steps from a fresh game, so the ' +
+            `walk could never take it\\. The panel gave these reasons, the latest last: "Arrive first\\."; "${ALONE_REASON}" ` +
+            '.*If it needs another player there too, list the ' +
+            'seats the walk plays in `seats` there',
+        ),
+      );
+      expect(steps.some((line) => line.endsWith('taking "rest"'))).toBe(true);
+      expect(steps.filter((line) => line.includes('waiting for a turn'))).toEqual([]);
+    },
+  );
+
+  it(
+    '#471: plays the seats a world spec names, each in a browser of its own, the second following the first, and takes ' +
+      'an action that needs another player there as soon as the page shows one, naming that player from `inputs`',
+    async () => {
+      const { outcome, steps } = await smokeOf(true, { ...gladeWorld(), 'tests/browser/smoke.spec.ts': gladeSpec({ seats: '[1, 4]', steps: 30 }) });
+
+      expect(outcome.summary).toMatch(
+        /^Served by `boardsmith dev` from a fresh start, players at seats 1 and 4 took "arrive", "greet", "look", "rest", "stroll"/,
+      );
+      expect(outcome.passed).toBe(true);
+      expect(steps).toContain('smoke: seat 4 joins the world in a browser of its own');
+      expect(steps.some((line) => /: acting as seat 4$/.test(line))).toBe(true);
+      // Seat 4 arrives, which only it is then offered, and follows seat 1 from there, so the two stroll on together.
+      expect(steps[steps.findIndex((line) => line.endsWith(': acting as seat 4')) + 1]).toMatch(/: taking "arrive"$/);
+      expect(steps.some((line) => line.endsWith(': taking "look", as seat 1 did'))).toBe(true);
+      expect(steps.some((line) => line.endsWith(': taking "stroll", as seat 1 did'))).toBe(true);
+      expect(steps.some((line) => /: entering "seat [14]" for "greet", from `inputs`$/.test(line))).toBe(true);
+      // "greet" was put off while neither had looked, and taken again as soon as a look showed the
+      // other seat there, before the walk strolled on.
+      const taking = steps.filter((line) => /: taking "[a-z]+"$/.test(line)).map((line) => line.replace(/^smoke step \d+: /, ''));
+      const looked = taking.indexOf('taking "look"');
+      expect(looked).toBeGreaterThan(taking.indexOf('taking "greet"'));
+      expect(taking.indexOf('taking "greet"', looked)).toBeLessThan(taking.indexOf('taking "stroll"'));
+      expect(steps.filter((line) => line.includes('waiting for a turn'))).toEqual([]);
+    },
+  );
+
+  it('#471: fails a walk whose second seat alone fails, naming that seat in every problem from its browser', async () => {
+    const { outcome } = await smokeOf(true, { ...gladeWorld({ stumbles: true }), 'tests/browser/smoke.spec.ts': gladeSpec({ seats: '[1, 4]', steps: 12 }) });
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toMatch(/- In seat 4's browser: The panel offered "arrive", and taking it failed: .*seat four tripped on a root/);
+    const fromABrowser = outcome.summary.match(/In seat \d+'s browser/g) ?? [];
+    expect(fromABrowser.length).toBeGreaterThan(0);
+    expect(new Set(fromABrowser)).toEqual(new Set(["In seat 4's browser"]));
+  });
+
+  it('#471: a seat after the first opens an action group to reach what only it is offered', async () => {
+    const { outcome, steps } = await smokeOf(true, {
+      ...gladeWorld({ manners: true }),
+      'tests/browser/smoke.spec.ts': gladeSpec({ seats: '[1, 4]', steps: 40, manners: true }),
+    });
+
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start, players at seats 1 and 4 took "arrive", "bow", "greet"/);
+    expect(outcome.passed).toBe(true);
+    const opening = steps.findIndex((line) => line.endsWith(`: opening the panel's group "Manners"`));
+    expect(opening).toBeGreaterThan(0);
+    expect(steps.slice(0, opening).reverse().find((line) => /: acting as seat \d+$/.test(line))).toMatch(/acting as seat 4$/);
+  });
+
+  it('#471: fails a world spec that names a seat the world does not have, saying which seats it has', async () => {
+    const { outcome } = await smokeOf(true, { ...gladeWorld(), 'tests/browser/smoke.spec.ts': gladeSpec({ seats: '[1, 9]', steps: 4 }) });
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toMatch(
+      /^The smoke walk found \d+ problems: - The walk could not go on: `seats` in tests\/browser\/smoke\.spec\.ts names seat 9, but this world has seats 1 to 8\. Name seats it has\. /,
+    );
+  });
+
+  it('#471: fails a table spec that names `seats`, since the walk acts for every seat at a table', async () => {
+    const { outcome } = await smokeOf(false, {
+      'tests/browser/smoke.spec.ts': "import { defineSmokeTest } from 'boardsmith/testing/browser';\n\ndefineSmokeTest({ actions: ['draw', 'play'], seats: 2 });\n",
+    });
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toBe(
+      'The smoke walk, dealt from seed "smoke", found a problem: - This game is played at a table, where the walk acts for ' +
+        'every seat in turn, so `seats` in tests/browser/smoke.spec.ts has nothing to choose. Remove `seats` there.',
+    );
+  });
 
   it('fails a spec that passes without walking the game', async () => {
     const { outcome } = await smokeOf(false, {

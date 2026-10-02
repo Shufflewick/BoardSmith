@@ -47,7 +47,7 @@
  *
  * 4. **The log is a tail, not a history.** See `messages`.
  */
-import { computed, type ComputedRef } from 'vue';
+import { computed, watch, type ComputedRef } from 'vue';
 import { deadEndPickMessage } from '../../engine/element/pick-candidates.js';
 import type { WorldSeatHost } from './useWorldHost.js';
 import type { WorldActionOffer } from './worldProtocol.js';
@@ -223,7 +223,7 @@ export function useWorldPlay(host: WorldSeatHost): WorldPlay {
     draftArgs: Record<string, unknown>,
     _player: number,
   ): Promise<ActionQuoteResult> {
-    const offer = offers.value.find((candidate) => candidate.name === actionName);
+    const offer = await offerOnScreen(actionName);
     if (offer === undefined) {
       return {
         success: false,
@@ -253,13 +253,36 @@ export function useWorldPlay(host: WorldSeatHost): WorldPlay {
     return { success: true, lines: answer.quote ?? null };
   }
 
+  /**
+   * THE OFFER FOR `actionName` ABOUT THE WORLD ON SCREEN (#475).
+   *
+   * Any commit -- another seat's command, the clock -- pushes a new state that
+   * blanks the offers until their own frame follows (#244). A player between two
+   * picks of one action is asking in that moment as often as not, and the empty
+   * set is not "this seat may do nothing": it is "not told yet". So the answer
+   * waits for the offers to arrive, and is read from them; it stops waiting only
+   * when the world stops answering this page at all.
+   */
+  async function offerOnScreen(actionName: string): Promise<WorldActionOffer | undefined> {
+    if (host.offersPending.value && host.phase.value === 'watching') {
+      await new Promise<void>((arrived) => {
+        const stop = watch([host.offersPending, host.phase], ([pending, phase]) => {
+          if (pending && phase === 'watching') return;
+          stop();
+          arrived();
+        });
+      });
+    }
+    return offers.value.find((candidate) => candidate.name === actionName);
+  }
+
   async function fetchPickChoices(
     actionName: string,
     selectionName: string,
     _player: number,
     currentArgs: Record<string, unknown> = {},
   ): Promise<PickChoicesResult> {
-    const offer = offers.value.find((candidate) => candidate.name === actionName);
+    const offer = await offerOnScreen(actionName);
     if (offer === undefined) {
       return {
         success: false,

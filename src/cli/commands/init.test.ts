@@ -373,6 +373,10 @@ describe('initCommand --world — a persistent world project (#168)', () => {
     expect(spec).toContain("import { defineSmokeTest } from 'boardsmith/testing/browser';");
     expect(spec).toContain("actions: ['tend'],");
     expect(spec).toMatch(/add an action here in[\s/]*the same change that adds it to the rules/);
+    // #471: an action that needs another player there is reached by playing seats the world brings together.
+    expect(spec).toMatch(/In a world the walk plays one seat/);
+    expect(spec).toContain('seats: [1, 4],');
+    expect(spec).toMatch(/`otherSeats`/);
   });
 
   it('writes no table half — a world has no turn order, flow or action table', async () => {
