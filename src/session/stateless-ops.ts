@@ -17,6 +17,7 @@ import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionStat
 import { validateTutorialDefinition, initialProgress, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
 import {
   GameRunner,
+  restoreEarlierSnapshot,
   type GameStateSnapshot,
   type CheckpointPolicy,
   type UndoPolicy,
@@ -103,7 +104,7 @@ export type Op =
    * restoreEarlier: go back to a WHOLE earlier snapshot of this game that the
    * host kept itself -- a demo stepping back one move. Run against the CURRENT
    * snapshot, and a restore in every sense a client sees
-   * (`GameRunner.fromEarlierSnapshot`): the restore epoch advances, so seats
+   * (`restoreEarlierSnapshot`): the restore epoch advances, so seats
    * drop stale element ids and reset their animation watermark. A host op: no
    * wire op maps to it.
    */
@@ -1126,7 +1127,7 @@ function handleRestoreEarlier(
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'restoreEarlier' }>,
 ): OpResult {
-  const runner = GameRunner.fromEarlierSnapshot(snapshot, op.snapshot as GameStateSnapshot, def.gameClass, {
+  const runner = restoreEarlierSnapshot(snapshot, op.snapshot as GameStateSnapshot, def.gameClass, {
     checkpoints: def.checkpoints,
     randomness: def.randomness,
     undo: def.undo,

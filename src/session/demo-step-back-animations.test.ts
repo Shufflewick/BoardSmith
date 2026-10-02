@@ -1,9 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { ref, nextTick } from 'vue';
-import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../engine/index.js';
 import type { AnimationEvent } from '../engine/index.js';
-import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
-import type { BotStrategy } from '../bot/types.js';
+import { executeOp } from './stateless-ops.js';
+import { botGameDef, botGameOptions } from './testing/fixtures/bot-game-fixture.js';
 import { SnapshotSessionHost } from './snapshot-session-host.js';
 import { createAnimationEvents, animationTimeline } from '../ui/composables/useAnimationEvents.js';
 
@@ -14,46 +13,8 @@ import { createAnimationEvents, animationTimeline } from '../ui/composables/useA
 // used to put the old snapshot and views back by hand, under the restore epoch
 // clients had already seen (#449 review).
 
-class AnimGame extends Game<AnimGame, Player> {
-  moves = 0;
-  constructor(options: GameOptions) {
-    super(options);
-    this.registerAction(
-      Action.create('move')
-        .chooseFrom('direction', { choices: ['left', 'right'] })
-        .execute((_args, ctx) => {
-          ctx.game.animate('moved', { n: ++(ctx.game as AnimGame).moves });
-          return { success: true };
-        }),
-    );
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 100,
-          do: actionStep({
-            actions: ['move'],
-            player: (ctx) => ctx.game.getPlayer(1)!,
-            repeatUntil: () => false,
-            turnScope: 'restart',
-          }),
-        }),
-      }),
-    );
-  }
-}
-
-// A demo is bot play, so the game needs a bot.
-const bot: BotStrategy = {
-  objectives: () => ({ moves: { checker: (game) => Math.min(1, (game as AnimGame).moves / 20), weight: 1 } }),
-};
-const def: GameDefinitionLike = {
-  gameClass: AnimGame,
-  gameType: 'anim-demo',
-  minPlayers: 2,
-  maxPlayers: 2,
-  bot,
-};
-const options = { playerCount: 2, seed: 'demo-back' };
+const def = botGameDef;
+const options = botGameOptions;
 
 type SeatState = { animationEvents?: AnimationEvent[]; gameInstanceId?: string; restoreEpoch?: number; isDemoRunning?: boolean };
 
@@ -81,6 +42,9 @@ describe('demo step back (#449 review)', () => {
     let moves = 0;
     const host = new SnapshotSessionHost({
       playerCount: 2,
+      // The demo plays every seat at the first bot seat's level; one search
+      // iteration is all a move needs here.
+      botSeats: [{ seat: 2, level: '1' }],
       executeOp: async (snap, pend, op) => {
         const res = await executeOp(def, options, snap, pend, op);
         if (op.type === 'action' && res.success) moves++;

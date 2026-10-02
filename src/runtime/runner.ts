@@ -1211,45 +1211,45 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       },
     );
   }
+}
 
-  /**
-   * Restore a WHOLE earlier snapshot of the game `live` is the current state
-   * of -- the second sanctioned restore, for a host that kept the earlier
-   * snapshot itself (a demo stepping back one move) rather than a checkpoint.
-   *
-   * It is a restore in every sense a client can see, exactly as
-   * {@link fromCheckpoint} is: the epoch advances past the live one, so every
-   * seat knows its element ids and animation watermark are stale, and the
-   * animation-event id sequence never moves below where `live` was. Loading
-   * `earlier` with `fromSnapshot` instead would hand clients an older position
-   * under an epoch they have already seen, and the next move's animations
-   * would reuse ids they already played.
-   *
-   * Throws when `earlier` is from another game: that is not a restore.
-   */
-  static fromEarlierSnapshot<G extends Game>(
-    live: GameStateSnapshot,
-    earlier: GameStateSnapshot,
-    GameClass: new (options: GameOptions) => G,
-    options?: { checkpoints?: CheckpointPolicy; randomness?: RandomnessPolicy; undo?: UndoPolicy }
-  ): GameRunner<G> {
-    if (earlier.gameInstanceId !== live.gameInstanceId) {
-      throw new Error(
-        'Cannot restore that snapshot here: it is from a different game than the one being played. ' +
-        'A restore only goes back in the same game; start a new game from it instead.',
-      );
-    }
-    return GameRunner.fromSnapshot(
-      { ...earlier, restoreEpoch: (live.restoreEpoch ?? 0) + 1 },
-      GameClass,
-      {
-        animationSeqFloor: (live.state as { animationEventSeq?: number }).animationEventSeq ?? 0,
-        checkpoints: options?.checkpoints,
-        randomness: options?.randomness,
-        undo: options?.undo,
-      },
+/**
+ * Restore a WHOLE earlier snapshot of the game `live` is the current state
+ * of -- the second sanctioned restore, for a host that kept the earlier
+ * snapshot itself (a demo stepping back one move) rather than a checkpoint.
+ *
+ * It is a restore in every sense a client can see, exactly as
+ * {@link GameRunner.fromCheckpoint} is: the epoch advances past the live one, so every
+ * seat knows its element ids and animation watermark are stale, and the
+ * animation-event id sequence never moves below where `live` was. Loading
+ * `earlier` with `fromSnapshot` instead would hand clients an older position
+ * under an epoch they have already seen, and the next move's animations
+ * would reuse ids they already played.
+ *
+ * Throws when `earlier` is from another game: that is not a restore.
+ */
+export function restoreEarlierSnapshot<G extends Game>(
+  live: GameStateSnapshot,
+  earlier: GameStateSnapshot,
+  GameClass: new (options: GameOptions) => G,
+  options?: { checkpoints?: CheckpointPolicy; randomness?: RandomnessPolicy; undo?: UndoPolicy }
+): GameRunner<G> {
+  if (earlier.gameInstanceId !== live.gameInstanceId) {
+    throw new Error(
+      'Cannot restore that snapshot here: it is from a different game than the one being played. ' +
+      'A restore only goes back in the same game; start a new game from it instead.',
     );
   }
+  return GameRunner.fromSnapshot(
+    { ...earlier, restoreEpoch: (live.restoreEpoch ?? 0) + 1 },
+    GameClass,
+    {
+      animationSeqFloor: (live.state as { animationEventSeq?: number }).animationEventSeq ?? 0,
+      checkpoints: options?.checkpoints,
+      randomness: options?.randomness,
+      undo: options?.undo,
+    },
+  );
 }
 
 /**
