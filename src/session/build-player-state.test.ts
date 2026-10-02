@@ -612,21 +612,12 @@ describe('buildPlayerState - hasTutorial field', () => {
     expect(buildPlayerState(runner, ['Alice', 'Bob'], 0).hasTutorial).toBe(true);
   });
 
-  it('actionCount is present for every seat, including spectator (position 0), unlike turnStartActionIndex', () => {
-    // Seat 1 (active player) -- both fields present
-    const active = buildPlayerState(runner, ['Alice', 'Bob'], 1);
-    expect(active.actionCount).toBe(runner.actionHistory.length);
-    expect(active.turnStartActionIndex).toBeDefined();
-
-    // Seat 2 (non-active player) -- actionCount present, turnStartActionIndex is NOT
-    const nonActive = buildPlayerState(runner, ['Alice', 'Bob'], 2);
-    expect(nonActive.actionCount).toBe(runner.actionHistory.length);
-    expect(nonActive.turnStartActionIndex).toBeUndefined();
-
-    // Position 0 (spectator) -- actionCount present, turnStartActionIndex is NOT
-    const spectator = buildPlayerState(runner, ['Alice', 'Bob'], 0);
-    expect(spectator.actionCount).toBe(runner.actionHistory.length);
-    expect(spectator.turnStartActionIndex).toBeUndefined();
+  it('sends no seat or spectator a global action count or history index (#449)', () => {
+    for (const position of [1, 2, 0]) {
+      const state = buildPlayerState(runner, ['Alice', 'Bob'], position) as unknown as Record<string, unknown>;
+      expect(state).not.toHaveProperty('actionCount');
+      expect(state).not.toHaveProperty('turnStartActionIndex');
+    }
   });
 });
 
