@@ -1,7 +1,7 @@
 {
-  "revision": 118,
+  "revision": 119,
   "bundleProtocol": 2,
-  "surfaceHash": "6259bc3d9c287fc2",
+  "surfaceHash": "74bd1caffd7ea896",
   "payloadHash": "3a98bc2f204eba00",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -1006,6 +1006,15 @@
       "payloadHash": "3a98bc2f204eba00",
       "formatHash": "0058593e7cc80205",
       "summary": "Table-game element ids are now opaque: Speck32/64 of the creation counter under a 64-bit key the engine mints per game (GameOptions.elementIdKey, recorded in snapshot.gameOptions and never sent to a seat), so a seat cannot count creations hidden from it and a guessable seed does not decode them. A table state restores only into a game built with its key; table snapshots saved before this cannot be restored. World ids are unchanged (#447, #482)"
+    },
+    {
+      "revision": 119,
+      "date": "2026-10-02",
+      "bundleProtocol": 2,
+      "surfaceHash": "74bd1caffd7ea896",
+      "payloadHash": "3a98bc2f204eba00",
+      "formatHash": "0058593e7cc80205",
+      "summary": "Engine-owned game options (seed, elementIdKey, playerCount, ...) are named once in ENGINE_OWNED_GAME_OPTION_KEYS; boardsmith/session exports selectGameOptions, the one way a client's choice of game options is admitted (declared options only, typed, never a host-owned key), and GameSession, its lobby and the dev host take only such a selection; a start op refuses gameOptions.elementIdKey (#447)"
     }
   ]
 }

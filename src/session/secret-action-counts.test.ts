@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { executeOp, type Op, type OpResult } from './stateless-ops.js';
-import { flowBoundaryKey, type BoundaryKeyState } from '../engine/index.js';
+import { flowBoundaryKey, type BoundaryKeyState, type GameStateSnapshot } from '../engine/index.js';
 import { GameSession } from './game-session.js';
 import type { SessionInfo } from './types.js';
 import {
@@ -17,13 +17,25 @@ import {
 // frame data), and the undo refusal, which named the refused action by its
 // index in the whole history.
 
-// One seed and one element id key (#447) for both runs, so seat 1's secret
-// placements are the only difference between them.
+// One seed for both runs, so seat 1's secret placements are the only
+// difference between them. The stateless runs also need one element id key
+// (#447), and a start op refuses a key from outside, so every stateless run
+// starts from the same saved position (`hostOptions.seedSnapshot`), the way a
+// host resumes a game it holds; the stateful runs pass the key as the host.
 const options = { playerCount: 2, seed: 'bs449', elementIdKey: '0000000000000449' };
+const statelessOptions = { playerCount: options.playerCount, seed: options.seed };
+let dealtPosition: GameStateSnapshot | undefined;
 
 /** The stateless executor, op after op, as a platform host drives it. */
 async function statelessGame() {
-  let last = await executeOp(secretDeploymentDefinition, options, null, null, { type: 'start' });
+  if (dealtPosition === undefined) {
+    const dealt = await executeOp(secretDeploymentDefinition, statelessOptions, null, null, { type: 'start' });
+    expect(dealt.success).toBe(true);
+    dealtPosition = dealt.snapshot as GameStateSnapshot;
+  }
+  let last = await executeOp(secretDeploymentDefinition, statelessOptions, null, null, { type: 'start' }, {
+    seedSnapshot: dealtPosition,
+  });
   expect(last.success).toBe(true);
   return {
     get last(): OpResult {
@@ -97,7 +109,7 @@ function statefulGame() {
     playerCount: 2,
     playerNames: ['A', 'B'],
     seed: options.seed,
-    gameOptions: { elementIdKey: options.elementIdKey },
+    elementIdKey: options.elementIdKey,
   });
   const watchers: SessionInfo[] = [
     { playerSeat: 2, isSpectator: false } as SessionInfo,

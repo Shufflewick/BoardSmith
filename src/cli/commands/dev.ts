@@ -35,7 +35,7 @@ import {
 import { parseBotLevel } from '../../bot/index.js';
 
 import type { DevHostConfig, DevOptionDef } from '../dev-host/config-types.js';
-import { validateGameOptionSelection } from '../dev-host/config-types.js';
+import { GameOptionSelectionError, selectGameOptions } from '../../session/game-option-selection.js';
 import type { GameOptionDefinition, GamePreset } from '../../session/types.js';
 
 interface DevOptions {
@@ -585,16 +585,17 @@ function buildDevConfig(args: {
 }
 
 /**
- * Runs a `DevFlagError`-throwing validator; on failure prints the actionable
- * `chalk.red` message and exits non-zero (`devCommand`'s `process.exit(1)`
- * convention). Any other error rethrows — this only intercepts intentional
- * flag/host validation failures, not unexpected bugs.
+ * Runs a validator that throws `DevFlagError` or `GameOptionSelectionError`;
+ * on failure prints the actionable `chalk.red` message and exits non-zero
+ * (`devCommand`'s `process.exit(1)` convention). Any other error rethrows —
+ * this only intercepts intentional flag/host validation failures, not
+ * unexpected bugs.
  */
 function exitOnDevFlagError<T>(fn: () => T): T {
   try {
     return fn();
   } catch (error) {
-    if (error instanceof DevFlagError) {
+    if (error instanceof DevFlagError || error instanceof GameOptionSelectionError) {
       console.error(chalk.red(error.message));
       process.exit(1);
     }
@@ -875,9 +876,8 @@ export async function devCommand(options: DevOptions): Promise<void> {
     options.preset !== undefined
       ? exitOnDevFlagError(() => resolvePreset(gameDefinition.presets, options.preset as string))
       : undefined;
-  const selectedGameOptions: Record<string, unknown> = { ...presetBundle?.options, ...gameOptionFlags };
-  exitOnDevFlagError(() =>
-    validateGameOptionSelection(optionRecordToList(gameDefinition.gameOptions), selectedGameOptions),
+  const selectedGameOptions = exitOnDevFlagError(() =>
+    selectGameOptions(gameDefinition.gameOptions, { ...presetBundle?.options, ...gameOptionFlags }),
   );
   const rawPlayers = options.players ?? (presetBundle?.playerCount !== undefined ? String(presetBundle.playerCount) : undefined);
 
@@ -937,7 +937,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
     // by --game-option flags (flag beats preset beats default) — replaces the
     // frozen `.default`-only computation.
     const optionDefaults = Object.fromEntries(devConfig.gameOptions.map((o) => [o.id, o.default]));
-    const baseGameOptions = { ...optionDefaults, ...selectedGameOptions };
+    const baseGameOptions = selectGameOptions(gameDefinition.gameOptions, { ...optionDefaults, ...selectedGameOptions });
     const clients = new Map<string, WebSocket>();
 
     const storeFile = devStorePath(cwd);
@@ -953,7 +953,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
       baseGameOptions,
       // D13/DEVHOST-01: lets a host `configure` wire message (Plan 03's
       // selector) validate and apply a selection after startup.
-      declaredGameOptions: devConfig.gameOptions,
+      declaredGameOptions: gameDefinition.gameOptions,
       presets: devConfig.presets,
       teachingDisabled,
       seedSnapshot,

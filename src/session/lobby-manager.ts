@@ -16,6 +16,7 @@ import type {
   PlayerOptionDefinition,
   SessionInfo,
 } from './types.js';
+import { GameOptionSelectionError, selectGameOptions, type GameOptionSelection } from './game-option-selection.js';
 
 // ============================================
 // Types
@@ -968,11 +969,22 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       return { success: false, error: 'Only the host can modify game options' };
     }
 
-    // Merge new options with existing
-    this.#storedState.gameOptions = {
-      ...this.#storedState.gameOptions,
-      ...options,
-    };
+    // The host chooses among the game's declared options only. A key the
+    // engine or the session owns (`seed`, `elementIdKey`, ...) is refused by
+    // name: these options go to every lobby member and into the game
+    // constructor, and either would let a player choose the shuffles or
+    // decode every element id (#447).
+    let selection: GameOptionSelection;
+    try {
+      selection = selectGameOptions(this.#storedState.gameOptionsDefinitions, {
+        ...this.#storedState.gameOptions,
+        ...options,
+      });
+    } catch (error) {
+      if (error instanceof GameOptionSelectionError) return { success: false, error: error.message };
+      throw error;
+    }
+    this.#storedState.gameOptions = selection;
 
     // Persist changes
     if (this.#storage) {

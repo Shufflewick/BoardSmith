@@ -9,7 +9,7 @@ import {
 } from '../../testing/random-simulation.js';
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 import { parseGameOptionFlags } from './dev.js';
-import { validateGameOptionSelection, type DevOptionDef } from '../dev-host/config-types.js';
+import { selectGameOptions, type GameOptionSelection } from '../../session/game-option-selection.js';
 import type { GameOptionDefinition } from '../../session/types.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { simulateReplayCommand } from '../lib/replay-command.js';
@@ -45,13 +45,8 @@ interface BoardSmithConfig {
 export function resolveSimulationGameOptions(
   declaredOptions: Record<string, GameOptionDefinition> | undefined,
   rawFlags: string[] | undefined,
-): Record<string, unknown> {
-  const selection: Record<string, unknown> = parseGameOptionFlags(rawFlags);
-  const declaredList: DevOptionDef[] = Object.entries(declaredOptions ?? {}).map(
-    ([id, def]) => ({ id, ...(def as object) }) as DevOptionDef,
-  );
-  validateGameOptionSelection(declaredList, selection);
-  return selection;
+): GameOptionSelection {
+  return selectGameOptions(declaredOptions, parseGameOptionFlags(rawFlags));
 }
 
 /** Stable per-game status enum for the CLI's `--json` output. */

@@ -514,6 +514,19 @@ hour. The key is recorded with the game's constructor options
 restore, undo checkpoint and bot search mints the same ids, and it is never
 sent to a seat. Keep it as secret as the snapshot itself.
 
+A host must never accept the key, or the seed, from a player. The engine's own
+options (`ENGINE_OWNED_GAME_OPTION_KEYS`: `seed`, `elementIdKey`,
+`playerCount`, the palette, ...) are minted by the engine or the host; what a
+player chooses is limited to the options the game declared
+(`GameDefinition.gameOptions`), and `selectGameOptions` in `boardsmith/session`
+is the one way such a choice is admitted: it refuses an undeclared key, a
+host-owned key and a value of the wrong type, and returns a
+`GameOptionSelection`, which is the only thing `GameSession` and the lobby
+will store. The stateless executor refuses `elementIdKey` on a `start` op
+outright, since a new game mints its own. A host that assembles a game's
+options itself must keep a client's object out of them, or hand it to
+`selectGameOptions` first.
+
 Two consequences:
 
 - Never read anything into an id beyond identity: do not sort by it, compare

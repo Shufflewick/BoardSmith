@@ -22,6 +22,8 @@ export {
   GAME_SELF_SERIALIZED_FIELDS,
   isEngineRootField,
   engineRootFieldAudience,
+  // Every GameOptions field, so a host can keep a player's selection off them.
+  ENGINE_OWNED_GAME_OPTION_KEYS,
 } from './game.js';
 export { PersistentMap } from './persistent-map.js';
 export { ElementCollection } from './element-collection.js';

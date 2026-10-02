@@ -1388,11 +1388,12 @@ export class MCTSBot<G extends Game = Game> {
    * here is correct, only the delta matters.
    */
   private restoreGame(snapshot: GameStateSnapshot): Game {
-    // The game's own constructor options, custom ones (playerConfigs) and its
-    // seed included. Every snapshot this bot restores is one it captured
-    // itself, and `createSnapshot` always records them. They are required:
-    // element ids are keyed by the game's seed (#447), and `snapshot.seed` is
-    // the BOT's search seed, not the game's.
+    // The game's own constructor options, custom ones (playerConfigs), its
+    // seed and its element id key included. Every snapshot this bot restores
+    // is one it captured itself, and `createSnapshot` always records them.
+    // They are required: element ids are minted under the game's own key
+    // (#447), which only these options carry, and `snapshot.seed` is the
+    // BOT's search seed, not the game's.
     const gameOptions = snapshot.gameOptions;
     if (gameOptions === undefined) {
       throw new Error(

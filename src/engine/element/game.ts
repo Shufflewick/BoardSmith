@@ -238,9 +238,16 @@ export type GameOptions = {
    * (#447): 16 lowercase hex digits. Leave it out and the engine mints one from
    * the platform's cryptographic random source. Either way it is recorded with
    * the constructor options, so every snapshot carries it and every restore
-   * uses it. Pass it only to rebuild a game whose key you hold (a test that
-   * wants the same ids twice), and never send it to a client: it is what keeps
-   * a seat from counting elements created where it could not see.
+   * uses it. Pass it only to rebuild a game whose key you hold (a restore from
+   * a snapshot, a test that wants the same ids twice).
+   *
+   * A HOST MUST NEVER ACCEPT IT FROM A PLAYER, or from any client, and must
+   * never send it to one: whoever holds the key can decode every id a seat
+   * sees back into the creation count, which is the leak the key closes. The
+   * session layer refuses it in a player's option selection
+   * (`selectGameOptions`) and the stateless executor refuses it on a `start`
+   * op; a host that builds its own options must keep it out of anything a
+   * client can write.
    */
   elementIdKey?: string;
   /** Available color palette for players (hex strings) */
@@ -307,6 +314,35 @@ export type GameOptions = {
    */
   worldMode?: boolean;
 };
+
+/**
+ * Every field of {@link GameOptions}: the options the engine or the host
+ * mints for a game, as opposed to the options a game declares for its players
+ * to choose. A player's selection may never name one of these (the session's
+ * `selectGameOptions` refuses it), and a game may not declare an option with
+ * one of these names. The type below holds the list complete: adding a field
+ * to `GameOptions` without listing it here does not compile.
+ */
+export const ENGINE_OWNED_GAME_OPTION_KEYS = [
+  'playerCount',
+  'playerNames',
+  'seed',
+  'elementIdKey',
+  'colors',
+  'colorLabels',
+  'colorSelectionEnabled',
+  'tutorial',
+  'randomness',
+  'worldMode',
+] as const satisfies readonly (keyof GameOptions)[];
+
+type UnlistedGameOption = Exclude<keyof GameOptions, (typeof ENGINE_OWNED_GAME_OPTION_KEYS)[number]>;
+type Complete<T extends true> = T;
+/**
+ * Compiles only while `ENGINE_OWNED_GAME_OPTION_KEYS` names every
+ * `GameOptions` field; the error names the field that is missing.
+ */
+export type EngineOwnedGameOptionKeysAreComplete = Complete<[UnlistedGameOption] extends [never] ? true : UnlistedGameOption>;
 
 /**
  * A game's class, as the session, the runner's callers and the bots take it:
@@ -5233,7 +5269,14 @@ export class Game<
   }
 
   /**
-   * Create a game from serialized JSON.
+   * Create a game from serialized JSON: the element tree and the game's own
+   * serialized state, in a game built with a FRESH SEED.
+   *
+   * The serialized state carries no seed and no RNG position, so the restored
+   * game's draws do not continue the original's. A restore that must play on
+   * from where the original stood goes through `GameRunner.fromSnapshot`,
+   * whose snapshot records the constructor options (seed and key included)
+   * and the RNG position.
    *
    * @param elementIdKey - The id key the serialized game was created with
    *   (its `getConstructorOptions().elementIdKey`). A game built under any

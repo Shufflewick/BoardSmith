@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../../engine/index.js';
-import { executeOp, type GameDefinitionLike } from '../../session/index.js';
+import { executeOp, selectGameOptions, type GameDefinitionLike, type GameOptionSelection } from '../../session/index.js';
+import type { GameOptionDefinition } from '../../session/types.js';
 import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
-import type { DevOptionDef } from './config-types.js';
 
 /**
  * D13/DEVHOST-01 (161-02): a selected gameOption/preset must reach the
@@ -36,9 +36,8 @@ const def = {
   maxPlayers: 4,
 } satisfies GameDefinitionLike;
 
-const declaredGameOptions: DevOptionDef[] = [
-  {
-    id: 'difficulty',
+const declaredGameOptions: Record<string, GameOptionDefinition> = {
+  difficulty: {
     type: 'select',
     label: 'Difficulty',
     default: 'easy',
@@ -47,13 +46,12 @@ const declaredGameOptions: DevOptionDef[] = [
       { value: 'hard', label: 'Hard' },
     ],
   },
-  { id: 'rounds', type: 'number', label: 'Rounds', default: 3, min: 1, max: 10 },
+  rounds: { type: 'number', label: 'Rounds', default: 3, min: 1, max: 10 },
   // CR-02: a boolean option — a raw string "false" must NOT arrive JS-truthy.
-  { id: 'hardMode', type: 'boolean', label: 'Hard mode', default: false },
+  hardMode: { type: 'boolean', label: 'Hard mode', default: false },
   // CR-02: a `select` option with NON-STRING declared choice values — a raw
   // CLI-flag string ("4") must still match the numeric choice (4).
-  {
-    id: 'level',
+  level: {
     type: 'select',
     label: 'Level',
     default: 1,
@@ -62,7 +60,12 @@ const declaredGameOptions: DevOptionDef[] = [
       { value: 4, label: 'Level 4' },
     ],
   },
-];
+};
+
+const declaredDefaults = selectGameOptions(
+  declaredGameOptions,
+  Object.fromEntries(Object.entries(declaredGameOptions).map(([id, def]) => [id, def.default])),
+);
 
 const presets = [
   {
@@ -73,21 +76,27 @@ const presets = [
   },
 ];
 
-function makeHost(overrides: { baseGameOptions?: Record<string, unknown> } = {}) {
+function makeHost(overrides: { baseGameOptions?: GameOptionSelection } = {}) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let startOptions: any = null;
+  /** The element id key of the game last started, read off the snapshot the host keeps (#447). */
+  let startedKey: string | undefined;
   const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
   const host = new MultiplayerHost({
     playerCount: 2,
     minPlayers: 1,
     maxPlayers: def.maxPlayers,
     makeSeed: () => 'go',
-    baseGameOptions: overrides.baseGameOptions ?? Object.fromEntries(declaredGameOptions.map((o) => [o.id, o.default])),
+    baseGameOptions: overrides.baseGameOptions ?? declaredDefaults,
     declaredGameOptions,
     presets,
-    executeOp: (gameOptions, snap, pend, op, hostOptions) => {
+    executeOp: async (gameOptions, snap, pend, op, hostOptions) => {
       if (op.type === 'start') startOptions = gameOptions;
-      return executeOp(def, gameOptions, snap, pend, op, hostOptions);
+      const result = await executeOp(def, gameOptions, snap, pend, op, hostOptions);
+      if (op.type === 'start' && result.success) {
+        startedKey = (result.snapshot as { gameOptions?: { elementIdKey?: string } }).gameOptions?.elementIdKey;
+      }
+      return result;
     },
     send: (clientId, msg) => sent.push({ clientId, msg }),
   });
@@ -95,7 +104,7 @@ function makeHost(overrides: { baseGameOptions?: Record<string, unknown> } = {})
     [...sent].reverse().find((e) => e.clientId === clientId && e.msg.type === type)?.msg as
       | HostOutbound
       | undefined;
-  return { host, getStartOptions: () => startOptions, lastOfType };
+  return { host, getStartOptions: () => startOptions, getStartedKey: () => startedKey, sent, lastOfType };
 }
 
 describe('MultiplayerHost — gameOption/preset selection reaches the start op (D13/DEVHOST-01)', () => {
@@ -247,5 +256,34 @@ describe('MultiplayerHost — CR-02: configure values are coerced to their decla
     expect(err?.message).toMatch(/"rounds"/);
     expect(err?.message).toMatch(/number/);
     expect(getStartOptions().rounds).toBe(3); // unchanged, still the original default
+  });
+});
+
+describe('MultiplayerHost — a client cannot reach the seed or the element id key through configure (#447)', () => {
+  it.each(['seed', 'elementIdKey'])('refuses %s by name and keeps the start op on the host\'s own seed', async (key) => {
+    const { host, getStartOptions, lastOfType } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+    const startBefore = getStartOptions();
+
+    await host.handleMessage('A', { type: 'configure', gameOptions: { [key]: '0000000000000447' } });
+
+    const err = lastOfType('A', 'error') as Extract<HostOutbound, { type: 'error' }> | undefined;
+    expect(err?.message).toMatch(new RegExp(`"${key}"`));
+    expect(getStartOptions()).toBe(startBefore); // no restart happened
+    expect(getStartOptions().seed).toBe('go');
+    expect(getStartOptions().elementIdKey).toBeUndefined();
+  });
+
+  it('never puts the started game\'s key in a game_state frame or any other frame', async () => {
+    const { host, getStartedKey, sent } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'configure', gameOptions: { difficulty: 'hard' } });
+
+    const key = getStartedKey();
+    expect(key).toMatch(/^[0-9a-f]{16}$/);
+    expect(sent.some((e) => e.msg.type === 'game_state')).toBe(true);
+    for (const { msg } of sent) {
+      expect(JSON.stringify(msg)).not.toContain(key);
+    }
   });
 });

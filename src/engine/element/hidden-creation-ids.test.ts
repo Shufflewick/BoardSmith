@@ -23,9 +23,11 @@ import {
   Action,
   defineFlow,
   actionStep,
+  flowBoundaryKey,
+  type BoundaryKeyState,
   type GameOptions,
 } from '../index.js';
-import { GameSession } from '../../session/index.js';
+import { GameSession, executeOp, type GameDefinitionLike } from '../../session/index.js';
 import { GameRunner } from '../../runtime/index.js';
 
 class Item extends Piece<ShopGame> {}
@@ -75,6 +77,9 @@ class ShopGame extends Game<ShopGame, Player> {
   }
 }
 
+/** The shop as a platform host runs it, op by op. */
+const shopDefinition = { gameClass: ShopGame, gameType: 'shop', minPlayers: 2, maxPlayers: 2 } satisfies GameDefinitionLike;
+
 /** Seat 1 buys `secret` items in secret, then seat 2 buys one; seat 2's view of its own item's id. */
 async function idSeat2Sees(secret: number): Promise<number> {
   // One seed and one id key for every run, so the hidden purchases are the
@@ -85,7 +90,7 @@ async function idSeat2Sees(secret: number): Promise<number> {
     playerCount: 2,
     playerNames: ['Ann', 'Bo'],
     seed: 'shop',
-    gameOptions: { elementIdKey: '0123456789abcdef' },
+    elementIdKey: '0123456789abcdef',
   });
   const first = await session.performAction('buySecretly', 1, { count: secret });
   expect(first.success, first.error).toBe(true);
@@ -206,6 +211,36 @@ describe('the id key does not rest on the seed (#447 review)', () => {
     for (const seat of [1, 2]) {
       expect(JSON.stringify(session.getState(seat))).not.toContain(key);
     }
+  });
+
+  it('the stateless executor sends the key only in the snapshot the host keeps, never in a seat or spectator view', async () => {
+    const started = await executeOp(shopDefinition, { playerCount: 2, seed: 'k' }, null, null, { type: 'start' });
+    expect(started.success, started.error).toBe(true);
+    const key = (started.snapshot as { gameOptions?: { elementIdKey?: string } }).gameOptions?.elementIdKey as string;
+    expect(key).toMatch(/^[0-9a-f]{16}$/);
+
+    const bought = await executeOp(shopDefinition, { playerCount: 2, seed: 'k' }, started.snapshot, null, {
+      type: 'action',
+      actionName: 'buySecretly',
+      player: 1,
+      args: { count: 1 },
+      boundaryKey: flowBoundaryKey(started.flowState as BoundaryKeyState),
+    });
+    expect(bought.success, bought.error).toBe(true);
+
+    for (const result of [started, bought]) {
+      expect(JSON.stringify(result.playerViews)).not.toContain(key);
+      expect(JSON.stringify(result.spectatorView)).not.toContain(key);
+      expect(JSON.stringify(result.flowState)).not.toContain(key);
+    }
+  });
+
+  it('a start op refuses a key supplied from outside: a new game mints its own', async () => {
+    const result = await executeOp(shopDefinition, { playerCount: 2, seed: 'k', elementIdKey: '0123456789abcdef' }, null, null, { type: 'start' });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/elementIdKey/);
+    expect(result.category).toBe('protocol');
   });
 
   it('refuses a key that is not 16 hex digits', () => {
