@@ -261,7 +261,9 @@ export interface OpResult {
   flowDebugInfo?: SerializedFlowDebugInfo;
   pendingAction?: SerializedPendingActionState;
 
-  // State envelope — always present on success
+  // State envelope — present on every op that changes state. A `resolveChoices`
+  // answer goes to one seat and changes nothing, so it carries none: `snapshot`
+  // and `flowState` are null and `playerViews` is empty (#450).
   snapshot: unknown;
   pendingState: Record<string, unknown> | null;
   flowState: unknown;
@@ -630,9 +632,18 @@ function handleResolveChoices(
     return errorResult(result.error ?? 'Failed to resolve choices', 'bundle', result.errorCode);
   }
 
+  // The answer and nothing else (#450): this result goes to the ONE seat that
+  // asked, and every host used to pass it through whole -- the unredacted
+  // snapshot and every seat's view with it. A query changes no state, so it
+  // has none to report.
   return {
     success: true,
-    ...stateEnvelope(runner, gameOptions.playerCount),
+    snapshot: null,
+    pendingState: null,
+    flowState: null,
+    playerViews: [],
+    isComplete: runner.isComplete(),
+    winners: runner.getWinners().map((p) => p.seat),
     choices: result.choices,
     validElements: result.validElements,
     multiSelect: result.multiSelect,

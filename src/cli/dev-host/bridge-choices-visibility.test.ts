@@ -1,42 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../../engine/index.js';
-import { executeOp, type GameDefinitionLike } from '../../session/index.js';
+import { executeOp } from '../../session/index.js';
+import { secretRoleDefinition as def } from '../../session/testing/fixtures/secret-role-fixture.js';
 import { createDevSession } from './bridge.js';
 
 // #450: the reply to a `resolve_choices` request is what the ASKING seat may
 // see -- the pick's answer and nothing else. It used to be the whole op result:
 // every seat's view, the spectator view and the unredacted snapshot, so a seat
 // could read another seat's withheld attributes off the wire.
-
-class SecretPlayer extends Player<SecretGame, SecretPlayer> {
-  static override visibleAttributes = ['publicScore'];
-  publicScore = 0;
-  secretRole = 'none';
-}
-
-class SecretGame extends Game<SecretGame, SecretPlayer> {
-  static override PlayerClass = SecretPlayer;
-  constructor(options: GameOptions) {
-    super(options);
-    this.getPlayer(1)!.secretRole = 'SEAT-ONE-SECRET-ROLE';
-    this.getPlayer(2)!.secretRole = 'seat-two-own-role';
-    this.registerAction(
-      Action.create('pick')
-        .chooseFrom('color', { choices: ['red', 'blue'] })
-        .execute(() => ({ success: true })),
-    );
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 100,
-          do: actionStep({ actions: ['pick'], player: (ctx) => ctx.game.getPlayer(2)!, turnScope: 'restart' }),
-        }),
-      }),
-    );
-  }
-}
-
-const def: GameDefinitionLike = { gameClass: SecretGame, gameType: 'secret', minPlayers: 2, maxPlayers: 2 };
 
 async function askChoicesAsSeat2(): Promise<Record<string, unknown>> {
   const responses: Array<{ seat: number; response: Record<string, unknown> }> = [];
