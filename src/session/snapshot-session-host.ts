@@ -295,13 +295,7 @@ export class SnapshotSessionHost {
   private demoPaused = false;
   private demoStepConsume = false;
   private demoRewound = false;
-  private demoHistory: Array<{
-    snapshot: unknown;
-    flowState: unknown;
-    isComplete: boolean;
-    winners: number[];
-    lastPlayerViews: unknown[];
-  }> = [];
+  private demoHistory: unknown[] = [];
   private _demoWake: (() => void) | null = null;
 
   /** Cancel the demo loop; its `finally` broadcasts that it has stopped. */
@@ -694,7 +688,9 @@ export class SnapshotSessionHost {
             break;
           case 'back':
             // Rewind one move: restore the pre-move snapshot and re-suggest from it.
-            this.demoRewindOne();
+            // On the op chain, like the demo's own moves, so it never lands
+            // between a move's execute and its apply.
+            await this.enqueue(() => this.demoRewindOne());
             break;
         }
         // Wake the pace-gate so the control takes effect immediately (pause cancels a
@@ -1277,14 +1273,8 @@ export class SnapshotSessionHost {
     if (this.demoAbort) return 'stopped';
     if (this._snapshot !== iterSnapshot) return 'stale';
 
-    // Record the pre-move state so 'back' can rewind exactly one move.
-    this.demoHistory.push({
-      snapshot: this.snapshot,
-      flowState: this.flowState,
-      isComplete: this.isComplete,
-      winners: this.winners,
-      lastPlayerViews: this.lastPlayerViews,
-    });
+    // Record the pre-move snapshot so 'back' can rewind exactly one move.
+    this.demoHistory.push(this.snapshot);
 
     // Phase 4: Execute the EXACT same move via 'action' op.
     // ANTI-PATTERN AVOIDED: Do NOT re-run botSuggest/botTurn here — a second
@@ -1364,15 +1354,26 @@ export class SnapshotSessionHost {
    * Rewind the demo by one move: restore the snapshot captured before the last
    * executed move and flag the loop to re-suggest from it. Pauses on rewind so the
    * learner can review. No-op when there is nothing to rewind.
+   *
+   * The restore goes through the `restoreEarlier` op, never by putting the old
+   * snapshot and views back by hand: those carry the restore epoch clients have
+   * already seen, so nothing would tell them the position went back, and the
+   * next move's animations would reuse ids they already played and be dropped.
    */
-  private demoRewindOne(): void {
+  private async demoRewindOne(): Promise<void> {
     const prev = this.demoHistory.pop();
-    if (!prev) return;
-    this._snapshot = prev.snapshot;
-    this._flowState = prev.flowState;
-    this.isComplete = prev.isComplete;
-    this.winners = prev.winners;
-    this.lastPlayerViews = prev.lastPlayerViews;
+    if (prev === undefined) return;
+    const res = await this.adapters.executeOp(this._snapshot, null, { type: 'restoreEarlier', snapshot: prev });
+    if (!res.success) {
+      this.demoHistory.push(prev);
+      throw new Error(`The demo could not step back a move: ${res.error ?? 'the restore failed'}`);
+    }
+    this._snapshot = res.snapshot;
+    this._flowState = res.flowState;
+    this.isComplete = res.isComplete;
+    this.winners = res.winners;
+    this.lastPlayerViews = res.playerViews;
+    if (res.flowDebugInfo) this.lastFlowDebugInfo = res.flowDebugInfo;
     this.narrationText = null;
     this.demoPaused = true;
     this.demoStepConsume = false;

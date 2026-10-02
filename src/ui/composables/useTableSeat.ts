@@ -23,7 +23,7 @@ import type { GameState } from '../../client/types.js';
 import { dueSeats as dueSeatsOf } from '../../engine/flow/seat-activity.js';
 import type { GameViewElement } from '../types.js';
 import { BOARD_INTERACTION_KEY, type BoardInteraction } from './useBoardInteraction.js';
-import { ANIMATION_EVENTS_KEY, createAnimationEvents, type UseAnimationEventsReturn } from './useAnimationEvents.js';
+import { ANIMATION_EVENTS_KEY, createAnimationEvents, animationTimeline, type UseAnimationEventsReturn } from './useAnimationEvents.js';
 import { ANNOUNCER_KEY, createAnnouncer, type UseAnnouncerReturn } from './useAnnouncer.js';
 import { GAME_OVER_HOLDS_KEY, createGameOverReveal } from './useGameOverReveal.js';
 import { gameContextProvisions, type GameContextPlayer, type TimeTravelDiff } from './useGameContext.js';
@@ -149,11 +149,7 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
   // rewound session still plays the replayed events.
   const animationEvents = createAnimationEvents({
     events: () => state.value?.state?.animationEvents,
-    timeline: () => {
-      const s = state.value?.state;
-      if (s?.gameInstanceId === undefined || s.restoreEpoch === undefined) return undefined;
-      return `${s.gameInstanceId}:${s.restoreEpoch}`;
-    },
+    timeline: () => animationTimeline(state.value?.state),
   });
 
   const liveRegion = { polite: ref(''), assertive: ref('') };

@@ -99,6 +99,15 @@ export type Op =
   // seat's own pending action (perspective-scoped via the threaded pendingState).
   | { type: 'debugFlowState'; player: number }
   | { type: 'debugRewind'; actionIndex: number }
+  /**
+   * restoreEarlier: go back to a WHOLE earlier snapshot of this game that the
+   * host kept itself -- a demo stepping back one move. Run against the CURRENT
+   * snapshot, and a restore in every sense a client sees
+   * (`GameRunner.fromEarlierSnapshot`): the restore epoch advances, so seats
+   * drop stale element ids and reset their animation watermark. A host op: no
+   * wire op maps to it.
+   */
+  | { type: 'restoreEarlier'; snapshot: unknown }
   | { type: 'debugReorder'; cardId: number; targetIndex: number }
   | { type: 'debugTransfer'; cardId: number; targetDeckId: number; position: 'first' | 'last' }
   | { type: 'debugShuffle'; deckId: number }
@@ -1111,6 +1120,23 @@ function runnerFromCheckpoint(
   return runner;
 }
 
+function handleRestoreEarlier(
+  def: RunnerDef,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+  op: Extract<Op, { type: 'restoreEarlier' }>,
+): OpResult {
+  const runner = GameRunner.fromEarlierSnapshot(snapshot, op.snapshot as GameStateSnapshot, def.gameClass, {
+    checkpoints: def.checkpoints,
+    randomness: def.randomness,
+    undo: def.undo,
+  });
+  if (def.tutorial) {
+    (runner.game as Game).tutorialDefinition = def.tutorial;
+  }
+  return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
+}
+
 function handleDebugHistory(
   def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
@@ -1427,6 +1453,8 @@ export async function executeOp(
         return handleDebugFlowState(def, gameOptions, snap, pendingState, op);
       case 'debugRewind':
         return handleDebugRewind(def, gameOptions, snap, op);
+      case 'restoreEarlier':
+        return handleRestoreEarlier(def, gameOptions, snap, op);
       case 'debugReorder':
         return handleDebugCommand(def, gameOptions, snap, {
           type: 'REORDER_CHILD',

@@ -102,6 +102,19 @@ export interface UseAnimationEventsOptions {
 }
 
 /**
+ * The `timeline` a seat's state names, for {@link UseAnimationEventsOptions.timeline}:
+ * this game and how many times its runner was restored. `undefined` (no
+ * signal) when either is missing, so a state that names neither can never look
+ * like a rewind.
+ */
+export function animationTimeline(
+  state: { gameInstanceId?: string; restoreEpoch?: number } | undefined,
+): string | undefined {
+  if (state?.gameInstanceId === undefined || state.restoreEpoch === undefined) return undefined;
+  return `${state.gameInstanceId}:${state.restoreEpoch}`;
+}
+
+/**
  * Return type for the animation events composable
  */
 export interface UseAnimationEventsReturn {
