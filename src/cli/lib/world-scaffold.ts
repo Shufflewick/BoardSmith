@@ -376,15 +376,28 @@ const T0 = 1_800_000_000_000;
 /** What the schedule caps see: a world with no timers pending. */
 const NO_TIMERS = { unkeyed: 0, keys: [], worldPending: 0 };
 
+/** Who holds which seat in this test's world. */
+const SEATS = new Map([
+  ['alice', 1],
+  ['bob', 2],
+]);
+
 function launch() {
-  return createWorld({
-    definition: gameDefinition,
-    seed: 'test-world',
-    seats: new Map([
-      ['alice', 1],
-      ['bob', 2],
-    ]),
-  });
+  return createWorld({ definition: gameDefinition, seed: 'test-world', seats: SEATS });
+}
+
+/**
+ * WHEN THIS SEAT LAST ACTED, as a host would stamp it.
+ *
+ * A real host keeps a watermark per seat and hands it in with every offer and
+ * every command, so a prompt can say how long a player has been away. This
+ * world began at \`T0\` and nobody in it has acted yet, so every seat has been
+ * recorded since then and has nothing recorded.
+ */
+function freshActivity(player: string) {
+  const seat = SEATS.get(player);
+  if (seat === undefined) throw new Error(\`"\${player}" holds no seat in this test's world.\`);
+  return { seat, at: null, since: T0 };
 }
 
 type Runner = ReturnType<typeof launch>['runner'];
@@ -441,7 +454,7 @@ async function offersFor(runner: Runner, player: string) {
     unrecorded,
     noBoxes,
   );
-  return runner.offersFor(player, { now: T0, presence: [1] });
+  return runner.offersFor(player, { now: T0, presence: [1], activity: freshActivity(player) });
 }
 
 /**
@@ -482,6 +495,8 @@ async function perform(
     arrivedAt,
     allowance: NO_TIMERS,
     presence: player === null ? [] : [1],
+    // The clock's event is about no seat here, so it carries no watermark.
+    activity: player === null ? null : freshActivity(player),
     // WHAT THE WALK COLLECTED, and nothing else: the loop hands back exactly
     // what this takes, so the two halves cannot come apart.
     ...answered,
@@ -492,8 +507,10 @@ describe('the world', () => {
   it('gives every seat a plot at genesis, once in the world\\'s lifetime', async () => {
     const { runner, seatCount } = launch();
     const genesis = await runner.genesis();
-    expect(Object.keys(genesis)).toHaveLength(seatCount);
-    expect(genesis[plotPartition(1)]).toBeDefined();
+    expect(Object.keys(genesis.partitions)).toHaveLength(seatCount);
+    expect(genesis.partitions[plotPartition(1)]).toBeDefined();
+    // The id counter genesis left off at, which a host stores beside the bytes.
+    expect(genesis.nextElementId).toBeGreaterThan(0);
   });
 
   it('offers a seat the rows of its own plot, as elements it can click', async () => {
@@ -550,7 +567,7 @@ describe('the world', () => {
         'alice',
         {},
         { kind: 'arrival', now: T0 },
-        [],
+        { declaredActivity: [], declaredNotices: [] },
       ),
     ).rejects.toThrow();
   });
