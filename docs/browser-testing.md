@@ -558,13 +558,15 @@ seat switcher (`[data-testid="world-seat-switcher"]`, then
 `[data-testid="world-take-seat"][data-seat="<n>"]`). The seats take a step each
 in turn; one with nothing to do passes its step to the next, and the walk waits
 for a turn only when none has anything. When it moves to another seat it says
-so (`smoke step 5: acting as seat 138`). An error in another seat's browser is
-reported with the seat it happened in.
+so (`smoke step 5: acting as seat 138`). Every problem found in a seat's
+browser, the first seat's included (a page error, a console error, a failed
+request, an error toast, an action that failed, a press that did not land), is
+reported with the seat it happened in: `In seat 4's browser: ...`.
 
 The first seat walks the world as a walk of one seat does. Each other seat
 travels with it: it takes what only it is offered first (arriving, reading mail
-the first seat sent it, accepting what the first seat offered it), and
-otherwise follows, taking the action the first seat took last whenever its own
+the first seat sent it, accepting what the first seat offered it), opening the
+panel's action groups it has not opened to find it, and otherwise follows, taking the action the first seat took last whenever its own
 panel offers it (`smoke step 8: taking "look", as seat 12 did`). So the seats go
 where the other goes and each sees what the other sees, the way players
 travelling together do, and an action that needs the other there has them
@@ -582,7 +584,9 @@ What the seats do together is found from the page, as a player finds it:
 input can name a player standing with this one, and gives nothing while nobody
 is (the action is put off). An action whose input reads a value off the page
 now is taken before anything else, while what it reads is there: two seats
-that arrive together act on each other as soon as either sees the other.
+that arrive together act on each other as soon as either sees the other. A value
+for a field the walk has met as a number field must be a number to count. Once
+an action has been taken it is not hurried again.
 
 A table takes no `seats`: the walk already acts for every seat there, and the
 check fails a table spec that names them.

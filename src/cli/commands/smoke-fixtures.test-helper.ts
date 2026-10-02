@@ -1266,8 +1266,22 @@ export const ALONE_REASON = 'There is nobody else in this glade to greet.';
  * while it is in flight) and `stroll` on to the next glade. The panel offers them in that order
  * (arrive, greet, look, rest, stroll), so a walk that took the first untaken action strolls away
  * before it greets anyone it did not see at first.
+ *
+ * With `stumbles`, seat 4's arrival fails in its rules, so only seat 4's browser sees a failure.
+ * With `manners`, seat 4 alone may also `bow`, an action the panel offers inside its "Manners" group.
  */
-export function gladeWorld(): Record<string, string> {
+export function gladeWorld(options: { stumbles?: boolean; manners?: boolean } = {}): Record<string, string> {
+  const stumble = options.stumbles ? "\n    if (ctx.player.seat === 4) throw new Error('seat four tripped on a root');" : '';
+  const bow = options.manners
+    ? `
+const bow = worldAction<DevGameGame>('bow')
+  .prompt('Bow to the glade')
+  .group('Manners')
+  .needs(({ player }) => [wandererPartition(player.seat)])
+  .condition({ 'only seat 4 bows': ({ player }) => player.seat === 4 })
+  .execute(() => {});
+`
+    : '';
   return {
     'src/rules/elements.ts': `import { Space } from 'boardsmith';
 
@@ -1341,7 +1355,7 @@ const arrive = worldAction<DevGameGame>('arrive')
   .prompt('Walk into your glade')
   .needs(({ player }) => [wandererPartition(player.seat), gladePartition(player.seat % GLADES)])
   .disabled(({ game, player }) => (wandererOf(game, player.seat).glade < 0 ? false : 'You are already here.'))
-  .execute((_args, ctx) => {
+  .execute((_args, ctx) => {${stumble}
     const wanderer = ctx.world.partition(wandererPartition(ctx.player.seat)) as Wanderer;
     const glade = ctx.world.partition(gladePartition(ctx.player.seat % GLADES)) as Glade;
     wanderer.glade = ctx.player.seat % GLADES;
@@ -1406,7 +1420,8 @@ const stroll = worldAction<DevGameGame>('stroll')
     wanderer.seen = [];
   });
 
-export const worldActions: WorldDefinition['actions'] = [arrive, greet, look, rest, stroll];
+${bow}
+export const worldActions: WorldDefinition['actions'] = [arrive, greet, look, rest, stroll${options.manners ? ', bow' : ''}];
 `,
     'src/ui/components/WorldBoard.vue': `<script setup lang="ts">
 import { computed } from 'vue';
@@ -1448,11 +1463,11 @@ const seen = computed(() => seenIn(props.gameView as ViewNode));
  * A smoke spec for {@link gladeWorld} playing `seats` (#471), whose `greet` names the other seat the
  * board shows standing here.
  */
-export function gladeSpec(more: { seats?: string; steps: number }): string {
+export function gladeSpec(more: { seats?: string; steps: number; manners?: boolean }): string {
   return `import { defineSmokeTest, type SmokeInputView } from 'boardsmith/testing/browser';
 
 defineSmokeTest({
-  actions: ['arrive', 'greet', 'look', 'rest', 'stroll'],${more.seats === undefined ? '' : `\n  seats: ${more.seats},`}
+  actions: ['arrive', 'greet', 'look', 'rest', 'stroll'${more.manners ? ", 'bow'" : ''}],${more.seats === undefined ? '' : `\n  seats: ${more.seats},`}
   inputs: {
     greet: {
       whom: async ({ texts, otherSeats }: SmokeInputView) =>

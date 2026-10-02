@@ -177,6 +177,32 @@ function answerOf(text: string, kind: FieldKind, action: string, field: string):
 }
 
 /**
+ * Whether the action `name` is ready to take because the page gives a value now (#471): it has an
+ * input that reads the page, and every such input gives one, read as a number for a field the walk
+ * has met as a number field. What such an input reads, such as another player standing here, may be
+ * gone a few steps on, so the walk takes the action before anything else.
+ */
+export async function readyToTake(walk: SmokeWalk, name: string, view: SmokeInputView): Promise<boolean> {
+  if (!Object.hasOwn(walk.inputs, name)) return false;
+  const reads = Object.keys(walk.inputs[name]).filter((field) => typeof walk.inputs[name][field] === 'function');
+  if (reads.length === 0) return false;
+  const kinds = walk.fieldsMet.get(name);
+  const given = await Promise.all(reads.map((field) => inputFor(walk.inputs, name, field, kinds?.get(field) ?? 'text', view)));
+  return given.every((answer) => answer !== undefined && 'value' in answer);
+}
+
+/**
+ * Records the reasons the panel gave for the actions it showed greyed out (#472): each once, the one
+ * given most recently moved last, so a report quoting the latest few quotes the current ones.
+ */
+export function recordGreyed(walk: SmokeWalk, greyed: ReadonlyArray<readonly [string, string | undefined]>): void {
+  for (const [name, reason] of greyed) {
+    if (reason === undefined) continue;
+    walk.greyed.set(name, [...(walk.greyed.get(name) ?? []).filter((given) => given !== reason), reason]);
+  }
+}
+
+/**
  * Why the walk reports that taking `action` failed: what the game said, how many numbers it refused
  * when it refused each one the walk tried (`refused` before the last), and what the walk typed, so a
  * refused value from the spec's `inputs` is named as such and one the walk chose says how to give
@@ -229,14 +255,16 @@ export interface SmokeWalk {
    */
   readonly wanting: Map<string, string>;
   /**
-   * The fields the walk met in each action it opened, by pick name (#470), so an input naming a
-   * field none of them has (a misspelt pick name) is reported once the walk met any of the action's
-   * fields or took it.
+   * The fields the walk met in each action it opened, by pick name, with the kind of each (#470), so
+   * an input naming a field none of them has (a misspelt pick name) is reported once the walk met any
+   * of the action's fields or took it, and an input for a number field is read as a number before
+   * the action is opened (`readyToTake`).
    */
-  readonly fieldsMet: Map<string, Set<string>>;
+  readonly fieldsMet: Map<string, Map<string, FieldKind>>;
   /**
-   * The reasons the panel gave for each action it showed greyed out (#472), each once, in the order
-   * it first gave them, so an action never seen ready to take is reported with them.
+   * The reasons the panel gave for each action it showed greyed out (#472), each once, the one it
+   * gave most recently last (`recordGreyed`), so an action never seen ready to take is reported with
+   * them.
    */
   readonly greyed: Map<string, string[]>;
   /** The world seats the walk played, when the spec named them (#471); none at a table. */
@@ -287,10 +315,11 @@ const NUMBER_TRIES = 3;
  * and taken, and the deal remembers it; a failed one is reported and not tried again, unless the
  * game refused a number the walk chose and typed in it (`refusedANumber`). What the walk typed is
  * spent either way, so a later failure of the action is never taken for a refusal of a number it did
- * not type, and a failure is reported with it (`actionFailed`, #470). Either way the action no longer
- * waits on an input, and a taken one counts as the game moving on.
+ * not type, and a failure is reported with it (`actionFailed`, #470), after `where`, the browser it
+ * was taken in when a world walk plays several seats (#471). Either way the action no longer waits on
+ * an input, and a taken one counts as the game moving on.
  */
-export function recordResolved(resolved: readonly ResolvedAction[], walk: SmokeWalk, memory: ResolvedMemory): void {
+export function recordResolved(resolved: readonly ResolvedAction[], walk: SmokeWalk, memory: ResolvedMemory, where = ''): void {
   for (const { action, success, error } of resolved) {
     walk.offered.add(action);
     walk.enabled.add(action);
@@ -304,7 +333,7 @@ export function recordResolved(resolved: readonly ResolvedAction[], walk: SmokeW
       memory.lastResolved = action;
     } else if (!refusedANumber(action, error, typed, memory)) {
       memory.failed.add(action);
-      note(walk, actionFailed(action, error, typed, memory.refused.get(action) ?? 0));
+      note(walk, `${where}${actionFailed(action, error, typed, memory.refused.get(action) ?? 0)}`);
     }
   }
 }
@@ -453,7 +482,7 @@ function fieldInputProblem(walk: SmokeWalk, action: string, field: string, input
   if (met !== undefined && (met.size > 0 || walk.taken.has(action)) && !met.has(field)) {
     return (
       `${inputName(action, field)} in ${SMOKE_SPEC_PATH} names a field the walk never met in "${action}", whose fields it ` +
-      `met are ${met.size === 0 ? 'none' : quoted([...met].sort())}. Name the field by the pick name its rules give it.`
+      `met are ${met.size === 0 ? 'none' : quoted([...met.keys()].sort())}. Name the field by the pick name its rules give it.`
     );
   }
   if (typeof input === 'string' && input.trim() === '') {

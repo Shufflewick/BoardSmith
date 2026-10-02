@@ -9,7 +9,7 @@
  * finding out.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { ref, shallowRef } from 'vue';
+import { nextTick, ref, shallowRef } from 'vue';
 import { useWorldPlay } from './useWorldPlay.js';
 import type { WorldHost } from './useWorldHost.js';
 import type { WorldActionOffer, WorldNarration, WorldPlayer, WorldPhase } from './worldProtocol.js';
@@ -20,6 +20,7 @@ function fakeHost(over: Partial<Record<string, unknown>> = {}) {
     view: shallowRef<unknown>({ player: 4, phase: 'watching', state: { className: 'Game', children: [] } }),
     seat: ref<number | null>(4),
     actions: ref<readonly WorldActionOffer[]>([]),
+    offersPending: ref(false),
     notice: ref<string | null>(null),
     worldName: ref<string | null>('Gloamhall'),
     presence: ref<readonly number[] | null>([2, 4]),
@@ -178,6 +179,34 @@ describe('re-asking one pick once something is bound (ShufflewickPub #378)', () 
     // THE CAP THE GAME MEANT, which the one-shot offer could not have known.
     expect(result.multiSelect).toEqual({ min: 1, max: 2 });
     expect(result.choices).toHaveLength(2);
+  });
+
+  it('#475: waits for the offers of a world that moved between two picks, and re-asks from them', async () => {
+    const resolvePick = vi.fn(async () => ({
+      ok: true,
+      selection: { name: 'crew', type: 'choice' as const, choices: [{ value: 'ash', display: 'Ash' }], multiSelect: { min: 1 } },
+    }));
+    const host = fakeHost({ resolvePick });
+    // Another seat's command committed: the new state blanked the offers, and its own are on the way.
+    host.offersPending.value = true;
+
+    const asked = play(host).fetchPickChoices('deploy', 'crew', 4, { ship: 'dory' });
+    await nextTick();
+    expect(resolvePick).not.toHaveBeenCalled();
+    host.actions.value = [DEPLOY];
+    host.offersPending.value = false;
+
+    const result = await asked;
+    expect(result.success).toBe(true);
+    expect(resolvePick).toHaveBeenCalledWith('deploy', 'crew', { ship: 'dory' });
+  });
+
+  it('#475: stops waiting for offers once the world is no longer answering, and says the action is not offered', async () => {
+    const host = fakeHost();
+    host.offersPending.value = true;
+    const asked = play(host).fetchPickChoices('deploy', 'crew', 4, { ship: 'dory' });
+    host.phase.value = 'lost';
+    expect((await asked).error).toMatch(/This world did not offer "deploy" to this seat/);
   });
 
   it('costs NO round trip while nothing is bound, which is most picks', async () => {
@@ -393,6 +422,18 @@ describe('quoting a draft (#248)', () => {
     const result = await play(fakeHost()).fetchActionQuote('boost', {}, 4);
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/boost/);
+  });
+
+  it('#475: waits for the offers of a world that moved before pricing the draft', async () => {
+    const quoteDraft = vi.fn(async () => ({ ok: true, quote: null }));
+    const host = fakeHost({ quoteDraft });
+    host.offersPending.value = true;
+    const priced = play(host).fetchActionQuote('rent', { weeks: 2 }, 4);
+    await nextTick();
+    host.actions.value = [{ name: 'rent', quote: true, selections: [] }];
+    host.offersPending.value = false;
+    expect((await priced).success).toBe(true);
+    expect(quoteDraft).toHaveBeenCalledWith('rent', { weeks: 2 });
   });
 
   it('fails loudly for an action that declares no quote, rather than asking anyway', async () => {

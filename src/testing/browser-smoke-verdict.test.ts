@@ -10,6 +10,8 @@ import {
   DEFAULT_SMOKE_SEED,
   inputFor,
   MOST_ANSWERS,
+  readyToTake,
+  recordGreyed,
   recordResolved,
   SMOKE_SPEC_PATH,
   startAnswering,
@@ -428,6 +430,39 @@ describe('walkStopped: why a walk could not go on (#464)', () => {
   });
 });
 
+describe('recordGreyed: the reasons a greyed-out action was given (#472)', () => {
+  it('keeps each reason once, the one given most recently last', () => {
+    const w = walk({});
+    recordGreyed(w, [['bank', 'Arrive first.']]);
+    recordGreyed(w, [['bank', 'Closed.'], ['wave', undefined]]);
+    recordGreyed(w, [['bank', 'Arrive first.']]);
+    expect(w.greyed).toEqual(new Map([['bank', ['Closed.', 'Arrive first.']]]));
+  });
+});
+
+describe('readyToTake: an action whose input reads a value off the page now (#471)', () => {
+  const page = (shown: string[]): SmokeInputView => ({ texts: async () => shown, otherSeats: [4] });
+  const reading = (inputs: SmokeWalk['inputs'], fieldsMet: SmokeWalk['fieldsMet'] = new Map()) => walk({ inputs, fieldsMet });
+
+  it('is ready when every input of the action that reads the page gives a value', async () => {
+    const w = reading({ greet: { whom: async ({ texts }: SmokeInputView) => (await texts('li'))[0], note: 'hi' } });
+    expect(await readyToTake(w, 'greet', page(['seat 4']))).toBe(true);
+    expect(await readyToTake(w, 'greet', page([]))).toBe(false);
+  });
+
+  it('is never ready for an action whose inputs read nothing off the page', async () => {
+    expect(await readyToTake(reading({ greet: { whom: 'seat 4' } }), 'greet', page(['x']))).toBe(false);
+    expect(await readyToTake(reading({}), 'greet', page(['x']))).toBe(false);
+  });
+
+  it('checks the value for a number field the walk has met as a number', async () => {
+    const inputs = { bid: { amount: async ({ texts }: SmokeInputView) => (await texts('.price'))[0] } };
+    const met = new Map([['bid', new Map([['amount', 'number' as const]])]]);
+    expect(await readyToTake(reading(inputs, met), 'bid', page(['forty']))).toBe(false);
+    expect(await readyToTake(reading(inputs, met), 'bid', page(['40']))).toBe(true);
+  });
+});
+
 describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
   /** A page whose elements, by selector, read as `shown`. */
   const page = (shown: Record<string, string[]> = {}, otherSeats: number[] = []): SmokeInputView => ({
@@ -500,14 +535,14 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
       listed: ['wave', 'greet'],
       taken: new Set(['wave', 'greet']),
       inputs: { wave: { whim: 'p2', whom: 'p2' }, greet: { whom: 'p2' } },
-      fieldsMet: new Map([['wave', new Set(['whom'])]]),
+      fieldsMet: new Map([['wave', new Map([['whom', 'text' as const]])]]),
     });
     expect(smokeProblems(opened)).toEqual([
       `\`inputs.wave.whim\` in ${SMOKE_SPEC_PATH} names a field the walk never met in "wave", whose fields it met are ` +
         '"whom". Name the field by the pick name its rules give it.',
     ]);
     // An action the walk gave up on before it reached any field says nothing about the names.
-    const stopped = walk({ listed: ['wave'], taken: new Set(), inputs: { wave: { whim: 'p2' } }, fieldsMet: new Map([['wave', new Set()]]) });
+    const stopped = walk({ listed: ['wave'], taken: new Set(), inputs: { wave: { whim: 'p2' } }, fieldsMet: new Map([['wave', new Map()]]) });
     expect(smokeProblems(stopped).filter((p) => p.includes('never met'))).toEqual([]);
   });
 
@@ -574,6 +609,12 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
   /** The walk typed `value` in the number field `field` of `action`, a number it chose itself. */
   const typedANumber = (m: ResolvedMemory, action: string, field: string, value: string, from: 'walk' | 'inputs' = 'walk') =>
     m.typed.set(action, [{ field, value, from, kind: 'number' }]);
+
+  it('#471: names the browser a failed action was taken in, in a world walk of several seats', () => {
+    const w = walk({});
+    recordResolved([failed('arrive', 'The glade is shut.')], w, memory(), "In seat 4's browser: ");
+    expect(w.errors).toEqual([`In seat 4's browser: The panel offered "arrive", and taking it failed: The glade is shut.`]);
+  });
 
   it('records a taken action as offered, enabled and taken, and reports one that failed, which is not taken again', () => {
     const w = walk({});

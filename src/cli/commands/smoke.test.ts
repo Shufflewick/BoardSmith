@@ -636,6 +636,29 @@ describe('boardsmith verify: the smoke check', () => {
     },
   );
 
+  it('#471: fails a walk whose second seat alone fails, naming that seat in every problem from its browser', async () => {
+    const { outcome } = await smokeOf(true, { ...gladeWorld({ stumbles: true }), 'tests/browser/smoke.spec.ts': gladeSpec({ seats: '[1, 4]', steps: 12 }) });
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toMatch(/- In seat 4's browser: The panel offered "arrive", and taking it failed: .*seat four tripped on a root/);
+    const fromABrowser = outcome.summary.match(/In seat \d+'s browser/g) ?? [];
+    expect(fromABrowser.length).toBeGreaterThan(0);
+    expect(new Set(fromABrowser)).toEqual(new Set(["In seat 4's browser"]));
+  });
+
+  it('#471: a seat after the first opens an action group to reach what only it is offered', async () => {
+    const { outcome, steps } = await smokeOf(true, {
+      ...gladeWorld({ manners: true }),
+      'tests/browser/smoke.spec.ts': gladeSpec({ seats: '[1, 4]', steps: 40, manners: true }),
+    });
+
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start, players at seats 1 and 4 took "arrive", "bow", "greet"/);
+    expect(outcome.passed).toBe(true);
+    const opening = steps.findIndex((line) => line.endsWith(`: opening the panel's group "Manners"`));
+    expect(opening).toBeGreaterThan(0);
+    expect(steps.slice(0, opening).reverse().find((line) => /: acting as seat \d+$/.test(line))).toMatch(/acting as seat 4$/);
+  });
+
   it('#471: fails a world spec that names a seat the world does not have, saying which seats it has', async () => {
     const { outcome } = await smokeOf(true, { ...gladeWorld(), 'tests/browser/smoke.spec.ts': gladeSpec({ seats: '[1, 9]', steps: 4 }) });
 
