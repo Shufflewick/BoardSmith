@@ -320,8 +320,9 @@ ledger, and every citation of it uses that id. `boardsmith chunk-merge` allocate
 on the combined tree and rewrites every citation. This is enforced as code: `chunk-merge` refuses a
 branch that added a real number, `ledger-check` and `constraint-check` treat a provisional id like
 any other (a duplicate is a finding), a citation of a provisional id nobody declared stops the
-merge, and `ledger-check` run in the main checkout fails any provisional id it finds there, since
-one can only get there by a merge that skipped `chunk-merge`.
+merge, and `ledger-check` run in the main checkout fails any provisional id it finds there, as a
+heading or cited in any file of the project, since one can only get there by a merge that skipped
+`chunk-merge` or a citation it could not rewrite.
 
 An example id (a reproduction in a filing, a form like `Ruling @<slug>.<n>`) goes in a code span or
 a fenced code block. In a Markdown file an id inside a code span, a fenced block or an HTML comment
@@ -335,6 +336,13 @@ written once, plural, and every id after it takes that kind: `Rulings 8 and @<sl
 new kind word inside it switches the kind. `chunk-merge` rewrites every provisional id in such a
 list. A provisional id with no kind before it in its list (`as settled in @<slug>.1`) says nothing
 about which ledger it names, so it stops the merge; write the kind in front of it.
+
+A run of one chunk's ids may be shortened after the first: `Decisions @<slug>.1, .2` names
+`@<slug>.1` and `@<slug>.2`, and `Rulings @<slug>.1 to .3` is a range (so is `through`, or a dash
+right before the next id). `chunk-merge` rewrites each shortened id to its real number. It
+rewrites a range only when the ids in it became one unbroken run of numbers; otherwise (an id in
+the range has no entry, the entries were headed out of order, or the range starts at a real
+number) it stops the merge, and the fix is to write the ids out as a list.
 
 ## Git Protocol
 
