@@ -130,7 +130,7 @@ export class StateHistory<G extends Game = Game> {
       return {
         success: false,
         error: `Cannot view state at action index ${actionIndex}: ` +
-          `${describeCheckpointAbsence(snapshot.actionCheckpoints, actionIndex)} The session accumulates per-action ` +
+          `${describeCheckpointAbsence(snapshot.actionCheckpoints, actionIndex, 'debug')} The session accumulates per-action ` +
           `checkpoints as it runs; a session cold-restored from action history alone cannot ` +
           `time-travel across pending mutations.`,
       };
@@ -391,7 +391,7 @@ export class StateHistory<G extends Game = Game> {
         return {
           success: false,
           error: `Cannot rewind to action index ${targetActionIndex}: ` +
-            `${describeCheckpointAbsence(snapshot.actionCheckpoints, targetActionIndex)} The session accumulates ` +
+            `${describeCheckpointAbsence(snapshot.actionCheckpoints, targetActionIndex, 'debug')} The session accumulates ` +
             `per-action checkpoints as it runs; a session cold-restored from action history alone ` +
             `cannot rewind across pending mutations.`,
         };

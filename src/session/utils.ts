@@ -6,7 +6,7 @@ import { Player, canSeatAct, availableActionsForSeat, type FlowState, type Game,
 import { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
 import { devWarn } from '../utils/dev.js';
-import { describeRestorePointAbsence } from '../runtime/index.js';
+import { describeCheckpointAbsence } from '../runtime/index.js';
 import { ErrorCode } from '../types/protocol.js';
 import type { GameRunner } from '../runtime/index.js';
 import type { PlayerGameState, ActionMetadata, PickMetadata, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
@@ -324,8 +324,10 @@ export function simultaneousUndoBoundary(
 /**
  * Where `seat`'s undo would rewind to, and whether the seat is the one whose
  * turn it is (D4). {@link decideUndo} builds the whole undo decision on it,
- * and `buildPlayerState` reads it for the published `actionsThisTurn` and
- * `turnStartActionIndex`.
+ * and `buildPlayerState` reads it for the published `actionsThisTurn` (the
+ * seat's own count). `turnStartActionIndex` stays on the server: it is an index
+ * into every seat's history, so publishing it would count other seats' actions
+ * (#449).
  *
  * Branches on whether the flow is CURRENTLY in a simultaneous step
  * (`flowState.awaitingPlayers?.length > 0`): sequential undo keeps its
@@ -499,13 +501,13 @@ export function assertUndoAllowed(args: {
     // `checkpoints: { max }` the author can raise) or `uncaptured` (above all
     // `checkpoints: { enabled: false }`, which the epic mandates on resolver
     // sessions — telling that author to raise `max` names a knob they never
-    // set). `describeRestorePointAbsence` already distinguishes them, so the
+    // set). `describeCheckpointAbsence` already distinguishes them, so the
     // fence asks it rather than hardcoding one.
     throw new UndoRefusedError(
       `Cannot undo: this game fences undo across random draws, so it needs ` +
       `the retained checkpoint at the point being restored to tell whether a ` +
       `draw was consumed — but ` +
-      `${describeRestorePointAbsence(runner.checkpointWindow(), turnStartActionIndex)}`,
+      `${describeCheckpointAbsence(runner.checkpointWindow(), turnStartActionIndex, 'seat')}`,
       'random-fence',
     );
   }
@@ -575,7 +577,7 @@ export function decideUndo(runner: GameRunner, seat: number): UndoDecision {
     throw err;
   }
 
-  const absence = describeRestorePointAbsence(runner.checkpointWindow(), turnStartActionIndex);
+  const absence = describeCheckpointAbsence(runner.checkpointWindow(), turnStartActionIndex, 'seat');
   if (absence) {
     return {
       allowed: false,
