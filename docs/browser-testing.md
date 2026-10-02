@@ -409,7 +409,9 @@ markers this page documents, so it keeps up with any game without knowing it:
   reported at once. Each press is narrated (`smoke step 4: pressing "Done" for
   "kindle"`).
 - A press a toast lies over reads the toast (an error toast is a problem like
-  any other), waits for it to go, as a player would, then presses again. A
+  any other), waits for it to go, as a player would, then presses again. That
+  holds for a toast in the page around the game too, such as the dev host's own
+  "Game restarted" after a deal (#478). A
   control or panel button a redraw takes away for a moment is looked for again
   until it comes back; one still gone after 5 seconds is reported. A control the
   walk can only see by scrolling it out from under a bar fixed along the edge of
@@ -452,8 +454,10 @@ markers this page documents, so it keeps up with any game without knowing it:
   element, so a redraw that moved another element into its place is not pressed
   by mistake, and a click that would land on anything else at that instant is
   stopped before the page sees it, as Playwright's own click does, and tried
-  again. A click that reaches nothing in the game's frame (the page around the
-  game has something over it there) fails the press rather than passing it.
+  again. A click that reaches nothing in the game's frame lands in the page
+  around the game, where the walk stops it too: on a toast there it waits the
+  toast out, and on anything else there (the page around the game has something
+  over the control) it fails the press rather than passing it.
 - While a modal dialog is open (`[aria-modal="true"]`, or a `<dialog>` shown
   modally), it is all a player can reach, so it is all the walk presses (#461).
   It presses each control in the dialog once, whatever its place: when one

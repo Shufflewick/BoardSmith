@@ -967,6 +967,68 @@ const rung = ref(0);
 }
 
 /**
+ * A BOARD CONTROL THE PAGE AROUND THE GAME COVERS (#478): from the moment the game first renders,
+ * "Ring the bell" lies under an element in the dev host's own page, over the game's frame, which
+ * follows the bell wherever the page lays it out. A `toast` cover is a toast, as the dev host's own
+ * "Game restarted" covers the foot of the game after a deal; it goes half a second after the first
+ * click reaches it, so a walk is sure to have clicked it while it was there. A `banner` cover is
+ * not a toast, and stays.
+ */
+export function boardUnderTheHostsCover(cover: 'toast' | 'banner'): Record<string, string> {
+  const [kind, words] = cover === 'toast' ? ['toast info', 'Table dealt'] : ['host-banner', 'Dev build'];
+  const goesOnceClicked = `
+    host.defaultView!.addEventListener('pointerdown', (event) => {
+      if (made.contains(event.target as Node)) setTimeout(() => made.remove(), 500);
+    }, true);`;
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { onMounted, ref } from 'vue';
+
+const rung = ref(0);
+const bell = ref<HTMLButtonElement>();
+
+onMounted(() => {
+  const host = window.parent.document;
+  if (host.body.dataset.covered === undefined) {
+    host.body.dataset.covered = 'yes';
+    const made = host.createElement('div');
+    made.id = 'host-cover';
+    made.className = '${kind}';
+    made.textContent = '${words}';
+    made.style.cssText = 'position: fixed; z-index: 10000; background: #345; color: #fff;';
+    host.body.append(made);${cover === 'toast' ? goesOnceClicked : ''}
+  }
+  const follow = () => {
+    const over = host.getElementById('host-cover');
+    if (over === null || bell.value === undefined) return;
+    const frame = window.frameElement!.getBoundingClientRect();
+    const box = bell.value.getBoundingClientRect();
+    over.style.left = frame.left + box.left - 4 + 'px';
+    over.style.top = frame.top + box.top - 4 + 'px';
+    over.style.width = box.width + 8 + 'px';
+    over.style.height = box.height + 8 + 'px';
+    requestAnimationFrame(follow);
+  };
+  follow();
+});
+</script>
+
+<template>
+  <div class="board">
+    <p>Rung {{ rung }} times.</p>
+    <button ref="bell" type="button" @click="rung++">Ring the bell</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
  * A PANEL THAT REDRAWS FOR A MOMENT (#468 review): "Look away" hides the panel's action buttons for
  * two seconds, as a panel redrawing its buttons after a board press does for a moment, so the panel's
  * buttons the walk read are not there when it first goes to press one. They come back by themselves,

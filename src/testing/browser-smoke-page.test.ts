@@ -183,6 +183,33 @@ describe('guardClicks and clickReached: what a pointed click reached (#468)', ()
     expect(clickReached()).toBe('nothing');
   });
 
+  it('#478: says a click stopped on a toast reached a toast, which goes by itself', () => {
+    document.body.innerHTML = `<button id="card">7</button><div class="toast info">Game restarted <button id="dismiss">x</button></div>`;
+    const dismiss = document.getElementById('dismiss')!;
+    let dismissed = 0;
+    dismiss.addEventListener('click', () => dismissed++);
+    guardClicks(document.getElementById('card')!);
+    dispatchClick(dismiss);
+    expect(dismissed).toBe(0);
+    expect(clickReached()).toBe('toast');
+  });
+
+  it('#478: guards the page around the game, where no element is the control: every click there is stopped, and read for a toast', () => {
+    document.body.innerHTML = `<div class="toast info" id="toast">Game restarted</div><header id="banner">Dev</header>`;
+    const banner = document.getElementById('banner')!;
+    let pressed = 0;
+    banner.addEventListener('click', () => pressed++);
+    guardClicks(null);
+    expect(clickReached()).toBe('nothing');
+    guardClicks(null);
+    dispatchClick(document.getElementById('toast')!);
+    expect(clickReached()).toBe('toast');
+    guardClicks(null);
+    dispatchClick(banner);
+    expect(pressed).toBe(0);
+    expect(clickReached()).toBe('other');
+  });
+
   it('says when the page was replaced before the click could be read, since the new page has no guard', () => {
     expect(() => clickReached()).toThrow('the game\'s page was replaced before the walk could read what the click reached');
   });
