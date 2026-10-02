@@ -9,7 +9,7 @@
  * - rewindToAction(): Rewind to arbitrary point
  */
 
-import { canSeatAct, availableActionsForSeat, type FlowState, type Game, type GameClass } from '../engine/index.js';
+import { canSeatAct, availableActionsForSeat, toPublicFlowState, type FlowState, type PublicFlowState, type Game, type GameClass } from '../engine/index.js';
 import { GameRunner, describeCheckpointAbsence } from '../runtime/index.js';
 import {
   ErrorCode,
@@ -37,7 +37,7 @@ export interface UndoResult {
   error?: string;
   /** Programmatic error code for switch statements. See ErrorCode enum. */
   errorCode?: ErrorCode;
-  flowState?: FlowState;
+  flowState?: PublicFlowState;
   state?: PlayerGameState;
   /** Number of actions that were undone */
   actionsUndone?: number;
@@ -299,7 +299,7 @@ export class StateHistory<G extends Game = Game> {
       });
       if (!newRunner) {
         throw new Error(
-          `Undo was allowed but no checkpoint exists at action ${turnStartActionIndex}. ` +
+          'Undo was allowed but no checkpoint exists at the start of this turn. ' +
           `decideUndo checks for that checkpoint, so this is a BoardSmith bug; please report it.`,
         );
       }
@@ -318,7 +318,7 @@ export class StateHistory<G extends Game = Game> {
 
       return {
         success: true,
-        flowState: newFlowState,
+        flowState: toPublicFlowState(newFlowState),
         state: buildPlayerState(newRunner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
         actionsUndone: actionsThisTurn,
       };

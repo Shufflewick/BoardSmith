@@ -11,7 +11,7 @@
 
 import type { Game, GameClass, GameCommand, TutorialDefinition, Annotation, FlowState, FollowUpOffer } from '../engine/index.js';
 import { ErrorCode } from '../types/protocol.js';
-import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey } from '../engine/index.js';
+import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState } from '../engine/index.js';
 import type { BoundaryKeyState } from '../engine/index.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
 import { validateTutorialDefinition, initialProgress, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
@@ -370,7 +370,7 @@ type BotFlowState = {
 function buildViews(runner: GameRunner, playerCount: number): unknown[] {
   const flowState = runner.getFlowState();
   return Array.from({ length: playerCount }, (_, i) => ({
-    flowState,
+    flowState: toPublicFlowState(flowState),
     state: buildPlayerState(runner, [], i + 1, { includeActionMetadata: true }),
   }));
 }
@@ -385,7 +385,7 @@ function buildViews(runner: GameRunner, playerCount: number): unknown[] {
 // `_restoreZoneVisibility`), so both cases redact identically.
 function buildSpectatorView(runner: GameRunner): unknown {
   return {
-    flowState: runner.getFlowState(),
+    flowState: toPublicFlowState(runner.getFlowState()),
     state: buildPlayerState(runner, [], 0, { includeActionMetadata: false }),
   };
 }
@@ -698,7 +698,7 @@ function handleUndo(
   const restored = runnerFromCheckpoint(def, snapshot, decision.turnStartActionIndex);
   if (!restored) {
     throw new Error(
-      `Undo was allowed but no checkpoint exists at action ${decision.turnStartActionIndex}. ` +
+      'Undo was allowed but no checkpoint exists at the start of this turn. ' +
       `decideUndo checks for that checkpoint, so this is a BoardSmith bug; please report it.`,
     );
   }

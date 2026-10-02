@@ -164,7 +164,7 @@ The `#game-board` slot receives:
 | `undo` | `function` | Undo to turn start: `() => Promise` |
 | `isViewingHistory` | `boolean` | True while the player is browsing a past position (see below) |
 | `disabledActions` | `object` | Action name → why it is disabled, for greying a control WITH its reason |
-| `flowState` | `FlowState \| null` | Turn info for the displayed position — `null` while browsing history |
+| `flowState` | `PublicFlowState \| null` | Turn info for the displayed position — `null` while browsing history. The part of the server's flow state every seat may see: who is up, each seat's actions, the phase, the step's time limit. It carries no action count (#449) |
 
 #### Time travel: browsing a past position
 

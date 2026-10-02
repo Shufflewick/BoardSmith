@@ -22,6 +22,7 @@ export {
 export {
   GameRunner,
   describeCheckpointAbsence,
+  describeRestorePointAbsence,
   type GameRunnerOptions,
   type CheckpointPolicy,
   type UndoPolicy,

@@ -17,7 +17,7 @@
  */
 
 import type { FlowState, SerializedAction, Game, GameClass, PendingActionState, GameCommand, FollowUpOffer, GameStateSnapshot, PlayerStateView, FlowDebugInfo, Player } from '../engine/index.js';
-import { canSeatAct } from '../engine/index.js';
+import { canSeatAct, toPublicFlowState, type PublicFlowState } from '../engine/index.js';
 import type { TutorialDefinition } from '../engine/tutorial/types.js';
 import type { Annotation } from '../engine/tutorial/types.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo } from './types.js';
@@ -180,7 +180,8 @@ export interface SessionActionResult {
   error?: string;
   /** Programmatic error code for switch statements. See ErrorCode enum. */
   errorCode?: import('./types.js').ErrorCode;
-  flowState?: FlowState;
+  /** What every seat may see of the flow -- see {@link PublicFlowState}. */
+  flowState?: PublicFlowState;
   state?: PlayerGameState;
   serializedAction?: SerializedAction;
   /** Additional data returned by the action's execute() */
@@ -1059,7 +1060,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   getState(
     playerPosition: number,
     options?: { includeActionMetadata?: boolean; includeDebugData?: boolean }
-  ): { success: boolean; flowState?: FlowState; state?: PlayerGameState } {
+  ): { success: boolean; flowState?: PublicFlowState; state?: PlayerGameState } {
     const flowState = this.#runner.getFlowState();
     const state = buildPlayerState(
       this.#runner,
@@ -1067,7 +1068,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       playerPosition,
       { includeActionMetadata: options?.includeActionMetadata ?? true, includeDebugData: options?.includeDebugData ?? this.#debugEnabled }
     );
-    return { success: true, flowState, state };
+    return { success: true, flowState: toPublicFlowState(flowState), state };
   }
 
   /**
@@ -1553,7 +1554,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     return {
       success: true,
-      flowState: result.flowState,
+      flowState: toPublicFlowState(result.flowState),
       state: buildPlayerState(this.#runner, this.#storedState.playerNames, player, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
       serializedAction: result.serializedAction,
       // The chained action, with the metadata to start it (it is usually not in availableActions).
@@ -1910,7 +1911,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     if (!this.#broadcaster) return;
 
-    const flowState = this.#runner.getFlowState();
+    // What every seat may see of the flow, never the server's FlowState, which
+    // counts every seat's actions (#449).
+    const flowState = toPublicFlowState(this.#runner.getFlowState());
     const sessions = this.#broadcaster.getSessions();
 
     // Flow position is public game structure (T-123-08), not per-seat hidden

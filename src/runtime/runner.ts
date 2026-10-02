@@ -1227,6 +1227,32 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
  * `assertUndoAllowed` runs before any restore is attempted and has no snapshot
  * in hand, and it must not re-guess a cause this function already knows.
  */
+/**
+ * {@link describeCheckpointAbsence} for a refusal a SEAT reads -- an undo.
+ *
+ * The same two causes and the same remedies, but no action index and no
+ * checkpoint count: both count every seat's actions, so a seat reading them
+ * could count another seat's secret ones (#449). Debug rewind, which names
+ * its own target index, keeps the precise form.
+ */
+export function describeRestorePointAbsence(
+  window: ActionCheckpointWindow | undefined,
+  actionIndex: number,
+): string {
+  const found = checkpointAt(window, actionIndex);
+  if (found.checkpoint) return '';
+  if (found.absence === 'pruned') {
+    return (
+      `the point being restored is older than this game's retained undo window. ` +
+      `Raise or remove \`checkpoints: { max }\` on the game definition to reach further back.`
+    );
+  }
+  return (
+    `no checkpoint was captured at the point being restored. Either the snapshot was not produced by ` +
+    `GameRunner.getSnapshot, or this game sets \`checkpoints: { enabled: false }\`, which disables undo.`
+  );
+}
+
 export function describeCheckpointAbsence(
   window: ActionCheckpointWindow | undefined,
   actionIndex: number,

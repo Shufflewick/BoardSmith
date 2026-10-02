@@ -6,7 +6,7 @@ import { Player, canSeatAct, availableActionsForSeat, type FlowState, type Game,
 import { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
 import { devWarn } from '../utils/dev.js';
-import { describeCheckpointAbsence } from '../runtime/index.js';
+import { describeRestorePointAbsence } from '../runtime/index.js';
 import { ErrorCode } from '../types/protocol.js';
 import type { GameRunner } from '../runtime/index.js';
 import type { PlayerGameState, ActionMetadata, PickMetadata, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
@@ -386,9 +386,11 @@ function computeUndoEligibility(
  * while the two stateful methods (`state-history.ts`) already have a
  * try/catch that converts any thrown Error into `{ success: false, error }`.
  *
- * Message content is intentionally limited to the action name/index or the
- * phase reason -- no file paths, line numbers, or stack traces (project hard
- * rule; T-155-03).
+ * Message content is intentionally limited to the action name or the phase
+ * reason -- no file paths, line numbers, or stack traces (project hard rule;
+ * T-155-03), and no action index or history length: the refusal goes to a
+ * seat, and an index into the whole history counts every other seat's
+ * actions, secret ones included (#449).
  */
 export type UndoRefusalReason =
   | 'non-undoable'
@@ -424,7 +426,7 @@ export class UndoRefusedError extends Error {
  *  2. Non-undoable fence: scan `actionHistory[turnStartActionIndex..end)`
  *     for an entry recorded with `undoable === false`
  *     (`.notUndoable()` -> `action-builder.ts`) and refuse, naming the
- *     blocking action by name and index.
+ *     blocking action.
  *  3. Commitment fence (155-02): refuse when
  *     `turnStartActionIndex < executeBarrierIndex` -- the target would rewind
  *     through a completed `execute({ irreversible: true })` node, taking back
@@ -474,17 +476,14 @@ export function assertUndoAllowed(args: {
   for (let i = turnStartActionIndex; i < actionHistory.length; i++) {
     if (actionHistory[i].undoable === false) {
       const name = actionHistory[i].name ?? 'action';
-      throw new UndoRefusedError(
-        `Cannot undo: action ${i} (${name}) is marked notUndoable.`,
-        'non-undoable',
-      );
+      throw new UndoRefusedError(`Cannot undo: ${name} is marked notUndoable.`, 'non-undoable');
     }
   }
 
   if (turnStartActionIndex < executeBarrierIndex) {
     throw new UndoRefusedError(
-      `Cannot undo past action ${executeBarrierIndex}: a step marked ` +
-      `execute({ irreversible: true }) has committed there. If that step only ` +
+      `Cannot undo: a step marked execute({ irreversible: true }) has ` +
+      `committed since the point being restored. If that step only ` +
       `changes game state (scoring, moving pieces, flow bookkeeping), drop the ` +
       `flag — state is restored by undo, and marking it needlessly blocks undo ` +
       `for the rest of the game.`,
@@ -500,20 +499,20 @@ export function assertUndoAllowed(args: {
     // `checkpoints: { max }` the author can raise) or `uncaptured` (above all
     // `checkpoints: { enabled: false }`, which the epic mandates on resolver
     // sessions — telling that author to raise `max` names a knob they never
-    // set). `describeCheckpointAbsence` already distinguishes them, so the
+    // set). `describeRestorePointAbsence` already distinguishes them, so the
     // fence asks it rather than hardcoding one.
     throw new UndoRefusedError(
-      `Cannot undo to action ${turnStartActionIndex}: this game fences undo ` +
-      `across random draws, so it needs the retained checkpoint there to tell ` +
-      `whether a draw was consumed — but ` +
-      `${describeCheckpointAbsence(runner.checkpointWindow(), turnStartActionIndex)}`,
+      `Cannot undo: this game fences undo across random draws, so it needs ` +
+      `the retained checkpoint at the point being restored to tell whether a ` +
+      `draw was consumed — but ` +
+      `${describeRestorePointAbsence(runner.checkpointWindow(), turnStartActionIndex)}`,
       'random-fence',
     );
   }
   if (targetRandomState !== game.getRandomState()) {
     throw new UndoRefusedError(
-      `Cannot undo past action ${turnStartActionIndex}: a random draw was ` +
-      `consumed there, and this game fences undo across draws so a draw ` +
+      `Cannot undo: a random draw was consumed since the point being ` +
+      `restored, and this game fences undo across draws so a draw ` +
       `cannot be re-rolled by undoing and acting in a different order. ` +
       `Nothing is wrong with the move you made — the result is simply final.`,
       'random-fence',
@@ -576,7 +575,7 @@ export function decideUndo(runner: GameRunner, seat: number): UndoDecision {
     throw err;
   }
 
-  const absence = describeCheckpointAbsence(runner.checkpointWindow(), turnStartActionIndex);
+  const absence = describeRestorePointAbsence(runner.checkpointWindow(), turnStartActionIndex);
   if (absence) {
     return {
       allowed: false,
@@ -616,7 +615,7 @@ export function buildPlayerState(
   // simultaneous step allows any awaiting-or-completed-this-step seat, with
   // the boundary from THAT seat's own action(s), not the turn-wide moveCount.
   // See computeUndoEligibility's doc comment.
-  const { eligible: canUndoEligible, turnStartActionIndex, actionsThisTurn } = computeUndoEligibility(
+  const { eligible: canUndoEligible, actionsThisTurn } = computeUndoEligibility(
     runner.actionHistory,
     flowState,
     playerPosition
@@ -721,13 +720,10 @@ export function buildPlayerState(
     // Gated on `canUndoEligible`, not `isMyTurn` (D4/SIM-02): a seat that
     // has already committed its simultaneous action is no longer "due"
     // (`isMyTurn`/`canSeatAct` is false the instant it commits) but IS
-    // still eligible to see/undo its own turnStartActionIndex.
+    // still eligible to see/undo its own actions.
     actionsThisTurn: canUndoEligible ? actionsThisTurn : 0,
-    turnStartActionIndex: canUndoEligible ? turnStartActionIndex : undefined,
     messages: playerView.messages.length > 0 ? playerView.messages : undefined,
-    // Unconditional, unlike turnStartActionIndex -- see PlayerGameState.actionCount doc.
-    actionCount: runner.actionHistory.length,
-    // Unconditional for the same reason: a count, not content -- see
+    // Unconditional: how many restores this timeline has had -- see
     // PlayerGameState.restoreEpoch.
     restoreEpoch: runner.restoreEpoch,
     // Unconditional too: which game this is -- see PlayerGameState.gameInstanceId.

@@ -1189,22 +1189,23 @@ describe('useAnimationEvents', () => {
   // A client that reconnects into a rewound session can carry a stale
   // `lastQueuedId` above the ids of the batch it is now being sent, because
   // the server-side fix (Plan 155-04) only guarantees monotonicity for a
-  // client that stayed connected throughout. `actionCount` is a new,
-  // always-published signal (src/session/utils.ts) the client can watch
-  // alongside `animationEvents`: a DECREASE between two observations means a
-  // rewind happened, and the watermark must be reset before the incoming
-  // batch is filtered -- otherwise ids at or below the (stale) old watermark
-  // are silently dropped, which is exactly "undo eats my animations" from
-  // the client's point of view.
-  describe('rewind detection via actionCount', () => {
-    it('replays events after a detected actionCount decrease (would be dropped without the reset)', async () => {
+  // client that stayed connected throughout. The `timeline` signal names the
+  // timeline the events belong to (the game and its restore count): a CHANGE
+  // between two observations means the runner was replaced, and the watermark
+  // must be reset before the incoming batch is filtered -- otherwise ids at or
+  // below the (stale) old watermark are silently dropped, which is exactly
+  // "undo eats my animations" from the client's point of view. It used to be
+  // the global action count, which let a seat count another seat's secret
+  // actions (#449).
+  describe('rewind detection via the timeline signal', () => {
+    it('replays events after the timeline changes (would be dropped without the reset)', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const actionCount = ref(5);
+      const timeline = ref('game-a:0');
       const delivered: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        actionCount: () => actionCount.value,
+        timeline: () => timeline.value,
       });
 
       instance.registerHandler('test', async (event) => {
@@ -1223,10 +1224,10 @@ describe('useAnimationEvents', () => {
       await waitForIdle(instance);
       expect(delivered).toEqual([1, 2, 3, 4, 5]);
 
-      // Rewind: actionCount decreases (undo/debug-rewind), then a replayed
+      // Rewind: the restore count moves (undo/debug-rewind), then a replayed
       // batch arrives carrying ids 3..4 -- below the old watermark of 5, but
       // these are NEW beats for the rewound session and must be delivered.
-      actionCount.value = 3;
+      timeline.value = 'game-a:1';
       events.value = [createEvent(3, 'test'), createEvent(4, 'test')];
       await nextTick();
       await waitForIdle(instance);
@@ -1235,14 +1236,14 @@ describe('useAnimationEvents', () => {
       expect(delivered).toEqual([1, 2, 3, 4, 5, 3, 4]);
     });
 
-    it('still dedupes at-or-below-watermark ids when actionCount has NOT decreased (forward play unaffected)', async () => {
+    it('still dedupes at-or-below-watermark ids while the timeline is unchanged (forward play unaffected)', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const actionCount = ref(5);
+      const timeline = ref('game-a:0');
       const delivered: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        actionCount: () => actionCount.value,
+        timeline: () => timeline.value,
       });
 
       instance.registerHandler('test', async (event) => {
@@ -1254,28 +1255,53 @@ describe('useAnimationEvents', () => {
       await waitForIdle(instance);
       expect(delivered).toEqual([1, 2]);
 
-      // actionCount increases (normal forward play) -- id 2 must NOT be redelivered.
-      actionCount.value = 6;
+      // Normal forward play keeps the timeline -- id 2 must NOT be redelivered.
       events.value = [createEvent(1, 'test'), createEvent(2, 'test'), createEvent(3, 'test')];
       await nextTick();
       await waitForIdle(instance);
       expect(delivered).toEqual([1, 2, 3]);
 
-      // actionCount unchanged -- same guarantee.
-      actionCount.value = 6;
+      // The same timeline observed again -- same guarantee.
+      timeline.value = 'game-a:0';
       events.value = [createEvent(1, 'test'), createEvent(2, 'test'), createEvent(3, 'test')];
       await nextTick();
       await waitForIdle(instance);
       expect(delivered).toEqual([1, 2, 3]);
     });
 
-    it('behaves exactly as today when no actionCount source is supplied (absence is not a rewind signal)', async () => {
+    it('replays events when a new game replaces this one at the same restore count', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      const timeline = ref('game-a:0');
+      const delivered: number[] = [];
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+        timeline: () => timeline.value,
+      });
+
+      instance.registerHandler('test', async (event) => {
+        delivered.push(event.id);
+      }, { skip: 'drop' });
+
+      events.value = [createEvent(1, 'test'), createEvent(2, 'test')];
+      await nextTick();
+      await waitForIdle(instance);
+
+      // New game: a fresh game starts its ids again, and its epoch at 0.
+      timeline.value = 'game-b:0';
+      events.value = [createEvent(1, 'test')];
+      await nextTick();
+      await waitForIdle(instance);
+      expect(delivered).toEqual([1, 2, 1]);
+    });
+
+    it('never resets when no timeline source is supplied (absence is not a rewind signal)', async () => {
       const events = ref<AnimationEvent[]>([]);
       const delivered: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        // no actionCount option supplied
+        // no timeline option supplied
       });
 
       instance.registerHandler('test', async (event) => {
@@ -1288,7 +1314,7 @@ describe('useAnimationEvents', () => {
       expect(delivered).toEqual([1, 2, 3]);
 
       // Re-delivering ids at or below the watermark must still be filtered --
-      // with no actionCount source, there is no signal to ever trigger a reset.
+      // with no timeline source, there is no signal to ever trigger a reset.
       events.value = [createEvent(1, 'test'), createEvent(2, 'test')];
       await nextTick();
       await waitForIdle(instance);
