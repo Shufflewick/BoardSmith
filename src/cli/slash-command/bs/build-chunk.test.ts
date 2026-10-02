@@ -805,6 +805,20 @@ describe('UIQ-03 — a11y floor', () => {
     expect(test).toMatch(/focus management/i);
     expect(test).toContain('prefers-reduced-motion');
   });
+
+  // A source scan reads text, so no code mutant can make it fail, and test-step-check's mutation
+  // check reports every one in a Spec Manifest file. The floor's scans live in tests/guards/,
+  // which the manifest never lists; motion is pinned by behaviour, never by a scan (#443).
+  it('puts the floor\'s source scans in tests/guards/, outside the Spec Manifest, and pins motion by behaviour (#443)', () => {
+    const test = read('build/test.md').replace(/\s+/g, ' ');
+    const floor = test.split('## The A11y Floor')[1].split('## Failures Loop Back')[0];
+    expect(floor).toContain('tests/guards/a11y-floor.test.ts');
+    expect(floor).toMatch(/never list it in the Spec Manifest/);
+    expect(floor).toMatch(/no-color-literal grep[^]*tests\/guards\//i);
+    expect(floor).toMatch(/reduced-motion[^]*behaviour[^]*never by scanning the source/i);
+    const assetGate = test.split('**Asset-reachability gate')[1].split('**A11y floor')[0];
+    expect(assetGate).toContain('tests/guards/a11y-floor.test.ts');
+  });
 });
 
 describe('BUILD-09 — playtest', () => {

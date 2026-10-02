@@ -455,6 +455,34 @@ it.skip('claim 2', () => {});
     expect((await checkTestStep(project, 'auction')).findings).toEqual([]);
   });
 
+  // The a11y floor's source scans live in tests/guards/: no code mutant can fail a scan, so a
+  // guard file listed in the manifest would always come back from the mutation check (#443).
+  const GUARD = `import { it, expect } from 'vitest';
+import { scanAssetReachability } from 'boardsmith/asset-scan';
+it('no bare asset <img>', () => { expect(scanAssetReachability(process.cwd())).toEqual([]); });
+`;
+
+  it('reports a guard file listed in the Spec Manifest, and says to take the row out (#443)', async () => {
+    await build(
+      { 'src/rules/auction.ts': RULES, 'tests/auction.test.ts': DISPATCHES_BOTH, 'tests/guards/a11y-floor.test.ts': GUARD },
+      '| tests/auction.test.ts | 1, 2 | yes |\n| tests/guards/a11y-floor.test.ts | a11y | yes |\n',
+    );
+    const findings = (await checkTestStep(project, 'auction')).findings;
+    expect(findings.map((f) => `${f.kind} ${f.subject}`)).toEqual(['guard-in-manifest tests/guards/a11y-floor.test.ts']);
+    expect(findings[0].detail).toMatch(/Remove the row/);
+    expect(findings[0].detail).toContain('build/test.md');
+  });
+
+  it('accepts a guard file the chunk wrote that the Spec Manifest does not list (#443)', async () => {
+    await build(
+      { 'src/rules/auction.ts': RULES, 'tests/auction.test.ts': DISPATCHES_BOTH, 'tests/guards/a11y-floor.test.ts': GUARD },
+      '| tests/auction.test.ts | 1, 2 | yes |\n',
+    );
+    const result = await checkTestStep(project, 'auction');
+    expect(result.findings).toEqual([]);
+    expect(result.testFiles.map((f) => f.path)).toEqual(['tests/auction.test.ts']);
+  });
+
   it('reports an exemption row on a chunk that has claims, and an empty manifest', async () => {
     await build({}, '| exempt | restyle | n/a |\n');
     expect((await checkTestStep(project, 'auction')).findings.map((f) => f.kind)).toEqual([

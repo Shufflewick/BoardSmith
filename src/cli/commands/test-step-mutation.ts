@@ -511,7 +511,9 @@ function survivorFindings(
       detail:
         "This test passed under every small break of this chunk's code, so it cannot fail when the code is wrong. " +
         'It asserts something the chunk does not control (a value it set up itself, a mock, a constant). Rewrite it ' +
-        'to assert what the game does, or delete it if another test already pins that.',
+        'to assert what the game does, or delete it if another test already pins that. A test that scans source ' +
+        'as text (the a11y floor\'s colour-literal or asset scan) is a guard: move it to tests/guards/ and take it ' +
+        'out of the Spec Manifest (build/test.md "The A11y Floor").',
     }));
   return [...claimFindings, ...testFindings];
 }

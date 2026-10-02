@@ -173,6 +173,9 @@ it('claim 2 — tautology', () => { const high = 3; expect(high).toBe(3); });
       'test-survives-mutation tests/auction.test.ts > claim 2 — tautology',
     ]);
     expect(result.findings[1].detail).toMatch(/asserts|fail/);
+    // A source scan (the a11y floor's colour or asset scan) cannot be failed by a mutant either:
+    // the finding says where such a test belongs instead (#443).
+    expect(result.findings[1].detail).toContain('tests/guards/');
   }, 60_000);
 
   it('refuses to mutate on top of a red suite', async () => {

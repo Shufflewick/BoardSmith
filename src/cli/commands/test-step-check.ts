@@ -19,6 +19,10 @@
  *      (`test-step-shell-context.ts`): it mounts with the shell-context stubs instead (#453).
  *   6. Mutation: every claim and every test is shown able to fail (`test-step-mutation.ts`).
  *
+ * A file under `tests/guards/` is a guard: a test that reads source as text, such as the a11y
+ * floor's colour-literal and asset scans (`build/test.md`). No code mutant can make a scan fail, so
+ * a guard is never a Spec Manifest file and is never mutation-tested; the full suite runs it (#443).
+ *
  * "The chunk added" means the lines whose last change is one of the chunk's own
  * `chunk-<slug>/` commits, or is not committed yet (`addedImplementationLines`).
  *
@@ -61,6 +65,7 @@ const TEST_STEP_FINDING_KINDS = Object.freeze([
   'exemption-with-claims',
   'red-not-observed',
   'test-file-missing',
+  'guard-in-manifest',
   'claim-not-live',
   'claim-test-missing',
   'claim-uncovered',
@@ -347,6 +352,15 @@ function rowClaimFindings(row: SpecManifestRow, file: ChunkTestFile | undefined,
   return findings;
 }
 
+/** Where a game keeps its guard tests (see the file comment). */
+const GUARD_TEST_DIR = 'tests/guards/';
+
+/** Whether a manifest path names a file under `GUARD_TEST_DIR`. */
+function isGuardFile(projectDir: string, testFile: string): boolean {
+  const absPath = resolveManifestPath(projectDir, testFile);
+  return absPath !== 'escapes' && absPath.startsWith(join(projectDir, GUARD_TEST_DIR));
+}
+
 /** Check 1: every row's file exists, its RED was observed, and its claims have citing tests. */
 async function manifestRowFindings(
   projectDir: string,
@@ -356,6 +370,18 @@ async function manifestRowFindings(
   const findings: TestStepFinding[] = [];
   const testFiles: ChunkTestFile[] = [];
   for (const row of manifest.rows) {
+    if (isGuardFile(projectDir, row.testFile)) {
+      findings.push({
+        kind: 'guard-in-manifest',
+        subject: row.testFile,
+        detail:
+          `The Spec Manifest lists ${row.testFile}, a guard test. A guard reads source as text, so no change to the ` +
+          "chunk's code can make it fail, and the mutation check would report every test in it. Remove the row: the " +
+          `full suite runs ${GUARD_TEST_DIR} on its own. A test that cites a claim belongs in a chunk test file ` +
+          'outside that folder (build/test.md "The A11y Floor").',
+      });
+      continue;
+    }
     if (!/^yes\b/.test(row.redObserved)) {
       findings.push({
         kind: 'red-not-observed',
