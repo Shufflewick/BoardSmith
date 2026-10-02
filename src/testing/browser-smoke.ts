@@ -744,15 +744,27 @@ const TOAST_WAIT_MS = 8_000;
 const TOASTS_WAITED = 3;
 
 /**
- * Waits for every toast on the page to go, as a player does before pressing what is under one. What
- * an error toast says is read before it goes, so waiting it out hides nothing. A toast still there
- * after {@link TOAST_WAIT_MS} covers the control for good (an {@link UnderAToast}).
+ * Waits for every toast to go, in the game's frame and in the page around it (#478), as a player
+ * does before pressing what is under one. What an error toast in the game says is read before it
+ * goes, so waiting it out hides nothing. A toast still there after {@link TOAST_WAIT_MS} covers the
+ * control for good (an {@link UnderAToast}).
  */
 async function waitOutTheToast(frame: Frame, walk: SmokeWalk, memory: WalkMemory): Promise<void> {
   await noteErrorToasts(frame, walk, memory);
-  await frame.waitForFunction(() => document.querySelector('.toast') === null, undefined, { timeout: TOAST_WAIT_MS }).catch(() => {
-    throw new UnderAToast(COVERED);
-  });
+  const deadline = Date.now() + TOAST_WAIT_MS;
+  for (const shown of [frame, ...pagesAround(frame)]) {
+    const timeout = Math.max(1, deadline - Date.now());
+    await shown.waitForFunction(() => document.querySelector('.toast') === null, undefined, { timeout }).catch(() => {
+      throw new UnderAToast(COVERED);
+    });
+  }
+}
+
+/** The frames `frame` is shown in, innermost first: the dev host's page around the game's frame. */
+function pagesAround(frame: Frame): Frame[] {
+  const around: Frame[] = [];
+  for (let outer = frame.parentFrame(); outer !== null; outer = outer.parentFrame()) around.push(outer);
+  return around;
 }
 
 /**
@@ -863,22 +875,31 @@ const OVER_THE_FRAME = "the click reached nothing in the game, so something over
 
 /**
  * Runs `click` with every pointer and mouse event that would reach anything but `control` stopped
- * before the page sees it, as Playwright's own click does (`guardClicks`), and says whether the
- * click reached `control` (`clickReached`). A click that reached something else did nothing, so the
- * walk can look again and click once more. One that reached nothing in the game's frame landed on
- * whatever the page around the game has over the frame, where no look inside the frame can see it,
+ * before the page sees it, as Playwright's own click does (`guardClicks`), in the game's frame and
+ * in the page around it (#478), and says whether the click reached `control` (`clickReached`). A
+ * click that reached something else in the game did nothing, so the walk can look again and click
+ * once more. One that reached a toast, in the game or in the page around it, is an
+ * {@link UnderAToast}, which `press` waits out. One that reached anything else in the page around
+ * the game landed on what that page has over the frame, where no look inside the frame can see it,
  * so the control is not pressable.
  */
 async function landsOnlyOn(control: Control, click: () => Promise<void>): Promise<boolean> {
+  const around = pagesAround(control.frame);
   await control.target.evaluate(guardClicks, undefined, { timeout: PRESS_MS });
-  let reached: Reached = 'nothing';
+  for (const outer of around) await outer.evaluate(guardClicks, null);
+  const reached: Reached[] = [];
   try {
     await click();
   } finally {
-    reached = await control.frame.evaluate(clickReached);
+    // The page around the game is read first: it stays when the click replaced the game's frame,
+    // and must be left unguarded whatever the frame's read finds.
+    for (const outer of around) reached.push(await outer.evaluate(clickReached));
+    reached.push(await control.frame.evaluate(clickReached));
   }
-  if (reached === 'nothing') throw new Error(OVER_THE_FRAME);
-  return reached === 'it';
+  if (reached.includes('toast')) throw new UnderAToast(COVERED);
+  const inTheGame = reached[reached.length - 1];
+  if (inTheGame === 'nothing') throw new Error(OVER_THE_FRAME);
+  return inTheGame === 'it';
 }
 
 /**

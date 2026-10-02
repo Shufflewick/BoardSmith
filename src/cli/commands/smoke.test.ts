@@ -28,6 +28,7 @@ import {
   boardThatHidesThePanelForAMoment,
   boardThatReplacesItsFrame,
   boardThatKeepsReordering,
+  boardUnderTheHostsCover,
   boardWithDialogs,
   candidateBoard,
   ALONE_REASON,
@@ -445,6 +446,26 @@ describe('boardsmith verify: the smoke check', () => {
       );
       expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
       expect(steps.some((line) => /pressing "r0c0" for "claim"/.test(line))).toBe(true);
+    });
+  });
+
+  describe("#478: a board control the page around the game covers", () => {
+    it('waits for a toast in the page around the game to go, and presses again', async () => {
+      const { outcome, steps } = await smokeOf(false, boardUnderTheHostsCover('toast'));
+
+      expect(outcome.summary).not.toContain('Pressing the board');
+      expect(outcome.passed).toBe(true);
+      expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
+    });
+
+    it('fails a press that something other than a toast in the page around the game takes, saying so', async () => {
+      const { outcome } = await smokeOf(false, boardUnderTheHostsCover('banner'));
+
+      expect(outcome.passed).toBe(false);
+      expect(outcome.summary).toContain(
+        '- Pressing the board\'s "Ring the bell" did not work: the click reached nothing in the game, so something over ' +
+          "the game's frame (the page around it) took it.",
+      );
     });
   });
 

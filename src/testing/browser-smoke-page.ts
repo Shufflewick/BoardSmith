@@ -108,37 +108,39 @@ export function pageDialogs(elements: Element[]): PageDialog[] {
 
 /**
  * What a click the walk made with the mouse reached (`guardClicks`, `clickReached`): the control
- * itself, something else in the game's frame, or nothing in the frame at all.
+ * itself, a toast, which goes by itself (#478), something else, or nothing in that page at all.
  */
-export type Reached = 'it' | 'other' | 'nothing';
+export type Reached = 'it' | 'toast' | 'other' | 'nothing';
 
-/** What `guardClicks` keeps on the frame's window for `clickReached`. */
+/** What `guardClicks` keeps on a page's window for `clickReached`. */
 interface ClickGuard {
   hit: boolean;
-  missed: boolean;
+  missed: Exclude<Reached, 'it' | 'nothing'> | undefined;
   remove: () => void;
 }
 
-/** The window of a frame `guardClicks` has guarded. */
+/** The window of a page `guardClicks` has guarded. */
 type GuardedWindow = Window & { __boardsmithSmokeGuard?: ClickGuard };
 
 /**
- * Guards the next click in `element`'s frame (#468): every pointer and mouse event that would reach
- * anything but `element` is stopped before the page sees it, as Playwright's own click does, so a
- * click that would land on something the page moved under the pointer does nothing and the walk can
- * look again. Which events reached the element, and which anything else, is kept for `clickReached`.
+ * Guards the next click in a page (#468): every pointer and mouse event that would reach anything
+ * but `element` is stopped before the page sees it, as Playwright's own click does, so a click that
+ * would land on something the page moved under the pointer does nothing and the walk can look again.
+ * Which events reached the element, and whether the others reached a toast, is kept for
+ * `clickReached`. With `element` null it guards the page it runs in, the page around the game's
+ * frame (#478), where nothing is the control: every click there is stopped.
  */
-export function guardClicks(element: Element): void {
-  const view = element.ownerDocument.defaultView as GuardedWindow;
+export function guardClicks(element: Element | null): void {
+  const view = (element?.ownerDocument.defaultView ?? window) as GuardedWindow;
   const types = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
-  const guard: ClickGuard = { hit: false, missed: false, remove: () => types.forEach((type) => view.removeEventListener(type, stop, true)) };
+  const guard: ClickGuard = { hit: false, missed: undefined, remove: () => types.forEach((type) => view.removeEventListener(type, stop, true)) };
   function stop(event: Event): void {
-    const target = event.target as Node | null;
-    if (target !== null && (target === element || element.contains(target))) {
+    const target = event.target as Element | null;
+    if (element !== null && target !== null && (target === element || element.contains(target))) {
       guard.hit = true;
       return;
     }
-    guard.missed = true;
+    if (guard.missed !== 'toast') guard.missed = target?.closest?.('.toast') ? 'toast' : 'other';
     event.stopImmediatePropagation();
     event.preventDefault();
   }
@@ -147,10 +149,10 @@ export function guardClicks(element: Element): void {
 }
 
 /**
- * Takes the guard `guardClicks` set off this frame and says what the click reached: the control,
- * something else (which the guard stopped), or nothing in the frame, as when the page around the
- * game covers the control and took the click itself. A frame with no guard is a new page: the click
- * replaced the one that was guarded.
+ * Takes the guard `guardClicks` set off this page and says what the click reached: the control, a
+ * toast or something else (which the guard stopped), or nothing in this page, as when the page
+ * around the game covers the control and took the click itself. A page with no guard is a new page:
+ * the click replaced the one that was guarded.
  */
 export function clickReached(): Reached {
   const view = window as GuardedWindow;
@@ -158,7 +160,7 @@ export function clickReached(): Reached {
   if (guard === undefined) throw new Error("the game's page was replaced before the walk could read what the click reached");
   guard.remove();
   delete view.__boardsmithSmokeGuard;
-  return guard.missed ? 'other' : guard.hit ? 'it' : 'nothing';
+  return guard.missed ?? (guard.hit ? 'it' : 'nothing');
 }
 
 /**
