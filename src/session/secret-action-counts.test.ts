@@ -47,10 +47,35 @@ async function statelessGame() {
   };
 }
 
+/** A table either executor runs: an action by name for a seat, and a seat's undo. */
+interface Table {
+  act(seat: number, actionName: string): Promise<{ success: boolean }>;
+  undo(seat: number): Promise<{ success: boolean; error?: string }>;
+}
+
+async function seat1PlacesPacks(table: Table, packs: number): Promise<void> {
+  for (let i = 0; i < packs; i++) expect((await table.act(1, 'placePack')).success).toBe(true);
+}
+
+/** Seat 2 burns a pack and asks to undo; its refusal must read the same however many packs seat 1 placed. */
+async function expectSeat2RefusalBlindToSeat1(newTable: () => Promise<Table>): Promise<void> {
+  const refusalAfter = async (packs: number) => {
+    const table = await newTable();
+    await seat1PlacesPacks(table, packs);
+    expect((await table.act(2, 'burnPack')).success).toBe(true);
+    const undo = await table.undo(2);
+    expect(undo.success).toBe(false);
+    return undo.error;
+  };
+  const none = await refusalAfter(0);
+  expect(none).toContain('burnPack');
+  expect(await refusalAfter(2)).toBe(none);
+}
+
 /** What seat 2 and the spectator were sent by the last op, with seat 1 placing `packs` packs first. */
 async function statelessSeenBySeat2AndSpectator(packs: number) {
   const game = await statelessGame();
-  for (let i = 0; i < packs; i++) expect((await game.act(1, 'placePack')).success).toBe(true);
+  await seat1PlacesPacks(game, packs);
   // Seat 2 acts publicly last, so every observation is taken from the same kind of op.
   expect((await game.act(2, 'done')).success).toBe(true);
   expect(game.last.playerViews[1]).toBeDefined();
@@ -80,12 +105,16 @@ function statefulGame() {
     getSessions: () => watchers,
     send: (to, message) => sent.push({ to, message: structuredClone(message) }),
   });
-  return { session, sent, seat2: watchers[0], spectator: watchers[1] };
+  const table: Table = {
+    act: (seat, actionName) => session.performAction(actionName, seat, {}),
+    undo: (seat) => session.undoToTurnStart(seat),
+  };
+  return { session, table, sent, seat2: watchers[0], spectator: watchers[1] };
 }
 
 async function statefulSeenBySeat2AndSpectator(packs: number) {
-  const { session, sent, seat2, spectator } = statefulGame();
-  for (let i = 0; i < packs; i++) expect((await session.performAction('placePack', 1, {})).success).toBe(true);
+  const { session, table, sent, seat2, spectator } = statefulGame();
+  await seat1PlacesPacks(table, packs);
   expect((await session.performAction('done', 2, {})).success).toBe(true);
   const lastTo = (who: SessionInfo) => {
     const message = sent.filter((s) => s.to === who).at(-1)?.message;
@@ -111,17 +140,7 @@ describe("a seat cannot count another seat's secret actions (#449)", () => {
     });
 
     it("the undo refusal seat 2 reads does not depend on seat 1's secret actions", async () => {
-      const refusalAfter = async (packs: number) => {
-        const game = await statelessGame();
-        for (let i = 0; i < packs; i++) expect((await game.act(1, 'placePack')).success).toBe(true);
-        expect((await game.act(2, 'burnPack')).success).toBe(true);
-        const undo = await game.undo(2);
-        expect(undo.success).toBe(false);
-        return undo.error;
-      };
-      const none = await refusalAfter(0);
-      expect(none).toContain('burnPack');
-      expect(await refusalAfter(2)).toBe(none);
+      await expectSeat2RefusalBlindToSeat1(statelessGame);
     });
 
     it('undo still takes back exactly the seat\'s own secret actions', async () => {
@@ -150,17 +169,7 @@ describe("a seat cannot count another seat's secret actions (#449)", () => {
     });
 
     it("the undo refusal seat 2 reads does not depend on seat 1's secret actions", async () => {
-      const refusalAfter = async (packs: number) => {
-        const { session } = statefulGame();
-        for (let i = 0; i < packs; i++) expect((await session.performAction('placePack', 1, {})).success).toBe(true);
-        expect((await session.performAction('burnPack', 2, {})).success).toBe(true);
-        const undo = await session.undoToTurnStart(2);
-        expect(undo.success).toBe(false);
-        return undo.error;
-      };
-      const none = await refusalAfter(0);
-      expect(none).toContain('burnPack');
-      expect(await refusalAfter(2)).toBe(none);
+      await expectSeat2RefusalBlindToSeat1(async () => statefulGame().table);
     });
   });
 });

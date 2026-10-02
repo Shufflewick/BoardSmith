@@ -1198,127 +1198,72 @@ describe('useAnimationEvents', () => {
   // the global action count, which let a seat count another seat's secret
   // actions (#449).
   describe('rewind detection via the timeline signal', () => {
-    it('replays events after the timeline changes (would be dropped without the reset)', async () => {
+    /**
+     * A queue fed by `events`, optionally watching `timeline`, whose one
+     * handler records every delivered id. `send` pushes a batch of ids (after
+     * moving the timeline, when one is given) and waits for the queue to drain.
+     */
+    function harness(initialTimeline?: string) {
       const events = ref<AnimationEvent[]>([]);
-      const timeline = ref('game-a:0');
+      const timeline = ref(initialTimeline);
       const delivered: number[] = [];
-
       const instance = createAnimationEvents({
         events: () => events.value,
-        timeline: () => timeline.value,
+        ...(initialTimeline === undefined ? {} : { timeline: () => timeline.value }),
       });
-
       instance.registerHandler('test', async (event) => {
         delivered.push(event.id);
       }, { skip: 'drop' });
+      return {
+        delivered,
+        async send(ids: number[], movedTimeline?: string) {
+          if (movedTimeline !== undefined) timeline.value = movedTimeline;
+          events.value = ids.map((id) => createEvent(id, 'test'));
+          await nextTick();
+          await waitForIdle(instance);
+        },
+      };
+    }
 
+    it('replays events after the timeline changes (would be dropped without the reset)', async () => {
+      const q = harness('game-a:0');
       // Forward play: ids 1..5 delivered, watermark advances to 5.
-      events.value = [
-        createEvent(1, 'test'),
-        createEvent(2, 'test'),
-        createEvent(3, 'test'),
-        createEvent(4, 'test'),
-        createEvent(5, 'test'),
-      ];
-      await nextTick();
-      await waitForIdle(instance);
-      expect(delivered).toEqual([1, 2, 3, 4, 5]);
+      await q.send([1, 2, 3, 4, 5]);
+      expect(q.delivered).toEqual([1, 2, 3, 4, 5]);
 
       // Rewind: the restore count moves (undo/debug-rewind), then a replayed
       // batch arrives carrying ids 3..4 -- below the old watermark of 5, but
       // these are NEW beats for the rewound session and must be delivered.
-      timeline.value = 'game-a:1';
-      events.value = [createEvent(3, 'test'), createEvent(4, 'test')];
-      await nextTick();
-      await waitForIdle(instance);
-
+      await q.send([3, 4], 'game-a:1');
       // Beats delivered to the consumer, not raw watermark integers (PROC-01).
-      expect(delivered).toEqual([1, 2, 3, 4, 5, 3, 4]);
-    });
-
-    it('still dedupes at-or-below-watermark ids while the timeline is unchanged (forward play unaffected)', async () => {
-      const events = ref<AnimationEvent[]>([]);
-      const timeline = ref('game-a:0');
-      const delivered: number[] = [];
-
-      const instance = createAnimationEvents({
-        events: () => events.value,
-        timeline: () => timeline.value,
-      });
-
-      instance.registerHandler('test', async (event) => {
-        delivered.push(event.id);
-      }, { skip: 'drop' });
-
-      events.value = [createEvent(1, 'test'), createEvent(2, 'test')];
-      await nextTick();
-      await waitForIdle(instance);
-      expect(delivered).toEqual([1, 2]);
-
-      // Normal forward play keeps the timeline -- id 2 must NOT be redelivered.
-      events.value = [createEvent(1, 'test'), createEvent(2, 'test'), createEvent(3, 'test')];
-      await nextTick();
-      await waitForIdle(instance);
-      expect(delivered).toEqual([1, 2, 3]);
-
-      // The same timeline observed again -- same guarantee.
-      timeline.value = 'game-a:0';
-      events.value = [createEvent(1, 'test'), createEvent(2, 'test'), createEvent(3, 'test')];
-      await nextTick();
-      await waitForIdle(instance);
-      expect(delivered).toEqual([1, 2, 3]);
+      expect(q.delivered).toEqual([1, 2, 3, 4, 5, 3, 4]);
     });
 
     it('replays events when a new game replaces this one at the same restore count', async () => {
-      const events = ref<AnimationEvent[]>([]);
-      const timeline = ref('game-a:0');
-      const delivered: number[] = [];
-
-      const instance = createAnimationEvents({
-        events: () => events.value,
-        timeline: () => timeline.value,
-      });
-
-      instance.registerHandler('test', async (event) => {
-        delivered.push(event.id);
-      }, { skip: 'drop' });
-
-      events.value = [createEvent(1, 'test'), createEvent(2, 'test')];
-      await nextTick();
-      await waitForIdle(instance);
-
+      const q = harness('game-a:0');
+      await q.send([1, 2]);
       // New game: a fresh game starts its ids again, and its epoch at 0.
-      timeline.value = 'game-b:0';
-      events.value = [createEvent(1, 'test')];
-      await nextTick();
-      await waitForIdle(instance);
-      expect(delivered).toEqual([1, 2, 1]);
+      await q.send([1], 'game-b:0');
+      expect(q.delivered).toEqual([1, 2, 1]);
+    });
+
+    it('still dedupes at-or-below-watermark ids while the timeline is unchanged (forward play unaffected)', async () => {
+      const q = harness('game-a:0');
+      await q.send([1, 2]);
+      // Normal forward play keeps the timeline -- id 2 must NOT be redelivered.
+      await q.send([1, 2, 3]);
+      // The same timeline observed again -- same guarantee.
+      await q.send([1, 2, 3], 'game-a:0');
+      expect(q.delivered).toEqual([1, 2, 3]);
     });
 
     it('never resets when no timeline source is supplied (absence is not a rewind signal)', async () => {
-      const events = ref<AnimationEvent[]>([]);
-      const delivered: number[] = [];
-
-      const instance = createAnimationEvents({
-        events: () => events.value,
-        // no timeline option supplied
-      });
-
-      instance.registerHandler('test', async (event) => {
-        delivered.push(event.id);
-      }, { skip: 'drop' });
-
-      events.value = [createEvent(1, 'test'), createEvent(2, 'test'), createEvent(3, 'test')];
-      await nextTick();
-      await waitForIdle(instance);
-      expect(delivered).toEqual([1, 2, 3]);
-
+      const q = harness();
+      await q.send([1, 2, 3]);
       // Re-delivering ids at or below the watermark must still be filtered --
       // with no timeline source, there is no signal to ever trigger a reset.
-      events.value = [createEvent(1, 'test'), createEvent(2, 'test')];
-      await nextTick();
-      await waitForIdle(instance);
-      expect(delivered).toEqual([1, 2, 3]);
+      await q.send([1, 2]);
+      expect(q.delivered).toEqual([1, 2, 3]);
     });
   });
 });
