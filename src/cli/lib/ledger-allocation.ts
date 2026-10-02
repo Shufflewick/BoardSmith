@@ -122,41 +122,59 @@ interface ProvisionalRange {
   written: string;
 }
 
-/** Reads one citation list matched at `at` in `citable`, item by item. */
-function readList(citable: string, at: number, length: number): { items: ListItem[]; ranges: ProvisionalRange[] } {
-  const items: ListItem[] = [];
-  const ranges: ProvisionalRange[] = [];
-  const end = at + length;
-  let kind = '';
-  let slug: string | undefined;
+/** Each item of the citation list `citable[at, end)`, as its regex groups and where it ends. */
+function* listMatches(citable: string, at: number, end: number): Generator<{ groups: ItemGroups; end: number }> {
   let pattern = FIRST_ITEM;
   let pos = at;
   while (pos < end) {
     pattern.lastIndex = pos;
     const m = pattern.exec(citable);
-    if (!m || m.index + m[0].length > end) break;
+    if (!m || m.index + m[0].length > end) return;
     pos = m.index + m[0].length;
     pattern = NEXT_ITEM;
-    const { word, letter, number, short, range, dash } = m.groups!;
-    if (word !== undefined) kind = `${word} `;
-    else if (letter !== undefined) kind = letter;
-    const written = number ?? short!;
-    let provisional: string | undefined;
-    if (number?.startsWith('@')) {
-      provisional = number;
-      slug = /^@(.*)\.\d+$/.exec(number)![1];
-    } else if (short !== undefined && slug !== undefined) {
-      provisional = `@${slug}${short}`;
-    } else {
-      // A real number, or a `.N` with no provisional id before it: no shorthand follows from it.
-      slug = undefined;
-      if (short !== undefined) continue;
-    }
-    const item: ListItem = { index: pos - written.length, written, kind, provisional };
-    const previous = items[items.length - 1];
-    if ((range ?? dash) !== undefined && previous && (previous.provisional ?? provisional) !== undefined) {
-      ranges.push({ from: previous, to: item, written: citable.slice(at, pos) });
-    }
+    yield { groups: m.groups!, end: pos };
+  }
+}
+
+/**
+ * The full provisional number an item names: itself (`@a.1`), or for a shorthand `.N`, the slug
+ * of the provisional id the list last named. `undefined` for a real number or a stray `.N`.
+ */
+function provisionalOf(number: string | undefined, short: string | undefined, slug: string | undefined): string | undefined {
+  if (number?.startsWith('@')) return number;
+  return short !== undefined && slug !== undefined ? `@${slug}${short}` : undefined;
+}
+
+type ItemGroups = Record<string, string | undefined>;
+
+/** The item a match names, or `undefined` for a `.N` with no provisional id before it, which names nothing. */
+function itemOf(groups: ItemGroups, end: number, kind: string, provisional: string | undefined): ListItem | undefined {
+  if (groups.number === undefined && provisional === undefined) return undefined;
+  const written = groups.number ?? groups.short!;
+  return { index: end - written.length, written, kind, provisional };
+}
+
+/** The range `item` ends, when a range joiner put it after `previous` and either end is provisional. */
+function rangeTo(previous: ListItem | undefined, item: ListItem, groups: ItemGroups, written: string): ProvisionalRange | undefined {
+  if ((groups.range ?? groups.dash) === undefined || previous === undefined) return undefined;
+  return (previous.provisional ?? item.provisional) === undefined ? undefined : { from: previous, to: item, written };
+}
+
+/** Reads one citation list matched at `at` in `citable`, item by item. */
+function readList(citable: string, at: number, length: number): { items: ListItem[]; ranges: ProvisionalRange[] } {
+  const items: ListItem[] = [];
+  const ranges: ProvisionalRange[] = [];
+  let kind = '';
+  let slug: string | undefined;
+  for (const { groups, end } of listMatches(citable, at, at + length)) {
+    kind = groups.word !== undefined ? `${groups.word} ` : (groups.letter ?? kind);
+    const provisional = provisionalOf(groups.number, groups.short, slug);
+    // After a real number no shorthand follows.
+    slug = provisional?.slice(1, provisional.lastIndexOf('.'));
+    const item = itemOf(groups, end, kind, provisional);
+    if (item === undefined) continue;
+    const range = rangeTo(items.at(-1), item, groups, citable.slice(at, end));
+    if (range) ranges.push(range);
     items.push(item);
   }
   return { items, ranges };
@@ -201,7 +219,7 @@ export function plainNumbersAdded(base: string, tip: string, spec: NumberedLedge
 }
 
 /** A range of citations the merge cannot rewrite one to one, in file `path`, and why. */
-export interface AllocationProblem {
+interface AllocationProblem {
   path: string;
   /** The provisional ids at the range's ends, which the merge leaves as written. */
   ids: string[];
@@ -221,32 +239,47 @@ const listed = (parts: string[]): string =>
  */
 function rangeProblem(range: ProvisionalRange, mapping: Record<string, string>): string | undefined {
   const { from, to } = range;
-  const full = (item: ListItem) => `${item.kind}${item.provisional}`;
-  if (!(from.provisional !== undefined && full(from) in mapping) && !(to.provisional !== undefined && full(to) in mapping)) {
+  if (![from, to].some((item) => item.provisional !== undefined && `${item.kind}${item.provisional}` in mapping)) {
     return undefined;
   }
   const quoted = `cites the range "${range.written}"`;
-  const fix = (kind: string, ids: string[]) =>
-    `Write each id out as a list on the branch (for example "${plural(kind)}${listed(ids)}"), and merge again.`;
   if (from.provisional === undefined || to.provisional === undefined) {
-    return `${quoted}, which runs from a real number to a provisional id, so no allocated number can stand for its end. ${fix(to.kind, [from.provisional ?? from.written, to.provisional ?? to.written])}`;
+    return `${quoted}, which runs from a real number to a provisional id, so no allocated number can stand for its end. ${listFix(to.kind, [from.provisional ?? from.written, to.provisional ?? to.written])}`;
   }
-  const slugOf = (p: string) => p.slice(0, p.lastIndexOf('.'));
-  const lo = numberOf(from.provisional);
-  const hi = numberOf(to.provisional);
-  if (slugOf(from.provisional) !== slugOf(to.provisional) || from.kind !== to.kind || hi <= lo) {
-    return `${quoted}, which is not a run of one chunk's ids of one kind, in order. ${fix(to.kind, [from.provisional, to.provisional])}`;
+  const problem = runProblem(from.kind, from.provisional, to.provisional, from.kind === to.kind, mapping);
+  return problem === undefined ? undefined : `${quoted}${problem}`;
+}
+
+/** The fix for a range that cannot be rewritten: write its ids out as a list. */
+function listFix(kind: string, ids: string[]): string {
+  return `Write each id out as a list on the branch (for example "${plural(kind)}${listed(ids)}"), and merge again.`;
+}
+
+/**
+ * Why the provisional range `first` to `last` of `kind` does not become one unbroken run of real
+ * numbers under `mapping`, as a clause after the quoted range, or `undefined` when it does.
+ */
+function runProblem(
+  kind: string,
+  first: string,
+  last: string,
+  sameKind: boolean,
+  mapping: Record<string, string>,
+): string | undefined {
+  const slug = first.slice(0, first.lastIndexOf('.'));
+  const lo = numberOf(first);
+  const hi = numberOf(last);
+  if (!sameKind || last.slice(0, last.lastIndexOf('.')) !== slug || hi <= lo) {
+    return `, which is not a run of one chunk's ids of one kind, in order. ${listFix(kind, [first, last])}`;
   }
-  const ids = Array.from({ length: hi - lo + 1 }, (_, i) => `${slugOf(from.provisional!)}.${lo + i}`);
-  const missing = ids.filter((id) => !(`${from.kind}${id}` in mapping));
+  const ids = Array.from({ length: hi - lo + 1 }, (_, i) => `${slug}.${lo + i}`);
+  const missing = ids.filter((id) => !(`${kind}${id}` in mapping));
   if (missing.length) {
-    return `${quoted}, but no entry is headed ${listed(missing.map((id) => `${from.kind}${id}`))}. ${fix(from.kind, ids)}`;
+    return `, but no entry is headed ${listed(missing.map((id) => `${kind}${id}`))}. ${listFix(kind, ids)}`;
   }
-  const became = ids.map((id) => numberOf(mapping[`${from.kind}${id}`]));
-  if (became.some((n, i) => n !== became[0] + i)) {
-    return `${quoted}, but those ids became ${plural(from.kind)}${listed(became.map(String))}, which are not one unbroken run of numbers. ${fix(from.kind, ids)}`;
-  }
-  return undefined;
+  const became = ids.map((id) => numberOf(mapping[`${kind}${id}`]));
+  if (became.every((n, i) => n === became[0] + i)) return undefined;
+  return `, but those ids became ${plural(kind)}${listed(became.map(String))}, which are not one unbroken run of numbers. ${listFix(kind, ids)}`;
 }
 
 /**

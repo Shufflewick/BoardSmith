@@ -600,8 +600,13 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
    */
   async function expectSecondMergeRefused(first: string, second: string, refusal: RegExp): Promise<void> {
     expect((await chunkMerge(main, first, { runTests: ownTestsRunner })).refusals).toEqual([]);
+    await expectMergeRefused(second, ownTestsRunner, refusal);
+  }
+
+  /** Expects merging `slug` to be refused with `refusal`, leaving the main line and its records as they were. */
+  async function expectMergeRefused(slug: string, runTests: TestRunner, refusal: RegExp): Promise<void> {
     const before = head();
-    const result = await chunkMerge(main, second, { runTests: ownTestsRunner });
+    const result = await chunkMerge(main, slug, { runTests });
     expect(result.merged).toBe(false);
     expect(result.refusals.join('\n')).toMatch(refusal);
     expect([head(), status()]).toEqual([before, '']);
@@ -656,11 +661,7 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
     // An edit to trading's own file on the main line that no chunk accounts for voids its sign-off.
     await write(main, { 'src/trading.ts': 'export const PARTITION_BYTES = 101;\n' });
     git(main, 'commit', '-q', '-am', 'an unaccounted edit');
-    const before = head();
-    const result = await chunkMerge(main, 'quests', { runTests: ownTestsRunner });
-    expect(result.refusals.join('\n')).toMatch(/chunk-check fails for trading on the combined tree[\s\S]*src\/trading\.ts changed after it/);
-    expect([head(), status()]).toEqual([before, '']);
-    await expect(fs.access(join(main, 'design/MERGE-SIGNOFFS.md'))).rejects.toThrow();
+    await expectMergeRefused('quests', ownTestsRunner, /chunk-check fails for trading on the combined tree[\s\S]*src\/trading\.ts changed after it/);
   });
 
   it("vouches for signed-off code the merge renumbered, so allocating a ledger number voids no sign-off (#435)", async () => {
@@ -731,14 +732,11 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
 
     it("refuses when the edit stops the signed chunk's own tests from running, naming the check and the chunk", async () => {
       await tradingSignsTheConfig(['tests/trading.test.ts']);
-      const before = head();
-      const result = await chunkMerge(main, 'quests', { runTests: configRunner });
-      expect(result.merged).toBe(false);
-      expect(result.refusals.join('\n')).toMatch(
+      await expectMergeRefused(
+        'quests',
+        configRunner,
         /trading's own tests \(tests\/trading\.test\.ts\) fail on the combined tree, so this merge cannot vouch for vitest\.config\.ts \(a test-runner config edited since the chunk signed it off\)[\s\S]*No test files found/,
       );
-      expect([head(), status()]).toEqual([before, '']);
-      await expect(fs.access(join(main, 'design/MERGE-SIGNOFFS.md'))).rejects.toThrow();
     });
   });
 
