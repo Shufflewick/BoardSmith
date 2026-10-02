@@ -683,6 +683,65 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
     expect(status()).toBe('');
   });
 
+  describe('a test-runner config the main line edited after a chunk signed it off (#479)', () => {
+    const config = (exclude: string[]) =>
+      `import { defineConfig } from 'vitest/config';\nexport default defineConfig({ test: { exclude: ${JSON.stringify(exclude)} } });\n`;
+
+    /** Each chunk's own tests, which vitest finds no file for when the config excludes them. */
+    const configRunner: TestRunner = async (projectDir, files) => {
+      const text = await read(projectDir, 'vitest.config.ts');
+      const excluded = files.filter((f) => text.includes(`"${f}"`));
+      if (excluded.length) return { ok: false, output: `No test files found: ${excluded.join(', ')} are excluded` };
+      return ownTestsRunner(projectDir, files);
+    };
+
+    /** Trading signs off vitest.config.ts with its code; then the main line edits only the config. */
+    async function tradingSignsTheConfig(exclude: string[]): Promise<void> {
+      await write(main, { 'vitest.config.ts': config(['node_modules/**']) });
+      git(main, 'add', '-A');
+      git(main, 'commit', '-q', '-m', 'vitest config');
+      const chunk = (await sharedChunkMd('trading', TRADING_CLAIM)).replace(
+        '| src/world.ts | written |',
+        '| src/world.ts | written |\n| vitest.config.ts | written |',
+      );
+      await buildShared('trading', {
+        extra: { 'design/chunks/trading/CHUNK.md': chunk, 'vitest.config.ts': config(['node_modules/**', 'dist/**']) },
+      });
+      expect((await chunkMerge(main, 'trading', { runTests: configRunner })).refusals).toEqual([]);
+      // Quests shares no file with trading; only the config stands between it and the main line.
+      await buildOnBranch('quests', 100);
+      await write(main, { 'vitest.config.ts': config(['node_modules/**', 'dist/**', ...exclude]) });
+      git(main, 'commit', '-q', '-am', 'tests: exclude more from collection');
+    }
+
+    it("vouches for it with the signed chunk's own checks, so the edit voids no sign-off", async () => {
+      await tradingSignsTheConfig(['.worktrees/**', '**/tests/browser/**']);
+      expect((await assessSignoffs(main)).get('trading')!.problems.join('\n')).toMatch(/vitest\.config\.ts changed after it/);
+
+      const result = await chunkMerge(main, 'quests', { runTests: configRunner });
+      expect(result.refusals).toEqual([]);
+      expect(result.vouched).toEqual([{ path: 'vitest.config.ts', chunks: ['trading'], why: 'test-config' }]);
+      expect(await read(main, 'design/MERGE-SIGNOFFS.md')).toContain('### vitest.config.ts');
+      expect((await assessSignoffs(main)).get('trading')).toEqual({
+        problems: [],
+        sharedEdits: [{ path: 'vitest.config.ts', coveredBy: 'trading', how: 'merged' }],
+      });
+      expect(status()).toBe('');
+    });
+
+    it("refuses when the edit stops the signed chunk's own tests from running, naming the check and the chunk", async () => {
+      await tradingSignsTheConfig(['tests/trading.test.ts']);
+      const before = head();
+      const result = await chunkMerge(main, 'quests', { runTests: configRunner });
+      expect(result.merged).toBe(false);
+      expect(result.refusals.join('\n')).toMatch(
+        /trading's own tests \(tests\/trading\.test\.ts\) fail on the combined tree, so this merge cannot vouch for vitest\.config\.ts \(a test-runner config edited since the chunk signed it off\)[\s\S]*No test files found/,
+      );
+      expect([head(), status()]).toEqual([before, '']);
+      await expect(fs.access(join(main, 'design/MERGE-SIGNOFFS.md'))).rejects.toThrow();
+    });
+  });
+
   it('refuses a branch that writes the merge sign-offs itself', async () => {
     await buildOnBranch('trading', 100, { 'design/MERGE-SIGNOFFS.md': '# Merge Sign-offs\n' });
     const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });

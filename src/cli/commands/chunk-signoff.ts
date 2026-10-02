@@ -55,7 +55,8 @@ import { verifiedProblem } from '../lib/verify-result.js';
  *     or when another chunk that names the file is being built (Status approved or built), whose
  *     own sign-off will have to cover it, or when `boardsmith chunk-merge` vouched for the file as
  *     it is now after two chunks built at the same time both edited it (#403,
- *     `design/MERGE-SIGNOFFS.md`). Accounted edits are reported as `sharedEdits`, which is
+ *     `design/MERGE-SIGNOFFS.md`), or because it is a test-runner config and the signed chunks' own
+ *     checks still passed with it (#479). Accounted edits are reported as `sharedEdits`, which is
  *     information, not a refusal. An edit nothing accounts for (a signed chunk reworked without a
  *     reopen, or an edit left behind by nobody's chunk) voids every sign-off naming that file.
  *   - A sign-off is a done claim, so it is refused unless the commit checked out, on a clean
@@ -698,6 +699,40 @@ function listFiles(paths: string[]): string {
   return paths.join(', ');
 }
 
+/** Each file the sign-off names that changed since, split into the edits accounted for and the rest. */
+function signedFileEdits(
+  self: ChunkState,
+  record: SignoffRecord,
+  project: ProjectState,
+): { sharedEdits: SharedEdit[]; unaccounted: string[] } {
+  const signedAt = new Date(record.when).getTime();
+  const sharedEdits: SharedEdit[] = [];
+  const unaccounted: string[] = [];
+  for (const path of Object.keys(record.code).filter((p) => p in self.code && self.code[p] !== record.code[p])) {
+    const cover = coverFor(path, self.code[path], self, signedAt, project);
+    if (cover) sharedEdits.push(cover);
+    else unaccounted.push(path);
+  }
+  return { sharedEdits, unaccounted };
+}
+
+/**
+ * For each verified chunk with a recorded sign-off, the files it names whose edit since nothing
+ * accounts for (#396): the files that void it. `chunk-merge` reads this to find a test-runner config
+ * it can vouch for (#479). Read-only.
+ */
+export async function unaccountedEdits(projectDir: string): Promise<Map<string, string[]>> {
+  const project = await readProjectState(resolve(projectDir));
+  const result = new Map<string, string[]>();
+  for (const chunk of project.chunks) {
+    const record = chunk.parsed.record;
+    if (!chunk.status.startsWith(VERIFIED) || !record) continue;
+    const { unaccounted } = signedFileEdits(chunk, record, project);
+    if (unaccounted.length) result.set(chunk.slug, unaccounted);
+  }
+  return result;
+}
+
 /** Compares the sign-off's files with the chunk's files now, applying the rule in the header. */
 function codeAssessment(self: ChunkState, record: SignoffRecord, project: ProjectState, resign: string): SignoffAssessment {
   const rel = relChunkMdPath(self.slug);
@@ -716,14 +751,7 @@ function codeAssessment(self: ChunkState, record: SignoffRecord, project: Projec
     );
   }
 
-  const signedAt = new Date(record.when).getTime();
-  const sharedEdits: SharedEdit[] = [];
-  const unaccounted: string[] = [];
-  for (const path of signedPaths.filter((p) => p in self.code && self.code[p] !== record.code[p])) {
-    const cover = coverFor(path, self.code[path], self, signedAt, project);
-    if (cover) sharedEdits.push(cover);
-    else unaccounted.push(path);
-  }
+  const { sharedEdits, unaccounted } = signedFileEdits(self, record, project);
   if (unaccounted.length) {
     problems.push(
       `${rel}'s sign-off (${record.when}) was for different code: ${listFiles(unaccounted)} ` +
