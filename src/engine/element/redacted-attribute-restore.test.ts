@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { Game, Player, Piece, type GameOptions } from '../index.js';
 import { RedactedAttributeError } from '../errors.js';
 
-/** One seed for every game here: a restore must be built from the seed its state was minted under (#447). */
-const SEED = 'redacted-attribute-restore';
+/** One id key for every game here: a restore must be built with the key its state was minted under (#447). */
+const ID_KEY = '0000000000000002';
 
 // #19, finding 1: a withheld attribute must not restore as its class-field
 // default.
@@ -51,7 +51,7 @@ class TestGame extends Game<TestGame, SecretPlayer> {
 
 /** Restore a fresh game from seat `seat`'s redacted view of `game`. */
 function restoreForSeat(game: TestGame, seat: number | null): TestGame {
-  const restored = new TestGame({ playerCount: 2, seed: SEED });
+  const restored = new TestGame({ playerCount: 2, elementIdKey: ID_KEY });
   restored.loadSerializedState(game.toJSONForPlayer(seat) as ReturnType<Game['toJSON']>);
   return restored;
 }
@@ -60,7 +60,7 @@ describe('#19 finding 1: a withheld attribute restores as unknown, not as its cl
   let game: TestGame;
 
   beforeEach(() => {
-    game = new TestGame({ playerCount: 2, seed: SEED });
+    game = new TestGame({ playerCount: 2, elementIdKey: ID_KEY });
     game.getPlayer(1)!.loc = 11;
     game.getPlayer(1)!.inv = [7, 2];
     game.getPlayer(2)!.loc = 22;
@@ -141,7 +141,7 @@ describe('#19 finding 1: a withheld attribute restores as unknown, not as its cl
     // `toJSON()`. If the redaction did not ride along, the second restore would
     // hand the class default back again one ply into the search.
     const sandbox = restoreForSeat(game, 1);
-    const clone = new TestGame({ playerCount: 2, seed: SEED });
+    const clone = new TestGame({ playerCount: 2, elementIdKey: ID_KEY });
     clone.loadSerializedState(sandbox.toJSON());
 
     expect(clone.getPlayer(2)!.isAttributeRedacted('loc')).toBe(true);

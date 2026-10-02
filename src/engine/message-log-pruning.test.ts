@@ -63,7 +63,7 @@ function played(actions: number): GameRunner<ChattyGame> {
 
 describe('the log tracks what it has evicted', () => {
   it('counts entries ever written, not entries currently held', () => {
-    const game = new ChattyGame({ playerCount: 2, seed: 'chat' });
+    const game = new ChattyGame({ playerCount: 2, seed: 'chat', elementIdKey: '00000000000000b3' });
     for (let i = 1; i <= 5; i++) game.message(`line ${i}`);
     expect(game.messageCount).toBe(5);
 
@@ -78,17 +78,17 @@ describe('the log tracks what it has evicted', () => {
   it('costs one number for the whole game, not a field on every line', () => {
     // The point of the offset over a per-entry identity: the log is the thing
     // that grows, so the fix for a size ceiling must not be paid per line.
-    const game = new ChattyGame({ playerCount: 2, seed: 'chat' });
+    const game = new ChattyGame({ playerCount: 2, seed: 'chat', elementIdKey: '00000000000000b3' });
     game.message('a line');
     expect(Object.keys(game.messages[0]).sort()).toEqual(['data', 'text']);
   });
 
   it('keeps counting across a restore', () => {
-    const game = new ChattyGame({ playerCount: 2, seed: 'chat' });
+    const game = new ChattyGame({ playerCount: 2, seed: 'chat', elementIdKey: '00000000000000b3' });
     for (let i = 1; i <= 5; i++) game.message(`line ${i}`);
     game.pruneMessages({ keepLast: 2 });
 
-    const restored = new ChattyGame({ playerCount: 2, seed: 'chat' });
+    const restored = new ChattyGame({ playerCount: 2, seed: 'chat', elementIdKey: '00000000000000b3' });
     restored.loadSerializedState(game.toJSON(), { messageLog: [...game.messages] });
 
     expect(restored.messagesEvicted).toBe(3);
@@ -98,7 +98,7 @@ describe('the log tracks what it has evicted', () => {
 
 describe('pruneMessages', () => {
   it('keeps the most recent N entries', () => {
-    const game = new ChattyGame({ playerCount: 2, seed: 'chat' });
+    const game = new ChattyGame({ playerCount: 2, seed: 'chat', elementIdKey: '00000000000000b3' });
     for (let i = 1; i <= 10; i++) game.message(`line ${i}`);
 
     game.pruneMessages({ keepLast: 3 });
@@ -107,7 +107,7 @@ describe('pruneMessages', () => {
   });
 
   it('drops from the front while a predicate says to', () => {
-    const game = new ChattyGame({ playerCount: 2, seed: 'chat' });
+    const game = new ChattyGame({ playerCount: 2, seed: 'chat', elementIdKey: '00000000000000b3' });
     game.message('old', undefined, { type: 'notice' });
     game.message('older still', undefined, { type: 'notice' });
     game.message('recent', undefined, { type: 'alert' });
@@ -125,20 +125,20 @@ describe('pruneMessages', () => {
     // A checkpoint's watermark is a position in a chronological log. There is
     // deliberately no predicate that could take an entry out of the middle and
     // move later lines across boundaries recorded before the removal.
-    const game = new ChattyGame({ playerCount: 2, seed: 'chat' });
+    const game = new ChattyGame({ playerCount: 2, seed: 'chat', elementIdKey: '00000000000000b3' });
     expect(Object.keys({ keepLast: 0, dropWhile: () => true })).toEqual(['keepLast', 'dropWhile']);
     expect(game.messages).toEqual([]);
   });
 
   it('does nothing when the log is already within the cap', () => {
-    const game = new ChattyGame({ playerCount: 2, seed: 'chat' });
+    const game = new ChattyGame({ playerCount: 2, seed: 'chat', elementIdKey: '00000000000000b3' });
     game.message('only line');
     game.pruneMessages({ keepLast: 5 });
     expect(game.messages).toHaveLength(1);
   });
 
   it('refuses a nonsensical cap rather than emptying the log', () => {
-    const game = new ChattyGame({ playerCount: 2, seed: 'chat' });
+    const game = new ChattyGame({ playerCount: 2, seed: 'chat', elementIdKey: '00000000000000b3' });
     game.message('a line');
     expect(() => game.pruneMessages({ keepLast: -1 })).toThrow(/keepLast/);
   });

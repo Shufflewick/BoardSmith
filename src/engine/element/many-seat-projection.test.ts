@@ -67,7 +67,7 @@ const SEATS = 4;
  * with nothing to hide.
  */
 function newPlaza(): PlazaGame {
-  const game = new PlazaGame({ playerCount: SEATS, seed: 'plaza' });
+  const game = new PlazaGame({ playerCount: SEATS, seed: 'plaza', elementIdKey: '00000000000000a4' });
   const square = game.create(Stall, 'square', { goods: 9 });
   square.create(Stall, 'baker', { goods: 3 });
   square.create(Stall, 'smith', { goods: 5 });

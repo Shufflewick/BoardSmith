@@ -94,10 +94,11 @@ describe('visibleAttributes covers game fields only (#448)', () => {
   });
 
   it('a restored per-seat copy knows the engine fields and still refuses the withheld one', () => {
-    const game = new PlanGame({ playerCount: 2, playerNames: ['Ann', 'Bo'], seed: 'plan' });
+    const options = { playerCount: 2, playerNames: ['Ann', 'Bo'], seed: 'plan', elementIdKey: '00000000000000a3' };
+    const game = new PlanGame(options);
     game.getPlayer(1)!.secretPlan = 'buy the lighthouse';
 
-    const sandbox = new PlanGame({ playerCount: 2, playerNames: ['Ann', 'Bo'], seed: 'plan' });
+    const sandbox = new PlanGame(options);
     sandbox.loadSerializedState(game.toJSONForPlayer(2));
     const ann = sandbox.getPlayer(1)!;
 

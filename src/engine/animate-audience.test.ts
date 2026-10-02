@@ -21,7 +21,7 @@ class CombatGame extends Game<CombatGame, Player> {
   }
 }
 
-const makeGame = () => new CombatGame({ playerCount: 3, playerNames: ['A', 'B', 'C'], seed: 'anim' });
+const makeGame = () => new CombatGame({ playerCount: 3, playerNames: ['A', 'B', 'C'], seed: 'anim', elementIdKey: '00000000000000b1' });
 
 /** The animation events a given seat's payload actually carries. */
 function eventsFor(game: CombatGame, seat: number | null): Array<{ type: string }> {

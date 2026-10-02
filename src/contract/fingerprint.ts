@@ -1691,6 +1691,9 @@ export async function computePayloadHash(): Promise<string> {
       playerCount: 2,
       playerNames: ['Alice', 'Bob'],
       seed: 'engine-contract-fixture',
+      // Element ids are keyed by a secret minted per game (#447); a fixed key
+      // keeps the hashed views identical from run to run.
+      elementIdKey: '0123456789abcdef',
     },
   }) as any;
 

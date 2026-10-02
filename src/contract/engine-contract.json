@@ -2,7 +2,7 @@
   "revision": 117,
   "bundleProtocol": 2,
   "surfaceHash": "3d6d28a5d3c36fcd",
-  "payloadHash": "dc3ebe29069b1bfd",
+  "payloadHash": "d4c55637c09b1324",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -994,9 +994,9 @@
       "date": "2026-10-02",
       "bundleProtocol": 2,
       "surfaceHash": "3d6d28a5d3c36fcd",
-      "payloadHash": "dc3ebe29069b1bfd",
+      "payloadHash": "d4c55637c09b1324",
       "formatHash": "0058593e7cc80205",
-      "summary": "Table-game element ids are now opaque (Speck32/64 of the creation counter keyed from the seed) instead of the counter itself, so a seat cannot count creations hidden from it; a saved table state restores only into a game built from its own seed, and table snapshots saved before this cannot be restored. World ids are unchanged (#447, #482)"
+      "summary": "Table-game element ids are now opaque: Speck32/64 of the creation counter under a 64-bit key the engine mints per game (GameOptions.elementIdKey, recorded in snapshot.gameOptions and never sent to a seat), so a seat cannot count creations hidden from it and a guessable seed does not decode them. A table state restores only into a game built with its key; table snapshots saved before this cannot be restored. World ids are unchanged (#447, #482)"
     }
   ]
 }

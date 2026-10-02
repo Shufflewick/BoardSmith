@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { Game, Player, Card, Space, type GameOptions, type ElementJSON } from '../index.js';
 import { RedactedAttributeError } from '../errors.js';
 
-/** One seed for every game here: a restore must be built from the seed its state was minted under (#447). */
-const SEED = 'hidden-element-restore';
+/** One id key for every game here: a restore must be built with the key its state was minted under (#447). */
+const ID_KEY = '0000000000000001';
 
 // #147: a HIDDEN ELEMENT must not restore with its class-field defaults.
 //
@@ -69,7 +69,7 @@ class TestGame extends Game<TestGame, Player> {
 
 /** Restore a fresh game from seat `seat`'s redacted view of `game`. */
 function restoreForSeat(game: TestGame, seat: number | null): TestGame {
-  const restored = new TestGame({ playerCount: 2, seed: SEED });
+  const restored = new TestGame({ playerCount: 2, elementIdKey: ID_KEY });
   restored.loadSerializedState(game.toJSONForPlayer(seat) as ReturnType<Game['toJSON']>);
   return restored;
 }
@@ -93,7 +93,7 @@ describe('#147: a hidden element restores as unknown, not as its class defaults'
   let game: TestGame;
 
   beforeEach(() => {
-    game = new TestGame({ playerCount: 2, seed: SEED });
+    game = new TestGame({ playerCount: 2, elementIdKey: ID_KEY });
   });
 
   it('withholds every attribute of an opponent-owned zone child', () => {
@@ -159,7 +159,7 @@ describe('#147: a hidden element restores as unknown, not as its class defaults'
 
   it('survives re-serialization of the already-redacted clone', () => {
     const once = restoreForSeat(game, 1);
-    const twice = new TestGame({ playerCount: 2, seed: SEED });
+    const twice = new TestGame({ playerCount: 2, elementIdKey: ID_KEY });
     twice.loadSerializedState(once.toJSON());
 
     const card = handCard(twice, 2);

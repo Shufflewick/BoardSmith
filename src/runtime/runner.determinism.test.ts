@@ -22,7 +22,7 @@ class Tray extends Space<ClockGame, Player> {}
 class ClockGame extends Game<ClockGame, Player> {
   tray!: Tray;
 
-  constructor(options: { playerCount: number; seed?: string }) {
+  constructor(options: { playerCount: number; seed?: string; elementIdKey?: string }) {
     super(options);
     this.registerElements([Token, Tray]);
     this.tray = this.create(Tray, 'tray');
@@ -52,7 +52,9 @@ function playTwoActions(seed: string): GameRunner<ClockGame> {
   const runner = new GameRunner({
     GameClass: ClockGame,
     gameType: 'clock-game',
-    gameOptions: { playerCount: 2, seed },
+    // The element id key is random per game like the instance id (#447), not
+    // a clock reading; fixed here so the runs differ only in what #54 is about.
+    gameOptions: { playerCount: 2, seed, elementIdKey: '00000000000000c1' },
   });
   runner.start();
   runner.performAction('nudge', 1, {});

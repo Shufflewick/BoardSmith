@@ -10,12 +10,22 @@
  * allowed to see, and a game's own code puts ids in animation data, messages
  * and flow variables where no view-time rewrite could find them all.
  *
- * So a table game's id is the counter run through a block cipher keyed from
- * its seed. A block cipher is a permutation of its block, so every counter
- * value still gets its own id, and the same seed always mints the same ids --
- * replay, restore, undo and bot search are untouched. Without the key the ids
- * are unordered and carry no count. The key is exactly as secret as the seed,
- * which already has to be: anyone holding the seed can predict every shuffle.
+ * So a table game's id is the counter run through a block cipher. A block
+ * cipher is a permutation of its block, so every counter value still gets its
+ * own id, and the same key always mints the same ids -- restore, undo and bot
+ * search are untouched. Without the key the ids are unordered and carry no
+ * count.
+ *
+ * THE KEY IS ITS OWN SECRET, NOT THE SEED. The game root is always counter
+ * value 0 and its id is in every seat's view, so anyone who can guess the key
+ * can check a guess against it offline. A seed is chosen by the host and may
+ * be short (a 32-bit number is searched in half an hour on one core), so a
+ * key derived from it would only be as strong as the weakest host. The key is
+ * 64 bits from the platform's cryptographic random source, minted when the
+ * game is constructed and recorded with its constructor options
+ * (`GameOptions.elementIdKey`), so every snapshot, restore, undo checkpoint
+ * and bot search carries it without being told to. It must never reach a
+ * client; nothing that is sent to a seat includes the constructor options.
  *
  * The cipher is Speck32/64 (Beaulieu et al., 2013): a 32-bit block, so ids
  * stay small whole numbers every client already handles, and a 64-bit key.
@@ -66,30 +76,25 @@ export function speck32Encrypt(roundKeys: Uint16Array, block: number): number {
   return ((x << 16) | y) >>> 0;
 }
 
-/**
- * One 32-bit hash of `text` under `salt` (murmur3's mixing). Two of them, with
- * different salts, make the 64-bit key.
- */
-function hash32(text: string, salt: number): number {
-  let h = salt >>> 0;
-  for (let i = 0; i < text.length; i += 1) {
-    let k = Math.imul(text.charCodeAt(i), 0xcc9e2d51);
-    k = (k << 15) | (k >>> 17);
-    h ^= Math.imul(k, 0x1b873593);
-    h = (h << 13) | (h >>> 19);
-    h = (Math.imul(h, 5) + 0xe6546b64) | 0;
-  }
-  h ^= text.length;
-  h ^= h >>> 16;
-  h = Math.imul(h, 0x85ebca6b);
-  h ^= h >>> 13;
-  h = Math.imul(h, 0xc2b2ae35);
-  h ^= h >>> 16;
-  return h >>> 0;
-}
+/** An element id key: 64 bits as 16 lowercase hex digits. */
+const ELEMENT_ID_KEY_PATTERN = /^[0-9a-f]{16}$/;
 
-/** Kept apart from every other use of the seed, the RNG included. */
-const KEY_DOMAIN = 'boardsmith/element-ids\u0000';
+/**
+ * A fresh element id key, from the platform's cryptographic random source.
+ * There is no fallback: a key from a predictable source would decode every id.
+ */
+export function mintElementIdKey(): string {
+  const source = globalThis.crypto;
+  if (typeof source?.getRandomValues !== 'function') {
+    throw new Error(
+      'BoardSmith needs crypto.getRandomValues to mint a game\'s element id key, and this runtime ' +
+        'has none. Run the engine on Node 19 or later, a browser, or a Workers runtime, or pass ' +
+        'GameOptions.elementIdKey from a secure random source.',
+    );
+  }
+  const bytes = source.getRandomValues(new Uint8Array(8));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
 
 function refuseCursor(cursor: number): never {
   if (Number.isInteger(cursor) && cursor >= ELEMENT_ID_SPACE) {
@@ -106,14 +111,19 @@ function refuseCursor(cursor: number): never {
 }
 
 /**
- * A table game's ids: Speck32/64 over the creation counter, keyed from the
- * whole seed string (not from the RNG's 32-bit fold of it).
+ * A table game's ids: Speck32/64 over the creation counter, keyed by `key`
+ * (16 hex digits, read as the cipher's four key words, high word first).
  */
-export function opaqueElementIds(seed: string): ElementIds {
-  const keyed = KEY_DOMAIN + seed;
-  const high = hash32(keyed, 0x9e3779b9);
-  const low = hash32(keyed, 0x85ebca77);
-  const roundKeys = speck32RoundKeys([low & WORD_MASK, low >>> 16, high & WORD_MASK, high >>> 16]);
+export function opaqueElementIds(key: string): ElementIds {
+  if (!ELEMENT_ID_KEY_PATTERN.test(key)) {
+    throw new Error(
+      `GameOptions.elementIdKey must be 16 hexadecimal digits (64 bits, lowercase); this game was ` +
+        `given ${JSON.stringify(key)}. Leave it out to have the engine mint one, or pass the key a ` +
+        `snapshot of this game recorded in its gameOptions.`,
+    );
+  }
+  const word = (i: number) => parseInt(key.slice(i * 4, i * 4 + 4), 16);
+  const roundKeys = speck32RoundKeys([word(3), word(2), word(1), word(0)]);
   return {
     mint(cursor) {
       if (!(Number.isInteger(cursor) && cursor >= 0 && cursor < ELEMENT_ID_SPACE)) refuseCursor(cursor);
@@ -127,11 +137,10 @@ export function opaqueElementIds(seed: string): ElementIds {
  *
  * A world's ids are durable -- stored partitions hold them across every wake,
  * and a host derives the next counter value from the highest id it has stored
- * (`worldIdAllocationOf`). Keying them from the seed would break both, because
- * a world host is free to change the seed on every wake (ShufflewickPub mints
- * a fresh one per wake so the RNG cannot be predicted). Opaque world ids need
- * a durable key the host keeps beside its allocation stamp, which is a
- * platform storage decision; until then a world's ids still count creations
+ * (`worldIdAllocationOf`). A world keeps no constructor options across wakes,
+ * so a key minted per construction would change on every wake. Opaque world
+ * ids need a durable key the host keeps beside its allocation stamp, which is
+ * a platform storage decision; until then a world's ids still count creations
  * (#482).
  */
 export const sequentialElementIds: ElementIds = {

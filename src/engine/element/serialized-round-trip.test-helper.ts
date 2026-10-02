@@ -12,8 +12,8 @@ export async function serializedRoundTrip<G extends Game>(
   const restored = constructGame(GameClass, {
     playerCount: original.players.length,
     playerNames: original.players.map((p) => p.name),
-    // Ids are keyed by the seed (#447); every real restore carries it.
-    seed: original.getConstructorOptions().seed as string,
+    // Ids are keyed (#447); every real restore carries the key.
+    elementIdKey: original.getConstructorOptions().elementIdKey as string,
   });
   for (const [name, cls] of original._ctx.classRegistry) restored._ctx.classRegistry.set(name, cls);
   restored.loadSerializedState(original.toJSON());

@@ -10,7 +10,8 @@
  *
  * Ids are now an opaque, keyed permutation of the creation counter: unique,
  * stable and deterministic for the game, but carrying no order or count to
- * anyone without the game's seed. These tests pin both halves: the leak is
+ * anyone without the game's id key -- a 64-bit secret minted per game, never
+ * derived from the seed (a host's seed may be guessable). These tests pin both halves: the leak is
  * gone, and replay, restore and undo still mint the same ids.
  */
 import { describe, it, expect } from 'vitest';
@@ -75,8 +76,17 @@ class ShopGame extends Game<ShopGame, Player> {
 }
 
 /** Seat 1 buys `secret` items in secret, then seat 2 buys one; seat 2's view of its own item's id. */
-async function idSeat2Sees(secret: number, seed = 'shop'): Promise<number> {
-  const session = GameSession.create({ gameType: 'shop', GameClass: ShopGame, playerCount: 2, playerNames: ['Ann', 'Bo'], seed });
+async function idSeat2Sees(secret: number): Promise<number> {
+  // One seed and one id key for every run, so the hidden purchases are the
+  // only difference between them.
+  const session = GameSession.create({
+    gameType: 'shop',
+    GameClass: ShopGame,
+    playerCount: 2,
+    playerNames: ['Ann', 'Bo'],
+    seed: 'shop',
+    gameOptions: { elementIdKey: '0123456789abcdef' },
+  });
   const first = await session.performAction('buySecretly', 1, { count: secret });
   expect(first.success, first.error).toBe(true);
   const second = await session.performAction('buy', 2, {});
@@ -124,12 +134,12 @@ describe('a hidden creation cannot be counted through element ids (#447)', () =>
 });
 
 describe('opaque ids keep replay, restore and undo exact (#447)', () => {
-  it('the same seed mints the same ids, and another seed mints others', () => {
-    const idsFor = (seed: string) =>
-      new ShopGame({ playerCount: 2, seed }).shelf.createMany(8, Item, 'item').map((item) => item.id);
+  it('the same id key mints the same ids, and another key mints others', () => {
+    const idsFor = (elementIdKey: string) =>
+      new ShopGame({ playerCount: 2, seed: 'replay', elementIdKey }).shelf.createMany(8, Item, 'item').map((item) => item.id);
 
-    expect(idsFor('replay')).toEqual(idsFor('replay'));
-    expect(idsFor('replay')).not.toEqual(idsFor('other'));
+    expect(idsFor('00000000000000aa')).toEqual(idsFor('00000000000000aa'));
+    expect(idsFor('00000000000000aa')).not.toEqual(idsFor('00000000000000bb'));
   });
 
   it('a runner restored from a snapshot mints the id the live runner mints', () => {
@@ -159,10 +169,47 @@ describe('opaque ids keep replay, restore and undo exact (#447)', () => {
     expect(session.runner.game.shelf.first(Item)!.id).toBe(before);
   });
 
-  it('refuses to load a tree whose ids were minted under another seed', () => {
-    const source = new ShopGame({ playerCount: 2, seed: 'source' });
-    const other = new ShopGame({ playerCount: 2, seed: 'not-the-source' });
+  it('refuses to load a tree whose ids were minted under another key', () => {
+    const source = new ShopGame({ playerCount: 2, seed: 'same' });
+    const other = new ShopGame({ playerCount: 2, seed: 'same' });
 
-    expect(() => other.loadSerializedState(source.toJSON())).toThrow(/minted under a different seed/);
+    expect(() => other.loadSerializedState(source.toJSON())).toThrow(/minted under a different element id key/);
+  });
+});
+
+describe('the id key does not rest on the seed (#447 review)', () => {
+  // A host's seed may be short and guessable (a 32-bit number is searchable
+  // in minutes), and the root's id is in every seat's view. If the key came
+  // from the seed, guessing the seed would decode every id.
+  it('two games from the same seed mint unrelated ids', () => {
+    const a = new ShopGame({ playerCount: 2, seed: '1234' });
+    const b = new ShopGame({ playerCount: 2, seed: '1234' });
+
+    expect(a.id).not.toBe(b.id);
+    expect(a.shelf.id).not.toBe(b.shelf.id);
+  });
+
+  it('mints a 64-bit key and records it with the constructor options every restore uses', () => {
+    const runner = new GameRunner({ GameClass: ShopGame, gameType: 'shop', gameOptions: { playerCount: 2, seed: 'k' } });
+    runner.start();
+    const key = runner.game.getConstructorOptions().elementIdKey;
+
+    expect(key).toMatch(/^[0-9a-f]{16}$/);
+    expect(runner.getSnapshot().gameOptions?.elementIdKey).toBe(key);
+  });
+
+  it('never sends the key to a seat', async () => {
+    const session = GameSession.create({ gameType: 'shop', GameClass: ShopGame, playerCount: 2, playerNames: ['Ann', 'Bo'], seed: 'k' });
+    await session.performAction('buySecretly', 1, { count: 1 });
+    const key = session.runner.game.getConstructorOptions().elementIdKey as string;
+
+    for (const seat of [1, 2]) {
+      expect(JSON.stringify(session.getState(seat))).not.toContain(key);
+    }
+  });
+
+  it('refuses a key that is not 16 hex digits', () => {
+    expect(() => new ShopGame({ playerCount: 2, elementIdKey: '1234' })).toThrow(/elementIdKey/);
+    expect(() => new ShopGame({ playerCount: 2, elementIdKey: 'zzzzzzzzzzzzzzzz' })).toThrow(/elementIdKey/);
   });
 });

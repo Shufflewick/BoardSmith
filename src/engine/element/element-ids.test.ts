@@ -1,10 +1,11 @@
 /**
  * The element id cipher (#447): Speck32/64 over the creation counter, keyed
- * from the game's seed.
+ * by a 64-bit secret minted per game.
  */
 import { describe, it, expect } from 'vitest';
 import {
   ELEMENT_ID_SPACE,
+  mintElementIdKey,
   opaqueElementIds,
   sequentialElementIds,
   speck32Encrypt,
@@ -20,28 +21,35 @@ describe('Speck32/64', () => {
     const roundKeys = speck32RoundKeys([0x0100, 0x0908, 0x1110, 0x1918]);
     expect(speck32Encrypt(roundKeys, 0x6574694c)).toBe(0xa86842f2);
   });
+
+  it('reads an id key as the four key words, high word first', () => {
+    expect(opaqueElementIds('1918111009080100').mint(0x6574694c)).toBe(0xa86842f2);
+  });
+});
+
+describe('mintElementIdKey', () => {
+  it('mints 64 random bits as 16 hex digits, a new one each time', () => {
+    const keys = new Set(Array.from({ length: 64 }, () => mintElementIdKey()));
+    for (const key of keys) expect(key).toMatch(/^[0-9a-f]{16}$/);
+    expect(keys.size).toBe(64);
+  });
 });
 
 describe('opaqueElementIds', () => {
   it('gives every counter value its own id', () => {
-    const ids = opaqueElementIds('permutation');
+    const ids = opaqueElementIds('0123456789abcdef');
     const seen = new Set<number>();
     for (let cursor = 0; cursor < 50_000; cursor += 1) seen.add(ids.mint(cursor));
     expect(seen.size).toBe(50_000);
   });
 
-  it('keys on the whole seed', () => {
-    const a = opaqueElementIds('seed-a').mint(0);
-    expect(opaqueElementIds('seed-a').mint(0)).toBe(a);
-    expect(opaqueElementIds('seed-b').mint(0)).not.toBe(a);
-    expect(opaqueElementIds('seed-a ').mint(0)).not.toBe(a);
-    // Seeds the RNG's 32-bit fold sends to the same state ("Aa" and "BB"
-    // both hash to 2112) must still key differently.
-    expect(opaqueElementIds('Aa').mint(0)).not.toBe(opaqueElementIds('BB').mint(0));
+  it('refuses a key that is not 16 hex digits', () => {
+    expect(() => opaqueElementIds('abc')).toThrow(/16 hexadecimal digits/);
+    expect(() => opaqueElementIds('0123456789ABCDEF')).toThrow(/16 hexadecimal digits/);
   });
 
   it('stays inside the id space and refuses a counter past it', () => {
-    const ids = opaqueElementIds('edge');
+    const ids = opaqueElementIds('fedcba9876543210');
     const last = ids.mint(ELEMENT_ID_SPACE - 1);
     expect(Number.isSafeInteger(last)).toBe(true);
     expect(last).toBeGreaterThanOrEqual(0);

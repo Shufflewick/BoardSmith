@@ -131,7 +131,7 @@ describe('GridCell', () => {
       game.toJSON() as any,
       GridGame as unknown as new (options: any) => GridGame,
       game._ctx.classRegistry,
-      game.getConstructorOptions().seed as string,
+      game.getConstructorOptions().elementIdKey as string,
     );
 
     const board = restored.first(Board)!;

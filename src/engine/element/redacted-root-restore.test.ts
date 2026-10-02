@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { Game, Player, type GameOptions } from '../index.js';
 import { RedactedAttributeError } from '../errors.js';
 
-/** One seed for every game here: a restore must be built from the seed its state was minted under (#447). */
-const SEED = 'redacted-root-restore';
+/** One id key for every game here: a restore must be built with the key its state was minted under (#447). */
+const ID_KEY = '0000000000000003';
 
 // #148: the GAME ROOT is never redacted on restore.
 //
@@ -35,7 +35,7 @@ class RootGame extends Game<RootGame, Player> {
 }
 
 function restoreForSeat(game: RootGame, seat: number | null): RootGame {
-  const restored = new RootGame({ playerCount: 2, seed: SEED });
+  const restored = new RootGame({ playerCount: 2, elementIdKey: ID_KEY });
   restored.loadSerializedState(game.toJSONForPlayer(seat) as ReturnType<Game['toJSON']>);
   return restored;
 }
@@ -44,7 +44,7 @@ describe('#148: a withheld game-root attribute restores as unknown', () => {
   let game: RootGame;
 
   beforeEach(() => {
-    game = new RootGame({ playerCount: 2, seed: SEED });
+    game = new RootGame({ playerCount: 2, elementIdKey: ID_KEY });
     game.publicPot = 12;
     game.mapSeed = 'the-real-seed';
     game.hiddenRound = 4;
@@ -102,7 +102,7 @@ describe('#148: a withheld game-root attribute restores as unknown', () => {
 
   it('survives re-serialization of the already-redacted clone', () => {
     const once = restoreForSeat(game, 1);
-    const twice = new RootGame({ playerCount: 2, seed: SEED });
+    const twice = new RootGame({ playerCount: 2, elementIdKey: ID_KEY });
     twice.loadSerializedState(once.toJSON());
 
     expect(twice.isAttributeRedacted('mapSeed')).toBe(true);
@@ -123,9 +123,9 @@ describe('#148: a withheld game-root attribute restores as unknown', () => {
     class OpenGame extends Game<OpenGame, Player> {
       seedValue = 'open';
     }
-    const open = new OpenGame({ playerCount: 2, seed: SEED });
+    const open = new OpenGame({ playerCount: 2, elementIdKey: ID_KEY });
     open.seedValue = 'still-open';
-    const restored = new OpenGame({ playerCount: 2, seed: SEED });
+    const restored = new OpenGame({ playerCount: 2, elementIdKey: ID_KEY });
     restored.loadSerializedState(open.toJSONForPlayer(1) as ReturnType<Game['toJSON']>);
 
     expect(restored.seedValue).toBe('still-open');

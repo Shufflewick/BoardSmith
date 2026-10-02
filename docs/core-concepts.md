@@ -499,19 +499,37 @@ Each player receives a filtered view of the game state:
 
 Every element has a numeric `id` that never changes and that every view,
 selection, message and animation refers to it by. In a table game the id is
-**opaque**: the game's creation counter run through a block cipher keyed from
-the game's seed. Ids are unique, whole numbers from 0 to 2^32 - 1, and the same
-seed always mints the same ids, so replay, restore, undo and bot search are
-exact. What they are not is ordered: a seat cannot tell from the ids it sees
-which element was created first, or how many elements were created where it
-could not see them. Creating elements in a hidden zone is therefore safe; the
-ids of everything a seat can see stay the same however many were created out of
-its sight (#447).
+**opaque**: the game's creation counter run through a block cipher under a
+64-bit key the engine mints for that game from the platform's cryptographic
+random source. Ids are unique whole numbers from 0 to 2^32 - 1. What they are
+not is ordered: a seat cannot tell from the ids it sees which element was
+created first, or how many elements were created where it could not see them.
+Creating elements in a hidden zone is therefore safe (#447).
 
-So never read anything into an id beyond identity: do not sort by it, compare
-it with `<`, or do arithmetic on it. Keep creation order in an attribute of your
-own when a rule needs it. A saved state can only be restored into a game built
-from the seed it was created with, and the restore refuses any other.
+The key is deliberately NOT derived from the seed. The game root's id is in
+every seat's view, so a key a player could guess could be checked against it
+offline, and a host's seed may be short: a 32-bit seed is searched in under an
+hour. The key is recorded with the game's constructor options
+(`GameOptions.elementIdKey`, carried in `snapshot.gameOptions`), so every
+restore, undo checkpoint and bot search mints the same ids, and it is never
+sent to a seat. Keep it as secret as the snapshot itself.
+
+Two consequences:
+
+- Never read anything into an id beyond identity: do not sort by it, compare
+  it with `<`, or do arithmetic on it. Keep creation order in an attribute of
+  your own when a rule needs it.
+- The same seed no longer gives the same ids: two games from one seed shuffle
+  alike but number their elements differently. A test that needs the same ids
+  twice passes the same `elementIdKey` (16 hex digits) to both, and a saved
+  state restores only into a game built with the key it was minted under; the
+  restore refuses any other.
+
+The seed still has to be unguessable for a different reason: it decides every
+shuffle and roll, so a host that hands the engine a guessable seed lets a
+player predict them. A host should supply at least 128 bits from a
+cryptographic random source. (The RNG itself currently keeps only 32 bits of
+state whatever the seed, which is its own open problem: #483.)
 
 A **world**'s ids are still its plain creation counter, because they are
 durable across wakes and a world host may change the seed on every wake. In a
