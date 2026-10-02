@@ -9,6 +9,7 @@ import {
   checkNumberedLedger,
   checkFilingStatus,
   checkRunLog,
+  describeFinding,
   ledgerCheck,
   ledgerCheckCommand,
 } from './ledger-check.js';
@@ -383,12 +384,45 @@ describe('ledgerCheck — the whole project', () => {
     expect(result.findings[0].detail).toContain('boardsmith chunk-merge');
   });
 
+  it('fails a provisional id cited anywhere in the main checkout, not only a heading (#446)', async () => {
+    const { result, found } = await committedProject({
+      'RULINGS.md': ruling(1) + '### Ruling @trading.1\n- Decision: merged by hand.\n',
+      'notes.md': 'Prices follow Rulings 1 and @trading.2, and `Ruling @x.1` is only quoted.\n',
+      '../src/trading.ts': '// Ruling @trading.3 applies; mail jt@example.com\n',
+      '../tests/trading.test.ts': '// as settled in @trading.4\n',
+    });
+    expect(found).toEqual([
+      'RULINGS.md:Ruling @trading.1:provisional-on-main-line',
+      'notes.md:Ruling @trading.2:provisional-on-main-line',
+      'src/trading.ts:Ruling @trading.3:provisional-on-main-line',
+      'tests/trading.test.ts:@trading.4:provisional-on-main-line',
+    ]);
+    const cited = result.findings[2];
+    expect(describeFinding(cited)).toBe(
+      'src/trading.ts, Ruling @trading.3: src/trading.ts cites Ruling @trading.3, a provisional id, which only a ' +
+        "chunk's own worktree may hold; it reached the main checkout without `boardsmith chunk-merge`, so it " +
+        'names no real entry. Replace it with the real number its entry was given (the merge commit that ' +
+        'allocated it says which), then run `boardsmith ledger-check` again.',
+    );
+    expect(describeFinding(result.findings[0])).toMatch(/^design\/RULINGS\.md, Ruling @trading\.1: /);
+  });
+
+  it('fails an uncommitted file citing a provisional id in the main checkout too (#446)', async () => {
+    const dir = await project({ 'RULINGS.md': ruling(1) });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    await fs.mkdir(join(dir, 'src'), { recursive: true });
+    await fs.writeFile(join(dir, 'src', 'x.ts'), '// Decisions 2 and @a.1\n');
+    expect(located((await ledgerCheck(dir)).findings)).toEqual(['src/x.ts:provisional-on-main-line']);
+  });
+
   it('accepts provisional ids in a chunk\'s own worktree, where a parallel branch writes them', async () => {
     const dir = await project({ 'RULINGS.md': ruling(1) });
     commitAt(dir, '2026-09-23T12:00:00Z');
     const worktree = join(dirname(dir), 'wt-trading');
     execSync(`git worktree add -q -b chunk/trading ${worktree}`, { cwd: dir, stdio: 'ignore' });
     await fs.appendFile(join(worktree, 'design', 'RULINGS.md'), '### Ruling @trading.1\n- Decision: x.\n');
+    await fs.mkdir(join(worktree, 'src'), { recursive: true });
+    await fs.writeFile(join(worktree, 'src', 'trading.ts'), '// Ruling @trading.1\n');
     commitAt(worktree, '2026-09-23T12:30:00Z');
     expect((await ledgerCheck(worktree)).findings).toEqual([]);
   });

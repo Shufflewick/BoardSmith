@@ -16,7 +16,8 @@
  *      the run that holds it. The kernel releases it when that run exits, however it exits (#441).
  *   2. A branch may not add a real ledger number (it writes `Ruling @<slug>.<n>`), may not write
  *      RUN.md, and may not write another chunk's run log. Real numbers are allocated here, on the
- *      combined tree, and every citation of each provisional id is rewritten.
+ *      combined tree, and every citation of each provisional id is rewritten, shorthand included
+ *      (`Rulings @a.1 to .3`); a range it cannot rewrite one to one is refused (#446).
  *   3. On the combined tree, before anything is committed, it re-runs every tree-wide check:
  *      the chunk is verified; the chunks really built alongside it (not yet verified on the main
  *      line when the branch left, or merged by chunk-merge since, #442) were allowed to be (the
@@ -66,7 +67,7 @@ import {
   plainNumbersAdded,
   provisionalReferences,
 } from '../lib/ledger-allocation.js';
-import { ledgerCheck } from './ledger-check.js';
+import { describeFinding, ledgerCheck } from './ledger-check.js';
 import { type TestRunner, checkConstraints, runVitest } from './constraint-check.js';
 import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles } from './chunk-signoff.js';
 import { verifiedAgainstIsCurrent } from './chunk-provenance.js';
@@ -273,8 +274,10 @@ async function allocate(
     const text = await readText(join(top, name));
     if (text !== undefined) files[name] = text;
   }
-  const { files: rewritten, mapping } = allocateProvisional(files, ledgers);
-  const refusals: string[] = [];
+  const { files: rewritten, mapping, problems } = allocateProvisional(files, ledgers);
+  // A range left as written is refused for what it is, not again as ids nobody declared.
+  const refusals = problems.map((p) => `${p.path} ${p.detail}`);
+  const kept = new Set(problems.flatMap((p) => p.ids.map((id) => `${p.path}\0${id}`)));
   const renumbered: string[] = [];
   const design = `${ctx.prefix}${DESIGN_DIR}/`;
   for (const [name, text] of Object.entries(rewritten)) {
@@ -283,7 +286,9 @@ async function allocate(
       await git(top, ['add', '--', name]);
       if (name.startsWith(ctx.prefix) && !name.startsWith(design)) renumbered.push(name.slice(ctx.prefix.length));
     }
-    for (const id of provisionalReferences(name, text)) refusals.push(citationRefusal(name, id));
+    for (const id of provisionalReferences(name, text)) {
+      if (!kept.has(`${name}\0${id}`)) refusals.push(citationRefusal(name, id));
+    }
   }
   return { allocated: mapping, refusals, renumbered };
 }
@@ -374,7 +379,7 @@ async function combinedTreeProblems(ctx: MergeContext, alongside: string[], runT
   const problems = [
     ...(await verifiedProblem(ctx)),
     ...(await concurrencyProblems(ctx, alongside)),
-    ...ledgers.findings.map((f) => `${DESIGN_DIR}/${f.ledger}, ${f.entry}: ${f.detail}`),
+    ...ledgers.findings.map(describeFinding),
     ...(await checkConstraints(ctx.projectDir, { runTests })).refusals,
     ...(await signoffProblems(ctx.projectDir)),
   ];
@@ -619,13 +624,13 @@ async function mergeLocked(ctx: MergeContext, runTests: TestRunner): Promise<Chu
   const touched = await touchedOnMainLine(ctx);
   const alongside = await builtAlongside(ctx, touched);
   const shared = await sharedSourceFiles(ctx, touched, renumbered);
-  const problems = [
-    ...refusals,
-    ...(await firstProblems([
-      () => vouchForSharedFiles(ctx, shared, runTests),
-      () => combinedTreeProblems(ctx, alongside, runTests),
-    ])),
-  ];
+  // A citation the allocation could not rewrite is still provisional on the combined tree, where
+  // ledger-check would name it again; the allocation's refusal says what to write instead.
+  const problems = await firstProblems([
+    async () => refusals,
+    () => vouchForSharedFiles(ctx, shared, runTests),
+    () => combinedTreeProblems(ctx, alongside, runTests),
+  ]);
   if (problems.length) {
     await run(ctx.top, ['merge', '--abort']);
     return refused(problems);

@@ -342,6 +342,38 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
     expect(await read(main, 'design/notes.md')).toBe('Prices follow Rulings 1 and 2.\n');
   });
 
+  it('rewrites shorthand ids after a provisional id, "Rulings @trading.1 to .3" and "@trading.1, .2" (#446)', async () => {
+    const rulings = ['1', '2', '3'].map((n) => `### Ruling @trading.${n}\n- Decision: ${n}.\n`).join('\n');
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': `# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n${rulings}`,
+      'src/trading-rules.ts': '// Rulings @trading.1 to .3 apply here.\n// Rulings 1 and @trading.1, .2\nexport const X = 1;\n',
+    });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.refusals).toEqual([]);
+    expect(await read(main, 'src/trading-rules.ts')).toBe(
+      '// Rulings 2 to 4 apply here.\n// Rulings 1 and 2, 3\nexport const X = 1;\n',
+    );
+  });
+
+  it('refuses a range whose ids would not stay one unbroken run, naming the file, and leaves main as it was (#446)', async () => {
+    // Headed out of order, so @trading.1 to .3 would become 2 to 3 and drop @trading.2 (4).
+    const rulings = ['1', '3', '2'].map((n) => `### Ruling @trading.${n}\n- Decision: ${n}.\n`).join('\n');
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': `# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n${rulings}`,
+      'design/notes.md': 'Prices follow Rulings @trading.1 to .3.\n',
+    });
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([
+      'design/notes.md cites the range "Rulings @trading.1 to .3", but those ids became Rulings 2, 4 and 3, ' +
+        'which are not one unbroken run of numbers. Write each id out as a list on the branch (for example ' +
+        '"Rulings @trading.1, @trading.2 and @trading.3"), and merge again.',
+    ]);
+    expect(head()).toBe(before);
+    expect(status()).toBe('');
+  });
+
   it('refuses a provisional id written with no kind before it, naming the file and the form to write (#439)', async () => {
     await buildOnBranch('trading', 100, {
       'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',

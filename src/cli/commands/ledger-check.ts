@@ -66,7 +66,7 @@ import { CHUNK_EVIDENCE_DIR, citedEvidencePaths } from '../lib/cited-evidence.js
 import { type ChunkCommit, type PinnedCommit, chunkPins } from '../lib/chunk-commits.js';
 import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem } from '../lib/line-location.js';
 import { type EntryField, type LedgerEntry, entryField, parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
-import { NUMBERED_LEDGER_SPECS, provisionalHeadings } from '../lib/ledger-allocation.js';
+import { NUMBERED_LEDGER_SPECS, provisionalHeadings, provisionalReferences } from '../lib/ledger-allocation.js';
 import { checkCrossChunkLedger } from './cross-chunk.js';
 import { type VerifyLookup, type VerifyOnFile, checkRunLogRoles, reviewRoundCommits, runLogEntries } from '../lib/run-log-roles.js';
 import { readVerifyResult, verifyResultPath, verifyResultsDir } from '../lib/verify-result.js';
@@ -88,7 +88,10 @@ export type LedgerFindingKind =
   | 'cited-lines-missing';
 
 export interface LedgerFinding {
+  /** The file the finding is in, relative to design/, or to the project when `outsideDesign`. */
   ledger: string;
+  /** True for a file outside design/, such as a source file citing a provisional id (#446). */
+  outsideDesign?: boolean;
   /** The entry the finding is about, e.g. `Ruling 138`. */
   entry: string;
   kind: LedgerFindingKind;
@@ -487,6 +490,11 @@ export function checkRunLog(
   return findings;
 }
 
+/** A finding as one line: where it is, the entry, and what to do. */
+export function describeFinding(f: LedgerFinding): string {
+  return `${f.outsideDesign ? f.ledger : `${DESIGN_DIR}/${f.ledger}`}, ${f.entry}: ${f.detail}`;
+}
+
 /** True in a repository's main checkout; false in a linked worktree (`git worktree add`). */
 async function isMainCheckout(projectDir: string): Promise<boolean> {
   const [gitDir, commonDir] = (await git(projectDir, ['rev-parse', '--git-dir', '--git-common-dir'])).trim().split('\n');
@@ -497,14 +505,17 @@ async function isMainCheckout(projectDir: string): Promise<boolean> {
  * A provisional id (`Ruling @<slug>.<n>`) is written on a chunk's parallel branch, in its own
  * worktree, and `boardsmith chunk-merge` turns it into a real number as it lands (#294). One in the
  * main checkout means a branch was merged some other way, skipping the allocation and every
- * combined-tree check that goes with it.
+ * combined-tree check that goes with it, or that a citation of one got past the merge's rewrite
+ * (#446). So in the main checkout every provisional id is a finding: each one headed in a ledger,
+ * and each one cited in any file of the project, tracked or not yet (an id a Markdown file only
+ * quotes, in a code span, a fenced block or a comment, is not cited; `citableText`).
  */
 async function provisionalOnMainLine(projectDir: string): Promise<LedgerFinding[]> {
-  const found: LedgerFinding[] = [];
+  const headed: LedgerFinding[] = [];
   for (const spec of NUMBERED_LEDGER_SPECS) {
     const text = await readLedger(projectDir, spec.file);
     for (const id of text === undefined ? [] : provisionalHeadings(text, spec)) {
-      found.push({
+      headed.push({
         ledger: spec.file,
         entry: id,
         kind: 'provisional-on-main-line',
@@ -516,9 +527,44 @@ async function provisionalOnMainLine(projectDir: string): Promise<LedgerFinding[
       });
     }
   }
-  if (found.length === 0) return [];
-  await requireGitRepo(projectDir, 'tells a chunk worktree, where provisional ids belong, from the main checkout');
-  return (await isMainCheckout(projectDir)) ? found : [];
+  if (!(await isGitRepo(projectDir))) {
+    // Outside git there is no telling a chunk worktree from the main checkout.
+    if (headed.length) await requireGitRepo(projectDir, 'tells a chunk worktree, where provisional ids belong, from the main checkout');
+    return [];
+  }
+  if (!(await isMainCheckout(projectDir))) return [];
+  return [...headed, ...(await provisionalCitedOnMainLine(projectDir, headed))];
+}
+
+/** Each provisional id cited in a project file, other than one `headed` already reports as a ledger heading. */
+async function provisionalCitedOnMainLine(projectDir: string, headed: LedgerFinding[]): Promise<LedgerFinding[]> {
+  const design = `${DESIGN_DIR}/`;
+  const already = new Set(headed.map((f) => `${design}${f.ledger}\0${f.entry}`));
+  const files = (await git(projectDir, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']))
+    .split('\0')
+    .filter(Boolean);
+  const found: LedgerFinding[] = [];
+  for (const file of [...new Set(files)].sort()) {
+    const buffer = await fs.readFile(pathJoin(projectDir, file)).catch(() => undefined);
+    // A file deleted from the working tree, or a binary file, cites nothing.
+    if (buffer === undefined || buffer.includes(0)) continue;
+    for (const id of provisionalReferences(file, buffer.toString('utf-8'))) {
+      if (already.has(`${file}\0${id}`)) continue;
+      const inDesign = file.startsWith(design);
+      found.push({
+        ledger: inDesign ? file.slice(design.length) : file,
+        ...(inDesign ? {} : { outsideDesign: true }),
+        entry: id,
+        kind: 'provisional-on-main-line',
+        detail:
+          `${file} cites ${id}, a provisional id, which only a chunk's own worktree may hold; it reached ` +
+          `the main checkout without \`boardsmith chunk-merge\`, so it names no real entry. Replace it ` +
+          `with the real number its entry was given (the merge commit that allocated it says which), ` +
+          `then run \`boardsmith ledger-check\` again.`,
+      });
+    }
+  }
+  return found;
 }
 
 /**
@@ -618,10 +664,15 @@ function git(cwd: string, args: string[]): Promise<string> {
 
 const UNCOMMITTED = /^0{40}$/;
 
+async function isGitRepo(projectDir: string): Promise<boolean> {
+  return git(projectDir, ['rev-parse', '--show-toplevel']).then(
+    () => true,
+    () => false,
+  );
+}
+
 async function requireGitRepo(projectDir: string, why: string): Promise<void> {
-  try {
-    await git(projectDir, ['rev-parse', '--show-toplevel']);
-  } catch {
+  if (!(await isGitRepo(projectDir))) {
     throw new Error(
       `${projectDir} is not a git repository (or git is not installed).\n` +
         `ledger-check ${why}, so it needs the game's git history. Run it from inside the game ` +
@@ -1042,6 +1093,6 @@ export async function ledgerCheckCommand(
   }
   console.log(`Ledger check found ${result.findings.length} problem(s). Fix each one, then run \`boardsmith ledger-check\` again:`);
   for (const f of result.findings) {
-    console.log(`  ${DESIGN_DIR}/${f.ledger}, ${f.entry}: ${f.detail}`);
+    console.log(`  ${describeFinding(f)}`);
   }
 }
