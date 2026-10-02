@@ -34,6 +34,8 @@ export type { SeatActivityState } from './seat-activity.js';
 // consumer must compare instead of comparing due-seat sets.
 export { flowBoundaryKey } from './boundary-key.js';
 export type { BoundaryKeyState } from './boundary-key.js';
+export { toPublicFlowState } from './public-flow-state.js';
+export type { PublicFlowState } from './public-flow-state.js';
 
 // The shortest window a step's timeLimitMs may declare.
 export { MIN_STEP_TIME_LIMIT_MS } from './step-time-limit.js';

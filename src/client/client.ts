@@ -10,7 +10,7 @@ import type {
   MatchmakingStatus,
   GameState,
   PlayerState,
-  FlowState,
+  PublicFlowState,
   CreateGameRequest,
   CreateGameResponse,
   GameConnectionConfig,
@@ -269,7 +269,7 @@ export class MeepleClient {
    * Get game state via HTTP (useful when not using WebSocket).
    */
   async getGameState(gameId: string, playerSeat?: number): Promise<{
-    flowState: FlowState;
+    flowState: PublicFlowState;
     state: PlayerState;
   }> {
     const url = playerSeat !== undefined
@@ -277,7 +277,7 @@ export class MeepleClient {
       : `/games/${gameId}`;
 
     const response = await this.fetch(url);
-    const data = await this.parseResponse<{ flowState: FlowState; state: PlayerState }>(response);
+    const data = await this.parseResponse<{ flowState: PublicFlowState; state: PlayerState }>(response);
 
     return {
       flowState: data.flowState,
@@ -293,13 +293,13 @@ export class MeepleClient {
     action: string,
     player: number,
     args: Record<string, unknown> = {}
-  ): Promise<{ flowState: FlowState; state: PlayerState }> {
+  ): Promise<{ flowState: PublicFlowState; state: PlayerState }> {
     const response = await this.fetch(`/games/${gameId}/action`, {
       method: 'POST',
       body: JSON.stringify({ action, player, args }),
     });
 
-    const data = await this.parseResponse<{ flowState: FlowState; state: PlayerState }>(response);
+    const data = await this.parseResponse<{ flowState: PublicFlowState; state: PlayerState }>(response);
 
     return {
       flowState: data.flowState,
@@ -329,12 +329,12 @@ export class MeepleClient {
    * Restart a game with the same players.
    * Creates a fresh game state while keeping the same game ID and player setup.
    */
-  async restartGame(gameId: string): Promise<{ flowState: FlowState; state: PlayerState }> {
+  async restartGame(gameId: string): Promise<{ flowState: PublicFlowState; state: PlayerState }> {
     const response = await this.fetch(`/games/${gameId}/restart`, {
       method: 'POST',
     });
 
-    const data = await this.parseResponse<{ flowState: FlowState; state: PlayerState }>(response);
+    const data = await this.parseResponse<{ flowState: PublicFlowState; state: PlayerState }>(response);
 
     return {
       flowState: data.flowState,
