@@ -9,6 +9,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
+import { generateWorldTestTs } from '../lib/world-scaffold.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
 import { smokeProject } from './smoke-project.test-helper.js';
 
@@ -27,5 +28,15 @@ describe('boardsmith init --world — the scaffolded suite (#456)', () => {
     // It ran the scaffold's tests rather than finding none to run.
     expect(test.stdout).toMatch(/Tests\s+6 passed \(6\)/);
     expect(test.code).toBe(0);
+  });
+
+  it("stamps a clock dispatch with its event owner's activity, as a host does", () => {
+    // The runner takes any stamp here, so running the suite cannot catch a scaffold that hands the
+    // clock null. A host stamps the OWNER of the due event (resident-world's \`about: event.owner\`),
+    // and the catch-up's ripening was armed by alice's tend.
+    const text = generateWorldTestTs();
+    const catchUp = text.slice(text.indexOf('catches a parked world up'));
+    expect(catchUp.slice(0, catchUp.indexOf('expect('))).toMatch(/'alice',\s*\)/);
+    expect(text).not.toMatch(/activity: player === null \? null/);
   });
 });

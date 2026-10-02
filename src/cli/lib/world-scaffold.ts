@@ -390,9 +390,8 @@ function launch() {
  * WHEN THIS SEAT LAST ACTED, as a host would stamp it.
  *
  * A real host keeps a watermark per seat and hands it in with every offer and
- * every command, so a prompt can say how long a player has been away. This
- * world began at \`T0\` and nobody in it has acted yet, so every seat has been
- * recorded since then and has nothing recorded.
+ * every command, so a prompt can say how long a player has been away. In this
+ * test's world, recording began at \`T0\` and no seat has acted since.
  */
 function freshActivity(player: string) {
   const seat = SEATS.get(player);
@@ -464,6 +463,10 @@ async function offersFor(runner: Runner, player: string) {
  * in the order its author wrote them. It ends when the runner asks for nothing,
  * and it needs no ceiling, because the walk is as long as the action's own
  * steps.
+ *
+ * \`about\` is whose activity the dispatch carries: the acting seat for a
+ * player's command, and the OWNER of the event for the clock's, which is the
+ * seat whose command armed it. Null only for an event the world itself owns.
  */
 async function perform(
   runner: Runner,
@@ -471,6 +474,7 @@ async function perform(
   command: Command,
   timing: { due: number; missedCount: number } | null = null,
   arrivedAt: number = T0,
+  about: string | null = player,
 ) {
   const answered = await walkDeclaration(
     (supplied, declared) =>
@@ -495,8 +499,7 @@ async function perform(
     arrivedAt,
     allowance: NO_TIMERS,
     presence: player === null ? [] : [1],
-    // The clock's event is about no seat here, so it carries no watermark.
-    activity: player === null ? null : freshActivity(player),
+    activity: about === null ? null : freshActivity(about),
     // WHAT THE WALK COLLECTED, and nothing else: the loop hands back exactly
     // what this takes, so the two halves cannot come apart.
     ...answered,
@@ -584,6 +587,8 @@ describe('the world', () => {
       // that got no call of their own.
       { due: T0 + RIPEN_MS, missedCount: 2 },
       T0 + RIPEN_MS,
+      // Alice's tend armed this ripening, so it is hers.
+      'alice',
     );
     // ONE OCCURRENCE OF WORK, THREE OCCURRENCES OF GROWTH.
     expect(result.events).toEqual([
