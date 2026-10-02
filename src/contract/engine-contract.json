@@ -1,8 +1,8 @@
 {
-  "revision": 115,
+  "revision": 116,
   "bundleProtocol": 2,
-  "surfaceHash": "3d6d28a5d3c36fcd",
-  "payloadHash": "cae65bbab7213c58",
+  "surfaceHash": "6259bc3d9c287fc2",
+  "payloadHash": "031fd82f9f0a2642",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -979,6 +979,15 @@
       "payloadHash": "cae65bbab7213c58",
       "formatHash": "0058593e7cc80205",
       "summary": "boardsmith pack names its tarball after the tree it packs instead of the time it ran: <version>-r<revision>-<content hash>, so packing unchanged sources gives the same file and a no-op re-vendor changes nothing (#434). No engine behaviour changed."
+    },
+    {
+      "revision": 116,
+      "date": "2026-10-02",
+      "bundleProtocol": 2,
+      "surfaceHash": "6259bc3d9c287fc2",
+      "payloadHash": "031fd82f9f0a2642",
+      "formatHash": "0058593e7cc80205",
+      "summary": "Seats and spectators are sent a PublicFlowState (no moveCount, frame counters, turnRun, followUp or actionError) instead of the server FlowState, and PlayerGameState no longer carries actionCount or turnStartActionIndex (#449)."
     }
   ]
 }

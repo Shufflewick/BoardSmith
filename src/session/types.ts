@@ -6,7 +6,7 @@
  * session surface — they are defined once, in one place.
  */
 
-import type { FlowState, SerializedAction, Game, GameClass, AnimationEvent, GameStateSnapshot, PendingActionState } from '../engine/index.js';
+import type { FlowState, PublicFlowState, SerializedAction, Game, GameClass, AnimationEvent, GameStateSnapshot, PendingActionState } from '../engine/index.js';
 import type { BotStrategy } from '../bot/index.js';
 import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
 import type { CheckpointPolicy, UndoPolicy } from '../engine/index.js';
@@ -405,10 +405,13 @@ export interface PlayerGameState {
   actionMetadata?: Record<string, ActionMetadata>;
   /** Whether the player can undo (has made actions this turn) */
   canUndo?: boolean;
-  /** Number of actions made by this player since turn start */
+  /**
+   * Number of actions made by this player since turn start -- its OWN actions,
+   * never another seat's. There is deliberately no global action count or
+   * history index anywhere in this state: in a simultaneous step it would let a
+   * seat count another seat's secret actions (#449).
+   */
   actionsThisTurn?: number;
-  /** Action index where this player's current turn started */
-  turnStartActionIndex?: number;
   /** Custom debug data from game's registerDebug() calls (optional, debug mode only) */
   customDebug?: Record<string, unknown>;
   /** Animation events pending playback (from game buffer). Only present when events exist. */
@@ -420,35 +423,18 @@ export interface PlayerGameState {
   /** Formatted game messages visible to this player */
   messages?: Array<{ text: string }>;
   /**
-   * Total number of actions taken in the game so far (`runner.actionHistory.length`).
-   *
-   * Published unconditionally for EVERY seat, including spectators (position 0) and
-   * non-acting seats -- unlike `turnStartActionIndex`, which is only sent to the
-   * player whose turn it is. This is the client's universal rewind-detection signal
-   * (UNDO-04): a client observing this value DECREASE between two observations knows
-   * its session was rewound (undo/debug-rewind) and must reset any cached high-water
-   * marks (e.g. `useAnimationEvents`'s `lastQueuedId`/`lastProcessedId`) rather than
-   * trusting them to still be valid. It is a count, not content -- no visibility
-   * concern, so it needs no seat gating.
-   */
-  actionCount: number;
-
-  /**
    * How many checkpoint RESTORES (undo / rewind / host-driven restore) this
    * game's timeline has undergone (`runner.restoreEpoch`).
    *
-   * Published unconditionally for EVERY seat, like `actionCount`. This is the
+   * Published unconditionally for EVERY seat. This is the
    * stated form of "the runner was replaced": a client observing this value
    * CHANGE between two broadcasts knows every element id it captured from the
    * previous runner is stale and must be discarded — an open pick's
    * `validElements`, a drag in progress, any cached element-id list. The
    * session layer clears its own state of exactly that kind at the same moment
    * (`GameSession`'s `replaceRunner`: hint, heatmap, pending actions); this
-   * field is how clients get told.
-   *
-   * Prefer this over inferring a restore from a DECREASE in `actionCount`: a
-   * decrease can only see a restore that moves backward, and it asks callers
-   * to reason about direction rather than compare with `!==`.
+   * field is how clients get told, and `useAnimationEvents` resets its
+   * watermarks on the same change.
    */
   restoreEpoch: number;
   /**
@@ -648,7 +634,8 @@ export interface SessionInfo {
  */
 export interface StateUpdate {
   type: 'state';
-  flowState: FlowState | undefined;
+  /** What every seat may see of the flow (#449) -- see {@link PublicFlowState}. */
+  flowState: PublicFlowState | undefined;
   state: PlayerGameState;
   playerSeat: number;
   isSpectator: boolean;

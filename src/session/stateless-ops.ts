@@ -11,12 +11,13 @@
 
 import type { Game, GameClass, GameCommand, TutorialDefinition, Annotation, FlowState, FollowUpOffer } from '../engine/index.js';
 import { ErrorCode } from '../types/protocol.js';
-import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey } from '../engine/index.js';
+import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState } from '../engine/index.js';
 import type { BoundaryKeyState } from '../engine/index.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
 import { validateTutorialDefinition, initialProgress, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
 import {
   GameRunner,
+  restoreEarlierSnapshot,
   type GameStateSnapshot,
   type CheckpointPolicy,
   type UndoPolicy,
@@ -99,6 +100,15 @@ export type Op =
   // seat's own pending action (perspective-scoped via the threaded pendingState).
   | { type: 'debugFlowState'; player: number }
   | { type: 'debugRewind'; actionIndex: number }
+  /**
+   * restoreEarlier: go back to a WHOLE earlier snapshot of this game that the
+   * host kept itself -- a demo stepping back one move. Run against the CURRENT
+   * snapshot, and a restore in every sense a client sees
+   * (`restoreEarlierSnapshot`): the restore epoch advances, so seats
+   * drop stale element ids and reset their animation watermark. A host op: no
+   * wire op maps to it.
+   */
+  | { type: 'restoreEarlier'; snapshot: unknown }
   | { type: 'debugReorder'; cardId: number; targetIndex: number }
   | { type: 'debugTransfer'; cardId: number; targetDeckId: number; position: 'first' | 'last' }
   | { type: 'debugShuffle'; deckId: number }
@@ -261,7 +271,9 @@ export interface OpResult {
   flowDebugInfo?: SerializedFlowDebugInfo;
   pendingAction?: SerializedPendingActionState;
 
-  // State envelope — always present on success
+  // State envelope — present on every op that changes state. A `resolveChoices`
+  // answer goes to one seat and changes nothing, so it carries none: `snapshot`
+  // and `flowState` are null and `playerViews` is empty (#450).
   snapshot: unknown;
   pendingState: Record<string, unknown> | null;
   flowState: unknown;
@@ -370,7 +382,7 @@ type BotFlowState = {
 function buildViews(runner: GameRunner, playerCount: number): unknown[] {
   const flowState = runner.getFlowState();
   return Array.from({ length: playerCount }, (_, i) => ({
-    flowState,
+    flowState: toPublicFlowState(flowState),
     state: buildPlayerState(runner, [], i + 1, { includeActionMetadata: true }),
   }));
 }
@@ -385,7 +397,7 @@ function buildViews(runner: GameRunner, playerCount: number): unknown[] {
 // `_restoreZoneVisibility`), so both cases redact identically.
 function buildSpectatorView(runner: GameRunner): unknown {
   return {
-    flowState: runner.getFlowState(),
+    flowState: toPublicFlowState(runner.getFlowState()),
     state: buildPlayerState(runner, [], 0, { includeActionMetadata: false }),
   };
 }
@@ -630,9 +642,18 @@ function handleResolveChoices(
     return errorResult(result.error ?? 'Failed to resolve choices', 'bundle', result.errorCode);
   }
 
+  // The answer and nothing else (#450): this result goes to the ONE seat that
+  // asked, and every host used to pass it through whole -- the unredacted
+  // snapshot and every seat's view with it. A query changes no state, so it
+  // has none to report.
   return {
     success: true,
-    ...stateEnvelope(runner, gameOptions.playerCount),
+    snapshot: null,
+    pendingState: null,
+    flowState: null,
+    playerViews: [],
+    isComplete: runner.isComplete(),
+    winners: runner.getWinners().map((p) => p.seat),
     choices: result.choices,
     validElements: result.validElements,
     multiSelect: result.multiSelect,
@@ -698,7 +719,7 @@ function handleUndo(
   const restored = runnerFromCheckpoint(def, snapshot, decision.turnStartActionIndex);
   if (!restored) {
     throw new Error(
-      `Undo was allowed but no checkpoint exists at action ${decision.turnStartActionIndex}. ` +
+      'Undo was allowed but no checkpoint exists at the start of this turn. ' +
       `decideUndo checks for that checkpoint, so this is a BoardSmith bug; please report it.`,
     );
   }
@@ -1100,6 +1121,23 @@ function runnerFromCheckpoint(
   return runner;
 }
 
+function handleRestoreEarlier(
+  def: RunnerDef,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+  op: Extract<Op, { type: 'restoreEarlier' }>,
+): OpResult {
+  const runner = restoreEarlierSnapshot(snapshot, op.snapshot as GameStateSnapshot, def.gameClass, {
+    checkpoints: def.checkpoints,
+    randomness: def.randomness,
+    undo: def.undo,
+  });
+  if (def.tutorial) {
+    (runner.game as Game).tutorialDefinition = def.tutorial;
+  }
+  return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
+}
+
 function handleDebugHistory(
   def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
@@ -1416,6 +1454,8 @@ export async function executeOp(
         return handleDebugFlowState(def, gameOptions, snap, pendingState, op);
       case 'debugRewind':
         return handleDebugRewind(def, gameOptions, snap, op);
+      case 'restoreEarlier':
+        return handleRestoreEarlier(def, gameOptions, snap, op);
       case 'debugReorder':
         return handleDebugCommand(def, gameOptions, snap, {
           type: 'REORDER_CHILD',

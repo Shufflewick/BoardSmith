@@ -1214,6 +1214,45 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 }
 
 /**
+ * Restore a WHOLE earlier snapshot of the game `live` is the current state
+ * of -- the second sanctioned restore, for a host that kept the earlier
+ * snapshot itself (a demo stepping back one move) rather than a checkpoint.
+ *
+ * It is a restore in every sense a client can see, exactly as
+ * {@link GameRunner.fromCheckpoint} is: the epoch advances past the live one, so every
+ * seat knows its element ids and animation watermark are stale, and the
+ * animation-event id sequence never moves below where `live` was. Loading
+ * `earlier` with `fromSnapshot` instead would hand clients an older position
+ * under an epoch they have already seen, and the next move's animations
+ * would reuse ids they already played.
+ *
+ * Throws when `earlier` is from another game: that is not a restore.
+ */
+export function restoreEarlierSnapshot<G extends Game>(
+  live: GameStateSnapshot,
+  earlier: GameStateSnapshot,
+  GameClass: new (options: GameOptions) => G,
+  options?: { checkpoints?: CheckpointPolicy; randomness?: RandomnessPolicy; undo?: UndoPolicy }
+): GameRunner<G> {
+  if (earlier.gameInstanceId !== live.gameInstanceId) {
+    throw new Error(
+      'Cannot restore that snapshot here: it is from a different game than the one being played. ' +
+      'A restore only goes back in the same game; start a new game from it instead.',
+    );
+  }
+  return GameRunner.fromSnapshot(
+    { ...earlier, restoreEpoch: (live.restoreEpoch ?? 0) + 1 },
+    GameClass,
+    {
+      animationSeqFloor: (live.state as { animationEventSeq?: number }).animationEventSeq ?? 0,
+      checkpoints: options?.checkpoints,
+      randomness: options?.randomness,
+      undo: options?.undo,
+    },
+  );
+}
+
+/**
  * Why there is no checkpoint at `actionIndex`, as an actionable sentence.
  *
  * `GameRunner.fromCheckpoint` returns `null` for two very different reasons,
@@ -1226,23 +1265,34 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
  * (`GameRunner.checkpointWindow()`) can ask it too — the random fence in
  * `assertUndoAllowed` runs before any restore is attempted and has no snapshot
  * in hand, and it must not re-guess a cause this function already knows.
+ *
+ * `audience` is required, because the two readers must be told different
+ * things. `'debug'` (a rewind or a time-travel view, whose caller named the
+ * index) gets the index and the window's size. `'seat'` (an undo refusal a
+ * player reads) gets neither: both count every seat's actions, so a seat could
+ * count another seat's secret ones (#449).
  */
 export function describeCheckpointAbsence(
   window: ActionCheckpointWindow | undefined,
   actionIndex: number,
+  audience: 'seat' | 'debug',
 ): string {
   const found = checkpointAt(window, actionIndex);
   if (found.checkpoint) return '';
+  const debug = audience === 'debug';
   if (found.absence === 'pruned') {
-    return (
-      `action ${actionIndex} is older than this game's retained undo window ` +
-      `(it keeps ${checkpointCount(window)} checkpoint(s), back to action ${window!.baseIndex}). ` +
-      `Raise or remove \`checkpoints: { max }\` on the game definition to reach further back.`
-    );
+    const where = debug
+      ? `action ${actionIndex} is older than this game's retained undo window ` +
+        `(it keeps ${checkpointCount(window)} checkpoint(s), back to action ${window!.baseIndex}). `
+      : `the point being restored is older than this game's retained undo window. `;
+    return where + `Raise or remove \`checkpoints: { max }\` on the game definition to reach further back.`;
   }
+  const where = debug
+    ? `no checkpoint was captured at action ${actionIndex} (the retained window carries ${checkpointCount(window)}). `
+    : `no checkpoint was captured at the point being restored. `;
   return (
-    `no checkpoint was captured at action ${actionIndex} ` +
-    `(the retained window carries ${checkpointCount(window)}). Either the snapshot was not produced by ` +
-    `GameRunner.getSnapshot, or this game sets \`checkpoints: { enabled: false }\`, which disables undo.`
+    where +
+    `Either the snapshot was not produced by GameRunner.getSnapshot, or this game sets ` +
+    `\`checkpoints: { enabled: false }\`, which disables undo.`
   );
 }

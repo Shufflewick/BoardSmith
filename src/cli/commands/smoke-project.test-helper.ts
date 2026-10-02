@@ -4,9 +4,8 @@
  * the test, typecheck and mutation checks run through linked from this checkout's install.
  *
  * The scaffold's `tests/a11y.example.test.ts` is left out: it runs axe-core, which this checkout
- * does not install. So is a world's `tests/world.test.ts`, which fails and does not type-check on
- * main (#456). Everything else is the scaffold as a designer receives it, so the smoke test a
- * fixture runs is the one `init` writes.
+ * does not install. Everything else, a world's own `tests/world.test.ts` included (#456), is the
+ * scaffold as a designer receives it, so the smoke test a fixture runs is the one `init` writes.
  */
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
@@ -32,7 +31,6 @@ export async function smokeProject(world: boolean, files: Record<string, string>
   await fs.symlink('../vue-tsc/bin/vue-tsc.js', join(modules, '.bin', 'vue-tsc'));
   await fs.symlink('../vitest/vitest.mjs', join(modules, '.bin', 'vitest'));
   await fs.rm(join(dir, 'tests', 'a11y.example.test.ts'));
-  if (world) await fs.rm(join(dir, 'tests', 'world.test.ts'));
   await writeFiles(dir, files);
   commitAll(dir, 'fixture: the scaffolded game');
   return dir;

@@ -23,7 +23,7 @@ import type { GameState } from '../../client/types.js';
 import { dueSeats as dueSeatsOf } from '../../engine/flow/seat-activity.js';
 import type { GameViewElement } from '../types.js';
 import { BOARD_INTERACTION_KEY, type BoardInteraction } from './useBoardInteraction.js';
-import { ANIMATION_EVENTS_KEY, createAnimationEvents, type UseAnimationEventsReturn } from './useAnimationEvents.js';
+import { ANIMATION_EVENTS_KEY, createAnimationEvents, animationTimeline, type UseAnimationEventsReturn } from './useAnimationEvents.js';
 import { ANNOUNCER_KEY, createAnnouncer, type UseAnnouncerReturn } from './useAnnouncer.js';
 import { GAME_OVER_HOLDS_KEY, createGameOverReveal } from './useGameOverReveal.js';
 import { gameContextProvisions, type GameContextPlayer, type TimeTravelDiff } from './useGameContext.js';
@@ -144,11 +144,12 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
   const players = computed<GameContextPlayer[]>(() => state.value?.state.players ?? []);
   const myPlayer = computed(() => players.value.find((player) => player.seat === playerSeat.value));
 
-  // actionCount is the rewind signal: a decrease resets the queue's watermark,
-  // so a reconnect into a rewound session still plays the replayed events.
+  // The timeline (this game, and how often its runner was restored) is the
+  // rewind signal: a change resets the queue's watermark, so a reconnect into a
+  // rewound session still plays the replayed events.
   const animationEvents = createAnimationEvents({
     events: () => state.value?.state?.animationEvents,
-    actionCount: () => state.value?.state?.actionCount,
+    timeline: () => animationTimeline(state.value?.state),
   });
 
   const liveRegion = { polite: ref(''), assertive: ref('') };

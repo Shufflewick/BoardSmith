@@ -5,7 +5,8 @@
  * Handles the step-by-step processing of actions with repeating selections.
  */
 
-import type { FlowState, PendingActionState, Game, FollowUpOffer } from '../engine/index.js';
+import type { FlowState, PendingActionState, Game, FollowUpOffer, PublicFlowState } from '../engine/index.js';
+import { toPublicFlowState } from '../engine/index.js';
 import type { GameRunner } from '../runtime/index.js';
 import {
   ErrorCode,
@@ -48,7 +49,7 @@ export interface PickStepResult {
   actionResult?: {
     success: boolean;
     error?: string;
-    flowState?: FlowState;
+    flowState?: PublicFlowState;
     state?: PlayerGameState;
     /**
      * `ActionResult.data` from the completed multi-step action (BUG-017), so a
@@ -389,7 +390,7 @@ export class PendingActionManager<G extends Game = Game> {
       actionResult: {
         success: actionResult.success,
         error: actionResult.error,
-        flowState,
+        flowState: toPublicFlowState(flowState),
         state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
         data: actionResult.data,
         message: actionResult.message,

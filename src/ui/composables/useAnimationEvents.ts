@@ -81,19 +81,37 @@ export interface UseAnimationEventsOptions {
    */
   handlerWaitTimeout?: number;
   /**
-   * Optional getter for `PlayerGameState.actionCount` (UNDO-04 defense-in-depth).
+   * Optional getter naming the timeline the events belong to (UNDO-04
+   * defense-in-depth): the game and how many times its runner was restored,
+   * from `PlayerGameState.gameInstanceId` and `restoreEpoch`.
    *
    * The server-side fix makes the animation-event id sequence monotonic for a client
    * that stays connected, but a client that reconnects or joins mid-rewind can still
    * carry a stale `lastQueuedId`/`lastProcessedId` above the ids it is now being sent.
-   * When this getter is supplied, a DECREASE in its value between two observations is
-   * treated as a detected rewind and resets both watermarks to 0 before the incoming
+   * When this getter is supplied, a CHANGE in its value between two observations is
+   * treated as a replaced runner and resets both watermarks to 0 before the incoming
    * `events` batch is filtered, so replayed beats are delivered instead of silently
    * dropped. If omitted (or its value is `undefined`), there is no signal, and
    * behavior is identical to not having this option at all -- absence must never be
    * treated as "rewound".
+   *
+   * It is not an action count: a count of every seat's actions would let a seat
+   * count another seat's secret ones (#449).
    */
-  actionCount?: () => number | undefined;
+  timeline?: () => string | undefined;
+}
+
+/**
+ * The `timeline` a seat's state names, for {@link UseAnimationEventsOptions.timeline}:
+ * this game and how many times its runner was restored. `undefined` (no
+ * signal) when either is missing, so a state that names neither can never look
+ * like a rewind.
+ */
+export function animationTimeline(
+  state: { gameInstanceId?: string; restoreEpoch?: number } | undefined,
+): string | undefined {
+  if (state?.gameInstanceId === undefined || state.restoreEpoch === undefined) return undefined;
+  return `${state.gameInstanceId}:${state.restoreEpoch}`;
 }
 
 /**
@@ -143,7 +161,7 @@ export function useAnimationEvents(): UseAnimationEventsReturn | undefined {
  * @returns Animation events controller
  */
 export function createAnimationEvents(options: UseAnimationEventsOptions): UseAnimationEventsReturn {
-  const { events: getEvents, defaultDuration = 0, handlerWaitTimeout = 3000, actionCount: getActionCount } = options;
+  const { events: getEvents, defaultDuration = 0, handlerWaitTimeout = 3000, timeline: getTimeline } = options;
 
   // Handler registry
   const handlers = new Map<string, { handler: AnimationHandler; skip: 'run' | 'drop' }>();
@@ -162,10 +180,10 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   // Track highest queued ID to avoid re-queueing during processing
   let lastQueuedId = 0;
 
-  // Last observed actionCount (UNDO-04 rewind signal). `undefined` means "no
+  // Last observed timeline (UNDO-04 rewind signal). `undefined` means "no
   // observation yet" -- distinct from the source being absent entirely, so the
-  // first tick never spuriously looks like a decrease.
-  let lastActionCount: number | undefined;
+  // first tick never spuriously looks like a change.
+  let lastTimeline: string | undefined;
 
   // Processing state
   let isProcessing = false;
@@ -387,27 +405,25 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     }
   });
 
-  // UNDO-04: detect a rewind via a DECREASE in actionCount and reset both
-  // watermarks. This runs in its OWN watcher (created before the events watcher
-  // below, so it fires first when both change in the same tick) and tracks
-  // actionCount CONTINUOUSLY -- even on ticks that carry no animation events.
-  // Tracking it inside the events watcher would skip the empty-tick gaps and
-  // could miss a rewind whose actionCount recovers before events resume.
-  // `undefined` (source not wired, or first observation) is "no signal" -- it
-  // must never be treated as a rewind.
-  if (getActionCount) {
+  // UNDO-04: detect a replaced runner via a CHANGE in the timeline and reset
+  // both watermarks. This runs in its OWN watcher (created before the events
+  // watcher below, so it fires first when both change in the same tick) and
+  // tracks the timeline CONTINUOUSLY -- even on ticks that carry no animation
+  // events. `undefined` (source not wired, or first observation) is "no
+  // signal" -- it must never be treated as a rewind.
+  if (getTimeline) {
     watch(
-      getActionCount,
-      (currentActionCount) => {
+      getTimeline,
+      (currentTimeline) => {
         if (
-          currentActionCount !== undefined &&
-          lastActionCount !== undefined &&
-          currentActionCount < lastActionCount
+          currentTimeline !== undefined &&
+          lastTimeline !== undefined &&
+          currentTimeline !== lastTimeline
         ) {
           lastQueuedId = 0;
           lastProcessedId = 0;
         }
-        lastActionCount = currentActionCount;
+        lastTimeline = currentTimeline;
       },
       { immediate: true },
     );
