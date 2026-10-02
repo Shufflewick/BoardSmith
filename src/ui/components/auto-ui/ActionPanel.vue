@@ -1462,6 +1462,13 @@ async function executeAction(actionName: string, args: Record<string, unknown>) 
     }
   }
 
+  // The board belongs to this execution only until another action starts. The
+  // controller drops `isExecuting` before this function's `finally` runs, and a
+  // custom board may start its next pick at exactly that moment (#445); clearing
+  // then would wipe that pick and the bridge would cancel it. Same guard as the
+  // controller's own post-send clear in `sendAndResolve`.
+  const startTick = actionController.actionStartTick.value;
+
   try {
     // Delegate to controller for execution. execute() never re-throws — on
     // failure it sets actionController.lastError internally, which GameShell's
@@ -1471,7 +1478,9 @@ async function executeAction(actionName: string, args: Record<string, unknown>) 
   } catch {
     // Defensive only — execute() does not throw; lastError already covers it.
   } finally {
-    boardInteraction?.clear();
+    if (actionController.actionStartTick.value === startTick) {
+      boardInteraction?.clear();
+    }
     emit('cancelSelection');
   }
 }
