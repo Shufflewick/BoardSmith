@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join } from 'node:path';
 import { boardsmithPackageRoot } from './boardsmith-version.js';
 import { gitOutput as git } from './git-output.js';
 
@@ -16,15 +16,19 @@ import { gitOutput as git } from './git-output.js';
  * An outcome is stored under a key made of everything the whole-suite run under that mutant could
  * depend on:
  *
- * - the mutant: its file and the file's whole mutated text;
+ * - the mutant: the game folder within the repository, its file, and the file's whole mutated text;
  * - every file of the REPOSITORY in the commit, by content, except the game's `BOOKKEEPING_RECORDS`.
  *   The whole repository, not the game folder: a game in a subfolder can depend on the root
  *   lockfile, a shared tsconfig or vitest config, or a sibling module, so a change to any of those
  *   is a change to what the tests run. The bookkeeping exclusions apply only to paths inside the
  *   game folder; a file of the same name elsewhere in the repository stays in the key;
  * - what is installed: npm's record of each install (`node_modules/.package-lock.json`) in the game
- *   folder and every folder above it, the folders Node resolves the tests' imports from. The
- *   committed lockfile says what should be installed; this says what is;
+ *   folder and every folder above it, the folders Node resolves the tests' imports from, in the
+ *   order Node tries them. The committed lockfile says what should be installed; this says what is.
+ *   A folder with no install, or one whose record repeats an earlier one in that order, changes
+ *   nothing Node resolves, so it is left out: a worktree whose `node_modules` links to the main
+ *   checkout's resolves exactly what the main checkout does, though the main checkout's own
+ *   `node_modules` also sits above it;
  * - the BoardSmith the game's tests load, resolved from the game folder as Node resolves
  *   `boardsmith` (`gameBoardsmithRoot`), and the BoardSmith running this command, which generates
  *   and runs the mutants; each named by `toolRevision`. Plus the Node version.
@@ -38,14 +42,23 @@ import { gitOutput as git } from './git-output.js';
  * comes to light only when the code, the tests, or the install next change. Fix the flaky test;
  * the cache is not where that shows.
  *
- * The cache is `.boardsmith/verify/mutants.json`, out of git like the results. `save` writes only
- * the outcomes the run looked up or recorded, so the file holds one run's worth and never grows;
- * a run that tried no mutant leaves it as it was.
+ * Nothing in the key names the checkout, so an outcome holds in every checkout of the repository.
+ * The cache is therefore `boardsmith/verify/mutants.json` in the git common directory
+ * (`git rev-parse --git-common-dir`), the one file the main checkout and all its worktrees share: a
+ * thread merge whose tree is the one its worktree verified reuses every outcome the worktree
+ * recorded (#477). It holds up to `MAX_STORED_OUTCOMES` outcomes, the most recently used first;
+ * `save` puts the ones this run looked up or recorded in front of those already on file and drops
+ * the oldest past the limit, so two checkouts verifying in turn do not evict each other. A run that
+ * tried no mutant leaves the file as it was. Two runs saving at the same moment can lose one run's
+ * new outcomes, which costs only running those mutants again.
  * `boardsmith verify` saves only when the tree stayed clean for the whole run, since the key is
  * computed from the commit and would not describe files edited mid-run.
  */
 
-const CACHE_FORMAT = 2;
+const CACHE_FORMAT = 3;
+
+/** How many outcomes the shared cache keeps: many runs' worth, at about 80 bytes each. */
+export const MAX_STORED_OUTCOMES = 20_000;
 
 type CachedOutcome = 'killed' | 'survived';
 
@@ -156,29 +169,38 @@ async function repositoryTreeHash(projectDir: string): Promise<string> {
 
 /**
  * npm's record of what each install put in place, for the game folder and every folder above it,
- * the folders Node resolves the tests' imports from. A folder with no install, or one made by a
- * tool that keeps no such record, contributes its absence.
+ * in the order Node resolves the tests' imports from them. A folder with no install (or one made by
+ * a tool that keeps no such record), and a record equal to one nearer the game, are left out: Node
+ * finds every package such an install holds in the nearer one first. So the hash says what the
+ * tests resolve, not where the checkout is.
  */
 async function installedPackagesHash(projectDir: string): Promise<string> {
-  const real = await fs.realpath(projectDir);
-  const hash = createHash('sha256');
-  for (const dir of ancestors(real)) {
+  const records: string[] = [];
+  for (const dir of ancestors(await fs.realpath(projectDir))) {
     const record = await readIfPresent(join(dir, 'node_modules', '.package-lock.json'));
-    hash.update(`\0${relative(real, dir)}\0`);
-    hash.update(record ?? 'no install record');
+    if (record === undefined) continue;
+    const digest = sha256(record);
+    if (!records.includes(digest)) records.push(digest);
   }
-  return hash.digest('hex');
+  return sha256(records.join('\0'));
 }
 
-export function mutantCachePath(projectDir: string): string {
-  return join(projectDir, '.boardsmith', 'verify', 'mutants.json');
+/** The cache file, in the git common directory every checkout of the repository shares. */
+export async function mutantCachePath(projectDir: string): Promise<string> {
+  const common = (await git(projectDir, ['rev-parse', '--path-format=absolute', '--git-common-dir'])).trim();
+  return join(await fs.realpath(common), 'boardsmith', 'verify', 'mutants.json');
 }
 
+/** The outcomes on file, the most recently used first. */
 async function readEntries(path: string): Promise<Map<string, CachedOutcome>> {
   try {
-    const file = JSON.parse(await fs.readFile(path, 'utf-8')) as { format?: number; outcomes?: Record<string, CachedOutcome> };
-    if (file.format !== CACHE_FORMAT || typeof file.outcomes !== 'object' || file.outcomes === null) return new Map();
-    return new Map(Object.entries(file.outcomes).filter(([, o]) => o === 'killed' || o === 'survived'));
+    const file = JSON.parse(await fs.readFile(path, 'utf-8')) as { format?: number; outcomes?: unknown };
+    if (file.format !== CACHE_FORMAT || !Array.isArray(file.outcomes)) return new Map();
+    return new Map(
+      (file.outcomes as unknown[]).filter(
+        (e): e is [string, CachedOutcome] => Array.isArray(e) && typeof e[0] === 'string' && (e[1] === 'killed' || e[1] === 'survived'),
+      ),
+    );
   } catch {
     return new Map();
   }
@@ -189,24 +211,26 @@ export interface MutantCache {
   get(mutant: MutantText): CachedOutcome | undefined;
   set(mutant: MutantText, outcome: CachedOutcome): void;
   /**
-   * Writes the outcomes this run looked up or recorded, and only those. A run that tried no mutant
-   * (a red suite, or no code changed) learned nothing and leaves the file as it was.
+   * Puts the outcomes this run looked up or recorded in front of those on file now, keeping up to
+   * `MAX_STORED_OUTCOMES`. A run that tried no mutant (a red suite, or no code changed) learned
+   * nothing and leaves the file as it was.
    */
   save(): Promise<void>;
 }
 
 /** The cache for the commit checked out in `projectDir`, as its tests run with what is installed now. */
 export async function openMutantCache(projectDir: string): Promise<MutantCache> {
-  const path = mutantCachePath(projectDir);
-  const [stored, tree, installed, tools] = await Promise.all([
+  const path = await mutantCachePath(projectDir);
+  const [stored, prefix, tree, installed, tools] = await Promise.all([
     readEntries(path),
+    git(projectDir, ['rev-parse', '--show-prefix']).then((p) => p.trim()),
     repositoryTreeHash(projectDir),
     installedPackagesHash(projectDir),
     toolRevisions(projectDir),
   ]);
   const used = new Map<string, CachedOutcome>();
   const keyOf = (m: MutantText) =>
-    sha256(JSON.stringify([CACHE_FORMAT, tools, process.version, tree, installed, m.file, sha256(m.source)]));
+    sha256(JSON.stringify([CACHE_FORMAT, tools, process.version, tree, installed, prefix, m.file, sha256(m.source)]));
 
   return {
     get(mutant) {
@@ -220,9 +244,12 @@ export async function openMutantCache(projectDir: string): Promise<MutantCache> 
     },
     async save() {
       if (used.size === 0) return;
-      await fs.mkdir(join(path, '..'), { recursive: true });
+      // Read again: another checkout may have saved since this run opened the cache.
+      const onFile = await readEntries(path);
+      const outcomes = [...used, ...[...onFile].filter(([key]) => !used.has(key))].slice(0, MAX_STORED_OUTCOMES);
+      await fs.mkdir(dirname(path), { recursive: true });
       const partial = `${path}.${process.pid}.tmp`;
-      await fs.writeFile(partial, `${JSON.stringify({ format: CACHE_FORMAT, outcomes: Object.fromEntries(used) })}\n`);
+      await fs.writeFile(partial, `${JSON.stringify({ format: CACHE_FORMAT, outcomes })}\n`);
       await fs.rename(partial, path);
     },
   };

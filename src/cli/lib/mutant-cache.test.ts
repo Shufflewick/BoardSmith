@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { BOOKKEEPING_RECORDS, gameBoardsmithRoot, mutantCachePath, openMutantCache, toolRevision } from './mutant-cache.js';
-import { commitAll, initRepo, writeFiles as write } from './verify-result.test-helper.js';
+import { BOOKKEEPING_RECORDS, MAX_STORED_OUTCOMES, gameBoardsmithRoot, mutantCachePath, openMutantCache, toolRevision } from './mutant-cache.js';
+import { commitAll, git, initRepo, writeFiles as write } from './verify-result.test-helper.js';
 
 // Each test builds real git repositories, one `git` process per step. A hang guard, not a budget:
 // on a busy machine vitest's 5 s default fails these with nothing wrong (#360).
@@ -118,33 +118,111 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
     expect(cache.get({ ...MUTANT, file: 'src/other.ts' })).toBeUndefined();
   });
 
-  it('keeps only the outcomes the last saved run looked up or recorded, so it never grows past one run', async () => {
+  it('keeps the outcomes of earlier runs it did not look up, so two checkouts verifying in turn do not evict each other', async () => {
     const dir = await project();
     const other = { file: 'src/other.ts', source: 'export const other = 0;\n' };
     const first = await openMutantCache(dir);
     first.set(MUTANT, 'killed');
-    first.set(other, 'survived');
     await first.save();
 
     const second = await openMutantCache(dir);
-    expect(second.get(MUTANT)).toBe('killed');
+    second.set(other, 'survived');
     await second.save();
 
     const third = await openMutantCache(dir);
     expect(third.get(MUTANT)).toBe('killed');
-    expect(third.get(other)).toBeUndefined();
+    expect(third.get(other)).toBe('survived');
     // A run that tried no mutant (a red suite, or no code changed) learned nothing, so it keeps what is there.
     await (await openMutantCache(dir)).save();
     expect(await lookup(dir)).toBe('killed');
   });
 
+  it(`holds at most ${MAX_STORED_OUTCOMES} outcomes, dropping those of the run no later run has used`, async () => {
+    const mutant = (n: number) => ({ file: 'src/other.ts', source: `export const other = ${n};\n` });
+    /** Records MUTANT, then the outcomes that fill the cache, then one more run that may look MUTANT up. */
+    async function fillThenOneMore(lookUpFirst: boolean): Promise<{ first: unknown; newest: unknown }> {
+      const dir = await project();
+      await record(dir, 'killed');
+      const fill = await openMutantCache(dir);
+      for (let n = 0; n < MAX_STORED_OUTCOMES - 1; n++) fill.set(mutant(n), 'killed');
+      await fill.save();
+      expect(await lookup(dir)).toBe('killed');
+
+      const next = await openMutantCache(dir);
+      if (lookUpFirst) next.get(MUTANT);
+      next.set(mutant(-1), 'survived');
+      await next.save();
+      const after = await openMutantCache(dir);
+      return { first: after.get(MUTANT), newest: after.get(mutant(-1)) };
+    }
+
+    expect(await fillThenOneMore(false)).toEqual({ first: undefined, newest: 'survived' });
+    // Looking an outcome up counts as using it, so the run that does keeps it.
+    expect(await fillThenOneMore(true)).toEqual({ first: 'killed', newest: 'survived' });
+  });
+
   it('starts empty, without failing, when the file on disk is unreadable', async () => {
     const dir = await project();
-    await fs.mkdir(dirname(mutantCachePath(dir)), { recursive: true });
-    await fs.writeFile(mutantCachePath(dir), 'not json');
+    const path = await mutantCachePath(dir);
+    await fs.mkdir(dirname(path), { recursive: true });
+    await fs.writeFile(path, 'not json');
     expect(await lookup(dir)).toBeUndefined();
     await record(dir, 'killed');
     expect(await lookup(dir)).toBe('killed');
+  });
+
+  describe('every worktree of a repository shares one cache, so a thread merge reuses what its worktree ran (#477)', () => {
+    /**
+     * A worktree of `dir`'s repository on a new branch, given the main checkout's packages as
+     * `agent-policy thread start` does: its own `node_modules` holding a copy of npm's install
+     * record and a link to each of the main checkout's packages.
+     */
+    async function worktree(dir: string): Promise<string> {
+      const path = join(dir, '.worktrees', 'demo');
+      git(dir, 'worktree', 'add', '-q', '-b', 'codex/demo', path);
+      await fs.mkdir(join(path, 'node_modules'));
+      await fs.copyFile(join(dir, 'node_modules', '.package-lock.json'), join(path, 'node_modules', '.package-lock.json'));
+      await fs.symlink(join(dir, 'node_modules', 'boardsmith'), join(path, 'node_modules', 'boardsmith'), 'dir');
+      return path;
+    }
+
+    it('keeps the cache in the git common directory, the same file for the main checkout and every worktree', async () => {
+      const dir = await project();
+      await write(dir, { '.gitignore': '.boardsmith/\nnode_modules/\n.worktrees/\n' });
+      commitAll(dir, 'ignore worktrees');
+      const tree = await worktree(dir);
+      const common = await fs.realpath(join(dir, '.git'));
+      expect(await mutantCachePath(dir)).toBe(join(common, 'boardsmith', 'verify', 'mutants.json'));
+      expect(await mutantCachePath(tree)).toBe(join(common, 'boardsmith', 'verify', 'mutants.json'));
+    });
+
+    it('reuses in the main checkout an outcome its worktree recorded, once main holds the same files', async () => {
+      const dir = await project();
+      await write(dir, { '.gitignore': '.boardsmith/\nnode_modules/\n.worktrees/\n' });
+      commitAll(dir, 'ignore worktrees');
+      const tree = await worktree(dir);
+      await write(tree, { 'tests/rules.test.ts': "it('fee', () => { expect(1).toBe(1); });\n" });
+      commitAll(tree, 'a test that kills the mutant');
+      await record(tree, 'killed');
+
+      // Main has not merged the change yet: its tests differ, so nothing it has may reuse the outcome.
+      expect(await lookup(dir)).toBeUndefined();
+      git(dir, 'merge', '-q', '--no-ff', '-m', 'merge demo', 'codex/demo');
+      expect(await lookup(dir)).toBe('killed');
+    });
+
+    it('runs the mutant again in a worktree whose own install differs from the main checkout it would otherwise share with', async () => {
+      const dir = await project();
+      await write(dir, { '.gitignore': '.boardsmith/\nnode_modules/\n.worktrees/\n' });
+      commitAll(dir, 'ignore worktrees');
+      await record(dir, 'killed');
+      const tree = await worktree(dir);
+      expect(await lookup(tree)).toBe('killed');
+
+      // Its own install, linking the same BoardSmith, with one more package in it.
+      await write(tree, { 'node_modules/.package-lock.json': installRecord('boardsmith', 'vitest', 'left-pad') });
+      expect(await lookup(tree)).toBeUndefined();
+    });
   });
 
   describe('a game in a subfolder of its repository depends on the whole repository', () => {
@@ -186,6 +264,17 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
         const { root, dir } = await repository();
         expect(await afterChange(dir, root, change, 'outside the game')).toEqual({ change: Object.keys(change)[0], outcome: undefined });
       }
+    });
+
+    it('never hands one game an outcome another game in the same repository recorded for a file of the same name', async () => {
+      const { root, dir } = await repository();
+      // With no bookkeeping record in either game, the two games' keys see the same repository.
+      await write(root, { 'games/other/src/rules.ts': RULES });
+      await fs.rm(join(root, 'games/bid/design/SKETCH.md'));
+      commitAll(root, 'the same rules in both games');
+      await record(dir, 'killed');
+      expect(await lookup(dir)).toBe('killed');
+      expect(await lookup(join(root, 'games', 'other'))).toBeUndefined();
     });
 
     it('runs the mutant again when the install above the game, or the BoardSmith it resolves to, changed', async () => {

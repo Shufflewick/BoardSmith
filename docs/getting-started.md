@@ -218,6 +218,9 @@ no change would be measured: there the mutation check fails unless you pass
 `chunk-<slug>/` commit. A mutant whose code, tests, repository and installed
 packages have not changed since an earlier run is not run again, so verifying
 again after a commit that only touches the `bs-` skills' design records is quick.
+Those outcomes are kept in the repository's git directory, shared by the main
+checkout and every worktree, so merging a worktree's branch reuses what its
+verify already ran.
 
 The smoke test is your game's `tests/browser/smoke.spec.ts`, which `boardsmith
 init` writes:

@@ -18,7 +18,8 @@
  *   6. mutation   every code line under `src/` changed since the base, broken one small change at a
  *                 time; the whole suite must fail for each (`runDiffMutationCheck`). An outcome from
  *                 an earlier run of the same code and tests is reused (`lib/mutant-cache.ts`), so a
- *                 re-verify after a bookkeeping-only commit runs no mutant again.
+ *                 re-verify after a bookkeeping-only commit runs no mutant again, and a merge of a
+ *                 worktree's branch reuses what the worktree ran.
  *
  * The base is the merge base of HEAD with `--base`, or with the main branch (`main`, else `master`).
  * On the main branch itself that merge base is HEAD, which measures no change, so without `--base`
