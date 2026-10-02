@@ -7,10 +7,11 @@
  * `status` by hand -- and an engine field added later was withheld from other
  * seats in every such game without anyone deciding it should be.
  *
- * The engine's fields are now the engine's, as the game root's already were
- * (#148): a visible element always carries them, a game's whitelist cannot
- * withhold them, and naming one in the list is refused so the list says only
- * what it does.
+ * A player's identity fields are now the engine's, as the game root's engine
+ * fields already were (#148): every seat is sent them, a game's whitelist
+ * cannot withhold them, and naming one in the list is refused so the list says
+ * only what it does. An ordinary element's whitelist is unchanged: it may still
+ * keep the owner, position or artwork from other seats.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -117,15 +118,34 @@ describe('visibleAttributes covers game fields only (#448)', () => {
     expect(attrs.seat).toBeUndefined();
   });
 
-  it('refuses a whitelist that names an engine field, naming the class and the field', () => {
-    class ListsEngineField extends Piece<PlanGame> {
-      static override visibleAttributes = ['player', 'rank'];
-      rank = 3;
+  it("an ordinary element's whitelist still withholds its owner, position and artwork", () => {
+    class SecretCard extends Piece<PlanGame> {
+      static override visibleAttributes = ['suit'];
+      suit = 'hearts';
     }
     const game = new PlanGame({ playerCount: 2, seed: 'plan' });
-    game.create(ListsEngineField, 'p');
+    const card = game.create(SecretCard, 'card', { row: 2, column: 3, $image: '/ace.png' });
+    card.player = game.getPlayer(1)!;
 
-    expect(() => game.toJSONForPlayer(2)).toThrow(/ListsEngineField\.visibleAttributes names "player"/);
+    const attrs = game.toJSONForPlayer(2).children!.find((child) => child.name === 'card')!.attributes;
+
+    expect(attrs.suit).toBe('hearts');
+    expect(attrs.player).toBeUndefined();
+    expect(attrs.row).toBeUndefined();
+    expect(attrs.column).toBeUndefined();
+    expect(attrs.$image).toBeUndefined();
+  });
+
+  it('a whitelist may name an ordinary element engine field, which sends it', () => {
+    class OwnedCard extends Piece<PlanGame> {
+      static override visibleAttributes = ['player'];
+    }
+    const game = new PlanGame({ playerCount: 2, seed: 'plan' });
+    const card = game.create(OwnedCard, 'card');
+    card.player = game.getPlayer(1)!;
+
+    const attrs = game.toJSONForPlayer(2).children!.find((child) => child.name === 'card')!.attributes;
+    expect(attrs.player).toBeDefined();
   });
 
   it('refuses a Player whitelist that names a Player engine field', () => {

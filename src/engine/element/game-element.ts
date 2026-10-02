@@ -297,10 +297,10 @@ export type SeatAttributeDerivation<E extends GameElement = any> = (
  * Both are authoring mistakes and both are refused at the first projection.
  */
 function assertSeatAttributeName(element: GameElement, name: string, className: string): void {
-  if (name.startsWith('_') || name.startsWith('$') || isEngineOwnedAttribute(element, name)) {
+  if (name.startsWith('_') || name.startsWith('$') || ENGINE_OWNED_ATTRIBUTES.has(name)) {
     throw new Error(
       `${className}.seatAttributes.${name} names an attribute the engine owns.\n` +
-      `  Engine-owned names (${engineOwnedAttributeNames(element).join(', ')}) and names starting with "_" or "$" ` +
+      `  Engine-owned names (${[...ENGINE_OWNED_ATTRIBUTES].join(', ')}) and names starting with "_" or "$" ` +
       `are structure the engine reads for itself.\n` +
       `  Fix: derive a different name (for example "${name}Readout").`
     );
@@ -344,66 +344,46 @@ function assertSeatAttributeSerializable(value: unknown, path: string, describe:
 }
 
 /**
- * The layout descriptors the renderers read: pure topology, never identity.
+ * Attributes the ENGINE owns on every element, which a redacted restore never
+ * takes away (#19).
  *
- * Every `$`-key an engine element class declares is either in here or is one
- * of the two value-bearing image keys (`$image`, `$images`), and
- * `image-leak.test.ts` fails when a new one is added to neither. A hidden
- * element's placeholder keeps exactly these, so it still lays out.
+ * These are structure, not game data: identity, ownership and layout, read by
+ * the engine itself (`getEffectiveOwner`, seat lookup, turn order, the
+ * renderers). Turning one into a throwing accessor would not withhold a
+ * secret, it would take the tree apart. A game's own secrets are never in
+ * this list.
+ *
+ * This is NOT the list a game's whitelist cannot touch: on an ordinary element
+ * `visibleAttributes` may still keep the owner, position or artwork from other
+ * seats. Only a player's identity fields are sent regardless
+ * ({@link PLAYER_IDENTITY_ATTRIBUTES}).
  */
-export const LAYOUT_ATTRIBUTES: ReadonlySet<string> = new Set([
-  '$type', '$layout',
-  '$direction', '$gap', '$overlap', '$fan', '$fanAngle', '$align',
-  '$rowLabels', '$columnLabels', '$rowCoord', '$colCoord',
-  '$hexOrientation', '$coordSystem', '$qCoord', '$rCoord', '$sCoord',
-  '$hexSize',
+const ENGINE_OWNED_ATTRIBUTES: ReadonlySet<string> = new Set([
+  // GameElement: identity, ownership, grid position, artwork.
+  'name', 'player', 'row', 'column', '$image', '$images',
+  // Player: seat identity, liveness (TurnOrder reads it) and seat colour.
+  'seat', 'status', '$type', 'color', 'colorLabel',
 ]);
 
 /**
- * Attributes the ENGINE owns on every element, whatever a game's
- * `visibleAttributes` says about them (#19, #448).
+ * A PLAYER's identity fields: what every seat needs to put an opponent on the
+ * table -- name, seat, colour and whether they are still playing (#448).
  *
- * These are structure, not game data: identity, ownership, grid position,
- * artwork and layout, read by the engine itself (`getEffectiveOwner`, seat
- * lookup, the renderers). A visible element always carries them, a game's
- * whitelist cannot withhold them, and a redacted restore leaves them alone:
- * withholding them would not withhold a secret, it would take the tree apart.
- * A game that must keep one of these from a seat hides the ELEMENT.
- */
-const ELEMENT_ENGINE_ATTRIBUTES: ReadonlySet<string> = new Set([
-  'name', 'player', 'row', 'column', '$image', '$images', ...LAYOUT_ATTRIBUTES,
-]);
-
-/**
- * What the engine owns on a PLAYER besides {@link ELEMENT_ENGINE_ATTRIBUTES}:
- * seat identity, liveness (turn order reads it) and seat colour. Only on a
- * player: a game's own element may name a field `seat` or `color` and keep it
- * to itself.
- *
+ * A player's `visibleAttributes` covers the game's own fields only. These are
+ * sent to every seat whatever the list says, and naming one in it is refused,
+ * so a game withholding one secret field no longer has to re-list them, and a
+ * field the engine adds here reaches every seat in every game.
  * `visible-attributes-engine-fields.test.ts` holds this equal to what a bare
- * `Player` sends, so a field the engine adds to `Player` is classified here,
- * by a decision, before any game can withhold it by accident.
+ * `Player` sends, so a new engine field on `Player` is classified here, by a
+ * decision, before any game can withhold it by accident.
  */
-const PLAYER_ENGINE_ATTRIBUTES: ReadonlySet<string> = new Set([
-  'seat', 'status', 'color', 'colorLabel',
+const PLAYER_IDENTITY_ATTRIBUTES: ReadonlySet<string> = new Set([
+  'name', '$type', 'seat', 'status', 'color', 'colorLabel',
 ]);
 
-/**
- * Does the ENGINE own `key` on `element`? (#19, #448)
- *
- * The one statement of which attributes a game's `static visibleAttributes`
- * may not name, may not withhold, and a redacted restore may not take away.
- */
-export function isEngineOwnedAttribute(element: GameElement, key: string): boolean {
-  return ELEMENT_ENGINE_ATTRIBUTES.has(key) || (isPlayerElement(element) && PLAYER_ENGINE_ATTRIBUTES.has(key));
-}
-
-/** Every attribute name the engine owns on `element`, for messages. */
-function engineOwnedAttributeNames(element: GameElement): string[] {
-  return [
-    ...ELEMENT_ENGINE_ATTRIBUTES,
-    ...(isPlayerElement(element) ? PLAYER_ENGINE_ATTRIBUTES : []),
-  ];
+/** Is `key` one of `element`'s player identity fields, which every seat is sent? (#448) */
+export function isPlayerIdentityAttribute(element: GameElement, key: string): boolean {
+  return isPlayerElement(element) && PLAYER_IDENTITY_ATTRIBUTES.has(key);
 }
 
 export class GameElement<G extends Game = any, P extends Player = any> {
@@ -1416,7 +1396,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     const withheld = Object.keys(element).filter((key) => (
       !key.startsWith('_') &&
       !unserializable.has(key) &&
-      !isEngineOwnedAttribute(element, key) &&
+      !ENGINE_OWNED_ATTRIBUTES.has(key) &&
       !isKnown(key) &&
       !(key in json.attributes)
     ));

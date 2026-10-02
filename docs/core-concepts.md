@@ -134,13 +134,12 @@ hand.contentsVisibleToOwner();
 
 ### Attribute Visibility
 
-`static visibleAttributes` whitelists which of YOUR GAME's attributes of an
-element are sent to non-owners (players other than the element's effective
-owner, and spectators). When declared, every game attribute NOT in the list is
-redacted from the game view for everyone except the owner. When left
-`undefined` (the default), every attribute stays visible to everyone — this is
-public-by-default, so existing custom attributes keep working with zero
-configuration.
+`static visibleAttributes` whitelists which attributes of an element are sent
+to non-owners (players other than the element's effective owner, and
+spectators). When declared, every attribute NOT in the list is redacted from
+the game view for everyone except the owner. When left `undefined` (the
+default), every attribute stays visible to everyone — this is public-by-default,
+so existing custom attributes keep working with zero configuration.
 
 ```typescript
 class Card extends BaseCard {
@@ -156,28 +155,27 @@ class MyPlayer extends Player<MyGame, MyPlayer> {
   score = 0;
   secretPlan = '';     // only this seat sees it
 
-  // The engine's own player fields are sent anyway; list only your own.
+  // A player's name, seat, colour and status are sent anyway; list only your own.
   static visibleAttributes = ['score'];
 }
 ```
 
-**The list names your game's fields, never the engine's.** Every element
-always carries what the engine owns -- its `name`, owner (`player`), grid
-position (`row`, `column`), artwork (`$image`, `$images`) and layout
-(`$type`, `$direction`, ...) -- and a player also its `seat`, `color`,
-`colorLabel` and `status`. A whitelist cannot withhold them, so an opponent's
-name and colour stay on the table whatever the game lists, and a field the
-engine adds later reaches every seat without each game re-listing it. Naming
-one of them in `visibleAttributes` is refused with an error that says which,
-because such a list would read as though the game decided that field's
-audience. (A game's own field that happens to be called `seat` or `color` on
-an element that is not a player is the game's, and the list governs it.)
+**A player's identity is never the list's to withhold.** A `Player` always
+sends its `name`, `$type`, `seat`, `color`, `colorLabel` and `status` to every
+seat, whatever its `visibleAttributes` says, so an opponent's name and colour
+stay on the table and a field the engine adds to `Player` later reaches every
+seat without each game re-listing it. A player's list names only your game's
+fields, and naming one of the identity fields in it is refused with an error
+that says which.
+
+On every other element the list governs every attribute it sends, the
+engine-defined ones included: leave `player`, `row`, `column` or `$image` out
+and other seats are not told the owner, the position or the artwork.
 
 This is attribute-level redaction, not element-level hiding — the element
 itself (and its whitelisted attributes) is still present in the view. To hide
-an entire element or an entire zone's contents -- including where it is, who
-owns it and what it looks like -- use the element/zone visibility controls
-below instead.
+an entire element or an entire zone's contents, use the element/zone
+visibility controls below instead.
 
 **A hidden ELEMENT withholds everything, not just the non-whitelisted.** An
 element the view cannot see (`showOnlyTo` / `hideFrom`, or any child of a

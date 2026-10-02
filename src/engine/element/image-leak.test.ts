@@ -20,7 +20,6 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { Game, Card, Deck, Hand, Space, Player, Action, defineFlow, loop, eachPlayer, actionStep, type ElementJSON, type GameOptions } from '../index.js';
-import { LAYOUT_ATTRIBUTES } from './game-element.js';
 
 // ---------------------------------------------------------------------------
 // Test fixture types
@@ -368,9 +367,9 @@ describe('SEC-02: unknown $-keys and $image must be fail-safe dropped on hidden 
 });
 
 // ---------------------------------------------------------------------------
-// WR-03: LAYOUT_ATTRIBUTES drift guard
+// WR-03: SAFE_LAYOUT_KEYS drift guard
 //
-// LAYOUT_ATTRIBUTES in game-element.ts is a hand-maintained allowlist of the layout
+// SAFE_LAYOUT_KEYS in game.ts is a hand-maintained allowlist of the layout
 // $-keys emitted by the engine element classes. If a future element adds a new
 // layout $-key but forgets to add it to the allowlist, redactHiddenElementAttrs
 // would silently strip it from every hidden/owner/count-only placeholder —
@@ -380,8 +379,8 @@ describe('SEC-02: unknown $-keys and $image must be fail-safe dropped on hidden 
 // (handled separately inside redactHiddenElementAttrs).
 // ---------------------------------------------------------------------------
 
-describe('WR-03: LAYOUT_ATTRIBUTES must stay in sync with engine layout $-keys', () => {
-  // Value-bearing $-keys are intentionally NOT in LAYOUT_ATTRIBUTES — they are
+describe('WR-03: SAFE_LAYOUT_KEYS must stay in sync with engine layout $-keys', () => {
+  // Value-bearing $-keys are intentionally NOT in SAFE_LAYOUT_KEYS — they are
   // redacted/narrowed by dedicated logic in redactHiddenElementAttrs.
   const VALUE_BEARING_KEYS = new Set(['$image', '$images']);
 
@@ -405,9 +404,17 @@ describe('WR-03: LAYOUT_ATTRIBUTES must stay in sync with engine layout $-keys',
     return keys;
   }
 
-  it('every layout $-key declared in the element classes is present in LAYOUT_ATTRIBUTES', () => {
+  function parseSafeLayoutKeys(): Set<string> {
+    const src = readFileSync(join(elementDir, 'game.ts'), 'utf-8');
+    const block = src.match(/const SAFE_LAYOUT_KEYS = new Set\(\[([\s\S]*?)\]\)/);
+    expect(block, 'SAFE_LAYOUT_KEYS Set literal must exist in game.ts').not.toBeNull();
+    const keys = [...block![1].matchAll(/['"](\$[a-zA-Z][a-zA-Z0-9]*)['"]/g)].map((m) => m[1]);
+    return new Set(keys);
+  }
+
+  it('every layout $-key declared in the element classes is present in SAFE_LAYOUT_KEYS', () => {
     const declared = discoverDeclaredDollarKeys();
-    const allowlist = LAYOUT_ATTRIBUTES;
+    const allowlist = parseSafeLayoutKeys();
 
     // Sanity: the scan must actually find keys, otherwise the guard is vacuous.
     expect(declared.size, 'expected to discover layout $-keys in element classes').toBeGreaterThan(0);
@@ -419,8 +426,8 @@ describe('WR-03: LAYOUT_ATTRIBUTES must stay in sync with engine layout $-keys',
     expect(
       missing,
       `These layout $-keys are emitted by element classes but missing from ` +
-        `LAYOUT_ATTRIBUTES (game-element.ts). They will be silently stripped from hidden ` +
-        `placeholders. Add them to LAYOUT_ATTRIBUTES (or handle them as value-bearing): ` +
+        `SAFE_LAYOUT_KEYS (game.ts). They will be silently stripped from hidden ` +
+        `placeholders. Add them to SAFE_LAYOUT_KEYS (or handle them as value-bearing): ` +
         `${missing.join(', ')}`
     ).toEqual([]);
   });

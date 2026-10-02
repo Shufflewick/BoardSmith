@@ -987,7 +987,7 @@
       "surfaceHash": "3d6d28a5d3c36fcd",
       "payloadHash": "e461d77424eadcb6",
       "formatHash": "0058593e7cc80205",
-      "summary": "visibleAttributes now names a game's own fields only: an element's and a player's engine fields (name, seat, color, colorLabel, status, owner, position, art, layout) always reach other seats, and a whitelist naming one is refused (#448)"
+      "summary": "A player's identity fields (name, $type, seat, color, colorLabel, status) now always reach other seats whatever the Player class's visibleAttributes says, and a whitelist naming one is refused; other elements' whitelists are unchanged (#448)"
     },
     {
       "revision": 117,
