@@ -434,7 +434,10 @@ it.skip('claim 2', () => {});
       },
       '| tests/auction.test.ts | 2 | pending |\n| tests/gone.test.ts | 7 | yes |\n',
     );
-    const kinds = (await checkTestStep(project, 'auction')).findings.map((f) => `${f.kind} ${f.subject}`);
+    const findings = (await checkTestStep(project, 'auction')).findings;
+    // A row build or repair added is held to the same observation, so the message names both (#485).
+    expect(findings[0].detail).toMatch(/before the change that makes them pass[^]*build or repair/);
+    const kinds = findings.map((f) => `${f.kind} ${f.subject}`);
     expect(kinds).toEqual([
       'red-not-observed tests/auction.test.ts',
       'claim-test-missing claim 2 in tests/auction.test.ts',
@@ -535,6 +538,10 @@ export function hexToRgb(hex: string): number[] { return [parseInt(hex.slice(1, 
     ['calls a function from the theme module', `import { hexToRgb } from '../../src/ui/theme';\nhexToRgb('#ffffff');\n`, 1, 'src/ui/theme.ts'],
     ['imports the whole theme module', `import * as theme from '../../src/ui/theme';\nvoid theme;\n`, 1, 'src/ui/theme.ts'],
     ['imports a support file that imports the game', `import { helper } from '../support/game';\nhelper();\n`, 1, 'src/rules/auction.ts'],
+    ['loads a game module through vi.importActual', `import { vi } from 'vitest';\nawait vi.importActual('../../src/rules/auction');\n`, 2, 'src/rules/auction.ts'],
+    ['loads a game module with require', `const auction = require('../../src/rules/auction');\nvoid auction;\n`, 1, 'src/rules/auction.ts'],
+    ['loads a game module through a template literal', 'await import(`../../src/rules/auction`);\n', 1, 'src/rules/auction.ts'],
+    ['loads a game module by a computed path', "const name = 'auction';\nawait import(`../../src/rules/${name}`);\n", 2, 'src/rules/'],
   ])('reports a guard that %s from the game\'s src/ (#485)', async (_what, guard, line, module) => {
     const findings = await findingsFor({
       'src/rules/auction.ts': RULES,
@@ -564,6 +571,12 @@ it('contrast', () => { expect(PALETTE[scheme].text).not.toBe(ACCENT_COLOR); });
     ['outside src/ui', 'src/rules/colours.ts', `export const INK = '#000000';\n`],
     ['whose module runs code when it loads', 'src/ui/colours.ts', `import { register } from './registry';\nexport const INK = '#000000';\nregister(INK);\n`],
     ['that is computed rather than written out', 'src/ui/colours.ts', `export const INK = ['#00', '0000'].join('');\n`],
+    ['behind a getter', 'src/ui/colours.ts', `export const INK = { get value() { return '#000000'; } };\n`],
+    ['behind a method', 'src/ui/colours.ts', `export const INK = { value() { return '#000000'; } };\n`],
+    ['re-exported from another module', 'src/ui/colours.ts', `export { INK } from './palette';\n`],
+    ['that is an overloaded function', 'src/ui/colours.ts', `export function INK(): string;\nexport function INK(x?: string): string { return x ?? '#000000'; }\n`],
+    ['that is a function sharing its name with a type', 'src/ui/colours.ts', `export type INK = string;\nexport function INK(): string { return '#000000'; }\n`],
+    ['that is an arrow sharing its name with an interface', 'src/ui/colours.ts', `export interface INK { value: string }\nexport const INK = () => '#000000';\n`],
   ])('reports a guard that imports a constant %s (#485)', async (_what, path, module) => {
     const specifier = `../../${path.replace(/\.ts$/, '')}`;
     const findings = await findingsFor({
@@ -611,6 +624,67 @@ it('regression: a bid is defined', () => { expect(bid).toBeTruthy(); });
     await write(project, { 'tests/regression.test.ts': RUNS_GAME });
     const findings = (await checkTestStep(project, 'auction')).findings;
     expect(findings.map((f) => [f.kind, f.subject])).toEqual([['test-not-in-manifest', 'tests/regression.test.ts']]);
+  });
+
+  it('reports a new test file outside the manifest that is staged but not committed (#485)', async () => {
+    await build({ 'src/rules/auction.ts': RULES, 'tests/auction.test.ts': DISPATCHES_BOTH }, '| tests/auction.test.ts | 1, 2 | yes |\n');
+    await write(project, { 'tests/regression.test.ts': RUNS_GAME });
+    git(project, 'add', 'tests/regression.test.ts');
+    const findings = (await checkTestStep(project, 'auction')).findings;
+    expect(findings.map((f) => [f.kind, f.subject])).toEqual([['test-not-in-manifest', 'tests/regression.test.ts']]);
+  });
+
+  // Git's rename detection would report a moved or rewritten file as renamed rather than added, so
+  // the new path would never count as created by this chunk (#485).
+  describe('a test file the chunk moved or replaced counts as new (#485)', () => {
+    beforeEach(async () => {
+      await write(project, { 'tests/old.test.ts': RUNS_GAME });
+      git(project, 'add', '-A');
+      git(project, 'commit', '-q', '-m', 'chunk-setup/step-close');
+      await build({ 'src/rules/auction.ts': RULES, 'tests/auction.test.ts': DISPATCHES_BOTH }, '| tests/auction.test.ts | 1, 2 | yes |\n');
+    });
+
+    const unlisted = async () =>
+      (await checkTestStep(project, 'auction')).findings.map((f) => [f.kind, f.subject]);
+
+    it('reports an earlier test file the chunk moved in one of its commits', async () => {
+      git(project, 'mv', 'tests/old.test.ts', 'tests/moved.test.ts');
+      git(project, 'commit', '-q', '-m', 'chunk-auction/step-build');
+      expect(await unlisted()).toEqual([['test-not-in-manifest', 'tests/moved.test.ts']]);
+    });
+
+    it('reports the same move staged and not committed', async () => {
+      git(project, 'mv', 'tests/old.test.ts', 'tests/moved.test.ts');
+      expect(await unlisted()).toEqual([['test-not-in-manifest', 'tests/moved.test.ts']]);
+    });
+
+    it('reports a new file much like an earlier one the chunk deleted', async () => {
+      git(project, 'rm', '-q', 'tests/old.test.ts');
+      await write(project, { 'tests/similar.test.ts': `${RUNS_GAME}// moved here\n` });
+      git(project, 'add', '-A');
+      git(project, 'commit', '-q', '-m', 'chunk-auction/step-build');
+      expect(await unlisted()).toEqual([['test-not-in-manifest', 'tests/similar.test.ts']]);
+    });
+  });
+
+  // vitest collects a test file anywhere in the project, and the CHUNK template's example row is
+  // under src/, so a new test file there is held to the same rule (#485).
+  it('reports a new game-running test file the chunk wrote under src/', async () => {
+    const findings = await findingsFor({
+      'src/rules/auction.ts': RULES,
+      'src/rules/auction-extra.test.ts': `import { it } from 'vitest';\nimport { bid } from './auction';\nit('x', () => { void bid; });\n`,
+    });
+    expect(findings.map((f) => [f.kind, f.subject])).toEqual([['test-not-in-manifest', 'src/rules/auction-extra.test.ts']]);
+  });
+
+  it('accepts a measurement harness under the chunk\'s evidence/ and a test file vitest never collects (#485)', async () => {
+    const findings = await findingsFor({
+      'src/rules/auction.ts': RULES,
+      'design/chunks/auction/evidence/budget.test.ts': `import { bid } from '../../../../src/rules/auction';\nvoid bid;\n`,
+      'tests/browser/flow.spec.ts': `import { bid } from '../../src/rules/auction';\nvoid bid;\n`,
+      'dist/auction.test.js': `import { bid } from '../src/rules/auction.js';\nvoid bid;\n`,
+    });
+    expect(findings).toEqual([]);
   });
 
   it('accepts a new test file listed as a row with no claims, and runs it in the mutation check (#485)', async () => {

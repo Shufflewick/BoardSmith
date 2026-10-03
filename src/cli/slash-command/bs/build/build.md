@@ -29,13 +29,17 @@ new test goes decides whether `boardsmith test-step-check` passes, because only 
 are mutation-tested (`build/test.md` item 2(c)):
 
 - **A test you can see fail** (a regression test written before the fix, run red against the bug)
-  may go in a new test file of this chunk. A new test file that runs the game's code is a new
+  may go in a new test file of this chunk under `tests/`, never in `evidence/`: a repro that proves a
+  fix is a regression test (`state-machine.md` "Project Layout"). A new test file that runs the game's code is a new
   Spec Manifest row: its Claims Covered lists the claims it pins, or `none (regression)`, and
   its RED Observed reads `yes` once you have run it and seen it fail. Add the row in the same edit
   that adds the file.
 - **A test you cannot see fail** (an edge case of code already written and already right) goes in
   an existing Spec Manifest file of this chunk, appended, never in a new file: a row claims an
-  observed RED, and there was none to observe.
+  observed RED, and there was none to observe. An exempt chunk (its Spec Manifest is the single
+  `| exempt |` row) has no Spec Manifest file to append to, and adds no game behaviour of its own, so
+  a test it cannot see fail pins an earlier chunk's behaviour: do not write it here, unlisted; name
+  the gap in that chunk's tests in this chunk's report so it is filed.
 - A scan that only reads source as text goes in `tests/guards/`, never in a row.
 
 ## Fresh-Context Exception (one of the two steps allowed to read raw slices)

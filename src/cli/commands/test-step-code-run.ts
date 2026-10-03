@@ -9,15 +9,17 @@
  *   that runs the game's code must be a manifest row (#485).
  *
  * A file runs the game's code when it imports a `.vue` component, `@vue/test-utils` or
- * `boardsmith/testing`, uses `renderAsSeat`, dispatches an action, or imports any module from the
+ * `boardsmith/testing`, uses `renderAsSeat`, dispatches an action, or loads any module from the
  * game's `src/` other than as text (an import ending `?raw`), directly or through a support file
- * under `tests/`. Reading source with `readFileSync` or a `?raw` import is a scan.
+ * under `tests/`. Loading counts in every form: `import`, `import(...)` with a string or template
+ * path, a re-export, `require(...)`, `vi.importActual(...)` and `vi.importMock(...)`. Reading source with `readFileSync` or a `?raw` import is a scan.
  *
  * The one game module a scan may import as code is literal constants under `src/ui/`: a contrast
  * check needs the theme's colours, and a TypeScript palette (one a WebGL scene reads, which cannot
  * read CSS custom properties) can only be read by importing it. Such an import runs nothing only
  * when every name it takes is a constant written out as literal data (strings, numbers, arrays and
- * objects of them) or a type, and the module itself runs nothing when it loads: no value imports
+ * objects of them) or a type that no value shares its name with, and the module itself runs
+ * nothing when it loads: no value imports
  * and no top-level statement other than declarations. Anything else, a function from the same
  * module included, is the game's code.
  */
@@ -55,12 +57,34 @@ const isTypeOnlyImport = (node: Statement): boolean => {
   return node.type === 'ImportDeclaration' && specifiers.length > 0 && specifiers.every((s) => s.importKind === 'type');
 };
 
-/** The module a statement or expression loads, for imports, dynamic imports and re-exports. */
+/** Calls that load a module by path: `require(...)`, `vi.importActual(...)`, `vi.importMock(...)`. */
+function isLoadingCall(node: AstNode): boolean {
+  if (node.type !== 'CallExpression') return false;
+  const callee = node.callee as AstNode;
+  if (callee.type === 'Identifier') return callee.name === 'require';
+  if (callee.type !== 'MemberExpression' || (callee.object as AstNode).type !== 'Identifier') return false;
+  const method = (callee.property as AstNode).name;
+  return (callee.object as AstNode).name === 'vi' && (method === 'importActual' || method === 'importMock');
+}
+
+/**
+ * The path a module specifier names: a string, or a template literal. A template with expressions
+ * gives its fixed start with `*` for the computed rest, which is enough to tell whether it reaches
+ * into the game's `src/`.
+ */
+function specifierText(node: AstNode | undefined): string | undefined {
+  if (!node) return undefined;
+  if (node.type === 'Literal') return typeof node.value === 'string' ? node.value : undefined;
+  if (node.type !== 'TemplateLiteral') return undefined;
+  const head = (node.quasis as Array<{ value: { cooked: string } }>)[0].value.cooked;
+  return (node.expressions as AstNode[]).length === 0 ? head : `${head}*`;
+}
+
+/** The module a statement or expression loads: imports, dynamic imports, re-exports and loading calls. */
 function loadedModule(node: AstNode): string | undefined {
+  if (isLoadingCall(node)) return specifierText((node.arguments as AstNode[])[0]);
   const loads = ['ImportDeclaration', 'ImportExpression', 'ExportNamedDeclaration', 'ExportAllDeclaration'];
-  if (!loads.includes(node.type) || !node.source) return undefined;
-  const source = node.source as AstNode;
-  return source.type === 'Literal' && typeof source.value === 'string' ? source.value : undefined;
+  return loads.includes(node.type) ? specifierText(node.source as AstNode | undefined) : undefined;
 }
 
 /** The project script a relative module path names, trying TypeScript's extension rules. */
@@ -78,7 +102,9 @@ function resolveScript(path: string, context: CodeRunContext): string | undefine
 // Literal theme constants
 // -------------------------------------------------------------------------------------------
 
-const TYPE_DECLARATIONS = new Set(['TSTypeAliasDeclaration', 'TSInterfaceDeclaration', 'TSDeclareFunction']);
+const TYPE_DECLARATIONS = new Set(['TSTypeAliasDeclaration', 'TSInterfaceDeclaration']);
+/** Declarations of a function, which run nothing until called. An overload signature is one. */
+const FUNCTION_DECLARATIONS = new Set(['FunctionDeclaration', 'TSDeclareFunction']);
 const TYPE_WRAPPERS = new Set(['TSAsExpression', 'TSSatisfiesExpression', 'TSTypeAssertion', 'TSNonNullExpression']);
 const INERT_INITIALIZERS = new Set(['ArrowFunctionExpression', 'FunctionExpression']);
 
@@ -86,7 +112,10 @@ const INERT_INITIALIZERS = new Set(['ArrowFunctionExpression', 'FunctionExpressi
 interface InertModule {
   /** Top-level `const` initializers, by local name. */
   constants: Map<string, AstNode | null>;
+  /** Names declared as a type or interface. */
   types: Set<string>;
+  /** Names declared as a value (a constant or a function). A name in both is a value. */
+  values: Set<string>;
   /** Exported name to local name. */
   exports: Map<string, string>;
 }
@@ -95,7 +124,7 @@ interface InertModule {
 function declareNamed(module: InertModule, node: AstNode, exported: boolean): true {
   const name = (node.id as AstNode | null)?.name as string | undefined;
   if (name === undefined) return true;
-  if (node.type !== 'FunctionDeclaration') module.types.add(name);
+  (TYPE_DECLARATIONS.has(node.type) ? module.types : module.values).add(name);
   if (exported) module.exports.set(name, name);
   return true;
 }
@@ -108,6 +137,7 @@ function declareConstants(module: InertModule, node: AstNode, exported: boolean)
     if (id.type !== 'Identifier') return false;
     if (init && !INERT_INITIALIZERS.has(init.type) && literalIdentifiers(init) === undefined) return false;
     module.constants.set(id.name as string, init);
+    module.values.add(id.name as string);
     if (exported) module.exports.set(id.name as string, id.name as string);
   }
   return true;
@@ -115,7 +145,7 @@ function declareConstants(module: InertModule, node: AstNode, exported: boolean)
 
 /** Records a declaration; false when it is not one that runs nothing. */
 function declare(module: InertModule, node: AstNode, exported: boolean): boolean {
-  if (TYPE_DECLARATIONS.has(node.type) || node.type === 'FunctionDeclaration') return declareNamed(module, node, exported);
+  if (TYPE_DECLARATIONS.has(node.type) || FUNCTION_DECLARATIONS.has(node.type)) return declareNamed(module, node, exported);
   if (node.type === 'VariableDeclaration' && node.kind === 'const') return declareConstants(module, node, exported);
   return false;
 }
@@ -146,7 +176,7 @@ function readStatement(module: InertModule, node: Statement): boolean {
 }
 
 function readInertModule(text: string, path: string): InertModule | undefined {
-  const module: InertModule = { constants: new Map(), types: new Set(), exports: new Map() };
+  const module: InertModule = { constants: new Map(), types: new Set(), values: new Set(), exports: new Map() };
   const body = parseSource(text, path).ast.body as Statement[];
   return body.every((node) => readStatement(module, node)) ? module : undefined;
 }
@@ -201,7 +231,8 @@ function importsOnlyThemeConstants(node: AstNode, modulePath: string, context: C
     if (specifier.importKind === 'type') return true;
     const imported = specifier.imported as AstNode;
     const local = module.exports.get((imported.name ?? imported.value) as string);
-    return local !== undefined && (module.types.has(local) || isLiteralConstant(module, local));
+    if (local === undefined) return false;
+    return module.values.has(local) ? isLiteralConstant(module, local) : module.types.has(local);
   });
 }
 

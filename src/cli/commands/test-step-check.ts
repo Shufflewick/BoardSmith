@@ -17,10 +17,12 @@
  *   4. No line the chunk added calls a guard unreachable.
  *   5. No test file the chunk wrote or changed provides, by hand, a key only one shell provides
  *      (`test-step-shell-context.ts`): it mounts with the shell-context stubs instead (#453).
- *   6. Every new test file the chunk wrote that runs the game's code is a Spec Manifest row, so the
- *      mutation check runs it (#485). Exempt: the browser smoke test (`tests/browser/smoke.spec.ts`),
- *      generated example tests (`tests/examples/<slug>.examples.test.ts`), guards (below), and
- *      earlier chunks' test files this chunk edits.
+ *   6. Every new test file the chunk wrote anywhere in the project that runs the game's code is a
+ *      Spec Manifest row, so the mutation check runs it (#485). A file moved or rewritten from another
+ *      counts as new. Exempt: files vitest never collects (the browser smoke test under
+ *      `tests/browser/` among them), generated example tests (`tests/examples/<slug>.examples.test.ts`),
+ *      measurement harnesses under `design/chunks/<slug>/evidence/`, guards (below), and earlier
+ *      chunks' test files this chunk edits.
  *   7. Mutation: every claim and every test is shown able to fail (`test-step-mutation.ts`).
  *
  * A file under `tests/guards/` is a guard: a test that reads source as text, such as the a11y
@@ -396,8 +398,9 @@ async function manifestRowFindings(
         kind: 'red-not-observed',
         subject: row.testFile,
         detail:
-          `RED Observed is "${row.redObserved || 'blank'}" for ${row.testFile}. Run the spec step's tests before ` +
-          'the implementation exists, see them fail, then set it to yes (build/spec.md).',
+          `RED Observed is "${row.redObserved || 'blank'}" for ${row.testFile}. Run its tests before the change ` +
+          'that makes them pass (the implementation, for a file the spec step wrote; the fix, for a regression or ' +
+          'measurement test build or repair added), see them fail, then set it to yes (build/spec.md "Persistence").',
       });
     }
     const file = await readRowFile(projectDir, row);
@@ -509,36 +512,68 @@ const manifestPaths = (projectDir: string, testFiles: ChunkTestFile[]) =>
   new Set(testFiles.map((f) => relative(projectDir, f.absPath).split(sep).join('/')));
 
 /**
- * The chunk's test files: its manifest's, every file under `tests/` one of its commits touched,
- * and any under `tests/` not committed yet. A file counts as created by the chunk when one of its
- * commits added it, or it is added but not committed, or untracked.
+ * Where vitest never collects a test file in a game project: its own default exclusions, and the
+ * two the project's config adds (`test-run-scope.ts`), the chunk worktrees under `.boardsmith/` and
+ * the browser tests under `tests/browser/`, which only Playwright runs.
+ */
+const NOT_COLLECTED = Object.freeze([
+  /(^|\/)(node_modules|dist|cypress)\//,
+  /(^|\/)\.(idea|git|cache|output|temp)\//,
+  /^\.boardsmith\//,
+  /(^|\/)tests\/browser\//,
+]);
+
+/** A file vitest collects as a test, by its default pattern and the exclusions above. */
+const isTestFile = (path: string) =>
+  /\.(test|spec)\.[cm]?[jt]sx?$/.test(path) && !NOT_COLLECTED.some((excluded) => excluded.test(path));
+
+/** Every script in the project outside `node_modules/`, with its text. */
+async function projectScripts(projectDir: string): Promise<SourceFile[]> {
+  const listed = await git(projectDir, ['ls-files', '--cached', '--others', '--exclude-standard']);
+  const scripts: SourceFile[] = [];
+  for (const path of lines(listed).filter((p) => /\.[cm]?[jt]sx?$/.test(p) && !/(^|\/)node_modules\//.test(p))) {
+    try {
+      scripts.push({ path, text: await fs.readFile(join(projectDir, path), 'utf-8') });
+    } catch {
+      continue; // listed by git but deleted in the working tree
+    }
+  }
+  return scripts;
+}
+
+/**
+ * The chunk's test files: its manifest's, then every script under `tests/` and every test file
+ * anywhere that one of its commits touched or that is not committed yet. A file counts as created
+ * by the chunk when one of its commits added it, or it is added but not committed, or untracked.
+ * Rename detection is off, so a file the chunk moved or rewrote from another counts as created:
+ * the new path is the chunk's (#485).
  */
 async function chunkTestScope(
   projectDir: string,
   chunkCommits: ReadonlySet<string>,
   testFiles: ChunkTestFile[],
 ): Promise<ChunkTestScope> {
-  const log = (...filter: string[]) =>
-    git(projectDir, ['log', '--no-walk', '--format=', '--name-only', ...filter, ...chunkCommits, '--', 'tests']);
-  const diff = (...filter: string[]) => git(projectDir, ['diff', 'HEAD', '--name-only', ...filter, '--', 'tests']);
-  const untracked = lines(await git(projectDir, ['ls-files', '--others', '--exclude-standard', '--', 'tests']));
-  const touched = new Set([...lines(await log()), ...lines(await diff()), ...untracked]);
-  const created = new Set([
-    ...lines(await log('--diff-filter=A')),
-    ...lines(await diff('--diff-filter=A')),
-    ...untracked,
-  ]);
+  const log = async (...filter: string[]) =>
+    lines(await git(projectDir, ['log', '--no-walk', '--no-renames', '--format=', '--name-only', ...filter, ...chunkCommits]));
+  const diff = async (...filter: string[]) =>
+    lines(await git(projectDir, ['diff', 'HEAD', '--no-renames', '--name-only', ...filter]));
+  const untracked = lines(await git(projectDir, ['ls-files', '--others', '--exclude-standard']));
+  const touched = new Set([...(await log()), ...(await diff()), ...untracked]);
+  const created = new Set([...(await log('--diff-filter=A')), ...(await diff('--diff-filter=A')), ...untracked]);
 
-  const support = await testSupportSources(projectDir);
-  const scripts = new Map([...(await implementationNow(projectDir)), ...support].map((f) => [f.path, f.text]));
+  const scripts = await projectScripts(projectDir);
+  const support = scripts.filter((f) => f.path.startsWith('tests/'));
+  const text = new Map(scripts.map((f) => [f.path, f.text]));
   const manifest = manifestPaths(projectDir, testFiles);
   return {
     touched: [
       ...testFiles.map((f) => ({ path: f.path, text: f.source })),
-      ...support.filter((f) => touched.has(f.path) && !manifest.has(f.path)),
+      ...scripts.filter(
+        (f) => touched.has(f.path) && !manifest.has(f.path) && (f.path.startsWith('tests/') || isTestFile(f.path)),
+      ),
     ],
     created,
-    context: { text: (path) => scripts.get(path), wrappers: findDispatchWrappers(support) },
+    context: { text: (path) => text.get(path), wrappers: findDispatchWrappers(support) },
   };
 }
 
@@ -582,12 +617,16 @@ function guardRunsCodeFindings(scope: ChunkTestScope): TestStepFinding[] {
     });
 }
 
-/** A test file a chunk writes outside its manifest that need not be a row (see the file comment). */
+/**
+ * A test file a chunk writes outside its manifest that need not be a row (see the file comment): a
+ * generated example test, and a measurement harness under the chunk's `evidence/`
+ * (`state-machine.md` "Project Layout"). The smoke test is under `tests/browser/`, which vitest
+ * never collects (`NOT_COLLECTED`).
+ */
 const UNLISTED_TEST_EXEMPTIONS = Object.freeze([
-  /^tests\/browser\/smoke\.spec\.ts$/,
   /^tests\/examples\/[^/]+\.examples\.test\.ts$/,
+  /^design\/chunks\/[^/]+\/evidence\//,
 ]);
-const isTestFile = (path: string) => /\.(test|spec)\.(ts|mts|js|mjs)$/.test(path);
 
 /** Check 6: every new test file the chunk wrote that runs the game's code is a Spec Manifest row. */
 function unlistedTestFindings(scope: ChunkTestScope, projectDir: string, testFiles: ChunkTestFile[]): TestStepFinding[] {

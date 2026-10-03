@@ -38,9 +38,12 @@ here.
    it and run the real command.
 
 2. **Chunk unit/integration tests — the red-to-green check.** These tests are NOT authored here:
-   `build/spec.md` wrote them from the approved interpretation and observed every one of them
-   FAILING before any implementation existed, and `build` wrote the code that makes them pass. This
-   step re-runs them and requires them all GREEN. Run them with `boardsmith test <pattern>`, naming
+   they are the files CHUNK.md's `## Spec Manifest` lists. `build/spec.md` wrote most of them from
+   the approved interpretation and observed every one of them FAILING before any implementation
+   existed, and `build` wrote the code that makes them pass. A row can also come later: a regression
+   test `build` wrote and saw fail before its fix, or a measurement test `repair` wrote and saw fail
+   before its cap (`build/spec.md` "Persistence"). This step re-runs them and requires them all
+   GREEN. Run them with `boardsmith test <pattern>`, naming
    this chunk's test files. Generated projects carry no npm scripts on purpose: `boardsmith test`
    is the one way to run a game's tests, so `npm test` will fail with "Missing script".
 
@@ -111,13 +114,16 @@ here.
          that runs nothing when it loads. A function from that module is code. A test that runs the
          game belongs in the chunk's own test file, where the mutation check shows it can fail.
        - **A new test file that runs the game is a Spec Manifest row.** Every test file the chunk
-         created that runs the game's code (by the same measure as a guard above), at any step, spec,
-         build or repair, is a `## Spec Manifest` row, or the mutation check never runs it and nothing
-         shows it can fail. A regression test build writes and a measurement test repair writes are
-         rows like any other. The exemptions are the browser smoke test `tests/browser/smoke.spec.ts`,
-         the generated `tests/examples/<slug>.examples.test.ts`, scan-only guards under
-         `tests/guards/`, and an earlier chunk's test file this chunk edits. A file that only reads
-         source as text is not a row: it belongs under `tests/guards/`.
+         created anywhere in the project that runs the game's code (by the same measure as a guard
+         above), at any step, spec, build or repair, is a `## Spec Manifest` row, or the mutation
+         check never runs it and nothing shows it can fail. A regression test build writes and a
+         measurement test repair writes are rows like any other. Moving an earlier chunk's test file
+         (or deleting it and writing a similar one) counts as creating a new file: the new path is
+         this chunk's. The exemptions are the browser smoke test `tests/browser/smoke.spec.ts`, the
+         generated `tests/examples/<slug>.examples.test.ts`, a measurement harness under
+         `design/chunks/<slug>/evidence/` (`state-machine.md` "Project Layout"), scan-only guards
+         under `tests/guards/`, and an earlier chunk's test file this chunk edits in place. A file
+         that only reads source as text is not a row: it belongs under `tests/guards/`.
 
        A finding here goes back to `build` (or to `spec`, when the fix is a test that pins the claim
        properly), never to an edit of the Spec Manifest that makes the row claim less. The two

@@ -45,7 +45,7 @@ So a file of your own in `design/` (one no skill names, like `design/NOTES.md`) 
   can never be committed by accident. (It has been: `_dbg.mjs`, `_cap_tmp.mjs` and friends were
   tracked in a real game, which is what issue #6 was filed about.)
 - **Evidence goes in `chunks/<slug>/evidence/`, and it is committed.** A measurement harness, a
-  playtest driver, a repro that proves a fix, a screenshot or recording: anything a ledger entry,
+  playtest driver, a screenshot or recording: anything a ledger entry,
   a CHUNK.md claim, or a sign-off cites as the reason something is true. Write it there from the
   start, or move it there from scratch the moment you decide to cite it, and commit it with the
   chunk. Cite it by that path (`chunks/<slug>/evidence/food-invariant.mjs`), never by a bare file
@@ -54,6 +54,11 @@ So a file of your own in `design/` (one no skill names, like `design/NOTES.md`) 
   and every check reads it there. A path in any other repository is written `<repo>:<path>`
   (`MERC:src/rules/combat.ts`) so it is not read as this game's.
   The design-review screenshots in `chunks/<slug>/shots/` are committed evidence of the same kind.
+- **A repro that proves a fix is a regression test, not evidence.** Scripts are split by purpose
+  (designer ruling, 2026-10-03, #485). A repro that proves a fix goes in `tests/` with a Spec
+  Manifest row (`build/build.md`), where `boardsmith test-step-check` shows it can fail. `evidence/`
+  keeps only measurement harnesses among scripts, which are exempt from the Spec Manifest even when
+  vitest would collect them. This is the one statement of the split; other steps cite it here.
 
 `boardsmith ledger-check` enforces the split as code, and `build/close.md` runs it before a chunk
 closes: every script or capture that `RULINGS.md`, `DECISIONS.md` or a verified CHUNK.md (its

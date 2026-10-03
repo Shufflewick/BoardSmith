@@ -2290,4 +2290,42 @@ describe('#485: every new test file that runs the game is a Spec Manifest row', 
     expect(template).toMatch(/at any step/);
     expect(template).toMatch(EXEMPTIONS);
   });
+
+  // Rename detection is off, so moving an earlier chunk's test file makes a new file (#485 review).
+  it('says moving an earlier chunk\'s test file counts as creating a new one', () => {
+    const rule = flatRead('build/test.md').split('**A new test file that runs the game is a Spec Manifest row.**')[1].split('A finding here goes back')[0];
+    expect(rule).toMatch(/[Mm]oving an earlier chunk's test file[^]*creat/);
+    const spec = flatRead('build/spec.md').split('## Persistence')[1].split('## Exemptions')[0];
+    expect(spec).toMatch(/[Mm]oving an earlier chunk's test file[^]*creat/);
+  });
+
+  it('holds new test files anywhere in the project, not only under tests/', () => {
+    const rule = flatRead('build/test.md').split('**A new test file that runs the game is a Spec Manifest row.**')[1].split('A finding here goes back')[0];
+    expect(rule).toMatch(/anywhere in the project/);
+  });
+
+  // Human ruling (2026-10-03): evidence files split by purpose. Recorded once, in state-machine.md
+  // "Project Layout"; the other files point at it.
+  it('records the evidence ruling once, in Project Layout, and the other files cite it', () => {
+    const layout = read('state-machine.md');
+    const section = layout.slice(layout.indexOf('## Project Layout'), layout.indexOf('## Companion Authority')).replace(/\s+/g, ' ');
+    expect(section).not.toMatch(/a repro that proves a fix, a screenshot/);
+    expect(section).toMatch(/A repro that proves a fix is a regression test[^]*`tests\/`[^]*Spec Manifest row/);
+    expect(section).toMatch(/`evidence\/` keeps only measurement harnesses[^]*exempt/);
+    for (const file of ['build/build.md', 'build/test.md', 'build/spec.md']) {
+      expect(flatRead(file), file).toMatch(/evidence\/[^]{0,300}`state-machine\.md` "Project Layout"/);
+    }
+  });
+
+  it('tells an exempt chunk with no Spec Manifest file where a test it cannot see fail goes', () => {
+    const build = flatRead('build/build.md');
+    expect(build).toMatch(/An exempt chunk[^.]*no Spec Manifest file/);
+  });
+
+  it("opens test.md item 2 with every row's author, spec, build and repair", () => {
+    const item2 = flatRead('build/test.md').split('2. **Chunk unit/integration tests')[1].split('Two failure modes')[0];
+    expect(item2).toMatch(/NOT authored here/);
+    expect(item2).toMatch(/regression test[^]*`build`[^]*measurement test[^]*`repair`/);
+  });
 });
+
