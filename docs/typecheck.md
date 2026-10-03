@@ -80,6 +80,15 @@ in every game.
   entry runs (`src/testing/project-test-utils.node.ts`) is imported through
   package.json `imports`, whose `types` condition hands every compiler the
   Node-free `project-test-utils.d.ts` instead.
+- **How a Workers host declares its globals.** This check uses the DOM and
+  Node libs, where `crypto` is a `var` and so `globalThis.crypto` compiles.
+  Cloudflare's types declare `crypto` and `console` as `const`, which
+  `typeof globalThis` does not carry. `src/contract/workers-typecheck.test.ts`
+  compiles every entry point the platform imports (`boardsmith`,
+  `boardsmith/session`, `boardsmith/session-host`, `boardsmith/world`,
+  `boardsmith/persistence` and `boardsmith/runtime`) with only ES2022 and
+  Workers-shaped declarations (#488). Read a runtime
+  global by its bare name, never as a property of `globalThis`.
 - **Anything at runtime.** Types say nothing about a shape crossing a boundary
   the types do not describe.
 
