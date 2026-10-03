@@ -72,6 +72,8 @@ export type {
   ActionSchemaView,
   ArgTemplate,
 } from './element/index.js';
+// What `GameRandom.getState` returns and `Game.setRandomState` takes (#483).
+export type { RandomState } from '../utils/random.js';
 
 
 // Player system

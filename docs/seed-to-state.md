@@ -38,9 +38,13 @@ The fields that carry the actual game state are:
   player is awaiting).
 - `sequence` — the element-id sequence counter, restored after the tree
   loads so newly-created elements don't collide with existing ids.
-- `randomState` — the seeded RNG's internal state (a single mulberry32 state
-  number, from `game.getRandomState()`), restored via `game.setRandomState()`
-  so the next `game.random()` draw matches exactly.
+- `randomState` — the seeded RNG's state (an opaque string holding the
+  generator's 256-bit key and its position, from `game.getRandomState()`),
+  restored via `game.setRandomState()` so the next `game.random()` draw
+  matches exactly. A snapshot saved before #483 holds a number here, which
+  `setRandomState` refuses: such a game cannot be continued. A snapshot with
+  no `randomState` at all (for example a hand-written `--seed` file) is
+  refused too.
 - `gameOptions` — the original constructor options (including custom options
   like `playerConfigs`), needed to reconstruct the game correctly.
 - `seed` — the original random seed string, used to derive `gameOptions.seed`

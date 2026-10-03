@@ -117,9 +117,9 @@ describe('MCTS seeded-search truncation is never silent', () => {
  * searched identically and warned about a seed nobody set.
  */
 
-interface SubSearch { seed?: string; rngState: number }
+interface SubSearch { seed?: string; rngState: string }
 
-type BotInternals = { config: BotConfig; rng: { state: number } };
+type BotInternals = { config: BotConfig; rng: { getState(): string } };
 
 /**
  * Run `bot.play()` and report every sub-search it started: the seed it was
@@ -133,7 +133,7 @@ async function subSearchesOf(bot: MCTSBot<ChoiceGame>): Promise<SubSearch[]> {
   const runSearch = proto.runSearch;
   const spy = vi.spyOn(proto, 'runSearch').mockImplementation(function (this: MCTSBot<Game>) {
     const self = this as unknown as BotInternals;
-    if (this !== (bot as unknown)) subs.push({ seed: self.config.seed, rngState: self.rng.state });
+    if (this !== (bot as unknown)) subs.push({ seed: self.config.seed, rngState: self.rng.getState() });
     return runSearch.call(this);
   });
   await bot.play();
