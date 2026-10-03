@@ -151,6 +151,9 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
       minPlayers: 1,
       maxPlayers: gameDef.maxPlayers,
       makeSeed: () => 'dev-host-integration',
+      // Two people sit at this table and both use the debug ops below, so it
+      // forces debugging on, as `boardsmith dev --debug` does (#481).
+      debug: true,
       executeOp: (gameOptions, snapshot, pendingState, op, hostOptions) =>
         executeOp(gameDef, gameOptions, snapshot, pendingState, op, hostOptions),
       send: (clientId, message) => {

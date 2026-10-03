@@ -42,7 +42,7 @@ interface Posted {
 function makeSession() {
   const posted: Posted[] = [];
   const session = createDevSession({
-    debug: false,
+    debug: () => false,
     playerCount: 2,
     executeOp: (snap, pend, op) =>
       executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op),
@@ -325,7 +325,7 @@ describe('dev host bridge', () => {
       const stateViews: Array<Array<{ state: Record<string, unknown> }>> = [];
       const responses: Array<Record<string, unknown>> = [];
       const session = createDevSession({
-        debug: false,
+        debug: () => false,
         playerCount: 2,
         teachingDisabled: true,
         executeOp: (snap, pend, op) =>
@@ -378,7 +378,7 @@ describe('dev host bridge', () => {
       const responses: Array<{ seat: number; result: Record<string, unknown> }> = [];
       let stateBroadcasts = 0;
       const session = createDevSession({
-        debug: true,
+        debug: () => true,
         playerCount: 2,
         executeOp: (snap, pend, op) =>
           executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op, { debug: true }),
@@ -454,7 +454,7 @@ describe('dev host bridge', () => {
 
     it('a persist() failure is captured via onPersistenceError, severity escalates with health', async () => {
       const session = createDevSession({
-        debug: false,
+        debug: () => false,
         playerCount: 1,
         persist: () => {
           throw new Error('disk full');
@@ -505,7 +505,7 @@ describe('dev host bridge', () => {
         });
       };
       const session = createDevSession({
-        debug: false,
+        debug: () => false,
         playerCount: 1,
         executeOp: warningExecuteOp,
         postGameState: () => {},
@@ -541,7 +541,7 @@ describe('dev host bridge', () => {
         throw new Error('executor boom');
       };
       const session = createDevSession({
-        debug: false,
+        debug: () => false,
         playerCount: 1,
         executeOp: throwingExecuteOp,
         postGameState: () => {},
@@ -566,7 +566,7 @@ describe('dev host bridge', () => {
       const responses: Array<{ seat: number; result: Record<string, unknown> }> = [];
       const session = createDevSession({
         playerCount: 2,
-        debug,
+        debug: () => debug,
         executeOp: (snap, pend, op) =>
           executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op, { debug }),
         postGameState: () => {},
@@ -584,6 +584,33 @@ describe('dev host bridge', () => {
       });
       expect(translateOp('debug:action-traces', 2, { player: 1 })).toEqual({ type: 'debugActionTraces', player: 2 });
       expect(translateOp('debug:flow-state', 2, { player: 1 })).toEqual({ type: 'debugFlowState', player: 2 });
+    });
+
+    it('pins hint and heatmap-toggle to the asking seat, whatever seat the payload names', () => {
+      expect(translateOp('hint', 2, { seat: 1 })).toEqual({ type: 'hint', seat: 2 });
+      expect(translateOp('heatmap-toggle', 2, { seat: 1, visible: true })).toEqual({
+        type: 'heatmapToggle', seat: 2, visible: true,
+      });
+    });
+
+    it('reads whether debugging is on at every request, so it can change while the session runs', async () => {
+      let debug = true;
+      const responses: Array<Record<string, unknown>> = [];
+      const session = createDevSession({
+        playerCount: 2,
+        debug: () => debug,
+        executeOp: (snap, pend, op) =>
+          executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op, { debug }),
+        postGameState: () => {},
+        postServerResponse: (_seat, _requestId, result) => responses.push(result),
+      });
+      await session.start();
+      await session.handleServerRequest(1, 'a', 'debug:history', {});
+      await session.handleServerRequest(1, 'b', 'debug:logs', {});
+      debug = false;
+      await session.handleServerRequest(1, 'c', 'debug:history', {});
+      await session.handleServerRequest(1, 'd', 'debug:logs', {});
+      expect(responses.map((r) => r.success)).toEqual([true, true, false, false]);
     });
 
     for (const [wireOp, payload] of [
@@ -672,7 +699,7 @@ describe('dev host bridge', () => {
   function makeResultSessionWithResponses() {
     const responses: Array<{ seat: number; result: Record<string, unknown> }> = [];
     const session = createDevSession({
-      debug: true,
+      debug: () => true,
       playerCount: 2,
       executeOp: (snap, pend, op) =>
         executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op, { debug: true }),

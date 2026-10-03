@@ -127,6 +127,7 @@ export function createProgram(): Command {
     .option('--bot-level <level>', 'Bot difficulty: easy, medium, hard, or an explicit iteration count', 'medium')
     .option('--game-option <kv...>', 'Select a declared game option as key=value (repeatable, e.g. --game-option difficulty=hard rounds=5)')
     .option('--preset <name>', 'Apply a declared preset\'s whole bundle of game option values (and player count, if the preset declares one)')
+    .option('--debug', 'Keep the Debug panel and debug tools on with several people seated (they can read every seat\'s moves, rewind and edit decks). Without it, debugging is on only while one person holds every human seat.')
     .option('--lock-teaching', 'Disable bot hint, move-quality heatmap, bot-vs-bot demo, and tutorial (action help stays enabled)')
     .option('--seed <file>', 'Seed the initial game state from a recorded GameStateSnapshot JSON file instead of a fresh start (FEAT-01)')
     .option('--no-open', 'Do not auto-launch a browser tab (use when driving the dev host from a script/CI, so an uncontrolled tab does not claim seat 1)')

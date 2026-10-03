@@ -11,7 +11,7 @@ import { createDevSession } from './bridge.js';
 async function askChoicesAsSeat2(): Promise<Record<string, unknown>> {
   const responses: Array<{ seat: number; response: Record<string, unknown> }> = [];
   const session = createDevSession({
-    debug: false,
+    debug: () => false,
     playerCount: 2,
     executeOp: (snap, pend, op) =>
       executeOp(def, op.type === 'start' ? { playerCount: 2, seed: 'bs450' } : { playerCount: 2 }, snap, pend, op),

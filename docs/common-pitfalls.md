@@ -1630,7 +1630,10 @@ or tree shape this way — never hidden/secret game state (a hand's contents,
 deck order, etc), since enabling `debugEnabled` on a live session broadcasts
 every registered debug entry to all connected players and spectators.
 The same option turns on the session's debug methods (time travel, rewind,
-action traces, deck edits); without it they refuse.
+action traces, deck edits); without it they refuse. In `boardsmith dev` the
+Debug panel and its tools are on only while one person (one browser) holds
+every human seat; once a second person sits down they are off for everyone
+until `boardsmith dev --debug` forces them on.
 
 4. **Check the sequence counter** - if it's much higher than element count, elements are being created and removed (normal but worth investigating)
 

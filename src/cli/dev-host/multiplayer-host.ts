@@ -56,13 +56,6 @@ export interface SeatInfo {
 export type LobbyPhase = 'lobby' | 'playing';
 
 /**
- * Whether this host's sessions run debug ops (#481). Always on: the dev host
- * exists to debug a game, and its Debug panel is how. The one value goes both
- * to the session and to `executeOp`, which each refuse debug ops when it is off.
- */
-const DEV_HOST_DEBUG = true;
-
-/**
  * How long a seat whose page went away stays its player's before a bot covers
  * it (#412). A reload closes the old socket before the new page says hello, so
  * for that moment the seat has no connected holder; within this window it is
@@ -85,6 +78,8 @@ const nodeReconnectTimer: ReconnectTimer = (delayMs, fire) => {
 export type HostOutbound =
   | {
       type: 'lobby';
+      /** Whether debugging is on (#481); see `MultiplayerHost.debugOn`. */
+      debug: boolean;
       phase: LobbyPhase;
       seats: SeatInfo[];
       minPlayers: number;
@@ -238,6 +233,12 @@ export interface MultiplayerHostOptions {
    * guards in Plans 111-01 and 111-02 fire on the real running host.
    */
   teachingDisabled?: boolean;
+  /**
+   * Force debugging on for a trusted table (#481), set by `boardsmith dev
+   * --debug`. Without it, debugging is on only while one person holds every
+   * human seat (see `MultiplayerHost.debugOn`).
+   */
+  debug?: boolean;
   /**
    * FEAT-01/168-02: when set, the FIRST started state is this seed's state —
    * threaded through the `start` op's `hostOptions.seedSnapshot` (never
@@ -1249,9 +1250,7 @@ export class MultiplayerHost {
     // `teachingDisabled` game option that must not collide with this flag.
     // FEAT-01/168-02: seedSnapshot rides here too (never gameOptions) so a
     // `--seed` restart still starts from the seed, not a fresh game.
-    // #481: `boardsmith dev` is a debugging host, so its debug ops run. The
-    // session refuses a seat-view debug op for any seat but the one asking.
-    const hostOptions = { teachingDisabled: this.opts.teachingDisabled, seedSnapshot: this.opts.seedSnapshot, debug: DEV_HOST_DEBUG };
+    const hostOptions = { teachingDisabled: this.opts.teachingDisabled, seedSnapshot: this.opts.seedSnapshot };
     const executeOp = async (
       snapshot: unknown,
       pendingState: Record<string, unknown> | null,
@@ -1262,7 +1261,10 @@ export class MultiplayerHost {
         snapshot,
         pendingState,
         op,
-        hostOptions,
+        // #481: whether debug ops (`debug:*`: history, state-at, state-diff,
+        // action traces, flow state, rewind, deck edits) run is decided per op
+        // by `debugOn()`, the same answer the session gets below.
+        { ...hostOptions, debug: this.debugOn() },
       );
       return this.applyPersistenceChannels(raw);
     };
@@ -1271,7 +1273,7 @@ export class MultiplayerHost {
       playerCount,
       botSeats: this.botSeats,
       teachingDisabled: this.opts.teachingDisabled,
-      debug: DEV_HOST_DEBUG,
+      debug: () => this.debugOn(),
       executeOp,
       hostWork: this.opts.hostWork ?? runsAtOnce,
       postGameState: (seat, view, meta) => {
@@ -1719,9 +1721,28 @@ export class MultiplayerHost {
     this.opts.send(clientId, message);
   }
 
+  /**
+   * Whether debugging is on right now (#481): the `debug:*` ops (history,
+   * state-at, state-diff, action traces, flow state, rewind, deck edits and
+   * `debug:logs`) and the page's Debug panel. On when `--debug` forced it, or
+   * when at most one person holds the human seats. A person is a client id:
+   * the id each browser keeps for itself (`dev-client-id.ts`), so tabs of one
+   * browser are one person and two browsers (or a private window) are two. A
+   * seat stays held while its player is away, until they leave it or someone
+   * takes it over, so stepping out does not turn debugging on for the others. Asked on every op and sent with
+   * every lobby message, so it follows people as they take and leave seats.
+   */
+  private debugOn(): boolean {
+    if (this.opts.debug === true) return true;
+    const holders = new Set<string>();
+    for (const info of this.seats.values()) if (info.clientId) holders.add(info.clientId);
+    return holders.size <= 1;
+  }
+
   private lobbyMessage(): HostOutbound {
     return {
       type: 'lobby',
+      debug: this.debugOn(),
       phase: this.phase,
       seats: [...this.seats.values()].map((s) => ({ ...s })),
       minPlayers: this.opts.minPlayers,

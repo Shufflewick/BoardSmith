@@ -67,11 +67,12 @@ export interface DevSessionOptions {
    */
   teachingDisabled?: boolean;
   /**
-   * Whether the debug ops (`debug:*`) run in this session (#481). Off refuses
-   * every one, `debug:logs` included. The `executeOp` below must pass the same
-   * value to `executeOp`'s `hostOptions.debug`.
+   * Whether the debug ops (`debug:*`) run right now (#481). Asked again for
+   * every request, because who sits at the table can change mid-game. Off
+   * refuses every debug op, `debug:logs` included. The `executeOp` below must
+   * pass the same answer to `executeOp`'s `hostOptions.debug`.
    */
-  debug: boolean;
+  debug: () => boolean;
   /**
    * In-process op executor bound to the author's gameDefinition. The host calls
    * this with the authoritative snapshot + the acting seat's pending state; the
@@ -202,10 +203,12 @@ export function translateOp(
       return { type: 'startTutorial', player: seat };
     case 'exit-tutorial':
       return { type: 'exitTutorial', player: seat };
+    // Hints and the heatmap are for the asking seat: a payload never names
+    // the seat, so no seat can ask for another's suggestions.
     case 'hint':
-      return { type: 'hint', seat: (payload.seat as number) ?? seat };
+      return { type: 'hint', seat };
     case 'heatmap-toggle':
-      return { type: 'heatmapToggle', seat: (payload.seat as number) ?? seat, visible: payload.visible as boolean };
+      return { type: 'heatmapToggle', seat, visible: payload.visible as boolean };
     case 'demo-start':
       return { type: 'demoStart', delay: payload.delay as number | undefined };
     case 'demo-stop':
@@ -377,7 +380,10 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
     playerCount: opts.playerCount,
     botSeats: opts.botSeats,
     teachingDisabled: opts.teachingDisabled,
-    debug: opts.debug,
+    // A getter, so the host asks on every op (see `DevSessionOptions.debug`).
+    get debug() {
+      return opts.debug();
+    },
     executeOp: opts.executeOp,
     persist: opts.persist,
     hostWork: opts.hostWork,
@@ -416,7 +422,7 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
     // debug:logs (ERR-04): host-lifecycle op resolved directly here, reading
     // the ring buffer — never delegated to host.handleOp/executeOp.
     if (op.type === 'debugLogs') {
-      if (!opts.debug) {
+      if (!opts.debug()) {
         opts.postServerResponse(seat, requestId, { success: false, error: debuggingOffMessage(wireOp) });
         return;
       }

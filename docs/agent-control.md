@@ -412,11 +412,23 @@ browser — use the dev-only ops below plus `createDevHostClient`.
 | Op | Purpose |
 |----|---------|
 | `getState` | Perspective-aware state for the caller's own connected seat (resolved server-side from the tracked connection — there is no client-supplied seat field, so a client can never request another seat's view). |
-| `getLobby` | Lobby info (phase, connected/open seats), in either phase. Like every op here, it is answered only after the connection has said `hello`. |
-| `debugToggle` | Relay-only: toggles the debug panel on every connected client. |
+| `getLobby` | Lobby info (phase, connected/open seats, and `debug`: whether debugging is on), in either phase. Like every op here, it is answered only after the connection has said `hello`. |
+| `debugToggle` | Relay-only: toggles the debug panel on every connected client, while debugging is on. |
 | `uiSwitch` | Relay-only: switches every connected client's UI mode (`{ name }`). |
 | `debug:logs` | Returns the dev-host's captured server-side log ring buffer (see [Structured Errors](#structured-errors-err) below). |
 | `debug:flow-state` | Returns the current `FlowDebugInfo` (same shape as `Game.getFlowDebugInfo()`) for a connected dev-host client. |
+
+**Debugging is on only while one person holds every human seat** (#481). A
+person is one browser: the dev host knows each by the id the page keeps in
+`localStorage`, so tabs of one browser are one person, and a second browser or
+a private window is another. A seat held by someone who stepped away still
+counts until they leave it. While two or more people hold seats, every
+`debug:*` op (`debug:history`, `debug:state-at`, `debug:state-diff`,
+`debug:action-traces`, `debug:flow-state`, `debug:rewind`, the deck edits and
+`debug:logs`) is refused for everyone, and the Debug panel is hidden. It comes
+back as soon as only one person is seated. `boardsmith dev --debug` keeps it on
+for a trusted table. Whatever the setting, a debug op that shows a seat's view
+always shows the asking seat's own.
 
 `debugToggle`/`uiSwitch` are host-level relay-only fan-out ops — like
 `hello`/`join`/`leave`/`restart`/`follow`, they have no per-caller reply to

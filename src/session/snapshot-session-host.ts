@@ -152,9 +152,11 @@ export interface SnapshotSessionAdapters {
   /**
    * When true, the debug ops (`DEBUG_OP_TYPES`) run; otherwise `handleOp`
    * refuses every one of them (#481). Even with debugging on, an op that
-   * reports a seat's view runs only for the seat that asked for it. Set once
-   * at session creation. The `executeOp` adapter must pass the same value to
-   * `executeOp`'s `hostOptions.debug`, which refuses debug ops on its own.
+   * reports a seat's view runs only for the seat that asked for it. Read on
+   * every op, so a host whose answer changes mid-game (the dev host, as people
+   * join and leave seats) supplies a getter, as `botSeats` may. The `executeOp`
+   * adapter must pass the same answer to `executeOp`'s `hostOptions.debug`,
+   * which refuses debug ops on its own.
    */
   debug?: boolean;
   /**

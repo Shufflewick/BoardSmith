@@ -224,6 +224,7 @@ function onHostMessage(msg: Record<string, unknown>): void {
       break;
     case 'lobby': {
       seats.value = msg.seats as SeatInfo[];
+      setDebugAvailable(msg.debug === true);
       const mine = (msg.seats as SeatInfo[]).find((s) => s.clientId === clientId);
       // Don't clear an already-known seat from a lobby broadcast (init is authoritative).
       if (mine) mySeat.value = mine.seat;
@@ -321,6 +322,7 @@ function onIframeLoad(): void {
   }
   if (lastInitSeat != null) postToGame({ type: 'init', seat: lastInitSeat, teachingDisabled: cfg.teachingDisabled === true });
   if (lastGameState) postToGame(lastGameState);
+  postToGame({ type: 'dev-debug-available', available: debugAvailable.value });
   // Re-request the UI list and re-assert the selection so a (re)mounted game
   // iframe rebuilds the dropdown and keeps the chosen view.
   postToGame({ type: 'dev-ui-list-request' });
@@ -353,6 +355,7 @@ function onWindowMessage(event: MessageEvent): void {
   if (data.type === 'request-state') {
     if (lastInitSeat != null) postToGame({ type: 'init', seat: lastInitSeat, teachingDisabled: cfg.teachingDisabled === true });
     if (lastGameState) postToGame(lastGameState);
+    postToGame({ type: 'dev-debug-available', available: debugAvailable.value });
     return;
   }
   // The game's DebugPanel reports its open state (toggled here, via its ✕, or
@@ -423,7 +426,21 @@ const tableSetupOpen = ref(false);
 // trigger belongs in the Dev header so all dev controls are together. We post a
 // toggle to the iframe and mirror the panel's reported open state for the button.
 const debugOpen = ref(false);
+/**
+ * Whether the host has debugging on (#481): only while one person holds every
+ * human seat, or under `--debug`. Every lobby message says, so it follows
+ * people taking and leaving seats. Off hides the Debug buttons and tells the
+ * game page to close and hide its panel; the host refuses debug ops anyway.
+ */
+const debugAvailable = ref(false);
+function setDebugAvailable(available: boolean): void {
+  if (available === debugAvailable.value) return;
+  debugAvailable.value = available;
+  if (!available) debugOpen.value = false;
+  postToGame({ type: 'dev-debug-available', available });
+}
 function toggleDebug(): void {
+  if (!debugAvailable.value) return;
   postToGame({ type: 'dev-debug-toggle' });
 }
 
@@ -806,8 +823,10 @@ onUnmounted(() => {
                   <span class="dev-chrome__btn-label">Table setup</span>
                 </button>
                 <button
+                  v-if="debugAvailable"
                   type="button"
                   class="btn"
+                  data-testid="debug-toggle"
                   :class="{ 'btn--on': debugOpen }"
                   :aria-pressed="debugOpen"
                   @click="toggleDebug"
@@ -847,8 +866,10 @@ onUnmounted(() => {
                 Table setup
               </button>
               <button
+                v-if="debugAvailable"
                 type="button"
                 class="btn"
+                data-testid="debug-toggle"
                 :class="{ 'btn--on': debugOpen }"
                 :aria-pressed="debugOpen"
                 @click="toggleDebug"

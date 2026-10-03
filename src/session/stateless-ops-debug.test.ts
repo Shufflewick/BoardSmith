@@ -402,5 +402,25 @@ describe('#481 debug op gate', () => {
       expect(s.getStateAtAction(1, 1).success).toBe(true);
       expect((await s.rewindToAction(1)).success).toBe(true);
     });
+
+    it('a session restored without debugEnabled refuses debug calls, even if the saved one had it on', async () => {
+      const original = session(true);
+      await passTwice(original);
+      const stored = JSON.parse(JSON.stringify(original.storedState));
+
+      const restored = GameSession.restore<PassGame>(stored, PassGame);
+      for (const [name, call] of calls) {
+        const res = await call(restored);
+        expect(res.success, name).toBe(false);
+        expect(res.error).toMatch(/debugging is not turned on/i);
+      }
+
+      const restoredWithDebug = GameSession.restore<PassGame>(
+        JSON.parse(JSON.stringify(original.storedState)), PassGame,
+        undefined, undefined, undefined, undefined, undefined, undefined, true,
+      );
+      const at = restoredWithDebug.getStateAtAction(0, 1);
+      expect(at.success, at.error).toBe(true);
+    });
   });
 });

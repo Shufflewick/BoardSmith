@@ -86,7 +86,7 @@ function expectFollowingSeatTwo(lastOfType: ReturnType<typeof makeAltHost>['last
   expect((lastOfType('A', 'game_state').view as any).state.isMyTurn).toBe(true);
 }
 
-function makeHost(opts: { designatedBotSeats?: number[] } = {}) {
+function makeHost(opts: { designatedBotSeats?: number[]; debug?: boolean } = {}) {
   const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
   const host = new MultiplayerHost({
     playerCount: 2,
@@ -94,6 +94,7 @@ function makeHost(opts: { designatedBotSeats?: number[] } = {}) {
     maxPlayers: def.maxPlayers,
     makeSeed: () => 'mp',
     designatedBotSeats: opts.designatedBotSeats,
+    debug: opts.debug,
     executeOp: (gameOptions, snap, pend, op, hostOptions) => executeOp(def, gameOptions, snap, pend, op, hostOptions),
     send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
   });
@@ -847,5 +848,72 @@ describe('MultiplayerHost — a 1-seat game has no seat to pick (#150)', () => {
 
     expect(has('B', 'init')).toBe(false); // B still picks its seat
     expect(lastOfType('B', 'lobby').seats.find((s: any) => s.seat === 2).clientId).toBe(null);
+  });
+});
+
+// #481: debugging is on only while one person holds every human seat, unless
+// `boardsmith dev --debug` forces it on.
+describe('MultiplayerHost debugging follows who holds the seats (#481)', () => {
+  async function ask(t: ReturnType<typeof makeHost>, clientId: string, op: string, payload: Record<string, unknown> = {}) {
+    const requestId = `${op}-${Math.random()}`;
+    await t.host.handleMessage(clientId, { type: 'server_request', requestId, op, payload });
+    const reply = t.to(clientId).find((m) => m.type === 'server_response' && m.requestId === requestId);
+    return (reply as Extract<HostOutbound, { type: 'server_response' }>).result;
+  }
+  const lobbyDebug = (t: ReturnType<typeof makeHost>, clientId: string) =>
+    (t.lastOfType(clientId, 'lobby') as { debug: boolean }).debug;
+
+  it('is on for one person alone at the table', async () => {
+    const t = makeHost();
+    await t.host.handleMessage('A', { type: 'hello' });
+    expect(lobbyDebug(t, 'A')).toBe(true);
+    expect((await ask(t, 'A', 'debug:history')).success).toBe(true);
+    expect((await ask(t, 'A', 'debug:logs')).success).toBe(true);
+  });
+
+  it('turns off for everyone the moment a second person takes a seat, and back on when they leave', async () => {
+    const t = makeHost();
+    await t.host.handleMessage('A', { type: 'hello' });
+    await t.host.handleMessage('B', { type: 'hello' });
+    await t.host.handleMessage('B', { type: 'join', seat: 2 });
+
+    expect(lobbyDebug(t, 'A')).toBe(false);
+    expect(lobbyDebug(t, 'B')).toBe(false);
+    for (const [op, payload] of [
+      ['debug:history', {}],
+      ['debug:logs', {}],
+      ['debug:rewind', { actionIndex: 0 }],
+      ['debug:shuffle-deck', { deckId: 1 }],
+      ['debug:state-at', { actionIndex: 0 }],
+    ] as const) {
+      for (const who of ['A', 'B']) {
+        const result = await ask(t, who, op, { ...payload });
+        expect(result.success, `${who} ${op}`).toBe(false);
+        expect(result.error).toMatch(/debugging is not turned on/i);
+      }
+    }
+
+    await t.host.handleMessage('B', { type: 'leave' });
+    expect(lobbyDebug(t, 'A')).toBe(true);
+    expect((await ask(t, 'A', 'debug:history')).success).toBe(true);
+  });
+
+  it('stays off while a second person is away but still holds their seat', async () => {
+    const t = makeHost();
+    await t.host.handleMessage('A', { type: 'hello' });
+    await t.host.handleMessage('B', { type: 'hello' });
+    await t.host.handleMessage('B', { type: 'join', seat: 2 });
+    t.host.disconnect('B');
+    expect(lobbyDebug(t, 'A')).toBe(false);
+    expect((await ask(t, 'A', 'debug:history')).success).toBe(false);
+  });
+
+  it('is on for a several-person table when the host forces it (boardsmith dev --debug)', async () => {
+    const t = makeHost({ debug: true });
+    await t.host.handleMessage('A', { type: 'hello' });
+    await t.host.handleMessage('B', { type: 'hello' });
+    await t.host.handleMessage('B', { type: 'join', seat: 2 });
+    expect(lobbyDebug(t, 'A')).toBe(true);
+    expect((await ask(t, 'B', 'debug:history')).success).toBe(true);
   });
 });
