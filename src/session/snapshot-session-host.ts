@@ -90,11 +90,19 @@ export interface TurnBoundary {
  * the durable state rather than UI state: a repeating selection's picks exist
  * only here, and its `onEach` has already changed `snapshot`, so a snapshot
  * restored without them holds a move that no selection owns (#320).
+ *
+ * `isComplete` and `winners` are the game's outcome as the last op reported
+ * it. The snapshot is opaque to the host, so it cannot work them out again: a
+ * host restored without them would publish a finished game as running (#490).
  */
 export interface SnapshotHostState {
   snapshot: unknown;
   flowState: unknown;
   pendingStates: Record<string, Record<string, unknown>>;
+  /** Whether the game has ended. */
+  isComplete: boolean;
+  /** The winning seats; empty while the game runs, and for a finished draw. */
+  winners: number[];
 }
 
 /**
@@ -624,6 +632,8 @@ export class SnapshotSessionHost {
       snapshot: this._snapshot,
       flowState: this._flowState,
       pendingStates: Object.fromEntries(this.pendingStates),
+      isComplete: this.isComplete,
+      winners: [...this.winners],
     };
   }
 
@@ -638,6 +648,8 @@ export class SnapshotSessionHost {
    *   snapshot. Without it a player who paused mid-action loses their picks,
    *   and a repeating selection's `onEach` moves stay on the board with no
    *   action left to finish (#320).
+   * - `isComplete` and `winners` are the game's outcome. Without them a host
+   *   restored from a finished game publishes it as running (#490).
    *
    * @param state.playerViews Optional last-known player views, so a
    *   `broadcastCurrent()` before the next op still carries board state.
@@ -661,9 +673,12 @@ export class SnapshotSessionHost {
       );
     }
     const pendingStates = this.restorablePendingStates(state.pendingStates);
+    const winners = this.restorableWinners(state.isComplete, state.winners);
     this._snapshot = state.snapshot;
     this._flowState = state.flowState;
     this.pendingStates = pendingStates;
+    this.isComplete = state.isComplete;
+    this.winners = winners;
     if (state.playerViews) this.lastPlayerViews = state.playerViews;
     if (state.spectatorView !== undefined) this.lastSpectatorView = state.spectatorView;
     // The gate holds the views exactly as given: they are what the pages show.
@@ -672,6 +687,39 @@ export class SnapshotSessionHost {
     state.playerViews?.forEach((view, i) => this.pushGate.recordSent(i + 1, { view }));
     if (state.spectatorView !== undefined) this.pushGate.recordSent(0, { view: state.spectatorView });
     this.publishedHasBots = this.hasBotPlayers();
+  }
+
+  /** `restoreFrom`'s check that the outcome is given, and names seats of this table. */
+  private restorableWinners(isComplete: unknown, winners: unknown): number[] {
+    if (typeof isComplete !== 'boolean') {
+      throw new Error(
+        'restoreFrom requires isComplete, the game outcome persisted with this snapshot: without ' +
+          'it a finished game would be published as running. Store the whole value the persist ' +
+          'adapter hands you and pass it back.',
+      );
+    }
+    if (!Array.isArray(winners)) {
+      throw new Error(
+        'restoreFrom requires winners, the winning seats persisted with this snapshot (an empty ' +
+          'array while the game runs, or for a draw). Store the whole value the persist adapter ' +
+          'hands you and pass it back.',
+      );
+    }
+    for (const seat of winners) {
+      if (!Number.isInteger(seat) || seat < 1 || seat > this.adapters.playerCount) {
+        throw new Error(
+          `restoreFrom was given winner ${JSON.stringify(seat)}, but this table has seats ` +
+            `1 to ${this.adapters.playerCount}. The persisted state does not belong to this table.`,
+        );
+      }
+    }
+    if (!isComplete && winners.length > 0) {
+      throw new Error(
+        'restoreFrom was given winners for a game that is not finished (isComplete is false). ' +
+          'The persisted state is inconsistent: pass back the value the persist adapter handed you.',
+      );
+    }
+    return [...winners] as number[];
   }
 
   /** `restoreFrom`'s check that every pending selection names a seat of this table. */

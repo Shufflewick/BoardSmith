@@ -262,6 +262,13 @@ the pages show, so call `host.broadcastCurrent()` right after restoring: a
 seat that passed between a person and the bot while the host slept is pushed
 to every page, and when nothing differs the gate makes it a no-op.
 
+What `restoreFrom` takes besides the views is the `SnapshotHostState` the
+`persist` adapter was handed (and `host.durableState()` returns): `snapshot`,
+`flowState`, `pendingStates`, and the game's outcome, `isComplete` and
+`winners`. Store it whole. The outcome is required because the host cannot
+read it back out of the snapshot, and a host restored without it would publish
+a finished game as running.
+
 ### Pushing state from your own host
 
 A host that builds frames outside both of those keeps a `StatePushGate` and
