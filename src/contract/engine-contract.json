@@ -2,7 +2,7 @@
   "revision": 122,
   "bundleProtocol": 2,
   "surfaceHash": "f7e59da26973c116",
-  "payloadHash": "3a98bc2f204eba00",
+  "payloadHash": "62ef1ec72ea8e5a9",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -1039,9 +1039,9 @@
       "date": "2026-10-03",
       "bundleProtocol": 2,
       "surfaceHash": "f7e59da26973c116",
-      "payloadHash": "3a98bc2f204eba00",
+      "payloadHash": "62ef1ec72ea8e5a9",
       "formatHash": "0058593e7cc80205",
-      "summary": "No BoardSmith host pushes a seat a state identical to the last one it sent (#487). SnapshotSessionHost's broadcast adapter is replaced by record (every view of record, spectator included, after each change) and push (only the seats whose view changed; seat 0 is the spectators), and it gains rosterChanged(), to call when a seat passes between a person and the bot; restoreFrom takes the views pages hold (playerViews, spectatorView). GameSession's SessionInfo requires a connectionId. StatePushGate is exported from boardsmith/session and boardsmith/session-host. Animation event ids in a seat's payload now count only the events that seat may see (#489): a seat's state.animationEvents carries only its own events, numbered in its own sequence, and seat views no longer carry animationEventSeq."
+      "summary": "No BoardSmith host pushes a seat a state identical to the last one it sent (#487). SnapshotSessionHost's broadcast adapter is replaced by record (every view of record, spectator included, after each change) and push (only the seats whose view changed; seat 0 is the spectators), and it gains rosterChanged(), to call when a seat passes between a person and the bot; restoreFrom takes the views pages hold (playerViews, spectatorView) as given, so a roster change made while the host slept is pushed. GameSession's SessionInfo requires a connectionId. StatePushGate is exported from boardsmith/session and boardsmith/session-host. Animation event ids in a seat's payload now count only the events that seat may see (#489): a seat's state.animationEvents carries only its own events, numbered in its own sequence, seat views no longer carry animationEventSeq, every PlayerGameState names the seat it was built for (viewerSeat, 0 for a spectator) so a page that changes seat restarts its animation watermark, and animateTo refuses seat 0."
     }
   ]
 }
