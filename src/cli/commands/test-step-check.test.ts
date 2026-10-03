@@ -483,6 +483,42 @@ it('no bare asset <img>', () => { expect(scanAssetReachability(process.cwd())).t
     expect(result.testFiles.map((f) => f.path)).toEqual(['tests/auction.test.ts']);
   });
 
+  // A guard is never mutation-tested, so a guard that runs the game's code would hide a test that
+  // could be tautological from the mutation check. A guard holds scans only (#443).
+  it.each([
+    ['imports a component', `import Bid from '../../src/ui/Bid.vue';\nit('x', () => { expect(Bid).toBeTruthy(); });\n`, 1],
+    ['mounts with @vue/test-utils', `import { mount } from '@vue/test-utils';\nit('x', () => { mount({}); });\n`, 1],
+    ['uses boardsmith/testing', `import { createTestGame } from 'boardsmith/testing';\nit('x', () => { createTestGame(); });\n`, 1],
+    ['calls renderAsSeat', `import { it } from 'vitest';\nimport { renderAsSeat } from '../support';\nit('x', () => { renderAsSeat(); });\n`, 2],
+    ['dispatches an action', `import { it } from 'vitest';\nit('x', () => {\n  testGame.doAction(1, 'bid');\n});\n`, 3],
+  ])('reports a guard the chunk wrote that %s, and says where the test belongs (#443)', async (_what, guard, line) => {
+    const findings = await findingsFor({ 'src/rules/auction.ts': RULES, 'tests/guards/a11y-floor.test.ts': guard });
+    expect(findings.map((f) => [f.kind, f.subject])).toEqual([['guard-runs-code', `tests/guards/a11y-floor.test.ts:${line}`]]);
+    expect(findings[0].detail).toMatch(/scans only/);
+    expect(findings[0].detail).toContain('Spec Manifest');
+  });
+
+  it('accepts a guard that reads components as text, including a ?raw import (#443)', async () => {
+    const findings = await findingsFor({
+      'src/rules/auction.ts': RULES,
+      'tests/guards/a11y-floor.test.ts': `import { it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import bidSource from '../../src/ui/Bid.vue?raw';
+import { scanAssetReachability } from 'boardsmith/asset-scan';
+it('no colour literals', () => { expect(readFileSync('src/ui/Bid.vue', 'utf-8') + bidSource).not.toMatch(/#[0-9a-f]{6}/i); });
+it('no bare asset <img>', () => { expect(scanAssetReachability(process.cwd())).toEqual([]); });
+`,
+    });
+    expect(findings).toEqual([]);
+  });
+
+  it('leaves alone a guard that runs code when the chunk did not touch it (#443)', async () => {
+    await write(project, { 'tests/guards/old.test.ts': `import { mount } from '@vue/test-utils';\n` });
+    git(project, 'add', '-A');
+    git(project, 'commit', '-q', '-m', 'chunk-setup/step-close');
+    expect(await findingsFor({ 'src/rules/auction.ts': RULES })).toEqual([]);
+  });
+
   it('reports an exemption row on a chunk that has claims, and an empty manifest', async () => {
     await build({}, '| exempt | restyle | n/a |\n');
     expect((await checkTestStep(project, 'auction')).findings.map((f) => f.kind)).toEqual([
