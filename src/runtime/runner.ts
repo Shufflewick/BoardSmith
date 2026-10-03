@@ -1075,8 +1075,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // matches the live game exactly. This is what lets us drop the replay: the
     // replay's only surviving contribution was re-advancing the RNG, and it could
     // not account for draws made inside pending/selection executes. Restoring the
-    // generator state covers all of those. Skip for older snapshots that predate
-    // RNG-state capture.
+    // generator state covers all of those. A snapshot without one is refused.
     runner.game.setRandomState(snapshot.randomState);
 
     // Restore the authoritative flow state (re-resolves players against the tree

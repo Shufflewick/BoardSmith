@@ -42,7 +42,9 @@ The fields that carry the actual game state are:
   generator's 256-bit key and its position, from `game.getRandomState()`),
   restored via `game.setRandomState()` so the next `game.random()` draw
   matches exactly. A snapshot saved before #483 holds a number here, which
-  `setRandomState` refuses: such a game cannot be continued.
+  `setRandomState` refuses: such a game cannot be continued. A snapshot with
+  no `randomState` at all (for example a hand-written `--seed` file) is
+  refused too.
 - `gameOptions` — the original constructor options (including custom options
   like `playerConfigs`), needed to reconstruct the game correctly.
 - `seed` — the original random seed string, used to derive `gameOptions.seed`
