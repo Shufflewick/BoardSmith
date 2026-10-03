@@ -32,13 +32,8 @@ function keyName(name: ts.PropertyName): string | undefined {
   return ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : undefined;
 }
 
-/**
- * Each local name bound by a value import from vitest or vite, with the name it was exported as,
- * but only when nothing else in the file declares the same name (a parameter or variable that
- * could shadow it where the config is written).
- */
-function trustedImports(source: ts.SourceFile): Map<string, string> {
-  const imported = new Map<string, string>();
+/** How many times the file declares each name, at any depth (a parameter, a variable, an import). */
+function declarationCounts(source: ts.SourceFile): Map<string, number> {
   const declared = new Map<string, number>();
   const visit = (node: ts.Node): void => {
     const name = (node as { name?: ts.Node }).name;
@@ -46,17 +41,26 @@ function trustedImports(source: ts.SourceFile): Map<string, string> {
     ts.forEachChild(node, visit);
   };
   visit(source);
-  for (const statement of source.statements) {
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
-    if (!CONFIG_MODULES.has(statement.moduleSpecifier.text)) continue;
-    const clause = statement.importClause;
-    if (!clause || clause.isTypeOnly || !clause.namedBindings || !ts.isNamedImports(clause.namedBindings)) continue;
-    for (const element of clause.namedBindings.elements) {
-      if (element.isTypeOnly) continue;
-      if (declared.get(element.name.text) === 1) imported.set(element.name.text, (element.propertyName ?? element.name).text);
-    }
-  }
-  return imported;
+  return declared;
+}
+
+/** The value imports `statement` binds from vitest or vite, as `[local name, exported name]`. */
+function configModuleImports(statement: ts.Statement): Array<[string, string]> {
+  if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) return [];
+  const bindings = statement.importClause?.namedBindings;
+  if (!CONFIG_MODULES.has(statement.moduleSpecifier.text) || statement.importClause?.isTypeOnly) return [];
+  if (!bindings || !ts.isNamedImports(bindings)) return [];
+  return bindings.elements.filter((e) => !e.isTypeOnly).map((e) => [e.name.text, (e.propertyName ?? e.name).text]);
+}
+
+/**
+ * Each local name bound by a value import from vitest or vite, with the name it was exported as,
+ * but only when nothing else in the file declares the same name (a parameter or variable that
+ * could shadow it where the config is written).
+ */
+function trustedImports(source: ts.SourceFile): Map<string, string> {
+  const declared = declarationCounts(source);
+  return new Map(source.statements.flatMap(configModuleImports).filter(([local]) => declared.get(local) === 1));
 }
 
 /** Whether `object` is a vitest config: the default export, or the argument of vitest's or vite's config helpers. */
