@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
   generateMutants,
+  isAssertionFailure,
   orderPinSites,
   PIN_MUTANT_CAP,
   runDiffMutationCheck,
@@ -137,6 +138,25 @@ describe('orderPinSites', () => {
     expect(spreadOrder(0)).toEqual([]);
     expect(spreadOrder(10)).toEqual([5, 2, 8, 1, 4, 7, 9, 0, 3, 6]);
     for (const n of [1, 7, 211, 367]) expect([...spreadOrder(n)].sort((a, b) => a - b)).toEqual([...Array(n).keys()]);
+  });
+});
+
+/**
+ * #485: a test that pins earlier behaviour runs all of the game's setup, so a mutant that makes
+ * setup throw fails it without its assertions ever running. Such a failure is not credited: only
+ * one raised by the test's own check is. The shapes here are what vitest reports for each kind.
+ */
+describe('isAssertionFailure', () => {
+  it('counts what expect, assert and expect.fail raise, and a snapshot mismatch', () => {
+    expect(isAssertionFailure({ name: 'AssertionError', diff: true })).toBe(true); // expect(x).toBe(y)
+    expect(isAssertionFailure({ name: 'AssertionError', diff: false })).toBe(true); // expect(fn).toThrow(), expect.fail()
+    expect(isAssertionFailure({ name: 'Error', diff: true })).toBe(true); // toMatchSnapshot, toMatchInlineSnapshot
+  });
+
+  it('does not count an error thrown by the code the test ran', () => {
+    expect(isAssertionFailure({ name: 'Error', diff: false })).toBe(false);
+    expect(isAssertionFailure({ name: 'RulesError', diff: false })).toBe(false);
+    expect(isAssertionFailure({ name: undefined, diff: false })).toBe(false); // throw 'a string'
   });
 });
 
@@ -283,7 +303,7 @@ it('claim 3 — the doubled score is shown', () => {
     async function pinCheck(
       testSource: string,
       files: Record<string, string> = { 'src/rules.ts': RULES },
-      options: { added?: Map<string, Set<number>>; mocked?: string[] } = {},
+      options: { added?: Map<string, Set<number>> } = {},
     ) {
       const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, ...files });
       const testPath = join(project, 'tests/pin.test.ts');
@@ -292,7 +312,7 @@ it('claim 3 — the doubled score is shown', () => {
       const logged: string[] = [];
       const result = await runMutationCheck({
         projectDir: project,
-        testFiles: [{ path: 'tests/pin.test.ts', absPath: testPath, source: testSource, pin: { mocked: options.mocked ?? [] } }],
+        testFiles: [{ path: 'tests/pin.test.ts', absPath: testPath, source: testSource, pin: true }],
         added: options.added ?? new Map(),
         claims: [],
         log: (line) => logged.push(line),
@@ -363,26 +383,96 @@ it('the special rule', () => { expect(special(${sum})).toBe(true); expect(specia
       expect(result.summary.mutants).toBeLessThan(5);
     }, 120_000);
 
-    it('carries on past a module it cannot read and one the test mocks, naming both', async () => {
+    it('carries on past a module it cannot read, naming it', async () => {
       const { result, logged } = await pinCheck(
-        `import { it, expect, vi } from 'vitest';
-import { bid } from '../src/rules';
+        `import { it, expect } from 'vitest';
 import { NAMES } from '../src/names';
 import { fee } from '../src/fee';
-vi.mock('../src/rules', { spy: true });
-it('runs', () => { bid(3, 4); fee(NAMES.length); expect(1).toBe(1); });
+it('runs', () => { fee(NAMES.length); expect(1).toBe(1); });
 `,
         {
-          'src/rules.ts': RULES,
           'src/names.ts': `export const NAMES = "a"${' + "b"'.repeat(20_000)};\n`,
           'src/fee.ts': 'export function fee(n: number): number {\n  return n + 1;\n}\n',
         },
-        { mocked: ['src/rules.ts'] },
       );
       expect(result.findings.map((f) => f.kind)).toEqual(['test-survives-mutation']);
-      expect(result.findings[0].detail).toMatch(/Not mutated: src\/names\.ts \(nested too deeply for the parser\), src\/rules\.ts \(mocked by this file\)/);
+      expect(result.findings[0].detail).toMatch(/Not mutated: src\/names\.ts \(nested too deeply for the parser\)/);
       expect(new Set(mutatedLines(logged).map((l) => l.split(':')[0]))).toEqual(new Set(['src/fee.ts']));
     }, 60_000);
+
+    // What a mock lets run is decided by what ran, not by the vi.mock call: an automock never runs
+    // the module's functions, and a spy mock runs the real ones.
+    it('mutates what a mocked module still ran: nothing of an automock, all of a spy', async () => {
+      const { result, logged } = await pinCheck(
+        `import { it, expect, vi } from 'vitest';
+import { bid } from '../src/rules';
+import { fee } from '../src/fee';
+vi.mock('../src/rules');
+vi.mock('../src/fee', { spy: true });
+it('runs', () => { bid(3, 4); fee(1); expect(1).toBe(1); });
+`,
+        { 'src/rules.ts': RULES, 'src/fee.ts': 'export function fee(n: number): number {\n  return n + 1;\n}\n' },
+      );
+      expect(result.findings.map((f) => f.kind)).toEqual(['test-survives-mutation']);
+      expect(new Set(mutatedLines(logged).map((l) => l.split(':')[0]))).toEqual(new Set(['src/fee.ts']));
+    }, 60_000);
+
+    // A pin runs all of the game's setup, so a mutant that makes setup throw fails it with no
+    // assertion run. Only a failure the test's own check raises is credited (`isAssertionFailure`).
+    describe('is credited only for a failure on its own assertion', () => {
+      const GAME = `export class Game {
+  readonly actions: string[] = [];
+  constructor(readonly players: number) {
+    if (players < 2) throw new Error('A game needs at least two players.');
+    this.register('bid');
+    this.register('pass');
+  }
+  register(name: string): void {
+    if (this.actions.includes(name)) throw new Error(\`\${name} is registered twice.\`);
+    this.actions.push(name);
+  }
+}
+`;
+
+      it('refuses a pin that only sets a game up: every break that fails it does so by throwing', async () => {
+        const { result } = await pinCheck(
+          `import { it, expect } from 'vitest';
+import { Game } from '../src/game';
+it('a two-player game sets up', () => { const game = new Game(2); expect(game).toBeTruthy(); });
+`,
+          { 'src/game.ts': GAME },
+        );
+        expect(result.findings.map((f) => `${f.kind} ${f.subject}`)).toEqual(['test-survives-mutation tests/pin.test.ts > a two-player game sets up']);
+        expect(result.findings[0].detail).toMatch(/never failed on an assertion of its own/);
+        expect(result.summary.killed).toBe(0);
+        expect(result.summary.survived).toBe(result.summary.mutants);
+      }, 60_000);
+
+      it('credits an expect on the outcome, an expected throw, and a snapshot', async () => {
+        const { result } = await pinCheck(
+          `import { it, expect } from 'vitest';
+import { Game } from '../src/game';
+it('a two-player game offers bid and pass', () => { expect(new Game(2).actions).toEqual(['bid', 'pass']); });
+it('a one-player game is refused', () => { expect(() => new Game(1)).toThrow('two players'); });
+it('the actions match the snapshot', () => { expect(new Game(2).actions).toMatchSnapshot(); });
+`,
+          {
+            'src/game.ts': GAME,
+            'tests/__snapshots__/pin.test.ts.snap': `// Vitest Snapshot v1, https://vitest.dev/guide/snapshot
+
+exports[\`the actions match the snapshot 1\`] = \`
+[
+  "bid",
+  "pass",
+]
+\`;
+`,
+          },
+        );
+        expect(result.findings).toEqual([]);
+        expect(result.summary.killed).toBeGreaterThan(0);
+      }, 120_000);
+    });
 
     it('reads what a mounted component runs, its template included', async () => {
       const { result, logged } = await pinCheck(

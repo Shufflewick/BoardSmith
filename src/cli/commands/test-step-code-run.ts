@@ -16,9 +16,6 @@
  * without a factory written inline (no second argument, or an options object such as `{ spy: true }`),
  * which loads the real module to mock it. Reading source with `readFileSync` or a `?raw` import is a scan.
  *
- * `mockedModules` answers one more question for the mutation check: which game modules a test that
- * pins earlier behaviour replaces with a mock, so their code is never what it pins (#485).
- *
  * The one game module a scan may import as code is literal constants under `src/ui/`: a contrast
  * check needs the theme's colours, and a TypeScript palette (one a WebGL scene reads, which cannot
  * read CSS custom properties) can only be read by importing it. Such an import runs nothing only
@@ -313,30 +310,4 @@ function codeRunIn(source: string, file: string, context: CodeRunContext, visite
  */
 export function findCodeRun(source: string, file: string, context: CodeRunContext): CodeRun | undefined {
   return codeRunIn(source, file, context, new Set());
-}
-
-// -------------------------------------------------------------------------------------------
-// mockedModules
-// -------------------------------------------------------------------------------------------
-
-const MOCKING_VI_METHODS = new Set(['mock', 'doMock']);
-
-/**
- * The project modules a test file replaces with `vi.mock(path, ...)` or `vi.doMock(path, ...)`, in
- * any form, as project-relative paths. A test that pins earlier behaviour runs the mock, not the
- * module, so the mutation check leaves these out (#485).
- */
-export function mockedModules(source: string, file: string, context: Pick<CodeRunContext, 'text'>): string[] {
-  const mocked = new Set<string>();
-  walk(parseSource(source, file).ast, (node) => {
-    if (node.type !== 'CallExpression') return;
-    const callee = node.callee as AstNode;
-    if (callee.type !== 'MemberExpression' || (callee.object as AstNode).name !== 'vi') return;
-    if (!MOCKING_VI_METHODS.has((callee.property as AstNode).name as string)) return;
-    const specifier = specifierText((node.arguments as AstNode[])[0]);
-    if (specifier === undefined || !specifier.startsWith('.') || /[?*]/.test(specifier)) return;
-    const resolved = resolveScript(posix.normalize(posix.join(posix.dirname(file), specifier)), context);
-    if (resolved !== undefined) mocked.add(resolved);
-  });
-  return [...mocked].sort();
 }

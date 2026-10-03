@@ -44,13 +44,19 @@ are mutation-tested (`build/test.md` item 2(c)):
   The mutation check still runs it, so it must be able to fail. The chunk's own lines cannot reach
   an earlier chunk's behaviour, so `boardsmith test-step-check` breaks the game code the test runs
   instead: it runs the file once with coverage and mutates only code under `src/` that the file's
-  tests actually ran, leaving out any module the file mocks. A big game gives thousands of places to
+  tests actually ran (what a mock lets run is decided by that, not by the `vi.mock` call: an
+  automock's functions never run, a spy's do). A big game gives thousands of places to
   break, so it takes at most 100 mutants per such row, the same ones every run, shared between the
   file's tests: each test still passing takes a turn on the next place it runs, lines this chunk
   changed first, then code fewer of the file's tests run before setup they all share, then code that
-  runs only while the file loads. A module the check cannot read is skipped and named. When a test
-  survives, the finding says how many places it ran and how many were broken. Assert the outcome the
-  pinned behaviour produces: a test that only runs setup, or asserts a constant, is not a pin.
+  runs only while the file loads. A module the check cannot read is skipped and named. A test in
+  such a row is credited only when a mutant makes one of its own assertions fail: an `expect` or
+  `assert` on an outcome, an `expect(() => ...).toThrow` (or `.not.toThrow`, `rejects`), or a
+  snapshot mismatch. A test that fails only because the broken game code threw is not credited,
+  since every pin runs the game's setup and a thrown error shows only that the code ran; nor is a
+  failed `expect.assertions(n)` count. When a test survives, the finding says how many places it
+  ran and how many were broken. Assert the outcome the pinned behaviour produces: a test that only
+  runs setup, or asserts a constant, is not a pin.
 - A scan that only reads source as text goes in `tests/guards/`, never in a row.
 
 ## Fresh-Context Exception (one of the two steps allowed to read raw slices)

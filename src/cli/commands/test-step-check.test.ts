@@ -701,7 +701,7 @@ it('regression: a bid is defined', () => { expect(bid).toBeTruthy(); });
   // own row marked `none (regression)`. It pins behaviour that already exists, so there is no red to
   // observe; it is still mutation-tested. Nothing broader is excused.
   describe('an exempt chunk\'s none (regression) row (#485)', () => {
-    const PIN = `import { it, expect, vi } from 'vitest';\nimport { start } from '../src/rules/game';\nvi.mock('../src/rules/game', { spy: true });\nit('pins start', () => { expect(start).toBeTruthy(); });\n`;
+    const PIN = `import { it, expect } from 'vitest';\nimport { start } from '../src/rules/game';\nit('pins start', () => { expect(start).toBeTruthy(); });\n`;
 
     async function exemptChunk(rows: string, claims = '') {
       await write(project, { 'tests/pin.test.ts': PIN, 'design/chunks/auction/CHUNK.md': chunkMd(rows, claims) });
@@ -710,10 +710,10 @@ it('regression: a bid is defined', () => { expect(bid).toBeTruthy(); });
       return checkTestStep(project, 'auction');
     }
 
-    it('hands it to the mutation check as a pin, with the game modules it mocks', async () => {
+    it('hands it to the mutation check as a pin', async () => {
       const result = await exemptChunk('| exempt | refactor, no rules change | n/a |\n| tests/pin.test.ts | none (regression) | n/a |\n');
       expect(result.findings).toEqual([]);
-      expect(result.testFiles.map((f) => [f.path, f.pin])).toEqual([['tests/pin.test.ts', { mocked: ['src/rules/game.ts'] }]]);
+      expect(result.testFiles.map((f) => [f.path, f.pin])).toEqual([['tests/pin.test.ts', true]]);
     });
 
     it.each(['pending', 'yes', ''])('accepts only n/a as its RED Observed, not "%s"', async (red) => {

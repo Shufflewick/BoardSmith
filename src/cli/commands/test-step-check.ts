@@ -63,7 +63,7 @@ import {
 } from './test-step-ast.js';
 import { runMutationCheck, type MutationSummary } from './test-step-mutation.js';
 import { scriptRegions } from './test-step-sfc.js';
-import { findCodeRun, mockedModules, type CodeRunContext } from './test-step-code-run.js';
+import { findCodeRun, type CodeRunContext } from './test-step-code-run.js';
 import { findHandBuiltShellContext } from './test-step-shell-context.js';
 import { findChunkCommits } from '../lib/chunk-commits.js';
 import { chunkMdPath, relChunkMdPath } from '../lib/project-paths.js';
@@ -288,11 +288,11 @@ export interface ChunkTestFile {
   absPath: string;
   source: string;
   /**
-   * Only on an exempt chunk's `none (regression)` row, which pins behaviour an earlier chunk built:
-   * the mutation check breaks the game code the file runs, not only the chunk's own lines, leaving out
-   * the modules it mocks (`mockedModules`, project-relative paths) (#485).
+   * Set on an exempt chunk's `none (regression)` row, which pins behaviour an earlier chunk built: the
+   * mutation check breaks the game code the file runs, not only the chunk's own lines, and credits a
+   * test only for a failure on an assertion of its own (#485, `test-step-mutation.ts`).
    */
-  pin?: { mocked: string[] };
+  pin?: boolean;
 }
 
 async function readChunk(projectDir: string, slug: string): Promise<string> {
@@ -411,17 +411,16 @@ function redFinding(manifest: SpecManifest, row: SpecManifestRow): TestStepFindi
 const pinsEarlierBehaviour = (manifest: SpecManifest, row: SpecManifestRow) => manifest.exemption !== undefined && row.regression;
 
 /**
- * Check 1: every row's file exists, its RED was observed, and its claims have citing tests. `pins`
- * holds the files of rows that pin an earlier chunk's behaviour.
+ * Check 1: every row's file exists, its RED was observed, and its claims have citing tests. The file
+ * of a row that pins an earlier chunk's behaviour is marked `pin`.
  */
 async function manifestRowFindings(
   projectDir: string,
   manifest: SpecManifest,
   claims: ChunkClaims,
-): Promise<{ findings: TestStepFinding[]; testFiles: ChunkTestFile[]; pins: Set<ChunkTestFile> }> {
+): Promise<{ findings: TestStepFinding[]; testFiles: ChunkTestFile[] }> {
   const findings: TestStepFinding[] = [];
   const testFiles: ChunkTestFile[] = [];
-  const pins = new Set<ChunkTestFile>();
   for (const row of manifest.rows) {
     if (isGuardFile(projectDir, row.testFile)) {
       findings.push({
@@ -439,8 +438,8 @@ async function manifestRowFindings(
     if (red) findings.push(red);
     const file = await readRowFile(projectDir, row);
     if (file) {
+      if (pinsEarlierBehaviour(manifest, row)) file.pin = true;
       testFiles.push(file);
-      if (pinsEarlierBehaviour(manifest, row)) pins.add(file);
     } else {
       findings.push({
         kind: 'test-file-missing',
@@ -450,7 +449,7 @@ async function manifestRowFindings(
     }
     findings.push(...rowClaimFindings(row, file, claims));
   }
-  return { findings, testFiles, pins };
+  return { findings, testFiles };
 }
 
 /** Check 2: every claim in force is listed by some row. */
@@ -563,14 +562,11 @@ const NOT_COLLECTED = Object.freeze([
 const isTestFile = (path: string) =>
   /\.(test|spec)\.[cm]?[jt]sx?$/.test(path) && !NOT_COLLECTED.some((excluded) => excluded.test(path));
 
-/**
- * Every script in the project outside `node_modules/`, and every component under `src/` (which a
- * test that pins earlier behaviour may mock, `mockedModules`), with its text.
- */
+/** Every script in the project outside `node_modules/`, with its text. */
 async function projectScripts(projectDir: string): Promise<SourceFile[]> {
   const listed = await git(projectDir, ['ls-files', '--cached', '--others', '--exclude-standard']);
   const scripts: SourceFile[] = [];
-  const wanted = (p: string) => (/\.[cm]?[jt]sx?$/.test(p) || (p.startsWith('src/') && p.endsWith('.vue'))) && !/(^|\/)node_modules\//.test(p);
+  const wanted = (p: string) => /\.[cm]?[jt]sx?$/.test(p) && !/(^|\/)node_modules\//.test(p);
   for (const path of lines(listed).filter(wanted)) {
     try {
       scripts.push({ path, text: await fs.readFile(join(projectDir, path), 'utf-8') });
@@ -724,9 +720,6 @@ export async function checkTestStep(
     ...(await guardFindings(dir, added)),
   ];
   const scope = await chunkTestScope(dir, chunkCommits, rows.testFiles);
-  for (const pin of rows.pins) {
-    pin.pin = { mocked: mockedModules(pin.source, relative(dir, pin.absPath).split(sep).join('/'), scope.context) };
-  }
   findings.push(
     ...shellContextFindings(scope),
     ...guardRunsCodeFindings(scope),
