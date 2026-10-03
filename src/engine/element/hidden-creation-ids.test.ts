@@ -161,7 +161,7 @@ describe('opaque ids keep replay, restore and undo exact (#447)', () => {
   });
 
   it('an undone creation, made again, gets the id it had', async () => {
-    const session = GameSession.create({ gameType: 'shop', GameClass: ShopGame, playerCount: 2, playerNames: ['Ann', 'Bo'], seed: 'undo' });
+    const session = GameSession.create({ gameType: 'shop', GameClass: ShopGame, playerCount: 2, playerNames: ['Ann', 'Bo'], seed: 'undo', debugEnabled: true });
     await session.performAction('buySecretly', 1, { count: 1 });
     await session.performAction('buy', 2, {});
     const before = session.runner.game.shelf.first(Item)!.id;

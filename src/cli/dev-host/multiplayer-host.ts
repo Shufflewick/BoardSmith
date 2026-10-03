@@ -44,10 +44,27 @@ function defaultSeed(): string {
   return String(Math.floor(Math.random() * 0xffffffff));
 }
 
-export interface SeatInfo {
+interface SeatInfo {
   seat: number;
   /** The client holding this seat, or null if open. */
   clientId: string | null;
+  name: string;
+  color?: string;
+  connected: boolean;
+}
+
+/**
+ * One seat as a lobby message shows it to ONE recipient. It never carries the
+ * holder's client id: that id is how the host knows who is who (reconnects,
+ * the one-person debug rule), so a page that learned another's could connect
+ * as them. `mine` says whether the recipient holds the seat.
+ */
+export interface LobbySeat {
+  seat: number;
+  /** Someone holds the seat (they may be away); false means open or bot. */
+  held: boolean;
+  /** The recipient holds this seat. */
+  mine: boolean;
   name: string;
   color?: string;
   connected: boolean;
@@ -78,8 +95,10 @@ const nodeReconnectTimer: ReconnectTimer = (delayMs, fire) => {
 export type HostOutbound =
   | {
       type: 'lobby';
+      /** Whether debugging is on (#481); see `MultiplayerHost.debugOn`. */
+      debug: boolean;
       phase: LobbyPhase;
-      seats: SeatInfo[];
+      seats: LobbySeat[];
       minPlayers: number;
       playerCount: number;
       requestId?: string | null;
@@ -232,6 +251,12 @@ export interface MultiplayerHostOptions {
    */
   teachingDisabled?: boolean;
   /**
+   * Force debugging on for a trusted table (#481), set by `boardsmith dev
+   * --debug`. Without it, debugging is on only while one person holds every
+   * human seat (see `MultiplayerHost.debugOn`).
+   */
+  debug?: boolean;
+  /**
    * FEAT-01/168-02: when set, the FIRST started state is this seed's state —
    * threaded through the `start` op's `hostOptions.seedSnapshot` (never
    * `gameOptions`, same WR-04/D-01 rationale as `teachingDisabled`) so
@@ -252,7 +277,7 @@ export interface MultiplayerHostOptions {
     snapshot: unknown,
     pendingState: Record<string, unknown> | null,
     op: Op,
-    hostOptions?: { teachingDisabled?: boolean; seedSnapshot?: GameStateSnapshot },
+    hostOptions?: { teachingDisabled?: boolean; seedSnapshot?: GameStateSnapshot; debug?: boolean },
   ) => Promise<OpResult>;
   /** Deliver a message to one client (the WS layer maps clientId → socket). */
   send: (clientId: string, message: HostOutbound) => void;
@@ -591,7 +616,7 @@ export class MultiplayerHost {
     }
 
     // Game already live (or starting): show the seat-picker.
-    this.send(clientId, this.lobbyMessage());
+    this.send(clientId, this.lobbyMessage(clientId));
   }
 
   disconnect(clientId: string): void {
@@ -879,11 +904,11 @@ export class MultiplayerHost {
     if (seat !== undefined && this.phase === 'playing') {
       this.addBotSeat(seat);
       this.broadcastLobby();
-      this.send(clientId, this.lobbyMessage());
+      this.send(clientId, this.lobbyMessage(clientId));
       await this.session?.host.runBotTurns();
       return;
     }
-    this.send(clientId, this.lobbyMessage());
+    this.send(clientId, this.lobbyMessage(clientId));
     this.broadcastLobby();
   }
 
@@ -955,7 +980,7 @@ export class MultiplayerHost {
     clientId: string,
     msg: Extract<ClientInbound, { type: 'getLobby' }>,
   ): void {
-    const lobby = this.lobbyMessage() as Extract<HostOutbound, { type: 'lobby' }>;
+    const lobby = this.lobbyMessage(clientId);
     this.send(clientId, { ...lobby, requestId: msg.requestId ?? null });
   }
 
@@ -1253,7 +1278,10 @@ export class MultiplayerHost {
         snapshot,
         pendingState,
         op,
-        hostOptions,
+        // #481: whether debug ops (`debug:*`: history, state-at, state-diff,
+        // action traces, flow state, rewind, deck edits) run is decided per op
+        // by `debugOn()`, the same answer the session gets below.
+        { ...hostOptions, debug: this.debugOn() },
       );
       return this.applyPersistenceChannels(raw);
     };
@@ -1262,6 +1290,7 @@ export class MultiplayerHost {
       playerCount,
       botSeats: this.botSeats,
       teachingDisabled: this.opts.teachingDisabled,
+      debug: () => this.debugOn(),
       executeOp,
       hostWork: this.opts.hostWork ?? runsAtOnce,
       postGameState: (seat, view, meta) => {
@@ -1709,18 +1738,41 @@ export class MultiplayerHost {
     this.opts.send(clientId, message);
   }
 
-  private lobbyMessage(): HostOutbound {
+  /**
+   * Whether debugging is on right now (#481): the `debug:*` ops (history,
+   * state-at, state-diff, action traces, flow state, rewind, deck edits and
+   * `debug:logs`) and the page's Debug panel. On when `--debug` forced it, or
+   * when at most one person holds the human seats. A person is a client id:
+   * the id each browser keeps for itself (`dev-client-id.ts`), so tabs of one
+   * browser are one person and two browsers (or a private window) are two. A
+   * seat stays held while its player is away, until they leave it or someone
+   * takes it over, so stepping out does not turn debugging on for the others. Asked on every op and sent with
+   * every lobby message, so it follows people as they take and leave seats.
+   */
+  private debugOn(): boolean {
+    if (this.opts.debug === true) return true;
+    const holders = new Set<string>();
+    for (const info of this.seats.values()) if (info.clientId) holders.add(info.clientId);
+    return holders.size <= 1;
+  }
+
+  /** The lobby as `recipient` may see it: seats say who holds them only as `mine`. */
+  private lobbyMessage(recipient: string): Extract<HostOutbound, { type: 'lobby' }> {
     return {
       type: 'lobby',
+      debug: this.debugOn(),
       phase: this.phase,
-      seats: [...this.seats.values()].map((s) => ({ ...s })),
+      seats: [...this.seats.values()].map(({ clientId, ...seat }) => ({
+        ...seat,
+        held: clientId !== null,
+        mine: clientId === recipient,
+      })),
       minPlayers: this.opts.minPlayers,
       playerCount: this.opts.playerCount,
     };
   }
 
   private broadcastLobby(): void {
-    const message = this.lobbyMessage();
-    for (const clientId of this.connected) this.send(clientId, message);
+    for (const clientId of this.connected) this.send(clientId, this.lobbyMessage(clientId));
   }
 }

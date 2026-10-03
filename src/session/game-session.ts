@@ -40,7 +40,7 @@ import {
   type GameOptionDefinition,
   type PickChoicesResponse,
 } from './types.js';
-import { buildPlayerState, offerFollowUp, serializeFlowDebugInfo, serializePendingActionState } from './utils.js';
+import { buildPlayerState, debuggingOffMessage, offerFollowUp, serializeFlowDebugInfo, serializePendingActionState } from './utils.js';
 import { BotController } from './bot-controller.js';
 import type { BotStrategy, BotMove, BotMoveStats } from '../bot/index.js';
 import { createBot, parseBotLevel } from '../bot/index.js';
@@ -142,7 +142,12 @@ export interface GameSessionOptions<G extends Game = Game> {
   teachingDisabled?: boolean;
   /**
    * When `true`, `registerDebug()` payloads (`customDebug`) are attached to
-   * broadcast/player-state payloads for this session (SEC-04/F15).
+   * broadcast/player-state payloads for this session (SEC-04/F15), and the
+   * debug methods run: `getStateAtAction`, `getStateDiff`, `getActionTraces`,
+   * `rewindToAction`, `executeDebugCommand` and the deck edits. Without it
+   * each of those refuses (#481). The methods take the seat whose view to
+   * build from the caller, so a host that forwards a player's request must
+   * pass that player's own seat.
    *
    * Defaults to `false` — debug dumps of hidden game state must never be
    * broadcast to players/spectators unless a trusted `GameSession` consumer
@@ -398,7 +403,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   #teachingDisabled = false;
   /**
    * When true, `registerDebug()` payloads (`customDebug`) are attached to
-   * broadcast/player-state payloads (SEC-04, D-SEC-04). Set once at
+   * broadcast/player-state payloads (SEC-04, D-SEC-04), and the debug methods
+   * run (#481; see `GameSessionOptions.debugEnabled`). Set once at
    * construction from `GameSessionOptions.debugEnabled`; never toggled.
    * Mirrors `#teachingDisabled`'s constructor-time-only shape. Defaults to
    * `false` — a `GameSession`-consumer-only opt-in, not persisted and not
@@ -912,6 +918,12 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
      * restore that omits it silently unfences undo for the rest of the game.
      */
     undo?: UndoPolicy,
+    /**
+     * The session's `GameSessionOptions.debugEnabled`. Re-supplied for the same
+     * reason as `checkpoints`: host config, deliberately not persisted, so a
+     * restored session has debugging off unless the host turns it on again (#481).
+     */
+    debugEnabled?: boolean,
   ): GameSession<G> {
     // Snapshot-authoritative restore (audit F42). Reconstruct game state directly
     // from the persisted snapshot via GameRunner.fromSnapshot — NOT by replaying
@@ -960,7 +972,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     // Explicit annotation breaks the type-inference cycle with the lobby
     // callbacks' `getSession: () => session` capture above.
-    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, botController, storedState.displayName, lobbyManager, undefined, undefined, botStrategy, storedState.teachingDisabled, onPersistenceError);
+    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, botController, storedState.displayName, lobbyManager, undefined, undefined, botStrategy, storedState.teachingDisabled, onPersistenceError, debugEnabled);
     return session;
   }
 
@@ -1152,6 +1164,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * Creates a temporary game and replays actions up to the specified index.
    */
   getStateAtAction(actionIndex: number, playerPosition: number): { success: boolean; state?: PlayerGameState; error?: string } {
+    if (!this.#debugEnabled) return this.#debuggingOff('getStateAtAction');
     return this.#stateHistory.getStateAtAction(actionIndex, playerPosition);
   }
 
@@ -1164,6 +1177,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     toIndex: number,
     playerPosition: number
   ): { success: boolean; diff?: ElementDiff; error?: string } {
+    if (!this.#debugEnabled) return this.#debuggingOff('getStateDiff');
     return this.#stateHistory.getStateDiff(fromIndex, toIndex, playerPosition);
   }
 
@@ -1182,6 +1196,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     };
     error?: string;
   } {
+    if (!this.#debugEnabled) return this.#debuggingOff('getActionTraces');
     return this.#stateHistory.getActionTraces(playerPosition);
   }
 
@@ -1621,12 +1636,22 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     actionsDiscarded?: number;
     state?: PlayerGameState;
   }> {
+    if (!this.#debugEnabled) return this.#debuggingOff('rewindToAction');
     return this.#stateHistory.rewindToAction(targetActionIndex);
   }
 
   // ============================================
   // Debug Deck Manipulation Methods (delegated to DebugController)
   // ============================================
+
+  /**
+   * The refusal every debug method gives when the session was created without
+   * `debugEnabled` (#481): time travel, action traces, rewind and deck edits
+   * read hidden state or change the game outside its rules.
+   */
+  #debuggingOff(method: string): { success: false; error: string } {
+    return { success: false, error: debuggingOffMessage(method) };
+  }
 
   /**
    * Execute a debug command against the game state.
@@ -1637,6 +1662,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * @returns Result with success status and error message if failed
    */
   executeDebugCommand(command: GameCommand): { success: boolean; error?: string } {
+    if (!this.#debugEnabled) return this.#debuggingOff('executeDebugCommand');
     return this.#debugController.executeDebugCommand(command);
   }
 
@@ -1648,6 +1674,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * @returns Result with success status
    */
   moveCardToTop(cardId: number): { success: boolean; error?: string } {
+    if (!this.#debugEnabled) return this.#debuggingOff('moveCardToTop');
     return this.#debugController.moveCardToTop(cardId);
   }
 
@@ -1659,6 +1686,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * @returns Result with success status
    */
   reorderCard(cardId: number, targetIndex: number): { success: boolean; error?: string } {
+    if (!this.#debugEnabled) return this.#debuggingOff('reorderCard');
     return this.#debugController.reorderCard(cardId, targetIndex);
   }
 
@@ -1671,6 +1699,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * @returns Result with success status
    */
   transferCard(cardId: number, targetDeckId: number, position: 'first' | 'last' = 'first'): { success: boolean; error?: string } {
+    if (!this.#debugEnabled) return this.#debuggingOff('transferCard');
     return this.#debugController.transferCard(cardId, targetDeckId, position);
   }
 
@@ -1681,6 +1710,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * @returns Result with success status
    */
   shuffleDeck(deckId: number): { success: boolean; error?: string } {
+    if (!this.#debugEnabled) return this.#debuggingOff('shuffleDeck');
     return this.#debugController.shuffleDeck(deckId);
   }
 

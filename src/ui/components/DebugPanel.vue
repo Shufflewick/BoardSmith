@@ -187,8 +187,6 @@ onUnmounted(() => {
 
 // ── Time travel, history and rewind ─────────────────────────────────────────
 
-const playerSeat = computed(() => props.playerSeat);
-
 const {
   actionHistory,
   historyLoading,
@@ -213,7 +211,6 @@ const {
   confirmRewind,
 } = useDebugTimeline({
   bridge,
-  playerSeat,
   onTimeTravel: (state, actionIndex, diff) => emit('time-travel', state, actionIndex, diff),
 });
 
@@ -312,7 +309,7 @@ async function fetchActionTraces() {
   tracesLoading.value = true;
   tracesError.value = null;
   try {
-    const { traces, flowContext: context } = await bridge.actionTraces(props.playerSeat);
+    const { traces, flowContext: context } = await bridge.actionTraces();
     actionTraces.value = traces;
     flowContext.value = context;
     tracesLastFetched.value = Date.now();
@@ -329,7 +326,7 @@ async function fetchActionTraces() {
  */
 async function fetchFlowState() {
   try {
-    flowStateInfo.value = await bridge.flowState(props.playerSeat);
+    flowStateInfo.value = await bridge.flowState();
   } catch {
     flowStateInfo.value = null;
   }

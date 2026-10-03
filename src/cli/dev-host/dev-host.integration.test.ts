@@ -151,6 +151,9 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
       minPlayers: 1,
       maxPlayers: gameDef.maxPlayers,
       makeSeed: () => 'dev-host-integration',
+      // Two people sit at this table and both use the debug ops below, so it
+      // forces debugging on, as `boardsmith dev --debug` does (#481).
+      debug: true,
       executeOp: (gameOptions, snapshot, pendingState, op, hostOptions) =>
         executeOp(gameDef, gameOptions, snapshot, pendingState, op, hostOptions),
       send: (clientId, message) => {
@@ -182,6 +185,9 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
     expect(lobbyAfterStart.phase).toBe('playing');
     expect(lobbyAfterStart.playerCount).toBe(2);
     expect(lobbyAfterStart.minPlayers).toBe(1);
+    // Seats say only whether they are held and which is yours, never by whom (#481).
+    expect(lobbyAfterStart.seats.find((s) => s.seat === 1)).toMatchObject({ held: true, mine: true });
+    expect(lobbyAfterStart.seats.some((s) => 'clientId' in s)).toBe(false);
 
     // ── DRIVE-01: getState returns the caller's OWN seat view, requestId echoed. ──
     const stateA = await clientA.getState();

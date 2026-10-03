@@ -83,7 +83,11 @@ export function createHeadlessSession(
     get botSeats() {
       return botRoster;
     },
-    executeOp: (snap, pend, op) => executeOp(def, gameOptions, snap, pend, op),
+    // Debug ops run (#481): a headless session has one in-process caller
+    // driving every seat, so there is no other player to keep a view from. A
+    // seat-view debug op still answers only for the seat `send` names.
+    debug: true,
+    executeOp: (snap, pend, op) => executeOp(def, gameOptions, snap, pend, op, { debug: true }),
     broadcast: (views, meta) => {
       // structuredClone here mirrors the production postMessage boundary: a
       // broadcast carrying a live game object would throw a DataCloneError.

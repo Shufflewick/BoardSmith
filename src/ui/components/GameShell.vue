@@ -31,6 +31,7 @@ import PlayShell, { type PlayConnection } from './PlayShell.vue';
 import WaitingRoom from './WaitingRoom.vue';
 import { readTurnDeadlineFrame, useTurnDeadline, type TurnDeadlineFrame } from '../composables/useTurnDeadline.js';
 import { useTeachingActions } from '../composables/useTeachingActions.js';
+import { useDevDebugGate } from '../composables/useDevDebugGate.js';
 import ZoomPreviewOverlay from './helpers/ZoomPreviewOverlay.vue';
 import GameOverCard from './GameOverCard.vue';
 import TutorialOverlay from './helpers/TutorialOverlay.vue';
@@ -287,6 +288,9 @@ const teachingDisabled = ref(false);
 
 // UI state
 const debugExpanded = ref(false);
+// #481: the dev host says whether debugging is on; the panel shows only then.
+const devDebugGate = useDevDebugGate(debugExpanded);
+const devDebugAvailable = devDebugGate.available;
 // Ref to the mounted GameHistory (lives in the players panel). GameShell mediates
 // Copy/Clear from DebugPanel without duplicating message state.
 /**
@@ -1337,13 +1341,10 @@ if (typeof window !== 'undefined' && window.parent !== window) {
       return;
     }
 
-    // Dev-only: the Dev header (DevHost chrome) owns the Debug toggle now. It
-    // posts this to open/close the in-iframe DebugPanel. GameShell echoes the
-    // resulting state back via the debugExpanded watcher so the header stays synced.
-    if (data.type === 'dev-debug-toggle' && isDevBuild) {
-      debugExpanded.value = !debugExpanded.value;
-      return;
-    }
+    // Dev-only: the Dev header (DevHost chrome) owns the Debug toggle and says
+    // whether debugging is on at all (#481). GameShell echoes the panel's open
+    // state back via the debugExpanded watcher so the header stays synced.
+    if (isDevBuild && devDebugGate.handleMessage(data)) return;
 
     if (data.type === 'game_state' && platformMode.value) {
       const view = data.view as { flowState?: unknown; state?: Record<string, unknown> } | undefined;
@@ -2085,11 +2086,12 @@ if ((import.meta as any).hot) {
         </div>
       </template>
 
-      <template v-if="debugMode && platformMode && isDevBuild" #debug>
+      <template v-if="debugMode && platformMode && isDevBuild && devDebugAvailable" #debug>
     <!-- Debug Panel: dev only. Renders inside the dev host iframe (platform
-         mode + dev build); never in a deployed/production embed. -->
+         mode + dev build), and only while the dev host has debugging on
+         (#481); never in a deployed/production embed. -->
     <DebugPanel
-      v-if="debugMode && platformMode && isDevBuild"
+      v-if="debugMode && platformMode && isDevBuild && devDebugAvailable"
       :state="state"
       :player-seat="playerSeat"
       :player-count="playerCount"

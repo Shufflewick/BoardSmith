@@ -105,7 +105,7 @@ const TEST_CONFIG: DevHostConfig = {
 
 const SEAT_LOBBY = {
   type: 'lobby',
-  seats: [{ seat: 1, clientId: null, name: '', connected: false }],
+  seats: [{ seat: 1, held: false, mine: false, name: '', connected: false }],
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

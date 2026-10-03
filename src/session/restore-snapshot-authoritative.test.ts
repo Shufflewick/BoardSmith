@@ -158,7 +158,9 @@ describe('F42: GameSession.restore is snapshot-authoritative', () => {
   it('supports time-travel (getStateAtAction) after restore', async () => {
     const { storage } = await buildPlayedSession();
     const loaded = await storage.load();
-    const restored = GameSession.restore<CollectGame>(loaded!, CollectGame);
+    const restored = GameSession.restore<CollectGame>(
+      loaded!, CollectGame, undefined, undefined, undefined, undefined, undefined, undefined, true,
+    );
 
     // State at action 0 (turn start, before collect) — hand empty.
     const at0 = restored.getStateAtAction(0, 1);

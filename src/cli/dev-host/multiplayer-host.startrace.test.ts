@@ -94,7 +94,7 @@ function makeRaceHost(gate: { promise: Promise<void> } | null) {
   const lastOfType = (clientId: string, type: HostOutbound['type']) =>
     [...to(clientId)].reverse().find((m) => m.type === type) as any; // eslint-disable-line @typescript-eslint/no-explicit-any
   const lastLobby = () => [...sent].reverse().find((e) => e.msg.type === 'lobby')?.msg as
-    | { seats: Array<{ seat: number; clientId: string | null; connected: boolean }> }
+    | { seats: Array<{ seat: number; held: boolean; connected: boolean }> }
     | undefined;
   /** `clientId` passes, as its page would; resolves with whether the host took the move. */
   const passes = async (clientId: string, requestId: string): Promise<boolean> => {
@@ -171,7 +171,7 @@ describe('MultiplayerHost — D15 disconnect-mid-startGame-await race (DEVHOST-0
 
     // Cover is loop-driver-only: the seat is still RESERVED for A's reconnect.
     const seat1 = lastLobby()?.seats.find((s) => s.seat === 1);
-    expect(seat1?.clientId).toBe('A');
+    expect(seat1?.held).toBe(true);
     expect(seat1?.connected).toBe(false);
   });
 
@@ -209,10 +209,10 @@ describe('MultiplayerHost — D15 disconnect-mid-startGame-await race (DEVHOST-0
     // seat 2 (human B, not bot) is now due — the pump halted waiting on B.
     expect((host as any).botSeats.some((s: { seat: number }) => s.seat === 1)).toBe(true); // eslint-disable-line @typescript-eslint/no-explicit-any
 
-    // The reservation was never released: A's clientId is still on seat 1.
+    // The reservation was never released: seat 1 is still held (for A).
     const preReconnectLobby = lastLobby();
     const seat1PreReconnect = preReconnectLobby?.seats.find((s) => s.seat === 1);
-    expect(seat1PreReconnect?.clientId).toBe('A');
+    expect(seat1PreReconnect?.held).toBe(true);
     expect(seat1PreReconnect?.connected).toBe(false);
 
     // A reconnects: reclaims the seat AND yields the bot.
@@ -220,7 +220,7 @@ describe('MultiplayerHost — D15 disconnect-mid-startGame-await race (DEVHOST-0
     expect((host as any).botSeats.some((s: { seat: number }) => s.seat === 1)).toBe(false); // eslint-disable-line @typescript-eslint/no-explicit-any
     const postReconnectLobby = lastLobby();
     const seat1PostReconnect = postReconnectLobby?.seats.find((s) => s.seat === 1);
-    expect(seat1PostReconnect?.clientId).toBe('A');
+    expect(seat1PostReconnect?.held).toBe(true);
     expect(seat1PostReconnect?.connected).toBe(true);
 
     // B (still due for round 1) acts, advancing the flow into round 2 seat 1 —
