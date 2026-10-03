@@ -2317,9 +2317,22 @@ describe('#485: every new test file that runs the game is a Spec Manifest row', 
     }
   });
 
-  it('tells an exempt chunk with no Spec Manifest file where a test it cannot see fail goes', () => {
+  // Ruling (2026-10-03): the exempt chunk adds the test as its own `none (regression)` row, excused
+  // from the observed red because it pins existing behaviour, and still mutation-tested.
+  it('has an exempt chunk pin earlier behaviour in its own none (regression) row, excused from the observed red', () => {
     const build = flatRead('build/build.md');
-    expect(build).toMatch(/An exempt chunk[^.]*no Spec Manifest file/);
+    expect(build).toMatch(/An exempt chunk[^]{0,200}`none \(regression\)`[^]{0,300}RED Observed[^]{0,300}mutation/);
+    expect(build).not.toMatch(/name the gap in that chunk's tests/);
+    for (const file of ['build/spec.md', 'build/test.md', 'templates/CHUNK.template.md']) {
+      expect(flatRead(file), file).toMatch(/exempt chunk[^]{0,300}`?none \(regression\)`?[^]{0,300}(observed red|RED Observed)/i);
+    }
+  });
+
+  // Ruling (2026-10-03): every file under tests/browser/ is exempt, since vitest never runs them.
+  it('exempts every file under tests/browser/, not only the smoke test', () => {
+    for (const file of ['build/spec.md', 'build/test.md', 'templates/CHUNK.template.md']) {
+      expect(flatRead(file), file).toMatch(/every file under `?tests\/browser\/`?[^.]*(never|only Playwright)/);
+    }
   });
 
   it("opens test.md item 2 with every row's author, spec, build and repair", () => {

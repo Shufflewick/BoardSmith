@@ -36,10 +36,11 @@ are mutation-tested (`build/test.md` item 2(c)):
   that adds the file.
 - **A test you cannot see fail** (an edge case of code already written and already right) goes in
   an existing Spec Manifest file of this chunk, appended, never in a new file: a row claims an
-  observed RED, and there was none to observe. An exempt chunk (its Spec Manifest is the single
-  `| exempt |` row) has no Spec Manifest file to append to, and adds no game behaviour of its own, so
-  a test it cannot see fail pins an earlier chunk's behaviour: do not write it here, unlisted; name
-  the gap in that chunk's tests in this chunk's report so it is filed.
+  observed RED, and there was none to observe. An exempt chunk has no such file: it adds the test
+  in a new file as its own row with Claims Covered `none (regression)`,
+  `| <file> | none (regression) | n/a |`, since with the `| exempt |` row it adds no game behaviour of
+  its own and the test pins an earlier chunk's. That row alone is excused from `RED Observed: yes`, because
+  the behaviour already exists; the mutation check still runs it, so it must be able to fail.
 - A scan that only reads source as text goes in `tests/guards/`, never in a row.
 
 ## Fresh-Context Exception (one of the two steps allowed to read raw slices)

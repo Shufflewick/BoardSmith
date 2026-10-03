@@ -106,6 +106,8 @@ interface SpecManifestRow {
   testFile: string;
   claims: number[];
   redObserved: string;
+  /** Claims Covered reads exactly `none (regression)`: the row pins behaviour, not a claim. */
+  regression: boolean;
 }
 
 interface SpecManifest {
@@ -162,6 +164,7 @@ export function parseSpecManifest(chunkText: string): SpecManifest {
       testFile,
       claims: parseClaimsCell(cells[1] ?? ''),
       redObserved: stripCell(cells[2]).toLowerCase(),
+      regression: /^none\s*\(regression\)$/i.test(stripCell(cells[1])),
     });
   }
   return { rows, exemption };
@@ -393,7 +396,7 @@ async function manifestRowFindings(
       });
       continue;
     }
-    if (!/^yes\b/.test(row.redObserved)) {
+    if (!/^yes\b/.test(row.redObserved) && !(manifest.exemption !== undefined && row.regression)) {
       findings.push({
         kind: 'red-not-observed',
         subject: row.testFile,

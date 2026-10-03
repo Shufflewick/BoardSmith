@@ -12,7 +12,7 @@
  * `boardsmith/testing`, uses `renderAsSeat`, dispatches an action, or loads any module from the
  * game's `src/` other than as text (an import ending `?raw`), directly or through a support file
  * under `tests/`. Loading counts in every form: `import`, `import(...)` with a string or template
- * path, a re-export, `require(...)`, `vi.importActual(...)` and `vi.importMock(...)`. Reading source with `readFileSync` or a `?raw` import is a scan.
+ * path, a re-export, `require(...)`, `vi.importActual(...)`, `vi.importMock(...)`, and `vi.mock(...)` with no factory. Reading source with `readFileSync` or a `?raw` import is a scan.
  *
  * The one game module a scan may import as code is literal constants under `src/ui/`: a contrast
  * check needs the theme's colours, and a TypeScript palette (one a WebGL scene reads, which cannot
@@ -57,14 +57,21 @@ const isTypeOnlyImport = (node: Statement): boolean => {
   return node.type === 'ImportDeclaration' && specifiers.length > 0 && specifiers.every((s) => s.importKind === 'type');
 };
 
-/** Calls that load a module by path: `require(...)`, `vi.importActual(...)`, `vi.importMock(...)`. */
+/** `vi` methods that load the real module: the import helpers, and a mock with no factory (an automock). */
+const LOADING_VI_METHODS = new Set(['importActual', 'importMock']);
+const AUTOMOCK_VI_METHODS = new Set(['mock', 'doMock']);
+
+/**
+ * Calls that load a module by path: `require(...)`, `vi.importActual(...)`, `vi.importMock(...)`,
+ * and `vi.mock(path)` or `vi.doMock(path)` without a factory, which loads the real module to mock it.
+ */
 function isLoadingCall(node: AstNode): boolean {
   if (node.type !== 'CallExpression') return false;
   const callee = node.callee as AstNode;
   if (callee.type === 'Identifier') return callee.name === 'require';
-  if (callee.type !== 'MemberExpression' || (callee.object as AstNode).type !== 'Identifier') return false;
-  const method = (callee.property as AstNode).name;
-  return (callee.object as AstNode).name === 'vi' && (method === 'importActual' || method === 'importMock');
+  if (callee.type !== 'MemberExpression' || (callee.object as AstNode).name !== 'vi') return false;
+  const method = (callee.property as AstNode).name as string;
+  return LOADING_VI_METHODS.has(method) || (AUTOMOCK_VI_METHODS.has(method) && (node.arguments as AstNode[]).length === 1);
 }
 
 /**

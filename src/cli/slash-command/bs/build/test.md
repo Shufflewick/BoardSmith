@@ -119,11 +119,16 @@ here.
          check never runs it and nothing shows it can fail. A regression test build writes and a
          measurement test repair writes are rows like any other. Moving an earlier chunk's test file
          (or deleting it and writing a similar one) counts as creating a new file: the new path is
-         this chunk's. The exemptions are the browser smoke test `tests/browser/smoke.spec.ts`, the
-         generated `tests/examples/<slug>.examples.test.ts`, a measurement harness under
+         this chunk's. The exemptions are every file under `tests/browser/`, which only Playwright
+         runs and vitest never collects, so no mutant can reach it (the smoke test
+         `tests/browser/smoke.spec.ts` among them), the generated `tests/examples/<slug>.examples.test.ts`, a measurement harness under
          `design/chunks/<slug>/evidence/` (`state-machine.md` "Project Layout"), scan-only guards
          under `tests/guards/`, and an earlier chunk's test file this chunk edits in place. A file
-         that only reads source as text is not a row: it belongs under `tests/guards/`.
+         that only reads source as text is not a row: it belongs under `tests/guards/`. A row must
+         have its red observed, with one exception: an exempt chunk that pins an earlier chunk's
+         behaviour lists that test as its own row with Claims Covered `none (regression)`, excused
+         from the observed red because the behaviour already exists (`build/build.md`). It is still
+         mutation-tested. Nothing else is excused.
 
        A finding here goes back to `build` (or to `spec`, when the fix is a test that pins the claim
        properly), never to an edit of the Spec Manifest that makes the row claim less. The two
