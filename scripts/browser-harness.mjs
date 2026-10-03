@@ -109,7 +109,9 @@ export const surfaceOf = (page) => page.frameLocator('.world-dev__frame');
  * The board is fitted above the board region's padding-bottom and the bar is
  * capped at it, so "the bar covers no board" is `top >= strip` and "everything
  * fits" is `!scrolls`. `outside` names each of `selectors` (looked up inside the
- * bar) that is missing or not wholly in view inside the bar and the viewport.
+ * bar) that is missing or not wholly in view inside the bar and the viewport;
+ * `clipped` names each one whose own text is cut off sideways (wider than its
+ * box), which an ellipsis or `overflow: hidden` does to a prompt.
  * A measurement, not an assertion: each script says what it expects of it.
  *
  * @param surface   the world surface, from `surfaceOf(page)`
@@ -126,12 +128,17 @@ export function barGeometry(surface, selectors = []) {
       const r = el.getBoundingClientRect();
       return r.top < box.top - 1 || r.bottom > box.bottom + 1 || r.bottom > window.innerHeight + 1;
     });
+    const clipped = selectors.filter((selector) => {
+      const el = bar.querySelector(selector);
+      return el !== null && el.scrollWidth > el.clientWidth + 1;
+    });
     return {
       strip: Math.round(strip),
       top: Math.round(box.top),
       height: Math.round(box.height),
       scrolls: bar.scrollHeight > bar.clientHeight + 1,
       outside,
+      clipped,
     };
   }, selectors);
 }

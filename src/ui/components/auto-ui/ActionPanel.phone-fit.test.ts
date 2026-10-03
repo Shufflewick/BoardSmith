@@ -142,8 +142,24 @@ describe('#486: a short landscape screen gets the same compact layout', () => {
     expect(rule(block, '.board-handoff-btn')).toMatch(/white-space:\s*normal;/);
   });
 
-  it('never cuts the prompt short: it carries rules text the player must read', () => {
-    const prompt = rule(phoneBlock(), '.selection-input > .selection-prompt');
-    expect(prompt).not.toMatch(/text-overflow|overflow:\s*hidden|line-clamp/);
+  it.each(['.selection-input > .selection-prompt', '.config-title'])(
+    'never cuts %s short: prompts carry rules text the player must read',
+    (selector) => {
+      // `.config-title` is the ACTION's prompt (`currentActionMeta.prompt`). A
+      // long one wraps, and the bar scrolls as the last resort.
+      const declarations = rule(phoneBlock(), selector);
+      expect(declarations).not.toMatch(/text-overflow|overflow:\s*hidden|line-clamp/);
+      expect(declarations).toMatch(/white-space:\s*normal;/);
+    },
+  );
+
+  it('uses the very query the shell uses for its one-row strip', () => {
+    // The compact block is keyed to the shell's short-landscape tier. If the two
+    // queries drift, the panel compacts on screens with a different strip.
+    const shell = fs.readFileSync(
+      path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'PlayShell.vue'),
+      'utf-8',
+    );
+    expect(shell).toContain(`@media ${SHORT_LANDSCAPE} {`);
   });
 });

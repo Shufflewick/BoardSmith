@@ -3136,12 +3136,14 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
     max-width: 100%;
   }
 
+  /* The action's prompt wraps rather than being cut short: it can carry rules
+     text. A long one costs a line, and the bar scrolls as the last resort. */
   .config-title {
     font-size: 0.9rem;
     line-height: 18px;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .cancel-btn {
