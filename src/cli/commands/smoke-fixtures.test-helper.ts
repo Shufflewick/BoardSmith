@@ -26,7 +26,7 @@ defineSmokeTest({
  * deal from `WITH` gives it to seat 1. The engine's own shuffle decides it, so a change to the
  * shuffle changes them.
  */
-export const ACE_SEEDS = { WITHOUT: 'plain', WITH: '4' } as const;
+export const ACE_SEEDS = { WITHOUT: 'blank', WITH: '0' } as const;
 
 /**
  * THE ACE GAME (#460): an action the DEAL decides. Each seat is dealt five cards from a shuffled
