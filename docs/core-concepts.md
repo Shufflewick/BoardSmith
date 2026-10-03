@@ -549,6 +549,49 @@ durable across wakes and a world host may change the seed on every wake. In a
 world, a seat can still count creations it could not see from the gaps in the
 ids it does (#482).
 
+### Secret Moves in a Simultaneous Step
+
+In a simultaneous step a seat may act in secret: its move changes only what
+that seat may see (an attribute withheld by `visibleAttributes`, a card in its
+own hidden hand). Hiding the change is not enough on its own. If every move
+sent every seat a fresh state, a seat whose board did not change would still
+learn THAT someone moved, and when.
+
+So no host pushes a seat or a spectator a state identical to the last one it
+sent that connection (#487). `GameSession`, `boardsmith dev` and the platform
+compare what a connection would receive with what it was last sent, and send
+nothing when the two match. Two parts of the payload are compared specially:
+
+- A send time stamped on every push does not count as a change. It moves only
+  when something else does.
+- Animation events count only when the seat has not been sent them. The engine
+  empties its animation buffer at the start of every move, so another seat's
+  move emptying it is not news. An event sent with `animateTo` reaches only its
+  audience; a public `animate()` reaches every seat, and so tells every seat
+  that someone moved. If a secret move animates at all, use `animateTo` (and
+  see the third limit below).
+
+A page that connects or reconnects is always sent the full state.
+
+Three things still reach other seats when a seat acts in secret. Design around
+them:
+
+- **Undo turns off when another seat acts after you.** A seat can undo back to
+  the start of its turn only while no other seat has acted since. If seat 2
+  makes a secret move and then seat 1 makes one, seat 2's Undo control goes
+  away, and the state that removes it tells seat 2 that another seat moved.
+  Where that matters, let a seat change its secret choice with a game action
+  (a "move my placement" action) rather than with undo.
+- **The restore count rises when another seat undoes.** Every undo replaces the
+  game's state, and every seat is told so through `restoreEpoch`, which the UI
+  needs to drop element references from before the undo. So when seat 1
+  undoes, every other seat receives a state and can tell that someone undid
+  something, though not what.
+- **Animation event ids are counted across every seat.** One numbering covers
+  all events, `animateTo` ones included, so a seat that is sent ids 4 and then
+  7 knows two events it was not sent were played in between (#489). Where the
+  number of secret moves must stay hidden, do not animate them.
+
 ## Snapshot Mode and World Mode
 
 Everything above describes **snapshot mode**: the whole element tree is
