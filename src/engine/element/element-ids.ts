@@ -84,7 +84,9 @@ const ELEMENT_ID_KEY_PATTERN = /^[0-9a-f]{16}$/;
  * There is no fallback: a key from a predictable source would decode every id.
  */
 export function mintElementIdKey(): string {
-  const source = globalThis.crypto;
+  // Read by its bare name, not as `globalThis.crypto`: Workers declares it
+  // `const crypto`, which `typeof globalThis` does not carry (#488).
+  const source = typeof crypto === 'undefined' ? undefined : crypto;
   if (typeof source?.getRandomValues !== 'function') {
     throw new Error(
       'BoardSmith needs crypto.getRandomValues to mint a game\'s element id key, and this runtime ' +

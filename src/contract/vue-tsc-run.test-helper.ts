@@ -2,8 +2,9 @@
  * ONE WAY TO ASK `vue-tsc` WHAT IT FOUND, for the contract gates that ask.
  *
  * `dev-host-typecheck.test.ts` compiles the development host,
- * `dice-typecheck.test.ts` the dice entry point and `testing-typecheck.test.ts`
- * a game test importing `boardsmith/testing`, each in a sandbox. They differ in
+ * `dice-typecheck.test.ts` the dice entry point, `testing-typecheck.test.ts`
+ * a game test importing `boardsmith/testing` and `workers-typecheck.test.ts`
+ * the platform-reachable engine under Workers globals, each in a sandbox. They differ in
  * WHAT they compile and WHAT they blame a failure on, and in nothing else -- so
  * the run, the rule for what counts as an error line, and the assertion that
  * there are none live here rather than once per gate.

@@ -2,7 +2,7 @@
  * The element id cipher (#447): Speck32/64 over the creation counter, keyed
  * by a 64-bit secret minted per game.
  */
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
   ELEMENT_ID_SPACE,
   mintElementIdKey,
@@ -32,6 +32,22 @@ describe('mintElementIdKey', () => {
     const keys = new Set(Array.from({ length: 64 }, () => mintElementIdKey()));
     for (const key of keys) expect(key).toMatch(/^[0-9a-f]{16}$/);
     expect(keys.size).toBe(64);
+  });
+
+  describe('with no secure random source', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('refuses when the runtime has no crypto global at all', () => {
+      vi.stubGlobal('crypto', undefined);
+      expect(() => mintElementIdKey()).toThrow(/needs crypto\.getRandomValues/);
+    });
+
+    it('refuses when crypto has no getRandomValues', () => {
+      vi.stubGlobal('crypto', {});
+      expect(() => mintElementIdKey()).toThrow(/needs crypto\.getRandomValues/);
+    });
   });
 });
 
