@@ -82,7 +82,51 @@ class TargetGame extends Game<TargetGame, Player> {
   }
 }
 
+/**
+ * A game whose one action asks for text with `optional: ''`. An empty string is
+ * falsy, so the engine and the action panel treat the step as REQUIRED, and the
+ * simulator must too (#476): skipping it would send a move the engine refuses.
+ */
+class EmptyLabelTextGame extends Game<EmptyLabelTextGame, Player> {
+  done = false;
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.registerAction(
+      Action.create<EmptyLabelTextGame>('note')
+        .enterText('text', { optional: '' })
+        .execute((_args, ctx) => {
+          ctx.game.done = true;
+          return { success: true };
+        }),
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          while: (ctx) => !ctx.game.done,
+          maxIterations: 10,
+          do: eachPlayer({ do: actionStep({ actions: ['note'] }) }),
+        }),
+      }),
+    );
+  }
+}
+
 describe('simulateRandomGames', () => {
+  it("treats an empty-string `optional` as required, as the engine does (#476)", async () => {
+    const results = await simulateRandomGames(EmptyLabelTextGame, {
+      count: 1,
+      playerCounts: [2],
+      seed: 'empty-label',
+      timeout: 5000,
+    });
+
+    expect(results.stuck).toBe(1);
+    expect(results.games[0]!.error).toContain("requires text input 'text'");
+  });
+
   it('generates valid arguments so arg-based games complete (F49)', async () => {
     const results = await simulateRandomGames(PickGame, {
       count: 12,

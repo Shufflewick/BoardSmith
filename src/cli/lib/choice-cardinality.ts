@@ -362,7 +362,7 @@ async function draftMove(drive: WorldDrive, seat: number, offer: WorldActionOffe
     const pick = index === 0 ? listed : await world.resolvePick(seat, offer.name, listed.name, args);
     const drawn = drawPick(drive, action, pick);
     if (drawn.ok) args[pick.name] = drawn.answer;
-    else if (pick.optional === undefined || pick.optional === false) return drawn.whyNot;
+    else if (!pick.optional) return drawn.whyNot;
   }
   return { name: offer.name, args };
 }

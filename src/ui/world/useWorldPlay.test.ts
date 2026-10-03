@@ -253,6 +253,15 @@ describe('re-asking one pick once something is bound (ShufflewickPub #378)', () 
     expect(result.choices).toEqual([]);
   });
 
+  it('leaves a pick OPTIONAL BY ITS SKIP LABEL alone too (#476)', async () => {
+    // `optional` may be a string, the Skip button's label. Any truthy value is
+    // skippable, the same as the table's PickHandler.
+    const result = await asking({ name: 'crew', type: 'choice', optional: 'no crew needed', choices: [] });
+
+    expect(result.success).toBe(true);
+    expect(result.choices).toEqual([]);
+  });
+
   it('reports the world\'s own refusal rather than a stale offer', async () => {
     // Falling back to the offer here would show the player a cap the world has
     // just said is wrong, which is the divergence the round trip exists to end.
