@@ -56,6 +56,13 @@ export interface SeatInfo {
 export type LobbyPhase = 'lobby' | 'playing';
 
 /**
+ * Whether this host's sessions run debug ops (#481). Always on: the dev host
+ * exists to debug a game, and its Debug panel is how. The one value goes both
+ * to the session and to `executeOp`, which each refuse debug ops when it is off.
+ */
+const DEV_HOST_DEBUG = true;
+
+/**
  * How long a seat whose page went away stays its player's before a bot covers
  * it (#412). A reload closes the old socket before the new page says hello, so
  * for that moment the seat has no connected holder; within this window it is
@@ -252,7 +259,7 @@ export interface MultiplayerHostOptions {
     snapshot: unknown,
     pendingState: Record<string, unknown> | null,
     op: Op,
-    hostOptions?: { teachingDisabled?: boolean; seedSnapshot?: GameStateSnapshot },
+    hostOptions?: { teachingDisabled?: boolean; seedSnapshot?: GameStateSnapshot; debug?: boolean },
   ) => Promise<OpResult>;
   /** Deliver a message to one client (the WS layer maps clientId → socket). */
   send: (clientId: string, message: HostOutbound) => void;
@@ -1242,7 +1249,9 @@ export class MultiplayerHost {
     // `teachingDisabled` game option that must not collide with this flag.
     // FEAT-01/168-02: seedSnapshot rides here too (never gameOptions) so a
     // `--seed` restart still starts from the seed, not a fresh game.
-    const hostOptions = { teachingDisabled: this.opts.teachingDisabled, seedSnapshot: this.opts.seedSnapshot };
+    // #481: `boardsmith dev` is a debugging host, so its debug ops run. The
+    // session refuses a seat-view debug op for any seat but the one asking.
+    const hostOptions = { teachingDisabled: this.opts.teachingDisabled, seedSnapshot: this.opts.seedSnapshot, debug: DEV_HOST_DEBUG };
     const executeOp = async (
       snapshot: unknown,
       pendingState: Record<string, unknown> | null,
@@ -1262,6 +1271,7 @@ export class MultiplayerHost {
       playerCount,
       botSeats: this.botSeats,
       teachingDisabled: this.opts.teachingDisabled,
+      debug: DEV_HOST_DEBUG,
       executeOp,
       hostWork: this.opts.hostWork ?? runsAtOnce,
       postGameState: (seat, view, meta) => {

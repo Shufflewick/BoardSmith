@@ -387,6 +387,7 @@ describe('SnapshotSessionHost', () => {
           },
           broadcast: () => {},
           botSeats: [{ seat: 2 }],
+          debug: true,
         };
 
         const host = new SnapshotSessionHost(adapters);

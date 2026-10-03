@@ -140,7 +140,7 @@ describe('debug action traces use the canonical predicate', () => {
     const seat1 = await executeOp(passDef, passOptions, start.snapshot, null, {
       type: 'debugActionTraces',
       player: 1,
-    });
+    }, { debug: true });
     const flow1 = seat1.flowContext as { isMyTurn: boolean; flowAllowedActions: string[] };
     expect(flow1.isMyTurn).toBe(true);
     expect(flow1.flowAllowedActions).toEqual(['pass']);
@@ -149,7 +149,7 @@ describe('debug action traces use the canonical predicate', () => {
     const seat2 = await executeOp(passDef, passOptions, start.snapshot, null, {
       type: 'debugActionTraces',
       player: 2,
-    });
+    }, { debug: true });
     const flow2 = seat2.flowContext as { isMyTurn: boolean; flowAllowedActions: string[] };
     expect(flow2.isMyTurn).toBe(false);
     expect(flow2.flowAllowedActions).toEqual([]);

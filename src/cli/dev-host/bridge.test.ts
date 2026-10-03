@@ -42,6 +42,7 @@ interface Posted {
 function makeSession() {
   const posted: Posted[] = [];
   const session = createDevSession({
+    debug: false,
     playerCount: 2,
     executeOp: (snap, pend, op) =>
       executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op),
@@ -324,6 +325,7 @@ describe('dev host bridge', () => {
       const stateViews: Array<Array<{ state: Record<string, unknown> }>> = [];
       const responses: Array<Record<string, unknown>> = [];
       const session = createDevSession({
+        debug: false,
         playerCount: 2,
         teachingDisabled: true,
         executeOp: (snap, pend, op) =>
@@ -376,9 +378,10 @@ describe('dev host bridge', () => {
       const responses: Array<{ seat: number; result: Record<string, unknown> }> = [];
       let stateBroadcasts = 0;
       const session = createDevSession({
+        debug: true,
         playerCount: 2,
         executeOp: (snap, pend, op) =>
-          executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op),
+          executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op, { debug: true }),
         postGameState: () => {
           stateBroadcasts++;
         },
@@ -451,6 +454,7 @@ describe('dev host bridge', () => {
 
     it('a persist() failure is captured via onPersistenceError, severity escalates with health', async () => {
       const session = createDevSession({
+        debug: false,
         playerCount: 1,
         persist: () => {
           throw new Error('disk full');
@@ -501,6 +505,7 @@ describe('dev host bridge', () => {
         });
       };
       const session = createDevSession({
+        debug: false,
         playerCount: 1,
         executeOp: warningExecuteOp,
         postGameState: () => {},
@@ -536,6 +541,7 @@ describe('dev host bridge', () => {
         throw new Error('executor boom');
       };
       const session = createDevSession({
+        debug: false,
         playerCount: 1,
         executeOp: throwingExecuteOp,
         postGameState: () => {},
@@ -551,6 +557,68 @@ describe('dev host bridge', () => {
       const errorEntries = getEntries().filter((e) => e.source === 'action' && e.severity === 'error');
       expect(errorEntries).toHaveLength(1);
       expect(errorEntries[0].message).toBe('executor boom');
+    });
+  });
+
+  // ── #481: debug ops need debugging on, and read only the asking seat ──────
+  describe('debug gate (#481)', () => {
+    function sessionWithDebug(debug: boolean) {
+      const responses: Array<{ seat: number; result: Record<string, unknown> }> = [];
+      const session = createDevSession({
+        playerCount: 2,
+        debug,
+        executeOp: (snap, pend, op) =>
+          executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op, { debug }),
+        postGameState: () => {},
+        postServerResponse: (seat, _requestId, result) => responses.push({ seat, result }),
+      });
+      return { session, responses };
+    }
+
+    it('pins every seat-view debug op to the asking seat, whatever seat the payload names', () => {
+      expect(translateOp('debug:state-at', 2, { actionIndex: 1, player: 1 })).toEqual({
+        type: 'debugStateAt', actionIndex: 1, player: 2,
+      });
+      expect(translateOp('debug:state-diff', 2, { fromIndex: 0, toIndex: 1, player: 1 })).toEqual({
+        type: 'debugStateDiff', fromIndex: 0, toIndex: 1, player: 2,
+      });
+      expect(translateOp('debug:action-traces', 2, { player: 1 })).toEqual({ type: 'debugActionTraces', player: 2 });
+      expect(translateOp('debug:flow-state', 2, { player: 1 })).toEqual({ type: 'debugFlowState', player: 2 });
+    });
+
+    for (const [wireOp, payload] of [
+      ['debug:history', {}],
+      ['debug:state-at', { actionIndex: 0 }],
+      ['debug:state-diff', { fromIndex: 0, toIndex: 0 }],
+      ['debug:action-traces', {}],
+      ['debug:flow-state', {}],
+      ['debug:rewind', { actionIndex: 0 }],
+      ['debug:move-to-top', { cardId: 1 }],
+      ['debug:reorder-card', { cardId: 1, targetIndex: 0 }],
+      ['debug:transfer-card', { cardId: 1, targetDeckId: 1 }],
+      ['debug:shuffle-deck', { deckId: 1 }],
+      ['debug:logs', {}],
+    ] as const) {
+      it(`refuses ${wireOp} when the session was created without debugging`, async () => {
+        clearEntries();
+        record('warning', 'only a debugger may read this', 'test');
+        const { session, responses } = sessionWithDebug(false);
+        await session.start();
+
+        await session.handleServerRequest(1, 'd', wireOp, { ...payload });
+
+        const last = responses[responses.length - 1];
+        expect(last.result.success).toBe(false);
+        expect(last.result.error).toMatch(/debugging is not turned on/i);
+        expect(last.result.entries).toBeUndefined();
+      });
+    }
+
+    it('answers debug ops when the session was created with debugging on', async () => {
+      const { session, responses } = sessionWithDebug(true);
+      await session.start();
+      await session.handleServerRequest(1, 'h', 'debug:history', {});
+      expect(responses[responses.length - 1].result.success).toBe(true);
     });
   });
 
@@ -604,9 +672,10 @@ describe('dev host bridge', () => {
   function makeResultSessionWithResponses() {
     const responses: Array<{ seat: number; result: Record<string, unknown> }> = [];
     const session = createDevSession({
+      debug: true,
       playerCount: 2,
       executeOp: (snap, pend, op) =>
-        executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op),
+        executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op, { debug: true }),
       postGameState: () => {},
       postServerResponse: (seat, _requestId, result) => responses.push({ seat, result }),
     });

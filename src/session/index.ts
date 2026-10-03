@@ -138,7 +138,7 @@ export type { PickStepResult } from './pending-action-manager.js';
 
 // Exposed so stateless hosts (the ShufflewickPub executor) can replicate
 // undo-to-turn-start by truncating the action history and replaying.
-export { computeUndoInfo } from './utils.js';
+export { computeUndoInfo, debuggingOffMessage } from './utils.js';
 
 // Exposed so the stateless executor can enrich an action's followUp with the
 // same metadata the dev server attaches, letting the embedded UI auto-start it.

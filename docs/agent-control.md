@@ -304,6 +304,12 @@ move" feature for a real session).
 import { GameSession, type UndoResult, type ElementDiff } from 'boardsmith/session';
 ```
 
+`getStateAtAction`, `getStateDiff`, `getActionTraces` and `rewindToAction`
+are debug methods: they refuse unless the session was created with
+`debugEnabled: true` (pass it again as `GameSession.restore`'s last argument
+after a restore). They build whichever seat's view the caller names, so a host
+that forwards a player's request must pass that player's own seat.
+
 - **`session.getStateAtAction(actionIndex, playerPosition)`** — the
   perspective-correct state as of a specific action count, restored from
   the checkpoint captured at that boundary (not replayed). Returns

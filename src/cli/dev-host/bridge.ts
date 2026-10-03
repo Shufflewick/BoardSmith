@@ -15,7 +15,7 @@
  * prod stay in lockstep.
  */
 
-import { SnapshotSessionHost, type Op, type OpResult, type SnapshotSessionAdapters, type TurnBoundary } from '../../session/index.js';
+import { SnapshotSessionHost, debuggingOffMessage, type Op, type OpResult, type SnapshotSessionAdapters, type TurnBoundary } from '../../session/index.js';
 import { record, getEntries, type LogEntry } from './log-capture.js';
 
 /** Wire op names the embedded GameShell sends (snake_case, prod payload shapes). */
@@ -66,6 +66,12 @@ export interface DevSessionOptions {
    * fail-loud for this session. Mirrors `--lock-teaching` in `boardsmith dev`.
    */
   teachingDisabled?: boolean;
+  /**
+   * Whether the debug ops (`debug:*`) run in this session (#481). Off refuses
+   * every one, `debug:logs` included. The `executeOp` below must pass the same
+   * value to `executeOp`'s `hostOptions.debug`.
+   */
+  debug: boolean;
   /**
    * In-process op executor bound to the author's gameDefinition. The host calls
    * this with the authoritative snapshot + the acting seat's pending state; the
@@ -212,25 +218,20 @@ export function translateOp(
       };
     case 'debug:history':
       return { type: 'debugHistory' };
+    // The seat-view debug ops always report the connection's own seat (#481):
+    // a payload never names the seat, so no seat can ask for another's view.
     case 'debug:state-at':
-      return {
-        type: 'debugStateAt',
-        actionIndex: payload.actionIndex as number,
-        player: (payload.player as number) ?? seat,
-      };
+      return { type: 'debugStateAt', actionIndex: payload.actionIndex as number, player: seat };
     case 'debug:state-diff':
       return {
         type: 'debugStateDiff',
         fromIndex: payload.fromIndex as number,
         toIndex: payload.toIndex as number,
-        player: (payload.player as number) ?? seat,
+        player: seat,
       };
     case 'debug:action-traces':
-      return { type: 'debugActionTraces', player: (payload.player as number) ?? seat };
+      return { type: 'debugActionTraces', player: seat };
     case 'debug:flow-state':
-      // Always the connection's own seat — pendingAction data is seat-scoped
-      // (T-123-10) and there is no legitimate use for a client-supplied
-      // override here, unlike the other debug:* ops above (IN-01).
       return { type: 'debugFlowState', player: seat };
     case 'debug:rewind':
       return { type: 'debugRewind', actionIndex: payload.actionIndex as number };
@@ -376,6 +377,7 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
     playerCount: opts.playerCount,
     botSeats: opts.botSeats,
     teachingDisabled: opts.teachingDisabled,
+    debug: opts.debug,
     executeOp: opts.executeOp,
     persist: opts.persist,
     hostWork: opts.hostWork,
@@ -414,6 +416,10 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
     // debug:logs (ERR-04): host-lifecycle op resolved directly here, reading
     // the ring buffer — never delegated to host.handleOp/executeOp.
     if (op.type === 'debugLogs') {
+      if (!opts.debug) {
+        opts.postServerResponse(seat, requestId, { success: false, error: debuggingOffMessage(wireOp) });
+        return;
+      }
       const logsResult = { success: true, entries: getEntries() } as unknown as OpResult & {
         entries: readonly LogEntry[];
       };

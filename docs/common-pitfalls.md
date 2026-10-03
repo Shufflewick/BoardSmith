@@ -1629,6 +1629,8 @@ when the session is created with `GameSessionOptions.debugEnabled: true`
 or tree shape this way — never hidden/secret game state (a hand's contents,
 deck order, etc), since enabling `debugEnabled` on a live session broadcasts
 every registered debug entry to all connected players and spectators.
+The same option turns on the session's debug methods (time travel, rewind,
+action traces, deck edits); without it they refuse.
 
 4. **Check the sequence counter** - if it's much higher than element count, elements are being created and removed (normal but worth investigating)
 

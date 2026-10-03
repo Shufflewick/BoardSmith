@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ref, nextTick } from 'vue';
+import { nextTick } from 'vue';
 import { useDebugTimeline } from './useDebugTimeline.js';
 import type { DebugBridge, SerializedAction } from './useDebugBridge.js';
 
@@ -28,10 +28,10 @@ function stubBridge(over: Partial<DebugBridge> = {}): DebugBridge {
   };
 }
 
-function setup(over: Partial<DebugBridge> = {}, seat = 1) {
+function setup(over: Partial<DebugBridge> = {}) {
   const bridge = stubBridge(over);
   const onTimeTravel = vi.fn();
-  const timeline = useDebugTimeline({ bridge, playerSeat: ref(seat), onTimeTravel });
+  const timeline = useDebugTimeline({ bridge, onTimeTravel });
   return { bridge, onTimeTravel, timeline };
 }
 
@@ -121,11 +121,11 @@ describe('staleness', () => {
 });
 
 describe('time travel', () => {
-  it('reads the state and the diff that produced it, for the viewing seat', async () => {
-    const { bridge, timeline } = setup({}, 3);
+  it('reads the state and the diff that produced it', async () => {
+    const { bridge, timeline } = setup({});
     await timeline.fetchStateAtAction(5);
-    expect(bridge.stateAt).toHaveBeenCalledWith(5, 3);
-    expect(bridge.stateDiff).toHaveBeenCalledWith(4, 5, 3);
+    expect(bridge.stateAt).toHaveBeenCalledWith(5);
+    expect(bridge.stateDiff).toHaveBeenCalledWith(4, 5);
   });
 
   it('asks for no diff at the first action, which has no predecessor', async () => {
@@ -290,18 +290,6 @@ describe('rewind', () => {
   });
 });
 
-describe('the seat the timeline reads for', () => {
-  it('follows the seat as it changes', async () => {
-    const bridge = stubBridge();
-    const playerSeat = ref(1);
-    const timeline = useDebugTimeline({ bridge, playerSeat, onTimeTravel: () => {} });
-    await timeline.fetchStateAtAction(2);
-    expect(bridge.stateAt).toHaveBeenLastCalledWith(2, 1);
-    playerSeat.value = 2;
-    await timeline.fetchStateAtAction(2);
-    expect(bridge.stateAt).toHaveBeenLastCalledWith(2, 2);
-  });
-});
 
 beforeEach(() => {
   vi.clearAllMocks();
