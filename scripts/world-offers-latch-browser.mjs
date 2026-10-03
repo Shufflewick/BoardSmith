@@ -233,8 +233,8 @@ await runBrowserRegression(
   driveThrough,
 );
 
-async function driveThrough({ chromium, hostUrl }) {
-  const browser = await chromium.launch();
+async function driveThrough({ launch, hostUrl }) {
+  const browser = await launch();
   try {
     for (const scene of SCENES) {
       const page = await (await browser.newContext()).newPage();

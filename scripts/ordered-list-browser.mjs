@@ -344,8 +344,8 @@ await runBrowserRegression(
   driveThrough,
 );
 
-async function driveThrough({ chromium, hostUrl }) {
-  const browser = await chromium.launch();
+async function driveThrough({ launch, hostUrl }) {
+  const browser = await launch();
 
   try {
     // One page for the whole run, so `browser.newPage` rather than a context of

@@ -75,6 +75,22 @@ describe('#231: the fixture world has one owner', () => {
   });
 });
 
+describe('every browser regression launches the one Chromium build the harness picks', () => {
+  it.each(browserScripts())('%s launches through the harness, not chromium.launch()', (name) => {
+    // A bare `chromium.launch()` asks for Playwright's separate headless-shell
+    // build, which a machine with a perfectly good full Chromium may not have:
+    // the run then refused instead of checking anything. The harness owns the
+    // choice, so it is made once.
+    const source = read(name);
+    expect(source, `${name} must launch with the harness's launch()`).toContain('await launch()');
+    expect(source, `${name} must not choose its own browser build`).not.toContain('chromium.launch(');
+  });
+
+  it('launches the full Chromium build, headless', () => {
+    expect(read('browser-harness.mjs')).toContain("chromium.launch({ channel: 'chromium' })");
+  });
+});
+
 describe('#231: the fixture world stops the host before it removes the project', () => {
   // The lifetime lives in TypeScript so `boardsmith typecheck` compiles its
   // call to the world dev host (#357); the harness reaches it only through

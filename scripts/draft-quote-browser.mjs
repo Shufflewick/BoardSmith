@@ -331,8 +331,8 @@ function recordFrames(page) {
   return { asked: byType.quote, answered: byType.world_quote_result, commands: byType.action };
 }
 
-async function driveThrough({ chromium, hostUrl }) {
-  const browser = await chromium.launch();
+async function driveThrough({ launch, hostUrl }) {
+  const browser = await launch();
 
   try {
     const context = await browser.newContext();

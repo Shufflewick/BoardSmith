@@ -194,8 +194,8 @@ const collapse = async (page) => {
   await page.waitForTimeout(150);
 };
 
-async function drive({ chromium, hostUrl }) {
-  const browser = await chromium.launch();
+async function drive({ launch, hostUrl }) {
+  const browser = await launch();
 
   // A desktop and a phone. The phone is the width the issue's "get it off the
   // screen" matters most at, and the width an edge control is likeliest to fall

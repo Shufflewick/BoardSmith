@@ -252,8 +252,8 @@ await runBrowserRegression(
   driveThrough,
 );
 
-async function driveThrough({ chromium, hostUrl }) {
-  const browser = await chromium.launch();
+async function driveThrough({ launch, hostUrl }) {
+  const browser = await launch();
 
   try {
     // ── 1. The action panel's own walk, and the frames it puts on the wire ──
