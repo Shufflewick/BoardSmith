@@ -146,6 +146,15 @@ describe('worldElementIds', () => {
     expect(() => worldElementIds('0123456789abcdef')).toThrow(/mintWorldElementIdKey/);
   });
 
+  it('never repeats the key it refused in the refusal', () => {
+    // A near-miss key -- right length, wrong case -- is the host's real secret
+    // with one slip, and a refusal can end up in a log.
+    const nearMiss = '00112233445566778899AABB';
+    expect(() => worldElementIds(nearMiss)).toThrow(/uppercase/);
+    expect(() => worldElementIds(nearMiss)).not.toThrow(new RegExp(nearMiss));
+    expect(() => worldElementIds('0123')).toThrow(/4 characters/);
+  });
+
   it('stays inside the 48-bit id space and refuses a counter past it', () => {
     const ids = worldElementIds(KEY);
     const last = ids.mint(WORLD_ELEMENT_ID_SPACE - 1);

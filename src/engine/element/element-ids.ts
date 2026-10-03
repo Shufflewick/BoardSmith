@@ -190,6 +190,18 @@ function keyWords(key: string): [number, number, number, number] {
   return [word(3), word(2), word(1), word(0)];
 }
 
+/**
+ * What is wrong with a key, WITHOUT the key. A refusal can end up in a log, and
+ * a near miss -- the right digits in the wrong case -- is the host's real
+ * secret with one slip in it.
+ */
+function keyShapeProblem(key: unknown, digits: number): string {
+  if (typeof key !== 'string') return `it is a ${key === null ? 'null' : typeof key}, not a string`;
+  if (key.length !== digits) return `it is ${key.length} characters long`;
+  if (/[A-F]/.test(key) && /^[0-9a-fA-F]+$/.test(key)) return 'it has uppercase hex digits';
+  return 'it has characters that are not hex digits';
+}
+
 function refuseCursor(cursor: number, space: number, what: 'game' | 'world'): never {
   if (Number.isInteger(cursor) && cursor >= space) {
     throw new Error(
@@ -211,9 +223,9 @@ function refuseCursor(cursor: number, space: number, what: 'game' | 'world'): ne
 export function opaqueElementIds(key: string): ElementIds {
   if (!ELEMENT_ID_KEY_PATTERN.test(key)) {
     throw new Error(
-      `GameOptions.elementIdKey must be 16 hexadecimal digits (64 bits, lowercase); this game was ` +
-        `given ${JSON.stringify(key)}. Leave it out to have the engine mint one, or pass the key a ` +
-        `snapshot of this game recorded in its gameOptions.`,
+      `GameOptions.elementIdKey must be 16 hexadecimal digits (64 bits, lowercase), and the key ` +
+        `this game was given is not: ${keyShapeProblem(key, 16)}. Leave it out to have the engine ` +
+        `mint one, or pass the key a snapshot of this game recorded in its gameOptions.`,
     );
   }
   const cipher = speck(SPECK_32_64, keyWords(key));
@@ -237,9 +249,10 @@ export function opaqueElementIds(key: string): ElementIds {
 export function worldElementIds(key: string): WorldElementIds {
   if (!WORLD_ELEMENT_ID_KEY_PATTERN.test(key)) {
     throw new Error(
-      `A world's element id key must be 24 hexadecimal digits (96 bits, lowercase); this world ` +
-        `was given ${JSON.stringify(key)}. Mint one with \`mintWorldElementIdKey()\` when the world ` +
-        `is created, store it with the world, and pass that same key on every wake.`,
+      `A world's element id key must be 24 hexadecimal digits (96 bits, lowercase), and the key ` +
+        `this world was given is not: ${keyShapeProblem(key, 24)}. Mint one with ` +
+        `\`mintWorldElementIdKey()\` when the world is created, store it with the world, and pass ` +
+        `that same key on every wake.`,
     );
   }
   const cipher = speck(SPECK_48_96, keyWords(key));

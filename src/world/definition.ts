@@ -32,6 +32,7 @@ import { createInlinedPartitionStore, createWorldRunner } from "./runner.js";
 import type { InlinedPartitionStore, WorldRunnerHandle } from "./runner.js";
 import type { StoredPartition } from "./contract.js";
 import { worldRefusal } from "./refusals.js";
+import { assertMintedUnderThisKey } from "./key-check.js";
 import { assertWorldMigration, type WorldMigration } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
 
@@ -767,20 +768,23 @@ function buildGenesis(
  * hydrating anything into a game.
  */
 export function worldIdAllocationOf(
-  stored: Iterable<StoredPartition | ElementJSON>,
+  stored: Iterable<StoredPartition>,
   elementIdKey: string,
 ): number {
   // THE STAMP IS A COUNTER VALUE, AND AN ID IS NOT ONE (#482). Every stored id
   // is read back to the counter value it was minted from, with the world's own
-  // key, and the stamp is one above the highest of those.
+  // key, and the stamp is one above the highest of those. Each record's parent
+  // is checked against the root first: read back under another key, every id
+  // would decode to a meaningless number and the stamp with them.
   const ids = worldElementIds(elementIdKey);
+  const rootId = ids.mint(0);
   let highest = WORLD_PARTITION_ID_FLOOR - 1;
   for (const record of stored) {
+    assertMintedUnderThisKey(undefined, record.parentId, rootId);
     // `StoredPartition.json` is `unknown` to a host on purpose -- it never
     // parses a partition -- so the shape is asserted here, at the one place
     // that does read inside the bytes.
-    const json = ("json" in record ? record.json : record) as ElementJSON;
-    highest = Math.max(highest, highestElementCursor(json, ids));
+    highest = Math.max(highest, highestElementCursor(record.json as ElementJSON, ids));
   }
   return highest + 1;
 }

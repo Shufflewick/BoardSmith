@@ -12,15 +12,16 @@
  * allocation stamp or the construction floor.
  */
 import { describe, it, expect } from 'vitest';
-import { Game, Space, Player, WORLD_PARTITION_ID_FLOOR, type ElementJSON, type GameOptions } from '../index.js';
+import { Game, Space, Piece, Player, WORLD_PARTITION_ID_FLOOR, type ElementJSON, type GameOptions } from '../index.js';
 import { worldElementIds } from './element-ids.js';
 
 class Room extends Space<KeyedWorld> {}
+class Coin extends Piece<KeyedWorld> {}
 
 class KeyedWorld extends Game<KeyedWorld, Player> {
   constructor(options: GameOptions) {
     super(options);
-    this.registerElements([Room]);
+    this.registerElements([Room, Coin]);
   }
 }
 
@@ -144,5 +145,38 @@ describe('#482 -- adoption reads stored ids back to the counter', () => {
     const { rooms, rootId } = storedRooms(KEY);
     const wrong = world(OTHER_KEY);
     expect(() => wrong.adoptSubtree(rootId, rooms[0]!)).toThrow(/element id key/);
+  });
+});
+
+describe('#482 -- a hidden zone\'s placeholders under 48-bit ids', () => {
+  /** Every id in a projected tree. */
+  const idsIn = (node: ElementJSON, into: number[] = []): number[] => {
+    into.push(node.id);
+    for (const child of node.children ?? []) idsIn(child, into);
+    return into;
+  };
+
+  it('gives every hidden child its own safe-integer placeholder, and remaps each to its own', () => {
+    const game = world();
+    const purse = game.create(Room, 'purse', { player: game.players[0] });
+    purse.contentsVisibleToOwner();
+    const coins = Array.from({ length: 20 }, (_unused, index) => purse.create(Coin, `coin-${index}`));
+    const ledger = game.create(Room, 'ledger');
+    ledger.contentsCountOnly();
+    for (let index = 0; index < 20; index += 1) ledger.create(Coin, `entry-${index}`);
+    // The shape the old numbering broke on: a container id past 2^43, where
+    // id * 1000 + index is no longer a safe integer and neighbours round to one.
+    expect(purse.id).toBeGreaterThan(2 ** 43);
+
+    const idRemap = new Map<number, number>();
+    const seen = game.toJSONForPlayer(2, idRemap) as ElementJSON;
+    const placeholders = idsIn(seen).filter((id) => id < 0);
+
+    expect(placeholders).toHaveLength(40);
+    expect(new Set(placeholders).size).toBe(40);
+    for (const id of placeholders) expect(Number.isSafeInteger(id)).toBe(true);
+    const remapped = coins.map((coin) => idRemap.get(coin.id));
+    expect(new Set(remapped).size).toBe(20);
+    for (const id of remapped) expect(placeholders).toContain(id);
   });
 });

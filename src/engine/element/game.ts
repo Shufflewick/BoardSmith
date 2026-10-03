@@ -4673,6 +4673,14 @@ export class Game<
     // For visibility checks, spectators use -1 (no special access)
     const visibilityPosition = playerSeat ?? -1;
 
+    // THE NEXT PLACEHOLDER ID, counted down from -1 across this one projection.
+    // A hidden zone's children are fungible and never animated one by one, so
+    // all a placeholder needs is an id no other element in this tree has, and
+    // a real id is never negative. Counted rather than derived from the
+    // container's id: a world's ids run to 2^48 (#482), where `id * 1000 + i`
+    // is past the safe integers and neighbouring placeholders round to one.
+    let nextPlaceholderId = -1;
+
     const filterElement = (json: ElementJSON, element: GameElement): ElementJSON | null => {
       const visibility = element.getEffectiveVisibility();
 
@@ -4887,7 +4895,7 @@ export class Game<
               // Redact identity-bearing image refs; keep only safe layout $-keys.
               // __hidden is seeded here (not in the helper) so the count-only
               // container branch keeps its distinct shape (no __hidden, has childCount).
-              const syntheticId = -(element._t.id * 1000 + i);
+              const syntheticId = nextPlaceholderId--;
               // CR-02 (159): record original -> synthetic id so an element-typed
               // flow variable pointing at this now-anonymized child can still be
               // relinked to its (redacted) placeholder on restore.
@@ -4897,7 +4905,7 @@ export class Game<
               }
               hiddenChildren.push({
                 className: childJson.className,
-                // Use negative index-based IDs to prevent correlation with real element IDs
+                // A negative, projection-scoped id: no correlation with a real id.
                 id: syntheticId,
                 attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(childJson.attributes ?? {}) },
                 // Don't include name - could reveal card identity
@@ -4919,11 +4927,10 @@ export class Game<
             for (let i = 0; i < json.children.length; i++) {
               const childJson = json.children[i];
               // Redact identity-bearing image refs; keep only safe layout $-keys.
-              // Use negative index-based IDs to prevent correlation with real
-              // element IDs (matches the hidden/count-only branch above). Leaking
-              // the real, stable id lets a non-owner track a face-down card across
-              // zones and reveals.
-              const syntheticId = -(element._t.id * 1000 + i);
+              // A negative, projection-scoped id, as in the count-only branch
+              // above. Leaking the real, stable id lets a non-owner track a
+              // face-down card across zones and reveals.
+              const syntheticId = nextPlaceholderId--;
               // CR-02 (159): see remap comment in the hidden/count-only branch above.
               const childElement = element._t.children[i];
               if (idRemap && childElement) {

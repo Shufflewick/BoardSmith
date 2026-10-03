@@ -63,6 +63,21 @@ function options(overrides: Partial<WorldRunnerOptions> = {}): WorldRunnerOption
 
 const idOf = (record: StoredPartition): number => (record.json as { id: number }).id;
 
+/** A seat's arrival, the instant a declaration is told about. */
+const arrival = { kind: "arrival", now: 1_000 } as const;
+const LOOK = { name: "look", args: {} } as const;
+const NO_DECLARED = { declaredActivity: [], declaredNotices: [] };
+
+/** What a call threw, so a case can assert the refusal itself. */
+async function refusalOf(attempt: () => unknown): Promise<unknown> {
+  try {
+    await attempt();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected a refusal, and the call succeeded");
+}
+
 describe("#482 -- createWorld takes the host's key and never mints one", () => {
   it("refuses a world built without a key, as the platform's fault, naming where one comes from", () => {
     const { elementIdKey: _omitted, ...keyless } = options();
@@ -149,6 +164,38 @@ describe("#482 -- a world's ids", () => {
     const genesis = await createWorld(options()).runner.genesis();
     const records = ROOMS.map((name) => genesis.partitions[name]!);
     expect(worldIdAllocationOf(records, KEY)).toBe(genesis.nextElementId);
+  });
+
+  it("refuses, as the platform's fault, a world woken with a key its bytes were not minted under", async () => {
+    // The host handed back the wrong key -- another world's, or one minted
+    // afresh on a wake. Every stored partition hangs from the root, whose id is
+    // the cipher of counter value 0 under the RIGHT key, so the first adoption
+    // can tell. Charged to the game, this would refuse every verb while the
+    // park ladder sat still and the publisher paid for it (#224's lesson).
+    const genesis = await createWorld(options()).runner.genesis();
+    const woken = createWorld(options({ elementIdKey: OTHER_KEY, nextElementId: genesis.nextElementId })).runner;
+    await woken.declare(LOOK, "p1", {}, arrival, NO_DECLARED);
+
+    const refusal = await refusalOf(() =>
+      woken.declare(LOOK, "p1", { a: genesis.partitions.a! }, arrival, NO_DECLARED),
+    );
+
+    expect(refusal).toBeInstanceOf(WorldRefusal);
+    expect((refusal as WorldRefusal).code).toBe("element-id-key-mismatch");
+    expect(ownerOf(refusal)).toBe("platform");
+    expect((refusal as WorldRefusal).message).toMatch(/key/);
+    expect((refusal as WorldRefusal).message).not.toContain(OTHER_KEY);
+  });
+
+  it("refuses to derive a stamp under a key the stored bytes were not minted under", async () => {
+    const genesis = await createWorld(options()).runner.genesis();
+    const records = ROOMS.map((name) => genesis.partitions[name]!);
+
+    const refusal = await refusalOf(() => worldIdAllocationOf(records, OTHER_KEY));
+
+    expect(refusal).toBeInstanceOf(WorldRefusal);
+    expect((refusal as WorldRefusal).code).toBe("element-id-key-mismatch");
+    expect(ownerOf(refusal)).toBe("platform");
   });
 
   it("never put the key in the bytes a host stores", async () => {

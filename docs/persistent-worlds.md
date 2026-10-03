@@ -344,7 +344,9 @@ The key is the HOST's, and it is durable state exactly as the stamp is:
 - **Hand the same key back on every wake** -- every rebuild, hibernation,
   eviction, deploy and partition load -- as `createWorld`'s `elementIdKey`.
   Every stored id, and the root every stored partition hangs from, is read back
-  with it, so a world built with any other key cannot find its own partitions.
+  with it. A world woken with any other key is refused at its first adoption
+  with `element-id-key-mismatch`, a platform refusal, because no stored
+  partition hangs from the root that key mints.
 - **Never mint a new one for a world that exists, and never derive it from the
   seed.** A seed may be short and guessable, and the game root's id is in every
   seat's view to check a guess against.
@@ -383,8 +385,10 @@ number hands back the same number on the next wake, so a park ladder should park
 on it rather than retry, and a publisher's health score should not be debited for
 it. The repair is the one below.
 
-**Repairing a stale stamp.** Derive the stamp from the bytes the store already
-holds, reading each id back with the world's key, and write it:
+**Repairing a stale stamp.** Derive the stamp from the partitions the store
+already holds -- whole `{ parentId, json }` records, because each one's parent is
+checked against the world's root under the key -- reading each id back with the
+world's key, and write it:
 
 ```ts
 import { worldIdAllocationOf } from 'boardsmith/world';
@@ -2711,6 +2715,7 @@ thing next time.
 | `vacancy-already-claimed` | One dispatch finalized the vacancy of two different chairs. A release is one chair's own committed step; schedule one occurrence per chair. |
 | `allocation-undeclared` | A host asked for a partition to be created on demand without handing the world its durable id allocation stamp, so any id minted would be a guess. See [a created root's identity is durable](#a-created-roots-identity-is-durable). |
 | `element-id-key-invalid` | A host built a world without its element id key, or with one that is not 24 lowercase hex digits (#482). Mint the key once, when the world is created, with `mintWorldElementIdKey()`, store it with the world, and pass it on every wake. Platform-owned and deterministic, so park rather than retry. |
+| `element-id-key-mismatch` | A stored partition does not hang from this world's root under the key the world was built with, so its bytes were minted under another key: the host passed a different world's key, minted a new one on a wake, or is serving bytes from before keyed ids (#482). Raised before anything is adopted. Pass the key stored with the world. Platform-owned and deterministic. |
 | `allocation-stale` | A host handed back a stamp standing below an id its own stored bytes hold, so the next id minted would collide with one already written. Raised at the adoption that proves it. Repair by deriving the stamp with `worldIdAllocationOf` over every stored partition. |
 | `child-timeout` | The bundle did not answer a host's call inside its deadline. |
 | `invalid-notice` | `ctx.world.notify` was handed a notice a box cannot hold: a seat outside the world, no `whenFull`, a payload JSON cannot carry, one past `noticeMaxBytes` -- or the world declares no `world.notices`. See [notices](#notices-a-lasting-line-for-one-seat-without-loading-it). |
