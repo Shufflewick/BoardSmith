@@ -4,60 +4,154 @@ import ts from 'typescript';
  * Whether an edit to a vitest config changed only which test files are collected (#479).
  *
  * `chunk-merge` vouches for a config edit with the signed chunks' own tests only when the edit can
- * change nothing but which files run: the run then shows every one of the chunk's files still ran
- * and passed. Any other edit (an alias that stubs a module, a setup file that mocks one, a different
- * environment) can make a test pass without the code it tests, so it voids the sign-off as any
- * other edit does.
+ * change nothing but which files run: the run then shows every one of the chunk's files ran, and
+ * only those, and that they passed. Any other edit (an alias that stubs a module, a setup file that
+ * mocks one, a different environment) can make a test pass without the code it tests, so it voids
+ * the sign-off as any other edit does.
  *
- * The two versions are compared as TypeScript tokens, comments and whitespace aside, with every
- * `include` or `exclude` property of a `test` object taken out. Equal token streams mean the edit
- * touched nothing else.
+ * Both versions are parsed. Each `include` / `exclude` of the config's own `test` object is read
+ * only when its value is plain data, so nothing in it can run: a list of string literals, template
+ * strings without expressions, and spreads of vitest's own `configDefaults.include` /
+ * `configDefaults.exclude`. Any other value, in either version, means the edit is not only a
+ * collection change. Those properties taken out, the rest of the two files must be the same tokens,
+ * comments and layout aside. A file that does not parse, or anything not recognised, is refused.
  */
 export function onlyTestCollectionChanged(before: string, after: string): boolean {
   const a = tokensOutsideCollection(before);
   const b = tokensOutsideCollection(after);
-  return a.length === b.length && a.every((token, i) => token === b[i]);
+  return a !== undefined && b !== undefined && a.length === b.length && a.every((token, i) => token === b[i]);
 }
 
 const COLLECTION_KEYS = new Set(['include', 'exclude']);
 
-function propertyName(node: ts.PropertyAssignment, source: ts.SourceFile): string {
-  return ts.isIdentifier(node.name) || ts.isStringLiteral(node.name) ? node.name.text : node.name.getText(source);
+/** The vitest and vite helpers whose object argument is a config, and where they come from. */
+const CONFIG_MODULES = new Set(['vitest/config', 'vite']);
+const CONFIG_HELPERS = new Set(['defineConfig', 'mergeConfig', 'defineProject']);
+
+function keyName(name: ts.PropertyName): string | undefined {
+  return ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : undefined;
 }
 
-/** `[start, end)` of every `include` / `exclude` property directly inside a `test: { ... }` object. */
-function collectionSpans(source: ts.SourceFile): Array<[number, number]> {
-  const spans: Array<[number, number]> = [];
+/**
+ * Each local name bound by a value import from vitest or vite, with the name it was exported as,
+ * but only when nothing else in the file declares the same name (a parameter or variable that
+ * could shadow it where the config is written).
+ */
+function trustedImports(source: ts.SourceFile): Map<string, string> {
+  const imported = new Map<string, string>();
+  const declared = new Map<string, number>();
   const visit = (node: ts.Node): void => {
-    if (ts.isPropertyAssignment(node) && COLLECTION_KEYS.has(propertyName(node, source))) {
-      const owner = node.parent.parent;
-      if (ts.isPropertyAssignment(owner) && propertyName(owner, source) === 'test') spans.push([node.getStart(source), node.end]);
+    const name = (node as { name?: ts.Node }).name;
+    if (name && ts.isIdentifier(name) && ts.isDeclaration(node)) declared.set(name.text, (declared.get(name.text) ?? 0) + 1);
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    if (!CONFIG_MODULES.has(statement.moduleSpecifier.text)) continue;
+    const clause = statement.importClause;
+    if (!clause || clause.isTypeOnly || !clause.namedBindings || !ts.isNamedImports(clause.namedBindings)) continue;
+    for (const element of clause.namedBindings.elements) {
+      if (element.isTypeOnly) continue;
+      if (declared.get(element.name.text) === 1) imported.set(element.name.text, (element.propertyName ?? element.name).text);
+    }
+  }
+  return imported;
+}
+
+/** Whether `object` is a vitest config: the default export, or the argument of vitest's or vite's config helpers. */
+function isConfigObject(object: ts.ObjectLiteralExpression, imports: Map<string, string>): boolean {
+  const parent = object.parent;
+  if (ts.isExportAssignment(parent)) return !parent.isExportEquals;
+  return (
+    ts.isCallExpression(parent) &&
+    parent.arguments.includes(object) &&
+    ts.isIdentifier(parent.expression) &&
+    CONFIG_HELPERS.has(imports.get(parent.expression.text) ?? '')
+  );
+}
+
+/** Whether `node` is `configDefaults.include` or `configDefaults.exclude`, with `configDefaults` vitest's own. */
+function isVitestDefaultList(node: ts.Expression, imports: Map<string, string>): boolean {
+  return (
+    ts.isPropertyAccessExpression(node) &&
+    !node.questionDotToken &&
+    COLLECTION_KEYS.has(node.name.text) &&
+    ts.isIdentifier(node.expression) &&
+    imports.get(node.expression.text) === 'configDefaults'
+  );
+}
+
+/** Whether `value` is a list whose evaluation can run no code. */
+function isPlainList(value: ts.Expression, imports: Map<string, string>): boolean {
+  return (
+    ts.isArrayLiteralExpression(value) &&
+    value.elements.every(
+      (e) =>
+        ts.isStringLiteral(e) ||
+        ts.isNoSubstitutionTemplateLiteral(e) ||
+        (ts.isSpreadElement(e) && isVitestDefaultList(e.expression, imports)),
+    )
+  );
+}
+
+/**
+ * Every `include` / `exclude` property of the config's own `test` object, or `undefined` when one
+ * of them holds a value that is not plain data.
+ */
+function collectionProperties(source: ts.SourceFile): Set<ts.Node> | undefined {
+  const imports = trustedImports(source);
+  const found = new Set<ts.Node>();
+  let plain = true;
+  const visit = (node: ts.Node): void => {
+    if (ts.isPropertyAssignment(node) && COLLECTION_KEYS.has(keyName(node.name) ?? '')) {
+      const test = node.parent.parent;
+      if (
+        ts.isPropertyAssignment(test) &&
+        keyName(test.name) === 'test' &&
+        ts.isObjectLiteralExpression(test.parent) &&
+        isConfigObject(test.parent, imports)
+      ) {
+        found.add(node);
+        if (!isPlainList(node.initializer, imports)) plain = false;
+      }
     }
     ts.forEachChild(node, visit);
   };
   visit(source);
-  return spans;
+  return plain ? found : undefined;
 }
 
-/** The config's tokens, comments and whitespace aside, with its collection properties and their commas taken out. */
-function tokensOutsideCollection(text: string): string[] {
+/**
+ * The file's tokens, comments aside, with its collection properties left out, and a single `,`
+ * between an object's remaining members (so a comma left behind, or a trailing one, says nothing).
+ * `undefined` when the file does not parse or a collection value is not plain data.
+ */
+function tokensOutsideCollection(text: string): string[] | undefined {
+  const { diagnostics } = ts.transpileModule(text, { reportDiagnostics: true, compilerOptions: { target: ts.ScriptTarget.Latest } });
+  if (diagnostics?.length) return undefined;
   const source = ts.createSourceFile('vitest.config.ts', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  const spans = collectionSpans(source);
-  const scanner = ts.createScanner(ts.ScriptTarget.Latest, true, ts.LanguageVariant.Standard, text);
+  const removed = collectionProperties(source);
+  if (removed === undefined) return undefined;
   const tokens: string[] = [];
-  let afterSpan = false;
-  for (let kind = scanner.scan(); kind !== ts.SyntaxKind.EndOfFileToken; kind = scanner.scan()) {
-    const start = scanner.getTokenStart();
-    const span = spans.find(([from, to]) => start >= from && start < to);
-    if (span) {
-      afterSpan = true;
-      continue;
+  const emit = (node: ts.Node): void => {
+    if (ts.isJSDoc(node)) return;
+    if (ts.isObjectLiteralExpression(node)) {
+      tokens.push('{');
+      node.properties.filter((p) => !removed.has(p)).forEach((p, i) => {
+        if (i > 0) tokens.push(',');
+        emit(p);
+      });
+      tokens.push('}');
+      return;
     }
-    // The comma after a removed property, and one left trailing before a closing brace, say nothing.
-    if (kind === ts.SyntaxKind.CommaToken && afterSpan) continue;
-    afterSpan = false;
-    if (kind === ts.SyntaxKind.CloseBraceToken && tokens.at(-1) === ',') tokens.pop();
-    tokens.push(scanner.getTokenText());
-  }
+    const children = node.getChildren(source);
+    if (children.length === 0) {
+      if (node.kind !== ts.SyntaxKind.EndOfFileToken) tokens.push(node.getText(source));
+      return;
+    }
+    children.forEach(emit);
+  };
+  emit(source);
   return tokens;
 }
