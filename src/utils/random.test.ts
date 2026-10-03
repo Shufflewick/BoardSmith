@@ -1,6 +1,6 @@
 import { createCipheriv, createHash } from 'node:crypto';
-import { describe, it, expect } from 'vitest';
-import { SeededRandom, createSeededRandom } from './random.js';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { SeededRandom, createSeededRandom, mintSeed } from './random.js';
 
 const draws = (rng: SeededRandom, count: number): number[] => Array.from({ length: count }, () => rng.next());
 
@@ -87,6 +87,24 @@ describe('SeededRandom state (#483)', () => {
       rng.next();
     }
     expect(seen.size).toBe(50);
+  });
+
+  it('restoring an earlier state of the same generator replays it, mid-block included', () => {
+    const rng = new SeededRandom('same-key');
+    draws(rng, 3);
+    const saved = rng.getState();
+    const expected = draws(rng, 20);
+    draws(rng, 5);
+    rng.setState(saved);
+    expect(draws(rng, 20)).toEqual(expected);
+  });
+
+  it.each([
+    ['a number', 12345],
+    ['undefined', undefined],
+    ['null', null],
+  ])('refuses a seed that is %s instead of treating it as some string', (_label, seed) => {
+    expect(() => new SeededRandom(seed as unknown as string)).toThrow(/seed must be a string/);
   });
 
   it('refuses a pre-#483 numeric state, saying the save cannot be continued', () => {
@@ -337,5 +355,26 @@ describe('createSeededRandom', () => {
     a();
     // b is untouched, so it still starts at the head of the sequence.
     expect(b()).toBe(createSeededRandom('independent')());
+  });
+});
+
+describe('mintSeed (#483)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('gives 128 bits as 32 hex digits', () => {
+    expect(mintSeed()).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it('comes from the cryptographic source, not Math.random', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    expect(mintSeed()).not.toBe(mintSeed());
+  });
+
+  it('refuses, naming the fix, when the runtime has no crypto.getRandomValues', () => {
+    vi.stubGlobal('crypto', undefined);
+    expect(() => mintSeed()).toThrow(/crypto\.getRandomValues to mint a game's random seed.*pass a seed/s);
   });
 });

@@ -23,6 +23,7 @@
 
 import { chacha20Block } from './chacha20.js';
 import { sha256 } from './sha256.js';
+import { secureRandomHex } from './secure-random.js';
 
 /**
  * A seeded generator's whole state, as `getState` writes it:
@@ -37,6 +38,9 @@ const STATE_PATTERN = /^chacha20:([0-9a-f]{64}):([0-9a-f]{1,14})$/;
 
 /** Positions are counted in 32-bit words and must stay exact as a JS number. */
 const POSITION_LIMIT = Number.MAX_SAFE_INTEGER;
+const BLOCK_WORDS = 16;
+/** The first block whose words would reach POSITION_LIMIT. */
+const BLOCK_LIMIT = Math.floor(POSITION_LIMIT / BLOCK_WORDS);
 
 /** The seed's UTF-16 code units, two bytes each, big-endian: injective for every string. */
 function seedBytes(seed: string): Uint8Array {
@@ -63,6 +67,12 @@ function keyHex(key: Uint32Array): string {
 }
 
 function describeRefusedState(state: unknown): string {
+  if (state === undefined) {
+    return (
+      'Cannot restore random state: the snapshot or checkpoint carries no random state, so the game ' +
+      'cannot continue from where it was saved. Restore only a snapshot the engine wrote.'
+    );
+  }
   if (typeof state === 'number') {
     return (
       'Cannot restore random state: it is a number, which is the generator BoardSmith used before ' +
@@ -75,6 +85,15 @@ function describeRefusedState(state: unknown): string {
     (typeof state === 'string' ? `a ${state.length}-character string` : `a ${typeof state}`) +
     '). Restore only a state taken from getState() or getRandomState().'
   );
+}
+
+/**
+ * A fresh 128-bit seed, as 32 hex digits, from the platform's cryptographic
+ * random source. What the engine uses when a game, session or bot is given no
+ * seed: a seed from Math.random would be only as unpredictable as Math.random.
+ */
+export function mintSeed(): string {
+  return secureRandomHex(16, "mint a game's random seed", 'pass a seed from a secure random source');
 }
 
 /**
@@ -112,11 +131,13 @@ function describeRefusedState(state: unknown): string {
 export class SeededRandom {
   #key: Uint32Array;
   #keyHex: string;
-  /** Keystream words consumed so far. */
-  #position = 0;
-  /** The block `#buffer` holds, or -1 when it must be computed. */
-  #bufferedBlock = -1;
-  readonly #buffer = new Uint32Array(16);
+  /** The keystream block the buffer is refilled from next. */
+  #nextBlock = 0;
+  /** Words of `#buffer` already drawn; 16 means it must be refilled first. */
+  #index = BLOCK_WORDS;
+  /** Words to skip in the next block refilled, so a restored position lands mid-block. */
+  #skip = 0;
+  readonly #buffer = new Uint32Array(BLOCK_WORDS);
   readonly #input = new Uint32Array(4);
 
   /**
@@ -130,24 +151,32 @@ export class SeededRandom {
    * ```
    */
   constructor(seed: string) {
+    if (typeof seed !== 'string') {
+      throw new TypeError(
+        `A random seed must be a string, but this one is a ${seed === null ? 'null' : typeof seed}. ` +
+          'Pass the seed as a string (for a number, String(n)) so every character of it shapes the sequence.',
+      );
+    }
     this.#key = keyWords(sha256(seedBytes(seed)));
     this.#keyHex = keyHex(this.#key);
   }
 
-  #nextWord(): number {
-    const position = this.#position;
-    if (position >= POSITION_LIMIT) {
+  #refill(): void {
+    const block = this.#nextBlock;
+    if (block >= BLOCK_LIMIT) {
       throw new Error('This random generator has drawn its whole stream (2^53 words); start a new seed.');
     }
-    const block = Math.floor(position / 16);
-    if (block !== this.#bufferedBlock) {
-      this.#input[0] = block % 2 ** 32;
-      this.#input[1] = Math.floor(block / 2 ** 32);
-      chacha20Block(this.#key, this.#input, this.#buffer);
-      this.#bufferedBlock = block;
-    }
-    this.#position = position + 1;
-    return this.#buffer[position % 16];
+    this.#input[0] = block % 2 ** 32;
+    this.#input[1] = Math.floor(block / 2 ** 32);
+    chacha20Block(this.#key, this.#input, this.#buffer);
+    this.#nextBlock = block + 1;
+    this.#index = this.#skip;
+    this.#skip = 0;
+  }
+
+  #nextWord(): number {
+    if (this.#index === BLOCK_WORDS) this.#refill();
+    return this.#buffer[this.#index++];
   }
 
   /**
@@ -161,9 +190,22 @@ export class SeededRandom {
    * ```
    */
   next(): number {
+    const index = this.#index;
+    // Both words in the buffered block: the common case, seven draws in eight.
+    if (index <= BLOCK_WORDS - 2) {
+      this.#index = index + 2;
+      return ((this.#buffer[index] >>> 5) * 67108864 + (this.#buffer[index + 1] >>> 6)) / 9007199254740992;
+    }
     const high = this.#nextWord() >>> 5;
     const low = this.#nextWord() >>> 6;
     return (high * 67108864 + low) / 9007199254740992;
+  }
+
+  /** Keystream words drawn so far. */
+  #position(): number {
+    return this.#index === BLOCK_WORDS
+      ? this.#nextBlock * BLOCK_WORDS + this.#skip
+      : (this.#nextBlock - 1) * BLOCK_WORDS + this.#index;
   }
 
   /**
@@ -171,13 +213,14 @@ export class SeededRandom {
    * `SeededRandom` makes that generator draw exactly what this one will next.
    */
   getState(): RandomState {
-    return `chacha20:${this.#keyHex}:${this.#position.toString(16)}`;
+    return `chacha20:${this.#keyHex}:${this.#position().toString(16)}`;
   }
 
   /**
    * Restore a state taken from `getState`. A state this engine did not write,
    * including a numeric one saved before #483, is refused and the generator
-   * is left as it was.
+   * is left as it was. Restoring a state with this generator's own key (bot
+   * search does it every iteration) does not parse the key again.
    */
   setState(state: RandomState): void {
     const match = typeof state === 'string' ? STATE_PATTERN.exec(state) : null;
@@ -185,12 +228,15 @@ export class SeededRandom {
     if (match === null || !(position < POSITION_LIMIT)) {
       throw new Error(describeRefusedState(state));
     }
-    const keyBytes = new Uint8Array(32);
-    for (let i = 0; i < 32; i += 1) keyBytes[i] = parseInt(match[1].slice(i * 2, i * 2 + 2), 16);
-    this.#key = keyWords(keyBytes);
-    this.#keyHex = match[1];
-    this.#position = position;
-    this.#bufferedBlock = -1;
+    if (match[1] !== this.#keyHex) {
+      const keyBytes = new Uint8Array(32);
+      for (let i = 0; i < 32; i += 1) keyBytes[i] = parseInt(match[1].slice(i * 2, i * 2 + 2), 16);
+      this.#key = keyWords(keyBytes);
+      this.#keyHex = match[1];
+    }
+    this.#nextBlock = Math.floor(position / BLOCK_WORDS);
+    this.#skip = position % BLOCK_WORDS;
+    this.#index = BLOCK_WORDS;
   }
 
   /**
