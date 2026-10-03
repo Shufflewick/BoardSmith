@@ -104,6 +104,39 @@ async function loadChromium(script) {
 export const surfaceOf = (page) => page.frameLocator('.world-dev__frame');
 
 /**
+ * WHERE THE ACTION BAR SITS AGAINST THE STRIP THE BOARD RESERVES (#444).
+ *
+ * The board is fitted above the board region's padding-bottom and the bar is
+ * capped at it, so "the bar covers no board" is `top >= strip` and "everything
+ * fits" is `!scrolls`. `outside` names each of `selectors` (looked up inside the
+ * bar) that is missing or not wholly in view inside the bar and the viewport.
+ * A measurement, not an assertion: each script says what it expects of it.
+ *
+ * @param surface   the world surface, from `surfaceOf(page)`
+ * @param selectors controls that must be in view inside the bar
+ */
+export function barGeometry(surface, selectors = []) {
+  return surface.locator('[data-testid="bs-actionbar"]').evaluate((bar, selectors) => {
+    const region = document.querySelector('.boardregion');
+    const strip = region.getBoundingClientRect().bottom - parseFloat(getComputedStyle(region).paddingBottom);
+    const box = bar.getBoundingClientRect();
+    const outside = selectors.filter((selector) => {
+      const el = bar.querySelector(selector);
+      if (!el) return true;
+      const r = el.getBoundingClientRect();
+      return r.top < box.top - 1 || r.bottom > box.bottom + 1 || r.bottom > window.innerHeight + 1;
+    });
+    return {
+      strip: Math.round(strip),
+      top: Math.round(box.top),
+      height: Math.round(box.height),
+      scrolls: bar.scrollHeight > bar.clientHeight + 1,
+      outside,
+    };
+  }, selectors);
+}
+
+/**
  * READING ONE STORED FIELD OUT OF A PROJECTED VIEW -- source, for a fixture board.
  *
  * Every regression that submits something has to read back what the world
@@ -256,12 +289,15 @@ export async function runBrowserRegression(run, body) {
  * Launch the FULL Chromium build, headless.
  *
  * A bare `chromium.launch()` asks for Playwright's separate headless-shell
- * build, which `npx playwright install chromium --only-shell` and some partial
- * installs have but a plain `npx playwright install chromium` on a machine that
- * has updated Playwright since may not: the regressions then refused to run on
- * a machine with a perfectly good Chromium. The `chromium` channel is the full
- * build every `playwright install chromium` provides, run in the same headless
- * mode, so one choice works on a developer's machine and in CI alike.
+ * build, which a machine with only the full build does not have: the
+ * regressions then refused to run on a machine with a perfectly good Chromium.
+ * The `chromium` channel is the full build, run in the same headless mode.
+ *
+ * Not every install provides that build: `playwright install chromium
+ * --only-shell` installs the headless shell alone. Install it with
+ * `boardsmith install-browser`, which installs exactly the full build this
+ * BoardSmith's Playwright drives (`--no-shell`), the same browser
+ * `boardsmith verify`'s smoke check uses.
  */
 function launchChromium(chromium) {
   return chromium.launch({ channel: 'chromium' });
