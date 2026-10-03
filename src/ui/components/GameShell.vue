@@ -331,8 +331,9 @@ function updateCompact(mql: MediaQueryList | MediaQueryListEvent) {
 // (--bsg-panel-reserved, applied as .boardregion's padding-bottom) and never
 // measured. Its height has no single value — it re-wraps on every selection
 // step — so a fit that reserved the measured height was not reproducible
-// between two loads of the same state (issue #13). The panel's content lays out
-// inside --bsg-panel-max and scrolls internally past it.
+// between two loads of the same state (issue #13). The panel is capped at that
+// same footprint, so it never covers the board (#444); its content lays out
+// inside it and scrolls internally past it.
 
 // Startup zoom fit: when a game (re)mounts, the board is zoomed once to fill
 // the board region (clamped to the 0.5–2.0 slider range) and then left alone —

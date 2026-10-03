@@ -1711,28 +1711,34 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 
     <!-- Configuring an action -->
     <div v-else class="action-config" :data-bs-open-action="currentAction">
-      <div class="config-header">
-        <span class="config-title">{{ currentActionMeta?.prompt || formatActionName(currentAction) }}</span>
-        <button class="cancel-btn" @click="cancelAction" aria-label="Cancel action">
-          <span aria-hidden="true">✕</span>
-        </button>
-      </div>
+      <!-- What is being done so far: the action's name, its cancel, and the items
+           already chosen. Lays out as nothing in the sentence flow; at phone width
+           it stacks into one control row, so the open panel fits the two rows the
+           shell reserves for it (#444). -->
+      <div class="config-context">
+        <div class="config-header">
+          <span class="config-title">{{ currentActionMeta?.prompt || formatActionName(currentAction) }}</span>
+          <button class="cancel-btn" @click="cancelAction" aria-label="Cancel action">
+            <span aria-hidden="true">✕</span>
+          </button>
+        </div>
 
-      <!-- Selected values (show previous selections as chips) -->
-      <!-- Note: displayableArgs filters out internal keys and current multiSelect selection -->
-      <div v-if="Object.keys(displayableArgs).length > 0" class="selected-values">
-        <template v-for="(value, key) in displayableArgs" :key="key">
-          <div class="selected-value from-board">
-            <span class="value-display">{{ getSelectionDisplay(key as string, value) }}</span>
-            <button
-              class="clear-selection-btn"
-              @click="clearSelection(key as string)"
-              :aria-label="`Clear ${(key as string).replace(/([A-Z])/g, ' $1').trim().toLowerCase()}`"
-            >
-              <span aria-hidden="true">✕</span>
-            </button>
-          </div>
-        </template>
+        <!-- Selected values (show previous selections as chips) -->
+        <!-- Note: displayableArgs filters out internal keys and current multiSelect selection -->
+        <div v-if="Object.keys(displayableArgs).length > 0" class="selected-values">
+          <template v-for="(value, key) in displayableArgs" :key="key">
+            <div class="selected-value from-board">
+              <span class="value-display">{{ getSelectionDisplay(key as string, value) }}</span>
+              <button
+                class="clear-selection-btn"
+                @click="clearSelection(key as string)"
+                :aria-label="`Clear ${(key as string).replace(/([A-Z])/g, ' $1').trim().toLowerCase()}`"
+              >
+                <span aria-hidden="true">✕</span>
+              </button>
+            </div>
+          </template>
+        </div>
       </div>
 
       <!-- Accumulated selections for repeating selection in progress -->
@@ -2455,6 +2461,11 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 .action-config {
   display: contents;
 }
+/* Both lay out as nothing in the sentence flow; the phone-width block below
+   gives them a box (#444). */
+.config-context {
+  display: contents;
+}
 .config-header {
   display: contents;
 }
@@ -2579,8 +2590,8 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 
 .choice-buttons {
   /* Flattened into the action bar's flow so every option button is a direct sibling of the
-     ⋯ menu / token / prompt and they all wrap inline together. The 5-row cap + scroll
-     now lives on the action bar itself (GameShell .actionbar). */
+     ⋯ menu / token / prompt and they all wrap inline together. The cap + scroll
+     lives on the action bar itself (PlayShell .actionbar). */
   display: contents;
 }
 
@@ -3076,5 +3087,76 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 .confirm-btn {
   font-weight: 600;
   border-color: var(--bsg-accent);
+}
+
+/* ── Phone width: fit the two rows the shell reserves (#444) ─────────────────
+   The bar is capped at two control rows (PlayShell, --bsg-panel-reserved) and
+   the board under it never refits, so an open pick has to fit them. As one
+   sentence, a pick handed to the board after an earlier choice took four rows at
+   375px: the action's name, the chosen item, the prompt and the handoff each
+   filled a row. Here the context (name, cancel, chosen items) stacks into one
+   control row, and the prompt and the handoff wrap their text so they share the
+   second. The ✕ controls keep their 24px targets (WCAG 2.5.8) but lend part of
+   them to the space around, so the two stacked lines fit one 44px row. Content
+   that still does not fit scrolls inside the bar. Same breakpoint as the shell's
+   compact tier (BREAKPOINTS.compact). */
+@media (max-width: 639px) {
+  .config-context {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 2px;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .config-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+  }
+
+  .config-title {
+    font-size: 0.9rem;
+    line-height: 18px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cancel-btn {
+    margin-block: -3px;
+  }
+
+  .selected-values {
+    gap: 4px;
+  }
+
+  .selected-value {
+    padding: 0 2px 0 8px;
+    font-size: 0.8rem;
+    line-height: 22px;
+  }
+
+  .clear-selection-btn {
+    margin-block: -1px;
+  }
+
+  .selection-prompt {
+    white-space: normal;
+    flex: 1 1 9rem;
+    font-size: 0.85rem;
+    line-height: 1.2;
+  }
+
+  .board-handoff-btn {
+    white-space: normal;
+    max-width: 9rem;
+    padding: 4px 10px;
+    line-height: 1.15;
+    text-align: center;
+  }
 }
 </style>

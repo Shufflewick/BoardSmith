@@ -1107,11 +1107,12 @@ board:
   reserved the panel's *measured* height, frozen at whatever it happened to be
   ~300ms after the board stopped changing — the same card measured 220px on one
   load and 202px on the next.)
-- **A tall panel floats over the board rather than resizing it.** The panel
-  grows past its reservation on choice-heavy steps, up to a ceiling of five
-  rows (`--bsg-panel-max`), then scrolls internally. It never moves your board:
-  the region plus the zoom container's bottom margin keep scroll room all the
-  way to that ceiling, so anything the panel covers can be scrolled into view.
+- **The panel never covers your board.** The strip is also the panel's
+  ceiling: the panel lays itself out to fit two rows (at phone width it stacks
+  the action's name over the chosen items and wraps the prompt beside its
+  control), and on a step with more than fits, it scrolls inside the strip
+  rather than growing over the board. So a board that fits itself above the
+  strip is never covered, at rest or mid-pick.
 
 Do **not** try to measure the Action Panel from a custom board, and do not size
 your board against a panel height — there is no such value to read. If your
