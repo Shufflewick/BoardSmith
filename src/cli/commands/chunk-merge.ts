@@ -26,19 +26,20 @@
  *      `parallel-check` pair rule); `ledger-check`; `constraint-check` with its measurement tests;
  *      every verified chunk's sign-off still stands for its code (`assessSignoffs`); and the
  *      project's whole test suite.
- *      Any failure aborts the merge and leaves the main line exactly as it was.
+ *      Any failure, or error, aborts the merge and leaves the main line exactly as it was.
  *   3a. A source file this branch and the main line both edited since the branch left (#403) is
  *      code no designer signed off: each chunk's sign-off saw only its own side. The merge vouches
  *      for it by re-running the own checks of every chunk involved (this one and those whose design
  *      files the main line changed since the branch left, whose Build Manifest names the file) on
- *      the combined tree: their tests (every test file must have run, not only passed),
+ *      the combined tree: their tests (every test file must have run, and no other, not only passed),
  *      `chunk-check` and `claim-quote-check`. If all pass, it records the file, its content hash,
  *      those chunks and the merge in design/MERGE-SIGNOFFS.md, which the sign-off check accepts;
  *      if any fails, the merge is refused naming the check and the chunk. No designer is asked.
  *      A source file whose provisional ledger ids step 2 rewrote is code the merge itself changed
  *      after its chunks signed it off, so it is vouched for the same way (#435), and so is
  *      `vitest.config.ts` when its only edit since a verified chunk signed it off is to
- *      `test.include` or `test.exclude`, for every chunk whose sign-off that edit would void (#479).
+ *      `test.include` or `test.exclude` and their values are plain data, for every chunk whose sign-off
+ *      that edit would void (#479).
  *   4. It lists every reference between the merged chunk's changes and what the main line gained
  *      while it was being built, in design/CROSS-CHUNK.md, pending the audit's ruling;
  *      `ledger-check` fails until the audit rules, so the next close and merge wait for it.
@@ -491,7 +492,7 @@ async function sharedSourceFiles(ctx: MergeContext, touched: string[], renumbere
  * Test-runner config (#479): it decides which test files run and how, and nothing the game does.
  * An edit that changes only which files it collects (`test.include` / `test.exclude`) cannot change
  * what a chunk's tests prove about the files that still run, and the merge checks that every one of
- * the chunk's own test files still ran (`ownTestsFailure`). Any other edit to it can (an alias that
+ * the chunk's own test files still ran, and no other (`ownTestsFailure`). Any other edit to it can (an alias that
  * stubs a module, a setup file that mocks one), and so can other tooling (the build config,
  * tsconfig, package.json), so those void the sign-off as any code edit does.
  */
@@ -561,9 +562,13 @@ function ownTestFiles(chunkText: string): string[] | string {
 }
 
 /**
- * Why a chunk's own tests do not vouch for the combined tree, or `undefined` when they all ran and
- * passed. A test file that did not run proves nothing: vitest skips a named file its config
- * excludes and still exits 0 (#479), so the run must name every file as run.
+ * Why a chunk's own tests do not vouch for the combined tree, or `undefined` when they all ran,
+ * only they ran, and they passed. A test file that did not run proves nothing: vitest skips a named
+ * file its config excludes and still exits 0 (#479), so the run must name every file as run. And
+ * vitest runs every collected file whose path contains a named one, so an edit to what it collects
+ * can add a file to the run; with isolation off (`isolate: false`, set here or in a config this one
+ * merges) that file shares module state with the chunk's tests and can make them pass. Only a run
+ * of the chunk's own files shows the result is theirs.
  */
 async function ownTestsFailure(
   projectDir: string,
@@ -576,15 +581,30 @@ async function ownTestsFailure(
   if ('refused' in run) return [what, run.refused];
   if (!run.ok) return [what, tail(run.output)];
   if (run.ran === undefined) {
-    return [`${slug}'s own tests cannot be confirmed`, 'the test run did not report which test files it ran.'];
+    return [
+      `${slug}'s own tests cannot be confirmed`,
+      `vitest's JSON report, which names the test files it ran, is missing or unreadable, so the run does not show they ran. ` +
+        `Run them in the chunk's worktree to see why vitest wrote no report.`,
+    ];
   }
+  const own = new Set(tests.map((t) => posix.normalize(t)));
   const ran = new Set(run.ran.map((f) => posix.normalize(f)));
   const missing = tests.filter((t) => !ran.has(posix.normalize(t)));
-  if (missing.length === 0) return undefined;
+  const they = (files: string[]) => (files.length === 1 ? 'it' : 'them');
+  if (missing.length) {
+    return [
+      `${slug}'s own tests did not all run`,
+      `${missing.join(', ')} did not run: the project's vitest config excludes ${they(missing)}, ` +
+        `or does not include ${they(missing)}, so the run proves nothing about ${they(missing)}.`,
+    ];
+  }
+  const extra = [...ran].filter((f) => !own.has(f)).sort();
+  if (extra.length === 0) return undefined;
   return [
-    `${slug}'s own tests did not all run`,
-    `${missing.join(', ')} did not run: the project's vitest config excludes ${missing.length === 1 ? 'it' : 'them'}, ` +
-      `or does not include ${missing.length === 1 ? 'it' : 'them'}, so the run proves nothing about ${missing.length === 1 ? 'it' : 'them'}.`,
+    `${slug}'s own tests did not run alone`,
+    `${extra.join(', ')} ran with them, because vitest runs every collected file whose path contains a named one. ` +
+      `A file outside the chunk's Spec Manifest can share state with its tests, so the run does not show their result is their own. ` +
+      `Rename the test files so no path contains another, or leave ${they(extra)} out of the vitest config's include.`,
   ];
 }
 
@@ -743,12 +763,22 @@ async function firstProblems(stages: Array<() => Promise<string[]>>): Promise<st
   return [];
 }
 
-/** Merges with the lock held; aborts the merge, restoring the main line, on any refusal. */
+/** Merges with the lock held; aborts the merge, restoring the main line, on any refusal or error. */
 async function mergeLocked(ctx: MergeContext, runTests: TestRunner): Promise<ChunkMergeResult> {
   const before = [...(await realNumbersAdded(ctx)), ...sharedRunFiles(ctx)];
   if (before.length) return refused(before);
 
-  const left = await startMerge(ctx);
+  try {
+    return await checkStartedMerge(ctx, await startMerge(ctx), runTests);
+  } catch (error) {
+    // A step that throws must not leave the main checkout mid-merge.
+    await run(ctx.top, ['merge', '--abort']);
+    throw error;
+  }
+}
+
+/** Checks and commits a merge `startMerge` began; aborts it, restoring the main line, on any refusal. */
+async function checkStartedMerge(ctx: MergeContext, left: string[], runTests: TestRunner): Promise<ChunkMergeResult> {
   if (left.length) {
     await run(ctx.top, ['merge', '--abort']);
     return refused([

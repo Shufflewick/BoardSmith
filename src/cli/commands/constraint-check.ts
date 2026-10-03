@@ -386,19 +386,29 @@ export const runVitest: TestRunner = async (projectDir, files) => {
       child.on('error', (error) => done({ ok: false, output: error.message }));
       child.on('close', (code) => done({ ok: code === 0, output: text }));
     });
-    return { ok, output, ran: await filesThatRan(projectDir, reportPath) };
+    const report = await fs.readFile(reportPath, 'utf-8').catch(() => undefined);
+    return { ok, output, ran: testFilesInReport(report, await fs.realpath(projectDir)) };
   } finally {
     await fs.rm(reportDir, { recursive: true, force: true });
   }
 };
 
-/** The test files vitest's JSON report says it ran, project-relative; none when it wrote no report. */
-async function filesThatRan(projectDir: string, reportPath: string): Promise<string[]> {
-  const text = await fs.readFile(reportPath, 'utf-8').catch(() => undefined);
-  if (text === undefined) return [];
-  const report = JSON.parse(text) as { testResults?: Array<{ name: string }> };
-  const root = await fs.realpath(projectDir);
-  return (report.testResults ?? []).map((r) => relative(root, r.name).split(sep).join(posix.sep));
+/**
+ * The test files vitest's JSON report says it ran, relative to `root`, or `undefined` when there is
+ * no report or it is not one vitest wrote whole (a run cut short can leave it truncated). Undefined
+ * says nothing about which files ran, so a caller that needs to know refuses on it.
+ */
+export function testFilesInReport(text: string | undefined, root: string): string[] | undefined {
+  if (text === undefined) return undefined;
+  let report: unknown;
+  try {
+    report = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  const results = (report as { testResults?: unknown } | null)?.testResults;
+  if (!Array.isArray(results) || !results.every((r) => typeof (r as { name?: unknown })?.name === 'string')) return undefined;
+  return results.map((r: { name: string }) => relative(root, r.name).split(sep).join(posix.sep));
 }
 
 /** The last lines of a test run, which is where vitest says what failed. */

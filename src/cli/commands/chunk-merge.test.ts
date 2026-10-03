@@ -802,6 +802,46 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
       );
     });
 
+    const editExclude = () => tradingSignsTheConfig(config(['node_modules/**', 'dist/**', '.worktrees/**']));
+
+    it("refuses when the run does not report which files ran, since vitest's report is then missing or unreadable", async () => {
+      await editExclude();
+      const unreported: TestRunner = async (projectDir, files) => {
+        const run = await configRunner(projectDir, files);
+        return 'refused' in run ? run : { ok: run.ok, output: run.output };
+      };
+      await expectMergeRefused(
+        'quests',
+        unreported,
+        /trading's own tests cannot be confirmed on the combined tree, so this merge cannot vouch for vitest\.config\.ts[^:]*: vitest's JSON report, which names the test files it ran, is missing or unreadable/,
+      );
+    });
+
+    it("refuses when the run also ran a file outside the chunk's own, which could share state with its tests", async () => {
+      // Vitest runs every collected file whose path contains a named one, and an include edit can add one.
+      await editExclude();
+      const alsoRan: TestRunner = async (projectDir, files) => {
+        const run = await configRunner(projectDir, files);
+        return 'refused' in run || files.length === 0 ? run : { ...run, ran: [...(run.ran ?? []), 'extra/tests/trading.test.ts'] };
+      };
+      await expectMergeRefused(
+        'quests',
+        alsoRan,
+        /trading's own tests did not run alone on the combined tree, so this merge cannot vouch for vitest\.config\.ts[^:]*: extra\/tests\/trading\.test\.ts ran with them/,
+      );
+    });
+
+    it('aborts the merge, leaving the main line as it was, when a check throws', async () => {
+      await editExclude();
+      const before = head();
+      const throws: TestRunner = async () => {
+        throw new Error('the test runner broke');
+      };
+      await expect(chunkMerge(main, 'quests', { runTests: throws })).rejects.toThrow('the test runner broke');
+      expect([head(), status()]).toEqual([before, '']);
+      await expect(fs.access(join(main, '.git/MERGE_HEAD'))).rejects.toThrow();
+    });
+
     it('does not vouch for any other edit to the config, which voids the sign-off as before', async () => {
       // A setup file can mock what the chunk's tests exercise, so this is not a collection change.
       await tradingSignsTheConfig(config(['node_modules/**', 'dist/**'], "\n    setupFiles: ['tests/setup.ts'],"));
