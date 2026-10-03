@@ -65,7 +65,7 @@ here.
        tests are green. It exits non-zero on any finding, and a non-zero exit is a failure of this
        step like any other: route the chunk back per "Failures Loop Back to `build`". There is no
        flag that skips part of it, and its findings are never argued away in prose. It enforces
-       five rules, each of which a real build run broke while its suite was green:
+       six rules, each of which a real build run broke while its suite was green:
 
        - **Every Spec Manifest claim names a test that exists.** Each `## Spec Manifest` row names a
          test file on disk with `RED Observed: yes`, and for every claim the row lists, a test in
@@ -94,12 +94,22 @@ here.
          `.vue` component that is its `<script>` blocks and the expressions of its template bindings,
          conditions and interpolations; event handlers and loops are not mutated. A test
          that survives every mutant asserts nothing the chunk's code controls, and a claim none of
-         whose tests fail under any mutant has no real test; both are findings. Mutants are served
+         whose tests fail under any mutant has no real test; both are findings. A test that reads
+         source as text (the a11y floor's scans below) can never fail under a mutant, so it is a
+         guard (next rule). Mutants are served
          to vitest in memory, never written over the source. This runs one vitest process per
          mutant, so it takes minutes on a large chunk; let it finish.
+       - **A guard holds scans only.** A file under `tests/guards/` reads source as text (the a11y
+         floor's scans below) and is never mutation-tested, so the Spec Manifest never lists it and a
+         row naming one is a finding. A guard the chunk wrote or changed that runs the game's code is
+         a finding too: one that imports a `.vue` component (a `?raw` import is text and is fine),
+         `@vue/test-utils` or `boardsmith/testing`, uses `renderAsSeat`, or dispatches an action. That
+         test belongs in the chunk's own test file, where the mutation check shows it can fail.
 
        A finding here goes back to `build` (or to `spec`, when the fix is a test that pins the claim
-       properly), never to an edit of the Spec Manifest that makes the row claim less.
+       properly), never to an edit of the Spec Manifest that makes the row claim less. The one
+       manifest edit a finding asks for is removing a row that names a guard: that row never
+       belonged there, and the guard's scans still run in the full suite.
 
 3. **Worked-example tests (TEST-01)** — this chunk's cited worked examples become executable
    tests as part of this same build, generated and immediately run, never left as a one-time
@@ -287,7 +297,8 @@ here.
 
 5. **Asset-reachability gate (conditional on `ui: touches|major`)** — if this chunk's CHUNK.md
    `## ui:` tag is `touches` or `major`, run `scanAssetReachability(cwd)`, imported from
-   `boardsmith/asset-scan`, against the generated project. A `ui: none` chunk skips this item
+   `boardsmith/asset-scan`, against the generated project, as a test in the guard file
+   `tests/guards/a11y-floor.test.ts` ("The A11y Floor" below says why it lives there). A `ui: none` chunk skips this item
    entirely — it has no UI to check. This is the single source of truth for ASSET-02's bare-`<img>`
    scan — do not reimplement or duplicate this scan in prose; cite it and run the real function,
    the same discipline item 1 above applies to `sandbox-scan.ts`. Any non-empty result (any bare
@@ -322,7 +333,17 @@ here.
 ## The A11y Floor — All Five Items (UIQ-03)
 
 Every `ui: touches|major` chunk's test step runs all five of these, every time, as executable
-tests — never a manual visual pass:
+tests — never a manual visual pass.
+
+Where each test lives decides whether `boardsmith test-step-check` can pass. Items 1, 2, 4 and 5
+mount the chunk's components and assert what they do, so they go in the chunk's own test file and
+its Spec Manifest row, where the mutation check shows they can fail. The scans (item 3's colour
+grep and contrast assertion, and the asset-reachability scan, sequence item 5 above) read source as
+text, so no change to the code can make them fail, and in a manifest file the mutation check reports
+every one. They live in one guard file for the whole game, `tests/guards/a11y-floor.test.ts`: the
+first UI chunk writes it, a later chunk extends it when it adds a token pair, and never list it in
+the Spec Manifest. The full suite and `boardsmith verify` still run it on every chunk. A guard holds
+scans only; a test that mounts a component or cites a claim belongs in the chunk's test file.
 
 1. **Keyboard-only ActionPanel completion.** A test that completes this chunk's action(s)
    through the ActionPanel using only keyboard events — no pointer/click simulation. Follow two
@@ -384,10 +405,12 @@ tests — never a manual visual pass:
    item 3 below, not by this scan.
 
 3. **No-color-literal grep with a contrast assertion for new game-local token pairs.** Grep this
-   chunk's new component source for hardcoded color literals (hex/rgb values outside the
+   game's `src/ui` source for hardcoded color literals (hex/rgb values outside the
    `--bsg-*` token system) and, for any new game-local foreground/background token pair this
    chunk introduces, assert its contrast ratio meets the WCAG threshold. This grep-plus-contrast-
-   assertion is what actually catches contrast regressions — `axe-core` in `jsdom` does not.
+   assertion is what actually catches contrast regressions — `axe-core` in `jsdom` does not. Both
+   are scans, so they go in the guard file `tests/guards/a11y-floor.test.ts`, never in a Spec
+   Manifest file.
 
 4. **Real controls with game-semantic aria-labels; decorative glyphs `aria-hidden`.** Every
    interactive control this chunk adds is a real control — a `<button>`, or an element with
@@ -401,7 +424,17 @@ tests — never a manual visual pass:
    focus lands somewhere sensible, never lost to `document.body` or left on a now-detached
    element. Confirm any animation this chunk adds respects the `prefers-reduced-motion` media
    query — reduced-motion users get the state change without the animated transition, not a
-   forced motion sequence they can't opt out of.
+   forced motion sequence they can't opt out of. Pin reduced motion by behaviour, never by scanning
+   the source for animation: with `prefers-reduced-motion: reduce` matched, one action puts the
+   final state on screen at once and nothing on screen changes afterwards. A chunk that adds no
+   animation still writes that test for the controls it adds; it is what fails when a later change
+   animates them. To write it: jsdom has no `window.matchMedia`, so stub it with
+   `vi.stubGlobal('matchMedia', ...)` returning `{ matches: true, media, addEventListener() {},
+   removeEventListener() {} }` for `(prefers-reduced-motion: reduce)` before the test file's first
+   mount (the engine reads the preference once, on first use). Use `vi.useFakeTimers()`, perform
+   the action, assert the final state, then `vi.advanceTimersByTime` well past the longest
+   transition the chunk could run (and `await nextTick()`) and assert the rendered output is
+   unchanged.
 
 ## Failures Loop Back to `build`
 

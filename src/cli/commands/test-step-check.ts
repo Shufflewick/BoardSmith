@@ -19,6 +19,12 @@
  *      (`test-step-shell-context.ts`): it mounts with the shell-context stubs instead (#453).
  *   6. Mutation: every claim and every test is shown able to fail (`test-step-mutation.ts`).
  *
+ * A file under `tests/guards/` is a guard: a test that reads source as text, such as the a11y
+ * floor's colour-literal and asset scans (`build/test.md`). No code mutant can make a scan fail, so
+ * a guard is never a Spec Manifest file and is never mutation-tested; the full suite runs it. A guard
+ * the chunk wrote or changed that mounts a component or dispatches an action is a finding, since it
+ * would be a behaviour test hidden from the mutation check (`test-step-guard.ts`, #443).
+ *
  * "The chunk added" means the lines whose last change is one of the chunk's own
  * `chunk-<slug>/` commits, or is not committed yet (`addedImplementationLines`).
  *
@@ -49,6 +55,7 @@ import {
 } from './test-step-ast.js';
 import { runMutationCheck, type MutationSummary } from './test-step-mutation.js';
 import { scriptRegions } from './test-step-sfc.js';
+import { findCodeRunInGuard } from './test-step-guard.js';
 import { findHandBuiltShellContext } from './test-step-shell-context.js';
 import { findChunkCommits } from '../lib/chunk-commits.js';
 import { chunkMdPath, relChunkMdPath } from '../lib/project-paths.js';
@@ -61,6 +68,8 @@ const TEST_STEP_FINDING_KINDS = Object.freeze([
   'exemption-with-claims',
   'red-not-observed',
   'test-file-missing',
+  'guard-in-manifest',
+  'guard-runs-code',
   'claim-not-live',
   'claim-test-missing',
   'claim-uncovered',
@@ -347,6 +356,15 @@ function rowClaimFindings(row: SpecManifestRow, file: ChunkTestFile | undefined,
   return findings;
 }
 
+/** Where a game keeps its guard tests (see the file comment). */
+const GUARD_TEST_DIR = 'tests/guards/';
+
+/** Whether a manifest path names a file under `GUARD_TEST_DIR`. */
+function isGuardFile(projectDir: string, testFile: string): boolean {
+  const absPath = resolveManifestPath(projectDir, testFile);
+  return absPath !== 'escapes' && absPath.startsWith(join(projectDir, GUARD_TEST_DIR));
+}
+
 /** Check 1: every row's file exists, its RED was observed, and its claims have citing tests. */
 async function manifestRowFindings(
   projectDir: string,
@@ -356,6 +374,18 @@ async function manifestRowFindings(
   const findings: TestStepFinding[] = [];
   const testFiles: ChunkTestFile[] = [];
   for (const row of manifest.rows) {
+    if (isGuardFile(projectDir, row.testFile)) {
+      findings.push({
+        kind: 'guard-in-manifest',
+        subject: row.testFile,
+        detail:
+          `The Spec Manifest lists ${row.testFile}, a guard test. A guard reads source as text, so no change to the ` +
+          "chunk's code can make it fail, and the mutation check would report every test in it. Remove the row: the " +
+          `full suite runs ${GUARD_TEST_DIR} on its own. A test that cites a claim belongs in a chunk test file ` +
+          'outside that folder (build/test.md "The A11y Floor").',
+      });
+      continue;
+    }
     if (!/^yes\b/.test(row.redObserved)) {
       findings.push({
         kind: 'red-not-observed',
@@ -498,6 +528,34 @@ async function shellContextFindings(
   );
 }
 
+/** A guard the chunk wrote or changed that runs the game's code (see the file comment). */
+async function guardRunsCodeFindings(
+  projectDir: string,
+  chunkCommits: ReadonlySet<string>,
+  testFiles: ChunkTestFile[],
+): Promise<TestStepFinding[]> {
+  const guards = (await chunkTestSources(projectDir, chunkCommits, testFiles)).filter(({ path }) =>
+    path.startsWith(GUARD_TEST_DIR),
+  );
+  if (guards.length === 0) return [];
+  const wrappers = findDispatchWrappers(await testSupportSources(projectDir));
+  return guards.flatMap(({ path, text }) => {
+    const run = findCodeRunInGuard(text, path, wrappers);
+    if (run === undefined) return [];
+    return [
+      {
+        kind: 'guard-runs-code' as const,
+        subject: `${path}:${run.line}`,
+        detail:
+          `Line ${run.line} of ${path} ${run.what}. A file under ${GUARD_TEST_DIR} holds scans only (tests that read ` +
+          'source as text): it is never mutation-tested, so a test there that runs the game could pass whatever the ' +
+          "code does. Move this test to the chunk's own test file and list that file in the Spec Manifest " +
+          '(build/test.md "The A11y Floor").',
+      },
+    ];
+  });
+}
+
 /**
  * Runs checks 1-5 (see the file comment). Never runs a test; `testStepCheckCommand` runs the
  * mutation check once these pass.
@@ -522,6 +580,7 @@ export async function checkTestStep(
     ...(await verbFindings(dir, verbs, rows.testFiles)),
     ...(await guardFindings(dir, added)),
     ...(await shellContextFindings(dir, chunkCommits, rows.testFiles)),
+    ...(await guardRunsCodeFindings(dir, chunkCommits, rows.testFiles)),
   ];
   return { slug, verbs, findings, testFiles: rows.testFiles, added };
 }

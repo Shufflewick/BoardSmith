@@ -445,8 +445,12 @@ function callVerbs(call: AstNode, wrappers: Wrappers): Array<string | undefined>
   return [literalText(dispatchArgument(call, wrappers))];
 }
 
-/** Every verb the file dispatches through the engine, outside skipped tests, in source order. */
-export function findDispatchedVerbs(source: string, file?: string, wrappers: Wrappers = new Map()): string[] {
+/** Every verb the file dispatches through the engine, outside skipped tests, with its line, in source order. */
+export function findDispatches(
+  source: string,
+  file?: string,
+  wrappers: Wrappers = new Map(),
+): Array<{ verb: string; line: number }> {
   const parsed = parseSource(source, file);
   const skippedRanges = collectBlocks(parsed)
     .filter((b) => b.skipped)
@@ -454,12 +458,17 @@ export function findDispatchedVerbs(source: string, file?: string, wrappers: Wra
   const inSkipped = (node: AstNode) =>
     skippedRanges.some(([start, end]) => start <= node.range[0] && node.range[1] <= end);
 
-  const verbs = new Set<string>();
+  const dispatches: Array<{ verb: string; line: number }> = [];
   walk(parsed.ast, (node) => {
     if (node.type !== 'CallExpression' || inSkipped(node)) return;
-    for (const verb of callVerbs(node, wrappers)) if (verb !== undefined) verbs.add(verb);
+    for (const verb of callVerbs(node, wrappers)) if (verb !== undefined) dispatches.push({ verb, line: node.loc.start.line });
   });
-  return [...verbs];
+  return dispatches;
+}
+
+/** Every verb the file dispatches through the engine, outside skipped tests, in source order. */
+export function findDispatchedVerbs(source: string, file?: string, wrappers: Wrappers = new Map()): string[] {
+  return [...new Set(findDispatches(source, file, wrappers).map((d) => d.verb))];
 }
 
 // -------------------------------------------------------------------------------------------
