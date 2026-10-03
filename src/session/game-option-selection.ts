@@ -8,14 +8,15 @@
  * palette, ...), and a client that could write one of those would choose the
  * game's shuffles or decode its element ids (#447). So a selection is admitted
  * only through {@link selectGameOptions}, which refuses an undeclared key, a
- * host-owned key, and a value that is not of the declared type, and the
+ * host-owned key, a value that is not of the declared type, and a number
+ * outside its declared `min`/`max` or off its `step`, and the
  * session's types take a {@link GameOptionSelection}, which nothing else can
  * produce. A host that spreads a client's object straight into a constructor
  * is then a type error, not a leak found in review.
  */
 import { ENGINE_OWNED_GAME_OPTION_KEYS } from '../engine/element/game.js';
 import { PERSIST_KEY } from '../persistence/persistence.js';
-import type { GameOptionDefinition } from '../types/protocol.js';
+import type { GameOptionDefinition, NumberOption } from '../types/protocol.js';
 
 /**
  * Every option name a player's selection may not use: each `GameOptions`
@@ -34,8 +35,9 @@ export const HOST_OWNED_GAME_OPTION_KEYS: readonly string[] = [
 const hostOwned = new Set(HOST_OWNED_GAME_OPTION_KEYS);
 
 /**
- * A selection that was refused: an undeclared or host-owned key, or a value
- * that is not of its option's declared type. The message names the option and
+ * A selection that was refused: an undeclared or host-owned key, a value
+ * that is not of its option's declared type, or a number outside its
+ * option's declared `min`/`max` or off its `step`. The message names the option and
  * what would be accepted, so a host can show it to the player as it is.
  */
 export class GameOptionSelectionError extends Error {}
@@ -52,17 +54,79 @@ export type GameOptionSelection = Readonly<Record<string, unknown>> & { readonly
 
 /**
  * Refuse a game's option declarations if one is named for a field the host
- * owns. Such an option could never be chosen (the selection would be refused
- * by name), so the game is wrong, not the player; this says so when the game
- * is loaded rather than at its first lobby.
+ * owns, or is a number option whose `min`, `max` or `step` no value could
+ * satisfy (not a finite number, `min` above `max`, a `step` that is not
+ * positive). Such an option could never be chosen, so the game is wrong, not
+ * the player; this says so when the game is loaded rather than at its first
+ * lobby.
  */
 export function assertDeclarableGameOptions(declared: Record<string, GameOptionDefinition> | undefined): void {
   if (!declared) return;
-  for (const name of Object.keys(declared)) {
+  for (const [name, def] of Object.entries(declared)) {
     if (hostOwned.has(name)) {
       throw new Error(
         `This game declares a game option named "${name}", which is a field the engine or the host ` +
           `sets for every game, so a player could never choose it. Rename the option.`,
+      );
+    }
+    if (def.type === 'number') assertDeclarableBounds(name, def);
+  }
+}
+
+function assertDeclarableBounds(name: string, def: NumberOption): void {
+  for (const field of ['min', 'max', 'step'] as const) {
+    const value: unknown = def[field];
+    if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value))) {
+      throw new Error(
+        `This game declares number option "${name}" with ${field} ${JSON.stringify(value) ?? String(value)}, ` +
+          `which is not a finite number. Give ${field} a number or leave it out.`,
+      );
+    }
+  }
+  if (def.min !== undefined && def.max !== undefined && def.min > def.max) {
+    throw new Error(
+      `This game declares number option "${name}" with min ${def.min} above max ${def.max}, ` +
+        `so no value could be chosen. Swap or correct them.`,
+    );
+  }
+  if (def.step !== undefined && def.step <= 0) {
+    throw new Error(
+      `This game declares number option "${name}" with step ${def.step}; a step must be above 0. ` +
+        `Give a positive step or leave it out.`,
+    );
+  }
+}
+
+/** A number as a person would write it, without binary rounding noise (0.30000000000000004 is 0.3). */
+function plain(n: number): string {
+  return String(Number(n.toPrecision(12)));
+}
+
+/**
+ * Refuse a number outside the option's declared range or off its step. The
+ * step counts from `min`, or from 0 when there is no `min`, as an HTML number
+ * input counts it, so the lobby's spinner and this check agree on what is
+ * reachable. A fractional step is compared with a tolerance, since 0.3 is not
+ * an exact multiple of 0.1 in binary.
+ */
+function checkNumberBounds(name: string, def: NumberOption, n: number): void {
+  const { min, max, step } = def;
+  if ((min !== undefined && n < min) || (max !== undefined && n > max)) {
+    const range =
+      min !== undefined && max !== undefined
+        ? `between ${plain(min)} and ${plain(max)}`
+        : min !== undefined
+          ? `at least ${plain(min)}`
+          : `at most ${plain(max as number)}`;
+    throw new GameOptionSelectionError(`Game option "${name}" must be ${range}, got ${plain(n)}.`);
+  }
+  if (step !== undefined) {
+    const base = min ?? 0;
+    const steps = (n - base) / step;
+    if (Math.abs(steps - Math.round(steps)) > 1e-9 * Math.max(1, Math.abs(steps))) {
+      const examples = [0, 1, 2].map((i) => plain(base + i * step)).join(', ');
+      throw new GameOptionSelectionError(
+        `Game option "${name}" must be in steps of ${plain(step)} from ${plain(base)} (${examples}, ...), got ${plain(n)}.`,
       );
     }
   }
@@ -78,6 +142,7 @@ function coerce(name: string, def: GameOptionDefinition, raw: unknown): unknown 
       if (typeof n !== 'number' || !Number.isFinite(n)) {
         throw new GameOptionSelectionError(`Game option "${name}" must be a number, got ${JSON.stringify(raw)}.`);
       }
+      checkNumberBounds(name, def, n);
       return n;
     }
     case 'boolean': {
@@ -110,8 +175,10 @@ function coerce(name: string, def: GameOptionDefinition, raw: unknown): unknown 
  * Returns a new object holding only the keys of `raw` that are declared, each
  * coerced to its declared type; a key whose value is `undefined` is no choice
  * and is left out. Throws {@link GameOptionSelectionError} for a host-owned
- * key, an undeclared key or a value the declaration does not admit, and a
- * plain error if the declarations themselves name a host-owned field.
+ * key, an undeclared key or a value the declaration does not admit (wrong
+ * type, not a declared choice, a number outside `min`/`max` or off `step`),
+ * and a plain error if the declarations themselves are unusable (see
+ * {@link assertDeclarableGameOptions}).
  */
 export function selectGameOptions(
   declared: Record<string, GameOptionDefinition> | undefined,
