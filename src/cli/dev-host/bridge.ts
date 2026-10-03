@@ -293,6 +293,7 @@ export function shapeResult(
         choices: result.choices,
         validElements: result.validElements,
         multiSelect: result.multiSelect,
+        orderedList: result.orderedList,
         warnings: result.warnings,
       };
     case 'selection_step':

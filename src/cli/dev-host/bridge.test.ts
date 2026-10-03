@@ -124,8 +124,24 @@ describe('dev host bridge', () => {
         choices: ['red', 'blue'],
         validElements: undefined,
         multiSelect: undefined,
+        orderedList: undefined,
         warnings: undefined,
       });
+    });
+
+    it('forwards the resolved ordered-list bounds for resolve_choices (#480)', () => {
+      const r = shapeResult('resolve_choices', {
+        success: true,
+        choices: ['university', 'shipyard'],
+        orderedList: { min: 1, max: 3 },
+        snapshot: null,
+        pendingState: null,
+        flowState: null,
+        playerViews: [],
+        isComplete: false,
+        winners: [],
+      });
+      expect(r.orderedList).toEqual({ min: 1, max: 3 });
     });
 
     // ── warnings threading (ERR-01 T-126-09) ────────────────────────────────
