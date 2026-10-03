@@ -65,7 +65,7 @@ here.
        tests are green. It exits non-zero on any finding, and a non-zero exit is a failure of this
        step like any other: route the chunk back per "Failures Loop Back to `build`". There is no
        flag that skips part of it, and its findings are never argued away in prose. It enforces
-       five rules, each of which a real build run broke while its suite was green:
+       six rules, each of which a real build run broke while its suite was green:
 
        - **Every Spec Manifest claim names a test that exists.** Each `## Spec Manifest` row names a
          test file on disk with `RED Observed: yes`, and for every claim the row lists, a test in
@@ -96,13 +96,20 @@ here.
          that survives every mutant asserts nothing the chunk's code controls, and a claim none of
          whose tests fail under any mutant has no real test; both are findings. A test that reads
          source as text (the a11y floor's scans below) can never fail under a mutant, so it is a
-         guard: it lives in `tests/guards/`, which the Spec Manifest never lists, and a manifest row
-         naming a file there is itself a finding. Mutants are served
+         guard (next rule). Mutants are served
          to vitest in memory, never written over the source. This runs one vitest process per
          mutant, so it takes minutes on a large chunk; let it finish.
+       - **A guard holds scans only.** A file under `tests/guards/` reads source as text (the a11y
+         floor's scans below) and is never mutation-tested, so the Spec Manifest never lists it and a
+         row naming one is a finding. A guard the chunk wrote or changed that runs the game's code is
+         a finding too: one that imports a `.vue` component (a `?raw` import is text and is fine),
+         `@vue/test-utils` or `boardsmith/testing`, uses `renderAsSeat`, or dispatches an action. That
+         test belongs in the chunk's own test file, where the mutation check shows it can fail.
 
        A finding here goes back to `build` (or to `spec`, when the fix is a test that pins the claim
-       properly), never to an edit of the Spec Manifest that makes the row claim less.
+       properly), never to an edit of the Spec Manifest that makes the row claim less. The one
+       manifest edit a finding asks for is removing a row that names a guard: that row never
+       belonged there, and the guard's scans still run in the full suite.
 
 3. **Worked-example tests (TEST-01)** — this chunk's cited worked examples become executable
    tests as part of this same build, generated and immediately run, never left as a one-time
@@ -421,7 +428,13 @@ scans only; a test that mounts a component or cites a claim belongs in the chunk
    the source for animation: with `prefers-reduced-motion: reduce` matched, one action puts the
    final state on screen at once and nothing on screen changes afterwards. A chunk that adds no
    animation still writes that test for the controls it adds; it is what fails when a later change
-   animates them.
+   animates them. To write it: jsdom has no `window.matchMedia`, so stub it with
+   `vi.stubGlobal('matchMedia', ...)` returning `{ matches: true, media, addEventListener() {},
+   removeEventListener() {} }` for `(prefers-reduced-motion: reduce)` before the test file's first
+   mount (the engine reads the preference once, on first use). Use `vi.useFakeTimers()`, perform
+   the action, assert the final state, then `vi.advanceTimersByTime` well past the longest
+   transition the chunk could run (and `await nextTick()`) and assert the rendered output is
+   unchanged.
 
 ## Failures Loop Back to `build`
 

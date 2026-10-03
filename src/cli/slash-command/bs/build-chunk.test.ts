@@ -819,6 +819,31 @@ describe('UIQ-03 — a11y floor', () => {
     const assetGate = test.split('**Asset-reachability gate')[1].split('**A11y floor')[0];
     expect(assetGate).toContain('tests/guards/a11y-floor.test.ts');
   });
+
+  // Every place that says "a row per test file" must carve out the guard, or following it
+  // produces the guard-in-manifest finding (#443).
+  it('says a guard is never a Spec Manifest row everywhere the manifest\'s rows are described (#443)', () => {
+    const spec = read('build/spec.md').replace(/\s+/g, ' ');
+    expect(spec).toMatch(/Add a row per test file[^]*tests\/guards\/[^]*is never a row/);
+    const template = read('templates/CHUNK.template.md').replace(/\s+/g, ' ');
+    expect(template).toMatch(/One row per test file this chunk introduces, except a guard under tests\/guards\//);
+  });
+
+  it('lists the guard rule among test-step-check\'s rules and allows removing a guard\'s row (#443)', () => {
+    const test = read('build/test.md').replace(/\s+/g, ' ');
+    const rules = test.split('It enforces')[1].split('3. **Worked-example tests')[0];
+    expect(rules.trimStart()).toMatch(/^six rules/);
+    expect(rules.match(/- \*\*/g)).toHaveLength(6);
+    expect(rules).toMatch(/A guard holds scans only[^]*@vue\/test-utils[^]*boardsmith\/testing[^]*renderAsSeat[^]*dispatches an action/);
+    expect(rules).toMatch(/The one manifest edit a finding asks for is removing a row that names a guard/);
+  });
+
+  it('says how to write the reduced-motion test in jsdom (#443)', () => {
+    const test = read('build/test.md').replace(/\s+/g, ' ');
+    const item5 = test.split('5. **Focus management')[1].split('## Failures Loop Back')[0];
+    expect(item5).toMatch(/jsdom has no `window\.matchMedia`[^]*vi\.stubGlobal\('matchMedia'/);
+    expect(item5).toMatch(/vi\.useFakeTimers\(\)[^]*vi\.advanceTimersByTime[^]*unchanged/);
+  });
 });
 
 describe('BUILD-09 — playtest', () => {

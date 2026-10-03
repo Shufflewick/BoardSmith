@@ -169,7 +169,9 @@ Fill CHUNK.md's existing `## Spec Manifest` table row-by-row as each test file i
 never invent a new section, never restructure the `| Test File | Claims Covered | RED Observed |`
 header. Add a row per test file this chunk introduces, and flip `RED Observed` from `pending` to
 `yes` the moment that file's tests have actually been run and seen failing — not in a batch at the
-end, and never ahead of the run.
+end, and never ahead of the run. The one exception is a guard: a file under `tests/guards/` holds
+scans that read source as text, never claims, and is never a row (`build/test.md` "The A11y
+Floor"); `boardsmith test-step-check` reports a row that names one.
 
 A session that crashes mid-spec resumes by reading this table: a row with `RED Observed: pending`
 is unfinished work, a row with `yes` is done and must not be rewritten. This is the file-by-file
