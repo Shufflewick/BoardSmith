@@ -23,6 +23,8 @@ const TELEPORTED_TEXT_SURFACES = [
   { file: path.join(HERE, 'ActionHelpPopover.vue'), root: '.action-help-popover' },
   { file: path.join(HERE, 'DisabledReasonTooltip.vue'), root: '.bs-disabled-tip' },
   { file: path.join(HERE, '..', 'Toast.vue'), root: '.toast-container' },
+  // Its card faces print a rank and suit (#451's cause, found after the issue).
+  { file: path.join(HERE, 'FlyingCardsOverlay.vue'), root: '.flying-cards-overlay' },
 ];
 
 describe('teleported shell text uses the shell font (#451)', () => {
