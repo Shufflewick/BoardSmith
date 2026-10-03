@@ -74,6 +74,13 @@ describe('animateTo() delivers only to its audience', () => {
     const game = makeGame();
     expect(() => game.animateTo(-1, 'combat-exchange', {})).toThrow(/invalid seat/i);
   });
+
+  it('refuses seat 0, which is no player: spectators see only public events (#489)', () => {
+    const game = makeGame();
+    expect(() => game.animateTo(0, 'combat-exchange', {})).toThrow(/seat 0 is no player.*animate\(\)/i);
+    expect(() => game.animateTo([1, 0], 'combat-exchange', {})).toThrow(/seat 0 is no player/i);
+    expect(game.pendingAnimationEvents).toEqual([]);
+  });
 });
 
 describe('animate() is unchanged — public by default', () => {

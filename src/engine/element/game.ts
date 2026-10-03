@@ -4308,7 +4308,8 @@ export class Game<
    * with its audience intact.
    *
    * @param audience - Seat(s) allowed to see this event: a Player, a seat
-   *   number, or an array of either.
+   *   number (from 1; spectators see only `animate()`'s public events), or an
+   *   array of either.
    * @param type - Event type identifier, same as `animate()`
    * @param data - Event-specific data payload (must be JSON-serializable)
    *
@@ -4324,6 +4325,14 @@ export class Game<
     data: Record<string, unknown>,
   ): void {
     const seats = this.resolveAudience(audience, `animateTo("${type}")`);
+    // Seat 0 is where the spectator's numbers are kept (#489), so an event
+    // addressed to it would move them for an event no spectator is sent.
+    if (seats.includes(0)) {
+      throw new Error(
+        `animateTo("${type}") was given seat 0, but seat 0 is no player: seats start at 1. ` +
+          `Spectators see only public events, so use animate() for an event they should see.`,
+      );
+    }
     this.execute({ type: 'ANIMATE', eventType: type, data, to: seats });
   }
 
