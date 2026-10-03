@@ -239,6 +239,31 @@ export interface SnapshotSessionAdapters {
   hostWork?: HostWorkGate;
 }
 
+/**
+ * Every field {@link SnapshotSessionHost}'s merge writes into a view from the
+ * host's own state (its roster, teaching tools, demo, pending selections),
+ * rather than from the game. `flowDebugInfo` is not one: it describes the game
+ * the view was built from.
+ */
+const HOST_STATE_FIELDS = [
+  'hint',
+  'heatmap',
+  'narration',
+  'pendingAction',
+  'isDemoRunning',
+  'demoControls',
+  'hasBotPlayers',
+  'teachingDisabled',
+] as const;
+
+/** `state` without {@link HOST_STATE_FIELDS}; `state` itself when it carries none. */
+function withoutHostState(state: Record<string, unknown>): Record<string, unknown> {
+  if (!HOST_STATE_FIELDS.some((field) => field in state)) return state;
+  const stripped = { ...state };
+  for (const field of HOST_STATE_FIELDS) delete stripped[field];
+  return stripped;
+}
+
 export class SnapshotSessionHost {
   // `snapshot` and `flowState` are ONE value in two halves, and they are exposed
   // read-only so a caller cannot restore one without the other. A host holding a
@@ -449,9 +474,13 @@ export class SnapshotSessionHost {
    * Merge transient teaching state — plus the flow-debug/pending-action
    * introspection fields (FLOW-01/03) — into player views post-buildPlayerState.
    *
+   * Every field the host writes ({@link HOST_STATE_FIELDS}) is stated afresh,
+   * never only added, so a view that already carries them (one handed back to
+   * restoreFrom) cannot keep a value the host no longer holds.
+   *
    * Short-circuits when there is no transient state, no bot seats, no flow-debug
-   * snapshot yet, and no pending action (identity return — the common case
-   * before the very first executeOp/start). This mirrors the
+   * snapshot yet, and no pending action (identity return for a view built by the
+   * game — the common case before the very first executeOp/start). This mirrors the
    * GameSession.broadcast() injection pattern (game-session.ts:1925-1934).
    *
    * Per-seat: hint, heatmap, pendingAction (keyed strictly by seat = i+1; no
@@ -476,12 +505,16 @@ export class SnapshotSessionHost {
       || (this.adapters.teachingDisabled ?? false)
       || this.lastFlowDebugInfo !== null
       || this.pendingStates.size > 0;
-    if (!hasTransient) return view;
     // Guard: stub/empty views (e.g. from bot pump tests) pass through unchanged.
     if (view == null || typeof view !== 'object' || !('state' in view)) return view;
     const withState = view as { state: Record<string, unknown> };
+    // A view handed to restoreFrom was merged by the host that recorded it, so
+    // what it says of the host is as old as that host: drop it and say it again.
+    const recorded = withState.state;
+    const fromGame = withoutHostState(recorded);
+    if (!hasTransient) return fromGame === recorded ? view : { ...withState, state: fromGame };
+    const state = { ...fromGame };
     const transient = this.transientTeachingState.get(seat);
-    const state = { ...withState.state };
     if (transient?.hint) state.hint = transient.hint;
     if (transient?.heatmap) state.heatmap = transient.heatmap;
     if (this.narrationText) state.narration = { text: this.narrationText };
@@ -614,7 +647,9 @@ export class SnapshotSessionHost {
    * what the host last handed `record` -- so the first change after the
    * restore pushes only the seats it changes (#487). A host that wakes from
    * hibernation with pages still open must pass them, or every seat is pushed
-   * its unchanged view once, telling it something moved.
+   * its unchanged view once, telling it something moved. They are taken as
+   * given: a roster change made while the host slept differs from them, so the
+   * next publish (call {@link rosterChanged} for one) pushes it.
    */
   restoreFrom(state: SnapshotHostState & { playerViews?: unknown[]; spectatorView?: unknown }): void {
     if (state.flowState === null || state.flowState === undefined) {
@@ -630,9 +665,11 @@ export class SnapshotSessionHost {
     this.pendingStates = pendingStates;
     if (state.playerViews) this.lastPlayerViews = state.playerViews;
     if (state.spectatorView !== undefined) this.lastSpectatorView = state.spectatorView;
-    const views = this.mergedViews();
-    views.players.forEach((view, i) => this.pushGate.recordSent(i + 1, { view }));
-    if (views.spectator !== undefined) this.pushGate.recordSent(0, { view: views.spectator });
+    // The gate holds the views exactly as given: they are what the pages show.
+    // Merging this host's roster and pending selections into them first would
+    // record a change made while the host slept as already sent.
+    state.playerViews?.forEach((view, i) => this.pushGate.recordSent(i + 1, { view }));
+    if (state.spectatorView !== undefined) this.pushGate.recordSent(0, { view: state.spectatorView });
     this.publishedHasBots = this.hasBotPlayers();
   }
 

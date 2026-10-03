@@ -155,6 +155,35 @@ describe('SnapshotSessionHost pushes only the seats whose view changed (#487)', 
     expect(restored.pushes.map((push) => push.map((p) => p.seat))).toEqual([[1]]);
   });
 
+  it('a host restored after a seat passed to the bot while it slept pushes every page the change', async () => {
+    const { table } = await secretTable();
+    // The pages were last pushed a table with no bot; the roster now has one.
+    const restored = createHeadlessSession(secretDeploymentDefinition, { playerCount: 2, seed: 'bs487' }, [{ seat: 2 }]);
+    restored.host.restoreFrom({
+      ...table.host.durableState(),
+      playerViews: table.broadcasts.at(-1) as unknown[],
+      spectatorView: table.spectatorViews.at(-1),
+    });
+    restored.host.rosterChanged();
+    expect(restored.pushes.map((push) => push.map((p) => p.seat))).toEqual([[0, 1, 2]]);
+  });
+
+  it('a host restored after a person took the bot\'s seat while it slept pushes every page the change', async () => {
+    const { table } = await secretTable();
+    table.makeSeatBot(2);
+    expect((table.broadcasts.at(-1) as Array<{ state: { hasBotPlayers?: boolean } }>)[0]!.state.hasBotPlayers).toBe(true);
+    // The pages were last pushed a table with a bot; the roster now has none.
+    const restored = createHeadlessSession(secretDeploymentDefinition, { playerCount: 2, seed: 'bs487' });
+    restored.host.restoreFrom({
+      ...table.host.durableState(),
+      playerViews: table.broadcasts.at(-1) as unknown[],
+      spectatorView: table.spectatorViews.at(-1),
+    });
+    restored.host.rosterChanged();
+    expect(restored.pushes.map((push) => push.map((p) => p.seat))).toEqual([[0, 1, 2]]);
+    expect((restored.broadcasts.at(-1) as Array<{ state: { hasBotPlayers?: boolean } }>)[0]!.state.hasBotPlayers).toBeUndefined();
+  });
+
   it('a seat passing to the bot is pushed to every page when it happens, not with the next move', async () => {
     const { table, pushedSince } = await secretTable();
     const from = table.pushes.length;

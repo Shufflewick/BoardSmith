@@ -257,7 +257,10 @@ compared. When a seat passes between a person and the bot, call
 without the call that change would reach every page with the next move. A host
 that wakes from hibernation passes the views it last recorded to
 `restoreFrom({ ..., playerViews, spectatorView })`, so the first change after
-waking pushes only the seats it changes.
+waking pushes only the seats it changes. The host takes those views as what
+the pages show: if a seat passed between a person and the bot while it slept,
+call `host.rosterChanged()` after restoring, and every page is pushed the
+change.
 
 ### Pushing state from your own host
 
