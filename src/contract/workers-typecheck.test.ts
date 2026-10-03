@@ -11,7 +11,8 @@
  * That shipped in r118 and stopped the platform adopting it.
  *
  * So this gate compiles the platform-reachable entry points -- `boardsmith`,
- * `boardsmith/session` and `boardsmith/session-host` -- from a consumer's
+ * `boardsmith/session`, `boardsmith/session-host`, `boardsmith/world`,
+ * `boardsmith/persistence` and `boardsmith/runtime` -- from a consumer's
  * install with no DOM lib, no Node types, and only the Workers-shaped
  * declarations below. The declarations copy the SHAPE of Cloudflare's
  * (`declare const` where it says `const`), trimmed to the members the engine
@@ -25,11 +26,18 @@ import { join } from 'node:path';
 import { consumerInstall } from './consumer-install.test-helper.js';
 import { expectCleanCompile } from './vue-tsc-run.test-helper.js';
 
-/** The entry points the platform's executor and games worker import. */
+/**
+ * The entry points the platform runs on Workers. The list comes from
+ * ShufflewickPub's `boardsmith*` imports in `games/src` and `executor/src`:
+ * when the platform starts importing another subpath, add it here.
+ */
 const PLATFORM_ENTRY_POINTS = [
   'src/engine/index.ts',
   'src/session/index.ts',
   'src/session/snapshot-session-host.ts',
+  'src/world/index.ts',
+  'src/persistence/index.ts',
+  'src/runtime/index.ts',
 ] as const;
 
 /** Cloudflare's declarations of the globals the engine reads, in their shape. */
@@ -94,7 +102,7 @@ describe('the platform-reachable engine type-checks under Workers globals (#488)
     expectCleanCompile(
       root,
       'tsconfig.workers.json',
-      'boardsmith, boardsmith/session and boardsmith/session-host against Workers-style globals',
+      'the platform-reachable entry points against Workers-style globals',
       'Read a runtime global by its bare name (`typeof crypto === "undefined"`), not as a property of ' +
         'globalThis: Workers declares several as `const` or `function`, which globalThis does not ' +
         'carry. A "Cannot find name" means the engine uses a global this gate has not declared yet; ' +

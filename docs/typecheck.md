@@ -84,8 +84,10 @@ in every game.
   Node libs, where `crypto` is a `var` and so `globalThis.crypto` compiles.
   Cloudflare's types declare `crypto` and `console` as `const`, which
   `typeof globalThis` does not carry. `src/contract/workers-typecheck.test.ts`
-  compiles `boardsmith`, `boardsmith/session` and `boardsmith/session-host`
-  with only ES2022 and Workers-shaped declarations (#488). Read a runtime
+  compiles every entry point the platform imports (`boardsmith`,
+  `boardsmith/session`, `boardsmith/session-host`, `boardsmith/world`,
+  `boardsmith/persistence` and `boardsmith/runtime`) with only ES2022 and
+  Workers-shaped declarations (#488). Read a runtime
   global by its bare name, never as a property of `globalThis`.
 - **Anything at runtime.** Types say nothing about a shape crossing a boundary
   the types do not describe.

@@ -1023,7 +1023,7 @@
       "surfaceHash": "74bd1caffd7ea896",
       "payloadHash": "3a98bc2f204eba00",
       "formatHash": "0058593e7cc80205",
-      "summary": "No behaviour change: mintElementIdKey reads crypto by its bare name instead of globalThis.crypto, so boardsmith, boardsmith/session and boardsmith/session-host typecheck under Cloudflare Workers types (crypto is declared const there). r119 failed the platform's games/ typecheck; adopt this build instead (#488)"
+      "summary": "No behaviour change: mintElementIdKey reads crypto by its bare name instead of globalThis.crypto, so boardsmith, boardsmith/session, boardsmith/session-host, boardsmith/world, boardsmith/persistence and boardsmith/runtime typecheck under Cloudflare Workers types (crypto is declared const there). r119 failed the platform's games/ typecheck; adopt this build instead (#488)"
     }
   ]
 }
