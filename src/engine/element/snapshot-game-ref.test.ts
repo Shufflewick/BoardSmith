@@ -21,7 +21,7 @@ describe('snapshot restore preserves element.game', () => {
     const game = buildGame();
     const json = game.toJSON();
 
-    const restored = Game.restoreGame(json, BoardGame, game._ctx.classRegistry) as BoardGame;
+    const restored = Game.restoreGame(json, BoardGame, game._ctx.classRegistry, game.getConstructorOptions().elementIdKey as string) as BoardGame;
     const checker = restored.first(Board)!.first(Square)!.first(Checker)!;
 
     // Before the fix this was `undefined` (fromJSON never set it), which made
@@ -33,7 +33,7 @@ describe('snapshot restore preserves element.game', () => {
     const game = buildGame();
     const json = game.toJSON();
 
-    const restored = Game.restoreGame(json, BoardGame, game._ctx.classRegistry) as BoardGame;
+    const restored = Game.restoreGame(json, BoardGame, game._ctx.classRegistry, game.getConstructorOptions().elementIdKey as string) as BoardGame;
     const checker = restored.first(Board)!.first(Square)!.first(Checker)!;
 
     expect(() => checker.remove()).not.toThrow();

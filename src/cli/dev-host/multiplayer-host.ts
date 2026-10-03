@@ -28,7 +28,8 @@ import { createNodeWorldClock, type WorldHostClock } from './node-world-clock.js
 import { runsAtOnce, type HostWorkGate } from '../../session/host-work-gate.js';
 import { heldClock, type RulesReloadNotice } from './rules-reload-queue.js';
 import { dueSeats, type SeatActivityState, type GameStateSnapshot } from '../../engine/index.js';
-import { validateGameOptionSelection, type DevOptionDef } from './config-types.js';
+import { selectGameOptions, type GameOptionSelection } from '../../session/game-option-selection.js';
+import type { GameOptionDefinition } from '../../session/types.js';
 import {
   PERSIST_KEY,
   PersistenceStore,
@@ -184,20 +185,26 @@ export interface MultiplayerHostOptions {
   designatedBotSeats?: number[];
   /** Seat colors offered in the lobby (1-indexed by position). */
   colorPalette?: Array<{ value: string; label: string }>;
-  /** Game-level options merged into the `start` op (the author's gameOptions). */
-  baseGameOptions?: Record<string, unknown>;
   /**
-   * The declared game-level option definitions (D13/DEVHOST-01) — used to
-   * validate an incoming `configure` selection (T-161-02): an undeclared key,
-   * or a `select` value not among its declared choices, is rejected and never
-   * reaches the start op.
+   * The game options the first `start` op carries (the declared defaults,
+   * overlaid by `--preset` and `--game-option`), already admitted by
+   * `selectGameOptions`: only a selection is accepted here, so the start op
+   * can never carry `seed`, `elementIdKey` or another host-owned field from
+   * the author's flags (#447).
    */
-  declaredGameOptions?: DevOptionDef[];
+  baseGameOptions?: GameOptionSelection;
+  /**
+   * The declared game-level option definitions (D13/DEVHOST-01), which an
+   * incoming `configure` selection is admitted against: an undeclared key, a
+   * host-owned key or a `select` value not among its declared choices is
+   * rejected and never reaches the start op.
+   */
+  declaredGameOptions?: Record<string, GameOptionDefinition>;
   /**
    * Declared presets (D13/DEVHOST-01) — a `configure` message's `preset` name
-   * is looked up here; applying a preset sets every option in its bundle (and
-   * its player count, if declared, via the reserved `playerCount` key in the
-   * applied selection — see `applyConfigure`).
+   * is looked up here; applying a preset sets every option in its bundle and,
+   * if it declares `players`, resizes the seat map to that count (see
+   * `handleConfigure`).
    */
   presets?: GamePreset[];
   /**
@@ -461,18 +468,15 @@ export class MultiplayerHost {
   private requestOrigin = new Map<string, string>();
   /**
    * D13/DEVHOST-01: the currently applied gameOption selection, seeded from
-   * `opts.baseGameOptions` (the `.default`-only computation) and overlaid by
-   * each accepted `configure` message. `startGame` spreads THIS (not
-   * `opts.baseGameOptions` directly) into the start op, so a selection
-   * persists across a subsequent restart instead of reverting to defaults.
-   * May carry a reserved `playerCount` key (set when a preset declares
-   * `players`) which overrides the start op's `playerCount` field — see
-   * `startGameOptions` below. `handleConfigure` calls `resizeSeats` (CR-01)
-   * BEFORE merging this key in, so the seat map is already consistent with
-   * the new count by the time it's applied — this field itself never
-   * triggers seat reconciliation, `resizeSeats` does.
+   * `opts.baseGameOptions` and replaced by each accepted `configure` message.
+   * `startGame` spreads THIS (not `opts.baseGameOptions` directly) into the
+   * start op, so a selection persists across a subsequent restart instead of
+   * reverting to defaults. It is only ever a `GameOptionSelection`, so it
+   * holds declared options and nothing the host owns; a preset's player
+   * count is applied to the seat map by `resizeSeats` (CR-01) and read by
+   * `startGame` from `opts.playerCount`, never carried in here.
    */
-  private appliedGameOptions: Record<string, unknown>;
+  private appliedGameOptions: GameOptionSelection;
   /**
    * The seats this session ACTS FOR, in the shape the store's seal is checked
    * against. Recomputed by `startGame` and read by the commit that ends the
@@ -502,7 +506,7 @@ export class MultiplayerHost {
     for (let seat = 1; seat <= opts.playerCount; seat++) {
       this.seats.set(seat, { seat, clientId: null, name: `Player ${seat}`, connected: false });
     }
-    this.appliedGameOptions = { ...opts.baseGameOptions };
+    this.appliedGameOptions = opts.baseGameOptions ?? selectGameOptions(opts.declaredGameOptions, {});
   }
 
   // ── Connection lifecycle ──────────────────────────────────────────────────
@@ -699,6 +703,7 @@ export class MultiplayerHost {
     msg: Extract<ClientInbound, { type: 'configure' }>,
   ): Promise<void> {
     let bundle: Record<string, unknown> = {};
+    let requestedPlayerCount: unknown;
     if (msg.preset !== undefined) {
       const preset = this.opts.presets?.find((p) => p.name === msg.preset);
       if (!preset) {
@@ -707,30 +712,40 @@ export class MultiplayerHost {
         return;
       }
       bundle = { ...preset.options };
-      if (preset.players?.length) bundle.playerCount = preset.players.length;
+      if (preset.players?.length) requestedPlayerCount = preset.players.length;
     }
-    if (msg.gameOptions) bundle = { ...bundle, ...msg.gameOptions };
+    if (msg.gameOptions) {
+      // The player count may ride beside the options, as a preset declares
+      // it. It is the host's field, applied to the seat map below, and never
+      // part of the selection: `selectGameOptions` would refuse it by name.
+      const { playerCount, ...options } = msg.gameOptions;
+      if (playerCount !== undefined) requestedPlayerCount = playerCount;
+      bundle = { ...bundle, ...options };
+    }
 
+    // Admitted as one selection with what is already applied, so the result
+    // holds declared options only, each of its declared type, and never a
+    // host-owned field such as `seed` or `elementIdKey` (#447).
+    let selection: GameOptionSelection;
     try {
-      validateGameOptionSelection(this.opts.declaredGameOptions ?? [], bundle);
+      selection = selectGameOptions(this.opts.declaredGameOptions, { ...this.appliedGameOptions, ...bundle });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Invalid game option selection.';
       this.send(clientId, { type: 'error', message });
       return;
     }
 
-    // CR-01: a preset's declared player count (the reserved `playerCount` key
-    // set above when `preset.players.length` is present) must not diverge
-    // from the seat map / per-seat arrays `startGame` derives from
-    // `this.opts.playerCount`. Resize the seat map to match BEFORE applying
-    // and (re)starting, so `playerCount` and every playerCount-sized array
+    // CR-01: a preset's declared player count must not diverge from the seat
+    // map / per-seat arrays `startGame` derives from `this.opts.playerCount`.
+    // Resize the seat map to match BEFORE applying and (re)starting, so
+    // `playerCount` and every playerCount-sized array
     // (`playerOptions`/`playerIsBot`/`playerConfigs`) always agree.
-    if (typeof bundle.playerCount === 'number') {
-      const newPlayerCount = bundle.playerCount;
-      if (!Number.isInteger(newPlayerCount) || newPlayerCount < 1) {
+    if (requestedPlayerCount !== undefined) {
+      const newPlayerCount = requestedPlayerCount;
+      if (typeof newPlayerCount !== 'number' || !Number.isInteger(newPlayerCount) || newPlayerCount < 1) {
         this.send(clientId, {
           type: 'error',
-          message: `Preset/configure playerCount must be a positive integer, got ${JSON.stringify(bundle.playerCount)}.`,
+          message: `Preset/configure playerCount must be a positive integer, got ${JSON.stringify(requestedPlayerCount)}.`,
         });
         return;
       }
@@ -748,7 +763,7 @@ export class MultiplayerHost {
       this.resizeSeats(newPlayerCount);
     }
 
-    this.appliedGameOptions = { ...this.appliedGameOptions, ...bundle };
+    this.appliedGameOptions = selection;
     await this.startGame();
   }
 
@@ -1183,20 +1198,18 @@ export class MultiplayerHost {
     // a fresh seed, each seat's chosen/default color, and which seats are bot.
     const perSeatOptions = this.buildPerSeatOptions();
     const startGameOptions = {
-      playerCount,
-      seed: seed ?? (this.opts.makeSeed ?? defaultSeed)(),
       // D13/DEVHOST-01: the CURRENTLY APPLIED selection (defaults, overlaid by
       // any accepted `configure` preset/gameOptions), not the frozen
-      // opts.baseGameOptions — so a selection persists across a restart. A
-      // reserved `playerCount` key here (set when a preset declares
-      // `players`) intentionally overrides the top-level `playerCount` field
-      // above via spread order; the TOP-LEVEL `playerCount` here is already
-      // the resized value (CR-01: `handleConfigure` calls `resizeSeats` —
-      // which mutates `this.opts.playerCount` — BEFORE `startGame` reads it),
-      // so both sides of the spread agree and `playerOptions`/`playerIsBot`/
-      // `playerConfigs` below (all sized off this same `playerCount`) never
-      // diverge from the reported count.
+      // opts.baseGameOptions, so a selection persists across a restart. It
+      // goes first: it is a `GameOptionSelection`, so it holds no host-owned
+      // field, and the host's own fields below win over it regardless (#447).
       ...this.appliedGameOptions,
+      // `playerCount` is already the resized value (CR-01: `handleConfigure`
+      // calls `resizeSeats`, which mutates `this.opts.playerCount`, BEFORE
+      // `startGame` reads it), so `playerOptions`/`playerIsBot`/`playerConfigs`
+      // below (all sized off this same `playerCount`) never diverge from it.
+      playerCount,
+      seed: seed ?? (this.opts.makeSeed ?? defaultSeed)(),
       // DEVHOST-04 / F-04: top-level `colors`/`colorLabels` are what the engine
       // reads to set `player.color`. Placed after appliedGameOptions so lobby
       // color selections win, mirroring the production per-seat override.

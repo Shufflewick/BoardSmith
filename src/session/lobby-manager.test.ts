@@ -294,6 +294,7 @@ describe('Ready-state preservation across unrelated lobby operations', () => {
         { name: 'Bob' },
         { name: 'Charlie' },
       ],
+      gameOptionsDefinitions: { someOption: { type: 'boolean', label: 'Some option' } },
       minPlayers: 2,
       maxPlayers: 4,
     });
@@ -333,7 +334,7 @@ describe('Ready-state preservation across unrelated lobby operations', () => {
     await session.setReady('player-2', true);
 
     // Host changes a game option
-    const result = await session.updateGameOptions('creator-123', { someOption: 'newValue' });
+    const result = await session.updateGameOptions('creator-123', { someOption: true });
     expect(result.success).toBe(true);
 
     // Player 2 should still be ready

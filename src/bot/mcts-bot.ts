@@ -1388,13 +1388,19 @@ export class MCTSBot<G extends Game = Game> {
    * here is correct, only the delta matters.
    */
   private restoreGame(snapshot: GameStateSnapshot): Game {
-    // Use full gameOptions from snapshot if available, falling back to basic options
-    // This ensures custom options like playerConfigs are preserved in MCTS clones
-    const gameOptions = snapshot.gameOptions ?? {
-      playerCount: snapshot.state.settings.playerCount as number,
-      playerNames: snapshot.state.settings.playerNames as string[],
-      seed: snapshot.seed,
-    };
+    // The game's own constructor options, custom ones (playerConfigs), its
+    // seed and its element id key included. Every snapshot this bot restores
+    // is one it captured itself, and `createSnapshot` always records them.
+    // They are required: element ids are minted under the game's own key
+    // (#447), which only these options carry, and `snapshot.seed` is the
+    // BOT's search seed, not the game's.
+    const gameOptions = snapshot.gameOptions;
+    if (gameOptions === undefined) {
+      throw new Error(
+        'MCTS bot cannot restore a snapshot without gameOptions: the search game must be built ' +
+          "with the game's own options and seed. Capture it with createSnapshot, which records them.",
+      );
+    }
 
     const game = constructGame(this.GameClass, gameOptions as any);
 

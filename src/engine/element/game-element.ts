@@ -261,16 +261,6 @@ const RESERVED_KEY_REASONS: Record<string, string> = {
 };
 
 /**
- * Attributes the ENGINE owns on every element, whatever a game's
- * `visibleAttributes` says about them (#19).
- *
- * These are structure, not game data: identity, ownership and layout, read by
- * the engine itself (`getEffectiveOwner`, seat lookup, turn order, the
- * renderers). A redacted restore leaves them alone — withholding them would
- * not withhold a secret, it would take the tree apart. A game's own secrets
- * are never in this list.
- */
-/**
  * The attribute a per-seat view puts on an element the seat cannot see.
  *
  * `toJSONForPlayer` replaces such an element with a placeholder carrying this
@@ -353,12 +343,48 @@ function assertSeatAttributeSerializable(value: unknown, path: string, describe:
   }
 }
 
+/**
+ * Attributes the ENGINE owns on every element, which a redacted restore never
+ * takes away (#19).
+ *
+ * These are structure, not game data: identity, ownership and layout, read by
+ * the engine itself (`getEffectiveOwner`, seat lookup, turn order, the
+ * renderers). Turning one into a throwing accessor would not withhold a
+ * secret, it would take the tree apart. A game's own secrets are never in
+ * this list.
+ *
+ * This is NOT the list a game's whitelist cannot touch: on an ordinary element
+ * `visibleAttributes` may still keep the owner, position or artwork from other
+ * seats. Only a player's identity fields are sent regardless
+ * ({@link PLAYER_IDENTITY_ATTRIBUTES}).
+ */
 const ENGINE_OWNED_ATTRIBUTES: ReadonlySet<string> = new Set([
   // GameElement: identity, ownership, grid position, artwork.
   'name', 'player', 'row', 'column', '$image', '$images',
   // Player: seat identity, liveness (TurnOrder reads it) and seat colour.
   'seat', 'status', '$type', 'color', 'colorLabel',
 ]);
+
+/**
+ * A PLAYER's identity fields: what every seat needs to put an opponent on the
+ * table -- name, seat, colour and whether they are still playing (#448).
+ *
+ * A player's `visibleAttributes` covers the game's own fields only. These are
+ * sent to every seat whatever the list says, and naming one in it is refused,
+ * so a game withholding one secret field no longer has to re-list them, and a
+ * field the engine adds here reaches every seat in every game.
+ * `visible-attributes-engine-fields.test.ts` holds this equal to what a bare
+ * `Player` sends, so a new engine field on `Player` is classified here, by a
+ * decision, before any game can withhold it by accident.
+ */
+const PLAYER_IDENTITY_ATTRIBUTES: ReadonlySet<string> = new Set([
+  'name', '$type', 'seat', 'status', 'color', 'colorLabel',
+]);
+
+/** Is `key` one of `element`'s player identity fields, which every seat is sent? (#448) */
+export function isPlayerIdentityAttribute(element: GameElement, key: string): boolean {
+  return isPlayerElement(element) && PLAYER_IDENTITY_ATTRIBUTES.has(key);
+}
 
 export class GameElement<G extends Game = any, P extends Player = any> {
   /** Element name for identification and queries */
@@ -463,18 +489,21 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   constructor(ctx: Partial<ElementContext>) {
     this._ctx = ctx as ElementContext;
 
-    // Initialize sequence if this is the root
-    if (this._ctx.sequence === undefined) {
-      this._ctx.sequence = 0;
-    }
-
     // Initialize class registry as Map
     if (!this._ctx.classRegistry) {
       this._ctx.classRegistry = new Map();
     }
 
-    // Create tree structure with unique ID
-    const id = this._ctx.sequence++;
+    // The next creation-counter value, made into an id that carries no count
+    // (#447). `Game` sets up both before its own root element is built.
+    if (this._ctx.ids === undefined) {
+      throw new Error(
+        `Cannot construct ${this.constructor.name} outside a game: an element takes its id from ` +
+          `the game it belongs to. Create it through the game instead, for example ` +
+          `game.create(${this.constructor.name}, 'name') or space.create(${this.constructor.name}, 'name').`,
+      );
+    }
+    const id = this._ctx.ids.mint(this._ctx.sequence++);
     this._t = {
       children: [],
       id,

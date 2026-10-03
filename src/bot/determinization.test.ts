@@ -36,7 +36,7 @@ import type { BotConfig, BotStrategy, DeterminizeSampler } from './types.js';
 
 class Keeper extends Player<VaultGame, Keeper> {
   /** `notTrapped` is public; `secret` is not. */
-  static override visibleAttributes = ['seat', 'name', 'status', 'notTrapped'];
+  static override visibleAttributes = ['notTrapped'];
   /** The trapped door. Withheld: `0` is a real door. */
   secret = 0;
   /** A door the keeper has declared safe. Public, and never the trapped one. */
@@ -422,14 +422,14 @@ class CardGame extends Game<CardGame, Player> {
 }
 
 function createCardGame(): CardGame {
-  const game = new CardGame({ playerCount: 2, playerNames: ['Asker', 'Holder'], seed: 'cards' });
+  const game = new CardGame({ playerCount: 2, playerNames: ['Asker', 'Holder'], seed: 'cards', elementIdKey: '00000000000000b4' });
   game.startFlow();
   return game;
 }
 
 /** Seat 1's sandbox, exactly as the bot builds it. */
 function sandboxForSeat1(): CardGame {
-  const sandbox = new CardGame({ playerCount: 2, playerNames: ['Asker', 'Holder'], seed: 'cards' });
+  const sandbox = new CardGame({ playerCount: 2, playerNames: ['Asker', 'Holder'], seed: 'cards', elementIdKey: '00000000000000b4' });
   sandbox.loadSerializedState(createCardGame().toJSONForPlayer(1) as ReturnType<Game['toJSON']>);
   return sandbox;
 }

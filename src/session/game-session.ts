@@ -46,6 +46,7 @@ import type { BotStrategy, BotMove, BotMoveStats } from '../bot/index.js';
 import { createBot, parseBotLevel } from '../bot/index.js';
 import type { ElementRef } from './types.js';
 import { LobbyManager, type LobbyManagerCallbacks } from './lobby-manager.js';
+import { assertDeclarableGameOptions, type GameOptionSelection } from './game-option-selection.js';
 import { PickHandler } from './pick-handler.js';
 import { PendingActionManager } from './pending-action-manager.js';
 import { StateHistory, type UndoResult, type ElementDiff } from './state-history.js';
@@ -84,10 +85,23 @@ export interface GameSessionOptions<G extends Game = Game> {
   playerNames: string[];
   playerIds?: string[];
   seed?: string;
+  /**
+   * The element id key to build the game with (#447), for a host rebuilding a
+   * game whose key it holds, or a test that wants the same ids twice. Leave it
+   * out and the engine mints one. Never take it from a client: whoever holds
+   * it can decode every element id a seat sees.
+   */
+  elementIdKey?: string;
   storage?: StorageAdapter;
   botSeats?: BotSeatConfig;
-  /** Game-specific options (boardSize, targetScore, etc.) */
-  gameOptions?: Record<string, unknown>;
+  /**
+   * The player-chosen game options (boardSize, targetScore, ...), admitted by
+   * `selectGameOptions` against `gameOptionsDefinitions`. Only a selection is
+   * accepted, so a client's raw object cannot reach the game constructor; the
+   * session's own fields (`seed`, `elementIdKey`, `playerCount`, ...) come
+   * from their own parameters here and win over anything in the selection.
+   */
+  gameOptions?: GameOptionSelection;
   /** Display name for lobby UI */
   displayName?: string;
   /** Per-player configurations (for lobby) */
@@ -533,11 +547,17 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         // The game needs access to playerConfigs for per-player options like isDictator
         if (storedState.lobbySlots) {
           const newPlayerNames = storedState.lobbySlots.map(s => s.name);
+          // The same game set up again with the lobby's roster: it keeps the
+          // seed and the element id key the session was created with, and the
+          // host's selection sits under the session's own fields, as in
+          // `create` (#447).
+          const { elementIdKey } = session.#runner.game.getConstructorOptions();
           const newGameOptions = {
+            ...storedState.gameOptions,
             playerCount: currentSlotCount,
             playerNames: newPlayerNames,
             seed: storedState.seed,
-            ...storedState.gameOptions,
+            ...(typeof elementIdKey === 'string' ? { elementIdKey } : {}),
             ...(storedState.colors ? { colors: storedState.colors } : {}),
             ...(colorLabels ? { colorLabels } : {}),
             playerConfigs,
@@ -635,6 +655,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       playerNames,
       playerIds,
       seed,
+      elementIdKey,
       storage,
       botSeats,
       gameOptions: customGameOptions,
@@ -657,11 +678,15 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     const gameSeed = seed ?? Math.random().toString(36).substring(2) + Date.now().toString(36);
 
+    // A game declaring an option named for a field the session owns is wrong
+    // from the start, not at its first lobby.
+    assertDeclarableGameOptions(gameOptionsDefinitions);
+
     // Extract color palette from playerOptionsDefinitions if game designer defined one
     // This ensures the engine uses the game's custom colors (e.g., CHECKERS_COLORS)
     // instead of falling back to DEFAULT_COLOR_PALETTE
     let extractedColors: string[] | undefined;
-    if (playerOptionsDefinitions?.color && !customGameOptions?.colors) {
+    if (playerOptionsDefinitions?.color) {
       const colorDef = playerOptionsDefinitions.color;
       if ('choices' in colorDef && colorDef.choices && colorDef.choices.length > 0) {
         extractedColors = colorDef.choices.map(
@@ -673,11 +698,18 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // text. Derived from the game's labeled palette; undefined falls back to the
     // engine's default palette names.
     const colorLabels = buildColorLabelMap(playerOptionsDefinitions);
+    // The selection first, the session's own fields after it: a selection is
+    // already free of them (`selectGameOptions` refuses each by name), and this
+    // order means a host that defeats the type still cannot pick the seed or
+    // the element id key (#447).
     const effectiveGameOptions = {
+      ...customGameOptions,
       playerCount,
       playerNames,
       seed: gameSeed,
-      ...customGameOptions,
+      // Set even when absent, so nothing underneath can supply one; the engine
+      // mints a key for `undefined`.
+      elementIdKey,
       ...(extractedColors ? { colors: extractedColors } : {}),
       ...(colorLabels ? { colorLabels } : {}),
       // Thread tutorial definition un-serialized into the game constructor

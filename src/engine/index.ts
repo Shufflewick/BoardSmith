@@ -35,6 +35,7 @@ export {
   GAME_SELF_SERIALIZED_FIELDS,
   isEngineRootField,
   engineRootFieldAudience,
+  ENGINE_OWNED_GAME_OPTION_KEYS,
 } from './element/index.js';
 
 export type {

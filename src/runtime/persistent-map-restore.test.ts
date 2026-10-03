@@ -37,7 +37,7 @@ class CounterGame extends Game<CounterGame, Player> {
   /** Exactly what the HMR warning recommends. */
   positionCounts = this.persistentMap<string, number>('positionCounts');
 
-  constructor(options: { playerCount: number; playerNames?: string[]; seed?: string }) {
+  constructor(options: { playerCount: number; playerNames?: string[]; seed?: string; elementIdKey?: string }) {
     super(options);
 
     this.registerActions(
@@ -64,7 +64,7 @@ function startedRunner(): GameRunner<CounterGame> {
   const runner = new GameRunner({
     GameClass: CounterGame,
     gameType: 'counter',
-    gameOptions: { playerCount: 1, playerNames: ['Solo'], seed: 'counter' },
+    gameOptions: { playerCount: 1, playerNames: ['Solo'], seed: 'counter', elementIdKey: '00000000000000b2' },
   });
   runner.start();
   return runner;
@@ -115,7 +115,7 @@ describe('persistentMap survives checkpoint/snapshot restore (#139)', () => {
     const seatView = runner.game.toJSONForPlayer(1);
     expect(seatView.redacted).toBe(true);
 
-    const restored = new CounterGame({ playerCount: 1, playerNames: ['Solo'], seed: 'counter' });
+    const restored = new CounterGame({ playerCount: 1, playerNames: ['Solo'], seed: 'counter', elementIdKey: '00000000000000b2' });
     restored.loadSerializedState(seatView);
 
     expect(restored.positionCounts).toBeInstanceOf(PersistentMap);

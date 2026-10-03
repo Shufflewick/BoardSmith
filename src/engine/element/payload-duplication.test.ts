@@ -34,7 +34,7 @@ class LeakGame extends Game<LeakGame, Player> {
 }
 
 function newGame(playerCount = 3): LeakGame {
-  const game = new LeakGame({ playerCount, seed: 'payload-duplication' });
+  const game = new LeakGame({ playerCount, seed: 'payload-duplication', elementIdKey: '00000000000000a2' });
   game.setupBoard();
   return game;
 }

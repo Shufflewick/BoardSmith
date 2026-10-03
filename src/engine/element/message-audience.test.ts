@@ -31,7 +31,7 @@ class LogGame extends Game<LogGame, Player> {
 }
 
 function newGame(playerCount = 3): LogGame {
-  const game = new LogGame({ playerCount, seed: 'message-audience' });
+  const game = new LogGame({ playerCount, seed: 'message-audience', elementIdKey: '00000000000000a1' });
   game.setupBoard();
   return game;
 }

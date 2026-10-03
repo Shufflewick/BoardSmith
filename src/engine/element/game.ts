@@ -1,5 +1,14 @@
 import { Space, type ElementEventHandler } from './space.js';
-import { GameElement, hasZoneVisibility, isPlayerElement, readDynamicAttribute, registerElementClass, HIDDEN_PLACEHOLDER_ATTRIBUTE } from './game-element.js';
+import { mintElementIdKey, opaqueElementIds, sequentialElementIds } from './element-ids.js';
+import {
+  GameElement,
+  hasZoneVisibility,
+  isPlayerElement,
+  isPlayerIdentityAttribute,
+  readDynamicAttribute,
+  registerElementClass,
+  HIDDEN_PLACEHOLDER_ATTRIBUTE,
+} from './game-element.js';
 import { Piece } from './piece.js';
 import { Card } from './card.js';
 import { Hand } from './hand.js';
@@ -224,6 +233,23 @@ export type GameOptions = {
   playerNames?: string[];
   /** Random seed for deterministic gameplay */
   seed?: string;
+  /**
+   * The secret that turns this game's creation counter into element ids
+   * (#447): 16 lowercase hex digits. Leave it out and the engine mints one from
+   * the platform's cryptographic random source. Either way it is recorded with
+   * the constructor options, so every snapshot carries it and every restore
+   * uses it. Pass it only to rebuild a game whose key you hold (a restore from
+   * a snapshot, a test that wants the same ids twice).
+   *
+   * A HOST MUST NEVER ACCEPT IT FROM A PLAYER, or from any client, and must
+   * never send it to one: whoever holds the key can decode every id a seat
+   * sees back into the creation count, which is the leak the key closes. The
+   * session layer refuses it in a player's option selection
+   * (`selectGameOptions`) and the stateless executor refuses it on a `start`
+   * op; a host that builds its own options must keep it out of anything a
+   * client can write.
+   */
+  elementIdKey?: string;
   /** Available color palette for players (hex strings) */
   colors?: string[];
   /**
@@ -288,6 +314,35 @@ export type GameOptions = {
    */
   worldMode?: boolean;
 };
+
+/**
+ * Every field of {@link GameOptions}: the options the engine or the host
+ * mints for a game, as opposed to the options a game declares for its players
+ * to choose. A player's selection may never name one of these (the session's
+ * `selectGameOptions` refuses it), and a game may not declare an option with
+ * one of these names. The type below holds the list complete: adding a field
+ * to `GameOptions` without listing it here does not compile.
+ */
+export const ENGINE_OWNED_GAME_OPTION_KEYS = [
+  'playerCount',
+  'playerNames',
+  'seed',
+  'elementIdKey',
+  'colors',
+  'colorLabels',
+  'colorSelectionEnabled',
+  'tutorial',
+  'randomness',
+  'worldMode',
+] as const satisfies readonly (keyof GameOptions)[];
+
+type UnlistedGameOption = Exclude<keyof GameOptions, (typeof ENGINE_OWNED_GAME_OPTION_KEYS)[number]>;
+type Complete<T extends true> = T;
+/**
+ * Compiles only while `ENGINE_OWNED_GAME_OPTION_KEYS` names every
+ * `GameOptions` field; the error names the field that is missing.
+ */
+export type EngineOwnedGameOptionKeysAreComplete = Complete<[UnlistedGameOption] extends [never] ? true : UnlistedGameOption>;
 
 /**
  * A game's class, as the session, the runner's callers and the bots take it:
@@ -421,6 +476,44 @@ export class RandomnessForbiddenError extends PlayerFacingError {
 // methods).  Placed at module level so they are pure functions with no access
 // to `this`, which keeps them trivially testable and avoids class coupling.
 // ---------------------------------------------------------------------------
+
+/**
+ * A class's `static visibleAttributes`, checked not to name a field the engine
+ * always sends (#448), keyed by class so the check and the Set are built once.
+ */
+const gameAttributeWhitelists = new WeakMap<object, ReadonlySet<string>>();
+
+/**
+ * The game attributes `element`'s class lets a non-owner see.
+ *
+ * A player's identity and the root's engine fields are sent whatever the list
+ * says. Naming one is refused rather than ignored: such a list reads as though
+ * the game decided that field's audience, and it did not.
+ */
+function gameAttributeWhitelist(element: GameElement, isRoot: boolean): ReadonlySet<string> {
+  const ElementClass = element.constructor as typeof GameElement;
+  const cached = gameAttributeWhitelists.get(ElementClass);
+  if (cached) return cached;
+
+  const names = ElementClass.visibleAttributes ?? [];
+  const engineName = names.find(
+    (name) => isPlayerIdentityAttribute(element, name) || (isRoot && isEngineRootField(name)),
+  );
+  if (engineName !== undefined) {
+    throw new Error(
+      `${ElementClass.name}.visibleAttributes names "${engineName}", which the engine owns.\n` +
+      `  ${isRoot
+        ? "The game root's engine fields (phase, settings, tutorialProgress, ...) have an audience the engine settles"
+        : "A player's identity (name, $type, seat, status, color, colorLabel) is sent to every seat"}, ` +
+      `whatever the list says, so listing it decides nothing. visibleAttributes names only your ` +
+      `game's own fields.\n` +
+      `  Fix: remove "${engineName}" from ${ElementClass.name}.visibleAttributes.`,
+    );
+  }
+  const whitelist = new Set(names);
+  gameAttributeWhitelists.set(ElementClass, whitelist);
+  return whitelist;
+}
 
 /**
  * Allowlist of pure layout/topology $-keys that are safe to broadcast to a
@@ -1026,9 +1119,21 @@ export class Game<
     const seed = options.seed ?? Math.random().toString(36).substring(2);
     const random = createGameRandom(seed);
 
+    // Ids are keyed by a secret of their own, never the seed, so they carry no
+    // count of hidden creations (#447). A world's stay sequential, see
+    // `sequentialElementIds`.
+    if (options.worldMode === true && options.elementIdKey !== undefined) {
+      throw new Error(
+        'GameOptions.elementIdKey was given to a world, whose element ids are its creation counter ' +
+          '(#482). Leave it out.'
+      );
+    }
+    const elementIdKey = options.worldMode === true ? undefined : (options.elementIdKey ?? mintElementIdKey());
+
     // Initialize context with Map for class registry
     const ctx: Partial<ElementContext> = {
       sequence: 0,
+      ids: elementIdKey === undefined ? sequentialElementIds : opaqueElementIds(elementIdKey),
       classRegistry: new Map(),
       random,
     };
@@ -1075,7 +1180,8 @@ export class Game<
     // `hostOptions`. Persisting it into the snapshot would let a snapshot
     // carry a policy the host did not declare for the op being run.
     const { tutorial: _tutorialOption, randomness: _randomnessOption, ...restOptions } = options;
-    this._constructorOptions = { ...restOptions, seed };
+    // The id key rides here so every snapshot and restore carries it (#447).
+    this._constructorOptions = { ...restOptions, seed, ...(elementIdKey !== undefined && { elementIdKey }) };
 
     // Wire tutorial definition (un-serialized static config, see tutorialDefinition JSDoc).
     // Listed in unserializableAttributes so toJSON/loadSerializedState skip it.
@@ -4607,21 +4713,26 @@ export class Game<
         const isOwner = isPlayerElement(element)
           ? element.seat === visibilityPosition
           : element.getEffectiveOwner()?.seat === visibilityPosition;
+        // Checked for every seat, the owner's included, so a list naming an
+        // engine field is refused at the first projection of any view.
+        const isRoot = element === this;
+        const whitelist = gameAttributeWhitelist(element, isRoot);
         if (!isOwner) {
-          const whitelist = new Set(ElementClass.visibleAttributes);
-          // #148: on the game ROOT, the engine's own fields are not the game's
-          // to withhold. Each already has a declared audience
-          // (GAME_ROOT_FIELD_AUDIENCE) and the seat-scoped ones are narrowed
-          // further down this method, so sweeping them off the wire with a
-          // game's whitelist withholds no secret and instead breaks the seat's
-          // own state (its `tutorialProgress` vanishing from its own view).
-          const isRoot = element === this;
           const filteredAttrs: Record<string, unknown> = {};
           for (const [key, value] of Object.entries(json.attributes ?? {})) {
-            // `_isCurrent` is framework metadata (Player.toJSON), not a
-            // developer-declared game attribute -- it must always survive
-            // filtering regardless of the whitelist.
-            if (whitelist.has(key) || key === '_isCurrent' || (isRoot && isEngineRootField(key))) {
+            // The whitelist names the GAME's attributes. The engine's own root
+            // fields (#148) and a player's identity (#448) are not the game's
+            // to withhold: each has an audience the engine settled, and
+            // sweeping one off the wire withholds no secret -- it takes an
+            // opponent's name and colour off the table, or a seat's own
+            // `tutorialProgress` out of its view. `_isCurrent` is framework
+            // metadata (Player.toJSON).
+            if (
+              whitelist.has(key) ||
+              key === '_isCurrent' ||
+              isPlayerIdentityAttribute(element, key) ||
+              (isRoot && isEngineRootField(key))
+            ) {
               filteredAttrs[key] = value;
             }
           }
@@ -4900,6 +5011,21 @@ export class Game<
     json: ReturnType<Game['toJSON']>,
     options?: { animationSeqFloor?: number; messageLog?: MessageEntry[] }
   ): void {
+    // Ids are keyed (#447), and the root is always the first element a game
+    // creates, so a root id that differs from this game's own says the tree
+    // was minted under another key. Adopting it would let the next element
+    // created here take an id the tree already holds.
+    if (json.id !== this._t.id) {
+      throw new Error(
+        `This game state was minted under a different element id key: its root element has id ` +
+          `${json.id}, and this game numbers its root ${this._t.id}. Elements created after this ` +
+          `restore could take ids the state already holds.\n` +
+          `  Fix: restore it into a game constructed with the options it was created with, ` +
+          `elementIdKey included (a snapshot carries them as gameOptions). A state saved by an ` +
+          `engine whose ids were plain creation counts cannot be restored; start that game again.`
+      );
+    }
+
     // Restore game-level state from JSON. `messages`/`settings` are adopted
     // here by reference but rebuilt into fresh objects (with element/player
     // refs and Map/Set shapes resolved) by `resolveElementReferences(this)`
@@ -5143,12 +5269,25 @@ export class Game<
   }
 
   /**
-   * Create a game from serialized JSON
+   * Create a game from serialized JSON: the element tree and the game's own
+   * serialized state, in a game built with a FRESH SEED.
+   *
+   * The serialized state carries no seed and no RNG position, so the restored
+   * game's draws do not continue the original's. A restore that must play on
+   * from where the original stood goes through `GameRunner.fromSnapshot`,
+   * whose snapshot records the constructor options (seed and key included)
+   * and the RNG position.
+   *
+   * @param elementIdKey - The id key the serialized game was created with
+   *   (its `getConstructorOptions().elementIdKey`). A game built under any
+   *   other key could mint an id the restored tree already holds, and the
+   *   restore refuses it (#447).
    */
   static restoreGame<G extends Game>(
     json: ReturnType<G['toJSON']>,
     GameClass: new (options: GameOptions) => G,
-    classRegistry: Map<string, ElementClass>
+    classRegistry: Map<string, ElementClass>,
+    elementIdKey: string,
   ): G {
     // Count players from serialized children (players are part of the element
     // tree). Matched structurally via isPlayerJSON — matching the class name
@@ -5168,6 +5307,7 @@ export class Game<
     const game = constructGame(GameClass, {
       playerCount,
       playerNames,
+      elementIdKey,
     });
 
     // Merge class registry

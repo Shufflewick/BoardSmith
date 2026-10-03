@@ -42,7 +42,7 @@ const WINNING_SCORE = 3;
 
 class Guesser extends Player<HiddenGuessGame, Guesser> {
   /** `secret` is withheld from every other seat. */
-  static override visibleAttributes = ['seat', 'name', 'status', 'score'];
+  static override visibleAttributes = ['score'];
   secret = 1;
   score = 0;
 }

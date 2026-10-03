@@ -123,6 +123,15 @@ export {
 
 export { BotController } from './bot-controller.js';
 
+// The one way a client's choice of game options is admitted (#447).
+export {
+  selectGameOptions,
+  assertDeclarableGameOptions,
+  GameOptionSelectionError,
+  HOST_OWNED_GAME_OPTION_KEYS,
+  type GameOptionSelection,
+} from './game-option-selection.js';
+
 export { PickHandler } from './pick-handler.js';
 
 export type { PickStepResult } from './pending-action-manager.js';

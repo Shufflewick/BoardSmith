@@ -6,6 +6,7 @@
  * - A Space with no reachable seeded rng throws an actionable Error instead
  *   of silently falling back to Math.random.
  */
+import { sequentialElementIds } from './element-ids.js';
 import { describe, it, expect } from 'vitest';
 import {
   Game,
@@ -58,8 +59,8 @@ describe('Space.shuffleInternal', () => {
   });
 
   it('throws an actionable error when no seeded rng is reachable', () => {
-    // Constructed with an empty context: no Game, no `random`.
-    const disconnected = new Space({} as never);
+    // Constructed with a context that numbers elements but has no Game and no `random`.
+    const disconnected = new Space({ sequence: 0, ids: sequentialElementIds } as never);
     expect(() => disconnected.shuffleInternal()).toThrow(
       /seeded random number generator is reachable/i,
     );

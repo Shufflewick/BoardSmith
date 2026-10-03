@@ -11,6 +11,7 @@ import type { BotStrategy } from '../bot/index.js';
 import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
 import type { CheckpointPolicy, UndoPolicy } from '../engine/index.js';
 import type { WorldDefinition } from '../world/definition.js';
+import type { GameOptionSelection } from './game-option-selection.js';
 import type {
   LobbyState,
   SlotStatus,
@@ -324,8 +325,13 @@ export interface StoredGameState {
    * `botSeats`'s round-trip.
    */
   displayName?: string;
-  /** Game-specific options (for restart) */
-  gameOptions?: Record<string, unknown>;
+  /**
+   * The player-chosen game options the game is (re)started with: only the
+   * options the game declared, admitted by `selectGameOptions`. The engine's
+   * and the session's own fields (`seed`, `elementIdKey`, `playerCount`, ...)
+   * are never in here; the session supplies them itself (#447).
+   */
+  gameOptions?: GameOptionSelection;
   /** Lobby state - 'waiting' until all players join, then 'playing' */
   lobbyState?: LobbyState;
   /** Per-slot information for lobby (who claimed what, bot status, etc.) */

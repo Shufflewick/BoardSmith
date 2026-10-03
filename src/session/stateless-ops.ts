@@ -503,6 +503,19 @@ function handleStart(
   gameOptions: { playerCount: number; [key: string]: unknown },
   seedSnapshot?: GameStateSnapshot,
 ): OpResult {
+  // A new game mints its own element id key (#447). The only key a start op
+  // could carry is one a client wrote into the host's options, and a client
+  // that chooses the key can decode every id it is sent; a host restoring a
+  // game it holds passes the snapshot, whose gameOptions carry the key.
+  if (gameOptions.elementIdKey !== undefined) {
+    return errorResult(
+      'A start op cannot carry gameOptions.elementIdKey: the engine mints a new game\'s element id ' +
+        'key itself, and a key chosen outside the engine would let whoever chose it decode every ' +
+        'element id. Remove it from the start options; to resume a saved game, pass its snapshot.',
+      'protocol',
+    );
+  }
+
   // Seed plug-in point (FEAT-01/168-02): when a seed snapshot rides in via
   // hostOptions (NEVER gameOptions — same WR-04/D-01 rationale as
   // teachingDisabled: gameOptions persists into snapshot.gameOptions and

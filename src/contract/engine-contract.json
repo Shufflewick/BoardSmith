@@ -1,8 +1,8 @@
 {
-  "revision": 116,
+  "revision": 119,
   "bundleProtocol": 2,
-  "surfaceHash": "6259bc3d9c287fc2",
-  "payloadHash": "031fd82f9f0a2642",
+  "surfaceHash": "74bd1caffd7ea896",
+  "payloadHash": "3a98bc2f204eba00",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -988,6 +988,33 @@
       "payloadHash": "031fd82f9f0a2642",
       "formatHash": "0058593e7cc80205",
       "summary": "Seats and spectators are sent a PublicFlowState (no moveCount, frame counters, turnRun, followUp or actionError) instead of the server FlowState, and PlayerGameState no longer carries actionCount or turnStartActionIndex (#449)."
+    },
+    {
+      "revision": 117,
+      "date": "2026-10-02",
+      "bundleProtocol": 2,
+      "surfaceHash": "6259bc3d9c287fc2",
+      "payloadHash": "0c3d1f7b4fc3bb43",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A player's identity fields (name, $type, seat, color, colorLabel, status) now always reach other seats whatever the Player class's visibleAttributes says, and a whitelist naming one is refused; other elements' whitelists are unchanged (#448)"
+    },
+    {
+      "revision": 118,
+      "date": "2026-10-02",
+      "bundleProtocol": 2,
+      "surfaceHash": "6259bc3d9c287fc2",
+      "payloadHash": "3a98bc2f204eba00",
+      "formatHash": "0058593e7cc80205",
+      "summary": "Table-game element ids are now opaque: Speck32/64 of the creation counter under a 64-bit key the engine mints per game (GameOptions.elementIdKey, recorded in snapshot.gameOptions and never sent to a seat), so a seat cannot count creations hidden from it and a guessable seed does not decode them. A table state restores only into a game built with its key; table snapshots saved before this cannot be restored. World ids are unchanged (#447, #482)"
+    },
+    {
+      "revision": 119,
+      "date": "2026-10-02",
+      "bundleProtocol": 2,
+      "surfaceHash": "74bd1caffd7ea896",
+      "payloadHash": "3a98bc2f204eba00",
+      "formatHash": "0058593e7cc80205",
+      "summary": "Engine-owned game options (seed, elementIdKey, playerCount, ...) are named once in ENGINE_OWNED_GAME_OPTION_KEYS; boardsmith/session exports selectGameOptions, the one way a client's choice of game options is admitted (declared options only, typed, never a host-owned key), and GameSession, its lobby and the dev host take only such a selection; a start op refuses gameOptions.elementIdKey (#447)"
     }
   ]
 }

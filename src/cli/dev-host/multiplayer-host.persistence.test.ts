@@ -43,6 +43,14 @@ function oneActionUntilFinished(action: string) {
   });
 }
 
+/**
+ * What the next StoreGame writes to its two channels when it ends. Set by
+ * `makeHost` for the game it starts: a test's instruction to its fixture, not
+ * a game option, so it does not travel through the start op's options (a
+ * player's selection could not carry it anyway, #447).
+ */
+let writeAtEnd: { persist?: unknown; persistPrivate?: unknown } | undefined;
+
 /** A game that reads its store at start and writes to both channels at the end. */
 class StoreGame extends Game<StoreGame, Player> {
   /** What the platform handed this session, echoed so a test can see it. */
@@ -52,12 +60,10 @@ class StoreGame extends Game<StoreGame, Player> {
   /** The PRIVATE commit channel. */
   persistPrivate: unknown = undefined;
 
-  constructor(options: GameOptions & { persist?: PersistStartPayload; write?: unknown }) {
+  constructor(options: GameOptions & { persist?: PersistStartPayload }) {
     super(options);
     this.handed = options.persist ?? null;
-    const write = options.write as
-      | { persist?: unknown; persistPrivate?: unknown }
-      | undefined;
+    const write = writeAtEnd;
     this.registerAction(
       Action.create('finish').execute(() => {
         if (write?.persist !== undefined) this.persist = write.persist;
@@ -85,6 +91,7 @@ function makeHost(options: {
 }): { host: MultiplayerHost; sent: HostOutbound[]; startOptions: () => Record<string, unknown> } {
   const sent: HostOutbound[] = [];
   let startOptions: Record<string, unknown> = {};
+  writeAtEnd = options.write;
   const host = new MultiplayerHost({
     playerCount: options.playerCount ?? 1,
     minPlayers: 1,
@@ -96,7 +103,6 @@ function makeHost(options: {
       store: options.store,
       now: () => 1000,
     },
-    baseGameOptions: { write: options.write },
     // harness shape, shared verbatim with the sibling multiplayer-host suites.
     // fallow-ignore-next-line code-duplication
     executeOp: (gameOptions, snap, pend, op, hostOptions) => {

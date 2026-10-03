@@ -2,6 +2,7 @@ import type { GameElement } from './game-element.js';
 import type { Game } from './game.js';
 import type { Player } from '../player/player.js';
 import type { VisibilityState } from '../command/visibility.js';
+import type { ElementIds } from './element-ids.js';
 
 /**
  * Reference to an image for rendering game elements.
@@ -37,8 +38,13 @@ export type ElementClass<T extends GameElement = GameElement> = {
 export type ElementContext = {
   /** Root game element */
   game: Game;
-  /** ID sequence counter */
+  /**
+   * The creation counter: how many elements this game has ever created. Never
+   * an id itself -- {@link ElementContext.ids} turns it into one (#447).
+   */
   sequence: number;
+  /** Turns a creation-counter value into the element's id (#447). */
+  ids: ElementIds;
   /** Current player context (for "mine" queries) */
   player?: Player;
   /** Registry of element classes by name for deserialization and commands */

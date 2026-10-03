@@ -149,7 +149,7 @@ describe('MCTS Game Clone Constructor Options', () => {
     expect(capturedPlayerConfigs![4].isLeader).toBe(false);
   });
 
-  it('should handle games without custom options (backward compatibility)', () => {
+  it('refuses a snapshot without gameOptions instead of building the search game from the wrong seed', () => {
     const game = new ConfigTestGame({
       playerCount: 2,
       playerNames: ['Player 1', 'Player 2'],
@@ -157,28 +157,10 @@ describe('MCTS Game Clone Constructor Options', () => {
     });
     game.startFlow();
 
-    const bot = new MCTSBot(
-      game,
-      ConfigTestGame,
-      'config-test',
-      1,
-      [],
-      { iterations: 1, playoutDepth: 1 }
-    );
+    const bot = new MCTSBot(game, ConfigTestGame, 'config-test', 1, [], { iterations: 1, playoutDepth: 1 });
+    const { gameOptions: _dropped, ...withoutOptions } = (bot as any).captureSnapshot();
 
-    const snapshot = (bot as any).captureSnapshot();
-
-    // Simulate old snapshot without gameOptions by deleting it
-    const oldSnapshot = { ...snapshot };
-    delete oldSnapshot.gameOptions;
-
-    // Reset and restore
-    capturedPlayerConfigs = undefined;
-
-    // Should still work (falls back to settings)
-    const restoredGame = (bot as any).restoreGame(oldSnapshot);
-    expect(restoredGame).toBeDefined();
-    expect(restoredGame.players.length).toBe(2);
+    expect(() => (bot as any).restoreGame(withoutOptions)).toThrow(/without gameOptions/);
   });
 
   it('should include seed in gameOptions', () => {

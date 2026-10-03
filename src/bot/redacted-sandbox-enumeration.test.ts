@@ -25,7 +25,7 @@ import { MCTSBot } from './mcts-bot.js';
 // ============================================================================
 
 class Scout extends Player<TravelGame, Scout> {
-  static override visibleAttributes = ['seat', 'name', 'status'];
+  static override visibleAttributes: string[] = [];
   /** Withheld. `0` is a real, and in this game illegal, sector. */
   loc = 0;
   /** Withheld. `[]` is a real (empty) pack. */

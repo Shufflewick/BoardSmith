@@ -30,6 +30,11 @@ function registryFor(game: Game): Map<string, ElementClass> {
   return new Map(game._ctx.classRegistry);
 }
 
+/** The id key a game was built with, which a restore of it must be built with too (#447). */
+function idKeyOf(game: Game): string {
+  return game.getConstructorOptions().elementIdKey as string;
+}
+
 describe('Game.restoreGame player detection', () => {
   it('serializes custom players under their own class name, tagged $type=player', async () => {
     const game = await new SurvivorGame({ playerCount: 3, playerNames: ['A', 'B', 'C'] }).ready();
@@ -60,7 +65,7 @@ describe('Game.restoreGame player detection', () => {
     const game = await new RecordingGame({ playerCount: 3, playerNames: ['Ada', 'Bo', 'Cy'] }).ready();
     seen.length = 0;
 
-    const restored = Game.restoreGame(game.toJSON(), RecordingGame, registryFor(game));
+    const restored = Game.restoreGame(game.toJSON(), RecordingGame, registryFor(game), idKeyOf(game));
 
     expect(seen).toHaveLength(1);
     expect(seen[0].playerCount).toBe(3);
@@ -86,7 +91,7 @@ describe('Game.restoreGame player detection', () => {
     const game = await new SeatedGame({ playerCount: 4 }).ready();
     game.players[1].supplies = 7;
 
-    const restored = Game.restoreGame(game.toJSON(), SeatedGame, registryFor(game));
+    const restored = Game.restoreGame(game.toJSON(), SeatedGame, registryFor(game), idKeyOf(game));
 
     expect(restored.seatCount).toBe(4);
     expect(restored.players).toHaveLength(4);
@@ -96,7 +101,7 @@ describe('Game.restoreGame player detection', () => {
   it('still restores a game that uses the bare Player class', async () => {
     const game = await new PlainGame({ playerCount: 2, playerNames: ['P1', 'P2'] }).ready();
 
-    const restored = Game.restoreGame(game.toJSON(), PlainGame, registryFor(game));
+    const restored = Game.restoreGame(game.toJSON(), PlainGame, registryFor(game), idKeyOf(game));
 
     expect(restored.players).toHaveLength(2);
     expect(restored.players.map((p) => p.name)).toEqual(['P1', 'P2']);
@@ -109,7 +114,7 @@ describe('Game.restoreGame player detection', () => {
       (c) => (c.attributes as Record<string, unknown> | undefined)?.$type !== 'player'
     );
 
-    expect(() => Game.restoreGame(json, SurvivorGame, registryFor(game))).toThrow(/no players/i);
-    expect(() => Game.restoreGame(json, SurvivorGame, registryFor(game))).toThrow(/SurvivorGame/);
+    expect(() => Game.restoreGame(json, SurvivorGame, registryFor(game), idKeyOf(game))).toThrow(/no players/i);
+    expect(() => Game.restoreGame(json, SurvivorGame, registryFor(game), idKeyOf(game))).toThrow(/SurvivorGame/);
   });
 });

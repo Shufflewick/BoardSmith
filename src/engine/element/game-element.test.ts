@@ -693,7 +693,7 @@ describe('Game Restoration', () => {
     classRegistry.set('Squad', Squad);
     classRegistry.set('RebelPlayer', RebelPlayer);
 
-    const restored = Game.restoreGame(json, RefTestGame, classRegistry);
+    const restored = Game.restoreGame(json, RefTestGame, classRegistry, game.getConstructorOptions().elementIdKey as string);
 
     // Verify references were resolved
     const restoredRebel = restored.first({ name: 'rebel1' }) as RebelPlayer;
@@ -737,7 +737,7 @@ describe('Game Restoration', () => {
     classRegistry.set('DataHolder', DataHolder);
     classRegistry.set('Squad', Squad);
 
-    const restored = Game.restoreGame(json, RefTestGame, classRegistry);
+    const restored = Game.restoreGame(json, RefTestGame, classRegistry, game.getConstructorOptions().elementIdKey as string);
     const restoredHolder = restored.first({ name: 'holder' }) as DataHolder;
     const restoredTarget1 = restored.first({ name: 'target1' }) as Squad;
     const restoredTarget2 = restored.first({ name: 'target2' }) as Squad;
@@ -767,7 +767,7 @@ describe('Game Restoration', () => {
     classRegistry.set('Container', Container);
     classRegistry.set('Squad', Squad);
 
-    const restored = Game.restoreGame(json, RefTestGame, classRegistry);
+    const restored = Game.restoreGame(json, RefTestGame, classRegistry, game.getConstructorOptions().elementIdKey as string);
     const restoredContainer = restored.first({ name: 'container' }) as Container;
     const restoredItem1 = restored.first({ name: 'item1' }) as Squad;
     const restoredItem2 = restored.first({ name: 'item2' }) as Squad;
