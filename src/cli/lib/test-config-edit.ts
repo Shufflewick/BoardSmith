@@ -32,12 +32,29 @@ function keyName(name: ts.PropertyName): string | undefined {
   return ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : undefined;
 }
 
+/** Every kind of node that binds the identifier it names in some scope. */
+const BINDING_KINDS = new Set([
+  ts.SyntaxKind.VariableDeclaration,
+  ts.SyntaxKind.Parameter,
+  ts.SyntaxKind.BindingElement,
+  ts.SyntaxKind.FunctionDeclaration,
+  ts.SyntaxKind.FunctionExpression,
+  ts.SyntaxKind.ClassDeclaration,
+  ts.SyntaxKind.ClassExpression,
+  ts.SyntaxKind.EnumDeclaration,
+  ts.SyntaxKind.ModuleDeclaration,
+  ts.SyntaxKind.ImportEqualsDeclaration,
+  ts.SyntaxKind.ImportClause,
+  ts.SyntaxKind.NamespaceImport,
+  ts.SyntaxKind.ImportSpecifier,
+]);
+
 /** How many times the file declares each name, at any depth (a parameter, a variable, an import). */
 function declarationCounts(source: ts.SourceFile): Map<string, number> {
   const declared = new Map<string, number>();
   const visit = (node: ts.Node): void => {
     const name = (node as { name?: ts.Node }).name;
-    if (name && ts.isIdentifier(name) && ts.isDeclaration(node)) declared.set(name.text, (declared.get(name.text) ?? 0) + 1);
+    if (name && ts.isIdentifier(name) && BINDING_KINDS.has(node.kind)) declared.set(name.text, (declared.get(name.text) ?? 0) + 1);
     ts.forEachChild(node, visit);
   };
   visit(source);
