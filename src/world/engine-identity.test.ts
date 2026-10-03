@@ -26,6 +26,7 @@ import { describe, expect, it } from "vitest";
 import { tempTree } from "../testing/temp-tree.test-helper.js";
 import { createWorld } from "./index.js";
 import { WorldRefusal } from "./refusals.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -81,6 +82,7 @@ describe("a world and its rules share one engine (#283)", () => {
     let refusal: unknown;
     try {
       createWorld({
+        elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
         definition: definition as Parameters<typeof createWorld>[0]["definition"],
         seed: "engine-identity",
         seats: new Map([["p1", 1]]),

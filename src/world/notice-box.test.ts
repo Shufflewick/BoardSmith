@@ -40,6 +40,7 @@ import {
 import { assertStorablePartitionName } from "./partition-store.js";
 import type { StoredPartition, WorldCommandResult } from "./contract.js";
 import type { WorldRunnerHandle } from "./runner.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 class Room extends Space<Clan> {
   /** Lines this seat has moved out of its notice box into its own state. */
@@ -178,10 +179,11 @@ const SEATS = new Map([
 
 async function launched(notices: { perSeat: number } | null = { perSeat: PER_SEAT }) {
   const definition = definitionWith(notices);
-  const genesis = await createWorld({ definition, seed: "notices", seats: SEATS }).runner.genesis();
+  const genesis = await createWorld({ elementIdKey: TEST_WORLD_ELEMENT_ID_KEY, definition, seed: "notices", seats: SEATS }).runner.genesis();
   // A COLD WAKE over genesis's bytes, so every partition a dispatch needs is
   // one it has to ask the host for -- which is how a case sees what it loaded.
   const runner = createWorld({
+    elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
     definition,
     seed: "notices",
     seats: SEATS,
@@ -440,6 +442,7 @@ describe("#521 — what a notice may be", () => {
     const { notices: _dropped, ...world } = definition.world!;
     expect(() =>
       createWorld({
+        elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
         definition: { ...definition, world },
         seed: "n",
         seats: SEATS,
@@ -451,7 +454,7 @@ describe("#521 — what a notice may be", () => {
     "refuses a world declaring %s notices per seat when it is built",
     (perSeat) => {
       expect(() =>
-        createWorld({ definition: definitionWith({ perSeat }), seed: "n", seats: SEATS }),
+        createWorld({ elementIdKey: TEST_WORLD_ELEMENT_ID_KEY, definition: definitionWith({ perSeat }), seed: "n", seats: SEATS }),
       ).toThrow(expect.objectContaining({ code: "bundle-not-a-world" }));
     },
   );

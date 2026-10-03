@@ -12,6 +12,7 @@ import { Game, Space } from "../engine/index.js";
 import { createWorld } from "./index.js";
 import type { ActionDefinition } from "../engine/action/types.js";
 import type { WorldActionOffer } from "./contract.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 /** The one partition every fixture world resides in. */
 class FixtureSpace extends Space {}
@@ -35,6 +36,7 @@ export async function offersFor(
   seed: string,
 ): Promise<readonly WorldActionOffer[]> {
   const { runner } = createWorld({
+    elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
     definition: {
       gameClass: FixtureWorld,
       world: {

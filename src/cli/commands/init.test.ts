@@ -459,6 +459,10 @@ describe('initCommand --world — a persistent world project (#168)', () => {
     // own functions, which is what all four existing world games do.
     expect(test).toContain("from 'boardsmith/world'");
     expect(test).toContain('createWorld(');
+    // Built the way a host builds one: with the world's element id key, minted
+    // once for the world and passed on every launch (#482).
+    expect(test).toContain('mintWorldElementIdKey()');
+    expect(test).toContain('elementIdKey: ELEMENT_ID_KEY');
     expect(test).toContain('runner.genesis()');
     expect(test).toContain('runner.declare(');
     expect(test).toContain('runner.apply(');

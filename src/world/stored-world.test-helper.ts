@@ -16,10 +16,12 @@ import type {
 } from "./contract.js";
 import { createWorld, type WorldRunnerOptions } from "./definition.js";
 import type { WorldRunnerHandle } from "./runner.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 /**
- * WHAT A HOST SUPPLIES TO OPEN A WORLD: one definition, one seed, one seat, and
- * -- once a world has been born -- the id the next element it creates must take.
+ * WHAT A HOST SUPPLIES TO OPEN A WORLD: one definition, one seed, one seat, the
+ * world's element id key (#482), and -- once a world has been born -- the
+ * counter value the next element it creates must take.
  *
  * Every migration test opens its world this way, so the shape lives here rather
  * than once per file.
@@ -33,8 +35,9 @@ export function worldOptions(
     definition,
     seed,
     seats: new Map([["p1", 1]]),
+    elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
     ...(nextElementId === undefined ? {} : { nextElementId }),
-  } as WorldRunnerOptions;
+  };
 }
 
 /**

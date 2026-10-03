@@ -4,7 +4,7 @@
  * `boardsmith/world` says what a world IS. This says how one is DRIVEN -- the
  * declare-then-run-then-checkpoint loop, the world lock that makes it
  * single-threaded, the per-seat projection a watcher is sent, the offer walk,
- * the schedule drain, the genesis/migration/lift a start performs, and the two
+ * the schedule drain, the genesis/migration a start performs, and the two
  * controls that exist because somebody is watching ("fire due events now" and
  * "wake from parked").
  *
@@ -72,10 +72,6 @@ import {
   planMigration,
   receiptFloor,
   resolveOrder,
-  lowestElementId,
-  rekeyOffsetFor,
-  rekeyPartition,
-  rekeyReferences,
   worldIdAllocationOf,
   type PlannedEvent,
   type RoutedEvent,
@@ -171,13 +167,6 @@ interface ResidentWorldOptions {
   readonly onVacated?: (vacancy: { readonly seat: number; readonly player: string }) => void;
 }
 
-/** What one id lift moved, for whoever says it out loud. */
-export interface WorldLiftOutcome {
-  readonly offset: number;
-  readonly partitions: number;
-  readonly events: number;
-}
-
 /** What one upgrade moved, for whoever says it out loud. */
 export interface WorldMigrationOutcome {
   readonly from: number;
@@ -199,8 +188,6 @@ export interface WorldMigrationOutcome {
  */
 export interface WorldStartOutcome {
   readonly migrated?: WorldMigrationOutcome;
-  /** Present when this start lifted a pre-floor world's ids (#223). */
-  readonly lifted?: WorldLiftOutcome;
 }
 
 /** One player's view, or the reason there is not one. */
@@ -393,8 +380,7 @@ export class ResidentWorld {
   /**
    * THE REPAIR ROAD FOR A WORLD WHOSE STAMP IS ALREADY STALE (#224).
    *
-   * `#repairAllocationStamp` covers the world that never had a stamp. This
-   * covers the one whose stamp is present and WRONG -- written by a host that
+   * For the world whose stamp is present and WRONG -- written by a host that
    * checkpointed a partition an ordinary command had grown and kept the number
    * it had before the growth. Such a world refuses every verb that touches the
    * grown room, forever, with a message that names the repair and no way to run
@@ -412,7 +398,7 @@ export class ResidentWorld {
       // The refusal is raised at ADOPT, before any command has written
       // anything, and the repair throws the resident tree away -- so the retry
       // starts from stored bytes rather than from a half-run command.
-      await this.#repairAllocationStamp({ force: true });
+      await this.#repairAllocationStamp();
       return await body();
     }
   }
@@ -423,13 +409,16 @@ export class ResidentWorld {
     // THE DURABLE ALLOCATION (ShufflewickPub #377). A world's element ids
     // outlive every host that ever ran it and only a fraction of the partitions
     // holding them is ever resident, so the counter comes out of the store too.
-    // Absent for a world that has not launched yet -- genesis owns its own
-    // counter -- and for one written before the stamp existed, which `start`
-    // repairs before anything is adopted.
+    // Absent only for a world that has not launched yet: genesis owns its own
+    // counter, and writes the stamp in the same transaction as its bytes.
     const nextElementId = this.#store.nextElementId();
     return createWorld({
       definition: this.#definition,
       seed: this.#seed,
+      // THE WORLD'S ID KEY (#482), out of the store for the reason the stamp
+      // is: it was minted once, when this world was created, and every stored
+      // id is read back with it.
+      elementIdKey: this.#store.elementIdKey(),
       // THE DURABLE ROSTER. A world's seats outlive every host that ever ran
       // it, so they come out of the store rather than out of this process.
       seats: new Map(this.#store.seats().map((row) => [row.player, row.seat] as const)),
@@ -561,7 +550,6 @@ export class ResidentWorld {
   // fallow-ignore-next-line unused-class-member
   async start(): Promise<WorldStartOutcome> {
     let migrated: WorldStartOutcome["migrated"] = undefined;
-    let lifted: WorldStartOutcome["lifted"] = undefined;
     await this.run(async () => {
       // BEFORE ANYTHING ASKS (ShufflewickPub #383). A seat's idleness is
       // measured from the instant this world began watching, and `activityOf`
@@ -583,43 +571,23 @@ export class ResidentWorld {
         // BEFORE ANYTHING IS WRITTEN (#400): an ended world is never moved
         // onto rules that read its bytes differently.
         this.#refuseNewVersionIfEnded();
-        // BEFORE ANY MIGRATION, AND BEFORE ANY ADOPTION (#223). A world
-        // written before #218's construction-id floor holds roots at ids the
-        // wider game's own construction now mints, so widening it failed on
-        // the FIRST adoption -- before any migration hook could run, which is
-        // to say at a moment no author could have reached. Lifting is a
-        // storage-format concern rather than a rules one, so it is not gated
-        // on `stateVersion`: a world whose ids are already above the floor
-        // pays one comparison and nothing else.
-        lifted = await this.#liftPreFloorIds();
-        // AFTER THE LIFT (#377/#223). A world below the construction floor has
-        // no allocation that means anything -- every id in it is one the wider
-        // game's own construction mints -- so the stamp is derived from the
-        // bytes the lift left behind, not from the ones it read.
-        await this.#repairAllocationStamp();
         migrated = await this.#migrateIfNeeded();
       }
       this.rearm();
     });
-    return lifted === undefined ? { migrated } : { migrated, lifted };
+    return { migrated };
   }
 
   /**
-   * GIVE AN OCCUPIED WORLD THE ALLOCATION STAMP IT NEVER HAD (#377).
+   * REWRITE A STALE ALLOCATION STAMP FROM THE BYTES IT IS STALE AGAINST (#224).
    *
-   * A world launched before the stamp existed has partitions full of minted ids
-   * and nothing recording how far the counter got. Deriving it means reading
-   * every stored partition, which is the O(world) cost this whole mode exists
-   * to avoid -- so it is paid ONCE, here, on the first start after the stamp
-   * landed, and never again: the number is written and every later start reads
-   * it out of meta.
-   *
-   * It runs BEFORE the lift and before any migration, because both of those
-   * adopt, and an adoption against a missing stamp is exactly the corruption
-   * the stamp exists to catch.
+   * Deriving the stamp means reading every stored partition, which is the
+   * O(world) cost this whole mode exists to avoid -- so it runs only off the
+   * `allocation-stale` refusal, which is proof the stamp is wrong, and a
+   * healthy world never pays for it. Every stored id is read back to its
+   * counter value with the world's own key (#482).
    */
-  async #repairAllocationStamp({ force = false }: { force?: boolean } = {}): Promise<void> {
-    if (!force && this.#store.nextElementId() !== undefined) return;
+  async #repairAllocationStamp(): Promise<void> {
     const stored: StoredPartition[] = [];
     for (const name of this.#store.partitionNames()) {
       stored.push(
@@ -630,68 +598,10 @@ export class ResidentWorld {
         ),
       );
     }
-    this.#store.recordAllocation(worldIdAllocationOf(stored));
-    // The world was BUILT without a stamp, so the runner it holds still has the
-    // construction floor for a counter. Rebuild it over the number just
-    // written, before anything adopts against the old one.
+    this.#store.recordAllocation(worldIdAllocationOf(stored, this.#store.elementIdKey()));
+    // The runner this world holds was built over the stale number. Rebuild it
+    // over the one just written, before anything adopts against the old one.
     this.#discardResident();
-  }
-
-  /**
-   * LIFT A WORLD WRITTEN BEFORE THE CONSTRUCTION-ID FLOOR (#223).
-   *
-   * `world/rekey.ts` carries the whole argument for the shape: one offset for
-   * the whole world, chosen to put its lowest id exactly on the floor, applied
-   * to every partition and every queued event so that ids keep meaning the
-   * same thing ACROSS partitions.
-   *
-   * ONE TRANSACTION, and nothing is adopted first: a world half lifted is a
-   * world whose references point at nothing, and unlike a checkpoint there is
-   * no retry that could finish it -- the second attempt would shift bytes the
-   * first had already shifted. It runs before `#migrateIfNeeded` because a
-   * migration ADOPTS, and adoption is the thing that was failing.
-   *
-   * A world already above the floor -- every world written since #218 -- costs
-   * one comparison per partition and writes nothing.
-   */
-  async #liftPreFloorIds(): Promise<WorldStartOutcome["lifted"]> {
-    const names = this.#store.partitionNames();
-    const stored = new Map<string, StoredPartition>();
-    let lowest = Number.POSITIVE_INFINITY;
-    for (const name of names) {
-      const partition = await this.#readPartition(
-        name,
-        `Reading this world needs partition "${name}", which its store does not have.`,
-      );
-      stored.set(name, partition);
-      lowest = Math.min(lowest, lowestElementId(partition.json));
-    }
-
-    const offset = rekeyOffsetFor(lowest);
-    if (offset === 0) return undefined;
-
-    const partitions: Record<string, string> = {};
-    const lifted: StoredPartition[] = [];
-    for (const [name, partition] of stored) {
-      const moved = rekeyPartition(partition.json, offset) as StoredPartition["json"];
-      partitions[name] = JSON.stringify(moved);
-      lifted.push({ parentId: partition.parentId, json: moved });
-    }
-    const events = this.#store.pendingEvents().map((event) => ({
-      ...event,
-      args: rekeyReferences(event.args, offset) as Record<string, unknown>,
-    }));
-
-    // THE STAMP COMES OFF THE LIFTED BYTES (#377). Every id in the world just
-    // moved, so the stamp has to move with them -- and it is read from the
-    // result rather than shifted by `offset`, because the bytes are already in
-    // hand here and a number derived from them cannot drift from them.
-    this.#store.rekey({ partitions, events, nextElementId: worldIdAllocationOf(lifted) });
-    // THE RESIDENT TREE GOES WITH THE OLD BYTES, exactly as a migration's
-    // does: nothing has been adopted yet on this start, and rebuilding is what
-    // makes that true for certain rather than by inspection.
-    this.#discardResident();
-    return { offset, partitions: Object.keys(partitions).length, events: events.length };
   }
 
   /** Upgrade this world's bytes to the rules that are about to run them (#200). */

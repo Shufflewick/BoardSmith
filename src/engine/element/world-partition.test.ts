@@ -31,6 +31,8 @@ import {
   type GameOptions,
   DEFAULT_COLOR_PALETTE,
 } from '../index.js';
+import { TEST_WORLD_ELEMENT_ID_KEY } from './world-element-id-key.test-helper.js';
+import { worldElementIds } from './element-ids.js';
 
 class WorldGame extends Game<WorldGame, Player> {
   constructor(options: GameOptions) {
@@ -89,7 +91,7 @@ function buildWorld(game: WorldGame) {
 
 /** A world whose three rooms are declared partitions, freshly baselined. */
 function worldWithPartitions(seed: string) {
-  const game = new WorldGame({ playerCount: 2, seed, worldMode: true });
+  const game = new WorldGame({ playerCount: 2, seed, worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
   const built = buildWorld(game);
   game.definePartition(built.roomA.id);
   game.definePartition(built.roomB.id);
@@ -110,7 +112,7 @@ function opened(game: WorldGame, id: number): GameElement {
 
 describe('world mode: element references are id-based, not positional', () => {
   it('serializes element attribute refs as __elementId in world mode', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'world-refs' , worldMode: true });
+    const game = new WorldGame({ playerCount: 2, seed: 'world-refs' , worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     const { roomB, b1, b2 } = buildWorld(game);
     b2.link = b1;
 
@@ -132,7 +134,7 @@ describe('world mode: element references are id-based, not positional', () => {
   });
 
   it('an id-based ref survives a round trip through a PARTIAL, reordered tree', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'world-partial' , worldMode: true });
+    const game = new WorldGame({ playerCount: 2, seed: 'world-partial' , worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     const { roomA, roomB, roomC, b1, b2 } = buildWorld(game);
     b2.link = b1;
 
@@ -174,7 +176,7 @@ describe('world mode: element references are id-based, not positional', () => {
       .link as { __elementRef: string }).__elementRef;
     expect(recordedBranch).toBe(b1.branch());
 
-    const game = new WorldGame({ playerCount: 2, seed: 'branch-hazard', worldMode: true });
+    const game = new WorldGame({ playerCount: 2, seed: 'branch-hazard', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     game.adoptSubtree(game.id, cJson);
     const adoptedA = game.adoptSubtree(game.id, aJson);
     const adoptedB = game.adoptSubtree(game.id, bJson);
@@ -189,7 +191,7 @@ describe('world mode: element references are id-based, not positional', () => {
   });
 
   it('preserves a ref into a NON-RESIDENT partition instead of nulling it', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'dangling-ref' , worldMode: true });
+    const game = new WorldGame({ playerCount: 2, seed: 'dangling-ref' , worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     const { roomA, roomB, roomC, a1, b2 } = buildWorld(game);
     b2.link = a1;
     const aId = a1.id;
@@ -216,7 +218,7 @@ describe('world mode: element references are id-based, not positional', () => {
 
 describe('Game.adoptSubtree', () => {
   it('grafts a serialized subtree under the named parent', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'adopt-basic' , worldMode: true });
+    const game = new WorldGame({ playerCount: 2, seed: 'adopt-basic' , worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     const { roomB } = buildWorld(game);
     const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
     game.evictSubtree(roomB.id);
@@ -231,27 +233,29 @@ describe('Game.adoptSubtree', () => {
   });
 
   it('raises the id counter so a later create() cannot collide with an adopted id', () => {
-    const donor = new WorldGame({ playerCount: 2, seed: 'donor' , worldMode: true });
+    const donor = new WorldGame({ playerCount: 2, seed: 'donor' , worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     for (let i = 0; i < 40; i++) donor.create(Space, `filler-${i}`);
     const highRoom = donor.create(Space, 'high-room');
     const highToken = highRoom.create(Token, 'high-token', { label: 'high' });
     const highJson = roundTripJson(highRoom.toJSON() as ElementJSON);
 
     // A fresh game whose counter is far BELOW the adopted ids.
-    const game = new WorldGame({ playerCount: 2, seed: 'collide' , worldMode: true });
-    expect(highToken.id).toBeGreaterThan(20);
+    const game = new WorldGame({ playerCount: 2, seed: 'collide' , worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    // Compared as counter values: an id is the keyed cipher of one (#482).
+    const cursorOf = (id: number) => worldElementIds(TEST_WORLD_ELEMENT_ID_KEY).cursorOf(id);
+    expect(cursorOf(highToken.id)).toBeGreaterThan(20);
 
     const adopted = game.adoptSubtree(game.id, highJson);
     const adoptedIds = new Set([adopted.id, ...adopted.all(Token).map((t) => t.id)]);
 
     const fresh = game.create(Space, 'fresh');
     expect(adoptedIds.has(fresh.id)).toBe(false);
-    expect(fresh.id).toBeGreaterThan(Math.max(...adoptedIds));
+    expect(cursorOf(fresh.id)).toBeGreaterThan(Math.max(...[...adoptedIds].map(cursorOf)));
     expect(game.getElementById(fresh.id)).toBe(fresh);
   });
 
   it('refuses an adoption whose ids are already resident', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'dupe-ids' , worldMode: true });
+    const game = new WorldGame({ playerCount: 2, seed: 'dupe-ids' , worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     const { roomB } = buildWorld(game);
     const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
 
@@ -260,7 +264,7 @@ describe('Game.adoptSubtree', () => {
   });
 
   it('names the missing parent when parentId is not resident', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'missing-parent' , worldMode: true });
+    const game = new WorldGame({ playerCount: 2, seed: 'missing-parent' , worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     const { roomB } = buildWorld(game);
     const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
     game.evictSubtree(roomB.id);
@@ -278,7 +282,7 @@ describe('Game.adoptSubtree', () => {
   });
 
   it('keeps a Space handler registered in its own class constructor', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'handlers' , worldMode: true });
+    const game = new WorldGame({ playerCount: 2, seed: 'handlers' , worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     const room = game.create(Room, 'kitchen');
     const outside = game.create(Space, 'outside');
     const token = outside.create(Token, 'spoon', { label: 'spoon' });
@@ -294,7 +298,7 @@ describe('Game.adoptSubtree', () => {
 
 describe('Game.evictSubtree', () => {
   it('detaches the subtree so it costs nothing to traverse', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'evict' , worldMode: true });
+    const game = new WorldGame({ playerCount: 2, seed: 'evict' , worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     const { roomB, b1 } = buildWorld(game);
     const bId = roomB.id;
 
@@ -306,12 +310,12 @@ describe('Game.evictSubtree', () => {
   });
 
   it('refuses to evict the game root', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'evict-root' , worldMode: true });
+    const game = new WorldGame({ playerCount: 2, seed: 'evict-root' , worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     expect(() => game.evictSubtree(game.id)).toThrow(/game root/i);
   });
 
   it('names an id that is not resident', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'evict-missing' , worldMode: true });
+    const game = new WorldGame({ playerCount: 2, seed: 'evict-missing' , worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     expect(() => game.evictSubtree(4242)).toThrow(/4242/);
   });
 });
@@ -429,7 +433,7 @@ describe('moveToInternal partition marking', () => {
   });
 
   it('adoption itself does not add to the move-touched set', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'adopt-not-touched' , worldMode: true });
+    const game = new WorldGame({ playerCount: 2, seed: 'adopt-not-touched' , worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     const { roomB } = buildWorld(game);
     const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
     game.evictSubtree(roomB.id);
@@ -610,7 +614,7 @@ describe('the dirty-set pass costs one serialization per partition, and no tree 
 
   /** Three counted rooms, declared and baselined, with the counters zeroed. */
   function countedWorld(seed: string) {
-    const game = new CountingGame({ playerCount: 2, seed, worldMode: true });
+    const game = new CountingGame({ playerCount: 2, seed, worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     const rooms = ['one', 'two', 'three'].map((name) => {
       const room = game.create(CountedRoom, name);
       room.create(Token, `${name}-t`, { label: name });
@@ -726,7 +730,7 @@ describe('world mode is declared at construction', () => {
       }
     }
 
-    const game = new EarlyWorld({ playerCount: 2, seed: 'early', worldMode: true });
+    const game = new EarlyWorld({ playerCount: 2, seed: 'early', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     expect(game.builtInWorldMode).toBe(true);
   });
 
@@ -743,7 +747,7 @@ describe('world mode is declared at construction', () => {
     // Colour is never the sole carrier of player identity here -- every entry
     // has a `colorLabel` -- so two players in a large world sharing "Red" is
     // honest rather than lossy, and it is a fact about the world's size.
-    const game = new WorldGame({ playerCount: 40, seed: 'crowd', worldMode: true });
+    const game = new WorldGame({ playerCount: 40, seed: 'crowd', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
 
     expect(game.players).toHaveLength(40);
     expect(game.players[0]!.color).toBe(DEFAULT_COLOR_PALETTE[0]);
@@ -769,6 +773,7 @@ describe('world mode is declared at construction', () => {
       playerCount: 8,
       seed: 'teams',
       worldMode: true,
+      elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
       colors: ['#111111', '#222222'],
     });
 
@@ -963,18 +968,20 @@ describe('the dirty-set comparison is scoped to what the command reached', () =>
  */
 describe('a world separates construction ids from stored ones', () => {
   it('mints everything after the reservation above every construction id', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'floor', worldMode: true });
+    const game = new WorldGame({ playerCount: 2, seed: 'floor', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     const beforeFloor = game.create(Room, 'built-in-the-constructor');
     game.reserveConstructionIdSpace();
     const afterFloor = game.create(Room, 'built-by-genesis');
 
-    expect(beforeFloor.id).toBeLessThan(afterFloor.id);
-    expect(afterFloor.id).toBeGreaterThanOrEqual(1_000_000);
+    // Counter values, read back with the world's key: ids carry no order (#482).
+    const cursorOf = (id: number) => worldElementIds(TEST_WORLD_ELEMENT_ID_KEY).cursorOf(id);
+    expect(cursorOf(beforeFloor.id)).toBeLessThan(cursorOf(afterFloor.id));
+    expect(cursorOf(afterFloor.id)).toBeGreaterThanOrEqual(1_000_000);
   });
 
   it('puts the same partition at the same id however many seats the world has', () => {
     const ids = [2, 40, 500].map((playerCount) => {
-      const game = new WorldGame({ playerCount, seed: 'floor', worldMode: true });
+      const game = new WorldGame({ playerCount, seed: 'floor', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
       game.reserveConstructionIdSpace();
       return game.create(Room, 'sector').id;
     });
@@ -982,7 +989,7 @@ describe('a world separates construction ids from stored ones', () => {
   });
 
   it('refuses a second reservation, which would drop the counter onto minted ids', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'floor', worldMode: true });
+    const game = new WorldGame({ playerCount: 2, seed: 'floor', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     game.reserveConstructionIdSpace();
     game.create(Room, 'sector');
     expect(() => game.reserveConstructionIdSpace()).toThrow(/already been reserved/);

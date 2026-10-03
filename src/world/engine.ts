@@ -132,6 +132,7 @@ import { devWarn, evaluateCondition, GameElement } from "../engine/index.js";
 import { readOnlyProjection } from "./readonly.js";
 import { assertAnsweredAllocations, assertCreatedRoots } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
+import { assertMintedUnderThisKey } from "./key-check.js";
 
 
 /**
@@ -806,6 +807,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         );
       }
       sources ??= this.buildSourceGame();
+      assertMintedUnderThisKey(name, stored.parentId, sources.id);
       const root = readOnlyProjection(sources.adoptSubtree(sources.id, stored.json as ElementJSON));
       read.set(name, root);
       return root;
@@ -871,7 +873,9 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * simply a partition the next checkpoint writes.
    */
   /**
-   * THE NEXT ID THIS WORLD WILL MINT, for the host to persist (#377).
+   * THE COUNTER VALUE THIS WORLD MINTS FROM NEXT, for the host to persist
+   * (#377). Never an id: an id is this value run through the world's keyed
+   * cipher (#482).
    *
    * Read after genesis and after every created partition, and written in the
    * SAME transaction as the bytes it was minted for -- so a world that stored a
@@ -3193,6 +3197,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // through JSON and the parent ships it to the child, neither knowing what
     // an element is. This engine does: what it is handed is what its own
     // `serializePartitions` wrote, and `adoptSubtree` is the reader.
+    // BEFORE ADOPTING: bytes minted under another key are the platform's to
+    // answer for, and would otherwise surface as a missing parent charged to
+    // the game (#482).
+    assertMintedUnderThisKey(name, stored.parentId, this.game.id);
     let root: GameElement;
     try {
       root = this.game.adoptSubtree(stored.parentId, stored.json as ElementJSON);

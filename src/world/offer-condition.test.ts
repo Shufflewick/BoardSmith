@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Game, Space } from "../engine/index.js";
 import { worldAction, worldClockAction, createWorld } from "./index.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 class Store extends Space {
   ready = true;
 }
@@ -29,6 +30,7 @@ describe("offer declarations and stamped conditions", () => {
       .needs(() => ["store"])
       .execute(() => {});
     const { runner } = createWorld({
+      elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
       definition: {
         gameClass: TestGame,
         world: {

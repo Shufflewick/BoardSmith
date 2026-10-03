@@ -291,8 +291,7 @@ that then refuses leaves an empty root rather than a root nothing recorded.
 #### A created root's identity is durable
 
 Nothing above is your concern as a game author, and it is written down because
-it decides what a HOST must do. Element ids come from one counter per world (a
-world's id IS its counter value, unlike a table game's opaque one; #482), and
+it decides what a HOST must do. Element ids come from one counter per world, and
 a world's ids outlive the process that minted them -- but only a fraction of the
 partitions holding them is ever resident, which is the whole point of this mode.
 So the counter cannot be rebuilt from what happens to be loaded: a host that
@@ -323,8 +322,59 @@ A host writes `nextElementId` in the SAME transaction as the partitions, and
 hands it back when the world is next built:
 
 ```ts
-createWorld({ definition, seed, seats, nextElementId: storedStamp });
+createWorld({ definition, seed, seats, elementIdKey: storedKey, nextElementId: storedStamp });
 ```
+
+`nextElementId` is a COUNTER value -- how many elements the world has ever
+created -- and never an id. A host stores it and hands it back; it never
+compares it with an id.
+
+#### A world's ids are keyed by a secret its host keeps (#482)
+
+An element's id is not its counter value. It is the counter run through a block
+cipher (Speck48/96) under a key that belongs to the world, so the ids a seat
+sees carry no order and no count: a seat cannot tell how many elements were
+created where it could not see them -- another character's private inventory, a
+hidden room's contents -- or measure other players' activity from the gaps.
+Every id is a whole number from 0 to 2^48 - 1, so ids stay plain JSON numbers.
+Never sort by an id or do arithmetic on one; keep creation order in an
+attribute when a rule needs it.
+
+The key is the HOST's, and it is durable state exactly as the stamp is:
+
+- **Mint it once, when the world is created**, with `mintWorldElementIdKey()`
+  from `boardsmith/world` (24 lowercase hex digits from the platform's
+  cryptographic random source), and store it with the world.
+- **Hand the same key back on every wake** -- every rebuild, hibernation,
+  eviction, deploy and partition load -- as `createWorld`'s `elementIdKey`.
+  Every stored id, and the root every stored partition hangs from, is read back
+  with it. A world woken with any other key is refused at its first adoption
+  with `element-id-key-mismatch`, a platform refusal, because no stored
+  partition hangs from the root that key mints.
+- **Never mint a new one for a world that exists, and never derive it from the
+  seed.** A seed may be short and guessable, and the game root's id is in every
+  seat's view to check a guess against.
+- **Never send it to a client and never accept one from a client.** Whoever
+  holds it can read every id back into the world's creation count.
+
+The engine never mints a world key on its own. `createWorld` without one is the
+platform-owned refusal `element-id-key-invalid`, as is a key of the wrong
+shape; a world game constructed directly needs `GameOptions.elementIdKey`.
+`boardsmith dev` mints a key when it creates a world's local store and keeps it
+there; `createTestWorld` mints one per test world unless a test passes
+`elementIdKey`.
+
+All of a world's partitions draw from its ONE counter, carried host to host by
+the stamp, and the cipher is a permutation of its block, so no two elements in
+a world ever share an id, whichever host, partition or migration minted them.
+The construction floor below is a counter value too: the game root and its
+players are counter values under it, everything a world stores is minted from
+values above it, and the host's stamp is compared with stored ids only after
+they have been read back with the key. Hydrating a partition mints nothing, so
+a wake never moves the stamp.
+
+The 48-bit block is also the ceiling on how many elements one world can ever
+create, about 2.8 x 10^14; minting past it is refused rather than wrapped.
 
 A world built without one may still be read, written and played; what it may not
 do is create a root on demand, and asking is the `allocation-undeclared`
@@ -339,20 +389,20 @@ number hands back the same number on the next wake, so a park ladder should park
 on it rather than retry, and a publisher's health score should not be debited for
 it. The repair is the one below.
 
-**Repairing a world that predates this.** Derive the stamp once, from the bytes
-the store already holds, and write it:
+**Repairing a stale stamp.** Derive the stamp from the partitions the store
+already holds -- whole `{ parentId, json }` records, because each one's parent is
+checked against the world's root under the key -- reading each id back with the
+world's key, and write it:
 
 ```ts
 import { worldIdAllocationOf } from 'boardsmith/world';
 
-store.recordAllocation(worldIdAllocationOf(await readEveryStoredPartition()));
+store.recordAllocation(worldIdAllocationOf(await readEveryStoredPartition(), storedKey));
 ```
 
-That is the only O(world) read in the scheme, it is paid once, and every later
-wake reads the number back out of storage. `boardsmith dev` does exactly this on
-the first start of a world that has no stamp, and again -- driven by the
-`allocation-stale` refusal, so a healthy world never pays for the scan -- on a
-world whose stamp is present and wrong.
+That is the only O(world) read in the scheme, so it runs only off the
+`allocation-stale` refusal, which is proof the stamp is wrong; a healthy world
+never pays for the scan. `boardsmith dev` repairs a world exactly this way.
 
 ## An action: declare, then execute
 
@@ -2548,17 +2598,12 @@ storage cannot collide however the seat count moves. Lowering `maxPlayers` below
 somebody already holds is still refused, because a seat is where a player's
 holdings are.
 
-**A world written BEFORE that floor is lifted onto it, once, at its next start
-(#223).** Its roots sit at whatever ids the old counter happened to reach, so
-widening it collided on the very first adoption -- before any migration hook
-could run, which is to say at a moment no author could have reached. The host
-now shifts the whole world by ONE offset, chosen to put its lowest id exactly
-on the floor: every partition and every queued event, in one transaction, so
-ids keep meaning the same thing across partitions and every `{ __elementId }`
-reference still points where it did. A seat (`{ __playerRef }`) is not an
-element id and is left exactly alone. You declare nothing for this and there is
-nothing to migrate -- `boardsmith dev` says what it lifted, and a world already
-above the floor pays one comparison.
+**A world stored before world ids were keyed (#482) cannot be carried
+forward.** Its ids are its bare creation counter, and no key reads them back,
+so it is a deliberate world format break: `boardsmith dev` refuses such a local
+store and names `boardsmith dev --reset`. (The one-offset lift that once moved
+pre-floor worlds onto the floor, #223, went with it: no keyed world predates
+the floor.)
 
 **It is not a command.** No clock, no schedule, no seat: a migration that could
 schedule would be arming timers against a world whose own timers are mid-
@@ -2673,6 +2718,8 @@ thing next time.
 | `not-the-vacancy-verb` | An action called `ctx.world.vacate()` and it is not the verb this world declared as `world.vacateByClock` — or this world declares none at all. See [giving a chair back](#giving-a-chair-back). |
 | `vacancy-already-claimed` | One dispatch finalized the vacancy of two different chairs. A release is one chair's own committed step; schedule one occurrence per chair. |
 | `allocation-undeclared` | A host asked for a partition to be created on demand without handing the world its durable id allocation stamp, so any id minted would be a guess. See [a created root's identity is durable](#a-created-roots-identity-is-durable). |
+| `element-id-key-invalid` | A host built a world without its element id key, or with one that is not 24 lowercase hex digits (#482). Mint the key once, when the world is created, with `mintWorldElementIdKey()`, store it with the world, and pass it on every wake. Platform-owned and deterministic, so park rather than retry. |
+| `element-id-key-mismatch` | A stored partition does not hang from this world's root under the key the world was built with, so its bytes were minted under another key: the host passed a different world's key, minted a new one on a wake, or is serving bytes from before keyed ids (#482). Raised before anything is adopted. Pass the key stored with the world. Platform-owned and deterministic. |
 | `allocation-stale` | A host handed back a stamp standing below an id its own stored bytes hold, so the next id minted would collide with one already written. Raised at the adoption that proves it. Repair by deriving the stamp with `worldIdAllocationOf` over every stored partition. |
 | `child-timeout` | The bundle did not answer a host's call inside its deadline. |
 | `invalid-notice` | `ctx.world.notify` was handed a notice a box cannot hold: a seat outside the world, no `whenFull`, a payload JSON cannot carry, one past `noticeMaxBytes` -- or the world declares no `world.notices`. See [notices](#notices-a-lasting-line-for-one-seat-without-loading-it). |
@@ -2881,12 +2928,16 @@ there is for writing a world's rules, and it is where a second world should
 start:
 
 ```ts
-import { createWorld } from 'boardsmith/world';
+import { createWorld, mintWorldElementIdKey } from 'boardsmith/world';
 import { gameDefinition } from '../src/rules/index.js';
+
+const ELEMENT_ID_KEY = mintWorldElementIdKey();
 
 const { runner, seatCount } = createWorld({
   definition: gameDefinition,
   seed: 'a-fixed-seed',
+  // Minted once per world and passed on every launch, as a host does (#482).
+  elementIdKey: ELEMENT_ID_KEY,
   seats: new Map([['alice', 1], ['bob', 2]]),
 });
 

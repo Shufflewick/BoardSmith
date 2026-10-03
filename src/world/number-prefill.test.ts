@@ -17,6 +17,7 @@ import { BoardSmithWorldEngine } from "./engine.js";
 import { worldAction } from "./action.js";
 import type { StoredPartition } from "./contract.js";
 import { MapStore, offerStamp } from "./stored-world.test-helper.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 class Citizen extends Space<CensusGame> {
   /** What the seat last told the census, and the reason a default is not a lie. */
@@ -62,7 +63,7 @@ const declareAge = worldAction<CensusGame>("declare-age")
   });
 
 function newGame(): CensusGame {
-  return new CensusGame({ playerCount: 1, seed: "census", worldMode: true });
+  return new CensusGame({ playerCount: 1, seed: "census", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
 }
 
 function genesis(): Map<string, StoredPartition> {

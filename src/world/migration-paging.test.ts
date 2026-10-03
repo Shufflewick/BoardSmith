@@ -975,7 +975,7 @@ describe("#246 — a transform page emits the roots its own source root splits i
 
     const command = { name: "settle", args: {} };
     const stored: Record<string, StoredPartition> = {
-      "owner-1": { parentId: 0, json: JSON.parse(answer.partitions["owner-1"]!) },
+      "owner-1": { parentId: world.rows["owner-1"]!.parentId, json: JSON.parse(answer.partitions["owner-1"]!) },
     };
     await runner.declare(command, "p1", stored, arrival(0), { declaredActivity: [], declaredNotices: [] });
     const result = await runner.apply({ player: "p1", command, timing: null, ...STAMP });

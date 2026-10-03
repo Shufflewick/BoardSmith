@@ -806,8 +806,10 @@ await world.quote(2, 'boost', { weeks: 2 });            // price a draft with th
 await world.unredactedElements();   // the whole world, which no single seat can see
 ```
 
-Options: `definition` (required), `seed`, `budgets`, `now`, and `watching` —
-which seats hold a socket, since presence is an input to an offer.
+Options: `definition` (required), `seed`, `elementIdKey`, `budgets`, `now`, and
+`watching` — which seats hold a socket, since presence is an input to an offer.
+`elementIdKey` is the world's element id key (#482); a fresh one is minted per
+test world unless a test passes one to get the same ids from two worlds.
 
 `getPlayerView` is assembled by the same two calls `boardsmith dev` makes to fill
 a `world_state` and a `world_offers` frame, over one world lock, carrying one

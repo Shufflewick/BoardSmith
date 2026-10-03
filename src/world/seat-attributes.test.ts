@@ -19,6 +19,7 @@ import type { StoredPartition, WorldPartitionSource } from "./contract.js";
 // The ordered walk a host drives -- ask, supply, ask again -- written once for
 // every world suite (`village.test-helper.ts`).
 import { applyThroughWalk } from "./village.test-helper.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 /** The gate: a character reads their coordinate only while carrying this. */
 class Gps extends Piece<CampGame> {}
@@ -72,7 +73,7 @@ const steal = worldAction<CampGame>("steal")
   });
 
 function genesis(): Map<string, StoredPartition> {
-  const game = new CampGame({ playerCount: 2, seed: "camp", worldMode: true });
+  const game = new CampGame({ playerCount: 2, seed: "camp", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
   const stored = new Map<string, StoredPartition>();
   for (const seat of [1, 2]) {
     const character = game.create(Character, `character-${seat}`);
@@ -95,7 +96,7 @@ class MemoryStore implements WorldPartitionSource {
 }
 
 function newCamp(): { engine: BoardSmithWorldEngine; game: CampGame } {
-  const game = new CampGame({ playerCount: 2, seed: "camp", worldMode: true });
+  const game = new CampGame({ playerCount: 2, seed: "camp", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
   const engine = new BoardSmithWorldEngine({
     game,
     seats: new Map([

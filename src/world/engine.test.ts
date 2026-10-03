@@ -34,6 +34,7 @@ import {
   holdingPartition,
   newVillageEngine,
 } from "./village.test-helper.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 /** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
  *  The clock's road passes its whole occurrence instead. */
@@ -138,7 +139,7 @@ function genesis(): Map<string, StoredPartition> {
 }
 
 function newWorldGame(): WorldFixtureGame {
-  const game = new WorldFixtureGame({ playerCount: 4, seed: "world-fixture", worldMode: true });
+  const game = new WorldFixtureGame({ playerCount: 4, seed: "world-fixture", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
   return game;
 }
 
@@ -1925,6 +1926,7 @@ describe("#381 — a resident-root lookup is asked of the root table, not of the
       playerCount: 4,
       seed: "world-fixture",
       worldMode: true,
+      elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
     });
   }
 

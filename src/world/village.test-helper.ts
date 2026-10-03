@@ -41,6 +41,7 @@ import type {
   StoredPartition,
   WorldPartitionSource,
 } from "./contract.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 /** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
  *  The clock's road passes its whole occurrence instead. */
@@ -145,7 +146,7 @@ function throughStorage(json: ElementJSON): ElementJSON {
  * same village and not a second one.
  */
 export function villageGenesis(settlers: number = SETTLERS): Map<string, StoredPartition> {
-  const game = new VillageFixture({ playerCount: settlers, seed: "village", worldMode: true });
+  const game = new VillageFixture({ playerCount: settlers, seed: "village", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
   const commons = game.create(Commons, "commons");
   const stored = new Map<string, StoredPartition>([
     [COMMONS, { parentId: game.id, json: throughStorage(commons.toJSON()) }],
@@ -185,7 +186,7 @@ export function newVillageEngine(
   budgets: WorldBudgets = worldBudgets(),
   settlers: number = SETTLERS,
 ): { engine: BoardSmithWorldEngine; store: CountingStore; game: VillageFixture } {
-  const game = new VillageFixture({ playerCount: settlers, seed: "village", worldMode: true });
+  const game = new VillageFixture({ playerCount: settlers, seed: "village", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
   const store = new CountingStore(villageGenesis(settlers));
   const seats = new Map<string, number>();
   for (let seat = 1; seat <= settlers; seat++) seats.set(`p${seat}`, seat);

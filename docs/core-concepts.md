@@ -538,6 +538,16 @@ Two consequences:
   state restores only into a game built with the key it was minted under; the
   restore refuses any other.
 
+A world's ids are opaque too (#482), under a key its HOST keeps rather than
+one the engine mints: a world outlives every process that runs it and keeps no
+snapshot, so the host mints the key once when it creates the world
+(`mintWorldElementIdKey` from `boardsmith/world`, 24 hex digits), stores it
+with the world, and passes it on every wake (`createWorld`'s `elementIdKey`,
+or `GameOptions.elementIdKey` for a world game built directly, which refuses
+to construct without one). A world's cipher has a 48-bit block, so its ids run
+from 0 to 2^48 - 1. See [persistent worlds](./persistent-worlds.md), "A
+world's ids are keyed by a secret its host keeps".
+
 The seed still has to be unguessable for a different reason: it decides every
 shuffle and roll, so a host that hands the engine a guessable seed lets a
 player predict them. A host should supply at least 128 bits from a
@@ -613,7 +623,9 @@ behave.
 
 ```typescript
 // World mode is declared at CONSTRUCTION, never switched on afterwards.
-const game = new MyWorld({ playerCount: 200, seed, worldMode: true });
+// A world's element id key is its host's: minted once, stored, passed on
+// every wake (#482).
+const game = new MyWorld({ playerCount: 200, seed, worldMode: true, elementIdKey: storedKey });
 
 game.definePartition(regionId);  // this subtree loads/checkpoints/evicts as a unit
 
@@ -677,23 +689,15 @@ Three things to know before using it:
 ```
 
 There is no `--world` flag. `backend` is required on every project and has no
-default, and `"world"` is what makes a game a world, so the dev host reads it
-and constructs the game with `worldMode: true` — one way to say it rather than
+default, and `"world"` is what makes a game a world, so `boardsmith dev` reads
+it and runs the project as a world -- through `createWorld`, the same runner the
+hosting platform uses, which constructs the game with `worldMode: true` and the
+world's element id key -- rather than as a table. One way to say it rather than
 two. What the choice IMPLIES (no undo, no bots, no spectators; always
 asynchronous, always joinable in progress) is resolved by `boardsmith build`
 into the manifest's `capabilities` object, which is what every reader consults
-instead of the backend's name. World mode then travels in the start op's gameOptions and so
-into the snapshot, which is what makes a restored world come back resident
-rather than reading its `{ __elementId }` references against a residency model
-that never wrote them.
-
-That construction option is the whole of what the block causes here. `boardsmith
-dev` then plays the project's TABLE game under this residency model; it runs no
-part of the world half of the game definition, because the commands, genesis,
-per-seat view and presence hooks in `gameDefinition.world` are called by the
-hosting platform's world runner and this repo contains no such runner. See
-[persistent worlds](./persistent-worlds.md) for who owns that contract and
-where a world really runs.
+instead of the backend's name. See [persistent worlds](./persistent-worlds.md)
+for the world runner's contract and what a host must persist.
 
 ## Game Lifecycle
 

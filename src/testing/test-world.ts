@@ -32,6 +32,7 @@
  */
 import type { ElementJSON } from '../engine/index.js';
 import {
+  mintWorldElementIdKey,
   worldBudgets,
   type StoredPartition,
   type WorldActionOffer,
@@ -60,6 +61,13 @@ export interface TestWorldOptions {
   /** The world's seed. The same one on every rebuild, or the world's randomness
    *  is a different world each time. */
   readonly seed?: string;
+  /**
+   * The world's element id key (#482): 24 lowercase hex digits. A fresh one
+   * from `mintWorldElementIdKey` unless a test names one -- as a host mints
+   * one when it creates a world -- so name it only when a test needs the same
+   * ids from two worlds.
+   */
+  readonly elementIdKey?: string;
   /** The ceilings this world runs. The library's defaults unless a test is
    *  about one of them. */
   readonly budgets?: WorldBudgets;
@@ -192,7 +200,7 @@ export class TestWorld {
   private constructor(options: TestWorldOptions) {
     const budgets = options.budgets ?? worldBudgets();
     this.#clock = manualClock(options.now ?? TEST_WORLD_EPOCH);
-    this.#store = createMemoryWorldStore(budgets);
+    this.#store = createMemoryWorldStore(options.elementIdKey ?? mintWorldElementIdKey(), budgets);
     this.#world = new ResidentWorld({
       definition: options.definition,
       seed: options.seed ?? 'test-world',

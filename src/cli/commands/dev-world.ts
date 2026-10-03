@@ -39,7 +39,7 @@ import open from 'open';
 import type { Plugin as VitePlugin } from 'vite';
 
 import { worldBudgets } from '../../world/index.js';
-import type { WorldLiftOutcome, WorldMigrationOutcome } from '../../world/host/index.js';
+import type { WorldMigrationOutcome } from '../../world/host/index.js';
 import type { LocalWorldHost } from '../dev-host/world-host.js';
 import { createRulesReloadQueue, type RulesReloadQueue } from '../dev-host/rules-reload-queue.js';
 import { createWorldConnections } from '../dev-host/world-connections.js';
@@ -570,22 +570,7 @@ export async function startWorldDevServer(
  * world to tell -- and the person who published the new rules is standing here
  * (#200). Silent for the ordinary start, which moved nothing.
  */
-function reportMigration(started: {
-  migrated?: WorldMigrationOutcome;
-  lifted?: WorldLiftOutcome;
-}): void {
-  if (started.lifted !== undefined) {
-    // SAID FIRST, because it happened first and because it is the sentence
-    // that explains why a world written on an older BoardSmith could suddenly
-    // grow (#223).
-    const { offset, partitions, events } = started.lifted;
-    console.log(
-      chalk.green(
-        `  Lifted this world's element ids by ${offset} so its seat count can change: ` +
-          `${partitions} partition(s) and ${events} queued event(s), in one durable step.`,
-      ),
-    );
-  }
+function reportMigration(started: { migrated?: WorldMigrationOutcome }): void {
   if (started.migrated === undefined) return;
   const { from, to, partitions, created, events } = started.migrated;
   console.log(

@@ -29,6 +29,8 @@ import { createWorld, worldIdAllocationOf, type WorldRunnerOptions } from "./def
 import { worldAction } from "./action.js";
 import { WorldRefusal, ownerOf } from "./refusals.js";
 import type { StoredPartition } from "./contract.js";
+import { worldElementIds } from "../engine/element/element-ids.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 /** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
  *  The clock's road passes its whole occurrence instead. */
@@ -50,6 +52,10 @@ const ROOMS = ["a", "b", "c", "d", "e"] as const;
  *  host on purpose -- it never parses a partition -- so a test that wants the
  *  id says so once. */
 const idOf = (record: StoredPartition): number => (record.json as { id: number }).id;
+
+/** The counter value a stored id was minted from, read back with the world's
+ *  key (#482): the stamp is a counter value, and an id is not one. */
+const cursorOf = (id: number): number => worldElementIds(TEST_WORLD_ELEMENT_ID_KEY).cursorOf(id);
 
 const readA = worldAction<Demo>("read-a")
   .needs(() => ["a"])
@@ -81,6 +87,7 @@ function options(overrides: Partial<WorldRunnerOptions> = {}): WorldRunnerOption
     definition,
     seed: "ids",
     seats: new Map([["p1", 1]]),
+    elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
     ...overrides,
   };
 }
@@ -119,10 +126,10 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
   it("reports the stamp a host must persist alongside genesis", async () => {
     const genesis = await storedWorld();
 
-    const ids = ROOMS.map((name) => idOf(genesis.partitions[name]!));
-    expect(ids).toEqual([1_000_000, 1_000_001, 1_000_002, 1_000_003, 1_000_004]);
-    // The next id the world may mint: above every id genesis handed out.
-    expect(genesis.nextElementId).toBeGreaterThan(Math.max(...ids));
+    const cursors = ROOMS.map((name) => cursorOf(idOf(genesis.partitions[name]!)));
+    expect(cursors).toEqual([1_000_000, 1_000_001, 1_000_002, 1_000_003, 1_000_004]);
+    // The next counter value the world may mint from: above every one genesis spent.
+    expect(genesis.nextElementId).toBeGreaterThan(Math.max(...cursors));
   });
 
   it("mints a cold on-demand root OUTSIDE every stored root's identity", async () => {
@@ -179,8 +186,8 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
 
     const made = await born.createPartition("dynamic");
 
-    expect(idOf(made!.partition)).toBeGreaterThan(
-      Math.max(...ROOMS.map((name) => idOf(genesis.partitions[name]!))),
+    expect(cursorOf(idOf(made!.partition))).toBeGreaterThan(
+      Math.max(...ROOMS.map((name) => cursorOf(idOf(genesis.partitions[name]!)))),
     );
   });
 
@@ -219,12 +226,13 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
   it("derives the repair stamp from stored bytes, for a world that has none", async () => {
     // The supported repair for a world that was already occupied when this
     // landed, and for one whose roots have already collided: read what is
-    // stored, take the highest id in it, and write the stamp above it. It is
+    // stored, read each id back to its counter value with the world's key,
+    // take the highest, and write the stamp above it. It is
     // O(stored) ONCE, at the repair, and never again.
     const genesis = await storedWorld();
     const records: StoredPartition[] = ROOMS.map((name) => genesis.partitions[name]!);
 
-    const repaired = worldIdAllocationOf(records);
+    const repaired = worldIdAllocationOf(records, TEST_WORLD_ELEMENT_ID_KEY);
 
     expect(repaired).toBe(genesis.nextElementId);
     const cold = createWorld(options({ nextElementId: repaired })).runner;

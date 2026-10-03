@@ -23,6 +23,7 @@ import { Game, Space, type GameElement, type GameOptions } from "../engine/index
 import { createWorld, type WorldRunnerOptions } from "./definition.js";
 import { worldAction } from "./action.js";
 import { WorldRefusal } from "./refusals.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 /** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
  *  The clock's road passes its whole occurrence instead. */
@@ -67,6 +68,7 @@ const STAMP = {
 
 async function attempt() {
   const runner = createWorld({
+    elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
     definition,
     seed: "credits",
     seats: new Map([["p1", 1]]),

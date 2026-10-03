@@ -1,9 +1,9 @@
 {
-  "revision": 124,
+  "revision": 125,
   "bundleProtocol": 2,
-  "surfaceHash": "f7e59da26973c116",
-  "payloadHash": "06cfffd56c7bef19",
-  "formatHash": "0058593e7cc80205",
+  "surfaceHash": "e868c2e60348f66b",
+  "payloadHash": "a6dc5ab68fb08599",
+  "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
       "revision": 1,
@@ -1060,6 +1060,15 @@
       "payloadHash": "06cfffd56c7bef19",
       "formatHash": "0058593e7cc80205",
       "summary": "No BoardSmith host pushes a seat a state identical to the last one it sent (#487). SnapshotSessionHost's broadcast adapter is replaced by record (every view of record, spectator included, after each change) and push (only the seats whose view changed; seat 0 is the spectators), and it gains rosterChanged(), to call when a seat passes between a person and the bot; restoreFrom takes the views pages hold (playerViews, spectatorView) as given, so a roster change made while the host slept is pushed. GameSession's SessionInfo requires a connectionId. StatePushGate is exported from boardsmith/session and boardsmith/session-host. Animation event ids in a seat's payload now count only the events that seat may see (#489): a seat's state.animationEvents carries only its own events, numbered in its own sequence, seat views no longer carry animationEventSeq, every PlayerGameState names the seat it was built for (viewerSeat, 0 for a spectator) so a page that changes seat restarts its animation watermark, and animateTo refuses seat 0."
+    },
+    {
+      "revision": 125,
+      "date": "2026-10-03",
+      "bundleProtocol": 2,
+      "surfaceHash": "e868c2e60348f66b",
+      "payloadHash": "a6dc5ab68fb08599",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "World element ids are now opaque (#482): Speck48/96 of the world's creation counter under a 96-bit key the HOST mints once when it creates a world (mintWorldElementIdKey from boardsmith/world, 24 hex digits), stores with the world beside nextElementId, and passes on every wake as createWorld's required elementIdKey (a world game built directly needs GameOptions.elementIdKey); never sent to a client. New platform-owned refusals: element-id-key-invalid (no key, or not 24 lowercase hex digits; the engine never mints a world key and never repeats a refused key) and element-id-key-mismatch (a stored partition does not hang from the root this key mints, raised before adoption). Ids are whole numbers below 2^48. nextElementId stays a counter value, never an id; worldIdAllocationOf(records, elementIdKey) now takes the key and whole StoredPartition records ({ parentId, json }, not bare json) and refuses records minted under another key; adopting a partition no longer spends counter values. Hidden-zone placeholder ids are now counted down from -1 per projection, for tables and worlds alike. Format break: the world format corpus is regenerated and records its key; worlds stored with sequential ids cannot be read by this engine, keep them on their archived runner or reset them. The pre-floor id lift (rekey exports, WorldStore.rekey, WorldStartOutcome.lifted) is removed; WorldStore gains elementIdKey(); createMemoryWorldStore takes the key first; TestWorld takes an optional elementIdKey."
     }
   ]
 }

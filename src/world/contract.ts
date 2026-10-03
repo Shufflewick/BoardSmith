@@ -1301,7 +1301,10 @@ export interface WorldEngine {
   ): Promise<readonly string[] | null>;
 
   /**
-   * THE NEXT ELEMENT ID THIS WORLD MAY MINT (ShufflewickPub #377).
+   * THE COUNTER VALUE THE NEXT ELEMENT THIS WORLD MINTS TAKES (ShufflewickPub
+   * #377). A counter value, not an id: an id is the counter run through the
+   * world's keyed cipher (#482), so a host stores this and hands it back, and
+   * never compares it with an id.
    *
    * A world's ids are durable and only a fraction of the partitions holding
    * them is ever resident, so the counter cannot be rebuilt from residency: a

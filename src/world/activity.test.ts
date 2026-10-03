@@ -37,6 +37,7 @@ import { Game, Space, type GameElement, type GameOptions } from "../engine/index
 import { createWorld, type WorldRunnerOptions } from "./definition.js";
 import { worldAction, worldClockAction } from "./action.js";
 import type { SeatActivity, SeatActivityStamp, StoredPartition } from "./contract.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 class Room extends Space<Demo> {}
 
@@ -83,7 +84,7 @@ const DAY = 86_400_000;
 const OPENED = 1_700_000_000_000;
 
 function world() {
-  return createWorld({ definition, seed: "activity", seats: SEATS }).runner;
+  return createWorld({ elementIdKey: TEST_WORLD_ELEMENT_ID_KEY, definition, seed: "activity", seats: SEATS }).runner;
 }
 
 /**

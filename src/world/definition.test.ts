@@ -26,6 +26,8 @@ import {
 import { worldAction, worldClockAction } from "./action.js";
 import { worldBudgets } from "./budgets.js";
 import { WorldRefusal } from "./refusals.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
+import { worldElementIds } from "../engine/element/element-ids.js";
 
 /** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
  *  The clock's road passes its whole occurrence instead. */
@@ -199,9 +201,9 @@ describe("readWorldDefinition — what a bundle must export", () => {
         vacate: "poke",
       },
     });
-    expect(createWorld({ definition: vacating, seed: "s", seats: new Map() }).vacate).toBe("poke");
+    expect(createWorld({ elementIdKey: TEST_WORLD_ELEMENT_ID_KEY, definition: vacating, seed: "s", seats: new Map() }).vacate).toBe("poke");
     expect(
-      createWorld({ definition: bundle(), seed: "s", seats: new Map() }).vacate,
+      createWorld({ elementIdKey: TEST_WORLD_ELEMENT_ID_KEY, definition: bundle(), seed: "s", seats: new Map() }).vacate,
     ).toBeNull();
   });
 
@@ -348,6 +350,7 @@ describe("createWorld — one construction, every host", () => {
     // serializes as a positional branch path, which resolves to the WRONG
     // element once a partition is not resident.
     const { seatCount } = createWorld({
+      elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
       definition: bundle(),
       seed: "s",
       seats: new Map([["p1", 1]]),
@@ -357,6 +360,7 @@ describe("createWorld — one construction, every host", () => {
 
   it("takes its seat count from world.maxPlayers, not from a table roster", () => {
     const { seatCount } = createWorld({
+      elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
       // A stale table roster beside the world block changes nothing: the world
       // reads its own number, so there is only ever one to read.
       definition: {
@@ -372,6 +376,7 @@ describe("createWorld — one construction, every host", () => {
 
   it("runs the bundle's genesis and hands back what a store must write", async () => {
     const { runner } = createWorld({
+      elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
       definition: bundle(),
       seed: "s",
       seats: new Map([["p1", 1]]),
@@ -384,13 +389,18 @@ describe("createWorld — one construction, every host", () => {
     // AND THE ALLOCATION STAMP, in the same answer (ShufflewickPub #377): the
     // ids genesis minted are durable, and a host that wrote the bytes without
     // recording how far the counter got would mint over them on its next wake.
+    // The stamp is a COUNTER value and an id is its keyed cipher (#482), so
+    // the comparison is made on the id read back with the world's key.
     expect(genesis.nextElementId).toBeGreaterThan(
-      (genesis.partitions["yard:1"]!.json as { id: number }).id,
+      worldElementIds(TEST_WORLD_ELEMENT_ID_KEY).cursorOf(
+        (genesis.partitions["yard:1"]!.json as { id: number }).id,
+      ),
     );
   });
 
   it("declares, applies and serializes a command end to end", async () => {
     const { runner } = createWorld({
+      elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
       definition: bundle(),
       seed: "s",
       seats: new Map([["p1", 1]]),
@@ -428,7 +438,7 @@ describe("createWorld — one construction, every host", () => {
 
   it("REFUSES a seating outside the world before it builds anything", () => {
     expect(() =>
-      createWorld({ definition: bundle(), seed: "s", seats: new Map([["p1", 3]]) }),
+      createWorld({ elementIdKey: TEST_WORLD_ELEMENT_ID_KEY, definition: bundle(), seed: "s", seats: new Map([["p1", 3]]) }),
     ).toThrow(/seats 1 through 2/);
   });
 
@@ -445,6 +455,7 @@ describe("createWorld — one construction, every host", () => {
       });
     const definition = bundle({ world: { maxPlayers: 2, view: () => [], actions: [spam] } });
     const { runner } = createWorld({
+      elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
       definition,
       seed: "s",
       seats: new Map([["p1", 1]]),
@@ -485,6 +496,7 @@ describe("createWorld — one construction, every host", () => {
         ctx.world.schedule({ delayMs: 60_000, key: "raid", action: "rearm" });
       });
     const { runner } = createWorld({
+      elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
       definition: bundle({ world: { maxPlayers: 2, view: () => [], actions: [rearm] } }),
       seed: "s",
       seats: new Map([["p1", 1]]),
@@ -515,6 +527,7 @@ describe("createWorld — one construction, every host", () => {
         ctx.world.cancel("");
       });
     const { runner } = createWorld({
+      elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
       definition: bundle({ world: { maxPlayers: 2, view: () => [], actions: [forget] } }),
       seed: "s",
       seats: new Map([["p1", 1]]),
