@@ -361,6 +361,26 @@ export type GameClass<G extends Game = Game> = new (options: GameOptions) => G;
 export type RandomnessPolicy = 'allowed' | 'forbidden';
 
 /**
+ * Where a restore must not take the animation numbering below: the live
+ * game's counters, read with {@link animationFloorOf}.
+ */
+export interface AnimationFloor {
+  /** The game-wide event counter. */
+  seq: number;
+  /** Each recipient's own counter, by seat (`0` is the spectator). */
+  bySeat: Record<string, number>;
+}
+
+/**
+ * The animation counters a serialized game (`toJSON()`) holds, as the floor a
+ * restore of an earlier point in the same game must stay above.
+ */
+export function animationFloorOf(state: unknown): AnimationFloor {
+  const json = state as { animationEventSeq?: number; animationSeqBySeat?: Record<string, number> };
+  return { seq: json.animationEventSeq ?? 0, bySeat: { ...(json.animationSeqBySeat ?? {}) } };
+}
+
+/**
  * Game phase
  */
 export type GamePhase = 'setup' | 'started' | 'finished';
@@ -371,8 +391,20 @@ export type GamePhase = 'setup' | 'started' | 'finished';
  * layer to UI consumers who play them back asynchronously.
  */
 export interface AnimationEvent {
-  /** Unique ID for acknowledgment (monotonically increasing) */
+  /**
+   * Monotonically increasing id. In the game's own buffer and in `toJSON()` it
+   * numbers every event in the game; in a seat's payload (`toJSONForPlayer`) it
+   * is that seat's own number for the event, counting only the events that
+   * seat may see, so a seat cannot count another seat's private events from
+   * the gaps (#489).
+   */
   id: number;
+  /**
+   * Each recipient's own number for this event, by seat (`0` is the
+   * spectator). Kept in the game's buffer and in `toJSON()` only: a seat's
+   * payload carries its own number as `id` instead.
+   */
+  seatIds?: Record<string, number>;
   /** Event type (e.g., 'combat', 'score', 'cardFlip') */
   type: string;
   /** Event-specific data payload (must be JSON-serializable) */
@@ -1016,6 +1048,9 @@ export class Game<
 
   /** Animation event sequence counter (for unique IDs) */
   private _animationEventSeq: number = 0;
+
+  /** Each recipient's own animation event counter, by seat (`0` is the spectator) -- see AnimationEvent.seatIds. */
+  private _animationSeqBySeat: Map<number, number> = new Map();
   /**
    * How many message-log entries have been evicted from the FRONT of the log
    * over this game's life (#25).
@@ -4262,7 +4297,8 @@ export class Game<
    * with its audience intact.
    *
    * @param audience - Seat(s) allowed to see this event: a Player, a seat
-   *   number, or an array of either.
+   *   number (from 1; spectators see only `animate()`'s public events), or an
+   *   array of either.
    * @param type - Event type identifier, same as `animate()`
    * @param data - Event-specific data payload (must be JSON-serializable)
    *
@@ -4278,6 +4314,14 @@ export class Game<
     data: Record<string, unknown>,
   ): void {
     const seats = this.resolveAudience(audience, `animateTo("${type}")`);
+    // Seat 0 is where the spectator's numbers are kept (#489), so an event
+    // addressed to it would move them for an event no spectator is sent.
+    if (seats.includes(0)) {
+      throw new Error(
+        `animateTo("${type}") was given seat 0, but seat 0 is no player: seats start at 1. ` +
+          `Spectators see only public events, so use animate() for an event they should see.`,
+      );
+    }
     this.execute({ type: 'ANIMATE', eventType: type, data, to: seats });
   }
 
@@ -4319,11 +4363,22 @@ export class Game<
    */
   pushAnimationEvent(eventType: string, data: Record<string, unknown>, to?: number[]): void {
     this._animationEventSeq++;
+    // Every recipient numbers the event in its own sequence (#489): a public
+    // event goes to every seat and the spectator (0), a private one to its
+    // audience only, so no seat's numbers move for an event it never receives.
+    const recipients = to ?? [0, ...this.players.map((player) => player.seat)];
+    const seatIds: Record<string, number> = {};
+    for (const seat of recipients) {
+      const next = (this._animationSeqBySeat.get(seat) ?? 0) + 1;
+      this._animationSeqBySeat.set(seat, next);
+      seatIds[seat] = next;
+    }
     this._animationEvents.push({
       id: this._animationEventSeq,
       type: eventType,
       data,
       ...(to ? { to } : {}),
+      seatIds,
     });
   }
 
@@ -4353,6 +4408,8 @@ export class Game<
     settings: Record<string, unknown>;
     animationEvents?: AnimationEvent[];
     animationEventSeq?: number;
+    /** Each recipient's animation event counter (#489) — see AnimationEvent.seatIds. */
+    animationSeqBySeat?: Record<string, number>;
     /** Message-log front-eviction offset (#25) — see Game#messagesEvicted. */
     messagesEvicted?: number;
   } {
@@ -4402,6 +4459,9 @@ export class Game<
       // `animate()` has ever actually run (avoid cluttering a snapshot that
       // never used animation events at all).
       ...(this._animationEventSeq > 0 && { animationEventSeq: this._animationEventSeq }),
+      ...(this._animationSeqBySeat.size > 0 && {
+        animationSeqBySeat: Object.fromEntries(this._animationSeqBySeat),
+      }),
       // How many log entries have been evicted (#25). Restored below so a
       // resumed game still resolves an old checkpoint's watermark correctly.
       // One number for the whole game, not a field on every line.
@@ -4411,7 +4471,7 @@ export class Game<
       ...(this._animationEvents.length > 0 && {
         // Copy the buffer (same CR-02 aliasing concern: the live array is
         // mutated in place as later events are recorded).
-        animationEvents: this._animationEvents.map((e) => ({ ...e })),
+        animationEvents: this._animationEvents.map((e) => ({ ...e, ...(e.seatIds && { seatIds: { ...e.seatIds } }) })),
       }),
     };
   }
@@ -4510,13 +4570,17 @@ export class Game<
    *     #269), which is author code handed the seat;
    *   `static playerView`, which is author code handed the seat;
    *   any tutorial progress, which is scoped to the receiving seat (SEC-05);
-   *   any animation event addressed to an audience (#23).
+   *   any animation event addressed to an audience (#23), or numbered
+   *     differently for two asking seats (#489).
    */
   projectionSignaturesFor(seats: readonly number[]): readonly string[] | null {
     const GameClass = this.constructor as typeof Game;
     if (GameClass.playerView !== undefined) return null;
     if (this.tutorialProgress.size > 0) return null;
     if (this._animationEvents.some((event) => event.to !== undefined)) return null;
+    // Each seat's events carry that seat's own numbers (#489), which differ
+    // between seats whenever their counters have.
+    if (this._animationEvents.some((event) => new Set(seats.map((seat) => event.seatIds?.[seat])).size > 1)) return null;
 
     /** Every state the tree declares, in one fixed order for every seat. */
     const declared: VisibilityState[] = [];
@@ -4930,7 +4994,13 @@ export class Game<
     // by `delete`, which would move it into dictionary mode — this runs once
     // per seat per broadcast and once per MCTS playout, and a deoptimized shape
     // here is measurable in bot search time.
-    const { messagesEvicted: _engineOnly, ...withoutEngineBookkeeping } =
+    //
+    // The animation id counter goes for a second reason (#487): it counts EVERY
+    // seat's events, `animateTo` ones included, so a seat watching it rise
+    // learns another seat played a private animation, and is pushed a changed
+    // view when nothing it may see changed. Restores read it from `toJSON()`,
+    // never from a seat's view.
+    const { messagesEvicted: _engineOnly, animationEventSeq: _restoreOnly, animationSeqBySeat: _restoreOnlyBySeat, ...withoutEngineBookkeeping } =
       filteredState as ReturnType<Game['toJSON']> & { messagesEvicted?: number };
     const view = withoutEngineBookkeeping as ReturnType<Game['toJSON']>;
 
@@ -4964,20 +5034,28 @@ export class Game<
     // #23: enforce `animateTo`'s audience here, the same boundary the message
     // log's is enforced at. The buffer is game-wide and rides in `toJSON()`, so
     // without this every seat's payload carried every seat's private events
-    // until the dispatch that produced them drained. Ids are left untouched, so
-    // a client's monotonic watermark still advances correctly across the gaps.
-
+    // until the dispatch that produced them drained.
+    //
+    // #489: each event the seat keeps carries the seat's OWN number for it,
+    // not the game-wide id, which counts every seat's events and so would let
+    // a seat count another seat's private ones from the gaps.
     if (view.animationEvents) {
-      const visible = view.animationEvents.filter(
-        (event) => !event.to || (playerSeat !== null && event.to.includes(playerSeat)),
-      );
-      if (visible.length === view.animationEvents.length) {
-        // Nothing withheld — leave the array as it is.
-      } else if (visible.length === 0) {
-        delete view.animationEvents;
-      } else {
-        view.animationEvents = visible;
-      }
+      const recipient = playerSeat ?? 0;
+      const visible = view.animationEvents
+        .filter((event) => !event.to || (playerSeat !== null && event.to.includes(playerSeat)))
+        .map(({ seatIds, ...event }) => {
+          const own = seatIds?.[recipient];
+          if (own === undefined) {
+            throw new Error(
+              `Animation event "${event.type}" has no number for seat ${recipient}, so it cannot be sent to that seat ` +
+                `without the game-wide id, which counts every seat's events. The game state was saved by an engine ` +
+                `that did not number events per seat: start the game again under this engine.`,
+            );
+          }
+          return { ...event, id: own };
+        });
+      if (visible.length === 0) delete view.animationEvents;
+      else view.animationEvents = visible;
     }
 
     return view;
@@ -4998,7 +5076,7 @@ export class Game<
    */
   loadSerializedState(
     json: ReturnType<Game['toJSON']>,
-    options?: { animationSeqFloor?: number; messageLog?: MessageEntry[] }
+    options?: { animationFloor?: AnimationFloor; messageLog?: MessageEntry[] }
   ): void {
     // Ids are keyed (#447), and the root is always the first element a game
     // creates, so a root id that differs from this game's own says the tree
@@ -5038,52 +5116,67 @@ export class Game<
 
     // Restore animation events if present.
     //
-    // `animationSeqFloor` distinguishes the two callers of this method
+    // `animationFloor` distinguishes the two callers of this method
     // (UNDO-04): a FULL session restore (GameSession.restore -> fromSnapshot,
-    // no floor) is correct to unconditionally ADOPT the persisted seq -- the
-    // process is starting fresh, there is no live counter to protect. An
+    // no floor) is correct to unconditionally ADOPT the persisted counters --
+    // the process is starting fresh, there is no live counter to protect. An
     // undo/rewind CHECKPOINT restore (GameRunner.fromCheckpoint) supplies a
-    // floor derived from the enclosing LIVE snapshot: the checkpoint's own
-    // seq is historical and may be behind the live counter, and letting it
-    // overwrite the live counter backwards is exactly what makes the client's
-    // monotonic watermark (`e.id > lastQueuedId`) silently drop every
-    // replayed beat. When a floor is supplied, the seq never drops below it,
-    // and the restored buffer is re-stamped with fresh ids above it so those
+    // floor read from the enclosing LIVE snapshot (`animationFloorOf`): the
+    // checkpoint's own counters are historical and may be behind the live
+    // ones, and letting them overwrite the live counters backwards is exactly
+    // what makes the client's monotonic watermark (`e.id > lastQueuedId`)
+    // silently drop every replayed beat. When a floor is supplied, no counter
+    // drops below it, and the restored buffer is re-stamped with fresh numbers
+    // above it -- the game-wide id and each recipient's own (#489) -- so those
     // beats still animate instead of colliding with ids already delivered.
     // Do not "simplify" this back into a single unconditional adopt -- see
     // RESEARCH.md §C.
-    const jsonWithEvents = json as { animationEvents?: AnimationEvent[]; animationEventSeq?: number };
-    if (options?.animationSeqFloor !== undefined) {
-      // Checkpoint/undo-rewind restore: never let the seq drop below the
+    const jsonWithEvents = json as {
+      animationEvents?: AnimationEvent[];
+      animationEventSeq?: number;
+      animationSeqBySeat?: Record<string, number>;
+    };
+    const savedBySeat = new Map(
+      Object.entries(jsonWithEvents.animationSeqBySeat ?? {}).map(([seat, n]) => [Number(seat), n] as const),
+    );
+    const floor = options?.animationFloor;
+    if (floor !== undefined) {
+      // Checkpoint/undo-rewind restore: never let a counter drop below the
       // live floor, whether or not this checkpoint happened to have a
-      // non-empty buffer (toJSON omits both fields entirely when the buffer
-      // was empty, so the floor must be applied unconditionally here -- not
-      // only inside the `if (jsonWithEvents.animationEvents)` branch).
-      this._animationEventSeq = Math.max(jsonWithEvents.animationEventSeq ?? 0, options.animationSeqFloor);
-      if (jsonWithEvents.animationEvents) {
-        // Copy the event objects too (CR-02): the snapshot may be restored
-        // again. Re-stamp each restored event with a fresh id above the
-        // floor, preserving relative order, so they are not filtered out by
-        // a client watermark that has already advanced past their old ids.
-        this._animationEvents = jsonWithEvents.animationEvents.map((e) => ({
-          ...e,
-          id: ++this._animationEventSeq,
-        }));
-      } else {
-        this._animationEvents = [];
+      // non-empty buffer (toJSON omits the fields entirely when nothing was
+      // ever animated, so the floor must be applied unconditionally here).
+      this._animationEventSeq = Math.max(jsonWithEvents.animationEventSeq ?? 0, floor.seq);
+      for (const [seat, n] of Object.entries(floor.bySeat)) {
+        const key = Number(seat);
+        savedBySeat.set(key, Math.max(savedBySeat.get(key) ?? 0, n));
       }
+      this._animationSeqBySeat = savedBySeat;
+      // Copy the event objects too (CR-02): the snapshot may be restored
+      // again. Re-stamp each restored event above the floor, preserving
+      // relative order, so a watermark that already passed its old numbers
+      // does not filter it out.
+      this._animationEvents = (jsonWithEvents.animationEvents ?? []).map((e) => {
+        const seatIds: Record<string, number> = {};
+        for (const seat of Object.keys(e.seatIds ?? {})) {
+          const next = (this._animationSeqBySeat.get(Number(seat)) ?? 0) + 1;
+          this._animationSeqBySeat.set(Number(seat), next);
+          seatIds[seat] = next;
+        }
+        return { ...e, id: ++this._animationEventSeq, seatIds };
+      });
     } else if (jsonWithEvents.animationEventSeq !== undefined || jsonWithEvents.animationEvents) {
-      // Full restore (no floor supplied): unconditionally adopt the
-      // persisted seq, unchanged from today's behavior. Checked on
-      // `animationEventSeq` OR `animationEvents` (not `animationEvents`
-      // alone) because toJSON now serializes the seq independently of
-      // whether the buffer happens to be empty -- a restore must still
-      // adopt a nonzero seq even when there is no buffer to go with it.
+      // Full restore (no floor supplied): adopt the persisted counters.
+      // Checked on `animationEventSeq` OR `animationEvents` (not
+      // `animationEvents` alone) because toJSON serializes the counters
+      // independently of whether the buffer happens to be empty -- a restore
+      // must still adopt them even when there is no buffer to go with it.
       // Copy the event objects too (CR-02): the snapshot may be restored again.
-      this._animationEvents = jsonWithEvents.animationEvents
-        ? jsonWithEvents.animationEvents.map((e) => ({ ...e }))
-        : [];
+      this._animationEvents = (jsonWithEvents.animationEvents ?? []).map((e) => ({
+        ...e,
+        ...(e.seatIds && { seatIds: { ...e.seatIds } }),
+      }));
       this._animationEventSeq = jsonWithEvents.animationEventSeq ?? 0;
+      this._animationSeqBySeat = savedBySeat;
     }
 
     // Capture Space onEnter/onExit handlers from the constructor-built tree

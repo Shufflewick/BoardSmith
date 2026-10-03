@@ -36,6 +36,7 @@ export {
   isEngineRootField,
   engineRootFieldAudience,
   ENGINE_OWNED_GAME_OPTION_KEYS,
+  animationFloorOf,
 } from './element/index.js';
 
 export type {
@@ -67,6 +68,7 @@ export type {
   LayoutAlignment,
   DieSides,
   AnimationEvent,
+  AnimationFloor,
   // INTRO-01/02: action-space introspection view types
   ActionSpaceView,
   ActionSchemaView,

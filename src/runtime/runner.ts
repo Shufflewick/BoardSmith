@@ -30,7 +30,7 @@ import {
 } from '../engine/index.js';
 import { ErrorCode } from '../types/protocol.js';
 import { PlayerFacingError } from '../engine/errors.js';
-import { constructGame } from '../engine/element/game.js';
+import { constructGame, animationFloorOf, type AnimationFloor } from '../engine/element/game.js';
 import { isDevThrowEnabled } from '../utils/dev.js';
 import type { RandomState } from '../utils/random.js';
 import type { MessageEntry } from '../engine/index.js';
@@ -953,7 +953,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     snapshot: GameStateSnapshot,
     GameClass: new (options: GameOptions) => G,
     options?: {
-      animationSeqFloor?: number;
+      animationFloor?: AnimationFloor;
       checkpoints?: CheckpointPolicy;
       randomness?: RandomnessPolicy;
       undo?: UndoPolicy;
@@ -1047,7 +1047,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // rebuilds the tree from snapshot.state on its own (see Game.loadSerializedState
     // / Game.restoreGame), so it stands alone with no prior replay.
     //
-    // `animationSeqFloor` (UNDO-04): absent for a normal full restore (adopt
+    // `animationFloor` (UNDO-04): absent for a normal full restore (adopt
     // the persisted animation-event seq, today's behavior); supplied only by
     // `fromCheckpoint` below, so an undo/rewind checkpoint restore can never
     // move the live animation-event id sequence backwards. Do not thread a
@@ -1141,7 +1141,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // game already was. This is what makes the fix self-serving from this
     // single call site -- no undo/rewind executor needs to remember to pass
     // it. See game.ts's `loadSerializedState` doc comment / RESEARCH.md §C.
-    const animationSeqFloor = (snapshot.state as { animationEventSeq?: number }).animationEventSeq ?? 0;
+    const animationFloor = animationFloorOf(snapshot.state);
 
     // UNDO-02: clamp the barrier to the restore point. A barrier set AHEAD of
     // `actionIndex` (e.g. from an execute() node that ran after the point
@@ -1157,7 +1157,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // is what makes undo still drop the lines the undone action wrote — the
     // behaviour that used to fall out for free when every checkpoint carried its
     // own copy of the log (CR-02's "undoToTurnStart rolls back game.message()").
-    // Same shape as the `animationSeqFloor` and `executeBarrierIndex` clamps
+    // Same shape as the `animationFloor` and `executeBarrierIndex` clamps
     // above: derived here, at the single sanctioned checkpoint-restore site, so
     // no undo/rewind caller has to remember it.
     //
@@ -1190,7 +1190,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
         },
         executeBarrierIndex,
         // The restore itself, recorded durably. This is the ONE site that
-        // advances the epoch -- same reasoning as `animationSeqFloor` and the
+        // advances the epoch -- same reasoning as `animationFloor` and the
         // `executeBarrierIndex` clamp above: derived at the single sanctioned
         // checkpoint-restore site, so no undo/rewind caller has to remember it,
         // and no host can ship a restore that forgets to tell its clients.
@@ -1200,7 +1200,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       },
       GameClass,
       {
-        animationSeqFloor,
+        animationFloor,
         checkpoints: options?.checkpoints,
         randomness: options?.randomness,
         undo: options?.undo,
@@ -1240,7 +1240,7 @@ export function restoreEarlierSnapshot<G extends Game>(
     { ...earlier, restoreEpoch: (live.restoreEpoch ?? 0) + 1 },
     GameClass,
     {
-      animationSeqFloor: (live.state as { animationEventSeq?: number }).animationEventSeq ?? 0,
+      animationFloor: animationFloorOf(live.state),
       checkpoints: options?.checkpoints,
       randomness: options?.randomness,
       undo: options?.undo,

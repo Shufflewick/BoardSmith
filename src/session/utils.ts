@@ -730,6 +730,9 @@ export function buildPlayerState(
     restoreEpoch: runner.restoreEpoch,
     // Unconditional too: which game this is -- see PlayerGameState.gameInstanceId.
     gameInstanceId: runner.gameInstanceId,
+    // Unconditional too: whose numbers the animation ids are -- see
+    // PlayerGameState.viewerSeat.
+    viewerSeat: playerPosition,
   };
 
   // Action metadata was built above (single-source reconciliation with
@@ -752,8 +755,11 @@ export function buildPlayerState(
     state.colorSelectionEnabled = true;
   }
 
-  // Include animation events if any are pending
-  const animationEvents = runner.game.pendingAnimationEvents;
+  // Include the animation events this seat may see, if any are pending. Read
+  // from `truthView`, which `toJSONForPlayer` has already cut to each
+  // `animateTo` event's audience: the game's own buffer holds every seat's
+  // private events (#23, #487).
+  const animationEvents = (truthView as { animationEvents?: PlayerGameState['animationEvents'] }).animationEvents ?? [];
   if (animationEvents.length > 0) {
     state.animationEvents = animationEvents;
     state.lastAnimationEventId = animationEvents[animationEvents.length - 1].id;

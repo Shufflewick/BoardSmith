@@ -549,6 +549,54 @@ durable across wakes and a world host may change the seed on every wake. In a
 world, a seat can still count creations it could not see from the gaps in the
 ids it does (#482).
 
+### Secret Moves in a Simultaneous Step
+
+In a simultaneous step a seat may act in secret: its move changes only what
+that seat may see (an attribute withheld by `visibleAttributes`, a card in its
+own hidden hand). Hiding the change is not enough on its own. If every move
+sent every seat a fresh state, a seat whose board did not change would still
+learn THAT someone moved, and when.
+
+So BoardSmith's hosts never push a seat or a spectator a state identical to
+the last one it was sent (#487). `GameSession` compares per connection;
+`SnapshotSessionHost`, and so `boardsmith dev`, compares per seat and hands its
+adapter only the views that changed. The platform adopts the same behaviour
+when it re-vendors this engine. Two parts of the payload are compared
+specially:
+
+- A send time stamped on every push does not count as a change. It moves only
+  when something else does.
+- Animation events count only when the seat has not been sent them. The engine
+  empties its animation buffer at the start of every move, so another seat's
+  move emptying it is not news. An event sent with `animateTo` reaches only its
+  audience; a public `animate()` reaches every seat, and so tells every seat
+  that someone moved. If a secret move animates at all, use `animateTo`.
+
+Animation event ids carry no count either: each seat (and the spectator)
+numbers only the events it is sent, so another seat's private animations
+leave no gap in its ids (#489). So an id means something only beside the seat
+it was numbered for, and every state says which seat that is
+(`PlayerGameState.viewerSeat`, 0 for a spectator). A page that changes seat
+(the dev host's follower, a spectator taking a seat) starts counting again
+from the new seat's numbers; GameShell does this for you.
+
+A page that connects or reconnects is always sent the full state.
+
+Two things still reach other seats when a seat acts in secret. Design around
+them:
+
+- **Undo turns off when another seat acts after you.** A seat can undo back to
+  the start of its turn only while no other seat has acted since. If seat 2
+  makes a secret move and then seat 1 makes one, seat 2's Undo control goes
+  away, and the state that removes it tells seat 2 that another seat moved.
+  Where that matters, let a seat change its secret choice with a game action
+  (a "move my placement" action) rather than with undo.
+- **The restore count rises when another seat undoes.** Every undo replaces the
+  game's state, and every seat is told so through `restoreEpoch`, which the UI
+  needs to drop element references from before the undo. So when seat 1
+  undoes, every other seat receives a state and can tell that someone undid
+  something, though not what.
+
 ## Snapshot Mode and World Mode
 
 Everything above describes **snapshot mode**: the whole element tree is

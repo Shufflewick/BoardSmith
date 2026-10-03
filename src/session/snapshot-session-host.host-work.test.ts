@@ -87,7 +87,7 @@ function countingSession(options: { botSeats?: Array<{ seat: number }>; botsStop
     botSeats: options.botSeats,
     executeOp,
     hostWork: gate.gate,
-    broadcast: (playerViews) => {
+    push: () => {}, record: ({ players: playerViews }) => {
       const view = playerViews[0] as { state: Count & { demoControls?: { canStepBack: boolean } } } | undefined;
       if (view !== undefined) views.push(view.state);
     },

@@ -455,6 +455,17 @@ export interface PlayerGameState {
    */
   gameInstanceId: string;
   /**
+   * The seat this state was built for: `0` for a spectator.
+   *
+   * Published unconditionally, and read with `gameInstanceId` and
+   * `restoreEpoch`: each seat numbers the animation events it may see in its
+   * own sequence (#489), so an event's `id` means something only beside the
+   * seat it was numbered for. A page that changes seat (the dev host's
+   * follower, a spectator taking a seat) sees this change, and
+   * `useAnimationEvents` starts its watermark again for the new seat's numbers.
+   */
+  viewerSeat: number;
+  /**
    * RESERVED (Plan 104-04): Active tutorial step projected for this player.
    *
    * `undefined` when no tutorial is running for this seat. Populated by
@@ -627,9 +638,16 @@ export type { LobbyState, SlotStatus, LobbySlot, LobbyInfo };
 // ============================================
 
 /**
- * Session identity for broadcasting
+ * One connection a `BroadcastAdapter` pushes to.
  */
 export interface SessionInfo {
+  /**
+   * Names this CONNECTION, not the seat: give each socket its own id when it
+   * opens and never reuse it. `GameSession` pushes a connection nothing
+   * identical to the last state it sent it (#487), so a page that reconnects
+   * must arrive under a new id to be sent the full state.
+   */
+  connectionId: string;
   playerId?: string;
   playerSeat: number;
   isSpectator: boolean;
@@ -675,6 +693,11 @@ export interface StorageAdapter {
  * Broadcast adapter interface for real-time updates
  */
 export interface BroadcastAdapter<TSession = SessionInfo> {
+  /**
+   * The connections open right now, one entry per connection. A connection
+   * absent from one call is forgotten, so it is sent the full state when it
+   * is listed again.
+   */
   getSessions(): TSession[];
   send(session: TSession, message: unknown): void;
 }

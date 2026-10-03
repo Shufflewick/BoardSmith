@@ -670,7 +670,7 @@ describe('useAnimationEvents', () => {
       expect(handled).toEqual([1, 2]);
     });
 
-    it('only queues events with id > lastProcessedId', async () => {
+    it('only queues events above the watermark', async () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: number[] = [];
 
@@ -1255,6 +1255,35 @@ describe('useAnimationEvents', () => {
       // The same timeline observed again -- same guarantee.
       await q.send([1, 2, 3], 'game-a:0');
       expect(q.delivered).toEqual([1, 2, 3]);
+    });
+
+    it("plays a new seat's events after skipping the old seat's, whatever their numbers (#489)", async () => {
+      // Each seat numbers its own events, so the queue can hold seat 1's
+      // events 5..7 when the page moves to seat 2, whose next event is 1.
+      const events = ref<AnimationEvent[]>([]);
+      const timeline = ref('game-a:0:1');
+      const delivered: string[] = [];
+      const instance = createAnimationEvents({ events: () => events.value, timeline: () => timeline.value });
+      instance.registerHandler('test', async (event, { signal }) => {
+        delivered.push(`${timeline.value}#${event.id}`);
+        // Seat 1's first event is still playing when the page changes seat.
+        await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+      }, { skip: 'drop' });
+
+      events.value = [5, 6, 7].map((id) => createEvent(id, 'test'));
+      await nextTick();
+      // Seat 2's first frame carries no events.
+      timeline.value = 'game-a:0:2';
+      events.value = [];
+      await nextTick();
+      instance.skipAll();
+      await waitForIdle(instance);
+
+      events.value = [createEvent(1, 'test')];
+      await nextTick();
+      instance.skipAll();
+      await waitForIdle(instance);
+      expect(delivered).toEqual(['game-a:0:1#5', 'game-a:0:2#1']);
     });
 
     it('never resets when no timeline source is supplied (absence is not a rewind signal)', async () => {

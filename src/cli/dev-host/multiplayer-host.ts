@@ -18,6 +18,7 @@
 import { createDevSession, type DevSession } from './bridge.js';
 import {
   STALE_SUBMISSION_MESSAGE,
+  StatePushGate,
   type Op,
   type OpResult,
   type GamePreset,
@@ -146,6 +147,9 @@ export type HostOutbound =
    * restarted since it joined. It is not seated; reloading it joins this run.
    */
   | { type: 'stale_run' };
+
+/** The `game_state` frame, the one message `pushGate` decides on. */
+type GameStateFrame = Extract<HostOutbound, { type: 'game_state' }>;
 
 /** Messages a client sends to the host. */
 export type ClientInbound =
@@ -479,6 +483,19 @@ export class MultiplayerHost {
   /** The seed the running game was dealt from, which every `game_state` frame carries (#460). */
   private dealtFrom: string | null = null;
   /**
+   * What the follower was last sent (#487). A seated page is pushed only when
+   * its own seat's view changed, which the game's host decides; the follower
+   * shows whichever seat is active, so it is held to the frame it last had
+   * here instead. Frames that reset it (`reinitSeat`) or answer it
+   * (`getState`) are recorded, not asked.
+   */
+  private readonly followerGate = new StatePushGate<string, GameStateFrame>({
+    playerState: (frame) => (frame.view as { state?: unknown } | undefined)?.state,
+    perPushFields: ['serverNow'],
+  });
+  /** The bot roster the game's host was last told about -- see `announceRoster`. */
+  private announcedRoster = '';
+  /**
    * Maps an in-flight requestId to the client that issued it, so the matching
    * `server_response` is routed back to the REQUESTING client — not the acting
    * seat. A follower acts as a seat it does not occupy (the active seat), so
@@ -617,6 +634,7 @@ export class MultiplayerHost {
 
   disconnect(clientId: string): void {
     this.connected.delete(clientId);
+    this.followerGate.forget(clientId);
     const seat = this.clientSeat.get(clientId);
     if (seat !== undefined) {
       const info = this.seats.get(seat);
@@ -643,6 +661,24 @@ export class MultiplayerHost {
   // ── Inbound dispatch ──────────────────────────────────────────────────────
 
   async handleMessage(clientId: string, msg: ClientInbound): Promise<void> {
+    await this.dispatch(clientId, msg);
+    this.announceRoster();
+  }
+
+  /**
+   * Tell the game's host when the bot roster changed since it was last told
+   * (`rosterChanged()`, #487), so every page learns of the change now and not
+   * with the next move. Called after every message and before every bot pump,
+   * since the roster is changed in many places and the pump reads it.
+   */
+  private announceRoster(): void {
+    const roster = this.botSeats.map((s) => s.seat).join(',');
+    if (this.phase !== 'playing' || !this.session || roster === this.announcedRoster) return;
+    this.announcedRoster = roster;
+    this.session.host.rosterChanged();
+  }
+
+  private async dispatch(clientId: string, msg: ClientInbound): Promise<void> {
     switch (msg.type) {
       case 'hello':
         return this.hello(clientId);
@@ -832,6 +868,7 @@ export class MultiplayerHost {
       const own = this.clientSeat.get(clientId);
       this.send(clientId, { type: 'follow', enabled: false, seat: own ?? 0 });
       if (own !== undefined && this.phase === 'playing') this.reinitSeat(clientId, own);
+      this.announceRoster();
       await this.session?.host.runBotTurns(); // resume bot for the seats it covered
       return;
     }
@@ -901,6 +938,7 @@ export class MultiplayerHost {
       this.addBotSeat(seat);
       this.broadcastLobby();
       this.send(clientId, this.lobbyMessage(clientId));
+      this.announceRoster();
       await this.session?.host.runBotTurns();
       return;
     }
@@ -961,10 +999,9 @@ export class MultiplayerHost {
     }
     const seat = this.seatOf(clientId, msg.requestId);
     if (seat === undefined) return;
-    this.send(clientId, {
-      ...this.gameStateFrame(this.session.viewForSeat(seat), this.session.meta()),
-      requestId: msg.requestId ?? null,
-    });
+    const frame = this.gameStateFrame(this.session.viewForSeat(seat), this.session.meta());
+    if (clientId === this.followerClientId) this.followerGate.recordSent(clientId, frame);
+    this.send(clientId, { ...frame, requestId: msg.requestId ?? null });
   }
 
   /**
@@ -1088,6 +1125,7 @@ export class MultiplayerHost {
   private coverAwaySeat(seat: number): void {
     if (this.followerClientId !== null) return;
     this.addBotSeat(seat);
+    this.announceRoster();
     if (this.phase !== 'playing') return;
     void this.session?.host.runBotTurns().catch((err: unknown) => {
       console.error(
@@ -1289,14 +1327,17 @@ export class MultiplayerHost {
       debug: () => this.debugOn(),
       executeOp,
       hostWork: this.opts.hostWork ?? runsAtOnce,
-      postGameState: (seat, view, meta) => {
+      observeChange: (meta) => {
         this.observeBoundary(session, meta.turnBoundary);
-        this.deliverGameState(seat, view, meta);
+        // Before `start` commits the session, the post-start re-init shows the follower its seat.
+        if (this.session === session) this.followActiveSeat(meta);
       },
+      postGameState: (seat, view, meta) => this.deliverGameState(seat, view, meta),
       postServerResponse: (seat, requestId, result) =>
         this.deliverServerResponse(seat, requestId, result),
     });
 
+    const startRoster = this.botSeats.map((s) => s.seat).join(',');
     // Only commit to 'playing' if the game actually starts — otherwise a failed
     // start would strand clients on an empty board. On failure, stay in the lobby
     // and surface the reason.
@@ -1310,6 +1351,8 @@ export class MultiplayerHost {
     }
 
     this.session = session;
+    // The host published its opening views with the roster it started under.
+    this.announcedRoster = startRoster;
     this.phase = 'playing';
     this.starting = false;
     this.stranded = null;
@@ -1332,6 +1375,7 @@ export class MultiplayerHost {
 
     // The opening seat may belong to a bot (e.g. a bot dictator that acts first);
     // drive any bot turns before handing control to the humans, then send state.
+    this.announceRoster();
     await session.host.runBotTurns();
 
     this.broadcastLobby();
@@ -1485,7 +1529,10 @@ export class MultiplayerHost {
     this.send(clientId, { type: 'init', seat });
     const view = this.session?.viewForSeat(seat);
     if (view !== undefined && this.session) {
-      this.send(clientId, this.gameStateFrame(view, this.session.meta()));
+      // `init` cleared the page, so it is sent the whole state whatever it last had.
+      const frame = this.gameStateFrame(view, this.session.meta());
+      if (clientId === this.followerClientId) this.followerGate.recordSent(clientId, frame);
+      this.send(clientId, frame);
     }
     // A page seated into a game its rules no longer fit is told so, after the
     // `init` that clears whatever it was showing before.
@@ -1533,9 +1580,9 @@ export class MultiplayerHost {
   }
 
   /**
-   * Send a `game_state` frame to the seat's client. For the follower, override
-   * the seat with the currently-active seat: re-`init` when it changes, and send
-   * that seat's freshly-computed view (so the follower drives whoever is due).
+   * Send a `game_state` frame to the seat's client, which the game's host
+   * calls only when that seat's view changed (#487). The follower is not sent
+   * its own seat's view here: it shows the active seat, in `followActiveSeat`.
    */
   private deliverGameState(
     seat: number,
@@ -1543,18 +1590,28 @@ export class MultiplayerHost {
     meta: { isComplete: boolean; winners: number[]; isDraw: boolean },
   ): void {
     const info = this.seats.get(seat);
-    if (!info?.clientId || !info.connected) return;
-    if (info.clientId === this.followerClientId) {
-      const active = this.effectiveActiveSeat();
-      if (active !== this.lastFollowerSeat) {
-        this.send(info.clientId, { type: 'init', seat: active });
-        this.lastFollowerSeat = active;
-      }
-      const activeView = this.session?.viewForSeat(active);
-      this.send(info.clientId, this.gameStateFrame(activeView ?? view, meta));
+    if (!info?.clientId || !info.connected || info.clientId === this.followerClientId) return;
+    this.send(info.clientId, this.gameStateFrame(view, meta));
+  }
+
+  /**
+   * After every change, show the follower the currently active seat: re-`init`
+   * when that seat changes, and otherwise send the seat's view only when it is
+   * not the one the follower already has.
+   */
+  private followActiveSeat(meta: { isComplete: boolean; winners: number[]; isDraw: boolean }): void {
+    const clientId = this.followerClientId;
+    if (clientId === null || !this.connected.has(clientId)) return;
+    const active = this.effectiveActiveSeat();
+    const frame = this.gameStateFrame(this.session?.viewForSeat(active), meta);
+    if (active !== this.lastFollowerSeat) {
+      this.send(clientId, { type: 'init', seat: active });
+      this.lastFollowerSeat = active;
+      this.followerGate.recordSent(clientId, frame);
+      this.send(clientId, frame);
       return;
     }
-    this.send(info.clientId, this.gameStateFrame(view, meta));
+    if (this.followerGate.shouldPush(clientId, frame)) this.send(clientId, frame);
   }
 
   /**
@@ -1564,7 +1621,7 @@ export class MultiplayerHost {
   private gameStateFrame(
     view: unknown,
     meta: { isComplete: boolean; winners: number[]; isDraw: boolean },
-  ): Extract<HostOutbound, { type: 'game_state' }> {
+  ): GameStateFrame {
     return {
       type: 'game_state',
       view,

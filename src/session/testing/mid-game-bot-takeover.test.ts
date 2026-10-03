@@ -219,7 +219,7 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
         }
         return { ...base, botMoved: false };
       },
-      broadcast: () => {},
+      record: () => {}, push: () => {},
       botSeats: [{ seat: 2 }],
     };
 
@@ -294,7 +294,7 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
         }
         return { ...base };
       },
-      broadcast: () => {},
+      record: () => {}, push: () => {},
       botSeats: [{ seat: 2 }],
     };
 

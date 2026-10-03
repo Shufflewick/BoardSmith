@@ -144,9 +144,10 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
   const players = computed<GameContextPlayer[]>(() => state.value?.state.players ?? []);
   const myPlayer = computed(() => players.value.find((player) => player.seat === playerSeat.value));
 
-  // The timeline (this game, and how often its runner was restored) is the
-  // rewind signal: a change resets the queue's watermark, so a reconnect into a
-  // rewound session still plays the replayed events.
+  // The timeline (this game, how often its runner was restored, and the seat
+  // shown) resets the queue's watermark when it changes, so a reconnect into a
+  // rewound session still plays the replayed events, and a page that changes
+  // seat plays the new seat's events, which are numbered in its own sequence.
   const animationEvents = createAnimationEvents({
     events: () => state.value?.state?.animationEvents,
     timeline: () => animationTimeline(state.value?.state),

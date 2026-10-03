@@ -221,7 +221,7 @@ describe('UNDO-04: full session restore is unaffected (the two loadSerializedSta
     // GameSession.create -> performAction ticks -> GameSession.restore is the
     // EXACT production path (game-session.ts:865 calls
     // `GameRunner.fromSnapshot<G>(storedState.snapshot, GameClass)` with NO
-    // animationSeqFloor option). This is the guard against over-applying the
+    // animationFloor option). This is the guard against over-applying the
     // fix: a full restore must keep adopting the persisted seq verbatim, not
     // be floored against anything, because there is no "live" counter running
     // across a cold restart to protect.

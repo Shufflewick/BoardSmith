@@ -1,8 +1,8 @@
 {
-  "revision": 123,
+  "revision": 124,
   "bundleProtocol": 2,
-  "surfaceHash": "a5e66c593812b04b",
-  "payloadHash": "f4cad95eb3f47e1f",
+  "surfaceHash": "f7e59da26973c116",
+  "payloadHash": "06cfffd56c7bef19",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -1051,6 +1051,15 @@
       "payloadHash": "f4cad95eb3f47e1f",
       "formatHash": "0058593e7cc80205",
       "summary": "selectGameOptions now refuses a number game option outside its declared min/max or off its step (counted from min, or 0), naming the option and its allowed range; a game declaring a non-finite bound, min above max, a non-positive step, or a default its own bounds refuse is refused when loaded. Re-vendor so a host cannot start a game with, say, rounds: 1000 against max: 10."
+    },
+    {
+      "revision": 124,
+      "date": "2026-10-03",
+      "bundleProtocol": 2,
+      "surfaceHash": "f7e59da26973c116",
+      "payloadHash": "06cfffd56c7bef19",
+      "formatHash": "0058593e7cc80205",
+      "summary": "No BoardSmith host pushes a seat a state identical to the last one it sent (#487). SnapshotSessionHost's broadcast adapter is replaced by record (every view of record, spectator included, after each change) and push (only the seats whose view changed; seat 0 is the spectators), and it gains rosterChanged(), to call when a seat passes between a person and the bot; restoreFrom takes the views pages hold (playerViews, spectatorView) as given, so a roster change made while the host slept is pushed. GameSession's SessionInfo requires a connectionId. StatePushGate is exported from boardsmith/session and boardsmith/session-host. Animation event ids in a seat's payload now count only the events that seat may see (#489): a seat's state.animationEvents carries only its own events, numbered in its own sequence, seat views no longer carry animationEventSeq, every PlayerGameState names the seat it was built for (viewerSeat, 0 for a spectator) so a page that changes seat restarts its animation watermark, and animateTo refuses seat 0."
     }
   ]
 }
