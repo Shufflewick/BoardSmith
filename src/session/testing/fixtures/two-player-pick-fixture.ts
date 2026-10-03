@@ -4,6 +4,7 @@
  * single-move path; endless turns, so a test can always find a decision point.
  */
 import { Game, Player, Action, defineFlow, loop, eachPlayer, actionStep, type GameOptions } from '../../../engine/index.js';
+import type { GameDefinitionLike } from '../../stateless-ops.js';
 
 export class TwoPlayerPickGame extends Game<TwoPlayerPickGame, Player> {
   constructor(options: GameOptions) {
@@ -30,3 +31,10 @@ export class TwoPlayerPickGame extends Game<TwoPlayerPickGame, Player> {
     );
   }
 }
+
+export const twoPlayerPickDefinition: GameDefinitionLike = {
+  gameClass: TwoPlayerPickGame,
+  gameType: 'two-player-pick',
+  minPlayers: 2,
+  maxPlayers: 2,
+};
