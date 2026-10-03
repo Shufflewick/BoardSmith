@@ -1,9 +1,9 @@
 {
-  "revision": 123,
+  "revision": 124,
   "bundleProtocol": 2,
-  "surfaceHash": "a5e66c593812b04b",
-  "payloadHash": "f4cad95eb3f47e1f",
-  "formatHash": "0058593e7cc80205",
+  "surfaceHash": "bd3667164d4eba91",
+  "payloadHash": "b315072582e20682",
+  "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
       "revision": 1,
@@ -1051,6 +1051,15 @@
       "payloadHash": "f4cad95eb3f47e1f",
       "formatHash": "0058593e7cc80205",
       "summary": "selectGameOptions now refuses a number game option outside its declared min/max or off its step (counted from min, or 0), naming the option and its allowed range; a game declaring a non-finite bound, min above max, a non-positive step, or a default its own bounds refuse is refused when loaded. Re-vendor so a host cannot start a game with, say, rounds: 1000 against max: 10."
+    },
+    {
+      "revision": 124,
+      "date": "2026-10-03",
+      "bundleProtocol": 2,
+      "surfaceHash": "bd3667164d4eba91",
+      "payloadHash": "b315072582e20682",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "World element ids are now opaque (#482): Speck48/96 of the world's creation counter under a 96-bit key the HOST mints once when it creates a world (mintWorldElementIdKey from boardsmith/world, 24 hex digits), stores with the world beside nextElementId, and passes on every wake as createWorld's required elementIdKey (a world game built directly needs GameOptions.elementIdKey); never sent to a client. createWorld without a valid key is the new platform-owned refusal element-id-key-invalid, and the engine never mints a world key. Ids are whole numbers below 2^48. nextElementId stays a counter value, never an id; worldIdAllocationOf(stored, elementIdKey) now takes the key, and adopting a partition no longer spends counter values. Format break: the world format corpus is regenerated and records its key; worlds stored with sequential ids cannot be read by this engine, keep them on their archived runner or reset them. The pre-floor id lift (rekey exports, WorldStore.rekey, WorldStartOutcome.lifted) is removed; WorldStore gains elementIdKey(); createMemoryWorldStore takes the key first; TestWorld takes an optional elementIdKey."
     }
   ]
 }
