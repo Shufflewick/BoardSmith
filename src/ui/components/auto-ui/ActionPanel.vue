@@ -2763,11 +2763,16 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 .text-input textarea {
   flex: 1 1 100%;
   width: 100%;
-  /* Four and a half lines at rest, and the player's own drag from there. Chosen
-     against the bar's height cap rather than by eye: the editor has to fit
-     inside it whole, and `resize: vertical` is how somebody who wants more
-     takes it. */
-  min-height: 5.5rem;
+  /* Six lines at rest, and the player's own drag from there, never past what
+     the bar's editor ceiling leaves once the action's row, the label, the count
+     and the submit have their room (issue 444). On a short screen that is less
+     than six lines, and the box gives way rather than the submit button leaving
+     the bar: its floor is four and a half lines, or what is left if that is
+     less. The tokens are the shell's (PlayShell); outside a shell they are
+     undefined, these three declarations drop out, and `rows` sizes the box. */
+  height: var(--bsg-editor-text-rest);
+  min-height: min(5.5rem, calc(var(--bsg-panel-editor-max) - var(--bsg-editor-chrome)));
+  max-height: calc(var(--bsg-panel-editor-max) - var(--bsg-editor-chrome));
   resize: vertical;
   padding: 8px 12px;
   background: var(--bsg-field);
@@ -3151,11 +3156,21 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
     margin-block: -1px;
   }
 
-  .selection-prompt {
+  /* The prompt in the bar's row only. An editor's label carries the same class
+     in a column, where a flex basis is a HEIGHT. */
+  .selection-input > .selection-prompt {
     white-space: normal;
     flex: 1 1 9rem;
     font-size: 0.85rem;
     line-height: 1.2;
+  }
+
+  /* Four typical action buttons take two rows rather than three: the label
+     sizes down a step and the side padding gives back 12px per button. The
+     44px touch target (min-height) is unchanged. */
+  .action-btn {
+    padding: 10px 14px;
+    font-size: 0.9rem;
   }
 
   .board-handoff-btn {
@@ -3164,6 +3179,18 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
     padding: 4px 10px;
     line-height: 1.15;
     text-align: center;
+  }
+}
+
+/* Short landscape screens reserve ONE row (PlayShell). A one-line field or a
+   number field puts its label beside the field there instead of above it, so
+   the field and its Done stay in that row rather than scrolling below it. */
+@media (orientation: landscape) and (max-height: 600px) {
+  .number-input,
+  .text-input:not(.text-input-multiline) {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
   }
 }
 </style>

@@ -681,13 +681,23 @@ const mobileToggleLabel = computed(() => {
   --bsg-panel-reserved: calc(2 * var(--bsg-panel-row) + var(--bsg-panel-gap)
                              + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom));
 
-  /* The ONE exception to that cap: a multi-line text editor (#229, #237) needs
-     six rows of text plus its count and submit, so while one is open the bar may
-     grow to five rows and cover part of the board. The board does not refit --
-     the reservation above is untouched -- and the cap returns when it closes.
-     See `.actionbar:has([data-bs-grows-panel])`. */
-  --bsg-panel-editor-max: calc(5 * var(--bsg-panel-row) + 4 * var(--bsg-panel-gap)
-                               + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom));
+  /* The ONE exception to that cap: a multi-line text editor (#229, #237) cannot
+     be written in two rows, so while one is open the bar may grow to what the
+     editor needs and cover part of the board. The board does not refit -- the
+     reservation above is untouched -- and the cap returns when it closes. See
+     `.actionbar:has([data-bs-grows-panel])`.
+
+     What the editor needs is its box plus everything around it that must stay
+     on screen: the action's row, the field's label line, the count-and-submit
+     row, and the bar's own padding (`--bsg-editor-chrome`). The box rests at six
+     lines of its 0.9rem / 1.4 text plus its padding and border
+     (`--bsg-editor-text-rest`). The ceiling is bounded by the screen, and the
+     box gives way to it (ActionPanel's textarea), so on a short screen the box
+     shrinks rather than the submit button leaving the bar. */
+  --bsg-editor-chrome: calc(2 * var(--bsg-panel-row) + var(--bsg-panel-gap) + 1.5rem
+                            + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom));
+  --bsg-editor-text-rest: calc(6 * 1.4 * 0.9rem + 18px);
+  --bsg-panel-editor-max: min(calc(var(--bsg-editor-chrome) + var(--bsg-editor-text-rest)), 60dvh);
 
   /* The bar put down (#230): ONE control row, because the row it keeps carries
      the ⋯ menu, and in platform mode that menu is the player's only control
@@ -905,7 +915,7 @@ const mobileToggleLabel = computed(() => {
    the strip (see --bsg-panel-editor-max). Keyed on the editor's own mark, so the
    exception lives exactly as long as the editor's DOM: submitting, cancelling or
    putting the bar down all unmount it and the strip cap is back. `max()` so a
-   short-screen ceiling can never cap the bar below the strip itself. */
+   very short screen can never cap the bar below the strip itself. */
 .actionbar:has([data-bs-grows-panel]) {
   max-height: max(var(--bsg-panel-reserved), var(--bsg-panel-editor-max));
 }
@@ -1172,13 +1182,19 @@ const mobileToggleLabel = computed(() => {
     /* One row on a short screen: vertical space is the scarce axis here. */
     --bsg-panel-reserved: calc(var(--bsg-panel-row) + 2 * var(--bsg-panel-pad)
                                + env(safe-area-inset-bottom));
-    /* A typed editor's ceiling, scaled to the short screen. */
-    --bsg-panel-editor-max: min(22dvh, 120px);
   }
 
   .actionbar {
     padding-top: 6px;
     padding-bottom: max(6px, env(safe-area-inset-bottom));
+  }
+
+  /* The wider tiers' region min-height is taller than this screen. Kept, it
+     overflowed the stage, the reserved strip fell below the screen, and the
+     bar (anchored to the screen's bottom) sat over the board instead of in the
+     strip. The region fills the stage here, and the board scrolls inside it. */
+  .boardregion {
+    min-height: 0;
   }
 }
 

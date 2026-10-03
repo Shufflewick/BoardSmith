@@ -1093,8 +1093,9 @@ startup zoom-fit already handles it.
 ### The Action Panel's reserved footprint
 
 The board region reserves a **constant** strip at its bottom for the floating
-Action Panel — two control rows, declared in CSS as `--bsg-panel-reserved` and
-applied as `.boardregion`'s `padding-bottom`. The startup fit sits your board
+Action Panel — two control rows (one on a short landscape screen, where height
+is the scarce axis), declared in CSS as `--bsg-panel-reserved` and applied as
+`.boardregion`'s `padding-bottom`. The startup fit sits your board
 above that strip simply by subtracting the region's own padding; nothing
 measures the panel.
 
@@ -1114,9 +1115,13 @@ board:
   rather than growing over the board. So a board that fits itself above the
   strip is never covered, at rest or mid-pick. The one exception is a
   multi-line text box (`multiline: true` on a text pick): while it is open the
-  panel may grow to five rows over the bottom of the board, because six rows
-  of text cannot be written in two. Your board still does not refit, and the
-  panel returns to the strip as soon as the box closes.
+  panel grows over the bottom of the board to what the box needs — six lines
+  of text plus the action, the field's label, the count and the submit —
+  bounded at 60% of the screen's height. On a short screen the box gives way
+  (down to a few lines) rather than the submit button leaving the panel. Your
+  board does not refit, and the part of it under the open panel cannot be
+  scrolled into view until the box closes, when the panel returns to the
+  strip.
 
 Do **not** try to measure the Action Panel from a custom board, and do not size
 your board against a panel height — there is no such value to read. If your

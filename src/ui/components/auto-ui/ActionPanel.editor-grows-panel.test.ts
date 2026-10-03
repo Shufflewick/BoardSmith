@@ -112,6 +112,22 @@ describe("the shell's bar lifts its cap for the marked editor, and for nothing e
     );
   });
 
+  it('sizes the editor ceiling to what the editor needs, bounded by the screen', () => {
+    // Not a fixed five rows: on a short landscape screen five rows is more than
+    // the screen, and on a phone it was less than the editor, so its submit and
+    // count sat below the bar's visible edge.
+    const tokens = rule('.game-shell__game');
+    const editorMax = tokens.match(/--bsg-panel-editor-max\s*:\s*([^;]+);/)?.[1] ?? '';
+    expect(editorMax).toContain('var(--bsg-editor-chrome)');
+    expect(editorMax).toContain('var(--bsg-editor-text-rest)');
+    expect(editorMax).toMatch(/^min\(/);
+    expect(editorMax).toContain('60dvh');
+    expect(tokens).toMatch(/--bsg-editor-chrome\s*:/);
+    expect(tokens).toMatch(/--bsg-editor-text-rest\s*:/);
+    // One definition, for every tier: no media query restates the ceiling.
+    expect(style.match(/--bsg-panel-editor-max\s*:/g)).toHaveLength(1);
+  });
+
   it('never moves the board: nothing about the region changes with the editor', () => {
     // The reservation is the region's padding and nothing else sets it; no rule
     // keyed on the mark reaches the board region or the reservation token.
@@ -126,3 +142,28 @@ describe("the shell's bar lifts its cap for the marked editor, and for nothing e
 async function vi_flush() {
   for (let i = 0; i < 5; i++) await nextTick();
 }
+
+describe('the box gives way so the action, prompt, count and submit always fit', () => {
+  const panel = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), 'ActionPanel.vue'),
+    'utf-8',
+  );
+  const style = panel.slice(panel.indexOf('<style scoped>'));
+  const textarea = style.slice(style.indexOf('\n.text-input textarea {'), style.indexOf('\n}', style.indexOf('\n.text-input textarea {')));
+
+  it('rests at the height the shell budgets for it', () => {
+    expect(textarea).toMatch(/height:\s*var\(--bsg-editor-text-rest\);/);
+  });
+
+  it('cannot grow, even by dragging, past what the ceiling leaves it', () => {
+    expect(textarea).toMatch(/resize:\s*vertical;/);
+    expect(textarea).toMatch(
+      /max-height:\s*calc\(var\(--bsg-panel-editor-max\)\s*-\s*var\(--bsg-editor-chrome\)\);/,
+    );
+  });
+
+  it('may shrink below its resting height when the screen is short', () => {
+    expect(textarea).toMatch(/min-height:\s*min\(/);
+    expect(textarea).toMatch(/min-height:[^;]*var\(--bsg-panel-editor-max\)\s*-\s*var\(--bsg-editor-chrome\)/);
+  });
+});

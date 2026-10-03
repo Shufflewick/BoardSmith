@@ -107,9 +107,21 @@ describe('#444: the open Action Panel fits the reserved strip at phone width', (
     const phone = phoneBlock();
     // The prompt is `nowrap` in the sentence flow; on a phone that alone took a row.
     expect(baseRule('.selection-prompt')).toMatch(/white-space:\s*nowrap;/);
-    expect(rule(phone, '.selection-prompt')).toMatch(/white-space:\s*normal;/);
+    // Only the prompt that sits in the bar's row: an editor's label is the same
+    // class in a COLUMN, where a flex basis is a height (it laid out 144px tall).
+    expect(phone).not.toMatch(/(^|\n)\s*\.selection-prompt \{/);
+    expect(rule(phone, '.selection-input > .selection-prompt')).toMatch(/white-space:\s*normal;/);
     const handoff = rule(phone, '.board-handoff-btn');
     expect(handoff).toMatch(/white-space:\s*normal;/);
     expect(handoff).toMatch(/max-width:/);
+  });
+});
+
+describe('#444: the action buttons fit two rows at phone width', () => {
+  it('compacts the action buttons, keeping the 44px touch target', () => {
+    const btn = rule(phoneBlock(), '.action-btn');
+    expect(btn).toMatch(/padding:/);
+    expect(btn).not.toMatch(/min-height/);
+    expect(baseRule('.action-btn')).toMatch(/min-height:\s*44px;/);
   });
 });

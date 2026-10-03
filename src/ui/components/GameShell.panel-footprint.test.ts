@@ -156,6 +156,20 @@ describe('#13 / #444: the Action Panel stays inside a constant, token-derived fo
       .toBe(row + 2 * pad + env.safeArea);
   });
 
+  it('keeps the strip on screen on a short landscape screen', () => {
+    // The tablet and desktop tiers give the board region a min-height (380px,
+    // 480px). On a landscape screen shorter than that, the region overflowed its
+    // stage, its reserved strip fell below the screen, and the bar -- anchored
+    // to the screen's bottom -- sat over the board's visible bottom instead.
+    const at = source.indexOf('@media (orientation: landscape) and (max-height: 600px)');
+    const blockEnd = source.indexOf('\n}\n', at);
+    const region = source.slice(at, blockEnd).match(/\.boardregion \{([^}]*)\}/);
+    expect(region, '.boardregion is not reset in the landscape-short tier').not.toBeNull();
+    expect(region![1]).toMatch(/min-height:\s*0;/);
+    // ...and that tier comes after the ones that set the min-height, so it wins.
+    expect(at).toBeGreaterThan(source.indexOf('min-height: 480px;'));
+  });
+
   it('does not feed action-panel measurements into board fitting', () => {
     expect(source).not.toContain('actionPanelHeight');
     expect(source).not.toContain('attachActionPanelObserver');
