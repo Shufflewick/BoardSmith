@@ -4941,7 +4941,13 @@ export class Game<
     // by `delete`, which would move it into dictionary mode — this runs once
     // per seat per broadcast and once per MCTS playout, and a deoptimized shape
     // here is measurable in bot search time.
-    const { messagesEvicted: _engineOnly, ...withoutEngineBookkeeping } =
+    //
+    // The animation id counter goes for a second reason (#487): it counts EVERY
+    // seat's events, `animateTo` ones included, so a seat watching it rise
+    // learns another seat played a private animation, and is pushed a changed
+    // view when nothing it may see changed. Restores read it from `toJSON()`,
+    // never from a seat's view.
+    const { messagesEvicted: _engineOnly, animationEventSeq: _restoreOnly, ...withoutEngineBookkeeping } =
       filteredState as ReturnType<Game['toJSON']> & { messagesEvicted?: number };
     const view = withoutEngineBookkeeping as ReturnType<Game['toJSON']>;
 

@@ -9,6 +9,9 @@
  *    refused -- the refusal is what a seat reads, and it must not count the
  *    other seats' actions either.
  *  - `done` is public: `isDone` is visible, and it closes the seat's part.
+ *  - `placePack` also plays an animation only the placing seat may see
+ *    (`animateTo`), and `signal` plays a public one (`animate`) while changing
+ *    nothing else, so a test can tell a new event apart from a changed board.
  *
  * Whatever seat 1 does with `placePack`/`burnPack`, what seat 2 and a spectator
  * receive must be the same, or seat 2 can count seat 1's secret actions.
@@ -44,7 +47,17 @@ class SecretDeploymentGame extends Game<SecretDeploymentGame, SecretDeploymentPl
       Action.create('placePack')
         .condition(notDone)
         .execute((_args, ctx) => {
-          (ctx.player as SecretDeploymentPlayer).packs += 1;
+          const player = ctx.player as SecretDeploymentPlayer;
+          player.packs += 1;
+          this.animateTo(player, 'packPlaced', { packs: player.packs });
+          return { success: true };
+        }),
+    );
+    this.registerAction(
+      Action.create('signal')
+        .condition(notDone)
+        .execute((_args, ctx) => {
+          this.animate('signal', { seat: ctx.player.seat });
           return { success: true };
         }),
     );
@@ -73,7 +86,7 @@ class SecretDeploymentGame extends Game<SecretDeploymentGame, SecretDeploymentPl
           simultaneousActionStep({
             name: 'deploy',
             players: () => this.players,
-            actions: ['placePack', 'burnPack', 'done'],
+            actions: ['placePack', 'burnPack', 'signal', 'done'],
             playerDone: (_ctx, p) => (p as SecretDeploymentPlayer).isDone,
           }),
           actionStep({ name: 'battle', actions: ['battle'], player: (ctx) => ctx.game.getPlayer(1)! }),
