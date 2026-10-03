@@ -1041,7 +1041,7 @@
       "surfaceHash": "a5e66c593812b04b",
       "payloadHash": "f4cad95eb3f47e1f",
       "formatHash": "0058593e7cc80205",
-      "summary": "The seeded RNG is now ChaCha20 keyed by SHA-256 of the whole seed (#483), replacing mulberry32 on a 32-bit fold of it: every seed deals a different game from before, snapshot.randomState and action-checkpoint randomState are now a string (\"chacha20:<key>:<position>\") instead of a number, and setRandomState refuses a numeric state, so a game saved on an earlier engine cannot be continued after re-vendoring. The payload fingerprint now also covers the stored random state and the draws it gives."
+      "summary": "The seeded RNG is now ChaCha20 keyed by SHA-256 of the whole seed (#483), replacing mulberry32 on a 32-bit fold of it: every seed deals a different game from before, snapshot.randomState and action-checkpoint randomState are now a string (\"chacha20:<key>:<position>\") instead of a number, and setRandomState refuses a numeric state, so a game saved on an earlier engine cannot be continued after re-vendoring. The payload fingerprint now also covers the stored random state and the draws it gives. A game, session, MCTS bot or dev-host table started without a seed now gets a 128-bit seed from crypto.getRandomValues instead of Math.random, a non-string seed is refused, and randomState is required on snapshots and checkpoints."
     }
   ]
 }

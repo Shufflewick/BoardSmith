@@ -54,6 +54,7 @@ import { DebugController } from './debug-controller.js';
 import { describeMoveDestination, describeMoveForHint } from './move-summary.js';
 import { TutorialController } from './tutorial-controller.js';
 import { autoAdvanceTutorial } from '../engine/tutorial/progress.js';
+import { mintSeed } from '../utils/random.js';
 
 /**
  * Consecutive persistence-save failures before `persistenceHealthy` flips
@@ -682,7 +683,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       undo,
     } = options;
 
-    const gameSeed = seed ?? Math.random().toString(36).substring(2) + Date.now().toString(36);
+    const gameSeed = seed ?? mintSeed();
 
     // A game declaring an option named for a field the session owns is wrong
     // from the start, not at its first lobby.

@@ -65,8 +65,9 @@ export interface GameStateSnapshot {
    *  time. Restored via `game.setRandomState()` so the next `game.random()` draw
    *  matches the live game exactly. This is what makes `fromSnapshot` fully
    *  state-authoritative: the RNG position is restored directly instead of being
-   *  re-derived by replaying actions. */
-  randomState?: RandomState;
+   *  re-derived by replaying actions. Required: a snapshot without it would
+   *  deal from the seed again, so restoring one is refused. */
+  randomState: RandomState;
 
   /** Original constructor options (for full game restoration including custom options like playerConfigs) */
   gameOptions?: Record<string, unknown>;
@@ -262,7 +263,7 @@ export interface ActionCheckpoint {
   sequence?: number;
 
   /** Seeded RNG internal state (`game.getRandomState()`) at this checkpoint. */
-  randomState?: RandomState;
+  randomState: RandomState;
 
   /**
    * The log's ABSOLUTE length at this action-count boundary — entries ever

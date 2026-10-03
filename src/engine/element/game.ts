@@ -54,7 +54,7 @@ import { describeFlowPosition } from '../flow/describe-flow-position.js';
 import { buildActionMetadata, buildPickMetadata } from './action-metadata.js';
 import type { ActionMetadata, PickMetadata } from '../../types/protocol.js';
 import { devWarn } from '../../utils/dev.js';
-import { SeededRandom, type RandomState } from '../../utils/random.js';
+import { SeededRandom, mintSeed, type RandomState } from '../../utils/random.js';
 import { PlayerFacingError } from '../errors.js';
 
 // ---------------------------------------------------------------------------
@@ -1103,7 +1103,7 @@ export class Game<
    */
   constructor(options: GameOptions) {
     // Create seed for random
-    const seed = options.seed ?? Math.random().toString(36).substring(2);
+    const seed = options.seed ?? mintSeed();
     const random = createGameRandom(seed);
 
     // Ids are keyed by a secret of their own, never the seed, so they carry no

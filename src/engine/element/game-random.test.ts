@@ -3,9 +3,10 @@
  * so a seed's shuffles cannot be found by searching a small state space, and a
  * state that snapshots, checkpoints and bot search can carry exactly.
  */
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { Action, Game, Piece, Player, Space, actionStep, defineFlow, loop } from '../index.js';
 import { GameRunner } from '../../runtime/runner.js';
+import { GameSession } from '../../session/game-session.js';
 
 class Card extends Piece<CardGame> {}
 class Pile extends Space<CardGame> {}
@@ -77,5 +78,43 @@ describe('the game generator (#483)', () => {
     runner.game.deck.shuffle();
     restored.game.deck.shuffle();
     expect(restored.game.order()).toEqual(runner.game.order());
+  });
+
+  it('refuses a stored snapshot that carries no random state, rather than dealing from the seed again', () => {
+    const runner = new GameRunner({
+      GameClass: CardGame,
+      gameType: 'card-game',
+      gameOptions: { playerCount: 2, seed: 'stored-table' },
+    });
+    runner.start();
+    const { randomState: _dropped, ...stored } = JSON.parse(JSON.stringify(runner.getSnapshot()));
+    expect(() => GameRunner.fromSnapshot(stored, CardGame)).toThrow(/no random state/);
+  });
+
+});
+
+// A game started without a seed gets one from the cryptographic source, so
+// its deal is not a function of Math.random's state (#483).
+describe('a game started without a seed (#483)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('deals from a fresh secure seed even when Math.random repeats itself', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.25);
+    const deal = () => {
+      const game = new CardGame({ playerCount: 2 });
+      game.deck.shuffle();
+      return game.order();
+    };
+    expect(deal()).not.toEqual(deal());
+  });
+
+  it('a session started without a seed records a 128-bit seed that Math.random did not choose', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.25);
+    const seedOf = () =>
+      GameSession.create({ gameType: 'card-game', GameClass: CardGame, playerCount: 2, playerNames: ['A', 'B'] })
+        .runner.getSnapshot().seed;
+    const first = seedOf();
+    expect(first).toMatch(/^[0-9a-f]{32}$/);
+    expect(seedOf()).not.toBe(first);
   });
 });
