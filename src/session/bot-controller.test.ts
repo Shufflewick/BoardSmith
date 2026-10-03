@@ -10,35 +10,8 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { Game, Player, Action, defineFlow, loop, eachPlayer, actionStep, type GameOptions } from '../engine/index.js';
+import { TwoPlayerPickGame } from './testing/fixtures/two-player-pick-fixture.js';
 import { BotController } from './bot-controller.js';
-
-// Two-player game with 3 choices so MCTS won't short-circuit the single-move path.
-class TwoPlayerPickGame extends Game<TwoPlayerPickGame, Player> {
-  constructor(options: GameOptions) {
-    super(options);
-
-    this.registerAction(
-      Action.create('pick')
-        .chooseFrom('option', {
-          prompt: 'Pick an option',
-          choices: ['a', 'b', 'c'],
-        })
-        .execute(() => {})
-    );
-
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 20,
-          do: eachPlayer({
-            do: actionStep({ actions: ['pick'] }),
-          }),
-        }),
-      })
-    );
-  }
-}
 
 function makeControllerAndRunner() {
   const controller = new BotController(

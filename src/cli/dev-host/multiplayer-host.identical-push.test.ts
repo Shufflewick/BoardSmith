@@ -74,33 +74,19 @@ async function secretTable() {
 }
 
 describe('boardsmith dev pushes no game_state identical to the last one a page was sent (#487)', () => {
-  it("seat 2's page receives nothing when seat 1 acts in secret; seat 1's page still does", async () => {
+  it.each([
+    { moves: ['placePack', 'placePack'], toB: 0, why: 'secret moves send seat 2 nothing' },
+    { moves: ['signal'], toB: 1, why: 'a public animation reaches seat 2' },
+    { moves: ['signal', 'placePack'], toB: 1, why: 'a secret move that drains a public animation sends nothing' },
+    { moves: ['placePack', 'done'], toB: 1, why: 'a public move reaches seat 2' },
+  ])('$why', async ({ moves, toB }) => {
     const { framesTo, act } = await secretTable();
     const a = framesTo('A');
     const b = framesTo('B');
-
-    await act('A', 'placePack');
-    await act('A', 'placePack');
-
-    expect(framesTo('A')).toBe(a + 2);
-    expect(framesTo('B')).toBe(b);
-  });
-
-  it("a public animation reaches seat 2's page, and a secret action that drains it sends nothing", async () => {
-    const { framesTo, act } = await secretTable();
-    const b = framesTo('B');
-    await act('A', 'signal');
-    expect(framesTo('B')).toBe(b + 1);
-    await act('A', 'placePack');
-    expect(framesTo('B')).toBe(b + 1);
-  });
-
-  it("a public move still reaches seat 2's page", async () => {
-    const { framesTo, act } = await secretTable();
-    const b = framesTo('B');
-    await act('A', 'placePack');
-    await act('A', 'done');
-    expect(framesTo('B')).toBe(b + 1);
+    for (const move of moves) await act('A', move);
+    // Every one of seat 1's own moves changes what seat 1 sees.
+    expect(framesTo('A')).toBe(a + moves.length);
+    expect(framesTo('B')).toBe(b + toB);
   });
 
   it('a page that reloads is sent the full state, and is then held to it like any other', async () => {

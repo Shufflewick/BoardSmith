@@ -1,49 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import {
-  Game,
-  Player,
-  Action,
-  defineFlow,
-  loop,
-  eachPlayer,
-  actionStep,
-  type GameOptions,
-} from '../engine/index.js';
+import { TwoPlayerPickGame as ThreeChoiceGame } from '../session/testing/fixtures/two-player-pick-fixture.js';
 import { MCTSBot } from './mcts-bot.js';
 import type { BotMoveStats } from './types.js';
 
-// ============================================================================
-// Minimal game with a 3-choice action so MCTS doesn't short-circuit (it skips
-// cloning when allMoves.length === 1). Three options ensures root.children has
-// multiple entries after the search, giving playWithStats() non-empty stats.
-// ============================================================================
-
-class ThreeChoiceGame extends Game<ThreeChoiceGame, Player> {
-  constructor(options: GameOptions) {
-    super(options);
-
-    this.registerAction(
-      Action.create('pick')
-        .chooseFrom('option', {
-          prompt: 'Pick an option',
-          choices: ['a', 'b', 'c'],
-        })
-        .execute(() => ({ success: true })),
-    );
-
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 10,
-          do: eachPlayer({
-            do: actionStep({ actions: ['pick'] }),
-          }),
-        }),
-      }),
-    );
-  }
-}
-
+// A 3-choice action so MCTS doesn't short-circuit (it skips cloning when
+// allMoves.length === 1): root.children has several entries after the search,
+// giving playWithStats() non-empty stats.
 function createThreeChoiceGame(): ThreeChoiceGame {
   const game = new ThreeChoiceGame({
     playerCount: 2,

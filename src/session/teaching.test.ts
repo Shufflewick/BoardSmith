@@ -10,73 +10,25 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  Game,
-  Player,
-  Action,
-  defineFlow,
-  loop,
-  eachPlayer,
-  actionStep,
-  type GameOptions,
-} from '../engine/index.js';
+import { TwoPlayerPickGame as TeachingTestGame } from './testing/fixtures/two-player-pick-fixture.js';
 import { GameRunner } from '../runtime/runner.js';
 import { GameSession } from './game-session.js';
-import type { PlayerGameState, BroadcastAdapter, SessionInfo } from './types.js';
+import type { PlayerGameState, SessionInfo } from './types.js';
+import { makeMockBroadcaster, type CapturedState } from './capture-broadcaster.test-helper.js';
 import type { BotStrategy } from '../bot/index.js';
-
-// ============================================
-// Minimal test game: two players, choose from 3 options per turn.
-// chooseFrom with 3+ choices means MCTS won't short-circuit the single-move path.
-// ============================================
-
-class TeachingTestGame extends Game<TeachingTestGame, Player> {
-  constructor(options: GameOptions) {
-    super(options);
-
-    this.registerAction(
-      Action.create('pick')
-        .chooseFrom('option', {
-          prompt: 'Pick an option',
-          choices: ['a', 'b', 'c'],
-        })
-        .execute(() => {})
-    );
-
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 20,
-          do: eachPlayer({
-            do: actionStep({ actions: ['pick'] }),
-          }),
-        }),
-      })
-    );
-  }
-}
 
 // ============================================
 // Helpers
 // ============================================
 
-type CapturedState = {
-  seat: number;
-  state: PlayerGameState;
-};
-
-function makeMockBroadcaster(
-  sessions: Array<{ playerSeat: number; isSpectator: boolean }>,
-  captured: CapturedState[]
-): BroadcastAdapter {
-  return {
-    // One connection per entry, named by its place in the list.
-    getSessions: () => sessions.map((s, i) => ({ connectionId: `connection-${i + 1}`, ...s })),
-    send: (_session: { playerSeat: number; isSpectator: boolean }, update: Record<string, unknown>) => {
-      const seat = (_session as { playerSeat: number }).playerSeat;
-      captured.push({ seat, state: (update as { state: PlayerGameState }).state });
-    },
-  } as unknown as BroadcastAdapter;
+/** A fresh session pushing seat 1's state into `captured`, with a hint already shown to seat 1. */
+async function hintedSession() {
+  const session = makeSession();
+  const captured: CapturedState[] = [];
+  session.setBroadcaster(makeMockBroadcaster([{ playerSeat: 1, isSpectator: false }], captured));
+  await (session as unknown as { requestHint(seat: number): Promise<void> }).requestHint(1);
+  expect(captured.at(-1)!.state.hint).toBeDefined();
+  return { session, captured };
 }
 
 function makeSession() {
@@ -170,18 +122,7 @@ describe('teaching state — broadcast injection', () => {
   // Injection positive case: after requestHint(), state.hint is populated.
   // This test is RED until Task 2 implements requestHint().
   it('broadcast state includes hint annotation when requestHint has been called', async () => {
-    const session = makeSession();
-    const captured: CapturedState[] = [];
-    const broadcaster = makeMockBroadcaster(
-      [{ playerSeat: 1, isSpectator: false }],
-      captured
-    );
-    session.setBroadcaster(broadcaster);
-
-    // RED: requestHint does not exist yet — this will fail with TypeError
-    await (session as unknown as { requestHint(seat: number): Promise<void> }).requestHint(1);
-
-    expect(captured.at(-1)!.state.hint).toBeDefined();
+    const { captured } = await hintedSession();
     expect(captured.at(-1)!.state.hint!.annotation.text).toBe('Suggested move');
   });
 });
@@ -210,16 +151,7 @@ describe('teaching state — requestHint / clearHint', () => {
   });
 
   it('hint clears after the next performAction on that seat', async () => {
-    const session = makeSession();
-    const captured: CapturedState[] = [];
-    const broadcaster = makeMockBroadcaster(
-      [{ playerSeat: 1, isSpectator: false }],
-      captured
-    );
-    session.setBroadcaster(broadcaster);
-
-    await (session as unknown as { requestHint(seat: number): Promise<void> }).requestHint(1);
-    expect(captured.at(-1)!.state.hint).toBeDefined();
+    const { session, captured } = await hintedSession();
     captured.length = 0;
 
     await session.performAction('pick', 1, { option: 'a' });
@@ -227,16 +159,7 @@ describe('teaching state — requestHint / clearHint', () => {
   });
 
   it('clearHint removes hint and broadcasts', async () => {
-    const session = makeSession();
-    const captured: CapturedState[] = [];
-    const broadcaster = makeMockBroadcaster(
-      [{ playerSeat: 1, isSpectator: false }],
-      captured
-    );
-    session.setBroadcaster(broadcaster);
-
-    await (session as unknown as { requestHint(seat: number): Promise<void> }).requestHint(1);
-    expect(captured.at(-1)!.state.hint).toBeDefined();
+    const { session, captured } = await hintedSession();
     captured.length = 0;
 
     (session as unknown as { clearHint(seat: number): void }).clearHint(1);

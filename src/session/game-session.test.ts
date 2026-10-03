@@ -11,7 +11,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../engine/index.js';
 import { GameSession } from './game-session.js';
-import type { PlayerGameState, BroadcastAdapter } from './types.js';
+import { makeMockBroadcaster, type CapturedState } from './capture-broadcaster.test-helper.js';
 import type { StorageAdapter } from './types.js';
 
 // Two-step action (chooseFrom color -> chooseFrom size), awaited by seat 1 only,
@@ -36,25 +36,6 @@ class TwoStepGame extends Game<TwoStepGame, Player> {
       })
     );
   }
-}
-
-type CapturedState = {
-  seat: number;
-  state: PlayerGameState;
-};
-
-function makeMockBroadcaster(
-  sessions: Array<{ playerSeat: number; isSpectator: boolean }>,
-  captured: CapturedState[]
-): BroadcastAdapter {
-  return {
-    // One connection per entry, named by its place in the list.
-    getSessions: () => sessions.map((s, i) => ({ connectionId: `connection-${i + 1}`, ...s })),
-    send: (_session: { playerSeat: number; isSpectator: boolean }, update: Record<string, unknown>) => {
-      const seat = (_session as { playerSeat: number }).playerSeat;
-      captured.push({ seat, state: (update as { state: PlayerGameState }).state });
-    },
-  } as unknown as BroadcastAdapter;
 }
 
 function makeSession() {
