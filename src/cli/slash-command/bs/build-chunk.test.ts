@@ -2328,6 +2328,16 @@ describe('#485: every new test file that runs the game is a Spec Manifest row', 
     }
   });
 
+  // Ruling (2026-10-03), as implemented: the chunk adds no game code, so the excused row's mutants come
+  // from the game code its test loads, capped, and its RED Observed reads n/a and nothing else.
+  it("says the excused row is mutated on the game code its test loads, capped, with RED Observed n/a only", () => {
+    for (const file of ['build/build.md', 'build/spec.md', 'build/test.md', 'templates/CHUNK.template.md']) {
+      const text = flatRead(file);
+      expect(text, file).toMatch(/none \(regression\)[^]{0,900}game code (the|its) test loads[^]{0,500}at most 100 mutants/);
+      expect(text, file).toMatch(/none \(regression\)[^]{0,900}RED Observed[^]{0,80}`n\/a`[^]{0,40}(only|never `pending`)/);
+    }
+  });
+
   // Ruling (2026-10-03): every file under tests/browser/ is exempt, since vitest never runs them.
   it('exempts every file under tests/browser/, not only the smoke test', () => {
     for (const file of ['build/spec.md', 'build/test.md', 'templates/CHUNK.template.md']) {

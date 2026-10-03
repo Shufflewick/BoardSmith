@@ -184,8 +184,9 @@ full
      earlier chunk's test file this chunk edits in place (moving one makes a new file, which is a row). A row with no claims
      says so in Claims Covered, e.g. `none (regression)`. An exempt chunk that pins an earlier
      chunk's behaviour writes its test as such a row, `| <file> | none (regression) | n/a |`: the
-     one row excused from an observed red, since the behaviour already exists. It is still
-     mutation-tested.
+     one row excused from an observed red, since the behaviour already exists, so its RED Observed
+     is `n/a` only. It is still mutation-tested, on the game code its test loads (the src/ modules
+     it imports, directly or through others), at most 100 mutants per row.
      Claims Covered lists the ## Interpretation claim numbers that file pins. RED Observed flips
      from `pending` to `yes` only after that file's tests have ACTUALLY been run and seen failing —
      never ahead of the run, never in a batch at the end.

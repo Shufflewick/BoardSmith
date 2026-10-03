@@ -23,7 +23,9 @@
  *      `tests/browser/` among them), generated example tests (`tests/examples/<slug>.examples.test.ts`),
  *      measurement harnesses under `design/chunks/<slug>/evidence/`, guards (below), and earlier
  *      chunks' test files this chunk edits.
- *   7. Mutation: every claim and every test is shown able to fail (`test-step-mutation.ts`).
+ *   7. Mutation: every claim and every test is shown able to fail (`test-step-mutation.ts`). An exempt
+ *      chunk adds no game behaviour, so a test it adds to pin an earlier chunk's (a `none (regression)`
+ *      row, the one row whose RED Observed is `n/a`) is broken on the game code it loads instead.
  *
  * A file under `tests/guards/` is a guard: a test that reads source as text, such as the a11y
  * floor's colour-literal and asset scans (`build/test.md`). No code mutant can make a scan fail, so
@@ -61,7 +63,7 @@ import {
 } from './test-step-ast.js';
 import { runMutationCheck, type MutationSummary } from './test-step-mutation.js';
 import { scriptRegions } from './test-step-sfc.js';
-import { findCodeRun, type CodeRunContext } from './test-step-code-run.js';
+import { findCodeRun, gameModulesLoaded, type CodeRunContext, type LoadedModule } from './test-step-code-run.js';
 import { findHandBuiltShellContext } from './test-step-shell-context.js';
 import { findChunkCommits } from '../lib/chunk-commits.js';
 import { chunkMdPath, relChunkMdPath } from '../lib/project-paths.js';
@@ -285,6 +287,12 @@ export interface ChunkTestFile {
   path: string;
   absPath: string;
   source: string;
+  /**
+   * Only on an exempt chunk's `none (regression)` row: the game modules the file loads
+   * (`gameModulesLoaded`). The mutation check breaks these, not the chunk's own lines, since the row
+   * pins behaviour an earlier chunk built (#485).
+   */
+  loads?: LoadedModule[];
 }
 
 async function readChunk(projectDir: string, slug: string): Promise<string> {
@@ -375,14 +383,45 @@ function isGuardFile(projectDir: string, testFile: string): boolean {
   return absPath !== 'escapes' && absPath.startsWith(join(projectDir, GUARD_TEST_DIR));
 }
 
-/** Check 1: every row's file exists, its RED was observed, and its claims have citing tests. */
+/** The RED Observed finding for a row, if it has one; an exempt chunk's `none (regression)` row reads `n/a`. */
+function redFinding(manifest: SpecManifest, row: SpecManifestRow): TestStepFinding | undefined {
+  if (pinsEarlierBehaviour(manifest, row)) {
+    if (row.redObserved === 'n/a') return undefined;
+    return {
+      kind: 'red-not-observed',
+      subject: row.testFile,
+      detail:
+        `RED Observed is "${row.redObserved || 'blank'}" for ${row.testFile}, a none (regression) row of an exempt ` +
+        'chunk. It pins behaviour an earlier chunk built, so there is no failure to observe before a change: set it to ' +
+        'n/a. The mutation check still breaks the game code it loads, so it must be able to fail (build/build.md).',
+    };
+  }
+  if (/^yes\b/.test(row.redObserved)) return undefined;
+  return {
+    kind: 'red-not-observed',
+    subject: row.testFile,
+    detail:
+      `RED Observed is "${row.redObserved || 'blank'}" for ${row.testFile}. Run its tests before the change ` +
+      'that makes them pass (the implementation, for a file the spec step wrote; the fix, for a regression or ' +
+      'measurement test build or repair added), see them fail, then set it to yes (build/spec.md "Persistence").',
+  };
+}
+
+/** Whether a row is an exempt chunk's `none (regression)` row, which pins an earlier chunk's behaviour. */
+const pinsEarlierBehaviour = (manifest: SpecManifest, row: SpecManifestRow) => manifest.exemption !== undefined && row.regression;
+
+/**
+ * Check 1: every row's file exists, its RED was observed, and its claims have citing tests. `pins`
+ * holds the files of rows that pin an earlier chunk's behaviour.
+ */
 async function manifestRowFindings(
   projectDir: string,
   manifest: SpecManifest,
   claims: ChunkClaims,
-): Promise<{ findings: TestStepFinding[]; testFiles: ChunkTestFile[] }> {
+): Promise<{ findings: TestStepFinding[]; testFiles: ChunkTestFile[]; pins: Set<ChunkTestFile> }> {
   const findings: TestStepFinding[] = [];
   const testFiles: ChunkTestFile[] = [];
+  const pins = new Set<ChunkTestFile>();
   for (const row of manifest.rows) {
     if (isGuardFile(projectDir, row.testFile)) {
       findings.push({
@@ -396,19 +435,13 @@ async function manifestRowFindings(
       });
       continue;
     }
-    if (!/^yes\b/.test(row.redObserved) && !(manifest.exemption !== undefined && row.regression)) {
-      findings.push({
-        kind: 'red-not-observed',
-        subject: row.testFile,
-        detail:
-          `RED Observed is "${row.redObserved || 'blank'}" for ${row.testFile}. Run its tests before the change ` +
-          'that makes them pass (the implementation, for a file the spec step wrote; the fix, for a regression or ' +
-          'measurement test build or repair added), see them fail, then set it to yes (build/spec.md "Persistence").',
-      });
-    }
+    const red = redFinding(manifest, row);
+    if (red) findings.push(red);
     const file = await readRowFile(projectDir, row);
-    if (file) testFiles.push(file);
-    else {
+    if (file) {
+      testFiles.push(file);
+      if (pinsEarlierBehaviour(manifest, row)) pins.add(file);
+    } else {
       findings.push({
         kind: 'test-file-missing',
         subject: row.testFile,
@@ -417,7 +450,7 @@ async function manifestRowFindings(
     }
     findings.push(...rowClaimFindings(row, file, claims));
   }
-  return { findings, testFiles };
+  return { findings, testFiles, pins };
 }
 
 /** Check 2: every claim in force is listed by some row. */
@@ -530,11 +563,15 @@ const NOT_COLLECTED = Object.freeze([
 const isTestFile = (path: string) =>
   /\.(test|spec)\.[cm]?[jt]sx?$/.test(path) && !NOT_COLLECTED.some((excluded) => excluded.test(path));
 
-/** Every script in the project outside `node_modules/`, with its text. */
+/**
+ * Every script in the project outside `node_modules/`, and every component under `src/` (which a
+ * test that pins earlier behaviour may load, `gameModulesLoaded`), with its text.
+ */
 async function projectScripts(projectDir: string): Promise<SourceFile[]> {
   const listed = await git(projectDir, ['ls-files', '--cached', '--others', '--exclude-standard']);
   const scripts: SourceFile[] = [];
-  for (const path of lines(listed).filter((p) => /\.[cm]?[jt]sx?$/.test(p) && !/(^|\/)node_modules\//.test(p))) {
+  const wanted = (p: string) => (/\.[cm]?[jt]sx?$/.test(p) || (p.startsWith('src/') && p.endsWith('.vue'))) && !/(^|\/)node_modules\//.test(p);
+  for (const path of lines(listed).filter(wanted)) {
     try {
       scripts.push({ path, text: await fs.readFile(join(projectDir, path), 'utf-8') });
     } catch {
@@ -687,6 +724,9 @@ export async function checkTestStep(
     ...(await guardFindings(dir, added)),
   ];
   const scope = await chunkTestScope(dir, chunkCommits, rows.testFiles);
+  for (const pin of rows.pins) {
+    pin.loads = gameModulesLoaded(pin.source, relative(dir, pin.absPath).split(sep).join('/'), scope.context);
+  }
   findings.push(
     ...shellContextFindings(scope),
     ...guardRunsCodeFindings(scope),
@@ -740,7 +780,7 @@ function printReport(result: TestStepCheckResult): void {
   if (result.mutation) {
     const m = result.mutation;
     console.log(
-      `Mutation: ${m.mutants} mutants of ${m.files} changed file(s), ${m.killed} made a test fail, ` +
+      `Mutation: ${m.mutants} mutants of ${m.files} file(s), ${m.killed} made a test fail, ` +
         `${m.survived} changed nothing any test noticed, ${m.timedOut} timed out.`,
     );
   }

@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { generateMutants, runDiffMutationCheck, runMutationCheck } from './test-step-mutation.js';
+import {
+  generateMutants,
+  PIN_MUTANT_CAP,
+  runDiffMutationCheck,
+  runMutationCheck,
+  selectPinMutants,
+} from './test-step-mutation.js';
 import { parseSource } from './test-step-ast.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { designProjectFixtures } from './design-project.test-helper.js';
@@ -103,6 +109,44 @@ const big = computed(() => props.n > 3);
     expect(generateMutants('src/ui/Plain.vue', plain, lines(3)).map((m) => `${m.line}: ${m.description}`)).toEqual([
       '3: 5 -> 6',
     ]);
+  });
+});
+
+/**
+ * #485 ruling (2026-10-03): an exempt chunk's `none (regression)` row is mutation-tested on the game
+ * code it loads. A whole game can give thousands of mutants, so at most PIN_MUTANT_CAP are taken,
+ * chosen the same way every time.
+ */
+describe('selectPinMutants', () => {
+  const mutantsOf = (file: string, count: number) =>
+    Array.from({ length: count }, (_, i) => ({ file, line: i + 1, description: 'change', source: `${file} ${i}` }));
+  const named = (mutants: Array<{ file: string; line: number }>) => mutants.map((m) => `${m.file}:${m.line}`);
+
+  it('takes every mutant that fits, nearest module first, alternating between modules', () => {
+    const selected = selectPinMutants(
+      [
+        { path: 'src/b.ts', depth: 2, mutants: mutantsOf('src/b.ts', 3) },
+        { path: 'src/a.ts', depth: 1, mutants: mutantsOf('src/a.ts', 2) },
+      ],
+      10,
+    );
+    expect(named(selected)).toEqual(['src/a.ts:1', 'src/b.ts:1', 'src/a.ts:2', 'src/b.ts:2', 'src/b.ts:3']);
+  });
+
+  it('stops at the cap, sharing it between modules and spreading each share across its whole module', () => {
+    const modules = [
+      { path: 'src/small.ts', depth: 2, mutants: mutantsOf('src/small.ts', 2) },
+      { path: 'src/big.ts', depth: 1, mutants: mutantsOf('src/big.ts', 10) },
+    ];
+    const selected = selectPinMutants(modules, 6);
+    expect(named(selected)).toEqual(['src/big.ts:1', 'src/small.ts:1', 'src/big.ts:3', 'src/small.ts:2', 'src/big.ts:6', 'src/big.ts:8']);
+    expect(named(selectPinMutants([...modules].reverse(), 6))).toEqual(named(selected));
+  });
+
+  it('caps a real game at a fixed count', () => {
+    expect(PIN_MUTANT_CAP).toBe(100);
+    const many = Array.from({ length: 30 }, (_, i) => ({ path: `src/m${i}.ts`, depth: 1 + (i % 3), mutants: mutantsOf(`src/m${i}.ts`, 50) }));
+    expect(selectPinMutants(many, PIN_MUTANT_CAP)).toHaveLength(PIN_MUTANT_CAP);
   });
 });
 
@@ -242,6 +286,61 @@ it('claim 3 — the doubled score is shown', () => {
     ]);
     expect(await fs.readFile(join(project, 'src/ui/Result.vue'), 'utf-8')).toBe(component);
   }, 120_000);
+
+  // #485 ruling (2026-10-03): an exempt chunk adds no game code, so a `none (regression)` row that pins
+  // an earlier chunk's behaviour is mutation-tested on the game code it loads instead.
+  describe('a test file that pins earlier behaviour (#485)', () => {
+    async function pinCheck(testSource: string, rules = RULES, added = new Map<string, Set<number>>()) {
+      const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': rules });
+      const testPath = join(project, 'tests/pin.test.ts');
+      await fs.mkdir(dirname(testPath), { recursive: true });
+      await fs.writeFile(testPath, testSource);
+      const logged: string[] = [];
+      const result = await runMutationCheck({
+        projectDir: project,
+        testFiles: [{ path: 'tests/pin.test.ts', absPath: testPath, source: testSource, loads: [{ path: 'src/rules.ts', depth: 1 }] }],
+        added,
+        claims: [],
+        log: (line) => logged.push(line),
+      });
+      return { project, result, logged };
+    }
+
+    it('breaks the lines the chunk changed in a module it loads first, and no more than the cap', async () => {
+      const rules = `export function fee(n: number): number {\n  return n + 1;\n}\n${RULES}`;
+      const { result, logged } = await pinCheck(
+        `import { it, expect } from 'vitest';
+import { bid } from '../src/rules';
+it('a higher offer still wins', () => { expect(bid(3, 4)).toBe(true); expect(bid(3, 3)).toBe(false); });
+`,
+        rules,
+        new Map([['src/rules.ts', lines(5)]]),
+      );
+      expect(result.findings).toEqual([]);
+      expect(logged[0]).toMatch(/^mutant 1\/\d+: src\/rules\.ts:5 /);
+      expect(Number(/^mutant 1\/(\d+)/.exec(logged[0])![1])).toBeLessThanOrEqual(PIN_MUTANT_CAP);
+    }, 60_000);
+
+    it('mutates the game code it loads, which the chunk never touched, and credits a test that pins it', async () => {
+      const { project, result } = await pinCheck(`import { it, expect } from 'vitest';
+import { bid } from '../src/rules';
+it('a higher offer still wins', () => { expect(bid(3, 4)).toBe(true); expect(bid(3, 3)).toBe(false); });
+`);
+      expect(result.findings).toEqual([]);
+      expect(result.summary).toMatchObject({ files: 1 });
+      expect(result.summary.killed).toBeGreaterThan(0);
+      expect(await fs.readFile(join(project, 'src/rules.ts'), 'utf-8')).toBe(RULES);
+    }, 60_000);
+
+    it('reports a pin no break of that code can fail, naming the code it was tried against', async () => {
+      const { result } = await pinCheck(`import { it, expect } from 'vitest';
+import { bid } from '../src/rules';
+it('bid exists', () => { expect(typeof bid).toBe('function'); });
+`);
+      expect(result.findings.map((f) => `${f.kind} ${f.subject}`)).toEqual(['test-survives-mutation tests/pin.test.ts > bid exists']);
+      expect(result.findings[0].detail).toMatch(/game code it loads[^]*src\/rules\.ts/);
+    }, 60_000);
+  });
 
   it('says how to install vitest when the project has none', async () => {
     const tree = tempTree('bs-mutation-');

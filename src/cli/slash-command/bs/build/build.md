@@ -39,8 +39,16 @@ are mutation-tested (`build/test.md` item 2(c)):
   observed RED, and there was none to observe. An exempt chunk has no such file: it adds the test
   in a new file as its own row with Claims Covered `none (regression)`,
   `| <file> | none (regression) | n/a |`, since with the `| exempt |` row it adds no game behaviour of
-  its own and the test pins an earlier chunk's. That row alone is excused from `RED Observed: yes`, because
-  the behaviour already exists; the mutation check still runs it, so it must be able to fail.
+  its own and the test pins an earlier chunk's. That row alone is excused from `RED Observed: yes`,
+  because the behaviour already exists: its RED Observed reads `n/a` only, never `pending` or `yes`.
+  The mutation check still runs it, so it must be able to fail. The chunk's own lines cannot reach
+  an earlier chunk's behaviour, so `boardsmith test-step-check` breaks the game code the test loads
+  instead: every module under `src/` it imports by a relative path, directly, through a support file
+  under `tests/`, or through another game module. A big game gives thousands of mutants, so it takes
+  at most 100 mutants per such row, the lines this chunk changed in those modules first, then the
+  rest shared out across the modules nearest first and spread evenly through each, the same ones
+  every run. Import the module whose behaviour the test pins and assert what it does: a test that reaches
+  the game only through a package loads no game code, so nothing can show it can fail.
 - A scan that only reads source as text goes in `tests/guards/`, never in a row.
 
 ## Fresh-Context Exception (one of the two steps allowed to read raw slices)

@@ -186,8 +186,10 @@ generated `tests/examples/<slug>.examples.test.ts`, a measurement harness under
 `tests/guards/`, and an earlier chunk's test file this chunk edits in place (which is that chunk's
 row). Every row needs `RED Observed: yes` but one: an exempt chunk that pins an earlier chunk's
 behaviour lists that test as its own row with Claims Covered `none (regression)`, excused from the
-observed red because the behaviour already exists; the mutation check still runs it
-(`build/build.md`).
+observed red because the behaviour already exists, so its RED Observed reads `n/a` only. It is
+still mutation-tested: the chunk's own lines cannot reach that behaviour, so the check breaks the
+game code the test loads instead (the `src/` modules it imports, directly or through others), at
+most 100 mutants per row (`build/build.md`).
 
 A session that crashes mid-spec resumes by reading this table: a row with `RED Observed: pending`
 is unfinished work, a row with `yes` is done and must not be rewritten. This is the file-by-file
