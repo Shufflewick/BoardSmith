@@ -64,4 +64,26 @@ describe("a seat's state carries only the animation events it may see", () => {
     expect((await session.performAction('signal', 1, {})).success).toBe(true);
     for (const seat of [0, 1, 2]) expect(eventTypes(session.getState(seat).state)).toEqual(['signal']);
   });
+
+  it("seat 2's ids do not count seat 1's private animations (#489)", async () => {
+    const idOfSignalAfter = async (privatePacks: number) => {
+      const session = GameSession.create<SecretDeploymentGame>({
+        gameType: 'secret-deployment',
+        GameClass: SecretDeploymentGame,
+        playerCount: 2,
+        playerNames: ['A', 'B'],
+        seed: 'animate-to',
+      });
+      for (let i = 0; i < privatePacks; i++) expect((await session.performAction('placePack', 1, {})).success).toBe(true);
+      expect((await session.performAction('signal', 2, {})).success).toBe(true);
+      return { seat1: session.getState(1).state!, seat2: session.getState(2).state!, spectator: session.getState(0).state! };
+    };
+    const none = await idOfSignalAfter(0);
+    const two = await idOfSignalAfter(2);
+    expect(two.seat2.animationEvents).toEqual(none.seat2.animationEvents);
+    expect(two.seat2.lastAnimationEventId).toBe(1);
+    expect(two.spectator.animationEvents).toEqual(none.spectator.animationEvents);
+    // Seat 1 saw its own two, so the public event is its third.
+    expect(two.seat1.lastAnimationEventId).toBe(3);
+  });
 });

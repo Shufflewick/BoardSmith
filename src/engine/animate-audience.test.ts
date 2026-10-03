@@ -13,7 +13,7 @@
  * side, in the per-seat payload, not by a UI filter.
  */
 import { describe, it, expect } from 'vitest';
-import { Game, Player, type GameOptions } from './index.js';
+import { Game, Player, animationFloorOf, type GameOptions } from './index.js';
 
 class CombatGame extends Game<CombatGame, Player> {
   constructor(options: GameOptions) {
@@ -85,20 +85,54 @@ describe('animate() is unchanged — public by default', () => {
       expect(eventsFor(game, seat).map((e) => e.type)).toEqual(['score']);
     }
   });
+});
 
-  it('shares one id sequence with animateTo, so ordering stays global', () => {
+/** The ids a given seat's payload carries, in order. */
+function idsFor(game: CombatGame, seat: number | null): number[] {
+  const json = game.toJSONForPlayer(seat) as { animationEvents?: Array<{ id: number }> };
+  return (json.animationEvents ?? []).map((e) => e.id);
+}
+
+describe('each recipient numbers only the events it may see (#489)', () => {
+  it("another seat's private events leave no gap in a seat's ids", () => {
     const game = makeGame();
     game.animate('first', {});
     game.animateTo(1, 'second', {});
-    game.animate('third', {});
+    game.animateTo(1, 'third', {});
+    game.animate('fourth', {});
 
-    const ids = game.pendingAnimationEvents.map((e) => e.id);
-    expect(ids).toEqual([...ids].sort((a, b) => a - b));
-    expect(new Set(ids).size).toBe(3);
-    // Seat 1 sees all three; seat 2 sees the two public ones, with their own
-    // ids intact so a client watermark still advances correctly.
-    expect(eventsFor(game, 1)).toHaveLength(3);
-    expect(eventsFor(game, 2).map((e) => e.type)).toEqual(['first', 'third']);
+    expect(idsFor(game, 1)).toEqual([1, 2, 3, 4]);
+    expect(idsFor(game, 2)).toEqual([1, 2]);
+    expect(idsFor(game, null)).toEqual([1, 2]);
+    // Nothing that counts every seat's events reaches a seat.
+    expect(JSON.stringify(game.toJSONForPlayer(2))).not.toMatch(/seatIds|animationSeqBySeat|animationEventSeq/);
+  });
+
+  it('keeps counting for each recipient across a full restore', () => {
+    const game = makeGame();
+    game.animateTo(1, 'private', {});
+    game.animate('public', {});
+
+    const restored = makeGame();
+    restored.loadSerializedState(game.toJSON(), { messageLog: [] });
+    restored.animate('next', {});
+    expect(idsFor(restored, 1).at(-1)).toBe(3);
+    expect(idsFor(restored, 2).at(-1)).toBe(2);
+  });
+
+  it("a restore below the live game re-numbers each recipient's events above what it was already sent", () => {
+    const game = makeGame();
+    game.animate('kept', {});
+    const earlier = game.toJSON();
+    game.animateTo(2, 'later', {});
+    game.animate('later-public', {});
+    const live = game.toJSON();
+
+    const restored = makeGame();
+    restored.loadSerializedState(earlier, { messageLog: [], animationFloor: animationFloorOf(live) });
+    // Seat 2 had been sent ids up to 3, seat 1 up to 2: the replayed beat follows each.
+    expect(idsFor(restored, 2)).toEqual([4]);
+    expect(idsFor(restored, 1)).toEqual([3]);
   });
 });
 

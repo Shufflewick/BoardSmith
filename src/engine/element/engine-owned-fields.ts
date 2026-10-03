@@ -73,6 +73,7 @@ export const ENGINE_OWNED_GAME_FIELDS = {
   _persistentMaps: 'fixed',
   _animationEvents: 'engine-set',
   _animationEventSeq: 'engine-set',
+  _animationSeqBySeat: 'engine-set',
   _messagesEvicted: 'engine-set',
   _constructorOptions: 'fixed',
   _initError: 'engine-set',

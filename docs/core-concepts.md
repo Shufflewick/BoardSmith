@@ -557,10 +557,12 @@ own hidden hand). Hiding the change is not enough on its own. If every move
 sent every seat a fresh state, a seat whose board did not change would still
 learn THAT someone moved, and when.
 
-So no host pushes a seat or a spectator a state identical to the last one it
-sent that connection (#487). `GameSession`, `boardsmith dev` and the platform
-compare what a connection would receive with what it was last sent, and send
-nothing when the two match. Two parts of the payload are compared specially:
+So BoardSmith's hosts never push a seat or a spectator a state identical to
+the last one it was sent (#487). `GameSession` compares per connection;
+`SnapshotSessionHost`, and so `boardsmith dev`, compares per seat and hands its
+adapter only the views that changed. The platform adopts the same behaviour
+when it re-vendors this engine. Two parts of the payload are compared
+specially:
 
 - A send time stamped on every push does not count as a change. It moves only
   when something else does.
@@ -568,12 +570,15 @@ nothing when the two match. Two parts of the payload are compared specially:
   empties its animation buffer at the start of every move, so another seat's
   move emptying it is not news. An event sent with `animateTo` reaches only its
   audience; a public `animate()` reaches every seat, and so tells every seat
-  that someone moved. If a secret move animates at all, use `animateTo` (and
-  see the third limit below).
+  that someone moved. If a secret move animates at all, use `animateTo`.
+
+Animation event ids carry no count either: each seat (and the spectator)
+numbers only the events it is sent, so another seat's private animations
+leave no gap in its ids (#489).
 
 A page that connects or reconnects is always sent the full state.
 
-Three things still reach other seats when a seat acts in secret. Design around
+Two things still reach other seats when a seat acts in secret. Design around
 them:
 
 - **Undo turns off when another seat acts after you.** A seat can undo back to
@@ -587,10 +592,6 @@ them:
   needs to drop element references from before the undo. So when seat 1
   undoes, every other seat receives a state and can tell that someone undid
   something, though not what.
-- **Animation event ids are counted across every seat.** One numbering covers
-  all events, `animateTo` ones included, so a seat that is sent ids 4 and then
-  7 knows two events it was not sent were played in between (#489). Where the
-  number of secret moves must stay hidden, do not animate them.
 
 ## Snapshot Mode and World Mode
 
