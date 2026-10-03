@@ -2344,6 +2344,13 @@ describe('#485: every new test file that runs the game is a Spec Manifest row', 
     }
   });
 
+  // Review of #485: `.not.toThrow` earns credit only around the pinned action, never around setup.
+  it('says .not.toThrow counts only around the pinned action, and wrapping setup in it is not a pin', () => {
+    for (const file of ['build/build.md', 'build/test.md']) {
+      expect(flatRead(file), file).toMatch(/`\.not\.toThrow`[^.]{0,80}only when it wraps the pinned action[^.]{0,120}\.[^.]{0,40}wrapp(ing|ed) (the game's )?setup in it is (still )?a setup-only test, not a pin/);
+    }
+  });
+
   // Ruling (2026-10-03): every file under tests/browser/ is exempt, since vitest never runs them.
   it('exempts every file under tests/browser/, not only the smoke test', () => {
     for (const file of ['build/spec.md', 'build/test.md', 'templates/CHUNK.template.md']) {

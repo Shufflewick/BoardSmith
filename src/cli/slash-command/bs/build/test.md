@@ -134,8 +134,10 @@ here.
          most 100 mutants per row, code fewer of its tests run first, chosen the same way every
          run. A test in that row is credited only when a mutant makes an assertion of its own fail
          (an `expect`, `assert`, `toThrow` or snapshot failure); one that fails only because the
-         broken game code threw is not, since every pin runs setup (`build/build.md`). Nothing
-         else is excused.
+         broken game code threw is not, since every pin runs setup (`build/build.md`).
+         `.not.toThrow` earns credit only when it wraps the pinned action or behaviour. Note that
+         wrapping the game's setup in it is still a setup-only test, not a pin. Nothing else is
+         excused.
 
        A finding here goes back to `build` (or to `spec`, when the fix is a test that pins the claim
        properly), never to an edit of the Spec Manifest that makes the row claim less. The two

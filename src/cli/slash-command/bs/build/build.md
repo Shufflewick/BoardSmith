@@ -52,7 +52,9 @@ are mutation-tested (`build/test.md` item 2(c)):
   runs only while the file loads. A module the check cannot read is skipped and named. A test in
   such a row is credited only when a mutant makes one of its own assertions fail: an `expect` or
   `assert` on an outcome, an `expect(() => ...).toThrow` (or `.not.toThrow`, `rejects`), or a
-  snapshot mismatch. A test that fails only because the broken game code threw is not credited,
+  snapshot mismatch. `.not.toThrow` earns credit only when it wraps the pinned action or behaviour.
+  Note that wrapping the game's setup in it is still a setup-only test, not a pin. A test that fails
+  only because the broken game code threw is not credited,
   since every pin runs the game's setup and a thrown error shows only that the code ran; nor is a
   failed `expect.assertions(n)` count. When a test survives, the finding says how many places it
   ran and how many were broken. Assert the outcome the pinned behaviour produces: a test that only
