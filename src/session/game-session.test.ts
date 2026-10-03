@@ -48,7 +48,8 @@ function makeMockBroadcaster(
   captured: CapturedState[]
 ): BroadcastAdapter {
   return {
-    getSessions: () => sessions,
+    // One connection per entry, named by its place in the list.
+    getSessions: () => sessions.map((s, i) => ({ connectionId: `connection-${i + 1}`, ...s })),
     send: (_session: { playerSeat: number; isSpectator: boolean }, update: Record<string, unknown>) => {
       const seat = (_session as { playerSeat: number }).playerSeat;
       captured.push({ seat, state: (update as { state: PlayerGameState }).state });

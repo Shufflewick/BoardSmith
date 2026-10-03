@@ -22,7 +22,7 @@ import {
 } from '../engine/index.js';
 import { GameRunner } from '../runtime/runner.js';
 import { GameSession } from './game-session.js';
-import type { PlayerGameState, BroadcastAdapter } from './types.js';
+import type { PlayerGameState, BroadcastAdapter, SessionInfo } from './types.js';
 import type { BotStrategy } from '../bot/index.js';
 
 // ============================================
@@ -70,7 +70,8 @@ function makeMockBroadcaster(
   captured: CapturedState[]
 ): BroadcastAdapter {
   return {
-    getSessions: () => sessions,
+    // One connection per entry, named by its place in the list.
+    getSessions: () => sessions.map((s, i) => ({ connectionId: `connection-${i + 1}`, ...s })),
     send: (_session: { playerSeat: number; isSpectator: boolean }, update: Record<string, unknown>) => {
       const seat = (_session as { playerSeat: number }).playerSeat;
       captured.push({ seat, state: (update as { state: PlayerGameState }).state });
@@ -250,27 +251,25 @@ describe('teaching state — requestHint / clearHint', () => {
 
 describe('teaching state — clear-on-replace', () => {
   // After requestHint + undo, stale hint must be gone.
-  it('undo clears stale hint from broadcast state', async () => {
+  it('replacing the runner (a rewind) clears a stale hint from the broadcast state', async () => {
     const session = makeSession();
     const captured: CapturedState[] = [];
     const broadcaster = makeMockBroadcaster(
-      [{ playerSeat: 1, isSpectator: false }],
+      [{ playerSeat: 2, isSpectator: false }],
       captured
     );
     session.setBroadcaster(broadcaster);
 
-    // Set a hint for seat 1 (who is currently awaiting input)
-    await (session as unknown as { requestHint(seat: number): Promise<void> }).requestHint(1);
+    // Seat 1 picks, so seat 2 is awaiting input and may ask for a hint.
+    expect((await session.performAction('pick', 1, { option: 'a' })).success).toBe(true);
+    await (session as unknown as { requestHint(seat: number): Promise<void> }).requestHint(2);
     expect(captured.at(-1)!.state.hint).toBeDefined();
 
-    // Perform an action to record an undo checkpoint, then undo it
-    await session.performAction('pick', 1, { option: 'a' });
-    // After seat 1 acts, seat 2 awaits. Now undo to turn start (seat 1 is back awaiting)
-    await session.undoToTurnStart(1);
+    // The rewind's own push (replaceRunner) must carry no hint. Reading it,
+    // rather than a later broadcast(), is the only way to see it: a second
+    // broadcast of the same state sends nothing (#487).
     captured.length = 0;
-    session.broadcast();
-
-    // After undo (replaceRunner), the hint must have been cleared
+    expect((await session.rewindToAction(0)).success).toBe(true);
     const lastState = captured.at(-1)!.state;
     expect(lastState.hint).toBeUndefined();
   });
@@ -451,7 +450,7 @@ describe('demo mode — startDemo / stopDemo / isDemoRunning', () => {
     // Intercept sends to track narration timing
     const originalSend = broadcaster.send.bind(broadcaster);
     (broadcaster as { send: typeof broadcaster.send }).send = (
-      _session: { playerSeat: number; isSpectator: boolean },
+      _session: SessionInfo,
       update: Record<string, unknown>
     ) => {
       const st = (update as { state: PlayerGameState }).state;
@@ -695,7 +694,7 @@ describe('demo mode — default narrator formats object args (WR-06)', () => {
     );
     const originalSend = broadcaster.send.bind(broadcaster);
     (broadcaster as { send: typeof broadcaster.send }).send = (
-      sess: { playerSeat: number; isSpectator: boolean },
+      sess: SessionInfo,
       update: Record<string, unknown>
     ) => {
       const st = (update as { state: PlayerGameState }).state;

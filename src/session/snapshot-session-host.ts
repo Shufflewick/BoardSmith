@@ -9,6 +9,8 @@ import { runsAtOnce, type HostWorkGate } from './host-work-gate.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
 
 export type { Op, OpResult } from './stateless-ops.js';
+// The adapter's half of #487: every host that pushes these views keeps one.
+export { StatePushGate, type StatePushGateOptions } from './state-push-gate.js';
 
 const MAX_BOT_MOVES = 500;
 
@@ -111,6 +113,16 @@ export type RulesReload =
 export interface SnapshotSessionAdapters {
   playerCount: number;
   executeOp: (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) => Promise<OpResult>;
+  /**
+   * Every seat's view after each change, indexed by seat - 1 (`[0]` is seat 1).
+   *
+   * Every seat's view arrives on every call, including a seat nothing changed
+   * for, because this is also the state of record a host serves a reconnecting
+   * page from. Do NOT push each one to its seat as it comes: in a simultaneous
+   * step with secret actions, a push that carries nothing new tells the seat
+   * another seat acted (#487). Keep a {@link StatePushGate} and push a socket
+   * its frame only when `gate.shouldPush(socket, frame)` says it changed.
+   */
   broadcast: (
     playerViews: unknown[],
     meta: { isComplete: boolean; winners: number[]; isDraw: boolean; turnBoundary: TurnBoundary },

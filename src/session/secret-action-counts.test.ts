@@ -112,8 +112,8 @@ function statefulGame() {
     elementIdKey: options.elementIdKey,
   });
   const watchers: SessionInfo[] = [
-    { playerSeat: 2, isSpectator: false } as SessionInfo,
-    { playerSeat: 0, isSpectator: true } as SessionInfo,
+    { connectionId: 'seat-2', playerSeat: 2, isSpectator: false },
+    { connectionId: 'spectator', playerSeat: 0, isSpectator: true },
   ];
   const sent: Array<{ to: SessionInfo; message: unknown }> = [];
   session.setBroadcaster({

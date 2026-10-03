@@ -627,9 +627,16 @@ export type { LobbyState, SlotStatus, LobbySlot, LobbyInfo };
 // ============================================
 
 /**
- * Session identity for broadcasting
+ * One connection a `BroadcastAdapter` pushes to.
  */
 export interface SessionInfo {
+  /**
+   * Names this CONNECTION, not the seat: give each socket its own id when it
+   * opens and never reuse it. `GameSession` pushes a connection nothing
+   * identical to the last state it sent it (#487), so a page that reconnects
+   * must arrive under a new id to be sent the full state.
+   */
+  connectionId: string;
   playerId?: string;
   playerSeat: number;
   isSpectator: boolean;
@@ -675,6 +682,11 @@ export interface StorageAdapter {
  * Broadcast adapter interface for real-time updates
  */
 export interface BroadcastAdapter<TSession = SessionInfo> {
+  /**
+   * The connections open right now, one entry per connection. A connection
+   * absent from one call is forgotten, so it is sent the full state when it
+   * is listed again.
+   */
   getSessions(): TSession[];
   send(session: TSession, message: unknown): void;
 }

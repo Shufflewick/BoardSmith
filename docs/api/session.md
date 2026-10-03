@@ -185,27 +185,81 @@ if (storedState) {
 ```typescript
 import type { BroadcastAdapter, SessionInfo } from 'boardsmith/session';
 
-class WebSocketBroadcaster implements BroadcastAdapter<SessionInfo> {
-  constructor(private connections: Map<number, WebSocket>) {}
+class WebSocketBroadcaster implements BroadcastAdapter<SessionInfo & { ws: WebSocket }> {
+  // One entry per open socket, made when it opens, with an id never reused.
+  private connections = new Map<string, SessionInfo & { ws: WebSocket }>();
 
-  getSessions(): SessionInfo[] {
-    return Array.from(this.connections.keys()).map((pos) => ({
-      playerSeat: pos,
-      isSpectator: false,
-    }));
+  open(ws: WebSocket, playerSeat: number): void {
+    const connectionId = crypto.randomUUID();
+    this.connections.set(connectionId, { connectionId, playerSeat, isSpectator: playerSeat === 0, ws });
+    ws.addEventListener('close', () => this.connections.delete(connectionId));
   }
 
-  send(session: SessionInfo, message: unknown): void {
-    const ws = this.connections.get(session.playerSeat);
-    ws?.send(JSON.stringify(message));
+  getSessions() {
+    return [...this.connections.values()];
+  }
+
+  send(session: SessionInfo & { ws: WebSocket }, message: unknown): void {
+    session.ws.send(JSON.stringify(message));
   }
 }
 
-// Set up broadcasting
-session.setBroadcaster(new WebSocketBroadcaster(connections));
+const broadcaster = new WebSocketBroadcaster();
+session.setBroadcaster(broadcaster);
 
-// State updates are now automatically broadcast to all players
+// When a socket opens: list it, then broadcast. The new socket gets the full
+// state; every other connection is pushed nothing, because nothing it may see
+// changed.
+broadcaster.open(ws, seat);
+session.broadcast();
 ```
+
+`broadcast()` never pushes a connection a state identical to the last one it
+sent it. In a simultaneous step where a seat acts in secret, that push would
+tell everyone else the seat acted, so a seat whose view did not change hears
+nothing (#487). Two consequences for a host:
+
+- `connectionId` names a connection, not a seat. A page that reconnects must
+  arrive under a new id, or it is compared against what its old socket was sent
+  and may be sent nothing.
+- Give a new connection its first state with `broadcast()`, not by sending it
+  `getState()` yourself: the session does not know what you sent, so its next
+  push to that connection would repeat it, and the repeat is itself a signal.
+  A host that must send outside `broadcast()` keeps its own `StatePushGate`
+  (below).
+
+### Pushing state from your own host
+
+A host that builds its own frames, such as one running `SnapshotSessionHost`,
+keeps a `StatePushGate` and asks it before every push. It is exported from
+`boardsmith/session` and from `boardsmith/session-host`.
+
+```typescript
+import { StatePushGate } from 'boardsmith/session-host';
+
+const gate = new StatePushGate<string, Frame>({
+  // Where the PlayerGameState sits in your frame.
+  playerState: (frame) => frame.view.state,
+  // Fields you stamp fresh on every push. They never make two frames differ,
+  // so they advance only when something else does.
+  perPushFields: ['serverNow'],
+});
+
+// The push path, per socket:
+if (gate.shouldPush(socketId, frame)) socket.send(JSON.stringify(frame));
+
+// A frame sent outside the push path (connect, reconnect, an answer to a
+// request) is recorded, in the same shape the push path builds:
+gate.recordSent(socketId, frame);
+
+// When the socket closes:
+gate.forget(socketId);
+```
+
+Animation events are compared by id, not by content: the engine empties its
+buffer at the start of every action, so a buffer emptied by another seat's
+action is not news, and only an event with a higher id than the connection was
+last sent is.
 
 ## See Also
 

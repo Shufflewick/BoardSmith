@@ -51,6 +51,7 @@ import { PickHandler } from './pick-handler.js';
 import { PendingActionManager } from './pending-action-manager.js';
 import { StateHistory, type UndoResult, type ElementDiff } from './state-history.js';
 import { DebugController } from './debug-controller.js';
+import { StatePushGate } from './state-push-gate.js';
 import { describeMoveDestination, describeMoveForHint } from './move-summary.js';
 import { TutorialController } from './tutorial-controller.js';
 import { autoAdvanceTutorial } from '../engine/tutorial/progress.js';
@@ -288,6 +289,32 @@ export interface ReadOnlyRunnerFacade<G extends Game = Game> {
 }
 
 /**
+ * The `connectionId` of every connection a broadcast adapter listed, refusing
+ * a list that does not name each connection once: two connections under one
+ * id would be compared against each other's last push (#487).
+ */
+function connectionIdsOf(sessions: readonly SessionInfo[]): string[] {
+  const ids = new Set<string>();
+  for (const session of sessions) {
+    const id = session.connectionId;
+    if (typeof id !== 'string' || id === '') {
+      throw new Error(
+        `A broadcast adapter listed a connection (seat ${session.playerSeat}) with no connectionId. ` +
+          'Give every connection its own id when it opens, and never reuse it.',
+      );
+    }
+    if (ids.has(id)) {
+      throw new Error(
+        `The broadcast adapter's connectionId "${id}" is used by more than one connection. ` +
+          'Each connection needs its own id, never shared and never reused.',
+      );
+    }
+    ids.add(id);
+  }
+  return [...ids];
+}
+
+/**
  * Build a {@link ReadOnlyRunnerFacade} that delegates every read to the live
  * `runner`. This is a genuinely narrower object literal — NOT a type-cast of
  * `runner` — so `.performAction` is `undefined` at runtime, not merely hidden
@@ -320,6 +347,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   readonly #storage?: StorageAdapter;
   #botController?: BotController<G>;  // Mutable for dynamic bot slot changes
   #broadcaster?: BroadcastAdapter<TSession>;
+  /** What each connection was last pushed, by `connectionId` -- see `broadcast()`. */
+  readonly #pushGate = new StatePushGate<string, StateUpdate>({ playerState: (update) => update.state });
   #displayName?: string;
   /** Lobby manager for games with lobby flow */
   #lobbyManager?: LobbyManager<TSession>;
@@ -1930,7 +1959,13 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   // ============================================
 
   /**
-   * Broadcast current state to all connected sessions
+   * Push the current state to every connection that has not been sent it.
+   *
+   * A connection is never pushed a state identical to the last one it was
+   * sent (#487): in a simultaneous step with secret actions, that push would
+   * tell it another seat acted. So call this freely, and call it when a
+   * connection opens: the new connection gets the full state and nobody else
+   * is pushed anything.
    */
   broadcast(): void {
     // Refresh the runner's per-action undo checkpoint on every state change.
@@ -1947,6 +1982,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // counts every seat's actions (#449).
     const flowState = toPublicFlowState(this.#runner.getFlowState());
     const sessions = this.#broadcaster.getSessions();
+    this.#pushGate.retainOnly(connectionIdsOf(sessions));
 
     // Flow position is public game structure (T-123-08), not per-seat hidden
     // info — safe to compute once and reuse across every seat/spectator in
@@ -1988,6 +2024,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         isSpectator: session.isSpectator,
       };
 
+      if (!this.#pushGate.shouldPush(session.connectionId, update)) continue;
       try {
         this.#broadcaster.send(session, update);
       } catch (error) {

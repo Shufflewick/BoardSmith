@@ -147,7 +147,7 @@ async function observeSession(max: number, upTo: number): Promise<Observed> {
     checkpoints: { max },
   });
   const broadcaster: BroadcastAdapter = {
-    getSessions: () => [{ playerSeat: 1, isSpectator: false }],
+    getSessions: () => [{ connectionId: 'seat-1', playerSeat: 1, isSpectator: false }],
     send: (_session, message) => {
       broadcasts.push((message as StateUpdate).state);
     },
