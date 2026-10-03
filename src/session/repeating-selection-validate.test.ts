@@ -113,7 +113,7 @@ function makeHost(def: GameDefinitionLike = runeDef, seed = options.seed) {
     playerCount: 1,
     botSeats: [],
     executeOp: (snap, pend, op) => executeOp(def, { ...options, seed }, snap, pend, op),
-    broadcast: () => {},
+    record: () => {}, push: () => {},
   });
 }
 

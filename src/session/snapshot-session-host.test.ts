@@ -92,7 +92,7 @@ function makeAdapters(
   const adapters: SnapshotSessionAdapters = {
     playerCount: opts.playerCount,
     executeOp: (snap, pend, op) => executeOp(def, opts, snap, pend, op),
-    broadcast: (views, meta) => broadcastLog.push([views, meta]),
+    push: () => {}, record: ({ players: views }, meta) => broadcastLog.push([views, meta]),
     ...extra,
   };
   return { adapters, broadcastLog };
@@ -139,7 +139,7 @@ describe('SnapshotSessionHost', () => {
       const eventLog: string[] = [];
 
       // Override broadcast to push an event
-      adapters.broadcast = (views, meta) => {
+      adapters.record = ({ players: views }, meta) => {
         eventLog.push('broadcast');
       };
 
@@ -333,7 +333,7 @@ describe('SnapshotSessionHost', () => {
           }
           return { ...baseResult };
         },
-        broadcast: () => {},
+        record: () => {}, push: () => {},
         botSeats: [{ seat: 2 }],
       };
 
@@ -385,7 +385,7 @@ describe('SnapshotSessionHost', () => {
             }
             return { ...baseResult };
           },
-          broadcast: () => {},
+          record: () => {}, push: () => {},
           botSeats: [{ seat: 2 }],
           debug: true,
         };
@@ -433,7 +433,7 @@ describe('SnapshotSessionHost', () => {
           }
           return { ...baseResult };
         },
-        broadcast: (views, meta) => broadcastLog.push([views, meta]),
+        push: () => {}, record: ({ players: views }, meta) => broadcastLog.push([views, meta]),
         botSeats: [{ seat: 2 }],
       };
 
@@ -497,7 +497,7 @@ describe('SnapshotSessionHost', () => {
           }
           return { ...baseResult };
         },
-        broadcast: () => {},
+        record: () => {}, push: () => {},
         botSeats: [{ seat: 1 }],
       };
 
@@ -558,7 +558,7 @@ describe('SnapshotSessionHost', () => {
           }
           return { ...baseResult };
         },
-        broadcast: () => {},
+        record: () => {}, push: () => {},
         botSeats: [{ seat: 2 }],
       };
 
@@ -628,7 +628,7 @@ describe('SnapshotSessionHost', () => {
           }
           return { ...base };
         },
-        broadcast: () => {},
+        record: () => {}, push: () => {},
         botSeats: [{ seat: 2 }],
       };
 
@@ -679,7 +679,7 @@ describe('SnapshotSessionHost', () => {
           }
           return { ...base };
         },
-        broadcast: () => {},
+        record: () => {}, push: () => {},
       };
 
       const host = new SnapshotSessionHost(adapters);
@@ -1266,7 +1266,7 @@ describe('SnapshotSessionHost', () => {
           // genuine game state advancement
           return executeOp(botGameDef, opts, snap, pend, op);
         },
-        broadcast: (views, meta) => broadcastLog.push([views, meta]),
+        push: () => {}, record: ({ players: views }, meta) => broadcastLog.push([views, meta]),
         botSeats: [{ seat: 1 }],
       };
       return { adapters, broadcastLog };

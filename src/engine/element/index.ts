@@ -24,6 +24,8 @@ export {
   engineRootFieldAudience,
   // Every GameOptions field, so a host can keep a player's selection off them.
   ENGINE_OWNED_GAME_OPTION_KEYS,
+  // The live game's animation counters, which a restore stays above (#489).
+  animationFloorOf,
 } from './game.js';
 export { PersistentMap } from './persistent-map.js';
 export { ElementCollection } from './element-collection.js';
@@ -40,7 +42,7 @@ export type {
 } from './types.js';
 
 export type { GameRootFieldAudience, MessageEntry, MessageOptions, FormattedMessage, PlayerOf } from './game.js';
-export type { GameOptions, GameClass, RandomnessPolicy, GamePhase, PlayerViewFunction, GameRandom, AnimationEvent, ActionSpaceView, ActionSchemaView, ArgTemplate } from './game.js';
+export type { GameOptions, GameClass, RandomnessPolicy, GamePhase, PlayerViewFunction, GameRandom, AnimationEvent, AnimationFloor, ActionSpaceView, ActionSchemaView, ArgTemplate } from './game.js';
 export type { ElementLayout } from './grid.js';
 export type { HexOrientation, HexCoordSystem } from './hex-grid.js';
 export type { LayoutDirection, LayoutAlignment } from './space.js';

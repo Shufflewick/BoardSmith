@@ -46,6 +46,10 @@ Read this before you plan your week.
   which moves the world's clock forward to the instant the next event was due
   rather than making you wait for it; and **wake from parked**, which drops
   everything resident and rehydrates from the store.
+- **Every watcher is pushed on every commit.** A world's frames carry its
+  global revision, which every commit advances by design, so a seat can tell
+  that the world changed even when nothing it may see did. The rule that hides
+  a secret move from other seats at a table (#487) does not apply to a world.
 - **It is the same library the hosting platform runs.** Same `createWorld`, same
   declaration walk, same schedule planning, same budgets, same refusals in the
   same sentences. What a host owns is its own lifecycle policy -- sockets,

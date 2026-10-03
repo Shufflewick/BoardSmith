@@ -76,7 +76,7 @@ describe('#421: SnapshotSessionHost with a bot seat whose move is refused', () =
         if (op.type === 'botTurn') botTurns.push({ seats: op.seats.map((s) => s.seat), result });
         return result;
       },
-      broadcast: () => {},
+      record: () => {}, push: () => {},
     });
     const refusalsOfSeat2 = () =>
       botTurns.filter((t) => !t.result.success && t.result.botPlayer === 2).length;

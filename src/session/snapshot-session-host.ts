@@ -6,9 +6,13 @@ import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-
 import { stepTimeLimitMs, type StepTimeLimitState } from '../engine/flow/step-time-limit.js';
 import { describeMoveForNarration } from './move-summary.js';
 import { runsAtOnce, type HostWorkGate } from './host-work-gate.js';
+import { StatePushGate } from './state-push-gate.js';
+import { devWarn } from '../utils/dev.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
 
 export type { Op, OpResult } from './stateless-ops.js';
+// The adapter's half of #487: every host that pushes these views keeps one.
+export { StatePushGate, type StatePushGateOptions } from './state-push-gate.js';
 
 const MAX_BOT_MOVES = 500;
 
@@ -108,13 +112,46 @@ export type RulesReload =
   | { kind: 'replayed'; restoreError: string; moves: number; result: OpResult }
   | { kind: 'failed'; reason: string };
 
+/** Every seat's view, and the spectator's, as {@link SnapshotSessionAdapters.record} receives them. */
+export interface PublishedViews {
+  /** Indexed by seat - 1. */
+  players: unknown[];
+  /** What a spectator may see, or `undefined` before the first view is built. */
+  spectator: unknown;
+}
+
+/** The game's end and turn boundary, handed beside every record and push. */
+export interface PublishMeta {
+  isComplete: boolean;
+  winners: number[];
+  isDraw: boolean;
+  turnBoundary: TurnBoundary;
+}
+
 export interface SnapshotSessionAdapters {
   playerCount: number;
   executeOp: (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) => Promise<OpResult>;
-  broadcast: (
-    playerViews: unknown[],
-    meta: { isComplete: boolean; winners: number[]; isDraw: boolean; turnBoundary: TurnBoundary },
-  ) => void;
+  /**
+   * THE STATE OF RECORD, after every change: every seat's view, indexed by
+   * seat - 1 (`players[0]` is seat 1), and the spectator's, with the turn
+   * boundary and the game's end. Serve a page that connects or reconnects from
+   * these, and do any per-change bookkeeping here (it is called even when no
+   * seat's view changed). This is not a push: nothing here should reach a page
+   * that is already showing the game.
+   */
+  record: (views: PublishedViews, meta: PublishMeta) => void;
+  /**
+   * PUSH these views: only the seats whose view changed since they were last
+   * pushed (`seat` 0 is the spectators), in seat order, never empty. Send each
+   * to every page showing that seat, stamping whatever you stamp per push (a
+   * send time) here and not before.
+   *
+   * The host compares the views itself (#487), so a plain loop over `changed`
+   * is correct: in a simultaneous step with secret moves, a seat whose view
+   * did not change is not in the list, and is not told that another seat
+   * acted.
+   */
+  push: (changed: ReadonlyArray<{ seat: number; view: unknown }>, meta: PublishMeta) => void;
   /**
    * The seats a bot plays.
    *
@@ -202,6 +239,31 @@ export interface SnapshotSessionAdapters {
   hostWork?: HostWorkGate;
 }
 
+/**
+ * Every field {@link SnapshotSessionHost}'s merge writes into a view from the
+ * host's own state (its roster, teaching tools, demo, pending selections),
+ * rather than from the game. `flowDebugInfo` is not one: it describes the game
+ * the view was built from.
+ */
+const HOST_STATE_FIELDS = [
+  'hint',
+  'heatmap',
+  'narration',
+  'pendingAction',
+  'isDemoRunning',
+  'demoControls',
+  'hasBotPlayers',
+  'teachingDisabled',
+] as const;
+
+/** `state` without {@link HOST_STATE_FIELDS}; `state` itself when it carries none. */
+function withoutHostState(state: Record<string, unknown>): Record<string, unknown> {
+  if (!HOST_STATE_FIELDS.some((field) => field in state)) return state;
+  const stripped = { ...state };
+  for (const field of HOST_STATE_FIELDS) delete stripped[field];
+  return stripped;
+}
+
 export class SnapshotSessionHost {
   // `snapshot` and `flowState` are ONE value in two halves, and they are exposed
   // read-only so a caller cannot restore one without the other. A host holding a
@@ -258,6 +320,17 @@ export class SnapshotSessionHost {
   demoRunning = false;
   narrationText: string | null = null;
   private lastPlayerViews: unknown[] = [];
+  private lastSpectatorView: unknown = undefined;
+  /**
+   * What each seat (0 = spectators) was last pushed (#487). A view identical
+   * to it is not pushed: in a simultaneous step with secret moves, that push
+   * would tell the seat another seat acted.
+   */
+  private readonly pushGate = new StatePushGate<number, { view: unknown }>({
+    playerState: (frame) => (frame.view as { state?: unknown } | null | undefined)?.state,
+  });
+  /** Whether the views last published said a bot plays here (`hasBotPlayers`) -- see {@link rosterChanged}. */
+  private publishedHasBots: boolean | null = null;
 
   // ENDGAME-02 / F-12: once disposed, this host is a DEAD session — it must
   // never broadcast again (a stale `complete`/demo frame from a restarted-away
@@ -401,9 +474,13 @@ export class SnapshotSessionHost {
    * Merge transient teaching state — plus the flow-debug/pending-action
    * introspection fields (FLOW-01/03) — into player views post-buildPlayerState.
    *
+   * Every field the host writes ({@link HOST_STATE_FIELDS}) is stated afresh,
+   * never only added, so a view that already carries them (one handed back to
+   * restoreFrom) cannot keep a value the host no longer holds.
+   *
    * Short-circuits when there is no transient state, no bot seats, no flow-debug
-   * snapshot yet, and no pending action (identity return — the common case
-   * before the very first executeOp/start). This mirrors the
+   * snapshot yet, and no pending action (identity return for a view built by the
+   * game — the common case before the very first executeOp/start). This mirrors the
    * GameSession.broadcast() injection pattern (game-session.ts:1925-1934).
    *
    * Per-seat: hint, heatmap, pendingAction (keyed strictly by seat = i+1; no
@@ -412,6 +489,11 @@ export class SnapshotSessionHost {
    * and spectator — T-123-08).
    */
   private mergeTransientState(playerViews: unknown[]): unknown[] {
+    return playerViews.map((view, i) => this.mergeView(view, i + 1));
+  }
+
+  /** {@link mergeTransientState} for one view: `seat` 0 is the spectator, who has no per-seat state. */
+  private mergeView(view: unknown, seat: number): unknown {
     // teachingDisabled must always be injected — include it in hasTransient so a
     // lockout-only session (no other transient state) still broadcasts the flag.
     // Per D-03 (criterion 4): every connected client reads the authoritative value
@@ -419,44 +501,63 @@ export class SnapshotSessionHost {
     const hasTransient = this.transientTeachingState.size > 0
       || this.demoRunning
       || this.narrationText !== null
-      || (this.adapters.botSeats?.length ?? 0) > 0
+      || this.hasBotPlayers()
       || (this.adapters.teachingDisabled ?? false)
       || this.lastFlowDebugInfo !== null
       || this.pendingStates.size > 0;
-    if (!hasTransient) return playerViews;
+    // Guard: stub/empty views (e.g. from bot pump tests) pass through unchanged.
+    if (view == null || typeof view !== 'object' || !('state' in view)) return view;
+    const withState = view as { state: Record<string, unknown> };
+    // A view handed to restoreFrom was merged by the host that recorded it, so
+    // what it says of the host is as old as that host: drop it and say it again.
+    const recorded = withState.state;
+    const fromGame = withoutHostState(recorded);
+    if (!hasTransient) return fromGame === recorded ? view : { ...withState, state: fromGame };
+    const state = { ...fromGame };
+    const transient = this.transientTeachingState.get(seat);
+    if (transient?.hint) state.hint = transient.hint;
+    if (transient?.heatmap) state.heatmap = transient.heatmap;
+    if (this.narrationText) state.narration = { text: this.narrationText };
+    // Flow position is public game structure — shared across every seat.
+    if (this.lastFlowDebugInfo) state.flowDebugInfo = this.lastFlowDebugInfo;
+    // SECURITY (T-123-07): pendingAction MUST be looked up keyed on THIS seat
+    // only — never shared across seats. A seat must never receive another
+    // seat's accumulated pending-action args.
+    const pendingAction = this.pendingStates.get(seat);
+    if (pendingAction) state.pendingAction = pendingAction as unknown as SerializedPendingActionState;
+    if (this.demoRunning) {
+      state.isDemoRunning = true;
+      // Playback-control state so clients can render the demo control bar.
+      state.demoControls = {
+        paused: this.demoPaused,
+        delay: this.demoDelay,
+        canStepBack: this.demoHistory.length > 0,
+      };
+    }
+    if (this.hasBotPlayers()) state.hasBotPlayers = true;
+    // Always inject teachingDisabled (true or false) so every broadcast carries the
+    // authoritative session value regardless of other transient state (criterion 4).
+    state.teachingDisabled = this.adapters.teachingDisabled ?? false;
+    return { ...withState, state };
+  }
 
-    return (playerViews as Array<{ flowState: unknown; state: Record<string, unknown> } | null>).map((view, i) => {
-      // Guard: stub/empty views (e.g. from bot pump tests) pass through unchanged.
-      if (view == null || typeof view !== 'object' || !('state' in view)) return view;
-      const seat = i + 1;
-      const transient = this.transientTeachingState.get(seat);
-      const state = { ...view.state };
-      if (transient?.hint) state.hint = transient.hint;
-      if (transient?.heatmap) state.heatmap = transient.heatmap;
-      if (this.narrationText) state.narration = { text: this.narrationText };
-      // Flow position is public game structure — shared across every seat.
-      if (this.lastFlowDebugInfo) state.flowDebugInfo = this.lastFlowDebugInfo;
-      // SECURITY (T-123-07): pendingAction MUST be looked up per-seat inside
-      // this loop keyed on THIS seat only — never hoisted outside the loop or
-      // shared across seats. A seat must never receive another seat's
-      // accumulated pending-action args.
-      const pendingAction = this.pendingStates.get(seat);
-      if (pendingAction) state.pendingAction = pendingAction as unknown as SerializedPendingActionState;
-      if (this.demoRunning) {
-        state.isDemoRunning = true;
-        // Playback-control state so clients can render the demo control bar.
-        state.demoControls = {
-          paused: this.demoPaused,
-          delay: this.demoDelay,
-          canStepBack: this.demoHistory.length > 0,
-        };
-      }
-      if (this.adapters.botSeats?.length) state.hasBotPlayers = true;
-      // Always inject teachingDisabled (true or false) so every broadcast carries the
-      // authoritative session value regardless of other transient state (criterion 4).
-      state.teachingDisabled = this.adapters.teachingDisabled ?? false;
-      return { ...view, state };
-    });
+  private hasBotPlayers(): boolean {
+    return (this.adapters.botSeats?.length ?? 0) > 0;
+  }
+
+  /**
+   * Tell the host its roster (`adapters.botSeats`) changed: a seat passed
+   * between a person and the bot. Call it when the change happens.
+   *
+   * The views say whether a bot plays here (`hasBotPlayers`), and they are
+   * built when the game changes, not when the roster does. Republished now,
+   * the change reaches each page on its own; left for the next move to carry,
+   * it would reach a seat whose view nothing else changed exactly when another
+   * seat moved in secret (#487). The host warns when a move's views find the
+   * roster changed with no call here.
+   */
+  rosterChanged(): void {
+    this.broadcastCurrent();
   }
 
   /**
@@ -477,13 +578,40 @@ export class SnapshotSessionHost {
           'Restore the whole persisted state with restoreFrom({ snapshot, flowState, pendingStates }).',
       );
     }
-    const mergedViews = this.mergeTransientState(this.lastPlayerViews);
-    this.adapters.broadcast(mergedViews, {
+    this.publish();
+  }
+
+  /**
+   * Hand the adapter the views of record, then push the ones that changed
+   * (#487). `apply()` and `broadcastCurrent()` both end here, so no view
+   * reaches a page any other way.
+   */
+  private publish(): void {
+    const meta: PublishMeta = {
       isComplete: this.isComplete,
       winners: this.winners,
       isDraw: this.isComplete && this.winners.length === 0,
       turnBoundary: this.turnBoundary(),
+    };
+    const views = this.mergedViews();
+    this.publishedHasBots = this.hasBotPlayers();
+    this.adapters.record(views, meta);
+    const changed: Array<{ seat: number; view: unknown }> = [];
+    views.players.forEach((view, i) => {
+      if (this.pushGate.shouldPush(i + 1, { view })) changed.push({ seat: i + 1, view });
     });
+    if (views.spectator !== undefined && this.pushGate.shouldPush(0, { view: views.spectator })) {
+      changed.unshift({ seat: 0, view: views.spectator });
+    }
+    if (changed.length > 0) this.adapters.push(changed, meta);
+  }
+
+  /** Every view of record with the host's transient state merged in. */
+  private mergedViews(): PublishedViews {
+    return {
+      players: this.mergeTransientState(this.lastPlayerViews),
+      spectator: this.lastSpectatorView === undefined ? undefined : this.mergeView(this.lastSpectatorView, 0),
+    };
   }
 
   /**
@@ -513,8 +641,18 @@ export class SnapshotSessionHost {
    *
    * @param state.playerViews Optional last-known player views, so a
    *   `broadcastCurrent()` before the next op still carries board state.
+   * @param state.spectatorView Optional last-known spectator view, likewise.
+   *
+   * The views given are taken as what every page already shows -- they are
+   * what the host last handed `record` -- so the first change after the
+   * restore pushes only the seats it changes (#487). A host that wakes from
+   * hibernation with pages still open must pass them, or every seat is pushed
+   * its unchanged view once, telling it something moved. They are taken as
+   * given: a roster change made while the host slept differs from them, so the
+   * next publish pushes it. Call {@link broadcastCurrent} right after restoring:
+   * the gate makes it a no-op when nothing differs.
    */
-  restoreFrom(state: SnapshotHostState & { playerViews?: unknown[] }): void {
+  restoreFrom(state: SnapshotHostState & { playerViews?: unknown[]; spectatorView?: unknown }): void {
     if (state.flowState === null || state.flowState === undefined) {
       throw new Error(
         'restoreFrom requires the flowState that was captured with this snapshot: without it the ' +
@@ -527,6 +665,13 @@ export class SnapshotSessionHost {
     this._flowState = state.flowState;
     this.pendingStates = pendingStates;
     if (state.playerViews) this.lastPlayerViews = state.playerViews;
+    if (state.spectatorView !== undefined) this.lastSpectatorView = state.spectatorView;
+    // The gate holds the views exactly as given: they are what the pages show.
+    // Merging this host's roster and pending selections into them first would
+    // record a change made while the host slept as already sent.
+    state.playerViews?.forEach((view, i) => this.pushGate.recordSent(i + 1, { view }));
+    if (state.spectatorView !== undefined) this.pushGate.recordSent(0, { view: state.spectatorView });
+    this.publishedHasBots = this.hasBotPlayers();
   }
 
   /** `restoreFrom`'s check that every pending selection names a seat of this table. */
@@ -593,17 +738,17 @@ export class SnapshotSessionHost {
       else this.pendingStates.delete(seat);
     }
     this.lastPlayerViews = res.playerViews;
+    if (res.spectatorView !== undefined) this.lastSpectatorView = res.spectatorView;
     if (this.disposed) return; // F-12: a dead session never broadcasts.
-    const mergedViews = this.mergeTransientState(res.playerViews);
-    this.adapters.broadcast(mergedViews, {
-      isComplete: res.isComplete,
-      winners: res.winners,
-      isDraw: res.isComplete && res.winners.length === 0,
-      // `this._flowState` was assigned from `res.flowState` at the top of
-      // apply(), so this is `res`'s own answer — and is provably the same
-      // expression broadcastCurrent() will republish.
-      turnBoundary: this.turnBoundary(),
-    });
+    if (this.publishedHasBots !== null && this.publishedHasBots !== this.hasBotPlayers()) {
+      devWarn(
+        'snapshot-host-roster-unannounced',
+        'The bot roster (adapters.botSeats) changed without a call to rosterChanged(), so the change ' +
+          'is reaching every page with this move. In a simultaneous step that tells a seat another ' +
+          'seat moved. Call host.rosterChanged() when a seat passes between a person and the bot.',
+      );
+    }
+    this.publish();
     await this.persistDurableState();
   }
 

@@ -245,7 +245,9 @@ loop({
 
 ## 5. Hidden Information
 
-Managing what each player can see.
+Managing what each player can see. For moves made in secret during a
+simultaneous step, and what other seats can still tell, see
+[Secret Moves in a Simultaneous Step](./core-concepts.md#secret-moves-in-a-simultaneous-step).
 
 ### Hand Cards (Visible to Owner Only)
 

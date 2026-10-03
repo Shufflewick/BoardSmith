@@ -15,7 +15,7 @@
  * prod stay in lockstep.
  */
 
-import { SnapshotSessionHost, debuggingOffMessage, type Op, type OpResult, type SnapshotSessionAdapters, type TurnBoundary } from '../../session/index.js';
+import { SnapshotSessionHost, debuggingOffMessage, type Op, type OpResult, type SnapshotSessionAdapters, type PublishMeta } from '../../session/index.js';
 import { record, getEntries, type LogEntry } from './log-capture.js';
 
 /** Wire op names the embedded GameShell sends (snake_case, prod payload shapes). */
@@ -94,15 +94,20 @@ export interface DevSessionOptions {
   /** How the host holds the session's own work during a rules reload (#388). */
   hostWork?: SnapshotSessionAdapters['hostWork'];
   /**
-   * Post a `game_state` frame for one seat's iframe. Called for every seat on
-   * each broadcast; the caller decides which seat's iframe actually exists.
-   * `meta.turnBoundary` is the host's own, so the caller can arm a timed
-   * step's window (#302).
+   * Called after every change, whether or not any seat's view changed, with
+   * the host's own `meta.turnBoundary`, so the caller can arm a timed step's
+   * window (#302).
+   */
+  observeChange?: (meta: PublishMeta) => void;
+  /**
+   * Post a `game_state` frame for one seat's iframe. Called only for a seat
+   * whose view changed since it was last posted (#487); the caller decides
+   * which seat's iframe actually exists.
    */
   postGameState: (
     seat: number,
     view: unknown,
-    meta: { isComplete: boolean; winners: number[]; isDraw: boolean; turnBoundary: TurnBoundary },
+    meta: PublishMeta,
   ) => void;
   /** Post a `server_response` frame to the requesting seat's iframe. */
   postServerResponse: (
@@ -395,14 +400,16 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
     onPersistenceError: (entry, _consecutiveFailures, healthy) => {
       record(healthy ? 'warning' : 'error', entry.message, 'persistence');
     },
-    broadcast: (playerViews, meta) => {
-      lastPlayerViews = playerViews;
+    record: (views, meta) => {
+      lastPlayerViews = views.players;
       isComplete = meta.isComplete;
       winners = meta.winners;
       isDraw = meta.isDraw;
-      for (let seat = 1; seat <= opts.playerCount; seat++) {
-        opts.postGameState(seat, playerViews[seat - 1], meta);
-      }
+      opts.observeChange?.(meta);
+    },
+    push: (changed, meta) => {
+      // The dev host has no spectators: seat 0 has no iframe to post to.
+      for (const { seat, view } of changed) if (seat > 0) opts.postGameState(seat, view, meta);
     },
   });
 

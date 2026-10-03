@@ -24,7 +24,7 @@ type WithOptionalBoundary<T> = T extends { boundaryKey: string }
 export type HeadlessOp = WithOptionalBoundary<Op>;
 
 /** The `meta` object the host hands to every broadcast, captured verbatim. */
-type BroadcastMeta = Parameters<SnapshotSessionAdapters['broadcast']>[1];
+type BroadcastMeta = Parameters<SnapshotSessionAdapters['record']>[1];
 
 /**
  * Drives a SnapshotSessionHost with an IN-PROCESS executeOp, forcing every op
@@ -67,6 +67,8 @@ export function createHeadlessSession(
 ) {
   const broadcasts: unknown[] = [];
   const metas: BroadcastMeta[] = [];
+  const pushes: Array<ReadonlyArray<{ seat: number; view: unknown }>> = [];
+  const spectatorViews: unknown[] = [];
   // The roster is a LIVE list this harness owns, handed to the host through a
   // GETTER — the same shape the platform DO supplies (`get botSeats()` over
   // `slots[].isBot` + `mindedSeats`). The positional `botSeats` argument seeds it;
@@ -88,15 +90,19 @@ export function createHeadlessSession(
     // seat-view debug op still answers only for the seat `send` names.
     debug: true,
     executeOp: (snap, pend, op) => executeOp(def, gameOptions, snap, pend, op, { debug: true }),
-    broadcast: (views, meta) => {
+    record: (views, meta) => {
       // structuredClone here mirrors the production postMessage boundary: a
       // broadcast carrying a live game object would throw a DataCloneError.
-      broadcasts.push(structuredClone(views));
+      broadcasts.push(structuredClone(views.players));
+      spectatorViews.push(structuredClone(views.spectator));
       // `meta` crosses the SAME boundary in production (the dev host's bridge
       // hands it to postGameState, the platform DO puts it on the wire), so it
       // is cloned for the same reason: a meta that is not structured-cloneable
       // would be a live defect, and this harness exists to surface exactly that.
       metas.push(structuredClone(meta));
+    },
+    push: (changed) => {
+      pushes.push(structuredClone(changed));
     },
   });
   return {
@@ -110,11 +116,21 @@ export function createHeadlessSession(
      */
     metas,
     /**
+     * What the host pushed, one entry per push: only the seats (0 = the
+     * spectators) whose view changed (#487). {@link broadcasts} is the state
+     * of record after every change, pushed or not.
+     */
+    pushes,
+    /** The spectator's view of record, index-aligned with {@link broadcasts}. */
+    spectatorViews,
+    /**
      * Record on the ROSTER that `seat` is now bot-driven, exactly as the platform
      * DO's `mindSeats` flips `slots[seat].isBot`.
      *
-     * This is HALF of a conversion and deliberately does nothing on its own: the
-     * roster is the adapter's, and the engine is told about the change by the
+     * This is HALF of a conversion. It tells the host the roster changed
+     * (`rosterChanged()`), so every page learns it now rather than with some
+     * later move (#487), but it does not wake the pump: the roster is the
+     * adapter's, and the engine is told about the change by the
      * `convertSeatToBot` op, which is also what wakes the pump. Flipping the
      * roster and never sending the op leaves the table parked — send the op.
      * Sending the op without flipping the roster is refused loudly.
@@ -124,6 +140,7 @@ export function createHeadlessSession(
     makeSeatBot(seat: number, level?: string) {
       if (botRoster.some((s) => s.seat === seat)) return;
       botRoster.push({ seat, level });
+      host.rosterChanged();
     },
     async start() {
       await host.start();
