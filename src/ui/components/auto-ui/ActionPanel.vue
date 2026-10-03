@@ -1714,7 +1714,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
       <!-- What is being done so far: the action's name, its cancel, and the items
            already chosen. Lays out as nothing in the sentence flow; at phone width
            it stacks into one control row, so the open panel fits the two rows the
-           shell reserves for it (#444). -->
+           shell reserves for it (issue 444). -->
       <div class="config-context">
         <div class="config-header">
           <span class="config-title">{{ currentActionMeta?.prompt || formatActionName(currentAction) }}</span>
@@ -2462,7 +2462,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
   display: contents;
 }
 /* Both lay out as nothing in the sentence flow; the phone-width block below
-   gives them a box (#444). */
+   gives them a box (issue 444). */
 .config-context {
   display: contents;
 }
@@ -3089,7 +3089,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
   border-color: var(--bsg-accent);
 }
 
-/* ── Phone width: fit the two rows the shell reserves (#444) ─────────────────
+/* ── Phone width: fit the two rows the shell reserves (issue 444) ─────────────────
    The bar is capped at two control rows (PlayShell, --bsg-panel-reserved) and
    the board under it never refits, so an open pick has to fit them. As one
    sentence, a pick handed to the board after an earlier choice took four rows at

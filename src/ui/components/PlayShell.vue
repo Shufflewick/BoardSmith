@@ -515,7 +515,7 @@ const mobileToggleLabel = computed(() => {
     <!-- Floating action bar: absolutely positioned over the BOTTOM of the game
          area (full width) so showing or growing it NEVER reflows or moves the
          board. It is capped at the strip the board region reserves for it
-         (--bsg-panel-reserved), so it never covers the board (#444); what does
+         (--bsg-panel-reserved), so it never covers the board (issue 444); what does
          not fit scrolls inside the bar. -->
     <!-- The action bar frame: the bar, plus the toggle that puts it down (#230).
          The toggle is a SIBLING of the bar rather than a child because the bar
@@ -670,7 +670,7 @@ const mobileToggleLabel = computed(() => {
   --bsg-panel-gap: 8px;    /* .actionbar row gap */
   --bsg-panel-pad: 9px;    /* .actionbar vertical padding */
 
-  /* Reserved footprint: TWO rows, and also the panel's ceiling (#444). The board
+  /* Reserved footprint: TWO rows, and also the panel's ceiling (issue 444). The board
      is fitted above it and never refits, so a panel allowed to grow past it
      covered the bottom of a board that had fitted itself correctly. The panel
      lays itself out to fit these two rows (ActionPanel compacts at phone width)
@@ -854,7 +854,7 @@ const mobileToggleLabel = computed(() => {
    the sidebar too). Out of flow, so it never reflows/moves the board — it floats over
    the board's bottom; the board reserves a CONSTANT footprint (--bsg-panel-reserved,
    in .boardregion's padding) and the bar is capped at exactly that footprint, so it
-   never covers the board (#444). Everything inside wraps naturally (flex-wrap) — no
+   never covers the board (issue 444). Everything inside wraps naturally (flex-wrap) — no
    reserved columns; content that still does not fit scrolls inside the bar. */
 /* The frame: the out-of-flow box the bar and its edge toggle share. The bar used
    to carry this positioning itself; the toggle needs a parent the bar's own
@@ -884,7 +884,7 @@ const mobileToggleLabel = computed(() => {
   gap: 8px;
   padding: 9px var(--bsg-s4);
   padding-bottom: calc(9px + env(safe-area-inset-bottom));
-  /* Capped at the reserved footprint, so the bar never covers the board (#444):
+  /* Capped at the reserved footprint, so the bar never covers the board (issue 444):
      content that does not fit scrolls inside it. On the border box, or the
      padding would sit on top of the cap. The ⋯ menu popover teleports to <body>,
      so overflow is safe. */
@@ -1126,7 +1126,7 @@ const mobileToggleLabel = computed(() => {
   }
   /* Phones use the SAME two-row Action Panel cap as desktop (no override) — the
      base .actionbar max-height applies, and ActionPanel compacts its own layout
-     at this width to fit it (#444). */
+     at this width to fit it (issue 444). */
 }
 
 /* Medium (640px–1023px): standard sidebar + board. Lower bound aligns with the
