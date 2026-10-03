@@ -75,6 +75,46 @@ describe('selectGameOptions admits only what the game declared', () => {
   });
 });
 
+describe('selectGameOptions reads client JSON by its own keys only', () => {
+  it('refuses a name that every object inherits, as undeclared', () => {
+    for (const name of ['toString', 'constructor', 'hasOwnProperty']) {
+      const raw = JSON.parse(`{"${name}":"x"}`) as Record<string, unknown>;
+      expect(() => selectGameOptions(declared, raw)).toThrow(GameOptionSelectionError);
+      expect(() => selectGameOptions(declared, raw)).toThrow(new RegExp(`Unknown game option "${name}"`));
+    }
+  });
+
+  it('refuses "__proto__", so a selection can never read a host-owned key through its prototype', () => {
+    const raw = JSON.parse('{"__proto__":{"seed":"evil"},"rounds":1}') as Record<string, unknown>;
+    expect(() => selectGameOptions(declared, raw)).toThrow(/Unknown game option "__proto__"/);
+  });
+
+  it('a declared option named like an inherited property is still a plain own key of the selection', () => {
+    const odd = { ...declared, constructor: { type: 'number', label: 'Constructor' } } as Record<string, GameOptionDefinition>;
+    const selection = selectGameOptions(odd, JSON.parse('{"constructor":"3"}') as Record<string, unknown>);
+    expect(Object.hasOwn(selection, 'constructor')).toBe(true);
+    expect(selection.constructor).toBe(3);
+    expect(Object.getPrototypeOf(selection)).toBe(Object.prototype);
+  });
+});
+
+describe('selectGameOptions refuses a value of the wrong type whatever its shape', () => {
+  it.each([[[1, 2]], [true], [{ n: 1 }], [null], [NaN], [Infinity], [''], ['  ']])('number: %j is refused', (value) => {
+    expect(() => selectGameOptions(declared, { rounds: value })).toThrow(GameOptionSelectionError);
+    expect(() => selectGameOptions(declared, { rounds: value })).toThrow(/"rounds" must be a number/);
+  });
+
+  it.each([[1], [0], ['yes'], [[true]], [null], [{}]])('boolean: %j is refused', (value) => {
+    expect(() => selectGameOptions(declared, { hardMode: value })).toThrow(GameOptionSelectionError);
+    expect(() => selectGameOptions(declared, { hardMode: value })).toThrow(/"hardMode" must be true or false/);
+  });
+
+  it.each([[[1]], [{ value: 1 }], [null], ['1.0'], [true]])('select: %j is refused', (value) => {
+    expect(() => selectGameOptions(declared, { level: value })).toThrow(GameOptionSelectionError);
+    expect(() => selectGameOptions(declared, { level: value })).toThrow(/"level".*one of: 1, 4/);
+  });
+});
+
 describe('selectGameOptions coerces wire strings to the declared type', () => {
   it('number: a numeric string becomes a number; anything else is refused by name', () => {
     expect(selectGameOptions(declared, { rounds: '5' })).toEqual({ rounds: 5 });

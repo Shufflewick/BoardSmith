@@ -69,23 +69,23 @@ export function assertDeclarableGameOptions(declared: Record<string, GameOptionD
 }
 
 function coerce(name: string, def: GameOptionDefinition, raw: unknown): unknown {
-  // A lobby text field and a `--game-option` flag both send strings; a value
-  // that already has a type (a preset's bundle) passes through.
+  // A lobby text field and a `--game-option` flag both send strings, so a
+  // string is read as the declared type; whatever arrives, the value is
+  // checked against that type before it is admitted.
   switch (def.type) {
     case 'number': {
-      if (typeof raw !== 'string') return raw;
-      const n = Number(raw);
-      if (Number.isNaN(n)) {
-        throw new GameOptionSelectionError(`Game option "${name}" must be a number, got "${raw}".`);
+      const n = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
+      if (typeof n !== 'number' || !Number.isFinite(n)) {
+        throw new GameOptionSelectionError(`Game option "${name}" must be a number, got ${JSON.stringify(raw)}.`);
       }
       return n;
     }
     case 'boolean': {
-      if (typeof raw !== 'string') return raw;
-      if (raw !== 'true' && raw !== 'false') {
-        throw new GameOptionSelectionError(`Game option "${name}" must be "true" or "false", got "${raw}".`);
+      const b = raw === 'true' ? true : raw === 'false' ? false : raw;
+      if (typeof b !== 'boolean') {
+        throw new GameOptionSelectionError(`Game option "${name}" must be true or false, got ${JSON.stringify(raw)}.`);
       }
-      return raw === 'true';
+      return b;
     }
     case 'select': {
       // Resolve a string to the declared choice it names, so a numeric choice
@@ -126,7 +126,9 @@ export function selectGameOptions(
         `Game option "${name}" cannot be chosen: the engine or the host sets it for every game.`,
       );
     }
-    const def = declared?.[name];
+    // Own declarations only: `raw` is parsed client JSON, and a name such as
+    // "constructor" or "toString" is found on every object's prototype.
+    const def = declared !== undefined && Object.hasOwn(declared, name) ? declared[name] : undefined;
     if (!def) {
       const known = Object.keys(declared ?? {});
       throw new GameOptionSelectionError(
@@ -135,7 +137,9 @@ export function selectGameOptions(
           : `Unknown game option "${name}": the declared options are ${known.join(', ')}.`,
       );
     }
-    selection[name] = coerce(name, def, value);
+    // Defined as an own data property, never assigned: assigning "__proto__"
+    // would set the selection's prototype instead of a key.
+    Object.defineProperty(selection, name, { value: coerce(name, def, value), enumerable: true, writable: true, configurable: true });
   }
   return selection as GameOptionSelection;
 }
