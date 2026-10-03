@@ -1041,7 +1041,7 @@
       "surfaceHash": "a5e66c593812b04b",
       "payloadHash": "3a98bc2f204eba00",
       "formatHash": "0058593e7cc80205",
-      "summary": "selectGameOptions now refuses a number game option outside its declared min/max or off its step (counted from min, or 0), naming the option and its allowed range; a game declaring a non-finite bound, min above max, or a non-positive step is refused when loaded. Re-vendor so a host cannot start a game with, say, rounds: 1000 against max: 10."
+      "summary": "selectGameOptions now refuses a number game option outside its declared min/max or off its step (counted from min, or 0), naming the option and its allowed range; a game declaring a non-finite bound, min above max, a non-positive step, or a default its own bounds refuse is refused when loaded. Re-vendor so a host cannot start a game with, say, rounds: 1000 against max: 10."
     }
   ]
 }
