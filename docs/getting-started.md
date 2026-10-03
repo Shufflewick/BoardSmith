@@ -219,8 +219,12 @@ no change would be measured: there the mutation check fails unless you pass
 packages have not changed since an earlier run is not run again, so verifying
 again after a commit that only touches the `bs-` skills' design records is quick.
 Those outcomes are kept in the repository's git directory, shared by the main
-checkout and every worktree, so merging a worktree's branch reuses what its
-verify already ran.
+checkout and every worktree. A merge reuses them only when the merged tree is
+the tree the worktree verified: main has not moved since, or the branch merged
+main before its last verify. Otherwise every mutant runs again at the merge. So
+for a cheap merge, merge main into the branch first and verify there. Older
+BoardSmith kept these outcomes in `.boardsmith/verify/mutants.json`; that file
+is no longer read and can be deleted.
 
 The smoke test is your game's `tests/browser/smoke.spec.ts`, which `boardsmith
 init` writes:
