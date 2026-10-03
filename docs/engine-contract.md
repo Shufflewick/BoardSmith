@@ -71,7 +71,10 @@ every test run:
   On the TABLE side it is a canonical per-player view: a default `Deck`, an
   owner-visible hand, an explicitly count-only pile and an explicitly hidden
   pile, because those are the shapes whose defaults have actually bitten us —
-  plus the serialized flow position the platform stores and restores.
+  plus the serialized flow position the platform stores and restores, and the
+  seeded generator's stored `randomState` and the next draws it gives (#483).
+  The platform keeps that state with every game, so a generator that wrote it
+  differently, or drew differently from it, changes what a stored game deals.
 
   On the WORLD side it is **one seat's projected view** of a five-seat village
   whose declaration names a subset of its partitions, with one resident
