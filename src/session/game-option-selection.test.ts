@@ -153,3 +153,149 @@ describe('a game cannot declare an option named for a field the host owns', () =
     expect(() => selectGameOptions(clashing, {})).toThrow(/"seed"/);
   });
 });
+
+describe('selectGameOptions holds a number option to its declared min, max and step', () => {
+  const bounded: Record<string, GameOptionDefinition> = {
+    rounds: { type: 'number', label: 'Rounds', min: 1, max: 10 },
+    bid: { type: 'number', label: 'Bid', min: 5, max: 50, step: 5 },
+    floor: { type: 'number', label: 'Floor', min: -3 },
+    ceiling: { type: 'number', label: 'Ceiling', max: 100 },
+    even: { type: 'number', label: 'Even', step: 2 },
+    tenths: { type: 'number', label: 'Tenths', min: 0, max: 1, step: 0.1 },
+  };
+
+  it('admits a value exactly at min and exactly at max', () => {
+    expect(selectGameOptions(bounded, { rounds: 1 })).toEqual({ rounds: 1 });
+    expect(selectGameOptions(bounded, { rounds: 10 })).toEqual({ rounds: 10 });
+    expect(selectGameOptions(bounded, { floor: -3 })).toEqual({ floor: -3 });
+    expect(selectGameOptions(bounded, { ceiling: 100 })).toEqual({ ceiling: 100 });
+  });
+
+  it('refuses a value above max, naming the option and its allowed range', () => {
+    expect(() => selectGameOptions(bounded, { rounds: 1000 })).toThrow(GameOptionSelectionError);
+    expect(() => selectGameOptions(bounded, { rounds: 11 })).toThrow(
+      'Game option "rounds" must be between 1 and 10, got 11.',
+    );
+    expect(() => selectGameOptions(bounded, { ceiling: 100.5 })).toThrow(
+      'Game option "ceiling" must be at most 100, got 100.5.',
+    );
+  });
+
+  it('refuses a value below min, naming the option and its allowed range', () => {
+    expect(() => selectGameOptions(bounded, { rounds: 0 })).toThrow(
+      'Game option "rounds" must be between 1 and 10, got 0.',
+    );
+    expect(() => selectGameOptions(bounded, { floor: -4 })).toThrow(
+      'Game option "floor" must be at least -3, got -4.',
+    );
+  });
+
+  it('checks a wire string after it is read as a number', () => {
+    expect(selectGameOptions(bounded, { rounds: '10' })).toEqual({ rounds: 10 });
+    expect(() => selectGameOptions(bounded, { rounds: '1000' })).toThrow(/"rounds" must be between 1 and 10/);
+  });
+
+  it('admits values on the step counted from min, at both ends of the range', () => {
+    expect(selectGameOptions(bounded, { bid: 5 })).toEqual({ bid: 5 });
+    expect(selectGameOptions(bounded, { bid: 25 })).toEqual({ bid: 25 });
+    expect(selectGameOptions(bounded, { bid: 50 })).toEqual({ bid: 50 });
+  });
+
+  it('refuses an off-step value, naming the step and where it counts from', () => {
+    expect(() => selectGameOptions(bounded, { bid: 7 })).toThrow(GameOptionSelectionError);
+    expect(() => selectGameOptions(bounded, { bid: 7 })).toThrow(
+      'Game option "bid" must be in steps of 5 from 5 (5, 10, 15, ...), got 7.',
+    );
+  });
+
+  it('counts the step from 0 when there is no min', () => {
+    expect(selectGameOptions(bounded, { even: -4 })).toEqual({ even: -4 });
+    expect(selectGameOptions(bounded, { even: 0 })).toEqual({ even: 0 });
+    expect(() => selectGameOptions(bounded, { even: 3 })).toThrow(
+      'Game option "even" must be in steps of 2 from 0 (0, 2, 4, ...), got 3.',
+    );
+  });
+
+  it('admits a fractional step despite floating point rounding, and refuses what is between steps', () => {
+    for (const v of [0, 0.1, 0.3, 0.7, 1]) {
+      expect(selectGameOptions(bounded, { tenths: v })).toEqual({ tenths: v });
+    }
+    expect(() => selectGameOptions(bounded, { tenths: 0.15 })).toThrow(/"tenths" must be in steps of 0\.1 from 0 \(0, 0\.1, 0\.2, \.\.\.\), got 0\.15/);
+  });
+
+  it('refuses an off-step value far from where the step counts from', () => {
+    expect(selectGameOptions(bounded, { even: 1000000000 })).toEqual({ even: 1000000000 });
+    expect(() => selectGameOptions(bounded, { even: 1000000001 })).toThrow(/"even" must be in steps of 2/);
+    expect(() => selectGameOptions(bounded, { even: 1000000000.5 })).toThrow(/"even" must be in steps of 2/);
+    expect(() => selectGameOptions(bounded, { even: 500000000.5 })).toThrow(/"even" must be in steps of 2/);
+    const wideTenths: Record<string, GameOptionDefinition> = { t: { type: 'number', label: 'T', step: 0.1 } };
+    expect(selectGameOptions(wideTenths, { t: 100000000.1 })).toEqual({ t: 100000000.1 });
+    expect(() => selectGameOptions(wideTenths, { t: 100000000.05 })).toThrow(/"t" must be in steps of 0\.1/);
+  });
+
+  it('admits every on-step value for a range of steps', () => {
+    for (const step of [0.01, 0.05, 0.1, 0.25, 0.3, 0.5, 1, 2.5, 3, 7, 10]) {
+      const defs: Record<string, GameOptionDefinition> = { v: { type: 'number', label: 'V', min: -5, step } };
+      for (let i = 0; i <= 2000; i += 7) {
+        const v = -5 + i * step;
+        expect(selectGameOptions(defs, { v })).toEqual({ v });
+      }
+    }
+  });
+
+  it('checks range before step, so a far-off value is told the range', () => {
+    expect(() => selectGameOptions(bounded, { bid: 1000 })).toThrow(/"bid" must be between 5 and 50, got 1000/);
+  });
+});
+
+describe('a game cannot declare a number option no value could satisfy', () => {
+  it('refuses a min above its max', () => {
+    expect(() =>
+      assertDeclarableGameOptions({ rounds: { type: 'number', label: 'Rounds', min: 10, max: 1 } }),
+    ).toThrow(/"rounds".*min 10.*max 1/);
+  });
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])('refuses a step of %s', (step) => {
+    expect(() => assertDeclarableGameOptions({ rounds: { type: 'number', label: 'Rounds', step } })).toThrow(
+      /"rounds".*step/,
+    );
+  });
+
+  it('refuses a default outside its own min and max, blaming the game', () => {
+    expect(() =>
+      assertDeclarableGameOptions({ rounds: { type: 'number', label: 'Rounds', min: 1, max: 10, default: 11 } }),
+    ).toThrow(/This game declares number option "rounds" with default 11, .*between 1 and 10/);
+    expect(() =>
+      assertDeclarableGameOptions({ rounds: { type: 'number', label: 'Rounds', min: 1, default: 0 } }),
+    ).toThrow(/"rounds" with default 0, .*at least 1/);
+  });
+
+  it('refuses a default off its own step, blaming the game', () => {
+    expect(() =>
+      assertDeclarableGameOptions({ bid: { type: 'number', label: 'Bid', min: 5, step: 5, default: 7 } }),
+    ).toThrow(/This game declares number option "bid" with default 7, .*steps of 5 from 5/);
+  });
+
+  it('admits a default exactly at min, at max and on step', () => {
+    for (const d of [5, 25, 50]) {
+      expect(() =>
+        assertDeclarableGameOptions({ bid: { type: 'number', label: 'Bid', min: 5, max: 50, step: 5, default: d } }),
+      ).not.toThrow();
+    }
+  });
+
+  it('refuses a default that is not a finite number', () => {
+    expect(() =>
+      assertDeclarableGameOptions({ rounds: { type: 'number', label: 'Rounds', default: Number.NaN } }),
+    ).toThrow(/"rounds".*default/);
+  });
+
+  it('refuses a min or max that is not a finite number', () => {
+    expect(() =>
+      assertDeclarableGameOptions({ rounds: { type: 'number', label: 'Rounds', min: Number.NaN } }),
+    ).toThrow(/"rounds".*min/);
+    expect(() =>
+      assertDeclarableGameOptions({ rounds: { type: 'number', label: 'Rounds', max: '10' as unknown as number } }),
+    ).toThrow(/"rounds".*max/);
+  });
+});

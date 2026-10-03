@@ -349,9 +349,8 @@ re-running draws.
 
 ## Determinism & Seeding
 
-Every `Game` owns a seeded RNG (`game.random`, a `GameRandom` — a
-mulberry32 generator whose internal numeric state can be read and
-restored). Games never call `Math.random()` directly; any in-game
+Every `Game` owns a seeded RNG (`game.random`, a `GameRandom` — ChaCha20
+keyed by SHA-256 of the whole seed, whose state can be read and restored). Games never call `Math.random()` directly; any in-game
 randomness (shuffles, dice rolls, `choices` selection) goes through
 `game.random()`, so re-running the same actions against the same seed
 produces an identical game. That is what makes a failing run reproducible
@@ -374,7 +373,7 @@ included in `doAction`/`assertActionAvailable`/`playUntilComplete` failure
 messages, so a failing run is one copy-paste from a deterministic repro.
 
 ```typescript
-game.getRandomState(): number       // read the RNG's internal state (for custom snapshots)
+game.getRandomState(): RandomState  // read the RNG's state, an opaque string (for custom snapshots)
 game.setRandomState(state): void    // restore it — the next game.random() draw matches exactly
 ```
 

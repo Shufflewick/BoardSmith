@@ -33,6 +33,8 @@
  * create, and minting past it is refused rather than wrapped.
  */
 
+import { secureRandomHex } from '../../utils/secure-random.js';
+
 /** How many distinct element ids a game can mint: the cipher's 32-bit block. */
 export const ELEMENT_ID_SPACE = 2 ** 32;
 
@@ -84,18 +86,11 @@ const ELEMENT_ID_KEY_PATTERN = /^[0-9a-f]{16}$/;
  * There is no fallback: a key from a predictable source would decode every id.
  */
 export function mintElementIdKey(): string {
-  // Read by its bare name, not as `globalThis.crypto`: Workers declares it
-  // `const crypto`, which `typeof globalThis` does not carry (#488).
-  const source = typeof crypto === 'undefined' ? undefined : crypto;
-  if (typeof source?.getRandomValues !== 'function') {
-    throw new Error(
-      'BoardSmith needs crypto.getRandomValues to mint a game\'s element id key, and this runtime ' +
-        'has none. Run the engine on Node 19 or later, a browser, or a Workers runtime, or pass ' +
-        'GameOptions.elementIdKey from a secure random source.',
-    );
-  }
-  const bytes = source.getRandomValues(new Uint8Array(8));
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return secureRandomHex(
+    8,
+    "mint a game's element id key",
+    'pass GameOptions.elementIdKey from a secure random source',
+  );
 }
 
 function refuseCursor(cursor: number): never {
