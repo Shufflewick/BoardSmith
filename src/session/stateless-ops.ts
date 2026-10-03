@@ -251,6 +251,12 @@ export interface OpResult {
   choices?: unknown[];
   validElements?: unknown[];
   multiSelect?: { min: number; max?: number };
+  /**
+   * The ordered-list bounds of the step a `resolveChoices` op answered (#249,
+   * #480), resolved against the selections already made. Absent on a step that
+   * is not an ordered list.
+   */
+  orderedList?: { min: number; max?: number };
   botMoved?: boolean;
   /** The bot seat that moved, or on a refused `botTurn`, the seat whose move was refused. */
   botPlayer?: number;
@@ -716,6 +722,7 @@ function handleResolveChoices(
     choices: result.choices,
     validElements: result.validElements,
     multiSelect: result.multiSelect,
+    orderedList: result.orderedList,
     warnings: result.warnings,
   };
 }
