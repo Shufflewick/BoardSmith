@@ -649,7 +649,8 @@ export class SnapshotSessionHost {
    * hibernation with pages still open must pass them, or every seat is pushed
    * its unchanged view once, telling it something moved. They are taken as
    * given: a roster change made while the host slept differs from them, so the
-   * next publish (call {@link rosterChanged} for one) pushes it.
+   * next publish pushes it. Call {@link broadcastCurrent} right after restoring:
+   * the gate makes it a no-op when nothing differs.
    */
   restoreFrom(state: SnapshotHostState & { playerViews?: unknown[]; spectatorView?: unknown }): void {
     if (state.flowState === null || state.flowState === undefined) {
