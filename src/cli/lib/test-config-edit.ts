@@ -13,8 +13,8 @@ import ts from 'typescript';
  * only when its value is plain data, so nothing in it can run: a list of string literals, template
  * strings without expressions, and spreads of vitest's own `configDefaults.include` /
  * `configDefaults.exclude`. Any other value, in either version, means the edit is not only a
- * collection change. Those properties taken out, the rest of the two files must be the same tokens,
- * comments and layout aside. A file that does not parse, or anything not recognised, is refused.
+ * collection change. Those properties taken out, the rest of the two files must be the same syntax
+ * tree with the same tokens, comments and layout aside. A file that does not parse, or anything not recognised, is refused.
  */
 export function onlyTestCollectionChanged(before: string, after: string): boolean {
   const a = tokensOutsideCollection(before);
@@ -144,11 +144,16 @@ function collectionProperties(source: ts.SourceFile): Set<ts.Node> | undefined {
 }
 
 /**
- * The file's tokens, comments aside, with its collection properties left out, and a single `,`
- * between an object's remaining members (so a comma left behind, or a trailing one, says nothing).
- * `undefined` when the file does not parse or a collection value is not plain data.
+ * The file's syntax tree, comments aside, written out flat with its collection properties left out:
+ * each node with children as its kind between open and close markers, each token as its text.
+ * Token text alone is not enough, because a line break can change the tree without changing a token
+ * (`a\n++b` is `a; ++b`, `a++\nb` is `a++; b`); the tree's shape records where each statement ends.
+ * The tree and its tokens fix everything the file does, so only layout and comments can differ
+ * between two files that write out the same. `undefined` when the file does not parse or a
+ * collection value is not plain data.
  */
 function tokensOutsideCollection(text: string): string[] | undefined {
+  // transpileModule reports parse errors through the public API; createSourceFile keeps them internal.
   const { diagnostics } = ts.transpileModule(text, { reportDiagnostics: true, compilerOptions: { target: ts.ScriptTarget.Latest } });
   if (diagnostics?.length) return undefined;
   const source = ts.createSourceFile('vitest.config.ts', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
@@ -157,21 +162,18 @@ function tokensOutsideCollection(text: string): string[] | undefined {
   const tokens: string[] = [];
   const emit = (node: ts.Node): void => {
     if (ts.isJSDoc(node)) return;
-    if (ts.isObjectLiteralExpression(node)) {
-      tokens.push('{');
-      node.properties.filter((p) => !removed.has(p)).forEach((p, i) => {
-        if (i > 0) tokens.push(',');
-        emit(p);
-      });
-      tokens.push('}');
-      return;
-    }
-    const children = node.getChildren(source);
-    if (children.length === 0) {
+    // An object's members are written without their commas, so a comma left behind by a removed
+    // property, or a trailing one, says nothing; each member's own markers keep them apart.
+    const children = ts.isObjectLiteralExpression(node)
+      ? node.properties.filter((p) => !removed.has(p))
+      : node.getChildren(source);
+    if (children.length === 0 && !ts.isObjectLiteralExpression(node)) {
       if (node.kind !== ts.SyntaxKind.EndOfFileToken) tokens.push(node.getText(source));
       return;
     }
+    tokens.push(`(${ts.SyntaxKind[node.kind]}`);
     children.forEach(emit);
+    tokens.push(')');
   };
   emit(source);
   return tokens;

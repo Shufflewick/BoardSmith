@@ -99,6 +99,16 @@ describe('onlyTestCollectionChanged', () => {
       expect(onlyTestCollectionChanged(before, `${config(" exclude: ['a/**', 'b'] ")}export const = ;\n`)).toBe(false);
     });
 
+    it('refuses a line break that moves where a statement ends, though the tokens are the same', () => {
+      // `a\n++b` is `a; ++b`, and `a++\nb` is `a++; b`: b decides whether the alias stubs the rules.
+      const withCounter = (statements: string) =>
+        `import { defineConfig } from 'vitest/config';\nlet a = 0;\nlet b = 0;\n${statements}\n` +
+        `const pick = () => (b ? { '../src/rules': './stub' } : {});\n` +
+        `export default defineConfig({ resolve: { alias: pick() }, test: { exclude: ['a'] } });\n`;
+      expect(onlyTestCollectionChanged(withCounter('a\n++b'), withCounter('a++\nb'))).toBe(false);
+      expect(onlyTestCollectionChanged(withCounter('a\n++b'), withCounter('a\n++b').replace("['a']", "['a', 'b']"))).toBe(true);
+    });
+
     it('does not mistake text inside a template string for a comment', () => {
       const withTemplate = (tail: string) => config(` exclude: ['a/**'], name: \`\${'x'}// ${tail}\` `);
       expect(onlyTestCollectionChanged(withTemplate('one'), withTemplate('two'))).toBe(false);
