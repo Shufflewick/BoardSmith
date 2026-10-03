@@ -29,6 +29,7 @@ import { BoardSmithWorldEngine } from "./engine.js";
 import { worldAction, worldClockAction } from "./action.js";
 import { planSchedules } from "./schedule-api.js";
 import { worldBudgets } from "./budgets.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 /** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
  *  The clock's road passes its whole occurrence instead. */
@@ -53,7 +54,7 @@ class RefusalWorld extends Game<RefusalWorld, Player> {
  *  one, which is the whole point of these cases. */
 function engineWith(actions: readonly ActionDefinition[]): BoardSmithWorldEngine {
   return new BoardSmithWorldEngine({
-    game: new RefusalWorld({ playerCount: 2, seed: "refusals", worldMode: true }),
+    game: new RefusalWorld({ playerCount: 2, seed: "refusals", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY }),
     seats: new Map([["p1", 1]]),
     store: createInlinedPartitionStore(),
     actions,

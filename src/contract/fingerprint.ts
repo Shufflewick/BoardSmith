@@ -119,6 +119,7 @@ import type {
   WorldMigrateContext,
   WorldSerialized,
 } from '../world/runner.js';
+import type { WorldRunnerOptions } from '../world/definition.js';
 
 /**
  * The committed corpus of world partition bytes. See `computeFormatHash`.
@@ -450,7 +451,15 @@ const WORLD_WIRE_FIXTURE = {
  * demanded. The values are arbitrary but fixed; only their shape and their
  * canonical serialization matter.
  */
+/** The world element id key the world fixtures are built with (#482). Fixed,
+ *  so the ids they mint -- and so the hashes -- are the same on every run. */
+const WORLD_FIXTURE_ELEMENT_ID_KEY = '00112233445566778899aabb';
+
 const WORLD_DURABILITY_FIXTURE = {
+  // WHAT A HOST HANDS BACK ON EVERY WAKE (#482): the key it minted when the
+  // world was created, beside the stamp. Both are durable inputs a host must
+  // persist with the world, and both are fields of a type surfaceHash cannot see.
+  wake: { elementIdKey: WORLD_FIXTURE_ELEMENT_ID_KEY, nextElementId: 1_000_011 },
   genesis: {
     partitions: {
       world: { parentId: 0, json: { id: 1_000_000, className: 'World' } },
@@ -511,6 +520,7 @@ const WORLD_DURABILITY_FIXTURE = {
     sources: { "room:b": { parentId: 1_000_000, json: { id: 1_000_001, className: 'Room' } } },
   },
 } satisfies {
+  wake: Pick<WorldRunnerOptions, 'elementIdKey' | 'nextElementId'>;
   genesis: WorldGenesis;
   checkpoint: WorldSerialized;
   created: WorldCreatedPartition;
@@ -1126,6 +1136,7 @@ async function computeWorldDeclaration(): Promise<unknown> {
       world,
     },
     seed: 'engine-contract-declaration',
+    elementIdKey: WORLD_FIXTURE_ELEMENT_ID_KEY,
     // HANDED TO THE CONSTRUCTOR, as every other seat in this file is, so the
     // `seat` verb's stated limit stays true and only the retirement is driven.
     seats: new Map([['stays', 1], ['leaves', 2]]),
@@ -1364,6 +1375,7 @@ async function computeWorldFixture(): Promise<{
       playerCount: SEATS,
       seed: 'engine-contract-world-fixture',
       worldMode: true,
+      elementIdKey: WORLD_FIXTURE_ELEMENT_ID_KEY,
     });
 
   // Genesis, kept as bytes only.
@@ -1912,11 +1924,21 @@ interface FormatFixturePartition {
  * revision.
  */
 interface FormatFixture {
+  /**
+   * The world element id key these bytes were minted under (#482). Recorded
+   * WITH the corpus rather than beside it in code, because the bytes are only
+   * readable with the key that wrote them -- exactly as a host stores a
+   * world's key with its partitions.
+   */
+  readonly elementIdKey: string;
   readonly nextElementId: number;
   readonly partitions: Readonly<Record<string, FormatFixturePartition>>;
 }
 
 const FORMAT_FIXTURE_SEATS = 3;
+/** The key a regenerated corpus is minted under. A fixed value, so a
+ *  regeneration that changed nothing else writes the same bytes. */
+const FORMAT_FIXTURE_ELEMENT_ID_KEY = '0f0e0d0c0b0a090807060504';
 const FORMAT_FIXTURE_LEDGER = 'ledger';
 const FORMAT_FIXTURE_VAULT = 'vault';
 
@@ -1935,6 +1957,7 @@ const FORMAT_FIXTURE_ORDER: readonly string[] = [FORMAT_FIXTURE_VAULT, FORMAT_FI
  * `assertCoversFormat` proves it rather than trusting this comment.
  */
 async function formatFixtureWorld(options: {
+  elementIdKey: string;
   nextElementId: number;
   store: { read(name: string): Promise<FormatFixturePartition | undefined>; forget(): void };
 }): Promise<any> {
@@ -1989,6 +2012,7 @@ async function formatFixtureWorld(options: {
     playerCount: FORMAT_FIXTURE_SEATS,
     seed: 'engine-contract-format-fixture',
     worldMode: true,
+    elementIdKey: options.elementIdKey,
   });
 
   const build = (built: any, name: string): any => {
@@ -2057,6 +2081,7 @@ const EMPTY_FORMAT_STORE = {
 export async function buildFormatFixture(): Promise<FormatFixture> {
   const { WORLD_PARTITION_ID_FLOOR } = (await import('../engine/index.js')) as any;
   const engine = await formatFixtureWorld({
+    elementIdKey: FORMAT_FIXTURE_ELEMENT_ID_KEY,
     nextElementId: WORLD_PARTITION_ID_FLOOR,
     store: EMPTY_FORMAT_STORE,
   });
@@ -2073,7 +2098,7 @@ export async function buildFormatFixture(): Promise<FormatFixture> {
     partitions[name] = { parentId: created.parentId, json: throughStorage(created.json) };
   }
 
-  return { nextElementId: engine.nextElementId(), partitions };
+  return { elementIdKey: FORMAT_FIXTURE_ELEMENT_ID_KEY, nextElementId: engine.nextElementId(), partitions };
 }
 
 /**
@@ -2089,6 +2114,7 @@ async function reserializeFormatFixture(
   names: readonly string[],
 ): Promise<{ nextElementId: number; partitions: Record<string, unknown> }> {
   const engine = await formatFixtureWorld({
+    elementIdKey: golden.elementIdKey,
     nextElementId: golden.nextElementId,
     store: {
       async read(name: string) {

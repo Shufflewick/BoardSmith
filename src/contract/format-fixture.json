@@ -1,11 +1,12 @@
 {
+  "elementIdKey": "0f0e0d0c0b0a090807060504",
   "nextElementId": 1000006,
   "partitions": {
     "vault": {
-      "parentId": 0,
+      "parentId": 207442614815006,
       "json": {
         "className": "FormatFixtureVault",
-        "id": 1000000,
+        "id": 274495466037897,
         "attributes": {
           "name": "vault",
           "sealed": false,
@@ -15,7 +16,7 @@
         "children": [
           {
             "className": "FormatFixtureChest",
-            "id": 1000001,
+            "id": 192187679614109,
             "attributes": {
               "name": "strongbox",
               "sealed": true
@@ -24,7 +25,7 @@
             "children": [
               {
                 "className": "FormatFixtureCoin",
-                "id": 1000002,
+                "id": 223601627754086,
                 "attributes": {
                   "name": "ingot",
                   "denomination": 50
@@ -48,10 +49,10 @@
       }
     },
     "ledger": {
-      "parentId": 0,
+      "parentId": 207442614815006,
       "json": {
         "className": "FormatFixtureLedger",
-        "id": 1000003,
+        "id": 38651998069879,
         "attributes": {
           "name": "ledger",
           "sealed": false,
@@ -62,7 +63,7 @@
             "name": "Player 1"
           },
           "reserve": {
-            "__elementId": 1000002
+            "__elementId": 223601627754086
           },
           "tallies": {
             "__map": [
@@ -115,7 +116,7 @@
         "children": [
           {
             "className": "FormatFixtureChest",
-            "id": 1000004,
+            "id": 48149915447140,
             "attributes": {
               "name": "page-1",
               "sealed": false
@@ -124,7 +125,7 @@
             "children": [
               {
                 "className": "FormatFixtureCoin",
-                "id": 1000005,
+                "id": 226419045434790,
                 "attributes": {
                   "name": "penny",
                   "denomination": 1

@@ -32,6 +32,7 @@ import {
 import { openWorldStore, worldStorePath } from './world-store.js';
 import { createMemoryWorldStore } from '../../testing/memory-world-store.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { TEST_WORLD_ELEMENT_ID_KEY } from '../../engine/element/world-element-id-key.test-helper.js';
 
 const MINUTE = 60_000;
 const OPENED = 1_700_000_000_000;
@@ -210,7 +211,7 @@ function sqliteStore(): WorldStore {
 
 const STORES: ReadonlyArray<readonly [string, () => WorldStore]> = [
   ['the dev host SQLite store', sqliteStore],
-  ['the testing memory store', () => createMemoryWorldStore(worldBudgets())],
+  ['the testing memory store', () => createMemoryWorldStore(TEST_WORLD_ELEMENT_ID_KEY, worldBudgets())],
 ];
 
 describe.each(STORES)('an ended world, on %s (#395)', (_name, makeStore) => {
@@ -353,7 +354,7 @@ const REOPENABLE_STORES: ReadonlyArray<readonly [string, () => () => WorldStore]
   [
     'the testing memory store',
     () => {
-      const store = createMemoryWorldStore(worldBudgets());
+      const store = createMemoryWorldStore(TEST_WORLD_ELEMENT_ID_KEY, worldBudgets());
       return () => store;
     },
   ],

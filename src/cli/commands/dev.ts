@@ -960,7 +960,6 @@ export async function devCommand(options: DevOptions): Promise<void> {
       teachingDisabled,
       debug: options.debug === true,
       seedSnapshot,
-      worldMode,
       idleAction: config.idleAction,
       ...(devStore
         ? {

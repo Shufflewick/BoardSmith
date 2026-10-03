@@ -11,6 +11,7 @@ import { Game, Piece, Player, Space } from "../engine/index.js";
 import type { GameOptions } from "../engine/index.js";
 import { readOnlyProjection } from "./readonly.js";
 import { WorldRefusal } from "./refusals.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 class Token extends Piece<ProjectionGame> {}
 class Room extends Space<ProjectionGame> {
@@ -24,7 +25,7 @@ class ProjectionGame extends Game<ProjectionGame, Player> {
 }
 
 function world() {
-  const game = new ProjectionGame({ playerCount: 2, seed: "projection", worldMode: true });
+  const game = new ProjectionGame({ playerCount: 2, seed: "projection", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
   const here = game.create(Room, "here");
   here.create(Token, "token-one");
   const there = game.create(Room, "there");
@@ -190,7 +191,7 @@ describe("readOnlyProjection", () => {
     // is the projection is a trap the walk paid. With the read doors of #409 in
     // place that is one trap per finder call, for the method itself; take them
     // away and every element the walk visits costs two more.
-    const game = new ProjectionGame({ playerCount: 2, seed: "cost", worldMode: true });
+    const game = new ProjectionGame({ playerCount: 2, seed: "cost", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     for (let i = 0; i < 500; i += 1) game.create(Room, `room-${i}`);
     const rooms = game.all(Room);
     const ROUNDS = 200;
@@ -225,7 +226,7 @@ describe("readOnlyProjection", () => {
     // the thing a test can pin without a clock. Two methods deep, through a
     // tree big enough that the walk is real, the projection must still be the
     // one projection that element has.
-    const game = new ProjectionGame({ playerCount: 2, seed: "depth", worldMode: true });
+    const game = new ProjectionGame({ playerCount: 2, seed: "depth", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     for (let i = 0; i < 500; i += 1) {
       game.create(Room, `room-${i}`).create(Token, `token-${i}`);
     }

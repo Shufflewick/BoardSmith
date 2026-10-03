@@ -46,6 +46,7 @@ import type {
   StoredPartition,
   WorldCommandResult,
 } from "./contract.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 class Ledger extends Space<Colony> {
   /** What is left of a departed empire, counted down by the teardown ladder. */
@@ -207,7 +208,7 @@ const SEATS = new Map([
 ]);
 
 function world(built = definition, seats: ReadonlyMap<string, number> = SEATS) {
-  return createWorld({ definition: built, seed: "clock-vacancy", seats });
+  return createWorld({ elementIdKey: TEST_WORLD_ELEMENT_ID_KEY, definition: built, seed: "clock-vacancy", seats });
 }
 
 /** A stamp as a HOST answers one: its own roster's facts about one chair. */

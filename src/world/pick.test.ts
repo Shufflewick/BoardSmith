@@ -37,6 +37,7 @@ import { worldAction, type WorldAction } from "./action.js";
 import type { StoredPartition } from "./contract.js";
 import { MapStore, offerStamp } from "./stored-world.test-helper.js";
 import { STAMP as COMMAND_STAMP } from "./village.test-helper.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 class Operative extends Piece<FleetGame> {}
 
@@ -91,7 +92,7 @@ const deploy = worldAction<FleetGame>("deploy")
   .execute(() => {});
 
 function newGame(): FleetGame {
-  return new FleetGame({ playerCount: 2, seed: "fleet", worldMode: true });
+  return new FleetGame({ playerCount: 2, seed: "fleet", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
 }
 
 /** A dock holding two ships of different hold and two operatives. */

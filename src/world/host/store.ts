@@ -201,22 +201,32 @@ export interface WorldStore extends WorldPartitionStore, WorldPartitionWriter {
   stateVersion(): number;
 
   /**
+   * THE WORLD'S ELEMENT ID KEY (#482): 24 lowercase hex digits.
+   *
+   * Minted ONCE, by the host, when the store is created for a new world
+   * (`mintWorldElementIdKey`), and never changed afterwards: every id the world
+   * has stored is read back with it. A store holds it for the whole life of
+   * the world, beside the allocation stamp, and it never reaches a client.
+   */
+  elementIdKey(): string;
+
+  /**
    * THE WORLD'S DURABLE ID ALLOCATION STAMP (ShufflewickPub #377).
    *
-   * The next element id this world may mint, as the last write that minted one
-   * left it. `undefined` for a world written before the stamp existed -- the
-   * host derives one from the stored bytes ONCE and writes it, rather than
-   * being handed a number nothing can vouch for.
+   * The creation-counter value the next element this world mints takes, as
+   * the last write that minted one left it -- a counter value, not an id
+   * (#482). `undefined` only for a world whose genesis has not run.
    */
   nextElementId(): number | undefined;
 
   /**
-   * WRITE THE STAMP A WORLD SHOULD ALWAYS HAVE HAD (ShufflewickPub #377).
+   * REWRITE A STALE STAMP (#224).
    *
-   * The one repair door, for a world launched before the stamp existed. Every
-   * other write that moves the allocation carries it in the transaction that
-   * minted the ids; this one has no ids to carry, because it is derived from
-   * bytes that are already durable.
+   * The one repair door, for a stamp the `allocation-stale` refusal proved
+   * stands below the world's own bytes. Every other write that moves the
+   * allocation carries it in the transaction that minted the ids; this one has
+   * no ids to carry, because it is derived from bytes that are already
+   * durable.
    */
   recordAllocation(nextElementId: number): void;
 
@@ -245,23 +255,6 @@ export interface WorldStore extends WorldPartitionStore, WorldPartitionWriter {
     created: WorldMigrated;
     events: readonly PlannedEvent[];
     toStateVersion: number;
-  }): void;
-
-  /**
-   * LIFT THIS WORLD'S ELEMENT IDS ABOVE THE CONSTRUCTION FLOOR (#223).
-   *
-   * Every partition and every queued event, rewritten with one offset, in ONE
-   * transaction -- for the reason `migrate` is one transaction, and one more:
-   * a world half lifted is a world whose partitions disagree about what an id
-   * means, and its references point at nothing. There is no retry that could
-   * finish it, because the second attempt would shift bytes the first had
-   * already shifted.
-   */
-  rekey(lifted: {
-    partitions: Record<string, string>;
-    events: readonly PlannedEvent[];
-    /** The stamp, moved by the same offset as the ids (#377). */
-    nextElementId: number;
   }): void;
 
   /**

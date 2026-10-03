@@ -55,11 +55,20 @@ interface PartitionRow {
 /**
  * Build a world store that lives for as long as the test does.
  *
+ * `elementIdKey` is the world's id key (#482), which a host mints once when it
+ * creates a world (`mintWorldElementIdKey`). It is required because this store
+ * IS the world's creation: a store that minted one for itself would be the
+ * engine minting a world key silently, and a test that wants the same ids
+ * twice has to be able to name the key.
+ *
  * `budgets` is passed rather than defaulted at each use for the reason every
  * other world surface takes it: a ceiling read rather than passed is one two
  * hosts can silently disagree about.
  */
-export function createMemoryWorldStore(budgets: WorldBudgets = worldBudgets()): WorldStore {
+export function createMemoryWorldStore(
+  elementIdKey: string,
+  budgets: WorldBudgets = worldBudgets(),
+): WorldStore {
   const partitions = new Map<string, PartitionRow>();
   const dirty = new Set<string>();
   const events = new Map<string, PlannedEvent>();
@@ -297,15 +306,9 @@ export function createMemoryWorldStore(budgets: WorldBudgets = worldBudgets()): 
       allocation = nextElementId;
     },
 
-    nextElementId: () => allocation,
+    elementIdKey: () => elementIdKey,
 
-    rekey({ partitions: written, events: planned, nextElementId }): void {
-      const rows = rowsFor(written);
-      writePartitions(rows);
-      writeEvents(planned);
-      // THE STAMP MOVES WITH THE IDS (#377).
-      allocation = nextElementId;
-    },
+    nextElementId: () => allocation,
 
     migrate({ partitions: written, created, events: planned, toStateVersion }): void {
       const rows = rowsFor(written);

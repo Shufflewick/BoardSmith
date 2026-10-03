@@ -110,74 +110,25 @@ function layoutOf(path: string): string | undefined {
   return row?.value as string | undefined;
 }
 
-function tablesOf(path: string): string[] {
-  return rawRows(path, "SELECT name FROM sqlite_master WHERE type = 'table'").map(
-    (row) => row.name as string,
+/**
+ * THE SAME WORLD, AS LAYOUT 7 LEFT IT (#482).
+ *
+ * Layout 8 added the world's element id key and changed nothing else, so a
+ * store without it, stamped 7, is layout 7 exactly: a world whose ids are its
+ * bare creation counter.
+ */
+function rewindToLayout7(path: string): void {
+  rawExec(
+    path,
+    "DELETE FROM meta WHERE key = 'elementIdKey'",
+    "UPDATE meta SET value = '7' WHERE key = 'schemaVersion'",
   );
 }
 
-/**
- * THE SAME WORLD, AS LAYOUT 6 LEFT IT (ShufflewickPub #521).
- *
- * Layout 7 added one table, the seats' notice boxes, and changed nothing else.
- */
-function rewindToLayout6(path: string): void {
-  rawExec(
-    path,
-    'DROP TABLE notice_boxes',
-    "UPDATE meta SET value = '6' WHERE key = 'schemaVersion'",
-  );
-}
-
-/**
- * THE SAME WORLD, AS LAYOUT 5 LEFT IT (#339).
- *
- * Layout 6 added one table, the presence ledger, and changed nothing else.
- */
-function rewindToLayout5(path: string): void {
-  rewindToLayout6(path);
-  rawExec(
-    path,
-    'DROP TABLE presence_told',
-    "UPDATE meta SET value = '5' WHERE key = 'schemaVersion'",
-  );
-}
-
-/**
- * THE SAME WORLD, AS LAYOUT 4 LEFT IT (#225, ShufflewickPub #423).
- *
- * Layout 5 added one nullable column to `seats` -- when each chair was granted
- * -- and changed nothing else, so a `seats` table without it is layout 4
- * exactly. Rebuilt rather than dropped with `ALTER`, so the rewind does not
- * depend on which SQLite the test host happens to ship.
- */
-function rewindToLayout4(path: string): void {
-  rewindToLayout5(path);
-  rawExec(
-    path,
-    'CREATE TABLE seats_old (player TEXT PRIMARY KEY, seat INTEGER NOT NULL)',
-    'INSERT INTO seats_old (player, seat) SELECT player, seat FROM seats',
-    'DROP TABLE seats',
-    'ALTER TABLE seats_old RENAME TO seats',
-    "UPDATE meta SET value = '4' WHERE key = 'schemaVersion'",
-  );
-}
-
-/**
- * THE SAME WORLD, AS LAYOUT 3 LEFT IT (#225).
- *
- * Layout 4 added `seat_activity` and the recording epoch it is measured from
- * (`36d723d6`) and changed nothing else, so removing both -- on top of the
- * layout 4 rewind -- is layout 3 exactly.
- */
-function rewindToLayout3(path: string): void {
-  rewindToLayout4(path);
-  rawExec(
-    path,
-    'DROP TABLE seat_activity',
-    "DELETE FROM meta WHERE key = 'activitySince'",
-    "UPDATE meta SET value = '3' WHERE key = 'schemaVersion'",
-  );
+/** The element id key a store file holds, read past the store's own doors. */
+function keyOf(path: string): string | undefined {
+  const [row] = rawRows(path, "SELECT value FROM meta WHERE key = 'elementIdKey'");
+  return row?.value as string | undefined;
 }
 
 describe('the local world store', () => {
@@ -206,6 +157,28 @@ describe('the local world store', () => {
     it('is created on open, so the first run of a world that has never been played is not an error', () => {
       expect(existsSync(worldStorePath(root))).toBe(true);
       expect(store.isLaunched()).toBe(false);
+    });
+  });
+
+  describe("the world's element id key (#482)", () => {
+    it('is minted when the store is created, as this host creates the world', () => {
+      expect(store.elementIdKey()).toMatch(/^[0-9a-f]{24}$/);
+    });
+
+    it('is the same key on every later open, so the world reads its own ids back', () => {
+      const key = store.elementIdKey();
+      store.close();
+      store = openWorldStore(worldStorePath(root), BUDGETS);
+      expect(store.elementIdKey()).toBe(key);
+    });
+
+    it('is a different key for a different world', () => {
+      const other = openWorldStore(worldStorePath(tempTree('bs-world-store-other-')), BUDGETS);
+      try {
+        expect(other.elementIdKey()).not.toBe(store.elementIdKey());
+      } finally {
+        other.close();
+      }
     });
   });
 
@@ -768,180 +741,36 @@ describe('the local world store', () => {
       store.close();
     }
 
-    /** Everything the occupied world above holds, asserted through the store's
-     *  own doors, so a case only has to say WHEN it expects to find it. */
-    async function expectNothingLost(reopened: LocalWorldStore): Promise<void> {
-      expect(reopened.isLaunched()).toBe(true);
-      expect(await reopened.read('world')).toEqual({ parentId: 0, json: { name: 'world' } });
-      expect(await reopened.read('room/aster')).toEqual({
-        parentId: 1,
-        json: { colony: 'Aster', pop: 9 },
-      });
-      expect(reopened.dirtyPartitions()).toEqual(['room/aster']);
-      expect(reopened.seats()).toEqual([{ player: 'player-a', seat: 7 }]);
-      expect(reopened.pendingEvents()).toEqual([event({ id: 'raid', due: 5_000, key: 'raid:north' })]);
-      expect(reopened.receipt('player-a', 'o1')?.message).toBe('Colony founded.');
-      expect(reopened.stateVersion()).toBe(2);
-      expect(reopened.nextElementId()).toBe(1_000_500);
-      expect(reopened.clockSkewMs()).toBe(600_000);
-      expect(reopened.partitionNames()).toEqual(['room/aster', 'world']);
-    }
-
-    /** The occupied world, wound back by `rewind` and opened again: upgraded
-     *  to the current layout with nothing lost, or the case fails here. The
-     *  caller closes what it is handed. */
-    async function upgradedFrom(rewind: (path: string) => void): Promise<LocalWorldStore> {
+    it('refuses a world stored before its ids were keyed, naming the reset, writing nothing', async () => {
+      // Layout 7's ids ARE the creation counter. No key reads them back, so
+      // no step can carry the world across (#482): the author is told why,
+      // and how to start again, and the file is left exactly as it was.
       await anOccupiedWorld();
-      rewind(worldStorePath(root));
-      const reopened = openWorldStore(worldStorePath(root), BUDGETS);
-      await expectNothingLost(reopened);
+      rewindToLayout7(worldStorePath(root));
+
+      expect(() => openWorldStore(worldStorePath(root), BUDGETS)).toThrow(
+        /layout 7, and this BoardSmith reads layout 8.*#482.*boardsmith dev --reset/s,
+      );
       expect(layoutOf(worldStorePath(root))).toBe('7');
-      return reopened;
-    }
-
-    it('carries layout 3 all the way to the current layout on open, losing nothing', async () => {
-      // A CHAIN AND NOT ONE STEP (ShufflewickPub #423): a store two upgrades
-      // old has to arrive, or the only thing left to tell an author is to reset
-      // a world five hundred seats deep.
-      const reopened = await upgradedFrom(rewindToLayout3);
-      try {
-        // The table the upgrade exists to add, in use rather than merely
-        // present: an upgraded world can record activity from here on.
-        reopened.activitySince(5_000);
-        await reopened.writeCheckpoint(cp({}), { activity: { seat: 7, at: 10_000 } });
-        expect(reopened.activityOf(7)).toEqual({
-          seat: 7,
-          at: 10_000,
-          since: 5_000,
-          // The chair was granted before this store recorded grants, so the
-          // world's own epoch is the whole of its baseline -- which is exactly
-          // where it was measured from before the column existed.
-          tenancy: 'held',
-        });
-      } finally {
-        reopened.close();
-      }
-    });
-
-    it('upgrades layout 6 to layout 7 with every notice box empty, losing nothing (ShufflewickPub #521)', async () => {
-      const reopened = await upgradedFrom(rewindToLayout6);
-      try {
-        expect(reopened.noticeBox(7)).toEqual({ entries: [], dropped: 0 });
-        await reopened.writeCheckpoint(cp({}), {
-          notices: [{ seat: 7, box: { entries: [{ at: 1, payload: null, text: 'hi' }], dropped: 0 } }],
-        });
-        expect(reopened.noticeBox(7).entries).toHaveLength(1);
-      } finally {
-        reopened.close();
-      }
-    });
-
-    it('upgrades layout 5 to layout 6 with nobody told present, losing nothing', async () => {
-      const reopened = await upgradedFrom(rewindToLayout5);
-      try {
-        // Nobody was told present under a layout that kept no record, and the
-        // host's start reconciles from exactly this: an empty ledger.
-        expect(reopened.presenceTold()).toEqual([]);
-        reopened.tellPresent(7);
-        expect(reopened.presenceOf(7)).toEqual({ closedAt: null });
-      } finally {
-        reopened.close();
-      }
-    });
-
-    it('upgrades layout 4 to the current layout without inventing when a chair was granted', async () => {
-      const reopened = await upgradedFrom(rewindToLayout4);
-      try {
-        // NOT BACKFILLED. This store does not know when a chair it already held
-        // was handed out, and a guessed instant is a floor somebody's empire
-        // would be measured against.
-        const epoch = reopened.activitySince(1_000);
-        expect(reopened.activityOf(7).since).toBe(epoch);
-      } finally {
-        reopened.close();
-      }
-    });
-
-    it('finishes an upgrade whose table an earlier refused open already left behind', async () => {
-      // The BoardSmith this issue was filed against created the new table
-      // BEFORE it checked the layout, so a world that was refused once is
-      // sitting on layout 3 with an empty `seat_activity` already in it. That
-      // is a store this upgrade still has to be able to finish.
-      await anOccupiedWorld();
-      rewindToLayout3(worldStorePath(root));
-      rawExec(worldStorePath(root), 'CREATE TABLE seat_activity (seat INTEGER PRIMARY KEY, at INTEGER NOT NULL)');
-
-      const reopened = openWorldStore(worldStorePath(root), BUDGETS);
-      try {
-        await expectNothingLost(reopened);
-        expect(layoutOf(worldStorePath(root))).toBe('7');
-      } finally {
-        reopened.close();
-      }
-    });
-
-    it('begins the missing activity history at the first open after the upgrade, and never moves it', async () => {
-      // The reading that would reap every empire in an upgraded world is
-      // "idle since 1970". The epoch is fixed at the first open that can
-      // record one, and a later restart is told the original answer.
-      await anOccupiedWorld();
-      rewindToLayout3(worldStorePath(root));
-
-      const upgraded = openWorldStore(worldStorePath(root), BUDGETS);
-      expect(upgraded.activitySince(5_000)).toBe(5_000);
-      expect(upgraded.activityOf(7)).toEqual({
-        seat: 7,
-        at: null,
-        since: 5_000,
-        tenancy: 'held',
-      });
-      upgraded.close();
-
-      const later = openWorldStore(worldStorePath(root), BUDGETS);
-      expect(later.activitySince(9_000_000)).toBe(5_000);
-      later.close();
-    });
-
-    it('rolls the whole upgrade back when it cannot finish, and lets a retry do it', async () => {
-      await anOccupiedWorld();
-      rewindToLayout3(worldStorePath(root));
-      // An index wearing the name the new table needs. SQLite refuses the
-      // CREATE, which is a mid-upgrade failure without a fake in it.
-      rawExec(worldStorePath(root), 'CREATE INDEX seat_activity ON seats (seat)');
-
-      expect(() => openWorldStore(worldStorePath(root), BUDGETS)).toThrow();
-      // The layout stamp moved with the table or not at all: a store left
-      // claiming layout 4 with no table is one every later open reads wrong.
-      expect(layoutOf(worldStorePath(root))).toBe('3');
-
-      rawExec(worldStorePath(root), 'DROP INDEX seat_activity');
-      const retried = openWorldStore(worldStorePath(root), BUDGETS);
-      try {
-        await expectNothingLost(retried);
-        expect(layoutOf(worldStorePath(root))).toBe('7');
-      } finally {
-        retried.close();
-      }
+      expect(keyOf(worldStorePath(root))).toBeUndefined();
     });
 
     it('refuses a layout it has no upgrade for, without writing anything into it', async () => {
       await anOccupiedWorld();
-      rewindToLayout3(worldStorePath(root));
+      rewindToLayout7(worldStorePath(root));
       rawExec(worldStorePath(root), "UPDATE meta SET value = '2' WHERE key = 'schemaVersion'");
 
       expect(() => openWorldStore(worldStorePath(root), BUDGETS)).toThrow(
-        /layout 2, and this BoardSmith reads layout 7.*no upgrade/s,
+        /layout 2, and this BoardSmith reads layout 8.*no upgrade/s,
       );
       expect(layoutOf(worldStorePath(root))).toBe('2');
-      // The bug that made a refusal destructive: the schema was created before
-      // the layout was read, so being told no still changed the store.
-      expect(tablesOf(worldStorePath(root))).not.toContain('seat_activity');
+      expect(keyOf(worldStorePath(root))).toBeUndefined();
     });
 
     /**
      * A STEP THAT DOES NOT LEAVE THE STAMP IT PROMISED (#273).
      *
-     * Unreachable through today's two upgrades, which is exactly why the guard
+     * Unreachable while the chain is empty, which is exactly why the guard
      * has to be proved rather than assumed: the next step somebody writes is
      * the one that can forget, and what it would produce is a store whose
      * tables and stamp disagree -- read wrong by every later open, or spun on
@@ -949,11 +778,11 @@ describe('the local world store', () => {
      * below hand `prepareSchema` the step that forgets.
      */
     describe('an upgrade step that does not stamp what it promised (#273)', () => {
-      /** The layout-3 world from the fixtures above, on a raw handle. */
-      const layout3Database = async (): Promise<{ db: SqliteDatabase; path: string }> => {
+      /** The layout-7 world from the fixtures above, on a raw handle. */
+      const layout7Database = async (): Promise<{ db: SqliteDatabase; path: string }> => {
         await anOccupiedWorld();
         const path = worldStorePath(root);
-        rewindToLayout3(path);
+        rewindToLayout7(path);
         const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
           DatabaseSync: new (file: string) => SqliteDatabase;
         };
@@ -961,34 +790,34 @@ describe('the local world store', () => {
       };
 
       it('refuses the store when the step leaves no stamp at all', async () => {
-        const { db, path } = await layout3Database();
+        const { db, path } = await layout7Database();
         try {
           expect(() =>
             prepareSchema(db, path, [
-              { from: '3', to: '4', apply: (one) => one.exec("DELETE FROM meta WHERE key = 'schemaVersion'") },
+              { from: '7', to: '8', apply: (one) => one.exec("DELETE FROM meta WHERE key = 'schemaVersion'") },
             ]),
-          ).toThrow(/upgraded from layout 3 to layout 4.*carrying no layout stamp at all.*report it/s);
+          ).toThrow(/upgraded from layout 7 to layout 8.*carrying no layout stamp at all.*report it/s);
         } finally {
           db.close();
         }
       });
 
       it('refuses the store when the step leaves the stamp where it was', async () => {
-        const { db, path } = await layout3Database();
+        const { db, path } = await layout7Database();
         try {
           expect(() =>
-            prepareSchema(db, path, [{ from: '3', to: '4', apply: () => {} }]),
-          ).toThrow(/upgraded from layout 3 to layout 4.*layout 3.*report it/s);
+            prepareSchema(db, path, [{ from: '7', to: '8', apply: () => {} }]),
+          ).toThrow(/upgraded from layout 7 to layout 8.*layout 7.*report it/s);
         } finally {
           db.close();
         }
       });
 
       it('names the store so the author knows which world to keep', async () => {
-        const { db, path } = await layout3Database();
+        const { db, path } = await layout7Database();
         try {
           expect(() =>
-            prepareSchema(db, path, [{ from: '3', to: '4', apply: () => {} }]),
+            prepareSchema(db, path, [{ from: '7', to: '8', apply: () => {} }]),
           ).toThrow(new RegExp(path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
         } finally {
           db.close();
@@ -998,12 +827,12 @@ describe('the local world store', () => {
 
     it('refuses a store written by a NEWER BoardSmith, and says which way to move', async () => {
       store.close();
-      rawExec(worldStorePath(root), "UPDATE meta SET value = '8' WHERE key = 'schemaVersion'");
+      rawExec(worldStorePath(root), "UPDATE meta SET value = '9' WHERE key = 'schemaVersion'");
 
       expect(() => openWorldStore(worldStorePath(root), BUDGETS)).toThrow(
-        /layout 8, and this BoardSmith reads layout 7.*newer BoardSmith/s,
+        /layout 9, and this BoardSmith reads layout 8.*newer BoardSmith/s,
       );
-      expect(layoutOf(worldStorePath(root))).toBe('8');
+      expect(layoutOf(worldStorePath(root))).toBe('9');
     });
 
     it('closes the database when it refuses to open one', async () => {
@@ -1011,8 +840,7 @@ describe('the local world store', () => {
       // to close is what removes them. So their absence is the observable
       // proof that a refused open did not leave a connection behind.
       await anOccupiedWorld();
-      rewindToLayout3(worldStorePath(root));
-      rawExec(worldStorePath(root), "UPDATE meta SET value = '2' WHERE key = 'schemaVersion'");
+      rewindToLayout7(worldStorePath(root));
 
       expect(() => openWorldStore(worldStorePath(root), BUDGETS)).toThrow();
       expect(existsSync(`${worldStorePath(root)}-shm`)).toBe(false);

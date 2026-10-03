@@ -2,7 +2,7 @@ import type { GameElement } from './game-element.js';
 import type { Game } from './game.js';
 import type { Player } from '../player/player.js';
 import type { VisibilityState } from '../command/visibility.js';
-import type { ElementIds } from './element-ids.js';
+import type { ElementIds, WorldElementIds } from './element-ids.js';
 
 /**
  * Reference to an image for rendering game elements.
@@ -105,6 +105,13 @@ export type ElementContext = {
    * because doing so is how a stale stamp goes unnoticed until a collision.
    */
   _worldIdAllocationDeclared?: boolean;
+  /**
+   * Internal: a world's ids, which can be read back to counter values (#482).
+   * The same object as `ids`, set only in world mode, for the comparisons
+   * against the allocation stamp and the construction floor that adoption
+   * makes. Not public API.
+   */
+  _worldIds?: WorldElementIds;
   /**
    * Internal: partition roots whose subtree has been physically re-parented
    * since the last `Game#takeTouchedPartitions()`, plus marks preserved for

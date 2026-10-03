@@ -14,6 +14,7 @@
 import { describe, expect, it } from "vitest";
 import { Game, Piece, Space } from "../engine/index.js";
 import { createWorld, worldAction } from "./index.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 class Plot extends Space {}
 class Marker extends Piece {}
@@ -49,6 +50,7 @@ describe("offer declarations over a large resident world (#283)", () => {
       .execute(() => {});
 
     const { runner } = createWorld({
+      elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
       definition: {
         gameClass: DigWorld,
         world: {

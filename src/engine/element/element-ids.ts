@@ -31,12 +31,35 @@
  * stay small whole numbers every client already handles, and a 64-bit key.
  * The 32-bit block is also the ceiling on how many elements one game can ever
  * create, and minting past it is refused rather than wrapped.
+ *
+ * A WORLD'S IDS ARE KEYED TOO, BY A KEY ITS HOST KEEPS (#482). A world's ids
+ * are durable: stored partitions hold them across every wake, and a world
+ * keeps no constructor options between wakes, so a key the engine minted per
+ * construction would change on every wake and orphan every stored id. The key
+ * is therefore the HOST's: minted once, when the world is created
+ * (`mintWorldElementIdKey`), stored with the world, and handed back on every
+ * wake (`WorldRunnerOptions.elementIdKey`). The engine never mints one for a
+ * world, and never sends one to a seat.
+ *
+ * A world's cipher is Speck48/96: a 48-bit block and a 96-bit key. The wider
+ * block is a budget decision. A world lives for seasons and its clock creates
+ * elements whether or not anybody is watching, so 2^32 lifetime creations is
+ * a ceiling a busy world can reach (a hundred creations a second does it in
+ * under a year and a half), and reaching it ends the world for good: no id
+ * could ever be minted again. 2^48 is ninety thousand years at that rate, and
+ * every 48-bit id is still a safe integer, so ids stay plain numbers. A world
+ * also needs its ids read BACK to counter values (`WorldElementIds.cursorOf`):
+ * the host's allocation stamp and the construction floor are counter values,
+ * and adoption checks stored ids against both.
  */
 
 import { secureRandomHex } from '../../utils/secure-random.js';
 
-/** How many distinct element ids a game can mint: the cipher's 32-bit block. */
+/** How many distinct element ids a table game can mint: Speck32's 32-bit block. */
 export const ELEMENT_ID_SPACE = 2 ** 32;
+
+/** How many distinct element ids a world can mint: Speck48's 48-bit block (#482). */
+export const WORLD_ELEMENT_ID_SPACE = 2 ** 48;
 
 /** Turns the creation counter into the id the element is known by. */
 export interface ElementIds {
@@ -44,42 +67,91 @@ export interface ElementIds {
   mint(cursor: number): number;
 }
 
-/** Speck32/64: 16-bit words, 22 rounds, rotations of 7 and 2. */
-const ROUNDS = 22;
-const WORD_MASK = 0xffff;
+/**
+ * A world's ids, which can also be read back to the counter (#482).
+ *
+ * A world's allocation stamp and its construction floor are counter values,
+ * and a world adopts ids that were minted by an earlier process, so it has to
+ * ask which counter value a stored id came from.
+ */
+export interface WorldElementIds extends ElementIds {
+  /** The counter value `id` was minted from. The inverse of `mint`. */
+  cursorOf(id: number): number;
+}
 
-const rotateRight = (word: number, by: number): number => ((word >>> by) | (word << (16 - by))) & WORD_MASK;
-const rotateLeft = (word: number, by: number): number => ((word << by) | (word >>> (16 - by))) & WORD_MASK;
+/** One member of the Speck family: its word size, round count and rotations. */
+export interface SpeckShape {
+  readonly wordBits: number;
+  readonly rounds: number;
+  readonly alpha: number;
+  readonly beta: number;
+}
+
+/** Speck32/64: 16-bit words, 22 rounds, rotations of 7 and 2. */
+export const SPECK_32_64: SpeckShape = { wordBits: 16, rounds: 22, alpha: 7, beta: 2 };
+
+/** Speck48/96: 24-bit words, 23 rounds, rotations of 8 and 3. */
+export const SPECK_48_96: SpeckShape = { wordBits: 24, rounds: 23, alpha: 8, beta: 3 };
+
+/** A keyed Speck permutation of one block size. */
+export interface SpeckCipher {
+  encrypt(block: number): number;
+  decrypt(block: number): number;
+}
 
 /**
- * Expand a Speck32/64 key, given as its four 16-bit words `[k0, l0, l1, l2]`
- * (the paper writes the same key as `l2 l1 l0 k0`), into the 22 round keys.
+ * Speck with `shape`, keyed by its four key words `[k0, l0, l1, l2]` (the
+ * paper writes the same key as `l2 l1 l0 k0`).
+ *
+ * Words are at most 24 bits, so every shift and rotation below stays inside
+ * the 32 bits JavaScript's bit operators work in, and a block (two words) is
+ * at most 48 bits, which is joined and split with arithmetic rather than bit
+ * operators.
  */
-export function speck32RoundKeys(key: readonly [number, number, number, number]): Uint16Array {
-  const roundKeys = new Uint16Array(ROUNDS);
+export function speck(shape: SpeckShape, key: readonly [number, number, number, number]): SpeckCipher {
+  const { wordBits, rounds, alpha, beta } = shape;
+  const wordSpace = 2 ** wordBits;
+  const mask = wordSpace - 1;
+  const rotateRight = (word: number, by: number): number =>
+    ((word >>> by) | (word << (wordBits - by))) & mask;
+  const rotateLeft = (word: number, by: number): number =>
+    ((word << by) | (word >>> (wordBits - by))) & mask;
+
+  const roundKeys: number[] = [key[0]];
   const l = [key[1], key[2], key[3]];
-  roundKeys[0] = key[0];
-  for (let i = 0; i < ROUNDS - 1; i += 1) {
-    const next = ((roundKeys[i] + rotateRight(l[i], 7)) & WORD_MASK) ^ i;
+  for (let i = 0; i < rounds - 1; i += 1) {
+    const next = ((roundKeys[i]! + rotateRight(l[i]!, alpha)) & mask) ^ i;
     l.push(next);
-    roundKeys[i + 1] = rotateLeft(roundKeys[i], 2) ^ next;
+    roundKeys.push(rotateLeft(roundKeys[i]!, beta) ^ next);
   }
-  return roundKeys;
+
+  return {
+    encrypt(block) {
+      let x = Math.floor(block / wordSpace);
+      let y = block % wordSpace;
+      for (let i = 0; i < rounds; i += 1) {
+        x = ((rotateRight(x, alpha) + y) & mask) ^ roundKeys[i]!;
+        y = rotateLeft(y, beta) ^ x;
+      }
+      return x * wordSpace + y;
+    },
+    decrypt(block) {
+      let x = Math.floor(block / wordSpace);
+      let y = block % wordSpace;
+      for (let i = rounds - 1; i >= 0; i -= 1) {
+        y = rotateRight(y ^ x, beta);
+        x = rotateLeft(((x ^ roundKeys[i]!) - y) & mask, alpha);
+      }
+      return x * wordSpace + y;
+    },
+  };
 }
 
-/** Encrypt one 32-bit block (high word `x`, low word `y`), as an unsigned integer. */
-export function speck32Encrypt(roundKeys: Uint16Array, block: number): number {
-  let x = (block >>> 16) & WORD_MASK;
-  let y = block & WORD_MASK;
-  for (let i = 0; i < ROUNDS; i += 1) {
-    x = ((rotateRight(x, 7) + y) & WORD_MASK) ^ roundKeys[i];
-    y = rotateLeft(y, 2) ^ x;
-  }
-  return ((x << 16) | y) >>> 0;
-}
-
-/** An element id key: 64 bits as 16 lowercase hex digits. */
+/** A table game's element id key: 64 bits as 16 lowercase hex digits. */
 const ELEMENT_ID_KEY_PATTERN = /^[0-9a-f]{16}$/;
+
+/** A world's element id key: 96 bits as 24 lowercase hex digits (#482). */
+const WORLD_ELEMENT_ID_KEY_PATTERN = /^[0-9a-f]{24}$/;
 
 /**
  * A fresh element id key, from the platform's cryptographic random source.
@@ -93,17 +165,42 @@ export function mintElementIdKey(): string {
   );
 }
 
-function refuseCursor(cursor: number): never {
-  if (Number.isInteger(cursor) && cursor >= ELEMENT_ID_SPACE) {
+/**
+ * A fresh WORLD element id key, for a host to mint ONCE, when it creates a
+ * world, and store with that world for as long as the world lives (#482).
+ *
+ * The engine never calls this for a world on its own: a key minted on a wake
+ * instead of read back from storage would turn every stored id into a number
+ * nothing can read. Keep it as secret as the world's stored partitions, and
+ * never send it to a client: whoever holds it can read every id a seat sees
+ * back into the count of elements created anywhere in the world.
+ */
+export function mintWorldElementIdKey(): string {
+  return secureRandomHex(
+    12,
+    "mint a world's element id key",
+    "mint the world's key on a runtime that has one and store it with the world",
+  );
+}
+
+/** The four key words of a hex key, as `speck` takes them: `[k0, l0, l1, l2]`. */
+function keyWords(key: string): [number, number, number, number] {
+  const digits = key.length / 4;
+  const word = (i: number) => parseInt(key.slice(i * digits, (i + 1) * digits), 16);
+  return [word(3), word(2), word(1), word(0)];
+}
+
+function refuseCursor(cursor: number, space: number, what: 'game' | 'world'): never {
+  if (Number.isInteger(cursor) && cursor >= space) {
     throw new Error(
-      `This game has created ${ELEMENT_ID_SPACE.toLocaleString('en-US')} elements, which is every ` +
-        `element id this game can mint, so it cannot create another. A game that creates and ` +
+      `This ${what} has created ${space.toLocaleString('en-US')} elements, which is every ` +
+        `element id this ${what} can mint, so it cannot create another. A ${what} that creates and ` +
         `removes elements in a loop should move or reuse existing elements instead.`,
     );
   }
   throw new Error(
     `The element id counter stands at ${String(cursor)}, which is not a whole number from 0: the ` +
-      `game's saved state is damaged. Restore it from a snapshot written by this engine.`,
+      `${what}'s saved state is damaged. Restore it from state written by this engine.`,
   );
 }
 
@@ -119,29 +216,48 @@ export function opaqueElementIds(key: string): ElementIds {
         `snapshot of this game recorded in its gameOptions.`,
     );
   }
-  const word = (i: number) => parseInt(key.slice(i * 4, i * 4 + 4), 16);
-  const roundKeys = speck32RoundKeys([word(3), word(2), word(1), word(0)]);
+  const cipher = speck(SPECK_32_64, keyWords(key));
   return {
     mint(cursor) {
-      if (!(Number.isInteger(cursor) && cursor >= 0 && cursor < ELEMENT_ID_SPACE)) refuseCursor(cursor);
-      return speck32Encrypt(roundKeys, cursor);
+      if (!(Number.isInteger(cursor) && cursor >= 0 && cursor < ELEMENT_ID_SPACE)) {
+        refuseCursor(cursor, ELEMENT_ID_SPACE, 'game');
+      }
+      return cipher.encrypt(cursor);
     },
   };
 }
 
 /**
- * A WORLD's ids: the counter itself.
- *
- * A world's ids are durable -- stored partitions hold them across every wake,
- * and a host derives the next counter value from the highest id it has stored
- * (`worldIdAllocationOf`). A world keeps no constructor options across wakes,
- * so a key minted per construction would change on every wake. Opaque world
- * ids need a durable key the host keeps beside its allocation stamp, which is
- * a platform storage decision; until then a world's ids still count creations
- * (#482).
+ * A WORLD's ids (#482): Speck48/96 over the creation counter, keyed by the
+ * world's durable key (24 hex digits, read as the cipher's four key words,
+ * high word first). The same key always mints the same ids, so a world
+ * rebuilt on every wake from its stored key and allocation stamp reads its
+ * stored ids exactly as the process that minted them did.
  */
-export const sequentialElementIds: ElementIds = {
-  mint(cursor) {
-    return cursor;
-  },
-};
+export function worldElementIds(key: string): WorldElementIds {
+  if (!WORLD_ELEMENT_ID_KEY_PATTERN.test(key)) {
+    throw new Error(
+      `A world's element id key must be 24 hexadecimal digits (96 bits, lowercase); this world ` +
+        `was given ${JSON.stringify(key)}. Mint one with \`mintWorldElementIdKey()\` when the world ` +
+        `is created, store it with the world, and pass that same key on every wake.`,
+    );
+  }
+  const cipher = speck(SPECK_48_96, keyWords(key));
+  return {
+    mint(cursor) {
+      if (!(Number.isInteger(cursor) && cursor >= 0 && cursor < WORLD_ELEMENT_ID_SPACE)) {
+        refuseCursor(cursor, WORLD_ELEMENT_ID_SPACE, 'world');
+      }
+      return cipher.encrypt(cursor);
+    },
+    cursorOf(id) {
+      if (!(Number.isInteger(id) && id >= 0 && id < WORLD_ELEMENT_ID_SPACE)) {
+        throw new Error(
+          `${String(id)} is not an element id this world could have minted: a world's ids are ` +
+            `whole numbers from 0 to 2^48 - 1. The stored bytes holding it are damaged.`,
+        );
+      }
+      return cipher.decrypt(id);
+    },
+  };
+}

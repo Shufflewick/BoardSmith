@@ -38,7 +38,9 @@ function pinnedClock(): WorldHostClock {
 
 /** Drive the dev host to the same place, and read the last frame it sent the
  *  one attached socket. */
-async function hostFrame(seat: number): Promise<{ view: unknown; actions: unknown }> {
+async function hostFrame(
+  seat: number,
+): Promise<{ view: unknown; actions: unknown; elementIdKey: string }> {
   const budgets = worldBudgets();
   // NAMED, because `temp-tree.test-helper` owns the removal and asserts that
   // every caller keeps the path it was given rather than losing it inline.
@@ -66,12 +68,14 @@ async function hostFrame(seat: number): Promise<{ view: unknown; actions: unknow
     action: 'stash',
     args: {},
   });
+  const elementIdKey = store.elementIdKey();
   await host.close();
   const last = (type: string): Record<string, unknown> | undefined =>
     [...sent].reverse().find((message) => message['type'] === type);
   return {
     view: last('world_state')?.['view'],
     actions: last('world_offers')?.['actions'],
+    elementIdKey,
   };
 }
 
@@ -83,6 +87,9 @@ describe('TestWorld projects exactly what the dev host sends', () => {
     const world = await createTestWorld({
       definition: vaultBundle(),
       seed: 'test-world',
+      // The SAME world means the same element id key (#482): the ids in both
+      // frames are minted under it.
+      elementIdKey: host.elementIdKey,
       now: TEST_WORLD_EPOCH,
       // The dev host has ONE socket open on this seat, so that is who is
       // present. Presence is an input to an offer, so a harness watching every

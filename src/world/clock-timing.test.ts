@@ -24,6 +24,7 @@ import { worldAction, worldClockAction } from "./action.js";
 import { walkDeclaration } from "./declaration.js";
 import { checkpointBytes } from "./stored-world.test-helper.js";
 import type { StoredPartition } from "./contract.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 class Yard extends Space<Depot> {
   /** The next crate a spawn fills, so a catch-up resumes where the last one
@@ -117,7 +118,7 @@ const OPENED = 1_700_000_000_000;
 const MINUTE = 60_000;
 
 function world() {
-  return createWorld({ definition, seed: "clock-timing", seats: new Map([["p1", 1]]) }).runner;
+  return createWorld({ elementIdKey: TEST_WORLD_ELEMENT_ID_KEY, definition, seed: "clock-timing", seats: new Map([["p1", 1]]) }).runner;
 }
 
 /** Genesis, as a host's store would hold it. Every case below runs against a

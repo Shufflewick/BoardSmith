@@ -38,6 +38,7 @@ import { BoardSmithWorldEngine } from "./engine.js";
 import { assertWorldAction, worldAction, worldClockAction } from "./action.js";
 import type { StoredPartition } from "./contract.js";
 import { MapStore, offerStamp } from "./stored-world.test-helper.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 class Empire extends Space<BoostGame> {
   /** Genuinely earned, and the reason a preview may not be a guess. */
@@ -112,7 +113,7 @@ const plainBoost = worldAction<BoostGame>("plain")
   .execute(() => {});
 
 function newGame(): BoostGame {
-  return new BoostGame({ playerCount: 2, seed: "boost", worldMode: true });
+  return new BoostGame({ playerCount: 2, seed: "boost", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
 }
 
 function genesis(boostUntil = 0): Map<string, StoredPartition> {

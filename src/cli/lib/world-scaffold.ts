@@ -354,7 +354,13 @@ export const gameDefinition: GameDefinition = {
 /** `tests/world.test.ts` -- the world driven by the library that runs it. */
 export function generateWorldTestTs(): string {
   return `import { describe, expect, it } from 'vitest';
-import { createWorld, EMPTY_NOTICE_BOX, settleDeclaration, walkDeclaration } from 'boardsmith/world';
+import {
+  createWorld,
+  EMPTY_NOTICE_BOX,
+  mintWorldElementIdKey,
+  settleDeclaration,
+  walkDeclaration,
+} from 'boardsmith/world';
 import { gameDefinition } from '../src/rules/index.js';
 import { PLOT_ROWS, RIPEN_MS, plotPartition } from '../src/rules/world.js';
 
@@ -382,8 +388,21 @@ const SEATS = new Map([
   ['bob', 2],
 ]);
 
+/**
+ * THIS WORLD'S ELEMENT ID KEY. A host mints one ONCE, when it creates a world,
+ * stores it with the world and passes it on every wake: the world's ids are
+ * read back with it, so a key minted afresh would make every stored id
+ * unreadable. It is a secret -- never send it to a page.
+ */
+const ELEMENT_ID_KEY = mintWorldElementIdKey();
+
 function launch() {
-  return createWorld({ definition: gameDefinition, seed: 'test-world', seats: SEATS });
+  return createWorld({
+    definition: gameDefinition,
+    seed: 'test-world',
+    elementIdKey: ELEMENT_ID_KEY,
+    seats: SEATS,
+  });
 }
 
 /**

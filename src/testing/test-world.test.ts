@@ -52,6 +52,20 @@ describe('TestWorld: a resident world a test can construct', () => {
     await world.close();
   });
 
+  it("builds its world with the key it is given, keeps the same ids for the same key, and sends the key to no seat (#482)", async () => {
+    const key = '0a1b2c3d4e5f60718293a4b5';
+    const one = await createTestWorld({ definition: bundle(), elementIdKey: key });
+    const again = await createTestWorld({ definition: bundle(), elementIdKey: key });
+    const other = await createTestWorld({ definition: bundle(), elementIdKey: 'b5a493827160f5e4d3c2b1a0' });
+
+    const frame = await one.getPlayerView(1);
+    expect(bytesOf(frame)).not.toContain(key);
+    expect((await again.getPlayerView(1)).state.id).toBe(frame.state.id);
+    expect((await other.getPlayerView(1)).state.id).not.toBe(frame.state.id);
+
+    await Promise.all([one.close(), again.close(), other.close()]);
+  });
+
   it('projects the pruned per-seat frame: my vault and the commons, nobody else’s', async () => {
     const world = await createTestWorld({ definition: bundle() });
 

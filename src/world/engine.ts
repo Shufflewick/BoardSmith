@@ -871,7 +871,9 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * simply a partition the next checkpoint writes.
    */
   /**
-   * THE NEXT ID THIS WORLD WILL MINT, for the host to persist (#377).
+   * THE COUNTER VALUE THIS WORLD MINTS FROM NEXT, for the host to persist
+   * (#377). Never an id: an id is this value run through the world's keyed
+   * cipher (#482).
    *
    * Read after genesis and after every created partition, and written in the
    * SAME transaction as the bytes it was minted for -- so a world that stored a

@@ -30,7 +30,6 @@ import {
   worldClockAction,
   WORLD_PRESENCE_DEFAULT_GRACE_MS,
   type WorldBudgets,
-  type StoredPartition,
   type WorldDefinition,
   type WorldActionOffer,
   type WorldMigration,
@@ -39,56 +38,24 @@ import { openWorldStore, worldStorePath, type LocalWorldStore } from './world-st
 import type { WorldHostClock } from './node-world-clock.js';
 import { LocalWorldHost, devWorldPlayer, type WorldDevRequest } from './world-host.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { worldElementIds } from '../../engine/element/element-ids.js';
 
 /**
- * A STORE AS THE OLDER CODE LEFT IT: real partitions, no allocation stamp
- * (ShufflewickPub #377).
+ * THE SAME STORE, AS LAYOUT 7 LEFT IT (#482).
  *
- * Reached through SQLite directly rather than through `LocalWorldStore`,
- * deliberately: every door this store has writes the stamp with the bytes, and
- * a fixture built through one of them could not be the world the repair is for.
+ * Layout 8 added the world's element id key and changed nothing else, so a
+ * store without it, stamped 7, is layout 7 exactly -- a world whose ids are its
+ * bare creation counter. Reached through SQLite directly, because the store
+ * only ever writes the layout it is on.
  */
-function forgetAllocationStamp(path: string): void {
+function rewindStoreToLayout7(path: string): void {
   const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
     DatabaseSync: new (file: string) => { exec(sql: string): void; close(): void };
   };
   const db = new DatabaseSync(path);
   try {
-    db.exec("DELETE FROM meta WHERE key = 'nextElementId'");
-  } finally {
-    db.close();
-  }
-}
-
-/**
- * THE SAME STORE, AS LAYOUT 3 LEFT IT (#225, ShufflewickPub #423).
- *
- * Layout 4 added `seat_activity` and the epoch a seat's idleness is measured
- * from; layout 5 added the instant each chair was granted; layout 6 added the
- * presence ledger (#339); layout 7 added the seats' notice boxes
- * (ShufflewickPub #521). None changed anything else, so undoing all five is
- * layout 3 exactly. Reached through
- * SQLite for the reason `forgetAllocationStamp` is: the store only ever writes
- * the layout it is on, so a world from an older one cannot be built through its
- * doors.
- */
-function rewindStoreToLayout3(path: string): void {
-  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
-    DatabaseSync: new (file: string) => { exec(sql: string): void; close(): void };
-  };
-  const db = new DatabaseSync(path);
-  try {
-    // REBUILT RATHER THAN ALTERED, so the rewind does not depend on which
-    // SQLite the test host ships a DROP COLUMN in.
-    db.exec('CREATE TABLE seats_old (player TEXT PRIMARY KEY, seat INTEGER NOT NULL)');
-    db.exec('INSERT INTO seats_old (player, seat) SELECT player, seat FROM seats');
-    db.exec('DROP TABLE seats');
-    db.exec('ALTER TABLE seats_old RENAME TO seats');
-    db.exec('DROP TABLE seat_activity');
-    db.exec('DROP TABLE presence_told');
-    db.exec('DROP TABLE notice_boxes');
-    db.exec("DELETE FROM meta WHERE key = 'activitySince'");
-    db.exec("UPDATE meta SET value = '3' WHERE key = 'schemaVersion'");
+    db.exec("DELETE FROM meta WHERE key = 'elementIdKey'");
+    db.exec("UPDATE meta SET value = '7' WHERE key = 'schemaVersion'");
   } finally {
     db.close();
   }
@@ -420,6 +387,42 @@ describe('#167: genesis runs once, into the local store', () => {
     const state = last(second.sent, 'c1', 'world_state');
     expect(JSON.stringify(state?.view)).toContain('"logs":1');
     await second.host.close();
+  });
+});
+
+describe("#482: the world's ids are keyed by the key its store holds", () => {
+  it('mints opaque ids, read back to counter values only with the stored key', async () => {
+    const opened = await attached({ dir });
+    const hearth = (await opened.store.read(HEARTH))!;
+    const id = (hearth.json as { id: number }).id;
+    expect(id).not.toBe(WORLD_PARTITION_ID_FLOOR);
+    expect(worldElementIds(opened.store.elementIdKey()).cursorOf(id)).toBe(WORLD_PARTITION_ID_FLOOR);
+    await opened.host.close();
+  });
+
+  it('serves the same ids after a restart, because the key comes back out of the store', async () => {
+    const first = await attached({ dir });
+    await first.host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'chop', args: {} });
+    const before = JSON.stringify(last(first.sent, 'c1', 'world_state')?.view);
+    await first.host.close();
+
+    const second = await attached({ dir });
+    const after = JSON.stringify(last(second.sent, 'c1', 'world_state')?.view);
+    expect(after).toBe(before);
+    await second.host.close();
+  });
+
+  it('never sends the key to a page, through any seat', async () => {
+    const opened = await attached({ dir });
+    const key = opened.store.elementIdKey();
+    await opened.host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'chop', args: {} });
+    await opened.host.handleMessage('c2', { type: 'hello' });
+    await opened.host.handleMessage('c2', { type: 'attach', seat: 2 });
+    await opened.host.handleMessage('c2', { type: 'action', order: nextOrder(), requestId: 'r2', action: 'chop', args: {} });
+
+    expect(opened.sent.length).toBeGreaterThan(0);
+    expect(JSON.stringify(opened.sent)).not.toContain(key);
+    await opened.host.close();
   });
 });
 
@@ -2143,8 +2146,12 @@ describe('#218: partitions created on first use', () => {
     // the stamp moves on for the host after this one.
     expect(one.length).toBeGreaterThan(0);
     expect(two.length).toBeGreaterThan(0);
-    expect(Math.min(...two)).toBeGreaterThanOrEqual(stamp);
-    expect(second.store.nextElementId()).toBeGreaterThan(Math.max(...two));
+    // Compared as COUNTER values, read back with the world's own key (#482):
+    // the stamp is a counter value, and an id is its keyed cipher.
+    const keyed = worldElementIds(second.store.elementIdKey());
+    const twoCursors = two.map((id) => keyed.cursorOf(id));
+    expect(Math.min(...twoCursors)).toBeGreaterThanOrEqual(stamp);
+    expect(second.store.nextElementId()).toBeGreaterThan(Math.max(...twoCursors));
     expect(two.filter((id) => one.includes(id))).toEqual([]);
 
     // And the world still runs a command that loads BOTH, which is where the
@@ -2159,42 +2166,6 @@ describe('#218: partitions created on first use', () => {
       args: {},
     });
     expect(last(second.sent, 'c1', 'world_response')).toMatchObject({ ok: true });
-    await second.host.close();
-  });
-
-  it('REPAIRS a world that was occupied before the stamp existed', async () => {
-    // The supported repair. The store below is one the older code wrote: real
-    // partitions, real minted ids, and no record of how far the counter got.
-    // `start` derives the stamp from the stored bytes ONCE and writes it, and
-    // the world mints safely from then on.
-    const first = await attached({ dir, definition: bundle({ world: lazyWorld() }) });
-    await first.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'r1',
-      action: 'settle',
-      args: {},
-    });
-    await first.host.close();
-    forgetAllocationStamp(worldStorePath(dir));
-
-    const second = openHost({ dir, definition: bundle({ world: lazyWorld() }) });
-    expect(second.store.nextElementId()).toBeUndefined();
-    await second.host.start();
-    expect(second.store.nextElementId()).toBeGreaterThan(WORLD_PARTITION_ID_FLOOR);
-
-    await second.host.handleMessage('c2', { type: 'hello' });
-    await second.host.handleMessage('c2', { type: 'attach', seat: 2 });
-    await second.host.handleMessage('c2', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'r2',
-      action: 'settle',
-      args: {},
-    });
-    const one = idsIn((await second.store.read(holdingOf(1)))?.json);
-    const two = idsIn((await second.store.read(holdingOf(2)))?.json);
-    expect(two.filter((id) => one.includes(id))).toEqual([]);
     await second.host.close();
   });
 
@@ -2743,100 +2714,6 @@ describe('#379: a migration reads across roots, in one atomic step', () => {
   });
 });
 
-describe('#223: lifting a world written before the construction-id floor', () => {
-  /** The bytes the OLD SDK left: a hearth at id 14, holding a reference to a
-   *  log at 15, exactly as a world serializes one (`{ __elementId }`). */
-  function preFloorHearth(): StoredPartition {
-    return {
-      parentId: 0,
-      json: {
-        className: 'Hearth',
-        id: 14,
-        name: 'hearth',
-        attributes: { logs: 3, burns: 0, marker: { __elementId: 15 }, seat: { __playerRef: 2 } },
-        children: [
-          { className: 'Hearth', id: 15, name: 'marker', attributes: { logs: 0, burns: 0 } },
-        ],
-      },
-    };
-  }
-
-  /** A launched world holding those bytes and one queued event whose frozen
-   *  arguments name an element by id. */
-  async function aPreFloorWorld(): Promise<void> {
-    const store = openWorldStore(worldStorePath(dir), worldBudgets());
-    // A world written before the allocation stamp existed carries none, so the
-    // fixture writes the rows and then drops the key the way the older code
-    // left it: absent. `start` derives it, once, after the lift (#377).
-    await store.createAll({ partitions: { [HEARTH]: preFloorHearth() }, nextElementId: 1_000_000 }, 0);
-    store.close();
-  }
-
-  it('lifts every id and every reference above the floor, in one step', async () => {
-    await aPreFloorWorld();
-    const opened = openHost({ dir, definition: bundle() });
-    const started = await opened.host.start();
-    expect(started.lifted).toEqual({ offset: 1_000_000 - 14, partitions: 1, events: 0 });
-    await opened.host.close();
-
-    const store = openWorldStore(worldStorePath(dir), worldBudgets());
-    const lifted = JSON.stringify(await store.read(HEARTH));
-    // THE IDS MOVED, and by the smallest shift that clears the floor.
-    expect(lifted).toContain('"id":1000000');
-    expect(lifted).toContain('"id":1000001');
-    // AND SO DID THE REFERENCE, or the world would wake up pointing at nothing.
-    expect(lifted).toContain('"__elementId":1000001');
-    // A SEAT IS NOT AN ELEMENT ID. Seat 2 is still seat 2 in a world that just
-    // grew, which is the one number a blanket shift would have ruined.
-    expect(lifted).toContain('"__playerRef":2');
-    // AND THE GAME'S OWN DATA IS UNTOUCHED.
-    expect(lifted).toContain('"logs":3');
-    store.close();
-  });
-
-  it('lets the lifted world WIDEN, which is the case the whole ticket is about', async () => {
-    await aPreFloorWorld();
-    const wider = worldBlock({ maxPlayers: 40 });
-    const { host, sent } = await attached({ dir, definition: bundle({ world: wider }) });
-
-    // The world is playable on the wider rules, from the bytes it already had.
-    expect(JSON.stringify(last(sent, 'c1', 'world_state')?.view)).toContain('"logs":3');
-    // AND A SEAT THE OLD WORLD DID NOT HAVE can be taken and can act.
-    await host.handleMessage('c2', { type: 'hello' });
-    await host.handleMessage('c2', { type: 'attach', seat: 13 });
-    await host.handleMessage('c2', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'r13',
-      action: 'chop',
-      args: {},
-    });
-    expect(last(sent, 'c2', 'world_response')).toMatchObject({ ok: true });
-    await host.close();
-  });
-
-  it('is done ONCE: a second start finds a world already above the floor', async () => {
-    await aPreFloorWorld();
-    const first = openHost({ dir, definition: bundle() });
-    expect((await first.host.start()).lifted).toBeDefined();
-    await first.host.close();
-
-    const again = openHost({ dir, definition: bundle() });
-    expect((await again.host.start()).lifted).toBeUndefined();
-    await again.host.close();
-  });
-
-  it('leaves a world written since the floor entirely alone', async () => {
-    // The ordinary start, which must cost one comparison and no write.
-    const opened = await attached({ dir });
-    await opened.host.close();
-
-    const again = openHost({ dir, definition: bundle() });
-    expect((await again.host.start()).lifted).toBeUndefined();
-    await again.host.close();
-  });
-});
-
 /**
  * ShufflewickPub #383: THE HOST IS THE ONLY THING THAT MAY SAY WHEN A SEAT WAS
  * LAST HERE.
@@ -3008,33 +2885,16 @@ describe('#383: a seat\'s activity, stamped by the host', () => {
   });
 });
 
-describe('#225: a world written under an older store layout', () => {
-  it('upgrades on the ordinary open and finds the world where it was left', async () => {
-    // The ticket's sentence: `boardsmith dev` in a game directory whose world
-    // was played under layout 3 starts, and the colony is still there. Genesis
-    // does not run again -- a world relaunched from genesis is the progress
-    // loss the upgrade exists to prevent, and it would read `"logs":0` rather
-    // than the log this world cut and the one it banked.
+describe('#482: a world stored before its ids were keyed', () => {
+  it('is refused on open, naming the reset, before anything is written', async () => {
+    // Layout 7's world holds ids that ARE its creation counter. No key reads
+    // them back, so there is no step that carries it across: the author is
+    // told why, and how to start again.
     await aPlayedVillage();
-    rewindStoreToLayout3(worldStorePath(dir));
+    rewindStoreToLayout7(worldStorePath(dir));
 
-    const second = openHost({ dir });
-    await second.host.start();
-    await second.host.handleMessage('c9', { type: 'hello' });
-
-    expect(JSON.stringify(last(second.sent, 'c9', 'world_state')?.view)).toContain('"logs":2');
-    expect(second.store.pendingEvents()).toHaveLength(1);
-    expect(second.store.seats()).toEqual([{ player: devWorldPlayer(1), seat: 1 }]);
-    // The upgraded world starts watching now, not in 1970.
-    expect(second.store.activityOf(1)).toEqual({
-      seat: 1,
-      at: null,
-      since: 1_000_000,
-      // The chair predates the column that records when a chair was granted,
-      // so the world's own recording epoch is the whole of its baseline.
-      tenancy: 'held',
-    });
-    await second.host.close();
+    expect(() => openHost({ dir })).toThrow(/#482/);
+    expect(() => openHost({ dir })).toThrow(/boardsmith dev --reset/);
   });
 });
 

@@ -62,6 +62,7 @@ import type {
   SeatTenancy,
   StoredPartition,
 } from "./contract.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 class Room extends Space<Demo> {
   /** Which seat the next occurrence of a sweep is about. */
@@ -215,7 +216,7 @@ const SEATS = new Map([
 ]);
 
 function world() {
-  return createWorld({ definition, seed: "point-read", seats: SEATS }).runner;
+  return createWorld({ elementIdKey: TEST_WORLD_ELEMENT_ID_KEY, definition, seed: "point-read", seats: SEATS }).runner;
 }
 
 /** A stamp as a HOST answers one: the facts, with no fallback applied. */
@@ -470,6 +471,7 @@ describe("#423 — the read is the world's own authority, and a seat cannot forg
 
     expect(() =>
       createWorld({
+        elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
         definition: {
           ...definition,
           world: { ...definition.world, actions: [forged] },
@@ -486,6 +488,7 @@ describe("#423 — the read is the world's own authority, and a seat cannot forg
       .about(() => 1.5)
       .execute(() => {});
     const runner = createWorld({
+      elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
       definition: {
         ...definition,
         world: { ...definition.world, actions: [bad] },

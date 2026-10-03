@@ -42,6 +42,7 @@ import {
   expectDeclarationWriteRefused,
   fireThroughWalk,
 } from "./village.test-helper.js";
+import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
 /** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
  *  The clock's road passes its whole occurrence instead. */
@@ -410,7 +411,7 @@ describe("what stops an author writing an O(world) enumeration", () => {
         elements: ({ game, player }) => neighbourSeats(player.seat).map((s) => game.holdingOf(s)),
       })
       .execute(() => {});
-    const game = new VillageFixture({ playerCount: SETTLERS, seed: "village", worldMode: true });
+    const game = new VillageFixture({ playerCount: SETTLERS, seed: "village", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     const engine = new BoardSmithWorldEngine({
       game,
       seats: new Map([["p1", 1]]),

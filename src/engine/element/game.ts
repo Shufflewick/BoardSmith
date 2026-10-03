@@ -1,5 +1,5 @@
 import { Space, type ElementEventHandler } from './space.js';
-import { mintElementIdKey, opaqueElementIds, sequentialElementIds } from './element-ids.js';
+import { mintElementIdKey, opaqueElementIds, worldElementIds } from './element-ids.js';
 import {
   GameElement,
   hasZoneVisibility,
@@ -249,6 +249,15 @@ export type GameOptions = {
    * (`selectGameOptions`) and the stateless executor refuses it on a `start`
    * op; a host that builds its own options must keep it out of anything a
    * client can write.
+   *
+   * A WORLD'S KEY IS REQUIRED AND IS ITS HOST'S (#482): 24 lowercase hex
+   * digits, minted once when the world is created (`mintWorldElementIdKey`
+   * from `boardsmith/world`), stored with the world and passed on every wake.
+   * The engine never mints one for a world, because a world's ids outlive the
+   * process that built it and a key minted per construction would orphan every
+   * stored id. `createWorld` passes it from `WorldRunnerOptions.elementIdKey`.
+   * A world's key is not recorded with the constructor options: a world keeps
+   * no snapshot, so nothing needs it from there.
    */
   elementIdKey?: string;
   /** Available color palette for players (hex strings) */
@@ -627,11 +636,35 @@ export interface FormattedMessage {
  *
  * A game's construction spends the id counter -- a player is an element -- so
  * the same world built for four seats and for forty hands out different ids for
- * the same furniture. Everything a world STORES is minted above this floor, so
- * a seat count can change without a single stored id colliding with one the
- * wider construction just minted. See `Game#reserveConstructionIdSpace`.
+ * the same furniture. Everything a world STORES is minted from counter values
+ * at or above this floor, so a seat count can change without a single stored
+ * id colliding with one the wider construction just minted. See
+ * `Game#reserveConstructionIdSpace`.
+ *
+ * It is a COUNTER value, not an id: a world's ids are the keyed cipher of the
+ * counter (#482), so an id is compared with it only after being read back with
+ * the world's key.
  */
 export const WORLD_PARTITION_ID_FLOOR = 1_000_000;
+
+/**
+ * The world key a world game was given, or a refusal that says where one comes
+ * from (#482). A world's ids outlive the process that built it, so the key is
+ * durable state its host keeps; the engine never mints one for a world.
+ */
+function requireWorldElementIdKey(options: GameOptions): string {
+  if (options.elementIdKey === undefined) {
+    throw new Error(
+      "A world needs its host's element id key (GameOptions.elementIdKey), and this one was " +
+        'built without one. Mint it once, when the world is created, with ' +
+        "`mintWorldElementIdKey()` from 'boardsmith/world', store it with the world, and pass " +
+        'the same key on every wake (`createWorld` takes it as `elementIdKey`). A world\'s ids ' +
+        'are read back with it, so a key minted afresh on a wake would make every stored id ' +
+        'unreadable (#482).',
+    );
+  }
+  return options.elementIdKey;
+}
 
 export const GAME_SELF_SERIALIZED_FIELDS = ['phase', 'messages', 'settings'] as const;
 
@@ -1107,20 +1140,16 @@ export class Game<
     const random = createGameRandom(seed);
 
     // Ids are keyed by a secret of their own, never the seed, so they carry no
-    // count of hidden creations (#447). A world's stay sequential, see
-    // `sequentialElementIds`.
-    if (options.worldMode === true && options.elementIdKey !== undefined) {
-      throw new Error(
-        'GameOptions.elementIdKey was given to a world, whose element ids are its creation counter ' +
-          '(#482). Leave it out.'
-      );
-    }
-    const elementIdKey = options.worldMode === true ? undefined : (options.elementIdKey ?? mintElementIdKey());
+    // count of hidden creations (#447). A table mints its own key; a world's
+    // is its host's, durable across every wake, and never minted here (#482).
+    const worldIds = options.worldMode === true ? worldElementIds(requireWorldElementIdKey(options)) : undefined;
+    const elementIdKey = worldIds === undefined ? (options.elementIdKey ?? mintElementIdKey()) : undefined;
 
     // Initialize context with Map for class registry
     const ctx: Partial<ElementContext> = {
       sequence: 0,
-      ids: elementIdKey === undefined ? sequentialElementIds : opaqueElementIds(elementIdKey),
+      ids: worldIds ?? opaqueElementIds(elementIdKey as string),
+      ...(worldIds === undefined ? {} : { _worldIds: worldIds }),
       classRegistry: new Map(),
       random,
     };
@@ -1166,8 +1195,15 @@ export class Game<
     // HOST's per-session policy, re-supplied on every stateless op from
     // `hostOptions`. Persisting it into the snapshot would let a snapshot
     // carry a policy the host did not declare for the op being run.
-    const { tutorial: _tutorialOption, randomness: _randomnessOption, ...restOptions } = options;
-    // The id key rides here so every snapshot and restore carries it (#447).
+    const {
+      tutorial: _tutorialOption,
+      randomness: _randomnessOption,
+      elementIdKey: _elementIdKeyOption,
+      ...restOptions
+    } = options;
+    // A table's id key rides here so every snapshot and restore carries it
+    // (#447). A world's does not: it keeps no snapshot, and its host already
+    // holds the key it passed (#482).
     this._constructorOptions = { ...restOptions, seed, ...(elementIdKey !== undefined && { elementIdKey }) };
 
     // Wire tutorial definition (un-serialized static config, see tutorialDefinition JSDoc).
@@ -1994,7 +2030,10 @@ export class Game<
       throw new Error(
         `Cannot adopt partition "${json.name ?? json.className}" under parent id ${parentId}: ` +
           `no element with that id is resident. Hydrate the parent's partition first — a graft ` +
-          `needs its attachment point in the tree.`
+          `needs its attachment point in the tree. A partition that hangs from the game itself ` +
+          `can only fail this way when the world was built with a different element id key ` +
+          `than the one its stored bytes were minted under (#482): pass the key stored with ` +
+          `this world.`
       );
     }
 
@@ -2005,8 +2044,12 @@ export class Game<
     //     whichever copy the DFS reaches first;
     //   - a counter left below the adopted ids makes the next `create()` mint
     //     one that collides.
+    // An id is the keyed cipher of its counter value (#482), so every
+    // comparison with the counter below is made on the value read back with
+    // the world's key, never on the id.
     const adoptedIds: number[] = [];
     collectJsonIds(json, adoptedIds);
+    const worldIds = this._ctx._worldIds!;
 
     const resident = new Set<number>();
     collectResidentIds(this, resident);
@@ -2017,10 +2060,10 @@ export class Game<
         `Cannot adopt partition "${json.name ?? json.className}": element id ${clash} is already ` +
           `resident in this game. A partition may only be adopted once — evict the resident copy ` +
           `(Game#evictSubtree) before adopting it again.` +
-          (clash < WORLD_PARTITION_ID_FLOOR
-            ? ` This id is below the ${WORLD_PARTITION_ID_FLOOR} reserved for a world's own ` +
-              `construction, so these bytes were written before that floor existed: the world ` +
-              `predates it and cannot be run on rules that have it. Start the world again.`
+          (worldIds.cursorOf(clash) < WORLD_PARTITION_ID_FLOOR
+            ? ` It is one of the ids this world's own construction mints (the game and its ` +
+              `players), which no stored partition can hold: these bytes were not written by ` +
+              `this world under this element id key.`
             : '')
       );
     }
@@ -2031,22 +2074,41 @@ export class Game<
     // that were NOT hydrated were the ones it then minted on top of. A world
     // that declared an allocation stamp is therefore told here, at the bytes
     // that prove it, rather than at the collision hours later.
-    const maxAdoptedId = Math.max(...adoptedIds);
-    if (this._ctx.sequence <= maxAdoptedId) {
+    let maxAdoptedCursor = -1;
+    let maxAdoptedId = -1;
+    for (const id of adoptedIds) {
+      const cursor = worldIds.cursorOf(id);
+      if (cursor > maxAdoptedCursor) {
+        maxAdoptedCursor = cursor;
+        maxAdoptedId = id;
+      }
+    }
+    if (this._ctx.sequence <= maxAdoptedCursor) {
       if (this._ctx._worldIdAllocationDeclared) {
         throw new Error(
           `Cannot adopt partition "${json.name ?? json.className}": it holds element id ` +
-            `${maxAdoptedId}, at or above this world's id allocation stamp of ` +
+            `${maxAdoptedId}, minted at or above this world's id allocation stamp of ` +
             `${this._ctx.sequence}. The stamp is stale, so the next id this world minted would ` +
             `collide with one it has already stored. Repair it by writing the stamp that ` +
             `\`worldIdAllocationOf\` derives from every stored partition, passing it back as ` +
             `\`nextElementId\`, then wake the world again.`
         );
       }
-      this._ctx.sequence = maxAdoptedId + 1;
+      this._ctx.sequence = maxAdoptedCursor + 1;
     }
 
+    // AN ADOPTION MINTS NOTHING (#482). `fromJSON` constructs every element it
+    // restores, and construction spends a counter value before the stored id
+    // overwrites the one it minted. A table's restore puts its counter back
+    // from the snapshot; an adoption has no snapshot to put it back from, so
+    // it puts back the value it started with. Left spent, every wake of a
+    // world burned one value per element it hydrated -- a hundred
+    // hydrations a second of a thousand elements each would spend a 32-bit
+    // id space in under twelve hours -- and the stamp a host persisted grew
+    // with every wake although nothing had been created.
+    const sequenceBeforeAdoption = this._ctx.sequence;
     const element = GameElement.fromJSON(json, this._ctx, this._ctx.classRegistry);
+    this._ctx.sequence = sequenceBeforeAdoption;
     element._t.parent = parent;
     element.game = this;
     parent._t.children.push(element);

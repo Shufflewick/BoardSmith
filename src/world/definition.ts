@@ -24,6 +24,7 @@
 import { DEFAULT_COLOR_PALETTE, Game, WORLD_PARTITION_ID_FLOOR } from "../engine/index.js";
 import type { ElementJSON, GameElement } from "../engine/index.js";
 import { constructGame } from "../engine/element/game.js";
+import { worldElementIds, type WorldElementIds } from "../engine/element/element-ids.js";
 import { BoardSmithWorldEngine } from "./engine.js";
 import type { WorldViewDeclaration } from "./engine.js";
 import type { ActionDefinition } from "../engine/index.js";
@@ -33,6 +34,10 @@ import type { StoredPartition } from "./contract.js";
 import { worldRefusal } from "./refusals.js";
 import { assertWorldMigration, type WorldMigration } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
+
+/** What a host calls ONCE, when it creates a world, for the key it then
+ *  stores with that world and passes on every wake (#482). */
+export { mintWorldElementIdKey } from "../engine/element/element-ids.js";
 
 /**
  * WHAT A WORLD BUNDLE EXPORTS ALONGSIDE ITS GAME CLASS.
@@ -752,34 +757,39 @@ function buildGenesis(
  * THE ALLOCATION STAMP AN OCCUPIED WORLD SHOULD HAVE (ShufflewickPub #377).
  *
  * The supported repair, and the only O(stored) step in the whole scheme: read
- * every partition the world holds, take the highest element id in any of them,
- * and the stamp is one above it. Run it ONCE -- when a world that predates the
- * stamp is first woken, or when a world's roots have already collided and are
- * being rewritten -- persist what it returns, and the world never pays for it
- * again.
+ * every partition the world holds, read each element id back to the counter
+ * value it was minted from with the world's `elementIdKey` (#482), and the
+ * stamp is one above the highest. Run it when the `allocation-stale` refusal
+ * proves a stamp wrong, persist what it returns, and the world never pays for
+ * it again.
  *
  * It reads BYTES, not a live tree: a host can answer this from storage without
  * hydrating anything into a game.
  */
 export function worldIdAllocationOf(
   stored: Iterable<StoredPartition | ElementJSON>,
+  elementIdKey: string,
 ): number {
+  // THE STAMP IS A COUNTER VALUE, AND AN ID IS NOT ONE (#482). Every stored id
+  // is read back to the counter value it was minted from, with the world's own
+  // key, and the stamp is one above the highest of those.
+  const ids = worldElementIds(elementIdKey);
   let highest = WORLD_PARTITION_ID_FLOOR - 1;
   for (const record of stored) {
     // `StoredPartition.json` is `unknown` to a host on purpose -- it never
     // parses a partition -- so the shape is asserted here, at the one place
     // that does read inside the bytes.
     const json = ("json" in record ? record.json : record) as ElementJSON;
-    highest = Math.max(highest, highestElementId(json));
+    highest = Math.max(highest, highestElementCursor(json, ids));
   }
   return highest + 1;
 }
 
-/** Every id in a serialized subtree, which is where a stored root's ids are. */
-function highestElementId(json: ElementJSON): number {
-  let highest = typeof json.id === "number" ? json.id : WORLD_PARTITION_ID_FLOOR - 1;
+/** The highest counter value any id in a serialized subtree was minted from. */
+function highestElementCursor(json: ElementJSON, ids: WorldElementIds): number {
+  let highest = typeof json.id === "number" ? ids.cursorOf(json.id) : WORLD_PARTITION_ID_FLOOR - 1;
   for (const child of json.children ?? []) {
-    highest = Math.max(highest, highestElementId(child));
+    highest = Math.max(highest, highestElementCursor(child, ids));
   }
   return highest;
 }
@@ -807,6 +817,7 @@ export interface WorldRunnerOptions {
     readonly gameClass: new (options: {
       playerCount: number;
       seed: string;
+      elementIdKey?: string;
       colors?: string[];
       worldMode?: boolean;
     }) => Game;
@@ -815,6 +826,24 @@ export interface WorldRunnerOptions {
   /** The world's seed. The same seed on every wake, or the world's randomness
    *  is a different world each time it is rebuilt. */
   readonly seed: string;
+  /**
+   * THE WORLD'S DURABLE ELEMENT ID KEY (#482): 24 lowercase hex digits.
+   *
+   * A world's element ids are the keyed cipher of its creation counter, so a
+   * seat cannot count the elements created where it cannot see them from the
+   * gaps in the ids it can. Mint it ONCE, when the world is created, with
+   * {@link mintWorldElementIdKey}; store it with the world, beside the
+   * allocation stamp; and pass the same key on every wake, exactly as the seed
+   * is. The engine never mints one for a world: every stored id is read back
+   * with this key, so a key minted on a wake would leave all of them
+   * unreadable.
+   *
+   * It is as secret as the world's stored partitions. Never send it to a
+   * client, and never accept one from a client: whoever holds it can read every
+   * id a seat sees back into the count of elements created anywhere in the
+   * world.
+   */
+  readonly elementIdKey: string;
   /** Who sits where, as the world is built. A world's roster is not fixed at
    *  construction -- players join a season already running -- so
    *  `WorldRunnerHandle.seat` adds to it. */
@@ -836,8 +865,9 @@ export interface WorldRunnerOptions {
    * one's identity. The instance that runs `genesis()` needs no stamp -- it
    * mints every id there is.
    *
-   * For a world that was already occupied before this existed, derive the stamp
-   * ONCE with {@link worldIdAllocationOf} over its stored partitions.
+   * It is a COUNTER value, never an id (#482). A stamp proved stale by the
+   * `allocation-stale` refusal is rederived with {@link worldIdAllocationOf}
+   * over the stored partitions and the world's key.
    */
   readonly nextElementId?: number;
 }
@@ -870,6 +900,33 @@ export interface WorldRunner {
    * once, in `worldVacateByClockAction`, rather than by each host.
    */
   readonly vacateByClock: string | null;
+}
+
+/**
+ * A WORLD IS NOT BUILT WITHOUT ITS HOST'S KEY (#482).
+ *
+ * Checked here rather than left to the game constructor so the refusal is a
+ * coded, platform-owned one a host can park on, and so it says what to do: a
+ * host that never stored a key has nothing to hand back, and the only repair
+ * is the one at world creation.
+ */
+function assertWorldElementIdKey(key: unknown): void {
+  if (typeof key === "string") {
+    try {
+      worldElementIds(key);
+      return;
+    } catch (error) {
+      throw worldRefusal("element-id-key-invalid", (error as Error).message);
+    }
+  }
+  throw worldRefusal(
+    "element-id-key-invalid",
+    "This world was built without its element id key (`elementIdKey`), so its ids could not be " +
+      "read back on the next wake. Mint one with `mintWorldElementIdKey()` when the world is " +
+      "created, store it with the world beside its allocation stamp, and pass the same key to " +
+      "`createWorld` on every wake. Never mint a new one for a world that already exists: its " +
+      "stored ids can only be read with the key they were minted under (#482).",
+  );
 }
 
 /**
@@ -918,6 +975,7 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
   const budgets = options.budgets ?? worldBudgets();
   const world = readWorldDefinition(options.definition);
   assertRulesShareThisEngine(options.definition.gameClass);
+  assertWorldElementIdKey(options.elementIdKey);
   // THE WORLD BLOCK'S OWN NUMBER. Not `definition.maxPlayers`: a table's roster
   // is a different fact, and a world game that has one at all is one #174 has
   // not reached yet.
@@ -931,6 +989,9 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
     const built = constructGame(options.definition.gameClass, {
       playerCount: seatCount,
       seed: options.seed,
+      // The SAME key for the live world and for a migration's source game
+      // (#275): an original's ids are the ids the live root already holds.
+      elementIdKey: options.elementIdKey,
       colors: worldColorPalette(seatCount),
       worldMode: true,
     });

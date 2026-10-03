@@ -96,6 +96,7 @@ import type {
   WorldMigrated,
   WorldSerialized,
 } from '../../world/runner.js';
+import { mintWorldElementIdKey } from '../../world/definition.js';
 import type { PlannedEvent } from '../../world/schedule-api.js';
 import type { WorldBudgets } from '../../world/budgets.js';
 import type { WorldReceipt } from '../../world/orders.js';
@@ -589,26 +590,23 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
 
     nextElementId(): number | undefined {
       const stored = meta(NEXT_ELEMENT_ID_KEY);
-      // UNDEFINED IS AN ANSWER (#377), and it is the one a world written before
-      // the stamp existed gives. The host repairs it from the stored bytes
-      // once, rather than this file inventing a number it cannot know.
+      // UNDEFINED IS AN ANSWER (#377): the world's genesis has not run, and
+      // genesis owns its own counter.
       return stored === undefined ? undefined : Number(stored);
     },
 
-    rekey({ partitions, events, nextElementId }): void {
-      const rows = Object.entries(partitions).map(([name, json]) => {
-        const known = stmt.knownParent.get(name) as { parent_id: number } | undefined;
-        if (!known) throw unknownPartition(name);
-        return { name, parentId: known.parent_id, json };
-      });
-      transact(() => {
-        writePartitions(rows);
-        writeEvents(events);
-        // THE STAMP MOVES WITH THE IDS (#377). A lift shifts every id in the
-        // world; a stamp left where it was would sit below them and hand the
-        // next mint an identity a lifted root already holds.
-        stmt.writeMeta.run(NEXT_ELEMENT_ID_KEY, String(nextElementId));
-      });
+    elementIdKey(): string {
+      const stored = meta(ELEMENT_ID_KEY_KEY);
+      // Written with the layout, in the transaction that created this store,
+      // so a layout-8 store without one is one no BoardSmith wrote.
+      if (stored === undefined) {
+        throw new Error(
+          `The local world store at ${path} has no element id key, which every store this ` +
+            `BoardSmith creates is given when it is created. Its world's ids cannot be read ` +
+            `without it: run \`boardsmith dev --reset\` to start this world again from genesis.`,
+        );
+      }
+      return stored;
     },
 
     migrate({ partitions, created, events, toStateVersion }): void {
@@ -814,6 +812,15 @@ const ENDED_AT_KEY = 'endedAt';
  */
 const NEXT_ELEMENT_ID_KEY = 'nextElementId';
 /**
+ * THE WORLD'S ELEMENT ID KEY (#482).
+ *
+ * Minted once, in the transaction that creates the store, and never written
+ * again: this host creates a world when it creates its store, and every id the
+ * world ever stores is read back with this key. It stays on this laptop -- the
+ * host reads it into the world it builds and sends it to no page.
+ */
+const ELEMENT_ID_KEY_KEY = 'elementIdKey';
+/**
  * WHEN THIS WORLD BEGAN RECORDING PER-SEAT ACTIVITY (ShufflewickPub #383).
  *
  * Written once, on the first open under a BoardSmith that has the field, and
@@ -829,36 +836,6 @@ const NEXT_ELEMENT_ID_KEY = 'nextElementId';
  */
 const ACTIVITY_SINCE_KEY = 'activitySince';
 const SCHEMA_VERSION_KEY = 'schemaVersion';
-
-/**
- * The one table layout 4 added, named apart because the upgrade from layout 3
- * writes exactly this and nothing else (#225). One definition, so a store this
- * code creates and a store it upgrades cannot end up with two shapes.
- */
-const SEAT_ACTIVITY_TABLE = `CREATE TABLE IF NOT EXISTS seat_activity (
-  seat INTEGER PRIMARY KEY,
-  at INTEGER NOT NULL
-);`;
-
-/**
- * The one table layout 6 added (#339), named apart for `SEAT_ACTIVITY_TABLE`'s
- * reason: the upgrade from layout 5 writes exactly this.
- */
-const PRESENCE_TOLD_TABLE = `CREATE TABLE IF NOT EXISTS presence_told (
-  seat INTEGER PRIMARY KEY,
-  closed_at INTEGER
-);`;
-
-/**
- * The one table layout 7 added (ShufflewickPub #521), named apart for
- * `SEAT_ACTIVITY_TABLE`'s reason: the upgrade from layout 6 writes exactly this.
- * One row per seat that has notices waiting; the box is the JSON
- * `WorldNoticeBox`, bounded by `perSeat x noticeMaxBytes`.
- */
-const NOTICE_BOXES_TABLE = `CREATE TABLE IF NOT EXISTS notice_boxes (
-  seat INTEGER PRIMARY KEY,
-  box TEXT NOT NULL
-);`;
 
 /**
  * The layout this file owns.
@@ -895,9 +872,20 @@ CREATE TABLE IF NOT EXISTS seats (
   seat INTEGER NOT NULL,
   seated_at INTEGER
 );
-${SEAT_ACTIVITY_TABLE}
-${PRESENCE_TOLD_TABLE}
-${NOTICE_BOXES_TABLE}
+CREATE TABLE IF NOT EXISTS seat_activity (
+  seat INTEGER PRIMARY KEY,
+  at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS presence_told (
+  seat INTEGER PRIMARY KEY,
+  closed_at INTEGER
+);
+-- One row per seat that has notices waiting (ShufflewickPub #521); the box is
+-- the JSON WorldNoticeBox, bounded by perSeat x noticeMaxBytes.
+CREATE TABLE IF NOT EXISTS notice_boxes (
+  seat INTEGER PRIMARY KEY,
+  box TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS receipts (
   player TEXT NOT NULL,
   order_id TEXT NOT NULL,
@@ -919,20 +907,23 @@ CREATE INDEX IF NOT EXISTS receipts_at ON receipts (at);
  * Silently READING a store this code does not understand stays forbidden -- an
  * upgrade is a deliberate, atomic rewrite, never a hopeful reinterpretation.
  */
-const SCHEMA_VERSION = '7';
+const SCHEMA_VERSION = '8';
 
 /**
  * THE LAYOUTS THIS CODE CAN CARRY A WORLD FORWARD FROM, and the step each one
  * takes.
  *
- * A CHAIN AND NOT A SINGLE SOURCE LAYOUT, because a world sitting on 3 has to
- * be able to reach the current layout: the alternative is telling an author whose store is two
- * upgrades old to reset it, which is offering to delete a world five hundred
- * seats deep. Each step is applied in order until the stamp is current.
+ * A CHAIN AND NOT A SINGLE SOURCE LAYOUT, because a world sitting two layouts
+ * back has to be able to reach the current layout: the alternative is telling
+ * an author whose store is two upgrades old to reset it, which is offering to
+ * delete a world five hundred seats deep. Each step is applied in order until
+ * the stamp is current.
  *
- * Layouts 1 and 2 are not upgradable, and are not pretended to be: nothing here
- * knows what their tables held, and a store opened on a guess is worse than one
- * refused.
+ * EMPTY SINCE LAYOUT 8 (#482). Every layout before 8 holds a world whose
+ * element ids are its bare creation counter, and layout 8's world reads every
+ * id back with a key: no step can carry those ids forward, so those layouts
+ * are refused with the reset, by name, rather than read. The next layout that
+ * only adds to this one gets a step here.
  */
 interface LayoutUpgrade {
   /** The stamp a store must carry for this step to be the next one. */
@@ -943,12 +934,10 @@ interface LayoutUpgrade {
   readonly apply: (db: SqliteDatabase) => void;
 }
 
-const LAYOUT_UPGRADES: readonly LayoutUpgrade[] = [
-  { from: '3', to: '4', apply: upgradeToLayout4 },
-  { from: '4', to: '5', apply: upgradeToLayout5 },
-  { from: '5', to: '6', apply: upgradeToLayout6 },
-  { from: '6', to: '7', apply: upgradeToLayout7 },
-];
+const LAYOUT_UPGRADES: readonly LayoutUpgrade[] = [];
+
+/** The first layout whose world's element ids are keyed (#482). */
+const FIRST_KEYED_LAYOUT = 8;
 
 /**
  * Bring the store at `db` to this file's layout, or refuse it whole.
@@ -979,6 +968,13 @@ export function prepareSchema(
       db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run(
         SCHEMA_VERSION_KEY,
         SCHEMA_VERSION,
+      );
+      // THE WORLD'S ID KEY, MINTED WHERE THE WORLD IS CREATED (#482), and in
+      // the same transaction as the layout, so no store this code writes is
+      // ever without one.
+      db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run(
+        ELEMENT_ID_KEY_KEY,
+        mintWorldElementIdKey(),
       );
     });
     return;
@@ -1021,76 +1017,6 @@ function storedLayout(db: SqliteDatabase): string | undefined {
 }
 
 /**
- * LAYOUT 3 TO LAYOUT 4: the seat activity table, and the stamp that says so.
- *
- * The whole of the difference between the two (`36d723d6`) is this one table.
- * Nothing else is touched, so every partition, dirty mark, seat, queued event,
- * receipt and meta row is carried forward by not being written at all -- which
- * is the strongest form the guarantee can take.
- *
- * IN ONE TRANSACTION with the stamp, and SQLite makes that real for DDL too. A
- * store stamped 4 with no table would be read wrong by every later open, and a
- * table with no stamp would be upgraded again on the next one.
- *
- * `IF NOT EXISTS` because the BoardSmith this issue was filed against created
- * the table BEFORE it read the layout: a world that was refused once is already
- * sitting on layout 3 with an empty one, and that store still has to be able to
- * finish its upgrade. The seat history it is short is not invented here -- the
- * epoch `activitySince` fixes on this open is what an upgraded world measures
- * its seats from, so they are idle since the upgrade rather than since 1970.
- */
-function upgradeToLayout4(db: SqliteDatabase): void {
-  transactOn(db, () => {
-    db.exec(SEAT_ACTIVITY_TABLE);
-    db.prepare('UPDATE meta SET value = ? WHERE key = ?').run('4', SCHEMA_VERSION_KEY);
-  });
-}
-
-/**
- * LAYOUT 4 TO LAYOUT 5: when each chair was granted (ShufflewickPub #423).
- *
- * One nullable column on `seats`, and the null is the honest answer rather than
- * a backfill: this store does not know when a chair it already held was handed
- * out, and a guessed instant is a floor somebody's empire is measured against.
- * A null chair falls back to the world's own recording epoch, which is exactly
- * where an already-seated player was measured from before this column existed.
- */
-function upgradeToLayout5(db: SqliteDatabase): void {
-  transactOn(db, () => {
-    db.exec('ALTER TABLE seats ADD COLUMN seated_at INTEGER');
-    db.prepare('UPDATE meta SET value = ? WHERE key = ?').run('5', SCHEMA_VERSION_KEY);
-  });
-}
-
-/**
- * LAYOUT 5 TO LAYOUT 6: the presence ledger (#339).
- *
- * One new table, and empty is the honest answer: a store written before the
- * ledger existed kept no record of what the world was told, so the host's
- * start reconciles from nobody told present, and every seat's next page is an
- * arrival, as it was under layout 5.
- */
-function upgradeToLayout6(db: SqliteDatabase): void {
-  transactOn(db, () => {
-    db.exec(PRESENCE_TOLD_TABLE);
-    db.prepare('UPDATE meta SET value = ? WHERE key = ?').run('6', SCHEMA_VERSION_KEY);
-  });
-}
-
-/**
- * LAYOUT 6 TO LAYOUT 7: the seats' notice boxes (ShufflewickPub #521).
- *
- * One new table, and empty is the honest answer: nothing could leave a notice
- * under a layout that had nowhere to keep one.
- */
-function upgradeToLayout7(db: SqliteDatabase): void {
-  transactOn(db, () => {
-    db.exec(NOTICE_BOXES_TABLE);
-    db.prepare('UPDATE meta SET value = ? WHERE key = ?').run('7', SCHEMA_VERSION_KEY);
-  });
-}
-
-/**
  * An upgrade that did not leave the stamp it promised, said so that the author
  * keeps their world and we get told about it.
  *
@@ -1119,13 +1045,20 @@ function upgradeLeftWrongStamp(
  *  that layout's world across. */
 function unreadableLayout(stored: string, path: string): Error {
   const ahead = Number(stored) > Number(SCHEMA_VERSION);
+  const unkeyed = !ahead && Number(stored) < FIRST_KEYED_LAYOUT;
   return new Error(
     `The local world store at ${path} was written by BoardSmith's world store layout ` +
       `${stored}, and this BoardSmith reads layout ${SCHEMA_VERSION}. ` +
       (ahead
         ? `It was written by a newer BoardSmith than this one: update BoardSmith to open this ` +
           `world, rather than moving it backwards onto rules that would read it wrong.`
-        : `There is no upgrade from layout ${stored}: run \`boardsmith dev --reset\` to start ` +
+        : (unkeyed
+            ? `That world's element ids are its bare creation counter, which let a seat count ` +
+              `the elements created where it could not see them; this BoardSmith keys every ` +
+              `world's ids with a secret kept in its store (#482), and an unkeyed world cannot ` +
+              `be carried across. `
+            : '') +
+          `There is no upgrade from layout ${stored}: run \`boardsmith dev --reset\` to start ` +
           `this world again from genesis, or move the directory aside if you want to keep it.`),
   );
 }
