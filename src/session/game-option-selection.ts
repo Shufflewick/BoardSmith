@@ -56,9 +56,10 @@ export type GameOptionSelection = Readonly<Record<string, unknown>> & { readonly
  * Refuse a game's option declarations if one is named for a field the host
  * owns, or is a number option whose `min`, `max` or `step` no value could
  * satisfy (not a finite number, `min` above `max`, a `step` that is not
- * positive). Such an option could never be chosen, so the game is wrong, not
- * the player; this says so when the game is loaded rather than at its first
- * lobby.
+ * positive), or whose `default` those bounds would refuse. Such an option
+ * could never be chosen, or would start a lobby on a value the player is then
+ * refused, so the game is wrong, not the player; this says so when the game
+ * is loaded rather than at its first lobby.
  */
 export function assertDeclarableGameOptions(declared: Record<string, GameOptionDefinition> | undefined): void {
   if (!declared) return;
@@ -74,7 +75,7 @@ export function assertDeclarableGameOptions(declared: Record<string, GameOptionD
 }
 
 function assertDeclarableBounds(name: string, def: NumberOption): void {
-  for (const field of ['min', 'max', 'step'] as const) {
+  for (const field of ['min', 'max', 'step', 'default'] as const) {
     const value: unknown = def[field];
     if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value))) {
       throw new Error(
@@ -95,6 +96,13 @@ function assertDeclarableBounds(name: string, def: NumberOption): void {
         `Give a positive step or leave it out.`,
     );
   }
+  const problem = def.default === undefined ? undefined : numberBoundsProblem(def, def.default);
+  if (problem !== undefined) {
+    throw new Error(
+      `This game declares number option "${name}" with default ${def.default}, but the option ` +
+        `must be ${problem}. Correct the default or the bounds.`,
+    );
+  }
 }
 
 /** A number as a person would write it, without binary rounding noise (0.30000000000000004 is 0.3). */
@@ -103,33 +111,34 @@ function plain(n: number): string {
 }
 
 /**
- * Refuse a number outside the option's declared range or off its step. The
- * step counts from `min`, or from 0 when there is no `min`, as an HTML number
- * input counts it, so the lobby's spinner and this check agree on what is
- * reachable. A fractional step is compared with a tolerance, since 0.3 is not
- * an exact multiple of 0.1 in binary.
+ * What a number option admits, said for a message, if `n` is outside the
+ * option's declared range or off its step; `undefined` if `n` is admitted.
+ *
+ * The step counts from `min`, or from 0 when there is no `min`, as an HTML
+ * number input counts it, so the lobby's spinner and this check agree on what
+ * is reachable; a `max` that is off the step can therefore never be chosen.
+ * `n` is compared with the nearest step value it rounds to, within a tolerance
+ * that does not grow with the distance from the base (0.3 is not an exact
+ * multiple of 0.1 in binary, but 1000000001 is plainly not a multiple of 2).
  */
-function checkNumberBounds(name: string, def: NumberOption, n: number): void {
+function numberBoundsProblem(def: NumberOption, n: number): string | undefined {
   const { min, max, step } = def;
   if ((min !== undefined && n < min) || (max !== undefined && n > max)) {
-    const range =
-      min !== undefined && max !== undefined
-        ? `between ${plain(min)} and ${plain(max)}`
-        : min !== undefined
-          ? `at least ${plain(min)}`
-          : `at most ${plain(max as number)}`;
-    throw new GameOptionSelectionError(`Game option "${name}" must be ${range}, got ${plain(n)}.`);
+    return min !== undefined && max !== undefined
+      ? `between ${plain(min)} and ${plain(max)}`
+      : min !== undefined
+        ? `at least ${plain(min)}`
+        : `at most ${plain(max as number)}`;
   }
   if (step !== undefined) {
     const base = min ?? 0;
-    const steps = (n - base) / step;
-    if (Math.abs(steps - Math.round(steps)) > 1e-9 * Math.max(1, Math.abs(steps))) {
+    const k = Math.round((n - base) / step);
+    if (Math.abs(n - (base + k * step)) > Math.max(step * 1e-9, Math.abs(n) * 1e-12)) {
       const examples = [0, 1, 2].map((i) => plain(base + i * step)).join(', ');
-      throw new GameOptionSelectionError(
-        `Game option "${name}" must be in steps of ${plain(step)} from ${plain(base)} (${examples}, ...), got ${plain(n)}.`,
-      );
+      return `in steps of ${plain(step)} from ${plain(base)} (${examples}, ...)`;
     }
   }
+  return undefined;
 }
 
 function coerce(name: string, def: GameOptionDefinition, raw: unknown): unknown {
@@ -142,7 +151,10 @@ function coerce(name: string, def: GameOptionDefinition, raw: unknown): unknown 
       if (typeof n !== 'number' || !Number.isFinite(n)) {
         throw new GameOptionSelectionError(`Game option "${name}" must be a number, got ${JSON.stringify(raw)}.`);
       }
-      checkNumberBounds(name, def, n);
+      const problem = numberBoundsProblem(def, n);
+      if (problem !== undefined) {
+        throw new GameOptionSelectionError(`Game option "${name}" must be ${problem}, got ${n}.`);
+      }
       return n;
     }
     case 'boolean': {
