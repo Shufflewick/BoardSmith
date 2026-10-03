@@ -1112,7 +1112,11 @@ board:
   the action's name over the chosen items and wraps the prompt beside its
   control), and on a step with more than fits, it scrolls inside the strip
   rather than growing over the board. So a board that fits itself above the
-  strip is never covered, at rest or mid-pick.
+  strip is never covered, at rest or mid-pick. The one exception is a
+  multi-line text box (`multiline: true` on a text pick): while it is open the
+  panel may grow to five rows over the bottom of the board, because six rows
+  of text cannot be written in two. Your board still does not refit, and the
+  panel returns to the strip as soon as the box closes.
 
 Do **not** try to measure the Action Panel from a custom board, and do not size
 your board against a panel height — there is no such value to read. If your

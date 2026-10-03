@@ -681,6 +681,14 @@ const mobileToggleLabel = computed(() => {
   --bsg-panel-reserved: calc(2 * var(--bsg-panel-row) + var(--bsg-panel-gap)
                              + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom));
 
+  /* The ONE exception to that cap: a multi-line text editor (#229, #237) needs
+     six rows of text plus its count and submit, so while one is open the bar may
+     grow to five rows and cover part of the board. The board does not refit --
+     the reservation above is untouched -- and the cap returns when it closes.
+     See `.actionbar:has([data-bs-grows-panel])`. */
+  --bsg-panel-editor-max: calc(5 * var(--bsg-panel-row) + 4 * var(--bsg-panel-gap)
+                               + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom));
+
   /* The bar put down (#230): ONE control row, because the row it keeps carries
      the ⋯ menu, and in platform mode that menu is the player's only control
      surface. Derived from the same row and padding tokens as everything above,
@@ -891,6 +899,15 @@ const mobileToggleLabel = computed(() => {
   box-sizing: border-box;
   max-height: var(--bsg-panel-reserved);
   overflow-y: auto;
+}
+
+/* While a multi-line text editor is open, and only then, the bar may grow past
+   the strip (see --bsg-panel-editor-max). Keyed on the editor's own mark, so the
+   exception lives exactly as long as the editor's DOM: submitting, cancelling or
+   putting the bar down all unmount it and the strip cap is back. `max()` so a
+   short-screen ceiling can never cap the bar below the strip itself. */
+.actionbar:has([data-bs-grows-panel]) {
+  max-height: max(var(--bsg-panel-reserved), var(--bsg-panel-editor-max));
 }
 
 /* Down: one row that must NOT wrap. A wrapped "collapsed" bar would be taller
@@ -1155,6 +1172,8 @@ const mobileToggleLabel = computed(() => {
     /* One row on a short screen: vertical space is the scarce axis here. */
     --bsg-panel-reserved: calc(var(--bsg-panel-row) + 2 * var(--bsg-panel-pad)
                                + env(safe-area-inset-bottom));
+    /* A typed editor's ceiling, scaled to the short screen. */
+    --bsg-panel-editor-max: min(22dvh, 120px);
   }
 
   .actionbar {

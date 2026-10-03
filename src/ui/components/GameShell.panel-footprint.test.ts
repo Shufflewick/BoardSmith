@@ -15,6 +15,8 @@
  *      the reserved strip and never refits (#13), so a panel taller than the strip
  *      would cover the bottom of a board that fitted itself correctly. The panel
  *      lays out inside the strip and, only as a last resort, scrolls inside it.
+ *      The one exception, a multi-line text editor that may grow the bar while
+ *      it is open, is held in ActionPanel.editor-grows-panel.test.ts.
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
