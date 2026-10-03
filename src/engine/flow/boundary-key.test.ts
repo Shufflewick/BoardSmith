@@ -171,6 +171,7 @@ describe('flowBoundaryKey', () => {
       session.host.snapshot,
       null,
       { type: 'debugFlowState', player: 1 },
+      { debug: true },
     );
     expect(restored.success).toBe(true);
 

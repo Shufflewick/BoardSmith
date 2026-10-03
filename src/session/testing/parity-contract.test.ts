@@ -139,6 +139,7 @@ function newStatefulSession() {
     playerCount: 2,
     playerNames: ['A', 'B'],
     seed: 't',
+    debugEnabled: true,
   });
 }
 
@@ -282,6 +283,7 @@ function newExecuteBarrierStatefulSession() {
     playerCount: 1,
     playerNames: ['A'],
     seed: 't',
+    debugEnabled: true,
   });
 }
 
@@ -401,6 +403,7 @@ function newSimultaneousStatefulSession() {
     playerCount: 2,
     playerNames: ['A', 'B'],
     seed: 't',
+    debugEnabled: true,
   });
 }
 

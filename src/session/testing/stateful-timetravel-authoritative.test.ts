@@ -47,6 +47,7 @@ async function buildSessionWithCollectedItem() {
     playerCount: 2,
     playerNames: ['A', 'B'],
     seed: 't',
+    debugEnabled: true,
   });
 
   // Turn 1 (player 1): explore, then collect one item into held-1.
@@ -134,6 +135,7 @@ describe('stateful time-travel across a pending mutation', () => {
       playerCount: 2,
       playerNames: ['A', 'B'],
       seed: 't',
+      debugEnabled: true,
     });
 
     // Turn 1 (player 1): explore, then collect one item into held-1 (action

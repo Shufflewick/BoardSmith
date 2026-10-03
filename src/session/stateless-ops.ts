@@ -36,6 +36,7 @@ import {
   assertUndoAllowed,
   UndoRefusedError,
   decideUndo,
+  debuggingOffMessage,
 } from './utils.js';
 
 // ---------------------------------------------------------------------------
@@ -171,6 +172,29 @@ const SUBMISSION_OP_TYPE_MAP: Record<SubmissionOpType, true> = {
 export const SUBMISSION_OP_TYPES: ReadonlySet<Op['type']> = new Set(
   Object.keys(SUBMISSION_OP_TYPE_MAP) as SubmissionOpType[],
 );
+
+/** Every debug op: the op types whose name starts with `debug`. */
+export type DebugOpType = Extract<Op['type'], `debug${string}`>;
+
+/**
+ * The debug ops, enumerated ONCE (#481). Each runs only when the host turns
+ * debugging on (`executeOp`'s `hostOptions.debug`, `SnapshotSessionHost`'s
+ * `debug` adapter). The `Record` makes the list exhaustive: an op named
+ * `debug…` that is missing here is a compile error, so a new debug op cannot
+ * slip past the gate.
+ */
+const DEBUG_OP_TYPE_MAP: Record<DebugOpType, true> = {
+  debugHistory: true,
+  debugStateAt: true,
+  debugStateDiff: true,
+  debugActionTraces: true,
+  debugFlowState: true,
+  debugRewind: true,
+  debugReorder: true,
+  debugTransfer: true,
+  debugShuffle: true,
+};
+export const DEBUG_OP_TYPES: ReadonlySet<Op['type']> = new Set(Object.keys(DEBUG_OP_TYPE_MAP) as DebugOpType[]);
 
 /** The read-only debug ops — reported without mutating or broadcasting state. */
 export const READ_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set([
@@ -450,6 +474,28 @@ function errorResult(
     isComplete: false,
     winners: [],
   };
+}
+
+/**
+ * The refusal for a debug op that may not run, or null when it may (#481).
+ * Every host asks this one question, so they cannot disagree about the answer.
+ *
+ * @param debug - whether the host turned debugging on for this session
+ * @param askingSeat - the seat that sent the op, when the caller knows it. A
+ *   debug op that reports a seat's view (it names a `player`) is refused unless
+ *   that `player` is the asking seat, so no seat can read another seat's view.
+ */
+export function debugOpRefusal(op: Op, debug: boolean, askingSeat?: number): OpResult | null {
+  if (!DEBUG_OP_TYPES.has(op.type)) return null;
+  if (!debug) return errorResult(debuggingOffMessage(op.type), 'protocol');
+  if (askingSeat !== undefined && 'player' in op && op.player !== askingSeat) {
+    return errorResult(
+      `Seat ${askingSeat} asked for seat ${op.player}'s view with '${op.type}', and was refused. ` +
+        'A debug view shows only the seat that asks for it; switch to that seat to see its view.',
+      'protocol',
+    );
+  }
+  return null;
 }
 
 /**
@@ -1380,6 +1426,12 @@ function handleDebugCommand(
  *                       mints a new seed). An order-entry session is normally
  *                       paired with `seedSnapshot`: a fresh start whose setup
  *                       shuffles would (correctly) fail here.
+ *                       `debug: true` (#481) allows the debug ops
+ *                       (`DEBUG_OP_TYPES`); without it each is refused. The
+ *                       executor cannot tell which seat asked, so a host that
+ *                       allows debug ops must itself make sure a seat-view op's
+ *                       `player` is the asking seat, as `SnapshotSessionHost`
+ *                       does.
  */
 export async function executeOp(
   definition: GameDefinitionLike,
@@ -1391,9 +1443,15 @@ export async function executeOp(
     teachingDisabled?: boolean;
     seedSnapshot?: GameStateSnapshot;
     randomness?: RandomnessPolicy;
+    debug?: boolean;
   } | null,
 ): Promise<OpResult> {
   try {
+    // #481: debug ops read every seat's history and edit the game outside its
+    // rules, so they are refused unless the host turns debugging on. Off is the
+    // default: a host that says nothing gets no debug ops.
+    const debugRefused = debugOpRefusal(op, hostOptions?.debug === true);
+    if (debugRefused) return debugRefused;
     const teachingDisabled = hostOptions?.teachingDisabled ?? false;
     // Written unconditionally from hostOptions, never read off the bundle: the
     // host is the sole authority on whether this session may draw, and every

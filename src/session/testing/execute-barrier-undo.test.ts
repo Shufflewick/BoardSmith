@@ -117,6 +117,7 @@ describe('UNDO-02 execute-barrier (stateful)', () => {
       playerCount: 1,
       playerNames: ['A'],
       seed: 't',
+      debugEnabled: true,
     });
   }
 
@@ -213,6 +214,7 @@ describe('UNDO-02: a bookkeeping (unmarked) execute() does not fence undo', () =
       playerCount: 1,
       playerNames: ['A'],
       seed: 't',
+      debugEnabled: true,
     });
 
     await session.performAction('act1', 1, {});

@@ -22,10 +22,15 @@ import { resolveWsCtor } from './ws-ctor.js';
  */
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 
-/** One seat's lobby info, mirroring `multiplayer-host.ts`'s `SeatInfo`. */
+/**
+ * One seat's lobby info, mirroring `multiplayer-host.ts`'s `LobbySeat`. The
+ * host never says who holds a seat, only whether one is held and whether it
+ * is yours (#481).
+ */
 export interface DevHostSeatInfo {
   seat: number;
-  clientId: string | null;
+  held: boolean;
+  mine: boolean;
   name: string;
   color?: string;
   connected: boolean;
@@ -33,6 +38,8 @@ export interface DevHostSeatInfo {
 
 /** Reply shape for `getLobby()` — same fields as the `lobby` broadcast, minus wire framing. */
 export interface DevHostLobbyReply {
+  /** Whether debugging is on for this table (#481). */
+  debug: boolean;
   phase: 'lobby' | 'playing';
   seats: DevHostSeatInfo[];
   minPlayers: number;
@@ -286,6 +293,7 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
       const msg = await requestWithId({ type: 'getLobby', requestId }, requestId);
       expectType(msg, 'lobby');
       return {
+        debug: msg.debug === true,
         phase: msg.phase as 'lobby' | 'playing',
         seats: msg.seats as DevHostSeatInfo[],
         minPlayers: msg.minPlayers as number,

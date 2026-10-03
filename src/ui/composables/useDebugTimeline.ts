@@ -19,8 +19,6 @@ import type { DebugBridge, ElementDiff, SerializedAction } from './useDebugBridg
 export interface DebugTimelineOptions {
   /** How the panel talks to the running game. */
   bridge: DebugBridge;
-  /** The viewing seat, whose view of historical state is fetched. */
-  playerSeat: Ref<number>;
   /**
    * Called whenever the pointer moves. `state` is `null` at the live head, and
    * so are `actionIndex` and `diff` — that triple is how the shell is told to
@@ -91,7 +89,7 @@ export interface DebugTimeline {
 }
 
 export function useDebugTimeline(options: DebugTimelineOptions): DebugTimeline {
-  const { bridge, playerSeat, onTimeTravel } = options;
+  const { bridge, onTimeTravel } = options;
 
   const actionHistory = ref<SerializedAction[]>([]);
   const historyLoading = ref(false);
@@ -144,9 +142,9 @@ export function useDebugTimeline(options: DebugTimelineOptions): DebugTimeline {
       // The state and the diff that produced it are independent reads, so they
       // go out together. Action 0 has no predecessor to diff against.
       const [state, diff] = await Promise.all([
-        bridge.stateAt(actionIndex, playerSeat.value),
+        bridge.stateAt(actionIndex),
         actionIndex > 0
-          ? bridge.stateDiff(actionIndex - 1, actionIndex, playerSeat.value)
+          ? bridge.stateDiff(actionIndex - 1, actionIndex)
           : Promise.resolve(null),
       ]);
 
