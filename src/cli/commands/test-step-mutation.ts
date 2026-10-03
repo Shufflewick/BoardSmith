@@ -662,15 +662,21 @@ function survivorFindings(
 
 /** What a surviving test of a `none (regression)` row was tried against, and what to do. */
 function pinSurvivorDetail(file: ChunkTestFile, mutants: number): string {
+  const fix = 'Import the game module whose behaviour it pins, run it, and assert what it does.';
   if (file.loads!.length === 0) {
     return (
       `${file.path} pins earlier behaviour (its row is none (regression)), but it loads no game code from src/ by a ` +
-      'relative import, so no break of the game can reach it and nothing shows it can fail. Import the game module ' +
-      'whose behaviour it pins, run it, and assert what it does.'
+      `relative import, so no break of the game can reach it and nothing shows it can fail. ${fix}`
     );
   }
   const modules = file.loads!.map((m) => m.path);
   const named = modules.length > 3 ? `${modules.slice(0, 3).join(', ')} and ${modules.length - 3} more` : modules.join(', ');
+  if (mutants === 0) {
+    return (
+      `${file.path} pins earlier behaviour (its row is none (regression)), but the game code it loads (${named}) has ` +
+      `nothing a mutant can change, so nothing shows it can fail. ${fix}`
+    );
+  }
   return (
     `This test passed under every one of ${mutants} small breaks of the game code it loads (${named}; at most ` +
     `${PIN_MUTANT_CAP}, spread across those modules, nearest first), so it cannot fail when that code is wrong. ` +

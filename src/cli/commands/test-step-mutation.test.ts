@@ -332,6 +332,15 @@ it('a higher offer still wins', () => { expect(bid(3, 4)).toBe(true); expect(bid
       expect(await fs.readFile(join(project, 'src/rules.ts'), 'utf-8')).toBe(RULES);
     }, 60_000);
 
+    it('says so when the game code a pin loads has nothing a mutant can change', async () => {
+      const { result } = await pinCheck(
+        `import { it, expect } from 'vitest';\nimport { noop } from '../src/rules';\nit('noop exists', () => { expect(typeof noop).toBe('function'); });\n`,
+        'export function noop(): void {}\n',
+      );
+      expect(result.findings.map((f) => f.kind)).toEqual(['test-survives-mutation']);
+      expect(result.findings[0].detail).toMatch(/src\/rules\.ts[^]*nothing a mutant can change[^]*Import the game module/);
+    }, 60_000);
+
     it('reports a pin no break of that code can fail, naming the code it was tried against', async () => {
       const { result } = await pinCheck(`import { it, expect } from 'vitest';
 import { bid } from '../src/rules';
