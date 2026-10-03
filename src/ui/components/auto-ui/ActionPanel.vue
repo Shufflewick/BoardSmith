@@ -3111,8 +3111,14 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
    second. The ✕ controls keep their 24px targets (WCAG 2.5.8) but lend part of
    them to the space around, so the two stacked lines fit one 44px row. Content
    that still does not fit scrolls inside the bar. Same breakpoint as the shell's
-   compact tier (BREAKPOINTS.compact). */
-@media (max-width: 639px) {
+   compact tier (BREAKPOINTS.compact).
+
+   Short landscape screens get the same layout (#486): the strip there is ONE
+   row and the board never refits, and at 844px wide the sentence flow put the
+   board handoff on a second row. Stacked context, wrapping prompt and compact
+   handoff make the pick one row. The prompt wraps and is never cut short: it
+   carries rules text. Same query as the shell's short-landscape tier. */
+@media (max-width: 639px), (orientation: landscape) and (max-height: 600px) {
   .config-context {
     display: flex;
     flex-direction: column;

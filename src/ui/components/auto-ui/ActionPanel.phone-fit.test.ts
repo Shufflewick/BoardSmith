@@ -33,9 +33,15 @@ const SOURCE = fs.readFileSync(
 );
 const STYLE = SOURCE.slice(SOURCE.indexOf('<style scoped>'));
 
-/** The phone-width media block of the panel's stylesheet. */
+/** The shell's short-landscape tier, where the strip is ONE row (PlayShell). */
+const SHORT_LANDSCAPE = '(orientation: landscape) and (max-height: 600px)';
+
+/**
+ * The compact media block of the panel's stylesheet: phone width, and short
+ * landscape screens (#486), one block so the two cannot drift apart.
+ */
 function phoneBlock(): string {
-  const query = `@media (max-width: ${BREAKPOINTS.compact - 1}px) {`;
+  const query = `@media (max-width: ${BREAKPOINTS.compact - 1}px), ${SHORT_LANDSCAPE} {`;
   const at = STYLE.indexOf(query);
   expect(at, `ActionPanel.vue has no ${query} block`).toBeGreaterThan(-1);
   return STYLE.slice(at, STYLE.indexOf('\n}\n', at));
@@ -123,5 +129,21 @@ describe('#444: the action buttons fit two rows at phone width', () => {
     expect(btn).toMatch(/padding:/);
     expect(btn).not.toMatch(/min-height/);
     expect(baseRule('.action-btn')).toMatch(/min-height:\s*44px;/);
+  });
+});
+
+describe('#486: a short landscape screen gets the same compact layout', () => {
+  it('applies the compact block where the strip is one row, so a pick after a choice fits it', () => {
+    // At 844x390 the sentence flow put "Choose on the board" on a second row of
+    // a one-row strip, and the bar scrolled. The stacked context and the
+    // wrapping prompt and handoff are what make it one row.
+    const block = phoneBlock();
+    expect(rule(block, '.config-context')).toMatch(/flex-direction:\s*column;/);
+    expect(rule(block, '.board-handoff-btn')).toMatch(/white-space:\s*normal;/);
+  });
+
+  it('never cuts the prompt short: it carries rules text the player must read', () => {
+    const prompt = rule(phoneBlock(), '.selection-input > .selection-prompt');
+    expect(prompt).not.toMatch(/text-overflow|overflow:\s*hidden|line-clamp/);
   });
 });

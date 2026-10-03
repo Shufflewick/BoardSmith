@@ -337,7 +337,9 @@ async function drive({ launch, hostUrl }) {
     }
 
     for (const viewport of [{ width: 375, height: 812 }, { width: 844, height: 390 }]) {
-      await pickAfterAChoice(browser, hostUrl, viewport);
+      for (const colorScheme of ['light', 'dark']) {
+        await pickAfterAChoice(browser, hostUrl, viewport, colorScheme);
+      }
     }
   } finally {
     await browser.close();
@@ -353,11 +355,12 @@ async function drive({ launch, hostUrl }) {
  * landscape screen: the bar's top edge sits at or below the strip the board
  * region reserves (its padding-bottom), and nothing scrolls inside the bar.
  * Before #444 the bar grew up to five rows over a board that had fitted itself
- * above two, and covered the bottom of it.
+ * above two, and covered the bottom of it. Run in both colour schemes, which
+ * proves the layout holds in each, not that either looks right.
  */
-async function pickAfterAChoice(browser, hostUrl, viewport) {
-  const size = `${viewport.width}x${viewport.height}`;
-  const context = await browser.newContext({ viewport });
+async function pickAfterAChoice(browser, hostUrl, viewport, colorScheme) {
+  const size = `${viewport.width}x${viewport.height} ${colorScheme}`;
+  const context = await browser.newContext({ viewport, colorScheme });
   try {
     const page = await context.newPage();
     await page.goto(hostUrl);
