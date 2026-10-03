@@ -31,13 +31,14 @@ async function hintedSession() {
   return { session, captured };
 }
 
-function makeSession() {
+function makeSession(options: { debugEnabled?: boolean } = {}) {
   const session = GameSession.create({
     gameType: 'teaching-test',
     GameClass: TeachingTestGame,
     playerCount: 2,
     playerNames: ['Alice', 'Bob'],
     seed: 'test',
+    ...options,
   });
   return session;
 }
@@ -175,7 +176,8 @@ describe('teaching state — requestHint / clearHint', () => {
 describe('teaching state — clear-on-replace', () => {
   // After requestHint + undo, stale hint must be gone.
   it('replacing the runner (a rewind) clears a stale hint from the broadcast state', async () => {
-    const session = makeSession();
+    // A rewind is a debug op, refused unless debugging is on (#481).
+    const session = makeSession({ debugEnabled: true });
     const captured: CapturedState[] = [];
     const broadcaster = makeMockBroadcaster(
       [{ playerSeat: 2, isSpectator: false }],
