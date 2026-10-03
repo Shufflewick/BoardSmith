@@ -1,5 +1,5 @@
 {
-  "revision": 122,
+  "revision": 123,
   "bundleProtocol": 2,
   "surfaceHash": "a5e66c593812b04b",
   "payloadHash": "f4cad95eb3f47e1f",
@@ -1042,6 +1042,15 @@
       "payloadHash": "f4cad95eb3f47e1f",
       "formatHash": "0058593e7cc80205",
       "summary": "The seeded RNG is now ChaCha20 keyed by SHA-256 of the whole seed (#483), replacing mulberry32 on a 32-bit fold of it: every seed deals a different game from before, snapshot.randomState and action-checkpoint randomState are now a string (\"chacha20:<key>:<position>\") instead of a number, and setRandomState refuses a numeric state, so a game saved on an earlier engine cannot be continued after re-vendoring. The payload fingerprint now also covers the stored random state and the draws it gives. A game, session, MCTS bot or dev-host table started without a seed now gets a 128-bit seed from crypto.getRandomValues instead of Math.random, a non-string seed is refused, and randomState is required on snapshots and checkpoints."
+    },
+    {
+      "revision": 123,
+      "date": "2026-10-03",
+      "bundleProtocol": 2,
+      "surfaceHash": "a5e66c593812b04b",
+      "payloadHash": "f4cad95eb3f47e1f",
+      "formatHash": "0058593e7cc80205",
+      "summary": "selectGameOptions now refuses a number game option outside its declared min/max or off its step (counted from min, or 0), naming the option and its allowed range; a game declaring a non-finite bound, min above max, a non-positive step, or a default its own bounds refuse is refused when loaded. Re-vendor so a host cannot start a game with, say, rounds: 1000 against max: 10."
     }
   ]
 }
