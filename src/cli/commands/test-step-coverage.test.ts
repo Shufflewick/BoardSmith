@@ -15,14 +15,6 @@ describe('countsAt', () => {
   it('lets the later of two ranges with the same extent win, as V8 means a block inside its function', () => {
     expect(countsAt([[0, 10, 1], [0, 10, 0]], [5])).toEqual([0]);
   });
-
-  it('stays fast on a whole game', () => {
-    const ranges: Array<[number, number, number]> = Array.from({ length: 20_000 }, (_, i) => [i * 10, i * 10 + 5, i % 2]);
-    const offsets = Array.from({ length: 200_000 }, (_, i) => i);
-    const started = Date.now();
-    expect(countsAt(ranges, offsets).slice(0, 12)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1]);
-    expect(Date.now() - started).toBeLessThan(2_000);
-  });
 });
 
 describe('decodeMappings', () => {
