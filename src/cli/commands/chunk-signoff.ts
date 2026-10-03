@@ -716,19 +716,25 @@ function signedFileEdits(
   return { sharedEdits, unaccounted };
 }
 
+/** A file a sign-off names whose edit since nothing accounts for, and its content hash at sign-off. */
+interface UnaccountedEdit {
+  path: string;
+  signed: string;
+}
+
 /**
  * For each verified chunk with a recorded sign-off, the files it names whose edit since nothing
  * accounts for (#396): the files that void it. `chunk-merge` reads this to find a test-runner config
  * it can vouch for (#479). Read-only.
  */
-export async function unaccountedEdits(projectDir: string): Promise<Map<string, string[]>> {
+export async function unaccountedEdits(projectDir: string): Promise<Map<string, UnaccountedEdit[]>> {
   const project = await readProjectState(resolve(projectDir));
-  const result = new Map<string, string[]>();
+  const result = new Map<string, UnaccountedEdit[]>();
   for (const chunk of project.chunks) {
     const record = chunk.parsed.record;
     if (!chunk.status.startsWith(VERIFIED) || !record) continue;
     const { unaccounted } = signedFileEdits(chunk, record, project);
-    if (unaccounted.length) result.set(chunk.slug, unaccounted);
+    if (unaccounted.length) result.set(chunk.slug, unaccounted.map((path) => ({ path, signed: record.code[path] })));
   }
   return result;
 }

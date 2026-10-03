@@ -6,6 +6,7 @@ import {
   allocateProvisional,
   plainNumbersAdded,
   provisionalReferences,
+  unreadableShorthand,
 } from './ledger-allocation.js';
 
 /**
@@ -292,5 +293,13 @@ describe('shorthand ids and ranges after a provisional id (#446)', () => {
     const result = allocate({ 'design/RULINGS.md': rulings('1'), 'design/notes.md': text });
     expect(result.problems).toEqual([]);
     expect(result.files['design/notes.md']).toBe('Rulings 1 to 3 hold. Ruling 2 - 2 players only. Ruling 2 to 3 players.\n');
+  });
+});
+
+describe('shorthand the merge cannot read (#446)', () => {
+  it('names a dash then a plain number after a provisional id, and a shortened id after a kind word', () => {
+    const text = 'Rulings @a.1-3 apply. Rulings @a.1 and Decision .2 too. Ruling @a.1 - .2 and Ruling 4-5 are fine.\n';
+    expect(unreadableShorthand('design/notes.md', text)).toEqual(['@a.1-3', 'Decision .2']);
+    expect(unreadableShorthand('design/notes.md', 'quoted: `Rulings @a.1-3`, and 0.5 seconds\n')).toEqual([]);
   });
 });

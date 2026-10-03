@@ -210,6 +210,22 @@ export function provisionalReferences(path: string, text: string): string[] {
   return [...new Set(provisionalCitations(path, text).citations.map((c) => c.id ?? c.written))];
 }
 
+const DASH_THEN_NUMBER = new RegExp(`(?<![\\w@.])${PROVISIONAL_NUMBER}[ \\t]*[-–][ \\t]*\\d+(?!\\d)`, 'g');
+const SHORTHAND_AFTER_KIND = new RegExp(`\\b(?:${WORD_KINDS.join('|')})s?[ \\t]+${SHORTHAND}(?!\\d)`, 'g');
+
+/**
+ * Shorthand in file `path` that names no id the merge can map (#446), as written: a dash then a
+ * plain number after a provisional id (`@a.1-3`, which may mean `@a.3` or real number 3), and a
+ * shortened id right after a kind word (`Decision .2`), which has no provisional id before it to
+ * take its slug from. Quoted text (`citableText`) is not read.
+ */
+export function unreadableShorthand(path: string, text: string): string[] {
+  const citable = citableText(path, text);
+  return [...citable.matchAll(DASH_THEN_NUMBER), ...citable.matchAll(SHORTHAND_AFTER_KIND)]
+    .sort((a, b) => a.index - b.index)
+    .map((m) => m[0]);
+}
+
 /** Real numbers present as headings in `tip` but not in `base`, e.g. `['Ruling 139']`. */
 export function plainNumbersAdded(base: string, tip: string, spec: NumberedLedgerSpec): string[] {
   const before = new Set(plainNumbers(base, spec));

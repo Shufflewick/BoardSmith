@@ -342,7 +342,9 @@ A run of one chunk's ids may be shortened after the first: `Decisions @<slug>.1,
 right before the next id). `chunk-merge` rewrites each shortened id to its real number. It
 rewrites a range only when the ids in it became one unbroken run of numbers; otherwise (an id in
 the range has no entry, the entries were headed out of order, or the range starts at a real
-number) it stops the merge, and the fix is to write the ids out as a list.
+number) it stops the merge, and the fix is to write the ids out as a list. It also stops on
+shorthand that names no id it can map: a dash then a plain number after a provisional id
+(`@<slug>.1-3`), and a shortened id straight after a kind word (`Decision .2`).
 
 ## Git Protocol
 

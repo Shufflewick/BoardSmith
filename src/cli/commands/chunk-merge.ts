@@ -17,10 +17,12 @@
  *   2. A branch may not add a real ledger number (it writes `Ruling @<slug>.<n>`), may not write
  *      RUN.md, and may not write another chunk's run log. Real numbers are allocated here, on the
  *      combined tree, and every citation of each provisional id is rewritten, shorthand included
- *      (`Rulings @a.1 to .3`); a range it cannot rewrite one to one is refused (#446).
+ *      (`Rulings @a.1 to .3`); a range it cannot rewrite one to one, or shorthand that names no id
+ *      it can map (`@a.1-3`, `Decision .2`), is refused (#446).
  *   3. On the combined tree, before anything is committed, it re-runs every tree-wide check:
  *      the chunk is verified; the chunks really built alongside it (not yet verified on the main
- *      line when the branch left, or merged by chunk-merge since, #442) were allowed to be (the
+ *      line when the branch left, merged by chunk-merge since, or whose code the main line
+ *      reworked since, #442) were allowed to be (the
  *      `parallel-check` pair rule); `ledger-check`; `constraint-check` with its measurement tests;
  *      every verified chunk's sign-off still stands for its code (`assessSignoffs`); and the
  *      project's whole test suite.
@@ -29,14 +31,14 @@
  *      code no designer signed off: each chunk's sign-off saw only its own side. The merge vouches
  *      for it by re-running the own checks of every chunk involved (this one and those whose design
  *      files the main line changed since the branch left, whose Build Manifest names the file) on
- *      the combined tree: their tests,
+ *      the combined tree: their tests (every test file must have run, not only passed),
  *      `chunk-check` and `claim-quote-check`. If all pass, it records the file, its content hash,
  *      those chunks and the merge in design/MERGE-SIGNOFFS.md, which the sign-off check accepts;
  *      if any fails, the merge is refused naming the check and the chunk. No designer is asked.
  *      A source file whose provisional ledger ids step 2 rewrote is code the merge itself changed
- *      after its chunks signed it off, so it is vouched for the same way (#435), and so is a
- *      test-runner config (`vitest.config.ts`) edited since a verified chunk signed it off, for
- *      every chunk whose sign-off that edit would void (#479).
+ *      after its chunks signed it off, so it is vouched for the same way (#435), and so is
+ *      `vitest.config.ts` when its only edit since a verified chunk signed it off is to
+ *      `test.include` or `test.exclude`, for every chunk whose sign-off that edit would void (#479).
  *   4. It lists every reference between the merged chunk's changes and what the main line gained
  *      while it was being built, in design/CROSS-CHUNK.md, pending the audit's ruling;
  *      `ledger-check` fails until the audit rules, so the next close and merge wait for it.
@@ -68,6 +70,7 @@ import {
   allocateProvisional,
   plainNumbersAdded,
   provisionalReferences,
+  unreadableShorthand,
 } from '../lib/ledger-allocation.js';
 import { describeFinding, ledgerCheck } from './ledger-check.js';
 import { type TestRunner, checkConstraints, runVitest } from './constraint-check.js';
@@ -78,6 +81,7 @@ import { parseSpecManifest } from './test-step-check.js';
 import { chunkCitations, pairProblems, readSketchChunks } from './parallel-check.js';
 import { appendCrossChunkEntry, changedSide, crossReferences } from './cross-chunk.js';
 import { takeOsLock } from '../lib/os-lock.js';
+import { onlyTestCollectionChanged } from '../lib/test-config-edit.js';
 
 interface ChunkMergeOptions {
   /** The chunk's branch. Defaults to `chunk/<slug>`, the branch the dispatch contract names. */
@@ -262,6 +266,14 @@ function citationRefusal(name: string, id: string): string {
   return `${name} cites ${id}, but no ledger entry is headed ${id}. Correct the citation on the branch${orExample}`;
 }
 
+/** Why shorthand the merge cannot map (`unreadableShorthand`) stops it, and the fix. */
+function shorthandRefusal(name: string, written: string): string {
+  return (
+    `${name} writes "${written}", which does not say which ids it names, so the merge cannot give it real ` +
+    `numbers. Write each id in full on the branch (for example \`Rulings @<slug>.1 and @<slug>.3\`), and merge again.`
+  );
+}
+
 /**
  * Gives every provisional id a real number on the combined tree and rewrites its citations.
  * `renumbered` is each source file (outside design/, project-relative) whose text that changed.
@@ -278,7 +290,10 @@ async function allocate(
   }
   const { files: rewritten, mapping, problems } = allocateProvisional(files, ledgers);
   // A range left as written is refused for what it is, not again as ids nobody declared.
-  const refusals = problems.map((p) => `${p.path} ${p.detail}`);
+  const refusals = [
+    ...Object.entries(files).flatMap(([name, text]) => unreadableShorthand(name, text).map((written) => shorthandRefusal(name, written))),
+    ...problems.map((p) => `${p.path} ${p.detail}`),
+  ];
   const kept = new Set(problems.flatMap((p) => p.ids.map((id) => `${p.path}\0${id}`)));
   const renumbered: string[] = [];
   const design = `${ctx.prefix}${DESIGN_DIR}/`;
@@ -318,26 +333,46 @@ async function touchedOnMainLine(ctx: MergeContext): Promise<string[]> {
 const MERGE_SUBJECT = /^Merge chunk (\S+) \(/;
 
 /**
- * Of `touched`, the chunks really built alongside this branch (#442): those not yet verified on
- * the main line when the branch left it, so the branch never saw them finished, and those a
- * `chunk-merge` brought in since, whatever they were at the fork. A chunk verified at the fork
- * whose CHUNK.md or run log was only edited since (a re-sign after another chunk's merge, a
- * Verified Against rewrite, a re-pointed claim quote) was finished before this branch began, so
- * the branch was built seeing it.
+ * Of `touched`, the chunks really built alongside this branch (#442):
+ *   - those not yet verified on the main line when the branch left it, so the branch never saw them
+ *     finished;
+ *   - those a `chunk-merge` brought in since, whatever they were at the fork;
+ *   - and those whose Build Manifest code the main line itself changed since (a chunk reopened and
+ *     reworked there), outside chunk merges, which answer for their own chunks, and outside the
+ *     test-runner config, whose edits the sign-off check judges (#479).
+ * A chunk verified at the fork whose CHUNK.md or run log was only edited since (a re-sign after
+ * another chunk's merge, a Verified Against rewrite, a re-pointed claim quote) was finished before
+ * this branch began and has not changed, so the branch was built seeing it.
  */
 async function builtAlongside(ctx: MergeContext, touched: string[]): Promise<string[]> {
-  const merged = new Set(
-    (await git(ctx.top, ['log', '--first-parent', '--format=%s', `${ctx.fork}..HEAD`]))
-      .split('\n')
-      .map((subject) => MERGE_SUBJECT.exec(subject)?.[1])
-      .filter((s): s is string => s !== undefined),
-  );
+  const merged = new Set<string>();
+  const reworked = new Set<string>();
+  const log = await git(ctx.top, ['log', '--first-parent', '--format=%H %s', `${ctx.fork}..HEAD`]);
+  for (const line of log.split('\n').filter(Boolean)) {
+    const [commit, subject] = [line.slice(0, line.indexOf(' ')), line.slice(line.indexOf(' ') + 1)];
+    const slug = MERGE_SUBJECT.exec(subject)?.[1];
+    if (slug !== undefined) {
+      merged.add(slug);
+      continue;
+    }
+    for (const name of await changedBy(ctx, commit)) reworked.add(name);
+  }
   const alongside: string[] = [];
   for (const slug of touched) {
     const atFork = statusOf(await showAt(ctx, ctx.fork, `chunks/${slug}/CHUNK.md`));
-    if (merged.has(slug) || !atFork.startsWith(VERIFIED)) alongside.push(slug);
+    const rework = [...(await manifestPaths(ctx.projectDir, slug))].some((p) => reworked.has(p) && !TEST_RUNNER_CONFIG.test(p));
+    if (merged.has(slug) || !atFork.startsWith(VERIFIED) || rework) alongside.push(slug);
   }
   return alongside;
+}
+
+/** The project-relative files main-line commit `commit` changed against its first parent. */
+async function changedBy(ctx: MergeContext, commit: string): Promise<string[]> {
+  const names = await git(ctx.top, ['diff', '--name-only', `${commit}^1`, commit]);
+  return names
+    .split('\n')
+    .filter((name) => name.startsWith(ctx.prefix) && name !== '')
+    .map((name) => posix.normalize(name.slice(ctx.prefix.length)));
 }
 
 /** A CHUNK.md's Status, or `missing` when it has none (or there is no CHUNK.md). */
@@ -438,26 +473,48 @@ async function sharedSourceFiles(ctx: MergeContext, touched: string[], renumbere
 }
 
 /**
- * Test-runner config (#479): it decides which test files run and how, and nothing the game does, so
- * an edit to it can change a chunk's evidence but not the behaviour its sign-off is about. Re-running
- * the chunk's own tests on the combined tree re-checks that evidence. Other tooling (the build
- * config, tsconfig, package.json) can change what the game does, so it is not in this set.
+ * Test-runner config (#479): it decides which test files run and how, and nothing the game does.
+ * An edit that changes only which files it collects (`test.include` / `test.exclude`) cannot change
+ * what a chunk's tests prove about the files that still run, and the merge checks that every one of
+ * the chunk's own test files still ran (`ownTestsFailure`). Any other edit to it can (an alias that
+ * stubs a module, a setup file that mocks one), and so can other tooling (the build config,
+ * tsconfig, package.json), so those void the sign-off as any code edit does.
  */
-const TEST_RUNNER_CONFIG = /^vitest\.(?:config|workspace)\.[cm]?[jt]s$/;
+const TEST_RUNNER_CONFIG = /^vitest\.config\.[cm]?[jt]s$/;
 
-/**
- * `shared`, plus every test-runner config whose edit voids a verified chunk's sign-off on the
- * combined tree, with those chunks, so the merge vouches for the config with their own checks
- * rather than refusing until a designer signs each of them off again (#479). An edit to any other
- * signed file still voids the sign-off, and the merge refuses it.
- */
-async function withStaleTestConfig(ctx: MergeContext, shared: SharedFile[]): Promise<SharedFile[]> {
-  const stale = new Map<string, string[]>();
-  for (const [slug, paths] of await unaccountedEdits(ctx.projectDir)) {
-    for (const path of paths.map((p) => posix.normalize(p)).filter((p) => TEST_RUNNER_CONFIG.test(p))) {
-      stale.set(path, [...(stale.get(path) ?? []), slug]);
+/** The text `path` had when it hashed to `signed`, found in the history of either side, or undefined. */
+async function signedText(ctx: MergeContext, path: string, signed: string): Promise<string | undefined> {
+  const where = `${ctx.prefix}${path}`;
+  const commits = (await git(ctx.top, ['log', '--format=%H', 'HEAD', ctx.branch, '--', where])).split('\n').filter(Boolean);
+  for (const commit of commits) {
+    const shown = await run(ctx.top, ['show', `${commit}:${where}`]);
+    if (shown.code === 0 && sha256(Buffer.from(shown.out)) === signed) return shown.out;
+  }
+  return undefined;
+}
+
+/** Each test-runner config whose edit since a verified chunk's sign-off changed only test collection, with those chunks. */
+async function collectionOnlyConfigEdits(ctx: MergeContext): Promise<Map<string, string[]>> {
+  const found = new Map<string, string[]>();
+  for (const [slug, edits] of await unaccountedEdits(ctx.projectDir)) {
+    for (const edit of edits.filter((e) => TEST_RUNNER_CONFIG.test(posix.normalize(e.path)))) {
+      const path = posix.normalize(edit.path);
+      const before = await signedText(ctx, path, edit.signed);
+      const now = await fs.readFile(join(ctx.projectDir, path), 'utf-8');
+      if (before !== undefined && onlyTestCollectionChanged(before, now)) found.set(path, [...(found.get(path) ?? []), slug]);
     }
   }
+  return found;
+}
+
+/**
+ * `shared`, plus every test-runner config whose edit since a verified chunk signed it off changed
+ * only which test files are collected, with those chunks, so the merge vouches for the config with
+ * their own checks rather than refusing until a designer signs each of them off again (#479). Any
+ * other edit to a signed file still voids the sign-off, and the merge refuses it.
+ */
+async function withStaleTestConfig(ctx: MergeContext, shared: SharedFile[]): Promise<SharedFile[]> {
+  const stale = await collectionOnlyConfigEdits(ctx);
   const files = shared.map((file) =>
     stale.has(file.path) ? { ...file, chunks: [...new Set([...file.chunks, ...stale.get(file.path)!])].sort() } : file,
   );
@@ -489,6 +546,34 @@ function ownTestFiles(chunkText: string): string[] | string {
 }
 
 /**
+ * Why a chunk's own tests do not vouch for the combined tree, or `undefined` when they all ran and
+ * passed. A test file that did not run proves nothing: vitest skips a named file its config
+ * excludes and still exits 0 (#479), so the run must name every file as run.
+ */
+async function ownTestsFailure(
+  projectDir: string,
+  slug: string,
+  tests: string[],
+  runTests: TestRunner,
+): Promise<[string, string] | undefined> {
+  const run = await runTests(projectDir, tests);
+  const what = `${slug}'s own tests (${tests.join(', ')}) fail`;
+  if ('refused' in run) return [what, run.refused];
+  if (!run.ok) return [what, tail(run.output)];
+  if (run.ran === undefined) {
+    return [`${slug}'s own tests cannot be confirmed`, 'the test run did not report which test files it ran.'];
+  }
+  const ran = new Set(run.ran.map((f) => posix.normalize(f)));
+  const missing = tests.filter((t) => !ran.has(posix.normalize(t)));
+  if (missing.length === 0) return undefined;
+  return [
+    `${slug}'s own tests did not all run`,
+    `${missing.join(', ')} did not run: the project's vitest config excludes ${missing.length === 1 ? 'it' : 'them'}, ` +
+      `or does not include ${missing.length === 1 ? 'it' : 'them'}, so the run proves nothing about ${missing.length === 1 ? 'it' : 'them'}.`,
+  ];
+}
+
+/**
  * What fails when one chunk's own checks run on the combined tree, each as `[what failed, why]`,
  * where `what failed` names the check and the chunk ("claim-quote-check fails for trading").
  */
@@ -499,10 +584,8 @@ async function ownCheckFailures(projectDir: string, slug: string, runTests: Test
   if (typeof tests === 'string') {
     failures.push([`${slug}'s own tests cannot be found`, tests]);
   } else if (tests.length > 0) {
-    const run = await runTests(projectDir, tests);
-    const what = `${slug}'s own tests (${tests.join(', ')}) fail`;
-    if ('refused' in run) failures.push([what, run.refused]);
-    else if (!run.ok) failures.push([what, tail(run.output)]);
+    const failure = await ownTestsFailure(projectDir, slug, tests, runTests);
+    if (failure) failures.push(failure);
   }
   const quotes = (await checkClaimQuotes(projectDir, slug)).refusals;
   if (quotes.length) failures.push([`claim-quote-check fails for ${slug}`, quotes.join(' ')]);

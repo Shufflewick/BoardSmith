@@ -36,8 +36,8 @@ const HEADER = `# Merge Sign-offs
 
 <!-- MACHINE-OWNED. Written by \`boardsmith chunk-merge\` and by nothing else. Each entry is a
      source file the merge changed after its chunks signed it off (two chunks built at the same
-     time both edited it, the merge renumbered its ledger citations, or it is a test-runner
-     config edited since a chunk signed it off), as the merge left it.
+     time both edited it, the merge renumbered its ledger citations, or only its vitest test
+     collection changed since a chunk signed it off), as the merge left it.
      The merge re-ran every named chunk's own checks on the combined file and they passed, so the
      sign-off check accepts that edit for each chunk whose sign-off names the file. -->
 `;

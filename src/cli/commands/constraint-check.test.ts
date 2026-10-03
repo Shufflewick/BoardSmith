@@ -348,10 +348,22 @@ describe('runVitest leaves chunk worktrees out of the run', () => {
     const project = await makeProject({ ...WIP, [VITEST_CONFIG_FILE]: generateVitestConfig(undefined) });
     await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');
     const run = await runVitest(project, []);
-    expect(run).toMatchObject({ ok: true });
+    expect(run).toMatchObject({ ok: true, ran: ['tests/ok.test.ts'] });
     const { output } = run as { output: string };
     expect(output).toContain('ok.test.ts');
     expect(output).not.toContain('wip.test.ts');
+  }, 60_000);
+
+  it('reports which named files ran, since vitest skips one its config excludes and still passes (#479)', async () => {
+    const config = generateVitestConfig(undefined).replace('test: { exclude: [', 'test: { exclude: ["tests/skipped.test.ts", ');
+    const project = await makeProject({
+      'tests/ok.test.ts': WIP['tests/ok.test.ts'],
+      'tests/skipped.test.ts': WIP['tests/ok.test.ts'],
+      [VITEST_CONFIG_FILE]: config,
+    });
+    await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');
+    const run = await runVitest(project, ['tests/ok.test.ts', 'tests/skipped.test.ts']);
+    expect(run).toMatchObject({ ok: true, ran: ['tests/ok.test.ts'] });
   }, 60_000);
 
   it('refuses to run a project whose vitest config would collect the worktrees', async () => {
