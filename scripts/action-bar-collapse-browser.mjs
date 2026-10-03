@@ -32,6 +32,9 @@
  *      one remaining row.
  *   6. And it comes up for a QUESTION, not for any click: a board click that
  *      asks nothing leaves the bar where the player put it.
+ *   7. Issue 444's headline case (#486): an element pick after an earlier
+ *      choice, at 375x812 and 844x390, keeps the bar's top at or below the
+ *      strip the board reserves, with nothing scrolling inside the bar.
  *
  * ## Why this is not in `npx vitest run`
  *
@@ -51,6 +54,7 @@
  */
 import {
   assert,
+  barGeometry,
   check,
   runBrowserRegression,
   summarise,
@@ -65,6 +69,12 @@ import {
  * The action needs a real answer -- nine choices, so nothing is auto-selected
  * and auto-executed -- because "the bar is up mid-question" is half of what is
  * measured here.
+ *
+ * And a second action, `plant`, for issue 444's headline case (#486): an
+ * element pick made after an earlier choice. Once a crop is chosen the panel
+ * shows the action's name, the crop as a chip, the prompt and -- because there
+ * are more beds than the panel lists and each is a board element -- "Choose on
+ * the board". The beds are their own class so `tend` keeps its nine choices.
  */
 const RULES = `import { Game, Piece, Player, Space } from 'boardsmith';
 import type { GameElement, GameOptions } from 'boardsmith';
@@ -77,10 +87,12 @@ class Plot extends Space<Garden> {
   tended = 0;
 }
 
+class Bed extends Space<Garden> {}
+
 export class Garden extends Game<Garden, Player> {
   constructor(options: GameOptions) {
     super(options);
-    this.registerElements([Ground, Plot]);
+    this.registerElements([Ground, Plot, Bed]);
   }
 }
 
@@ -97,6 +109,40 @@ const tend = worldAction<Garden>('tend')
     ctx.world.emit(GROUND, { plot }, \`Seat \${ctx.player.seat} tended \${plot as string}.\`);
   });
 
+/**
+ * A unit chosen, then a bed handed to the board, under the action prompt given.
+ *
+ * \`plant\` uses Windup Warfare's wording, where #444 was found: the panel's fit
+ * depends on the length of what it says, so the measured case uses the real
+ * one. \`muster\` has an action prompt far longer than one line, which must wrap
+ * rather than be cut short, since a prompt can carry rules text. It is offered
+ * to seat 2 only, so seat 1's resting bar -- which the collapse checks measure
+ * -- is not a different bar because of it.
+ */
+const packPick = (name: string, prompt: string, seat: number) =>
+  worldAction<Garden>(name)
+    .prompt(prompt)
+    .condition({ [\`seat \${seat} only\`]: ({ player }) => player.seat === seat })
+    .needs(() => [GROUND])
+    .chooseFrom('crop', {
+      prompt: 'Which unit?',
+      choices: () => ['Scuttlers', 'Rollers'],
+    })
+    .chooseElement('bed', {
+      prompt: 'Choose where the middle of the front row goes',
+      elements: ({ game }) => game.all(Bed),
+    })
+    .execute(({ crop }, ctx) => {
+      ctx.world.emit(GROUND, { crop }, \`Seat \${ctx.player.seat} placed \${crop as string}.\`);
+    });
+
+const plant = packPick('plant', 'Buy and place a pack', 1);
+const muster = packPick(
+  'muster',
+  'Wind up every soldier in a fresh pack, pay for it from the war chest, and march it onto the field',
+  2,
+);
+
 export const gameDefinition: GameDefinition = {
   gameClass: Garden,
   gameType: 'collapse-garden',
@@ -106,10 +152,13 @@ export const gameDefinition: GameDefinition = {
     genesis: (game) => {
       const ground = game.create(Ground, 'ground');
       for (let i = 1; i <= 9; i++) ground.create(Plot, \`plot-\${i}\`);
+      // More than the panel lists (MAX_FLAT_CHOICE_CANDIDATES), so the pick
+      // goes to the board.
+      for (let i = 1; i <= 30; i++) ground.create(Bed, \`bed-\${i}\`);
       return { [GROUND]: ground as GameElement };
     },
     view: () => [GROUND],
-    actions: [tend],
+    actions: [tend, plant, muster],
   },
 };
 `;
@@ -303,11 +352,79 @@ async function drive({ launch, hostUrl }) {
 
       await context.close();
     }
+
+    for (const viewport of [{ width: 375, height: 812 }, { width: 844, height: 390 }]) {
+      for (const colorScheme of ['light', 'dark']) {
+        await pickAfterAChoice(browser, hostUrl, viewport, colorScheme);
+      }
+    }
   } finally {
     await browser.close();
   }
 
   return summarise('measured on screen in a real browser at both widths.');
+}
+
+/**
+ * ISSUE 444'S HEADLINE CASE, MEASURED (#486).
+ *
+ * An element pick made after an earlier choice, on a phone and on a short
+ * landscape screen: the bar's top edge sits at or below the strip the board
+ * region reserves (its padding-bottom), and nothing scrolls inside the bar.
+ * Before #444 the bar grew up to five rows over a board that had fitted itself
+ * above two, and covered the bottom of it. Run in both colour schemes, which
+ * proves the layout holds in each, not that either looks right.
+ */
+/** What a pick after a choice shows, each of which must be whole and in view. */
+const PICK_PARTS = [
+  '.config-title',
+  '.selected-value',
+  '.selection-input > .selection-prompt',
+  '.board-handoff-btn',
+];
+
+async function pickAfterAChoice(browser, hostUrl, viewport, colorScheme) {
+  const size = `${viewport.width}x${viewport.height} ${colorScheme}`;
+  const context = await browser.newContext({ viewport, colorScheme });
+  try {
+    const page = await context.newPage();
+    await page.goto(hostUrl);
+    await seated(page);
+    const surface = surfaceOf(page);
+
+    await check(`${size}: an element pick after an earlier choice sits inside the strip, without scrolling`, async () => {
+      await surface.locator('[data-bs-action="plant"]').click();
+      await surface.locator('.action-config .choice-btn', { hasText: 'Scuttlers' }).click();
+      await surface.locator('.board-handoff-btn').waitFor({ timeout: 15_000 });
+      const bar = await barGeometry(surface, PICK_PARTS);
+      assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}`);
+      assert(!bar.scrolls, `the bar scrolls during the pick (${bar.height}px tall): it does not fit the strip`);
+      assert(bar.outside.length === 0, `not in view inside the bar: ${bar.outside.join(', ')}`);
+      assert(bar.clipped.length === 0, `cut off sideways: ${bar.clipped.join(', ')}`);
+      await surface.locator('.action-config .cancel-btn').click();
+      await surface.locator('.action-config').waitFor({ state: 'detached', timeout: 10_000 });
+    });
+
+    await check(`${size}: a long action prompt wraps whole, and the handoff stays reachable`, async () => {
+      // Never cut short. It may cost the bar its fit, so the bar may scroll --
+      // the last resort -- but it still covers no board and every part of the
+      // pick can be scrolled into view. Offered to seat 2 (see \`packPick\`).
+      await page.locator('[data-testid="world-seat-switcher"]').click();
+      await page.locator('[data-testid="world-take-seat"][data-seat="2"]').click();
+      await surface.locator('[data-bs-action="muster"]').click();
+      await surface.locator('.action-config .choice-btn', { hasText: 'Scuttlers' }).click();
+      const handoff = surface.locator('.board-handoff-btn');
+      await handoff.waitFor({ timeout: 15_000 });
+      const bar = await barGeometry(surface, PICK_PARTS);
+      assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}`);
+      assert(bar.clipped.length === 0, `cut off sideways: ${bar.clipped.join(', ')}`);
+      await handoff.scrollIntoViewIfNeeded();
+      const scrolled = await barGeometry(surface, ['.board-handoff-btn']);
+      assert(scrolled.outside.length === 0, 'the board handoff cannot be scrolled into view inside the bar');
+    });
+  } finally {
+    await context.close();
+  }
 }
 
 // THE WHOLE RUN, IN THE HARNESS'S ORDER (#231). It checks the checkout is

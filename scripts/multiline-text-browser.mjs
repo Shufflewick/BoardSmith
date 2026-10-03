@@ -41,6 +41,7 @@
 
 import {
   assert,
+  barGeometry,
   check,
   runBrowserRegression,
   summarise,
@@ -548,28 +549,6 @@ function screens() {
   ];
 }
 
-/** Where the bar sits against the strip, and whether `selectors` are in view inside it. */
-function barGeometry(surface, selectors = []) {
-  return surface.locator('[data-testid="bs-actionbar"]').evaluate((bar, selectors) => {
-    const region = document.querySelector('.boardregion');
-    const strip = region.getBoundingClientRect().bottom - parseFloat(getComputedStyle(region).paddingBottom);
-    const box = bar.getBoundingClientRect();
-    const outside = selectors.filter((selector) => {
-      const el = bar.querySelector(selector);
-      if (!el) return true;
-      const r = el.getBoundingClientRect();
-      return r.top < box.top - 1 || r.bottom > box.bottom + 1 || r.bottom > window.innerHeight + 1;
-    });
-    return {
-      strip: Math.round(strip),
-      top: Math.round(box.top),
-      height: Math.round(box.height),
-      scrolls: bar.scrollHeight > bar.clientHeight + 1,
-      outside,
-    };
-  }, selectors);
-}
-
 async function onASmallerScreen(browser, hostUrl, viewport) {
   const size = `${viewport.width}x${viewport.height}`;
   const context = await browser.newContext({ viewport });
@@ -594,7 +573,18 @@ async function onASmallerScreen(browser, hostUrl, viewport) {
     });
 
     await check(`${size}: the open box keeps the action, its label, count and submit in view`, async () => {
+      // The box may grow the bar past the strip, but it floats over the board:
+      // the board stays exactly where it was fitted.
+      const board = surface.locator('.colony-board');
+      const before = await board.boundingBox();
       await startAction(page, 'setDescription');
+      const during = await board.boundingBox();
+      assert(before !== null && during !== null, 'the board has no layout box');
+      assert(
+        during.x === before.x && during.y === before.y
+          && during.width === before.width && during.height === before.height,
+        `the board moved when the box opened: ${JSON.stringify(before)} became ${JSON.stringify(during)}`,
+      );
       const bar = await barGeometry(surface, [
         '.config-title',
         '.text-input .selection-prompt',
