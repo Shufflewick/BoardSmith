@@ -901,3 +901,9 @@ export function buildActionTraces(
   }
   return runner.game.getActionTraces(player);
 }
+
+/** What a host says when it refuses a debug request because debugging is off (#481). */
+export function debuggingOffMessage(requestName: string): string {
+  return `Debugging is not turned on for this session, so '${requestName}' was refused. ` +
+    'Debug tools run only in a session whose host turns debugging on, such as `boardsmith dev`.';
+}

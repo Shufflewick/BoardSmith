@@ -301,6 +301,7 @@ describe('UNDO-04: full session restore is unaffected (the two loadSerializedSta
       playerCount: 2,
       playerNames: ['A', 'B'],
       seed: 'rewind-direct',
+      debugEnabled: true,
     });
 
     const watermark: ClientWatermark = { lastQueuedId: 0 };

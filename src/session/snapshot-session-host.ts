@@ -1,5 +1,5 @@
 import type { Op, OpResult } from './stateless-ops.js';
-import { READ_ONLY_OP_TYPES } from './stateless-ops.js';
+import { READ_ONLY_OP_TYPES, debugOpRefusal } from './stateless-ops.js';
 import type { Annotation } from '../engine/index.js';
 import { dueSeats, type SeatActivityState } from '../engine/flow/seat-activity.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
@@ -161,6 +161,16 @@ export interface SnapshotSessionAdapters {
    * as true to every seat. Set once at session creation; never toggled mid-session.
    */
   teachingDisabled?: boolean;
+  /**
+   * When true, the debug ops (`DEBUG_OP_TYPES`) run; otherwise `handleOp`
+   * refuses every one of them (#481). Even with debugging on, an op that
+   * reports a seat's view runs only for the seat that asked for it. Read on
+   * every op, so a host whose answer changes mid-game (the dev host, as people
+   * join and leave seats) supplies a getter, as `botSeats` may. The `executeOp`
+   * adapter must pass the same answer to `executeOp`'s `hostOptions.debug`,
+   * which refuses debug ops on its own.
+   */
+  debug?: boolean;
   /**
    * Called after every state-mutating op with the host's whole durable state.
    * Store it as given; {@link SnapshotSessionHost.restoreFrom} takes it back.
@@ -632,6 +642,9 @@ export class SnapshotSessionHost {
   /** Read-only ops (resolveChoices) do NOT mutate or broadcast. State-mutating
    *  ops broadcast the new state, THEN the caller returns the op response. */
   async handleOp(seat: number, op: Op): Promise<OpResult> {
+    // #481: debug ops need debugging on, and a seat-view one must be for `seat`.
+    const debugRefused = debugOpRefusal(op, this.adapters.debug === true, seat);
+    if (debugRefused) return debugRefused;
     // Demo lifecycle ops — handled directly in the host (NOT delegated to executeOp)
     // because they need the broadcast adapter and a cancellable async lifetime.
     // demoStart: fire-and-forget runDemoLoop; return minimal envelope immediately.

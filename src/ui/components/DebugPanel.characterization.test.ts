@@ -229,7 +229,7 @@ describe('DebugPanel action traces', () => {
     { actionName: 'beta', available: false, selections: [] },
   ];
 
-  it('sends the viewing seat and stores traces plus flow context', async () => {
+  it('names no seat (the host answers for the asking seat) and stores traces plus flow context', async () => {
     const { platformRequest, vm } = track(
       mountPanel(async () => ({
         success: true,
@@ -238,7 +238,7 @@ describe('DebugPanel action traces', () => {
       }))
     );
     await vm.fetchActionTraces();
-    expect(callsFor(platformRequest, 'debug:action-traces')[0][1]).toEqual({ player: 1 });
+    expect(callsFor(platformRequest, 'debug:action-traces')[0][1]).toEqual({});
     expect(vm.actionTraces).toHaveLength(3);
     expect(vm.tracesError).toBeNull();
   });
@@ -317,7 +317,7 @@ describe('DebugPanel flow state', () => {
       mountPanel(async () => ({ success: true, flowDebugInfo: info }))
     );
     await vm.fetchFlowState();
-    expect(callsFor(platformRequest, 'debug:flow-state')[0][1]).toEqual({ player: 1 });
+    expect(callsFor(platformRequest, 'debug:flow-state')[0][1]).toEqual({});
     expect(vm.flowStateInfo).toEqual(info);
   });
 
@@ -430,11 +430,10 @@ describe('DebugPanel time travel', () => {
   it('requests the state and the diff from the previous action in one go', async () => {
     const { platformRequest, vm } = track(mountPanel(handler));
     await vm.fetchStateAtAction(2);
-    expect(callsFor(platformRequest, 'debug:state-at')[0][1]).toEqual({ actionIndex: 2, player: 1 });
+    expect(callsFor(platformRequest, 'debug:state-at')[0][1]).toEqual({ actionIndex: 2 });
     expect(callsFor(platformRequest, 'debug:state-diff')[0][1]).toEqual({
       fromIndex: 1,
       toIndex: 2,
-      player: 1,
     });
   });
 

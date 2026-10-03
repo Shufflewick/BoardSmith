@@ -1,7 +1,7 @@
 {
-  "revision": 121,
+  "revision": 122,
   "bundleProtocol": 2,
-  "surfaceHash": "8cc776c942ab6bef",
+  "surfaceHash": "054d3efb56db3ebd",
   "payloadHash": "3a98bc2f204eba00",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -1029,7 +1029,16 @@
       "revision": 121,
       "date": "2026-10-03",
       "bundleProtocol": 2,
-      "surfaceHash": "8cc776c942ab6bef",
+      "surfaceHash": "a5e66c593812b04b",
+      "payloadHash": "3a98bc2f204eba00",
+      "formatHash": "0058593e7cc80205",
+      "summary": "Debug ops are refused unless the host turns debugging on (executeOp hostOptions.debug, SnapshotSessionHost debug adapter, GameSession debugEnabled), and seat-view debug ops answer only for the asking seat (#481)."
+    },
+    {
+      "revision": 122,
+      "date": "2026-10-03",
+      "bundleProtocol": 2,
+      "surfaceHash": "054d3efb56db3ebd",
       "payloadHash": "3a98bc2f204eba00",
       "formatHash": "0058593e7cc80205",
       "summary": "StatePushGate is exported from boardsmith/session and boardsmith/session-host, and SessionInfo requires a connectionId: no host pushes a connection a state identical to the last one it sent it, so a seat cannot tell another seat acted in secret (#487). The platform's own send loop must keep a StatePushGate per socket. A seat's state.animationEvents now carries only the events it may see, and a seat's view no longer carries animationEventSeq."
