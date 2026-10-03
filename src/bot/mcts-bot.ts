@@ -17,7 +17,7 @@ import type {
 } from './types.js';
 import { DEFAULT_CONFIG } from './types.js';
 import { applyDeterminization } from './determinization.js';
-import { SeededRandom } from '../utils/random.js';
+import { SeededRandom, mintSeed } from '../utils/random.js';
 
 /** Game class constructor type */
 type GameClass<G extends Game = Game> = new (options: GameOptions) => G;
@@ -117,7 +117,7 @@ export class MCTSBot<G extends Game = Game> {
     this.uctConstant = botStrategy?.uctConstant;
     this.determinize = botStrategy?.determinize;
     this.seed = this.config.seed;
-    this.rng = new SeededRandom(this.config.seed ?? Math.random().toString(36).substring(2));
+    this.rng = new SeededRandom(this.config.seed ?? mintSeed());
   }
 
   // ============================================================================
@@ -1421,9 +1421,7 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     // Restore the seeded RNG position so the next draw matches the live game.
-    if (snapshot.randomState !== undefined) {
-      game.setRandomState(snapshot.randomState);
-    }
+    game.setRandomState(snapshot.randomState);
 
     // Restore the authoritative flow position. Element-valued flow variables were
     // serialized to markers by getPosition; restoreFlowState relinks them to the

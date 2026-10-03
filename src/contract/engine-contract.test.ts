@@ -20,6 +20,7 @@ import {
 } from './fingerprint.js';
 import { Game, GameElement } from '../engine/index.js';
 import { BoardSmithWorldEngine, WORLD_ENGINE_METHODS } from '../world/index.js';
+import { SeededRandom } from '../utils/random.js';
 
 const UPDATE_HINT = (dimension: string) =>
   `The engine's ${dimension} no longer matches src/contract/engine-contract.json.\n\n`
@@ -162,6 +163,38 @@ describe('engine contract', () => {
   // that touch no stored byte. Both halves are asserted here, because a hash
   // that only covered the WRITER would call the r46 id-floor change -- which
   // altered no byte and refused every older world -- a compatible one.
+  // The platform stores `snapshot.randomState` with every game and restores it
+  // on every load, so what the generator draws and how it writes its state are
+  // part of what a stored game means (#483). Neither is a runtime export or
+  // something a seat receives, so the payload fixture reads both explicitly.
+  describe('the payload fingerprint covers the seeded generator', () => {
+    it('moves when the generator draws a different sequence', async () => {
+      const before = await computePayloadHash();
+      const original = SeededRandom.prototype.next;
+      SeededRandom.prototype.next = function shifted(this: SeededRandom) {
+        return (original.call(this) + 0.5) % 1;
+      };
+      try {
+        expect(await computePayloadHash()).not.toBe(before);
+      } finally {
+        SeededRandom.prototype.next = original;
+      }
+    });
+
+    it('moves when the generator writes its stored state differently', async () => {
+      const before = await computePayloadHash();
+      const original = SeededRandom.prototype.getState;
+      SeededRandom.prototype.getState = function renamed(this: SeededRandom) {
+        return original.call(this).replace('chacha20:', 'other:');
+      };
+      try {
+        expect(await computePayloadHash()).not.toBe(before);
+      } finally {
+        SeededRandom.prototype.getState = original;
+      }
+    });
+  });
+
   describe('the world serialization format fingerprint', () => {
     it('refuses by name when the engine can no longer READ the committed corpus', async () => {
       const original = Game.prototype.adoptSubtree;

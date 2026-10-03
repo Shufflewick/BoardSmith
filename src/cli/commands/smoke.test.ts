@@ -209,11 +209,11 @@ describe('boardsmith verify: the smoke check', () => {
       const second = await smokeIn(dir);
 
       expect(first.outcome.summary).toMatch(
-        /^Served by `boardsmith dev` from a fresh start and dealt from seed "plain", then from seed "4", a seated player took "draw", "play", "showAce" and pressed \d+ board controls?, with no error\./,
+        /^Served by `boardsmith dev` from a fresh start and dealt from seed "blank", then from seed "0", a seated player took "draw", "play", "showAce" and pressed \d+ board controls?, with no error\./,
       );
       expect(first.outcome.passed).toBe(true);
       // The steps name the cards each choice pressed, so the same steps are the same deals walked the same way.
-      expect(first.steps).toContain('smoke: dealing a game from seed "plain"');
+      expect(first.steps).toContain('smoke: dealing a game from seed "blank"');
       expect(first.steps.some((line) => /pressing "[^"]+" for "play"/.test(line))).toBe(true);
       expect(second.steps).toEqual(first.steps);
     },
@@ -226,7 +226,7 @@ describe('boardsmith verify: the smoke check', () => {
     });
     const { outcome } = await runSmoke({ projectDir: dir, log: quiet, seeds: [ACE_SEEDS.WITH] });
 
-    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "4", a seated player took "draw", "play", "showAce"/);
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "0", a seated player took "draw", "play", "showAce"/);
     expect(outcome.passed).toBe(true);
   });
 
@@ -241,7 +241,7 @@ describe('boardsmith verify: the smoke check', () => {
 
     expect(outcome.passed).toBe(false);
     expect(outcome.summary).toMatch(
-      /^The smoke walk, dealt from seed "plain", found a problem: - The walk never saw "showAce" offered in 20 steps from a fresh game dealt from seed "plain"\. .*choose a seed whose deal offers it, and list it in `seed` there\./,
+      /^The smoke walk, dealt from seed "blank", found a problem: - The walk never saw "showAce" offered in 20 steps from a fresh game dealt from seed "blank"\. .*choose a seed whose deal offers it, and list it in `seed` there\./,
     );
   });
 
@@ -483,7 +483,7 @@ describe('boardsmith verify: the smoke check', () => {
       'smoke step 2: taking "draw"',
       'smoke step 3: taking "play"',
     ]);
-    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "plain", a seated player took "draw", "play"/);
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "blank", a seated player took "draw", "play"/);
     expect(outcome.passed).toBe(true);
   });
 

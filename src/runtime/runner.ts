@@ -32,6 +32,7 @@ import { ErrorCode } from '../types/protocol.js';
 import { PlayerFacingError } from '../engine/errors.js';
 import { constructGame } from '../engine/element/game.js';
 import { isDevThrowEnabled } from '../utils/dev.js';
+import type { RandomState } from '../utils/random.js';
 import type { MessageEntry } from '../engine/index.js';
 
 /**
@@ -471,7 +472,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * nothing else, so this comparison IS "did anything draw here", in O(1),
    * from data every checkpoint already carries.
    */
-  randomStateAt(actionIndex: number): number | undefined {
+  randomStateAt(actionIndex: number): RandomState | undefined {
     return checkpointAt(this.checkpointWindow(), actionIndex).checkpoint?.randomState;
   }
 
@@ -515,9 +516,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     if (checkpoint.sequence !== undefined) {
       this.game._ctx.sequence = checkpoint.sequence;
     }
-    if (checkpoint.randomState !== undefined) {
-      this.game.setRandomState(checkpoint.randomState);
-    }
+    this.game.setRandomState(checkpoint.randomState);
     return undefined;
   }
 
@@ -1076,11 +1075,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // matches the live game exactly. This is what lets us drop the replay: the
     // replay's only surviving contribution was re-advancing the RNG, and it could
     // not account for draws made inside pending/selection executes. Restoring the
-    // generator state covers all of those. Skip for older snapshots that predate
-    // RNG-state capture.
-    if (snapshot.randomState !== undefined) {
-      runner.game.setRandomState(snapshot.randomState);
-    }
+    // generator state covers all of those. A snapshot without one is refused.
+    runner.game.setRandomState(snapshot.randomState);
 
     // Restore the authoritative flow state (re-resolves players against the tree
     // just loaded). restoreFlowState builds a fresh FlowEngine from the saved

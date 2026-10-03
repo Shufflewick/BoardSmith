@@ -1776,6 +1776,16 @@ export async function computePayloadHash(): Promise<string> {
   const flowPosition = game.getFlowState()?.position;
   assertCoversElementBindings(flowPosition);
 
+  // THE SEEDED GENERATOR (#483). The platform stores `snapshot.randomState`
+  // with every game and restores it on every load, so the state's written form
+  // and the sequence the generator draws decide what a stored game means: an
+  // engine that drew differently from the same state would deal a restored
+  // game cards it was never going to deal. Neither is a runtime export or part
+  // of a view, so both are read here: the stored state at this point, then the
+  // next few draws from it.
+  const storedRandomState = runner.getSnapshot().randomState;
+  const nextDraws = [game.random(), game.random(), game.random(), game.random()];
+
   // The parts hashed together: the per-player payload the platform ships, the
   // names of the fields the session layer wraps it in (#356, above), the
   // serialized flow position the platform STORES and restores (not reachable
@@ -1806,6 +1816,8 @@ export async function computePayloadHash(): Promise<string> {
       openingFlowState,
       publishedStateFields,
       flowPosition,
+      storedRandomState,
+      nextDraws,
       worldWire: WORLD_WIRE_FIXTURE,
       // What a host must land in one transaction (#224). Types only, so
       // `surfaceHash` is blind to it and `payloadHash` is where it belongs.
