@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { boardsmithPackageRoot } from './boardsmith-version.js';
 import { gitOutput as git } from './git-output.js';
 
@@ -29,6 +29,11 @@ import { gitOutput as git } from './git-output.js';
  *   nothing Node resolves, so it is left out: a worktree whose `node_modules` links to the main
  *   checkout's resolves exactly what the main checkout does, though the main checkout's own
  *   `node_modules` also sits above it;
+ * - every package installed as a link to a folder outside the repository (`"dep": "file:../dep"`),
+ *   by that folder's content (`linkedPackagesHash`): npm's install record names the link, not what
+ *   is behind it, so without this an edit to the sibling would reuse every outcome (#484). When a
+ *   linked folder cannot be read, nothing is cached for the run (`MutantCache.unavailable`), since
+ *   an outcome reused across a change the key missed would hide a surviving mutant;
  * - the BoardSmith the game's tests load, resolved from the game folder as Node resolves
  *   `boardsmith` (`gameBoardsmithRoot`), and the BoardSmith running this command, which generates
  *   and runs the mutants; each named by `toolRevision`. Plus the Node version.
@@ -55,7 +60,7 @@ import { gitOutput as git } from './git-output.js';
  * computed from the commit and would not describe files edited mid-run.
  */
 
-const CACHE_FORMAT = 3;
+const CACHE_FORMAT = 4;
 
 /** How many outcomes the shared cache keeps: many runs' worth, at about 80 bytes each. */
 export const MAX_STORED_OUTCOMES = 20_000;
@@ -111,6 +116,104 @@ export async function gameBoardsmithRoot(projectDir: string): Promise<string | u
 }
 
 /**
+ * A git checkout at `root` named by its commit and by the content of its uncommitted and untracked
+ * changes. Undefined when `root` is not the top of a git checkout.
+ */
+async function checkoutRevision(root: string): Promise<string | undefined> {
+  let top: string;
+  try {
+    top = (await git(root, ['rev-parse', '--show-toplevel'])).trim();
+  } catch {
+    return undefined;
+  }
+  const [realTop, realRoot] = await Promise.all([fs.realpath(top), fs.realpath(root)]);
+  if (realTop !== realRoot) return undefined;
+
+  const commit = (await git(root, ['rev-parse', 'HEAD'])).trim();
+  const hash = createHash('sha256');
+  hash.update(await git(root, ['diff', '--binary', '--no-ext-diff', 'HEAD', '--']));
+  const untracked = (await git(root, ['ls-files', '--others', '--exclude-standard', '-z'])).split('\0').filter(Boolean).sort();
+  for (const path of untracked) {
+    hash.update(`\0${path}\0`);
+    try {
+      hash.update(await fs.readFile(join(root, path)));
+    } catch (error) {
+      throw new Error(`could not read untracked ${path} in ${root}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return `${commit} ${hash.digest('hex')}`;
+}
+
+/** True when git ignores `path` (relative to `root`, the top of a checkout), whether or not it exists. */
+async function ignoredByGit(root: string, path: string): Promise<boolean> {
+  try {
+    await git(root, ['check-ignore', '-q', '--', path]);
+    return true;
+  } catch (error) {
+    if ((error as { code?: unknown }).code === 1) return false;
+    throw error;
+  }
+}
+
+/** Every file path a package.json field names: `main`, `module`, and each target in `exports`. */
+function entryTargets(value: unknown, into: string[] = []): string[] {
+  if (typeof value === 'string') into.push(value);
+  else if (Array.isArray(value)) for (const item of value) entryTargets(item, into);
+  else if (value !== null && typeof value === 'object') for (const item of Object.values(value)) entryTargets(item, into);
+  return into;
+}
+
+/**
+ * The git-ignored files a linked checkout's package exposes, by content: `checkoutRevision` sees
+ * only what git tracks or would track, and a package often loads build output git ignores.
+ *
+ * Each target of `main`, `module` and `exports` (or `index.js`, Node's default, when none is
+ * given) is looked at as a path. For a plain path, the outermost ignored folder holding it, or the
+ * file itself when only it is ignored, is hashed whole, so files the entry point imports beside it
+ * count too. A `*` pattern reaches every file under the folder before the `*`, so every ignored
+ * file or folder under it counts, except those inside `node_modules`, which install records name.
+ * A pattern that reaches the whole package, and a target outside it, cannot be bounded, and throw.
+ */
+async function ignoredEntryPointsHash(root: string): Promise<string> {
+  const manifest = await readIfPresent(join(root, 'package.json'));
+  const pkg = (manifest === undefined ? {} : JSON.parse(manifest.toString('utf-8'))) as Record<string, unknown>;
+  const targets = entryTargets([pkg.main, pkg.module, pkg.exports]);
+  if (targets.length === 0) targets.push('index.js');
+
+  const hashed = new Map<string, string>();
+  const hashPath = async (path: string) => {
+    if (hashed.has(path)) return;
+    const full = join(root, path);
+    const stat = await fs.stat(full).catch(() => undefined);
+    hashed.set(path, stat === undefined ? 'absent' : stat.isDirectory() ? await folderContentHash(full) : sha256(await fs.readFile(full)));
+  };
+  for (const target of targets) {
+    const star = target.indexOf('*');
+    const fixed = star === -1 ? target : target.slice(0, star);
+    const scope = relative(root, join(root, star === -1 || fixed.endsWith('/') ? fixed : dirname(fixed)));
+    if (scope === '') throw new Error(`the package in ${root} exports "${target}", which reaches every file in it, so the files git ignores cannot be bounded`);
+    if (scope === '..' || scope.startsWith(`..${sep}`) || isAbsolute(scope)) {
+      throw new Error(`the package in ${root} names "${target}", which is outside the package`);
+    }
+    const parts = scope.split(sep);
+    let ignored: string | undefined;
+    for (let n = 1; n <= parts.length && ignored === undefined; n++) {
+      const prefix = parts.slice(0, n).join('/');
+      if (await ignoredByGit(root, prefix)) ignored = prefix;
+    }
+    if (ignored !== undefined) await hashPath(ignored);
+    else if (star !== -1) {
+      const listing = await git(root, ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory', '--', `${parts.join('/')}/`]);
+      for (const entry of listing.split('\0').filter(Boolean)) {
+        const path = entry.replace(/\/$/, '');
+        if (!path.split('/').includes('node_modules')) await hashPath(path);
+      }
+    }
+  }
+  return sha256(JSON.stringify([...hashed].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))));
+}
+
+/**
  * The BoardSmith package at `root`, by name and version. A git checkout (as a game linked to a
  * local BoardSmith has) is also named by its commit and by the content of its uncommitted and
  * untracked changes, so editing BoardSmith is a new revision. An installed copy has no git of its
@@ -119,24 +222,8 @@ export async function gameBoardsmithRoot(projectDir: string): Promise<string | u
 export async function toolRevision(root: string): Promise<string> {
   const pkg = JSON.parse(await fs.readFile(join(root, 'package.json'), 'utf-8')) as { name: string; version: string };
   const release = `${pkg.name}@${pkg.version}`;
-  let top: string;
-  try {
-    top = (await git(root, ['rev-parse', '--show-toplevel'])).trim();
-  } catch {
-    return release;
-  }
-  const [realTop, realRoot] = await Promise.all([fs.realpath(top), fs.realpath(root)]);
-  if (realTop !== realRoot) return release;
-
-  const commit = (await git(root, ['rev-parse', 'HEAD'])).trim();
-  const hash = createHash('sha256');
-  hash.update(await git(root, ['diff', '--binary', '--no-ext-diff', 'HEAD', '--']));
-  const untracked = (await git(root, ['ls-files', '--others', '--exclude-standard', '-z'])).split('\0').filter(Boolean).sort();
-  for (const path of untracked) {
-    hash.update(`\0${path}\0`);
-    hash.update(await fs.readFile(join(root, path)));
-  }
-  return `${release} ${commit} ${hash.digest('hex')}`;
+  const checkout = await checkoutRevision(root);
+  return checkout === undefined ? release : `${release} ${checkout}`;
 }
 
 /** The BoardSmith running this command and the one the game loads, each named once. */
@@ -185,6 +272,114 @@ async function installedPackagesHash(projectDir: string): Promise<string> {
   return sha256(records.join('\0'));
 }
 
+/** True when `path` is `dir` or lies inside it. */
+function within(dir: string, path: string): boolean {
+  const rel = relative(dir, path);
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+}
+
+/**
+ * Every file under `dir` by path and content, with a link inside it named by where it points, so
+ * a folder git does not track is fingerprinted, and so is a build output git ignores. `node_modules`
+ * and `.git` are left out: what is installed is named by the install records, and git's own store
+ * is not something a test loads.
+ */
+async function folderContentHash(dir: string): Promise<string> {
+  const hash = createHash('sha256');
+  async function walk(folder: string): Promise<void> {
+    const entries = (await fs.readdir(folder, { withFileTypes: true })).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    for (const entry of entries) {
+      const path = join(folder, entry.name);
+      const name = relative(dir, path);
+      if (entry.isSymbolicLink()) hash.update(`\0link ${name}\0${await fs.readlink(path)}`);
+      else if (entry.isDirectory()) {
+        if (entry.name !== 'node_modules' && entry.name !== '.git') await walk(path);
+      } else if (entry.isFile()) {
+        hash.update(`\0file ${name}\0`);
+        hash.update(await fs.readFile(path));
+      }
+    }
+  }
+  await walk(dir);
+  return hash.digest('hex');
+}
+
+/** The links in `dir/node_modules`, scoped packages included, each with the path it is reached by. */
+async function installedLinks(nodeModules: string): Promise<string[]> {
+  const links: string[] = [];
+  let entries;
+  try {
+    entries = await fs.readdir(nodeModules, { withFileTypes: true });
+  } catch {
+    return links;
+  }
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue;
+    const path = join(nodeModules, entry.name);
+    if (entry.isSymbolicLink()) links.push(path);
+    else if (entry.isDirectory() && entry.name.startsWith('@')) {
+      for (const scoped of await fs.readdir(path, { withFileTypes: true })) {
+        if (scoped.isSymbolicLink()) links.push(join(path, scoped.name));
+      }
+    }
+  }
+  return links;
+}
+
+/**
+ * Every package the tests can load through a link to a folder outside the repository, by that
+ * folder's content. npm installs `"dep": "file:../dep"` as such a link, and its install record names
+ * the link, not what is behind it.
+ *
+ * The links looked at are those in `node_modules` of the game folder and every folder above it,
+ * then, for each linked folder, those its own imports resolve through (its `node_modules` and the
+ * folders above it), with the install records of those folders that are not above the game too. A link into the repository is
+ * left out, since its files are in the key already, and so is a link into a `node_modules`
+ * folder, as an install record names that package. A linked folder is named by its path and, when
+ * it is the top of a git checkout, by `checkoutRevision` plus the ignored files its package
+ * exposes (`ignoredEntryPointsHash`), otherwise by every file in it (`folderContentHash`); a link whose folder is missing is named by where it points. Nothing names
+ * the link's own location, so a worktree whose `node_modules` links to the main checkout's resolves
+ * to the same key as the main checkout. A folder that cannot be read throws.
+ */
+export async function linkedPackagesHash(projectDir: string): Promise<string> {
+  const repository = await fs.realpath((await git(projectDir, ['rev-parse', '--show-toplevel'])).trim());
+  const game = await fs.realpath(projectDir);
+  // The install records here are in the key already (`installedPackagesHash`).
+  const gameFolders = new Set(ancestors(game));
+  const named = new Map<string, string>();
+  const scanned = new Set<string>();
+
+  async function scan(from: string): Promise<void> {
+    for (const dir of ancestors(from)) {
+      if (scanned.has(dir)) continue;
+      scanned.add(dir);
+      const record = await readIfPresent(join(dir, 'node_modules', '.package-lock.json'));
+      if (record !== undefined && !gameFolders.has(dir)) named.set(`record ${dir}`, sha256(record));
+      for (const link of await installedLinks(join(dir, 'node_modules'))) {
+        let target: string;
+        try {
+          target = await fs.realpath(link);
+        } catch {
+          const points = await fs.readlink(link);
+          named.set(`missing ${link}`, points);
+          continue;
+        }
+        if (named.has(target) || within(repository, target) || target.split(sep).includes('node_modules')) continue;
+        named.set(target, '');
+        try {
+          const checkout = await checkoutRevision(target);
+          named.set(target, checkout === undefined ? `content ${await folderContentHash(target)}` : `${checkout} ${await ignoredEntryPointsHash(target)}`);
+        } catch (error) {
+          throw new Error(`could not read ${target}, linked from ${link}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        await scan(target);
+      }
+    }
+  }
+  await scan(game);
+  return sha256(JSON.stringify([...named].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))));
+}
+
 /** The cache file, in the git common directory every checkout of the repository shares. */
 export async function mutantCachePath(projectDir: string): Promise<string> {
   const common = (await git(projectDir, ['rev-parse', '--path-format=absolute', '--git-common-dir'])).trim();
@@ -207,6 +402,11 @@ async function readEntries(path: string): Promise<Map<string, CachedOutcome>> {
 }
 
 export interface MutantCache {
+  /**
+   * Why this run keeps no outcomes, when it does not: something the tests load could not be
+   * fingerprinted, so no outcome may be trusted or stored. Undefined when the cache works.
+   */
+  readonly unavailable?: string;
   /** The stored outcome of `mutant` for the project's HEAD, or undefined when it must run. */
   get(mutant: MutantText): CachedOutcome | undefined;
   set(mutant: MutantText, outcome: CachedOutcome): void;
@@ -221,6 +421,12 @@ export interface MutantCache {
 /** The cache for the commit checked out in `projectDir`, as its tests run with what is installed now. */
 export async function openMutantCache(projectDir: string): Promise<MutantCache> {
   const path = await mutantCachePath(projectDir);
+  let linked: string;
+  try {
+    linked = await linkedPackagesHash(projectDir);
+  } catch (error) {
+    return uncached(`the mutant cache is off for this run: ${error instanceof Error ? error.message : String(error)}`);
+  }
   const [stored, prefix, tree, installed, tools] = await Promise.all([
     readEntries(path),
     git(projectDir, ['rev-parse', '--show-prefix']).then((p) => p.trim()),
@@ -230,7 +436,7 @@ export async function openMutantCache(projectDir: string): Promise<MutantCache> 
   ]);
   const used = new Map<string, CachedOutcome>();
   const keyOf = (m: MutantText) =>
-    sha256(JSON.stringify([CACHE_FORMAT, tools, process.version, tree, installed, prefix, m.file, sha256(m.source)]));
+    sha256(JSON.stringify([CACHE_FORMAT, tools, process.version, tree, installed, linked, prefix, m.file, sha256(m.source)]));
 
   return {
     get(mutant) {
@@ -252,5 +458,15 @@ export async function openMutantCache(projectDir: string): Promise<MutantCache> 
       await fs.writeFile(partial, `${JSON.stringify({ format: CACHE_FORMAT, outcomes })}\n`);
       await fs.rename(partial, path);
     },
+  };
+}
+
+/** A cache that holds nothing and stores nothing, for a run whose key could not be computed. */
+function uncached(reason: string): MutantCache {
+  return {
+    unavailable: reason,
+    get: () => undefined,
+    set: () => {},
+    save: async () => {},
   };
 }

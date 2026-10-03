@@ -536,13 +536,15 @@ export async function runVerify(options: {
   await requireResultIgnored(projectDir);
   const base = await runBase(projectDir, options);
   const mutantCache = await openMutantCache(projectDir);
+  const log = options.log ?? ((line: string) => console.error(chalk.dim(line)));
+  if (mutantCache.unavailable !== undefined) log(`${mutantCache.unavailable}; every mutant runs.`);
   const checks = await runChecks(options.checks ?? VERIFY_CHECKS, {
     projectDir,
     head,
     base,
     changed: await changedSince(projectDir, base.commit),
     mutantCache,
-    log: options.log ?? ((line: string) => console.error(chalk.dim(line))),
+    log,
   });
 
   const after = await checkoutState(projectDir);
