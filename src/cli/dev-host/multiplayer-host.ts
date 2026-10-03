@@ -44,10 +44,27 @@ function defaultSeed(): string {
   return String(Math.floor(Math.random() * 0xffffffff));
 }
 
-export interface SeatInfo {
+interface SeatInfo {
   seat: number;
   /** The client holding this seat, or null if open. */
   clientId: string | null;
+  name: string;
+  color?: string;
+  connected: boolean;
+}
+
+/**
+ * One seat as a lobby message shows it to ONE recipient. It never carries the
+ * holder's client id: that id is how the host knows who is who (reconnects,
+ * the one-person debug rule), so a page that learned another's could connect
+ * as them. `mine` says whether the recipient holds the seat.
+ */
+export interface LobbySeat {
+  seat: number;
+  /** Someone holds the seat (they may be away); false means open or bot. */
+  held: boolean;
+  /** The recipient holds this seat. */
+  mine: boolean;
   name: string;
   color?: string;
   connected: boolean;
@@ -81,7 +98,7 @@ export type HostOutbound =
       /** Whether debugging is on (#481); see `MultiplayerHost.debugOn`. */
       debug: boolean;
       phase: LobbyPhase;
-      seats: SeatInfo[];
+      seats: LobbySeat[];
       minPlayers: number;
       playerCount: number;
       requestId?: string | null;
@@ -599,7 +616,7 @@ export class MultiplayerHost {
     }
 
     // Game already live (or starting): show the seat-picker.
-    this.send(clientId, this.lobbyMessage());
+    this.send(clientId, this.lobbyMessage(clientId));
   }
 
   disconnect(clientId: string): void {
@@ -887,11 +904,11 @@ export class MultiplayerHost {
     if (seat !== undefined && this.phase === 'playing') {
       this.addBotSeat(seat);
       this.broadcastLobby();
-      this.send(clientId, this.lobbyMessage());
+      this.send(clientId, this.lobbyMessage(clientId));
       await this.session?.host.runBotTurns();
       return;
     }
-    this.send(clientId, this.lobbyMessage());
+    this.send(clientId, this.lobbyMessage(clientId));
     this.broadcastLobby();
   }
 
@@ -963,7 +980,7 @@ export class MultiplayerHost {
     clientId: string,
     msg: Extract<ClientInbound, { type: 'getLobby' }>,
   ): void {
-    const lobby = this.lobbyMessage() as Extract<HostOutbound, { type: 'lobby' }>;
+    const lobby = this.lobbyMessage(clientId);
     this.send(clientId, { ...lobby, requestId: msg.requestId ?? null });
   }
 
@@ -1739,19 +1756,23 @@ export class MultiplayerHost {
     return holders.size <= 1;
   }
 
-  private lobbyMessage(): HostOutbound {
+  /** The lobby as `recipient` may see it: seats say who holds them only as `mine`. */
+  private lobbyMessage(recipient: string): Extract<HostOutbound, { type: 'lobby' }> {
     return {
       type: 'lobby',
       debug: this.debugOn(),
       phase: this.phase,
-      seats: [...this.seats.values()].map((s) => ({ ...s })),
+      seats: [...this.seats.values()].map(({ clientId, ...seat }) => ({
+        ...seat,
+        held: clientId !== null,
+        mine: clientId === recipient,
+      })),
       minPlayers: this.opts.minPlayers,
       playerCount: this.opts.playerCount,
     };
   }
 
   private broadcastLobby(): void {
-    const message = this.lobbyMessage();
-    for (const clientId of this.connected) this.send(clientId, message);
+    for (const clientId of this.connected) this.send(clientId, this.lobbyMessage(clientId));
   }
 }

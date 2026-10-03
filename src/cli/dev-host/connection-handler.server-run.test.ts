@@ -81,7 +81,7 @@ async function seatedPage(run: { port: number }, clientId: string) {
 async function seatsSeenBy(page: Page) {
   const reply = page.next((f) => f.type === 'lobby' && f.requestId === 'lobby-check');
   page.send({ type: 'getLobby', requestId: 'lobby-check' });
-  return (await reply).seats as Array<{ seat: number; clientId: string | null; connected: boolean }>;
+  return (await reply).seats as Array<{ seat: number; held: boolean; mine: boolean; connected: boolean }>;
 }
 
 /** A tab that joined one run, and the run started after that one stopped. */
@@ -113,8 +113,8 @@ describe('#416: a tab from an earlier dev-server run', () => {
     expect(fresh.runId).not.toBe(oldRun);
 
     const seats = await seatsSeenBy(fresh.page);
-    expect(seats.find((s) => s.seat === 1)).toMatchObject({ clientId: 'B', connected: true });
-    expect(seats.find((s) => s.seat === 2)?.clientId).toBeNull();
+    expect(seats.find((s) => s.seat === 1)).toMatchObject({ mine: true, connected: true });
+    expect(seats.find((s) => s.seat === 2)?.held).toBe(false);
     // Nothing further was sent to the stale tab: not a lobby, not a board.
     expect(stale.frames.map((f) => f.type)).toEqual(['stale_run']);
   });
@@ -126,7 +126,7 @@ describe('#416: a tab from an earlier dev-server run', () => {
     stale.send({ type: 'join', seat: 2 });
     await second.server.received((m) => m.type === 'join');
 
-    expect((await seatsSeenBy(fresh.page)).find((s) => s.seat === 2)?.clientId).toBeNull();
+    expect((await seatsSeenBy(fresh.page)).find((s) => s.seat === 2)?.held).toBe(false);
   });
 
   it("sharing its client id with the fresh page (one browser), does not take that page's messages", async () => {
@@ -135,7 +135,7 @@ describe('#416: a tab from an earlier dev-server run', () => {
     await openSocketPage(second.port, 'C', initOrStale, { runId: oldRun });
 
     // The fresh page is still the one the host answers.
-    expect((await seatsSeenBy(fresh.page)).find((s) => s.seat === 1)).toMatchObject({ clientId: 'C', connected: true });
+    expect((await seatsSeenBy(fresh.page)).find((s) => s.seat === 1)).toMatchObject({ mine: true, connected: true });
   });
 });
 

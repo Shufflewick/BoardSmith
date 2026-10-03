@@ -31,9 +31,13 @@ const cfg = props.config;
 const clientId = loadDevClientId(TABLE_CLIENT_KEY, 'c');
 
 // ── Lobby / game state (driven by the host over WS) ──────────────────────────
+/** One seat as the host shows it to this page (`LobbySeat` in multiplayer-host.ts). */
 interface SeatInfo {
   seat: number;
-  clientId: string | null;
+  /** Someone holds the seat; the host never says who (#481). */
+  held: boolean;
+  /** This page holds the seat. */
+  mine: boolean;
   name: string;
   color?: string;
   connected: boolean;
@@ -147,7 +151,7 @@ function handleNewGameClick(): void {
 
 /** Seats this client may take: open, or held by an away (disconnected) player. */
 function canTake(seat: SeatInfo): boolean {
-  return !(seat.clientId && seat.connected);
+  return !(seat.held && seat.connected);
 }
 const takenColors = computed(
   () => new Set(seats.value.filter((s) => s.color).map((s) => s.color as string)),
@@ -225,7 +229,7 @@ function onHostMessage(msg: Record<string, unknown>): void {
     case 'lobby': {
       seats.value = msg.seats as SeatInfo[];
       setDebugAvailable(msg.debug === true);
-      const mine = (msg.seats as SeatInfo[]).find((s) => s.clientId === clientId);
+      const mine = (msg.seats as SeatInfo[]).find((s) => s.mine);
       // Don't clear an already-known seat from a lobby broadcast (init is authoritative).
       if (mine) mySeat.value = mine.seat;
       break;
@@ -411,7 +415,7 @@ function onUiSelect(): void {
 }
 
 function seatLabel(seat: SeatInfo): string {
-  if (!seat.clientId) return `Seat ${seat.seat}`;
+  if (!seat.held) return `Seat ${seat.seat}`;
   return seat.name + (seat.connected ? '' : ' (away)');
 }
 
@@ -590,7 +594,7 @@ onUnmounted(() => {
             ></span>
             <span class="seat-card__name">{{ seatLabel(seat) }}</span>
             <span
-              v-if="seat.clientId"
+              v-if="seat.held"
               class="seat-card__dot"
               :class="seat.connected ? 'is-online' : 'is-offline'"
             ></span>

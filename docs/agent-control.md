@@ -412,7 +412,7 @@ browser — use the dev-only ops below plus `createDevHostClient`.
 | Op | Purpose |
 |----|---------|
 | `getState` | Perspective-aware state for the caller's own connected seat (resolved server-side from the tracked connection — there is no client-supplied seat field, so a client can never request another seat's view). |
-| `getLobby` | Lobby info (phase, connected/open seats, and `debug`: whether debugging is on), in either phase. Like every op here, it is answered only after the connection has said `hello`. |
+| `getLobby` | Lobby info (phase, seats, and `debug`: whether debugging is on), in either phase. Each seat says whether it is `held`, whether it is `mine` (the caller's), and whether its holder is `connected`, never who holds it: a client id is how the host recognises a player, so it is never shown to anyone else. Like every op here, it is answered only after the connection has said `hello`. |
 | `debugToggle` | Relay-only: toggles the debug panel on every connected client, while debugging is on. |
 | `uiSwitch` | Relay-only: switches every connected client's UI mode (`{ name }`). |
 | `debug:logs` | Returns the dev-host's captured server-side log ring buffer (see [Structured Errors](#structured-errors-err) below). |
