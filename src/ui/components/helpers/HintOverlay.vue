@@ -308,6 +308,8 @@ function ringStyle(ring: ResolvedRing): Record<string, string> {
 <style scoped>
 /* ── Overlay root ─────────────────────────────────────────────────────────── */
 .bsg-hint-overlay {
+  /* Teleported out of the shell root, so it does not inherit the shell's font (#451). */
+  font-family: var(--bsg-font);
   position: fixed;
   inset: 0;
   z-index: 20;

@@ -279,6 +279,8 @@ const previewCardStyle = computed(() => ({
 
 <style scoped>
 .zoom-preview-overlay {
+  /* Teleported out of the shell root, so it does not inherit the shell's font (#451). */
+  font-family: var(--bsg-font);
   position: fixed;
   z-index: 10000;
   pointer-events: none;
