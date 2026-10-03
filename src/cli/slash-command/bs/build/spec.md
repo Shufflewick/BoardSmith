@@ -173,6 +173,14 @@ end, and never ahead of the run. The one exception is a guard: a file under `tes
 scans that read source as text, never claims, and is never a row (`build/test.md` "The A11y
 Floor"); `boardsmith test-step-check` reports a row that names one.
 
+The table is not only this step's. Every new test file this chunk writes that runs the game's code
+is a row, at any step: here, in `build` (a regression test, `build/build.md`) and in `repair` (a
+measurement test, `build/audit.md`), because only Spec Manifest files are mutation-tested and
+`boardsmith test-step-check` reports a new test file left outside the table. Four kinds of file are
+never rows: the browser smoke test `tests/browser/smoke.spec.ts` (every chunk that adds an action
+edits it), the generated `tests/examples/<slug>.examples.test.ts`, a scan-only guard under
+`tests/guards/`, and an earlier chunk's test file this chunk edits (which is that chunk's row).
+
 A session that crashes mid-spec resumes by reading this table: a row with `RED Observed: pending`
 is unfinished work, a row with `yes` is done and must not be rewritten. This is the file-by-file
 resume signal for `spec`, exactly parallel to `## Build Manifest`'s role for `build` — finer-grained

@@ -95,6 +95,11 @@ suite is green on anything else: `chunk-signoff` refuses a commit with no passin
 the chunk's change, and a later step asks `npx boardsmith verify --check --chunk <slug>`. A failing
 verify is a failure of this repair at its role, handled by the ladder in "Repair Loop Bound" above.
 
+A round that adds a new test file that runs the game's code (a measurement test, a regression test
+for the finding) adds a Spec Manifest row for it, as `build/build.md` says for a regression test,
+and runs `npx boardsmith test-step-check <slug>` before verify: only Spec Manifest files are
+mutation-tested, and that command fails on a new test file left outside the manifest.
+
 ## Round-3 User Triage — Plain Language, Never Raw
 
 After round 3, any finding still lacking a disposition is triaged with the user directly. Cite

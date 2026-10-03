@@ -65,7 +65,7 @@ here.
        tests are green. It exits non-zero on any finding, and a non-zero exit is a failure of this
        step like any other: route the chunk back per "Failures Loop Back to `build`". There is no
        flag that skips part of it, and its findings are never argued away in prose. It enforces
-       six rules, each of which a real build run broke while its suite was green:
+       seven rules, each of which a real build run broke while its suite was green:
 
        - **Every Spec Manifest claim names a test that exists.** Each `## Spec Manifest` row names a
          test file on disk with `RED Observed: yes`, and for every claim the row lists, a test in
@@ -103,13 +103,27 @@ here.
          floor's scans below) and is never mutation-tested, so the Spec Manifest never lists it and a
          row naming one is a finding. A guard the chunk wrote or changed that runs the game's code is
          a finding too: one that imports a `.vue` component (a `?raw` import is text and is fine),
-         `@vue/test-utils` or `boardsmith/testing`, uses `renderAsSeat`, or dispatches an action. That
-         test belongs in the chunk's own test file, where the mutation check shows it can fail.
+         `@vue/test-utils` or `boardsmith/testing`, uses `renderAsSeat`, dispatches an action, or
+         makes any other import from the game's `src/` that does not end `?raw`, directly or through a
+         support file under `tests/`. The one exception is literal constants under `src/ui/`, such as
+         a TypeScript palette whose colours a contrast check needs: a guard may import names written
+         out as literal data (strings, numbers, arrays and objects of them) and types, from a module
+         that runs nothing when it loads. A function from that module is code. A test that runs the
+         game belongs in the chunk's own test file, where the mutation check shows it can fail.
+       - **A new test file that runs the game is a Spec Manifest row.** Every test file the chunk
+         created that runs the game's code (by the same measure as a guard above), at any step, spec,
+         build or repair, is a `## Spec Manifest` row, or the mutation check never runs it and nothing
+         shows it can fail. A regression test build writes and a measurement test repair writes are
+         rows like any other. The exemptions are the browser smoke test `tests/browser/smoke.spec.ts`,
+         the generated `tests/examples/<slug>.examples.test.ts`, scan-only guards under
+         `tests/guards/`, and an earlier chunk's test file this chunk edits. A file that only reads
+         source as text is not a row: it belongs under `tests/guards/`.
 
        A finding here goes back to `build` (or to `spec`, when the fix is a test that pins the claim
-       properly), never to an edit of the Spec Manifest that makes the row claim less. The one
-       manifest edit a finding asks for is removing a row that names a guard: that row never
-       belonged there, and the guard's scans still run in the full suite.
+       properly), never to an edit of the Spec Manifest that makes the row claim less. The two
+       manifest edits a finding asks for are removing a row that names a guard (that row never
+       belonged there, and the guard's scans still run in the full suite) and adding a row for a new
+       test file that runs the game, with `RED Observed: yes` only once its tests were seen failing.
 
 3. **Worked-example tests (TEST-01)** — this chunk's cited worked examples become executable
    tests as part of this same build, generated and immediately run, never left as a one-time
@@ -343,7 +357,10 @@ text, so no change to the code can make them fail, and in a manifest file the mu
 every one. They live in one guard file for the whole game, `tests/guards/a11y-floor.test.ts`: the
 first UI chunk writes it, a later chunk extends it when it adds a token pair, and never list it in
 the Spec Manifest. The full suite and `boardsmith verify` still run it on every chunk. A guard holds
-scans only; a test that mounts a component or cites a claim belongs in the chunk's test file.
+scans only; a test that mounts a component or cites a claim belongs in the chunk's test file. A guard
+reads the game's source with `readFileSync` or an import ending `?raw`; the one game module it may
+import is literal constants under `src/ui/`, such as the palette a contrast check reads (rule list
+above).
 
 1. **Keyboard-only ActionPanel completion.** A test that completes this chunk's action(s)
    through the ActionPanel using only keyboard events — no pointer/click simulation. Follow two

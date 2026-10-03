@@ -832,10 +832,10 @@ describe('UIQ-03 — a11y floor', () => {
   it('lists the guard rule among test-step-check\'s rules and allows removing a guard\'s row (#443)', () => {
     const test = read('build/test.md').replace(/\s+/g, ' ');
     const rules = test.split('It enforces')[1].split('3. **Worked-example tests')[0];
-    expect(rules.trimStart()).toMatch(/^six rules/);
-    expect(rules.match(/- \*\*/g)).toHaveLength(6);
+    expect(rules.trimStart()).toMatch(/^seven rules/);
+    expect(rules.match(/- \*\*/g)).toHaveLength(7);
     expect(rules).toMatch(/A guard holds scans only[^]*@vue\/test-utils[^]*boardsmith\/testing[^]*renderAsSeat[^]*dispatches an action/);
-    expect(rules).toMatch(/The one manifest edit a finding asks for is removing a row that names a guard/);
+    expect(rules).toMatch(/The two manifest edits a finding asks for are removing a row that names a guard/);
   });
 
   it('says how to write the reduced-motion test in jsdom (#443)', () => {
@@ -2233,5 +2233,61 @@ describe('#453: the in-browser smoke test is a chunk output, and part of the don
     expect(gate).toContain('`npx boardsmith install-browser`');
     expect(cliSource).toContain(".command('smoke')");
     expect(cliSource).toContain(".command('install-browser')");
+  });
+});
+
+/**
+ * #485: a test file a chunk writes outside its Spec Manifest is never mutation-tested. The ruling
+ * (2026-10-02): every NEW test file that runs the game's code is a row, at whichever step writes it,
+ * so build's regression tests and repair's budget tests are rows too. Exempt: the smoke test, the
+ * generated example tests, scan-only guards and edits to an earlier chunk's test files. Following
+ * the skill text must never trip test-step-check's `test-not-in-manifest` finding.
+ */
+describe('#485: every new test file that runs the game is a Spec Manifest row', () => {
+  const EXEMPTIONS = /tests\/browser\/smoke\.spec\.ts[^]*tests\/examples\/[^]*tests\/guards\/[^]*earlier chunk/;
+
+  it("lists the rule among test-step-check's rules, with the ruling's four exemptions", () => {
+    const rules = flatRead('build/test.md').split('It enforces')[1].split('3. **Worked-example tests')[0];
+    const rule = rules.split('**A new test file that runs the game is a Spec Manifest row.**')[1]?.split('- **')[0];
+    expect(rule).toBeDefined();
+    expect(rule).toMatch(/build or repair/);
+    expect(rule).toMatch(EXEMPTIONS);
+    expect(rules).toMatch(/manifest edits a finding asks for[^]*adding a row for a new test file that runs the game/);
+  });
+
+  it('says a guard may not import game code from src/ except literal theme constants from src/ui/', () => {
+    const rules = flatRead('build/test.md').split('It enforces')[1].split('3. **Worked-example tests')[0];
+    const guard = rules.split('**A guard holds scans only.**')[1].split('- **')[0];
+    expect(guard).toMatch(/any other import from the game's `src\/`/);
+    expect(guard).toMatch(/literal constants under `src\/ui\/`[^]*contrast/);
+    const floor = flatRead('build/test.md').split('## The A11y Floor')[1].split('## Failures Loop Back')[0];
+    expect(floor).toMatch(/`\?raw`[^]*literal constants under `src\/ui\/`/);
+  });
+
+  it('has build add a row for a regression test file, and put tests it cannot see fail in an existing row\'s file', () => {
+    const build = flatRead('build/build.md');
+    expect(build).toMatch(/new test file[^]*Spec Manifest row[^]*RED Observed[^]*yes/);
+    expect(build).toMatch(/cannot see fail[^]*existing Spec Manifest file/);
+  });
+
+  it("has repair's measurement test land in a Spec Manifest row, then run test-step-check", () => {
+    const audit = flatRead('build/audit.md');
+    const fix = audit.split('`repair` fixes a constraints finding')[1].split('## The Cross-Chunk Lens')[0];
+    expect(fix).toMatch(/Spec Manifest/);
+    expect(fix).toMatch(/boardsmith test-step-check <slug>/);
+    const repair = flatRead('build/repair.md').split('## A Fix Is Not Done Until `boardsmith verify` Passes')[1];
+    expect(repair).toMatch(/new test file[^]*Spec Manifest row[^]*boardsmith test-step-check <slug>/);
+  });
+
+  it("widens spec's and the template's row rule to every new test file, at any step, with the exemptions", () => {
+    const spec = flatRead('build/spec.md').split('## Persistence')[1].split('## Exemptions')[0];
+    expect(spec).toMatch(/at any step[^]*build[^]*repair/);
+    expect(spec).toMatch(EXEMPTIONS);
+    const template = read('templates/CHUNK.template.md')
+      .split(/^## Spec Manifest$/m)[1]
+      .split(/^## Build Manifest$/m)[0]
+      .replace(/\s+/g, ' ');
+    expect(template).toMatch(/at any step/);
+    expect(template).toMatch(EXEMPTIONS);
   });
 });

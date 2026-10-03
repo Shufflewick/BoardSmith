@@ -176,6 +176,11 @@ full
 <!-- Per-file spec manifest for spec-step crash/resume, and the durable RED evidence the TDD
      guarantee rests on (build/spec.md "Persistence"). One row per test file this chunk introduces,
      except a guard under tests/guards/, which is never a row (build/test.md "The A11y Floor").
+     That holds at any step: a new test file that runs the game's code, written by spec, build (a
+     regression test) or repair (a measurement test), is a row, or test-step-check reports it. Never
+     rows: tests/browser/smoke.spec.ts, the generated tests/examples/<slug>.examples.test.ts, a guard
+     under tests/guards/, and an earlier chunk's test file this chunk edits. A row with no claims
+     says so in Claims Covered, e.g. `none (regression)`.
      Claims Covered lists the ## Interpretation claim numbers that file pins. RED Observed flips
      from `pending` to `yes` only after that file's tests have ACTUALLY been run and seen failing —
      never ahead of the run, never in a batch at the end.

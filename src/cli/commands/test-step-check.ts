@@ -17,13 +17,17 @@
  *   4. No line the chunk added calls a guard unreachable.
  *   5. No test file the chunk wrote or changed provides, by hand, a key only one shell provides
  *      (`test-step-shell-context.ts`): it mounts with the shell-context stubs instead (#453).
- *   6. Mutation: every claim and every test is shown able to fail (`test-step-mutation.ts`).
+ *   6. Every new test file the chunk wrote that runs the game's code is a Spec Manifest row, so the
+ *      mutation check runs it (#485). Exempt: the browser smoke test (`tests/browser/smoke.spec.ts`),
+ *      generated example tests (`tests/examples/<slug>.examples.test.ts`), guards (below), and
+ *      earlier chunks' test files this chunk edits.
+ *   7. Mutation: every claim and every test is shown able to fail (`test-step-mutation.ts`).
  *
  * A file under `tests/guards/` is a guard: a test that reads source as text, such as the a11y
  * floor's colour-literal and asset scans (`build/test.md`). No code mutant can make a scan fail, so
  * a guard is never a Spec Manifest file and is never mutation-tested; the full suite runs it. A guard
- * the chunk wrote or changed that mounts a component or dispatches an action is a finding, since it
- * would be a behaviour test hidden from the mutation check (`test-step-guard.ts`, #443).
+ * the chunk wrote or changed that runs the game's code is a finding, since it would be a behaviour test
+ * hidden from the mutation check (`test-step-code-run.ts` says what counts, #443, #485).
  *
  * "The chunk added" means the lines whose last change is one of the chunk's own
  * `chunk-<slug>/` commits, or is not committed yet (`addedImplementationLines`).
@@ -32,7 +36,7 @@
  */
 import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
-import { join, resolve as pathResolve } from 'node:path';
+import { join, relative, resolve as pathResolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import chalk from 'chalk';
 import {
@@ -55,7 +59,7 @@ import {
 } from './test-step-ast.js';
 import { runMutationCheck, type MutationSummary } from './test-step-mutation.js';
 import { scriptRegions } from './test-step-sfc.js';
-import { findCodeRunInGuard } from './test-step-guard.js';
+import { findCodeRun, type CodeRunContext } from './test-step-code-run.js';
 import { findHandBuiltShellContext } from './test-step-shell-context.js';
 import { findChunkCommits } from '../lib/chunk-commits.js';
 import { chunkMdPath, relChunkMdPath } from '../lib/project-paths.js';
@@ -70,6 +74,7 @@ const TEST_STEP_FINDING_KINDS = Object.freeze([
   'test-file-missing',
   'guard-in-manifest',
   'guard-runs-code',
+  'test-not-in-manifest',
   'claim-not-live',
   'claim-test-missing',
   'claim-uncovered',
@@ -487,33 +492,59 @@ async function guardFindings(
   return findings;
 }
 
+/** The test files a chunk wrote or changed, and what a check needs to read them. */
+interface ChunkTestScope {
+  /** Its manifest's files, then every other file under `tests/` it wrote or changed. */
+  touched: SourceFile[];
+  /** The paths under `tests/` the chunk created, committed or not. */
+  created: ReadonlySet<string>;
+  /** What `findCodeRun` reads beyond the file in hand: the project's scripts and dispatch helpers. */
+  context: CodeRunContext;
+}
+
+const lines = (output: string) => output.split('\n').filter(Boolean);
+
+/** The project-relative paths of the manifest's files, as git writes them, however a row spells one. */
+const manifestPaths = (projectDir: string, testFiles: ChunkTestFile[]) =>
+  new Set(testFiles.map((f) => relative(projectDir, f.absPath).split(sep).join('/')));
+
 /**
- * The test files the chunk wrote or changed: its manifest's, every file under `tests/` one of its
- * commits touched, and any under `tests/` not committed yet.
+ * The chunk's test files: its manifest's, every file under `tests/` one of its commits touched,
+ * and any under `tests/` not committed yet. A file counts as created by the chunk when one of its
+ * commits added it, or it is added but not committed, or untracked.
  */
-async function chunkTestSources(
+async function chunkTestScope(
   projectDir: string,
   chunkCommits: ReadonlySet<string>,
   testFiles: ChunkTestFile[],
-): Promise<SourceFile[]> {
-  const committed = await git(projectDir, ['log', '--no-walk', '--format=', '--name-only', ...chunkCommits, '--', 'tests']);
-  const uncommitted = await git(projectDir, ['diff', 'HEAD', '--name-only', '--', 'tests']);
-  const untracked = await git(projectDir, ['ls-files', '--others', '--exclude-standard', '--', 'tests']);
-  const touched = new Set([...committed.split('\n'), ...uncommitted.split('\n'), ...untracked.split('\n')]);
-  const manifest = new Set(testFiles.map((f) => f.path));
-  return [
-    ...testFiles.map((f) => ({ path: f.path, text: f.source })),
-    ...(await testSupportSources(projectDir)).filter((f) => touched.has(f.path) && !manifest.has(f.path)),
-  ];
+): Promise<ChunkTestScope> {
+  const log = (...filter: string[]) =>
+    git(projectDir, ['log', '--no-walk', '--format=', '--name-only', ...filter, ...chunkCommits, '--', 'tests']);
+  const diff = (...filter: string[]) => git(projectDir, ['diff', 'HEAD', '--name-only', ...filter, '--', 'tests']);
+  const untracked = lines(await git(projectDir, ['ls-files', '--others', '--exclude-standard', '--', 'tests']));
+  const touched = new Set([...lines(await log()), ...lines(await diff()), ...untracked]);
+  const created = new Set([
+    ...lines(await log('--diff-filter=A')),
+    ...lines(await diff('--diff-filter=A')),
+    ...untracked,
+  ]);
+
+  const support = await testSupportSources(projectDir);
+  const scripts = new Map([...(await implementationNow(projectDir)), ...support].map((f) => [f.path, f.text]));
+  const manifest = manifestPaths(projectDir, testFiles);
+  return {
+    touched: [
+      ...testFiles.map((f) => ({ path: f.path, text: f.source })),
+      ...support.filter((f) => touched.has(f.path) && !manifest.has(f.path)),
+    ],
+    created,
+    context: { text: (path) => scripts.get(path), wrappers: findDispatchWrappers(support) },
+  };
 }
 
 /** Check 5: no test file the chunk wrote or changed provides a one-shell key by hand. */
-async function shellContextFindings(
-  projectDir: string,
-  chunkCommits: ReadonlySet<string>,
-  testFiles: ChunkTestFile[],
-): Promise<TestStepFinding[]> {
-  return (await chunkTestSources(projectDir, chunkCommits, testFiles)).flatMap(({ path, text }) =>
+function shellContextFindings(scope: ChunkTestScope): TestStepFinding[] {
+  return scope.touched.flatMap(({ path, text }) =>
     findHandBuiltShellContext(text, path).map(({ line, key }) => ({
       kind: 'hand-built-shell-context' as const,
       subject: `${path}:${line}`,
@@ -529,35 +560,68 @@ async function shellContextFindings(
 }
 
 /** A guard the chunk wrote or changed that runs the game's code (see the file comment). */
-async function guardRunsCodeFindings(
-  projectDir: string,
-  chunkCommits: ReadonlySet<string>,
-  testFiles: ChunkTestFile[],
-): Promise<TestStepFinding[]> {
-  const guards = (await chunkTestSources(projectDir, chunkCommits, testFiles)).filter(({ path }) =>
-    path.startsWith(GUARD_TEST_DIR),
-  );
-  if (guards.length === 0) return [];
-  const wrappers = findDispatchWrappers(await testSupportSources(projectDir));
-  return guards.flatMap(({ path, text }) => {
-    const run = findCodeRunInGuard(text, path, wrappers);
-    if (run === undefined) return [];
-    return [
-      {
-        kind: 'guard-runs-code' as const,
-        subject: `${path}:${run.line}`,
-        detail:
-          `Line ${run.line} of ${path} ${run.what}. A file under ${GUARD_TEST_DIR} holds scans only (tests that read ` +
-          'source as text): it is never mutation-tested, so a test there that runs the game could pass whatever the ' +
-          "code does. Move this test to the chunk's own test file and list that file in the Spec Manifest " +
-          '(build/test.md "The A11y Floor").',
-      },
-    ];
-  });
+function guardRunsCodeFindings(scope: ChunkTestScope): TestStepFinding[] {
+  return scope.touched
+    .filter(({ path }) => path.startsWith(GUARD_TEST_DIR))
+    .flatMap(({ path, text }) => {
+      const run = findCodeRun(text, path, scope.context);
+      if (run === undefined) return [];
+      return [
+        {
+          kind: 'guard-runs-code' as const,
+          subject: `${path}:${run.line}`,
+          detail:
+            `Line ${run.line} of ${path} ${run.what}. A file under ${GUARD_TEST_DIR} holds scans only (tests that read ` +
+            'source as text, with `readFileSync` or an import ending `?raw`): it is never mutation-tested, so a test ' +
+            'there that runs the game could pass whatever the code does. The one game module a scan may import is ' +
+            'literal constants under src/ui/, such as the theme colours a contrast check needs. Move this test to ' +
+            "the chunk's own test file and list that file in the Spec Manifest " +
+            '(build/test.md "The A11y Floor").',
+        },
+      ];
+    });
+}
+
+/** A test file a chunk writes outside its manifest that need not be a row (see the file comment). */
+const UNLISTED_TEST_EXEMPTIONS = Object.freeze([
+  /^tests\/browser\/smoke\.spec\.ts$/,
+  /^tests\/examples\/[^/]+\.examples\.test\.ts$/,
+]);
+const isTestFile = (path: string) => /\.(test|spec)\.(ts|mts|js|mjs)$/.test(path);
+
+/** Check 6: every new test file the chunk wrote that runs the game's code is a Spec Manifest row. */
+function unlistedTestFindings(scope: ChunkTestScope, projectDir: string, testFiles: ChunkTestFile[]): TestStepFinding[] {
+  const manifest = manifestPaths(projectDir, testFiles);
+  return scope.touched
+    .filter(
+      ({ path }) =>
+        scope.created.has(path) &&
+        isTestFile(path) &&
+        !manifest.has(path) &&
+        !path.startsWith(GUARD_TEST_DIR) &&
+        !UNLISTED_TEST_EXEMPTIONS.some((exempt) => exempt.test(path)),
+    )
+    .flatMap(({ path, text }) => {
+      const run = findCodeRun(text, path, scope.context);
+      if (run === undefined) return [];
+      return [
+        {
+          kind: 'test-not-in-manifest' as const,
+          subject: path,
+          detail:
+            `This chunk wrote ${path}, and it runs the game's code (line ${run.line} ${run.what}), but no Spec ` +
+            'Manifest row lists it, so the mutation check never runs it and nothing shows its tests can fail. ' +
+            `Add a Spec Manifest row for it: \`| ${path} | <the claims it pins, or none> | yes |\`, with yes only once ` +
+            'you have seen its tests fail before the change that makes them pass. A test you cannot see fail that ' +
+            "way belongs in one of the chunk's existing Spec Manifest files instead. A file that only reads source as " +
+            `text belongs under ${GUARD_TEST_DIR} (build/spec.md "Persistence").`,
+        },
+      ];
+    });
 }
 
 /**
- * Runs checks 1-5 (see the file comment). Never runs a test; `testStepCheckCommand` runs the
+ * Runs checks 1-6 (see the file comment). Never runs a test; `testStepCheckCommand` runs the
  * mutation check once these pass.
  */
 export async function checkTestStep(
@@ -579,9 +643,13 @@ export async function checkTestStep(
     ...uncoveredClaimFindings(manifest, claims),
     ...(await verbFindings(dir, verbs, rows.testFiles)),
     ...(await guardFindings(dir, added)),
-    ...(await shellContextFindings(dir, chunkCommits, rows.testFiles)),
-    ...(await guardRunsCodeFindings(dir, chunkCommits, rows.testFiles)),
   ];
+  const scope = await chunkTestScope(dir, chunkCommits, rows.testFiles);
+  findings.push(
+    ...shellContextFindings(scope),
+    ...guardRunsCodeFindings(scope),
+    ...unlistedTestFindings(scope, dir, rows.testFiles),
+  );
   return { slug, verbs, findings, testFiles: rows.testFiles, added };
 }
 

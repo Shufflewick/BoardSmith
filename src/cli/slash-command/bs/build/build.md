@@ -23,8 +23,20 @@ restructuring gate below enforces for code shape, applied to the definition of c
 An implementation edited until the test passes is the point of this pipeline; a test edited until
 the implementation passes is its exact inversion.
 
-Adding NEW tests here is fine and expected — regression tests for a bug found mid-build, edge cases
-the implementation reveals. The rule constrains changing `spec`'s tests, not growing the suite.
+Adding NEW tests here is fine and expected: regression tests for a bug found mid-build, edge cases the
+implementation reveals. The rule constrains changing `spec`'s tests, not growing the suite. Where a
+new test goes decides whether `boardsmith test-step-check` passes, because only Spec Manifest files
+are mutation-tested (`build/test.md` item 2(c)):
+
+- **A test you can see fail** (a regression test written before the fix, run red against the bug)
+  may go in a new test file of this chunk. A new test file that runs the game's code is a new
+  Spec Manifest row: its Claims Covered lists the claims it pins, or `none (regression)`, and
+  its RED Observed reads `yes` once you have run it and seen it fail. Add the row in the same edit
+  that adds the file.
+- **A test you cannot see fail** (an edge case of code already written and already right) goes in
+  an existing Spec Manifest file of this chunk, appended, never in a new file: a row claims an
+  observed RED, and there was none to observe.
+- A scan that only reads source as text goes in `tests/guards/`, never in a row.
 
 ## Fresh-Context Exception (one of the two steps allowed to read raw slices)
 
