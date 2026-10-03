@@ -266,11 +266,26 @@ function citationRefusal(name: string, id: string): string {
   return `${name} cites ${id}, but no ledger entry is headed ${id}. Correct the citation on the branch${orExample}`;
 }
 
-/** Why shorthand the merge cannot map (`unreadableShorthand`) stops it, and the fix. */
+/**
+ * Why shorthand the merge cannot map (`unreadableShorthand`) stops it, and the fix. A number after
+ * a dash may be prose ("Ruling @a.1 - 2 players only"), which the merge cannot tell from a range,
+ * so the refusal says how to write either one so it reads one way.
+ */
 function shorthandRefusal(name: string, written: string): string {
+  const range = /^(.*)\.(\d+)[ \t]*[-–][ \t]*(\d+)$/.exec(written);
+  if (range) {
+    const [, chunk, from, to] = range;
+    return (
+      `${name} writes "${written}", which reads as a range of ids, so the merge cannot tell whether ${to} is ` +
+      `${chunk}.${to} or real number ${to}. If it is a range, write each id in full on the branch (for example ` +
+      `\`Rulings ${chunk}.${from} and ${chunk}.${to}\`); if ${to} is not an id, put something other than a dash between ` +
+      `them (for example "${chunk}.${from}: ${to}"). Then merge again.`
+    );
+  }
   return (
-    `${name} writes "${written}", which does not say which ids it names, so the merge cannot give it real ` +
-    `numbers. Write each id in full on the branch (for example \`Rulings @<slug>.1 and @<slug>.3\`), and merge again.`
+    `${name} writes "${written}", a shortened id with no provisional id before it to take its slug from, so the ` +
+    `merge cannot give it a real number. Write the id in full on the branch (for example ` +
+    `\`${written.replace(/\.(\d+)$/, '@<slug>.$1')}\`), and merge again.`
   );
 }
 

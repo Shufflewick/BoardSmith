@@ -404,7 +404,26 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
     });
     const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
     expect(result.merged).toBe(false);
-    expect(result.refusals).toEqual([expect.stringMatching(/^design\/notes\.md writes "@trading\.1-3", which does not say which ids it names/)]);
+    expect(result.refusals).toEqual([expect.stringMatching(/^design\/notes\.md writes "@trading\.1-3", which reads as a range of ids/)]);
+    expect(status()).toBe('');
+  });
+
+  it('says how to reword prose that only reads as a range, and how to write a shortened id in full (#446)', async () => {
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
+      'design/notes.md': 'Ruling @trading.1 - 2 players only.\n\nSee Decision .2 too.\n',
+    });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([
+      'design/notes.md writes "@trading.1 - 2", which reads as a range of ids, so the merge cannot tell whether 2 is ' +
+        '@trading.2 or real number 2. If it is a range, write each id in full on the branch (for example ' +
+        '`Rulings @trading.1 and @trading.2`); if 2 is not an id, put something other than a dash between them ' +
+        '(for example "@trading.1: 2"). Then merge again.',
+      'design/notes.md writes "Decision .2", a shortened id with no provisional id before it to take its slug from, ' +
+        'so the merge cannot give it a real number. Write the id in full on the branch (for example ' +
+        '`Decision @<slug>.2`), and merge again.',
+    ]);
     expect(status()).toBe('');
   });
 
