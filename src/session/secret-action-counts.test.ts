@@ -1,11 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { executeOp, type Op, type OpResult } from './stateless-ops.js';
 import { flowBoundaryKey, type BoundaryKeyState, type GameStateSnapshot } from '../engine/index.js';
-import { GameSession } from './game-session.js';
 import type { SessionInfo } from './types.js';
 import {
   secretDeploymentDefinition,
-  SecretDeploymentGame,
+  createSecretDeploymentSession,
 } from './testing/fixtures/secret-deployment-fixture.js';
 
 // #449: what a seat or a spectator receives must not let it count another
@@ -103,14 +102,7 @@ async function statelessSeenBySeat2AndSpectator(packs: number) {
 
 /** A stateful session whose broadcasts to seat 2 and to a spectator are recorded. */
 function statefulGame() {
-  const session = GameSession.create<SecretDeploymentGame>({
-    gameType: 'secret-deployment',
-    GameClass: SecretDeploymentGame,
-    playerCount: 2,
-    playerNames: ['A', 'B'],
-    seed: options.seed,
-    elementIdKey: options.elementIdKey,
-  });
+  const session = createSecretDeploymentSession({ seed: options.seed, elementIdKey: options.elementIdKey });
   const watchers: SessionInfo[] = [
     { connectionId: 'seat-2', playerSeat: 2, isSpectator: false },
     { connectionId: 'spectator', playerSeat: 0, isSpectator: true },

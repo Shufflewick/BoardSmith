@@ -3,13 +3,12 @@ import { flowBoundaryKey, type BoundaryKeyState } from '../engine/index.js';
 import { _clearShownWarnings } from '../utils/dev.js';
 import { SnapshotSessionHost } from './snapshot-session-host.js';
 import { executeOp } from './stateless-ops.js';
-import { GameSession } from './game-session.js';
 import { createHeadlessSession } from './headless-session.js';
 import { StatePushGate } from './state-push-gate.js';
 import type { SessionInfo } from './types.js';
 import {
   secretDeploymentDefinition,
-  SecretDeploymentGame,
+  createSecretDeploymentSession,
 } from './testing/fixtures/secret-deployment-fixture.js';
 
 // #487: in the fixture's simultaneous deployment, seat 1's `placePack` changes
@@ -18,13 +17,7 @@ import {
 // receive nothing; a public move (`signal`, `done`) must still reach them.
 
 function statefulTable() {
-  const session = GameSession.create<SecretDeploymentGame>({
-    gameType: 'secret-deployment',
-    GameClass: SecretDeploymentGame,
-    playerCount: 2,
-    playerNames: ['A', 'B'],
-    seed: 'bs487',
-  });
+  const session = createSecretDeploymentSession({ seed: 'bs487' });
   const connections: SessionInfo[] = [
     { connectionId: 'seat-1', playerSeat: 1, isSpectator: false },
     { connectionId: 'seat-2', playerSeat: 2, isSpectator: false },
@@ -94,13 +87,7 @@ describe('GameSession pushes no state identical to the last one sent (#487)', ()
   });
 
   it('a connection whose send failed is sent the state again on the next broadcast', async () => {
-    const session = GameSession.create<SecretDeploymentGame>({
-      gameType: 'secret-deployment',
-      GameClass: SecretDeploymentGame,
-      playerCount: 2,
-      playerNames: ['A', 'B'],
-      seed: 'bs487',
-    });
+    const session = createSecretDeploymentSession({ seed: 'bs487' });
     let failing = true;
     const delivered: unknown[] = [];
     session.setBroadcaster({

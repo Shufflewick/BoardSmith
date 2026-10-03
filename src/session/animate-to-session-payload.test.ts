@@ -1,11 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { GameSession } from './game-session.js';
 import { executeOp } from './stateless-ops.js';
 import type { PlayerGameState } from './types.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/index.js';
 import {
   secretDeploymentDefinition,
-  SecretDeploymentGame,
+  createSecretDeploymentSession,
 } from './testing/fixtures/secret-deployment-fixture.js';
 
 // #23 put `animateTo`'s audience on the game view; the session's own
@@ -17,13 +16,7 @@ const eventTypes = (state: PlayerGameState | undefined) => (state?.animationEven
 
 describe("a seat's state carries only the animation events it may see", () => {
   it('stateful session: seat 1 sees its private event, seat 2 and the spectator do not', async () => {
-    const session = GameSession.create<SecretDeploymentGame>({
-      gameType: 'secret-deployment',
-      GameClass: SecretDeploymentGame,
-      playerCount: 2,
-      playerNames: ['A', 'B'],
-      seed: 'animate-to',
-    });
+    const session = createSecretDeploymentSession({ seed: 'animate-to' });
     expect((await session.performAction('placePack', 1, {})).success).toBe(true);
 
     expect(eventTypes(session.getState(1).state)).toEqual(['packPlaced']);
@@ -54,26 +47,14 @@ describe("a seat's state carries only the animation events it may see", () => {
   });
 
   it('a public animation still reaches every seat and the spectator', async () => {
-    const session = GameSession.create<SecretDeploymentGame>({
-      gameType: 'secret-deployment',
-      GameClass: SecretDeploymentGame,
-      playerCount: 2,
-      playerNames: ['A', 'B'],
-      seed: 'animate-to',
-    });
+    const session = createSecretDeploymentSession({ seed: 'animate-to' });
     expect((await session.performAction('signal', 1, {})).success).toBe(true);
     for (const seat of [0, 1, 2]) expect(eventTypes(session.getState(seat).state)).toEqual(['signal']);
   });
 
   it("seat 2's ids do not count seat 1's private animations (#489)", async () => {
     const idOfSignalAfter = async (privatePacks: number) => {
-      const session = GameSession.create<SecretDeploymentGame>({
-        gameType: 'secret-deployment',
-        GameClass: SecretDeploymentGame,
-        playerCount: 2,
-        playerNames: ['A', 'B'],
-        seed: 'animate-to',
-      });
+      const session = createSecretDeploymentSession({ seed: 'animate-to' });
       for (let i = 0; i < privatePacks; i++) expect((await session.performAction('placePack', 1, {})).success).toBe(true);
       expect((await session.performAction('signal', 2, {})).success).toBe(true);
       return { seat1: session.getState(1).state!, seat2: session.getState(2).state!, spectator: session.getState(0).state! };
@@ -86,4 +67,5 @@ describe("a seat's state carries only the animation events it may see", () => {
     // Seat 1 saw its own two, so the public event is its third.
     expect(two.seat1.lastAnimationEventId).toBe(3);
   });
+
 });
