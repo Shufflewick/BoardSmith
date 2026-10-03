@@ -173,6 +173,26 @@ end, and never ahead of the run. The one exception is a guard: a file under `tes
 scans that read source as text, never claims, and is never a row (`build/test.md` "The A11y
 Floor"); `boardsmith test-step-check` reports a row that names one.
 
+The table is not only this step's. Every new test file this chunk writes that runs the game's code
+is a row, at any step: here, in `build` (a regression test, `build/build.md`) and in `repair` (a
+measurement test, `build/audit.md`), because only Spec Manifest files are mutation-tested and
+`boardsmith test-step-check` reports a new test file left outside the table, wherever in the project
+it is. Moving an earlier chunk's test file (or deleting it and writing a similar one) counts as
+creating a new file, so the moved file needs a row here. Five kinds of file are never rows: every
+file under `tests/browser/`, which only Playwright runs and vitest never collects (the browser smoke
+test `tests/browser/smoke.spec.ts`, which every chunk that adds an action edits, among them), the
+generated `tests/examples/<slug>.examples.test.ts`, a measurement harness under
+`design/chunks/<slug>/evidence/` (`state-machine.md` "Project Layout"), a scan-only guard under
+`tests/guards/`, and an earlier chunk's test file this chunk edits in place (which is that chunk's
+row). Every row needs `RED Observed: yes` but one: an exempt chunk that pins an earlier chunk's
+behaviour lists that test as its own row with Claims Covered `none (regression)`, excused from the
+observed red because the behaviour already exists, so its RED Observed reads `n/a` only. It is
+still mutation-tested: the chunk's own lines cannot reach that behaviour, so the check breaks the
+game code the test runs instead (code under `src/` its tests ran, measured with coverage, so a mock
+is mutated only as far as it lets the real code run), at most 100 mutants per row, and credits a
+test only for a failure on an assertion of its own (an `expect`, `assert`, `toThrow` or snapshot
+failure), never for an error the broken game code threw on the way (`build/build.md`).
+
 A session that crashes mid-spec resumes by reading this table: a row with `RED Observed: pending`
 is unfinished work, a row with `yes` is done and must not be rewritten. This is the file-by-file
 resume signal for `spec`, exactly parallel to `## Build Manifest`'s role for `build` — finer-grained

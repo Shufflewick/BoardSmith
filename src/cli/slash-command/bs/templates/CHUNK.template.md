@@ -176,6 +176,19 @@ full
 <!-- Per-file spec manifest for spec-step crash/resume, and the durable RED evidence the TDD
      guarantee rests on (build/spec.md "Persistence"). One row per test file this chunk introduces,
      except a guard under tests/guards/, which is never a row (build/test.md "The A11y Floor").
+     That holds at any step: a new test file that runs the game's code, written by spec, build (a
+     regression test) or repair (a measurement test), is a row, or test-step-check reports it. Never
+     rows: every file under tests/browser/, which only Playwright runs (tests/browser/smoke.spec.ts
+     among them), the generated tests/examples/<slug>.examples.test.ts, a
+     measurement harness under design/chunks/<slug>/evidence/, a guard under tests/guards/, and an
+     earlier chunk's test file this chunk edits in place (moving one makes a new file, which is a row). A row with no claims
+     says so in Claims Covered, e.g. `none (regression)`. An exempt chunk that pins an earlier
+     chunk's behaviour writes its test as such a row, `| <file> | none (regression) | n/a |`: the
+     one row excused from an observed red, since the behaviour already exists, so its RED Observed
+     is `n/a` only. It is still mutation-tested, on the game code its test runs (code under src/
+     its tests ran, measured with coverage; a mock counts only as far as it lets the real code run),
+     at most 100 mutants per row, and a test is credited only for a failure on its own assertion
+     (expect, assert, toThrow, snapshot), never for an error the broken game code threw.
      Claims Covered lists the ## Interpretation claim numbers that file pins. RED Observed flips
      from `pending` to `yes` only after that file's tests have ACTUALLY been run and seen failing —
      never ahead of the run, never in a batch at the end.

@@ -23,8 +23,43 @@ restructuring gate below enforces for code shape, applied to the definition of c
 An implementation edited until the test passes is the point of this pipeline; a test edited until
 the implementation passes is its exact inversion.
 
-Adding NEW tests here is fine and expected — regression tests for a bug found mid-build, edge cases
-the implementation reveals. The rule constrains changing `spec`'s tests, not growing the suite.
+Adding NEW tests here is fine and expected: regression tests for a bug found mid-build, edge cases the
+implementation reveals. The rule constrains changing `spec`'s tests, not growing the suite. Where a
+new test goes decides whether `boardsmith test-step-check` passes, because only Spec Manifest files
+are mutation-tested (`build/test.md` item 2(c)):
+
+- **A test you can see fail** (a regression test written before the fix, run red against the bug)
+  may go in a new test file of this chunk under `tests/`, never in `evidence/`: a repro that proves a
+  fix is a regression test (`state-machine.md` "Project Layout"). A new test file that runs the game's code is a new
+  Spec Manifest row: its Claims Covered lists the claims it pins, or `none (regression)`, and
+  its RED Observed reads `yes` once you have run it and seen it fail. Add the row in the same edit
+  that adds the file.
+- **A test you cannot see fail** (an edge case of code already written and already right) goes in
+  an existing Spec Manifest file of this chunk, appended, never in a new file: a row claims an
+  observed RED, and there was none to observe. An exempt chunk has no such file: it adds the test
+  in a new file as its own row with Claims Covered `none (regression)`,
+  `| <file> | none (regression) | n/a |`, since with the `| exempt |` row it adds no game behaviour of
+  its own and the test pins an earlier chunk's. That row alone is excused from `RED Observed: yes`,
+  because the behaviour already exists: its RED Observed reads `n/a` only, never `pending` or `yes`.
+  The mutation check still runs it, so it must be able to fail. The chunk's own lines cannot reach
+  an earlier chunk's behaviour, so `boardsmith test-step-check` breaks the game code the test runs
+  instead: it runs the file once with coverage and mutates only code under `src/` that the file's
+  tests actually ran (what a mock lets run is decided by that, not by the `vi.mock` call: an
+  automock's functions never run, a spy's do). A big game gives thousands of places to
+  break, so it takes at most 100 mutants per such row, the same ones every run, shared between the
+  file's tests: each test still passing takes a turn on the next place it runs, lines this chunk
+  changed first, then code fewer of the file's tests run before setup they all share, then code that
+  runs only while the file loads. A module the check cannot read is skipped and named. A test in
+  such a row is credited only when a mutant makes one of its own assertions fail: an `expect` or
+  `assert` on an outcome, an `expect(() => ...).toThrow` (or `.not.toThrow`, `rejects`), or a
+  snapshot mismatch. `.not.toThrow` earns credit only when it wraps the pinned action or behaviour.
+  Note that wrapping the game's setup in it is still a setup-only test, not a pin. A test that fails
+  only because the broken game code threw is not credited,
+  since every pin runs the game's setup and a thrown error shows only that the code ran; nor is a
+  failed `expect.assertions(n)` count. When a test survives, the finding says how many places it
+  ran and how many were broken. Assert the outcome the pinned behaviour produces: a test that only
+  runs setup, or asserts a constant, is not a pin.
+- A scan that only reads source as text goes in `tests/guards/`, never in a row.
 
 ## Fresh-Context Exception (one of the two steps allowed to read raw slices)
 

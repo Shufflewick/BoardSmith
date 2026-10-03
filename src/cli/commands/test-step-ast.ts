@@ -29,6 +29,21 @@ export interface ParsedSource {
 }
 
 /** Parses TypeScript with locations, comments and tokens. Throws a readable error naming `file`. */
+/**
+ * A file this check cannot read: nested too deeply for the parser, or not parseable. The message
+ * says what to do; a caller that can carry on without the file catches this and names it instead.
+ */
+export class UnreadableSourceError extends Error {
+  constructor(
+    message: string,
+    /** Why, in a few words for a finding that names the file. */
+    readonly reason: string,
+  ) {
+    super(message);
+    this.name = 'UnreadableSourceError';
+  }
+}
+
 export function parseSource(source: string, file = 'this file'): ParsedSource {
   let program: ReturnType<typeof parse>;
   try {
@@ -42,15 +57,17 @@ export function parseSource(source: string, file = 'this file'): ParsedSource {
     });
   } catch (err) {
     if (err instanceof RangeError) {
-      throw new Error(
+      throw new UnreadableSourceError(
         `${file} is nested too deeply for this check to read (usually a very long chain such as ` +
           "`a + b + c + ...`). Build the value another way, for example an array of parts joined with " +
           "`.join('')`, and run this check again.",
+        'nested too deeply for the parser',
       );
     }
-    throw new Error(
+    throw new UnreadableSourceError(
       `Could not parse ${file} as TypeScript: ${(err as Error).message}\n` +
         'Fix the syntax error (run `npx vue-tsc --noEmit`) and run this check again.',
+      'not parseable as TypeScript',
     );
   }
   return {

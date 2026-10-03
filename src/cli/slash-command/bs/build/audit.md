@@ -280,6 +280,14 @@ putting it to the designer the way `build/ask.md` puts an open question. Their a
 growing structure through: `boardsmith chunk-signoff` runs the same check and refuses to sign
 the chunk off while it fails, so an uncapped structure cannot reach `verified`.
 
+The measurement test is mutation-tested like the chunk's other tests, so it lives in the Spec
+Manifest. Write it before the cap and run it red (the structure overruns the budget), then add the
+cap. In a new test file it is a new Spec Manifest row, its Claims Covered `none (budget)` and its RED
+Observed `yes` once seen failing; a measurement test for a cap already in the code, which you cannot
+see fail, is appended to one of the chunk's existing Spec Manifest files instead. Then run
+`npx boardsmith test-step-check <slug>`, which reports a new test file outside the manifest
+(`build/test.md` item 2(c)) and shows the measurement test can fail.
+
 The rules are the same for a project built from a rulebook or from existing code: the check
 reads CLAUDE.md, the ledger and the code, never the rulebook. With no slug,
 `boardsmith constraint-check` checks the whole tree and runs every measurement test, which is

@@ -832,10 +832,10 @@ describe('UIQ-03 — a11y floor', () => {
   it('lists the guard rule among test-step-check\'s rules and allows removing a guard\'s row (#443)', () => {
     const test = read('build/test.md').replace(/\s+/g, ' ');
     const rules = test.split('It enforces')[1].split('3. **Worked-example tests')[0];
-    expect(rules.trimStart()).toMatch(/^six rules/);
-    expect(rules.match(/- \*\*/g)).toHaveLength(6);
+    expect(rules.trimStart()).toMatch(/^seven rules/);
+    expect(rules.match(/- \*\*/g)).toHaveLength(7);
     expect(rules).toMatch(/A guard holds scans only[^]*@vue\/test-utils[^]*boardsmith\/testing[^]*renderAsSeat[^]*dispatches an action/);
-    expect(rules).toMatch(/The one manifest edit a finding asks for is removing a row that names a guard/);
+    expect(rules).toMatch(/The two manifest edits a finding asks for are removing a row that names a guard/);
   });
 
   it('says how to write the reduced-motion test in jsdom (#443)', () => {
@@ -2235,3 +2235,133 @@ describe('#453: the in-browser smoke test is a chunk output, and part of the don
     expect(cliSource).toContain(".command('install-browser')");
   });
 });
+
+/**
+ * #485: a test file a chunk writes outside its Spec Manifest is never mutation-tested. The ruling
+ * (2026-10-02): every NEW test file that runs the game's code is a row, at whichever step writes it,
+ * so build's regression tests and repair's budget tests are rows too. Exempt: the smoke test, the
+ * generated example tests, scan-only guards and edits to an earlier chunk's test files. Following
+ * the skill text must never trip test-step-check's `test-not-in-manifest` finding.
+ */
+describe('#485: every new test file that runs the game is a Spec Manifest row', () => {
+  const EXEMPTIONS = /tests\/browser\/smoke\.spec\.ts[^]*tests\/examples\/[^]*tests\/guards\/[^]*earlier chunk/;
+
+  it("lists the rule among test-step-check's rules, with the ruling's four exemptions", () => {
+    const rules = flatRead('build/test.md').split('It enforces')[1].split('3. **Worked-example tests')[0];
+    const rule = rules.split('**A new test file that runs the game is a Spec Manifest row.**')[1]?.split('- **')[0];
+    expect(rule).toBeDefined();
+    expect(rule).toMatch(/build or repair/);
+    expect(rule).toMatch(EXEMPTIONS);
+    expect(rules).toMatch(/manifest edits a finding asks for[^]*adding a row for a new test file that runs the game/);
+  });
+
+  it('says a guard may not import game code from src/ except literal theme constants from src/ui/', () => {
+    const rules = flatRead('build/test.md').split('It enforces')[1].split('3. **Worked-example tests')[0];
+    const guard = rules.split('**A guard holds scans only.**')[1].split('- **')[0];
+    expect(guard).toMatch(/any other import from the game's `src\/`/);
+    expect(guard).toMatch(/literal constants under `src\/ui\/`[^]*contrast/);
+    const floor = flatRead('build/test.md').split('## The A11y Floor')[1].split('## Failures Loop Back')[0];
+    expect(floor).toMatch(/`\?raw`[^]*literal constants under `src\/ui\/`/);
+  });
+
+  it('has build add a row for a regression test file, and put tests it cannot see fail in an existing row\'s file', () => {
+    const build = flatRead('build/build.md');
+    expect(build).toMatch(/new test file[^]*Spec Manifest row[^]*RED Observed[^]*yes/);
+    expect(build).toMatch(/cannot see fail[^]*existing Spec Manifest file/);
+  });
+
+  it("has repair's measurement test land in a Spec Manifest row, then run test-step-check", () => {
+    const audit = flatRead('build/audit.md');
+    const fix = audit.split('`repair` fixes a constraints finding')[1].split('## The Cross-Chunk Lens')[0];
+    expect(fix).toMatch(/Spec Manifest/);
+    expect(fix).toMatch(/boardsmith test-step-check <slug>/);
+    const repair = flatRead('build/repair.md').split('## A Fix Is Not Done Until `boardsmith verify` Passes')[1];
+    expect(repair).toMatch(/new test file[^]*Spec Manifest row[^]*boardsmith test-step-check <slug>/);
+  });
+
+  it("widens spec's and the template's row rule to every new test file, at any step, with the exemptions", () => {
+    const spec = flatRead('build/spec.md').split('## Persistence')[1].split('## Exemptions')[0];
+    expect(spec).toMatch(/at any step[^]*build[^]*repair/);
+    expect(spec).toMatch(EXEMPTIONS);
+    const template = read('templates/CHUNK.template.md')
+      .split(/^## Spec Manifest$/m)[1]
+      .split(/^## Build Manifest$/m)[0]
+      .replace(/\s+/g, ' ');
+    expect(template).toMatch(/at any step/);
+    expect(template).toMatch(EXEMPTIONS);
+  });
+
+  // Rename detection is off, so moving an earlier chunk's test file makes a new file (#485 review).
+  it('says moving an earlier chunk\'s test file counts as creating a new one', () => {
+    const rule = flatRead('build/test.md').split('**A new test file that runs the game is a Spec Manifest row.**')[1].split('A finding here goes back')[0];
+    expect(rule).toMatch(/[Mm]oving an earlier chunk's test file[^]*creat/);
+    const spec = flatRead('build/spec.md').split('## Persistence')[1].split('## Exemptions')[0];
+    expect(spec).toMatch(/[Mm]oving an earlier chunk's test file[^]*creat/);
+  });
+
+  it('holds new test files anywhere in the project, not only under tests/', () => {
+    const rule = flatRead('build/test.md').split('**A new test file that runs the game is a Spec Manifest row.**')[1].split('A finding here goes back')[0];
+    expect(rule).toMatch(/anywhere in the project/);
+  });
+
+  // Human ruling (2026-10-03): evidence files split by purpose. Recorded once, in state-machine.md
+  // "Project Layout"; the other files point at it.
+  it('records the evidence ruling once, in Project Layout, and the other files cite it', () => {
+    const layout = read('state-machine.md');
+    const section = layout.slice(layout.indexOf('## Project Layout'), layout.indexOf('## Companion Authority')).replace(/\s+/g, ' ');
+    expect(section).not.toMatch(/a repro that proves a fix, a screenshot/);
+    expect(section).toMatch(/A repro that proves a fix is a regression test[^]*`tests\/`[^]*Spec Manifest row/);
+    expect(section).toMatch(/`evidence\/` keeps only measurement harnesses[^]*exempt/);
+    for (const file of ['build/build.md', 'build/test.md', 'build/spec.md']) {
+      expect(flatRead(file), file).toMatch(/evidence\/[^]{0,300}`state-machine\.md` "Project Layout"/);
+    }
+  });
+
+  // Ruling (2026-10-03): the exempt chunk adds the test as its own `none (regression)` row, excused
+  // from the observed red because it pins existing behaviour, and still mutation-tested.
+  it('has an exempt chunk pin earlier behaviour in its own none (regression) row, excused from the observed red', () => {
+    const build = flatRead('build/build.md');
+    expect(build).toMatch(/An exempt chunk[^]{0,200}`none \(regression\)`[^]{0,300}RED Observed[^]{0,300}mutation/);
+    expect(build).not.toMatch(/name the gap in that chunk's tests/);
+    for (const file of ['build/spec.md', 'build/test.md', 'templates/CHUNK.template.md']) {
+      expect(flatRead(file), file).toMatch(/exempt chunk[^]{0,300}`?none \(regression\)`?[^]{0,300}(observed red|RED Observed)/i);
+    }
+  });
+
+  // Ruling (2026-10-03), as implemented: the chunk's own lines cannot reach what the excused row pins, so
+  // its mutants come from the game code its test runs (what a mock lets run included, nothing it does
+  // not), capped, crediting a test only for a failure on its own assertion, since every pin runs the
+  // game's setup and a mutant that makes setup throw fails any test; its RED Observed reads n/a only.
+  it("says the excused row is mutated on the game code its test runs, capped, credited on its own assertions only, with RED Observed n/a only", () => {
+    for (const file of ['build/build.md', 'build/spec.md', 'build/test.md', 'templates/CHUNK.template.md']) {
+      const text = flatRead(file);
+      expect(text, file).toMatch(/none \(regression\)[^]{0,900}game code (the|its) test runs[^]{0,500}at most 100 mutants/);
+      expect(text, file).toMatch(/none \(regression\)[^]{0,1200}(a mock (is mutated|counts)[^]{0,80}real code run|automock)/);
+      expect(text, file).not.toMatch(/leaving out (any )?modules? (it|the file) mocks/);
+      expect(text, file).toMatch(/none \(regression\)[^]{0,1500}credit(s|ed)[^]{0,120}(own assertions?|assertions? of its own)/);
+      expect(text, file).toMatch(/none \(regression\)[^]{0,1800}game code threw/);
+      expect(text, file).toMatch(/none \(regression\)[^]{0,900}RED Observed[^]{0,80}`n\/a`[^]{0,40}(only|never `pending`)/);
+    }
+  });
+
+  // Review of #485: `.not.toThrow` earns credit only around the pinned action, never around setup.
+  it('says .not.toThrow counts only around the pinned action, and wrapping setup in it is not a pin', () => {
+    for (const file of ['build/build.md', 'build/test.md']) {
+      expect(flatRead(file), file).toMatch(/`\.not\.toThrow`[^.]{0,80}only when it wraps the pinned action[^.]{0,120}\.[^.]{0,40}wrapp(ing|ed) (the game's )?setup in it is (still )?a setup-only test, not a pin/);
+    }
+  });
+
+  // Ruling (2026-10-03): every file under tests/browser/ is exempt, since vitest never runs them.
+  it('exempts every file under tests/browser/, not only the smoke test', () => {
+    for (const file of ['build/spec.md', 'build/test.md', 'templates/CHUNK.template.md']) {
+      expect(flatRead(file), file).toMatch(/every file under `?tests\/browser\/`?[^.]*(never|only Playwright)/);
+    }
+  });
+
+  it("opens test.md item 2 with every row's author, spec, build and repair", () => {
+    const item2 = flatRead('build/test.md').split('2. **Chunk unit/integration tests')[1].split('Two failure modes')[0];
+    expect(item2).toMatch(/NOT authored here/);
+    expect(item2).toMatch(/regression test[^]*`build`[^]*measurement test[^]*`repair`/);
+  });
+});
+
