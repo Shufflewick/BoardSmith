@@ -1,8 +1,8 @@
 {
-  "revision": 122,
+  "revision": 123,
   "bundleProtocol": 2,
   "surfaceHash": "f7e59da26973c116",
-  "payloadHash": "62ef1ec72ea8e5a9",
+  "payloadHash": "06cfffd56c7bef19",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -1038,8 +1038,17 @@
       "revision": 122,
       "date": "2026-10-03",
       "bundleProtocol": 2,
+      "surfaceHash": "a5e66c593812b04b",
+      "payloadHash": "f4cad95eb3f47e1f",
+      "formatHash": "0058593e7cc80205",
+      "summary": "The seeded RNG is now ChaCha20 keyed by SHA-256 of the whole seed (#483), replacing mulberry32 on a 32-bit fold of it: every seed deals a different game from before, snapshot.randomState and action-checkpoint randomState are now a string (\"chacha20:<key>:<position>\") instead of a number, and setRandomState refuses a numeric state, so a game saved on an earlier engine cannot be continued after re-vendoring. The payload fingerprint now also covers the stored random state and the draws it gives. A game, session, MCTS bot or dev-host table started without a seed now gets a 128-bit seed from crypto.getRandomValues instead of Math.random, a non-string seed is refused, and randomState is required on snapshots and checkpoints."
+    },
+    {
+      "revision": 123,
+      "date": "2026-10-03",
+      "bundleProtocol": 2,
       "surfaceHash": "f7e59da26973c116",
-      "payloadHash": "62ef1ec72ea8e5a9",
+      "payloadHash": "06cfffd56c7bef19",
       "formatHash": "0058593e7cc80205",
       "summary": "No BoardSmith host pushes a seat a state identical to the last one it sent (#487). SnapshotSessionHost's broadcast adapter is replaced by record (every view of record, spectator included, after each change) and push (only the seats whose view changed; seat 0 is the spectators), and it gains rosterChanged(), to call when a seat passes between a person and the bot; restoreFrom takes the views pages hold (playerViews, spectatorView) as given, so a roster change made while the host slept is pushed. GameSession's SessionInfo requires a connectionId. StatePushGate is exported from boardsmith/session and boardsmith/session-host. Animation event ids in a seat's payload now count only the events that seat may see (#489): a seat's state.animationEvents carries only its own events, numbered in its own sequence, seat views no longer carry animationEventSeq, every PlayerGameState names the seat it was built for (viewerSeat, 0 for a spectator) so a page that changes seat restarts its animation watermark, and animateTo refuses seat 0."
     }

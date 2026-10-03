@@ -1,5 +1,131 @@
-import { describe, it, expect } from 'vitest';
-import { SeededRandom, createSeededRandom } from './random.js';
+import { createCipheriv, createHash } from 'node:crypto';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { SeededRandom, createSeededRandom, mintSeed } from './random.js';
+
+const draws = (rng: SeededRandom, count: number): number[] => Array.from({ length: count }, () => rng.next());
+
+/**
+ * The generator as its documentation states it, built from Node's own SHA-256
+ * and ChaCha20 rather than from this module: the key is SHA-256 of the seed's
+ * UTF-16 code units (two bytes each, big-endian), the stream is ChaCha20's
+ * keystream from block 0 with words 13..15 zero, and each draw takes two
+ * words, high 27 bits then low 26.
+ */
+function referenceDraws(seed: string, count: number): number[] {
+  const encoded = Buffer.alloc(seed.length * 2);
+  for (let i = 0; i < seed.length; i += 1) encoded.writeUInt16BE(seed.charCodeAt(i), i * 2);
+  const key = createHash('sha256').update(encoded).digest();
+  const stream = createCipheriv('chacha20', key, Buffer.alloc(16)).update(Buffer.alloc(count * 8));
+  return Array.from({ length: count }, (_, i) => {
+    const high = stream.readUInt32LE(i * 8) >>> 5;
+    const low = stream.readUInt32LE(i * 8 + 4) >>> 6;
+    return (high * 2 ** 26 + low) / 2 ** 53;
+  });
+}
+
+describe('SeededRandom generator (#483)', () => {
+  it('is ChaCha20 keyed by SHA-256 of the whole seed, across several blocks', () => {
+    for (const seed of ['', 'abc', 'game-123', '0f1e2d3c4b5a69788796a5b4c3d2e1f0', 'caf\u00e9 \u{1F3B2}']) {
+      expect(draws(new SeededRandom(seed), 40), seed).toEqual(referenceDraws(seed, 40));
+    }
+  });
+
+  // Under the old generator every seed folded to one 32-bit number
+  // (h = 31*h + charCode), so these pairs were the same game.
+  it('tells apart seeds that the old 32-bit fold made identical', () => {
+    expect(draws(new SeededRandom('Aa'), 10)).not.toEqual(draws(new SeededRandom('BB'), 10));
+    const prefix = '9c41d7e05b2a8f3e6d1c0b9a8f7e6d';
+    expect(draws(new SeededRandom(`${prefix}Aa`), 10)).not.toEqual(draws(new SeededRandom(`${prefix}BB`), 10));
+  });
+
+  it('tells apart 128-bit seeds that differ only in their last character', () => {
+    const a = new SeededRandom('0f1e2d3c4b5a69788796a5b4c3d2e1f0');
+    const b = new SeededRandom('0f1e2d3c4b5a69788796a5b4c3d2e1f1');
+    expect(draws(a, 10)).not.toEqual(draws(b, 10));
+  });
+
+  it('gives each draw 53 bits, so a draw can land between two 32-bit steps', () => {
+    const values = draws(new SeededRandom('resolution'), 200);
+    expect(values.some((value) => !Number.isInteger(value * 2 ** 32))).toBe(true);
+  });
+});
+
+describe('SeededRandom state (#483)', () => {
+  it('carries the whole 256-bit key and the position in its state', () => {
+    const state = new SeededRandom('state-shape').getState();
+    expect(state).toMatch(/^chacha20:[0-9a-f]{64}:0$/);
+  });
+
+  it('restoring mid-sequence continues exactly where the generator left off', () => {
+    const live = new SeededRandom('restore-me');
+    draws(live, 13);
+    const saved = JSON.parse(JSON.stringify(live.getState())) as string;
+    const expected = draws(live, 30);
+
+    const restored = new SeededRandom('some other seed entirely');
+    restored.setState(saved);
+    expect(draws(restored, 30)).toEqual(expected);
+    expect(restored.getState()).toBe(live.getState());
+  });
+
+  it('restores at every position inside and across block boundaries', () => {
+    const reference = draws(new SeededRandom('boundaries'), 40);
+    const live = new SeededRandom('boundaries');
+    for (let i = 0; i < 39; i += 1) {
+      const restored = new SeededRandom('x');
+      restored.setState(live.getState());
+      expect(restored.next(), `after ${i} draws`).toBe(reference[i]);
+      live.next();
+    }
+  });
+
+  it('state changes with every draw, so equal states mean no draw happened', () => {
+    const rng = new SeededRandom('fence');
+    const seen = new Set<string>();
+    for (let i = 0; i < 50; i += 1) {
+      seen.add(rng.getState());
+      rng.next();
+    }
+    expect(seen.size).toBe(50);
+  });
+
+  it('restoring an earlier state of the same generator replays it, mid-block included', () => {
+    const rng = new SeededRandom('same-key');
+    draws(rng, 3);
+    const saved = rng.getState();
+    const expected = draws(rng, 20);
+    draws(rng, 5);
+    rng.setState(saved);
+    expect(draws(rng, 20)).toEqual(expected);
+  });
+
+  it.each([
+    ['a number', 12345],
+    ['undefined', undefined],
+    ['null', null],
+  ])('refuses a seed that is %s instead of treating it as some string', (_label, seed) => {
+    expect(() => new SeededRandom(seed as unknown as string)).toThrow(/seed must be a string/);
+  });
+
+  it('refuses a pre-#483 numeric state, saying the save cannot be continued', () => {
+    const rng = new SeededRandom('old');
+    expect(() => rng.setState(123456 as unknown as string)).toThrow(/number.*before.*#483.*cannot be continued/s);
+  });
+
+  it.each([
+    ['empty', ''],
+    ['wrong algorithm', `mulberry32:${'0'.repeat(64)}:0`],
+    ['short key', `chacha20:${'0'.repeat(63)}:0`],
+    ['upper-case key', `chacha20:${'A'.repeat(64)}:0`],
+    ['negative position', `chacha20:${'0'.repeat(64)}:-1`],
+    ['position past 2^53', `chacha20:${'0'.repeat(64)}:20000000000000`],
+  ])('refuses a malformed state (%s) and leaves the generator as it was', (_label, state) => {
+    const rng = new SeededRandom('keep');
+    const before = rng.getState();
+    expect(() => rng.setState(state)).toThrow(/random state/i);
+    expect(rng.getState()).toBe(before);
+  });
+});
 
 describe('SeededRandom', () => {
   describe('determinism', () => {
@@ -9,13 +135,6 @@ describe('SeededRandom', () => {
       const seqA = Array.from({ length: 50 }, () => a.next());
       const seqB = Array.from({ length: 50 }, () => b.next());
       expect(seqA).toEqual(seqB);
-    });
-
-    it('produces the identical sequence for the same numeric seed', () => {
-      const a = new SeededRandom(12345);
-      const b = new SeededRandom(12345);
-      expect(Array.from({ length: 20 }, () => a.next()))
-        .toEqual(Array.from({ length: 20 }, () => b.next()));
     });
 
     it('diverges for different seeds', () => {
@@ -36,12 +155,6 @@ describe('SeededRandom', () => {
       const a = new SeededRandom('');
       const b = new SeededRandom('');
       expect(a.next()).toBe(b.next());
-    });
-
-    it('seed 0 still advances rather than sticking', () => {
-      const rng = new SeededRandom(0);
-      const values = Array.from({ length: 5 }, () => rng.next());
-      expect(new Set(values).size).toBe(5);
     });
   });
 
@@ -242,5 +355,26 @@ describe('createSeededRandom', () => {
     a();
     // b is untouched, so it still starts at the head of the sequence.
     expect(b()).toBe(createSeededRandom('independent')());
+  });
+});
+
+describe('mintSeed (#483)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('gives 128 bits as 32 hex digits', () => {
+    expect(mintSeed()).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it('comes from the cryptographic source, not Math.random', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    expect(mintSeed()).not.toBe(mintSeed());
+  });
+
+  it('refuses, naming the fix, when the runtime has no crypto.getRandomValues', () => {
+    vi.stubGlobal('crypto', undefined);
+    expect(() => mintSeed()).toThrow(/crypto\.getRandomValues to mint a game's random seed.*pass a seed/s);
   });
 });

@@ -39,11 +39,7 @@ import {
   type PersistPlayer,
 } from '../../persistence/index.js';
 import { boundaryKeyOf } from '../../session/testing/boundary-stamp.js';
-
-/** A fresh random 32-bit seed for a new game. */
-function defaultSeed(): string {
-  return String(Math.floor(Math.random() * 0xffffffff));
-}
+import { mintSeed } from '../../utils/random.js';
 
 interface SeatInfo {
   seat: number;
@@ -285,7 +281,7 @@ export interface MultiplayerHostOptions {
   ) => Promise<OpResult>;
   /** Deliver a message to one client (the WS layer maps clientId → socket). */
   send: (clientId: string, message: HostOutbound) => void;
-  /** Seed source for a fresh game (defaults to a random 32-bit seed). */
+  /** Seed source for a fresh game (defaults to `mintSeed`, 128 bits from the secure random source). */
   makeSeed?: () => string;
   /**
    * The cross-session store this host reads at start and commits to at game
@@ -1272,7 +1268,7 @@ export class MultiplayerHost {
       // `startGame` reads it), so `playerOptions`/`playerIsBot`/`playerConfigs`
       // below (all sized off this same `playerCount`) never diverge from it.
       playerCount,
-      seed: seed ?? (this.opts.makeSeed ?? defaultSeed)(),
+      seed: seed ?? (this.opts.makeSeed ?? mintSeed)(),
       // DEVHOST-04 / F-04: top-level `colors`/`colorLabels` are what the engine
       // reads to set `player.color`. Placed after appliedGameOptions so lobby
       // color selections win, mirroring the production per-seat override.

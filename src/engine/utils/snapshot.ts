@@ -4,6 +4,7 @@ import type { SerializedAction } from '../action/types.js';
 import type { FlowState } from '../flow/types.js';
 import type { ElementJSON } from '../element/types.js';
 import type { TutorialStepView } from '../tutorial/types.js';
+import type { RandomState } from '../../utils/random.js';
 import { getActiveTutorialStepView } from '../tutorial/gate.js';
 
 /**
@@ -64,9 +65,9 @@ export interface GameStateSnapshot {
    *  time. Restored via `game.setRandomState()` so the next `game.random()` draw
    *  matches the live game exactly. This is what makes `fromSnapshot` fully
    *  state-authoritative: the RNG position is restored directly instead of being
-   *  re-derived by replaying actions. Optional for back-compat with older
-   *  snapshots that predate RNG-state capture. */
-  randomState?: number;
+   *  re-derived by replaying actions. Required: a snapshot without it would
+   *  deal from the seed again, so restoring one is refused. */
+  randomState: RandomState;
 
   /** Original constructor options (for full game restoration including custom options like playerConfigs) */
   gameOptions?: Record<string, unknown>;
@@ -262,7 +263,7 @@ export interface ActionCheckpoint {
   sequence?: number;
 
   /** Seeded RNG internal state (`game.getRandomState()`) at this checkpoint. */
-  randomState?: number;
+  randomState: RandomState;
 
   /**
    * The log's ABSOLUTE length at this action-count boundary — entries ever
