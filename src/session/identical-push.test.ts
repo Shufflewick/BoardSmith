@@ -1,4 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { flowBoundaryKey, type BoundaryKeyState } from '../engine/index.js';
+import { _clearShownWarnings } from '../utils/dev.js';
+import { SnapshotSessionHost } from './snapshot-session-host.js';
+import { executeOp } from './stateless-ops.js';
 import { GameSession } from './game-session.js';
 import { createHeadlessSession } from './headless-session.js';
 import { StatePushGate } from './state-push-gate.js';
@@ -89,6 +93,34 @@ describe('GameSession pushes no state identical to the last one sent (#487)', ()
     expect(pushesTo('seat-2')).toBe(2);
   });
 
+  it('a connection whose send failed is sent the state again on the next broadcast', async () => {
+    const session = GameSession.create<SecretDeploymentGame>({
+      gameType: 'secret-deployment',
+      GameClass: SecretDeploymentGame,
+      playerCount: 2,
+      playerNames: ['A', 'B'],
+      seed: 'bs487',
+    });
+    let failing = true;
+    const delivered: unknown[] = [];
+    session.setBroadcaster({
+      getSessions: () => [{ connectionId: 'seat-2', playerSeat: 2, isSpectator: false }],
+      send: (_to, message) => {
+        if (failing) throw new Error('socket closed');
+        delivered.push(message);
+      },
+    });
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      session.broadcast();
+      failing = false;
+      session.broadcast();
+      expect(delivered).toHaveLength(1);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
   it('refuses connections that do not each name a distinct connection', () => {
     const { session, connections } = statefulTable();
     connections.push({ connectionId: 'seat-2', playerSeat: 2, isSpectator: false });
@@ -96,25 +128,78 @@ describe('GameSession pushes no state identical to the last one sent (#487)', ()
   });
 });
 
-describe('SnapshotSessionHost hands its adapter the same view for a seat that saw nothing (#487)', () => {
-  it("seat 2's view is not pushed after seat 1's secret actions, and is after a public one", async () => {
+describe('SnapshotSessionHost pushes only the seats whose view changed (#487)', () => {
+  async function secretTable() {
     const table = createHeadlessSession(secretDeploymentDefinition, { playerCount: 2, seed: 'bs487' });
     await table.host.start();
-    // The adapter's half: one gate, one recipient per seat, as a platform host keeps per socket.
-    const gate = new StatePushGate<number, { view: { state: unknown } }>({ playerState: (f) => f.view.state });
-    const pushedTo = (seat: number) =>
-      table.broadcasts.map((views) => gate.shouldPush(seat, { view: (views as Array<{ state: unknown }>)[seat - 1]! }));
     const key = () => table.metas.at(-1)!.turnBoundary.key;
     const act = async (seat: number, actionName: string) =>
       expect((await table.host.handleOp(seat, { type: 'action', actionName, player: seat, args: {}, boundaryKey: key() })).success).toBe(true);
+    /** The seats each push since `from` went to (0 = the spectators). */
+    const pushedSince = (from: number) => table.pushes.slice(from).map((push) => push.map((p) => p.seat));
+    return { table, act, pushedSince };
+  }
+
+  it('a secret move is pushed to its own seat only; a public one to everyone', async () => {
+    const { table, act, pushedSince } = await secretTable();
+    expect(pushedSince(0)).toEqual([[0, 1, 2]]);
+    const from = table.pushes.length;
 
     await act(1, 'placePack');
     await act(1, 'placePack');
     await act(1, 'signal');
     await act(1, 'placePack');
     await act(1, 'done');
-    // start, placePack, placePack, signal, placePack, done
-    expect(pushedTo(2)).toEqual([true, false, false, true, false, true]);
-    expect(pushedTo(1).every(Boolean)).toBe(true);
+    expect(pushedSince(from)).toEqual([[1], [1], [0, 1, 2], [1], [0, 1, 2]]);
+    // The state of record still follows every change, for pages that connect.
+    expect(table.broadcasts).toHaveLength(6);
+  });
+
+  it('a host restored with the views its pages hold pushes them nothing until something they may see changes', async () => {
+    const { table } = await secretTable();
+    const restored = createHeadlessSession(secretDeploymentDefinition, { playerCount: 2, seed: 'bs487' });
+    restored.host.restoreFrom({
+      ...table.host.durableState(),
+      playerViews: table.broadcasts.at(-1) as unknown[],
+      spectatorView: table.spectatorViews.at(-1),
+    });
+    const key = table.metas.at(-1)!.turnBoundary.key;
+    expect((await restored.host.handleOp(1, { type: 'action', actionName: 'placePack', player: 1, args: {}, boundaryKey: key })).success).toBe(true);
+    expect(restored.pushes.map((push) => push.map((p) => p.seat))).toEqual([[1]]);
+  });
+
+  it('a seat passing to the bot is pushed to every page when it happens, not with the next move', async () => {
+    const { table, pushedSince } = await secretTable();
+    const from = table.pushes.length;
+    table.makeSeatBot(2);
+    // Every view now says a bot plays here.
+    expect(pushedSince(from)).toEqual([[0, 1, 2]]);
+  });
+
+  it('warns when the roster changed and nobody called rosterChanged()', async () => {
+    _clearShownWarnings();
+    const roster: Array<{ seat: number }> = [];
+    const pushes: number[][] = [];
+    const host = new SnapshotSessionHost({
+      playerCount: 2,
+      get botSeats() {
+        return roster;
+      },
+      // A bot that never moves: the warning is about the roster, not the bot's play.
+      executeOp: (snap, pend, op) =>
+        executeOp(secretDeploymentDefinition, { playerCount: 2, seed: 'bs487' }, snap, pend, op.type === 'botTurn' ? { ...op, seats: [] } : op),
+      record: () => {},
+      push: (changed) => pushes.push(changed.map((c) => c.seat)),
+    });
+    await host.start();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      roster.push({ seat: 2 });
+      const boundaryKey = flowBoundaryKey(host.flowState as BoundaryKeyState);
+      expect((await host.handleOp(1, { type: 'action', actionName: 'placePack', player: 1, args: {}, boundaryKey })).success).toBe(true);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('rosterChanged()'));
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

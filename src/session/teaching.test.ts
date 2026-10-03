@@ -11,6 +11,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TwoPlayerPickGame as TeachingTestGame } from './testing/fixtures/two-player-pick-fixture.js';
+import { Game, Player, Action, defineFlow, actionStep, type GameOptions } from '../engine/index.js';
 import { GameRunner } from '../runtime/runner.js';
 import { GameSession } from './game-session.js';
 import type { PlayerGameState, SessionInfo } from './types.js';
@@ -173,8 +174,53 @@ describe('teaching state — requestHint / clearHint', () => {
 // Task 1: clear-on-replace (undo/rewind)
 // ============================================
 
+/** Seat 1 picks twice in one turn, so it can undo its first pick while its turn is still open. */
+class TwoPickTurnGame extends Game<TwoPickTurnGame, Player> {
+  picks = 0;
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(
+      Action.create('pick')
+        .chooseFrom('option', { prompt: 'Pick an option', choices: ['a', 'b', 'c'] })
+        .execute(() => {
+          this.picks += 1;
+        }),
+    );
+    this.setFlow(
+      defineFlow({
+        root: actionStep({
+          actions: ['pick'],
+          player: (ctx) => ctx.game.getPlayer(1)!,
+          repeatUntil: () => this.picks >= 2,
+        }),
+      }),
+    );
+  }
+}
+
 describe('teaching state — clear-on-replace', () => {
-  // After requestHint + undo, stale hint must be gone.
+  // A stale hint must be gone after anything that replaces the runner.
+  it('undo clears a stale hint from the broadcast state', async () => {
+    const session = GameSession.create({
+      gameType: 'two-pick-turn',
+      GameClass: TwoPickTurnGame,
+      playerCount: 2,
+      playerNames: ['Alice', 'Bob'],
+      seed: 'test',
+    });
+    const captured: CapturedState[] = [];
+    session.setBroadcaster(makeMockBroadcaster([{ playerSeat: 1, isSpectator: false }], captured));
+
+    // Seat 1 picks once, so its turn is still open and its pick undoable.
+    expect((await session.performAction('pick', 1, { option: 'a' })).success).toBe(true);
+    await (session as unknown as { requestHint(seat: number): Promise<void> }).requestHint(1);
+    expect(captured.at(-1)!.state.hint).toBeDefined();
+
+    captured.length = 0;
+    expect((await session.undoToTurnStart(1)).success).toBe(true);
+    expect(captured.at(-1)!.state.hint).toBeUndefined();
+  });
+
   it('replacing the runner (a rewind) clears a stale hint from the broadcast state', async () => {
     // A rewind is a debug op, refused unless debugging is on (#481).
     const session = makeSession({ debugEnabled: true });

@@ -228,11 +228,42 @@ nothing (#487). Two consequences for a host:
   A host that must send outside `broadcast()` keeps its own `StatePushGate`
   (below).
 
+### `SnapshotSessionHost` compares for you
+
+`SnapshotSessionHost` (from `boardsmith/session-host`) hands its adapter two
+things after every change, and decides itself which seats changed:
+
+```typescript
+const host = new SnapshotSessionHost({
+  // ...
+  // The state of record: every seat's view and the spectator's. Serve a page
+  // that connects or reconnects from these. Not a push.
+  record: ({ players, spectator }, meta) => {
+    lastViews = { players, spectator };
+  },
+  // Only the seats whose view changed (seat 0 is the spectators). A plain loop
+  // is correct: a seat that saw nothing new is not in the list.
+  push: (changed, meta) => {
+    for (const { seat, view } of changed) {
+      for (const socket of socketsOf(seat)) socket.send(JSON.stringify({ view, serverNow: Date.now() }));
+    }
+  },
+});
+```
+
+Stamp per-push fields such as a send time in `push`, after the host has
+compared. When a seat passes between a person and the bot, call
+`host.rosterChanged()` at once: the views say whether a bot plays here, and
+without the call that change would reach every page with the next move. A host
+that wakes from hibernation passes the views it last recorded to
+`restoreFrom({ ..., playerViews, spectatorView })`, so the first change after
+waking pushes only the seats it changes.
+
 ### Pushing state from your own host
 
-A host that builds its own frames, such as one running `SnapshotSessionHost`,
-keeps a `StatePushGate` and asks it before every push. It is exported from
-`boardsmith/session` and from `boardsmith/session-host`.
+A host that builds frames outside both of those keeps a `StatePushGate` and
+asks it before every push. It is exported from `boardsmith/session` and from
+`boardsmith/session-host`.
 
 ```typescript
 import { StatePushGate } from 'boardsmith/session-host';

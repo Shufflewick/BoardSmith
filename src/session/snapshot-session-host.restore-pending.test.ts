@@ -27,7 +27,7 @@ function makeHost(extra: Partial<SnapshotSessionAdapters> = {}) {
   const host = new SnapshotSessionHost({
     playerCount: options.playerCount,
     executeOp: (snap, pend, op) => executeOp(collectDef, options, snap, pend, op),
-    broadcast: (views) => broadcasts.push(views),
+    push: () => {}, record: ({ players: views }) => broadcasts.push(views),
     // What a Durable Object's storage hands back: a JSON round trip.
     persist: (state) => {
       persisted.push(JSON.parse(JSON.stringify(state)) as SnapshotHostState);

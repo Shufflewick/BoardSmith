@@ -242,7 +242,7 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
           isComplete: true,
           winners: [1],
         }) as unknown as OpResult,
-      broadcast: (_views, meta) => metas.push(meta),
+      push: () => {}, record: (_views, meta) => metas.push(meta),
     });
     await host.start();
 
@@ -263,7 +263,7 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
       const host = new SnapshotSessionHost({
         playerCount: 2,
         executeOp: (snap, pend, op) => executeOp(simultaneousRoundsFixtureDefinition, twoSeats, snap, pend, op),
-        broadcast: (_views, meta) => {
+        push: () => {}, record: (_views, meta) => {
           metas.push(meta);
         },
       });

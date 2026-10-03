@@ -34,7 +34,7 @@ function makeHost(botSeats: Array<{ seat: number; level?: string }> = []) {
     playerCount: options.playerCount,
     botSeats,
     executeOp: (snap, pend, op) => executeOp(collectDef, options, snap, pend, op),
-    broadcast: () => {},
+    record: () => {}, push: () => {},
   });
 }
 

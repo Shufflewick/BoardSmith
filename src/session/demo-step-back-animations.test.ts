@@ -50,7 +50,7 @@ describe('demo step back (#449 review)', () => {
         if (op.type === 'action' && res.success) moves++;
         return res;
       },
-      broadcast: (views) => {
+      push: () => {}, record: ({ players: views }) => {
         seat1.value = (views[0] as { state: SeatState }).state;
       },
     });

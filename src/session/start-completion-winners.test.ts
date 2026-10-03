@@ -54,7 +54,7 @@ describe('a flow completing inside start() publishes its winners', () => {
       playerCount: 2,
       executeOp: (snap, pend, op) =>
         executeOp(instantWinGameDef, instantWinOptions, snap, pend, op),
-      broadcast: (views, meta) => broadcastLog.push([views, meta]),
+      push: () => {}, record: ({ players: views }, meta) => broadcastLog.push([views, meta]),
     };
 
     const host = new SnapshotSessionHost(adapters);

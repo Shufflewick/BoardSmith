@@ -2058,6 +2058,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       try {
         this.#broadcaster.send(session, update);
       } catch (error) {
+        // It was recorded as sent, and was not: forget the connection, so the
+        // next broadcast sends it the full state rather than nothing.
+        this.#pushGate.forget(session.connectionId);
         console.error('Broadcast error:', error);
       }
     }

@@ -305,7 +305,7 @@ describe('#481 debug op gate', () => {
           executed.push(op.type);
           return executeOp(passDef, op.type === 'start' ? passOptions : { playerCount: 2 }, snap, pend, op, { debug: true });
         },
-        broadcast: () => {},
+        record: () => {}, push: () => {},
       });
       await host.start();
       for (let i = 0; i < 2; i++) {

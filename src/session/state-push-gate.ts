@@ -46,7 +46,11 @@ export interface StatePushGateOptions<F> {
 }
 
 interface Sent {
-  /** The frame as compared: everything but per-push fields and animation events. */
+  /**
+   * A 128-bit digest of the frame as compared (everything but per-push fields
+   * and animation events). A digest rather than the text, so a gate holds a few
+   * bytes per recipient rather than a copy of every frame it sent.
+   */
   body: string;
   /** The highest animation event id in the frame. */
   lastEventId: number;
@@ -66,6 +70,37 @@ function highestEventId(events: unknown): number {
     if (typeof id === 'number' && id > highest) highest = id;
   }
   return highest;
+}
+
+/**
+ * A 128-bit digest of `text` (cyrb128: four independently mixed 32-bit lanes).
+ * Not cryptographic, which it need not be: no one chooses the frames compared
+ * here to collide, and with the text's length appended, two different frames
+ * of one recipient sharing a digest by accident is vanishingly unlikely.
+ * Synchronous and import-free, because the gate runs inside a Worker as well
+ * as in Node.
+ */
+function digest(text: string): string {
+  let h1 = 1779033703;
+  let h2 = 3144134277;
+  let h3 = 1013904242;
+  let h4 = 2773480762;
+  for (let i = 0; i < text.length; i++) {
+    const k = text.charCodeAt(i);
+    h1 = h2 ^ Math.imul(h1 ^ k, 597399067);
+    h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);
+    h3 = h4 ^ Math.imul(h3 ^ k, 951274213);
+    h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);
+  }
+  h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
+  h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
+  h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
+  h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+  h1 ^= h2 ^ h3 ^ h4;
+  h2 ^= h1;
+  h3 ^= h1;
+  h4 ^= h1;
+  return [h1, h2, h3, h4].map((h) => (h >>> 0).toString(16).padStart(8, '0')).join('') + `:${text.length}`;
 }
 
 export class StatePushGate<R, F extends object = object> {
@@ -117,12 +152,12 @@ export class StatePushGate<R, F extends object = object> {
       highestEventId(gameView?.animationEvents),
     );
     const perPush = this.#perPush;
-    const body = JSON.stringify(frame, function (this: unknown, key: string, value: unknown) {
+    const text = JSON.stringify(frame, function (this: unknown, key: string, value: unknown) {
       if (this === frame && perPush.has(key)) return undefined;
       if (this === playerState && (key === 'animationEvents' || key === 'lastAnimationEventId')) return undefined;
       if (this === gameView && key === 'animationEvents') return undefined;
       return value;
     });
-    return { body, lastEventId };
+    return { body: digest(text), lastEventId };
   }
 }
