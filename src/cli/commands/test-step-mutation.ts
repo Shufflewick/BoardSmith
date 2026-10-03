@@ -20,19 +20,27 @@
  * tautology in that file would otherwise be credited too.
  *
  * One kind of test file is mutated differently: the `none (regression)` row of an exempt chunk
- * (#485). Such a chunk adds no game behaviour, so its own lines give no mutant that could reach what
- * the row pins, an earlier chunk's behaviour. Its mutants are made instead from the game code the
- * test loads (`gameModulesLoaded` in `test-step-code-run.ts`, given here as `ChunkTestFile.loads`),
- * every line of it, the lines the chunk changed there first, at most `PIN_MUTANT_CAP` per such file
- * (`selectPinMutants`). Those mutants run only against that file.
+ * (#485), marked `ChunkTestFile.pin`. Such a chunk adds no game behaviour, so its own lines give no
+ * mutant that could reach what the row pins, an earlier chunk's behaviour. Its mutants are made
+ * instead from the game code the test runs, found by running it once with V8 coverage
+ * (`test-step-coverage.ts`), leaving out the modules it mocks: at most `PIN_MUTANT_CAP` per such file,
+ * shared between its tests (`killPinTests`). Those mutants run only against that file.
  */
 import { spawn } from 'node:child_process';
 import { existsSync, promises as fs, realpathSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
-import { parseSource, walk, findTestBlocks, type AstNode, type ParsedSource, type TestBlock } from './test-step-ast.js';
+import {
+  parseSource,
+  walk,
+  findTestBlocks,
+  UnreadableSourceError,
+  type AstNode,
+  type ParsedSource,
+  type TestBlock,
+} from './test-step-ast.js';
 import { codeRegions } from './test-step-sfc.js';
 import type { ChunkTestFile, TestStepFinding } from './test-step-check.js';
-import type { LoadedModule } from './test-step-code-run.js';
+import { COVERAGE_SETUP, coverageEnv, readCoverage, testKeyOf, type FileCoverage } from './test-step-coverage.js';
 import type { MutantCache } from '../lib/mutant-cache.js';
 import { scratchDir } from '../lib/project-paths.js';
 import { VITEST_CONFIG_NAMES } from '../lib/test-run-scope.js';
@@ -158,6 +166,8 @@ const MUTATORS: Readonly<Record<string, Mutator>> = Object.freeze({
 /** One mutant before its text is built: where it is, what it changes, and the change. */
 interface MutantSite {
   line: number;
+  /** The 0-based column of the start of the code it changes (on `line`). */
+  column: number;
   description: string;
   edit: Edit;
 }
@@ -167,7 +177,7 @@ interface MutantSite {
  * component's script blocks and template expressions are mutated; the rest of it is markup (#425).
  */
 function mutationSites(file: string, source: string, lines: ReadonlySet<number>): MutantSite[] {
-  const found: Array<MutantSite & { start: number; order: number }> = [];
+  const found: Array<Omit<MutantSite, 'column'> & { start: number; order: number }> = [];
   for (const region of codeRegions(file, source)) {
     const { ast, tokens } = parseSource(region.text, file);
     walk(ast, (node, ancestors) => {
@@ -188,7 +198,7 @@ function mutationSites(file: string, source: string, lines: ReadonlySet<number>)
   }
   return found
     .sort((a, b) => a.line - b.line || a.start - b.start || a.order - b.order)
-    .map(({ line, description, edit }) => ({ line, description, edit }));
+    .map(({ line, start, description, edit }) => ({ line, column: start - source.lastIndexOf('\n', start - 1) - 1, description, edit }));
 }
 
 /** The mutant a site makes: the whole file's text with that one change applied. */
@@ -205,61 +215,70 @@ export function generateMutants(file: string, source: string, addedLines: Readon
 }
 
 // -------------------------------------------------------------------------------------------
-// selectPinMutants: the mutants a test pinning earlier behaviour is run against
+// orderPinSites: the order a test pinning earlier behaviour is tried in
 // -------------------------------------------------------------------------------------------
 
 /**
  * The most mutants a `none (regression)` row of an exempt chunk is run against. A whole game can give
- * thousands; each mutant is one vitest run of the row's file, so this bounds the check to about a
- * hundred runs of that file, each under the same time limit as any other mutant. The check stops early
- * once every test in the file has failed, so a test that pins something real usually needs only a few.
+ * thousands; each mutant is one vitest run of the row's file, so this bounds the check to a hundred
+ * runs of that file, each under the same time limit as any other mutant. The check stops once every
+ * test in the file has failed, so a file whose tests pin something real usually needs far fewer.
  */
 export const PIN_MUTANT_CAP = 100;
 
-/** A game module a pinning test loads, with every mutant of it in source order. */
+/** The coverage setup file's name in the run's scratch directory (`test-step-coverage.ts`). */
+const COVERAGE_SETUP_NAME = 'coverage-setup.mjs';
+
+/** A game module a pinning test runs, with the places of one rank in it, in source order. */
 interface PinModule<T> {
   path: string;
-  depth: number;
+  /** Lower ranks come first (`pinSites` says what a rank is). */
+  rank: number;
   mutants: T[];
 }
 
-const byDepthThenPath = (a: PinModule<unknown>, b: PinModule<unknown>) => a.depth - b.depth || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
-
 /**
- * At most `cap` of the modules' mutants, chosen the same way every time. The cap is shared out one
- * mutant per module per round, nearest module first, so every module the test loads gets a share;
- * each module's share is spread evenly across its whole length rather than taken from its top. The
- * mutants come back round by round, nearest first, so the modules the test imports itself go first.
- * It picks among sites (`mutationSites`), so only the chosen mutants' texts are ever built.
+ * Every module's mutants in the order a pin tries them, the same every time: ranks in order, lowest
+ * first, all of one before any of the next. Within a rank, one mutant per module per round (modules
+ * by path), and each module's mutants in an order that spreads any first few across its whole length
+ * (`spreadOrder`) rather than taking them from its top.
  */
-export function selectPinMutants<T>(modules: ReadonlyArray<PinModule<T>>, cap: number): T[] {
-  const ordered = [...modules].sort(byDepthThenPath);
-  const shares = ordered.map(() => 0);
-  let taken = 0;
-  for (let grew = true; grew && taken < cap; ) {
-    grew = false;
-    for (const [i, module] of ordered.entries()) {
-      if (taken === cap || shares[i] === module.mutants.length) continue;
-      shares[i]++;
-      taken++;
-      grew = true;
+export function orderPinSites<T>(modules: ReadonlyArray<PinModule<T>>): T[] {
+  const ordered: T[] = [];
+  for (const rank of [...new Set(modules.map((m) => m.rank))].sort((a, b) => a - b)) {
+    const lists = modules
+      .filter((m) => m.rank === rank)
+      .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+      .map((m) => spreadOrder(m.mutants.length).map((k) => m.mutants[k]));
+    for (let round = 0; round < Math.max(0, ...lists.map((l) => l.length)); round++) {
+      for (const list of lists) if (round < list.length) ordered.push(list[round]);
     }
   }
-  const picks = ordered.map((module, i) =>
-    Array.from({ length: shares[i] }, (_, k) => module.mutants[Math.floor((k * module.mutants.length) / shares[i])]),
-  );
-  const selected: T[] = [];
-  for (let round = 0; round < Math.max(0, ...shares); round++) {
-    for (const pick of picks) if (round < pick.length) selected.push(pick[round]);
+  return ordered;
+}
+
+/** `0..count-1` in an order whose every prefix is spread across the range: halves, then quarters, and so on. */
+export function spreadOrder(count: number): number[] {
+  const order: number[] = [];
+  const queue: Array<[number, number]> = [[0, count]];
+  while (queue.length > 0) {
+    const [from, to] = queue.shift()!;
+    if (from >= to) continue;
+    const middle = (from + to) >> 1;
+    order.push(middle);
+    queue.push([from, middle], [middle + 1, to]);
   }
-  return selected;
+  return order;
 }
 
 // -------------------------------------------------------------------------------------------
 // Running vitest with one mutant in place
 // -------------------------------------------------------------------------------------------
 
-/** The project's own vitest config, extended with the mutant loader and test locations. */
+/**
+ * The project's own vitest config, extended with the mutant loader and test locations, and with the
+ * coverage setup file (`COVERAGE_SETUP`) on a run that records which game code a pin runs.
+ */
 function wrapperConfig(workDir: string, projectConfig: string | undefined): string {
   const importBase = projectConfig
     ? `import base from ${JSON.stringify(relative(workDir, projectConfig).split(sep).join('/'))};`
@@ -283,7 +302,10 @@ export default defineConfig(async (env) =>
         },
       },
     ],
-    test: { includeTaskLocation: true },
+    test: {
+      includeTaskLocation: true,
+      ...(process.env.BOARDSMITH_COVERAGE ? { setupFiles: [${JSON.stringify(join(workDir, COVERAGE_SETUP_NAME))}] } : {}),
+    },
   }),
 );
 `;
@@ -313,12 +335,15 @@ type RunResult =
 type RunScope = ChunkTestFile[] | 'whole-suite';
 
 interface Runner {
-  /** With `bail`, vitest stops at the first failing test: enough to know a mutant was caught. */
+  /**
+   * With `bail`, vitest stops at the first failing test: enough to know a mutant was caught. With
+   * `coverage`, each test file writes which game code it ran into that directory (`readCoverage`).
+   */
   run(
     scope: RunScope,
     mutant: { absPath: string; source: string } | null,
     timeoutMs: number,
-    options?: { bail?: boolean },
+    options?: { bail?: boolean; coverage?: string },
   ): Promise<RunResult>;
   dispose(): Promise<void>;
 }
@@ -414,6 +439,7 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
   const reportPath = join(workDir, 'report.json');
   const projectConfig = VITEST_CONFIG_NAMES.map((n) => join(projectDir, n)).find((p) => existsSync(p));
   await fs.writeFile(configPath, wrapperConfig(workDir, projectConfig));
+  await fs.writeFile(join(workDir, COVERAGE_SETUP_NAME), COVERAGE_SETUP);
 
   const byRealPath = new Map(testFiles.map((f) => [realpathSync(f.absPath), f.path]));
 
@@ -422,6 +448,8 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
       await fs.rm(reportPath, { force: true });
       const env = { ...process.env };
       delete env.BOARDSMITH_MUTANT;
+      delete env.BOARDSMITH_COVERAGE;
+      if (options.coverage) Object.assign(env, coverageEnv(options.coverage, projectDir));
       if (mutant) {
         await fs.writeFile(mutantPath, JSON.stringify({ file: realpathSync(mutant.absPath), source: mutant.source }));
         env.BOARDSMITH_MUTANT = mutantPath;
@@ -458,7 +486,7 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
 // -------------------------------------------------------------------------------------------
 
 export interface MutationSummary {
-  /** Files that were mutated: the code the chunk changed, and the game code a pin loads. */
+  /** Files that were mutated: the code the chunk changed, and the game code a pin runs. */
   files: number;
   mutants: number;
   /** Mutants that made at least one chunk test fail. */
@@ -509,8 +537,8 @@ type LocatedMutant = Mutant & { absPath: string };
 /** A mutant of the chunk check, and the manifest paths of the test files it runs against. */
 type TargetedMutant = LocatedMutant & { targets: ReadonlySet<string> };
 
-/** Whether a test file pins earlier behaviour, so its mutants come from the game code it loads. */
-const isPin = (file: ChunkTestFile) => file.loads !== undefined;
+/** Whether a test file pins earlier behaviour, so its mutants come from the game code it runs. */
+const isPin = (file: ChunkTestFile) => file.pin !== undefined;
 
 /** Every line number of `source`. */
 const allLines = (source: string) => new Set(source.split('\n').map((_, i) => i + 1));
@@ -531,64 +559,158 @@ async function collectMutants(
 }
 
 /**
- * The chunk check's mutants, each with the test files it runs against: a mutant of the chunk's added
- * lines runs against every file that is not a pin; a pin runs only against its own selection from
- * the game code it loads (`pinMutants`). A mutant two files share runs once, against both.
- * `pinCounts` gives each pin's file the number of mutants it faces, never more than `PIN_MUTANT_CAP`.
+ * The chunk check's mutants of the lines the chunk added, each with the test files it runs against:
+ * every file that is not a pin (a pin is tried on the game code it runs, `killPinTests`). A mutant
+ * two files share runs once, against both.
  */
-async function chunkMutants(
-  projectDir: string,
-  input: MutationCheckInput,
-  summary: MutationSummary,
-): Promise<{ mutants: TargetedMutant[]; pinCounts: Map<string, number> }> {
-  const byKey = new Map<string, LocatedMutant & { targets: Set<string> }>();
-  const files = new Set<string>();
-  const add = (mutant: LocatedMutant, target: string) => {
-    const key = `${mutant.file}\0${mutant.source}`;
-    const entry = byKey.get(key) ?? { ...mutant, targets: new Set<string>() };
-    entry.targets.add(target);
-    byKey.set(key, entry);
-    files.add(mutant.file);
-  };
-  const unpinned = input.testFiles.filter((f) => !isPin(f));
+async function chunkMutants(projectDir: string, input: MutationCheckInput, files: Set<string>): Promise<TargetedMutant[]> {
+  const unpinned = new Set(input.testFiles.filter((f) => !isPin(f)).map((f) => f.path));
+  if (unpinned.size === 0) return [];
+  const mutants: TargetedMutant[] = [];
   for (const [file, lines] of input.added) {
     const absPath = join(projectDir, file);
     for (const mutant of generateMutants(file, await fs.readFile(absPath, 'utf-8'), lines)) {
-      for (const test of unpinned) add({ ...mutant, absPath }, test.path);
+      mutants.push({ ...mutant, absPath, targets: unpinned });
+      files.add(file);
     }
   }
-  const pinCounts = new Map<string, number>();
-  for (const test of input.testFiles.filter(isPin)) {
-    const selected = await pinMutants(projectDir, test.loads!, input.added);
-    for (const mutant of selected) add(mutant, test.path);
-    pinCounts.set(test.path, selected.length);
-  }
-  summary.files = files.size;
-  return { mutants: [...byKey.values()], pinCounts };
+  return mutants;
+}
+
+/** A module under `src/` a mutant can change: a script or component that is not a test. */
+const isGameModule = (path: string) =>
+  path.startsWith('src/') && /\.(ts|mts|cts|js|mjs|vue)$/.test(path) && !/\.(test|spec|d)\.[a-z]+$/.test(path);
+
+/** A place a pin runs that a mutant can change, and the tests that run it (indexes into `FileCoverage.tests`). */
+interface PinSite {
+  path: string;
+  text: string;
+  site: MutantSite;
+  tests: number[];
+}
+
+/** What a pin was tried against, for the finding when one of its tests survives. */
+interface PinPlan {
+  /** By test key (`testKeyOf`): how many places it runs that a mutant can change, and how many were broken. */
+  perTest: Map<string, { runnable: number; tried: number }>;
+  /** Game modules it runs that the check could not read, with why. */
+  unreadable: Array<{ path: string; reason: string }>;
+  /** Game modules it runs that it mocks, so their code is not what it pins. */
+  mocked: string[];
 }
 
 /**
- * A pin's mutants (`selectPinMutants`): every line of each game module it loads, with the lines the
- * chunk changed in a module put first, as a module of their own nearer than any other.
+ * Every place in the game code a pin runs (`coverage`) that a mutant can change, in the order it is
+ * tried (`orderPinSites`), leaving out modules it mocks and any module the check cannot read (named
+ * instead of stopping the check). Ranks, lowest first:
+ *
+ *   - 0: places on a line this chunk changed, which is what a pin in a refactor exists to hold;
+ *   - n: places n of the file's tests run, so code a test runs on its own comes before setup every
+ *     test shares;
+ *   - last: places that run only while the file loads or between tests (module-level data and
+ *     set-up hooks), which any test may read.
  */
-async function pinMutants(
+async function pinSites(
   projectDir: string,
-  loads: readonly LoadedModule[],
+  test: ChunkTestFile,
+  coverage: FileCoverage,
   added: ReadonlyMap<string, ReadonlySet<number>>,
-): Promise<LocatedMutant[]> {
-  const modules: Array<PinModule<{ path: string; text: string; site: MutantSite }>> = [];
-  for (const { path, depth } of loads) {
+): Promise<{ sites: PinSite[]; unreadable: PinPlan['unreadable']; mocked: string[] }> {
+  const unreadable: PinPlan['unreadable'] = [];
+  const mocked: string[] = [];
+  const modules: Array<PinModule<PinSite>> = [];
+  for (const path of coverage.modules.filter(isGameModule)) {
+    if (test.pin!.mocked.includes(path)) {
+      mocked.push(path);
+      continue;
+    }
     const text = await fs.readFile(join(projectDir, path), 'utf-8');
+    let sites: MutantSite[];
+    try {
+      sites = mutationSites(path, text, allLines(text));
+    } catch (error) {
+      if (!(error instanceof UnreadableSourceError)) throw error;
+      unreadable.push({ path, reason: error.reason });
+      continue;
+    }
     const changed = added.get(path) ?? new Set<number>();
-    const sites = mutationSites(path, text, allLines(text)).map((site) => ({ path, text, site }));
-    const ownSites = sites.filter(({ site }) => changed.has(site.line));
-    if (ownSites.length > 0) modules.push({ path, depth: 0, mutants: ownSites });
-    modules.push({ path, depth, mutants: sites.filter(({ site }) => !changed.has(site.line)) });
+    const byRank = new Map<number, PinSite[]>();
+    for (const site of sites) {
+      const runs = coverage.runs(path, site.line, site.column);
+      if (!runs.ran) continue;
+      const rank = changed.has(site.line) ? 0 : runs.tests.length > 0 ? runs.tests.length : coverage.tests.length + 1;
+      byRank.set(rank, [...(byRank.get(rank) ?? []), { path, text, site, tests: runs.tests }]);
+    }
+    for (const [rank, mutants] of byRank) modules.push({ path, rank, mutants });
   }
-  return selectPinMutants(modules, PIN_MUTANT_CAP).map(({ path, text, site }) => ({
-    ...mutantAt(path, text, site),
-    absPath: join(projectDir, path),
-  }));
+  return { sites: orderPinSites(modules), unreadable, mocked };
+}
+
+/**
+ * Tries a pin's tests on the game code they run: in turn, each test that no mutant has yet made fail
+ * gets the next place it runs, in `pinSites` order (a place that runs only while the file loads
+ * counts as run by every test), until every test has failed or `PIN_MUTANT_CAP` mutants have run.
+ * Each mutant runs against the whole file, and any test it makes fail is credited. Taking turns gives
+ * every test still standing its own share of the cap, most specific to it first.
+ */
+async function killPinTests(
+  runner: Runner,
+  input: MutationCheckInput,
+  pin: ChunkTestFile,
+  tracked: Outcome[],
+  coverage: FileCoverage,
+  timeoutMs: number,
+  summary: MutationSummary,
+  files: Set<string>,
+): Promise<{ killed: Set<string>; plan: PinPlan }> {
+  const { sites, unreadable, mocked } = await pinSites(realpathSync(input.projectDir), pin, coverage, input.added);
+  const tests = tracked.filter((o) => o.path === pin.path);
+  const queues = new Map(
+    tests.map((o) => {
+      const index = coverage.tests.indexOf(testKeyOf(o.fullName, o.line));
+      if (index < 0) {
+        throw new Error(
+          `The run that records which game code ${pin.path} runs has no record of its test "${o.fullName}", so the ` +
+            'mutation check cannot tell what that test pins. This is a BoardSmith bug: file an issue with the test file attached.',
+        );
+      }
+      return [testKey(o), sites.filter((s) => s.tests.length === 0 || s.tests.includes(index))] as const;
+    }),
+  );
+  const plan: PinPlan = {
+    perTest: new Map([...queues].map(([key, queue]) => [key, { runnable: queue.length, tried: 0 }])),
+    unreadable,
+    mocked,
+  };
+  const killed = new Set<string>();
+  const tried = new Set<PinSite>();
+  const limit = Math.min(PIN_MUTANT_CAP, sites.length);
+  while (tried.size < limit) {
+    let ranThisRound = false;
+    for (const [key, queue] of queues) {
+      if (tried.size >= limit) break;
+      if (killed.has(key)) continue;
+      const next = queue.find((s) => !tried.has(s));
+      if (!next) continue;
+      tried.add(next);
+      ranThisRound = true;
+      const mutant = { ...mutantAt(next.path, next.text, next.site), absPath: join(realpathSync(input.projectDir), next.path) };
+      files.add(next.path);
+      input.log(`mutant ${tried.size}/${limit}: ${mutant.file}:${mutant.line} ${mutant.description}`);
+      const result = await runner.run([pin], mutant, timeoutMs);
+      summary.mutants++;
+      if (result.kind === 'timed-out') {
+        summary.timedOut++;
+        continue;
+      }
+      const failed = result.outcomes.filter((o) => o.status === 'failed');
+      summary[failed.length > 0 ? 'killed' : 'survived']++;
+      failed.forEach((o) => killed.add(testKey(o)));
+    }
+    if (!ranThisRound) break;
+  }
+  for (const [key, queue] of queues) plan.perTest.get(key)!.tried = queue.filter((s) => tried.has(s)).length;
+  return { killed, plan };
 }
 
 /**
@@ -629,7 +751,7 @@ function survivorFindings(
   tracked: Outcome[],
   killed: ReadonlySet<string>,
   mutantCount: number,
-  pinCounts: ReadonlyMap<string, number>,
+  plans: ReadonlyMap<string, PinPlan>,
 ): TestStepFinding[] {
   const blocksByPath = new Map(input.testFiles.map((f) => [f.path, findTestBlocks(f.source, f.path)]));
   const claimTests = new Map<number, Outcome[]>();
@@ -655,34 +777,35 @@ function survivorFindings(
     .map((o) => ({
       kind: 'test-survives-mutation' as const,
       subject: testKey(o),
-      detail: pins.has(o.path) ? pinSurvivorDetail(pins.get(o.path)!, pinCounts.get(o.path) ?? 0) : CHUNK_SURVIVOR_DETAIL,
+      detail: pins.has(o.path) ? pinSurvivorDetail(pins.get(o.path)!, plans.get(o.path)!, testKey(o)) : CHUNK_SURVIVOR_DETAIL,
     }));
   return [...claimFindings, ...testFindings];
 }
 
 /** What a surviving test of a `none (regression)` row was tried against, and what to do. */
-function pinSurvivorDetail(file: ChunkTestFile, mutants: number): string {
-  const fix = 'Import the game module whose behaviour it pins, run it, and assert what it does.';
-  if (file.loads!.length === 0) {
+function pinSurvivorDetail(file: ChunkTestFile, plan: PinPlan, key: string): string {
+  const fix = 'assert the outcome the pinned behaviour produces, reached by running the game, not a value the test set up itself, a mock or a constant.';
+  const skipped = [
+    ...plan.unreadable.map(({ path, reason }) => `${path} (${reason})`),
+    ...plan.mocked.map((path) => `${path} (mocked by this file)`),
+  ];
+  const left = skipped.length > 0 ? ` Not mutated: ${skipped.join(', ')}.` : '';
+  const { runnable, tried } = plan.perTest.get(key)!;
+  if (runnable === 0) {
     return (
-      `${file.path} pins earlier behaviour (its row is none (regression)), but it loads no game code from src/ by a ` +
-      `relative import, so no break of the game can reach it and nothing shows it can fail. ${fix}`
+      `${file.path} pins earlier behaviour (its row is none (regression)), but this test runs no game code under src/ ` +
+      `that a mutant can change, so nothing shows it can fail.${left} Import the game module whose behaviour it ` +
+      `pins, run it, and ${fix}`
     );
   }
-  const modules = file.loads!.map((m) => m.path);
-  const named = modules.length > 3 ? `${modules.slice(0, 3).join(', ')} and ${modules.length - 3} more` : modules.join(', ');
-  if (mutants === 0) {
-    return (
-      `${file.path} pins earlier behaviour (its row is none (regression)), but the game code it loads (${named}) has ` +
-      `nothing a mutant can change, so nothing shows it can fail. ${fix}`
-    );
-  }
-  return (
-    `This test passed under every one of ${mutants} small breaks of the game code it loads (${named}; at most ` +
-    `${PIN_MUTANT_CAP}, spread across those modules, nearest first), so it cannot fail when that code is wrong. ` +
-    'It pins earlier behaviour, so assert the outcome that behaviour produces, reached by running the game, ' +
-    'not a value the test set up itself, a mock or a constant.'
-  );
+  const sample =
+    tried === runnable
+      ? `all ${tried} places in the game code it runs that a mutant can change`
+      : `${tried} of the ${runnable} places in the game code it runs that a mutant can change (the other ` +
+        `${runnable - tried} were not tried: the check runs at most ${PIN_MUTANT_CAP} mutants per file, shared ` +
+        "between the tests still passing, each test's most specific code first)";
+  return `This test passed with each of ${sample} broken in turn, so it did not fail when that code was wrong.${left} ` +
+    `It pins earlier behaviour: ${fix}`;
 }
 
 const CHUNK_SURVIVOR_DETAIL =
@@ -692,10 +815,25 @@ const CHUNK_SURVIVOR_DETAIL =
         'as text (the a11y floor\'s colour-literal or asset scan) is a guard: move it to tests/guards/ and take it ' +
         'out of the Spec Manifest (build/test.md "The A11y Floor").';
 
+/** Runs the pins once more, unmutated, recording the game code each of their tests runs (`test-step-coverage.ts`). */
+async function pinCoverage(runner: Runner, projectDir: string, pins: ChunkTestFile[]): Promise<Map<string, FileCoverage>> {
+  const coverage = new Map<string, FileCoverage>();
+  if (pins.length === 0) return coverage;
+  const dir = await fs.mkdtemp(join(scratchDir(projectDir), 'coverage-'));
+  try {
+    const run = await runner.run(pins, null, 10 * 60_000, { coverage: dir });
+    if (run.kind !== 'ran') throw new Error('The run that records which game code the pinning tests run did not finish within 10 minutes.');
+    for (const pin of pins) coverage.set(pin.path, await readCoverage(dir, projectDir, pin.absPath, pin.path));
+    return coverage;
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
 /**
  * Runs the chunk's tests once unmutated (they must all pass), then once per mutant, and reports
  * every claim and every test that no mutant made fail. A pin's mutants come from the game code it
- * loads (see the file comment).
+ * runs (see the file comment).
  */
 export async function runMutationCheck(
   input: MutationCheckInput,
@@ -710,9 +848,21 @@ export async function runMutationCheck(
     if (notGreen.length > 0) return { findings: notGreen, summary };
 
     const tracked = baseline.outcomes.filter((o) => o.status === 'passed');
-    const { mutants, pinCounts } = await chunkMutants(projectDir, input, summary);
-    const killed = await killTests(runner, input, tracked, mutants, Math.max(30_000, baseline.ms * 10), summary);
-    return { findings: survivorFindings(input, tracked, killed, mutants.length, pinCounts), summary };
+    const timeoutMs = Math.max(30_000, baseline.ms * 10);
+    const files = new Set<string>();
+    const mutants = await chunkMutants(projectDir, input, files);
+    const unpinned = new Set(input.testFiles.filter((f) => !isPin(f)).map((f) => f.path));
+    const killed = await killTests(runner, input, tracked.filter((o) => unpinned.has(o.path)), mutants, timeoutMs, summary);
+    const pins = input.testFiles.filter(isPin);
+    const coverage = await pinCoverage(runner, projectDir, pins);
+    const plans = new Map<string, PinPlan>();
+    for (const pin of pins) {
+      const result = await killPinTests(runner, input, pin, tracked, coverage.get(pin.path)!, timeoutMs, summary, files);
+      result.killed.forEach((key) => killed.add(key));
+      plans.set(pin.path, result.plan);
+    }
+    summary.files = files.size;
+    return { findings: survivorFindings(input, tracked, killed, mutants.length, plans), summary };
   } finally {
     await runner.dispose();
   }

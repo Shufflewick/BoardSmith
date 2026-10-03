@@ -188,8 +188,8 @@ row). Every row needs `RED Observed: yes` but one: an exempt chunk that pins an 
 behaviour lists that test as its own row with Claims Covered `none (regression)`, excused from the
 observed red because the behaviour already exists, so its RED Observed reads `n/a` only. It is
 still mutation-tested: the chunk's own lines cannot reach that behaviour, so the check breaks the
-game code the test loads instead (the `src/` modules it imports, directly or through others), at
-most 100 mutants per row (`build/build.md`).
+game code the test runs instead (code under `src/` its tests ran, measured with coverage, leaving out
+modules it mocks), at most 100 mutants per row (`build/build.md`).
 
 A session that crashes mid-spec resumes by reading this table: a row with `RED Observed: pending`
 is unfinished work, a row with `yes` is done and must not be rewritten. This is the file-by-file

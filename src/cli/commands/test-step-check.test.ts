@@ -701,7 +701,7 @@ it('regression: a bid is defined', () => { expect(bid).toBeTruthy(); });
   // own row marked `none (regression)`. It pins behaviour that already exists, so there is no red to
   // observe; it is still mutation-tested. Nothing broader is excused.
   describe('an exempt chunk\'s none (regression) row (#485)', () => {
-    const PIN = `import { it, expect } from 'vitest';\nimport { start } from '../src/rules/game';\nit('pins start', () => { expect(start).toBeTruthy(); });\n`;
+    const PIN = `import { it, expect, vi } from 'vitest';\nimport { start } from '../src/rules/game';\nvi.mock('../src/rules/game', { spy: true });\nit('pins start', () => { expect(start).toBeTruthy(); });\n`;
 
     async function exemptChunk(rows: string, claims = '') {
       await write(project, { 'tests/pin.test.ts': PIN, 'design/chunks/auction/CHUNK.md': chunkMd(rows, claims) });
@@ -710,10 +710,10 @@ it('regression: a bid is defined', () => { expect(bid).toBeTruthy(); });
       return checkTestStep(project, 'auction');
     }
 
-    it('hands it to the mutation check with the game modules it loads, since the chunk wrote none of its own', async () => {
+    it('hands it to the mutation check as a pin, with the game modules it mocks', async () => {
       const result = await exemptChunk('| exempt | refactor, no rules change | n/a |\n| tests/pin.test.ts | none (regression) | n/a |\n');
       expect(result.findings).toEqual([]);
-      expect(result.testFiles.map((f) => [f.path, f.loads])).toEqual([['tests/pin.test.ts', [{ path: 'src/rules/game.ts', depth: 1 }]]]);
+      expect(result.testFiles.map((f) => [f.path, f.pin])).toEqual([['tests/pin.test.ts', { mocked: ['src/rules/game.ts'] }]]);
     });
 
     it.each(['pending', 'yes', ''])('accepts only n/a as its RED Observed, not "%s"', async (red) => {
@@ -953,8 +953,8 @@ it('claim 2 — tautology', () => { const high = 3; expect(high).toBe(3); });
     }, 60_000);
 
     it('fails the step on a pin no break of that code can make fail', async () => {
-      const result = await exemptChunkPinning("it('resolveBid exists', () => { expect(typeof resolveBid).toBe('function'); });\n");
-      expect(result.findings.map((f) => [f.kind, f.subject])).toEqual([['test-survives-mutation', 'tests/pin.test.ts > resolveBid exists']]);
+      const result = await exemptChunkPinning("it('resolveBid runs', () => { resolveBid(3, 4); expect(typeof resolveBid).toBe('function'); });\n");
+      expect(result.findings.map((f) => [f.kind, f.subject])).toEqual([['test-survives-mutation', 'tests/pin.test.ts > resolveBid runs']]);
       expect(result.mutation?.mutants).toBeGreaterThan(0);
       expect(process.exitCode).toBe(1);
     }, 60_000);

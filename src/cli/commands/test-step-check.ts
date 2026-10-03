@@ -25,7 +25,7 @@
  *      chunks' test files this chunk edits.
  *   7. Mutation: every claim and every test is shown able to fail (`test-step-mutation.ts`). An exempt
  *      chunk adds no game behaviour, so a test it adds to pin an earlier chunk's (a `none (regression)`
- *      row, the one row whose RED Observed is `n/a`) is broken on the game code it loads instead.
+ *      row, the one row whose RED Observed is `n/a`) is broken on the game code it runs instead.
  *
  * A file under `tests/guards/` is a guard: a test that reads source as text, such as the a11y
  * floor's colour-literal and asset scans (`build/test.md`). No code mutant can make a scan fail, so
@@ -63,7 +63,7 @@ import {
 } from './test-step-ast.js';
 import { runMutationCheck, type MutationSummary } from './test-step-mutation.js';
 import { scriptRegions } from './test-step-sfc.js';
-import { findCodeRun, gameModulesLoaded, type CodeRunContext, type LoadedModule } from './test-step-code-run.js';
+import { findCodeRun, mockedModules, type CodeRunContext } from './test-step-code-run.js';
 import { findHandBuiltShellContext } from './test-step-shell-context.js';
 import { findChunkCommits } from '../lib/chunk-commits.js';
 import { chunkMdPath, relChunkMdPath } from '../lib/project-paths.js';
@@ -288,11 +288,11 @@ export interface ChunkTestFile {
   absPath: string;
   source: string;
   /**
-   * Only on an exempt chunk's `none (regression)` row: the game modules the file loads
-   * (`gameModulesLoaded`). The mutation check breaks these, not the chunk's own lines, since the row
-   * pins behaviour an earlier chunk built (#485).
+   * Only on an exempt chunk's `none (regression)` row, which pins behaviour an earlier chunk built:
+   * the mutation check breaks the game code the file runs, not only the chunk's own lines, leaving out
+   * the modules it mocks (`mockedModules`, project-relative paths) (#485).
    */
-  loads?: LoadedModule[];
+  pin?: { mocked: string[] };
 }
 
 async function readChunk(projectDir: string, slug: string): Promise<string> {
@@ -393,7 +393,7 @@ function redFinding(manifest: SpecManifest, row: SpecManifestRow): TestStepFindi
       detail:
         `RED Observed is "${row.redObserved || 'blank'}" for ${row.testFile}, a none (regression) row of an exempt ` +
         'chunk. It pins behaviour an earlier chunk built, so there is no failure to observe before a change: set it to ' +
-        'n/a. The mutation check still breaks the game code it loads, so it must be able to fail (build/build.md).',
+        'n/a. The mutation check still breaks the game code it runs, so it must be able to fail (build/build.md).',
     };
   }
   if (/^yes\b/.test(row.redObserved)) return undefined;
@@ -565,7 +565,7 @@ const isTestFile = (path: string) =>
 
 /**
  * Every script in the project outside `node_modules/`, and every component under `src/` (which a
- * test that pins earlier behaviour may load, `gameModulesLoaded`), with its text.
+ * test that pins earlier behaviour may mock, `mockedModules`), with its text.
  */
 async function projectScripts(projectDir: string): Promise<SourceFile[]> {
   const listed = await git(projectDir, ['ls-files', '--cached', '--others', '--exclude-standard']);
@@ -725,7 +725,7 @@ export async function checkTestStep(
   ];
   const scope = await chunkTestScope(dir, chunkCommits, rows.testFiles);
   for (const pin of rows.pins) {
-    pin.loads = gameModulesLoaded(pin.source, relative(dir, pin.absPath).split(sep).join('/'), scope.context);
+    pin.pin = { mocked: mockedModules(pin.source, relative(dir, pin.absPath).split(sep).join('/'), scope.context) };
   }
   findings.push(
     ...shellContextFindings(scope),

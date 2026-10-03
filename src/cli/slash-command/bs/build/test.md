@@ -128,10 +128,11 @@ here.
          have its red observed, with one exception: an exempt chunk that pins an earlier chunk's
          behaviour lists that test as its own row with Claims Covered `none (regression)`, excused
          from the observed red because the behaviour already exists, so its RED Observed reads
-         `n/a` only. It is still mutation-tested, on the game code its test loads rather than only
-         the chunk's own lines, which cannot reach that behaviour: the `src/` modules it imports,
-         directly or through others, at most 100 mutants per row, chosen the same way every run
-         (`build/build.md`). Nothing else is excused.
+         `n/a` only. It is still mutation-tested, on the game code its test runs rather than only
+         the chunk's own lines, which cannot reach that behaviour: code under `src/` its tests ran,
+         measured with coverage, leaving out modules it mocks, at most 100 mutants per row, code
+         fewer of its tests run first, chosen the same way every run (`build/build.md`). Nothing
+         else is excused.
 
        A finding here goes back to `build` (or to `spec`, when the fix is a test that pins the claim
        properly), never to an edit of the Spec Manifest that makes the row claim less. The two

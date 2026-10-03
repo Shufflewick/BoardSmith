@@ -16,9 +16,8 @@
  * without a factory written inline (no second argument, or an options object such as `{ spy: true }`),
  * which loads the real module to mock it. Reading source with `readFileSync` or a `?raw` import is a scan.
  *
- * `gameModulesLoaded` answers the other question test-step-check asks: which game modules a test
- * loads, so the mutation check can break the code an exempt chunk's `none (regression)` row pins
- * (#485).
+ * `mockedModules` answers one more question for the mutation check: which game modules a test that
+ * pins earlier behaviour replaces with a mock, so their code is never what it pins (#485).
  *
  * The one game module a scan may import as code is literal constants under `src/ui/`: a contrast
  * check needs the theme's colours, and a TypeScript palette (one a WebGL scene reads, which cannot
@@ -31,7 +30,6 @@
  */
 import { posix } from 'node:path';
 import { findDispatches, parseSource, walk, type AstNode } from './test-step-ast.js';
-import { scriptRegions } from './test-step-sfc.js';
 
 /** Modules a scan never needs: they mount components or run a game. */
 const CODE_RUNNING_MODULES = new Set(['@vue/test-utils', 'boardsmith/testing']);
@@ -318,58 +316,27 @@ export function findCodeRun(source: string, file: string, context: CodeRunContex
 }
 
 // -------------------------------------------------------------------------------------------
-// gameModulesLoaded
+// mockedModules
 // -------------------------------------------------------------------------------------------
 
-/** A game module a test loads, and how many game modules deep: 1 for one the test (or a support file) imports. */
-export interface LoadedModule {
-  path: string;
-  depth: number;
-}
-
-/** Game code a mutant can change: a script or component under `src/` that is not a test or a declaration file. */
-const isGameCode = (path: string) =>
-  path.startsWith('src/') && /\.(ts|mts|cts|js|mjs|vue)$/.test(path) && !/\.(test|spec|d)\.[a-z]+$/.test(path);
-
-/** The project files a script loads as code by a relative path it spells out, resolved. */
-function codeImports(source: string, file: string, context: Pick<CodeRunContext, 'text'>): string[] {
-  const found: string[] = [];
-  for (const region of scriptRegions(file, source)) {
-    walk(parseSource(region.text, file).ast, (node) => {
-      const specifier = loadedModule(node);
-      if (specifier === undefined || !specifier.startsWith('.') || /[?*]/.test(specifier)) return;
-      if (isTypeOnlyImport(node as Statement)) return;
-      const resolved = resolveScript(posix.normalize(posix.join(posix.dirname(file), specifier)), context);
-      if (resolved !== undefined) found.push(resolved);
-    });
-  }
-  return found;
-}
+const MOCKING_VI_METHODS = new Set(['mock', 'doMock']);
 
 /**
- * Every game module (`src/` code, scripts and components) a test file loads, directly, through a
- * support file under `tests/`, or through another game module, nearest first and then by path. A
- * support file adds no depth. What loads nothing is left out: type-only imports, text (`?raw`),
- * packages, a path computed at run time, test files and declaration files. A module the test only
- * reaches through a package (a game definition `boardsmith/testing` is never handed) is not seen,
- * so a test that pins the game imports the module it runs.
+ * The project modules a test file replaces with `vi.mock(path, ...)` or `vi.doMock(path, ...)`, in
+ * any form, as project-relative paths. A test that pins earlier behaviour runs the mock, not the
+ * module, so the mutation check leaves these out (#485).
  */
-export function gameModulesLoaded(source: string, file: string, context: Pick<CodeRunContext, 'text'>): LoadedModule[] {
-  const depthOf = new Map<string, number>([[file, 0]]);
-  const queue: Array<{ path: string; text: string; depth: number }> = [{ path: file, text: source, depth: 0 }];
-  while (queue.length > 0) {
-    const next = queue.shift()!;
-    for (const path of codeImports(next.text, next.path, context)) {
-      const game = isGameCode(path);
-      if (!game && !path.startsWith('tests/')) continue;
-      const depth = next.depth + (game ? 1 : 0);
-      if ((depthOf.get(path) ?? Infinity) <= depth) continue;
-      depthOf.set(path, depth);
-      queue.push({ path, text: context.text(path)!, depth });
-    }
-  }
-  return [...depthOf]
-    .filter(([path]) => isGameCode(path))
-    .map(([path, depth]) => ({ path, depth }))
-    .sort((a, b) => a.depth - b.depth || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+export function mockedModules(source: string, file: string, context: Pick<CodeRunContext, 'text'>): string[] {
+  const mocked = new Set<string>();
+  walk(parseSource(source, file).ast, (node) => {
+    if (node.type !== 'CallExpression') return;
+    const callee = node.callee as AstNode;
+    if (callee.type !== 'MemberExpression' || (callee.object as AstNode).name !== 'vi') return;
+    if (!MOCKING_VI_METHODS.has((callee.property as AstNode).name as string)) return;
+    const specifier = specifierText((node.arguments as AstNode[])[0]);
+    if (specifier === undefined || !specifier.startsWith('.') || /[?*]/.test(specifier)) return;
+    const resolved = resolveScript(posix.normalize(posix.join(posix.dirname(file), specifier)), context);
+    if (resolved !== undefined) mocked.add(resolved);
+  });
+  return [...mocked].sort();
 }
