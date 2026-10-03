@@ -187,7 +187,9 @@ Loop until there is nothing left to build or a stop condition fires
    vouches for the combined file: it re-runs both chunks' own checks (their tests, `chunk-check`,
    `claim-quote-check`) on the combined tree and records the file in `design/MERGE-SIGNOFFS.md`
    naming both chunks and the merge. A source file whose provisional ledger citations the merge
-   renumbered is vouched for the same way. That needs no designer sign-off. If one of those checks
+   renumbered is vouched for the same way, and so is an edit to only `test.include` or
+   `test.exclude` in `vitest.config.ts` since a verified chunk signed it off, when both are plain
+   lists of strings. That needs no designer sign-off. If one of those checks
    fails, the merge is refused naming the check and the chunk; fix it on the chunk's branch.
 
 Between chunks, say one plain sentence about what the designer can now see in their game — or

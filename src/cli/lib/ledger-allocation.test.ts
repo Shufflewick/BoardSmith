@@ -6,6 +6,7 @@ import {
   allocateProvisional,
   plainNumbersAdded,
   provisionalReferences,
+  unreadableShorthand,
 } from './ledger-allocation.js';
 
 /**
@@ -216,5 +217,89 @@ describe('provisional ids in list citations (#439)', () => {
     expect(result.files['design/DECISIONS.md']).toContain('(rulebook p.20; Rulings 8 and 9)');
     expect(result.files['design/playtests/ranged-units/results.json']).toContain('Decisions 71 and 72);');
     for (const text of Object.values(result.files)) expect(text).not.toContain('@ranged-units');
+  });
+});
+
+/**
+ * #446: prose cites a run of provisional ids with shorthand for the later ones, `Rulings @a.1 to .3`
+ * or `Decisions @a.1, .2`. A `.N` directly after a provisional id in the same list is that slug's
+ * id N, and `to` (or `through`, or a dash before a provisional id) makes a range. The merge
+ * rewrites each one, or refuses one it cannot map one to one, so no stale `.3` reaches the main line.
+ */
+describe('shorthand ids and ranges after a provisional id (#446)', () => {
+  const DECISIONS = NUMBERED_LEDGER_SPECS.find((s) => s.kind === 'Decision')!;
+  const rulings = (...ids: string[]) =>
+    ['### Ruling 1', '- a', ...ids.flatMap((id) => [`### Ruling @a.${id}`, '- x'])].join('\n') + '\n';
+  const allocate = (files: Record<string, string>) =>
+    allocateProvisional(files, [
+      { spec: RULINGS, path: 'design/RULINGS.md' },
+      { spec: DECISIONS, path: 'design/DECISIONS.md' },
+    ]);
+
+  it('reads a shorthand id as the provisional id it continues, of the same kind', () => {
+    expect(provisionalReferences('src/a.ts', '// Rulings @a.1 to .3 apply here.\n// Decisions 4 and @a.1, .2\n')).toEqual([
+      'Ruling @a.1',
+      'Ruling @a.3',
+      'Decision @a.1',
+      'Decision @a.2',
+    ]);
+    expect(provisionalReferences('design/a.md', 'Rulings @a.1, .2 and .4; Ruling 3, .5')).toEqual([
+      'Ruling @a.1',
+      'Ruling @a.2',
+      'Ruling @a.4',
+    ]);
+  });
+
+  it('rewrites a shorthand list and a range whose ids became one unbroken run', () => {
+    const result = allocate({
+      'design/RULINGS.md': rulings('1', '2', '3'),
+      'design/DECISIONS.md': '### Decision 4\n- a\n### Decision @a.1\n- b\n### Decision @a.2\n- c\n',
+      'src/a.ts': '// Rulings @a.1 to .3 apply here.\n// Decisions 4 and @a.1, .2\n// Rulings @a.1 through @a.2, and @a.2-.3\n',
+    });
+    expect(result.problems).toEqual([]);
+    expect(result.files['src/a.ts']).toBe('// Rulings 2 to 4 apply here.\n// Decisions 4 and 5, 6\n// Rulings 2 through 3, and 3-4\n');
+  });
+
+  it('refuses a range whose ids did not become one unbroken run, and leaves it as written', () => {
+    const text = 'See Rulings @a.1 to .3.\n';
+    // Allocated in heading order: @a.1 is 2, @a.3 is 3, @a.2 is 4, so "2 to 3" would drop @a.2.
+    const result = allocate({ 'design/RULINGS.md': rulings('1', '3', '2'), 'design/notes.md': text });
+    expect(result.files['design/notes.md']).toBe(text);
+    expect(result.problems).toEqual([
+      {
+        path: 'design/notes.md',
+        ids: ['Ruling @a.1', 'Ruling @a.3'],
+        detail:
+          'cites the range "Rulings @a.1 to .3", but those ids became Rulings 2, 4 and 3, which are not ' +
+          'one unbroken run of numbers. Write each id out as a list on the branch (for example ' +
+          '"Rulings @a.1, @a.2 and @a.3"), and merge again.',
+      },
+    ]);
+  });
+
+  it('refuses a range with an id in it that no entry is headed, or with a real number at one end', () => {
+    const result = allocate({
+      'design/RULINGS.md': rulings('1', '3'),
+      'design/notes.md': 'See Rulings @a.1 to .3. Also Rulings 1 to @a.3.\n',
+    });
+    expect(result.files['design/notes.md']).toBe('See Rulings @a.1 to .3. Also Rulings 1 to @a.3.\n');
+    expect(result.problems.map((p) => p.ids)).toEqual([['Ruling @a.1', 'Ruling @a.3'], ['Ruling @a.3']]);
+    expect(result.problems[0].detail).toContain('no entry is headed Ruling @a.2');
+    expect(result.problems[1].detail).toContain('runs from a real number to a provisional id');
+  });
+
+  it('reads no range before a real number: a range of real numbers, or a number after a provisional id', () => {
+    const text = 'Rulings 1 to 3 hold. Ruling @a.1 - 2 players only. Ruling @a.1 to 3 players.\n';
+    const result = allocate({ 'design/RULINGS.md': rulings('1'), 'design/notes.md': text });
+    expect(result.problems).toEqual([]);
+    expect(result.files['design/notes.md']).toBe('Rulings 1 to 3 hold. Ruling 2 - 2 players only. Ruling 2 to 3 players.\n');
+  });
+});
+
+describe('shorthand the merge cannot read (#446)', () => {
+  it('names a dash then a plain number after a provisional id, and a shortened id after a kind word', () => {
+    const text = 'Rulings @a.1-3 apply. Rulings @a.1 and Decision .2 too. Ruling @a.1 - .2 and Ruling 4-5 are fine.\n';
+    expect(unreadableShorthand('design/notes.md', text)).toEqual(['@a.1-3', 'Decision .2']);
+    expect(unreadableShorthand('design/notes.md', 'quoted: `Rulings @a.1-3`, and 0.5 seconds\n')).toEqual([]);
   });
 });

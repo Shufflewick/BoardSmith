@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { takeOsLock } from '../lib/os-lock.js';
 import { chunkMerge, resolveDesignConflicts } from './chunk-merge.js';
-import { assessSignoffs, recordSignoff } from './chunk-signoff.js';
+import { assessSignoffs, recordReopen, recordSignoff } from './chunk-signoff.js';
 import { recordPassingVerify } from '../lib/verify-result.test-helper.js';
 import { recordVerifiedAgainst } from './chunk-provenance.js';
 import { checkClaimQuotes } from './claim-quotes.js';
@@ -44,7 +44,7 @@ const read = (dir: string, rel: string) => fs.readFile(join(dir, rel), 'utf-8');
  * The measurement test the constraint names, run as code: the world partition is the sum of every
  * `PARTITION_BYTES` a chunk adds under src/, and the budget is 512.
  */
-const budgetRunner: TestRunner = async (projectDir) => {
+const budgetRunner: TestRunner = async (projectDir, files) => {
   const src = join(projectDir, 'src');
   let total = 0;
   for (const name of await fs.readdir(src)) {
@@ -52,7 +52,7 @@ const budgetRunner: TestRunner = async (projectDir) => {
     if (m) total += Number(m[1]);
   }
   return total <= 512
-    ? { ok: true, output: `partition ${total} bytes` }
+    ? { ok: true, output: `partition ${total} bytes`, ran: [...files] }
     : { ok: false, output: `world partition is ${total} bytes, over the 512 byte budget` };
 };
 
@@ -228,6 +228,62 @@ describe('chunkMerge: the combined tree is checked, not the branch alone', () =>
     expect(status()).toBe('');
   });
 
+  /** Trading is merged and verified on the main line; then auctions, which cites trading's page, leaves it. */
+  async function tradingVerifiedBeforeAuctionsLeft(): Promise<void> {
+    await buildOnBranch('trading', 100);
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner })).refusals).toEqual([]);
+    await buildOnBranch('auctions', 100);
+  }
+
+  /** Auctions' merge is refused under the pair rule, as built alongside trading, and main is left as it was. */
+  async function expectAuctionsRefusedAlongsideTrading(): Promise<void> {
+    const result = await chunkMerge(main, 'auctions', { runTests: budgetRunner });
+    expect(result.merged).toBe(false);
+    expect(result.refusals.join('\n')).toMatch(/both cite rulebook\/04-trading\.md/);
+    expect(status()).toBe('');
+  }
+
+  it('does not count a chunk verified before the branch left as built alongside it, however its design files were edited since (#442)', async () => {
+    await tradingVerifiedBeforeAuctionsLeft();
+    // Bookkeeping on the main line: trading's CHUNK.md and run log are edited, as a re-sign or a
+    // Verified Against rewrite does. Trading's rules are what auctions saw when it left.
+    const chunk = await read(main, 'design/chunks/trading/CHUNK.md');
+    const log = await read(main, 'design/run-log/trading.md');
+    await write(main, {
+      'design/chunks/trading/CHUNK.md': `${chunk}\n<!-- re-pointed after another chunk's merge -->\n`,
+      'design/run-log/trading.md': `${log}\n- Note: re-signed\n`,
+    });
+    git(main, 'commit', '-q', '-am', 'bookkeeping on trading');
+
+    const result = await chunkMerge(main, 'auctions', { runTests: budgetRunner });
+    expect(result.refusals).toEqual([]);
+    expect(result.alongside).toEqual([]);
+    expect(status()).toBe('');
+  });
+
+  it('still counts a chunk verified before the branch left, then reopened and reworked on the main line, as built alongside it (#442)', async () => {
+    await tradingVerifiedBeforeAuctionsLeft();
+    // On the main line, trading goes back for rework, its code changes, and it is signed off again.
+    await recordReopen('trading', { project: main, reason: 'prices rework', now: new Date('2026-09-02T00:00:00Z') });
+    git(main, 'commit', '-q', '-am', 'chunk-trading/reopen');
+    await write(main, { 'src/trading.ts': 'export const PARTITION_BYTES = 120;\n' });
+    await recordPassingVerify(main, { chunk: 'trading', message: 'chunk-trading/revise-2' });
+    await recordSignoff('trading', { project: main, automated: 'tests/budget.test.ts passed', now: new Date('2026-09-02T02:00:00Z') });
+    git(main, 'commit', '-q', '-am', 'chunk-trading/close');
+    expect((await assessSignoffs(main)).get('trading')!.problems).toEqual([]);
+
+    await expectAuctionsRefusedAlongsideTrading();
+  });
+
+  it('counts a chunk the main line verified after the branch left as built alongside it, however it reached the main line (#442)', async () => {
+    await buildOnBranch('trading', 100);
+    await buildOnBranch('auctions', 100);
+    // Not through chunk-merge: trading was still unverified on the main line when auctions left.
+    git(main, 'merge', '-q', '--no-ff', '-m', 'trading by hand', 'chunk/trading');
+
+    await expectAuctionsRefusedAlongsideTrading();
+  });
+
   it("sees the branch's own commits on the combined tree, so a claim pinned to one of them holds (#435)", async () => {
     const trading = await buildOnBranch('trading', 100);
     const closed = git(trading, 'rev-parse', 'HEAD').trim();
@@ -307,6 +363,68 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
     expect(result.refusals).toEqual([]);
     expect(result.allocated).toEqual({ 'Ruling @trading.1': 'Ruling 2' });
     expect(await read(main, 'design/notes.md')).toBe('Prices follow Rulings 1 and 2.\n');
+  });
+
+  it('rewrites shorthand ids after a provisional id, "Rulings @trading.1 to .3" and "@trading.1, .2" (#446)', async () => {
+    const rulings = ['1', '2', '3'].map((n) => `### Ruling @trading.${n}\n- Decision: ${n}.\n`).join('\n');
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': `# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n${rulings}`,
+      'src/trading-rules.ts': '// Rulings @trading.1 to .3 apply here.\n// Rulings 1 and @trading.1, .2\nexport const X = 1;\n',
+    });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.refusals).toEqual([]);
+    expect(await read(main, 'src/trading-rules.ts')).toBe(
+      '// Rulings 2 to 4 apply here.\n// Rulings 1 and 2, 3\nexport const X = 1;\n',
+    );
+  });
+
+  it('refuses a range whose ids would not stay one unbroken run, naming the file, and leaves main as it was (#446)', async () => {
+    // Headed out of order, so @trading.1 to .3 would become 2 to 3 and drop @trading.2 (4).
+    const rulings = ['1', '3', '2'].map((n) => `### Ruling @trading.${n}\n- Decision: ${n}.\n`).join('\n');
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': `# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n${rulings}`,
+      'design/notes.md': 'Prices follow Rulings @trading.1 to .3.\n',
+    });
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([
+      'design/notes.md cites the range "Rulings @trading.1 to .3", but those ids became Rulings 2, 4 and 3, ' +
+        'which are not one unbroken run of numbers. Write each id out as a list on the branch (for example ' +
+        '"Rulings @trading.1, @trading.2 and @trading.3"), and merge again.',
+    ]);
+    expect(head()).toBe(before);
+    expect(status()).toBe('');
+  });
+
+  it('refuses shorthand it cannot map, "@trading.1-3", naming the file (#446)', async () => {
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
+      'design/notes.md': 'Prices follow Rulings @trading.1-3.\n',
+    });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([expect.stringMatching(/^design\/notes\.md writes "@trading\.1-3", which reads as a range of ids/)]);
+    expect(status()).toBe('');
+  });
+
+  it('says how to reword prose that only reads as a range, and how to write a shortened id in full (#446)', async () => {
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
+      'design/notes.md': 'Ruling @trading.1 - 2 players only.\n\nSee Decision .2 too.\n',
+    });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([
+      'design/notes.md writes "@trading.1 - 2", which reads as a range of ids, so the merge cannot tell whether 2 is ' +
+        '@trading.2 or real number 2. If it is a range, write each id in full on the branch (for example ' +
+        '`Rulings @trading.1 and @trading.2`); if 2 is not an id, put something other than a dash between them ' +
+        '(for example "@trading.1: 2"). Then merge again.',
+      'design/notes.md writes "Decision .2", a shortened id with no provisional id before it to take its slug from, ' +
+        'so the merge cannot give it a real number. Write the id in full on the branch (for example ' +
+        '`Decision @<slug>.2`), and merge again.',
+    ]);
+    expect(status()).toBe('');
   });
 
   it('refuses a provisional id written with no kind before it, naming the file and the form to write (#439)', async () => {
@@ -535,8 +653,13 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
    */
   async function expectSecondMergeRefused(first: string, second: string, refusal: RegExp): Promise<void> {
     expect((await chunkMerge(main, first, { runTests: ownTestsRunner })).refusals).toEqual([]);
+    await expectMergeRefused(second, ownTestsRunner, refusal);
+  }
+
+  /** Expects merging `slug` to be refused with `refusal`, leaving the main line and its records as they were. */
+  async function expectMergeRefused(slug: string, runTests: TestRunner, refusal: RegExp): Promise<void> {
     const before = head();
-    const result = await chunkMerge(main, second, { runTests: ownTestsRunner });
+    const result = await chunkMerge(main, slug, { runTests });
     expect(result.merged).toBe(false);
     expect(result.refusals.join('\n')).toMatch(refusal);
     expect([head(), status()]).toEqual([before, '']);
@@ -591,11 +714,7 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
     // An edit to trading's own file on the main line that no chunk accounts for voids its sign-off.
     await write(main, { 'src/trading.ts': 'export const PARTITION_BYTES = 101;\n' });
     git(main, 'commit', '-q', '-am', 'an unaccounted edit');
-    const before = head();
-    const result = await chunkMerge(main, 'quests', { runTests: ownTestsRunner });
-    expect(result.refusals.join('\n')).toMatch(/chunk-check fails for trading on the combined tree[\s\S]*src\/trading\.ts changed after it/);
-    expect([head(), status()]).toEqual([before, '']);
-    await expect(fs.access(join(main, 'design/MERGE-SIGNOFFS.md'))).rejects.toThrow();
+    await expectMergeRefused('quests', ownTestsRunner, /chunk-check fails for trading on the combined tree[\s\S]*src\/trading\.ts changed after it/);
   });
 
   it("vouches for signed-off code the merge renumbered, so allocating a ledger number voids no sign-off (#435)", async () => {
@@ -616,6 +735,118 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
       sharedEdits: [{ path: 'src/world.ts', coveredBy: 'trading', how: 'merged' }],
     });
     expect(status()).toBe('');
+  });
+
+  describe('a test-runner config the main line edited after a chunk signed it off (#479)', () => {
+    const config = (exclude: string[], more = '') =>
+      `import { defineConfig } from 'vitest/config';\n` +
+      `export default defineConfig({\n  test: {\n    exclude: ${JSON.stringify(exclude)},${more}\n  },\n});\n`;
+
+    /**
+     * Vitest as it really behaves: a test file named on the command line that the config excludes
+     * is skipped without a word, and the run still exits 0. Only the files that ran say otherwise.
+     */
+    const configRunner: TestRunner = async (projectDir, files) => {
+      const text = await read(projectDir, 'vitest.config.ts');
+      const run = await ownTestsRunner(projectDir, files);
+      return 'refused' in run ? run : { ...run, ran: files.filter((f) => !text.includes(`"${f}"`)) };
+    };
+
+    /**
+     * Trading signs off vitest.config.ts with its code, with a second test file of its own; then the
+     * main line edits only the config, to `edited`.
+     */
+    async function tradingSignsTheConfig(edited: string): Promise<void> {
+      await write(main, { 'vitest.config.ts': config(['node_modules/**']) });
+      git(main, 'add', '-A');
+      git(main, 'commit', '-q', '-m', 'vitest config');
+      const chunk = (await sharedChunkMd('trading', TRADING_CLAIM))
+        .replace('| src/world.ts | written |', '| src/world.ts | written |\n| vitest.config.ts | written |')
+        .replace('| tests/trading.test.ts | 1 | yes |', '| tests/trading.test.ts | 1 | yes |\n| tests/trading-prices.test.ts | 1 | yes |');
+      await buildShared('trading', {
+        extra: {
+          'design/chunks/trading/CHUNK.md': chunk,
+          'tests/trading-prices.test.ts': '// trading prices\n',
+          'vitest.config.ts': config(['node_modules/**', 'dist/**']),
+        },
+      });
+      expect((await chunkMerge(main, 'trading', { runTests: configRunner })).refusals).toEqual([]);
+      // Quests shares no file with trading; only the config stands between it and the main line.
+      await buildOnBranch('quests', 100);
+      await write(main, { 'vitest.config.ts': edited });
+      git(main, 'commit', '-q', '-am', 'tests: change the vitest config');
+    }
+
+    it("vouches for an edit to test.exclude with the signed chunk's own checks, so it voids no sign-off", async () => {
+      await tradingSignsTheConfig(config(['node_modules/**', 'dist/**', '.worktrees/**', '**/tests/browser/**']));
+      expect((await assessSignoffs(main)).get('trading')!.problems.join('\n')).toMatch(/vitest\.config\.ts changed after it/);
+
+      const result = await chunkMerge(main, 'quests', { runTests: configRunner });
+      expect(result.refusals).toEqual([]);
+      expect(result.alongside).toEqual([]);
+      expect(result.vouched).toEqual([{ path: 'vitest.config.ts', chunks: ['trading'], why: 'test-config' }]);
+      expect(await read(main, 'design/MERGE-SIGNOFFS.md')).toContain('### vitest.config.ts');
+      expect((await assessSignoffs(main)).get('trading')).toEqual({
+        problems: [],
+        sharedEdits: [{ path: 'vitest.config.ts', coveredBy: 'trading', how: 'merged' }],
+      });
+      expect(status()).toBe('');
+    });
+
+    it("refuses when the edit excludes one of the chunk's own test files, though vitest exits 0 without it", async () => {
+      await tradingSignsTheConfig(config(['node_modules/**', 'dist/**', 'tests/trading-prices.test.ts']));
+      await expectMergeRefused(
+        'quests',
+        configRunner,
+        /trading's own tests did not all run on the combined tree, so this merge cannot vouch for vitest\.config\.ts \(a test-runner config edited since the chunk signed it off\): tests\/trading-prices\.test\.ts did not run/,
+      );
+    });
+
+    const editExclude = () => tradingSignsTheConfig(config(['node_modules/**', 'dist/**', '.worktrees/**']));
+
+    it("refuses when the run does not report which files ran, since vitest's report is then missing or unreadable", async () => {
+      await editExclude();
+      const unreported: TestRunner = async (projectDir, files) => {
+        const run = await configRunner(projectDir, files);
+        return 'refused' in run ? run : { ok: run.ok, output: run.output };
+      };
+      await expectMergeRefused(
+        'quests',
+        unreported,
+        /trading's own tests cannot be confirmed on the combined tree, so this merge cannot vouch for vitest\.config\.ts[^:]*: vitest's JSON report, which names the test files it ran, is missing or unreadable/,
+      );
+    });
+
+    it("refuses when the run also ran a file outside the chunk's own, which could share state with its tests", async () => {
+      // Vitest runs every collected file whose path contains a named one, and an include edit can add one.
+      await editExclude();
+      const alsoRan: TestRunner = async (projectDir, files) => {
+        const run = await configRunner(projectDir, files);
+        return 'refused' in run || files.length === 0 ? run : { ...run, ran: [...(run.ran ?? []), 'extra/tests/trading.test.ts'] };
+      };
+      await expectMergeRefused(
+        'quests',
+        alsoRan,
+        /trading's own tests did not run alone on the combined tree, so this merge cannot vouch for vitest\.config\.ts[^:]*: extra\/tests\/trading\.test\.ts ran with them/,
+      );
+    });
+
+    it('aborts the merge, leaving the main line as it was, when a check throws', async () => {
+      await editExclude();
+      const before = head();
+      const throws: TestRunner = async () => {
+        throw new Error('the test runner broke');
+      };
+      await expect(chunkMerge(main, 'quests', { runTests: throws })).rejects.toThrow('the test runner broke');
+      expect([head(), status()]).toEqual([before, '']);
+      await expect(fs.access(join(main, '.git/MERGE_HEAD'))).rejects.toThrow();
+    });
+
+    it('does not vouch for any other edit to the config, which voids the sign-off as before', async () => {
+      // A setup file can mock what the chunk's tests exercise, so this is not a collection change.
+      await tradingSignsTheConfig(config(['node_modules/**', 'dist/**'], "\n    setupFiles: ['tests/setup.ts'],"));
+      await expectMergeRefused('quests', configRunner, /chunks\/trading\/CHUNK\.md's sign-off \([^)]*\) was for different code: vitest\.config\.ts changed after it/);
+    });
   });
 
   it('refuses a branch that writes the merge sign-offs itself', async () => {

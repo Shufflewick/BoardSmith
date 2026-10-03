@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
-import { checkConstraints, constraintCheckCommand, runVitest, type TestRunner } from './constraint-check.js';
+import { checkConstraints, constraintCheckCommand, runVitest, testFilesInReport, type TestRunner } from './constraint-check.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 import { generateVitestConfig, VITEST_CONFIG_FILE } from '../lib/test-run-scope.js';
 
@@ -337,6 +337,29 @@ describe('provisional ids on a parallel branch, and ids used twice', () => {
  * inside the project, and vitest's discovery walks into dot-directories. The project's own vitest
  * config leaves them out (`test-run-scope.ts`), and runVitest refuses a project whose config does not.
  */
+/**
+ * #479: chunk-merge trusts a vouching run only when vitest's JSON report says which files ran. A
+ * report that is missing or cut short says nothing, and must not throw out of the merge (which would
+ * leave the main checkout mid-merge).
+ */
+describe('testFilesInReport', () => {
+  const root = '/project';
+
+  it('lists the files the report says ran, relative to the project', () => {
+    const text = JSON.stringify({ testResults: [{ name: '/project/tests/a.test.ts' }, { name: '/project/tests/sub/b.test.ts' }] });
+    expect(testFilesInReport(text, root)).toEqual(['tests/a.test.ts', 'tests/sub/b.test.ts']);
+    expect(testFilesInReport(JSON.stringify({ testResults: [] }), root)).toEqual([]);
+  });
+
+  it('says nothing for a report that is missing, cut short, or not the shape vitest writes', () => {
+    expect(testFilesInReport(undefined, root)).toBeUndefined();
+    expect(testFilesInReport('{"testResults": [{"name": "/project/tests/a.te', root)).toBeUndefined();
+    expect(testFilesInReport('{}', root)).toBeUndefined();
+    expect(testFilesInReport('null', root)).toBeUndefined();
+    expect(testFilesInReport(JSON.stringify({ testResults: [{ file: 'x' }] }), root)).toBeUndefined();
+  });
+});
+
 describe('runVitest leaves chunk worktrees out of the run', () => {
   const WIP = {
     'tests/ok.test.ts': "import { it } from 'vitest';\nit('holds', () => {});\n",
@@ -348,10 +371,22 @@ describe('runVitest leaves chunk worktrees out of the run', () => {
     const project = await makeProject({ ...WIP, [VITEST_CONFIG_FILE]: generateVitestConfig(undefined) });
     await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');
     const run = await runVitest(project, []);
-    expect(run).toMatchObject({ ok: true });
+    expect(run).toMatchObject({ ok: true, ran: ['tests/ok.test.ts'] });
     const { output } = run as { output: string };
     expect(output).toContain('ok.test.ts');
     expect(output).not.toContain('wip.test.ts');
+  }, 60_000);
+
+  it('reports which named files ran, since vitest skips one its config excludes and still passes (#479)', async () => {
+    const config = generateVitestConfig(undefined).replace('test: { exclude: [', 'test: { exclude: ["tests/skipped.test.ts", ');
+    const project = await makeProject({
+      'tests/ok.test.ts': WIP['tests/ok.test.ts'],
+      'tests/skipped.test.ts': WIP['tests/ok.test.ts'],
+      [VITEST_CONFIG_FILE]: config,
+    });
+    await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');
+    const run = await runVitest(project, ['tests/ok.test.ts', 'tests/skipped.test.ts']);
+    expect(run).toMatchObject({ ok: true, ran: ['tests/ok.test.ts'] });
   }, 60_000);
 
   it('refuses to run a project whose vitest config would collect the worktrees', async () => {

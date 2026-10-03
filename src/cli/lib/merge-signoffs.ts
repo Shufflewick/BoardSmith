@@ -4,7 +4,8 @@ import { MERGE_SIGNOFFS_MD, designPath } from './project-paths.js';
 /**
  * `design/MERGE-SIGNOFFS.md` (#403): what `boardsmith chunk-merge` vouched for when the merged
  * tree has a source file in a form no designer signed off: two chunks built at the same time both
- * edited it, or the merge rewrote its provisional ledger citations to real numbers (#435). The
+ * edited it, the merge rewrote its provisional ledger citations to real numbers (#435), or it is a
+ * test-runner config edited since a verified chunk signed it off (#479). The
  * merge re-runs the own checks (tests, chunk-check and claim-quote-check) of the chunks whose
  * Build Manifest names it and records each such file here, with its content hash, the chunks it
  * vouched for, and the merge. The sign-off check (`checkSignoff`) then accounts for that file's
@@ -35,7 +36,8 @@ const HEADER = `# Merge Sign-offs
 
 <!-- MACHINE-OWNED. Written by \`boardsmith chunk-merge\` and by nothing else. Each entry is a
      source file the merge changed after its chunks signed it off (two chunks built at the same
-     time both edited it, or the merge renumbered its ledger citations), as the merge left it.
+     time both edited it, the merge renumbered its ledger citations, or only its vitest test
+     collection changed since a chunk signed it off), as the merge left it.
      The merge re-ran every named chunk's own checks on the combined file and they passed, so the
      sign-off check accepts that edit for each chunk whose sign-off names the file. -->
 `;

@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, posix, relative, resolve, sep } from 'node:path';
+import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
 import chalk from 'chalk';
 import {
@@ -68,10 +69,13 @@ interface GrowingStructure {
 }
 
 /**
- * What a test run reports back: whether it passed and its output for the refusal, or, when the
- * tests could not be run as asked, the sentence that says why.
+ * What a test run reports back: whether it passed, its output for the refusal, and the test files
+ * that actually ran (project-relative, `/`-separated), or, when the tests could not be run as asked,
+ * the sentence that says why. `ran` matters because vitest skips a named file its config excludes
+ * and still exits 0 (#479): only `ran` shows a file was left out. A runner that cannot tell leaves
+ * it out, and a check that must know refuses.
  */
-type TestRunResult = { ok: boolean; output: string } | { refused: string };
+type TestRunResult = { ok: boolean; output: string; ran?: string[] } | { refused: string };
 
 /** Runs the named test files (relative to the project) and reports whether they all passed. */
 export type TestRunner = (projectDir: string, files: readonly string[]) => Promise<TestRunResult>;
@@ -370,15 +374,42 @@ async function reviewRefusals(projectDir: string, slug: string, constraints: Har
 export const runVitest: TestRunner = async (projectDir, files) => {
   const problem = await testRunScopeProblem(projectDir);
   if (problem !== undefined) return { refused: problem };
-  return new Promise((done) => {
-    const child = spawn('npx', ['vitest', 'run', ...files], { cwd: projectDir, shell: process.platform === 'win32' });
-    let output = '';
-    child.stdout.on('data', (d: Buffer) => (output += d.toString()));
-    child.stderr.on('data', (d: Buffer) => (output += d.toString()));
-    child.on('error', (error) => done({ ok: false, output: error.message }));
-    child.on('close', (code) => done({ ok: code === 0, output }));
-  });
+  const reportDir = await fs.mkdtemp(join(tmpdir(), 'boardsmith-constraint-run-'));
+  const reportPath = join(reportDir, 'report.json');
+  try {
+    const args = ['vitest', 'run', '--reporter=default', '--reporter=json', `--outputFile.json=${reportPath}`, ...files];
+    const { ok, output } = await new Promise<{ ok: boolean; output: string }>((done) => {
+      const child = spawn('npx', args, { cwd: projectDir, shell: process.platform === 'win32' });
+      let text = '';
+      child.stdout.on('data', (d: Buffer) => (text += d.toString()));
+      child.stderr.on('data', (d: Buffer) => (text += d.toString()));
+      child.on('error', (error) => done({ ok: false, output: error.message }));
+      child.on('close', (code) => done({ ok: code === 0, output: text }));
+    });
+    const report = await fs.readFile(reportPath, 'utf-8').catch(() => undefined);
+    return { ok, output, ran: testFilesInReport(report, await fs.realpath(projectDir)) };
+  } finally {
+    await fs.rm(reportDir, { recursive: true, force: true });
+  }
 };
+
+/**
+ * The test files vitest's JSON report says it ran, relative to `root`, or `undefined` when there is
+ * no report or it is not one vitest wrote whole (a run cut short can leave it truncated). Undefined
+ * says nothing about which files ran, so a caller that needs to know refuses on it.
+ */
+export function testFilesInReport(text: string | undefined, root: string): string[] | undefined {
+  if (text === undefined) return undefined;
+  let report: unknown;
+  try {
+    report = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  const results = (report as { testResults?: unknown } | null)?.testResults;
+  if (!Array.isArray(results) || !results.every((r) => typeof (r as { name?: unknown })?.name === 'string')) return undefined;
+  return results.map((r: { name: string }) => relative(root, r.name).split(sep).join(posix.sep));
+}
 
 /** The last lines of a test run, which is where vitest says what failed. */
 function tail(output: string, lines = 25): string {
