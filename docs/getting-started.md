@@ -219,9 +219,14 @@ no change would be measured: there the mutation check fails unless you pass
 packages have not changed since an earlier run is not run again, so verifying
 again after a commit that only touches the `bs-` skills' design records is quick.
 A package installed as a link to a folder outside the repository, such as
-`"dep": "file:../dep"`, counts by that folder's content, so editing it runs the
-mutants again; if such a folder cannot be read, nothing is reused or kept for
-that run.
+`"dep": "file:../dep"`, counts too, so editing it runs the mutants again. When
+that folder is the top of a git checkout, what counts is its commit, its
+uncommitted and untracked changes, and the git-ignored files that its
+`package.json` `main`, `module` and `exports` point into (such as a built
+`dist/`). Any other folder counts by every file in it except `node_modules` and
+`.git`. The folder's own installed packages count as well. If any of this
+cannot be read, or the exports reach every file in the package, nothing is
+reused or kept for that run, and `boardsmith verify` says why.
 Those outcomes are kept in the repository's git directory, shared by the main
 checkout and every worktree. A merge reuses them only when the merged tree is
 the tree the worktree verified: main has not moved since, or the branch merged

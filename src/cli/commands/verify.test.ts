@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
@@ -368,6 +368,22 @@ describe('boardsmith verify: a re-verify reuses mutant outcomes only while nothi
     const third = await runVerify({ projectDir: dir, checks: CHECKS, log });
     expect(check(third.result, 'mutation').counts).toMatchObject({ mutants: 3, survived: 3, reused: 0 });
     expect(freshRuns(lines)).toBe(3);
+  });
+
+  it('says why, and runs every mutant, when a package linked from outside the repository cannot be read (#484)', async () => {
+    const dir = await gameOnBranch(false);
+    const dep = join(dirname(dir), 'dep');
+    await write(dep, { 'index.js': 'export const rate = 2;\n', 'secret/x.js': 'export {};\n' });
+    await fs.mkdir(join(dirname(dir), 'node_modules'));
+    await fs.symlink(dep, join(dirname(dir), 'node_modules', 'dep'), 'dir');
+    await fs.chmod(join(dep, 'secret'), 0o000);
+    const lines: string[] = [];
+    try {
+      await runVerify({ projectDir: dir, checks: CHECKS, log: (l) => lines.push(l) });
+    } finally {
+      await fs.chmod(join(dep, 'secret'), 0o755);
+    }
+    expect(lines).toContainEqual(expect.stringMatching(/^the mutant cache is off for this run: could not read .*dep.*; every mutant runs\.$/));
   });
 
   it('keeps no outcome from a run whose tree changed while it ran', async () => {

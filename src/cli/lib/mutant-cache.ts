@@ -135,9 +135,82 @@ async function checkoutRevision(root: string): Promise<string | undefined> {
   const untracked = (await git(root, ['ls-files', '--others', '--exclude-standard', '-z'])).split('\0').filter(Boolean).sort();
   for (const path of untracked) {
     hash.update(`\0${path}\0`);
-    hash.update(await fs.readFile(join(root, path)));
+    try {
+      hash.update(await fs.readFile(join(root, path)));
+    } catch (error) {
+      throw new Error(`could not read untracked ${path} in ${root}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
   return `${commit} ${hash.digest('hex')}`;
+}
+
+/** True when git ignores `path` (relative to `root`, the top of a checkout), whether or not it exists. */
+async function ignoredByGit(root: string, path: string): Promise<boolean> {
+  try {
+    await git(root, ['check-ignore', '-q', '--', path]);
+    return true;
+  } catch (error) {
+    if ((error as { code?: unknown }).code === 1) return false;
+    throw error;
+  }
+}
+
+/** Every file path a package.json field names: `main`, `module`, and each target in `exports`. */
+function entryTargets(value: unknown, into: string[] = []): string[] {
+  if (typeof value === 'string') into.push(value);
+  else if (Array.isArray(value)) for (const item of value) entryTargets(item, into);
+  else if (value !== null && typeof value === 'object') for (const item of Object.values(value)) entryTargets(item, into);
+  return into;
+}
+
+/**
+ * The git-ignored files a linked checkout's package exposes, by content: `checkoutRevision` sees
+ * only what git tracks or would track, and a package often loads build output git ignores.
+ *
+ * Each target of `main`, `module` and `exports` (or `index.js`, Node's default, when none is
+ * given) is looked at as a path. For a plain path, the outermost ignored folder holding it, or the
+ * file itself when only it is ignored, is hashed whole, so files the entry point imports beside it
+ * count too. A `*` pattern reaches every file under the folder before the `*`, so every ignored
+ * file or folder under it counts, except those inside `node_modules`, which install records name.
+ * A pattern that reaches the whole package, and a target outside it, cannot be bounded, and throw.
+ */
+async function ignoredEntryPointsHash(root: string): Promise<string> {
+  const manifest = await readIfPresent(join(root, 'package.json'));
+  const pkg = (manifest === undefined ? {} : JSON.parse(manifest.toString('utf-8'))) as Record<string, unknown>;
+  const targets = entryTargets([pkg.main, pkg.module, pkg.exports]);
+  if (targets.length === 0) targets.push('index.js');
+
+  const hashed = new Map<string, string>();
+  const hashPath = async (path: string) => {
+    if (hashed.has(path)) return;
+    const full = join(root, path);
+    const stat = await fs.stat(full).catch(() => undefined);
+    hashed.set(path, stat === undefined ? 'absent' : stat.isDirectory() ? await folderContentHash(full) : sha256(await fs.readFile(full)));
+  };
+  for (const target of targets) {
+    const star = target.indexOf('*');
+    const fixed = star === -1 ? target : target.slice(0, star);
+    const scope = relative(root, join(root, star === -1 || fixed.endsWith('/') ? fixed : dirname(fixed)));
+    if (scope === '') throw new Error(`the package in ${root} exports "${target}", which reaches every file in it, so the files git ignores cannot be bounded`);
+    if (scope === '..' || scope.startsWith(`..${sep}`) || isAbsolute(scope)) {
+      throw new Error(`the package in ${root} names "${target}", which is outside the package`);
+    }
+    const parts = scope.split(sep);
+    let ignored: string | undefined;
+    for (let n = 1; n <= parts.length && ignored === undefined; n++) {
+      const prefix = parts.slice(0, n).join('/');
+      if (await ignoredByGit(root, prefix)) ignored = prefix;
+    }
+    if (ignored !== undefined) await hashPath(ignored);
+    else if (star !== -1) {
+      const listing = await git(root, ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory', '--', `${parts.join('/')}/`]);
+      for (const entry of listing.split('\0').filter(Boolean)) {
+        const path = entry.replace(/\/$/, '');
+        if (!path.split('/').includes('node_modules')) await hashPath(path);
+      }
+    }
+  }
+  return sha256(JSON.stringify([...hashed].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))));
 }
 
 /**
@@ -262,9 +335,9 @@ async function installedLinks(nodeModules: string): Promise<string[]> {
  * then, for each linked folder, those its own imports resolve through (its `node_modules` and the
  * folders above it), with the install records of those folders that are not above the game too. A link into the repository is
  * left out, since its files are in the key already, and so is a link into a `node_modules`
- * folder, as an install record names that package. A linked folder is named by its path and
- * `checkoutRevision` when it is the top of a git checkout, otherwise by every file in it
- * (`folderContentHash`); a link whose folder is missing is named by where it points. Nothing names
+ * folder, as an install record names that package. A linked folder is named by its path and, when
+ * it is the top of a git checkout, by `checkoutRevision` plus the ignored files its package
+ * exposes (`ignoredEntryPointsHash`), otherwise by every file in it (`folderContentHash`); a link whose folder is missing is named by where it points. Nothing names
  * the link's own location, so a worktree whose `node_modules` links to the main checkout's resolves
  * to the same key as the main checkout. A folder that cannot be read throws.
  */
@@ -294,7 +367,8 @@ export async function linkedPackagesHash(projectDir: string): Promise<string> {
         if (named.has(target) || within(repository, target) || target.split(sep).includes('node_modules')) continue;
         named.set(target, '');
         try {
-          named.set(target, (await checkoutRevision(target)) ?? `content ${await folderContentHash(target)}`);
+          const checkout = await checkoutRevision(target);
+          named.set(target, checkout === undefined ? `content ${await folderContentHash(target)}` : `${checkout} ${await ignoredEntryPointsHash(target)}`);
         } catch (error) {
           throw new Error(`could not read ${target}, linked from ${link}: ${error instanceof Error ? error.message : String(error)}`);
         }

@@ -374,6 +374,79 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
       expect(await lookup(tree)).toBe('killed');
     });
 
+    it('runs the mutant again when a git-ignored file that the linked package exports changed', async () => {
+      const layouts: Array<{ files: Record<string, string>; change: Record<string, string> }> = [
+        {
+          files: { 'package.json': JSON.stringify({ name: 'dep', exports: { '.': './dist/index.js' } }), '.gitignore': 'dist/\n', 'dist/index.js': "export * from './chunk.js';\n", 'dist/chunk.js': 'export const rate = 2;\n' },
+          change: { 'dist/chunk.js': 'export const rate = 3;\n' },
+        },
+        {
+          files: { 'package.json': JSON.stringify({ name: 'dep', main: './build/main.js' }), '.gitignore': 'build/\n', 'build/main.js': 'export const rate = 2;\n' },
+          change: { 'build/main.js': 'export const rate = 3;\n' },
+        },
+        {
+          files: { 'package.json': JSON.stringify({ name: 'dep', exports: { './*': { import: './src/*.js' } } }), '.gitignore': 'src/generated/\n', 'src/generated/x.js': 'export const x = 1;\n' },
+          change: { 'src/generated/x.js': 'export const x = 2;\n' },
+        },
+      ];
+      for (const { files, change } of layouts) {
+        const { dir, dep } = await withSibling({ git: true });
+        await write(dep, files);
+        commitAll(dep, 'exports');
+        await record(dir, 'killed');
+        expect(await lookup(dir)).toBe('killed');
+        await write(dep, change);
+        expect({ change: Object.keys(change)[0], outcome: await lookup(dir) }).toEqual({ change: Object.keys(change)[0], outcome: undefined });
+      }
+    });
+
+    it('does not cache, and names the package, when its exports reach every file in it, ignored ones included', async () => {
+      const { dir, dep } = await withSibling({ git: true });
+      await write(dep, { 'package.json': JSON.stringify({ name: 'dep', exports: { './*': './*' } }) });
+      commitAll(dep, 'export everything');
+      expect((await openMutantCache(dir)).unavailable).toMatch(/the package in .*dep exports "\.\/\*", which reaches every file in it/);
+    });
+
+    it('finds a link in a node_modules above the game folder, as Node does', async () => {
+      const dir = await project();
+      const dep = join(dirname(dir), 'dep');
+      await write(dep, { 'index.js': 'export const rate = 2;\n' });
+      await fs.mkdir(join(dirname(dir), 'node_modules'));
+      await fs.symlink(dep, join(dirname(dir), 'node_modules', 'dep'), 'dir');
+      expect(await afterChange(dir, dep, { 'index.js': 'export const rate = 3;\n' }, undefined)).toEqual({ change: 'index.js', outcome: undefined });
+    });
+
+    it('leaves out a link from a sibling back into the repository, whose committed files are in the key already', async () => {
+      const { dir, dep } = await withSibling({ git: true });
+      await write(dep, { '.gitignore': 'node_modules/\n' });
+      commitAll(dep, 'ignore installs');
+      await fs.mkdir(join(dep, 'node_modules'));
+      await fs.symlink(dir, join(dep, 'node_modules', 'game'), 'dir');
+      // An untracked file in the game would change the game checkout's revision, were it looked at.
+      expect(await afterChange(dir, dir, { 'notes.txt': 'not committed\n' }, undefined)).toEqual({ change: 'notes.txt', outcome: 'killed' });
+    });
+
+    it('stops at two siblings that link to each other, and still sees a change in either', async () => {
+      const { dir, dep } = await withSibling({ git: false });
+      const other = join(dirname(dep), 'other');
+      await write(other, { 'index.js': 'export const o = 1;\n' });
+      await fs.mkdir(join(dep, 'node_modules'));
+      await fs.mkdir(join(other, 'node_modules'));
+      await fs.symlink(other, join(dep, 'node_modules', 'other'), 'dir');
+      await fs.symlink(dep, join(other, 'node_modules', 'dep'), 'dir');
+      expect(await afterChange(dir, other, { 'index.js': 'export const o = 2;\n' }, undefined)).toEqual({ change: 'index.js', outcome: undefined });
+    });
+
+    it('does not cache, and names the file, when a linked checkout has an untracked link it cannot read', async () => {
+      for (const target of ['folder', 'nowhere']) {
+        const { dir, dep } = await withSibling({ git: true });
+        await fs.mkdir(join(dirname(dep), 'folder'), { recursive: true });
+        await fs.symlink(join(dirname(dep), target), join(dep, 'escape'));
+        const cache = await openMutantCache(dir);
+        expect({ target, reason: cache.unavailable }).toEqual({ target, reason: expect.stringMatching(/could not read untracked escape in .*dep/) });
+      }
+    });
+
     it('does not cache at all, and says why, when a linked folder cannot be read', async () => {
       const { dir, dep } = await withSibling({ git: false });
       await record(dir, 'killed');
