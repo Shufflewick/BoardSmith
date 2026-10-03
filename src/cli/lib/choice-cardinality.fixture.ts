@@ -283,6 +283,15 @@ const say = worldAction<CardinalityWorld>('say')
   .enterText('line', {})
   .execute(() => {});
 
+/**
+ * Asks for words under an EMPTY Skip label. An empty string is falsy, so the
+ * step is required, exactly as the engine and the panel read it (#476).
+ */
+const scrawl = worldAction<CardinalityWorld>('scrawl')
+  .needs(inCommons)
+  .enterText('line', { optional: '' })
+  .execute(() => {});
+
 /** Writes to a partition it never declared, which the world refuses. */
 const trespass = worldAction<CardinalityWorld>('trespass')
   .needs(inCommons)
@@ -297,7 +306,7 @@ const flood = worldAction<CardinalityWorld>('flood')
   .chooseFrom('drop', { choices: range(250) })
   .execute(() => {});
 
-const WORLD_ACTIONS = { shout, mark, nod, pair, hang, light, plant, sprout, harvest, say, trespass, flood };
+const WORLD_ACTIONS = { shout, mark, nod, pair, hang, light, plant, sprout, harvest, say, scrawl, trespass, flood };
 
 /**
  * A three-seat world bundle offering the named actions. `onArrive` names the

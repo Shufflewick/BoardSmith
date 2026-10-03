@@ -839,14 +839,25 @@ describe('GameRunner', () => {
       // Below it: refused, and the message says the policy dropped it (not that
       // something is broken) and how to reach further back.
       expect(GameRunner.fromCheckpoint(snapshot, 2, LongGame)).toBeNull();
-      const why = describeCheckpointAbsence(snapshot.actionCheckpoints, 2);
+      const why = describeCheckpointAbsence(snapshot.actionCheckpoints, 2, 'debug');
       expect(why).toContain('older than');
       expect(why).toContain('checkpoints: { max }');
+      expect(why).toContain('action 2');
 
       // Above it: a different absence, with a different fix.
-      const never = describeCheckpointAbsence(snapshot.actionCheckpoints, 999);
+      const never = describeCheckpointAbsence(snapshot.actionCheckpoints, 999, 'debug');
       expect(never).toContain('no checkpoint was captured');
       expect(never).not.toContain('older than');
+    });
+
+    it('tells a seat the same cause and fix with no action index or count in it (#449)', () => {
+      const snapshot = playedRunner(12, { max: 4 }).getSnapshot();
+      const pruned = describeCheckpointAbsence(snapshot.actionCheckpoints, 2, 'seat');
+      expect(pruned).toContain('older than');
+      expect(pruned).toContain('checkpoints: { max }');
+      const never = describeCheckpointAbsence(snapshot.actionCheckpoints, 999, 'seat');
+      expect(never).toContain('no checkpoint was captured');
+      for (const text of [pruned, never]) expect(text).not.toMatch(/\d/);
     });
 
     it('carries the policy through a snapshot round-trip', () => {
@@ -867,7 +878,7 @@ describe('GameRunner', () => {
       const snapshot = playedRunner(8, { enabled: false }).getSnapshot();
       expect(snapshot.actionCheckpoints!.entries).toHaveLength(0);
       expect(GameRunner.fromCheckpoint(snapshot, 4, LongGame)).toBeNull();
-      expect(describeCheckpointAbsence(snapshot.actionCheckpoints, 4)).toContain('enabled: false');
+      expect(describeCheckpointAbsence(snapshot.actionCheckpoints, 4, 'debug')).toContain('enabled: false');
     });
 
     it('still advances the execute() barrier with checkpointing disabled', () => {

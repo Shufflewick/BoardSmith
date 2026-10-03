@@ -69,7 +69,7 @@ describe('#361: the table dev host enforces the game definition', () => {
     const table = await openPolicyTable(FENCED);
     expect((await table.act('roll'))?.success).toBe(true);
 
-    await expectUndoRefused(table, /a random draw was consumed there/);
+    await expectUndoRefused(table, /a random draw was consumed since the point being restored/);
   }, 30_000);
 
   it('still allows an undo the fence does not cover, so the policy and not undo itself is what refused', async () => {
@@ -93,6 +93,6 @@ describe('#361: the table dev host enforces the game definition', () => {
     expect(outcome?.kind).toBe('restored');
 
     expect((await table.act('roll'))?.success).toBe(true);
-    await expectUndoRefused(table, /a random draw was consumed there/);
+    await expectUndoRefused(table, /a random draw was consumed since the point being restored/);
   }, 30_000);
 });

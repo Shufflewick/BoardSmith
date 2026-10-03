@@ -21,7 +21,7 @@ import type {
   WebSocketMessage,
   ActionMetadata,
 } from '../types/protocol.js';
-import type { AnimationEvent, FlowState, FollowUpOffer, TutorialStepView } from '../engine/index.js';
+import type { AnimationEvent, PublicFlowState, FollowUpOffer, TutorialStepView } from '../engine/index.js';
 // Type-only (erased at runtime, no client -> session coupling in the emitted
 // code). `PlayerState` below is the wire shape of the server's
 // `PlayerGameState`, so borrowing the server's own payload types is what keeps
@@ -125,10 +125,11 @@ export interface MatchmakingStatus {
 // ============================================
 
 /**
- * The engine's `FlowState`, which `buildPlayerState` forwards onto the wire
- * as-is. Re-exported rather than restated, so the client cannot drift from it.
+ * What a seat is sent of the flow: the engine's `PublicFlowState`, never its
+ * server-side `FlowState`, which counts every seat's actions (#449).
+ * Re-exported rather than restated, so the client cannot drift from it.
  */
-export type { FlowState };
+export type { PublicFlowState };
 
 export interface PlayerState {
   /** Current game phase */
@@ -166,14 +167,6 @@ export interface PlayerState {
 
   /** Formatted game messages visible to this player */
   messages?: Array<{ text: string }>;
-
-  /**
-   * Total number of actions taken in the game so far. Published unconditionally
-   * for every seat, including spectators -- see `PlayerGameState.actionCount`
-   * (`src/session/types.ts`) for the server-side source of truth. Used by
-   * `useAnimationEvents` as a rewind-detection signal (UNDO-04).
-   */
-  actionCount?: number;
 
   /**
    * How many checkpoint restores (undo / rewind) this timeline has undergone.
@@ -227,7 +220,7 @@ export interface PlayerState {
 
 export interface GameState {
   /** Flow state (turn info, available actions) */
-  flowState: FlowState;
+  flowState: PublicFlowState;
 
   /** Player-specific state */
   state: PlayerState;
@@ -344,7 +337,7 @@ export type WebSocketOutgoingMessage = Extract<
 /** Server pushed a fresh game state (initial state or a mid-game update). */
 export interface StateIncomingMessage {
   type: 'state';
-  flowState: FlowState;
+  flowState: PublicFlowState;
   state: PlayerState;
   playerSeat?: number;
   isSpectator?: boolean;
@@ -353,7 +346,7 @@ export interface StateIncomingMessage {
 /** Server signals the game restarted; carries a fresh state, same shape as `state`. */
 export interface RestartIncomingMessage {
   type: 'restart';
-  flowState: FlowState;
+  flowState: PublicFlowState;
   state: PlayerState;
   playerSeat?: number;
   isSpectator?: boolean;
@@ -417,7 +410,7 @@ export type { CreateGameRequest };
 export interface CreateGameResponse {
   success: boolean;
   gameId?: string;
-  flowState?: FlowState;
+  flowState?: PublicFlowState;
   state?: PlayerState;
   error?: string;
   /** Lobby info (if useLobby was true) */
