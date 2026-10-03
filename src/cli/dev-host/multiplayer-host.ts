@@ -18,6 +18,7 @@
 import { createDevSession, type DevSession } from './bridge.js';
 import {
   STALE_SUBMISSION_MESSAGE,
+  StatePushGate,
   type Op,
   type OpResult,
   type GamePreset,
@@ -131,6 +132,9 @@ export type HostOutbound =
    * restarted since it joined. It is not seated; reloading it joins this run.
    */
   | { type: 'stale_run' };
+
+/** The `game_state` frame, the one message `pushGate` decides on. */
+type GameStateFrame = Extract<HostOutbound, { type: 'game_state' }>;
 
 /** Messages a client sends to the host. */
 export type ClientInbound =
@@ -458,6 +462,16 @@ export class MultiplayerHost {
   /** The seed the running game was dealt from, which every `game_state` frame carries (#460). */
   private dealtFrom: string | null = null;
   /**
+   * What each page was last sent, by clientId (#487). A `game_state` push
+   * identical to it, `serverNow` aside, is not sent: in a simultaneous step it
+   * would tell the page another seat acted in secret. Frames that reset the
+   * page (`reinitSeat`) or answer it (`getState`) are recorded, not asked.
+   */
+  private readonly pushGate = new StatePushGate<string, GameStateFrame>({
+    playerState: (frame) => (frame.view as { state?: unknown } | undefined)?.state,
+    perPushFields: ['serverNow'],
+  });
+  /**
    * Maps an in-flight requestId to the client that issued it, so the matching
    * `server_response` is routed back to the REQUESTING client — not the acting
    * seat. A follower acts as a seat it does not occupy (the active seat), so
@@ -596,6 +610,7 @@ export class MultiplayerHost {
 
   disconnect(clientId: string): void {
     this.connected.delete(clientId);
+    this.pushGate.forget(clientId);
     const seat = this.clientSeat.get(clientId);
     if (seat !== undefined) {
       const info = this.seats.get(seat);
@@ -622,6 +637,29 @@ export class MultiplayerHost {
   // ── Inbound dispatch ──────────────────────────────────────────────────────
 
   async handleMessage(clientId: string, msg: ClientInbound): Promise<void> {
+    const roster = this.rosterKey();
+    await this.dispatch(clientId, msg);
+    this.republishIfRosterChanged(roster);
+  }
+
+  /**
+   * Which seats the bot plays, as the views state it (`hasBotPlayers`). The
+   * views are built when the game changes, not when the roster does, so a
+   * roster change is published at once by {@link republishIfRosterChanged}:
+   * otherwise it would ride on the next push, and reach a page whose view
+   * nothing else changed exactly when another seat acted in secret (#487).
+   */
+  private rosterKey(): string {
+    return this.botSeats.map((s) => s.seat).join(',');
+  }
+
+  /** Re-send the current views when the roster changed since `before`; the push gate sends each page only what is new to it. */
+  private republishIfRosterChanged(before: string): void {
+    if (this.phase !== 'playing' || !this.session || this.rosterKey() === before) return;
+    this.session.host.broadcastCurrent();
+  }
+
+  private async dispatch(clientId: string, msg: ClientInbound): Promise<void> {
     switch (msg.type) {
       case 'hello':
         return this.hello(clientId);
@@ -940,10 +978,9 @@ export class MultiplayerHost {
     }
     const seat = this.seatOf(clientId, msg.requestId);
     if (seat === undefined) return;
-    this.send(clientId, {
-      ...this.gameStateFrame(this.session.viewForSeat(seat), this.session.meta()),
-      requestId: msg.requestId ?? null,
-    });
+    const frame = this.gameStateFrame(this.session.viewForSeat(seat), this.session.meta());
+    this.pushGate.recordSent(clientId, frame);
+    this.send(clientId, { ...frame, requestId: msg.requestId ?? null });
   }
 
   /**
@@ -1066,7 +1103,9 @@ export class MultiplayerHost {
   /** The grace ran out: the bot drives the seat until its player is back. */
   private coverAwaySeat(seat: number): void {
     if (this.followerClientId !== null) return;
+    const roster = this.rosterKey();
     this.addBotSeat(seat);
+    this.republishIfRosterChanged(roster);
     if (this.phase !== 'playing') return;
     void this.session?.host.runBotTurns().catch((err: unknown) => {
       console.error(
@@ -1460,7 +1499,10 @@ export class MultiplayerHost {
     this.send(clientId, { type: 'init', seat });
     const view = this.session?.viewForSeat(seat);
     if (view !== undefined && this.session) {
-      this.send(clientId, this.gameStateFrame(view, this.session.meta()));
+      // `init` cleared the page, so it is sent the whole state whatever it last had.
+      const frame = this.gameStateFrame(view, this.session.meta());
+      this.pushGate.recordSent(clientId, frame);
+      this.send(clientId, frame);
     }
     // A page seated into a game its rules no longer fit is told so, after the
     // `init` that clears whatever it was showing before.
@@ -1521,15 +1563,24 @@ export class MultiplayerHost {
     if (!info?.clientId || !info.connected) return;
     if (info.clientId === this.followerClientId) {
       const active = this.effectiveActiveSeat();
+      const activeView = this.session?.viewForSeat(active);
+      const frame = this.gameStateFrame(activeView ?? view, meta);
       if (active !== this.lastFollowerSeat) {
         this.send(info.clientId, { type: 'init', seat: active });
         this.lastFollowerSeat = active;
+        this.pushGate.recordSent(info.clientId, frame);
+        this.send(info.clientId, frame);
+        return;
       }
-      const activeView = this.session?.viewForSeat(active);
-      this.send(info.clientId, this.gameStateFrame(activeView ?? view, meta));
+      this.pushFrame(info.clientId, frame);
       return;
     }
-    this.send(info.clientId, this.gameStateFrame(view, meta));
+    this.pushFrame(info.clientId, this.gameStateFrame(view, meta));
+  }
+
+  /** Push `frame` unless it is the one this page was last sent (#487). */
+  private pushFrame(clientId: string, frame: GameStateFrame): void {
+    if (this.pushGate.shouldPush(clientId, frame)) this.send(clientId, frame);
   }
 
   /**
@@ -1539,7 +1590,7 @@ export class MultiplayerHost {
   private gameStateFrame(
     view: unknown,
     meta: { isComplete: boolean; winners: number[]; isDraw: boolean },
-  ): Extract<HostOutbound, { type: 'game_state' }> {
+  ): GameStateFrame {
     return {
       type: 'game_state',
       view,
