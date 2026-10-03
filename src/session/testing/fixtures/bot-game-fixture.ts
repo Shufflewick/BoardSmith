@@ -36,6 +36,9 @@ export class BotGame extends Game<BotGame, Player> {
         .chooseFrom('direction', { choices: ['left', 'right'] })
         .execute(() => {
           this.moveCount++;
+          // One animation beat per move, so a test can watch what a client
+          // plays (a demo's step back must not swallow the next move's beat).
+          this.animate('moved', { n: this.moveCount });
           return { success: true };
         }),
     );

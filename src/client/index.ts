@@ -64,7 +64,7 @@ export type {
   MatchmakingStatus,
 
   // Game State
-  FlowState,
+  PublicFlowState,
   PlayerState,
   GameState,
 

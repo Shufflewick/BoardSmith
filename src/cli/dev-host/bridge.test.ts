@@ -108,7 +108,7 @@ describe('dev host bridge', () => {
       expect(r).toEqual({ success: true, error: undefined, followUp: { action: 'next' } });
     });
 
-    it('returns the full result for resolve_choices', () => {
+    it('returns only the pick answer for resolve_choices, never the state envelope (#450)', () => {
       const r = shapeResult('resolve_choices', {
         success: true,
         choices: ['red', 'blue'],
@@ -119,7 +119,13 @@ describe('dev host bridge', () => {
         isComplete: false,
         winners: [],
       });
-      expect(r.choices).toEqual(['red', 'blue']);
+      expect(r).toEqual({
+        success: true,
+        choices: ['red', 'blue'],
+        validElements: undefined,
+        multiSelect: undefined,
+        warnings: undefined,
+      });
     });
 
     // ── warnings threading (ERR-01 T-126-09) ────────────────────────────────
@@ -162,7 +168,7 @@ describe('dev host bridge', () => {
       ]);
     });
 
-    it("resolve_choices full-passthrough still carries warnings (regression guard)", () => {
+    it("forwards result.warnings on the 'resolve_choices' case", () => {
       const r = shapeResult('resolve_choices', {
         success: true,
         choices: ['red', 'blue'],

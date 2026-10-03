@@ -371,7 +371,7 @@ function answeredPick(
   args: Readonly<Record<string, unknown>>,
 ): PickChoicesResult {
   const candidates = answered.choices ?? answered.validElements;
-  if (candidates?.length === 0 && answered.optional !== true) {
+  if (candidates?.length === 0 && !answered.optional) {
     return {
       success: false,
       error: deadEndPickMessage({

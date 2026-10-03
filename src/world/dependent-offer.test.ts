@@ -144,4 +144,22 @@ describe("#270 — a dependent choice does not take the verb out of the offer", 
 
     expect(offers.map((offer) => offer.name)).toEqual(["look"]);
   });
+
+  it.each([
+    ["true", true],
+    ["a Skip label", "wear nothing"],
+  ] as const)("offers an action whose empty FIRST question is optional by %s (#476)", async (_label, optional) => {
+    // An optional question with nothing in it is answered by skipping it, so
+    // the button is not dead. A string `optional` is the Skip button's label
+    // and counts exactly as `true` does.
+    const skippable = worldAction<KitGame>("skippable")
+      .needs(() => [KIT])
+      .chooseFrom("slot", { optional, choices: () => [] as string[] })
+      .execute(() => {});
+    const engine = await warmEngine([look, skippable]);
+
+    const offers = await engine.offersFor("player-a", STAMP);
+
+    expect(offers.map((offer) => offer.name).sort()).toEqual(["look", "skippable"]);
+  });
 });
