@@ -404,6 +404,7 @@ describe('cross-layer integration: engine progress → controller → projection
       playerCount: 2,
       playerNames: ['Alice', 'Bob'],
       seed: 'cross-layer',
+      debugEnabled: true,
       tutorial: PARITY_TUTORIAL,
     });
   });

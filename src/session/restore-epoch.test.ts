@@ -42,6 +42,7 @@ function newSession(storage: StorageAdapter) {
     playerCount: 2,
     playerNames: ['Alice', 'Bob'],
     seed: 'b17-seed',
+    debugEnabled: true,
     storage,
   });
 }

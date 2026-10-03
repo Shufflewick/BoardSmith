@@ -153,6 +153,10 @@ boardsmith dev --lan               # shorthand for --host 0.0.0.0
 # Disable teaching aids (bot hint, move heatmap, bot-vs-bot demo, tutorial)
 boardsmith dev --lock-teaching
 
+# Keep the Debug panel on with several people seated. Without it, debugging is
+# on only while one browser holds every human seat (solo or hot-seat play)
+boardsmith dev --debug
+
 # Don't auto-launch a browser tab (for scripts/CI driving the dev host,
 # so an uncontrolled tab doesn't claim seat 1)
 boardsmith dev --no-open

@@ -82,9 +82,10 @@ const TEST_CONFIG: DevHostConfig = {
 
 const SEAT_LOBBY = {
   type: 'lobby',
+  debug: true,
   seats: [
-    { seat: 1, clientId: 'client-a', name: 'Alice', connected: true },
-    { seat: 2, clientId: null, name: '', connected: false },
+    { seat: 1, held: true, mine: false, name: 'Alice', connected: true },
+    { seat: 2, held: false, mine: false, name: '', connected: false },
   ],
 };
 
@@ -263,5 +264,55 @@ describe('DevHost — game_state deadline relay (#302)', () => {
     await endStep()[0].trigger('click');
     const frames = ws.send.mock.calls.map((c) => JSON.parse(c[0] as string));
     expect(frames).toEqual([{ type: 'fireDeadline' }]);
+  });
+});
+
+// #481: the host says whether debugging is on (only one person holds the
+// seats, or `--debug`), and the page follows it live.
+describe('DevHost — debugging availability', () => {
+  const availability = (spy: ReturnType<typeof vi.fn>) =>
+    spy.mock.calls
+      .map((c) => c[0] as { type?: string; available?: boolean })
+      .filter((m) => m.type === 'dev-debug-available')
+      .map((m) => m.available);
+
+  it('hides the Debug buttons and tells the game when the host turns debugging off, and shows them again when it comes back', async () => {
+    const wrapper = await mountAndActivate();
+    const ws = mockWsInstance!;
+    const postSpy = spyOnIframePostMessage(wrapper);
+    expect(wrapper.findAll('[data-testid="debug-toggle"]').length).toBeGreaterThan(0);
+
+    ws.simulateMessage({ ...SEAT_LOBBY, debug: false });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findAll('[data-testid="debug-toggle"]')).toHaveLength(0);
+    expect(availability(postSpy).at(-1)).toBe(false);
+
+    ws.simulateMessage({ ...SEAT_LOBBY, debug: true });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findAll('[data-testid="debug-toggle"]').length).toBeGreaterThan(0);
+    expect(availability(postSpy).at(-1)).toBe(true);
+  });
+
+  it('does not open the panel from a debugToggle host message while debugging is off', async () => {
+    const wrapper = await mountAndActivate();
+    const ws = mockWsInstance!;
+    const postSpy = spyOnIframePostMessage(wrapper);
+    ws.simulateMessage({ ...SEAT_LOBBY, debug: false });
+    await wrapper.vm.$nextTick();
+
+    ws.simulateMessage({ type: 'debugToggle' });
+    await wrapper.vm.$nextTick();
+    expect(postSpy.mock.calls.filter((c) => (c[0] as { type?: string }).type === 'dev-debug-toggle')).toHaveLength(0);
+  });
+
+  it('tells a reloaded game page the current availability', async () => {
+    const wrapper = await mountAndActivate();
+    const ws = mockWsInstance!;
+    ws.simulateMessage({ ...SEAT_LOBBY, debug: false });
+    await wrapper.vm.$nextTick();
+    const postSpy = spyOnIframePostMessage(wrapper);
+
+    await wrapper.find('iframe').trigger('load');
+    expect(availability(postSpy)).toEqual([false]);
   });
 });

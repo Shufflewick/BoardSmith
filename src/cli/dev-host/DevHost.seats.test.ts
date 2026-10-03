@@ -80,9 +80,9 @@ const TEST_CONFIG: DevHostConfig = {
 const SEAT_LOBBY = {
   type: 'lobby',
   seats: [
-    { seat: 1, clientId: 'client-a', name: 'Alice', connected: true },
-    { seat: 2, clientId: null, name: '', connected: false }, // bot seat
-    { seat: 3, clientId: null, name: '', connected: false }, // bot seat
+    { seat: 1, held: true, mine: false, name: 'Alice', connected: true },
+    { seat: 2, held: false, mine: false, name: '', connected: false }, // bot seat
+    { seat: 3, held: false, mine: false, name: '', connected: false }, // bot seat
   ],
 };
 

@@ -304,6 +304,12 @@ move" feature for a real session).
 import { GameSession, type UndoResult, type ElementDiff } from 'boardsmith/session';
 ```
 
+`getStateAtAction`, `getStateDiff`, `getActionTraces` and `rewindToAction`
+are debug methods: they refuse unless the session was created with
+`debugEnabled: true` (pass it again as `GameSession.restore`'s last argument
+after a restore). They build whichever seat's view the caller names, so a host
+that forwards a player's request must pass that player's own seat.
+
 - **`session.getStateAtAction(actionIndex, playerPosition)`** — the
   perspective-correct state as of a specific action count, restored from
   the checkpoint captured at that boundary (not replayed). Returns
@@ -406,11 +412,23 @@ browser — use the dev-only ops below plus `createDevHostClient`.
 | Op | Purpose |
 |----|---------|
 | `getState` | Perspective-aware state for the caller's own connected seat (resolved server-side from the tracked connection — there is no client-supplied seat field, so a client can never request another seat's view). |
-| `getLobby` | Lobby info (phase, connected/open seats), in either phase. Like every op here, it is answered only after the connection has said `hello`. |
-| `debugToggle` | Relay-only: toggles the debug panel on every connected client. |
+| `getLobby` | Lobby info (phase, seats, and `debug`: whether debugging is on), in either phase. Each seat says whether it is `held`, whether it is `mine` (the caller's), and whether its holder is `connected`, never who holds it: a client id is how the host recognises a player, so it is never shown to anyone else. Like every op here, it is answered only after the connection has said `hello`. |
+| `debugToggle` | Relay-only: toggles the debug panel on every connected client, while debugging is on. |
 | `uiSwitch` | Relay-only: switches every connected client's UI mode (`{ name }`). |
 | `debug:logs` | Returns the dev-host's captured server-side log ring buffer (see [Structured Errors](#structured-errors-err) below). |
 | `debug:flow-state` | Returns the current `FlowDebugInfo` (same shape as `Game.getFlowDebugInfo()`) for a connected dev-host client. |
+
+**Debugging is on only while one person holds every human seat** (#481). A
+person is one browser: the dev host knows each by the id the page keeps in
+`localStorage`, so tabs of one browser are one person, and a second browser or
+a private window is another. A seat held by someone who stepped away still
+counts until they leave it. While two or more people hold seats, every
+`debug:*` op (`debug:history`, `debug:state-at`, `debug:state-diff`,
+`debug:action-traces`, `debug:flow-state`, `debug:rewind`, the deck edits and
+`debug:logs`) is refused for everyone, and the Debug panel is hidden. It comes
+back as soon as only one person is seated. `boardsmith dev --debug` keeps it on
+for a trusted table. Whatever the setting, a debug op that shows a seat's view
+always shows the asking seat's own.
 
 `debugToggle`/`uiSwitch` are host-level relay-only fan-out ops — like
 `hello`/`join`/`leave`/`restart`/`follow`, they have no per-caller reply to

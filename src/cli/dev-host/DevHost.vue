@@ -31,9 +31,13 @@ const cfg = props.config;
 const clientId = loadDevClientId(TABLE_CLIENT_KEY, 'c');
 
 // ── Lobby / game state (driven by the host over WS) ──────────────────────────
+/** One seat as the host shows it to this page (`LobbySeat` in multiplayer-host.ts). */
 interface SeatInfo {
   seat: number;
-  clientId: string | null;
+  /** Someone holds the seat; the host never says who (#481). */
+  held: boolean;
+  /** This page holds the seat. */
+  mine: boolean;
   name: string;
   color?: string;
   connected: boolean;
@@ -147,7 +151,7 @@ function handleNewGameClick(): void {
 
 /** Seats this client may take: open, or held by an away (disconnected) player. */
 function canTake(seat: SeatInfo): boolean {
-  return !(seat.clientId && seat.connected);
+  return !(seat.held && seat.connected);
 }
 const takenColors = computed(
   () => new Set(seats.value.filter((s) => s.color).map((s) => s.color as string)),
@@ -224,7 +228,8 @@ function onHostMessage(msg: Record<string, unknown>): void {
       break;
     case 'lobby': {
       seats.value = msg.seats as SeatInfo[];
-      const mine = (msg.seats as SeatInfo[]).find((s) => s.clientId === clientId);
+      setDebugAvailable(msg.debug === true);
+      const mine = (msg.seats as SeatInfo[]).find((s) => s.mine);
       // Don't clear an already-known seat from a lobby broadcast (init is authoritative).
       if (mine) mySeat.value = mine.seat;
       break;
@@ -321,6 +326,7 @@ function onIframeLoad(): void {
   }
   if (lastInitSeat != null) postToGame({ type: 'init', seat: lastInitSeat, teachingDisabled: cfg.teachingDisabled === true });
   if (lastGameState) postToGame(lastGameState);
+  postToGame({ type: 'dev-debug-available', available: debugAvailable.value });
   // Re-request the UI list and re-assert the selection so a (re)mounted game
   // iframe rebuilds the dropdown and keeps the chosen view.
   postToGame({ type: 'dev-ui-list-request' });
@@ -353,6 +359,7 @@ function onWindowMessage(event: MessageEvent): void {
   if (data.type === 'request-state') {
     if (lastInitSeat != null) postToGame({ type: 'init', seat: lastInitSeat, teachingDisabled: cfg.teachingDisabled === true });
     if (lastGameState) postToGame(lastGameState);
+    postToGame({ type: 'dev-debug-available', available: debugAvailable.value });
     return;
   }
   // The game's DebugPanel reports its open state (toggled here, via its ✕, or
@@ -408,7 +415,7 @@ function onUiSelect(): void {
 }
 
 function seatLabel(seat: SeatInfo): string {
-  if (!seat.clientId) return `Seat ${seat.seat}`;
+  if (!seat.held) return `Seat ${seat.seat}`;
   return seat.name + (seat.connected ? '' : ' (away)');
 }
 
@@ -423,7 +430,21 @@ const tableSetupOpen = ref(false);
 // trigger belongs in the Dev header so all dev controls are together. We post a
 // toggle to the iframe and mirror the panel's reported open state for the button.
 const debugOpen = ref(false);
+/**
+ * Whether the host has debugging on (#481): only while one person holds every
+ * human seat, or under `--debug`. Every lobby message says, so it follows
+ * people taking and leaving seats. Off hides the Debug buttons and tells the
+ * game page to close and hide its panel; the host refuses debug ops anyway.
+ */
+const debugAvailable = ref(false);
+function setDebugAvailable(available: boolean): void {
+  if (available === debugAvailable.value) return;
+  debugAvailable.value = available;
+  if (!available) debugOpen.value = false;
+  postToGame({ type: 'dev-debug-available', available });
+}
 function toggleDebug(): void {
+  if (!debugAvailable.value) return;
   postToGame({ type: 'dev-debug-toggle' });
 }
 
@@ -573,7 +594,7 @@ onUnmounted(() => {
             ></span>
             <span class="seat-card__name">{{ seatLabel(seat) }}</span>
             <span
-              v-if="seat.clientId"
+              v-if="seat.held"
               class="seat-card__dot"
               :class="seat.connected ? 'is-online' : 'is-offline'"
             ></span>
@@ -806,8 +827,10 @@ onUnmounted(() => {
                   <span class="dev-chrome__btn-label">Table setup</span>
                 </button>
                 <button
+                  v-if="debugAvailable"
                   type="button"
                   class="btn"
+                  data-testid="debug-toggle"
                   :class="{ 'btn--on': debugOpen }"
                   :aria-pressed="debugOpen"
                   @click="toggleDebug"
@@ -847,8 +870,10 @@ onUnmounted(() => {
                 Table setup
               </button>
               <button
+                v-if="debugAvailable"
                 type="button"
                 class="btn"
+                data-testid="debug-toggle"
                 :class="{ 'btn--on': debugOpen }"
                 :aria-pressed="debugOpen"
                 @click="toggleDebug"

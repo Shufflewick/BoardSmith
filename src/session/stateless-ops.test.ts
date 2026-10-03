@@ -1599,6 +1599,7 @@ describe('executeOp', () => {
         startResult.snapshot,
         null,
         { type: 'debugFlowState', player: 1 },
+        { debug: true },
       );
 
       expect(result.success).toBe(true);
@@ -1623,7 +1624,7 @@ describe('executeOp', () => {
 
       const debug = await executeOp(playThenAcknowledgeFixtureDefinition, options, result.snapshot, null, {
         type: 'debugFlowState', player: 1,
-      });
+      }, { debug: true });
 
       expect(debug.flowDebugInfo!.step).toBe('scoring');
       expect(debug.flowDebugInfo!.description).toBe('step *scoring*, waiting on seats 1, 2');
@@ -1639,6 +1640,7 @@ describe('executeOp', () => {
         startResult.snapshot,
         null,
         { type: 'debugFlowState', player: 0 },
+        { debug: true },
       );
 
       expect(result.success).toBe(false);
@@ -1655,6 +1657,7 @@ describe('executeOp', () => {
         startResult.snapshot,
         null,
         { type: 'debugFlowState', player: 1 },
+        { debug: true },
       );
 
       expect(result.success).toBe(true);
@@ -1681,6 +1684,7 @@ describe('executeOp', () => {
         step1.snapshot,
         step1.pendingState,
         { type: 'debugFlowState', player: 1 },
+        { debug: true },
       );
 
       expect(result.success).toBe(true);

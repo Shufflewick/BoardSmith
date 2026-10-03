@@ -108,20 +108,24 @@ function isFlowContext(value: unknown): value is FlowContext {
     && typeof value.isMyTurn === 'boolean';
 }
 
-/** Everything the debug panel can ask of, or do to, the running game. */
+/**
+ * Everything the debug panel can ask of, or do to, the running game. The reads
+ * that show a seat's view always show the viewing seat's: the host answers for
+ * the seat that asked and never takes a seat from the request (#481).
+ */
 export interface DebugBridge {
-  /** Why each action is or is not offered to `player`, and what flow allows. */
-  actionTraces(player: number): Promise<{ traces: ActionTrace[]; flowContext: FlowContext | null }>;
-  /** Where the flow stands for `player`, or `null` if the host declines to say. */
-  flowState(player: number): Promise<FlowStateInfo | null>;
+  /** Why each action is or is not offered to this seat, and what flow allows. */
+  actionTraces(): Promise<{ traces: ActionTrace[]; flowContext: FlowContext | null }>;
+  /** Where the flow stands for this seat, or `null` if the host declines to say. */
+  flowState(): Promise<FlowStateInfo | null>;
   /** Every action played so far, oldest first. */
   history(): Promise<SerializedAction[]>;
   /** Captured server-side log lines. */
   logs(): Promise<LogEntry[]>;
-  /** `player`'s view of the state as it stood after action `actionIndex`. */
-  stateAt(actionIndex: number, player: number): Promise<unknown>;
+  /** This seat's view of the state as it stood after action `actionIndex`. */
+  stateAt(actionIndex: number): Promise<unknown>;
   /** What changed between two actions, or `null` if the host declines to diff them. */
-  stateDiff(fromIndex: number, toIndex: number, player: number): Promise<ElementDiff | null>;
+  stateDiff(fromIndex: number, toIndex: number): Promise<ElementDiff | null>;
   /** Permanently discard every action after `actionIndex`. */
   rewind(actionIndex: number): Promise<void>;
   /** Move a card to the top of the container it is already in. */
@@ -175,8 +179,8 @@ export function createDebugBridge(platformRequest: PlatformRequest | null): Debu
   }
 
   return {
-    async actionTraces(player) {
-      const data = await send('debug:action-traces', { player }, 'Failed to fetch action traces');
+    async actionTraces() {
+      const data = await send('debug:action-traces', {}, 'Failed to fetch action traces');
       // The host payload is untyped, so check its shape rather than asserting
       // it: a malformed response degrades to empty/null instead of putting a
       // non-array or a stray primitive into typed state.
@@ -186,8 +190,8 @@ export function createDebugBridge(platformRequest: PlatformRequest | null): Debu
       };
     },
 
-    async flowState(player) {
-      const data = await sendOptional('debug:flow-state', { player });
+    async flowState() {
+      const data = await sendOptional('debug:flow-state', {});
       return (data?.flowDebugInfo as FlowStateInfo) ?? null;
     },
 
@@ -201,15 +205,15 @@ export function createDebugBridge(platformRequest: PlatformRequest | null): Debu
       return (data.entries as LogEntry[]) || [];
     },
 
-    async stateAt(actionIndex, player) {
-      const data = await send('debug:state-at', { actionIndex, player }, 'Failed to fetch state');
+    async stateAt(actionIndex) {
+      const data = await send('debug:state-at', { actionIndex }, 'Failed to fetch state');
       return data.state;
     },
 
-    async stateDiff(fromIndex, toIndex, player) {
+    async stateDiff(fromIndex, toIndex) {
       // A diff the host declines to produce costs the reader a highlight, not
       // the historical state it accompanies, so a refusal is not a failure.
-      const data = await sendOptional('debug:state-diff', { fromIndex, toIndex, player });
+      const data = await sendOptional('debug:state-diff', { fromIndex, toIndex });
       return (data?.diff as ElementDiff) ?? null;
     },
 

@@ -47,6 +47,8 @@ interface DevOptions {
   bot?: string[];
   botLevel?: string;
   lockTeaching?: boolean;
+  /** #481: `--debug` keeps debugging on however many people are seated. */
+  debug?: boolean;
   /** Commander's negatable `--no-open` sets this to `false`; unset/true auto-opens. */
   open?: boolean;
   /** D13/DEVHOST-01: repeatable `--game-option key=value`. */
@@ -956,6 +958,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
       declaredGameOptions: gameDefinition.gameOptions,
       presets: devConfig.presets,
       teachingDisabled,
+      debug: options.debug === true,
       seedSnapshot,
       worldMode,
       idleAction: config.idleAction,
@@ -1072,6 +1075,11 @@ export async function devCommand(options: DevOptions): Promise<void> {
     if (teachingDisabled) {
       console.log(chalk.yellow(`  Teaching lockout active (--lock-teaching): hint, heatmap, demo, and tutorial are disabled.`));
     }
+    console.log(
+      options.debug === true
+        ? chalk.yellow('  Debugging forced on (--debug): everyone seated can read every seat\'s moves, rewind and edit decks.')
+        : chalk.dim('  Debugging is on while one person holds every human seat, and off once a second person sits down (--debug keeps it on).'),
+    );
     if (seedSnapshot) {
       console.log(chalk.cyan(`  Seeded start (--seed ${options.seed}): initial state loaded from the recorded snapshot instead of a fresh start.`));
     }
