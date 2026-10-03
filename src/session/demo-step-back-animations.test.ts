@@ -16,7 +16,7 @@ import { createAnimationEvents, animationTimeline } from '../ui/composables/useA
 const def = botGameDef;
 const options = botGameOptions;
 
-type SeatState = { animationEvents?: AnimationEvent[]; gameInstanceId?: string; restoreEpoch?: number; isDemoRunning?: boolean };
+type SeatState = { animationEvents?: AnimationEvent[]; gameInstanceId?: string; restoreEpoch?: number; viewerSeat?: number; isDemoRunning?: boolean };
 
 async function until(pred: () => boolean): Promise<void> {
   for (let i = 0; i < 500; i++) {
@@ -85,10 +85,12 @@ describe('demo step back (#449 review)', () => {
     await until(() => seat1.value?.isDemoRunning === undefined);
   });
 
-  it('names no timeline when the state does not say which game or restore it is', () => {
+  it('names no timeline when the state does not say which game, restore or seat it is', () => {
     expect(animationTimeline(undefined)).toBeUndefined();
-    expect(animationTimeline({ restoreEpoch: 0 })).toBeUndefined();
-    expect(animationTimeline({ gameInstanceId: 'g' })).toBeUndefined();
-    expect(animationTimeline({ gameInstanceId: 'g', restoreEpoch: 2 })).toBe('g:2');
+    expect(animationTimeline({ restoreEpoch: 0, viewerSeat: 1 })).toBeUndefined();
+    expect(animationTimeline({ gameInstanceId: 'g', viewerSeat: 1 })).toBeUndefined();
+    expect(animationTimeline({ gameInstanceId: 'g', restoreEpoch: 2 })).toBeUndefined();
+    expect(animationTimeline({ gameInstanceId: 'g', restoreEpoch: 2, viewerSeat: 1 })).toBe('g:2:1');
+    expect(animationTimeline({ gameInstanceId: 'g', restoreEpoch: 2, viewerSeat: 0 })).toBe('g:2:0');
   });
 });

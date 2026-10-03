@@ -184,6 +184,13 @@ export interface PlayerState {
    */
   gameInstanceId?: string;
 
+  /**
+   * The seat this state was built for, `0` for a spectator -- see
+   * `PlayerGameState.viewerSeat` (`src/session/types.ts`). Animation event ids
+   * are numbered per seat, so a CHANGE restarts the animation watermark.
+   */
+  viewerSeat?: number;
+
   // The fields below are sent by the server (`PlayerGameState`, session/types.ts)
   // and consumed by GameShell, but were never declared here. Nothing caught the
   // drift because the `*.vue` shim typed every component as

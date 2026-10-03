@@ -68,4 +68,12 @@ describe("a seat's state carries only the animation events it may see", () => {
     expect(two.seat1.lastAnimationEventId).toBe(3);
   });
 
+  it('each state names the seat whose numbers its ids are, 0 for the spectator (#489)', async () => {
+    const session = createSecretDeploymentSession({ seed: 'animate-to' });
+    expect([0, 1, 2].map((seat) => session.getState(seat).state!.viewerSeat)).toEqual([0, 1, 2]);
+    const options = { playerCount: 2, seed: 'animate-to' };
+    const start = await executeOp(secretDeploymentDefinition, options, null, null, { type: 'start' });
+    const viewerSeat = (view: unknown) => (view as { state: PlayerGameState }).state.viewerSeat;
+    expect([start.spectatorView, ...start.playerViews].map(viewerSeat)).toEqual([0, 1, 2]);
+  });
 });

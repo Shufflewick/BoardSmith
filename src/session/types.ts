@@ -455,6 +455,17 @@ export interface PlayerGameState {
    */
   gameInstanceId: string;
   /**
+   * The seat this state was built for: `0` for a spectator.
+   *
+   * Published unconditionally, and read with `gameInstanceId` and
+   * `restoreEpoch`: each seat numbers the animation events it may see in its
+   * own sequence (#489), so an event's `id` means something only beside the
+   * seat it was numbered for. A page that changes seat (the dev host's
+   * follower, a spectator taking a seat) sees this change, and
+   * `useAnimationEvents` starts its watermark again for the new seat's numbers.
+   */
+  viewerSeat: number;
+  /**
    * RESERVED (Plan 104-04): Active tutorial step projected for this player.
    *
    * `undefined` when no tutorial is running for this seat. Populated by

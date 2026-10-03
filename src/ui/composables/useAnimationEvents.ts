@@ -82,14 +82,17 @@ export interface UseAnimationEventsOptions {
   handlerWaitTimeout?: number;
   /**
    * Optional getter naming the timeline the events belong to (UNDO-04
-   * defense-in-depth): the game and how many times its runner was restored,
-   * from `PlayerGameState.gameInstanceId` and `restoreEpoch`.
+   * defense-in-depth): the game, how many times its runner was restored, and
+   * the seat whose numbers the ids are, from `PlayerGameState.gameInstanceId`,
+   * `restoreEpoch` and `viewerSeat`. Each seat numbers only the events it may
+   * see (#489), so a page that changes seat must start counting again: the new
+   * seat's ids can sit below the old seat's watermark.
    *
    * The server-side fix makes the animation-event id sequence monotonic for a client
    * that stays connected, but a client that reconnects or joins mid-rewind can still
-   * carry a stale `lastQueuedId`/`lastProcessedId` above the ids it is now being sent.
+   * carry a stale watermark above the ids it is now being sent.
    * When this getter is supplied, a CHANGE in its value between two observations is
-   * treated as a replaced runner and resets both watermarks to 0 before the incoming
+   * treated as a new sequence and resets the watermark to 0 before the incoming
    * `events` batch is filtered, so replayed beats are delivered instead of silently
    * dropped. If omitted (or its value is `undefined`), there is no signal, and
    * behavior is identical to not having this option at all -- absence must never be
@@ -103,15 +106,17 @@ export interface UseAnimationEventsOptions {
 
 /**
  * The `timeline` a seat's state names, for {@link UseAnimationEventsOptions.timeline}:
- * this game and how many times its runner was restored. `undefined` (no
- * signal) when either is missing, so a state that names neither can never look
- * like a rewind.
+ * this game, how many times its runner was restored, and the seat the state
+ * was built for. `undefined` (no signal) when any is missing, so a state that
+ * does not name all three can never look like a rewind or a change of seat.
  */
 export function animationTimeline(
-  state: { gameInstanceId?: string; restoreEpoch?: number } | undefined,
+  state: { gameInstanceId?: string; restoreEpoch?: number; viewerSeat?: number } | undefined,
 ): string | undefined {
-  if (state?.gameInstanceId === undefined || state.restoreEpoch === undefined) return undefined;
-  return `${state.gameInstanceId}:${state.restoreEpoch}`;
+  if (state?.gameInstanceId === undefined || state.restoreEpoch === undefined || state.viewerSeat === undefined) {
+    return undefined;
+  }
+  return `${state.gameInstanceId}:${state.restoreEpoch}:${state.viewerSeat}`;
 }
 
 /**
@@ -174,10 +179,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   const paused = ref(false);
   const pendingCount = ref(0);
 
-  // Track last processed ID to avoid re-processing
-  let lastProcessedId = 0;
-
-  // Track highest queued ID to avoid re-queueing during processing
+  // The watermark: the highest id queued in the current timeline, so an event
+  // is queued once however many frames carry it. A timeline change resets it.
   let lastQueuedId = 0;
 
   // Last observed timeline (UNDO-04 rewind signal). `undefined` means "no
@@ -274,7 +277,6 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
           console.warn(
             `Animation event "${event.type}" (id: ${event.id}) skipped: no handler registered after ${handlerWaitTimeout}ms`
           );
-          lastProcessedId = event.id;
           continue;
         }
       }
@@ -301,8 +303,6 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
         currentHandlerAbort = null;
       }
       // No handler and handlerWaitTimeout is 0 -- skip immediately (backward compat)
-
-      lastProcessedId = event.id;
     }
 
     isProcessing = false;
@@ -320,11 +320,9 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       if (entry?.skip === 'run') runOnSkipEvents.push(event);
     }
 
-    if (queue.length > 0) {
-      const lastEvent = queue[queue.length - 1];
-      lastProcessedId = lastEvent.id;
-      lastQueuedId = lastEvent.id;
-    }
+    // The watermark stays where it is: it already covers every event queued in
+    // this timeline, and the queue may still hold events from an earlier one (a
+    // seat the page no longer shows, #489), whose numbers mean nothing here.
 
     // Clear the queue
     queue.length = 0;
@@ -405,9 +403,10 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     }
   });
 
-  // UNDO-04: detect a replaced runner via a CHANGE in the timeline and reset
-  // both watermarks. This runs in its OWN watcher (created before the events
-  // watcher below, so it fires first when both change in the same tick) and
+  // UNDO-04, #489: detect a new sequence via a CHANGE in the timeline (a
+  // replaced runner, another game, another seat) and reset the watermark.
+  // This runs in its OWN watcher (created before the events watcher below,
+  // so it fires first when both change in the same tick) and
   // tracks the timeline CONTINUOUSLY -- even on ticks that carry no animation
   // events. `undefined` (source not wired, or first observation) is "no
   // signal" -- it must never be treated as a rewind.
@@ -421,7 +420,6 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
           currentTimeline !== lastTimeline
         ) {
           lastQueuedId = 0;
-          lastProcessedId = 0;
         }
         lastTimeline = currentTimeline;
       },
@@ -437,8 +435,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
         return;
       }
 
-      // Filter to only new events (id > lastQueuedId)
-      // Use lastQueuedId instead of lastProcessedId to avoid re-queueing during processing
+      // Only events above the watermark are new.
       const newEvents = events.filter((e) => e.id > lastQueuedId);
 
       if (newEvents.length === 0) {

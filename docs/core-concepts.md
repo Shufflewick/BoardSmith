@@ -574,7 +574,11 @@ specially:
 
 Animation event ids carry no count either: each seat (and the spectator)
 numbers only the events it is sent, so another seat's private animations
-leave no gap in its ids (#489).
+leave no gap in its ids (#489). So an id means something only beside the seat
+it was numbered for, and every state says which seat that is
+(`PlayerGameState.viewerSeat`, 0 for a spectator). A page that changes seat
+(the dev host's follower, a spectator taking a seat) starts counting again
+from the new seat's numbers; GameShell does this for you.
 
 A page that connects or reconnects is always sent the full state.
 

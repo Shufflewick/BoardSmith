@@ -730,6 +730,9 @@ export function buildPlayerState(
     restoreEpoch: runner.restoreEpoch,
     // Unconditional too: which game this is -- see PlayerGameState.gameInstanceId.
     gameInstanceId: runner.gameInstanceId,
+    // Unconditional too: whose numbers the animation ids are -- see
+    // PlayerGameState.viewerSeat.
+    viewerSeat: playerPosition,
   };
 
   // Action metadata was built above (single-source reconciliation with
