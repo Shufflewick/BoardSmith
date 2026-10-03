@@ -1,5 +1,5 @@
 {
-  "revision": 123,
+  "revision": 124,
   "bundleProtocol": 2,
   "surfaceHash": "f7e59da26973c116",
   "payloadHash": "06cfffd56c7bef19",
@@ -1045,6 +1045,15 @@
     },
     {
       "revision": 123,
+      "date": "2026-10-03",
+      "bundleProtocol": 2,
+      "surfaceHash": "a5e66c593812b04b",
+      "payloadHash": "f4cad95eb3f47e1f",
+      "formatHash": "0058593e7cc80205",
+      "summary": "selectGameOptions now refuses a number game option outside its declared min/max or off its step (counted from min, or 0), naming the option and its allowed range; a game declaring a non-finite bound, min above max, a non-positive step, or a default its own bounds refuse is refused when loaded. Re-vendor so a host cannot start a game with, say, rounds: 1000 against max: 10."
+    },
+    {
+      "revision": 124,
       "date": "2026-10-03",
       "bundleProtocol": 2,
       "surfaceHash": "f7e59da26973c116",
