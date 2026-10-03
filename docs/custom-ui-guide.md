@@ -1109,9 +1109,10 @@ board:
   ~300ms after the board stopped changing — the same card measured 220px on one
   load and 202px on the next.)
 - **The panel never covers your board.** The strip is also the panel's
-  ceiling: the panel lays itself out to fit two rows (at phone width it stacks
-  the action's name over the chosen items and wraps the prompt beside its
-  control), and on a step with more than fits, it scrolls inside the strip
+  ceiling: the panel lays itself out to fit it (at phone width, and on a short
+  landscape screen where the strip is one row, it stacks the action's name over
+  the chosen items and wraps the prompt beside its control), and on a step with
+  more than fits, it scrolls inside the strip
   rather than growing over the board. So a board that fits itself above the
   strip is never covered, at rest or mid-pick. The one exception is a
   multi-line text box (`multiline: true` on a text pick): while it is open the
