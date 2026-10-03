@@ -218,6 +218,10 @@ no change would be measured: there the mutation check fails unless you pass
 `chunk-<slug>/` commit. A mutant whose code, tests, repository and installed
 packages have not changed since an earlier run is not run again, so verifying
 again after a commit that only touches the `bs-` skills' design records is quick.
+A package installed as a link to a folder outside the repository, such as
+`"dep": "file:../dep"`, counts by that folder's content, so editing it runs the
+mutants again; if such a folder cannot be read, nothing is reused or kept for
+that run.
 Those outcomes are kept in the repository's git directory, shared by the main
 checkout and every worktree. A merge reuses them only when the merged tree is
 the tree the worktree verified: main has not moved since, or the branch merged

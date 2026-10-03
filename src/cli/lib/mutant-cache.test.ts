@@ -289,6 +289,108 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
     });
   });
 
+  describe('a package installed as a link to a folder outside the repository is in the key by its content (#484)', () => {
+    /**
+     * The game from `project()`, depending on `dep` as `"dep": "file:../dep"` installs it: a link in
+     * `node_modules` to a sibling folder, which npm's install record names but whose content it does not.
+     */
+    async function withSibling(sibling: { git: boolean }): Promise<{ dir: string; dep: string }> {
+      const dir = await project();
+      const dep = join(dirname(dir), 'dep');
+      await write(dep, { 'package.json': JSON.stringify({ name: 'dep', version: '1.0.0' }), 'src/fee.ts': 'export const rate = 2;\n' });
+      if (sibling.git) {
+        initRepo(dep);
+        commitAll(dep, 'dep');
+      }
+      await fs.symlink(dep, join(dir, 'node_modules', 'dep'), 'dir');
+      await write(dir, { 'node_modules/.package-lock.json': installRecord('boardsmith', 'vitest', 'dep') });
+      return { dir, dep };
+    }
+
+    it('reuses an outcome while the linked folder is unchanged', async () => {
+      for (const sibling of [{ git: true }, { git: false }]) {
+        const { dir } = await withSibling(sibling);
+        await record(dir, 'killed');
+        expect({ sibling, outcome: await lookup(dir) }).toEqual({ sibling, outcome: 'killed' });
+      }
+    });
+
+    it('runs the mutant again when a git checkout behind the link has an edit, a new file, or a new commit', async () => {
+      const edit = { 'src/fee.ts': 'export const rate = 3;\n' };
+      for (const commit of [undefined, 'dep 2']) {
+        const { dir, dep } = await withSibling({ git: true });
+        expect(await afterChange(dir, dep, edit, commit)).toEqual({ change: 'src/fee.ts', outcome: undefined });
+      }
+      const { dir, dep } = await withSibling({ git: true });
+      expect(await afterChange(dir, dep, { 'src/new.ts': 'export const n = 1;\n' }, undefined)).toEqual({ change: 'src/new.ts', outcome: undefined });
+    });
+
+    it('runs the mutant again when a plain folder behind the link changed, whether or not git would see the file', async () => {
+      const changes: Array<Record<string, string>> = [{ 'src/fee.ts': 'export const rate = 3;\n' }, { 'dist/fee.js': 'export const rate = 3;\n' }];
+      for (const change of changes) {
+        const { dir, dep } = await withSibling({ git: false });
+        expect(await afterChange(dir, dep, change, undefined)).toEqual({ change: Object.keys(change)[0], outcome: undefined });
+      }
+    });
+
+    it("runs the mutant again when the linked package's own install, or a package it links to in turn, changed", async () => {
+      const install = await withSibling({ git: true });
+      await write(install.dep, { 'node_modules/.package-lock.json': installRecord('vue') });
+      const change = { 'node_modules/.package-lock.json': installRecord('vue', 'left-pad') };
+      expect(await afterChange(install.dir, install.dep, change, undefined)).toEqual({ change: 'node_modules/.package-lock.json', outcome: undefined });
+
+      const nested = await withSibling({ git: true });
+      const inner = join(dirname(nested.dep), 'inner');
+      await write(inner, { 'index.js': 'export const x = 1;\n' });
+      await fs.mkdir(join(nested.dep, 'node_modules', '@scope'), { recursive: true });
+      await fs.symlink(inner, join(nested.dep, 'node_modules', '@scope', 'inner'), 'dir');
+      expect(await afterChange(nested.dir, inner, { 'index.js': 'export const x = 2;\n' }, undefined)).toEqual({ change: 'index.js', outcome: undefined });
+    });
+
+    it('runs the mutant again when the link is repointed or its folder disappears', async () => {
+      const { dir, dep } = await withSibling({ git: false });
+      await record(dir, 'killed');
+      const other = join(dirname(dep), 'dep-copy');
+      await fs.cp(dep, other, { recursive: true });
+      await fs.rm(join(dir, 'node_modules', 'dep'));
+      await fs.symlink(other, join(dir, 'node_modules', 'dep'), 'dir');
+      expect(await lookup(dir)).toBeUndefined();
+
+      await record(dir, 'killed');
+      await fs.rm(other, { recursive: true });
+      expect(await lookup(dir)).toBeUndefined();
+    });
+
+    it('shares outcomes with a worktree whose node_modules links to the main checkout\'s link', async () => {
+      const { dir } = await withSibling({ git: true });
+      await write(dir, { '.gitignore': '.boardsmith/\nnode_modules/\n.worktrees/\n' });
+      commitAll(dir, 'ignore worktrees');
+      const tree = join(dir, '.worktrees', 'demo');
+      git(dir, 'worktree', 'add', '-q', '-b', 'codex/demo', tree);
+      await fs.mkdir(join(tree, 'node_modules'));
+      await fs.copyFile(join(dir, 'node_modules', '.package-lock.json'), join(tree, 'node_modules', '.package-lock.json'));
+      for (const pkg of ['boardsmith', 'dep']) await fs.symlink(join(dir, 'node_modules', pkg), join(tree, 'node_modules', pkg), 'dir');
+      await record(dir, 'killed');
+      expect(await lookup(tree)).toBe('killed');
+    });
+
+    it('does not cache at all, and says why, when a linked folder cannot be read', async () => {
+      const { dir, dep } = await withSibling({ git: false });
+      await record(dir, 'killed');
+      await fs.chmod(join(dep, 'src'), 0o000);
+      try {
+        const cache = await openMutantCache(dir);
+        expect(cache.unavailable).toMatch(/could not read .*dep/);
+        expect(cache.get(MUTANT)).toBeUndefined();
+        cache.set(MUTANT, 'survived');
+        await cache.save();
+      } finally {
+        await fs.chmod(join(dep, 'src'), 0o755);
+      }
+      expect(await lookup(dir)).toBe('killed');
+    });
+  });
+
   it('leaves out exactly the design records the bs- skills write after the code is verified', () => {
     const left = (path: string) => BOOKKEEPING_RECORDS.some((re) => re.test(path));
     expect(left('design/SKETCH.md')).toBe(true);
