@@ -3113,7 +3113,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
    that still does not fit scrolls inside the bar. Same breakpoint as the shell's
    compact tier (BREAKPOINTS.compact).
 
-   Short landscape screens get the same layout (#486): the strip there is ONE
+   Short landscape screens get the same layout (issue 486): the strip there is ONE
    row and the board never refits, and at 844px wide the sentence flow put the
    board handoff on a second row. Stacked context, wrapping prompt and compact
    handoff make the pick one row. The prompt wraps and is never cut short: it
