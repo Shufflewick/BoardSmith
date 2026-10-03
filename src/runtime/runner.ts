@@ -32,6 +32,7 @@ import { ErrorCode } from '../types/protocol.js';
 import { PlayerFacingError } from '../engine/errors.js';
 import { constructGame } from '../engine/element/game.js';
 import { isDevThrowEnabled } from '../utils/dev.js';
+import type { RandomState } from '../utils/random.js';
 import type { MessageEntry } from '../engine/index.js';
 
 /**
@@ -471,7 +472,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * nothing else, so this comparison IS "did anything draw here", in O(1),
    * from data every checkpoint already carries.
    */
-  randomStateAt(actionIndex: number): number | undefined {
+  randomStateAt(actionIndex: number): RandomState | undefined {
     return checkpointAt(this.checkpointWindow(), actionIndex).checkpoint?.randomState;
   }
 

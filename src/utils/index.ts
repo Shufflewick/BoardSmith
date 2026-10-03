@@ -10,6 +10,7 @@
 
 export { isDevMode, devWarn, _clearShownWarnings } from './dev.js';
 export { SeededRandom, createSeededRandom } from './random.js';
+export type { RandomState } from './random.js';
 export {
   easeOutCubic,
   easeInCubic,

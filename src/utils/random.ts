@@ -4,7 +4,10 @@
  * Seeded random number generation for BoardSmith.
  * Provides deterministic randomness for reproducible game states and testing.
  *
- * Uses the mulberry32 algorithm for high-quality pseudo-random numbers.
+ * The generator is ChaCha20 keyed by SHA-256 of the whole seed (#483). Its
+ * state is that 256-bit key and a position in the keystream, so a seed's
+ * draws cannot be recovered by searching a small state space, and two seeds
+ * give the same game only if their SHA-256 collides.
  *
  * @example
  * ```typescript
@@ -18,11 +21,75 @@
  * ```
  */
 
+import { chacha20Block } from './chacha20.js';
+import { sha256 } from './sha256.js';
+
 /**
- * Seeded random number generator using mulberry32 algorithm.
+ * A seeded generator's whole state, as `getState` writes it:
+ * `chacha20:<key as 64 hex digits>:<keystream position in words, hex>`.
+ * Opaque to callers: store it, compare it with `===`, hand it to `setState`.
+ * Two states `getState` wrote are equal exactly when the generators will draw
+ * the same sequence, and every draw changes it.
+ */
+export type RandomState = string;
+
+const STATE_PATTERN = /^chacha20:([0-9a-f]{64}):([0-9a-f]{1,14})$/;
+
+/** Positions are counted in 32-bit words and must stay exact as a JS number. */
+const POSITION_LIMIT = Number.MAX_SAFE_INTEGER;
+
+/** The seed's UTF-16 code units, two bytes each, big-endian: injective for every string. */
+function seedBytes(seed: string): Uint8Array {
+  const bytes = new Uint8Array(seed.length * 2);
+  for (let i = 0; i < seed.length; i += 1) {
+    const unit = seed.charCodeAt(i);
+    bytes[i * 2] = unit >>> 8;
+    bytes[i * 2 + 1] = unit & 0xff;
+  }
+  return bytes;
+}
+
+/** ChaCha20 reads its key as little-endian words. */
+function keyWords(keyBytes: Uint8Array): Uint32Array {
+  const view = new DataView(keyBytes.buffer, keyBytes.byteOffset, 32);
+  return Uint32Array.from({ length: 8 }, (_, i) => view.getUint32(i * 4, true));
+}
+
+function keyHex(key: Uint32Array): string {
+  const bytes = new Uint8Array(32);
+  const view = new DataView(bytes.buffer);
+  key.forEach((word, i) => view.setUint32(i * 4, word, true));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function describeRefusedState(state: unknown): string {
+  if (typeof state === 'number') {
+    return (
+      'Cannot restore random state: it is a number, which is the generator BoardSmith used before ' +
+      '#483. A game saved before that change cannot be continued on this engine; start a new game.'
+    );
+  }
+  return (
+    'Cannot restore random state: it is not one this engine wrote (expected ' +
+    '"chacha20:<64 hex digits>:<position>", got ' +
+    (typeof state === 'string' ? `a ${state.length}-character string` : `a ${typeof state}`) +
+    '). Restore only a state taken from getState() or getRandomState().'
+  );
+}
+
+/**
+ * Seeded random number generator: ChaCha20 keyed by SHA-256 of the seed.
  *
  * Produces deterministic sequences given the same seed, which is essential
- * for reproducible game states, testing, and debugging.
+ * for reproducible game states, testing, and debugging. The output is the same
+ * in Node, browsers and Workers, and `getState`/`setState` capture and restore
+ * the exact position.
+ *
+ * The key is SHA-256 of the seed's UTF-16 code units (two bytes each,
+ * big-endian). The stream is ChaCha20's keystream from block 0, with the
+ * block number in words 12 (low 32 bits) and 13 (high bits) and words 14 and
+ * 15 zero. Each draw takes the next two words and makes a 53-bit fraction from
+ * the first word's high 27 bits and the second word's high 26.
  *
  * @example
  * ```typescript
@@ -43,41 +110,48 @@
  * ```
  */
 export class SeededRandom {
-  private state: number;
+  #key: Uint32Array;
+  #keyHex: string;
+  /** Keystream words consumed so far. */
+  #position = 0;
+  /** The block `#buffer` holds, or -1 when it must be computed. */
+  #bufferedBlock = -1;
+  readonly #buffer = new Uint32Array(16);
+  readonly #input = new Uint32Array(4);
 
   /**
    * Create a seeded random number generator.
    *
-   * @param seed - String or number seed for reproducibility
+   * @param seed - Any string; every character of it shapes the sequence
    *
    * @example
    * ```typescript
-   * const rng1 = new SeededRandom('my-seed');
-   * const rng2 = new SeededRandom(12345);
+   * const rng = new SeededRandom('my-seed');
    * ```
    */
-  constructor(seed: string | number) {
-    if (typeof seed === 'number') {
-      this.state = seed >>> 0;
-    } else {
-      this.state = SeededRandom.hashString(seed);
+  constructor(seed: string) {
+    this.#key = keyWords(sha256(seedBytes(seed)));
+    this.#keyHex = keyHex(this.#key);
+  }
+
+  #nextWord(): number {
+    const position = this.#position;
+    if (position >= POSITION_LIMIT) {
+      throw new Error('This random generator has drawn its whole stream (2^53 words); start a new seed.');
     }
+    const block = Math.floor(position / 16);
+    if (block !== this.#bufferedBlock) {
+      this.#input[0] = block % 2 ** 32;
+      this.#input[1] = Math.floor(block / 2 ** 32);
+      chacha20Block(this.#key, this.#input, this.#buffer);
+      this.#bufferedBlock = block;
+    }
+    this.#position = position + 1;
+    return this.#buffer[position % 16];
   }
 
   /**
-   * Hash a string to a 32-bit unsigned integer.
-   * Uses a simple but effective multiply-and-add hash.
-   */
-  private static hashString(str: string): number {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = Math.imul(31, hash) + str.charCodeAt(i) | 0;
-    }
-    return hash >>> 0;
-  }
-
-  /**
-   * Get the next random float in [0, 1).
+   * Get the next random float in [0, 1), with 53 bits of resolution.
    *
    * @returns Random number between 0 (inclusive) and 1 (exclusive)
    *
@@ -87,11 +161,36 @@ export class SeededRandom {
    * ```
    */
   next(): number {
-    // Mulberry32 algorithm
-    this.state = this.state + 0x6D2B79F5 | 0;
-    let t = Math.imul(this.state ^ this.state >>> 15, 1 | this.state);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    const high = this.#nextWord() >>> 5;
+    const low = this.#nextWord() >>> 6;
+    return (high * 67108864 + low) / 9007199254740992;
+  }
+
+  /**
+   * The generator's whole state. Handing it to `setState` on any
+   * `SeededRandom` makes that generator draw exactly what this one will next.
+   */
+  getState(): RandomState {
+    return `chacha20:${this.#keyHex}:${this.#position.toString(16)}`;
+  }
+
+  /**
+   * Restore a state taken from `getState`. A state this engine did not write,
+   * including a numeric one saved before #483, is refused and the generator
+   * is left as it was.
+   */
+  setState(state: RandomState): void {
+    const match = typeof state === 'string' ? STATE_PATTERN.exec(state) : null;
+    const position = match === null ? NaN : parseInt(match[2], 16);
+    if (match === null || !(position < POSITION_LIMIT)) {
+      throw new Error(describeRefusedState(state));
+    }
+    const keyBytes = new Uint8Array(32);
+    for (let i = 0; i < 32; i += 1) keyBytes[i] = parseInt(match[1].slice(i * 2, i * 2 + 2), 16);
+    this.#key = keyWords(keyBytes);
+    this.#keyHex = match[1];
+    this.#position = position;
+    this.#bufferedBlock = -1;
   }
 
   /**

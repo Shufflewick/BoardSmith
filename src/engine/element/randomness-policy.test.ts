@@ -101,7 +101,7 @@ describe("randomness: 'forbidden'", () => {
   it('still round-trips the RNG position so snapshots keep working', () => {
     const game = makeGame('forbidden');
     const state = game.getRandomState();
-    expect(typeof state).toBe('number');
+    expect(typeof state).toBe('string');
     expect(() => game.setRandomState(state)).not.toThrow();
     expect(game.getRandomState()).toBe(state);
   });
