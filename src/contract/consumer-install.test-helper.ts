@@ -15,6 +15,8 @@
  * the optional `three` peer installed and once without.
  * `testing-typecheck.test.ts` uses it for a game's test importing
  * `boardsmith/testing`, compiled under the game's own tsconfig.
+ * `workers-typecheck.test.ts` uses it for the platform-reachable entry points,
+ * compiled under a tsconfig of its own that carries Workers-style globals.
  */
 import { mkdirSync, readFileSync, symlinkSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
