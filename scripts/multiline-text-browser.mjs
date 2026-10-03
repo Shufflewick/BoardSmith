@@ -217,8 +217,8 @@ await runBrowserRegression(
   driveThrough,
 );
 
-async function driveThrough({ chromium, hostUrl }) {
-  const browser = await chromium.launch();
+async function driveThrough({ launch, hostUrl }) {
+  const browser = await launch();
 
   try {
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -440,8 +440,8 @@ async function driveThrough({ chromium, hostUrl }) {
     await check('collapsing the bar mid-draft, then re-opening it', async () => {
       // NEW SINCE THIS WAS FIRST MEASURED (#230). A collapsed bar renders one
       // row -- token and summary -- and the whole panel branch is `v-else-if`,
-      // so the editor is UNMOUNTED rather than hidden, and `--bsg-panel-max`
-      // is overridden to a single row's height while it is down.
+      // so the editor is UNMOUNTED rather than hidden, and the bar's cap is a
+      // single row's height while it is down.
       //
       // What is asserted is what a player can still do: the action survives
       // the round trip and the box comes back, at a usable size, inside the
@@ -519,10 +519,103 @@ async function driveThrough({ chromium, hostUrl }) {
     });
 
     await context.close();
+
+    for (const viewport of screens()) await onASmallerScreen(browser, hostUrl, viewport);
   } finally {
     await browser.close();
   }
 
   return summarise('through the real dev host in a real browser.');
+}
+
+/**
+ * THE PANEL AND THE BOX ON EVERY KIND OF SCREEN (issue 444).
+ *
+ * The bar is capped at the strip the board reserves for it, so it never covers
+ * the board; the one exception is this box, which may grow the bar while it is
+ * open. The checks above run at one desktop size. These hold the cap and the
+ * exception where they are tightest: a phone, where the bar's width is the
+ * scarce axis, and a short landscape screen, which reserves one row and has
+ * little height to grow into.
+ */
+function screens() {
+  // A function, not a constant: the run starts at a top-level await above this
+  // line, before a `const` here would be initialised.
+  return [
+    { width: 375, height: 812 },
+    { width: 844, height: 390 },
+    { width: 1280, height: 900 },
+  ];
+}
+
+/** Where the bar sits against the strip, and whether `selectors` are in view inside it. */
+function barGeometry(surface, selectors = []) {
+  return surface.locator('[data-testid="bs-actionbar"]').evaluate((bar, selectors) => {
+    const region = document.querySelector('.boardregion');
+    const strip = region.getBoundingClientRect().bottom - parseFloat(getComputedStyle(region).paddingBottom);
+    const box = bar.getBoundingClientRect();
+    const outside = selectors.filter((selector) => {
+      const el = bar.querySelector(selector);
+      if (!el) return true;
+      const r = el.getBoundingClientRect();
+      return r.top < box.top - 1 || r.bottom > box.bottom + 1 || r.bottom > window.innerHeight + 1;
+    });
+    return {
+      strip: Math.round(strip),
+      top: Math.round(box.top),
+      height: Math.round(box.height),
+      scrolls: bar.scrollHeight > bar.clientHeight + 1,
+      outside,
+    };
+  }, selectors);
+}
+
+async function onASmallerScreen(browser, hostUrl, viewport) {
+  const size = `${viewport.width}x${viewport.height}`;
+  const context = await browser.newContext({ viewport });
+  try {
+    const page = await context.newPage();
+    await page.goto(hostUrl);
+    await seated(page);
+    const surface = surfaceOf(page);
+
+    await check(`${size}: at rest the bar sits inside the strip the board reserves, without scrolling`, async () => {
+      const bar = await barGeometry(surface);
+      assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}`);
+      assert(!bar.scrolls, `the bar scrolls at rest (${bar.height}px tall): its actions do not fit the strip`);
+    });
+
+    await check(`${size}: during a one-line pick the bar stays inside the strip, its submit in view`, async () => {
+      await startAction(page, 'setNickname');
+      const bar = await barGeometry(surface, ['.text-input .done-button']);
+      assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}`);
+      assert(bar.outside.length === 0, `not in view inside the bar: ${bar.outside.join(', ')}`);
+      await surface.locator('.cancel-btn').click();
+    });
+
+    await check(`${size}: the open box keeps the action, its label, count and submit in view`, async () => {
+      await startAction(page, 'setDescription');
+      const bar = await barGeometry(surface, [
+        '.config-title',
+        '.text-input .selection-prompt',
+        '.text-input textarea',
+        '.text-input .char-count',
+        '.text-input .done-button',
+      ]);
+      assert(bar.top >= 0, `the bar's top is at ${bar.top}, off the top of the screen`);
+      assert(bar.outside.length === 0, `not in view inside the bar: ${bar.outside.join(', ')}`);
+      const area = await surface.locator('.text-input textarea').boundingBox();
+      assert(area !== null && area.height >= 40, `the box is ${Math.round(area?.height ?? 0)}px tall: not two lines`);
+    });
+
+    await check(`${size}: closing the box puts the bar back inside the strip`, async () => {
+      await surface.locator('.cancel-btn').click();
+      await surface.locator('.text-input').waitFor({ state: 'detached', timeout: 10_000 });
+      const bar = await barGeometry(surface);
+      assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}`);
+    });
+  } finally {
+    await context.close();
+  }
 }
 

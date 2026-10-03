@@ -180,8 +180,8 @@ describe('GameShell actionbar — IA-04 constant panel footprint (#13)', () => {
     'utf-8',
   );
 
-  it('caps the actionbar with the shared ceiling token', () => {
-    expect(shellSource).toMatch(/\.actionbar \{[\s\S]*?max-height: var\(--bsg-panel-max\);/);
+  it('caps the actionbar at the reserved footprint (#444)', () => {
+    expect(shellSource).toMatch(/\.actionbar \{[\s\S]*?max-height: var\(--bsg-panel-reserved\);/);
   });
 
   it('reserves the panel footprint as .boardregion padding, not as a measured value', () => {

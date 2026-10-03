@@ -514,9 +514,9 @@ const mobileToggleLabel = computed(() => {
 
     <!-- Floating action bar: absolutely positioned over the BOTTOM of the game
          area (full width) so showing or growing it NEVER reflows or moves the
-         board. Its options list caps at 5 rows and scrolls; the board reserves
-         the panel's measured height as scroll room so anything it floats over
-         stays reachable. -->
+         board. It is capped at the strip the board region reserves for it
+         (--bsg-panel-reserved), so it never covers the board (issue 444); what does
+         not fit scrolls inside the bar. -->
     <!-- The action bar frame: the bar, plus the toggle that puts it down (#230).
          The toggle is a SIBLING of the bar rather than a child because the bar
          scrolls its own overflow, and an overflow scroller clips an edge control
@@ -665,26 +665,39 @@ const mobileToggleLabel = computed(() => {
      selection step, so it has no single value and a fit that reserved it was
      not reproducible between two loads of the same state (issue #13). These
      tokens are derived from the panel's own control metrics, so there is one
-     definition of a "row" for both the ceiling and the reservation. */
+     definition of a "row" for the reservation and the collapsed bar. */
   --bsg-panel-row: 44px;   /* one control row: the WCAG 2.5.8 touch-target floor */
   --bsg-panel-gap: 8px;    /* .actionbar row gap */
   --bsg-panel-pad: 9px;    /* .actionbar vertical padding */
 
-  /* Visual ceiling: the panel's content lays out inside this and scrolls past it. */
-  --bsg-panel-max: calc(5 * var(--bsg-panel-row) + 4 * var(--bsg-panel-gap)
-                        + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom));
+  /* Reserved footprint: TWO rows, and also the panel's ceiling (issue 444). The board
+     is fitted above it and never refits, so a panel allowed to grow past it
+     covered the bottom of a board that had fitted itself correctly. The panel
+     lays itself out to fit these two rows (ActionPanel compacts at phone width)
+     and scrolls inside them only when its content still does not fit. Two rows
+     because the panel has two resting states a player sits in between picks --
+     the action-choice row (which routinely wraps once on a phone) and the
+     context + prompt of a pick; three would cost 52px more board on every load. */
+  --bsg-panel-reserved: calc(2 * var(--bsg-panel-row) + var(--bsg-panel-gap)
+                             + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom));
 
-  /* Reserved footprint the board is fitted above: TWO rows. The panel has two
-     resting states a player sits in between picks -- the action-choice row (which
-     routinely wraps once on a phone) and prompt + one row of choices during a
-     pick. One row guarantees routine overlap; three would cost 158px of board on
-     every load to buy headroom that only many-choice moments need, and internal
-     scroll already serves those. */
-  --bsg-panel-reserved: min(
-    calc(2 * var(--bsg-panel-row) + var(--bsg-panel-gap)
-         + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom)),
-    var(--bsg-panel-max)
-  );
+  /* The ONE exception to that cap: a multi-line text editor (#229, #237) cannot
+     be written in two rows, so while one is open the bar may grow to what the
+     editor needs and cover part of the board. The board does not refit -- the
+     reservation above is untouched -- and the cap returns when it closes. See
+     `.actionbar:has([data-bs-grows-panel])`.
+
+     What the editor needs is its box plus everything around it that must stay
+     on screen: the action's row, the field's label line, the count-and-submit
+     row, and the bar's own padding (`--bsg-editor-chrome`). The box rests at six
+     lines of its 0.9rem / 1.4 text plus its padding and border
+     (`--bsg-editor-text-rest`). The ceiling is bounded by the screen, and the
+     box gives way to it (ActionPanel's textarea), so on a short screen the box
+     shrinks rather than the submit button leaving the bar. */
+  --bsg-editor-chrome: calc(2 * var(--bsg-panel-row) + var(--bsg-panel-gap) + 1.5rem
+                            + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom));
+  --bsg-editor-text-rest: calc(6 * 1.4 * 0.9rem + 18px);
+  --bsg-panel-editor-max: min(calc(var(--bsg-editor-chrome) + var(--bsg-editor-text-rest)), 60dvh);
 
   /* The bar put down (#230): ONE control row, because the row it keeps carries
      the ⋯ menu, and in platform mode that menu is the player's only control
@@ -694,17 +707,11 @@ const mobileToggleLabel = computed(() => {
                              + env(safe-area-inset-bottom));
 }
 
-/* Down, the CEILING is one row -- and that is the only override needed, because
-   every declaration of `--bsg-panel-reserved` above is already clamped to the
-   ceiling by its own `min(...)`. So the reservation follows to one row on its
-   own, in every tier, and the two cannot drift apart.
-
-   That equality is what makes minimizing give the board its space back rather
-   than just emptying the box: the region reserves one row, the bar cannot grow
-   past one row, nothing is covered, and there is no clearance left to scroll
-   for. */
+/* Down, the reservation is one row. The bar's cap is the reservation, so the
+   bar shrinks with it and the board gets the rest back: nothing is covered and
+   there is nothing to scroll for. */
 .game-shell__game.action-bar-collapsed {
-  --bsg-panel-max: var(--bsg-action-bar-collapsed);
+  --bsg-panel-reserved: var(--bsg-action-bar-collapsed);
 }
 
 /* Stage: sidebar + boardregion side by side; fills remaining height */
@@ -864,9 +871,9 @@ const mobileToggleLabel = computed(() => {
 /* Floating Action Panel: absolutely anchored to the bottom, FULL WIDTH (spans under
    the sidebar too). Out of flow, so it never reflows/moves the board — it floats over
    the board's bottom; the board reserves a CONSTANT footprint (--bsg-panel-reserved,
-   in .boardregion's padding) plus scroll room up to the panel's ceiling, so covered
-   content stays reachable however tall the panel grows. Everything inside wraps
-   naturally (flex-wrap) — no reserved columns; the options list caps at 5 rows and scrolls. */
+   in .boardregion's padding) and the bar is capped at exactly that footprint, so it
+   never covers the board (issue 444). Everything inside wraps naturally (flex-wrap) — no
+   reserved columns; content that still does not fit scrolls inside the bar. */
 /* The frame: the out-of-flow box the bar and its edge toggle share. The bar used
    to carry this positioning itself; the toggle needs a parent the bar's own
    overflow scroller cannot clip, and giving the pair a wrapper is what lets the
@@ -881,8 +888,9 @@ const mobileToggleLabel = computed(() => {
 
 .actionbar {
   background: var(--bsg-surface);
-  border-top: 1px solid var(--bsg-line);
-  box-shadow: var(--bsg-shadow);
+  /* The top rule is an inset shadow, not a border, so it takes no height from
+     the two rows the reservation is sized for. */
+  box-shadow: inset 0 1px 0 var(--bsg-line), var(--bsg-shadow);
   /* One inline-wrapping flow: the ⋯ menu, player token, prompt text, cancel, and
      every option button are flattened into THIS flex container (ActionPanel wrappers
      use display:contents) so they wrap together like words in a sentence — no header
@@ -894,10 +902,22 @@ const mobileToggleLabel = computed(() => {
   gap: 8px;
   padding: 9px var(--bsg-s4);
   padding-bottom: calc(9px + env(safe-area-inset-bottom));
-  /* Cap at 5 button-rows, then the whole flow scrolls. The ⋯ menu popover teleports
-     to <body>, so overflow is safe. */
-  max-height: var(--bsg-panel-max);
+  /* Capped at the reserved footprint, so the bar never covers the board (issue 444):
+     content that does not fit scrolls inside it. On the border box, or the
+     padding would sit on top of the cap. The ⋯ menu popover teleports to <body>,
+     so overflow is safe. */
+  box-sizing: border-box;
+  max-height: var(--bsg-panel-reserved);
   overflow-y: auto;
+}
+
+/* While a multi-line text editor is open, and only then, the bar may grow past
+   the strip (see --bsg-panel-editor-max). Keyed on the editor's own mark, so the
+   exception lives exactly as long as the editor's DOM: submitting, cancelling or
+   putting the bar down all unmount it and the strip cap is back. `max()` so a
+   very short screen can never cap the bar below the strip itself. */
+.actionbar:has([data-bs-grows-panel]) {
+  max-height: max(var(--bsg-panel-reserved), var(--bsg-panel-editor-max));
 }
 
 /* Down: one row that must NOT wrap. A wrapped "collapsed" bar would be taller
@@ -1131,8 +1151,9 @@ const mobileToggleLabel = computed(() => {
     border-bottom: 1px solid var(--bsg-line);
     box-shadow: var(--bsg-shadow);
   }
-  /* Phones use the SAME 5-row Action Panel row cap as desktop (no override) — the base
-     .actionbar max-height applies. */
+  /* Phones use the SAME two-row Action Panel cap as desktop (no override) — the
+     base .actionbar max-height applies, and ActionPanel compacts its own layout
+     at this width to fit it (issue 444). */
 }
 
 /* Medium (640px–1023px): standard sidebar + board. Lower bound aligns with the
@@ -1154,20 +1175,26 @@ const mobileToggleLabel = computed(() => {
 
 /* Landscape phone (short screen): prevent the actionbar from crushing the board.
    The stage already uses the row layout (sidebar | board); this branch only
-   reduces the actionbar height cap so the board retains adequate vertical space. */
+   reduces the reservation, and with it the bar's cap, so the board retains
+   adequate vertical space. */
 @media (orientation: landscape) and (max-height: 600px) {
   .game-shell__game {
-    --bsg-panel-max: min(22dvh, 120px);
     /* One row on a short screen: vertical space is the scarce axis here. */
-    --bsg-panel-reserved: min(
-      calc(var(--bsg-panel-row) + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom)),
-      var(--bsg-panel-max)
-    );
+    --bsg-panel-reserved: calc(var(--bsg-panel-row) + 2 * var(--bsg-panel-pad)
+                               + env(safe-area-inset-bottom));
   }
 
   .actionbar {
     padding-top: 6px;
     padding-bottom: max(6px, env(safe-area-inset-bottom));
+  }
+
+  /* The wider tiers' region min-height is taller than this screen. Kept, it
+     overflowed the stage, the reserved strip fell below the screen, and the
+     bar (anchored to the screen's bottom) sat over the board instead of in the
+     strip. The region fills the stage here, and the board scrolls inside it. */
+  .boardregion {
+    min-height: 0;
   }
 }
 
@@ -1183,15 +1210,6 @@ const mobileToggleLabel = computed(() => {
      axes (the board has an intrinsic size to multiply) — unlike transform:scale,
      which only shifts the paint and left the board un-scrollable / drifting sideways. */
   zoom: var(--zoom-level);
-
-  /* Total clearance below the board = .boardregion's padding-bottom
-     (--bsg-panel-reserved) + this margin = --bsg-panel-max, the panel's ceiling.
-     So even a panel grown to its full 5 rows can always be scrolled clear of, while
-     the board is still FITTED against only the constant reserved footprint.
-     Divided by --zoom-level because `zoom` scales this element's whole layout box,
-     margin included: at zoom 0.82 an undivided margin delivered only 82% of the
-     clearance and the board's last ~27px stayed pinned under the panel. */
-  margin-bottom: calc((var(--bsg-panel-max) - var(--bsg-panel-reserved)) / var(--zoom-level));
 
   /* CONTAINMENT: Prevents position:fixed from escaping to viewport.
      Any fixed-position elements inside will behave like absolute positioning

@@ -242,10 +242,27 @@ async function loadFixtureWorld(script) {
  *
  * @param run.script  the script's own filename, for the refusal's command line
  * @param run.fixture the world project, as `withFixtureWorld` takes it
- * @param body        called with `{ chromium, hostUrl }`; returns `summarise`
+ * @param body        called with `{ launch, hostUrl }`; returns `summarise`
  */
 export async function runBrowserRegression(run, body) {
   const withFixtureWorld = await loadFixtureWorld(run.script);
   const chromium = await loadChromium(run.script);
-  process.exit(await withFixtureWorld(run.fixture, ({ hostUrl }) => body({ chromium, hostUrl })));
+  process.exit(
+    await withFixtureWorld(run.fixture, ({ hostUrl }) => body({ launch: () => launchChromium(chromium), hostUrl })),
+  );
+}
+
+/**
+ * Launch the FULL Chromium build, headless.
+ *
+ * A bare `chromium.launch()` asks for Playwright's separate headless-shell
+ * build, which `npx playwright install chromium --only-shell` and some partial
+ * installs have but a plain `npx playwright install chromium` on a machine that
+ * has updated Playwright since may not: the regressions then refused to run on
+ * a machine with a perfectly good Chromium. The `chromium` channel is the full
+ * build every `playwright install chromium` provides, run in the same headless
+ * mode, so one choice works on a developer's machine and in CI alike.
+ */
+function launchChromium(chromium) {
+  return chromium.launch({ channel: 'chromium' });
 }

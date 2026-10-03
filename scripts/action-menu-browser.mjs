@@ -339,8 +339,8 @@ async function tabTo(page, target, limit = 25) {
   );
 }
 
-async function drive({ chromium, hostUrl }) {
-  const browser = await chromium.launch();
+async function drive({ launch, hostUrl }) {
+  const browser = await launch();
   try {
     // Four sessions, because each is about something the others cannot be:
     // the collapsible action bar the menu lives in, one seat walking the menu,

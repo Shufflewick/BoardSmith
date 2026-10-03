@@ -34,6 +34,8 @@ const { toasts, remove } = useToast();
 
 <style scoped>
 .toast-container {
+  /* Teleported out of the shell root, so it does not inherit the shell's font (#451). */
+  font-family: var(--bsg-font);
   position: fixed;
   bottom: 20px;
   left: 50%;

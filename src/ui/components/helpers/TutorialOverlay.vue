@@ -410,6 +410,8 @@ function ringStyle(ring: ResolvedRing): Record<string, string> {
  * pointer-events:none on the root; the bubble re-enables them on its content box.
  */
 .bsg-tutorial-overlay {
+  /* Teleported out of the shell root, so it does not inherit the shell's font (#451). */
+  font-family: var(--bsg-font);
   position: fixed;
   inset: 0;
   z-index: 20;

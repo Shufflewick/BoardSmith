@@ -30,14 +30,12 @@
  * GameShell reserves a CONSTANT footprint in CSS: `--bsg-panel-reserved` is
  * `.boardregion`'s padding-bottom, so the padding subtraction below already
  * excludes the panel's space and the region box is the single source of truth.
- * Being constant, it never re-triggers the persistent region observer, and the
- * panel can grow over the board without ever resizing it — the old "board shakes
- * under the player's cursor on every click" regression is structurally
- * impossible. The panel is out of flow (its `.actionbar-frame` wrapper is
- * `position: absolute`) so
- * it never moves the board by itself, and the region plus the zoom container's
- * bottom margin keep scroll room up to the panel's ceiling (`--bsg-panel-max`),
- * so anything a fully grown panel covers stays scrollable into view.
+ * Being constant, it never re-triggers the persistent region observer — the old
+ * "board shakes under the player's cursor on every click" regression is
+ * structurally impossible. The panel is out of flow (its `.actionbar-frame`
+ * wrapper is `position: absolute`) so it never moves the board by itself, and it
+ * is capped at that same reserved footprint (#444), so it never covers the
+ * board either: what does not fit scrolls inside the panel.
  *
  * Fit axis: a board that has called `useBoardSize()` is pinned to the region's
  * width and documented to grow by VERTICAL SCROLL. Height-fitting such a board

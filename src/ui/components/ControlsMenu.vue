@@ -407,6 +407,8 @@ function handleLeave() {
 /* Popover — teleported to <body>; position is set inline (fixed) from the
    trigger's rect so no ancestor overflow can clip it. */
 .menu {
+  /* Teleported out of the shell root, so it does not inherit the shell's font (#451). */
+  font-family: var(--bsg-font);
   width: 300px;
   background: var(--bsg-surface);
   border: 1px solid var(--bsg-line);

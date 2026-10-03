@@ -26,7 +26,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { defineComponent, h, nextTick, provide, ref } from 'vue';
+import { defineComponent, h, nextTick, provide, ref, watch } from 'vue';
 import ActionPanel from './ActionPanel.vue';
 import { useActionController } from '../../composables/useActionController.js';
 import { useBoardActionBridge } from '../../composables/useBoardActionBridge.js';
@@ -235,6 +235,54 @@ describe('ActionPanel start leaves the board wired (#185)', () => {
     expect(board.currentPickName).toBe('direction');
     // The compass points, not the plots the player walked away from.
     expect(board.validElements.map(e => e.ref.notation).sort()).toEqual(['n', 's']);
+    wrapper.unmount();
+  });
+});
+
+describe("ActionPanel's post-execute clear leaves a newer action alone (#445)", () => {
+  it('keeps a pick the board starts the moment the executed action finishes', async () => {
+    // A custom board that opens its next pick when `isExecuting` drops (a new
+    // round beginning). The controller drops it before the panel's own cleanup
+    // runs, so a panel that clears unconditionally wipes the board's new pick and
+    // the bridge's external-cancel watcher then cancels it.
+    const { board, controller, wrapper, sendAction } = mountHarness();
+    await flush();
+
+    const stop = watch(
+      () => controller.isExecuting.value,
+      (executing, was) => {
+        if (was && !executing) void controller.start('tend');
+      },
+      { flush: 'sync' },
+    );
+
+    await wrapper.find('[data-bs-action="wait"]').trigger('click');
+    await flush();
+
+    expect(sendAction).toHaveBeenCalledWith('wait', {});
+    expect(controller.currentAction.value).toBe('tend');
+    expect(board.currentAction).toBe('tend');
+    expect(board.validElements.map(e => e.id)).toEqual([11, 12]);
+    expect(board.onElementSelect).not.toBeNull();
+
+    stop();
+    wrapper.unmount();
+  });
+
+  it('still clears the board after an action when nothing newer started', async () => {
+    const { board, controller, wrapper } = mountHarness();
+    await flush();
+
+    await wrapper.find('[data-bs-action="tend"]').trigger('click');
+    await flush();
+    expect(board.currentAction).toBe('tend');
+
+    board.triggerElementSelect({ id: 11 });
+    await flush();
+
+    expect(controller.currentAction.value).toBeNull();
+    expect(board.currentAction).toBeNull();
+    expect(board.validElements).toEqual([]);
     wrapper.unmount();
   });
 });

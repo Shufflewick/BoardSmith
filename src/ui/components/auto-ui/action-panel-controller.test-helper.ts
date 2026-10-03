@@ -34,6 +34,9 @@ export function stubActionController(overrides: Record<string, unknown> = {}) {
     isExecuting: ref(false),
     isLoadingChoices: ref(false),
     actionSnapshot: ref(null),
+    // Read around execute(): the panel clears the board afterwards only if no
+    // newer action started meanwhile (#445).
+    actionStartTick: ref(0),
 
     // Refs the panel wraps in a computed.
     animationsPending: ref(false),
