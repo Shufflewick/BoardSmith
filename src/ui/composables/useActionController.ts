@@ -171,6 +171,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     availableActions,
     actionMetadata,
     isMyTurn,
+    heldFollowUp,
     completed,
     disabledActions,
     gameView,
@@ -446,11 +447,36 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     choiceFetchGen++;
   }
 
+  /** Which follow-up this controller last started, so a held one is never started twice. */
+  let lastFollowUpKey: string | undefined;
+  function followUpKey(followUp: { action: string; args?: Record<string, unknown> }): string {
+    return JSON.stringify([followUp.action, followUp.args ?? {}]);
+  }
+
+  // A follow-up the server holds for this seat that this page has not started
+  // (see `heldFollowUp`). Once the server holds none, the next one is new.
+  if (heldFollowUp) {
+    watch(
+      heldFollowUp,
+      (offer) => {
+        if (!offer) {
+          lastFollowUpKey = undefined;
+          return;
+        }
+        if (followUpKey(offer) === lastFollowUpKey) return;
+        if (currentAction.value || pendingFollowUp.value || isExecuting.value) return;
+        queueFollowUp(offer);
+      },
+      { immediate: true },
+    );
+  }
+
   /**
    * Queue a follow-up action after reactive state has settled.
    * Uses a microtask + Vue tick instead of timers to avoid timing fragility.
    */
   function queueFollowUp(result: NonNullable<ControllerActionResult['followUp']>): void {
+    lastFollowUpKey = followUpKey(result);
     pendingFollowUp.value = true;
     const { action: followUpAction, args: followUpArgs, metadata: followUpMetadata, display: followUpDisplay } = result;
 

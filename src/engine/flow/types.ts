@@ -248,8 +248,16 @@ export type TurnScope = 'continue' | 'restart';
 export interface TurnRun {
   /** Seat number of the player whose run this is. */
   player: number;
-  /** Committed actions in the run so far. */
+  /**
+   * Moves in the run so far, a follow-up chain counting as one: the moves a
+   * `turnScope: 'continue'` step starts from.
+   */
   count: number;
+  /**
+   * Committed actions in the run so far, every link of a follow-up chain
+   * counted: how far undo reaches back.
+   */
+  actions: number;
 }
 
 /**
@@ -397,7 +405,8 @@ export interface FlowState {
   /** Current named phase (for UI display) */
   currentPhase?: string;
   /**
-   * Number of moves taken in the CURRENTLY ACTIVE action-step frame. Published
+   * Number of actions committed in the CURRENTLY ACTIVE step frame, every link of a
+   * follow-up chain counted (move limits count a chain once; see `movesRemaining`). Published
    * for every action step (not only ones declaring minMoves/maxMoves) --
    * `session/utils.ts`'s `computeUndoInfo` treats this as the sole
    * authoritative undo-boundary signal (UNDO-03): a MISSING value means "not

@@ -607,6 +607,11 @@ export class FlowEngine<G extends Game = Game> {
 
     const config = currentFrame.node.config as ActionStepConfig;
 
+    // Every committed action counts toward how far undo reaches back, each link
+    // of a follow-up chain included (#495). Moves, below, count a chain once.
+    const actionCount = ((currentFrame.data?.actionCount as number) ?? 0) + 1;
+    currentFrame.data = { ...currentFrame.data, actionCount };
+
     // If action returned a followUp, don't complete the step or count the move yet.
     // The followUp chain must complete first. Only when the final action in the chain
     // completes (no followUp) do we count it as a move and check completion.
@@ -624,7 +629,7 @@ export class FlowEngine<G extends Game = Game> {
     // in a fresh frame seeds itself from. Recorded per seat so an entry for a
     // DIFFERENT seat never carries -- that is a turn boundary by definition.
     if (this.currentPlayer) {
-      this.turnRun = { player: this.currentPlayer.seat, count: newMoveCount };
+      this.turnRun = { player: this.currentPlayer.seat, count: newMoveCount, actions: actionCount };
     }
 
     // Check completion conditions
@@ -1073,11 +1078,16 @@ export class FlowEngine<G extends Game = Game> {
     // / `resumeSimultaneousAction`), which is the step-window lower bound
     // `session/utils.ts`'s per-seat simultaneous undo boundary depends on.
     if (this.currentActionConfig || this.awaitingPlayers.length > 0) {
-      state.moveCount = this.moveCount;
+      // An action step publishes its committed actions (every link of a
+      // follow-up chain), not its moves: this is undo's boundary (#495).
+      const top = this.stack[this.stack.length - 1];
+      state.moveCount = top?.node.type === 'action-step' && typeof top.data?.actionCount === 'number'
+        ? top.data.actionCount
+        : this.moveCount;
       // Why moveCount is 0 here, when the seat plainly just acted: the step
       // this frame belongs to never said whether re-entering it continues the
       // same turn. Published so the undo refusal can name the cause instead of
-      // reporting "No actions to undo" -- see `entryMoveCount`.
+      // reporting "No actions to undo" -- see `entryRun`.
       const undeclared = this.stack[this.stack.length - 1]?.data?.turnScopeUndeclared;
       if (typeof undeclared === 'string') {
         state.turnScopeUndeclared = undeclared;
@@ -1802,7 +1812,7 @@ export class FlowEngine<G extends Game = Game> {
    * warning once about unknown action names to help catch typos.
    */
   /**
-   * The move count a FRESH action-step frame starts at.
+   * The move and action counts a FRESH action-step frame starts at.
    *
    * Zero unless the seat about to be prompted is the same seat that committed
    * the immediately preceding action -- the one case where the frame boundary
@@ -1818,16 +1828,17 @@ export class FlowEngine<G extends Game = Game> {
    * it with `turnScope`, and an ambiguous entry that declares nothing warns in
    * dev and marks the frame, so the undo it disables says why.
    */
-  private entryMoveCount(config: ActionStepConfig<G>, player: Player, frame: ExecutionFrame<G>): number {
+  private entryRun(config: ActionStepConfig<G>, player: Player, frame: ExecutionFrame<G>): { moves: number; actions: number } {
+    const none = { moves: 0, actions: 0 };
     const run = this.turnRun;
-    if (!run || run.player !== player.seat || run.count === 0) return 0;
+    if (!run || run.player !== player.seat || run.actions === 0) return none;
 
-    if (config.turnScope === 'continue') return run.count;
+    if (config.turnScope === 'continue') return { moves: run.count, actions: run.actions };
 
     if (config.turnScope === 'restart') {
       // The run ends here: this entry is the start of a new turn.
       this.turnRun = undefined;
-      return 0;
+      return none;
     }
 
     // Undeclared, and ambiguous. Behave as `'restart'` -- the safe reading,
@@ -1861,7 +1872,7 @@ export class FlowEngine<G extends Game = Game> {
     );
     frame.data = { ...frame.data, turnScopeUndeclared: stepName };
     this.turnRun = undefined;
-    return 0;
+    return none;
   }
 
   /**
@@ -1914,10 +1925,10 @@ export class FlowEngine<G extends Game = Game> {
       if (!entryPlayer) {
         throw new Error('ActionStep requires a player');
       }
-      // Resolved BEFORE the assignment: `entryMoveCount` may also mark the
+      // Resolved BEFORE the assignment: `entryRun` may also mark the
       // frame, and a spread evaluated first would discard that mark.
-      const startingMoveCount = this.entryMoveCount(config, entryPlayer, frame);
-      frame.data = { ...frame.data, moveCount: startingMoveCount };
+      const start = this.entryRun(config, entryPlayer, frame);
+      frame.data = { ...frame.data, moveCount: start.moves, actionCount: start.actions };
     }
     const moveCount = frame.data.moveCount as number;
 

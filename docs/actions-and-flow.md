@@ -1392,6 +1392,16 @@ or list an end action (such as `endTurn`) in the step. A seat held for a
 follow-up that has no valid choice cannot move on, and in development the
 engine warns about it.
 
+Undo to the turn start reaches back over every action of a chain: the step's
+undo boundary counts actions, each link of a chain included, while move limits
+(`maxMoves`, `minMoves`) count a whole chain as one move.
+
+A follow-up normally reaches the client in the result of the action that
+returned it. The seat's own published state carries it too
+(`PlayerGameState.followUp`), and the table starts it from there when no action
+is in progress, so a page reloaded mid-chain picks it back up. One the player
+cancels is not restarted, so the player can take another offered action.
+
 The follow-up runs with the args it was published with, and its `condition` is
 not checked (the chain offers it, not the condition). The seat may take it pick
 by pick, as the UI does, or as one whole action: bots do the latter, and

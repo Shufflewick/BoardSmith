@@ -757,6 +757,14 @@ export function buildPlayerState(
     state.actionMetadata = actionMetadata;
   }
 
+  // The follow-up the flow holds for this seat, in this seat's state alone, so
+  // a page that never saw the action result it arrived in (a reload mid-chain)
+  // can still start it. Built when metadata is, since the offer carries its own.
+  if (options?.includeActionMetadata && playerPosition > 0) {
+    const followUp = offerFollowUp(runner.game, flowState, playerPosition);
+    if (followUp) state.followUp = followUp;
+  }
+
   // Optionally include custom debug data
   if (options?.includeDebugData) {
     const customDebug = runner.game.getCustomDebugData();

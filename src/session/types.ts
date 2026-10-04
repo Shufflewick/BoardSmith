@@ -52,7 +52,7 @@ export type { ActionTrace, PickTrace, ConditionDetail } from '../engine/index.js
 // Re-export repeating selection types from engine
 export type { PendingActionState, RepeatingSelectionState, RepeatConfig } from '../engine/index.js';
 
-import type { RefWithRole } from '../engine/action/types.js';
+import type { RefWithRole, FollowUpOffer } from '../engine/action/types.js';
 export type { RefWithRole };
 
 // Re-export tutorial types for consumers of the session surface
@@ -409,6 +409,14 @@ export interface PlayerGameState {
   view: unknown;
   /** Action metadata for auto-UI generation (optional) */
   actionMetadata?: Record<string, ActionMetadata>;
+  /**
+   * The follow-up the flow holds for this seat, with the metadata to start it.
+   * Only in this seat's own state, and only while it holds one: the seat keeps
+   * its turn (or stays undone in a simultaneous step) until it takes it or takes
+   * another action. A client starts it from here when it did not get it in the
+   * result of the action that returned it, as after a reload.
+   */
+  followUp?: FollowUpOffer;
   /** Whether the player can undo (has made actions this turn) */
   canUndo?: boolean;
   /**

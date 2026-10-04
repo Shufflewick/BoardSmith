@@ -317,9 +317,7 @@ describe('GameSession', () => {
     expect(s.runner.game.looted).toEqual([1, 2]);
   });
 
-  // Simultaneous only: a turn-based step does not count a chain's actions
-  // toward its undo boundary yet (#495).
-  for (const shape of ['simultaneous'] as const) {
+  for (const shape of ['turn', 'simultaneous'] as const) {
     it(`${shape}: undo to the turn start takes the follow-up back with the action that returned it`, async () => {
       const s = session(shape);
       await s.performAction('scout', 1, {});
@@ -332,6 +330,49 @@ describe('GameSession', () => {
       expect(s.runner.game.scouted).toEqual([]);
     });
   }
+
+  it('publishes a held follow-up in its own seat\'s state only, so a reloaded page can resume it', async () => {
+    const s = session('simultaneous');
+    await s.performAction('scout', 1, {});
+
+    expect(s.buildPlayerState(1, { includeActionMetadata: true }).followUp).toMatchObject({
+      action: 'loot',
+      args: { by: 1 },
+      metadata: { name: 'loot' },
+    });
+    expect(s.buildPlayerState(2, { includeActionMetadata: true }).followUp).toBeUndefined();
+    expect(s.buildPlayerState(0, { includeActionMetadata: false }).followUp).toBeUndefined();
+  });
+
+  it('turn-based: undo to the turn start reaches back over a whole follow-up chain (#495)', async () => {
+    // Two moves a turn, so the seat is still up after scout + loot (one move).
+    class TwoMoveRaid extends RaidGame {
+      constructor(options: GameOptions) {
+        super(options);
+        this.setFlow(defineFlow({
+          root: loop({
+            maxIterations: 3,
+            while: raiding,
+            do: eachPlayer({ do: actionStep({ actions: ['scout', 'rest'], maxMoves: 2, turnScope: 'restart' }) }),
+          }),
+        }));
+      }
+    }
+    const s = GameSession.create({
+      gameType: 'raid', GameClass: TwoMoveRaid, playerCount: 3, playerNames: ['A', 'B', 'C'], seed: 'follow-up-hold',
+    });
+    await s.performAction('scout', 1, {});
+    await s.processSelectionStep(1, 'where', 'north', 'loot', { by: 1 });
+    expect(await s.processSelectionStep(1, 'what', 'gold')).toMatchObject({ success: true, actionComplete: true });
+    expect(s.runner.getFlowState()).toMatchObject({ currentPlayer: 1, moveCount: 2, movesRemaining: 1 });
+
+    const undone = await s.undoToTurnStart(1);
+
+    expect(undone.success).toBe(true);
+    expect(s.runner.game.scouted).toEqual([]);
+    expect(s.runner.game.looted).toEqual([]);
+    expect(s.runner.getFlowState()).toMatchObject({ currentPlayer: 1, moveCount: 0 });
+  });
 
   it('turn-based: the turn stays with the seat until it takes its follow-up', async () => {
     const s = session('turn');
@@ -374,10 +415,29 @@ describe('stateless ops', () => {
     expect((await g.action(1, 'scout')).followUp).toMatchObject({ action: 'loot', args: { by: 1 } });
     expect((await g.action(2, 'scout')).followUp).toMatchObject({ action: 'loot', args: { by: 2 } });
 
+    const views = g.last.playerViews as Array<{ state: { followUp?: unknown } }>;
+    expect(views[0]!.state.followUp).toMatchObject({ action: 'loot', args: { by: 1 } });
+    expect(views[2]!.state.followUp).toBeUndefined();
+
     expect(await g.loot(3, 1)).toMatchObject({ success: false, error: NOT_YOURS });
     expect(await g.loot(1, 1)).toMatchObject({ success: true, actionComplete: true });
     expect(await g.loot(2, 2)).toMatchObject({ success: true, actionComplete: true });
   });
+
+  for (const shape of ['turn', 'simultaneous'] as const) {
+    it(`${shape}: a bot seat holding a follow-up takes it through the botTurn op`, async () => {
+      const def: GameDefinitionLike = { gameClass: raidClass(shape, false), gameType: 'raid', minPlayers: 2, maxPlayers: 3 };
+      const started = await executeOp(def, gameOptions, null, {}, { type: 'start' });
+      const scouted = await executeOp(def, gameOptions, started.snapshot, null, {
+        type: 'action', actionName: 'scout', player: 1, args: {}, boundaryKey: boundaryKeyOf(started.snapshot),
+      });
+
+      const turn = await executeOp(def, gameOptions, scouted.snapshot, null, { type: 'botTurn', seats: [{ seat: 1, level: '8' }] });
+
+      expect(turn).toMatchObject({ success: true, botMoved: true, botPlayer: 1 });
+      expect((turn.flowState as FlowState).followUps).toBeUndefined();
+    });
+  }
 
   it('turn-based: the turn stays with the seat until it takes its follow-up', async () => {
     const g = await play('turn');

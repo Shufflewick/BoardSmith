@@ -15,7 +15,7 @@ const server: FlowState = {
     },
     playerIndex: 1,
     variables: { secret: 'x' },
-    turnRun: { player: 1, count: 3 },
+    turnRun: { player: 1, count: 3, actions: 3 },
   },
   complete: false,
   awaitingInput: true,

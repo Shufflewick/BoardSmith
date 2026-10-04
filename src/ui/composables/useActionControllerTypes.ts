@@ -210,6 +210,16 @@ export interface UseActionControllerOptions {
   /** Is it this player's turn. Accepts Ref with potentially undefined value for test compatibility. */
   isMyTurn: Ref<boolean | undefined> | Ref<boolean>;
   /**
+   * The follow-up the server holds for this seat, read off its published state
+   * (`PlayerGameState.followUp`). A follow-up normally arrives in the result of
+   * the action that returned it and is started from there; this is how a page
+   * that never saw that result (a reload mid-chain) gets it back. One that
+   * appears while no action is in progress, and that this controller has not
+   * already started, is started. One the player cancelled is not restarted, so
+   * the player can take another action instead.
+   */
+  heldFollowUp?: Ref<FollowUpOffer | undefined> | ComputedRef<FollowUpOffer | undefined>;
+  /**
    * The acting seat's OWN `completed` flag for the current simultaneous step
    * (from `flowState.awaitingPlayers[playerSeat].completed`; `false`/`undefined`
    * outside a simultaneous step). This is the SHARED chokepoint for the D27
