@@ -97,6 +97,7 @@ import { easeOutCubic } from '../../utils/easing.js';
 import { tryUseBoardInteraction } from './useBoardInteraction.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
 import { isDevThrowEnabled } from '../../utils/dev.js';
+import { isHiddenPlaceholder } from '../../engine/element/hidden-placeholder.js';
 
 /**
  * Game element type for auto-watch mode
@@ -108,7 +109,6 @@ export interface AutoWatchGameElement {
   attributes?: Record<string, unknown>;
   children?: AutoWatchGameElement[];
   childCount?: number;
-  __hidden?: boolean;
 }
 
 /**
@@ -938,7 +938,7 @@ export function useFlyingElements(
       containerElements: Map<string, AutoWatchGameElement | null>,
       result: Map<number, { element: AutoWatchGameElement; container: string | null; isHidden: boolean }>
     ): void {
-      const isHidden = root.__hidden === true || root.attributes?.__hidden === true;
+      const isHidden = isHiddenPlaceholder(root);
       const container = findElementContainer(root, containerElements);
 
       // Only track elements that are in tracked containers or have been tracked before
@@ -997,7 +997,7 @@ export function useFlyingElements(
     ): boolean {
       const cached = elementDataCache.get(element.id);
       const wasHidden = cached?.wasHidden ?? false;
-      const isHidden = element.__hidden === true || element.attributes?.__hidden === true;
+      const isHidden = isHiddenPlaceholder(element);
       return wasHidden !== isHidden;
     }
 

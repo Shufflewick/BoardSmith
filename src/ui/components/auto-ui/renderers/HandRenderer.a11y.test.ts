@@ -35,7 +35,6 @@ interface GameElement {
   attributes?: Record<string, unknown>;
   children?: GameElement[];
   childCount?: number;
-  __hidden?: boolean;
 }
 
 function buildHandElement(children: GameElement[] = []): GameElement {
