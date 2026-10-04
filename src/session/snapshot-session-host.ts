@@ -101,7 +101,7 @@ export interface SnapshotHostState {
   pendingStates: Record<string, Record<string, unknown>>;
   /** Whether the game has ended. */
   isComplete: boolean;
-  /** The winning seats; empty while the game runs, and for a finished draw. */
+  /** The winning seats the game has declared; empty for a draw. */
   winners: number[];
 }
 
@@ -689,7 +689,12 @@ export class SnapshotSessionHost {
     this.publishedHasBots = this.hasBotPlayers();
   }
 
-  /** `restoreFrom`'s check that the outcome is given, and names seats of this table. */
+  /**
+   * `restoreFrom`'s check that the outcome is given, and names seats of this table.
+   * Winners with `isComplete` false are taken as they are: `game.finish([p])`
+   * inside a loop that does not stop on it reports exactly that, and
+   * `restoreFrom` accepts anything `durableState()` can return.
+   */
   private restorableWinners(isComplete: unknown, winners: unknown): number[] {
     if (typeof isComplete !== 'boolean') {
       throw new Error(
@@ -701,7 +706,7 @@ export class SnapshotSessionHost {
     if (!Array.isArray(winners)) {
       throw new Error(
         'restoreFrom requires winners, the winning seats persisted with this snapshot (an empty ' +
-          'array while the game runs, or for a draw). Store the whole value the persist adapter ' +
+          'array when no winner is declared). Store the whole value the persist adapter ' +
           'hands you and pass it back.',
       );
     }
@@ -712,12 +717,6 @@ export class SnapshotSessionHost {
             `1 to ${this.adapters.playerCount}. The persisted state does not belong to this table.`,
         );
       }
-    }
-    if (!isComplete && winners.length > 0) {
-      throw new Error(
-        'restoreFrom was given winners for a game that is not finished (isComplete is false). ' +
-          'The persisted state is inconsistent: pass back the value the persist adapter handed you.',
-      );
     }
     return [...winners] as number[];
   }
