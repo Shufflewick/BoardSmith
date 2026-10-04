@@ -1077,7 +1077,7 @@
       "surfaceHash": "43029ef1af70bf2d",
       "payloadHash": "a6dc5ab68fb08599",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "A game finished with game.finish() or the END_GAME command now ends the flow in every construct (eachPlayer, loop, sequence, repeat, simultaneous steps), so op results report isComplete: true with its winners and no seat is offered an action or follow-up; undo on a finished game is refused as 'the game is finished'"
+      "summary": "A finished game now ends the flow wherever it is: game.finish(), the END_GAME command, or the game's own isFinished() override (which now ends the flow even when the flow's isComplete differs) stops every construct (eachPlayer, loop, sequence, repeat, forEach, phase, simultaneous steps, turnLoop, stateAwareLoop), so op results report isComplete: true with winners and no seat is offered an action or follow-up. A node placed after the main loop no longer runs once an action calls finish(), including in turnLoop and stateAwareLoop. A pending multi-step action completes only when the flow offers it to that seat (refused with 'The game is finished.' or 'It\\'s not your turn.' before anything runs), and undo on a finished game is refused as 'the game is finished'."
     }
   ]
 }
