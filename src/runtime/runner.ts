@@ -784,12 +784,20 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    *   whole action replays at its place in the history after that move, with
    *   its condition checked first, so letting it complete would record a move
    *   that is not legal where it is recorded.
-   * - When the action's own picks ended the condition (a repeat's `onEach`
-   *   spending what the condition counts), it is not refused: its picks are
-   *   part of the action, and the condition was checked before they ran. The
-   *   game as other seats alone would have left it does not exist once its own
-   *   picks have changed the game, so from then on the condition gates it again
-   *   only after it holds again following one of its picks.
+   * - When the condition already failed right after the seat's own previous
+   *   pick (a repeat's `onEach` spent what the condition counts), the pick is
+   *   not refused: its picks are part of the action, and the condition was
+   *   checked before they ran.
+   *
+   * Limit: once the action's own picks have ended the condition, nothing here
+   * can tell whether another seat's move would also have ended it, because the
+   * game as other seats alone would have left it no longer exists. Until the
+   * condition holds again after one of the action's picks, such an action is
+   * NOT refused even if another seat's move would have taken the condition
+   * away. This is a known gap, not a guarantee that other seats' moves are
+   * always caught. A pending state without `conditionHeld` (a host resuming
+   * from `initialArgs` alone, or one persisted before the field existed) is
+   * treated as the first pick.
    *
    * A held follow-up is offered by its chain, not its condition, so its
    * condition is not evaluated at all.

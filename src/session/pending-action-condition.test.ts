@@ -58,6 +58,16 @@ class QuarryGame extends Game<QuarryGame, Player> {
         ctx.game.stoneInQuarry = false;
         ctx.game.ran.push(`take:${ctx.player.seat}`);
       }),
+      Action.create<QuarryGame>('return').prompt('Return the stone').execute((_a, ctx) => {
+        ctx.game.stoneInQuarry = true;
+        ctx.game.ran.push(`return:${ctx.player.seat}`);
+      }),
+      Action.create<QuarryGame>('sap').prompt("Sap everyone else's energy").execute((_a, ctx) => {
+        for (let seat = 1; seat < ctx.game.energy.length; seat++) {
+          if (seat !== ctx.player.seat) ctx.game.energy[seat] = 0;
+        }
+        ctx.game.ran.push(`sap:${ctx.player.seat}`);
+      }),
       Action.create<QuarryGame>('rest').prompt('Rest').execute((_a, ctx) => {
         ctx.game.ran.push(`rest:${ctx.player.seat}`);
       }),
@@ -70,8 +80,9 @@ class QuarryGame extends Game<QuarryGame, Player> {
           choices: ['east', 'west', 'stop'],
           repeat: {
             until: (_ctx, last) => last === 'stop',
-            onEach: (ctx) => {
-              (ctx.game as QuarryGame).energy[ctx.player.seat] -= 1;
+            // Digging east costs energy; west and stop are free.
+            onEach: (ctx, pick) => {
+              if (pick === 'east') (ctx.game as QuarryGame).energy[ctx.player.seat] -= 1;
             },
           },
         })
@@ -96,7 +107,7 @@ class QuarryGame extends Game<QuarryGame, Player> {
     this.setFlow(defineFlow({
       root: loop({
         maxIterations: 10,
-        do: simultaneousActionStep({ actions: ['build', 'take', 'rest', 'dig', 'scout'] }),
+        do: simultaneousActionStep({ actions: ['build', 'take', 'return', 'sap', 'rest', 'dig', 'scout'] }),
       }),
     }));
   }
@@ -141,6 +152,20 @@ describe('GameRunner', () => {
     expect(step).toEqual({ success: false, error: STONE_GONE });
     expect(r.game.ran).toEqual(['take:2']);
     expect(historyLabels(r.actionHistory)).toEqual(historyBefore);
+  });
+
+  it('completes the refused pending action once its condition holds again', () => {
+    const r = runner();
+    r.startPendingAction('build', 1);
+    expect(r.processSelectionStep(1, 'where', 'north').success).toBe(true);
+    expect(r.performAction('take', 2, {}).success).toBe(true);
+    expect(r.processSelectionStep(1, 'what', 'wall')).toEqual({ success: false, error: STONE_GONE });
+
+    r.game.stoneInQuarry = true;
+
+    expect(r.processSelectionStep(1, 'what', 'wall')).toMatchObject({ success: true, actionComplete: true });
+    expect(r.game.ran).toEqual(['take:2', 'build:1']);
+    expect(historyLabels(r.actionHistory)).toEqual(['take:2', 'build:1']);
   });
 
   it('refuses the first pick of an action whose condition does not hold', () => {
@@ -232,6 +257,16 @@ describe('GameSession', () => {
     expect(step).toMatchObject({ success: false, error: STONE_GONE_AT_START, errorCode: 'ACTION_NOT_AVAILABLE' });
   });
 
+  it('treats a resume from initialArgs alone as the start, so the condition must hold then', async () => {
+    const s = session();
+    expect((await s.performAction('take', 2, {})).success).toBe(true);
+
+    const step = await s.processSelectionStep(1, 'what', 'wall', 'build', { where: 'north' });
+
+    expect(step).toMatchObject({ success: false, error: STONE_GONE_AT_START, errorCode: 'ACTION_NOT_AVAILABLE' });
+    expect(s.runner.game.ran).toEqual(['take:2']);
+  });
+
   it("completes an action whose own picks end its condition, with another seat's move in between", async () => {
     const s = session();
     expect((await s.processSelectionStep(1, 'spot', 'east', 'dig')).success).toBe(true);
@@ -286,6 +321,19 @@ describe('stateless selectionStep op', () => {
     expect(step).toMatchObject({ success: false, error: STONE_GONE, errorCode: 'ACTION_NOT_AVAILABLE' });
   });
 
+  it('completes from the same pending state once its condition holds again after a refusal', async () => {
+    const first = await pick(await start(), null, 'build', 'where', 'north');
+    const taken = await act(first, 'take', 2);
+    expect(await pick(taken, first, 'build', 'what', 'wall')).toMatchObject({ success: false, error: STONE_GONE });
+
+    // The refused step changed nothing, so the seat continues from the pending
+    // state it held before it.
+    const returned = await act(taken, 'return', 3);
+    const step = await pick(returned, first, 'build', 'what', 'wall');
+
+    expect(step).toMatchObject({ success: true, actionComplete: true });
+  });
+
   it('refuses the first pick of an action whose condition does not hold', async () => {
     const taken = await act(await start(), 'take', 2);
 
@@ -302,6 +350,37 @@ describe('stateless selectionStep op', () => {
     const step = await pick(rested, first, 'dig', 'spot', 'stop');
 
     expect(step).toMatchObject({ success: true, actionComplete: true });
+  });
+
+  it('treats a pending state without conditionHeld as the start, so the condition must hold then', async () => {
+    const first = await pick(await start(), null, 'dig', 'spot', 'east');
+    expect(first.pendingState).toMatchObject({ conditionHeld: false });
+    const { conditionHeld: _dropped, ...withoutRecord } = first.pendingState as Record<string, unknown>;
+    const rested = await act(first, 'rest', 2);
+
+    const step = await pick(rested, { ...first, pendingState: withoutRecord }, 'dig', 'spot', 'stop');
+
+    expect(step).toMatchObject({
+      success: false,
+      error: "'dig' is not available to you right now: 'you have energy left' does not hold.",
+      errorCode: 'ACTION_NOT_AVAILABLE',
+    });
+  });
+
+  it("refuses an action whose picks change the game once another seat's move took its condition away", async () => {
+    const first = await pick(await start(), null, 'dig', 'spot', 'west');
+    expect(first.pendingState).toMatchObject({ conditionHeld: true });
+    const sapped = await act(first, 'sap', 2);
+
+    const step = await pick(sapped, first, 'dig', 'spot', 'stop');
+
+    expect(step).toMatchObject({
+      success: false,
+      error:
+        "'dig' is no longer available to you: the game changed since your last choice, " +
+        "and 'you have energy left' no longer holds.",
+      errorCode: 'ACTION_NOT_AVAILABLE',
+    });
   });
 
   it('completes a held follow-up pick by pick although its condition does not hold', async () => {
