@@ -1735,12 +1735,11 @@ export class MultiplayerHost {
   ): Promise<OpResult> {
     try {
       return await window.session.host.handleOp(seat, {
-        type: 'action',
-        actionName: idle.name,
+        type: 'expireTimedSeat',
         player: seat,
+        idleAction: idle.name,
         args: idle.args ?? {},
         boundaryKey: window.boundary.key,
-        onTimeout: true,
       });
     } catch (err) {
       return refusedOp(err instanceof Error ? err.message : String(err));

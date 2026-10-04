@@ -31,5 +31,5 @@ export {
   type PendingStepResult,
 } from './runner.js';
 
-// Serialized action type (used by callers that invoke GameRunner.replay)
-export type { SerializedAction } from '../engine/index.js';
+// History entry types (used by callers that invoke GameRunner.replay)
+export type { SerializedAction, SerializedSeatExpiry, HistoryEntry } from '../engine/index.js';

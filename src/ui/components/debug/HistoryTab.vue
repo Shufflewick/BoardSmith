@@ -12,19 +12,13 @@
  * pointed in the history and what a rewind sends, and its tests cover both. This
  * renders what it is handed and emits what a click means.
  */
-import { formatActionName, formatActionArgs, formatTimestamp } from './debug-format.js';
+import type { HistoryEntry } from '../../composables/useDebugBridge.js';
+import { formatHistoryEntry, formatActionArgs, formatTimestamp } from './debug-format.js';
 import DebugButton from './DebugButton.vue';
 import DebugDialog from './DebugDialog.vue';
 
-interface HistoryAction {
-  name: string;
-  player: number;
-  args?: Record<string, unknown>;
-  timestamp?: number;
-}
-
 defineProps<{
-  actionHistory: HistoryAction[];
+  actionHistory: HistoryEntry[];
   historyLoading: boolean;
   historyError: string | null;
   selectedActionIndex: number | null;
@@ -147,13 +141,13 @@ const emit = defineEmits<{
               <span class="history-player" :class="`player-${action.player}`">
                 P{{ action.player + 1 }}
               </span>
-              <span class="history-action-name">{{ formatActionName(action.name) }}</span>
+              <span class="history-action-name">{{ formatHistoryEntry(action) }}</span>
               <span v-if="action.timestamp" class="history-time">
                 {{ formatTimestamp(action.timestamp) }}
               </span>
             </div>
-            <div v-if="action.args && formatActionArgs(action.args)" class="history-item-args">
-              {{ formatActionArgs(action.args ?? {}) }}
+            <div v-if="'args' in action && formatActionArgs(action.args)" class="history-item-args">
+              {{ formatActionArgs(action.args) }}
             </div>
           </div>
         </div>

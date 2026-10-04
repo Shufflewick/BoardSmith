@@ -6,7 +6,7 @@
  * session surface — they are defined once, in one place.
  */
 
-import type { FlowState, PublicFlowState, SerializedAction, Game, GameClass, AnimationEvent, GameStateSnapshot, PendingActionState } from '../engine/index.js';
+import type { FlowState, PublicFlowState, HistoryEntry, Game, GameClass, AnimationEvent, GameStateSnapshot, PendingActionState } from '../engine/index.js';
 import type { BotStrategy } from '../bot/index.js';
 import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
 import type { CheckpointPolicy, UndoPolicy } from '../engine/index.js';
@@ -282,7 +282,7 @@ export interface StoredGameState {
   playerNames: string[];
   playerIds?: string[];
   seed?: string;
-  actionHistory: SerializedAction[];
+  actionHistory: HistoryEntry[];
   /**
    * Wall-clock time each `actionHistory` entry was recorded, parallel to it by
    * index. SESSION-owned, and deliberately kept out of the entries themselves

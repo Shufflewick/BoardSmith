@@ -34,6 +34,16 @@ export interface SerializedAction {
   timestamp?: number;
 }
 
+/** A timed seat the host closed when its window ran out: no action ran. */
+export interface SerializedSeatExpiry {
+  kind: 'seatExpiry';
+  player: number;
+  timestamp?: number;
+}
+
+/** One entry of the history the host reports: an action, or a seat the host closed. */
+export type HistoryEntry = SerializedAction | SerializedSeatExpiry;
+
 /** Why one action is or is not offered, as traced by the host. */
 export interface ActionTrace {
   actionName: string;
@@ -119,7 +129,7 @@ export interface DebugBridge {
   /** Where the flow stands for this seat, or `null` if the host declines to say. */
   flowState(): Promise<FlowStateInfo | null>;
   /** Every action played so far, oldest first. */
-  history(): Promise<SerializedAction[]>;
+  history(): Promise<HistoryEntry[]>;
   /** Captured server-side log lines. */
   logs(): Promise<LogEntry[]>;
   /** This seat's view of the state as it stood after action `actionIndex`. */
@@ -197,7 +207,7 @@ export function createDebugBridge(platformRequest: PlatformRequest | null): Debu
 
     async history() {
       const data = await send('debug:history', {}, 'Failed to fetch history');
-      return (data.actionHistory as SerializedAction[]) || [];
+      return (data.actionHistory as HistoryEntry[]) || [];
     },
 
     async logs() {

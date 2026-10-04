@@ -17,6 +17,8 @@ import {
   type GameOptions,
   type Player,
   type SerializedAction,
+  type HistoryEntry,
+  isSeatExpiry,
   type ActionResult,
   type FlowState,
   type FlowDebugInfo,
@@ -193,8 +195,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   /** Game type identifier */
   readonly gameType: string;
 
-  /** History of serialized actions */
-  readonly actionHistory: SerializedAction[] = [];
+  /** The game's history: every action taken, and every timed seat the host closed */
+  readonly actionHistory: HistoryEntry[] = [];
 
   /**
    * The RETAINED WINDOW of per-action authoritative undo checkpoints: the
@@ -765,19 +767,30 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * A host closing a timed step whose window ran out (#494: time limits always
    * win). When the open step declared a time limit, `seat` holds a follow-up,
    * and the step does not offer `seat` the idle action `actionName`, the
-   * follow-up is dropped and the seat's part ends; the new flow state is
-   * returned and a checkpoint taken (nothing enters `actionHistory`: no action
-   * ran). Otherwise returns `undefined`, and the host submits the idle action as
-   * an ordinary action, which, when the step offers it, also drops the seat's
-   * follow-up.
+   * follow-up is dropped and the seat's part ends, and the new flow state is
+   * returned. Otherwise returns `undefined`, and the host runs the idle action
+   * as the seat's own action, which, when the step offers it, also drops the
+   * seat's follow-up. The stateless `expireTimedSeat` op is the one caller.
    */
   closeExpiredHeldSeat(seat: number, actionName: string): FlowState | undefined {
     const flowState = this.getFlowState();
     if (flowState?.timeLimitMs === undefined) return undefined;
     if (!followUpForSeat(flowState, seat)) return undefined;
     if (this.refusalToAct(actionName, seat) === undefined) return undefined;
+    return this.expireHeldSeat(seat);
+  }
+
+  /**
+   * Drop `seat`'s held follow-up, end its part in the open step, and record
+   * that in `actionHistory` as a seat expiry. No action ran, but the flow
+   * moved, so the history has to say so: `replay` re-applies the entry through
+   * this same method, and undo counts it (and never reaches behind it). Throws
+   * when `seat` holds no follow-up, so a replay on rules that no longer hold
+   * one fails loudly.
+   */
+  private expireHeldSeat(seat: number): FlowState {
     const state = this.game.expireHeldSeat(seat);
-    this.captureCheckpoint();
+    this.actionHistory.push({ kind: 'seatExpiry', player: seat, undoable: false });
     return state;
   }
 
@@ -984,21 +997,31 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   }
 
   /**
-   * Replay a game from a list of serialized actions
+   * Replay a game from its history: every action is performed again, and every
+   * timed seat the host closed is closed again, in order. Throws, naming the
+   * entry, when the rules no longer accept one.
    */
   static replay<G extends Game>(
     options: GameRunnerOptions<G>,
-    actions: SerializedAction[]
+    history: HistoryEntry[]
   ): GameRunner<G> {
     const runner = new GameRunner(options);
     runner.start();
 
-    for (const action of actions) {
-      const { actionName, player, args } = deserializeAction(action, runner.game);
+    for (const entry of history) {
+      if (isSeatExpiry(entry)) {
+        try {
+          runner.expireHeldSeat(entry.player);
+        } catch (error) {
+          throw new Error(`Replay failed at seat ${entry.player}'s expiry: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        continue;
+      }
+      const { actionName, player, args } = deserializeAction(entry, runner.game);
       const result = runner.performAction(actionName, player, args);
 
       if (!result.success) {
-        throw new Error(`Replay failed at action ${action.name}: ${result.error}`);
+        throw new Error(`Replay failed at action ${entry.name}: ${result.error}`);
       }
     }
 

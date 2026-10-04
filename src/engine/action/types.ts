@@ -858,6 +858,35 @@ export interface SerializedAction {
 }
 
 /**
+ * A seat's part of a timed step, ended by the host because the step's window
+ * ran out while the seat held a follow-up the step offered no idle action
+ * beside (#494: time limits always win). No action ran, so there is nothing to
+ * deserialize: a replay re-applies it through `Game.expireHeldSeat`. It is
+ * never undoable, because a seat cannot take back a closure the host made, and
+ * it counts as one entry in the step's undo window like the actions around it.
+ */
+export interface SerializedSeatExpiry {
+  kind: 'seatExpiry';
+  /** The seat whose part ended */
+  player: number;
+  undoable: false;
+  /** Stamped by the session beside the entry, as on `SerializedAction` */
+  timestamp?: number;
+}
+
+/**
+ * One entry of a game's action history: an action a seat took, or a timed
+ * seat the host closed. Every consumer that walks the history (replay, undo,
+ * the debug timeline) tells them apart with `isSeatExpiry`.
+ */
+export type HistoryEntry = SerializedAction | SerializedSeatExpiry;
+
+/** Whether `entry` records a timed seat the host closed rather than an action. */
+export function isSeatExpiry(entry: HistoryEntry): entry is SerializedSeatExpiry {
+  return 'kind' in entry && entry.kind === 'seatExpiry';
+}
+
+/**
  * Validation result
  */
 export interface ValidationResult {

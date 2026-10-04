@@ -33,6 +33,7 @@ import { GameRunner } from '../runtime/runner.js';
 import { GameSession } from './game-session.js';
 import { executeOp, type GameDefinitionLike, type OpResult } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
+import { historyLabels } from './testing/history-labels.js';
 
 class BuildGame extends Game<BuildGame, Player> {
   /** Every build that actually ran, so a test can see a refused one did not. */
@@ -271,7 +272,7 @@ describe('a follow-up belongs to the seat that published it', () => {
     expect(r.processSelectionStep(1, 'where', 'north').success).toBe(true);
     expect(r.processSelectionStep(1, 'what', 'gold')).toMatchObject({ success: true, actionComplete: true });
     expect(r.game.looted).toEqual([1]);
-    expect(r.actionHistory.map((a) => `${a.name}:${a.player}`)).toEqual(['scout:1', 'loot:1']);
+    expect(historyLabels(r.actionHistory)).toEqual(['scout:1', 'loot:1']);
   });
 
   it('GameSession: another seat is refused it; only the publishing seat is offered it', async () => {

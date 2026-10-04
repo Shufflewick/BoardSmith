@@ -14,6 +14,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { ref } from 'vue';
 import type { VueWrapper } from '@vue/test-utils';
 import { Game, Player, Action, defineFlow, loop, eachPlayer, actionStep, type GameOptions } from '../../engine/index.js';
+import { historyLabels } from '../../session/testing/history-labels.js';
 import { GameSession } from '../../session/game-session.js';
 import { createBoardInteraction } from './useBoardInteraction.js';
 import { mountTableWiring, settle } from './table-wiring.test-helper.js';
@@ -107,7 +108,7 @@ describe('a reloaded page resumes the follow-up its seat holds', () => {
     await settle();
 
     expect(session.runner.getFlowState()?.currentPlayer).toBe(2);
-    expect(session.runner.actionHistory.map((a) => `${a.name}:${a.player}`)).toEqual(['scout:1', 'loot:1']);
+    expect(historyLabels(session.runner.actionHistory)).toEqual(['scout:1', 'loot:1']);
   });
 
   it('starts nothing for a seat that holds no follow-up', async () => {

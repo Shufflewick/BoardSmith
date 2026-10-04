@@ -3,7 +3,7 @@ import type {
   GameOptions,
   Player,
   FlowState,
-  SerializedAction,
+  HistoryEntry,
   ActionDefinition,
   Selection,
   GameStateSnapshot,
@@ -61,7 +61,7 @@ export class MCTSBot<G extends Game = Game> {
    */
   private determinize?: DeterminizeSampler;
   private rng: SeededRandom;
-  private actionHistory: SerializedAction[];
+  private actionHistory: HistoryEntry[];
   private seed?: string;
   /** Cached UCT exploration constant (computed once per move in playSingle) */
   private cachedUctC: number = Math.sqrt(2);
@@ -101,7 +101,7 @@ export class MCTSBot<G extends Game = Game> {
     GameClass: GameClass<G>,
     gameType: string,
     playerIndex: number,
-    actionHistory: SerializedAction[] = [],
+    actionHistory: HistoryEntry[] = [],
     config: Partial<BotConfig> = {},
     botStrategy?: BotStrategy
   ) {

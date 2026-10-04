@@ -14,7 +14,7 @@
  * @module
  */
 import { ref, computed, type Ref, type ComputedRef } from 'vue';
-import type { DebugBridge, ElementDiff, SerializedAction } from './useDebugBridge.js';
+import type { DebugBridge, ElementDiff, HistoryEntry } from './useDebugBridge.js';
 
 export interface DebugTimelineOptions {
   /** How the panel talks to the running game. */
@@ -29,7 +29,7 @@ export interface DebugTimelineOptions {
 
 export interface DebugTimeline {
   /** Every action played so far, oldest first. */
-  actionHistory: Ref<SerializedAction[]>;
+  actionHistory: Ref<HistoryEntry[]>;
   historyLoading: Ref<boolean>;
   historyError: Ref<string | null>;
   /** Reload the history. Ignored while a load is already in flight. */
@@ -91,7 +91,7 @@ export interface DebugTimeline {
 export function useDebugTimeline(options: DebugTimelineOptions): DebugTimeline {
   const { bridge, onTimeTravel } = options;
 
-  const actionHistory = ref<SerializedAction[]>([]);
+  const actionHistory = ref<HistoryEntry[]>([]);
   const historyLoading = ref(false);
   const historyError = ref<string | null>(null);
   const historyLastFetched = ref(0);

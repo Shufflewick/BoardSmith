@@ -501,6 +501,12 @@ export class FlowEngine<G extends Game = Game> {
    * finished. In an action step that ends the step; in a simultaneous step the
    * seat is marked done and the step ends when its `allDone` says so.
    *
+   * The runner records the expiry as an entry of the action history, so the
+   * step counts it the way it counts an action: in the undo window (an action
+   * step's `actionCount`, a simultaneous step's `moveCount`) and in the run a
+   * `turnScope: 'continue'` step carries on from. It is not a move: the chain
+   * it ended never completed, so move limits do not see it.
+   *
    * Only for a host closing a timed step: `GameRunner.closeExpiredHeldSeat`
    * checks that the step declared a time limit and the seat holds a follow-up
    * before calling this.
@@ -516,6 +522,9 @@ export class FlowEngine<G extends Game = Game> {
       const config = frame.node.config as SimultaneousActionStepConfig;
       const playerState = this.awaitingPlayers.find((p) => p.playerIndex === seat);
       if (playerState) playerState.completed = true;
+      const moveCount = ((frame.data?.moveCount as number) ?? 0) + 1;
+      frame.data = { ...frame.data, moveCount };
+      this.moveCount = moveCount;
       const allDone = config.allDone
         ? config.allDone(this.createContext())
         : this.awaitingPlayers.every((p) => p.completed);
@@ -529,6 +538,9 @@ export class FlowEngine<G extends Game = Game> {
       return this.run();
     }
 
+    const actionCount = ((frame.data?.actionCount as number) ?? 0) + 1;
+    frame.data = { ...frame.data, actionCount };
+    this.turnRun = { player: seat, count: (frame.data.moveCount as number) ?? 0, actions: actionCount };
     this.completeActionStep(frame);
     this.awaitingInput = false;
     return this.run();

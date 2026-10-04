@@ -2,7 +2,7 @@
  * Shared utility functions for game hosting
  */
 
-import { Player, canSeatAct, availableActionsForSeat, followUpForSeat, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState, type FollowUpAction, type FollowUpOffer } from '../engine/index.js';
+import { Player, canSeatAct, availableActionsForSeat, followUpForSeat, isSeatExpiry, type HistoryEntry, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState, type FollowUpAction, type FollowUpOffer } from '../engine/index.js';
 import { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
 import { devWarn } from '../utils/dev.js';
@@ -473,7 +473,7 @@ const FINISHED_UNDO_REFUSAL = 'Cannot undo: the game is finished.';
 
 export function assertUndoAllowed(args: {
   runner: GameRunner;
-  actionHistory: Array<{ player: number; undoable?: boolean; name?: string }>;
+  actionHistory: readonly HistoryEntry[];
   turnStartActionIndex: number;
   fenceRandomRewind: boolean;
 }): void {
@@ -486,10 +486,16 @@ export function assertUndoAllowed(args: {
   }
 
   for (let i = turnStartActionIndex; i < actionHistory.length; i++) {
-    if (actionHistory[i].undoable === false) {
-      const name = actionHistory[i].name ?? 'action';
-      throw new UndoRefusedError(`Cannot undo: ${name} is marked notUndoable.`, 'non-undoable');
+    const entry = actionHistory[i];
+    if (entry.undoable !== false) continue;
+    // A timed seat the host closed is not the seat's own move to take back.
+    if (isSeatExpiry(entry)) {
+      throw new UndoRefusedError(
+        `Cannot undo: seat ${entry.player}'s time ran out and the host closed its part of the step, which cannot be taken back.`,
+        'non-undoable',
+      );
     }
+    throw new UndoRefusedError(`Cannot undo: ${entry.name} is marked notUndoable.`, 'non-undoable');
   }
 
   if (turnStartActionIndex < executeBarrierIndex) {

@@ -1392,16 +1392,22 @@ Two things end a hold anyway, by ruling:
   step: when a game's own `allDone` ends a simultaneous step, the follow-ups the
   step held end with it.
 - **Time limits always win.** When a timed step's window runs out, the host
-  submits the game's `idleAction` for each seat still due. A seat holding a
-  follow-up takes the idle action if the step offers it (which drops the
-  follow-up, like any other action); if the step does not offer it, the
-  follow-up is dropped and the seat's part ends as if it had finished: the turn
-  passes on (`actionStep`), or the seat is marked done (`simultaneousActionStep`).
-  Nothing enters the action history for that. See `timeLimitMs` below. So **an
-optional follow-up needs a way out**: give the follow-up action a "done" choice,
-or list an end action (such as `endTurn`) in the step. A seat held for a
-follow-up that has no valid choice cannot move on, and in development the
-engine warns about it.
+  closes each seat still due with an `expireTimedSeat` op naming the game's
+  `idleAction`. A seat holding a follow-up takes the idle action if the step
+  offers it (which drops the follow-up, like any other action); if the step
+  does not offer it, the follow-up is dropped and the seat's part ends as if it
+  had finished: the turn passes on (`actionStep`), or the seat is marked done
+  (`simultaneousActionStep`). No action runs then, so the action history
+  records a **seat expiry** instead (`{ kind: 'seatExpiry', player, undoable:
+  false }`, a `HistoryEntry` beside the `SerializedAction` entries): a replay
+  of the history closes the seat again at the same point, and undo counts it
+  but never reaches behind it, because a closure the host made is not the
+  seat's to take back. See `timeLimitMs` below.
+
+So **an optional follow-up needs a way out**: give the follow-up action a
+"done" choice, or list an end action (such as `endTurn`) in the step. A seat
+held for a follow-up that has no valid choice cannot move on, and in
+development the engine warns about it.
 
 Undo to the turn start reaches back over every action of a chain: the step's
 undo boundary counts actions, each link of a chain included, while move limits
@@ -1898,11 +1904,13 @@ actionStep({
 - It is a **duration, never an instant**. The engine keeps no clock and never
   closes the step itself. It publishes the value as `FlowState.timeLimitMs` and
   on the host's turn boundary (`meta.turnBoundary.timeLimitMs`), and the host
-  closes the step when the window elapses by submitting your `idleAction` for
-  every seat that has not acted, marked as a timeout (`onTimeout` on the
-  `action` op). Time limits always win: a seat holding a follow-up is closed
-  too, by the idle action when the step offers it, and otherwise by dropping
-  its follow-up and ending its part (see "A Follow-up Holds Its Seat").
+  closes the step when the window elapses with one `expireTimedSeat` op per
+  seat that has not acted, naming your `idleAction`. That op is the host's
+  alone: no client message maps to it, so a player cannot close a seat by
+  dressing an action up as a timeout. Time limits always win: a seat holding a
+  follow-up is closed too, by the idle action when the step offers it, and
+  otherwise by dropping its follow-up and ending its part, which the history
+  records as a seat expiry (see "A Follow-up Holds Its Seat").
 - So a game with a timed step **must declare `idleAction`** in
   `boardsmith.json`. `boardsmith validate` and `boardsmith build` refuse it
   otherwise, naming the step. A bot is not an alternative: a timed-out seat is
