@@ -19,8 +19,10 @@
  * ## Material included in the key, and why
  *
  * - **`complete`** — a finished flow gets ONE distinguished terminal key,
- *   distinct from every in-play key. A completed flow has an empty `path`,
- *   which is not otherwise distinguishable from a not-yet-started one.
+ *   distinct from every in-play key. A completed flow's `path` is wherever it
+ *   stopped: the finishing node's position when the game was finished, or
+ *   empty when it ran out of nodes, which is not otherwise distinguishable
+ *   from a not-yet-started one.
  * - **`position.path`** — the frame index stack. This is what actually carries
  *   the boundary. For `loop`/`repeat`/`each-player`/`for-each`/`phase` frames
  *   the entry IS the iteration count (see `engine.ts`, `validatePath`), and

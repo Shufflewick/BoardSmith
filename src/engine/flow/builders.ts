@@ -68,12 +68,18 @@ export function phase<G extends Game = Game>(name: string, config: { do: FlowNod
 }
 
 /**
- * Create a loop that repeats while a condition is true
+ * Create a loop that repeats while a condition is true.
+ *
+ * A finished game (`game.finish()`, the END_GAME command, or the game's own
+ * `isFinished()`) ends the flow wherever it is, so `while` only needs the
+ * loop's own condition.
  *
  * @example
  * ```typescript
+ * // Rounds until the deck runs out, or until an action calls game.finish().
  * loop({
- *   while: (ctx) => !ctx.game.isFinished(),
+ *   maxIterations: 100,
+ *   while: (ctx) => ctx.game.deck.count() > 0,
  *   do: eachPlayer({ do: playerTurn })
  * })
  * ```
@@ -560,9 +566,9 @@ export function setVar<G extends Game = Game>(
 /**
  * A simplified loop for turn-based action sequences.
  *
- * This is syntactic sugar for the common pattern of looping while a condition
- * is true, with automatic game.isFinished() checking. It reduces boilerplate
- * for turn loops that need custom continuation conditions.
+ * This is syntactic sugar for the common pattern of looping an action step
+ * while a condition is true. Like every flow node, it stops as soon as the game
+ * is finished: the flow engine ends the flow then, whatever loop it is in.
  *
  * @example
  * ```typescript
@@ -598,7 +604,7 @@ export function setVar<G extends Game = Game>(
  * This is equivalent to:
  * ```typescript
  * loop({
- *   while: (ctx) => !ctx.game.isFinished() && customCondition(ctx),
+ *   while: (ctx) => customCondition(ctx),
  *   do: actionStep({ actions: [...] }),
  * })
  * ```
@@ -608,7 +614,7 @@ export function turnLoop<G extends Game = Game>(config: {
   name?: string;
   /** Actions available during the loop */
   actions: string[] | ((context: FlowContext<G>) => string[]);
-  /** Continue looping while this returns true. Game.isFinished() is checked automatically. */
+  /** Continue looping while this returns true. A finished game ends the flow regardless. */
   while?: (context: FlowContext<G>) => boolean;
   /** Safety limit to prevent infinite loops (default: 100 unless `unbounded`) */
   maxIterations?: number;
@@ -633,13 +639,12 @@ export function turnLoop<G extends Game = Game>(config: {
   return loop({
     name: config.name,
     while: (ctx) => {
-      // Always stop if game is finished
-      if (ctx.game.isFinished()) return false;
       // Check custom condition if provided
       if (config.while) {
         return config.while(ctx);
       }
-      // Default: continue forever (until endTurn action or game ends)
+      // Default: continue forever. The flow engine ends the flow as soon as
+      // the game is finished, whatever loop it is in.
       return true;
     },
     // F-16: only apply the default cap when NOT unbounded — loop() throws if
@@ -737,7 +742,7 @@ export function stateAwareLoop<G extends Game = Game>(config: {
    * (#35), and applies to a composite `do` body too.
    */
   skipIf?: (context: FlowContext<G>) => boolean;
-  /** Continue looping while this returns true. Game.isFinished() is checked automatically. */
+  /** Continue looping while this returns true. A finished game ends the flow regardless. */
   while?: (context: FlowContext<G>) => boolean;
   /**
    * Return an array of pending state values to check.
@@ -786,9 +791,6 @@ export function stateAwareLoop<G extends Game = Game>(config: {
   return loop({
     name: config.name,
     while: (ctx) => {
-      // Always stop if game is finished
-      if (ctx.game.isFinished()) return false;
-
       // Keep looping if any pending state exists (even if while() would return false)
       if (config.pendingStates) {
         const pending = config.pendingStates(ctx);
@@ -802,7 +804,8 @@ export function stateAwareLoop<G extends Game = Game>(config: {
         return config.while(ctx);
       }
 
-      // Default: continue forever (until endTurn action or game ends)
+      // Default: continue forever. The flow engine ends the flow as soon as
+      // the game is finished, whatever loop it is in.
       return true;
     },
     // F-16: only apply the default cap when NOT unbounded (see turnLoop).

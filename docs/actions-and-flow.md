@@ -1569,6 +1569,28 @@ const playerTurn: FlowNode<MyGame> = sequence(
 );
 ```
 
+### Ending the game
+
+A game ends the moment it is finished, wherever the flow is. Any of these
+finishes it:
+
+- an action or an `execute()` calls `game.finish([winner])`,
+- something runs the `END_GAME` command,
+- your game's own `isFinished()` override starts returning true,
+- the flow's `isComplete` returns true, or the flow runs out of nodes.
+
+The flow engine checks before every node, so once the game is finished no
+further node runs and no seat is offered an action, not even a `followUp` the
+finishing action asked for. That holds in every construct: `eachPlayer`,
+`loop`, `sequence`, `repeat`, `forEach`, `phase`, a `simultaneousActionStep`
+with seats still to act, `turnLoop` and `stateAwareLoop` alike. A loop's
+`while` therefore only needs the loop's own condition; it does not have to test
+`isFinished()`.
+
+Put anything that must happen at the end (final scoring, a closing message)
+into the code that finishes the game, before it calls `finish()`. A node placed
+after the main loop does not run when an action finished the game.
+
 ### Flow Nodes
 
 #### `sequence` - Run steps in order

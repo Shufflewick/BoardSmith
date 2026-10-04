@@ -461,6 +461,9 @@ export class UndoRefusedError extends Error {
  * old client-trusted-enforcement bug -- there is no boolean flag a caller
  * could compute and then ignore.
  */
+/** Why nothing can be undone in a finished game, whichever check refuses it. */
+const FINISHED_UNDO_REFUSAL = 'Cannot undo: the game is finished.';
+
 export function assertUndoAllowed(args: {
   runner: GameRunner;
   actionHistory: Array<{ player: number; undoable?: boolean; name?: string }>;
@@ -472,7 +475,7 @@ export function assertUndoAllowed(args: {
   const executeBarrierIndex = runner.executeBarrierIndex;
 
   if (game.isFinished()) {
-    throw new UndoRefusedError('Cannot undo: the game is finished.', 'finished-phase');
+    throw new UndoRefusedError(FINISHED_UNDO_REFUSAL, 'finished-phase');
   }
 
   for (let i = turnStartActionIndex; i < actionHistory.length; i++) {
@@ -537,12 +540,15 @@ type UndoDecision =
  * disagree. A seat is offered Undo exactly when this allows it.
  *
  * In order, the undo is refused when:
- *  1. it is not the seat's turn ({@link computeUndoEligibility});
- *  2. the seat has nothing to undo this turn ({@link undoUnavailableMessage});
- *  3. a fence in {@link assertUndoAllowed} refuses it: finished game,
+ *  1. the game is finished. A finished game's flow is complete and prompts
+ *     no seat (#492), so without this first every seat would be told "It's
+ *     not your turn" instead of the real reason;
+ *  2. it is not the seat's turn ({@link computeUndoEligibility});
+ *  3. the seat has nothing to undo this turn ({@link undoUnavailableMessage});
+ *  4. a fence in {@link assertUndoAllowed} refuses it: finished game,
  *     `.notUndoable()` action, irreversible `execute()`, or the game's
  *     `undo: { fenceRandomRewind: true }` policy;
- *  4. the runner holds no checkpoint at the turn start to restore, because
+ *  5. the runner holds no checkpoint at the turn start to restore, because
  *     the game sets `checkpoints: { enabled: false }` or its
  *     `checkpoints: { max }` window no longer reaches back that far.
  *
@@ -550,6 +556,9 @@ type UndoDecision =
  * caller's restore from it succeeds.
  */
 export function decideUndo(runner: GameRunner, seat: number): UndoDecision {
+  if (runner.game.isFinished()) {
+    return { allowed: false, error: FINISHED_UNDO_REFUSAL, errorCode: ErrorCode.UNDO_NOT_ALLOWED };
+  }
   const flowState = runner.getFlowState();
   const { eligible, turnStartActionIndex, actionsThisTurn } = computeUndoEligibility(
     runner.actionHistory,

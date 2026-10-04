@@ -862,6 +862,10 @@ export class FlowEngine<G extends Game = Game> {
         return this.run();
       }
 
+      // The action finished the game while other seats were still to act.
+      // run() ends the flow before anything else is offered (#492).
+      if (this.isOver()) return this.run();
+
       // F-06/SIM-03: allDone returned false. If NO seat can still act (every
       // awaiting seat has already individually completed, or there are none),
       // this step will not finalize on its own -- Option C keeps allDone
@@ -964,10 +968,11 @@ export class FlowEngine<G extends Game = Game> {
       if (this.actionPartiallyApplied) state.actionPartiallyApplied = true;
     }
 
-    // Include followUp if last action returned one. NOTE: the sibling fields
+    // Include followUp if last action returned one, unless that action ended
+    // the game: a complete flow offers nothing. NOTE: the sibling fields
     // `data`/`message` are deliberately NOT published here — see the note on
     // FlowState (BUG-017); they would fan out to every seat.
-    if (this.lastActionResult?.followUp) {
+    if (this.lastActionResult?.followUp && !this.complete) {
       state.followUp = this.lastActionResult.followUp;
     }
 
@@ -1253,9 +1258,13 @@ export class FlowEngine<G extends Game = Game> {
    * Uses a stack-based state machine to execute nested flow nodes. Each iteration
    * processes one node, which may push children onto the stack (e.g., sequence steps)
    * or mark itself complete. The loop exits when:
+   * - The flow is over (see `isOver`), checked before every node, so a game
+   *   finished by an action or a node runs nothing further and opens no step
    * - A node requires player input (awaitingInput)
-   * - The game's isComplete() returns true
    * - The stack empties (all nodes processed)
+   *
+   * Every path that advances the flow ends here, including one that leaves a
+   * step open, so this is the one place completion is decided.
    *
    * Includes iteration safety (DEFAULT_MAX_ITERATIONS) to detect infinite loops
    * from misconfigured while/repeatUntil conditions.
@@ -1263,7 +1272,13 @@ export class FlowEngine<G extends Game = Game> {
   private run(): FlowState {
     let iterations = 0;
 
-    while (this.stack.length > 0 && !this.awaitingInput && !this.complete) {
+    while (!this.complete) {
+      if (this.stack.length === 0 || this.isOver()) {
+        this.endFlow();
+        break;
+      }
+      if (this.awaitingInput) break;
+
       iterations++;
       if (iterations > DEFAULT_MAX_ITERATIONS) {
         // Build helpful error message with context
@@ -1299,26 +1314,37 @@ export class FlowEngine<G extends Game = Game> {
 
       if (result.awaitingInput) {
         this.awaitingInput = true;
-        break;
+        continue;
       }
 
       if (frame.completed) {
         this.stack.pop();
       }
-
-      // Check game completion after each node execution
-      if (this.definition.isComplete?.(this.createContext())) {
-        this.complete = true;
-        break;
-      }
-    }
-
-    // Check completion after stack empty
-    if (this.stack.length === 0 || this.definition.isComplete?.(this.createContext())) {
-      this.complete = true;
     }
 
     return this.getState();
+  }
+
+  /**
+   * Whether the game is over: it was finished (`game.finish()`, the END_GAME
+   * command, or a game's own `isFinished()`), or the flow's `isComplete` says so.
+   *
+   * A finished game ends the flow whatever loop it is in (#492). Only
+   * `turnLoop` and `stateAwareLoop` used to stop on `isFinished()`, so a game
+   * finished inside `eachPlayer`, `loop`, `sequence` or `repeat` kept waiting
+   * on the next seat: hosts reported it incomplete beside its winners and its
+   * players could keep acting.
+   */
+  private isOver(): boolean {
+    return this.game.isFinished() || this.definition.isComplete?.(this.createContext()) === true;
+  }
+
+  /** Mark the flow complete. A complete flow prompts no seat. */
+  private endFlow(): void {
+    this.complete = true;
+    this.awaitingInput = false;
+    this.availableActions = [];
+    this.awaitingPlayers = [];
   }
 
   // ============================================================================
