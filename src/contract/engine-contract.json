@@ -1,7 +1,7 @@
 {
   "revision": 126,
   "bundleProtocol": 2,
-  "surfaceHash": "a579e5ee6e2448ef",
+  "surfaceHash": "43029ef1af70bf2d",
   "payloadHash": "a6dc5ab68fb08599",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1074,7 +1074,7 @@
       "revision": 126,
       "date": "2026-10-04",
       "bundleProtocol": 2,
-      "surfaceHash": "a579e5ee6e2448ef",
+      "surfaceHash": "43029ef1af70bf2d",
       "payloadHash": "a6dc5ab68fb08599",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A game finished with game.finish() or the END_GAME command now ends the flow in every construct (eachPlayer, loop, sequence, repeat, simultaneous steps), so op results report isComplete: true with its winners and no seat is offered an action or follow-up; undo on a finished game is refused as 'the game is finished'"
