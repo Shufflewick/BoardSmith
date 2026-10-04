@@ -103,6 +103,39 @@ class StuckGame extends Game<StuckGame, Player> {
 }
 const stuckDefinition: GameDefinitionLike = { gameClass: StuckGame, gameType: 'stuck', minPlayers: 2, maxPlayers: 2 };
 
+/**
+ * A timed simultaneous step offering only `scout`, once per seat. `scout`
+ * returns a follow-up into `loot`, which the step does not list, so a seat that
+ * scouted is held for its follow-up with nothing else offered: not even the
+ * idle action, `commit` (#494).
+ */
+class HeldGame extends Game<HeldGame, Player> {
+  scouted: number[] = [];
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerActions(
+      Action.create<HeldGame>('scout')
+        .condition({ 'has not scouted': (ctx) => !(ctx.game as HeldGame).scouted.includes(ctx.player.seat) })
+        .execute((_a, ctx) => {
+          (ctx.game as HeldGame).scouted.push(ctx.player.seat);
+          return { success: true, followUp: { action: 'loot' } };
+        }),
+      Action.create<HeldGame>('loot').chooseFrom('where', { choices: ['north', 'south'] }).execute(() => {}),
+      Action.create<HeldGame>('commit').execute(() => ({ success: true })),
+    );
+    this.setFlow(
+      defineFlow<HeldGame>({
+        root: loop({
+          maxIterations: 3,
+          while: (ctx) => (ctx.game as HeldGame).scouted.length < 2,
+          do: simultaneousActionStep<HeldGame>({ name: 'raid', actions: ['scout'], timeLimitMs: 10_000 }),
+        }),
+      }),
+    );
+  }
+}
+const heldDefinition: GameDefinitionLike = { gameClass: HeldGame, gameType: 'held', minPlayers: 2, maxPlayers: 2 };
+
 type Executed = { op: Op; result: OpResult };
 
 function makeHost(
@@ -230,6 +263,30 @@ describe('MultiplayerHost step deadlines (#302)', () => {
     // The round closed: a new key, and a fresh window measured from now.
     await vi.waitFor(() => expect(clients.key('A')).not.toBe(armedKey));
     expect(h.lastFrame('A').deadlineAt).toBe(START + 2 * WINDOW_MS);
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('closes seats held for a follow-up when the window elapses, though the step offers them no idle action (#494)', async () => {
+    const h = makeHost(heldDefinition);
+    await h.seatBoth();
+    for (const [client, requestId] of [['A', 's1'], ['B', 's2']] as const) {
+      await h.host.handleMessage(client, {
+        type: 'server_request',
+        requestId,
+        op: 'action',
+        payload: { actionName: 'scout', args: {}, boundaryKey: clients.key(client) },
+      });
+    }
+    expect(h.due('A')).toEqual([1, 2]);
+
+    h.clock.advance(10_000);
+
+    await vi.waitFor(() => expect(h.actions().filter((e) => e.op.type === 'action' && e.op.onTimeout)).toHaveLength(2));
+    for (const idle of h.actions().filter((e) => e.op.type === 'action' && e.op.onTimeout)) {
+      expect(idle.op).toMatchObject({ actionName: 'commit', onTimeout: true });
+      expect(idle.result.success).toBe(true);
+    }
+    await vi.waitFor(() => expect(h.lastFrame('A').view).toMatchObject({ flowState: { complete: true } }));
     expect(error).not.toHaveBeenCalled();
   });
 

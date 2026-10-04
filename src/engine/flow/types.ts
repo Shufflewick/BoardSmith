@@ -212,7 +212,10 @@ export interface ActionStepConfig<G extends Game = Game> extends BaseFlowConfig 
    * instant: the engine keeps no clock and never closes the step itself. It
    * publishes the value as {@link FlowState.timeLimitMs} and on the host's turn
    * boundary, and the HOST closes the step when the window elapses by
-   * submitting the game's `idleAction` for every seat that has not acted.
+   * submitting the game's `idleAction` for every seat that has not acted,
+   * marked `onTimeout`. Time limits always win over a held follow-up: a seat
+   * the step does not offer the idle action has its follow-up dropped and its
+   * part ended instead (`GameRunner.closeExpiredHeldSeat`).
    * A game that declares one must therefore declare `idleAction` in
    * `boardsmith.json` -- `boardsmith validate` and `boardsmith build` refuse it
    * otherwise. See docs/simultaneous-and-interrupt-semantics.md section 5.

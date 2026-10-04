@@ -3244,6 +3244,21 @@ export class Game<
   }
 
   /**
+   * End a seat's part in the open timed step when its time ran out while it
+   * held a follow-up the step offers no idle action beside (#494: time limits
+   * always win). See `FlowEngine.expireHeldSeat`; hosts reach it through
+   * `GameRunner.closeExpiredHeldSeat`.
+   */
+  expireHeldSeat(seat: number): FlowState {
+    if (!this._flowEngine) {
+      throw new Error('Flow not started');
+    }
+    const state = this._flowEngine.expireHeldSeat(seat);
+    this.#applyFlowCompletion(state);
+    return state;
+  }
+
+  /**
    * Get current flow state
    */
   getFlowState(): FlowState | undefined {

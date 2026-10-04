@@ -166,11 +166,15 @@ Which means, precisely:
   duration, never an instant, and it does not take part in the boundary key.
   The HOST arms its own deadline when the key changes, from its own clock, and
   when the window elapses submits the game's `idleAction` for every seat still
-  due, stamped with the key it armed under — so a round a human closed while
+  due, marked `onTimeout`, stamped with the key it armed under — so a round a human closed while
   the timer ran refuses the idle op as stale rather than letting it land in the
   next round (§7: the host carries a boundary it captured earlier, not the
   current one). A timed step is always resolved by `idleAction`, never by a
-  bot: the player is present and slow, not absent. `boardsmith build` stamps
+  bot: the player is present and slow, not absent. Time limits always win over
+  a held follow-up (#494): a seat held for one is closed by the idle action when
+  the step offers it, and otherwise its follow-up is dropped and its part ends
+  (`GameRunner.closeExpiredHeldSeat`, reached through `onTimeout`, which a host
+  sets itself and never copies from a client). `boardsmith build` stamps
   `capabilities.timedSteps` from the compiled flow, and `boardsmith validate`
   and `build` refuse a timed game that declares no `idleAction`. A window is at
   least `MIN_STEP_TIME_LIMIT_MS` (ten seconds, #307): closing a step takes the

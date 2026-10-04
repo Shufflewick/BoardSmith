@@ -71,7 +71,20 @@ export interface BoundaryStamped {
 
 export type Op =
   | { type: 'start' }
-  | ({ type: 'action'; actionName: string; player: number; args: Record<string, unknown> } & BoundaryStamped)
+  | ({
+      type: 'action';
+      actionName: string;
+      player: number;
+      args: Record<string, unknown>;
+      /**
+       * Set ONLY by a host submitting the game's idle action because a timed
+       * step's window ran out, never copied from a client message: a seat
+       * holding a follow-up that the step offers no idle action is then closed
+       * anyway (time limits always win, #494). See
+       * `GameRunner.closeExpiredHeldSeat`.
+       */
+      onTimeout?: true;
+    } & BoundaryStamped)
   | ({
       type: 'selectionStep';
       player: number;
@@ -626,6 +639,12 @@ function handleAction(
   op: Extract<Op, { type: 'action' }>,
 ): OpResult {
   const runner = runnerFromSnapshot(snapshot, def);
+
+  const expired = op.onTimeout ? runner.closeExpiredHeldSeat(op.player, op.actionName) : undefined;
+  if (expired) {
+    advanceRunningTutorials(runner.game as Game);
+    return { success: true, ...stateEnvelope(runner, gameOptions.playerCount), flowState: expired };
+  }
 
   const actionResult = runner.performAction(op.actionName, op.player, op.args);
 

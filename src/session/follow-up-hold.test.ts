@@ -27,6 +27,7 @@ import {
   type FlowNode,
   type FlowState,
   type GameOptions,
+  type GameStateSnapshot,
 } from '../engine/index.js';
 import { _clearShownWarnings } from '../utils/dev.js';
 import { GameRunner } from '../runtime/runner.js';
@@ -87,22 +88,22 @@ function raiding(ctx: { game: unknown }): boolean {
   return game.players.some((p) => !game.scouted.includes(p.seat) && !game.rested.includes(p.seat));
 }
 
-function flowFor(shape: Shape, actions: string[]): FlowNode<RaidGame> {
+function flowFor(shape: Shape, actions: string[], timeLimitMs?: number): FlowNode<RaidGame> {
   return shape === 'turn'
-    ? loop({ maxIterations: 3, while: raiding, do: eachPlayer({ do: actionStep({ actions, turnScope: 'restart' }) }) })
-    : loop({ maxIterations: 3, while: raiding, do: simultaneousActionStep({ actions }) });
+    ? loop({ maxIterations: 3, while: raiding, do: eachPlayer({ do: actionStep({ actions, turnScope: 'restart', timeLimitMs }) }) })
+    : loop({ maxIterations: 3, while: raiding, do: simultaneousActionStep({ actions, timeLimitMs }) });
 }
 
 const classes = new Map<string, typeof RaidGame>();
-function raidClass(shape: Shape, decline: boolean): typeof RaidGame {
-  const key = `${shape}:${decline}`;
+function raidClass(shape: Shape, decline: boolean, timed = false): typeof RaidGame {
+  const key = `${shape}:${decline}:${timed}`;
   let cls = classes.get(key);
   if (!cls) {
     const actions = decline ? ['scout', 'rest'] : ['scout'];
     cls = class extends RaidGame {
       constructor(options: GameOptions) {
         super(options);
-        this.setFlow(defineFlow({ root: flowFor(shape, actions) }));
+        this.setFlow(defineFlow({ root: flowFor(shape, actions, timed ? 30_000 : undefined) }));
       }
     };
     classes.set(key, cls);
@@ -446,5 +447,96 @@ describe('stateless ops', () => {
 
     expect(await g.loot(1, 1)).toMatchObject({ success: true, actionComplete: true });
     expect((g.last.flowState as FlowState).currentPlayer).toBe(2);
+  });
+});
+
+/**
+ * Time limits always win (#494, ruled). When a timed step's window runs out the
+ * host submits the game's idle action for every seat still due, marked
+ * `onTimeout`. A seat holding a follow-up is closed like any other: with the
+ * idle action when the step offers it (which drops the follow-up), else by
+ * dropping the follow-up and ending the seat's part.
+ */
+describe('a timed step whose window ran out', () => {
+  async function scoutedTimed(shape: Shape, decline: boolean, timed = true) {
+    const def: GameDefinitionLike = { gameClass: raidClass(shape, decline, timed), gameType: 'raid', minPlayers: 2, maxPlayers: 3 };
+    const started = await executeOp(def, gameOptions, null, {}, { type: 'start' });
+    const scouted = await executeOp(def, gameOptions, started.snapshot, null, {
+      type: 'action', actionName: 'scout', player: 1, args: {}, boundaryKey: boundaryKeyOf(started.snapshot),
+    });
+    expect((scouted.flowState as FlowState).followUps).toHaveLength(1);
+    const idle = (snapshot: OpResult['snapshot'], onTimeout?: true) => executeOp(def, gameOptions, snapshot, null, {
+      type: 'action', actionName: 'rest', player: 1, args: {}, boundaryKey: boundaryKeyOf(snapshot), ...(onTimeout && { onTimeout }),
+    });
+    return { scouted, idle };
+  }
+
+  for (const shape of ['turn', 'simultaneous'] as const) {
+    it(`${shape}: the idle action the step offers closes the held seat and drops its follow-up`, async () => {
+      const { scouted, idle } = await scoutedTimed(shape, true);
+
+      const closed = await idle(scouted.snapshot, true);
+
+      expect(closed.success).toBe(true);
+      expect((closed.flowState as FlowState).followUps).toBeUndefined();
+      const runner = GameRunner.fromSnapshot(closed.snapshot as GameStateSnapshot, raidClass(shape, true, true));
+      expect(runner.game.rested).toEqual([1]);
+    });
+
+    it(`${shape}: with no idle action offered, the held seat's follow-up is dropped and its part ends`, async () => {
+      const { scouted, idle } = await scoutedTimed(shape, false);
+
+      // A player cannot do this: the same action, not marked as a timeout, is refused.
+      expect((await idle(scouted.snapshot)).success).toBe(false);
+
+      const closed = await idle(scouted.snapshot, true);
+
+      expect(closed.success).toBe(true);
+      const state = closed.flowState as FlowState;
+      expect(state.followUps).toBeUndefined();
+      if (shape === 'turn') {
+        expect(state.currentPlayer).toBe(2);
+      } else {
+        expect(state.awaitingPlayers?.find((p) => p.playerIndex === 1)?.completed).toBe(true);
+      }
+      const runner = GameRunner.fromSnapshot(closed.snapshot as GameStateSnapshot, raidClass(shape, false, true));
+      expect(runner.game.rested).toEqual([]);
+      expect(runner.game.looted).toEqual([]);
+    });
+
+    it(`${shape}: an untimed step closes nothing on a timeout`, async () => {
+      const { scouted, idle } = await scoutedTimed(shape, false, false);
+
+      expect((await idle(scouted.snapshot, true)).success).toBe(false);
+    });
+  }
+});
+
+describe('a custom allDone ends the step and drops held follow-ups (#494, ruled)', () => {
+  class OneScoutEnough extends RaidGame {
+    constructor(options: GameOptions) {
+      super(options);
+      this.setFlow(defineFlow({
+        root: simultaneousActionStep({ actions: ['scout'], allDone: (ctx) => (ctx.game as RaidGame).scouted.length >= 1 }),
+      }));
+    }
+  }
+
+  it('the step ends on its own allDone while a seat holds a follow-up', () => {
+    const r = new GameRunner({ GameClass: OneScoutEnough, gameType: 'raid', gameOptions });
+    r.start();
+
+    expect(r.performAction('scout', 1, {}).success).toBe(true);
+
+    expect(r.getFlowState()?.followUps).toBeUndefined();
+    expect(r.isComplete()).toBe(true);
+    expect(r.refusalToAct('loot', 1)).toBeDefined();
+  });
+});
+
+describe('a pending action is settled only for the seat whose turn it is', () => {
+  it('turn-based: settling it for another seat is refused loudly', () => {
+    const r = runner('turn');
+    expect(() => r.game.continueFlowAfterPendingAction({ success: true }, 2)).toThrow(/seat 2.*seat 1/i);
   });
 });

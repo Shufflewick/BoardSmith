@@ -1740,6 +1740,7 @@ export class MultiplayerHost {
         player: seat,
         args: idle.args ?? {},
         boundaryKey: window.boundary.key,
+        onTimeout: true,
       });
     } catch (err) {
       return refusedOp(err instanceof Error ? err.message : String(err));

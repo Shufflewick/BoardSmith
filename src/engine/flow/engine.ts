@@ -482,9 +482,56 @@ export class FlowEngine<G extends Game = Game> {
       return this.settleSimultaneousAction(frame, playerState, player, result);
     }
 
+    if (frame?.node.type === 'action-step' && this.currentPlayer?.seat !== seat) {
+      throw new Error(
+        `Seat ${seat} took an action, but the open action step is awaiting seat ${this.currentPlayer?.seat}, ` +
+          `so it cannot be settled there. Ask GameRunner.refusalToAct(action, seat) before running a pending action.`,
+      );
+    }
+
     if (!this.recordActionResult(result, seat)) return this.getState();
     this.awaitingInput = false;
     return this.continueAfterCommittedAction(result);
+  }
+
+  /**
+   * The open step's time ran out while `seat` held a follow-up, and the step
+   * does not offer that seat the game's idle action. Time limits always win
+   * (#494): the follow-up is dropped and the seat's part ends, as if it had
+   * finished. In an action step that ends the step; in a simultaneous step the
+   * seat is marked done and the step ends when its `allDone` says so.
+   *
+   * Only for a host closing a timed step: `GameRunner.closeExpiredHeldSeat`
+   * checks that the step declared a time limit and the seat holds a follow-up
+   * before calling this.
+   */
+  expireHeldSeat(seat: number): FlowState {
+    const frame = this.stack[this.stack.length - 1];
+    if (!this.awaitingInput || !frame || !this.heldFollowUp(frame, seat)) {
+      throw new Error(`Seat ${seat} holds no follow-up in the open step, so there is nothing to expire.`);
+    }
+    this.holdFollowUp(frame, seat, undefined);
+
+    if (frame.node.type === 'simultaneous-action-step') {
+      const config = frame.node.config as SimultaneousActionStepConfig;
+      const playerState = this.awaitingPlayers.find((p) => p.playerIndex === seat);
+      if (playerState) playerState.completed = true;
+      const allDone = config.allDone
+        ? config.allDone(this.createContext())
+        : this.awaitingPlayers.every((p) => p.completed);
+      if (!allDone) {
+        this.warnIfDeadlockedSimultaneousStep(config);
+        return this.getState();
+      }
+      this.awaitingInput = false;
+      this.awaitingPlayers = [];
+      frame.completed = true;
+      return this.run();
+    }
+
+    this.completeActionStep(frame);
+    this.awaitingInput = false;
+    return this.run();
   }
 
   /**
