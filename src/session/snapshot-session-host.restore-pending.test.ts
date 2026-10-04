@@ -123,11 +123,13 @@ describe('SnapshotSessionHost restores in-progress selections (#320)', () => {
     expect(() => host.restoreFrom({ snapshot, flowState })).toThrow(/pendingStates/);
   });
 
-  it('a failed action that cleared a pending selection persists the cleared state', async () => {
+  it('a refused action keeps the pending selection, in memory and in storage alike', async () => {
     const first = makeHost();
     await first.host.start();
     await pick(first.host, 'p1');
-    expect(Object.keys(first.persisted.at(-1)!.pendingStates)).toEqual(['1']);
+    const saved = first.persisted.at(-1)!.pendingStates;
+    expect(Object.keys(saved)).toEqual(['1']);
+    const saves = first.persisted.length;
 
     const refused = await first.host.handleOp(1, {
       type: 'action',
@@ -138,8 +140,8 @@ describe('SnapshotSessionHost restores in-progress selections (#320)', () => {
     });
     expect(refused.success).toBe(false);
 
-    // Storage agrees with memory: a restore does not resurrect the selection.
-    expect(first.persisted.at(-1)!.pendingStates).toEqual({});
-    expect(first.host.durableState().pendingStates).toEqual({});
+    // The refusal changed nothing: no save, and the selection stands in both.
+    expect(first.persisted.length).toBe(saves);
+    expect(first.host.durableState().pendingStates).toEqual(saved);
   });
 });
