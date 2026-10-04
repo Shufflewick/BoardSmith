@@ -1367,6 +1367,12 @@ Only chain to follow-up when a condition is met:
 4. **Args pre-filled** - follow-up action starts with provided args already set
 5. **User continues** - from user's perspective, it's one seamless interaction
 
+A follow-up belongs to the seat whose action returned it. The flow records
+that seat beside it (`FlowState.followUp.seat`), and only that seat is offered
+the follow-up or may take it, even in a simultaneous step where every seat can
+act. Another seat that tries is refused with "'collectEquipment' is not one of
+your actions right now."
+
 ### When to Use Action Chaining
 
 Use `followUp` when:
