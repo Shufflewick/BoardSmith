@@ -728,6 +728,35 @@ export class FlowEngine<G extends Game = Game> {
     }
   }
 
+  /**
+   * After a seat acts in a simultaneous step: is it done (`playerDone`), and
+   * if not, which of its actions are still available? A seat left with none
+   * is done.
+   */
+  private reevaluateSimultaneousSeat(
+    config: SimultaneousActionStepConfig,
+    playerState: PlayerAwaitingState,
+    player: Player,
+    context: FlowContext<G>,
+  ): void {
+    if (config.playerDone) {
+      playerState.completed = config.playerDone(context, player);
+    }
+    if (playerState.completed) return;
+
+    const actions = typeof config.actions === 'function'
+      ? config.actions(context, player)
+      : config.actions;
+    playerState.availableActions = actions.filter((availableActionName) => {
+      const action = this.game.getAction(availableActionName);
+      if (!action) return false;
+      return this.game.getAvailableActions(player).some((a) => a.name === availableActionName);
+    });
+    if (playerState.availableActions.length === 0) {
+      playerState.completed = true;
+    }
+  }
+
   private resumeSimultaneousAction(
     actionName: string,
     args: Record<string, unknown>,
@@ -827,27 +856,12 @@ export class FlowEngine<G extends Game = Game> {
     // letting GameRunner record the committed action instead of silently
     // diverging actionHistory from applied game state (WR-06).
     try {
-      // Check if this player is done (re-evaluate after action)
-      const context = this.createContext();
-      if (config.playerDone) {
-        playerState.completed = config.playerDone(context, player);
-      }
+      // The action finished the game, whoever else was still to act. run()
+      // ends the flow before anything else is asked or offered (#492).
+      if (this.isOver()) return this.run();
 
-      // Re-evaluate available actions for this player
-      if (!playerState.completed) {
-        const actions = typeof config.actions === 'function'
-          ? config.actions(context, player)
-          : config.actions;
-        playerState.availableActions = actions.filter((availableActionName) => {
-          const action = this.game.getAction(availableActionName);
-          if (!action) return false;
-          return this.game.getAvailableActions(player).some((a) => a.name === availableActionName);
-        });
-        // If no available actions left, mark as completed
-        if (playerState.availableActions.length === 0) {
-          playerState.completed = true;
-        }
-      }
+      const context = this.createContext();
+      this.reevaluateSimultaneousSeat(config, playerState, player, context);
 
       // Check if all players are done
       const allDone = config.allDone
@@ -861,10 +875,6 @@ export class FlowEngine<G extends Game = Game> {
         frame.completed = true;
         return this.run();
       }
-
-      // The action finished the game while other seats were still to act.
-      // run() ends the flow before anything else is offered (#492).
-      if (this.isOver()) return this.run();
 
       // F-06/SIM-03: allDone returned false. If NO seat can still act (every
       // awaiting seat has already individually completed, or there are none),
