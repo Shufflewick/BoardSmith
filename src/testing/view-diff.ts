@@ -39,6 +39,7 @@
  */
 
 import type { ElementJSON, Game } from '../engine/index.js';
+import { isHiddenPlaceholder } from '../engine/element/hidden-placeholder.js';
 import type { TestGame } from './test-game.js';
 import { TestWorld } from './test-world.js';
 import { assertViewFixtureShape } from './view-fixture.js';
@@ -78,10 +79,6 @@ export interface ViewDiffResult {
   describe(): string;
 }
 
-/** True when a node is a redacted placeholder (hidden individually, count-only, or zone-anonymized). */
-function isHiddenNode(node: ElementJSON | undefined): boolean {
-  return node?.attributes?.__hidden === true;
-}
 
 /** Readable label for a node: its `name` when present, else `ClassName[index]`. */
 function describeNode(node: ElementJSON, index: number): string {
@@ -127,8 +124,8 @@ function walk(
 
   const a = nodeA as ElementJSON;
   const b = nodeB as ElementJSON;
-  const hiddenA = isHiddenNode(a);
-  const hiddenB = isHiddenNode(b);
+  const hiddenA = isHiddenPlaceholder(a);
+  const hiddenB = isHiddenPlaceholder(b);
 
   // Prefer the non-hidden side for the readable label (hidden placeholders
   // drop `name` for identity-bearing elements).
@@ -234,7 +231,7 @@ function pairChildren(
   while (i < leftoverA.length || j < leftoverB.length) {
     const left = leftoverA[i];
     const right = leftoverB[j];
-    if (left && right && (isHiddenNode(left.a) || isHiddenNode(right.b))) {
+    if (left && right && (isHiddenPlaceholder(left.a) || isHiddenPlaceholder(right.b))) {
       pairs.push({ a: left.a, b: right.b, index: left.index });
       i += 1;
       j += 1;

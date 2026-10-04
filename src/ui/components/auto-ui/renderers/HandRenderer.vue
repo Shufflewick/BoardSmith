@@ -14,6 +14,7 @@ import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction
 import { useSelectable } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
 import { resolvePresentation } from '../presentation.js';
+import { isHiddenPlaceholder } from '../../../../engine/element/hidden-placeholder.js';
 import type { PresentationOverlay } from '../presentation.js';
 import { GAME_CONTEXT_KEYS, injectPlayerSeat } from '../../../composables/useGameContext.js';
 
@@ -27,7 +28,6 @@ interface GameElement {
   attributes?: Record<string, unknown>;
   children?: GameElement[];
   childCount?: number;
-  __hidden?: boolean;
 }
 
 type ImageInfo =
@@ -130,7 +130,7 @@ const hasOverlap = computed(() => props.element.attributes?.$overlap !== undefin
 // Visible children
 // ---------------------------------------------------------------------------
 const visibleChildren = computed(() => {
-  if (props.element.__hidden) return [];
+  if (isHiddenPlaceholder(props.element)) return [];
   return props.element.children ?? [];
 });
 

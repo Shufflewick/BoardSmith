@@ -46,8 +46,7 @@ const pieceVisual = computed((): PieceVisual => resolvePieceVisual(props.element
 
 // ── Presentation overlay injection (D-04) ────────────────────────────────────
 // Resolved AFTER visibility filtering; resolvePresentation strips image/stats
-// for __hidden elements (PRESENT-02). Pieces don't have __hidden but guard is
-// still routed through resolver for correctness.
+// for hidden placeholders (PRESENT-02).
 const overlay = inject(GAME_CONTEXT_KEYS.presentation, undefined) as ComputedRef<PresentationOverlay | undefined> | undefined;
 const presentationEntry = computed(() =>
   resolvePresentation(props.element, overlay?.value)

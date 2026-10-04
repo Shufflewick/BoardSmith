@@ -40,7 +40,6 @@ interface GameElement {
   className: string;
   attributes?: Record<string, unknown>;
   children?: GameElement[];
-  __hidden?: boolean;
 }
 
 function buildCardElement(overrides: Partial<GameElement> = {}): GameElement {
@@ -129,7 +128,7 @@ describe('CardRenderer mount', () => {
 
   it('renders a hidden card (card-back) without error', () => {
     const wrapper = mount(CardRenderer, {
-      props: { element: buildCardElement({ __hidden: true }), depth: 0 },
+      props: { element: buildCardElement({ attributes: { __hidden: true } }), depth: 0 },
       global: { provide: {} },
     });
     expect(wrapper.exists()).toBe(true);

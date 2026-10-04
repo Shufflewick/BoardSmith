@@ -25,7 +25,6 @@ interface GameElement {
   attributes?: Record<string, unknown>;
   children?: GameElement[];
   childCount?: number;
-  __hidden?: boolean;
 }
 
 const props = defineProps<{

@@ -11,6 +11,7 @@ import type {
 import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
 import { PersistentMap } from './persistent-map.js';
+import { HIDDEN_PLACEHOLDER_ATTRIBUTE } from './hidden-placeholder.js';
 import type { VisibilityMode, VisibilityState } from '../command/visibility.js';
 import {
   DEFAULT_VISIBILITY,
@@ -259,17 +260,6 @@ const RESERVED_KEY_REASONS: Record<string, string> = {
   _t: "it holds the element's tree position (parent and children)",
   _ctx: 'it holds the shared game context (sequence counter, class registry)',
 };
-
-/**
- * The attribute a per-seat view puts on an element the seat cannot see.
- *
- * `toJSONForPlayer` replaces such an element with a placeholder carrying this
- * marker, safe layout keys and nothing else. It is engine metadata rather than
- * a game attribute (hence the `_` prefix, which keeps it out of the generic
- * attribute loops), and it is what tells a restore that EVERY game attribute
- * this element would otherwise carry was withheld (#147).
- */
-export const HIDDEN_PLACEHOLDER_ATTRIBUTE = '__hidden';
 
 /**
  * One entry of `static seatAttributes` (#269): the value of that attribute for

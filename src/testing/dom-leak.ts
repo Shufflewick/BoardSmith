@@ -27,6 +27,7 @@ import type { VueWrapper } from '@vue/test-utils';
 import type { default as AutoUIComponent } from '../ui/components/auto-ui/AutoUI.vue';
 import type { GameViewElement as UIGameElement } from '../ui/components/auto-ui/index.js';
 import type { ElementJSON } from '../engine/index.js';
+import { HIDDEN_PLACEHOLDER_ATTRIBUTE, isHiddenPlaceholder } from '../engine/element/hidden-placeholder.js';
 import type { BoardInteraction } from '../ui/composables/useBoardInteraction.js';
 import type { TableSeat } from '../ui/composables/useTableSeat.js';
 import type { WorldSeatHost } from '../ui/world/useWorldHost.js';
@@ -86,8 +87,9 @@ export interface SeatProjection {
 /**
  * The shape `renderAsSeat`/`assertNoHiddenInfoLeak`'s `gameViewOverride` (and
  * the AutoUI `gameView` prop) accept — structurally identical to
- * `ElementJSON` (id/className/attributes/children/childCount/name, plus the
- * UI's own `__hidden` convenience flag). Exported so callers constructing a
+ * `ElementJSON` (id/className/attributes/children/childCount/name; a hidden
+ * placeholder is marked by `attributes.__hidden`, read with
+ * isHiddenPlaceholder). Exported so callers constructing a
  * deliberately-leaky override (e.g. `game.toJSON()`, or a mutated
  * `getPlayerView(seat).state`) have a name for the cast instead of reaching
  * for `any`.
@@ -1241,7 +1243,7 @@ function collectSurvivingValues(node: ElementJSON): Set<string> {
   if (node.name) values.add(node.name);
 
   for (const [key, value] of Object.entries(node.attributes ?? {})) {
-    if (key === '__hidden') continue;
+    if (key === HIDDEN_PLACEHOLDER_ATTRIBUTE) continue;
     if (key === '$images' && value && typeof value === 'object') {
       for (const imgVal of Object.values(value as Record<string, unknown>)) {
         const s = stringifyImageValue(imgVal);
@@ -1303,7 +1305,7 @@ function deriveLeakDetectionData(
 
     const elementLabel = `${unfiltered.className}#${unfiltered.id}`;
     const node = nodesById.get(unfiltered.id);
-    const elementHidden = !node || node.attributes?.__hidden === true;
+    const elementHidden = !node || isHiddenPlaceholder(node);
 
     if (elementHidden) {
       // Absent from the final tree, or present only as a `__hidden` placeholder:
