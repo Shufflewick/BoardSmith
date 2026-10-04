@@ -11,7 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, defineFlow, eachPlayer, actionStep, type GameOptions } from '../engine/index.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
-import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
+import { SnapshotSessionHost, type SnapshotSessionAdapters, type PublishMeta } from './snapshot-session-host.js';
 import { GameSession } from './game-session.js';
 import { boundaryKeyOf, boundaryKeyOfHost } from './testing/boundary-stamp.js';
 
@@ -70,12 +70,12 @@ describe('stateless ops', () => {
 
 describe('SnapshotSessionHost', () => {
   it('broadcasts the finished game as complete, decisive, and offers no seat a turn', async () => {
-    const records: Array<[unknown[], Record<string, unknown>]> = [];
+    const records: Array<[unknown[], PublishMeta]> = [];
     const adapters: SnapshotSessionAdapters = {
       playerCount: 3,
       executeOp: (snap, pend, op) => executeOp(gameDef, options, snap, pend, op),
       push: () => {},
-      record: ({ players: views }, meta) => records.push([views as unknown[], meta as Record<string, unknown>]),
+      record: ({ players: views }, meta) => records.push([views, meta]),
     };
     const host = new SnapshotSessionHost(adapters);
     await host.start();
