@@ -36,9 +36,9 @@ function finishedGameDef(winnerSeats: number[]): GameDefinitionLike {
 
 /**
  * A game the acting seat ends with an action: `win` calls `game.finish([player])`.
- * With `flowEnds`, the loop stops on `isFinished()` and the flow completes. Without
- * it the loop goes on, and the op reports winners for a game that is not complete:
- * a state the engine really produces, so `restoreFrom` must take it back.
+ * With `flowEnds`, the loop's own `while` stops on `isFinished()`. Without it the
+ * loop would go on, which before #492 left the op reporting winners for a game
+ * that was not complete; the flow now ends either way.
  */
 function actionFinishDef(flowEnds: boolean): GameDefinitionLike {
   class ActionFinishGame extends Game<ActionFinishGame, Player> {
@@ -175,13 +175,12 @@ describe('a host restored from a finished game publishes its outcome (#490)', ()
     expect(records.at(-1)!.meta.turnBoundary.dueSeats).toEqual([]);
   });
 
-  it('winners for a game whose flow has not ended round-trip as they were, so the table can wake', async () => {
-    // game.finish([player]) inside a loop that does not stop on isFinished():
-    // the op reports winners while isComplete stays false. restoreFrom takes
-    // back anything durableState() can return.
+  it('a game finished inside a loop that does not stop on isFinished() is restored as complete too (#492)', async () => {
+    // game.finish([player]) ends the flow whatever loop it is in, so there is
+    // no "winners but not complete" state left for restoreFrom to carry.
     const { seat, host, records } = await restoredFromActionFinish(false);
     host.broadcastCurrent();
-    expect(records.at(-1)!.meta).toMatchObject({ isComplete: false, winners: [seat], isDraw: false });
-    expect(host.durableState()).toMatchObject({ isComplete: false, winners: [seat] });
+    expect(records.at(-1)!.meta).toMatchObject({ isComplete: true, winners: [seat], isDraw: false });
+    expect(host.durableState()).toMatchObject({ isComplete: true, winners: [seat] });
   });
 });
