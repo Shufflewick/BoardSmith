@@ -551,13 +551,9 @@ world's ids are keyed by a secret its host keeps".
 The seed still has to be unguessable for a different reason: it decides every
 shuffle and roll, so a host that hands the engine a guessable seed lets a
 player predict them. A host should supply at least 128 bits from a
-cryptographic random source. (The RNG itself currently keeps only 32 bits of
-state whatever the seed, which is its own open problem: #483.)
-
-A **world**'s ids are still its plain creation counter, because they are
-durable across wakes and a world host may change the seed on every wake. In a
-world, a seat can still count creations it could not see from the gaps in the
-ids it does (#482).
+cryptographic random source. The generator is ChaCha20 keyed by SHA-256 of
+the whole seed (#483), so every bit of the seed counts and its draws cannot be
+recovered by searching a small state space.
 
 ### Secret Moves in a Simultaneous Step
 

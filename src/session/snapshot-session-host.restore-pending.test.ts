@@ -57,7 +57,7 @@ describe('SnapshotSessionHost restores in-progress selections (#320)', () => {
     await pick(host, 'p1');
 
     const last = persisted.at(-1)!;
-    expect(Object.keys(last).sort()).toEqual(['flowState', 'pendingStates', 'snapshot']);
+    expect(Object.keys(last).sort()).toEqual(['flowState', 'isComplete', 'pendingStates', 'snapshot', 'winners']);
     expect(last.flowState).toEqual(JSON.parse(JSON.stringify(host.flowState)));
     expect(Object.keys(last.pendingStates)).toEqual(['1']);
     expect(JSON.parse(JSON.stringify(host.durableState()))).toEqual(last);

@@ -1,7 +1,7 @@
 {
-  "revision": 125,
+  "revision": 126,
   "bundleProtocol": 2,
-  "surfaceHash": "e868c2e60348f66b",
+  "surfaceHash": "95159a004e1f493f",
   "payloadHash": "a6dc5ab68fb08599",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1069,6 +1069,15 @@
       "payloadHash": "a6dc5ab68fb08599",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "World element ids are now opaque (#482): Speck48/96 of the world's creation counter under a 96-bit key the HOST mints once when it creates a world (mintWorldElementIdKey from boardsmith/world, 24 hex digits), stores with the world beside nextElementId, and passes on every wake as createWorld's required elementIdKey (a world game built directly needs GameOptions.elementIdKey); never sent to a client. New platform-owned refusals: element-id-key-invalid (no key, or not 24 lowercase hex digits; the engine never mints a world key and never repeats a refused key) and element-id-key-mismatch (a stored partition does not hang from the root this key mints, raised before adoption). Ids are whole numbers below 2^48. nextElementId stays a counter value, never an id; worldIdAllocationOf(records, elementIdKey) now takes the key and whole StoredPartition records ({ parentId, json }, not bare json) and refuses records minted under another key; adopting a partition no longer spends counter values. Hidden-zone placeholder ids are now counted down from -1 per projection, for tables and worlds alike. Format break: the world format corpus is regenerated and records its key; worlds stored with sequential ids cannot be read by this engine, keep them on their archived runner or reset them. The pre-floor id lift (rekey exports, WorldStore.rekey, WorldStartOutcome.lifted) is removed; WorldStore gains elementIdKey(); createMemoryWorldStore takes the key first; TestWorld takes an optional elementIdKey."
+    },
+    {
+      "revision": 126,
+      "date": "2026-10-03",
+      "bundleProtocol": 2,
+      "surfaceHash": "95159a004e1f493f",
+      "payloadHash": "a6dc5ab68fb08599",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "SnapshotHostState carries the game's outcome (#490): durableState() and the persist adapter now hand out isComplete and winners beside snapshot, flowState and pendingStates, and restoreFrom requires both, so a host restored from a finished game publishes it as finished (with its winners, or as a draw) on broadcastCurrent() or rosterChanged() instead of as running. restoreFrom refuses a state missing either, or winners that are not seats of the table, and takes back anything durableState() returns, including winners with isComplete false (game.finish() inside a loop that does not stop on it). Re-vendor and store the whole persisted value, including the two new fields."
     }
   ]
 }

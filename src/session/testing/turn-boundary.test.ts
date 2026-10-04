@@ -288,7 +288,13 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
       expect(host.snapshot).toBeNull();
 
       // The sanctioned path takes the pair, so the flow state cannot go missing.
-      host.restoreFrom({ snapshot: started.snapshot, flowState: started.flowState, pendingStates: {} });
+      host.restoreFrom({
+        snapshot: started.snapshot,
+        flowState: started.flowState,
+        pendingStates: {},
+        isComplete: started.isComplete,
+        winners: started.winners,
+      });
       expect(host.snapshot).toBe(started.snapshot);
       expect(host.flowState).toBe(started.flowState);
     });
@@ -296,7 +302,9 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
     it('restoreFrom REFUSES a snapshot without a flow state, naming what to do', async () => {
       const { host, started } = await freshHostAndStartedGame();
 
-      expect(() => host.restoreFrom({ snapshot: started.snapshot, flowState: null, pendingStates: {} })).toThrow(
+      expect(() =>
+        host.restoreFrom({ snapshot: started.snapshot, flowState: null, pendingStates: {}, isComplete: false, winners: [] }),
+      ).toThrow(
         /flowState/i,
       );
     });
@@ -321,6 +329,8 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
         snapshot: started.snapshot,
         flowState: started.flowState,
         pendingStates: {},
+        isComplete: started.isComplete,
+        winners: started.winners,
         playerViews: started.playerViews,
       });
       host.broadcastCurrent();
