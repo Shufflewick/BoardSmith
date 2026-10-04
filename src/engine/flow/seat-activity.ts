@@ -15,6 +15,8 @@
  * same predicates work on serialized flow states received over the wire.
  */
 
+import type { PublishedFollowUp } from './types.js';
+
 /** The minimal flow-state shape these predicates read. */
 export interface SeatActivityState {
   /** Whether the flow is currently awaiting player input. */
@@ -29,6 +31,8 @@ export interface SeatActivityState {
     availableActions: string[];
     completed: boolean;
   }>;
+  /** The follow-up the last action published, with the seat that owns it. */
+  followUp?: PublishedFollowUp;
   /**
    * Serialized flow position. Only `frameData` is read here — see
    * {@link turnSequence}, which recovers the running order an `eachPlayer` node
@@ -157,4 +161,18 @@ export function availableActionsForSeat(
   }
 
   return flowState.currentPlayer === seat ? (flowState.availableActions ?? []) : [];
+}
+
+/**
+ * The follow-up the given seat may take right now, or `undefined`. A follow-up
+ * belongs to the seat whose action returned it, so no other seat is offered
+ * it, even in a simultaneous step where every seat may act. Hosts offer a
+ * follow-up and accept its selections only through this.
+ */
+export function followUpForSeat(
+  flowState: SeatActivityState | undefined | null,
+  seat: number,
+): PublishedFollowUp | undefined {
+  if (!flowState?.awaitingInput) return undefined;
+  return flowState.followUp?.seat === seat ? flowState.followUp : undefined;
 }

@@ -1635,7 +1635,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       state: buildPlayerState(this.#runner, this.#storedState.playerNames, player, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
       serializedAction: result.serializedAction,
       // The chained action, with the metadata to start it (it is usually not in availableActions).
-      followUp: result.flowState?.followUp && offerFollowUp(this.#runner.game, player, result.flowState.followUp),
+      followUp: offerFollowUp(this.#runner.game, result.flowState, player),
       // The action's own return value to the acting seat (BUG-017/BUG-012).
       data: result.data,
       message: result.message,

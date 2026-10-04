@@ -389,7 +389,7 @@ export class PendingActionManager<G extends Game = Game> {
       // performAction so actionHistory is the single source of truth for what
       // happened (replay, undo counts, and bot history all read it).
       this.#runner.recordSerializedAction(serializedAction);
-      this.#runner.game.continueFlowAfterPendingAction(actionResult);
+      this.#runner.game.continueFlowAfterPendingAction(actionResult, playerPosition);
       this.#runner.captureCheckpoint();
       this.#storedState.actionHistory = this.#runner.actionHistory;
 
@@ -416,7 +416,7 @@ export class PendingActionManager<G extends Game = Game> {
         message: actionResult.message,
       },
       state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
-      followUp: flowState?.followUp && offerFollowUp(this.#runner.game, playerPosition, flowState.followUp),
+      followUp: offerFollowUp(this.#runner.game, flowState, playerPosition),
       // Hoisted beside followUp so a multi-step action's return value reaches
       // the ops layer on the same footing as a single-step one (BUG-017).
       data: actionResult.data,

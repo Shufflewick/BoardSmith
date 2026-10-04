@@ -30,7 +30,7 @@ const server: FlowState = {
   timeLimitMs: 30000,
   turnScopeUndeclared: 'deploy',
   actionError: "seat 1's error",
-  followUp: { action: 'peek', args: { card: 12 } },
+  followUp: { action: 'peek', args: { card: 12 }, seat: 1 },
 };
 
 describe('toPublicFlowState (#449)', () => {

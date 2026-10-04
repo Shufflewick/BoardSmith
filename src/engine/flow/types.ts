@@ -433,11 +433,12 @@ export interface FlowState {
    */
   actionPartiallyApplied?: boolean;
   /**
-   * Follow-up action to chain after the last action completed.
-   * When present, the client should automatically start this action
-   * with the provided args pre-filled.
+   * Follow-up action to chain after the last action completed, and the seat
+   * whose action returned it. Only that seat is offered it (`followUpForSeat`):
+   * in a simultaneous step every seat may act, so the name alone must never let
+   * another seat take it.
    */
-  followUp?: FollowUpAction;
+  followUp?: PublishedFollowUp;
   // NOTE (BUG-017): `ActionResult.data`/`.message` deliberately do NOT live
   // here, even though `followUp` does. `FlowState` fans out: `stateless-ops`'s
   // `buildViews`/`buildSpectatorView` hand the whole object to EVERY seat and
@@ -446,6 +447,17 @@ export interface FlowState {
   // the whole table — the same leak that rules out `game.animate()` as a
   // channel. It travels instead via `FlowEngine.getLastActionResult()`, read
   // by `GameRunner.performAction` and returned only to that op's caller.
+}
+
+/**
+ * A follow-up as the flow holds it: the {@link FollowUpAction} an action
+ * returned, plus the seat that took that action. `seat` is the follow-up's
+ * owner, recorded by the flow when the action's result is recorded, so every
+ * host and check reads the same owner.
+ */
+export interface PublishedFollowUp extends FollowUpAction {
+  /** The seat whose action returned this follow-up: the only seat that may take it. */
+  seat: number;
 }
 
 /**

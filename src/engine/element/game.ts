@@ -3225,13 +3225,14 @@ export class Game<
    * Continue flow after a pending action was executed externally.
    * Used when an action with repeating selections completes via the action executor.
    * @param result The result of the executed action
+   * @param seat The seat that took the action: the owner of any follow-up it returned
    */
-  continueFlowAfterPendingAction(result: ActionResult): FlowState {
+  continueFlowAfterPendingAction(result: ActionResult, seat: number): FlowState {
     if (!this._flowEngine) {
       throw new Error('Flow not started');
     }
 
-    const state = this._flowEngine.resumeAfterExternalAction(result);
+    const state = this._flowEngine.resumeAfterExternalAction(result, seat);
 
     this.#applyFlowCompletion(state);
 

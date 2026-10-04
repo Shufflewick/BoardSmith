@@ -643,7 +643,7 @@ function handleAction(
     // stateEnvelope() re-reads flowState from the runner; actionResult.flowState
     // is the authoritative value returned by performAction — override with it.
     flowState: actionResult.flowState,
-    followUp: actionResult.flowState?.followUp && offerFollowUp(game, op.player, actionResult.flowState.followUp),
+    followUp: offerFollowUp(game, actionResult.flowState, op.player),
     // The acting seat's return value from execute() (BUG-017/BUG-012).
     data: actionResult.data,
     message: actionResult.message,

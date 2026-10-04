@@ -10,6 +10,7 @@ import type {
   FlowPosition,
   TurnRun,
   FlowState,
+  PublishedFollowUp,
   FlowStepResult,
   FlowDefinition,
   SequenceConfig,
@@ -306,6 +307,12 @@ export class FlowEngine<G extends Game = Game> {
   private availableActions: string[] = [];
   private complete = false;
   private lastActionResult?: ActionResult;
+  /**
+   * The follow-up the last action returned, with the seat that took it. Set
+   * whenever an action's result is recorded, so the owner always matches the
+   * result; published as `FlowState.followUp`.
+   */
+  private followUp?: PublishedFollowUp;
   /** Error from last action if it failed (cleared on success) */
   private actionError?: string;
   /** See FlowState.actionPartiallyApplied — set alongside actionError. */
@@ -400,6 +407,7 @@ export class FlowEngine<G extends Game = Game> {
     this.moveCount = 0;
     this.turnRun = undefined;
     this.lastActionResult = undefined;
+    this.followUp = undefined;
     this.actionError = undefined;
     this.actionPartiallyApplied = false;
     this.currentPhase = undefined;
@@ -434,30 +442,36 @@ export class FlowEngine<G extends Game = Game> {
 
     // Execute the action (regular action step), then settle its result exactly
     // as a result executed elsewhere (a completed pending action) is settled.
-    return this.resumeAfterExternalAction(this.game.performAction(actionName, this.currentPlayer!, args));
+    return this.resumeAfterExternalAction(
+      this.game.performAction(actionName, this.currentPlayer!, args),
+      this.currentPlayer!.seat,
+    );
   }
 
   /**
    * Resume flow after an action was executed externally (e.g., via pending action).
    * This is like resume() but skips the action execution since it already happened.
    * @param result The result of the externally-executed action
+   * @param seat The seat that took the action: the owner of any follow-up it returned
    */
-  resumeAfterExternalAction(result: ActionResult): FlowState {
+  resumeAfterExternalAction(result: ActionResult, seat: number): FlowState {
     if (!this.awaitingInput) {
       throw new Error('Flow is not awaiting input');
     }
 
-    if (!this.recordActionResult(result)) return this.getState();
+    if (!this.recordActionResult(result, seat)) return this.getState();
     this.awaitingInput = false;
     return this.continueAfterCommittedAction(result);
   }
 
   /**
-   * Record an action's result. A failure stays in the same state with its error
-   * recorded; returns whether the action succeeded.
+   * Record an action's result, and `seat` as the owner of any follow-up it
+   * returned. A failure stays in the same state with its error recorded;
+   * returns whether the action succeeded.
    */
-  private recordActionResult(result: ActionResult): boolean {
+  private recordActionResult(result: ActionResult, seat: number): boolean {
     this.lastActionResult = result;
+    this.followUp = result.followUp && { ...result.followUp, seat };
     if (!result.success) {
       this.actionError = result.error;
       // #44/#325: a failure that may have applied part of its changes.
@@ -839,7 +853,7 @@ export class FlowEngine<G extends Game = Game> {
       throw new Error(`Invalid player position: ${actingPlayerIndex}`);
     }
     const result = this.game.performAction(actionName, player, args);
-    if (!this.recordActionResult(result)) return this.getState();
+    if (!this.recordActionResult(result, actingPlayerIndex)) return this.getState();
 
     // 160-02 (D4 step-window bound): count this action toward the CURRENT
     // simultaneous-step frame's move counter (mirrors
@@ -984,8 +998,8 @@ export class FlowEngine<G extends Game = Game> {
     // the game: a complete flow offers nothing. NOTE: the sibling fields
     // `data`/`message` are deliberately NOT published here — see the note on
     // FlowState (BUG-017); they would fan out to every seat.
-    if (this.lastActionResult?.followUp && !this.complete) {
-      state.followUp = this.lastActionResult.followUp;
+    if (this.followUp && !this.complete) {
+      state.followUp = { ...this.followUp };
     }
 
     return state;
@@ -1113,7 +1127,13 @@ export class FlowEngine<G extends Game = Game> {
     // Restore action error and follow-up state
     this.actionError = state.actionError;
     this.actionPartiallyApplied = state.actionPartiallyApplied === true;
-    this.lastActionResult = state.followUp ? { success: true, followUp: state.followUp } : undefined;
+    this.followUp = state.followUp && { ...state.followUp };
+    if (state.followUp) {
+      const { seat: _owner, ...followUp } = state.followUp;
+      this.lastActionResult = { success: true, followUp };
+    } else {
+      this.lastActionResult = undefined;
+    }
 
     // Restore move-limit tracking for action steps
     this.restoreActionStepTracking();

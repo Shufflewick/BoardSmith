@@ -217,3 +217,107 @@ describe('stateless selectionStep op', () => {
     expect(step.errorCode).toBe('NOT_YOUR_TURN');
   });
 });
+
+/**
+ * A follow-up belongs to the seat whose action returned it (#492 review). In a
+ * simultaneous step every seat may act, so the follow-up's name alone must not
+ * let another seat take it: seat 1's `scout` publishes `loot`, and only seat 1
+ * may loot.
+ */
+class ScoutGame extends Game<ScoutGame, Player> {
+  /** Every loot that actually ran, by seat. */
+  looted: number[] = [];
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerActions(
+      Action.create<ScoutGame>('scout').prompt('Scout').execute(() => ({
+        success: true,
+        followUp: { action: 'loot' },
+      })),
+      // Two selections, so it is collected as a pending action. Not offered by
+      // the step: only a follow-up reaches it.
+      Action.create<ScoutGame>('loot')
+        .prompt('Loot')
+        .chooseFrom('where', { choices: ['north', 'south'] })
+        .chooseFrom('what', { choices: ['gold', 'gems'] })
+        .execute((_a, ctx) => {
+          (ctx.game as ScoutGame).looted.push(ctx.player.seat);
+        }),
+    );
+    this.setFlow(defineFlow({
+      root: loop({ maxIterations: 10, do: simultaneousActionStep({ actions: ['scout'] }) }),
+    }));
+  }
+}
+
+const NOT_YOURS = "'loot' is not one of your actions right now.";
+
+describe('a follow-up belongs to the seat that published it', () => {
+  it('GameRunner: another seat is refused it; the publishing seat takes it', () => {
+    const r = new GameRunner({ GameClass: ScoutGame, gameType: 'scout', gameOptions });
+    r.start();
+    expect(r.performAction('scout', 1, {}).success).toBe(true);
+    expect(r.getFlowState()?.followUp).toMatchObject({ action: 'loot', seat: 1 });
+
+    expect(r.refusalToAct('loot', 2)).toEqual({ error: NOT_YOURS, errorCode: 'ACTION_NOT_AVAILABLE' });
+    r.startPendingAction('loot', 2);
+    const stolen = r.processSelectionStep(2, 'where', 'north');
+    expect(stolen).toMatchObject({ success: false, error: NOT_YOURS });
+    expect(r.game.looted).toEqual([]);
+
+    expect(r.refusalToAct('loot', 1)).toBeUndefined();
+    r.startPendingAction('loot', 1);
+    expect(r.processSelectionStep(1, 'where', 'north').success).toBe(true);
+    expect(r.processSelectionStep(1, 'what', 'gold')).toMatchObject({ success: true, actionComplete: true });
+    expect(r.game.looted).toEqual([1]);
+    expect(r.actionHistory.map((a) => `${a.name}:${a.player}`)).toEqual(['scout:1', 'loot:1']);
+  });
+
+  it('GameSession: another seat is refused it; only the publishing seat is offered it', async () => {
+    const s = GameSession.create({
+      gameType: 'scout',
+      GameClass: ScoutGame,
+      playerCount: 3,
+      playerNames: ['A', 'B', 'C'],
+      seed: 'pending-offer',
+    });
+    const scouted = await s.performAction('scout', 1, {});
+    expect(scouted.followUp?.action).toBe('loot');
+
+    const stolen = await s.processSelectionStep(2, 'where', 'north', 'loot');
+    expect(stolen).toMatchObject({ success: false, error: NOT_YOURS, errorCode: 'ACTION_NOT_AVAILABLE' });
+    expect(s.runner.game.looted).toEqual([]);
+
+    expect((await s.processSelectionStep(1, 'where', 'north', 'loot')).success).toBe(true);
+    const done = await s.processSelectionStep(1, 'what', 'gold');
+    expect(done).toMatchObject({ success: true, actionComplete: true });
+    expect(s.runner.game.looted).toEqual([1]);
+  });
+
+  it('stateless selectionStep op: another seat is refused it; the publishing seat takes it', async () => {
+    const gameDef: GameDefinitionLike = { gameClass: ScoutGame, gameType: 'scout', minPlayers: 2, maxPlayers: 3 };
+    const started = await executeOp(gameDef, gameOptions, null, {}, { type: 'start' });
+    const scouted = await executeOp(gameDef, gameOptions, started.snapshot, null, {
+      type: 'action', actionName: 'scout', player: 1, args: {}, boundaryKey: boundaryKeyOf(started.snapshot),
+    });
+    expect(scouted.followUp?.action).toBe('loot');
+
+    const stolen = await executeOp(gameDef, gameOptions, scouted.snapshot, null, {
+      type: 'selectionStep', player: 2, selectionName: 'where', value: 'north', actionName: 'loot',
+      boundaryKey: boundaryKeyOf(scouted.snapshot),
+    });
+    expect(stolen).toMatchObject({ success: false, error: NOT_YOURS, errorCode: 'ACTION_NOT_AVAILABLE' });
+
+    const first = await executeOp(gameDef, gameOptions, scouted.snapshot, null, {
+      type: 'selectionStep', player: 1, selectionName: 'where', value: 'north', actionName: 'loot',
+      boundaryKey: boundaryKeyOf(scouted.snapshot),
+    });
+    expect(first.success).toBe(true);
+    const done = await executeOp(gameDef, gameOptions, first.snapshot, first.pendingState, {
+      type: 'selectionStep', player: 1, selectionName: 'what', value: 'gold', actionName: 'loot',
+      initialArgs: { where: 'north' }, boundaryKey: boundaryKeyOf(first.snapshot),
+    });
+    expect(done).toMatchObject({ success: true, actionComplete: true });
+  });
+});

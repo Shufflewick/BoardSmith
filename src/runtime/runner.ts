@@ -12,6 +12,7 @@ import {
   FlowHaltedError,
   canSeatAct,
   availableActionsForSeat,
+  followUpForSeat,
   type Game,
   type GameOptions,
   type Player,
@@ -731,9 +732,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * op) asks this before any selection is processed, so a pending action can
    * never run on a finished game or as another seat's move (#492).
    *
-   * An action the flow published as the acting seat's `followUp` counts as
-   * offered: that is how a chained action that the step does not list is
-   * taken.
+   * A follow-up counts as offered only to the seat whose action published it
+   * (`followUpForSeat`): that is how a chained action that the step does not
+   * list is taken, and in a simultaneous step no other seat may take it.
    */
   refusalToAct(actionName: string, seat: number): { error: string; errorCode: ErrorCode } | undefined {
     if (!this.game.getAction(actionName)) {
@@ -750,7 +751,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       return { error: "It's not your turn.", errorCode: ErrorCode.NOT_YOUR_TURN };
     }
     const offered = availableActionsForSeat(flowState, seat).includes(actionName)
-      || flowState.followUp?.action === actionName;
+      || followUpForSeat(flowState, seat)?.action === actionName;
     if (!offered) {
       return {
         error: `'${actionName}' is not one of your actions right now.`,
@@ -851,7 +852,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
     if (actionResult.success) {
       this.recordSerializedAction(serializedAction);
-      this.game.continueFlowAfterPendingAction(actionResult);
+      this.game.continueFlowAfterPendingAction(actionResult, playerPosition);
     }
 
     return {

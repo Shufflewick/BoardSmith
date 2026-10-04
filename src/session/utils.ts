@@ -2,7 +2,7 @@
  * Shared utility functions for game hosting
  */
 
-import { Player, canSeatAct, availableActionsForSeat, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState, type FollowUpAction, type FollowUpOffer } from '../engine/index.js';
+import { Player, canSeatAct, availableActionsForSeat, followUpForSeat, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState, type FollowUpAction, type FollowUpOffer } from '../engine/index.js';
 import { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
 import { devWarn } from '../utils/dev.js';
@@ -144,12 +144,19 @@ export function buildSingleActionMetadata(
 }
 
 /**
- * The follow-up a game returned, as the seat that took the action receives it:
+ * The follow-up the flow holds for `seat`, as that seat's client receives it:
  * with the metadata of the action it names, which is usually not in that
- * seat's available actions. The one place a {@link FollowUpOffer} is built
- * (#377). `metadata` is absent when `seat` names no player.
+ * seat's available actions. `undefined` when the flow holds no follow-up, or
+ * one that belongs to another seat ({@link followUpForSeat}). The one place a
+ * {@link FollowUpOffer} is built (#377). `metadata` is absent when `seat`
+ * names no player.
  */
-export function offerFollowUp(game: Game, seat: number, followUp: FollowUpAction): FollowUpOffer {
+export function offerFollowUp(game: Game, flowState: FlowState | undefined, seat: number): FollowUpOffer | undefined {
+  const owned = followUpForSeat(flowState, seat);
+  if (!owned) return undefined;
+  const followUp: FollowUpAction = { action: owned.action };
+  if (owned.args !== undefined) followUp.args = owned.args;
+  if (owned.display !== undefined) followUp.display = owned.display;
   const player = game.getPlayer(seat);
   // followUp.args reach the metadata so a dynamic prompt can read them (e.g. a sector's name).
   const metadata = player ? buildSingleActionMetadata(game, player, followUp.action, followUp.args) : undefined;
