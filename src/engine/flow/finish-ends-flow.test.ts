@@ -184,6 +184,15 @@ describe('a simultaneous step', () => {
     expectNoFurtherActions(runner);
   });
 
+  it('admits no seat when the awaiting set is refreshed after the game is over', () => {
+    const runner = start(build());
+    runner.performAction('win', 2, {});
+
+    runner.game.refreshAwaitingActions();
+
+    expectOver(runner, [2]);
+  });
+
   it('ends the flow on END_GAME too', () => {
     const runner = start(build());
 

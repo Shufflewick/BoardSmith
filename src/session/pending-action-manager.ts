@@ -169,6 +169,14 @@ export class PendingActionManager<G extends Game = Game> {
   ): Promise<PickStepResult> {
     let pendingState = this.#pendingActions.get(playerPosition);
 
+    // Nothing of the action may run unless the flow offers it to this seat
+    // now: not on a finished game, and not as another seat's move (#492).
+    const offeredName = pendingState?.actionName ?? actionName;
+    if (offeredName) {
+      const refusal = this.#runner.refusalToAct(offeredName, playerPosition);
+      if (refusal) return { success: false, error: refusal.error, errorCode: refusal.errorCode };
+    }
+
     // Auto-create pending action if it doesn't exist and actionName is provided
     if (!pendingState && actionName) {
       const startResult = this.startPendingAction(actionName, playerPosition);

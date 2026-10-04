@@ -10,6 +10,8 @@ import {
   createAllPlayerViews,
   ActionExecutor,
   FlowHaltedError,
+  canSeatAct,
+  availableActionsForSeat,
   type Game,
   type GameOptions,
   type Player,
@@ -719,6 +721,46 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   }
 
   /**
+   * Why `seat` may not take `actionName` right now, or `undefined` when the
+   * flow currently offers it that action.
+   *
+   * A multi-step action is collected one selection at a time and runs when the
+   * last arrives, without passing through the flow's own checks first. Every
+   * pending-action path (`processSelectionStep` here, and
+   * `PendingActionManager` for `GameSession` and the stateless `selectionStep`
+   * op) asks this before any selection is processed, so a pending action can
+   * never run on a finished game or as another seat's move (#492).
+   *
+   * An action the flow published as the acting seat's `followUp` counts as
+   * offered: that is how a chained action that the step does not list is
+   * taken.
+   */
+  refusalToAct(actionName: string, seat: number): { error: string; errorCode: ErrorCode } | undefined {
+    if (!this.game.getAction(actionName)) {
+      return { error: `Action not found: ${actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND };
+    }
+    const flowState = this.getFlowState();
+    if (flowState?.complete || this.game.isFinished()) {
+      return { error: 'The game is finished.', errorCode: ErrorCode.NOT_AWAITING_INPUT };
+    }
+    if (!flowState?.awaitingInput) {
+      return { error: 'The game is not waiting for any action right now.', errorCode: ErrorCode.NOT_AWAITING_INPUT };
+    }
+    if (!canSeatAct(flowState, seat)) {
+      return { error: "It's not your turn.", errorCode: ErrorCode.NOT_YOUR_TURN };
+    }
+    const offered = availableActionsForSeat(flowState, seat).includes(actionName)
+      || flowState.followUp?.action === actionName;
+    if (!offered) {
+      return {
+        error: `'${actionName}' is not one of your actions right now.`,
+        errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
+      };
+    }
+    return undefined;
+  }
+
+  /**
    * Process one selection step of a player's in-progress pending action
    * (started via `startPendingAction`). Session-free mirror of
    * `PendingActionManager.processSelectionStep` — handles both regular and
@@ -739,6 +781,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     if (!pendingState) {
       return { success: false, error: 'No pending action for this player. Call startPendingAction first.' };
     }
+
+    const refusal = this.refusalToAct(pendingState.actionName, playerPosition);
+    if (refusal) return { success: false, error: refusal.error };
 
     const action = this.game.getAction(pendingState.actionName);
     if (!action) {

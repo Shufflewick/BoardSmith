@@ -675,6 +675,8 @@ export class FlowEngine<G extends Game = Game> {
    * @param seat - Refresh only this seat. Omit to refresh every seat.
    */
   refreshAwaitingActions(seat?: number): void {
+    // A complete flow prompts no seat, so there is nothing to admit.
+    if (this.complete) return;
     const frame = this.stack[this.stack.length - 1];
     if (!frame || frame.node.type !== 'simultaneous-action-step') return;
     const config = frame.node.config as SimultaneousActionStepConfig;
@@ -1268,8 +1270,9 @@ export class FlowEngine<G extends Game = Game> {
    * Uses a stack-based state machine to execute nested flow nodes. Each iteration
    * processes one node, which may push children onto the stack (e.g., sequence steps)
    * or mark itself complete. The loop exits when:
-   * - The flow is over (see `isOver`), checked before every node, so a game
-   *   finished by an action or a node runs nothing further and opens no step
+   * - The flow is over (see `isOver`), checked on entry and after every node,
+   *   so a game finished by an action or a node runs nothing further and
+   *   leaves no step open
    * - A node requires player input (awaitingInput)
    * - The stack empties (all nodes processed)
    *
@@ -1282,12 +1285,15 @@ export class FlowEngine<G extends Game = Game> {
   private run(): FlowState {
     let iterations = 0;
 
-    while (!this.complete) {
-      if (this.stack.length === 0 || this.isOver()) {
+    // Once on entry (a resume can arrive after the action that finished the
+    // game), then once after each node that runs.
+    if (!this.complete && this.isOver()) this.endFlow();
+
+    while (!this.complete && !this.awaitingInput) {
+      if (this.stack.length === 0) {
         this.endFlow();
         break;
       }
-      if (this.awaitingInput) break;
 
       iterations++;
       if (iterations > DEFAULT_MAX_ITERATIONS) {
@@ -1324,12 +1330,11 @@ export class FlowEngine<G extends Game = Game> {
 
       if (result.awaitingInput) {
         this.awaitingInput = true;
-        continue;
-      }
-
-      if (frame.completed) {
+      } else if (frame.completed) {
         this.stack.pop();
       }
+
+      if (this.isOver()) this.endFlow();
     }
 
     return this.getState();
