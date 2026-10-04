@@ -31,8 +31,8 @@ export interface SeatActivityState {
     availableActions: string[];
     completed: boolean;
   }>;
-  /** The follow-up the last action published, with the seat that owns it. */
-  followUp?: PublishedFollowUp;
+  /** The follow-ups the open step holds, each with the seat that owns it. */
+  followUps?: PublishedFollowUp[];
   /**
    * Serialized flow position. Only `frameData` is read here — see
    * {@link turnSequence}, which recovers the running order an `eachPlayer` node
@@ -115,8 +115,10 @@ export function orderSeatsByTurn(allSeats: number[], sequence: number[]): number
 /**
  * The seats that may act right now, in canonical order.
  *
- * - Simultaneous step: every awaiting seat that is not yet completed and still
- *   has at least one available action, in `awaitingPlayers` order.
+ * - Simultaneous step: every awaiting seat that is not yet completed, in
+ *   `awaitingPlayers` order. The engine marks a seat completed once it has
+ *   nothing left to do, so a seat that is not completed either has actions
+ *   or holds a follow-up (and then has only that).
  * - Sequential step: the single `currentPlayer`, if one is set.
  * - Not awaiting input: none.
  */
@@ -125,7 +127,7 @@ export function dueSeats(flowState: SeatActivityState | undefined | null): numbe
 
   if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
     return flowState.awaitingPlayers
-      .filter(p => !p.completed && p.availableActions.length > 0)
+      .filter(p => !p.completed)
       .map(p => p.playerIndex);
   }
 
@@ -155,9 +157,7 @@ export function availableActionsForSeat(
 
   if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
     const playerState = flowState.awaitingPlayers.find(p => p.playerIndex === seat);
-    return playerState && !playerState.completed && playerState.availableActions.length > 0
-      ? playerState.availableActions
-      : [];
+    return playerState && !playerState.completed ? playerState.availableActions : [];
   }
 
   return flowState.currentPlayer === seat ? (flowState.availableActions ?? []) : [];
@@ -174,5 +174,5 @@ export function followUpForSeat(
   seat: number,
 ): PublishedFollowUp | undefined {
   if (!flowState?.awaitingInput) return undefined;
-  return flowState.followUp?.seat === seat ? flowState.followUp : undefined;
+  return flowState.followUps?.find((f) => f.seat === seat);
 }

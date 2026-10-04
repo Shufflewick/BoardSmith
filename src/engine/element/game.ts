@@ -44,7 +44,7 @@ import {
   type VisibilityState,
 } from '../command/visibility.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
-import { ActionExecutor } from '../action/action.js';
+import { ActionExecutor, type PerformOptions } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition, FlowDebugInfo } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
 import { getActionLevelDisabledReasons } from '../tutorial/gate.js';
@@ -2597,12 +2597,16 @@ export class Game<
   }
 
   /**
-   * Perform an action with the given arguments
+   * Perform an action with the given arguments.
+   *
+   * `options.asFollowUp` is for the flow engine alone: the action is the
+   * seat's held follow-up, whose condition is not checked.
    */
   performAction(
     actionName: string,
     player: P,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    options?: PerformOptions,
   ): ActionResult {
     // Clear previous animation events -- new action starts a new batch
     this._animationEvents = [];
@@ -2629,7 +2633,7 @@ export class Game<
       };
     }
 
-    return this._actionExecutor.executeAction(action, player, args);
+    return this._actionExecutor.executeAction(action, player, args, options);
   }
 
   /**

@@ -1,9 +1,9 @@
 import type { Game, PlayerOf } from '../element/game.js';
 import { GameElement, hasZoneVisibility } from '../element/game-element.js';
 import { Player } from '../player/player.js';
-import { devWarn } from '../../utils/dev.js';
+import { devWarn, isDevMode } from '../../utils/dev.js';
 import { PlayerFacingError } from '../errors.js';
-import type { ActionResult } from '../action/types.js';
+import type { ActionResult, FollowUpAction } from '../action/types.js';
 import type {
   FlowNode,
   FlowContext,
@@ -307,12 +307,6 @@ export class FlowEngine<G extends Game = Game> {
   private availableActions: string[] = [];
   private complete = false;
   private lastActionResult?: ActionResult;
-  /**
-   * The follow-up the last action returned, with the seat that took it. Set
-   * whenever an action's result is recorded, so the owner always matches the
-   * result; published as `FlowState.followUp`.
-   */
-  private followUp?: PublishedFollowUp;
   /** Error from last action if it failed (cleared on success) */
   private actionError?: string;
   /** See FlowState.actionPartiallyApplied — set alongside actionError. */
@@ -407,7 +401,6 @@ export class FlowEngine<G extends Game = Game> {
     this.moveCount = 0;
     this.turnRun = undefined;
     this.lastActionResult = undefined;
-    this.followUp = undefined;
     this.actionError = undefined;
     this.actionPartiallyApplied = false;
     this.currentPhase = undefined;
@@ -434,6 +427,14 @@ export class FlowEngine<G extends Game = Game> {
       return this.resumeSimultaneousAction(actionName, args, playerIndex, currentFrame);
     }
 
+    const player = this.currentPlayer!;
+
+    // The acting seat's own follow-up, taken as one whole action.
+    const followUp = currentFrame && this.heldFollowUp(currentFrame, player.seat);
+    if (followUp?.action === actionName) {
+      return this.resumeAfterExternalAction(this.performFollowUp(followUp, player, args), player.seat);
+    }
+
     // Enforce flow-level allow-list for regular action steps.
     if (currentFrame?.node.type === 'action-step' && !this.availableActions.includes(actionName)) {
       this.actionError = `Action ${actionName} is not available in the current flow step`;
@@ -442,10 +443,16 @@ export class FlowEngine<G extends Game = Game> {
 
     // Execute the action (regular action step), then settle its result exactly
     // as a result executed elsewhere (a completed pending action) is settled.
-    return this.resumeAfterExternalAction(
-      this.game.performAction(actionName, this.currentPlayer!, args),
-      this.currentPlayer!.seat,
-    );
+    return this.resumeAfterExternalAction(this.game.performAction(actionName, player, args), player.seat);
+  }
+
+  /**
+   * Take a seat's held follow-up as one whole action. Its condition is not
+   * checked (the chain offers it, not the condition) and the args it was
+   * published with are the ones it runs with: a follow-up is pre-filled.
+   */
+  private performFollowUp(followUp: FollowUpAction, player: PlayerOf<G>, args: Record<string, unknown>): ActionResult {
+    return this.game.performAction(followUp.action, player, { ...args, ...followUp.args }, { asFollowUp: true });
   }
 
   /**
@@ -459,19 +466,36 @@ export class FlowEngine<G extends Game = Game> {
       throw new Error('Flow is not awaiting input');
     }
 
+    // In a simultaneous step the action is settled for its seat alone, exactly
+    // as one taken through resume() is: the other seats, and what the step
+    // holds for them, are left as they are.
+    const frame = this.stack[this.stack.length - 1];
+    if (frame?.node.type === 'simultaneous-action-step') {
+      const playerState = this.awaitingPlayers.find((p) => p.playerIndex === seat && !p.completed);
+      const player = this.game.getPlayer(seat);
+      if (!playerState || !player) {
+        throw new Error(
+          `Seat ${seat} is not awaited by the open simultaneous step, so its action cannot be settled there. ` +
+            `Ask GameRunner.refusalToAct(action, seat) before running a pending action.`,
+        );
+      }
+      return this.settleSimultaneousAction(frame, playerState, player, result);
+    }
+
     if (!this.recordActionResult(result, seat)) return this.getState();
     this.awaitingInput = false;
     return this.continueAfterCommittedAction(result);
   }
 
   /**
-   * Record an action's result, and `seat` as the owner of any follow-up it
-   * returned. A failure stays in the same state with its error recorded;
-   * returns whether the action succeeded.
+   * Record an action's result. A failure stays in the same state with its error
+   * recorded, and leaves every held follow-up as it was; returns whether the
+   * action succeeded. A success replaces `seat`'s follow-up with the one the
+   * action returned, or drops it when it returned none: taking another action
+   * is how a seat declines its follow-up.
    */
   private recordActionResult(result: ActionResult, seat: number): boolean {
     this.lastActionResult = result;
-    this.followUp = result.followUp && { ...result.followUp, seat };
     if (!result.success) {
       this.actionError = result.error;
       // #44/#325: a failure that may have applied part of its changes.
@@ -482,7 +506,66 @@ export class FlowEngine<G extends Game = Game> {
     }
     this.actionError = undefined;
     this.actionPartiallyApplied = false;
+    this.holdFollowUp(this.stack[this.stack.length - 1], seat, result.followUp);
     return true;
+  }
+
+  /**
+   * The follow-ups a step frame holds, keyed by seat. They live in the frame's
+   * own data, so they end with the step and survive every position round trip
+   * (checkpoint, snapshot, undo) with nothing else to restore.
+   */
+  private heldFollowUps(frame: ExecutionFrame<G> | undefined): Record<string, FollowUpAction> {
+    return (frame?.data?.followUps as Record<string, FollowUpAction> | undefined) ?? {};
+  }
+
+  /** The follow-up `frame` holds for `seat`, if any. */
+  private heldFollowUp(frame: ExecutionFrame<G>, seat: number): FollowUpAction | undefined {
+    return this.heldFollowUps(frame)[String(seat)];
+  }
+
+  /** Set (or, with no follow-up, drop) the follow-up `frame` holds for `seat`. */
+  private holdFollowUp(frame: ExecutionFrame<G> | undefined, seat: number, followUp: FollowUpAction | undefined): void {
+    if (!frame) return;
+    const held = { ...this.heldFollowUps(frame) };
+    if (followUp) {
+      held[String(seat)] = { ...followUp };
+    } else if (held[String(seat)]) {
+      delete held[String(seat)];
+    } else {
+      return;
+    }
+    const { followUps: _replaced, ...rest } = frame.data ?? {};
+    frame.data = Object.keys(held).length > 0 ? { ...rest, followUps: held } : rest;
+  }
+
+  /**
+   * Development warning: `seat` is held for a follow-up it cannot take, because
+   * the follow-up's action has no valid choice for it. Nothing else will move
+   * that seat on, so the step stalls.
+   */
+  private warnIfFollowUpStalls(stepName: string, seat: number, followUp: FollowUpAction): void {
+    if (!isDevMode()) return;
+    const player = this.game.getPlayer(seat);
+    const action = this.game.getAction(followUp.action);
+    if (!player || !action) return;
+    let stalls: boolean;
+    let reason = 'that action has no valid choice for seat ' + seat + ' right now';
+    try {
+      stalls = !this.game.getActionExecutor().hasFollowUpChoices(action, player, followUp.args ?? {});
+    } catch (error) {
+      stalls = true;
+      reason = `its args could not be read: ${error instanceof Error ? error.message : String(error)}`;
+    }
+    if (!stalls) return;
+    devWarn(
+      `follow-up-stall:${stepName}:${followUp.action}`,
+      `Step "${stepName}" holds seat ${seat} for its follow-up '${followUp.action}', but ${reason}, ` +
+        `so the seat cannot take it and the step will not move on. A follow-up holds its seat until it is ` +
+        `taken or the seat takes another action the step offers: list such an action in the step (a 'done' ` +
+        `or end action), give the follow-up a choice that is always valid, or return the follow-up only ` +
+        `when it can be completed.`,
+    );
   }
 
   /**
@@ -712,8 +795,13 @@ export class FlowEngine<G extends Game = Game> {
       // A seat that already committed this step stays committed. Re-deriving
       // its list would be the one change a refresh must never make.
       if (existing?.completed) continue;
+      // A seat holding a follow-up stays awaited whatever else is true of it.
+      const holdsFollowUp = this.heldFollowUp(frame, player.seat) !== undefined;
 
-      if (config.skipPlayer?.(context, player as never) || config.playerDone?.(context, player as never)) {
+      if (
+        !holdsFollowUp
+        && (config.skipPlayer?.(context, player as never) || config.playerDone?.(context, player as never))
+      ) {
         if (existing) this.awaitingPlayers = this.awaitingPlayers.filter((p) => p !== existing);
         continue;
       }
@@ -727,7 +815,7 @@ export class FlowEngine<G extends Game = Game> {
         this.game.getAvailableActions(player).some((a) => a.name === actionName),
       );
 
-      if (available.length === 0) {
+      if (available.length === 0 && !holdsFollowUp) {
         if (existing) this.awaitingPlayers = this.awaitingPlayers.filter((p) => p !== existing);
         continue;
       }
@@ -747,15 +835,18 @@ export class FlowEngine<G extends Game = Game> {
   /**
    * After a seat acts in a simultaneous step: is it done (`playerDone`), and
    * if not, which of its actions are still available? A seat left with none
-   * is done.
+   * is done, unless it holds a follow-up: then it is not done whatever
+   * `playerDone` says, and the follow-up is what it has left to take.
    */
   private reevaluateSimultaneousSeat(
+    frame: ExecutionFrame<G>,
     config: SimultaneousActionStepConfig,
     playerState: PlayerAwaitingState,
     player: Player,
     context: FlowContext<G>,
   ): void {
-    if (config.playerDone) {
+    const followUp = this.heldFollowUp(frame, player.seat);
+    if (config.playerDone && !followUp) {
       playerState.completed = config.playerDone(context, player);
     }
     if (playerState.completed) return;
@@ -768,7 +859,9 @@ export class FlowEngine<G extends Game = Game> {
       if (!action) return false;
       return this.game.getAvailableActions(player).some((a) => a.name === availableActionName);
     });
-    if (playerState.availableActions.length === 0) {
+    if (followUp) {
+      this.warnIfFollowUpStalls(config.name ?? 'simultaneous-action-step', player.seat, followUp);
+    } else if (playerState.availableActions.length === 0) {
       playerState.completed = true;
     }
   }
@@ -785,7 +878,7 @@ export class FlowEngine<G extends Game = Game> {
     let actingPlayerIndex = playerIndex;
     if (actingPlayerIndex === undefined) {
       // If not provided, use the first awaiting player
-      const firstAwaiting = this.awaitingPlayers.find(p => !p.completed && p.availableActions.length > 0);
+      const firstAwaiting = this.awaitingPlayers.find(p => !p.completed);
       if (firstAwaiting) {
         actingPlayerIndex = firstAwaiting.playerIndex;
       }
@@ -842,7 +935,9 @@ export class FlowEngine<G extends Game = Game> {
       this.actionError = `Player ${actingPlayerIndex} has already completed their action`;
       return this.getState();
     }
-    if (!playerState.availableActions.includes(actionName)) {
+    const followUp = this.heldFollowUp(frame, actingPlayerIndex);
+    const takesFollowUp = followUp?.action === actionName;
+    if (!takesFollowUp && !playerState.availableActions.includes(actionName)) {
       this.actionError = `Action ${actionName} is not available for player ${actingPlayerIndex}`;
       return this.getState();
     }
@@ -852,8 +947,25 @@ export class FlowEngine<G extends Game = Game> {
     if (!player) {
       throw new Error(`Invalid player position: ${actingPlayerIndex}`);
     }
-    const result = this.game.performAction(actionName, player, args);
-    if (!this.recordActionResult(result, actingPlayerIndex)) return this.getState();
+    const result = takesFollowUp
+      ? this.performFollowUp(followUp, player, args)
+      : this.game.performAction(actionName, player, args);
+    return this.settleSimultaneousAction(frame, playerState, player, result);
+  }
+
+  /**
+   * Settle one seat's action in the open simultaneous step, however it was
+   * taken (whole, through resume(), or pick by pick as a pending action): count
+   * it, re-evaluate that seat, and finish the step when every seat is done.
+   */
+  private settleSimultaneousAction(
+    frame: ExecutionFrame<G>,
+    playerState: PlayerAwaitingState,
+    player: PlayerOf<G>,
+    result: ActionResult,
+  ): FlowState {
+    const config = frame.node.config as SimultaneousActionStepConfig;
+    if (!this.recordActionResult(result, player.seat)) return this.getState();
 
     // 160-02 (D4 step-window bound): count this action toward the CURRENT
     // simultaneous-step frame's move counter (mirrors
@@ -877,7 +989,7 @@ export class FlowEngine<G extends Game = Game> {
       if (this.isOver()) return this.run();
 
       const context = this.createContext();
-      this.reevaluateSimultaneousSeat(config, playerState, player, context);
+      this.reevaluateSimultaneousSeat(frame, config, playerState, player, context);
 
       // Check if all players are done
       const allDone = config.allDone
@@ -994,12 +1106,16 @@ export class FlowEngine<G extends Game = Game> {
       if (this.actionPartiallyApplied) state.actionPartiallyApplied = true;
     }
 
-    // Include followUp if last action returned one, unless that action ended
-    // the game: a complete flow offers nothing. NOTE: the sibling fields
-    // `data`/`message` are deliberately NOT published here — see the note on
-    // FlowState (BUG-017); they would fan out to every seat.
-    if (this.followUp && !this.complete) {
-      state.followUp = { ...this.followUp };
+    // The follow-ups the open step holds, one per seat, each with its owner. A
+    // complete flow holds none. NOTE: an action's `data`/`message` are
+    // deliberately NOT published here — see the note on FlowState (BUG-017);
+    // they would fan out to every seat.
+    if (this.awaitingInput && !this.complete) {
+      const held = this.heldFollowUps(this.stack[this.stack.length - 1]);
+      const seats = Object.keys(held).map(Number).sort((a, b) => a - b);
+      if (seats.length > 0) {
+        state.followUps = seats.map((seat): PublishedFollowUp => ({ ...held[String(seat)], seat }));
+      }
     }
 
     return state;
@@ -1124,16 +1240,12 @@ export class FlowEngine<G extends Game = Game> {
       this.currentPhase = state.currentPhase;
     }
 
-    // Restore action error and follow-up state
+    // Restore action error state
     this.actionError = state.actionError;
     this.actionPartiallyApplied = state.actionPartiallyApplied === true;
-    this.followUp = state.followUp && { ...state.followUp };
-    if (state.followUp) {
-      const { seat: _owner, ...followUp } = state.followUp;
-      this.lastActionResult = { success: true, followUp };
-    } else {
-      this.lastActionResult = undefined;
-    }
+    // A restored flow has no last action of its own (see getLastActionResult).
+    // The follow-ups the open step holds came back with its frame's data.
+    this.lastActionResult = undefined;
 
     // Restore move-limit tracking for action steps
     this.restoreActionStepTracking();
@@ -1780,6 +1892,11 @@ export class FlowEngine<G extends Game = Game> {
     config: ActionStepConfig<G>,
     context: FlowContext<G>
   ): FlowStepResult {
+    // A seat holding a follow-up keeps the turn until it takes it, or takes
+    // another action this step offers it. Nothing else ends the step.
+    const [heldSeat] = Object.keys(this.heldFollowUps(frame)).map(Number);
+    if (heldSeat !== undefined) return this.awaitHeldSeat(frame, config, context, heldSeat);
+
     // Check skip condition
     if (config.skipIf?.(context)) {
       this.currentActionConfig = undefined;
@@ -1872,6 +1989,35 @@ export class FlowEngine<G extends Game = Game> {
       availableActions: available,
       currentPlayer: player,
     };
+  }
+
+  /**
+   * Re-open an action step for the seat that holds a follow-up in it: the seat
+   * is offered the step's actions it can still take (possibly none) beside its
+   * follow-up, and the step neither skips nor completes meanwhile.
+   */
+  private awaitHeldSeat(
+    frame: ExecutionFrame<G>,
+    config: ActionStepConfig<G>,
+    context: FlowContext<G>,
+    seat: number,
+  ): FlowStepResult {
+    const player = this.game.getPlayer(seat) as PlayerOf<G> | undefined;
+    if (!player) {
+      throw new Error(`Action step holds a follow-up for seat ${seat}, but this game has no seat ${seat}.`);
+    }
+    const actions = typeof config.actions === 'function' ? config.actions(context) : config.actions;
+    this.requireRegisteredActions(actions, config.name ?? 'action-step');
+    const allAvailable = this.game.getAvailableActions(player);
+    const available = actions.filter((actionName) => allAvailable.some((a) => a.name === actionName));
+
+    this.warnIfFollowUpStalls(config.name ?? 'action-step', seat, this.heldFollowUp(frame, seat)!);
+    this.openStepWindow(frame, config, context, 'action-step');
+    this.currentActionConfig = config;
+    this.moveCount = frame.data?.moveCount as number;
+    this.currentPlayer = player;
+    this.availableActions = available;
+    return { continue: false, awaitingInput: true, availableActions: available, currentPlayer: player };
   }
 
   private executeSimultaneousActionStep(

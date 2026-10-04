@@ -90,7 +90,7 @@ function expectOver(runner: GameRunner<EndingGame>, winners: number[]): void {
   expect(state.currentPlayer).toBeUndefined();
   expect(state.availableActions).toBeUndefined();
   expect(state.awaitingPlayers).toBeUndefined();
-  expect(state.followUp).toBeUndefined();
+  expect(state.followUps).toBeUndefined();
   expect(runner.getWinners().map((p) => p.seat)).toEqual(winners);
   // The snapshot every host stores and the view every seat receives agree.
   expect(runner.getSnapshot().flowState?.complete).toBe(true);

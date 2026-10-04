@@ -1367,11 +1367,35 @@ Only chain to follow-up when a condition is met:
 4. **Args pre-filled** - follow-up action starts with provided args already set
 5. **User continues** - from user's perspective, it's one seamless interaction
 
-A follow-up belongs to the seat whose action returned it. The flow records
-that seat beside it (`FlowState.followUp.seat`), and only that seat is offered
-the follow-up or may take it, even in a simultaneous step where every seat can
-act. Another seat that tries is refused with "'collectEquipment' is not one of
-your actions right now."
+### A Follow-up Holds Its Seat
+
+A follow-up belongs to the seat whose action returned it, and each seat has its
+own: in a simultaneous step, another seat's action never replaces it. The flow
+publishes the follow-ups the open step holds as `FlowState.followUps`, each with
+its `seat`, and only that seat is offered the follow-up or may take it. Another
+seat that tries is refused with "'collectEquipment' is not one of your actions
+right now."
+
+While a seat holds a follow-up, the step keeps it:
+
+- in an `actionStep`, the turn stays with that seat, even if the step offers it
+  nothing else;
+- in a `simultaneousActionStep`, the seat is not marked done (whatever
+  `playerDone` says), so with the default `allDone` the step waits for it. A
+  custom `allDone` stays authoritative: when it ends the step, the follow-ups
+  the step held end with it.
+
+There is no separate "decline". The seat drops its follow-up only by taking
+another action the step offers it; a refused action leaves it held. So **an
+optional follow-up needs a way out**: give the follow-up action a "done" choice,
+or list an end action (such as `endTurn`) in the step. A seat held for a
+follow-up that has no valid choice cannot move on, and in development the
+engine warns about it.
+
+The follow-up runs with the args it was published with, and its `condition` is
+not checked (the chain offers it, not the condition). The seat may take it pick
+by pick, as the UI does, or as one whole action: bots do the latter, and
+`enumerateLegalMoves` lists a held follow-up's moves for its seat.
 
 ### When to Use Action Chaining
 

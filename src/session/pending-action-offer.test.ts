@@ -258,7 +258,7 @@ describe('a follow-up belongs to the seat that published it', () => {
     const r = new GameRunner({ GameClass: ScoutGame, gameType: 'scout', gameOptions });
     r.start();
     expect(r.performAction('scout', 1, {}).success).toBe(true);
-    expect(r.getFlowState()?.followUp).toMatchObject({ action: 'loot', seat: 1 });
+    expect(r.getFlowState()?.followUps).toEqual([{ action: 'loot', seat: 1 }]);
 
     expect(r.refusalToAct('loot', 2)).toEqual({ error: NOT_YOURS, errorCode: 'ACTION_NOT_AVAILABLE' });
     r.startPendingAction('loot', 2);

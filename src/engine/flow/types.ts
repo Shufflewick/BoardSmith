@@ -361,9 +361,15 @@ export type FlowNode<G extends Game = Game> =
 export interface PlayerAwaitingState {
   /** Player position */
   playerIndex: number;
-  /** Actions available to this player */
+  /**
+   * The step's actions this player may take. Empty only while the player holds
+   * a follow-up (see `FlowState.followUps`), which is then all it can take.
+   */
   availableActions: string[];
-  /** Whether this player has completed their action */
+  /**
+   * Whether this player is done with the step. Never true while it holds a
+   * follow-up; a player that is not done is due to act.
+   */
   completed: boolean;
 }
 
@@ -433,14 +439,16 @@ export interface FlowState {
    */
   actionPartiallyApplied?: boolean;
   /**
-   * Follow-up action to chain after the last action completed, and the seat
-   * whose action returned it. Only that seat is offered it (`followUpForSeat`):
-   * in a simultaneous step every seat may act, so the name alone must never let
-   * another seat take it.
+   * The follow-ups the open step holds, at most one per seat, ordered by seat.
+   * Each belongs to the seat whose action returned it, and only that seat is
+   * offered it or may take it (`followUpForSeat`). While a seat holds one, the
+   * step does not end its part (turn-based) or mark it done (simultaneous); the
+   * seat drops it only by taking another action the step offers. Absent when
+   * none is held.
    */
-  followUp?: PublishedFollowUp;
+  followUps?: PublishedFollowUp[];
   // NOTE (BUG-017): `ActionResult.data`/`.message` deliberately do NOT live
-  // here, even though `followUp` does. `FlowState` fans out: `stateless-ops`'s
+  // here, even though `followUps` does. `FlowState` fans out: `stateless-ops`'s
   // `buildViews`/`buildSpectatorView` hand the whole object to EVERY seat and
   // to the spectator. `data` is the acting seat's private return value (a map
   // recall, a scout report), so a field on this interface would publish it to

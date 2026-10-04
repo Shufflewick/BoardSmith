@@ -375,6 +375,7 @@ export class PendingActionManager<G extends Game = Game> {
     // actions (single-step actions go through performAction), so recording here
     // neither double-records nor misses any path. We push only after a
     // successful execute (below) to avoid recording a failed action.
+    this.#runner.bindFollowUpArgs(pendingState, playerPosition);
     const serializedAction = this.#runner.serializeForHistory(
       action.name,
       player,

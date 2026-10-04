@@ -762,6 +762,18 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   }
 
   /**
+   * When `pendingState` is `seat`'s held follow-up, bind the args the follow-up
+   * was published with: a follow-up runs with those, whatever the client sent
+   * for them. Every pending-action path calls this just before it executes.
+   */
+  bindFollowUpArgs(pendingState: PendingActionState, seat: number): void {
+    const followUp = followUpForSeat(this.getFlowState(), seat);
+    if (followUp?.action === pendingState.actionName && followUp.args) {
+      Object.assign(pendingState.collectedArgs, followUp.args);
+    }
+  }
+
+  /**
    * Process one selection step of a player's in-progress pending action
    * (started via `startPendingAction`). Session-free mirror of
    * `PendingActionManager.processSelectionStep` — handles both regular and
@@ -846,6 +858,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     pendingState: PendingActionState,
     playerPosition: number
   ): PendingStepResult & { actionComplete: true } {
+    this.bindFollowUpArgs(pendingState, playerPosition);
     const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs);
     const actionResult = executor.executePendingAction(action, player, pendingState);
     this.pendingActions.delete(playerPosition);
