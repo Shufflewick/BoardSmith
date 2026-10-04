@@ -169,13 +169,8 @@ export class PendingActionManager<G extends Game = Game> {
   ): Promise<PickStepResult> {
     let pendingState = this.#pendingActions.get(playerPosition);
 
-    // Nothing of the action may run unless the flow offers it to this seat
-    // now: not on a finished game, and not as another seat's move (#492).
-    const offeredName = pendingState?.actionName ?? actionName;
-    if (offeredName) {
-      const refusal = this.#runner.refusalToAct(offeredName, playerPosition);
-      if (refusal) return { success: false, error: refusal.error, errorCode: refusal.errorCode };
-    }
+    const refused = this.#refuseUnofferedAction(playerPosition, pendingState, actionName);
+    if (refused) return refused;
 
     // Auto-create pending action if it doesn't exist and actionName is provided
     if (!pendingState && actionName) {
@@ -344,6 +339,23 @@ export class PendingActionManager<G extends Game = Game> {
    */
   clearAll(): void {
     this.#pendingActions.clear();
+  }
+
+  /**
+   * Nothing of a pending action may run unless the flow offers it to this
+   * seat now: not on a finished game, and not as another seat's move (#492).
+   * The action is the open pending one, else the one about to be started.
+   * With neither there is nothing to check; the caller reports that.
+   */
+  #refuseUnofferedAction(
+    playerPosition: number,
+    pendingState: PendingActionState | undefined,
+    actionName: string | undefined,
+  ): PickStepResult | undefined {
+    const name = pendingState?.actionName ?? actionName;
+    if (!name) return undefined;
+    const refusal = this.#runner.refusalToAct(name, playerPosition);
+    return refusal && { success: false, error: refusal.error, errorCode: refusal.errorCode };
   }
 
   async #completePendingAction(
