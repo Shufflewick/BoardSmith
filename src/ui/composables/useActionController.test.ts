@@ -2038,6 +2038,36 @@ describe('useActionController', () => {
       expect(controller.currentAction.value).toBe(null);
     });
 
+    it('keeps a cancelled held follow-up startable: resumeFollowUp starts it again', async () => {
+      const heldFollowUp = ref<typeof held | undefined>(held);
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn, heldFollowUp });
+      await settle();
+      controller.cancel();
+      await settle();
+      expect(controller.currentAction.value).toBe(null);
+      expect(controller.heldFollowUp.value?.action).toBe('loot');
+
+      await controller.resumeFollowUp();
+
+      expect(controller.currentAction.value).toBe('loot');
+      expect(controller.pendingOnServer.value).toBe(true);
+      expect(controller.currentArgs.value.by).toBe(1);
+    });
+
+    it('starts the held follow-up of the seat the page switches to, even one it cancelled for the last seat', async () => {
+      const heldFollowUp = ref<typeof held | undefined>(held);
+      const playerSeat = ref(1);
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn, heldFollowUp, playerSeat });
+      await settle();
+      controller.cancel();
+
+      playerSeat.value = 2;
+      heldFollowUp.value = { ...held };
+      await settle();
+
+      expect(controller.currentAction.value).toBe('loot');
+    });
+
     it('does not interrupt an action already in progress', async () => {
       const heldFollowUp = ref<typeof held | undefined>(undefined);
       const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn, heldFollowUp });

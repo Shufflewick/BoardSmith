@@ -453,22 +453,39 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return JSON.stringify([followUp.action, followUp.args ?? {}]);
   }
 
-  // A follow-up the server holds for this seat that this page has not started
-  // (see `heldFollowUp`). Once the server holds none, the next one is new.
-  if (heldFollowUp) {
-    watch(
-      heldFollowUp,
-      (offer) => {
-        if (!offer) {
-          lastFollowUpKey = undefined;
-          return;
-        }
-        if (followUpKey(offer) === lastFollowUpKey) return;
-        if (currentAction.value || pendingFollowUp.value || isExecuting.value) return;
-        queueFollowUp(offer);
-      },
-      { immediate: true },
-    );
+  /** The follow-up the server holds for this seat, if any (see the `heldFollowUp` option). */
+  const heldFollowUpOffer = computed(() => heldFollowUp?.value);
+
+  /**
+   * Start the held follow-up once, automatically, when this page has not
+   * started it yet: a page that never saw the result it arrived in (a reload)
+   * gets it back. One the player cancelled is not restarted here; it stays
+   * startable through `resumeFollowUp` (the Action Panel offers a button).
+   */
+  function autoStartHeldFollowUp(): void {
+    const offer = heldFollowUpOffer.value;
+    if (!offer) {
+      lastFollowUpKey = undefined;
+      return;
+    }
+    if (followUpKey(offer) === lastFollowUpKey) return;
+    if (currentAction.value || pendingFollowUp.value || isExecuting.value) return;
+    queueFollowUp(offer);
+  }
+  if (heldFollowUp) watch(heldFollowUpOffer, autoStartHeldFollowUp, { immediate: true });
+
+  /**
+   * Start the follow-up the server holds for this seat, whether or not it was
+   * started and cancelled before. A seat holding a follow-up keeps its turn
+   * until it takes it or takes another offered action, so the player must
+   * always be able to start it again. Does nothing while another action is in
+   * progress or when no follow-up is held.
+   */
+  async function resumeFollowUp(): Promise<void> {
+    const offer = heldFollowUpOffer.value;
+    if (!offer || currentAction.value || isExecuting.value) return;
+    lastFollowUpKey = followUpKey(offer);
+    await startFollowUp(offer.action, offer.args ?? {}, offer.metadata, offer.display);
   }
 
   /**
@@ -2328,6 +2345,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     watch(playerSeat, (seat, previous) => {
       if (seat === previous) return;
       abandonDraft();
+      // What this page started or cancelled was the last seat's: the new seat's
+      // held follow-up, if it has one, is new to it.
+      lastFollowUpKey = undefined;
+      autoStartHeldFollowUp();
     });
   }
 
@@ -2599,6 +2620,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // availableActions as "stale, cancel it" — doing so cancels live followUp chains
     // (e.g. explore -> take equipment) the instant a state broadcast arrives.
     pendingOnServer: readonly(pendingOnServer),
+    heldFollowUp: heldFollowUpOffer,
+    resumeFollowUp,
     // Reactive choices for the current pick (re-runs when async-fetched choices arrive).
     currentChoices,
 

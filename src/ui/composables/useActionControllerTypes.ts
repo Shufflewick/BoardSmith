@@ -413,6 +413,14 @@ export interface UseActionControllerReturn {
    * availableActions as a reason to cancel the current action.
    */
   pendingOnServer: Readonly<Ref<boolean>>;
+  /**
+   * The follow-up the server holds for this seat (the `heldFollowUp` option),
+   * or `undefined`. While it is held the seat keeps its turn, so a UI that lets
+   * the player cancel it must offer a way to start it again: `resumeFollowUp`.
+   */
+  heldFollowUp: ComputedRef<FollowUpOffer | undefined>;
+  /** Start the held follow-up, even one started and cancelled before. A no-op while another action is in progress. */
+  resumeFollowUp: () => Promise<void>;
 
   /**
    * Increments each time an action chain fully resolves (end-of-chain). Consumed by the

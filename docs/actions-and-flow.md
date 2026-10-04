@@ -1381,12 +1381,23 @@ While a seat holds a follow-up, the step keeps it:
 - in an `actionStep`, the turn stays with that seat, even if the step offers it
   nothing else;
 - in a `simultaneousActionStep`, the seat is not marked done (whatever
-  `playerDone` says), so with the default `allDone` the step waits for it. A
-  custom `allDone` stays authoritative: when it ends the step, the follow-ups
-  the step held end with it.
+  `playerDone` says), so with the default `allDone` the step waits for it.
 
 There is no separate "decline". The seat drops its follow-up only by taking
-another action the step offers it; a refused action leaves it held. So **an
+another action the step offers it; a refused action leaves it held.
+
+Two things end a hold anyway, by ruling:
+
+- **A custom `allDone` wins.** It is the one exception to the hold inside the
+  step: when a game's own `allDone` ends a simultaneous step, the follow-ups the
+  step held end with it.
+- **Time limits always win.** When a timed step's window runs out, the host
+  submits the game's `idleAction` for each seat still due. A seat holding a
+  follow-up takes the idle action if the step offers it (which drops the
+  follow-up, like any other action); if the step does not offer it, the
+  follow-up is dropped and the seat's part ends as if it had finished: the turn
+  passes on (`actionStep`), or the seat is marked done (`simultaneousActionStep`).
+  Nothing enters the action history for that. See `timeLimitMs` below. So **an
 optional follow-up needs a way out**: give the follow-up action a "done" choice,
 or list an end action (such as `endTurn`) in the step. A seat held for a
 follow-up that has no valid choice cannot move on, and in development the
@@ -1400,7 +1411,10 @@ A follow-up normally reaches the client in the result of the action that
 returned it. The seat's own published state carries it too
 (`PlayerGameState.followUp`), and the table starts it from there when no action
 is in progress, so a page reloaded mid-chain picks it back up. One the player
-cancels is not restarted, so the player can take another offered action.
+cancels is not restarted on its own, so the player can take another offered
+action, but it stays one click away: the Action Panel shows a button for it
+whenever no action is in progress (`data-bs-follow-up`), and a custom UI calls
+the controller's `resumeFollowUp()`, reading `heldFollowUp`.
 
 The follow-up runs with the args it was published with, and its `condition` is
 not checked (the chain offers it, not the condition). The seat may take it pick
@@ -1885,7 +1899,10 @@ actionStep({
   closes the step itself. It publishes the value as `FlowState.timeLimitMs` and
   on the host's turn boundary (`meta.turnBoundary.timeLimitMs`), and the host
   closes the step when the window elapses by submitting your `idleAction` for
-  every seat that has not acted.
+  every seat that has not acted, marked as a timeout (`onTimeout` on the
+  `action` op). Time limits always win: a seat holding a follow-up is closed
+  too, by the idle action when the step offers it, and otherwise by dropping
+  its follow-up and ending its part (see "A Follow-up Holds Its Seat").
 - So a game with a timed step **must declare `idleAction`** in
   `boardsmith.json`. `boardsmith validate` and `boardsmith build` refuse it
   otherwise, naming the step. A bot is not an alternative: a timed-out seat is

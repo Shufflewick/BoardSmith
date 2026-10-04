@@ -37,6 +37,11 @@ interface TableWiringOptions<G extends Game> {
   autoEndTurn: boolean;
   /** Runs after the session applied an action and before its reply returns. */
   afterPerform?: () => void;
+  /**
+   * Wire the selection-step transport too (`session.processSelectionStep`), as
+   * GameShell does: a follow-up's picks travel through it.
+   */
+  withPickStep?: boolean;
 }
 
 export function mountTableWiring<G extends Game>(
@@ -61,6 +66,13 @@ export function mountTableWiring<G extends Game>(
         },
         fetchPickChoices: async (action, pick, player, args) =>
           session().getPickChoices(action, pick, player, args),
+        ...(options.withPickStep
+          ? {
+              pickStep: async (player: number, selectionName: string, value: unknown, actionName: string, initialArgs?: Record<string, unknown>) =>
+                session().processSelectionStep(player, selectionName, value, actionName, initialArgs),
+              cancelPendingAction: async (player: number) => session().cancelPendingAction(player),
+            }
+          : {}),
       });
       return () => h('div');
     },
