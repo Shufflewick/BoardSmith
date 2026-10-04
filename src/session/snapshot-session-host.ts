@@ -986,18 +986,16 @@ export class SnapshotSessionHost {
    * mutation can begin.
    */
   private async applyMutatingOp(seat: number, op: Op): Promise<OpResult> {
-    // A new direct action supersedes any in-progress selection for this seat.
-    // Clear pending state BEFORE executing so a failed superseding action
-    // doesn't leave stale selection state behind (matches the old DO's
-    // applyHumanAction, which deleted pending state before a direct action).
-    const supersededSelection = closesSeat(op) && this.pendingStates.delete(seat);
-    const res = await this.adapters.executeOp(this.snapshot, this.pendingStates.get(seat) ?? null, op);
-    if (!res.success) {
-      // The refused op changed nothing else, but it did drop this seat's
-      // selection, and storage must agree or a restore would bring it back.
-      if (supersededSelection) await this.persistDurableState();
-      return res;
-    }
+    // An op that closes the seat (the seat's own action, or the host closing a
+    // timed seat) runs without the seat's in-progress selection: it does not
+    // continue those picks. They are dropped only once the close SUCCEEDS. A
+    // refused close changed nothing, and it may be refused precisely because
+    // the round it named is over (a stale submission), in which case the picks
+    // belong to the new round and must survive.
+    const closing = closesSeat(op);
+    const res = await this.adapters.executeOp(this.snapshot, closing ? null : this.pendingStates.get(seat) ?? null, op);
+    if (!res.success) return res;
+    if (closing) this.pendingStates.delete(seat);
 
     // Clear hint for the acting seat on successful action/selectionStep (completion).
     // Mirrors GameSession.performAction: this.#hint.delete(player).

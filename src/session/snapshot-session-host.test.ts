@@ -652,90 +652,87 @@ describe('SnapshotSessionHost', () => {
   // ── 5. New action supersedes an in-progress selection ───────────────────────
 
   describe('action supersedes in-progress selection', () => {
-    it('clears stale pending state when a new (failing) action is dispatched mid-selection', async () => {
+    /**
+     * Seat 1 finishes one pick (closing the round), remembers that round's key,
+     * then makes the first choice of its next pick. Returns the old key, which
+     * any submission naming it is refused for.
+     */
+    async function midSelectionInNextRound(host: SnapshotSessionHost): Promise<string> {
+      const oldKey = boundaryKeyOfHost(host);
+      const done = await host.handleOp(1, { type: 'action', actionName: 'pick', player: 1, args: { color: 'red', size: 'S' }, boundaryKey: oldKey });
+      expect(done.success).toBe(true);
+      expect(boundaryKeyOfHost(host)).not.toBe(oldKey);
+      const step = await host.handleOp(1, {
+        type: 'selectionStep', player: 1, selectionName: 'color', value: 'blue', actionName: 'pick',
+        boundaryKey: boundaryKeyOfHost(host),
+      });
+      expect(step.success).toBe(true);
+      expect(step.actionComplete).toBe(false);
+      return oldKey;
+    }
+
+    it('a refused close, stale or player-sent, leaves the seat\'s picks in the new round intact, live and saved', async () => {
+      const closes: Array<(oldKey: string) => Op> = [
+        (oldKey) => ({ type: 'expireTimedSeat', player: 1, idleAction: 'pick', args: {}, boundaryKey: oldKey }),
+        (oldKey) => ({ type: 'action', actionName: 'pick', player: 1, args: { color: 'green', size: 'L' }, boundaryKey: oldKey }),
+        // Refused for its arguments rather than its key.
+        () => ({ type: 'action', actionName: 'pick', player: 1, args: { color: 'purple', size: 'L' }, boundaryKey: '' }),
+      ];
+      for (const close of closes) {
+        const persisted: Array<{ pendingStates: Record<string, unknown> }> = [];
+        const { adapters } = makeAdapters(twoStepGameDef, twoStepGameOptions);
+        adapters.persist = (state) => { persisted.push(state as { pendingStates: Record<string, unknown> }); };
+        const host = new SnapshotSessionHost(adapters);
+        await host.start();
+        const oldKey = await midSelectionInNextRound(host);
+        const pickedBefore = host.durableState().pendingStates['1'];
+        expect(pickedBefore).toBeTruthy();
+        const savesBefore = persisted.length;
+
+        let op = close(oldKey);
+        if (op.type === 'action' && op.boundaryKey === '') op = { ...op, boundaryKey: boundaryKeyOfHost(host) };
+        const refused = await host.handleOp(1, op);
+        expect(refused.success).toBe(false);
+
+        // Nothing about the seat changed, so nothing was saved, and the picks stand.
+        expect(persisted.length).toBe(savesBefore);
+        expect(host.durableState().pendingStates['1']).toEqual(pickedBefore);
+        // The seat finishes the pick it had started.
+        const finish = await host.handleOp(1, {
+          type: 'selectionStep', player: 1, selectionName: 'size', value: 'M', actionName: 'pick',
+          boundaryKey: boundaryKeyOfHost(host),
+        });
+        expect(finish.success).toBe(true);
+        expect(finish.actionComplete).toBe(true);
+      }
+    });
+
+    it('a successful player action clears the seat\'s in-progress picks and runs without them', async () => {
       const calls: Array<{ type: string; pendingState: Record<string, unknown> | null }> = [];
       const base: OpResult = {
-        success: true,
-        snapshot: {},
-        pendingState: null,
-        flowState: {},
-        playerViews: [],
-        isComplete: false,
-        winners: [],
+        success: true, snapshot: {}, pendingState: null, flowState: {}, playerViews: [], isComplete: false, winners: [],
       };
-
       const adapters: SnapshotSessionAdapters = {
         playerCount: 2,
         executeOp: async (_snap, pend, op) => {
           calls.push({ type: op.type, pendingState: pend });
-          if (op.type === 'start') return { ...base };
-          if (op.type === 'selectionStep') {
-            // Mid-action: action not complete, so the host retains pendingState.
-            return { ...base, actionComplete: false, pendingState: { step: 'mid' } };
-          }
-          if (op.type === 'action') {
-            // The superseding action FAILS — must not leave stale pending behind.
-            return { ...base, success: false, error: 'boom' };
-          }
+          if (op.type === 'selectionStep') return { ...base, actionComplete: false, pendingState: { step: 'mid' } };
           return { ...base };
         },
         record: () => {}, push: () => {},
       };
-
       const host = new SnapshotSessionHost(adapters);
       await host.start();
-
-      const startCalls = calls.length;
-
-      // Step A: drive seat 1 into a mid-action pending state.
       await host.handleOp(1, {
-        type: 'selectionStep',
-        player: 1,
-        selectionName: 'color',
-        value: 'red',
-        actionName: 'pick',
+        type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick',
         boundaryKey: boundaryKeyOfHost(host),
       });
-
-      // Step B: a follow-up selectionStep proves the pending state was retained.
-      await host.handleOp(1, {
-        type: 'selectionStep',
-        player: 1,
-        selectionName: 'size',
-        value: 'M',
-        actionName: 'pick',
-        boundaryKey: boundaryKeyOfHost(host),
+      const acted = await host.handleOp(1, {
+        type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host),
       });
-      const followUpCall = calls[startCalls + 1];
-      expect(followUpCall.type).toBe('selectionStep');
-      expect(followUpCall.pendingState).not.toBeNull();
-
-      // Step C: a NEW action is dispatched mid-selection and FAILS.
-      const actionRes = await host.handleOp(1, {
-        type: 'action',
-        actionName: 'pass',
-        player: 1,
-        args: {},
-        boundaryKey: boundaryKeyOfHost(host),
-      });
-      expect(actionRes.success).toBe(false);
-      // The action itself must have run with pending already cleared.
-      const actionCall = calls[startCalls + 2];
-      expect(actionCall.type).toBe('action');
-      expect(actionCall.pendingState).toBeNull();
-
-      // Step D: a subsequent selectionStep for that seat now sees NO stale pending.
-      await host.handleOp(1, {
-        type: 'selectionStep',
-        player: 1,
-        selectionName: 'color',
-        value: 'blue',
-        actionName: 'pick',
-        boundaryKey: boundaryKeyOfHost(host),
-      });
-      const afterActionCall = calls[startCalls + 3];
-      expect(afterActionCall.type).toBe('selectionStep');
-      expect(afterActionCall.pendingState).toBeNull();
+      expect(acted.success).toBe(true);
+      expect(calls.at(-1)).toEqual({ type: 'action', pendingState: null });
+      expect(host.durableState().pendingStates['1']).toBeUndefined();
     });
 
     it('a timed-seat close drops the seat\'s in-progress selection too, and drives the bot pump after it', async () => {
