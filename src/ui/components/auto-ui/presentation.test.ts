@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { resolvePresentation } from './presentation.js';
 import type { PresentationOverlay } from './presentation.js';
+import { hiddenOpponentCard, ownCardOfSeat1 } from './hidden-hand-game.test-helper.js';
 
 describe('resolvePresentation', () => {
   describe('null/undefined overlay', () => {
@@ -109,19 +110,28 @@ describe('resolvePresentation', () => {
     });
   });
 
-  describe('PRESENT-02: __hidden guard', () => {
-    it('strips image and stats when element.__hidden is true', () => {
+  describe('PRESENT-02: hidden placeholder guard (real per-seat view)', () => {
+    // Driven from the engine's own per-seat view, never a hand-built shape:
+    // a hand-built `{ __hidden: true }` once kept this guard green while it
+    // never fired on what the engine actually sends (BoardSmith #491).
+    const opponentCard = hiddenOpponentCard();
+
+    it('the fixture is a real placeholder: the marker sits in attributes, not at the top level', () => {
+      expect(opponentCard.attributes?.__hidden).toBe(true);
+      expect('__hidden' in opponentCard).toBe(false);
+    });
+
+    it('strips image and stats from a hidden placeholder', () => {
       const overlay: PresentationOverlay = {
         byClass: {
-          Card: {
+          SecretCard: {
             image: '/img/face.png',
             label: 'Card',
             stats: { power: 10, defense: 5 },
           },
         },
       };
-      const element = { className: 'Card', __hidden: true };
-      const result = resolvePresentation(element, overlay);
+      const result = resolvePresentation(opponentCard, overlay);
       expect(result).not.toBeNull();
       // label is allowed through
       expect(result!.label).toBe('Card');
@@ -130,30 +140,39 @@ describe('resolvePresentation', () => {
       expect(result!.stats).toBeUndefined();
     });
 
-    it('returns null when __hidden and no overlay match exists', () => {
+    it('returns null for a hidden placeholder when no overlay entry matches', () => {
       const overlay: PresentationOverlay = {
         byClass: { Piece: { label: 'A piece' } },
       };
-      const element = { className: 'Card', __hidden: true };
-      expect(resolvePresentation(element, overlay)).toBeNull();
+      expect(resolvePresentation(opponentCard, overlay)).toBeNull();
     });
 
-    it('allows render through for __hidden elements (author responsibility)', () => {
+    it('allows render through for a hidden placeholder (author responsibility)', () => {
       const mockComponent = {} as import('vue').Component;
       const overlay: PresentationOverlay = {
         byClass: {
-          Card: {
+          SecretCard: {
             image: '/img/face.png',
             render: mockComponent,
           },
         },
       };
-      const element = { className: 'Card', __hidden: true };
-      const result = resolvePresentation(element, overlay);
+      const result = resolvePresentation(opponentCard, overlay);
       expect(result).not.toBeNull();
       // image stripped, render allowed
       expect(result!.image).toBeUndefined();
       expect(result!.render).toBe(mockComponent);
+    });
+
+    it("keeps image and stats on the owner's own (visible) copy of the same card", () => {
+      const overlay: PresentationOverlay = {
+        byClass: { SecretCard: { image: '/img/face.png', stats: { power: 10 } } },
+      };
+      const ownCard = ownCardOfSeat1();
+      expect(ownCard.attributes?.__hidden).toBeUndefined();
+      const result = resolvePresentation(ownCard, overlay);
+      expect(result!.image).toBe('/img/face.png');
+      expect(result!.stats).toEqual({ power: 10 });
     });
   });
 

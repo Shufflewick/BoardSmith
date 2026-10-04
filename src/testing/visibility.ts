@@ -10,6 +10,7 @@
  */
 
 import { GameElement, ElementCollection, type Game, type ElementJSON } from '../engine/index.js';
+import { isHiddenPlaceholder } from '../engine/element/hidden-placeholder.js';
 
 /**
  * Walk a serialized ElementJSON tree collecting the ids of nodes that are
@@ -21,8 +22,7 @@ import { GameElement, ElementCollection, type Game, type ElementJSON } from '../
  * negative id).
  */
 function collectVisibleIds(node: ElementJSON, into: Set<number>): void {
-  const hidden = node.attributes?.__hidden === true;
-  if (!hidden) {
+  if (!isHiddenPlaceholder(node)) {
     into.add(node.id);
   }
   if (node.children) {
@@ -84,7 +84,7 @@ export function isElementVisible(element: GameElement, seat: number): boolean {
   const finalTree = game.toJSONForPlayer(seat);
   const node = findNodeById(finalTree, element.id);
   if (!node) return false; // absent from final tree
-  return node.attributes?.__hidden !== true;
+  return !isHiddenPlaceholder(node);
 }
 
 /**

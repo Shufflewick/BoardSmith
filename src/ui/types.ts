@@ -110,8 +110,6 @@ export interface GameViewElement<TAttributes extends BaseElementAttributes = Bas
   children?: GameViewElement<TAttributes>[];
   /** Count of children (used when contents are hidden from player) */
   childCount?: number;
-  /** Internal flag indicating element should be hidden */
-  __hidden?: boolean;
 }
 
 /**

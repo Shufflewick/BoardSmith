@@ -14,7 +14,7 @@
  *
  * Face/back image selection: hidden cards ALWAYS show the back image;
  * visible cards show the face image. The face URL is never exposed when
- * element.__hidden is true (T-93-04).
+ * the element is a hidden placeholder (T-93-04).
  */
 
 import { computed, inject, ref, watch, type Ref, type ComputedRef } from 'vue';
@@ -22,6 +22,7 @@ import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction
 import { useSelectable } from '../../../composables/useSelectable.js';
 import { setTransformAwareDragImage } from '../../../composables/dragImage.js';
 import { resolvePresentation } from '../presentation.js';
+import { isHiddenPlaceholder } from '../../../../engine/element/hidden-placeholder.js';
 import type { PresentationOverlay } from '../presentation.js';
 import { GAME_CONTEXT_KEYS, injectPlayerSeat } from '../../../composables/useGameContext.js';
 
@@ -35,7 +36,6 @@ interface GameElement {
   attributes?: Record<string, unknown>;
   children?: GameElement[];
   childCount?: number;
-  __hidden?: boolean;
 }
 
 type ImageInfo =
@@ -61,12 +61,15 @@ const boardInteraction = tryUseBoardInteraction();
 // ---------------------------------------------------------------------------
 // Presentation overlay — injected from AutoRenderer (D-04)
 // Resolved AFTER engine visibility filtering; resolvePresentation strips
-// image/stats for __hidden elements (PRESENT-02).
+// image/stats for hidden placeholders (PRESENT-02).
 // ---------------------------------------------------------------------------
 const overlay = inject(GAME_CONTEXT_KEYS.presentation, undefined) as ComputedRef<PresentationOverlay | undefined> | undefined;
 const presentationEntry = computed(() =>
   resolvePresentation(props.element, overlay?.value)
 );
+
+// Whether the seat is sent a placeholder for this card rather than the card.
+const isHidden = computed(() => isHiddenPlaceholder(props.element));
 
 // Suppress unused variable warning for playerSeat and selectableElements/selectedElements
 // (injected for context completeness per interface spec; element-level selectable state
@@ -226,8 +229,7 @@ const currentCardImage = computed((): ImageInfo | null => {
   if (!cardImages.value) return null;
 
   // CRITICAL: hidden cards always show back, never face (T-93-04)
-  const isHidden = props.element.__hidden || props.element.attributes?.__hidden;
-  const image = isHidden ? cardImages.value.back : cardImages.value.face;
+  const image = isHidden.value ? cardImages.value.back : cardImages.value.face;
 
   if (!image) return null;
 
@@ -267,8 +269,8 @@ const displayLabel = computed(
 );
 
 // Effective image: overlay image overrides for visible cards; hidden cards use engine back logic.
-// resolvePresentation already strips `image` for __hidden elements, so presentationEntry?.image
-// will always be undefined when element.__hidden is true — no additional guard needed here.
+// resolvePresentation already strips `image` for hidden placeholders, so presentationEntry?.image
+// is always undefined when isHidden is true — no additional guard needed here.
 const effectiveCardImage = computed((): ImageInfo | null => {
   const overlayImage = presentationEntry.value?.image;
   if (overlayImage) {
@@ -356,7 +358,7 @@ function handleDrop(event: DragEvent) {
         'action-selectable': isActionSelectable,
         'is-board-highlighted': isBoardHighlighted,
         'is-board-selected': isBoardSelected,
-        'is-hidden': element.__hidden,
+        'is-hidden': isHidden,
         'is-disabled': isDisabled,
         'is-draggable': isActionSelectable,
         'is-dragging': isDragged,
@@ -397,7 +399,7 @@ function handleDrop(event: DragEvent) {
         :src="effectiveCardImage.src"
         class="card-image card-image-overlay"
         :class="{
-          'card-image-back': element.__hidden || element.attributes?.__hidden,
+          'card-image-back': isHidden,
           'is-loaded': loaded,
         }"
         :alt="displayLabel"
@@ -410,14 +412,14 @@ function handleDrop(event: DragEvent) {
     <div
       v-else-if="effectiveCardImage?.type === 'sprite'"
       class="card-image card-sprite"
-      :class="{ 'card-image-back': element.__hidden || element.attributes?.__hidden }"
+      :class="{ 'card-image-back': isHidden }"
       :style="getSpriteStyle(effectiveCardImage)"
     ></div>
 
     <!-- Baseline 3 / 4: No image from $images — show face or back fallback -->
     <template v-else>
       <!-- Hidden card with no face image — show back gradient or back image fallback -->
-      <template v-if="element.__hidden || element.attributes?.__hidden">
+      <template v-if="isHidden">
         <div class="card-back" :class="{ 'has-image': !!backImageFallback }">
           <img
             v-if="backImageFallback?.type === 'url'"
@@ -440,7 +442,7 @@ function handleDrop(event: DragEvent) {
     </template>
 
     <!-- Overlay stats block (D-04): only rendered when stats present; resolvePresentation
-         strips stats for __hidden elements so this is never shown for hidden cards -->
+         strips stats for hidden placeholders so this is never shown for hidden cards -->
     <dl v-if="presentationEntry?.stats" class="card-stats">
       <template v-for="(val, key) in presentationEntry.stats" :key="key">
         <dt>{{ key }}</dt>

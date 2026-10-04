@@ -1198,10 +1198,14 @@ If an element belongs to an opponent, its children may be hidden:
 }
 ```
 
-Check for `__hidden` when iterating children:
+Check with `isHiddenPlaceholder` (from `boardsmith/ui`) when iterating children.
+It is the same check the built-in renderers use, and it reads the marker where
+the engine puts it, in `attributes`:
 ```typescript
+import { isHiddenPlaceholder } from 'boardsmith/ui';
+
 const visibleEquipment = merc.children?.filter(c =>
-  c.className === 'Equipment' && !c.attributes?.__hidden
+  c.className === 'Equipment' && !isHiddenPlaceholder(c)
 );
 ```
 

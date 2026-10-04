@@ -207,15 +207,16 @@ describe('GoFish ask interaction tests', () => {
     // Go Fish opponent's face-down hand in the real game:
     //   - Server strips face URL from hidden cards before sending to client
     //   - toJSONForPlayer assigns anonymized NEGATIVE ids to hidden elements
-    //   - $images contains both face and back; UI must show ONLY back when __hidden=true
+    //   - the placeholder is marked by attributes.__hidden
     //
-    // This element shape is what the gameView contains for an opponent's hidden card:
+    // The engine also drops the face from $images; this keeps it in, so the
+    // test proves the renderer itself shows ONLY the back for a placeholder:
     const hiddenOpponentCard = {
       id: -42,                  // anonymized negative id (toJSONForPlayer redaction)
       name: 'Card',
       className: 'Card',
-      __hidden: true,           // PRESENT-02 trigger: strip face, show only back
       attributes: {
+        __hidden: true,         // the engine's placeholder marker: show only back
         // The face URL MUST NOT appear in the rendered output
         $images: {
           face: '/cards/face/AS.svg',   // face URL — must never leak when __hidden
@@ -225,7 +226,7 @@ describe('GoFish ask interaction tests', () => {
     };
 
     // Mount CardRenderer directly (no ActionController needed for this path)
-    // CardRenderer reads __hidden and routes through resolvePresentation which
+    // CardRenderer reads the placeholder marker and routes through resolvePresentation which
     // strips image/stats for hidden elements (PRESENT-02 guard).
     const wrapper = mount(CardRenderer, {
       props: {

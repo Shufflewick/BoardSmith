@@ -59,6 +59,9 @@ export { default as ActionPanel } from './components/auto-ui/ActionPanel.vue';
 export { defineGameUIs, defaultUI, devUI } from './game-uis.js';
 export type { GameUIEntry, DefaultGameUIEntry, GameUIRegistry } from './game-uis.js';
 export type { GameViewElement, BoardPlayer } from './types.js';
+// Whether a view element is a placeholder for something the seat cannot see.
+// The one check for it: the engine marks placeholders in attributes.__hidden.
+export { isHiddenPlaceholder } from '../engine/element/hidden-placeholder.js';
 
 // AutoUI/AutoRenderer are deliberately NOT re-exported here — they live behind the
 // `boardsmith/ui/auto-ui` subpath so a game only pays for them when it asks for

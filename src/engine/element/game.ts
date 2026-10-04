@@ -7,8 +7,8 @@ import {
   isPlayerIdentityAttribute,
   readDynamicAttribute,
   registerElementClass,
-  HIDDEN_PLACEHOLDER_ATTRIBUTE,
 } from './game-element.js';
+import { HIDDEN_PLACEHOLDER_ATTRIBUTE } from './hidden-placeholder.js';
 import { Piece } from './piece.js';
 import { Card } from './card.js';
 import { Hand } from './hand.js';
