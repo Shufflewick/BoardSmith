@@ -184,6 +184,13 @@ export interface PendingActionState {
   currentSelectionIndex: number;
   /** Indices of selections whose onSelect callback has fired */
   onSelectFired?: Set<number>;
+  /**
+   * Whether the action's `condition` held right after this seat's latest pick
+   * of it. Absent before the first pick. `GameRunner.refusalToPick` reads it to
+   * tell a condition another seat took away (refused) from one the action's
+   * own picks ended (allowed), and `GameRunner.notePickTaken` writes it (#493).
+   */
+  conditionHeld?: boolean;
 }
 
 /**

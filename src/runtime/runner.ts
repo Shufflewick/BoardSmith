@@ -1,4 +1,5 @@
 import { rulesErrorSentence } from '../engine/action/rules-error.js';
+import { evaluateConditionWithTrace } from '../engine/action/action.js';
 import {
   serializeAction,
   deserializeAction,
@@ -729,10 +730,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    *
    * A multi-step action is collected one selection at a time and runs when the
    * last arrives, without passing through the flow's own checks first. Every
-   * pending-action path (`processSelectionStep` here, and
-   * `PendingActionManager` for `GameSession` and the stateless `selectionStep`
-   * op) asks this before any selection is processed, so a pending action can
-   * never run on a finished game or as another seat's move (#492).
+   * pending-action path asks this, through `refusalToPick`, before any
+   * selection is processed, so a pending action can never run on a finished
+   * game or as another seat's move (#492).
    *
    * A follow-up counts as offered only to the seat whose action published it
    * (`followUpForSeat`): that is how a chained action that the step does not
@@ -761,6 +761,89 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       };
     }
     return undefined;
+  }
+
+  /**
+   * Why `seat` may not take the next pick of its pending action `actionName`
+   * now, or `undefined` when it may. `pending` is the seat's open pending state,
+   * or `undefined` when the pick about to be processed starts the action. Every
+   * pending-action path (`processSelectionStep` here, and
+   * `PendingActionManager` for `GameSession` and the stateless `selectionStep`
+   * op) asks this before any pick is processed, and calls `notePickTaken`
+   * after each pick that leaves the action open.
+   *
+   * First, the flow must offer the action to the seat (`refusalToAct`). Then
+   * its `condition`, evaluated as hosts evaluate it to show the action (with
+   * no args), against the game as it stands (#493):
+   *
+   * - At the first pick it must hold, as for a whole submission.
+   * - At a later pick (the last one completes the action) the action is
+   *   refused only when the condition held right after the seat's own previous
+   *   pick and does not hold now. Between those two moments nothing of this
+   *   action ran, so something else, another seat's move, took it away. A
+   *   whole action replays at its place in the history after that move, with
+   *   its condition checked first, so letting it complete would record a move
+   *   that is not legal where it is recorded.
+   * - When the action's own picks ended the condition (a repeat's `onEach`
+   *   spending what the condition counts), it is not refused: its picks are
+   *   part of the action, and the condition was checked before they ran. The
+   *   game as other seats alone would have left it does not exist once its own
+   *   picks have changed the game, so from then on the condition gates it again
+   *   only after it holds again following one of its picks.
+   *
+   * A held follow-up is offered by its chain, not its condition, so its
+   * condition is not evaluated at all.
+   */
+  refusalToPick(
+    actionName: string,
+    seat: number,
+    pending: PendingActionState | undefined,
+  ): { error: string; errorCode: ErrorCode } | undefined {
+    const refusal = this.refusalToAct(actionName, seat);
+    if (refusal) return refusal;
+    const failed = this.failedConditionLabels(actionName, seat);
+    if (failed.length === 0) return undefined;
+    const labels = failed.map((label) => `'${label}'`).join(' and ');
+    if (pending?.conditionHeld === undefined) {
+      return {
+        error: `'${actionName}' is not available to you right now: ${labels} does not hold.`,
+        errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
+      };
+    }
+    if (pending.conditionHeld) {
+      return {
+        error: `'${actionName}' is no longer available to you: the game changed since your last choice, and ${labels} no longer holds.`,
+        errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
+      };
+    }
+    return undefined;
+  }
+
+  /**
+   * Record, after `seat` made a pick that leaves its pending action open,
+   * whether the action's condition still holds, so the next pick's
+   * `refusalToPick` can tell what took it away.
+   */
+  notePickTaken(pending: PendingActionState, seat: number): void {
+    pending.conditionHeld = this.failedConditionLabels(pending.actionName, seat).length === 0;
+  }
+
+  /**
+   * The labels of `actionName`'s condition that fail for `seat` now, evaluated
+   * with no args, as availability is. None for an action without a condition,
+   * and none for the seat's held follow-up, whose condition does not apply.
+   */
+  private failedConditionLabels(actionName: string, seat: number): string[] {
+    const action = this.game.getAction(actionName);
+    const player = this.game.getPlayer(seat);
+    if (!action?.condition || !player) return [];
+    if (followUpForSeat(this.getFlowState(), seat)?.action === actionName) return [];
+    const { details } = evaluateConditionWithTrace(
+      action.condition,
+      { game: this.game, player, args: {} },
+      `action '${actionName}'`,
+    );
+    return details.filter((detail) => !detail.passed).map((detail) => detail.label);
   }
 
   /**
@@ -828,7 +911,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       return { success: false, error: 'No pending action for this player. Call startPendingAction first.' };
     }
 
-    const refusal = this.refusalToAct(pendingState.actionName, playerPosition);
+    const refusal = this.refusalToPick(pendingState.actionName, playerPosition, pendingState);
     if (refusal) return { success: false, error: refusal.error };
 
     const action = this.game.getAction(pendingState.actionName);
@@ -862,6 +945,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       if (result.done && executor.isPendingActionComplete(action, pendingState)) {
         return this.completePendingAction(executor, action, player, pendingState, playerPosition);
       }
+      this.notePickTaken(pendingState, playerPosition);
       return { success: true, actionComplete: false };
     }
 
@@ -874,6 +958,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       return this.completePendingAction(executor, action, player, pendingState, playerPosition);
     }
 
+    this.notePickTaken(pendingState, playerPosition);
     return { success: true, actionComplete: false };
   }
 

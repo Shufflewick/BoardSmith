@@ -827,6 +827,35 @@ permanently hidden:
 A failing condition also produces the fixed message `Action is not available`;
 it cannot explain itself. If you need a reason, use `.validate()`.
 
+**A multi-step action taken pick by pick is gated by its condition too** (#493).
+Each pick is checked against the game as it stands, with empty args, as
+availability is:
+
+- The first pick is refused when the condition does not hold
+  (`'build' is not available to you right now: 'the stone is still in the quarry' does not hold.`).
+- A later pick, including the one that completes the action, is refused when
+  the condition held right after the seat's own previous pick and does not hold
+  now. Nothing of the action ran in between, so another seat's move took it
+  away: in a simultaneous step, seat 2 taking the stone refuses seat 1's
+  half-picked `build`
+  (`'build' is no longer available to you: the game changed since your last choice, and 'the stone is still in the quarry' no longer holds.`).
+  Nothing is run or recorded, and the seat's pending action stays open, so it
+  can cancel it or finish it if the condition comes back.
+- An action whose **own** picks end its condition still completes. A repeat
+  whose `onEach` spends the energy its condition counts is not refused for
+  having spent it: the condition was checked before those picks ran, and they
+  are part of the action. Once its own picks have ended the condition, the
+  game as other seats alone would have left it no longer exists, so the
+  condition gates the action again only after it holds again following one of
+  its picks.
+- A held follow-up is offered by its chain, not its condition, so its
+  condition is never checked.
+
+`GameRunner.refusalToPick` is the one place this is decided, for the
+session-free runner, `GameSession` and the stateless `selectionStep` op alike.
+A host that resumes a pending action without its persisted pending state (only
+`initialArgs`) is treated as starting it, so the condition must hold then.
+
 #### Why not just refuse inside `execute`?
 
 Returning `{ success: false, error }` from `execute` is too late: the action has

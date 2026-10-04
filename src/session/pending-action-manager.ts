@@ -256,6 +256,7 @@ export class PendingActionManager<G extends Game = Game> {
       }
 
       // More selections needed
+      this.#runner.notePickTaken(pendingState, playerPosition);
       return {
         success: true,
         done: result.done,
@@ -276,6 +277,8 @@ export class PendingActionManager<G extends Game = Game> {
     if (executor.isPendingActionComplete(action, pendingState)) {
       return this.#completePendingAction(executor, action, player, pendingState, playerPosition);
     }
+
+    this.#runner.notePickTaken(pendingState, playerPosition);
 
     // onSelect may have modified game state (e.g. animation events).
     this.#runner.captureCheckpoint();
@@ -343,9 +346,11 @@ export class PendingActionManager<G extends Game = Game> {
 
   /**
    * Nothing of a pending action may run unless the flow offers it to this
-   * seat now: not on a finished game, and not as another seat's move (#492).
-   * The action is the open pending one, else the one about to be started.
-   * With neither there is nothing to check; the caller reports that.
+   * seat now: not on a finished game, and not as another seat's move (#492),
+   * and not once another seat's move took its condition away (#493,
+   * `GameRunner.refusalToPick`). The action is the open pending one, else the
+   * one about to be started. With neither there is nothing to check; the
+   * caller reports that.
    */
   #refuseUnofferedAction(
     playerPosition: number,
@@ -354,7 +359,7 @@ export class PendingActionManager<G extends Game = Game> {
   ): PickStepResult | undefined {
     const name = pendingState?.actionName ?? actionName;
     if (!name) return undefined;
-    const refusal = this.#runner.refusalToAct(name, playerPosition);
+    const refusal = this.#runner.refusalToPick(name, playerPosition, pendingState);
     return refusal && { success: false, error: refusal.error, errorCode: refusal.errorCode };
   }
 
