@@ -63,6 +63,35 @@ function actionFinishDef(flowEnds: boolean): GameDefinitionLike {
   return { gameClass: ActionFinishGame, gameType: 'action-finish', minPlayers: 1, maxPlayers: 4 };
 }
 
+/**
+ * A game that names a leader while play goes on: `getWinners()` is overridden to
+ * report the seat with the most points, and the flow never ends. An op reports
+ * that seat in `winners` with `isComplete` false, a state the engine really
+ * produces, so `restoreFrom` must take it back.
+ */
+function leaderDef(): GameDefinitionLike {
+  class LeaderGame extends Game<LeaderGame, Player> {
+    points: Record<number, number> = {};
+
+    constructor(gameOptions: GameOptions) {
+      super(gameOptions);
+      this.registerAction(
+        Action.create('win').execute((_args, ctx) => {
+          const seat = (ctx.player as Player).seat;
+          this.points[seat] = (this.points[seat] ?? 0) + 1;
+        }),
+      );
+      this.setFlow(defineFlow({ root: loop({ maxIterations: 10, do: actionStep({ actions: ['win'] }) }) }));
+    }
+
+    override getWinners(): Player[] {
+      const scored = Object.entries(this.points).sort(([, a], [, b]) => b - a);
+      return scored.length > 0 ? [this.getPlayer(Number(scored[0]![0]))!] : [];
+    }
+  }
+  return { gameClass: LeaderGame, gameType: 'leader', minPlayers: 1, maxPlayers: 4 };
+}
+
 const options = { playerCount: 3, seed: 'bs490' };
 
 function makeHost(def: GameDefinitionLike) {
@@ -173,6 +202,21 @@ describe('a host restored from a finished game publishes its outcome (#490)', ()
     host.rosterChanged();
     expect(records.at(-1)!.meta).toMatchObject({ isComplete: true, winners: [seat], isDraw: false });
     expect(records.at(-1)!.meta.turnBoundary.dueSeats).toEqual([]);
+  });
+
+  it('winners for a game that is not complete round-trip as they were, so the table can wake', async () => {
+    const def = leaderDef();
+    const first = makeHost(def);
+    await first.host.start();
+    const seat = await playWin(first.host, first.records);
+    expect(first.records.at(-1)!.meta).toMatchObject({ isComplete: false, winners: [seat] });
+    expect(first.host.durableState()).toMatchObject({ isComplete: false, winners: [seat] });
+
+    const { host, records } = restoreSecond(def, first);
+    host.broadcastCurrent();
+    expect(records.at(-1)!.meta).toMatchObject({ isComplete: false, winners: [seat], isDraw: false });
+    expect(records.at(-1)!.meta.turnBoundary.dueSeats).not.toEqual([]);
+    expect(host.durableState()).toMatchObject({ isComplete: false, winners: [seat] });
   });
 
   it('a game finished inside a loop that does not stop on isFinished() is restored as complete too (#492)', async () => {

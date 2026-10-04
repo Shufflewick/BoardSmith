@@ -691,9 +691,10 @@ export class SnapshotSessionHost {
 
   /**
    * `restoreFrom`'s check that the outcome is given, and names seats of this table.
-   * Winners with `isComplete` false are taken as they are: `game.finish([p])`
-   * inside a loop that does not stop on it reports exactly that, and
-   * `restoreFrom` accepts anything `durableState()` can return.
+   * Winners with `isComplete` false are taken as they are: a game that
+   * overrides `getWinners()` to name the leader while play goes on reports
+   * exactly that, and `restoreFrom` accepts anything `durableState()` can
+   * return.
    */
   private restorableWinners(isComplete: unknown, winners: unknown): number[] {
     if (typeof isComplete !== 'boolean') {
