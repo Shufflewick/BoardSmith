@@ -36,9 +36,9 @@ function finishedGameDef(winnerSeats: number[]): GameDefinitionLike {
 
 /**
  * A game the acting seat ends with an action: `win` calls `game.finish([player])`.
- * With `flowEnds`, the loop stops on `isFinished()` and the flow completes. Without
- * it the loop goes on, and the op reports winners for a game that is not complete:
- * a state the engine really produces, so `restoreFrom` must take it back.
+ * With `flowEnds`, the loop's own `while` stops on `isFinished()`. Without it the
+ * loop would go on, which before #492 left the op reporting winners for a game
+ * that was not complete; the flow now ends either way.
  */
 function actionFinishDef(flowEnds: boolean): GameDefinitionLike {
   class ActionFinishGame extends Game<ActionFinishGame, Player> {
@@ -61,6 +61,35 @@ function actionFinishDef(flowEnds: boolean): GameDefinitionLike {
     }
   }
   return { gameClass: ActionFinishGame, gameType: 'action-finish', minPlayers: 1, maxPlayers: 4 };
+}
+
+/**
+ * A game that names a leader while play goes on: `getWinners()` is overridden to
+ * report the seat with the most points, and the flow never ends. An op reports
+ * that seat in `winners` with `isComplete` false, a state the engine really
+ * produces, so `restoreFrom` must take it back.
+ */
+function leaderDef(): GameDefinitionLike {
+  class LeaderGame extends Game<LeaderGame, Player> {
+    points: Record<number, number> = {};
+
+    constructor(gameOptions: GameOptions) {
+      super(gameOptions);
+      this.registerAction(
+        Action.create('win').execute((_args, ctx) => {
+          const seat = (ctx.player as Player).seat;
+          this.points[seat] = (this.points[seat] ?? 0) + 1;
+        }),
+      );
+      this.setFlow(defineFlow({ root: loop({ maxIterations: 10, do: actionStep({ actions: ['win'] }) }) }));
+    }
+
+    override getWinners(): Player[] {
+      const scored = Object.entries(this.points).sort(([, a], [, b]) => b - a);
+      return scored.length > 0 ? [this.getPlayer(Number(scored[0]![0]))!] : [];
+    }
+  }
+  return { gameClass: LeaderGame, gameType: 'leader', minPlayers: 1, maxPlayers: 4 };
 }
 
 const options = { playerCount: 3, seed: 'bs490' };
@@ -175,13 +204,27 @@ describe('a host restored from a finished game publishes its outcome (#490)', ()
     expect(records.at(-1)!.meta.turnBoundary.dueSeats).toEqual([]);
   });
 
-  it('winners for a game whose flow has not ended round-trip as they were, so the table can wake', async () => {
-    // game.finish([player]) inside a loop that does not stop on isFinished():
-    // the op reports winners while isComplete stays false. restoreFrom takes
-    // back anything durableState() can return.
-    const { seat, host, records } = await restoredFromActionFinish(false);
+  it('winners for a game that is not complete round-trip as they were, so the table can wake', async () => {
+    const def = leaderDef();
+    const first = makeHost(def);
+    await first.host.start();
+    const seat = await playWin(first.host, first.records);
+    expect(first.records.at(-1)!.meta).toMatchObject({ isComplete: false, winners: [seat] });
+    expect(first.host.durableState()).toMatchObject({ isComplete: false, winners: [seat] });
+
+    const { host, records } = restoreSecond(def, first);
     host.broadcastCurrent();
     expect(records.at(-1)!.meta).toMatchObject({ isComplete: false, winners: [seat], isDraw: false });
+    expect(records.at(-1)!.meta.turnBoundary.dueSeats).not.toEqual([]);
     expect(host.durableState()).toMatchObject({ isComplete: false, winners: [seat] });
+  });
+
+  it('a game finished inside a loop that does not stop on isFinished() is restored as complete too (#492)', async () => {
+    // game.finish([player]) ends the flow whatever loop it is in, so there is
+    // no "winners but not complete" state left for restoreFrom to carry.
+    const { seat, host, records } = await restoredFromActionFinish(false);
+    host.broadcastCurrent();
+    expect(records.at(-1)!.meta).toMatchObject({ isComplete: true, winners: [seat], isDraw: false });
+    expect(host.durableState()).toMatchObject({ isComplete: true, winners: [seat] });
   });
 });

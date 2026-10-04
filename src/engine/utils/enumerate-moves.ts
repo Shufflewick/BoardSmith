@@ -20,9 +20,9 @@
 // name below has exactly one defining module.
 import { constructGame, type Game, type GameOptions } from '../element/game.js';
 import type { Player } from '../player/player.js';
-import type { ActionDefinition, PendingActionState, Selection } from '../action/types.js';
+import type { ActionDefinition, FollowUpAction, PendingActionState, Selection } from '../action/types.js';
 import { isElement } from '../element/game-element.js';
-import { availableActionsForSeat } from '../flow/seat-activity.js';
+import { availableActionsForSeat, followUpForSeat } from '../flow/seat-activity.js';
 import { resolveMultiSelect, resolveOrderedList } from './resolve-multiselect.js';
 import { NotSimulableError } from '../errors.js';
 import { devWarn } from '../../utils/dev.js';
@@ -112,6 +112,16 @@ export function enumerateLegalMoves(
     }
   }
 
+  // The seat's held follow-up is one of its moves too, and while the step
+  // offers it nothing else, its only one.
+  const followUp = followUpForSeat(flowState, seat);
+  const followUpDef = followUp && game.getAction(followUp.action);
+  if (followUp && followUpDef) {
+    for (const args of enumerateActionMoves(game, followUpDef, player, { ...options, followUp })) {
+      result.push({ action: followUp.action, args });
+    }
+  }
+
   return result;
 }
 
@@ -128,14 +138,25 @@ export function enumerateLegalMoves(
  *
  * @param options.maxPerAction - Truncate to this many arg sets. Default:
  *   unlimited (full enumeration).
+ * @param options.followUp - The seat's held follow-up naming this action: its
+ *   args are bound in every move, and its condition is not checked (the chain
+ *   offers it, not the condition).
  */
 export function enumerateActionMoves(
   game: Game,
   actionDef: ActionDefinition,
   player: Player,
-  options?: { maxPerAction?: number },
+  options?: { maxPerAction?: number; followUp?: FollowUpAction },
 ): Record<string, unknown>[] {
   const executor = game.getActionExecutor();
+  const followUp = options?.followUp;
+  if (followUp && followUp.action !== actionDef.name) {
+    throw new Error(
+      `enumerateActionMoves was given follow-up '${followUp.action}' for action '${actionDef.name}'. ` +
+        `Pass the follow-up with the action it names.`,
+    );
+  }
+  const bound = followUp?.args ?? {};
 
   try {
     // #19: an action list comes from the flow state's FROZEN `availableActions`,
@@ -144,15 +165,15 @@ export function enumerateActionMoves(
     // moved on since. Re-check the action's own `condition` against the game as
     // it stands: without this, a `choices` closure the condition was written to
     // guard runs anyway, and the reporting game's threw outright.
-    if (actionDef.condition && !executor.isActionAvailable(actionDef, player)) {
+    if (!followUp && actionDef.condition && !executor.isActionAvailable(actionDef, player)) {
       return [];
     }
 
     // #325: a repeating selection's picks change the game (`onEach`) while
     // they are being made, so its moves can only be found by making them.
     const legal = executor.hasRepeatingSelections(actionDef)
-      ? enumerateThroughSelectionSteps(game, actionDef, player)
-      : enumerateGatedSelections(game, actionDef, player);
+      ? enumerateThroughSelectionSteps(game, actionDef, player, bound)
+      : enumerateGatedSelections(game, actionDef, player, bound, followUp !== undefined);
 
     // Apply maxPerAction truncation only when caller opts in (D-07: full enumeration default)
     return options?.maxPerAction !== undefined ? legal.slice(0, options.maxPerAction) : legal;
@@ -184,15 +205,17 @@ function enumerateGatedSelections(
   game: Game,
   actionDef: ActionDefinition,
   player: Player,
+  bound: Record<string, unknown>,
+  asFollowUp: boolean,
 ): Record<string, unknown>[] {
-  const combos = enumerateSelections(game, actionDef, player);
+  const executor = game.getActionExecutor();
+  const combos = enumerateSelections(game, actionDef, player, executor.resolveArgs(actionDef, bound, player));
   // #19: an action-level `.validate()` refuses a SUBMISSION, and enumeration
   // never called it — so a bot enumerated moves the engine then rejected, and
   // the pump halted on the rejection with the round never closing for any
   // seat. Every move handed back must be one `performAction` would accept.
   if (!actionDef.validate) return combos;
-  const executor = game.getActionExecutor();
-  return combos.filter((args) => executor.validateAction(actionDef, player, args).valid);
+  return combos.filter((args) => executor.validateAction(actionDef, player, args, { asFollowUp }).valid);
 }
 
 // ─── Repeating selections ────────────────────────────────────────────────────
@@ -229,6 +252,7 @@ function enumerateThroughSelectionSteps(
   game: Game,
   actionDef: ActionDefinition,
   player: Player,
+  bound: Record<string, unknown>,
 ): Record<string, unknown>[] {
   const scratch = scratchCopy(game);
   const moves: Record<string, unknown>[] = [];
@@ -238,7 +262,7 @@ function enumerateThroughSelectionSteps(
   while (queue.length > 0 && built < MAX_REPEAT_ENUMERATION_STEPS) {
     const steps = queue.shift()!;
     built++;
-    const at = scratch.replay(actionDef.name, player.seat, steps);
+    const at = scratch.replay(actionDef.name, player.seat, steps, bound);
     // A value the selection offered can still be refused by its own
     // `validate`: that path is simply not a move.
     if (!at) continue;
@@ -247,7 +271,7 @@ function enumerateThroughSelectionSteps(
 
     if (executor.isPendingActionComplete(action, pending)) {
       if (executor.pendingActionRefusal(action, seatPlayer, pending) === null) {
-        moves.push(liveArgs(game, steps));
+        moves.push({ ...bound, ...liveArgs(game, steps) });
       }
       continue;
     }
@@ -371,12 +395,20 @@ function scratchCopy(source: Game) {
      * Put the copy back, then make `steps` as a player would. Returns where
      * that left the pending action, or `null` if a step was refused.
      */
-    replay(actionName: string, seat: number, steps: EnumerationStep[]) {
+    replay(actionName: string, seat: number, steps: EnumerationStep[], bound: Record<string, unknown>) {
       reset();
       const action = game.getAction(actionName)!;
       const seatPlayer = game.getPlayer(seat)!;
       const executor = game.getActionExecutor();
       const pending = executor.createPendingActionState(actionName, seat);
+      // A follow-up's pre-filled args, as a seat's pending follow-up starts.
+      Object.assign(pending.collectedArgs, bound);
+      while (
+        pending.currentSelectionIndex < action.selections.length
+        && Object.prototype.hasOwnProperty.call(bound, action.selections[pending.currentSelectionIndex].name)
+      ) {
+        pending.currentSelectionIndex++;
+      }
       for (const { selection, value } of steps) {
         if (executor.isRepeatingSelection(selection)) {
           if (executor.processRepeatingStep(action, seatPlayer, pending, value).error) return null;
@@ -406,11 +438,12 @@ function enumerateSelections(
   game: Game,
   actionDef: ActionDefinition,
   player: Player,
+  bound: Record<string, unknown>,
 ): Record<string, unknown>[] {
   if (actionDef.selections.length === 0) {
-    return [{}];
+    return [{ ...bound }];
   }
-  return _enumerateRecursive(game, actionDef, player, 0, {});
+  return _enumerateRecursive(game, actionDef, player, 0, { ...bound });
 }
 
 // ─── Pure Combinatorics Helpers (exported for bot import + testability) ──────
@@ -499,6 +532,10 @@ function _enumerateRecursive(
   }
 
   const selection = actionDef.selections[index];
+  // Already bound (a follow-up's pre-filled arg): not a question to enumerate.
+  if (Object.prototype.hasOwnProperty.call(currentArgs, selection.name)) {
+    return _enumerateRecursive(game, actionDef, player, index + 1, currentArgs);
+  }
   const choices = _getChoices(game, actionDef.name, selection, player, currentArgs);
 
   // Text/number inputs cannot be enumerated — skip optional, block required

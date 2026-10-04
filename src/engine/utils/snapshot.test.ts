@@ -83,7 +83,7 @@ describe('GameStateSnapshot', () => {
       const snapshot = createSnapshot(game, 'test-game', actions);
 
       expect(snapshot.actionHistory).toHaveLength(1);
-      expect(snapshot.actionHistory[0].name).toBe('test');
+      expect(snapshot.actionHistory[0]).toMatchObject({ name: 'test' });
     });
   });
 

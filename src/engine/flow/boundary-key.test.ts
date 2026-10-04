@@ -145,12 +145,15 @@ describe('flowBoundaryKey', () => {
     expect(flowBoundaryKey(finished)).toBe(terminal);
     expect(flowBoundaryKey(structuredClone(finished))).toBe(terminal);
 
-    // DISTINGUISHED, not merely different-by-luck. A finished flow reports an
-    // EMPTY `path` — and so does a flow that has not started yet. Any key that
-    // derived the terminal case from position material alone would collide
-    // "game over" with "game not begun", which is the worst possible pair to
-    // confuse. The terminal key must come from `complete`, not from the path.
-    expect(finished.position?.path).toEqual([]);
+    // DISTINGUISHED, not merely different-by-luck. A flow that ran out of
+    // nodes reports an EMPTY `path` — and so does a flow that has not started
+    // yet. Any key that derived the terminal case from position material alone
+    // would collide "game over" with "game not begun", which is the worst
+    // possible pair to confuse. The terminal key must come from `complete`,
+    // not from the path. (This game finished in its last node, so its own path
+    // is where it stopped; the empty-path case is built directly.)
+    const ranOut: BoundaryKeyState = { complete: true, position: { path: [] } };
+    expect(flowBoundaryKey(ranOut)).toBe(terminal);
     const notStarted: BoundaryKeyState = { complete: false, position: { path: [] } };
     expect(flowBoundaryKey(notStarted)).not.toBe(terminal);
   });

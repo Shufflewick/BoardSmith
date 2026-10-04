@@ -159,6 +159,9 @@ export interface PlayerState {
   /** Action metadata for auto-UI generation, keyed by action name. Mirrors `PlayerGameState.actionMetadata`. */
   actionMetadata?: Record<string, ActionMetadata>;
 
+  /** The follow-up the flow holds for this seat. Mirrors `PlayerGameState.followUp`. */
+  followUp?: FollowUpOffer;
+
   /** Whether the player can undo (has made actions this turn) */
   canUndo?: boolean;
 

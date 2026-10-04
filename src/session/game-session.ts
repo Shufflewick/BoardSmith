@@ -16,7 +16,7 @@
  * - bot scheduling
  */
 
-import type { FlowState, SerializedAction, Game, GameClass, PendingActionState, GameCommand, FollowUpOffer, GameStateSnapshot, PlayerStateView, FlowDebugInfo, Player } from '../engine/index.js';
+import type { FlowState, SerializedAction, HistoryEntry, Game, GameClass, PendingActionState, GameCommand, FollowUpOffer, GameStateSnapshot, PlayerStateView, FlowDebugInfo, Player } from '../engine/index.js';
 import { canSeatAct, toPublicFlowState, type PublicFlowState } from '../engine/index.js';
 import type { TutorialDefinition } from '../engine/tutorial/types.js';
 import type { Annotation } from '../engine/tutorial/types.js';
@@ -283,7 +283,7 @@ function buildColorLabelMap(
  */
 export interface ReadOnlyRunnerFacade<G extends Game = Game> {
   readonly game: G;
-  readonly actionHistory: readonly SerializedAction[];
+  readonly actionHistory: readonly HistoryEntry[];
   getSnapshot(): GameStateSnapshot;
   getPlayerView(playerPosition: number): PlayerStateView;
   getAllPlayerViews(): PlayerStateView[];
@@ -1175,7 +1175,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   /**
    * Get action history
    */
-  getHistory(): { actionHistory: SerializedAction[]; createdAt: number } {
+  getHistory(): { actionHistory: HistoryEntry[]; createdAt: number } {
     // A projection, not the engine's array: the entries are copies carrying the
     // session's `timestamp` merged in from `actionTimestamps` (#54), so a caller
     // reading history can neither see a half-owned alias nor write through it
@@ -1635,7 +1635,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       state: buildPlayerState(this.#runner, this.#storedState.playerNames, player, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
       serializedAction: result.serializedAction,
       // The chained action, with the metadata to start it (it is usually not in availableActions).
-      followUp: result.flowState?.followUp && offerFollowUp(this.#runner.game, player, result.flowState.followUp),
+      followUp: offerFollowUp(this.#runner.game, result.flowState, player),
       // The action's own return value to the acting seat (BUG-017/BUG-012).
       data: result.data,
       message: result.message,

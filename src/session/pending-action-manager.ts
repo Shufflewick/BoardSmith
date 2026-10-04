@@ -169,6 +169,9 @@ export class PendingActionManager<G extends Game = Game> {
   ): Promise<PickStepResult> {
     let pendingState = this.#pendingActions.get(playerPosition);
 
+    const refused = this.#refuseUnofferedAction(playerPosition, pendingState, actionName);
+    if (refused) return refused;
+
     // Auto-create pending action if it doesn't exist and actionName is provided
     if (!pendingState && actionName) {
       const startResult = this.startPendingAction(actionName, playerPosition);
@@ -338,6 +341,23 @@ export class PendingActionManager<G extends Game = Game> {
     this.#pendingActions.clear();
   }
 
+  /**
+   * Nothing of a pending action may run unless the flow offers it to this
+   * seat now: not on a finished game, and not as another seat's move (#492).
+   * The action is the open pending one, else the one about to be started.
+   * With neither there is nothing to check; the caller reports that.
+   */
+  #refuseUnofferedAction(
+    playerPosition: number,
+    pendingState: PendingActionState | undefined,
+    actionName: string | undefined,
+  ): PickStepResult | undefined {
+    const name = pendingState?.actionName ?? actionName;
+    if (!name) return undefined;
+    const refusal = this.#runner.refusalToAct(name, playerPosition);
+    return refusal && { success: false, error: refusal.error, errorCode: refusal.errorCode };
+  }
+
   async #completePendingAction(
     executor: ReturnType<Game['getActionExecutor']>,
     action: any,
@@ -355,6 +375,7 @@ export class PendingActionManager<G extends Game = Game> {
     // actions (single-step actions go through performAction), so recording here
     // neither double-records nor misses any path. We push only after a
     // successful execute (below) to avoid recording a failed action.
+    this.#runner.bindFollowUpArgs(pendingState, playerPosition);
     const serializedAction = this.#runner.serializeForHistory(
       action.name,
       player,
@@ -369,7 +390,7 @@ export class PendingActionManager<G extends Game = Game> {
       // performAction so actionHistory is the single source of truth for what
       // happened (replay, undo counts, and bot history all read it).
       this.#runner.recordSerializedAction(serializedAction);
-      this.#runner.game.continueFlowAfterPendingAction(actionResult);
+      this.#runner.game.continueFlowAfterPendingAction(actionResult, playerPosition);
       this.#runner.captureCheckpoint();
       this.#storedState.actionHistory = this.#runner.actionHistory;
 
@@ -396,7 +417,7 @@ export class PendingActionManager<G extends Game = Game> {
         message: actionResult.message,
       },
       state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
-      followUp: flowState?.followUp && offerFollowUp(this.#runner.game, playerPosition, flowState.followUp),
+      followUp: offerFollowUp(this.#runner.game, flowState, playerPosition),
       // Hoisted beside followUp so a multi-step action's return value reaches
       // the ops layer on the same footing as a single-step one (BUG-017).
       data: actionResult.data,

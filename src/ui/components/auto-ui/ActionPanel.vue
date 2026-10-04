@@ -231,6 +231,20 @@ const editorLabelId = `${editorInputId}-value-label`;
 
 const currentArgs = computed(() => actionController.currentArgs.value);
 
+/**
+ * The follow-up the server holds for this seat (#494). The seat keeps its turn
+ * until it takes it or takes another offered action, so while no action is in
+ * progress the panel always offers it: a player who cancelled it can start it
+ * again, even when the step offers nothing else. Not drawn as a second button
+ * when the step lists the same action; that button starts the follow-up.
+ */
+const heldFollowUp = computed(() => actionController.heldFollowUp.value);
+const heldFollowUpButton = computed(() => {
+  const offer = heldFollowUp.value;
+  if (!offer || props.availableActions.includes(offer.action)) return undefined;
+  return { action: offer.action, prompt: offer.metadata?.prompt || formatActionName(offer.action) };
+});
+
 // Get metadata for available actions
 // Annotated as EnrichedActionMetadata[] on purpose: without it the synthesized
 // fallback entries below form a union with the real metadata, and reading an
@@ -1346,6 +1360,12 @@ async function startAction(
   actionName: string,
   options?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> }
 ) {
+  // The seat's held follow-up names this action: the server takes it as the
+  // follow-up, with its pre-filled args, so start it as one.
+  if (heldFollowUp.value?.action === actionName) {
+    await actionController.resumeFollowUp();
+    return;
+  }
   const meta = actionsWithMetadata.value.find(a => a.name === actionName);
 
   if (!meta || meta.selections.length === 0) {
@@ -1635,6 +1655,16 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
       <!-- Menu chrome, drawn only inside a group (#228). At the top level there
            is none, so a game that declares no grouping renders exactly the flat
            panel it always did. -->
+      <div v-if="heldFollowUpButton" class="action-btn-group">
+        <button
+          class="action-btn"
+          data-bs-follow-up
+          :data-bs-action="heldFollowUpButton.action"
+          @click="actionController.resumeFollowUp()"
+        >
+          {{ heldFollowUpButton.prompt }}
+        </button>
+      </div>
       <div v-if="menuLevel.group" class="action-menu-header">
         <button
           class="action-btn menu-back-btn"

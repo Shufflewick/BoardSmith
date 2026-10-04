@@ -210,6 +210,16 @@ export interface UseActionControllerOptions {
   /** Is it this player's turn. Accepts Ref with potentially undefined value for test compatibility. */
   isMyTurn: Ref<boolean | undefined> | Ref<boolean>;
   /**
+   * The follow-up the server holds for this seat, read off its published state
+   * (`PlayerGameState.followUp`). A follow-up normally arrives in the result of
+   * the action that returned it and is started from there; this is how a page
+   * that never saw that result (a reload mid-chain) gets it back. One that
+   * appears while no action is in progress, and that this controller has not
+   * already started, is started. One the player cancelled is not restarted, so
+   * the player can take another action instead.
+   */
+  heldFollowUp?: Ref<FollowUpOffer | undefined> | ComputedRef<FollowUpOffer | undefined>;
+  /**
    * The acting seat's OWN `completed` flag for the current simultaneous step
    * (from `flowState.awaitingPlayers[playerSeat].completed`; `false`/`undefined`
    * outside a simultaneous step). This is the SHARED chokepoint for the D27
@@ -403,6 +413,14 @@ export interface UseActionControllerReturn {
    * availableActions as a reason to cancel the current action.
    */
   pendingOnServer: Readonly<Ref<boolean>>;
+  /**
+   * The follow-up the server holds for this seat (the `heldFollowUp` option),
+   * or `undefined`. While it is held the seat keeps its turn, so a UI that lets
+   * the player cancel it must offer a way to start it again: `resumeFollowUp`.
+   */
+  heldFollowUp: ComputedRef<FollowUpOffer | undefined>;
+  /** Start the held follow-up, even one started and cancelled before. A no-op while another action is in progress. */
+  resumeFollowUp: () => Promise<void>;
 
   /**
    * Increments each time an action chain fully resolves (end-of-chain). Consumed by the

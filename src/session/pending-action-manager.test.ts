@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Game, Player, Piece, Space, Action, defineFlow, actionStep, deserializeAction, type GameOptions } from '../engine/index.js';
+import { recordedAction } from './testing/history-labels.js';
 import { GameRunner } from '../runtime/index.js';
 import { PendingActionManager } from './pending-action-manager.js';
 import { computeUndoInfo } from './utils.js';
@@ -334,7 +335,7 @@ describe('PendingActionManager', () => {
       expect(result.actionComplete).toBe(true);
 
       expect(runner.actionHistory).toHaveLength(1);
-      const entry = runner.actionHistory[0];
+      const entry = recordedAction(runner.actionHistory, 0);
       expect(entry.name).toBe('pick');
       expect(entry.player).toBe(1);
       // Fully-collected args from BOTH steps, not a partial.
@@ -350,7 +351,7 @@ describe('PendingActionManager', () => {
       expect(step2.actionComplete).toBe(true);
 
       expect(runner.actionHistory).toHaveLength(1);
-      const entry = runner.actionHistory[0];
+      const entry = recordedAction(runner.actionHistory, 0);
       expect(entry.name).toBe('reEquip');
       expect(entry.player).toBe(1);
       expect(entry.args.unit).toBe('warrior');
@@ -390,7 +391,7 @@ describe('PendingActionManager', () => {
       // counted) is `runner.actionHistory`, not `computeUndoInfo`'s
       // undo-eligibility verdict for an already-finished game.
       expect(runner.actionHistory).toHaveLength(1);
-      expect(runner.actionHistory[0].name).toBe('pick');
+      expect(runner.actionHistory[0]).toMatchObject({ name: 'pick' });
     });
 
     it('replay/clone from actionHistory reproduces the completed multi-step action', async () => {
@@ -412,16 +413,16 @@ describe('PendingActionManager', () => {
       });
       replayRunner.start();
 
-      for (const recorded of runner.actionHistory) {
-        const { actionName, player, args } = deserializeAction(recorded, replayRunner.game);
+      for (let i = 0; i < runner.actionHistory.length; i++) {
+        const { actionName, player, args } = deserializeAction(recordedAction(runner.actionHistory, i), replayRunner.game);
         const replayResult = replayRunner.performAction(actionName, player.seat, args);
         expect(replayResult.success).toBe(true);
       }
 
       expect(replayRunner.actionHistory).toHaveLength(runner.actionHistory.length);
       // The re-serialized entry matches the original (ignoring timestamp).
-      const { name, player, args } = runner.actionHistory[0];
-      const replayed = replayRunner.actionHistory[0];
+      const { name, player, args } = recordedAction(runner.actionHistory, 0);
+      const replayed = recordedAction(replayRunner.actionHistory, 0);
       expect({ name: replayed.name, player: replayed.player, args: replayed.args })
         .toEqual({ name, player, args });
     });

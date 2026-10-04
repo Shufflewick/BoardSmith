@@ -1,8 +1,8 @@
 {
-  "revision": 126,
+  "revision": 127,
   "bundleProtocol": 2,
-  "surfaceHash": "95159a004e1f493f",
-  "payloadHash": "a6dc5ab68fb08599",
+  "surfaceHash": "6cf4146f749f7e86",
+  "payloadHash": "40d5b63bde8d6007",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1078,6 +1078,15 @@
       "payloadHash": "a6dc5ab68fb08599",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "SnapshotHostState carries the game's outcome (#490): durableState() and the persist adapter now hand out isComplete and winners beside snapshot, flowState and pendingStates, and restoreFrom requires both, so a host restored from a finished game publishes it as finished (with its winners, or as a draw) on broadcastCurrent() or rosterChanged() instead of as running. restoreFrom refuses a state missing either, or winners that are not seats of the table, and takes back anything durableState() returns, including winners with isComplete false (game.finish() inside a loop that does not stop on it). Re-vendor and store the whole persisted value, including the two new fields."
+    },
+    {
+      "revision": 127,
+      "date": "2026-10-04",
+      "bundleProtocol": 2,
+      "surfaceHash": "6cf4146f749f7e86",
+      "payloadHash": "40d5b63bde8d6007",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A finished game now ends the flow wherever it is: game.finish(), the END_GAME command, or the game's own isFinished() override (which now ends the flow even when the flow's isComplete differs) stops every construct (eachPlayer, loop, sequence, repeat, forEach, phase, simultaneous steps, turnLoop, stateAwareLoop), so op results report isComplete: true with winners and no seat is offered an action or follow-up. A node placed after the main loop no longer runs once an action calls finish(), including in turnLoop and stateAwareLoop. A pending multi-step action completes only when the flow offers it to that seat (refused with 'The game is finished.' or 'It's not your turn.' before anything runs), and undo on a finished game is refused as 'the game is finished'. Follow-ups are per seat and hold their seat (#494): FlowState.followUp is replaced by FlowState.followUps (one per seat, each with its seat, kept in the step's frame data so checkpoints, snapshots and undo carry them), followUpForSeat(flowState, seat) is the one check, and no other seat may take a seat's follow-up ('<action>' is not one of your actions right now.) or is offered it. While a seat holds a follow-up an actionStep keeps the turn with it and a simultaneousActionStep does not mark it done. By ruling, two things end a hold anyway: a game's custom allDone ends the step and drops the follow-ups it held (the one exception inside the step), and time limits always win: a host closes a timed step with a new host-only op, { type: 'expireTimedSeat', player, idleAction, args, boundaryKey }, one per seat still due (the action op has no timeout flag any more): it runs the idle action as the seat's own action when the step offers it, and otherwise drops a held seat's follow-up and ends its part (GameRunner.closeExpiredHeldSeat), recording that in actionHistory as a seat expiry ({ kind: 'seatExpiry', player, undoable: false }; actionHistory and GameStateSnapshot.actionHistory are now HistoryEntry[], SerializedAction | SerializedSeatExpiry, with isSeatExpiry to tell them apart) so GameRunner.replay re-applies it and undo counts it but never reaches behind it. The platform must compose expireTimedSeat itself from its round timer, never from a client message (no wire op maps to it), carry it through every op allowlist on its submission path (the builders table, the executor's validation schema, OP_BUILDERS), and stamp it with the key the timer was armed under: it is refused as stale like any submission, and refused outright on a step with no time limit. The seat drops its follow-up only by taking another action the step offers, and a refused action leaves it held. A held follow-up runs with its published args and without its condition, pick by pick or as one whole action (performAction/resume accept it for its owner; Game.performAction takes { asFollowUp }), enumerateLegalMoves and MCTSBot include its moves, a pending action completed in a simultaneous step is settled for its seat like a whole one (the step is no longer re-entered), dueSeats counts a held seat with no listed actions, and development builds warn when a held follow-up has no valid choice. A seat's own player state now carries the follow-up it holds (PlayerGameState.followUp, with metadata), and the table wiring starts it when no action is in progress (useActionController's heldFollowUp option), so a page reloaded mid-chain resumes it; a cancelled one stays startable from an Action Panel button (data-bs-follow-up) or the controller's resumeFollowUp(). FlowState.moveCount now counts every action in a turn-based step, each link of a follow-up chain included, so undo to the turn start reaches back over a whole chain (#495); move limits still count a chain once, and TurnRun gains actions beside count. offerFollowUp is now offerFollowUp(game, flowState, seat); Game.continueFlowAfterPendingAction and FlowEngine.resumeAfterExternalAction take the acting seat."
     }
   ]
 }

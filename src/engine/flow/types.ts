@@ -211,8 +211,12 @@ export interface ActionStepConfig<G extends Game = Game> extends BaseFlowConfig 
    * a seat submitting mid-round cannot move it. It is a duration, never an
    * instant: the engine keeps no clock and never closes the step itself. It
    * publishes the value as {@link FlowState.timeLimitMs} and on the host's turn
-   * boundary, and the HOST closes the step when the window elapses by
-   * submitting the game's `idleAction` for every seat that has not acted.
+   * boundary, and the HOST closes the step when the window elapses with one
+   * `expireTimedSeat` op per seat that has not acted, naming the game's
+   * `idleAction`. Time limits always win over a held follow-up: a seat the
+   * step does not offer the idle action has its follow-up dropped and its
+   * part ended instead (`GameRunner.closeExpiredHeldSeat`), which the action
+   * history records as a seat expiry.
    * A game that declares one must therefore declare `idleAction` in
    * `boardsmith.json` -- `boardsmith validate` and `boardsmith build` refuse it
    * otherwise. See docs/simultaneous-and-interrupt-semantics.md section 5.
@@ -248,8 +252,16 @@ export type TurnScope = 'continue' | 'restart';
 export interface TurnRun {
   /** Seat number of the player whose run this is. */
   player: number;
-  /** Committed actions in the run so far. */
+  /**
+   * Moves in the run so far, a follow-up chain counting as one: the moves a
+   * `turnScope: 'continue'` step starts from.
+   */
   count: number;
+  /**
+   * Committed actions in the run so far, every link of a follow-up chain
+   * counted: how far undo reaches back.
+   */
+  actions: number;
 }
 
 /**
@@ -361,9 +373,15 @@ export type FlowNode<G extends Game = Game> =
 export interface PlayerAwaitingState {
   /** Player position */
   playerIndex: number;
-  /** Actions available to this player */
+  /**
+   * The step's actions this player may take. Empty only while the player holds
+   * a follow-up (see `FlowState.followUps`), which is then all it can take.
+   */
   availableActions: string[];
-  /** Whether this player has completed their action */
+  /**
+   * Whether this player is done with the step. Never true while it holds a
+   * follow-up; a player that is not done is due to act.
+   */
   completed: boolean;
 }
 
@@ -391,7 +409,8 @@ export interface FlowState {
   /** Current named phase (for UI display) */
   currentPhase?: string;
   /**
-   * Number of moves taken in the CURRENTLY ACTIVE action-step frame. Published
+   * Number of actions committed in the CURRENTLY ACTIVE step frame, every link of a
+   * follow-up chain counted (move limits count a chain once; see `movesRemaining`). Published
    * for every action step (not only ones declaring minMoves/maxMoves) --
    * `session/utils.ts`'s `computeUndoInfo` treats this as the sole
    * authoritative undo-boundary signal (UNDO-03): a MISSING value means "not
@@ -433,19 +452,33 @@ export interface FlowState {
    */
   actionPartiallyApplied?: boolean;
   /**
-   * Follow-up action to chain after the last action completed.
-   * When present, the client should automatically start this action
-   * with the provided args pre-filled.
+   * The follow-ups the open step holds, at most one per seat, ordered by seat.
+   * Each belongs to the seat whose action returned it, and only that seat is
+   * offered it or may take it (`followUpForSeat`). While a seat holds one, the
+   * step does not end its part (turn-based) or mark it done (simultaneous); the
+   * seat drops it only by taking another action the step offers. Absent when
+   * none is held.
    */
-  followUp?: FollowUpAction;
+  followUps?: PublishedFollowUp[];
   // NOTE (BUG-017): `ActionResult.data`/`.message` deliberately do NOT live
-  // here, even though `followUp` does. `FlowState` fans out: `stateless-ops`'s
+  // here, even though `followUps` does. `FlowState` fans out: `stateless-ops`'s
   // `buildViews`/`buildSpectatorView` hand the whole object to EVERY seat and
   // to the spectator. `data` is the acting seat's private return value (a map
   // recall, a scout report), so a field on this interface would publish it to
   // the whole table — the same leak that rules out `game.animate()` as a
   // channel. It travels instead via `FlowEngine.getLastActionResult()`, read
   // by `GameRunner.performAction` and returned only to that op's caller.
+}
+
+/**
+ * A follow-up as the flow holds it: the {@link FollowUpAction} an action
+ * returned, plus the seat that took that action. `seat` is the follow-up's
+ * owner, recorded by the flow when the action's result is recorded, so every
+ * host and check reads the same owner.
+ */
+export interface PublishedFollowUp extends FollowUpAction {
+  /** The seat whose action returned this follow-up: the only seat that may take it. */
+  seat: number;
 }
 
 /**

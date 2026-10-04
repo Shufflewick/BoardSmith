@@ -6,7 +6,7 @@
  * session surface — they are defined once, in one place.
  */
 
-import type { FlowState, PublicFlowState, SerializedAction, Game, GameClass, AnimationEvent, GameStateSnapshot, PendingActionState } from '../engine/index.js';
+import type { FlowState, PublicFlowState, HistoryEntry, Game, GameClass, AnimationEvent, GameStateSnapshot, PendingActionState } from '../engine/index.js';
 import type { BotStrategy } from '../bot/index.js';
 import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
 import type { CheckpointPolicy, UndoPolicy } from '../engine/index.js';
@@ -52,7 +52,7 @@ export type { ActionTrace, PickTrace, ConditionDetail } from '../engine/index.js
 // Re-export repeating selection types from engine
 export type { PendingActionState, RepeatingSelectionState, RepeatConfig } from '../engine/index.js';
 
-import type { RefWithRole } from '../engine/action/types.js';
+import type { RefWithRole, FollowUpOffer } from '../engine/action/types.js';
 export type { RefWithRole };
 
 // Re-export tutorial types for consumers of the session surface
@@ -282,7 +282,7 @@ export interface StoredGameState {
   playerNames: string[];
   playerIds?: string[];
   seed?: string;
-  actionHistory: SerializedAction[];
+  actionHistory: HistoryEntry[];
   /**
    * Wall-clock time each `actionHistory` entry was recorded, parallel to it by
    * index. SESSION-owned, and deliberately kept out of the entries themselves
@@ -409,6 +409,14 @@ export interface PlayerGameState {
   view: unknown;
   /** Action metadata for auto-UI generation (optional) */
   actionMetadata?: Record<string, ActionMetadata>;
+  /**
+   * The follow-up the flow holds for this seat, with the metadata to start it.
+   * Only in this seat's own state, and only while it holds one: the seat keeps
+   * its turn (or stays undone in a simultaneous step) until it takes it or takes
+   * another action. A client starts it from here when it did not get it in the
+   * result of the action that returned it, as after a reload.
+   */
+  followUp?: FollowUpOffer;
   /** Whether the player can undo (has made actions this turn) */
   canUndo?: boolean;
   /**

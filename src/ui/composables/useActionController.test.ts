@@ -1984,6 +1984,102 @@ describe('useActionController', () => {
     });
   });
 
+  describe('a follow-up the server holds for this seat (#494)', () => {
+    const lootMeta: Record<string, EnrichedActionMetadata> = {
+      loot: {
+        name: 'loot',
+        prompt: 'Loot',
+        selections: [
+          { name: 'where', type: 'choice', prompt: 'Where', choices: [{ value: 'north', display: 'North' }, { value: 'south', display: 'South' }] },
+          { name: 'what', type: 'choice', prompt: 'What', choices: [{ value: 'gold', display: 'Gold' }, { value: 'gems', display: 'Gems' }] },
+        ],
+      },
+    };
+    const held = { action: 'loot', args: { by: 1 }, metadata: lootMeta.loot };
+
+    async function settle(): Promise<void> {
+      for (let i = 0; i < 5; i++) await nextTick();
+    }
+
+    it('starts it when it arrives in the seat state, as a page reloaded mid-chain needs', async () => {
+      const heldFollowUp = ref<typeof held | undefined>(held);
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn, heldFollowUp });
+      await settle();
+
+      expect(controller.currentAction.value).toBe('loot');
+      expect(controller.pendingOnServer.value).toBe(true);
+      expect(controller.currentArgs.value.by).toBe(1);
+    });
+
+    it('does not start it again after the player cancels it, so another action can be taken', async () => {
+      const heldFollowUp = ref<typeof held | undefined>(held);
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn, heldFollowUp });
+      await settle();
+      controller.cancel();
+      heldFollowUp.value = { ...held };
+      await settle();
+
+      expect(controller.currentAction.value).toBe(null);
+    });
+
+    it('does not start a second copy of one an action result already started', async () => {
+      const heldFollowUp = ref<typeof held | undefined>(undefined);
+      actionMetadata.value = { ...createTestMetadata(), ...lootMeta };
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn, heldFollowUp });
+      sendAction.mockResolvedValueOnce({ success: true, followUp: held });
+      await controller.execute('endTurn');
+      await settle();
+      expect(controller.currentAction.value).toBe('loot');
+      controller.cancel();
+
+      heldFollowUp.value = held;
+      await settle();
+
+      expect(controller.currentAction.value).toBe(null);
+    });
+
+    it('keeps a cancelled held follow-up startable: resumeFollowUp starts it again', async () => {
+      const heldFollowUp = ref<typeof held | undefined>(held);
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn, heldFollowUp });
+      await settle();
+      controller.cancel();
+      await settle();
+      expect(controller.currentAction.value).toBe(null);
+      expect(controller.heldFollowUp.value?.action).toBe('loot');
+
+      await controller.resumeFollowUp();
+
+      expect(controller.currentAction.value).toBe('loot');
+      expect(controller.pendingOnServer.value).toBe(true);
+      expect(controller.currentArgs.value.by).toBe(1);
+    });
+
+    it('starts the held follow-up of the seat the page switches to, even one it cancelled for the last seat', async () => {
+      const heldFollowUp = ref<typeof held | undefined>(held);
+      const playerSeat = ref(1);
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn, heldFollowUp, playerSeat });
+      await settle();
+      controller.cancel();
+
+      playerSeat.value = 2;
+      heldFollowUp.value = { ...held };
+      await settle();
+
+      expect(controller.currentAction.value).toBe('loot');
+    });
+
+    it('does not interrupt an action already in progress', async () => {
+      const heldFollowUp = ref<typeof held | undefined>(undefined);
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn, heldFollowUp });
+      await controller.start('playCard');
+
+      heldFollowUp.value = held;
+      await settle();
+
+      expect(controller.currentAction.value).toBe('playCard');
+    });
+  });
+
   describe('followUp + skip + auto-execute', () => {
     /** Metadata for the followUp action: one optional selection, no other selections. */
     const followUpMeta: Record<string, EnrichedActionMetadata> = {

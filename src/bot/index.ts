@@ -1,4 +1,4 @@
-import type { Game, GameClass, SerializedAction } from '../engine/index.js';
+import type { Game, GameClass, HistoryEntry } from '../engine/index.js';
 import { MCTSBot } from './mcts-bot.js';
 import type { BotConfig, BotStrategy, DifficultyLevel } from './types.js';
 import { DIFFICULTY_PRESETS } from './types.js';
@@ -57,7 +57,7 @@ export function createBot<G extends Game>(
   GameClass: GameClass<G>,
   gameType: string,
   playerIndex: number,
-  actionHistory: SerializedAction[] = [],
+  actionHistory: HistoryEntry[] = [],
   difficulty: DifficultyLevel | number = 'medium',
   botStrategy?: BotStrategy,
   reproducible?: { seed: string }

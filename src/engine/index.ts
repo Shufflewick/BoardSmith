@@ -153,7 +153,7 @@ export {
 export { actionTempState, type ActionTempState } from './action/index.js';
 
 // Default ceiling applied to every `enterText()` selection (see docs/state-size.md)
-export { DEFAULT_TEXT_MAX_LENGTH } from './action/index.js';
+export { DEFAULT_TEXT_MAX_LENGTH, isSeatExpiry } from './action/index.js';
 
 export type {
   AnnotatedChoice,
@@ -172,6 +172,8 @@ export type {
   FollowUpAction,
   FollowUpOffer,
   SerializedAction,
+  SerializedSeatExpiry,
+  HistoryEntry,
   ValidationResult,
   RefWithRole,
   ChoiceBoardRefs,
@@ -215,6 +217,7 @@ export {
   dueSeats,
   canSeatAct,
   availableActionsForSeat,
+  followUpForSeat,
   turnSequence,
   orderSeatsByTurn,
   flowBoundaryKey,
@@ -229,6 +232,7 @@ export type {
   FlowContext,
   FlowNode,
   FlowState,
+  PublishedFollowUp,
   FlowDebugInfo,
   FlowDefinition,
   BaseFlowConfig,

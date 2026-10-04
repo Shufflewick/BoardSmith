@@ -2044,9 +2044,9 @@ describe('Action Chaining with followUp in FlowState', () => {
     state = engine.resume('explore', {});
 
     // FlowState should include followUp
-    expect(state.followUp).toBeDefined();
-    expect(state.followUp?.action).toBe('collect');
-    expect(state.followUp?.args).toEqual({ mercId: 42, sectorId: 'A1' });
+    expect(state.followUps).toBeDefined();
+    expect(state.followUps?.[0]?.action).toBe('collect');
+    expect(state.followUps?.[0]?.args).toEqual({ mercId: 42, sectorId: 'A1' });
   });
 
   it('should not include followUp in FlowState when action does not return one', () => {
@@ -2068,7 +2068,7 @@ describe('Action Chaining with followUp in FlowState', () => {
 
     state = engine.resume('simple', {});
 
-    expect(state.followUp).toBeUndefined();
+    expect(state.followUps).toBeUndefined();
   });
 
   it('should clear followUp when subsequent action does not return one', () => {
@@ -2104,11 +2104,11 @@ describe('Action Chaining with followUp in FlowState', () => {
 
     // First action - should have followUp
     state = engine.resume('first', {});
-    expect(state.followUp?.action).toBe('second');
+    expect(state.followUps?.[0]?.action).toBe('second');
 
     // Second action - should NOT have followUp (cleared)
     state = engine.resume('second', {});
-    expect(state.followUp).toBeUndefined();
+    expect(state.followUps).toBeUndefined();
   });
 
   it('should include followUp with element ID from selected element', () => {
@@ -2146,8 +2146,8 @@ describe('Action Chaining with followUp in FlowState', () => {
     const card = deck.first(Card)!;
     state = engine.resume('selectAndChain', { card });
 
-    expect(state.followUp?.action).toBe('processCard');
-    expect(state.followUp?.args?.cardId).toBe(card.id);
+    expect(state.followUps?.[0]?.action).toBe('processCard');
+    expect(state.followUps?.[0]?.args?.cardId).toBe(card.id);
   });
 
   it('should not count followUp chains against loop maxIterations', () => {
@@ -2194,7 +2194,7 @@ describe('Action Chaining with followUp in FlowState', () => {
     state = engine.resume('chain', {});
 
     // Execute all the followUps (each triggered automatically via the flow engine)
-    while (state.followUp && !state.complete) {
+    while (state.followUps && !state.complete) {
       state = engine.resume('chain', {});
     }
 

@@ -1367,6 +1367,66 @@ Only chain to follow-up when a condition is met:
 4. **Args pre-filled** - follow-up action starts with provided args already set
 5. **User continues** - from user's perspective, it's one seamless interaction
 
+### A Follow-up Holds Its Seat
+
+A follow-up belongs to the seat whose action returned it, and each seat has its
+own: in a simultaneous step, another seat's action never replaces it. The flow
+publishes the follow-ups the open step holds as `FlowState.followUps`, each with
+its `seat`, and only that seat is offered the follow-up or may take it. Another
+seat that tries is refused with "'collectEquipment' is not one of your actions
+right now."
+
+While a seat holds a follow-up, the step keeps it:
+
+- in an `actionStep`, the turn stays with that seat, even if the step offers it
+  nothing else;
+- in a `simultaneousActionStep`, the seat is not marked done (whatever
+  `playerDone` says), so with the default `allDone` the step waits for it.
+
+There is no separate "decline". The seat drops its follow-up only by taking
+another action the step offers it; a refused action leaves it held.
+
+Two things end a hold anyway, by ruling:
+
+- **A custom `allDone` wins.** It is the one exception to the hold inside the
+  step: when a game's own `allDone` ends a simultaneous step, the follow-ups the
+  step held end with it.
+- **Time limits always win.** When a timed step's window runs out, the host
+  closes each seat still due with an `expireTimedSeat` op naming the game's
+  `idleAction`. A seat holding a follow-up takes the idle action if the step
+  offers it (which drops the follow-up, like any other action); if the step
+  does not offer it, the follow-up is dropped and the seat's part ends as if it
+  had finished: the turn passes on (`actionStep`), or the seat is marked done
+  (`simultaneousActionStep`). No action runs then, so the action history
+  records a **seat expiry** instead (`{ kind: 'seatExpiry', player, undoable:
+  false }`, a `HistoryEntry` beside the `SerializedAction` entries): a replay
+  of the history closes the seat again at the same point, and undo counts it
+  but never reaches behind it, because a closure the host made is not the
+  seat's to take back. See `timeLimitMs` below.
+
+So **an optional follow-up needs a way out**: give the follow-up action a
+"done" choice, or list an end action (such as `endTurn`) in the step. A seat
+held for a follow-up that has no valid choice cannot move on, and in
+development the engine warns about it.
+
+Undo to the turn start reaches back over every action of a chain: the step's
+undo boundary counts actions, each link of a chain included, while move limits
+(`maxMoves`, `minMoves`) count a whole chain as one move.
+
+A follow-up normally reaches the client in the result of the action that
+returned it. The seat's own published state carries it too
+(`PlayerGameState.followUp`), and the table starts it from there when no action
+is in progress, so a page reloaded mid-chain picks it back up. One the player
+cancels is not restarted on its own, so the player can take another offered
+action, but it stays one click away: the Action Panel shows a button for it
+whenever no action is in progress (`data-bs-follow-up`), and a custom UI calls
+the controller's `resumeFollowUp()`, reading `heldFollowUp`.
+
+The follow-up runs with the args it was published with, and its `condition` is
+not checked (the chain offers it, not the condition). The seat may take it pick
+by pick, as the UI does, or as one whole action: bots do the latter, and
+`enumerateLegalMoves` lists a held follow-up's moves for its seat.
+
 ### When to Use Action Chaining
 
 Use `followUp` when:
@@ -1568,6 +1628,28 @@ const playerTurn: FlowNode<MyGame> = sequence(
   actionStep({ actions: ['play'] }),
 );
 ```
+
+### Ending the game
+
+A game ends the moment it is finished, wherever the flow is. Any of these
+finishes it:
+
+- an action or an `execute()` calls `game.finish([winner])`,
+- something runs the `END_GAME` command,
+- your game's own `isFinished()` override starts returning true,
+- the flow's `isComplete` returns true, or the flow runs out of nodes.
+
+The flow engine checks before every node, so once the game is finished no
+further node runs and no seat is offered an action, not even a `followUp` the
+finishing action asked for. That holds in every construct: `eachPlayer`,
+`loop`, `sequence`, `repeat`, `forEach`, `phase`, a `simultaneousActionStep`
+with seats still to act, `turnLoop` and `stateAwareLoop` alike. A loop's
+`while` therefore only needs the loop's own condition; it does not have to test
+`isFinished()`.
+
+Put anything that must happen at the end (final scoring, a closing message)
+into the code that finishes the game, before it calls `finish()`. A node placed
+after the main loop does not run when an action finished the game.
 
 ### Flow Nodes
 
@@ -1822,8 +1904,13 @@ actionStep({
 - It is a **duration, never an instant**. The engine keeps no clock and never
   closes the step itself. It publishes the value as `FlowState.timeLimitMs` and
   on the host's turn boundary (`meta.turnBoundary.timeLimitMs`), and the host
-  closes the step when the window elapses by submitting your `idleAction` for
-  every seat that has not acted.
+  closes the step when the window elapses with one `expireTimedSeat` op per
+  seat that has not acted, naming your `idleAction`. That op is the host's
+  alone: no client message maps to it, so a player cannot close a seat by
+  dressing an action up as a timeout. Time limits always win: a seat holding a
+  follow-up is closed too, by the idle action when the step offers it, and
+  otherwise by dropping its follow-up and ending its part, which the history
+  records as a seat expiry (see "A Follow-up Holds Its Seat").
 - So a game with a timed step **must declare `idleAction`** in
   `boardsmith.json`. `boardsmith validate` and `boardsmith build` refuse it
   otherwise, naming the step. A bot is not an alternative: a timed-out seat is

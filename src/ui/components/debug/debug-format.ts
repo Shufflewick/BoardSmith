@@ -9,6 +9,7 @@
  *
  * @module
  */
+import type { HistoryEntry } from '../../composables/useDebugBridge.js';
 
 /** CSS custom property naming the colour a value of this type is drawn in. */
 export function getTypeColor(value: unknown): string {
@@ -55,6 +56,14 @@ export function formatActionName(name: string): string {
   return name
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/^./, s => s.toUpperCase());
+}
+
+/**
+ * What the History tab shows for one entry: the action's name, or, for a timed
+ * seat the host closed when its window ran out, that no action was taken.
+ */
+export function formatHistoryEntry(entry: HistoryEntry): string {
+  return 'name' in entry ? formatActionName(entry.name) : 'Time ran out (seat closed)';
 }
 
 /**

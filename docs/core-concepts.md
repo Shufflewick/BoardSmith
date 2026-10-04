@@ -711,8 +711,8 @@ for the world runner's contract and what a host must persist.
    - Flow starts executing
    - Players take actions
 
-4. isFinished() returns true
-   - Game ends
+4. The game is finished (finish(), the END_GAME command, or isFinished())
+   - The flow ends at once, whatever loop it is in
    - getWinners() called
 ```
 

@@ -2,7 +2,7 @@
  * bot controller for managing bot player moves
  */
 
-import { dueSeats, canSeatAct, type Game, type SerializedAction } from '../engine/index.js';
+import { dueSeats, canSeatAct, type Game, type HistoryEntry } from '../engine/index.js';
 import type { GameRunner } from '../runtime/index.js';
 import { createBot, parseBotLevel } from '../bot/index.js';
 import type { BotStrategy } from '../bot/index.js';
@@ -70,7 +70,7 @@ export class BotController<G extends Game = Game> {
    */
   async checkAndPlay(
     runner: GameRunner<G>,
-    actionHistory: SerializedAction[],
+    actionHistory: HistoryEntry[],
     onMove: (action: string, player: number, args: Record<string, unknown>) => Promise<boolean>,
     onBeforeMove?: (action: string, player: number, args: Record<string, unknown>) => Promise<void>
   ): Promise<{ action: string; player: number; args: Record<string, unknown> } | null> {

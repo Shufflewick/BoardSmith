@@ -18,6 +18,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, eachPlayer, type GameOptions } from '../engine/index.js';
+import { historyLabels } from './testing/history-labels.js';
 import { GameSession } from './game-session.js';
 
 class CounterGame extends Game<CounterGame, Player> {
@@ -54,9 +55,7 @@ function makeSession() {
 function expectSingleOwner(session: ReturnType<typeof makeSession>) {
   expect(session.storedState.actionHistory).toBe(session.runner.actionHistory);
   const served = session.getHistory().actionHistory;
-  expect(served.map(e => `${e.name}/${e.player}`)).toEqual(
-    session.runner.actionHistory.map(e => `${e.name}/${e.player}`)
-  );
+  expect(historyLabels(served)).toEqual(historyLabels(session.runner.actionHistory));
 }
 
 describe('action history has one owner (#48)', () => {

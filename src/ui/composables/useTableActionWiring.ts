@@ -22,7 +22,7 @@
  * that registers watchers.
  */
 import { computed, type ComputedRef, type Ref } from 'vue';
-import type { TutorialStepView } from '../../engine/index.js';
+import type { FollowUpOffer, TutorialStepView } from '../../engine/index.js';
 import type { ActionMetadata as WireActionMetadata } from '../../types/protocol.js';
 import type { BoardInteraction } from './useBoardInteraction.js';
 import type {
@@ -40,6 +40,8 @@ import { useBoardActionBridge, type RunnerIdentity } from './useBoardActionBridg
  */
 export interface TableSeatState {
   actionMetadata?: Record<string, WireActionMetadata>;
+  /** The follow-up the server holds for this seat (see `UseActionControllerOptions.heldFollowUp`). */
+  followUp?: FollowUpOffer;
   disabledActions?: Record<string, string>;
   tutorial?: TutorialStepView;
   gameInstanceId?: string;
@@ -53,7 +55,7 @@ export interface TableSeatState {
  */
 type ControllerTransportOptions = Omit<
   UseActionControllerOptions,
-  'actionMetadata' | 'disabledActions' | 'tutorialStep' | 'autoFill' | 'autoExecute' | 'isViewingHistory' | 'isMyTurn' | 'playerSeat' | 'availableActions'
+  'actionMetadata' | 'heldFollowUp' | 'disabledActions' | 'tutorialStep' | 'autoFill' | 'autoExecute' | 'isViewingHistory' | 'isMyTurn' | 'playerSeat' | 'availableActions'
 >;
 
 export interface TableActionWiringOptions extends ControllerTransportOptions {
@@ -89,6 +91,7 @@ export function useTableActionWiring(opts: TableActionWiringOptions): TableActio
   const actionMetadata = computed<Record<string, EnrichedActionMetadata>>(() => seatState.value?.actionMetadata ?? {});
   const disabledActions = computed(() => seatState.value?.disabledActions);
   const tutorialStep = computed(() => seatState.value?.tutorial);
+  const heldFollowUp = computed(() => seatState.value?.followUp);
   // A change in either field means every element id the client holds is stale:
   // see BoardActionBridgeOptions.runnerIdentity.
   const runnerIdentity = computed<RunnerIdentity | undefined>(() => {
@@ -100,6 +103,7 @@ export function useTableActionWiring(opts: TableActionWiringOptions): TableActio
   const controller = useActionController({
     ...transport,
     actionMetadata,
+    heldFollowUp,
     disabledActions,
     tutorialStep,
     availableActions,

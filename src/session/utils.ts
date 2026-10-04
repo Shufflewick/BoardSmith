@@ -2,7 +2,7 @@
  * Shared utility functions for game hosting
  */
 
-import { Player, canSeatAct, availableActionsForSeat, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState, type FollowUpAction, type FollowUpOffer } from '../engine/index.js';
+import { Player, canSeatAct, availableActionsForSeat, followUpForSeat, isSeatExpiry, type HistoryEntry, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState, type FollowUpAction, type FollowUpOffer } from '../engine/index.js';
 import { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
 import { devWarn } from '../utils/dev.js';
@@ -144,12 +144,19 @@ export function buildSingleActionMetadata(
 }
 
 /**
- * The follow-up a game returned, as the seat that took the action receives it:
+ * The follow-up the flow holds for `seat`, as that seat's client receives it:
  * with the metadata of the action it names, which is usually not in that
- * seat's available actions. The one place a {@link FollowUpOffer} is built
- * (#377). `metadata` is absent when `seat` names no player.
+ * seat's available actions. `undefined` when the flow holds no follow-up, or
+ * one that belongs to another seat ({@link followUpForSeat}). The one place a
+ * {@link FollowUpOffer} is built (#377). `metadata` is absent when `seat`
+ * names no player.
  */
-export function offerFollowUp(game: Game, seat: number, followUp: FollowUpAction): FollowUpOffer {
+export function offerFollowUp(game: Game, flowState: FlowState | undefined, seat: number): FollowUpOffer | undefined {
+  const owned = followUpForSeat(flowState, seat);
+  if (!owned) return undefined;
+  const followUp: FollowUpAction = { action: owned.action };
+  if (owned.args !== undefined) followUp.args = owned.args;
+  if (owned.display !== undefined) followUp.display = owned.display;
   const player = game.getPlayer(seat);
   // followUp.args reach the metadata so a dynamic prompt can read them (e.g. a sector's name).
   const metadata = player ? buildSingleActionMetadata(game, player, followUp.action, followUp.args) : undefined;
@@ -461,9 +468,12 @@ export class UndoRefusedError extends Error {
  * old client-trusted-enforcement bug -- there is no boolean flag a caller
  * could compute and then ignore.
  */
+/** Why nothing can be undone in a finished game, whichever check refuses it. */
+const FINISHED_UNDO_REFUSAL = 'Cannot undo: the game is finished.';
+
 export function assertUndoAllowed(args: {
   runner: GameRunner;
-  actionHistory: Array<{ player: number; undoable?: boolean; name?: string }>;
+  actionHistory: readonly HistoryEntry[];
   turnStartActionIndex: number;
   fenceRandomRewind: boolean;
 }): void {
@@ -472,14 +482,20 @@ export function assertUndoAllowed(args: {
   const executeBarrierIndex = runner.executeBarrierIndex;
 
   if (game.isFinished()) {
-    throw new UndoRefusedError('Cannot undo: the game is finished.', 'finished-phase');
+    throw new UndoRefusedError(FINISHED_UNDO_REFUSAL, 'finished-phase');
   }
 
   for (let i = turnStartActionIndex; i < actionHistory.length; i++) {
-    if (actionHistory[i].undoable === false) {
-      const name = actionHistory[i].name ?? 'action';
-      throw new UndoRefusedError(`Cannot undo: ${name} is marked notUndoable.`, 'non-undoable');
+    const entry = actionHistory[i];
+    if (entry.undoable !== false) continue;
+    // A timed seat the host closed is not the seat's own move to take back.
+    if (isSeatExpiry(entry)) {
+      throw new UndoRefusedError(
+        `Cannot undo: seat ${entry.player}'s time ran out and the host closed its part of the step, which cannot be taken back.`,
+        'non-undoable',
+      );
     }
+    throw new UndoRefusedError(`Cannot undo: ${entry.name} is marked notUndoable.`, 'non-undoable');
   }
 
   if (turnStartActionIndex < executeBarrierIndex) {
@@ -537,12 +553,15 @@ type UndoDecision =
  * disagree. A seat is offered Undo exactly when this allows it.
  *
  * In order, the undo is refused when:
- *  1. it is not the seat's turn ({@link computeUndoEligibility});
- *  2. the seat has nothing to undo this turn ({@link undoUnavailableMessage});
- *  3. a fence in {@link assertUndoAllowed} refuses it: finished game,
+ *  1. the game is finished. A finished game's flow is complete and prompts
+ *     no seat (#492), so without this first every seat would be told "It's
+ *     not your turn" instead of the real reason;
+ *  2. it is not the seat's turn ({@link computeUndoEligibility});
+ *  3. the seat has nothing to undo this turn ({@link undoUnavailableMessage});
+ *  4. a fence in {@link assertUndoAllowed} refuses it: finished game,
  *     `.notUndoable()` action, irreversible `execute()`, or the game's
  *     `undo: { fenceRandomRewind: true }` policy;
- *  4. the runner holds no checkpoint at the turn start to restore, because
+ *  5. the runner holds no checkpoint at the turn start to restore, because
  *     the game sets `checkpoints: { enabled: false }` or its
  *     `checkpoints: { max }` window no longer reaches back that far.
  *
@@ -550,6 +569,9 @@ type UndoDecision =
  * caller's restore from it succeeds.
  */
 export function decideUndo(runner: GameRunner, seat: number): UndoDecision {
+  if (runner.game.isFinished()) {
+    return { allowed: false, error: FINISHED_UNDO_REFUSAL, errorCode: ErrorCode.UNDO_NOT_ALLOWED };
+  }
   const flowState = runner.getFlowState();
   const { eligible, turnStartActionIndex, actionsThisTurn } = computeUndoEligibility(
     runner.actionHistory,
@@ -739,6 +761,14 @@ export function buildPlayerState(
   // availableActions, D26/SPACE-05) -- attach it here if present.
   if (actionMetadata) {
     state.actionMetadata = actionMetadata;
+  }
+
+  // The follow-up the flow holds for this seat, in this seat's state alone, so
+  // a page that never saw the action result it arrived in (a reload mid-chain)
+  // can still start it. Built when metadata is, since the offer carries its own.
+  if (options?.includeActionMetadata && playerPosition > 0) {
+    const followUp = offerFollowUp(runner.game, flowState, playerPosition);
+    if (followUp) state.followUp = followUp;
   }
 
   // Optionally include custom debug data

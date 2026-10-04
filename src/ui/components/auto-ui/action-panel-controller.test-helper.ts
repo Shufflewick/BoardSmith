@@ -37,6 +37,9 @@ export function stubActionController(overrides: Record<string, unknown> = {}) {
     // Read around execute(): the panel clears the board afterwards only if no
     // newer action started meanwhile (#445).
     actionStartTick: ref(0),
+    // The follow-up the server holds for this seat, and the verb that starts it.
+    heldFollowUp: ref<unknown>(undefined),
+    resumeFollowUp: vi.fn(async () => {}),
 
     // Refs the panel wraps in a computed.
     animationsPending: ref(false),

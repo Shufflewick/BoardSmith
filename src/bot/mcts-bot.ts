@@ -3,12 +3,13 @@ import type {
   GameOptions,
   Player,
   FlowState,
-  SerializedAction,
+  HistoryEntry,
   ActionDefinition,
   Selection,
   GameStateSnapshot,
+  FollowUpAction,
 } from '../engine/index.js';
-import { createSnapshot, canSeatAct, availableActionsForSeat } from '../engine/index.js';
+import { createSnapshot, canSeatAct, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
 import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
 import { constructGame } from '../engine/element/game.js';
 import type {
@@ -60,7 +61,7 @@ export class MCTSBot<G extends Game = Game> {
    */
   private determinize?: DeterminizeSampler;
   private rng: SeededRandom;
-  private actionHistory: SerializedAction[];
+  private actionHistory: HistoryEntry[];
   private seed?: string;
   /** Cached UCT exploration constant (computed once per move in playSingle) */
   private cachedUctC: number = Math.sqrt(2);
@@ -100,7 +101,7 @@ export class MCTSBot<G extends Game = Game> {
     GameClass: GameClass<G>,
     gameType: string,
     playerIndex: number,
-    actionHistory: SerializedAction[] = [],
+    actionHistory: HistoryEntry[] = [],
     config: Partial<BotConfig> = {},
     botStrategy?: BotStrategy
   ) {
@@ -1094,7 +1095,22 @@ export class MCTSBot<G extends Game = Game> {
       }
     }
 
+    moves.push(...this.followUpMoves(game, flowState, this.playerIndex, noSampling));
     return moves;
+  }
+
+  /**
+   * The moves of the follow-up `seat` holds, if any: its action with the args
+   * it was published with bound. While the step offers the seat nothing else,
+   * these are its only moves, so a bot that skipped them would stall the step.
+   */
+  private followUpMoves(game: Game, flowState: FlowState, seat: number, noSampling: boolean): BotMove[] {
+    const followUp = followUpForSeat(flowState, seat);
+    const actionDef = followUp && game.getAction(followUp.action);
+    const player = game.getPlayer(seat);
+    if (!followUp || !actionDef || !player) return [];
+    return this.enumerateSelectionsInternal(game, actionDef, player, noSampling, followUp)
+      .map((args) => ({ action: followUp.action, args }));
   }
 
   /**
@@ -1120,7 +1136,7 @@ export class MCTSBot<G extends Game = Game> {
 
     // For simultaneous actions, pick the first awaiting player
     if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
-      const firstAwaiting = flowState.awaitingPlayers.find(p => !p.completed && p.availableActions.length > 0);
+      const firstAwaiting = flowState.awaitingPlayers.find(p => !p.completed);
       if (firstAwaiting) {
         currentPlayerIndex = firstAwaiting.playerIndex;
         actions = firstAwaiting.availableActions;
@@ -1151,6 +1167,7 @@ export class MCTSBot<G extends Game = Game> {
       }
     }
 
+    moves.push(...this.followUpMoves(enumerationGame, flowState, currentPlayerIndex, false));
     return moves;
   }
 
@@ -1228,10 +1245,11 @@ export class MCTSBot<G extends Game = Game> {
     game: Game,
     actionDef: ActionDefinition,
     player: Player,
-    noSampling: boolean
+    noSampling: boolean,
+    followUp?: FollowUpAction,
   ): Record<string, unknown>[] {
     // Shared enumerator: fully gated, element objects (no serialization, no sampling)
-    const combos = enumerateActionMoves(game, actionDef, player);
+    const combos = enumerateActionMoves(game, actionDef, player, { followUp });
 
     // Bot wire format: convert element objects to numeric IDs
     const serialized = combos.map(args => this.serializeArgs(args, actionDef.selections));

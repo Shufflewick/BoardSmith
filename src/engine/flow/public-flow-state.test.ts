@@ -15,7 +15,7 @@ const server: FlowState = {
     },
     playerIndex: 1,
     variables: { secret: 'x' },
-    turnRun: { player: 1, count: 3 },
+    turnRun: { player: 1, count: 3, actions: 3 },
   },
   complete: false,
   awaitingInput: true,
@@ -30,7 +30,7 @@ const server: FlowState = {
   timeLimitMs: 30000,
   turnScopeUndeclared: 'deploy',
   actionError: "seat 1's error",
-  followUp: { action: 'peek', args: { card: 12 } },
+  followUps: [{ action: 'peek', args: { card: 12 }, seat: 1 }],
 };
 
 describe('toPublicFlowState (#449)', () => {

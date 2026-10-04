@@ -10,10 +10,15 @@ import {
   createAllPlayerViews,
   ActionExecutor,
   FlowHaltedError,
+  canSeatAct,
+  availableActionsForSeat,
+  followUpForSeat,
   type Game,
   type GameOptions,
   type Player,
   type SerializedAction,
+  type HistoryEntry,
+  isSeatExpiry,
   type ActionResult,
   type FlowState,
   type FlowDebugInfo,
@@ -190,8 +195,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   /** Game type identifier */
   readonly gameType: string;
 
-  /** History of serialized actions */
-  readonly actionHistory: SerializedAction[] = [];
+  /** The game's history: every action taken, and every timed seat the host closed */
+  readonly actionHistory: HistoryEntry[] = [];
 
   /**
    * The RETAINED WINDOW of per-action authoritative undo checkpoints: the
@@ -719,6 +724,89 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   }
 
   /**
+   * Why `seat` may not take `actionName` right now, or `undefined` when the
+   * flow currently offers it that action.
+   *
+   * A multi-step action is collected one selection at a time and runs when the
+   * last arrives, without passing through the flow's own checks first. Every
+   * pending-action path (`processSelectionStep` here, and
+   * `PendingActionManager` for `GameSession` and the stateless `selectionStep`
+   * op) asks this before any selection is processed, so a pending action can
+   * never run on a finished game or as another seat's move (#492).
+   *
+   * A follow-up counts as offered only to the seat whose action published it
+   * (`followUpForSeat`): that is how a chained action that the step does not
+   * list is taken, and in a simultaneous step no other seat may take it.
+   */
+  refusalToAct(actionName: string, seat: number): { error: string; errorCode: ErrorCode } | undefined {
+    if (!this.game.getAction(actionName)) {
+      return { error: `Action not found: ${actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND };
+    }
+    const flowState = this.getFlowState();
+    if (flowState?.complete || this.game.isFinished()) {
+      return { error: 'The game is finished.', errorCode: ErrorCode.NOT_AWAITING_INPUT };
+    }
+    if (!flowState?.awaitingInput) {
+      return { error: 'The game is not waiting for any action right now.', errorCode: ErrorCode.NOT_AWAITING_INPUT };
+    }
+    if (!canSeatAct(flowState, seat)) {
+      return { error: "It's not your turn.", errorCode: ErrorCode.NOT_YOUR_TURN };
+    }
+    const offered = availableActionsForSeat(flowState, seat).includes(actionName)
+      || followUpForSeat(flowState, seat)?.action === actionName;
+    if (!offered) {
+      return {
+        error: `'${actionName}' is not one of your actions right now.`,
+        errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
+      };
+    }
+    return undefined;
+  }
+
+  /**
+   * A host closing a timed step whose window ran out (#494: time limits always
+   * win). When the open step declared a time limit, `seat` holds a follow-up,
+   * and the step does not offer `seat` the idle action `actionName`, the
+   * follow-up is dropped and the seat's part ends, and the new flow state is
+   * returned. Otherwise returns `undefined`, and the host runs the idle action
+   * as the seat's own action, which, when the step offers it, also drops the
+   * seat's follow-up. The stateless `expireTimedSeat` op is the one caller.
+   */
+  closeExpiredHeldSeat(seat: number, actionName: string): FlowState | undefined {
+    const flowState = this.getFlowState();
+    if (flowState?.timeLimitMs === undefined) return undefined;
+    if (!followUpForSeat(flowState, seat)) return undefined;
+    if (this.refusalToAct(actionName, seat) === undefined) return undefined;
+    return this.expireHeldSeat(seat);
+  }
+
+  /**
+   * Drop `seat`'s held follow-up, end its part in the open step, and record
+   * that in `actionHistory` as a seat expiry. No action ran, but the flow
+   * moved, so the history has to say so: `replay` re-applies the entry through
+   * this same method, and undo counts it (and never reaches behind it). Throws
+   * when `seat` holds no follow-up, so a replay on rules that no longer hold
+   * one fails loudly.
+   */
+  private expireHeldSeat(seat: number): FlowState {
+    const state = this.game.expireHeldSeat(seat);
+    this.actionHistory.push({ kind: 'seatExpiry', player: seat, undoable: false });
+    return state;
+  }
+
+  /**
+   * When `pendingState` is `seat`'s held follow-up, bind the args the follow-up
+   * was published with: a follow-up runs with those, whatever the client sent
+   * for them. Every pending-action path calls this just before it executes.
+   */
+  bindFollowUpArgs(pendingState: PendingActionState, seat: number): void {
+    const followUp = followUpForSeat(this.getFlowState(), seat);
+    if (followUp?.action === pendingState.actionName && followUp.args) {
+      Object.assign(pendingState.collectedArgs, followUp.args);
+    }
+  }
+
+  /**
    * Process one selection step of a player's in-progress pending action
    * (started via `startPendingAction`). Session-free mirror of
    * `PendingActionManager.processSelectionStep` — handles both regular and
@@ -739,6 +827,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     if (!pendingState) {
       return { success: false, error: 'No pending action for this player. Call startPendingAction first.' };
     }
+
+    const refusal = this.refusalToAct(pendingState.actionName, playerPosition);
+    if (refusal) return { success: false, error: refusal.error };
 
     const action = this.game.getAction(pendingState.actionName);
     if (!action) {
@@ -800,13 +891,14 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     pendingState: PendingActionState,
     playerPosition: number
   ): PendingStepResult & { actionComplete: true } {
+    this.bindFollowUpArgs(pendingState, playerPosition);
     const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs);
     const actionResult = executor.executePendingAction(action, player, pendingState);
     this.pendingActions.delete(playerPosition);
 
     if (actionResult.success) {
       this.recordSerializedAction(serializedAction);
-      this.game.continueFlowAfterPendingAction(actionResult);
+      this.game.continueFlowAfterPendingAction(actionResult, playerPosition);
     }
 
     return {
@@ -905,21 +997,31 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   }
 
   /**
-   * Replay a game from a list of serialized actions
+   * Replay a game from its history: every action is performed again, and every
+   * timed seat the host closed is closed again, in order. Throws, naming the
+   * entry, when the rules no longer accept one.
    */
   static replay<G extends Game>(
     options: GameRunnerOptions<G>,
-    actions: SerializedAction[]
+    history: HistoryEntry[]
   ): GameRunner<G> {
     const runner = new GameRunner(options);
     runner.start();
 
-    for (const action of actions) {
-      const { actionName, player, args } = deserializeAction(action, runner.game);
+    for (const entry of history) {
+      if (isSeatExpiry(entry)) {
+        try {
+          runner.expireHeldSeat(entry.player);
+        } catch (error) {
+          throw new Error(`Replay failed at seat ${entry.player}'s expiry: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        continue;
+      }
+      const { actionName, player, args } = deserializeAction(entry, runner.game);
       const result = runner.performAction(actionName, player, args);
 
       if (!result.success) {
-        throw new Error(`Replay failed at action ${action.name}: ${result.error}`);
+        throw new Error(`Replay failed at action ${entry.name}: ${result.error}`);
       }
     }
 

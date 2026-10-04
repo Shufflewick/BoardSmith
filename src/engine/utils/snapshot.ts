@@ -1,6 +1,6 @@
 import type { Game, MessageEntry } from '../element/game.js';
 import { Player } from '../player/player.js';
-import type { SerializedAction } from '../action/types.js';
+import type { HistoryEntry } from '../action/types.js';
 import type { FlowState } from '../flow/types.js';
 import type { ElementJSON } from '../element/types.js';
 import type { TutorialStepView } from '../tutorial/types.js';
@@ -49,8 +49,8 @@ export interface GameStateSnapshot {
   /** Flow engine state (if flow is active) */
   flowState?: FlowState;
 
-  /** Action history for replay */
-  actionHistory: SerializedAction[];
+  /** Action history: every action taken and every timed seat the host closed, for undo and replay */
+  actionHistory: HistoryEntry[];
 
   /** Random seed for deterministic replay */
   seed?: string;
@@ -413,7 +413,7 @@ export interface PlayerStateView {
 export function createSnapshot(
   game: Game,
   gameType: string,
-  actionHistory: SerializedAction[] = [],
+  actionHistory: HistoryEntry[] = [],
   seed?: string,
   /** `forSeat`: build a REDACTED clone for this seat — `null` for the spectator
    *  (public information only). Omit for the unfiltered authoritative truth. */

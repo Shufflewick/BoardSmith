@@ -44,7 +44,7 @@ import {
   type VisibilityState,
 } from '../command/visibility.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
-import { ActionExecutor } from '../action/action.js';
+import { ActionExecutor, type PerformOptions } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition, FlowDebugInfo } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
 import { getActionLevelDisabledReasons } from '../tutorial/gate.js';
@@ -2597,12 +2597,16 @@ export class Game<
   }
 
   /**
-   * Perform an action with the given arguments
+   * Perform an action with the given arguments.
+   *
+   * `options.asFollowUp` is for the flow engine alone: the action is the
+   * seat's held follow-up, whose condition is not checked.
    */
   performAction(
     actionName: string,
     player: P,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    options?: PerformOptions,
   ): ActionResult {
     // Clear previous animation events -- new action starts a new batch
     this._animationEvents = [];
@@ -2629,7 +2633,7 @@ export class Game<
       };
     }
 
-    return this._actionExecutor.executeAction(action, player, args);
+    return this._actionExecutor.executeAction(action, player, args, options);
   }
 
   /**
@@ -3225,16 +3229,32 @@ export class Game<
    * Continue flow after a pending action was executed externally.
    * Used when an action with repeating selections completes via the action executor.
    * @param result The result of the executed action
+   * @param seat The seat that took the action: the owner of any follow-up it returned
    */
-  continueFlowAfterPendingAction(result: ActionResult): FlowState {
+  continueFlowAfterPendingAction(result: ActionResult, seat: number): FlowState {
     if (!this._flowEngine) {
       throw new Error('Flow not started');
     }
 
-    const state = this._flowEngine.resumeAfterExternalAction(result);
+    const state = this._flowEngine.resumeAfterExternalAction(result, seat);
 
     this.#applyFlowCompletion(state);
 
+    return state;
+  }
+
+  /**
+   * End a seat's part in the open timed step when its time ran out while it
+   * held a follow-up the step offers no idle action beside (#494: time limits
+   * always win). See `FlowEngine.expireHeldSeat`; hosts reach it through
+   * `GameRunner.closeExpiredHeldSeat`.
+   */
+  expireHeldSeat(seat: number): FlowState {
+    if (!this._flowEngine) {
+      throw new Error('Flow not started');
+    }
+    const state = this._flowEngine.expireHeldSeat(seat);
+    this.#applyFlowCompletion(state);
     return state;
   }
 

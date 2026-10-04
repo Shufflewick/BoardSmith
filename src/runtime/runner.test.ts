@@ -414,7 +414,7 @@ describe('GameRunner', () => {
       // state and replay/undo/snapshot are inconsistent.
       expect(haltingRunner.game.mode).toBe('unexpected');
       expect(haltingRunner.actionHistory).toHaveLength(1);
-      expect(haltingRunner.actionHistory[0].name).toBe('setMode');
+      expect(haltingRunner.actionHistory[0]).toMatchObject({ name: 'setMode' });
     });
 
     it('ENG-03: a failing simultaneous action returns {success:false} and is NOT recorded in actionHistory', () => {

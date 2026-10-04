@@ -1,5 +1,5 @@
 import type { Op, OpResult } from './stateless-ops.js';
-import { READ_ONLY_OP_TYPES, debugOpRefusal } from './stateless-ops.js';
+import { READ_ONLY_OP_TYPES, closesSeat, debugOpRefusal } from './stateless-ops.js';
 import type { Annotation } from '../engine/index.js';
 import { dueSeats, type SeatActivityState } from '../engine/flow/seat-activity.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
@@ -691,9 +691,10 @@ export class SnapshotSessionHost {
 
   /**
    * `restoreFrom`'s check that the outcome is given, and names seats of this table.
-   * Winners with `isComplete` false are taken as they are: `game.finish([p])`
-   * inside a loop that does not stop on it reports exactly that, and
-   * `restoreFrom` accepts anything `durableState()` can return.
+   * Winners with `isComplete` false are taken as they are: a game that
+   * overrides `getWinners()` to name the leader while play goes on reports
+   * exactly that, and `restoreFrom` accepts anything `durableState()` can
+   * return.
    */
   private restorableWinners(isComplete: unknown, winners: unknown): number[] {
     if (typeof isComplete !== 'boolean') {
@@ -989,7 +990,7 @@ export class SnapshotSessionHost {
     // Clear pending state BEFORE executing so a failed superseding action
     // doesn't leave stale selection state behind (matches the old DO's
     // applyHumanAction, which deleted pending state before a direct action).
-    const supersededSelection = op.type === 'action' && this.pendingStates.delete(seat);
+    const supersededSelection = closesSeat(op) && this.pendingStates.delete(seat);
     const res = await this.adapters.executeOp(this.snapshot, this.pendingStates.get(seat) ?? null, op);
     if (!res.success) {
       // The refused op changed nothing else, but it did drop this seat's
@@ -1000,7 +1001,7 @@ export class SnapshotSessionHost {
 
     // Clear hint for the acting seat on successful action/selectionStep (completion).
     // Mirrors GameSession.performAction: this.#hint.delete(player).
-    if (op.type === 'action' || (op.type === 'selectionStep' && res.actionComplete)) {
+    if (closesSeat(op) || (op.type === 'selectionStep' && res.actionComplete)) {
       const seatTransient = this.transientTeachingState.get(seat);
       if (seatTransient?.hint) {
         const { hint: _h, ...rest } = seatTransient;
@@ -1026,7 +1027,7 @@ export class SnapshotSessionHost {
     }
 
     await this.apply(res, seat);
-    const actionCompleted = op.type === 'action' || (op.type === 'selectionStep' && res.actionComplete);
+    const actionCompleted = closesSeat(op) || (op.type === 'selectionStep' && res.actionComplete);
     // A restore can land the game on a bot seat's turn, and nothing else will
     // ever wake it: the pump is driven by ops, and the only op that would
     // arrive is a human action the bot seat is not going to take. The table

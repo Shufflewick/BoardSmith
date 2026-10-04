@@ -321,6 +321,16 @@ function choiceCountErrors(
  * - Executing action handlers with resolved arguments
  * - Supporting repeating selections and pending action state
  */
+/** How an action is being taken, when it is not an ordinary offered action. */
+export interface PerformOptions {
+  /**
+   * The action is the acting seat's held follow-up: its condition is not
+   * checked, since the chain offers it, not the condition. Only the flow
+   * engine passes this, for the seat that owns the follow-up.
+   */
+  asFollowUp?: boolean;
+}
+
 export class ActionExecutor {
   private game: Game;
 
@@ -1271,7 +1281,8 @@ export class ActionExecutor {
   validateAction(
     action: ActionDefinition,
     player: Player,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    options?: PerformOptions,
   ): ValidationResult {
     const allErrors: string[] = [];
     const context: ActionContext = {
@@ -1280,8 +1291,8 @@ export class ActionExecutor {
       args,
     };
 
-    // Check condition
-    if (action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
+    // Check condition. A follow-up is offered by the chain, not its condition.
+    if (!options?.asFollowUp && action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
       return {
         valid: false,
         errors: ['Action is not available'],
@@ -1328,7 +1339,8 @@ export class ActionExecutor {
   executeAction(
     action: ActionDefinition,
     player: Player,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    options?: PerformOptions,
   ): ActionResult {
     // A repeating selection is a protocol, not a value: each pick is checked
     // against the choices the previous pick's onEach left, runs onEach, and is
@@ -1336,14 +1348,14 @@ export class ActionExecutor {
     // whole submission runs the same selection steps a player's picks do
     // (#325) rather than a second, repeat-blind validation.
     if (this.hasRepeatingSelections(action)) {
-      return this.executeThroughSelectionSteps(action, player, args);
+      return this.executeThroughSelectionSteps(action, player, args, options);
     }
 
     // Resolve serialized args (player indices, element IDs) to actual objects
     const resolvedArgs = this.resolveArgs(action, args, player);
 
     // Validate with resolved args
-    const validation = this.validateAction(action, player, resolvedArgs);
+    const validation = this.validateAction(action, player, resolvedArgs, options);
     if (!validation.valid) {
       return {
         success: false,
@@ -1414,10 +1426,11 @@ export class ActionExecutor {
   private executeThroughSelectionSteps(
     action: ActionDefinition,
     player: Player,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    options?: PerformOptions,
   ): ActionResult {
     const context = { game: this.game, player, args: this.resolveArgs(action, args, player) };
-    if (action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
+    if (!options?.asFollowUp && action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
       return { success: false, error: 'Action is not available' };
     }
 
@@ -1547,6 +1560,16 @@ export class ActionExecutor {
    * For actions with dependent selections (filterBy), this checks if at least
    * one valid path through all selections exists.
    */
+  /**
+   * Whether a seat holding `action` as a follow-up pre-filled with `args` has
+   * at least one valid way to complete it. The condition is not checked: a
+   * follow-up is offered by the chain, not by its condition.
+   */
+  hasFollowUpChoices(action: ActionDefinition, player: Player, args: Record<string, unknown>): boolean {
+    const resolved = this.resolveArgs(action, args, player);
+    return this.hasValidSelectionPath(action.selections, player, resolved, 0, action.name);
+  }
+
   isActionAvailable(action: ActionDefinition, player: Player): boolean {
     const context: ActionContext = {
       game: this.game,

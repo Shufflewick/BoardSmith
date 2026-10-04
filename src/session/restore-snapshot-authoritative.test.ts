@@ -112,7 +112,7 @@ describe('F42: GameSession.restore is snapshot-authoritative', () => {
     // actionHistory is preserved (for undo turn-detection) — exactly one entry
     // for the completed multi-step action.
     expect(restored.runner.actionHistory).toHaveLength(1);
-    expect(restored.runner.actionHistory[0].name).toBe('collect');
+    expect(restored.runner.actionHistory[0]).toMatchObject({ name: 'collect' });
   });
 
   it('uses GameRunner.fromSnapshot and never GameRunner.replay', async () => {

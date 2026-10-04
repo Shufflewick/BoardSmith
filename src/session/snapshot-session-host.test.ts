@@ -737,6 +737,54 @@ describe('SnapshotSessionHost', () => {
       expect(afterActionCall.type).toBe('selectionStep');
       expect(afterActionCall.pendingState).toBeNull();
     });
+
+    it('a timed-seat close drops the seat\'s in-progress selection too, and drives the bot pump after it', async () => {
+      const calls: Array<{ type: string; pendingState: Record<string, unknown> | null }> = [];
+      const base: OpResult = {
+        success: true,
+        snapshot: {},
+        pendingState: null,
+        flowState: {},
+        playerViews: [],
+        isComplete: false,
+        winners: [],
+      };
+      const adapters: SnapshotSessionAdapters = {
+        playerCount: 2,
+        executeOp: async (_snap, pend, op) => {
+          calls.push({ type: op.type, pendingState: pend });
+          if (op.type === 'selectionStep') return { ...base, actionComplete: false, pendingState: { step: 'mid' } };
+          if (op.type === 'botTurn') return { ...base, botMoved: false };
+          return { ...base };
+        },
+        record: () => {}, push: () => {},
+        botSeats: [{ seat: 2 }],
+      };
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      const startCalls = calls.length;
+
+      // Seat 1 is mid-way through picking its follow-up when its window closes.
+      await host.handleOp(1, {
+        type: 'selectionStep', player: 1, selectionName: 'where', value: 'north', actionName: 'loot',
+        boundaryKey: boundaryKeyOfHost(host),
+      });
+      const closed = await host.handleOp(1, {
+        type: 'expireTimedSeat', player: 1, idleAction: 'rest', args: {}, boundaryKey: boundaryKeyOfHost(host),
+      });
+      expect(closed.success).toBe(true);
+
+      const closeCall = calls[startCalls + 1];
+      expect(closeCall).toEqual({ type: 'expireTimedSeat', pendingState: null });
+      // The close ended the seat's part, so the bot seat was asked to move next.
+      expect(calls.slice(startCalls + 2).map((c) => c.type)).toContain('botTurn');
+      // And the seat's half-made picks are gone for good.
+      await host.handleOp(1, {
+        type: 'selectionStep', player: 1, selectionName: 'where', value: 'south', actionName: 'loot',
+        boundaryKey: boundaryKeyOfHost(host),
+      });
+      expect(calls.at(-1)).toEqual({ type: 'selectionStep', pendingState: null });
+    });
   });
 
   // ── persist hook ───────────────────────────────────────────────────────────

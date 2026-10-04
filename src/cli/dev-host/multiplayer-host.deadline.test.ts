@@ -103,6 +103,39 @@ class StuckGame extends Game<StuckGame, Player> {
 }
 const stuckDefinition: GameDefinitionLike = { gameClass: StuckGame, gameType: 'stuck', minPlayers: 2, maxPlayers: 2 };
 
+/**
+ * A timed simultaneous step offering only `scout`, once per seat. `scout`
+ * returns a follow-up into `loot`, which the step does not list, so a seat that
+ * scouted is held for its follow-up with nothing else offered: not even the
+ * idle action, `commit` (#494).
+ */
+class HeldGame extends Game<HeldGame, Player> {
+  scouted: number[] = [];
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerActions(
+      Action.create<HeldGame>('scout')
+        .condition({ 'has not scouted': (ctx) => !(ctx.game as HeldGame).scouted.includes(ctx.player.seat) })
+        .execute((_a, ctx) => {
+          (ctx.game as HeldGame).scouted.push(ctx.player.seat);
+          return { success: true, followUp: { action: 'loot' } };
+        }),
+      Action.create<HeldGame>('loot').chooseFrom('where', { choices: ['north', 'south'] }).execute(() => {}),
+      Action.create<HeldGame>('commit').execute(() => ({ success: true })),
+    );
+    this.setFlow(
+      defineFlow<HeldGame>({
+        root: loop({
+          maxIterations: 3,
+          while: (ctx) => (ctx.game as HeldGame).scouted.length < 2,
+          do: simultaneousActionStep<HeldGame>({ name: 'raid', actions: ['scout'], timeLimitMs: 10_000 }),
+        }),
+      }),
+    );
+  }
+}
+const heldDefinition: GameDefinitionLike = { gameClass: HeldGame, gameType: 'held', minPlayers: 2, maxPlayers: 2 };
+
 type Executed = { op: Op; result: OpResult };
 
 function makeHost(
@@ -141,8 +174,11 @@ function makeHost(
   const lastFrame = (clientId: string) => frames(clientId).at(-1)!;
   const errors = (clientId: string) =>
     sent.filter((e) => e.clientId === clientId && e.msg.type === 'error').map((e) => (e.msg as { message: string }).message);
+  /** Whether `op` is a seat's move or the host closing that seat's timed step. */
+  const closesSeat = (op: Op): op is Extract<Op, { type: 'action' | 'expireTimedSeat' }> =>
+    op.type === 'action' || op.type === 'expireTimedSeat';
   const actionsFor = (seat: number) =>
-    executed.filter((e) => e.op.type === 'action' && e.op.player === seat);
+    executed.filter((e) => closesSeat(e.op) && e.op.player === seat);
   const commit = (clientId: string, requestId: string) =>
     host.handleMessage(clientId, {
       type: 'server_request',
@@ -166,7 +202,9 @@ function makeHost(
     expect(error).not.toHaveBeenCalled();
     executed.length = 0;
   };
-  const actions = () => executed.filter((e) => e.op.type === 'action');
+  const actions = () => executed.filter((e) => closesSeat(e.op));
+  /** Every timed-seat close the host submitted, in order. */
+  const expiries = () => executed.filter((e) => e.op.type === 'expireTimedSeat');
   /** The one error the host reported to seat 1's client, once it arrives. */
   const reported = async () => {
     await vi.waitFor(() => expect(errors('A')).toHaveLength(1));
@@ -180,7 +218,7 @@ function makeHost(
   };
   const due = (clientId: string) =>
     dueSeats((lastFrame(clientId).view as { flowState: SeatActivityState }).flowState);
-  return { host, clock, lastFrame, errors, actions, actionsFor, reported, firesNothing, commit, seatBoth, due };
+  return { host, clock, lastFrame, errors, actions, actionsFor, expiries, reported, firesNothing, commit, seatBoth, due };
 }
 
 let info: ReturnType<typeof vi.spyOn>;
@@ -223,13 +261,37 @@ describe('MultiplayerHost step deadlines (#302)', () => {
 
     await vi.waitFor(() => expect(h.actionsFor(2)).toHaveLength(1));
     const [idle] = h.actionsFor(2);
-    expect(idle.op).toMatchObject({ actionName: 'commit', player: 2, boundaryKey: armedKey });
+    expect(idle.op).toEqual({ type: 'expireTimedSeat', idleAction: 'commit', args: {}, player: 2, boundaryKey: armedKey });
     expect(idle.result.success).toBe(true);
     // Seat 1 had already committed, so nothing more was submitted for it.
     expect(h.actionsFor(1)).toHaveLength(1);
     // The round closed: a new key, and a fresh window measured from now.
     await vi.waitFor(() => expect(clients.key('A')).not.toBe(armedKey));
     expect(h.lastFrame('A').deadlineAt).toBe(START + 2 * WINDOW_MS);
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('closes seats held for a follow-up when the window elapses, though the step offers them no idle action (#494)', async () => {
+    const h = makeHost(heldDefinition);
+    await h.seatBoth();
+    for (const [client, requestId] of [['A', 's1'], ['B', 's2']] as const) {
+      await h.host.handleMessage(client, {
+        type: 'server_request',
+        requestId,
+        op: 'action',
+        payload: { actionName: 'scout', args: {}, boundaryKey: clients.key(client) },
+      });
+    }
+    expect(h.due('A')).toEqual([1, 2]);
+
+    h.clock.advance(10_000);
+
+    await vi.waitFor(() => expect(h.expiries()).toHaveLength(2));
+    for (const idle of h.expiries()) {
+      expect(idle.op).toMatchObject({ type: 'expireTimedSeat', idleAction: 'commit' });
+      expect(idle.result.success).toBe(true);
+    }
+    await vi.waitFor(() => expect(h.lastFrame('A').view).toMatchObject({ flowState: { complete: true } }));
     expect(error).not.toHaveBeenCalled();
   });
 
@@ -246,8 +308,9 @@ describe('MultiplayerHost step deadlines (#302)', () => {
 
     await vi.waitFor(() => expect(h.actionsFor(1)).toHaveLength(2));
     const [humanCommit, timerCommit] = h.actionsFor(1);
+    expect(humanCommit.op.type).toBe('action');
     expect(humanCommit.result.success).toBe(true);
-    expect(timerCommit.op).toMatchObject({ boundaryKey: armedKey });
+    expect(timerCommit.op).toMatchObject({ type: 'expireTimedSeat', boundaryKey: armedKey });
     expect(timerCommit.result).toMatchObject({ success: false, error: STALE_SUBMISSION_MESSAGE });
     // Seat 1 still owes a move in the new round: nothing was spent on its behalf.
     expect(clients.key('A')).not.toBe(armedKey);

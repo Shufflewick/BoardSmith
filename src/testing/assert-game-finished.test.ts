@@ -12,6 +12,8 @@ import {
   loop,
   eachPlayer,
   actionStep,
+  sequence,
+  execute,
   type GameOptions,
   type FlowContext,
 } from '../engine/index.js';
@@ -19,9 +21,9 @@ import { TestGame } from './test-game.js';
 import { assertGameFinished } from './assertions.js';
 
 /**
- * Each `claim` adds a point. The game ends when someone reaches 2 points,
- * and the seat(s) on the highest score win — so a test can drive a solo
- * winner or a draw deliberately.
+ * Each `claim` adds a point. The game ends at the end of the round in which
+ * someone reaches 2 points, and the seat(s) on the highest score win — so a
+ * test can drive a solo winner or a draw deliberately.
  */
 class RaceGame extends Game<RaceGame, Player> {
   scores: Record<number, number> = {};
@@ -36,21 +38,24 @@ class RaceGame extends Game<RaceGame, Player> {
         .execute((args, ctx) => {
           const game = ctx.game as RaceGame;
           game.scores[ctx.player.seat] += args.points as number;
-          const best = Math.max(...Object.values(game.scores));
-          if (best >= 2) {
-            game.finish(game.players.filter((p) => game.scores[p.seat] === best));
-          }
           return { success: true };
         }),
     );
 
+    const best = (game: RaceGame) => Math.max(...Object.values(game.scores));
     this.setFlow(
       defineFlow({
-        root: loop({
-          while: (ctx) => !ctx.game.isFinished(),
-          maxIterations: 100,
-          do: eachPlayer({ do: actionStep({ actions: ['claim'] }) }),
-        }),
+        root: sequence(
+          loop({
+            while: (ctx) => best(ctx.game as RaceGame) < 2,
+            maxIterations: 100,
+            do: eachPlayer({ do: actionStep({ actions: ['claim'] }) }),
+          }),
+          execute((ctx) => {
+            const game = ctx.game as RaceGame;
+            game.finish(game.players.filter((p) => game.scores[p.seat] === best(game)));
+          }),
+        ),
       }),
     );
   }
@@ -60,8 +65,8 @@ const newGame = () => TestGame.create(RaceGame, { playerCount: 2 });
 
 /**
  * Drive the game so seat 1 wins outright. The round is played out to its end
- * because `isComplete()` tracks the FLOW, not `game.finish()` — the loop only
- * re-reads its `while` condition once every seat in the round has acted.
+ * because the game only finishes once the loop's `while` is re-read, after
+ * every seat in the round has acted.
  */
 const seatOneWins = () => {
   const testGame = newGame();

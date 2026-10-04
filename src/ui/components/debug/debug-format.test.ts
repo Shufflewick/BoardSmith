@@ -5,6 +5,7 @@ import {
   isExpandable,
   formatConditionValue,
   formatActionName,
+  formatHistoryEntry,
   formatActionArgs,
   formatTimestamp,
   formatState,
@@ -133,5 +134,15 @@ describe('formatState', () => {
     const cyclic: Record<string, unknown> = {};
     cyclic.self = cyclic;
     expect(formatState(cyclic)).toBe('Error formatting state');
+  });
+});
+
+describe('formatHistoryEntry', () => {
+  it('names an action the way formatActionName does', () => {
+    expect(formatHistoryEntry({ name: 'playCard', player: 1, args: {} })).toBe('Play Card');
+  });
+
+  it('says that a timed seat was closed by the host, which took no action', () => {
+    expect(formatHistoryEntry({ kind: 'seatExpiry', player: 1 })).toBe('Time ran out (seat closed)');
   });
 });
