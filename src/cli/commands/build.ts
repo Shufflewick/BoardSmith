@@ -374,10 +374,27 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
 }
 
 /**
- * Builds the project in `cwd`. Throws, with a message saying what to fix, when it cannot, so a
- * caller (`publish`, `verify`) stops there and the CLI exits non-zero.
+ * Builds the project in `projectDir`. Throws, with a message saying what to fix, when it cannot, so
+ * a caller (`publish`, `verify`) stops there and the CLI exits non-zero.
+ *
+ * Leaves `process.env` as it found it. Vite sets NODE_ENV (to `production` when it is unset) and
+ * copies keys from the project's `.env` files into it, and never puts them back; `verify` runs
+ * this in its own process and then starts `boardsmith dev`, Playwright and vitest with that
+ * environment (#532).
  */
 export async function buildProject(projectDir: string, options: BuildOptions): Promise<void> {
+  const envBefore = { ...process.env };
+  try {
+    await buildProjectIn(projectDir, options);
+  } finally {
+    for (const key of Object.keys(process.env)) {
+      if (!(key in envBefore)) delete process.env[key];
+    }
+    Object.assign(process.env, envBefore);
+  }
+}
+
+async function buildProjectIn(projectDir: string, options: BuildOptions): Promise<void> {
   // The real path, as a shell's working directory always is: Vite names each HTML entry by its
   // path relative to the root, and a root reached through a symlink (macOS's /var is
   // /private/var) puts the entry outside it.
