@@ -38,7 +38,6 @@ import {
   type PrivateChannelCarrier,
   type PersistPlayer,
 } from '../../persistence/index.js';
-import { boundaryKeyOf } from '../../session/testing/boundary-stamp.js';
 import { mintSeed } from '../../utils/random.js';
 
 interface SeatInfo {
