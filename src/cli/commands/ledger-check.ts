@@ -42,7 +42,7 @@
  */
 
 import { promises as fs } from 'node:fs';
-import { execFile } from 'node:child_process';
+import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { join as pathJoin, relative as pathRelative, resolve as pathResolve } from 'node:path';
 import {
   CROSS_CHUNK_MD,
@@ -653,22 +653,10 @@ async function runLogFiles(projectDir: string): Promise<string[]> {
 // Git: the commit time of each line of a run log
 // ---------------------------------------------------------------------------------------------
 
-function git(cwd: string, args: string[]): Promise<string> {
-  return new Promise((resolvePromise, reject) => {
-    execFile('git', args, { cwd, maxBuffer: 64 * 1024 * 1024 }, (error, stdout) => {
-      if (error) reject(error);
-      else resolvePromise(stdout.toString());
-    });
-  });
-}
-
 const UNCOMMITTED = /^0{40}$/;
 
-async function isGitRepo(projectDir: string): Promise<boolean> {
-  return git(projectDir, ['rev-parse', '--show-toplevel']).then(
-    () => true,
-    () => false,
-  );
+function isGitRepo(projectDir: string): Promise<boolean> {
+  return gitSucceeds(projectDir, ['rev-parse', '--show-toplevel']);
 }
 
 async function requireGitRepo(projectDir: string, why: string): Promise<void> {
@@ -761,23 +749,13 @@ async function fileExists(path: string): Promise<boolean> {
   }
 }
 
-async function isIgnored(projectDir: string, rel: string): Promise<boolean> {
-  try {
-    await git(projectDir, ['check-ignore', '-q', '--', rel]);
-    return true;
-  } catch {
-    return false;
-  }
+function isIgnored(projectDir: string, rel: string): Promise<boolean> {
+  return gitSucceeds(projectDir, ['check-ignore', '-q', '--', rel]);
 }
 
 /** Whether `rel` (project-relative) was a tracked file in commit `sha`. */
-async function trackedAt(projectDir: string, sha: string, rel: string): Promise<boolean> {
-  try {
-    await git(projectDir, ['cat-file', '-e', `${sha}:./${rel}`]);
-    return true;
-  } catch {
-    return false;
-  }
+function trackedAt(projectDir: string, sha: string, rel: string): Promise<boolean> {
+  return gitSucceeds(projectDir, ['cat-file', '-e', `${sha}:./${rel}`]);
 }
 
 /**

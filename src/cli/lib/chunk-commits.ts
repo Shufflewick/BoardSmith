@@ -1,5 +1,4 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { gitOutput as git } from './git-output.js';
 
 /**
  * A chunk's own commits, and the commit it started from.
@@ -21,13 +20,6 @@ import { promisify } from 'node:util';
  * on the combined tree before it commits the merge, when a branch's chunk commits are reachable
  * only from MERGE_HEAD (#435). Every check that asks which commits are a chunk's asks here.
  */
-
-const execFileAsync = promisify(execFile);
-
-async function git(projectDir: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync('git', args, { cwd: projectDir, maxBuffer: 256 * 1024 * 1024 });
-  return stdout;
-}
 
 /** One commit of a chunk's history, and how a message names it. */
 export interface ChunkCommit {

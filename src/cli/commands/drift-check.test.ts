@@ -364,7 +364,7 @@ describe('driftCheckCommand', () => {
     await driftCheckCommand({ project: repoDir });
 
     const diffCalls = execFileMock.mock.calls.filter(
-      (call) => call[0] === 'git' && Array.isArray(call[1]) && call[1][0] === 'diff',
+      (call) => call[0] === 'git' && Array.isArray(call[1]) && call[1].includes('diff'),
     );
     // Two chunks share the SAME hash — only one `git diff` subprocess should have been spawned.
     expect(diffCalls.length).toBe(1);

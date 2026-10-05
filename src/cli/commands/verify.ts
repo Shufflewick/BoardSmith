@@ -46,7 +46,7 @@ import { join, relative, resolve as pathResolve } from 'node:path';
 import chalk from 'chalk';
 import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
 import { chunkVerifyBase } from '../lib/chunk-commits.js';
-import { gitOutput as git } from '../lib/git-output.js';
+import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { type MutantCache, openMutantCache } from '../lib/mutant-cache.js';
 import { scratchDir } from '../lib/project-paths.js';
 import { testRunScopeProblem } from '../lib/test-run-scope.js';
@@ -452,10 +452,7 @@ function requireGameProject(projectDir: string): void {
  * not, writing the result would itself make the tree dirty, and no result could ever count.
  */
 async function requireResultIgnored(projectDir: string): Promise<void> {
-  const ignored = await git(projectDir, ['check-ignore', '-q', '--no-index', '.boardsmith/verify/result.json']).then(
-    () => true,
-    () => false,
-  );
+  const ignored = await gitSucceeds(projectDir, ['check-ignore', '-q', '--no-index', '.boardsmith/verify/result.json']);
   if (!ignored) {
     throw new Error(
       "This project's .gitignore does not leave .boardsmith/ out of git, so the result `boardsmith verify` writes " +

@@ -323,6 +323,13 @@ export const pass = Action.create('pass');
 it('claim 1 and 2', () => { testGame.doAction(1, 'bid'); testGame.doAction(1, 'pass'); });
 `;
 
+  // git quotes a non-ASCII path unless asked not to, and a quoted path matches no file read elsewhere (#531).
+  it('reads a chunk file with a non-ASCII name by its real path', async () => {
+    await build({ 'src/rules/enchère.ts': RULES, 'tests/auction.test.ts': DISPATCHES_BOTH }, '| tests/auction.test.ts | 1, 2 | yes |\n');
+    const result = await checkTestStep(project, 'auction');
+    expect([...result.added.keys()]).toEqual(['src/rules/enchère.ts']);
+  });
+
   it('passes a chunk whose manifest names real claim tests and whose verbs go through the engine', async () => {
     await build(
       {
