@@ -320,7 +320,7 @@ export async function ingestGapsCommand(
   let relabelled = 0;
   if (!options.skipRelabel) {
     relabelled = (
-      await ingestRelabelCommand({ project: projectDir, quiet: options.quiet })
+      await relabelDerivedLines({ project: projectDir, quiet: options.quiet })
     ).relabelled;
   }
   const rulebookDir = designRulebookDir(projectDir);
@@ -471,7 +471,7 @@ const RELABEL_DERIVED_LINE_RE = new RegExp(
   `^(\\s*)Derived (${DERIVED_CITATION_BODY_SOURCE}):(.*)$`,
 );
 
-export async function ingestRelabelCommand(
+export async function relabelDerivedLines(
   options: { project?: string; quiet?: boolean } = {},
 ): Promise<{ relabelled: number; changes: Array<{ file: string; line: number; matched: string }> }> {
   const projectDir = resolve(options.project ?? process.cwd());

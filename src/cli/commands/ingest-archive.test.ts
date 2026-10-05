@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import {
   ingestArchiveCommand,
   ingestGapsCommand,
-  ingestRelabelCommand,
+  relabelDerivedLines,
   renderIndex,
   normalizeEdition,
   EDITION_EMPTY_LEXICON,
@@ -893,7 +893,7 @@ describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)
       'red, green, blue, purple, and black — with a large white numeral centered on the face, ' +
       'small white pip-like dots along the card edges, and slightly rounded corners.';
     const project = await withSlices([], [artLine]);
-    const result = await ingestRelabelCommand({ project, quiet: true });
+    const result = await relabelDerivedLines({ project, quiet: true });
     expect(result.relabelled).toBe(1);
     expect(await fs.readFile(join(project, DESIGN_DIR, 'rulebook', '01-core.md'), 'utf-8')).toContain(
       'Visual (p.1): Card art depicted',
@@ -908,7 +908,7 @@ describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)
       'Derived (p.1): Sets match on number only — the depicted Set example mixes two green ' +
       'cards with one purple card, so color is not required to match within a Set.';
     const project = await withSlices([], [ruleLine]);
-    const result = await ingestRelabelCommand({ project, quiet: true });
+    const result = await relabelDerivedLines({ project, quiet: true });
     expect(result.relabelled).toBe(0);
   });
 });
