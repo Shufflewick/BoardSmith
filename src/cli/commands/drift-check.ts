@@ -37,12 +37,7 @@ import {
   extractVerifiedCommitHash,
   resolveManifestPath,
 } from './build-manifest.js';
-import {
-  CHUNK_MD,
-  CHUNKS_DIR,
-  DESIGN_DIR,
-  designChunksDir,
-} from '../lib/project-paths.js';
+import { CHUNK_MD, designChunksDir, requireChunkSlugs } from '../lib/project-paths.js';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 
 /**
@@ -171,21 +166,7 @@ export async function driftCheckCommand(
   const head = await resolveHead(projectDir);
 
   const chunksDir = designChunksDir(projectDir);
-  let chunkDirEntries: Array<{ name: string; isDirectory(): boolean }>;
-  try {
-    chunkDirEntries = await fs.readdir(chunksDir, { withFileTypes: true });
-  } catch {
-    throw new Error(
-      `No ${DESIGN_DIR}/${CHUNKS_DIR}/ directory in ${projectDir}.\n` +
-        `This command looks for ${DESIGN_DIR}/${CHUNKS_DIR}/<slug>/${CHUNK_MD} files — run it from a\n` +
-        `BoardSmith game project directory, or pass --project <dir>.\n` +
-        `If this project still uses the old flat layout, run: boardsmith doctor --fix`,
-    );
-  }
-  const slugs = chunkDirEntries
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .sort();
+  const slugs = await requireChunkSlugs(projectDir);
 
   const findings: Finding[] = [];
   const chunks: ChunkDrift[] = [];

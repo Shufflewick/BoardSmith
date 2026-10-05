@@ -1,9 +1,9 @@
 import {
   chunkMdPath,
-  designChunksDir,
   designDir,
   designRulebookDir,
   relChunkMdPath,
+  requireChunkSlugs,
   DESIGN_DIR,
 } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
@@ -1243,22 +1243,7 @@ export async function chunkProvenanceStatusCommand(
   options: { project?: string; json?: boolean; quiet?: boolean } = {},
 ): Promise<ChunkProvenanceStatusResult> {
   const projectDir = resolve(options.project ?? process.cwd());
-  const chunksDir = designChunksDir(projectDir);
-
-  let entries: Array<{ name: string; isDirectory(): boolean }>;
-  try {
-    entries = await fs.readdir(chunksDir, { withFileTypes: true });
-  } catch {
-    throw new Error(
-      `No chunks/ directory in ${projectDir}.\n` +
-        `This command looks for chunks/<slug>/CHUNK.md files — run it from a BoardSmith game\n` +
-        `project directory, or pass --project <dir>.`,
-    );
-  }
-  const slugs = entries
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .sort();
+  const slugs = await requireChunkSlugs(projectDir);
 
   const chunks: ChunkProvenanceEntry[] = [];
   const byEdition: Record<string, string[]> = {};
@@ -1273,7 +1258,7 @@ export async function chunkProvenanceStatusCommand(
   for (const slug of slugs) {
     let chunkText: string;
     try {
-      chunkText = await fs.readFile(join(chunksDir, slug, 'CHUNK.md'), 'utf-8');
+      chunkText = await fs.readFile(chunkMdPath(projectDir, slug), 'utf-8');
     } catch {
       continue; // a chunks/<slug> dir with no CHUNK.md is not this command's problem to report
     }

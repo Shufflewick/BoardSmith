@@ -28,11 +28,10 @@ import {
 } from './build-manifest.js';
 import {
   CHUNK_MD,
-  CHUNKS_DIR,
-  DESIGN_DIR,
   RULINGS_MD,
   designChunksDir,
   designPath,
+  requireChunkSlugs,
 } from '../lib/project-paths.js';
 import { ENTRY_NUMBER } from '../lib/ledger-entries.js';
 
@@ -254,22 +253,7 @@ export async function traceCheckCommand(
 ): Promise<TraceCheckResult> {
   const projectDir = pathResolve(options.project ?? process.cwd());
   const chunksDir = designChunksDir(projectDir);
-
-  let chunkDirEntries: Array<{ name: string; isDirectory(): boolean }>;
-  try {
-    chunkDirEntries = await fs.readdir(chunksDir, { withFileTypes: true });
-  } catch {
-    throw new Error(
-      `No ${DESIGN_DIR}/${CHUNKS_DIR}/ directory in ${projectDir}.\n` +
-        `This command looks for ${DESIGN_DIR}/${CHUNKS_DIR}/<slug>/${CHUNK_MD} files — run it from a\n` +
-        `BoardSmith game project directory, or pass --project <dir>.\n` +
-        `If this project still uses the old flat layout, run: boardsmith doctor --fix`,
-    );
-  }
-  const slugs = chunkDirEntries
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .sort();
+  const slugs = await requireChunkSlugs(projectDir);
 
   const findings: Finding[] = [];
   const counts = emptyCounts();
