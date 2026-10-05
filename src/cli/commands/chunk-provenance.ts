@@ -1,13 +1,13 @@
 import {
   chunkMdPath,
-  designChunksDir,
   designDir,
   designRulebookDir,
   relChunkMdPath,
+  requireChunkSlugs,
   DESIGN_DIR,
 } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import chalk from 'chalk';
@@ -116,10 +116,6 @@ export interface VerificationScope {
   }>;
 }
 
-function sha256(buf: Buffer): string {
-  return createHash('sha256').update(buf).digest('hex');
-}
-
 async function exists(path: string): Promise<boolean> {
   try {
     await fs.access(path);
@@ -197,7 +193,7 @@ export async function computeVerificationScope(projectDir: string): Promise<Veri
     };
   }
 
-  if (sha256(archivedBuf) !== sourceHash) {
+  if (sha256Hex(archivedBuf) !== sourceHash) {
     return {
       scope: SCOPE_CODE_ONLY,
       reason: 'source-hash-mismatch',
@@ -302,7 +298,7 @@ async function verifyAdditionalSources(
       failedAdditionalSources.push({ ...row, reason: 'additional-source-missing' });
       continue;
     }
-    if (sha256(buf) === record.sourceHash) {
+    if (sha256Hex(buf) === record.sourceHash) {
       additionalSources.push(row);
     } else {
       failedAdditionalSources.push({ ...row, reason: 'additional-source-hash-mismatch' });
@@ -386,7 +382,7 @@ async function readCitedSlices(
   const documents = new Set<string>();
   for (const rel of resolved) {
     const bytes = await fs.readFile(join(designDir(projectDir), rel));
-    citedSlices.push({ path: rel, hash: sha256(bytes) });
+    citedSlices.push({ path: rel, hash: sha256Hex(bytes) });
     const sliceSource = NON_SLICE_FILES.includes(basename(rel)) ? undefined : parseSliceSource(bytes.toString('utf-8'));
     for (const d of sliceDocuments(sliceSource, recorded)) documents.add(d);
   }
@@ -1247,22 +1243,7 @@ export async function chunkProvenanceStatusCommand(
   options: { project?: string; json?: boolean; quiet?: boolean } = {},
 ): Promise<ChunkProvenanceStatusResult> {
   const projectDir = resolve(options.project ?? process.cwd());
-  const chunksDir = designChunksDir(projectDir);
-
-  let entries: Array<{ name: string; isDirectory(): boolean }>;
-  try {
-    entries = await fs.readdir(chunksDir, { withFileTypes: true });
-  } catch {
-    throw new Error(
-      `No chunks/ directory in ${projectDir}.\n` +
-        `This command looks for chunks/<slug>/CHUNK.md files — run it from a BoardSmith game\n` +
-        `project directory, or pass --project <dir>.`,
-    );
-  }
-  const slugs = entries
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .sort();
+  const slugs = await requireChunkSlugs(projectDir);
 
   const chunks: ChunkProvenanceEntry[] = [];
   const byEdition: Record<string, string[]> = {};
@@ -1277,7 +1258,7 @@ export async function chunkProvenanceStatusCommand(
   for (const slug of slugs) {
     let chunkText: string;
     try {
-      chunkText = await fs.readFile(join(chunksDir, slug, 'CHUNK.md'), 'utf-8');
+      chunkText = await fs.readFile(chunkMdPath(projectDir, slug), 'utf-8');
     } catch {
       continue; // a chunks/<slug> dir with no CHUNK.md is not this command's problem to report
     }

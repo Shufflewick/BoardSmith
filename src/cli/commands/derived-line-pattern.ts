@@ -8,7 +8,7 @@
  * missed by others — exactly the drift class this milestone keeps closing. Every consumer now
  * imports THIS ONE regex rather than re-spelling it.
  *
- * Deliberately isolated in its own file with NO other imports: `verify-derive-check.ts` imports
+ * Deliberately isolated in its own file, importing only the leaf `lib/regexp.ts`: `verify-derive-check.ts` imports
  * `verify-classify.ts`, which imports `chunk-provenance.ts`, which imports `ingest-archive.ts` —
  * so `ingest-archive.ts` importing `DERIVED_LINE_RE` directly from `verify-derive-check.ts`
  * would close a circular import (`ingest-archive` → `verify-derive-check` → `verify-classify` →
@@ -16,6 +16,8 @@
  * time in whichever file loads second. Routing every consumer through this leaf module avoids the
  * cycle entirely.
  */
+import { escapeRegExp } from '../lib/regexp.js';
+
 export const DERIVED_LINE_RE = /^Derived \(p\.[^)]*\)/i;
 
 /**
@@ -46,17 +48,6 @@ export const ANNOTATION_FAMILIES = Object.freeze([
 ] as const);
 
 export type AnnotationFamily = (typeof ANNOTATION_FAMILIES)[number];
-
-/**
- * Escapes every regex metacharacter in `s` so it can be embedded literally inside a
- * mechanically-assembled pattern. None of today's four family names contain a metacharacter
- * (the hyphen in `Named-but-undefined` is not special outside a character class), but this keeps
- * the assembly correct for any future family name a later phase adds to `ANNOTATION_FAMILIES`
- * without anyone having to remember to escape it by hand.
- */
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 /**
  * The citation-keyed backstop, built mechanically from `ANNOTATION_FAMILIES` — replaces the two

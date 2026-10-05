@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { computeVerificationScope, documentFailure, type VerificationScope } from './chunk-provenance.js';
@@ -246,10 +246,7 @@ export function createEnumeratedFact(input: {
     validateNumericValue(input.numericValue, 'createEnumeratedFact');
   }
 
-  const id = createHash('sha256')
-    .update(`${input.statement}\n${input.sourceSentence}`)
-    .digest('hex')
-    .slice(0, 16);
+  const id = sha256Hex(`${input.statement}\n${input.sourceSentence}`).slice(0, 16);
 
   return {
     id,
@@ -530,7 +527,7 @@ export function validateGrounding(
     const matchB = outcomeB.fact;
 
     grounded.push({
-      id: createHash('sha256').update(`grounded:${matchA.id}:${matchB.id}`).digest('hex').slice(0, 16),
+      id: sha256Hex(`grounded:${matchA.id}:${matchB.id}`).slice(0, 16),
       statement: claim.statement,
       quotedFromA: claim.quotedFromA,
       quotedFromB: claim.quotedFromB,
@@ -741,12 +738,9 @@ export function composeArithmeticClaim(input: {
   }
 
   const composed: ComposedFact = {
-    id: createHash('sha256')
-      .update(
-        `composed:${derivedLineText}:${operandValues.map((v) => v.magnitude).join(',')}:${operation}`,
-      )
-      .digest('hex')
-      .slice(0, 16),
+    id: sha256Hex(
+      `composed:${derivedLineText}:${operandValues.map((v) => v.magnitude).join(',')}:${operation}`,
+    ).slice(0, 16),
     statement: `${operandValues
       .map((v) => `${v.magnitude}${v.unit ? ' ' + v.unit : ''}`)
       .join(` ${operation} `)} = ${claimedResult.magnitude}${claimedResult.unit ? ' ' + claimedResult.unit : ''}`,
@@ -928,10 +922,7 @@ export function composeArithmeticChain(input: {
   }
 
   const composed: ComposedFact = {
-    id: createHash('sha256')
-      .update(`composed-chain:${derivedLineText}:${chainStepStatements.join('|')}`)
-      .digest('hex')
-      .slice(0, 16),
+    id: sha256Hex(`composed-chain:${derivedLineText}:${chainStepStatements.join('|')}`).slice(0, 16),
     statement:
       `${chainStepStatements.join('; then ')} ` +
       `(final: ${claimedResult.magnitude}${claimedResult.unit ? ' ' + claimedResult.unit : ''})`,

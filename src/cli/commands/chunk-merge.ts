@@ -50,10 +50,10 @@
  * the chunk's tests, and run this again.
  */
 import { promises as fs } from 'node:fs';
-import { execFile } from 'node:child_process';
+import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { join, posix, resolve } from 'node:path';
 import chalk from 'chalk';
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '../lib/hash.js';
 import {
   CROSS_CHUNK_MD,
   DESIGN_DIR,
@@ -105,26 +105,6 @@ interface ChunkMergeResult {
   vouched: SharedFile[];
 }
 
-interface GitResult {
-  code: number;
-  out: string;
-}
-
-function run(cwd: string, args: string[]): Promise<GitResult> {
-  return new Promise((done) => {
-    execFile('git', args, { cwd, maxBuffer: 64 * 1024 * 1024 }, (error, stdout, stderr) => {
-      const code = error ? (typeof error.code === 'number' ? error.code : 1) : 0;
-      done({ code, out: code === 0 ? stdout.toString() : `${stdout}${stderr}` });
-    });
-  });
-}
-
-async function git(cwd: string, args: string[]): Promise<string> {
-  const result = await run(cwd, args);
-  if (result.code !== 0) throw new Error(`git ${args.join(' ')} failed: ${result.out.trim()}`);
-  return result.out;
-}
-
 /** The merge's fixed facts, read once. Paths in git are repository-relative; `prefix` makes them. */
 interface MergeContext {
   projectDir: string;
@@ -152,8 +132,7 @@ const refused = (refusals: string[]): ChunkMergeResult => ({
 });
 
 async function showAt(ctx: MergeContext, rev: string, designRel: string): Promise<string> {
-  const result = await run(ctx.projectDir, ['show', `${rev}:${ctx.prefix}${DESIGN_DIR}/${designRel}`]);
-  return result.code === 0 ? result.out : '';
+  return git(ctx.projectDir, ['show', `${rev}:${ctx.prefix}${DESIGN_DIR}/${designRel}`]).catch(() => '');
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -503,8 +482,8 @@ async function signedText(ctx: MergeContext, path: string, signed: string): Prom
   const where = `${ctx.prefix}${path}`;
   const commits = (await git(ctx.top, ['log', '--format=%H', 'HEAD', ctx.branch, '--', where])).split('\n').filter(Boolean);
   for (const commit of commits) {
-    const shown = await run(ctx.top, ['show', `${commit}:${where}`]);
-    if (shown.code === 0 && sha256(Buffer.from(shown.out)) === signed) return shown.out;
+    const shown = await git(ctx.top, ['show', `${commit}:${where}`]).catch(() => undefined);
+    if (shown !== undefined && sha256Hex(Buffer.from(shown)) === signed) return shown;
   }
   return undefined;
 }
@@ -645,10 +624,6 @@ function vouchRefusal(ctx: MergeContext, shared: SharedFile[], slug: string, [wh
   );
 }
 
-function sha256(data: Buffer): string {
-  return createHash('sha256').update(data).digest('hex');
-}
-
 /** Records every shared file as the merge combined it, in design/MERGE-SIGNOFFS.md, staged. */
 async function recordMergeSignoffs(ctx: MergeContext, shared: SharedFile[]): Promise<void> {
   const merge = `${ctx.branch} ${(await git(ctx.top, ['rev-parse', ctx.branch])).trim()} into ${(await git(ctx.top, ['rev-parse', 'HEAD'])).trim()}`;
@@ -657,7 +632,7 @@ async function recordMergeSignoffs(ctx: MergeContext, shared: SharedFile[]): Pro
   for (const file of shared) {
     const content = await fs.readFile(join(ctx.projectDir, file.path)).catch(() => undefined);
     // A file the merge deleted has no code to vouch for; its chunks' manifests answer for that.
-    if (content !== undefined) entries.push({ path: file.path, content: sha256(content), chunks: file.chunks, merge, when });
+    if (content !== undefined) entries.push({ path: file.path, content: sha256Hex(content), chunks: file.chunks, merge, when });
   }
   const path = designPath(ctx.projectDir, MERGE_SIGNOFFS_MD);
   const existing = await fs.readFile(path, 'utf-8').catch(() => undefined);
@@ -710,11 +685,11 @@ async function recordCrossChunk(ctx: MergeContext, alongside: string[]): Promise
 /** The merge's facts, or the reason there is nothing that can be merged. */
 async function readContext(projectDir: string, slug: string, branch: string): Promise<MergeContext | string> {
   // One process for both: --show-prefix prints an empty line at the top level.
-  const where = await run(projectDir, ['rev-parse', '--show-toplevel', '--show-prefix']);
-  if ((await run(projectDir, ['rev-parse', '--verify', '--quiet', `${branch}^{commit}`])).code !== 0) {
+  const where = await git(projectDir, ['rev-parse', '--show-toplevel', '--show-prefix']);
+  if (!(await gitSucceeds(projectDir, ['rev-parse', '--verify', '--quiet', `${branch}^{commit}`]))) {
     return `There is no branch ${branch}. A chunk built alongside others lives on chunk/<slug>; pass --branch if it is elsewhere.`;
   }
-  if ((await run(projectDir, ['rev-parse', '--verify', '--quiet', 'MERGE_HEAD'])).code === 0) {
+  if (await gitSucceeds(projectDir, ['rev-parse', '--verify', '--quiet', 'MERGE_HEAD'])) {
     return (
       'The main checkout holds a merge that was started and never finished, most likely by a chunk-merge ' +
       'that was stopped partway. Undo it with `git merge --abort` in the main checkout, then run chunk-merge again.'
@@ -725,7 +700,7 @@ async function readContext(projectDir: string, slug: string, branch: string): Pr
   }
   const own = (await git(projectDir, ['rev-list', '--first-parent', branch, '^HEAD'])).split('\n').filter(Boolean);
   if (own.length === 0) return `${branch} has nothing the main line does not already have.`;
-  const [top, prefix] = where.out.split('\n');
+  const [top, prefix] = where.split('\n');
   const base = (await git(projectDir, ['merge-base', 'HEAD', branch])).trim();
   return {
     projectDir,
@@ -741,8 +716,8 @@ async function readContext(projectDir: string, slug: string, branch: string): Pr
 
 /** Starts the merge without committing it; returns the files whose conflicts remain. */
 async function startMerge(ctx: MergeContext): Promise<string[]> {
-  const merge = await run(ctx.top, ['-c', 'merge.conflictStyle=diff3', 'merge', '--no-ff', '--no-commit', ctx.branch]);
-  const left = merge.code === 0 ? [] : await resolveConflicts(ctx);
+  const merged = await gitSucceeds(ctx.top, ['-c', 'merge.conflictStyle=diff3', 'merge', '--no-ff', '--no-commit', ctx.branch]);
+  const left = merged ? [] : await resolveConflicts(ctx);
   if (left.length === 0) await keepMainLock(ctx);
   return left;
 }
@@ -772,7 +747,7 @@ async function mergeLocked(ctx: MergeContext, runTests: TestRunner): Promise<Chu
     return await checkStartedMerge(ctx, await startMerge(ctx), runTests);
   } catch (error) {
     // A step that throws must not leave the main checkout mid-merge.
-    await run(ctx.top, ['merge', '--abort']);
+    await gitSucceeds(ctx.top, ['merge', '--abort']);
     throw error;
   }
 }
@@ -780,7 +755,7 @@ async function mergeLocked(ctx: MergeContext, runTests: TestRunner): Promise<Chu
 /** Checks and commits a merge `startMerge` began; aborts it, restoring the main line, on any refusal. */
 async function checkStartedMerge(ctx: MergeContext, left: string[], runTests: TestRunner): Promise<ChunkMergeResult> {
   if (left.length) {
-    await run(ctx.top, ['merge', '--abort']);
+    await gitSucceeds(ctx.top, ['merge', '--abort']);
     return refused([
       `Merging ${ctx.branch} conflicts in ${left.join(', ')}. Merge the main line into ${ctx.branch} in the ` +
         `chunk's own worktree, resolve the conflicts there, re-run its tests, commit, and run chunk-merge again.`,
@@ -798,7 +773,7 @@ async function checkStartedMerge(ctx: MergeContext, left: string[], runTests: Te
     () => combinedTreeProblems(ctx, alongside, runTests),
   ]);
   if (problems.length) {
-    await run(ctx.top, ['merge', '--abort']);
+    await gitSucceeds(ctx.top, ['merge', '--abort']);
     return refused(problems);
   }
   const crossChunk = await recordCrossChunk(ctx, alongside);
@@ -818,9 +793,9 @@ async function checkStartedMerge(ctx: MergeContext, left: string[], runTests: Te
 export async function chunkMerge(projectDir: string, slug: string, options: ChunkMergeOptions = {}): Promise<ChunkMergeResult> {
   const dir = resolve(projectDir);
   const branch = options.branch ?? `chunk/${slug}`;
-  const common = await run(dir, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
-  if (common.code !== 0) return refused([`${dir} is not in a git repository. Run chunk-merge from the game project's main checkout.`]);
-  const lock = await takeOsLock(join(common.out.trim(), 'boardsmith-chunk-merge.flock'), `chunk-merge of ${slug} (branch ${branch})`);
+  const common = await git(dir, ['rev-parse', '--path-format=absolute', '--git-common-dir']).catch(() => undefined);
+  if (common === undefined) return refused([`${dir} is not in a git repository. Run chunk-merge from the game project's main checkout.`]);
+  const lock = await takeOsLock(join(common.trim(), 'boardsmith-chunk-merge.flock'), `chunk-merge of ${slug} (branch ${branch})`);
   if (typeof lock === 'string') return refused([lock]);
   try {
     const ctx = await readContext(dir, slug, branch);

@@ -1,7 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { existsSync, rmSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
-import { execSync } from 'node:child_process';
 import chalk from 'chalk';
 import ora from 'ora';
 import {
@@ -31,6 +30,7 @@ import { SMOKE_SPEC_PATH } from '../../testing/browser-smoke-verdict.js';
 import { ingestArchiveCommand, rulebookArchivePaths } from './ingest-archive.js';
 import { installIngestHook } from '../lib/ingest-hook.js';
 import { assertGameName } from '../lib/user-name.js';
+import { gitOutput } from '../lib/git-output.js';
 
 export interface InitOptions {
   /**
@@ -235,10 +235,10 @@ ${worldScaffoldStatus()
  * configured" case), the repo already exists and staging succeeded — telling
  * the user to run `git init` again would be misleading.
  */
-function initVersionControl(projectPath: string): void {
+async function initVersionControl(projectPath: string): Promise<void> {
   try {
-    execSync('git init', { cwd: projectPath, stdio: 'ignore' });
-    execSync('git add -A', { cwd: projectPath, stdio: 'ignore' });
+    await gitOutput(projectPath, ['init']);
+    await gitOutput(projectPath, ['add', '-A']);
   } catch {
     console.log(
       chalk.dim('  (skipped git init — git not available; run `git init` manually if you want version control)')
@@ -247,16 +247,12 @@ function initVersionControl(projectPath: string): void {
   }
 
   try {
-    execSync('git commit -m "chore: scaffold project via boardsmith init"', {
-      cwd: projectPath,
-      stdio: 'ignore',
-    });
+    await gitOutput(projectPath, ['commit', '-m', 'chore: scaffold project via boardsmith init']);
   } catch {
     console.log(
       chalk.dim('  (git repo created but initial commit skipped — set `git config user.name` / `user.email`, then run `git commit`)')
     );
   }
-
 }
 
 /**
@@ -416,7 +412,7 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
 
     // An existing repository already has its history, so it gets no `git init` and no scaffold
     // commit: the designer reviews the scaffold beside their own work and commits it.
-    if (!options.intoExisting) initVersionControl(projectPath);
+    if (!options.intoExisting) await initVersionControl(projectPath);
 
     if (archive) {
       // Archive inside init so it cannot be a step the session skips. A failure here is loud:

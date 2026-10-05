@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, it, expect, beforeEach, afterEach, vi, type MockInstance } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   requireGameProject,
   requireGameProjectManifests,
@@ -10,36 +10,16 @@ import {
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
- * Every guard in this module ends in `process.exit(1)`, which is the behaviour
- * the call sites depend on: a command that cannot find its project must not
- * carry on with an undefined config. So the exit is what these assert, not
- * merely the message.
+ * Every guard in this module throws a readable error rather than ending the process (#532), so a
+ * command can run inside another one (`boardsmith verify` runs `validate` and `build`) and still
+ * stop there. The CLI entry turns the throw into its message and a non-zero exit.
  */
-class ExitCalled extends Error {
-  constructor(readonly code: number | undefined) {
-    super(`process.exit(${code})`);
-  }
-}
-
 describe('game-project guards', () => {
   let projectDir: string;
-  let exitSpy: MockInstance;
-  let errorSpy: MockInstance;
 
   beforeEach(() => {
     projectDir = tempTree('bs-game-project-');
-    exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
-      throw new ExitCalled(code);
-    }) as never);
-    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
   });
-
-  afterEach(() => {
-    exitSpy.mockRestore();
-    errorSpy.mockRestore();
-  });
-
-  const errors = (): string => errorSpy.mock.calls.map((call) => String(call[0])).join('\n');
 
   describe('requireGameProject', () => {
     it('returns the manifest path when the project has one', () => {
@@ -47,11 +27,8 @@ describe('game-project guards', () => {
       expect(requireGameProject(projectDir)).toBe(join(projectDir, 'boardsmith.json'));
     });
 
-    it('exits 1 and names the missing manifest', () => {
-      expect(() => requireGameProject(projectDir)).toThrow(ExitCalled);
-      expect(exitSpy).toHaveBeenCalledWith(1);
-      expect(errors()).toContain('boardsmith.json not found');
-      expect(errors()).toContain('BoardSmith game project directory');
+    it('throws naming the missing manifest', () => {
+      expect(() => requireGameProject(projectDir)).toThrow(/boardsmith\.json not found[\s\S]*BoardSmith game project directory/);
     });
   });
 
@@ -67,18 +44,14 @@ describe('game-project guards', () => {
       expect(pkg.version).toBe('1.2.3');
     });
 
-    it('exits 1 when boardsmith.json is missing, before it ever looks for package.json', () => {
+    it('throws when boardsmith.json is missing, before it ever looks for package.json', () => {
       writeFileSync(join(projectDir, 'package.json'), '{"version":"1.0.0"}');
-      expect(() => requireGameProjectManifests(projectDir)).toThrow(ExitCalled);
-      expect(errors()).toContain('boardsmith.json not found');
+      expect(() => requireGameProjectManifests(projectDir)).toThrow(/boardsmith\.json not found/);
     });
 
-    it('exits 1 when package.json is missing, and says where a version comes from', () => {
+    it('throws when package.json is missing, and says where a version comes from', () => {
       writeFileSync(join(projectDir, 'boardsmith.json'), '{"name":"x"}');
-      expect(() => requireGameProjectManifests(projectDir)).toThrow(ExitCalled);
-      expect(exitSpy).toHaveBeenCalledWith(1);
-      expect(errors()).toContain('package.json not found');
-      expect(errors()).toContain('version');
+      expect(() => requireGameProjectManifests(projectDir)).toThrow(/package\.json not found[\s\S]*version/);
     });
   });
 
@@ -103,12 +76,10 @@ describe('game-project guards', () => {
       expect(requireRulesIndex(rulesDir)).toBe(join(rulesDir, 'index.ts'));
     });
 
-    it('exits 1 naming the path it looked at and the export it wanted', () => {
-      const rulesDir = join(projectDir, 'src', 'rules');
-      expect(() => requireRulesIndex(rulesDir)).toThrow(ExitCalled);
-      expect(exitSpy).toHaveBeenCalledWith(1);
-      expect(errors()).toContain(join(rulesDir, 'index.ts'));
-      expect(errors()).toContain('gameDefinition');
+    it('throws naming the path it looked at, the export it wanted and paths.rules', () => {
+      const rulesDir = join(projectDir, 'custom', 'rules');
+      expect(() => requireRulesIndex(rulesDir)).toThrow(join(rulesDir, 'index.ts'));
+      expect(() => requireRulesIndex(rulesDir)).toThrow(/gameDefinition[\s\S]*"paths\.rules"/);
     });
   });
 });

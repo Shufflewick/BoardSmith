@@ -18,21 +18,13 @@ Import from `boardsmith/eslint-plugin` directly only if you want the same rules 
 import boardsmithPlugin from 'boardsmith/eslint-plugin';
 
 export default [
-  {
-    files: ['src/games/**/*.ts'],
-    plugins: {
-      boardsmith: boardsmithPlugin,
-    },
-    rules: {
-      'boardsmith/no-network': 'error',
-      'boardsmith/no-filesystem': 'error',
-      'boardsmith/no-timers': 'error',
-      'boardsmith/no-nondeterministic': 'error',
-      'boardsmith/no-eval': 'error',
-    },
-  },
+  // Lets ESLint lint TypeScript and Vue files; add your parser here.
+  { files: ['src/**/*.ts', 'src/**/*.vue'] },
+  ...boardsmithPlugin.configs.recommended,
 ];
 ```
+
+This is the same configuration `boardsmith lint` and `boardsmith validate` run, so your editor reports exactly what they do.
 
 ## Exports
 
@@ -44,6 +36,7 @@ export default [
 
 - `rules` - Individual rules object
 - `configs` - Configuration presets
+- `ruleGroups` - Every rule, grouped by what it guards (`security`, `determinism`, `identity`, `silence`, `ownership`). `configs.recommended` and `boardsmith validate` are built from it
 
 ## Rules
 
@@ -178,39 +171,10 @@ engine fields it can check, with the same message.
 
 ### recommended
 
-Enables all rules at error level.
+An array of two flat-config blocks; spread it into your config array:
 
-```javascript
-// eslint.config.js
-import boardsmithPlugin from 'boardsmith/eslint-plugin';
-
-export default [
-  {
-    files: ['src/games/**/*.ts'],
-    ...boardsmithPlugin.configs.recommended,
-  },
-];
-```
-
-Equivalent to (ESLint 9+ flat-config shape):
-
-```javascript
-{
-  name: 'boardsmith/recommended',
-  plugins: { boardsmith: boardsmithPlugin },
-  rules: {
-    'boardsmith/no-network': 'error',
-    'boardsmith/no-filesystem': 'error',
-    'boardsmith/no-timers': 'error',
-    'boardsmith/no-nondeterministic': 'error',
-    'boardsmith/no-eval': 'error',
-    'boardsmith/no-element-identity-comparison': 'error',
-    'boardsmith/no-element-array-state': 'error',
-    'boardsmith/no-silent-dispatch-fallthrough': 'error',
-    'boardsmith/no-engine-field-shadow': 'error',
-  },
-}
-```
+1. `boardsmith/recommended` registers the plugin and turns every rule on at error level.
+2. `boardsmith/recommended-ui` turns the `determinism` group (`no-timers`, `no-nondeterministic`) off for `src/ui/**`. UI code runs in the browser, never in the executor, so timers and randomness there are legitimate.
 
 ## Examples
 
@@ -225,35 +189,8 @@ export default tseslint.config(
   // Base TypeScript config
   ...tseslint.configs.recommended,
 
-  // Game code - strict determinism
-  {
-    files: ['src/games/**/game.ts', 'src/games/**/rules/**/*.ts'],
-    plugins: {
-      boardsmith: boardsmithPlugin,
-    },
-    rules: {
-      'boardsmith/no-network': 'error',
-      'boardsmith/no-filesystem': 'error',
-      'boardsmith/no-timers': 'error',
-      'boardsmith/no-nondeterministic': 'error',
-      'boardsmith/no-eval': 'error',
-    },
-  },
-
-  // UI code - less strict
-  {
-    files: ['src/games/**/ui/**/*.ts', 'src/games/**/ui/**/*.vue'],
-    plugins: {
-      boardsmith: boardsmithPlugin,
-    },
-    rules: {
-      // UI can use timers for animations
-      'boardsmith/no-timers': 'off',
-      // But still no network/random in UI
-      'boardsmith/no-network': 'error',
-      'boardsmith/no-nondeterministic': 'error',
-    },
-  },
+  // Every BoardSmith rule, with the determinism rules off under src/ui/
+  ...boardsmithPlugin.configs.recommended,
 );
 ```
 
