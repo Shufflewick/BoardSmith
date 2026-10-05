@@ -1,6 +1,5 @@
 /**
  * TEST-03: assertActionAvailable trace-on-failure
- * TEST-04: assertFlowState actionsMode option
  *
  * Cross-layer boundary: testing → engine (debugActionAvailability)
  * The trace must flow from the engine through the assertion error message.
@@ -25,7 +24,6 @@ import { TestGame } from './test-game.js';
 import {
   assertActionAvailable,
   assertActionNotAvailable,
-  assertFlowState,
   assertHidden,
   assertVisible,
 } from './assertions.js';
@@ -177,41 +175,23 @@ describe('assertActionAvailable — TEST-03: trace-on-failure', () => {
 // TEST-04: assertFlowState — actionsMode option
 // ---------------------------------------------------------------------------
 
-describe('assertFlowState — TEST-04: actionsMode option', () => {
-  it("actionsMode: 'exact' fails when extra actions are available", () => {
-    // available = ['pick', 'pass']; expected only ['pick'] — 'pass' is extra
-    const testGame = makeFixture();
+describe('Selections block (#519)', () => {
+  const selectionsBlock = (run: () => void): string => {
+    try {
+      run();
+    } catch (e) {
+      const match = /\nSelections:\n([\s\S]*?)\nFlow position/.exec((e as Error).message);
+      expect(match, (e as Error).message).not.toBeNull();
+      return match![1];
+    }
+    throw new Error('expected the call to throw');
+  };
 
-    expect(() =>
-      assertFlowState(testGame, {
-        actions: ['pick'],
-        actionsMode: 'exact',
-      }),
-    ).toThrow(/Unexpected available actions/);
-  });
-
-  it("actionsMode: 'contains' passes despite extra available actions", () => {
-    // available = ['pick', 'pass']; expected only ['pick'] — should pass in contains mode
-    const testGame = makeFixture();
-
-    expect(() =>
-      assertFlowState(testGame, {
-        actions: ['pick'],
-        actionsMode: 'contains',
-      }),
-    ).not.toThrow();
-  });
-
-  it('no actionsMode defaults to exact behavior (D-06 backward-compat pin)', () => {
-    // Omitting actionsMode should behave identically to actionsMode: 'exact'
-    const testGame = makeFixture();
-
-    expect(() =>
-      assertFlowState(testGame, {
-        actions: ['pick'],
-        // no actionsMode
-      }),
-    ).toThrow(/Unexpected available actions/);
+  it('doAction and assertActionAvailable list the same selections for the same unavailable action', () => {
+    const fromDoAction = selectionsBlock(() => makeFixture().doAction(1, 'constrained', { value: 1 }));
+    const fromAssertion = selectionsBlock(() => assertActionAvailable(makeFixture(), 1, 'constrained'));
+    expect(fromDoAction).toContain("'value': 0 choices");
+    expect(fromDoAction).toBe(fromAssertion);
   });
 });
 
@@ -219,13 +199,12 @@ describe('assertFlowState — TEST-04: actionsMode option', () => {
 // CR-01/02/03 regression: simultaneous-turn support
 //
 // A simultaneousActionStep sets awaitingPlayers (not currentPlayer).
-// The three assertion helpers previously read currentPlayer, which is
+// The assertion helpers previously read currentPlayer, which is
 // undefined in simultaneous turns — causing:
 //   CR-01: assertActionAvailable threw false error for active players
 //   CR-02: assertActionNotAvailable silently passed (false pass)
-//   CR-03: assertFlowState reported all actions as missing
 //
-// These tests pin the correct behavior for all three helpers.
+// These tests pin the correct behavior for both helpers.
 // ---------------------------------------------------------------------------
 
 /** Fixture: both players must bid; game ends when both have acted. */
@@ -324,30 +303,6 @@ describe('assertActionNotAvailable — CR-02: simultaneous turns', () => {
     const testGame = makeBidGame();
     testGame.doAction(1, 'bid', {});
     expect(() => assertActionNotAvailable(testGame, 1, 'bid')).not.toThrow();
-  });
-});
-
-describe('assertFlowState — CR-03: simultaneous turns', () => {
-  it("reports correct actions for a simultaneous step (contains mode)", () => {
-    // availableActions is undefined on a simultaneous step; the fix reads from
-    // awaitingPlayers[*].availableActions instead.
-    const testGame = makeBidGame();
-    expect(() =>
-      assertFlowState(testGame, {
-        actions: ['bid', 'fold'],
-        actionsMode: 'contains',
-      }),
-    ).not.toThrow();
-  });
-
-  it("fails when an expected action is genuinely missing in a simultaneous step", () => {
-    const testGame = makeBidGame();
-    expect(() =>
-      assertFlowState(testGame, {
-        actions: ['nonexistent'],
-        actionsMode: 'contains',
-      }),
-    ).toThrow(/Missing expected actions/i);
   });
 });
 

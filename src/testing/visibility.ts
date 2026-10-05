@@ -1,36 +1,15 @@
 /**
  * Hidden-info visibility utilities for testing BoardSmith games (VIS-01).
  *
- * Provides `isElementVisible` and `getVisibleElements` — visibility predicates
- * derived from the SAME serialization path the wire uses
+ * Provides `isElementVisible`, a visibility predicate derived from the SAME serialization path the wire uses
  * (`Game.toJSONForPlayer(seat)`), so tests never drift from what a seat's
  * client actually receives.
  *
  * @module
  */
 
-import { GameElement, ElementCollection, type Game, type ElementJSON } from '../engine/index.js';
+import type { GameElement, Game, ElementJSON } from '../engine/index.js';
 import { isHiddenPlaceholder } from '../engine/element/hidden-placeholder.js';
-
-/**
- * Walk a serialized ElementJSON tree collecting the ids of nodes that are
- * present AND not flagged `__hidden`.
- *
- * Synthetic negative ids (used for zone-hidden/count-only children) are
- * always `__hidden`, so they never contribute to the visible-id set and can
- * never be reverse-mapped to a live element (there is no element with a
- * negative id).
- */
-function collectVisibleIds(node: ElementJSON, into: Set<number>): void {
-  if (!isHiddenPlaceholder(node)) {
-    into.add(node.id);
-  }
-  if (node.children) {
-    for (const child of node.children) {
-      collectVisibleIds(child, into);
-    }
-  }
-}
 
 /**
  * Find the node for a given real element id within a serialized ElementJSON
@@ -85,34 +64,4 @@ export function isElementVisible(element: GameElement, seat: number): boolean {
   const node = findNodeById(finalTree, element.id);
   if (!node) return false; // absent from final tree
   return !isHiddenPlaceholder(node);
-}
-
-/**
- * Get the live elements visible to `seat` — derived from the final per-seat
- * serialized tree, matching `game.toJSONForPlayer(seat)` exactly.
- *
- * **What NOT to do:** Do not hand-parse `game.toJSONForPlayer(seat)` yourself
- * to figure out which elements are visible — this function does that for you
- * and reverse-maps the surviving node ids back to live elements so you can
- * keep using the normal element/collection API (`.filter()`, `.length`, etc.)
- * on the result.
- *
- * @param game - The game instance
- * @param seat - The seat to compute visibility for (use 0 for spectator)
- * @returns An ElementCollection of the live elements visible to `seat`
- */
-export function getVisibleElements(game: Game, seat: number): ElementCollection<GameElement> {
-  const GameClass = game.constructor as typeof Game;
-
-  // FAST PATH: see isElementVisible for why this is safe when playerView is undefined.
-  if (!GameClass.playerView) {
-    return game.all(GameElement).filter((e) => e.isVisibleTo(seat));
-  }
-
-  // FINAL-TREE PATH: collect the visible ids from the actual serialized output,
-  // then reverse-map by real (positive) element id back to live elements.
-  const finalTree = game.toJSONForPlayer(seat);
-  const visibleIds = new Set<number>();
-  collectVisibleIds(finalTree, visibleIds);
-  return game.all(GameElement).filter((e) => visibleIds.has(e.id));
 }

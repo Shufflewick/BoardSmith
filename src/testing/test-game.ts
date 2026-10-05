@@ -10,7 +10,6 @@ import {
   Game,
   Player,
   GameElement,
-  ElementCollection,
   type GameOptions,
   type FlowState,
   type FlowDebugInfo,
@@ -25,7 +24,7 @@ import {
   type CheckpointPolicy,
 } from '../runtime/index.js';
 import { ActionBuilder } from './action-builder.js';
-import { isElementVisible, getVisibleElements } from './visibility.js';
+import { formatSelectionLines } from './debug.js';
 
 /**
  * Options for creating a test game.
@@ -402,11 +401,7 @@ export class TestGame<G extends Game = Game> {
     try {
       const player = this.getPlayer(playerSeat);
       const debugInfo = this.game.debugActionAvailability(actionName, player);
-      const selLines = debugInfo.details.selections
-        .map(s =>
-          `  ${s.passed ? '✓' : '✗'} '${s.name}': ${s.choices} choices${s.note ? ` — ${s.note}` : ''}`
-        )
-        .join('\n');
+      const selLines = formatSelectionLines(debugInfo);
       message =
         `Action '${actionName}' failed for seat ${playerSeat}.\n` +
         `Error: ${result.error ?? 'unknown error'}${result.errorCode ? ` (${result.errorCode})` : ''}\n` +
@@ -565,30 +560,6 @@ export class TestGame<G extends Game = Game> {
         })),
       })),
     };
-  }
-
-  /**
-   * Is `element` visible to `seat` — judged on the EXACT final per-seat wire
-   * output (`game.toJSONForPlayer(seat)`), including any `static playerView`
-   * post-transform the game class defines. See {@link isElementVisible}.
-   *
-   * @param element - The live element to check
-   * @param seat - The seat to check visibility for (use 0 for spectator)
-   * @returns Whether `element`'s identity is visible to `seat`
-   */
-  isElementVisible(element: GameElement, seat: number): boolean {
-    return isElementVisible(element, seat);
-  }
-
-  /**
-   * Get the live elements visible to `seat` — derived from the final
-   * per-seat serialized tree. See {@link getVisibleElements}.
-   *
-   * @param seat - The seat to compute visibility for (use 0 for spectator)
-   * @returns An ElementCollection of the live elements visible to `seat`
-   */
-  getVisibleElements(seat: number): ElementCollection<GameElement> {
-    return getVisibleElements(this.game, seat);
   }
 }
 

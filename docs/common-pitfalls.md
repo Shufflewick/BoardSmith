@@ -358,24 +358,16 @@ it completely.
 
 ### The Solution
 
-Build the attribute, and check the fixture:
+Do not hand-build a view. Capture a real one with `testGame.getPlayerView(seat)`
+or `renderAsSeat`; a captured view is what production sends, so it cannot
+drift:
 
 ```typescript
-import { viewPlayerRef, assertViewFixtureShape } from 'boardsmith/testing';
-
-const view = {
-  id: 1,
-  className: 'Token',
-  attributes: { player: viewPlayerRef(2, { name: 'Alice' }) },
-};
-
-assertViewFixtureShape(view);  // throws, naming the element and attribute
+const view = testGame.getPlayerView(2).state;
 ```
 
-`diffPlayerViews` runs the check on any view pair you hand it, so a drifted
-fixture fails there without opting in. Prefer capturing a view from a real
-game (`testGame.getPlayerView(seat)`, `renderAsSeat`) over hand-building one
-at all — a captured view cannot drift.
+`diffPlayerViews` refuses a view pair that carries the short form, naming the
+element and attribute, so a drifted fixture handed to it fails there.
 
 ---
 

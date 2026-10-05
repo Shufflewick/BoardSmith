@@ -4,7 +4,6 @@
  * Provides utilities for testing BoardSmith games including:
  * - Test game creation and management
  * - Action simulation and assertions
- * - Flow state verification
  * - Debug utilities for diagnosing issues
  * - Random game simulation for completeness testing
  *
@@ -54,30 +53,15 @@ export {
 
 // Assertion helpers
 export {
-  assertFlowState,
-  assertGameFinished,
   assertActionAvailable,
   assertActionFails,
   assertActionNotAvailable,
   assertHidden,
   assertVisible,
-  type ExpectedFlowState,
-  type FlowStateAssertionResult,
 } from './assertions.js';
 
 // Hidden-info visibility utilities (VIS-01)
-export {
-  isElementVisible,
-  getVisibleElements,
-} from './visibility.js';
-
-// Hand-built view fixtures (#160) -- the real serialized player-reference
-// shape, and the check that refuses the short form that renders identically.
-export {
-  viewPlayerRef,
-  assertViewFixtureShape,
-  type ViewPlayerRef,
-} from './view-fixture.js';
+export { isElementVisible } from './visibility.js';
 
 // Per-seat view diffing (VIS-02)
 export {
@@ -131,10 +115,7 @@ export {
   type SimulateTutorialResult,
 } from './simulate-tutorial.js';
 
-export {
-  assertTutorialStep,
-  assertTutorialCompletes,
-} from './tutorial-assertions.js';
+export { assertTutorialCompletes } from './tutorial-assertions.js';
 
 // ActionBuilder — multi-step / dependent-selection builder (TEST-05)
 export { ActionBuilder } from './action-builder.js';

@@ -220,7 +220,6 @@ next time their file is edited, and the answer will be to split them:
 | `src/cli/dev-host/config-types.ts` `coerceGameOptionValue` | 10 | 12 |
 | `src/engine/flow/seat-activity.ts` `availableActionsForSeat` | 10 | 8 |
 | `src/engine/utils/dev-state.ts` `restoreFromDevCheckpoint` | 10 | 13 |
-| `src/testing/assertions.ts` `assertGameFinished` | 10 | 9 |
 | `src/world/migration.ts` `declaredSources` | 10 | 12 |
 
 Roughly half sit in `src/cli/commands/`, which is touched often. That is the

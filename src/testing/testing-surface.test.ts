@@ -12,6 +12,13 @@ describe('boardsmith/testing export surface', () => {
     'simulateAction',
     'simulateActions',
     'assertActionSucceeds',
+    // #519: nothing used these
+    'assertFlowState',
+    'assertGameFinished',
+    'getVisibleElements',
+    'assertTutorialStep',
+    'viewPlayerRef',
+    'assertViewFixtureShape',
   ])('does not export %s', (name) => {
     expect(testingBarrel).not.toHaveProperty(name);
   });
@@ -21,5 +28,11 @@ describe('boardsmith/testing export surface', () => {
     expect(typeof testingBarrel.TestGame.prototype.tryAction).toBe('function');
     expect(typeof testingBarrel.TestGame.prototype.action).toBe('function');
     expect(typeof testingBarrel.assertActionFails).toBe('function');
+  });
+
+  it('asks whether an element is visible one way: the standalone isElementVisible (#519)', () => {
+    expect(typeof testingBarrel.isElementVisible).toBe('function');
+    expect(testingBarrel.TestGame.prototype).not.toHaveProperty('isElementVisible');
+    expect(testingBarrel.TestGame.prototype).not.toHaveProperty('getVisibleElements');
   });
 });

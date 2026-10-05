@@ -7,7 +7,21 @@
  * @module
  */
 
-import { Player, type Game, type GameElement } from '../engine/index.js';
+import { Player, type Game, type GameElement, type ActionDebugInfo } from '../engine/index.js';
+
+/**
+ * The "Selections:" lines of an action-availability failure: one line per
+ * selection, marked passed or failed, with its choice count and note. Shared
+ * by `TestGame.doAction` and `assertActionAvailable` so both failures read
+ * the same. Returns an empty string for an action with no selections.
+ */
+export function formatSelectionLines(debugInfo: ActionDebugInfo): string {
+  return debugInfo.details.selections
+    .map(s =>
+      `  ${s.passed ? '✓' : '✗'} '${s.name}': ${s.choices} choices${s.note ? ` — ${s.note}` : ''}`
+    )
+    .join('\n');
+}
 
 /**
  * Options for {@link toDebugString}.

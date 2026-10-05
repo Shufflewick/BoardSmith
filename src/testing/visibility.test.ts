@@ -2,8 +2,7 @@
  * VIS-01: Per-seat element-visibility utilities.
  *
  * Verifies that:
- * (1) `isElementVisible`/`getVisibleElements` (standalone + TestGame methods)
- *     correctly classify owner-visible, owner-hidden, count-only, all-visible,
+ * (1) `isElementVisible` correctly classify owner-visible, owner-hidden, count-only, all-visible,
  *     and spectator (seat 0) elements.
  * (2) Fast-path parity: with no `static playerView`, `isElementVisible` result
  *     equals `element.isVisibleTo(seat)` exactly.
@@ -28,7 +27,7 @@ import {
   type ElementJSON,
 } from '../engine/index.js';
 import { TestGame } from './test-game.js';
-import { isElementVisible, getVisibleElements } from './visibility.js';
+import { isElementVisible } from './visibility.js';
 
 // ---------------------------------------------------------------------------
 // Fixture 1: no static playerView — four visibility modes per player
@@ -92,19 +91,17 @@ function makeNoPlayerViewGame(): TestGame<NoPlayerViewGame> {
   return TestGame.create(NoPlayerViewGame, { playerCount: 2, seed: 'vis-01-no-playerview' });
 }
 
-describe('isElementVisible / getVisibleElements — no static playerView (fast path)', () => {
+describe('isElementVisible — no static playerView (fast path)', () => {
   it('owner sees their own hand card (owner-only zone)', () => {
     const tg = makeNoPlayerViewGame();
     const card = tg.game.first(FixtureCard, { name: 'hand-card-1' })!;
     expect(isElementVisible(card, 1)).toBe(true);
-    expect(tg.isElementVisible(card, 1)).toBe(true);
   });
 
   it('non-owner does NOT see the other player\'s hand card (owner-only zone)', () => {
     const tg = makeNoPlayerViewGame();
     const card = tg.game.first(FixtureCard, { name: 'hand-card-1' })!;
     expect(isElementVisible(card, 2)).toBe(false);
-    expect(tg.isElementVisible(card, 2)).toBe(false);
   });
 
   it('nobody sees a vault card (hidden zone), including the owner', () => {
@@ -132,27 +129,6 @@ describe('isElementVisible / getVisibleElements — no static playerView (fast p
     const tg = makeNoPlayerViewGame();
     const card = tg.game.first(FixtureCard, { name: 'vault-card-1' })!;
     expect(isElementVisible(card, 0)).toBe(false);
-  });
-
-  it('getVisibleElements(seat) returns exactly the elements visible to that seat', () => {
-    const tg = makeNoPlayerViewGame();
-    const visibleToP1 = getVisibleElements(tg.game, 1);
-    const names = visibleToP1.filter((e) => e instanceof FixtureCard).map((e) => e.name);
-
-    expect(names).toContain('hand-card-1');
-    expect(names).not.toContain('hand-card-2');
-    expect(names).not.toContain('vault-card-1');
-    expect(names).not.toContain('vault-card-2');
-    expect(names).not.toContain('stash-card-2');
-    expect(names).toContain('display-card-1');
-    expect(names).toContain('display-card-2');
-  });
-
-  it('TestGame.getVisibleElements delegates identically to the standalone function', () => {
-    const tg = makeNoPlayerViewGame();
-    const viaMethod = tg.getVisibleElements(2).map((e) => e.id).sort();
-    const viaFn = getVisibleElements(tg.game, 2).map((e) => e.id).sort();
-    expect(viaMethod).toEqual(viaFn);
   });
 
   it('fast-path parity: isElementVisible(el, seat) === el.isVisibleTo(seat) for every element/seat pair', () => {
@@ -233,7 +209,7 @@ function makeWithPlayerViewGame(): TestGame<WithPlayerViewGame> {
   return TestGame.create(WithPlayerViewGame, { playerCount: 2, seed: 'vis-01-playerview' });
 }
 
-describe('isElementVisible / getVisibleElements — static playerView post-transform honored', () => {
+describe('isElementVisible — static playerView post-transform honored', () => {
   it('isVisibleTo(seat) is true for the stripped card (pre-transform rule sees it as visible)', () => {
     const tg = makeWithPlayerViewGame();
     const card = tg.game.first(StrippedCard, { name: 'stripped-card' })!;
@@ -244,20 +220,11 @@ describe('isElementVisible / getVisibleElements — static playerView post-trans
     const tg = makeWithPlayerViewGame();
     const card = tg.game.first(StrippedCard, { name: 'stripped-card' })!;
     expect(isElementVisible(card, 1)).toBe(false);
-    expect(tg.isElementVisible(card, 1)).toBe(false);
   });
 
   it('isElementVisible returns TRUE for the non-stripped card in the same all-visible zone', () => {
     const tg = makeWithPlayerViewGame();
     const kept = tg.game.first(StrippedCard, { name: 'kept-card' })!;
     expect(isElementVisible(kept, 1)).toBe(true);
-  });
-
-  it('getVisibleElements excludes the stripped card but includes the kept card', () => {
-    const tg = makeWithPlayerViewGame();
-    const visible = getVisibleElements(tg.game, 1);
-    const names = visible.filter((e) => e instanceof StrippedCard).map((e) => e.name);
-    expect(names).not.toContain('stripped-card');
-    expect(names).toContain('kept-card');
   });
 });

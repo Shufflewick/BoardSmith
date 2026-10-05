@@ -8,12 +8,12 @@
  * identically and the fixture drifts from what production actually sends with
  * nothing failing.
  *
- * These are the two ways out: a builder that writes the real shape, and a
- * check that refuses the short form loudly.
+ * `assertViewFixtureShape` refuses the short form loudly. It is internal:
+ * `diffPlayerViews` runs it on every view it is handed.
  */
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Piece, type GameOptions, type ElementJSON } from '../engine/index.js';
-import { viewPlayerRef, assertViewFixtureShape } from './view-fixture.js';
+import { assertViewFixtureShape } from './view-fixture.js';
 import { diffPlayerViews } from './view-diff.js';
 
 class Token extends Piece<RefGame> {}
@@ -25,30 +25,6 @@ class RefGame extends Game<RefGame, Player> {
     token.player = this.players[0];
   }
 }
-
-describe('viewPlayerRef', () => {
-  it('writes exactly the shape the engine serializes', () => {
-    const game = new RefGame({ playerCount: 2, seed: 'view-fixture' });
-    const token = game.first(Token)!;
-    const serialized = (game.toJSON() as ElementJSON);
-    const serializedToken = serialized.children!.find((c) => c.name === 'token')!;
-
-    expect(viewPlayerRef(token.player!)).toEqual(serializedToken.attributes!.player);
-  });
-
-  it('accepts a bare seat number and names the seat as the reference', () => {
-    expect(viewPlayerRef(3)).toEqual({ __playerRef: 3, seat: 3, color: undefined, name: undefined });
-  });
-
-  it('carries a color and name when the fixture wants them on screen', () => {
-    expect(viewPlayerRef(2, { color: '#ff0000', name: 'Alice' })).toEqual({
-      __playerRef: 2,
-      seat: 2,
-      color: '#ff0000',
-      name: 'Alice',
-    });
-  });
-});
 
 describe('assertViewFixtureShape', () => {
   const shortForm: ElementJSON = {
@@ -66,14 +42,12 @@ describe('assertViewFixtureShape', () => {
     expect(() => assertViewFixtureShape(shortForm)).toThrowError(/token.*player|player.*token/s);
   });
 
-  it('accepts the shape the builder writes', () => {
-    const good: ElementJSON = {
-      id: 1,
-      className: 'Token',
-      name: 'token',
-      attributes: { player: viewPlayerRef(2) },
-    } as unknown as ElementJSON;
-    expect(() => assertViewFixtureShape(good)).not.toThrow();
+  it('accepts the shape the engine serializes', () => {
+    const game = new RefGame({ playerCount: 2, seed: 'view-fixture' });
+    const serialized = game.toJSON() as ElementJSON;
+    const serializedToken = serialized.children!.find((c) => c.name === 'token')!;
+    expect(serializedToken.attributes!.player).toHaveProperty('__playerRef');
+    expect(() => assertViewFixtureShape(serializedToken)).not.toThrow();
   });
 
   it('leaves an attribute that merely has a seat-like field alone', () => {
@@ -108,11 +82,11 @@ describe('assertViewFixtureShape', () => {
 });
 
 describe('diffPlayerViews refuses a drifted fixture rather than diffing it', () => {
-  it('throws when either view carries the short form', () => {
+  it('throws when either view carries the short form, and says to capture a real view', () => {
     const good: ElementJSON = {
       id: 1,
       className: 'Table',
-      attributes: { player: viewPlayerRef(1) },
+      attributes: { player: { __playerRef: 1, seat: 1, color: undefined, name: undefined } },
     } as unknown as ElementJSON;
     const bad: ElementJSON = {
       id: 1,
@@ -122,6 +96,6 @@ describe('diffPlayerViews refuses a drifted fixture rather than diffing it', () 
 
     expect(() =>
       diffPlayerViews({ player: 1, state: good }, { player: 2, state: bad })
-    ).toThrowError(/__playerRef/);
+    ).toThrowError(/__playerRef[\s\S]*getPlayerView\(seat\) or renderAsSeat\(\)/);
   });
 });

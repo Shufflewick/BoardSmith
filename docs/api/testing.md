@@ -51,8 +51,6 @@ There is one way to run an action and one way to assert it fails:
 
 ### Assertions
 
-- `assertFlowState()` - Assert current player / available actions / phase / completion state
-- `assertGameFinished()` - Assert the game is complete, optionally checking winner(s)
 - `assertActionAvailable()` - Assert an action is available to a player; **auto-traces the failure** if not
 - `assertActionNotAvailable()` - Assert an action is *not* available to a player
 
@@ -66,14 +64,13 @@ There is one way to run an action and one way to assert it fails:
 ### Tutorial DSL
 
 - `simulateTutorial()` - Drive a tutorial script through a sequence of expected steps
-- `assertTutorialStep()` / `assertTutorialCompletes()` - Assertions over tutorial simulation results
+- `assertTutorialCompletes()` - Assert a tutorial simulation reached its last step
 
 ### Types
 
 - `TestGameOptions` - Test game creation options (`playerCount`, `playerNames`, `seed`, `autoStart`, `checkpoints`, plus any game-specific constructor options). `checkpoints` is the per-action checkpoint retention policy, applied to the runner rather than passed to the game constructor — without it a test always runs under the unbounded default and cannot exercise the policy the game ships (see `docs/state-size.md`). `seed` defaults to a fixed literal (`'test-seed'`) — never `Date.now()`/`Math.random` — so two seedless `TestGame.create()`/`createTestGame()` calls are deterministic and reproduce identical shuffles/command history. The resolved seed (fixed default or caller-supplied) is exposed via `testGame.seed` and included in `doAction`/`assertActionAvailable`/`playUntilComplete` failure messages so a failing run is one copy-paste from a deterministic repro.
 - `PlayUntilCompleteOptions` - Options for `playUntilComplete()` (`maxMoves`, `strategy`, `rng`)
 - `SimulateRandomGamesOptions`, `ReplayRandomGameOptions`, `SingleGameResult`, `SimulationResults`, `IsResting` - Random simulation types
-- `ExpectedFlowState`, `FlowStateAssertionResult` - `assertFlowState()` input/output types
 - `DebugStringOptions`, `ActionTraceResult`, `ActionTraceDetail` - Debug utility types
 - `TutorialScenarioMove`, `SimulateTutorialOptions`, `SimulateTutorialResult` - Tutorial DSL types
 
@@ -234,29 +231,6 @@ assertActionAvailable(testGame, 1, 'equipItem');
 
 `assertActionNotAvailable()` is the inverse — it passes if the seat can't act at all, or the action just isn't in that seat's available list.
 
-### Flow State: `actionsMode` — exact vs. contains
-
-`assertFlowState()`'s `actions` check is **exact by default**: both missing and extra available actions fail the assertion. Opt into `actionsMode: 'contains'` when a test only cares that certain actions are present and doesn't want to enumerate every other action the flow happens to expose.
-
-```typescript
-import { assertFlowState } from 'boardsmith/testing';
-
-// Exact (default) — fails if 'pass' is also available but not listed here.
-assertFlowState(testGame, {
-  currentPlayer: 1,
-  actions: ['move', 'attack'],
-});
-
-// Contains — only fails if 'move' is missing; other available actions are fine.
-assertFlowState(testGame, {
-  currentPlayer: 1,
-  actions: ['move'],
-  actionsMode: 'contains',
-});
-```
-
-`assertFlowState` handles both sequential turns (`flowState.currentPlayer` / `availableActions`) and simultaneous turns (`flowState.awaitingPlayers[*].availableActions`) transparently — the `actions` check is against the union of available actions for whichever seats are currently active.
-
 ### Random Game Simulation
 
 ```typescript
@@ -412,23 +386,17 @@ post-`playerView` serialized tree the production UI actually receives
 bytes are safe, not just that `element.isVisibleTo()` says so.
 
 ```typescript
-import { isElementVisible, getVisibleElements, assertHidden, assertVisible } from 'boardsmith/testing';
+import { isElementVisible, assertHidden, assertVisible } from 'boardsmith/testing';
 
 const opponentHand = testGame.game.getPlayer(2)!.hand;
 
 // Is a specific element visible to seat 1?
 isElementVisible(opponentHand.first()!, 1); // false — opponent's hand is hidden
 
-// All elements currently visible to seat 1
-const visible = getVisibleElements(testGame.game, 1);
-
 // Assertion form — throws with the surviving attribute keys on failure
 assertHidden(opponentHand.first()!, 1);
 assertVisible(testGame.game.getPlayer(1)!.hand.first()!, 1);
 ```
-
-`TestGame` also exposes these as delegate methods: `testGame.isElementVisible(element, seat)` /
-`testGame.getVisibleElements(seat)`.
 
 **`diffPlayerViews(viewA, viewB)`** sorts every node across two seats' final
 per-seat trees into `onlyInA` / `onlyInB` / `attributeDiffs` — useful for
