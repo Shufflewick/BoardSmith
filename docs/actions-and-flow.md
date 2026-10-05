@@ -1427,8 +1427,9 @@ Two things end a hold anyway, by ruling:
   for the op: the deadline is the host's. A seat holding a follow-up takes the
   idle action if the step offers it (which drops the follow-up, like any other
   action); if the step does not offer it, the follow-up is dropped and the
-  seat's part ends as if it had finished: the turn passes on (`actionStep`), or the seat is marked done
-  (`simultaneousActionStep`). No action runs then, so the action history
+  seat's part ends as if it had finished: the turn passes on (`actionStep`), or
+  the seat is marked done (`simultaneousActionStep`). No action runs then, so
+  the action history
   records a **seat expiry** instead (`{ kind: 'seatExpiry', player, undoable:
   false }`, a `HistoryEntry` beside the `SerializedAction` entries): a replay
   of the history closes the seat again at the same point, and undo counts it
