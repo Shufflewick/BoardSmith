@@ -507,7 +507,7 @@ function assertWorldVacate(world: WorldDefinition): void {
  * verb in that world may free a chair from the clock, and the call that would
  * is refused by name.
  */
-export function worldVacateByClockAction(world: WorldDefinition): string | null {
+function worldVacateByClockAction(world: WorldDefinition): string | null {
   return world.vacateByClock ?? null;
 }
 
@@ -599,7 +599,7 @@ export function worldSeatCount(
  * clamped -- a box silently smaller than its author wrote would drop notices
  * nobody decided to drop.
  */
-export function worldNoticesPerSeat(
+function worldNoticesPerSeat(
   declaration: { notices?: { perSeat?: unknown } },
   budgets: WorldBudgets,
 ): number | undefined {
@@ -809,7 +809,7 @@ function highestElementCursor(json: ElementJSON, ids: WorldElementIds): number {
 export type WorldOrdering = "arrival" | "chronological";
 
 /** The orderings a host runs, in one place, so the refusal can name them. */
-export const WORLD_ORDERINGS: readonly WorldOrdering[] = ["arrival", "chronological"];
+const WORLD_ORDERINGS: readonly WorldOrdering[] = ["arrival", "chronological"];
 
 /** What a host must supply to build a world out of a bundle's definition. */
 export interface WorldRunnerOptions {
