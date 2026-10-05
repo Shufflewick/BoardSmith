@@ -219,15 +219,18 @@ simultaneous) and `src/session/testing/fixtures/collect-turns-fixture.ts`
 
 ### On case 9, and why it is not redundant
 
-The key the engine HANDS OUT and the key the guard ACCEPTS are computed in two
-different places. The broadcast key comes from `OpResult.flowState` (via
-`SnapshotSessionHost.turnBoundary()`, reading `this._flowState`); the guard
-compares against `snapshot.flowState`, because `executeOp` is stateless and the
-snapshot is all it is given. If those ever diverged, EVERY legitimate
-submission would be refused — the system would wedge, telling players to reload
-into a round they could never act in. No other case here would notice: they all
-read the key from the same side they submit it to. Case 9 is the cross-unit
-identity test that holds the two halves together.
+The guard compares a submission's key against `snapshot.flowState`, because
+`executeOp` is stateless and the snapshot is all it is given.
+`SnapshotSessionHost` hands out the key from that same value: its
+`turnBoundary()` reads the flow state out of the snapshot it holds (#536), so
+for that host the two cannot diverge. An op result still reports the flow state
+a second time, as `OpResult.flowState`, and a host that hands out keys from that
+copy depends on it equalling the snapshot's. If they ever diverged, EVERY
+legitimate submission from such a host would be refused: the system would wedge,
+telling players to reload into a round they could never act in. No other case
+here would notice, because they all read the key from the same side they submit
+it to. Case 9 holds the copy equal to the snapshot's for as long as op results
+carry it.
 
 ### On case 7, and why the selection path is still guarded
 
