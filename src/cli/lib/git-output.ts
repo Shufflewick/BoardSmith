@@ -4,7 +4,8 @@ import { execFile } from 'node:child_process';
  * Runs git in `dir` and returns its stdout. Every CLI command runs git through this (#531), so
  * paths come back as written (`core.quotePath=false`) everywhere, a path with non-ASCII characters
  * read here matches the same path read anywhere else, and a whole-project diff or listing fits in
- * the buffer. A non-zero exit rejects with an error naming the git command and what git said.
+ * the buffer. A non-zero exit rejects with an error naming the git command and what git said,
+ * carrying git's exit status as `code` for a caller that tells one non-zero exit from another.
  */
 export function gitOutput(dir: string, args: string[]): Promise<string> {
   return new Promise((resolvePromise, reject) => {
@@ -13,8 +14,10 @@ export function gitOutput(dir: string, args: string[]): Promise<string> {
       ['-c', 'core.quotePath=false', ...args],
       { cwd: dir, maxBuffer: 256 * 1024 * 1024 },
       (error, stdout, stderr) => {
-        if (error) reject(new Error(`git ${args.join(' ')} failed: ${(String(stderr) || error.message).trim()}`));
-        else resolvePromise(String(stdout));
+        if (error) {
+          const message = `git ${args.join(' ')} failed: ${(String(stderr) || error.message).trim()}`;
+          reject(Object.assign(new Error(message), { code: error.code }));
+        } else resolvePromise(String(stdout));
       },
     );
   });
