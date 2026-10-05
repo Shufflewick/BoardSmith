@@ -15,6 +15,7 @@ import { assertBareName } from '../lib/user-name.js';
 import { testRunScopeProblem } from '../lib/test-run-scope.js';
 import { extractSection, parseRulings } from './build-manifest.js';
 import { ENTRY_NUMBER, entryHeadingPattern } from '../lib/ledger-entries.js';
+import { escapeRegExp } from '../lib/regexp.js';
 
 /**
  * `boardsmith constraint-check [slug]`: does the project hold its own hard constraints (#288)?
@@ -175,10 +176,6 @@ async function readOptional(path: string): Promise<string | undefined> {
 // ---------------------------------------------------------------------------------------------
 // The checks
 // ---------------------------------------------------------------------------------------------
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 /** True when `identifier` appears in the file as a whole word. */
 async function fileMentions(projectDir: string, file: string, identifier: string): Promise<boolean | undefined> {

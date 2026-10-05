@@ -24,6 +24,7 @@ import {
 import { atomicWriteFile } from './verify-run.js';
 import { checkConstraints } from './constraint-check.js';
 import { verifiedProblem } from '../lib/verify-result.js';
+import { escapeRegExp } from '../lib/regexp.js';
 
 /**
  * `boardsmith chunk-signoff` / `boardsmith chunk-waiver` / `checkSignoff()`: who may say a chunk
@@ -1063,10 +1064,6 @@ export async function recordReopen(slug: string, options: ReopenOptions): Promis
   const updatedChunk = writeSignoffBlock(chunkText, body, rel).replace(/^Status:.*$/m, 'Status: built');
   await atomicWriteFile(chunkMdPath(dir, slug), updatedChunk);
   await atomicWriteFile(designPath(dir, SKETCH_MD), updatedSketch);
-}
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 interface WaiverOptions {
