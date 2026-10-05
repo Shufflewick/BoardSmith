@@ -320,7 +320,7 @@ export async function ingestGapsCommand(
   let relabelled = 0;
   if (!options.skipRelabel) {
     relabelled = (
-      await ingestRelabelCommand({ project: projectDir, json: false, quiet: options.quiet })
+      await ingestRelabelCommand({ project: projectDir, quiet: options.quiet })
     ).relabelled;
   }
   const rulebookDir = designRulebookDir(projectDir);
@@ -440,7 +440,8 @@ export const PRESENTATION_LEXICON = Object.freeze([
 ]);
 
 /**
- * `boardsmith ingest-relabel` — move presentation descriptions off the `Derived (p.N):` prefix.
+ * Move presentation descriptions off the `Derived (p.N):` prefix. The first step of
+ * `boardsmith ingest-gaps` (and of `ingest-check`), not a command of its own (#534).
  *
  * INGEST-02 exists because rule-bearing inferences must be separable from presentation notes.
  * Twelve mechanisms were tried to get transcription to make that split at write time and the
@@ -471,7 +472,7 @@ const RELABEL_DERIVED_LINE_RE = new RegExp(
 );
 
 export async function ingestRelabelCommand(
-  options: { project?: string; json?: boolean; dryRun?: boolean; quiet?: boolean } = {},
+  options: { project?: string; quiet?: boolean } = {},
 ): Promise<{ relabelled: number; changes: Array<{ file: string; line: number; matched: string }> }> {
   const projectDir = resolve(options.project ?? process.cwd());
   const dir = designRulebookDir(projectDir);
@@ -504,14 +505,10 @@ export async function ingestRelabelCommand(
       touched = true;
     }
 
-    if (touched && !options.dryRun) await fs.writeFile(full, lines.join('\n'));
+    if (touched) await fs.writeFile(full, lines.join('\n'));
   }
 
   const result = { relabelled: changed.length, changes: changed };
-  if (options.json) {
-    console.log(JSON.stringify(result, null, 2));
-    return result;
-  }
   if (options.quiet) return result;
   if (!changed.length) {
     console.log(chalk.green('✓ No Derived (p. line carries presentation-only vocabulary'));
@@ -519,7 +516,7 @@ export async function ingestRelabelCommand(
   }
   console.log(
     chalk.green(
-      `✓ Relabelled ${changed.length} line${changed.length === 1 ? '' : 's'} Derived → Visual${options.dryRun ? ' (dry run — nothing written)' : ''}`,
+      `✓ Relabelled ${changed.length} line${changed.length === 1 ? '' : 's'} Derived → Visual`,
     ),
   );
   for (const c of changed) {
