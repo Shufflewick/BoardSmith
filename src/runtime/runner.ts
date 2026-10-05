@@ -196,7 +196,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   /** Game type identifier */
   readonly gameType: string;
 
-  /** The game's history: every action taken, and every timed seat the host closed */
+  /** The game's history: every action taken, and every seat the host closed at a deadline */
   readonly actionHistory: HistoryEntry[] = [];
 
   /**
@@ -855,18 +855,16 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   }
 
   /**
-   * A host closing a timed step whose window ran out (#494: time limits always
-   * win). When the open step declared a time limit, `seat` holds a follow-up,
-   * and the step does not offer `seat` the idle action `actionName`, the
-   * follow-up is dropped and the seat's part ends, and the new flow state is
-   * returned. Otherwise returns `undefined`, and the host runs the idle action
-   * as the seat's own action, which, when the step offers it, also drops the
-   * seat's follow-up. The stateless `expireTimedSeat` op is the one caller.
+   * A host closing a seat whose deadline passed, on any step, timed or not
+   * (#494: host deadlines always win). When `seat` holds a follow-up and the
+   * step does not offer `seat` the idle action `actionName`, the follow-up is
+   * dropped and the seat's part ends, and the new flow state is returned.
+   * Otherwise returns `undefined`, and the host runs the idle action as the
+   * seat's own action, which, when the step offers it, also drops the seat's
+   * follow-up. The stateless `expireSeat` op is the one caller.
    */
   closeExpiredHeldSeat(seat: number, actionName: string): FlowState | undefined {
-    const flowState = this.getFlowState();
-    if (flowState?.timeLimitMs === undefined) return undefined;
-    if (!followUpForSeat(flowState, seat)) return undefined;
+    if (!followUpForSeat(this.getFlowState(), seat)) return undefined;
     if (this.refusalToAct(actionName, seat) === undefined) return undefined;
     return this.expireHeldSeat(seat);
   }
@@ -1091,7 +1089,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
   /**
    * Replay a game from its history: every action is performed again, and every
-   * timed seat the host closed is closed again, in order. Throws, naming the
+   * seat the host closed at a deadline is closed again, in order. Throws, naming the
    * entry, when the rules no longer accept one.
    */
   static replay<G extends Game>(

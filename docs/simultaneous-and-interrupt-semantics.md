@@ -165,12 +165,15 @@ Which means, precisely:
   `TurnBoundary.timeLimitMs` on every broadcast inside that boundary. It is a
   duration, never an instant, and it does not take part in the boundary key.
   The HOST arms its own deadline when the key changes, from its own clock, and
-  when the window elapses submits one `expireTimedSeat` op per seat still due,
+  when the window elapses submits one `expireSeat` op per seat still due,
   naming the game's `idleAction` and stamped with the key it armed under — so a
   round a human closed while the timer ran refuses the op as stale rather than
   letting it land in the next round (§7: the host carries a boundary it
   captured earlier, not the current one). The op is a host-only member of the
   `Op` union: no wire op maps to it, so nothing a client sends can become one.
+  It does not need a time limit on the step: a host that keeps a deadline of
+  its own (a table's hours-long round) closes a seat with the same op on any
+  step, and the seat is closed the same way.
   A timed step is always resolved by `idleAction`, never by a bot: the player
   is present and slow, not absent. Time limits always win over a held follow-up
   (#494): a seat held for one is closed by the idle action when the step offers

@@ -1420,9 +1420,11 @@ Two things end a hold anyway, by ruling:
 - **A custom `allDone` wins.** It is the one exception to the hold inside the
   step: when a game's own `allDone` ends a simultaneous step, the follow-ups the
   step held end with it.
-- **Time limits always win.** When a timed step's window runs out, the host
-  closes each seat still due with an `expireTimedSeat` op naming the game's
-  `idleAction`. A seat holding a follow-up takes the idle action if the step
+- **Host deadlines always win.** When a host deadline passes, a timed step's
+  window or any deadline the host keeps itself on any step (a table's
+  hours-long round, say), the host closes each seat still due with an
+  `expireSeat` op naming the game's `idleAction`. The step needs no time limit
+  for the op: the deadline is the host's. A seat holding a follow-up takes the idle action if the step
   offers it (which drops the follow-up, like any other action); if the step
   does not offer it, the follow-up is dropped and the seat's part ends as if it
   had finished: the turn passes on (`actionStep`), or the seat is marked done
@@ -1933,10 +1935,12 @@ actionStep({
 - It is a **duration, never an instant**. The engine keeps no clock and never
   closes the step itself. It publishes the value as `FlowState.timeLimitMs` and
   on the host's turn boundary (`meta.turnBoundary.timeLimitMs`), and the host
-  closes the step when the window elapses with one `expireTimedSeat` op per
+  closes the step when the window elapses with one `expireSeat` op per
   seat that has not acted, naming your `idleAction`. That op is the host's
   alone: no client message maps to it, so a player cannot close a seat by
-  dressing an action up as a timeout. Time limits always win: a seat holding a
+  dressing an action up as a timeout. The same op closes a seat at any other
+  deadline the host keeps, on a step with no time limit too. Time limits always
+  win: a seat holding a
   follow-up is closed too, by the idle action when the step offers it, and
   otherwise by dropping its follow-up and ending its part, which the history
   records as a seat expiry (see "A Follow-up Holds Its Seat").

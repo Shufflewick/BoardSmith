@@ -34,7 +34,7 @@ export interface SerializedAction {
   timestamp?: number;
 }
 
-/** A timed seat the host closed when its window ran out: no action ran. */
+/** A seat the host closed when its deadline passed: no action ran. */
 export interface SerializedSeatExpiry {
   kind: 'seatExpiry';
   player: number;

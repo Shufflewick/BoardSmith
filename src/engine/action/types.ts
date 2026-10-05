@@ -888,7 +888,7 @@ export interface SerializedSeatExpiry {
  */
 export type HistoryEntry = SerializedAction | SerializedSeatExpiry;
 
-/** Whether `entry` records a timed seat the host closed rather than an action. */
+/** Whether `entry` records a seat the host closed at a deadline rather than an action. */
 export function isSeatExpiry(entry: HistoryEntry): entry is SerializedSeatExpiry {
   return 'kind' in entry && entry.kind === 'seatExpiry';
 }

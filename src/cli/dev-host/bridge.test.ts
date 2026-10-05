@@ -92,12 +92,12 @@ describe('dev host bridge', () => {
       expect(translateOp('bogus', 1, {})).toBeUndefined();
     });
 
-    it('never builds the host-only timed-seat close from a client message', () => {
+    it('never builds the host-only seat close from a client message', () => {
       // No wire op maps to it, under either spelling.
-      expect(translateOp('expireTimedSeat', 1, { player: 1, idleAction: 'pass', boundaryKey: 'k' })).toBeUndefined();
-      expect(translateOp('expire_timed_seat', 1, { player: 1, idleAction: 'pass', boundaryKey: 'k' })).toBeUndefined();
+      expect(translateOp('expireSeat', 1, { player: 1, idleAction: 'pass', boundaryKey: 'k' })).toBeUndefined();
+      expect(translateOp('expire_seat', 1, { player: 1, idleAction: 'pass', boundaryKey: 'k' })).toBeUndefined();
       // An action is rebuilt field by field, so nothing else a client sends rides along.
-      expect(translateOp('action', 1, { actionName: 'pass', args: {}, boundaryKey: 'k', onTimeout: true, type: 'expireTimedSeat' })).toEqual({
+      expect(translateOp('action', 1, { actionName: 'pass', args: {}, boundaryKey: 'k', onTimeout: true, type: 'expireSeat' })).toEqual({
         type: 'action',
         actionName: 'pass',
         player: 1,
