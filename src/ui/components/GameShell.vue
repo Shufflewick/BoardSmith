@@ -344,10 +344,13 @@ audioService.init({
   turnSoundUrl: turnNotificationSound,
 });
 
-// Play the turn sound when it becomes this seat's turn: a false -> true
-// transition only, so neither the first state nor a page load chimes.
-watch(isMyTurn, (now, before) => {
-  if (now && before === false) audioService.playTurnSound();
+// Play the turn sound when the turn comes to this seat: a change from "not your
+// turn" to "your turn" between two states. The first state only says whose turn
+// it already is, so loading (or reloading) the page on your own turn is silent.
+// `null` until that first state arrives.
+const turnIsMine = computed<boolean | null>(() => (state.value ? state.value.state.isMyTurn : null));
+watch(turnIsMine, (now, before) => {
+  if (now === true && before === false) audioService.playTurnSound();
 });
 
 // Global "Show action help" preference — persisted to localStorage.
@@ -780,7 +783,7 @@ if (isDevBuild) {
     ],
     () => {
       maybePostDevtoolsUpdate(
-        { isDevBuild, platformMode: inHost },
+        { isDevBuild, inHost },
         {
           seat: playerSeat.value,
           state: state.value?.state ?? null,
