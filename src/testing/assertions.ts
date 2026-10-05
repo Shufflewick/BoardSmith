@@ -11,6 +11,7 @@ import type { TestGame } from './test-game.js';
 import { canSeatAct, availableActionsForSeat, type GameElement } from '../engine/index.js';
 import { _collectAvailableActions } from './simulate-action.js';
 import { isElementVisible } from './visibility.js';
+import type { ActionExecutionResult } from '../runtime/index.js';
 
 /**
  * Expected flow state for assertions.
@@ -187,6 +188,58 @@ export function assertGameFinished(
       );
     }
   }
+}
+
+/**
+ * Assert that an action fails.
+ *
+ * Performs the action with `testGame.tryAction` and throws if it succeeds.
+ * Optionally checks that the error matches an expected string or pattern. To
+ * run an action that should succeed, call `testGame.doAction`, which throws
+ * with the full availability trace when it does not.
+ *
+ * @param testGame - The test game instance
+ * @param playerSeat - The player seat performing the action (1-indexed)
+ * @param actionName - The name of the action to perform
+ * @param args - Arguments for the action
+ * @param expectedError - Optional string the error must contain, or regex it must match
+ * @returns The failed action result
+ * @throws Error if the action succeeds, or if expectedError is given and doesn't match
+ *
+ * @example
+ * ```typescript
+ * assertActionFails(testGame, 1, 'playCard', { card: wrongCard });
+ * assertActionFails(testGame, 1, 'playCard', { card: wrongCard }, 'not your turn');
+ * ```
+ */
+export function assertActionFails(
+  testGame: TestGame,
+  playerSeat: number,
+  actionName: string,
+  args: Record<string, unknown> = {},
+  expectedError?: string | RegExp
+): ActionExecutionResult {
+  const result = testGame.tryAction(playerSeat, actionName, args);
+
+  if (result.success) {
+    throw new Error(
+      `Expected action '${actionName}' by player ${playerSeat} to fail, but it succeeded`
+    );
+  }
+
+  if (expectedError) {
+    const errorMatches = typeof expectedError === 'string'
+      ? result.error?.includes(expectedError)
+      : expectedError.test(result.error ?? '');
+
+    if (!errorMatches) {
+      throw new Error(
+        `Expected error to match ${expectedError}, but got: ${result.error}`
+      );
+    }
+  }
+
+  return result;
 }
 
 /**

@@ -77,7 +77,7 @@ here.
          claims coverage no test gives is a false record, not a formatting slip.
        - **Every verb the chunk adds is dispatched through the engine** in at least one of the
          chunk's tests: `testGame.doAction`, `tryAction`, `action(...).execute()`,
-         `simulateAction(s)`, `assertActionSucceeds`, `runner.performAction`, or a world's `take`,
+         `runner.performAction`, or a world's `take`,
          with the verb's name written literally. Calling the rules function directly skips the
          engine's selections, conditions and flow, so it does not count, and neither does a verb
          only ever dispatched through `assertActionFails`.

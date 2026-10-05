@@ -10,22 +10,15 @@
  *
  * @example
  * ```typescript
- * import {
- *   createTestGame,
- *   simulateAction,
- *   assertFlowState,
- *   assertActionSucceeds,
- * } from 'boardsmith/testing';
+ * import { createTestGame, assertActionAvailable } from 'boardsmith/testing';
  *
  * test('player can draw a card', () => {
  *   const game = createTestGame(MyGame, { playerCount: 2 });
  *
- *   assertActionSucceeds(game, 1, 'draw');
+ *   // Throws with the availability trace, flow position and seed if it fails.
+ *   game.doAction(1, 'draw');
  *
- *   assertFlowState(game, {
- *     currentPlayer: 1,
- *     actions: ['play', 'discard'],
- *   });
+ *   assertActionAvailable(game, 1, 'play');
  * });
  * ```
  *
@@ -40,13 +33,8 @@ export {
   type TestGameOptions,
 } from './test-game.js';
 
-// Action simulation + playUntilComplete (TEST-02)
+// playUntilComplete (TEST-02)
 export {
-  simulateAction,
-  simulateActions,
-  assertActionSucceeds,
-  assertActionFails,
-  type SimulateActionResult,
   playUntilComplete,
   GameStuckError,
   type PlayUntilCompleteOptions,
@@ -69,6 +57,7 @@ export {
   assertFlowState,
   assertGameFinished,
   assertActionAvailable,
+  assertActionFails,
   assertActionNotAvailable,
   assertHidden,
   assertVisible,

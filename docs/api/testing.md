@@ -13,8 +13,8 @@ import {
   TestGame,
   createTestGame,
   playUntilComplete,
-  assertActionSucceeds,
-  assertFlowState,
+  assertActionAvailable,
+  assertActionFails,
 } from 'boardsmith/testing';
 ```
 
@@ -32,12 +32,14 @@ import {
 - `createTestWorld()` - Convenience function wrapping `TestWorld.create()`; genesis has run and every seat is on the roster by the time it resolves
 - `TEST_WORLD_EPOCH` - The fixed instant a test world starts at, unless you name another
 
-### Action Simulation
+### Running Actions
 
-- `simulateAction()` - Simulate a single action, returning a result annotated with the action/seat/args attempted
-- `simulateActions()` - Simulate a sequence of `[playerSeat, actionName, args?]` tuples
-- `assertActionSucceeds()` - Perform an action and throw (with the engine error) if it fails
-- `assertActionFails()` - Perform an action and throw if it *succeeds*; optionally match the error message
+There is one way to run an action and one way to assert it fails:
+
+- `testGame.doAction()` - Run an action; throws `ActionExecutionError` with the availability trace, flow position and seed if it fails
+- `testGame.tryAction()` - Run an action and return the `ActionExecutionResult` without throwing, for a test that branches on the outcome
+- `testGame.action()` - Build a multi-step action selection by selection (see `ActionBuilder` below)
+- `assertActionFails()` - Run an action and throw if it *succeeds*; optionally match the error message
 - `playUntilComplete()` - Drive a game to completion by auto-selecting legal moves; throws `GameStuckError` instead of hanging
 - `GameStuckError` - Structured error thrown by `playUntilComplete()` when the game cannot progress
 - `ActionBuilder` - Fluent builder for multi-step / dependent-selection actions (returned by `TestGame.action()`)
@@ -69,7 +71,6 @@ import {
 ### Types
 
 - `TestGameOptions` - Test game creation options (`playerCount`, `playerNames`, `seed`, `autoStart`, `checkpoints`, plus any game-specific constructor options). `checkpoints` is the per-action checkpoint retention policy, applied to the runner rather than passed to the game constructor — without it a test always runs under the unbounded default and cannot exercise the policy the game ships (see `docs/state-size.md`). `seed` defaults to a fixed literal (`'test-seed'`) — never `Date.now()`/`Math.random` — so two seedless `TestGame.create()`/`createTestGame()` calls are deterministic and reproduce identical shuffles/command history. The resolved seed (fixed default or caller-supplied) is exposed via `testGame.seed` and included in `doAction`/`assertActionAvailable`/`playUntilComplete` failure messages so a failing run is one copy-paste from a deterministic repro.
-- `SimulateActionResult` - Action simulation result (extends `ActionExecutionResult` with `action`/`playerSeat`/`args`)
 - `PlayUntilCompleteOptions` - Options for `playUntilComplete()` (`maxMoves`, `strategy`, `rng`)
 - `SimulateRandomGamesOptions`, `ReplayRandomGameOptions`, `SingleGameResult`, `SimulationResults`, `IsResting` - Random simulation types
 - `ExpectedFlowState`, `FlowStateAssertionResult` - `assertFlowState()` input/output types
@@ -82,21 +83,18 @@ import {
 
 ```typescript
 import { describe, test } from 'vitest';
-import { createTestGame, assertFlowState, assertActionSucceeds } from 'boardsmith/testing';
+import { createTestGame, assertActionAvailable } from 'boardsmith/testing';
 import { GoFishGame } from '../src/game';
 
 describe('Go Fish', () => {
   test('player can ask for a card', () => {
     const game = createTestGame(GoFishGame, { playerCount: 2 });
 
-    // Verify initial state
-    assertFlowState(game, {
-      currentPlayer: 1,
-      actions: ['ask'],
-    });
+    // Seat 1 may ask; if not, the error says why
+    assertActionAvailable(game, 1, 'ask');
 
-    // Perform an action
-    assertActionSucceeds(game, 1, 'ask', {
+    // Run the action; throws ActionExecutionError with the trace if it fails
+    game.doAction(1, 'ask', {
       target: 2,
       rank: '7',
     });
@@ -172,18 +170,19 @@ try {
 
 `GameStuckError` fires in three cases, each with a distinct actionable message: a dead-end (active seat, zero enumerable legal moves — e.g. a text/number-input action that must be driven with `doAction()` directly), every enumerated move failing execution (a mismatch between `chooseFrom()` choices and `execute()` preconditions), or the `maxMoves` cap being reached without completion.
 
-### Simulating Individual Actions
+### Running Individual Actions
 
 ```typescript
-import { createTestGame, simulateAction, assertActionSucceeds, assertActionFails } from 'boardsmith/testing';
+import { createTestGame, assertActionFails } from 'boardsmith/testing';
 
 const testGame = createTestGame(CheckersGame, { playerCount: 2 });
 
-const result = simulateAction(testGame, 1, 'move', { from: 'a3', to: 'b4' });
-expect(result.success).toBe(true);
+// Throws ActionExecutionError (error, availability trace, flow position, seed) if it fails.
+testGame.doAction(1, 'move', { from: 'a3', to: 'b4' });
 
-// Throws with the engine's error message if the action fails.
-assertActionSucceeds(testGame, 1, 'move', { from: 'a3', to: 'b4' });
+// Returns the result instead of throwing, for a test that branches on it.
+const result = testGame.tryAction(2, 'move', { from: 'c5', to: 'd4' });
+expect(result.success).toBe(true);
 
 // Throws if the action *succeeds* unexpectedly; optionally match the error.
 assertActionFails(testGame, 2, 'move', { from: 'a3', to: 'b4' }, 'not your turn');

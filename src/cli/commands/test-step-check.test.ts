@@ -225,14 +225,21 @@ describe('findDispatchedVerbs', () => {
       findDispatchedVerbs(`
 testGame.doAction(1, 'a');
 testGame.tryAction(1, 'b', {});
-simulateAction(testGame, 1, 'c');
-simulateActions(testGame, [[1, 'd'], [2, 'e', {}]]);
-assertActionSucceeds(testGame, 1, 'f');
 runner.performAction('g', 1, {});
 await world.take(1, 'h');
 testGame.action('i', 1).select('x', 2).execute();
 `),
-    ).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']);
+    ).toEqual(['a', 'b', 'g', 'h', 'i']);
+  });
+
+  it('does not count the removed simulateAction / simulateActions / assertActionSucceeds helpers (#517)', () => {
+    expect(
+      findDispatchedVerbs(`
+simulateAction(testGame, 1, 'c');
+simulateActions(testGame, [[1, 'd'], [2, 'e', {}]]);
+assertActionSucceeds(testGame, 1, 'f');
+`),
+    ).toEqual([]);
   });
 
   it('does not count a direct function call, a builder never executed, a failure-only dispatch, or a skipped test', () => {
