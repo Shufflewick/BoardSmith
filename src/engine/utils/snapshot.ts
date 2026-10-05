@@ -6,6 +6,7 @@ import type { ElementJSON } from '../element/types.js';
 import type { TutorialStepView } from '../tutorial/types.js';
 import type { RandomState } from '../../utils/random.js';
 import { getActiveTutorialStepView } from '../tutorial/gate.js';
+import { canSeatAct, availableActionsForSeat } from '../flow/seat-activity.js';
 
 /**
  * Complete game state snapshot for persistence/transmission
@@ -367,7 +368,8 @@ export interface PlayerStateView {
   flowState?: {
     awaitingInput: boolean;
     isMyTurn: boolean;
-    availableActions?: string[];
+    /** Empty when this player cannot act. */
+    availableActions: string[];
   };
 
   /** Messages visible to this player */
@@ -499,32 +501,6 @@ export function createPlayerView(
 ): PlayerStateView {
   const flowState = game.getFlowState();
 
-  // Resolve this player's turn status and available actions, handling BOTH
-  // sequential action steps (flowState.currentPlayer / flowState.availableActions)
-  // and simultaneous action steps (flowState.awaitingPlayers[].availableActions).
-  // Mirrors buildPlayerState() and GameShell so host-embedded views (which read
-  // this PlayerStateView) match the BoardSmith dev server. Without the
-  // awaitingPlayers branch, simultaneous steps (e.g. a "choose your landing"
-  // phase) report zero available actions and no action buttons render.
-  let isMyTurn = false;
-  let availableActions: string[] | undefined;
-  if (flowState) {
-    const awaiting = flowState.awaitingPlayers;
-    if (awaiting && awaiting.length > 0) {
-      const entry = awaiting.find(
-        (p) => p.playerIndex === playerPosition && !p.completed
-      );
-      isMyTurn = entry !== undefined;
-      availableActions = entry?.availableActions;
-    } else {
-      isMyTurn = flowState.currentPlayer === playerPosition;
-      availableActions =
-        flowState.awaitingInput && isMyTurn
-          ? flowState.availableActions
-          : undefined;
-    }
-  }
-
   // Tutorial projection — parity with buildPlayerState (T-104-07).
   // Uses the shared getActiveTutorialStepView helper so this call site and
   // buildPlayerState cannot diverge.
@@ -544,8 +520,8 @@ export function createPlayerView(
     state: game.toJSONForPlayer(playerPosition),
     flowState: flowState ? {
       awaitingInput: flowState.awaitingInput,
-      isMyTurn,
-      availableActions,
+      isMyTurn: canSeatAct(flowState, playerPosition),
+      availableActions: availableActionsForSeat(flowState, playerPosition),
     } : undefined,
     // Seat-scoped: `messageTo()` messages addressed to other seats are withheld
     // here, not hidden in the UI — this is the payload the client receives.
