@@ -6,8 +6,6 @@ export interface DebugPanelProps {
   playerSeat: number;
   /** Total number of players */
   playerCount: number;
-  /** Game ID (null in the dev host — kept for state-download filenames) */
-  gameId: string | null;
   /** Whether panel is expanded */
   expanded?: boolean;
   /**
@@ -289,7 +287,7 @@ function downloadState() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `game-state-${props.gameId || 'unknown'}.json`;
+  a.download = 'game-state.json';
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -391,7 +389,6 @@ async function fetchLogs() {
 // reloads whichever tab is showing, because that state is what it describes.
 
 watch(activeTab, (tab) => {
-  if (!props.gameId) return;
   if (tab === 'actions' && Date.now() - tracesLastFetched.value > TAB_REFRESH_MAX_AGE_MS) {
     fetchActionTraces();
     fetchFlowState();
@@ -510,7 +507,6 @@ function handleRestartClick() {
           :selected-action-index="selectedActionIndex"
           :historical-state-loading="historicalStateLoading"
           :historical-state-error="historicalStateError"
-          :game-id="props.gameId ?? null"
           @back-to-live="clearHistoricalState"
           @copy="copyState"
           @download="downloadState"

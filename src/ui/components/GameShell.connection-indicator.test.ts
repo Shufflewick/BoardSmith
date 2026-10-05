@@ -33,7 +33,7 @@ describe('GameShell connection indicator (IA-01 / #179)', () => {
     const wrapper = mountShell();
     await nextTick();
 
-    // Platform mode skips the lobby, so the play surface — and its dot — is up.
+    // Inside a host the play surface -- and its dot -- is up from the start.
     const dot = wrapper.find('[data-testid="bs-connection"]');
     expect(dot.exists()).toBe(true);
     expect(dot.classes()).toContain('connecting');
@@ -68,7 +68,7 @@ describe('GameShell connection indicator (IA-01 / #179)', () => {
     }
   });
 
-  it('shows no dot outside platform mode — the GameHeader badge speaks there', async () => {
+  it('shows no dot outside a host, where only the "runs inside a host" sentence renders', async () => {
     const wrapper = mountShell();
     await nextTick();
     expect(wrapper.find('[data-testid="bs-connection"]').exists()).toBe(false);

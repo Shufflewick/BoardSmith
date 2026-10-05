@@ -334,10 +334,6 @@ const mobileToggleLabel = computed(() => {
 
 <template>
   <div class="game-shell__game" :class="{ 'action-bar-collapsed': actionBarCollapsed }">
-    <!-- The adapter's own header band. Dev/standalone only for a table; absent
-         in platform mode, where the host draws its own chrome over the top. -->
-    <slot name="header"></slot>
-
     <!-- Stage: sidebar + boardregion side by side (full-width actionbar is a
          sibling, below). -->
     <div class="stage">
@@ -526,8 +522,8 @@ const mobileToggleLabel = computed(() => {
          with nothing measuring anything. -->
     <div class="actionbar-frame">
       <div ref="actionBarEl" id="bs-actionbar" class="actionbar" :class="{ collapsed: actionBarCollapsed }" role="region" aria-label="Actions" data-testid="bs-actionbar">
-        <!-- ⋯ controls menu: always at the far left of the bar, and in platform
-             mode the sole control surface (GameHeader is hidden there). Its
+        <!-- ⋯ controls menu: always at the far left of the bar, and the sole
+             control surface. Its
              CONTENTS are the adapter's — a table's carries undo, hints, heatmap
              and the tutorial, none of which a world has.
 
@@ -644,8 +640,8 @@ const mobileToggleLabel = computed(() => {
 
 <style scoped>
 /* THE GAME SCREEN, and the positioning context for the floating action bar.
-   The class name is unchanged: it is the box `.game-shell--platform` sizes from
-   the adapter above, and a rename would have been a rename in two files for no
+   The class name is unchanged: it is the box `.game-shell` sizes from the
+   adapter above, and a rename would have been a rename in two files for no
    reason. */
 .game-shell__game {
   display: flex;

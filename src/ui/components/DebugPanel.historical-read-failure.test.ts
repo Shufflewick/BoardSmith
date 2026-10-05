@@ -36,7 +36,7 @@ interface Vm {
 function mountPanel(handler: Op) {
   const platformRequest = vi.fn<Op>(handler);
   const wrapper = mount(DebugPanel, {
-    props: { state: STATE, playerSeat: 1, playerCount: 2, gameId: 'g', expanded: true },
+    props: { state: STATE, playerSeat: 1, playerCount: 2, expanded: true },
     global: { provide: { [GAME_CONTEXT_KEYS.platformRequest as symbol]: platformRequest } },
     attachTo: document.body,
   });

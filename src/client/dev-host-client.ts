@@ -1,10 +1,8 @@
 /**
  * Node-capable protocol client for `boardsmith dev`'s multiplayer WebSocket
- * host (DRIVE-02). This is a SEPARATE sibling of `GameConnection` — it speaks
- * the dev host's own wire protocol (`hello`/`join`/`server_request`/`getState`/
- * `getLobby`/`debugToggle`/`uiSwitch`, see `multiplayer-host.ts`), which is
- * NOT compatible with `GameConnection`'s production `/games/:gameId` protocol.
- * Do not extend or fold this into `GameConnection`.
+ * host (DRIVE-02). It speaks the dev host's own wire protocol (`hello`/`join`/
+ * `server_request`/`getState`/`getLobby`/`debugToggle`/`uiSwitch`, see
+ * `multiplayer-host.ts`).
  *
  * Lets a scripted agent drive `boardsmith dev` end-to-end from Node without a
  * browser: connect, take a seat, read state, perform actions, and exercise
@@ -14,12 +12,7 @@
 
 import { resolveWsCtor } from './ws-ctor.js';
 
-/**
- * Default timeout for requestId-correlated requests. A named constant (rather
- * than a bare `10000` literal) so this file's intent reads independently from
- * `game-connection.ts`'s unrelated 10s action/pong timeouts — three separate
- * design choices that happen to share a number, not one shared value.
- */
+/** Default timeout for requestId-correlated requests. */
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 
 /**

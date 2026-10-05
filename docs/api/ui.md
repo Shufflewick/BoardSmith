@@ -24,14 +24,10 @@ import {
 
 ### Core Components
 
-- `GameShell` - Main game container with header, panels, and layout
+- `GameShell` - Main game container with panels and layout; runs inside a host's iframe
 - `DebugPanel` - Developer debug tools
-- `GameHeader` - Game title and player info
 - `GameHistory` - Action history display
-- `GameLobby` - Pre-game lobby for multiplayer
-- `HamburgerMenu` - Mobile menu
 - `PlayersPanel` - Player list and scores
-- `WaitingRoom` - Waiting for players screen
 - `Toast` - Toast notification component
 
 ### Helper Components

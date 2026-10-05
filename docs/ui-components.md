@@ -470,106 +470,14 @@ Development tool for inspecting game state, history, and debugging.
 </template>
 ```
 
-## Lobby Components
+## Game Setup
 
-BoardSmith provides a complete lobby system for configuring games before they start. The lobby dynamically renders controls based on game definition metadata.
+A game is configured before it starts by its host, not by `GameShell`: the
+`boardsmith dev` host's Table setup locally, and ShufflewickPub's lobby in
+production. Both read the game options, player options and presets the game
+declares, so a game declares them once and never draws a lobby of its own.
 
-### GameLobby
-
-The main lobby component that fetches game definition metadata and renders configuration UI.
-
-```vue
-<template>
-  <GameLobby
-    :game-type="gameType"
-    :player-count="playerCount"
-    @create="handleCreate"
-  />
-</template>
-
-<script setup lang="ts">
-import { GameLobby } from 'boardsmith/ui';
-
-const gameType = 'hex';
-const playerCount = 2;
-
-function handleCreate(config: { gameOptions: Record<string, unknown>; playerConfigs: PlayerConfig[] }) {
-  // Create game with the configured options
-}
-</script>
-```
-
-The lobby automatically:
-- Fetches game definition from `/games/definitions` endpoint
-- Renders game options (number inputs, selects, toggles)
-- Renders per-player configuration (name, bot toggle, color picker)
-- Shows preset cards for quick setup
-- Validates player count against game limits
-
-### GameOptionsForm
-
-Dynamic form that renders game-level options from metadata.
-
-```vue
-<template>
-  <GameOptionsForm
-    :options="gameDefinition.gameOptions"
-    v-model="gameOptions"
-  />
-</template>
-```
-
-Supports three option types:
-
-| Type | Control | Properties |
-|------|---------|------------|
-| `number` | Number input | `min`, `max`, `step`, `default` |
-| `select` | Dropdown | `choices` (array of `{ value, label }`) |
-| `boolean` | Toggle switch | `default` |
-
-### PlayerConfigList
-
-Per-player configuration with bot toggle and custom options.
-
-```vue
-<template>
-  <PlayerConfigList
-    :player-count="2"
-    :has-bot="true"
-    :player-options="gameDefinition.playerOptions"
-    v-model="playerConfigs"
-  />
-</template>
-```
-
-Features:
-- Player name input
-- bot toggle with level selector (when game has bot)
-- Dynamic rendering of per-player options (color picker, role select, etc.)
-- Shows taken options as disabled with visual indicator
-- Exclusive options render as radio buttons (exactly one player can be selected)
-
-### PresetsPanel
-
-Quick-start preset cards for common game configurations.
-
-```vue
-<template>
-  <PresetsPanel
-    :presets="gameDefinition.presets"
-    @select="applyPreset"
-  />
-</template>
-
-<script setup lang="ts">
-function applyPreset(preset: GamePreset) {
-  // Apply preset.options to gameOptions
-  // Apply preset.players to playerConfigs
-}
-</script>
-```
-
-### Player Colors
+## Player Colors
 
 Players automatically receive colors from the engine's color palette. Access them via the `color` property:
 
@@ -581,7 +489,7 @@ const myColor = player.color;  // '#e74c3c'
 const playerColor = gameView.players[playerSeat - 1].color;
 ```
 
-#### Custom Color Palette
+### Custom Color Palette
 
 To use a custom color palette, specify it in your game definition:
 
@@ -595,9 +503,9 @@ export const gameDefinition = {
 };
 ```
 
-#### Lobby Color Selection
+### Color Selection
 
-To enable players to choose colors in the lobby, define `colorPalette` in `boardsmith.json`:
+To let players choose colors when they set up a game, define `colorPalette` in `boardsmith.json`:
 
 ```json
 {
@@ -609,11 +517,6 @@ To enable players to choose colors in the lobby, define `colorPalette` in `board
 ```
 
 If `colorPalette` is omitted, the standard 8-color palette is used. Plain hex strings are also accepted (e.g., `["#ff0000", "#0000ff"]`).
-
-The color picker in PlayerConfigList:
-- Shows color swatches with labels
-- Disables already-selected colors with X overlay
-- Automatically applies first available color as default
 
 ## Helper Components
 

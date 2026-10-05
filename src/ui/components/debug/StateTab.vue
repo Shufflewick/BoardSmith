@@ -31,7 +31,6 @@ defineProps<{
   selectedActionIndex: number | null;
   historicalStateLoading: boolean;
   historicalStateError: string | null;
-  gameId: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -114,10 +113,6 @@ const emit = defineEmits<{
               <div class="tree-root">
                 <!-- Game info summary -->
                 <div class="tree-summary" :class="{ historical: isViewingHistory }">
-                  <span class="summary-item">
-                    <span class="summary-label">ID:</span>
-                    <span class="summary-value">{{ gameId || 'N/A' }}</span>
-                  </span>
                   <span class="summary-item">
                     <span class="summary-label">Phase:</span>
                     <span class="summary-value">{{ displayedState?.state?.phase || 'N/A' }}</span>

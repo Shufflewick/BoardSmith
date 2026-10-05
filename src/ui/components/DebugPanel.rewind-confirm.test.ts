@@ -53,7 +53,6 @@ function mountPanel() {
       state: { phase: 'test', round: 1 },
       playerSeat: 1,
       playerCount: 2,
-      gameId: 'test-game',
       expanded: true,
     },
     global: { provide: { [GAME_CONTEXT_KEYS.platformRequest as symbol]: platformRequest } },
