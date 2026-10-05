@@ -12,6 +12,9 @@ describe('boardsmith/testing export surface', () => {
     'simulateAction',
     'simulateActions',
     'assertActionSucceeds',
+    // #518: simulateRandomGames / replayRandomGame are the one play-to-the-end driver
+    'playUntilComplete',
+    'GameStuckError',
     // #519: nothing used these
     'assertFlowState',
     'assertGameFinished',

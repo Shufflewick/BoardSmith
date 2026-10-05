@@ -32,13 +32,6 @@ export {
   type TestGameOptions,
 } from './test-game.js';
 
-// playUntilComplete (TEST-02)
-export {
-  playUntilComplete,
-  GameStuckError,
-  type PlayUntilCompleteOptions,
-} from './simulate-action.js';
-
 // Random game simulation
 export {
   simulateRandomGames,

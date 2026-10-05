@@ -4,7 +4,7 @@
 
 ## When to Use
 
-Import from `boardsmith/testing` when writing tests for your game logic. This package provides utilities for creating test games, reading typed observable state, driving a game to completion, simulating individual actions, and making assertions with actionable failure messages.
+Import from `boardsmith/testing` when writing tests for your game logic. This package provides utilities for creating test games, reading typed observable state, driving random games to completion, running individual actions, and making assertions with actionable failure messages.
 
 ## Usage
 
@@ -12,7 +12,7 @@ Import from `boardsmith/testing` when writing tests for your game logic. This pa
 import {
   TestGame,
   createTestGame,
-  playUntilComplete,
+  simulateRandomGames,
   assertActionAvailable,
   assertActionFails,
 } from 'boardsmith/testing';
@@ -40,8 +40,6 @@ There is one way to run an action and one way to assert it fails:
 - `testGame.tryAction()` - Run an action and return the `ActionExecutionResult` without throwing, for a test that branches on the outcome
 - `testGame.action()` - Build a multi-step action selection by selection (see `ActionBuilder` below)
 - `assertActionFails()` - Run an action and throw if it *succeeds*; optionally match the error message
-- `playUntilComplete()` - Drive a game to completion by auto-selecting legal moves; throws `GameStuckError` instead of hanging
-- `GameStuckError` - Structured error thrown by `playUntilComplete()` when the game cannot progress
 - `ActionBuilder` - Fluent builder for multi-step / dependent-selection actions (returned by `TestGame.action()`)
 
 ### Random Simulation
@@ -68,8 +66,7 @@ There is one way to run an action and one way to assert it fails:
 
 ### Types
 
-- `TestGameOptions` - Test game creation options (`playerCount`, `playerNames`, `seed`, `autoStart`, `checkpoints`, plus any game-specific constructor options). `checkpoints` is the per-action checkpoint retention policy, applied to the runner rather than passed to the game constructor — without it a test always runs under the unbounded default and cannot exercise the policy the game ships (see `docs/state-size.md`). `seed` defaults to a fixed literal (`'test-seed'`) — never `Date.now()`/`Math.random` — so two seedless `TestGame.create()`/`createTestGame()` calls are deterministic and reproduce identical shuffles/command history. The resolved seed (fixed default or caller-supplied) is exposed via `testGame.seed` and included in `doAction`/`assertActionAvailable`/`playUntilComplete` failure messages so a failing run is one copy-paste from a deterministic repro.
-- `PlayUntilCompleteOptions` - Options for `playUntilComplete()` (`maxMoves`, `strategy`, `rng`)
+- `TestGameOptions` - Test game creation options (`playerCount`, `playerNames`, `seed`, `autoStart`, `checkpoints`, plus any game-specific constructor options). `checkpoints` is the per-action checkpoint retention policy, applied to the runner rather than passed to the game constructor — without it a test always runs under the unbounded default and cannot exercise the policy the game ships (see `docs/state-size.md`). `seed` defaults to a fixed literal (`'test-seed'`) — never `Date.now()`/`Math.random` — so two seedless `TestGame.create()`/`createTestGame()` calls are deterministic and reproduce identical shuffles/command history. The resolved seed (fixed default or caller-supplied) is exposed via `testGame.seed` and included in `doAction`/`assertActionAvailable` failure messages so a failing run is one copy-paste from a deterministic repro.
 - `SimulateRandomGamesOptions`, `ReplayRandomGameOptions`, `SingleGameResult`, `SimulationResults`, `IsResting` - Random simulation types
 - `DebugStringOptions`, `ActionTraceResult`, `ActionTraceDetail` - Debug utility types
 - `TutorialScenarioMove`, `SimulateTutorialOptions`, `SimulateTutorialResult` - Tutorial DSL types
@@ -125,47 +122,6 @@ testGame.game.score;      // no JSON parsing required
 ```
 
 `view.state` is an `ElementJSON` tree intended for the UI renderer, not for domain assertions — use `testGame.game.<prop>` for game-specific state instead.
-
-### Driving a Game to Completion
-
-`playUntilComplete()` auto-selects legal moves (via `enumerateLegalMoves`) for whichever seat(s) are active — sequential (`currentPlayer`) or simultaneous (`awaitingPlayers`) — until the game finishes. It never hangs: instead of looping forever on a stuck game, it throws a `GameStuckError` with enough detail to diagnose the cause.
-
-```typescript
-import { createTestGame, playUntilComplete, GameStuckError } from 'boardsmith/testing';
-
-test('game always reaches a terminal state', () => {
-  const testGame = createTestGame(MyGame, { playerCount: 2 });
-
-  playUntilComplete(testGame);  // strategy: 'random' by default
-
-  expect(testGame.isComplete()).toBe(true);
-});
-
-// Deterministic run for reproducible snapshots:
-playUntilComplete(testGame, { strategy: 'first' });
-
-// Reproducible random run with a stub rng:
-playUntilComplete(testGame, { rng: () => 0 });
-```
-
-When the game can't progress, `playUntilComplete` throws instead of hanging:
-
-```typescript
-try {
-  playUntilComplete(testGame, { maxMoves: 200 });
-} catch (err) {
-  if (err instanceof GameStuckError) {
-    console.log(err.message);
-    // "Game stuck at iteration 4: seat 2 has no enumerable legal moves.
-    //  Available actions: [name]. If these actions require text/number
-    //  input they cannot be auto-enumerated — use doAction() directly. ..."
-    console.log(err.availableActions);  // ['name']
-    console.log(err.flowState);         // full FlowState snapshot at failure
-  }
-}
-```
-
-`GameStuckError` fires in three cases, each with a distinct actionable message: a dead-end (active seat, zero enumerable legal moves — e.g. a text/number-input action that must be driven with `doAction()` directly), every enumerated move failing execution (a mismatch between `chooseFrom()` choices and `execute()` preconditions), or the `maxMoves` cap being reached without completion.
 
 ### Running Individual Actions
 
@@ -718,8 +674,8 @@ info.step;  // named step, or the node's type when unnamed
 info.path;  // the raw FlowPosition path that produced this
 ```
 
-`FlowDebugInfo` is also embedded automatically in `GameStuckError.flowState`
-and in assertion failure messages (`assertActionAvailable`,
+`FlowDebugInfo` is also embedded automatically in `doAction` and assertion
+failure messages (`assertActionAvailable`,
 `toDebugString`) — you don't need to call it manually just to get a
 readable diagnostic on a failing test.
 

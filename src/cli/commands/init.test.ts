@@ -20,7 +20,7 @@ import { dirname, join } from 'node:path';
 import { generateGameTs, generateTestTs, initCommand, type InitOptions } from './init.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { rejectionMessage } from '../../testing/rejection.test-helper.js';
-import { createTestGame, playUntilComplete } from '../../testing/index.js';
+import { createTestGame, simulateRandomGames } from '../../testing/index.js';
 import { _clearShownWarnings } from '../../utils/dev.js';
 
 /**
@@ -929,12 +929,15 @@ describe('initCommand — a scaffolded game plays with no warnings (#309)', () =
     expect(warnings()).toEqual([]);
   });
 
-  it('plays to the end without a warning', () => {
-    const game = newGame();
+  it('plays to the end without a warning', async () => {
+    const results = await simulateRandomGames(scaffolded309.gameClass, {
+      count: 1,
+      playerCounts: [2],
+      seed: 'issue-309',
+    });
 
-    playUntilComplete(game);
-
-    expect(game.isComplete()).toBe(true);
+    expect(results.games.map((g) => g.error)).toEqual([undefined]);
+    expect(results.completed).toBe(1);
     expect(warnings()).toEqual([]);
   });
 });

@@ -189,8 +189,7 @@ export class TestGame<G extends Game = Game> {
     GameClass: new (options: GameOptions) => G,
     options: TestGameOptions
   ): TestGame<G> {
-    // Deterministic by default: a fixed literal seed (matching the
-    // 'playUntilComplete-default' house style), NEVER Date.now()/Math.random,
+    // Deterministic by default: a fixed literal seed, NEVER Date.now()/Math.random,
     // so two seedless TestGame.create() calls produce identical shuffles /
     // command history. Pass an explicit `seed` option to vary the run.
     const seed = options.seed ?? 'test-seed';
