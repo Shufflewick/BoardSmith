@@ -22,7 +22,7 @@ import {
 } from './GameShell.platform-mount.test-helper.js';
 
 function mountShell() {
-  return mountPlatformShell({ gameType: 'indicator-test' });
+  return mountPlatformShell();
 }
 
 afterEach(leaveIframe);

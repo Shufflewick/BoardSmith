@@ -9,7 +9,6 @@
  *
  * export default defineGameUIs({
  *   Heirloom: defaultUI(() => import('./heirloom/HeirloomTable.vue')),
- *   Auto:     devUI(() => import('boardsmith/ui/auto-ui')),
  *   Classic:  devUI(() => import('./components/CribbageBoard.vue')),
  * });
  * ```
@@ -125,7 +124,7 @@ export function defaultUI(component: Component): DefaultGameUIEntry {
 
 /**
  * A UI available only in `boardsmith dev` — an old board kept for comparison,
- * the auto-UI, a debug view. Eliminated wholesale from production builds.
+ * a debug view. (The table shell adds the auto-UI itself; see `withDevAutoUI`.) Eliminated wholesale from production builds.
  *
  * The ternary below is load-bearing and must stay inline: `import.meta.env.DEV`
  * is a literal Vite substitution, so the production branch folds away and takes
@@ -171,6 +170,31 @@ export function defineGameUIs<T extends Record<string, GameUIEntry>>(
     // a player still sees a board rather than an empty stage.
     defaultName: defaultNames[0] ?? names[0] ?? '',
     entries,
+  };
+}
+
+/** The name of the auto-UI entry the table shell adds under `boardsmith dev`. */
+const AUTO_UI_NAME = 'Auto';
+
+/**
+ * The registry `GameShell` renders from: the game's own, plus a dev-only `Auto`
+ * entry for the auto-UI (#525), so no game has to list it.
+ *
+ * Under a production build this returns the game's registry unchanged. The
+ * branch reads `import.meta.env.DEV` inline for the same reason `devUI()` does:
+ * a production build folds it to `false`, and the auto-UI's `import()` -- its
+ * JS and its CSS -- never enters the graph. A game whose registry already names
+ * an entry `Auto` (an auto-UI game whose default IS the auto-UI) keeps its own.
+ */
+export function withDevAutoUI(registry: GameUIRegistry): GameUIRegistry {
+  if (!import.meta.env.DEV || AUTO_UI_NAME in registry.entries) return registry;
+  return {
+    ...registry,
+    names: [...registry.names, AUTO_UI_NAME],
+    entries: {
+      ...registry.entries,
+      [AUTO_UI_NAME]: devUI(() => import('./components/auto-ui/index.js')),
+    },
   };
 }
 

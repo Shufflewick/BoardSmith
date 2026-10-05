@@ -251,7 +251,7 @@ import { GameShell } from 'boardsmith/ui';
 </script>
 
 <template>
-  <GameShell game-type="my-game" display-name="My Game">
+  <GameShell :uis="uis">
     <template #game-board="{ gameView, actionController }">
       <MyBoard :game-view="gameView" :action-controller="actionController" />
     </template>

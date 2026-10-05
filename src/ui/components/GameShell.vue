@@ -3,7 +3,7 @@ import { ref, shallowRef, computed, watch, onMounted, onUnmounted, toRef, nextTi
 import { applyTheme, BREAKPOINTS } from '../theme.js';
 import { consumeInitMessage, isOriginAllowed } from './GameShellInit.js';
 import type { PresentationOverlay } from './auto-ui/presentation.js';
-import { devUiNames, resolveUiComponent, type GameUIRegistry } from '../game-uis.js';
+import { devUiNames, resolveUiComponent, withDevAutoUI, type GameUIRegistry } from '../game-uis.js';
 import { selectArchetype } from './auto-ui/archetype-selector.js';
 import {
   announceTurnChange,
@@ -61,12 +61,6 @@ function setActionHelpEnabled(value: boolean): void {
 }
 
 interface GameShellProps {
-  /** Game type identifier (e.g., 'go-fish', 'cribbage') */
-  gameType: string;
-  /** Display name for the game */
-  displayName?: string;
-  /** Number of players (default: 2) */
-  playerCount?: number;
   /** Enable debug panel (default: true in dev) */
   debugMode?: boolean;
   /**
@@ -145,7 +139,6 @@ interface GameShellProps {
 }
 
 const props = withDefaults(defineProps<GameShellProps>(), {
-  playerCount: 2,
   debugMode: true,
   platformActionPanelEscapeHatch: false,
   providesOwnGameOverUi: false,
@@ -168,11 +161,9 @@ const isDevBuild = import.meta.env.DEV;
 // Dev-only UI switcher. `boardsmith dev` shows a dropdown of every UI the game's
 // registry declares and renders the selected one without a permanent split-screen.
 //
-// The auto-UI is NOT injected here any more. A game that wants it lists it like
-// any other board — `Auto: devUI(() => import('boardsmith/ui/auto-ui'))` — so the
-// registry really is the complete list of a game's UIs rather than the list plus
-// one the shell adds behind its back. That also stops offering an auto-UI peek to
-// games where it means nothing.
+// The shell adds the auto-UI to every table game's switcher itself, as a dev-only
+// `Auto` entry (`withDevAutoUI`, #525), so a game's `src/ui/uis.ts` lists only
+// its own boards. A game whose own registry already has an `Auto` keeps it.
 //
 // Elimination note, because this is the part that is easy to get wrong: a devUI
 // entry's component is null in production (see src/ui/game-uis.ts), and its
@@ -183,7 +174,7 @@ const isDevBuild = import.meta.env.DEV;
 // barrel's re-export rather than through any import anyone was looking at.
 // Elimination is a property of the WHOLE graph. Only the built artifact proves
 // it, which is what treeshake-bundle.test.ts asserts, for CSS as well as JS.
-const registry = computed(() => props.uis);
+const registry = computed(() => withDevAutoUI(props.uis));
 // Both shells resolve a registry the same way since #170, so the two lines that
 // do it live in `game-uis.ts` beside the registry itself.
 const uiNames = computed(() => devUiNames(registry.value));
@@ -196,10 +187,7 @@ const selectedUiComponent = computed(() =>
 function postDevUiList(): void {
   if (!isDevBuild || !inHost) return;
   window.parent.postMessage(
-    // gameType lets the dev host detect when its outer page is stale relative to
-    // the game now running in the iframe (e.g. the dev server was restarted with a
-    // different game on the same port) and force a full reload.
-    { source: 'shufflewick-game', type: 'dev-ui-list', uis: uiNames.value, gameType: props.gameType },
+    { source: 'shufflewick-game', type: 'dev-ui-list', uis: uiNames.value },
     '*'
   );
 }
@@ -1654,7 +1642,6 @@ defineExpose({
       v-if="debugMode && isDevBuild && devDebugAvailable"
       :state="state"
       :player-seat="playerSeat"
-      :player-count="playerCount"
       :history-has-messages="historyPanel?.hasMessages ?? false"
       v-model:expanded="debugExpanded"
       @switch-player="handleSwitchPlayer"

@@ -33,7 +33,7 @@ function requestsFor(posted: unknown[], op: string): unknown[] {
 describe('GameShell — "New game" routing (D11)', () => {
   it('asks the host to restart through debug:restart', async () => {
     const posted = enterIframe();
-    const wrapper = mountPlatformShell({ gameType: 'restart-test' });
+    const wrapper = mountPlatformShell();
     await nextTick();
 
     wrapper.findComponent(ControlsMenu).vm.$emit('menu-item-click', 'new-game');
@@ -47,7 +47,7 @@ describe('GameShell — "New game" routing (D11)', () => {
 describe('the controls menu (#515)', () => {
   it('offers no "Leave game" item', async () => {
     enterIframe();
-    const wrapper = mountPlatformShell({ gameType: 'restart-test' });
+    const wrapper = mountPlatformShell();
     await nextTick();
 
     await wrapper.find('button[aria-label="Game controls"]').trigger('click');

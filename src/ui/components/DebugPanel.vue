@@ -4,8 +4,6 @@ export interface DebugPanelProps {
   state: any;
   /** Current player seat */
   playerSeat: number;
-  /** Total number of players */
-  playerCount: number;
   /** Whether panel is expanded */
   expanded?: boolean;
   /**
@@ -77,6 +75,15 @@ import { useStateTree } from '../composables/useStateTree.js';
 const props = withDefaults(defineProps<DebugPanelProps>(), {
   expanded: false,
   historyHasMessages: false,
+});
+
+/**
+ * How many seats the running game has: the players in the state the host sent
+ * (#525). The Controls tab draws one "switch player" button per seat from it.
+ */
+const seatCount = computed(() => {
+  const players = props.state?.state?.players;
+  return Array.isArray(players) ? players.length : 0;
 });
 
 const emit = defineEmits<{
@@ -584,7 +591,7 @@ function handleRestartClick() {
         <ControlsTab
           v-show="activeTab === 'controls'"
           :player-seat="props.playerSeat"
-          :player-count="props.playerCount"
+          :player-count="seatCount"
           :restart-confirming="restartConfirming"
           :history-has-messages="props.historyHasMessages"
           v-model:show-raw-state="showRawState"

@@ -61,8 +61,6 @@ export function leaveIframe(): void {
 }
 
 interface PlatformShellOptions {
-  /** Named in failures, so two files mounting the shell are told apart. */
-  gameType: string;
   /**
    * The board to register as the game's one UI. A test that asserts what a
    * custom UI reads from the context passes a board that reads it; the default
@@ -76,10 +74,9 @@ interface PlatformShellOptions {
   props?: { providesOwnGameOverUi?: boolean; 'provides-own-game-over-ui'?: boolean };
 }
 
-export function mountPlatformShell(options: PlatformShellOptions) {
+export function mountPlatformShell(options: PlatformShellOptions = {}) {
   return mount(GameShell, {
     props: {
-      gameType: options.gameType,
       uis: defineGameUIs({ Stub: defaultUI(options.board ?? StubBoard) }),
       ...options.props,
     },

@@ -9,9 +9,7 @@ The main wrapper component that provides complete game UI structure.
 ```vue
 <template>
   <GameShell
-    game-type="my-game"
-    display-name="My Game"
-    :player-count="2"
+    :uis="uis"
   >
     <template #game-board="{ gameView, actionController, isMyTurn }">
       <MyGameTable

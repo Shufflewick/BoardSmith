@@ -26,7 +26,6 @@ function mountShell(warnings: string[]) {
   return mount(GameShell, {
     attachTo: document.body,
     props: {
-      gameType: 'resolved-components',
       uis: defineGameUIs({ Stub: defaultUI(StubBoard) }),
     },
     global: {

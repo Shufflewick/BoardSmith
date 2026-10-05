@@ -519,9 +519,7 @@ The UI uses Vue 3 and the `boardsmith/ui` package:
 ```vue
 <template>
   <GameShell
-    game-type="my-game"
-    display-name="My Game"
-    :player-count="2"
+    :uis="uis"
   >
     <template #game-board="{
       gameView,

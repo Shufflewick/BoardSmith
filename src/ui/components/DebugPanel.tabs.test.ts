@@ -20,7 +20,6 @@ import DebugPanel from './DebugPanel.vue';
 const MIN_PROPS = {
   state: { phase: 'test', round: 1 },
   playerSeat: 1,
-  playerCount: 2,
   expanded: true, // open so panels are rendered
 };
 

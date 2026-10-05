@@ -33,7 +33,7 @@ describe('GameShell outside a host frame (#515)', () => {
     // `window.parent === window`: no `enterIframe`, so this is a top-level page.
     const wrapper = mount(GameShell, {
       attachTo: document.body,
-      props: { gameType: 'outside-host', uis: defineGameUIs({ Stub: defaultUI(StubBoard) }) },
+      props: { uis: defineGameUIs({ Stub: defaultUI(StubBoard) }) },
     });
     await nextTick();
     await nextTick();

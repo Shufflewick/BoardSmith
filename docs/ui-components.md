@@ -11,9 +11,7 @@ The main wrapper component that provides the complete game UI structure: header,
 ```vue
 <template>
   <GameShell
-    game-type="my-game"
-    display-name="My Game"
-    :player-count="2"
+    :uis="uis"
   >
     <!-- Custom game board -->
     <template #game-board="{

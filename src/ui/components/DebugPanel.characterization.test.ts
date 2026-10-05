@@ -150,7 +150,6 @@ function mountPanel(handler?: Op, props: Record<string, unknown> = {}) {
     props: {
       state: STATE,
       playerSeat: 1,
-      playerCount: 2,
       expanded: true,
       ...props,
     },
@@ -163,7 +162,7 @@ function mountPanel(handler?: Op, props: Record<string, unknown> = {}) {
 /** Mount with NO host bridge provided. */
 function mountBridgeless() {
   const wrapper = mount(DebugPanel, {
-    props: { state: STATE, playerSeat: 1, playerCount: 2, expanded: true },
+    props: { state: STATE, playerSeat: 1, expanded: true },
     attachTo: document.body,
   });
   return { wrapper, vm: wrapper.vm as unknown as Vm };

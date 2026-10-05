@@ -25,7 +25,7 @@ import {
 } from './GameShell.platform-mount.test-helper.js';
 
 function mountShell() {
-  return mountPlatformShell({ gameType: 'ready-test' });
+  return mountPlatformShell();
 }
 
 afterEach(leaveIframe);

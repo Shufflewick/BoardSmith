@@ -36,7 +36,7 @@ function postState(state: Record<string, unknown>): void {
 
 async function mountShowHintShell() {
   enterIframe();
-  const wrapper = mountPlatformShell({ gameType: 'show-hint' });
+  const wrapper = mountPlatformShell();
   await nextTick();
   return { wrapper, showHint: () => wrapper.findComponent(ControlsMenu).props('showHint') };
 }

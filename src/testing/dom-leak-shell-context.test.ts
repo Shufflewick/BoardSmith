@@ -191,7 +191,7 @@ describe('renderAsSeat provides the animation events GameShell provides (#406)',
  */
 async function renderInsideGameShell(game: TestGame<MoveGame>, seat: number, board: Component) {
   enterIframe();
-  const shell = mountPlatformShell({ gameType: 'render-as-seat-parity', board });
+  const shell = mountPlatformShell({ board });
   mounted.push(shell);
   await nextTick();
   window.dispatchEvent(new MessageEvent('message', { data: { source: 'shufflewick', type: 'init', seat } }));
