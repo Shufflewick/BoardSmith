@@ -217,7 +217,7 @@ This replaces the split-screen scaffold and the "auto-UI is a debug panel" frami
 **Why it's clean now (grounded in the current wiring):**
 - Today there is **no UI registration layer at all** — a game's UI is simply whatever `App.vue` statically imports, and the scaffold *hard-imports* `AutoUI` into a two-column `App.vue` (`project-scaffold.ts:263-348`). That static import is the only reason AutoUI can't be tree-shaken out of a production build.
 - The build (`build.ts`) runs two Vite builds; the **UI build (`build.ts:87-96`) is a plain SPA build with no `rollupOptions.input`/`lib`** — its entry is implicitly `index.html → src/main.ts → App.vue`. There's no UI selection and no exclusion.
-- `boardsmith.json` is already the declared single source of truth that **both** `dev` and `build`/`manifest` read — the natural home for a UI declaration. (`paths.ui`/`paths.rules` exist but are read only by `dev`.)
+- `boardsmith.json` is already the declared single source of truth that **both** `dev` and `build`/`manifest` read — the natural home for a UI declaration. (`paths.rules` is read by every command that loads the rules (`dev`, `build`, `simulate`, `validate`, `evolve-bot-weights`); `paths.ui` is read only by `dev`.)
 
 **Proposed mechanics:**
 1. **Declare UIs** in a registry — by symmetry with the existing `gameDefinition` export, either a sibling `uiDefinition` the game exports or (preferred) a `ui` map in `boardsmith.json`:
