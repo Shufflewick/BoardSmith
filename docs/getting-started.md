@@ -514,37 +514,32 @@ export function createGameFlow(game: MyGame): FlowDefinition {
 
 ### UI (src/ui/App.vue)
 
-The UI uses Vue 3 and the `boardsmith/ui` package:
+The UI uses Vue 3 and the `boardsmith/ui` package. `src/ui/uis.ts` lists the
+game's boards, and `App.vue` hands that registry to `GameShell`:
+
+```ts
+// src/ui/uis.ts
+import { defineGameUIs, defaultUI } from 'boardsmith/ui';
+import GameTable from './components/GameTable.vue';
+
+export default defineGameUIs({ GameTable: defaultUI(GameTable) });
+```
 
 ```vue
+<!-- src/ui/App.vue -->
+<script setup lang="ts">
+import { GameShell } from 'boardsmith/ui';
+import uis from './uis.js';
+</script>
+
 <template>
-  <GameShell
-    :uis="uis"
-  >
-    <template #game-board="{
-      gameView,
-      playerSeat,
-      isMyTurn,
-      availableActions,
-      actionArgs,
-      actionController,
-      setBoardPrompt
-    }">
-      <GameTable
-        :game-view="gameView"
-        :player-seat="playerSeat"
-        :is-my-turn="isMyTurn"
-        :available-actions="availableActions"
-        :action-args="actionArgs"
-        :action-controller="actionController"
-        :set-board-prompt="setBoardPrompt"
-      />
-    </template>
-  </GameShell>
+  <GameShell :uis="uis" />
 </template>
 ```
 
-The `actionController` is the recommended way to handle actions from custom UIs. See [UI Components](./ui-components.md#action-controller-api) for the full API.
+`GameShell` mounts `GameTable` and passes it `gameView`, `playerSeat`,
+`isMyTurn`, `availableActions`, `actionArgs`, `actionController` and
+`setBoardPrompt` as props. The `actionController` is the recommended way to handle actions from custom UIs. See [UI Components](./ui-components.md#action-controller-api) for the full API.
 
 ## Important: Read Before You Start
 

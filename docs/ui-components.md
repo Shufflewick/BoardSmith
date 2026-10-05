@@ -6,35 +6,15 @@ BoardSmith provides Vue 3 components and composables for building game UIs. The 
 
 ### GameShell
 
-The main wrapper component that provides the complete game UI structure: header, player panels, game board area, action panel, and game history.
+The main wrapper component that provides the complete game UI structure: player panels, game board area, action panel, and game history. It runs inside a host's iframe (`boardsmith dev` locally, Shufflewick in production); opened directly it only says so.
+
+The board itself is not a slot. `GameShell` renders the default UI from the game's registry in `src/ui/uis.ts` (see [Dev-time UI switcher](#dev-time-ui-switcher)) and hands it the props listed under [Board props](#board-props).
 
 ```vue
 <template>
   <GameShell
     :uis="uis"
   >
-    <!-- Custom game board -->
-    <template #game-board="{
-      state,
-      gameView,
-      playerSeat,
-      isMyTurn,
-      availableActions,
-      actionArgs,
-      actionController,
-      setBoardPrompt
-    }">
-      <GameTable
-        :game-view="gameView"
-        :player-seat="playerSeat"
-        :is-my-turn="isMyTurn"
-        :available-actions="availableActions"
-        :action-args="actionArgs"
-        :action-controller="actionController"
-        :set-board-prompt="setBoardPrompt"
-      />
-    </template>
-
     <!-- Custom player stats display. The slot also receives interaction state so a
          player's panel can be actionable (e.g. tap your own ability to use it), not
          just informational: playerSeat (the local seat), isMyTurn, availableActions,
@@ -64,7 +44,7 @@ The main wrapper component that provides the complete game UI structure: header,
 
 <script setup lang="ts">
 import { GameShell } from 'boardsmith/ui';
-import GameTable from './components/GameTable.vue';
+import uis from './uis.js';
 </script>
 ```
 
@@ -144,14 +124,17 @@ Note that `Game.nextPlayer()` is **not** one of them — it is a hardcoded seat
 successor, and it disagrees with the real turn order in exactly the games that
 need this.
 
-#### Slot Props
+#### Board props
 
-The `#game-board` slot receives:
+The board component (the registry's default UI, or the dev switcher's
+selection) receives:
 
 | Prop | Type | Description |
 |------|------|-------------|
 | `state` | `GameState` | Full game state |
 | `gameView` | `object` | Player-filtered view of game state |
+| `players` | `object[]` | Every seat's player, in seat order |
+| `myPlayer` | `object` | This seat's player |
 | `playerSeat` | `number` | Current player's seat |
 | `isMyTurn` | `boolean` | Whether it's this player's turn |
 | `availableActions` | `string[]` | Actions available to the player |
@@ -441,18 +424,32 @@ it, so it has to be operable without a pointer.
 
 ### Dev-time UI switcher
 
-Under `boardsmith dev`, the dev host shows a **UI dropdown** to switch which UI
-renders the running game — without a split-screen and without restarting. The
-dropdown lists:
-- the game's primary UI (whatever you render in GameShell's `#game-board` slot),
-- any extra UIs you declare via GameShell's `uis` prop
-  (`:uis="[{ name: 'Compact', component: CompactBoard }]"`), and
-- the built-in **Auto UI** (offered automatically in dev).
+A game declares every board it has in one file, `src/ui/uis.ts`, and passes
+that registry to `<GameShell :uis="uis">`:
 
-The auto-UI peek is dev-only: it is gated behind `import.meta.env.DEV`, so a
-production `boardsmith build` constant-folds it away and a custom-UI game never
-bundles the auto-UI (tree-shaking is preserved — see SHIP-02). A production build
-renders the primary slot UI.
+```ts
+import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui';
+import HeirloomTable from './heirloom/HeirloomTable.vue';
+
+export default defineGameUIs({
+  HeirloomTable: defaultUI(HeirloomTable),
+  Classic: devUI(() => import('./components/CribbageBoard.vue')),
+});
+```
+
+Exactly one entry is `defaultUI()`: that is the board a production build
+renders. `devUI()` entries exist only under `boardsmith dev`.
+
+Under `boardsmith dev`, the dev host shows a **UI dropdown** to switch which UI
+renders the running game, without restarting. It lists every entry in the
+registry, in declared order, and then **Auto**, the built-in auto-UI, which
+`GameShell` adds itself in dev builds. Do not list it in `uis.ts`. A game that
+declares its own entry named `Auto` (an auto-UI game whose default IS the
+auto-UI) keeps that entry, and no second one is added.
+
+Everything dev-only is gated behind `import.meta.env.DEV`, so a production
+`boardsmith build` folds it away: neither `devUI()` boards nor the shell's Auto
+entry reach the bundle, JS or CSS (see SHIP-02 and `treeshake-bundle.test.ts`).
 
 ### DebugPanel
 
@@ -575,7 +572,7 @@ Overlay for card flight animations between positions. Teleports to body to rende
 
 ### GameOverlay
 
-Modal overlay that stays **constrained within the game content area**, keeping header and ActionPanel accessible. Unlike FlyingCardsOverlay, this does NOT teleport to body.
+Modal overlay that stays **constrained within the game content area**, keeping the players panel and ActionPanel accessible. Unlike FlyingCardsOverlay, this does NOT teleport to body.
 
 **How it works:** GameOverlay uses `position: fixed` but renders in-place (no Teleport). When inside GameShell's zoom-container (which has `contain: layout`), the fixed positioning is trapped within that container.
 
@@ -625,7 +622,7 @@ const showModal = ref(false);
 - `@click` - Fires when clicking the backdrop (use `@click.stop` on content to prevent)
 
 **Important:**
-- Must be rendered inside a component within GameShell's game-board slot
+- Must be rendered inside the board component GameShell mounts from `src/ui/uis.ts`
 - Use `@click.stop` on your modal content to prevent backdrop clicks from closing
 - Use `position: sticky` on content for tall game boards
 
@@ -1680,7 +1677,7 @@ See [Nomenclature](./nomenclature.md) for animation event terminology definition
 
 ## Action Controller API
 
-The `actionController` (type: `UseActionControllerReturn`) is the unified interface for executing and managing game actions. It's provided via the `#game-board` slot and handles all action execution, wizard mode navigation, and auto-fill logic.
+The `actionController` (type: `UseActionControllerReturn`) is the unified interface for executing and managing game actions. It is passed to the board component as a prop and handles all action execution, wizard mode navigation, and auto-fill logic.
 
 ### Controller Methods
 
