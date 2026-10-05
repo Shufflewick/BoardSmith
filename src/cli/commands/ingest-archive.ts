@@ -2,7 +2,7 @@ import {
   designRulebookDir,
 } from '../lib/project-paths.js';
 import { resolveUserPath } from '../lib/user-path.js';
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import chalk from 'chalk';
@@ -142,10 +142,6 @@ export function normalizeEdition(raw: string | undefined): string {
  */
 export const GAPS_BEGIN = '<!-- boardsmith:gaps:begin -->';
 export const GAPS_END = '<!-- boardsmith:gaps:end -->';
-
-function sha256(buf: Buffer): string {
-  return createHash('sha256').update(buf).digest('hex');
-}
 
 /** ISO date (YYYY-MM-DD) in local time — the value written to `Transcribed:`. */
 function isoDate(now: Date): string {
@@ -584,7 +580,7 @@ async function assertArchiveSlotFree(source: SourceToArchive): Promise<void> {
   } catch {
     return; // Not archived yet -- the normal path.
   }
-  if (sha256(existing) !== sha256(source.bytes)) {
+  if (sha256Hex(existing) !== sha256Hex(source.bytes)) {
     throw new Error(
       `${source.relArchivePath} already exists in this project and differs from ${source.sourcePath}.\n` +
         `Remove or rename the archived copy and re-run, or pass --project to target a different project.`,
@@ -596,8 +592,8 @@ async function assertArchiveSlotFree(source: SourceToArchive): Promise<void> {
 async function archiveSource(source: SourceToArchive): Promise<string> {
   await fs.mkdir(dirname(source.archivePath), { recursive: true });
   await fs.writeFile(source.archivePath, source.bytes);
-  const sourceHash = sha256(await fs.readFile(source.archivePath));
-  if (sourceHash !== sha256(source.bytes)) {
+  const sourceHash = sha256Hex(await fs.readFile(source.archivePath));
+  if (sourceHash !== sha256Hex(source.bytes)) {
     throw new Error(`Archived copy at ${source.relArchivePath} does not match the source. Aborting.`);
   }
   return sourceHash;

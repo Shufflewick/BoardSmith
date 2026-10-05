@@ -87,7 +87,7 @@
  * @module
  */
 
-import { createHash } from 'node:crypto';
+import { sha256Hex } from './hash.js';
 
 /** One occurrence of a clone, as `fallow dupes --format json` reports it. *
  * Not exported: it is only ever reached through `CloneGroup`.
@@ -150,7 +150,7 @@ export function cloneGroupKey(group: CloneGroup): string {
     .map((instance) => instance.fragment)
     .sort()
     .join('\u0000');
-  return createHash('sha256').update(text).digest('hex').slice(0, 16);
+  return sha256Hex(text).slice(0, 16);
 }
 
 /** The accepted record this tree would produce, sorted for a stable diff. */

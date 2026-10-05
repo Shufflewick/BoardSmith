@@ -53,7 +53,7 @@ import { promises as fs } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { join, posix, resolve } from 'node:path';
 import chalk from 'chalk';
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '../lib/hash.js';
 import {
   CROSS_CHUNK_MD,
   DESIGN_DIR,
@@ -504,7 +504,7 @@ async function signedText(ctx: MergeContext, path: string, signed: string): Prom
   const commits = (await git(ctx.top, ['log', '--format=%H', 'HEAD', ctx.branch, '--', where])).split('\n').filter(Boolean);
   for (const commit of commits) {
     const shown = await run(ctx.top, ['show', `${commit}:${where}`]);
-    if (shown.code === 0 && sha256(Buffer.from(shown.out)) === signed) return shown.out;
+    if (shown.code === 0 && sha256Hex(Buffer.from(shown.out)) === signed) return shown.out;
   }
   return undefined;
 }
@@ -645,10 +645,6 @@ function vouchRefusal(ctx: MergeContext, shared: SharedFile[], slug: string, [wh
   );
 }
 
-function sha256(data: Buffer): string {
-  return createHash('sha256').update(data).digest('hex');
-}
-
 /** Records every shared file as the merge combined it, in design/MERGE-SIGNOFFS.md, staged. */
 async function recordMergeSignoffs(ctx: MergeContext, shared: SharedFile[]): Promise<void> {
   const merge = `${ctx.branch} ${(await git(ctx.top, ['rev-parse', ctx.branch])).trim()} into ${(await git(ctx.top, ['rev-parse', 'HEAD'])).trim()}`;
@@ -657,7 +653,7 @@ async function recordMergeSignoffs(ctx: MergeContext, shared: SharedFile[]): Pro
   for (const file of shared) {
     const content = await fs.readFile(join(ctx.projectDir, file.path)).catch(() => undefined);
     // A file the merge deleted has no code to vouch for; its chunks' manifests answer for that.
-    if (content !== undefined) entries.push({ path: file.path, content: sha256(content), chunks: file.chunks, merge, when });
+    if (content !== undefined) entries.push({ path: file.path, content: sha256Hex(content), chunks: file.chunks, merge, when });
   }
   const path = designPath(ctx.projectDir, MERGE_SIGNOFFS_MD);
   const existing = await fs.readFile(path, 'utf-8').catch(() => undefined);

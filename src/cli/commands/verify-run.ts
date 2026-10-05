@@ -1,7 +1,8 @@
 import {
   designRulebookDir,
 } from '../lib/project-paths.js';
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
+import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
@@ -228,10 +229,6 @@ export interface AdjudicationRecord {
   quotedPass1: string;
   quotedPass2: string;
   recordedAt: string;
-}
-
-function sha256(buf: Buffer): string {
-  return createHash('sha256').update(buf).digest('hex');
 }
 
 /** `date -u +%Y-%m-%dT%H:%M:%SZ`-shaped, with `:` replaced by `-`. Minted BY THIS COMMAND. */
@@ -1188,7 +1185,7 @@ export async function verifyRunRecordCommand(
 
   const bytes = await fs.readFile(sliceAbs);
   if (range) await assertSliceNamesRangeDocument(projectDir, bytes.toString('utf-8'), slice, range);
-  const hash = sha256(bytes);
+  const hash = sha256Hex(bytes);
   const record: LedgerRecord = {
     unitId: unit,
     slicePath: relToStaging,
@@ -1314,7 +1311,7 @@ export async function verifyRunStatusCommand(
       );
       continue;
     }
-    if (sha256(bytes) !== rec.sha256) {
+    if (sha256Hex(bytes) !== rec.sha256) {
       warnings.push(
         `unit "${rec.unitId}"'s recorded sha256 no longer matches ${rec.slicePath} on disk — ` +
           `treating as NOT recorded (hand-edit or tamper detected)`,

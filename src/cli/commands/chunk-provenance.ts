@@ -7,7 +7,7 @@ import {
   DESIGN_DIR,
 } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import chalk from 'chalk';
@@ -116,10 +116,6 @@ export interface VerificationScope {
   }>;
 }
 
-function sha256(buf: Buffer): string {
-  return createHash('sha256').update(buf).digest('hex');
-}
-
 async function exists(path: string): Promise<boolean> {
   try {
     await fs.access(path);
@@ -197,7 +193,7 @@ export async function computeVerificationScope(projectDir: string): Promise<Veri
     };
   }
 
-  if (sha256(archivedBuf) !== sourceHash) {
+  if (sha256Hex(archivedBuf) !== sourceHash) {
     return {
       scope: SCOPE_CODE_ONLY,
       reason: 'source-hash-mismatch',
@@ -302,7 +298,7 @@ async function verifyAdditionalSources(
       failedAdditionalSources.push({ ...row, reason: 'additional-source-missing' });
       continue;
     }
-    if (sha256(buf) === record.sourceHash) {
+    if (sha256Hex(buf) === record.sourceHash) {
       additionalSources.push(row);
     } else {
       failedAdditionalSources.push({ ...row, reason: 'additional-source-hash-mismatch' });
@@ -386,7 +382,7 @@ async function readCitedSlices(
   const documents = new Set<string>();
   for (const rel of resolved) {
     const bytes = await fs.readFile(join(designDir(projectDir), rel));
-    citedSlices.push({ path: rel, hash: sha256(bytes) });
+    citedSlices.push({ path: rel, hash: sha256Hex(bytes) });
     const sliceSource = NON_SLICE_FILES.includes(basename(rel)) ? undefined : parseSliceSource(bytes.toString('utf-8'));
     for (const d of sliceDocuments(sliceSource, recorded)) documents.add(d);
   }

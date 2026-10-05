@@ -16,7 +16,7 @@
  * belongs to `tempTree` (#236); nothing here creates or removes one.
  */
 import { promises as fs } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '../lib/hash.js';
 import { dirname, join } from 'node:path';
 import { DESIGN_DIR, resolveDesignRelative } from '../lib/project-paths.js';
 import { renderIndex } from './ingest-archive.js';
@@ -79,7 +79,7 @@ export async function archiveRulebookSource(project: string): Promise<ArchivedSo
   const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
   await fs.mkdir(rulebookDir, { recursive: true });
   const bytes = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
-  const hash = createHash('sha256').update(bytes).digest('hex');
+  const hash = sha256Hex(bytes);
   const archivedPath = 'rulebook/source/rules.pdf';
   await fs.writeFile(
     join(rulebookDir, 'INDEX.md'),
