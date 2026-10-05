@@ -287,6 +287,23 @@ export function runRootDir(projectDir: string, runId: string): string {
 }
 
 /**
+ * Every verify run's id under `<projectDir>/rulebook/.verify/`, oldest first: run-ids sort
+ * lexicographically because the format is fixed-width UTC. Empty when there are none.
+ */
+export async function listRunIds(projectDir: string): Promise<string[]> {
+  let entries: Array<{ name: string; isDirectory(): boolean }>;
+  try {
+    entries = await fs.readdir(join(designRulebookDir(projectDir), '.verify'), { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((e) => e.isDirectory() && RUN_ID_RE.test(e.name))
+    .map((e) => e.name)
+    .sort();
+}
+
+/**
  * A run's staging tree: `<projectDir>/rulebook/.verify/<run-id>/slices/`. Dot-prefixed so no
  * walker mistakes a staged slice for a live one; run-scoped so two passes cannot collide. Derived
  * from `runRootDir`, which owns the validation and the containment assertion.
@@ -1252,25 +1269,12 @@ export async function verifyRunStatusCommand(
   options: VerifyRunOptions & { runId?: string } = {},
 ): Promise<VerifyRunStatusResult> {
   const projectDir = resolve(options.project ?? process.cwd());
-  const verifyRoot = join(designRulebookDir(projectDir), '.verify');
 
   let runId = options.runId;
   if (runId) {
     assertValidRunId(runId);
   } else {
-    let entries: Array<{ name: string; isDirectory(): boolean }>;
-    try {
-      entries = await fs.readdir(verifyRoot, { withFileTypes: true });
-    } catch {
-      throw new Error(
-        `No verify runs found under rulebook/.verify/ in ${projectDir}.\n` +
-          `Run \`boardsmith verify-run-init\` first.`,
-      );
-    }
-    const runIds = entries
-      .filter((e) => e.isDirectory() && RUN_ID_RE.test(e.name))
-      .map((e) => e.name)
-      .sort();
+    const runIds = await listRunIds(projectDir);
     if (runIds.length === 0) {
       throw new Error(
         `No verify runs found under rulebook/.verify/ in ${projectDir}.\n` +
