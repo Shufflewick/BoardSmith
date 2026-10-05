@@ -907,9 +907,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
           `Persist the \`nextElementId\` the runner reports after genesis, after every ` +
           `partition it creates, and after EVERY CHECKPOINT (#224) -- an ordinary command ` +
           `that creates an element mints from this same counter -- and pass it as ` +
-          `\`nextElementId\` when the world is next built. ` +
-          `For a world that is already occupied and has no stamp, derive one once with ` +
-          `\`worldIdAllocationOf\` over its stored partitions.`,
+          `\`nextElementId\` when the world is next built.`,
       );
     }
     const resident = this.residentIds.get(name);

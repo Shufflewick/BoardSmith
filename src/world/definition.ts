@@ -507,7 +507,7 @@ function assertWorldVacate(world: WorldDefinition): void {
  * verb in that world may free a chair from the clock, and the call that would
  * is refused by name.
  */
-export function worldVacateByClockAction(world: WorldDefinition): string | null {
+function worldVacateByClockAction(world: WorldDefinition): string | null {
   return world.vacateByClock ?? null;
 }
 
@@ -599,7 +599,7 @@ export function worldSeatCount(
  * clamped -- a box silently smaller than its author wrote would drop notices
  * nobody decided to drop.
  */
-export function worldNoticesPerSeat(
+function worldNoticesPerSeat(
   declaration: { notices?: { perSeat?: unknown } },
   budgets: WorldBudgets,
 ): number | undefined {
@@ -755,14 +755,15 @@ function buildGenesis(
 }
 
 /**
- * THE ALLOCATION STAMP AN OCCUPIED WORLD SHOULD HAVE (ShufflewickPub #377).
+ * THE ALLOCATION STAMP A WORLD'S STORED BYTES CALL FOR (ShufflewickPub #377).
  *
- * The supported repair, and the only O(stored) step in the whole scheme: read
- * every partition the world holds, read each element id back to the counter
- * value it was minted from with the world's `elementIdKey` (#482), and the
- * stamp is one above the highest. Run it when the `allocation-stale` refusal
- * proves a stamp wrong, persist what it returns, and the world never pays for
- * it again.
+ * Read every partition the world holds, read each element id back to the
+ * counter value it was minted from with the world's `elementIdKey` (#482), and
+ * the stamp is one above the highest. O(stored), so it is a CHECK -- a test or
+ * an audit asking whether a host kept its stamp at or above what its bytes
+ * need -- and never a step a host runs on a live world. A stale stamp is a host
+ * defect that stops the world (`allocation-stale`, #540), not something to
+ * rewrite.
  *
  * It reads BYTES, not a live tree: a host can answer this from storage without
  * hydrating anything into a game.
@@ -808,7 +809,7 @@ function highestElementCursor(json: ElementJSON, ids: WorldElementIds): number {
 export type WorldOrdering = "arrival" | "chronological";
 
 /** The orderings a host runs, in one place, so the refusal can name them. */
-export const WORLD_ORDERINGS: readonly WorldOrdering[] = ["arrival", "chronological"];
+const WORLD_ORDERINGS: readonly WorldOrdering[] = ["arrival", "chronological"];
 
 /** What a host must supply to build a world out of a bundle's definition. */
 export interface WorldRunnerOptions {

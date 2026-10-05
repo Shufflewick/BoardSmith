@@ -1117,7 +1117,7 @@ export function createWorldRunner(
    */
   migrationHooks: WorldMigrationHooks = {},
 ): WorldRunnerHandle {
-  return {
+  return stopsOnStaleStamp({
     /**
      * Which partitions the parent must send for this command.
      *
@@ -1551,6 +1551,55 @@ export function createWorldRunner(
             declaredNotices: request.declaredNotices,
           });
     },
+  });
+}
+
+/**
+ * A RUNNER THAT HAS PROVED ITS STAMP STALE RUNS NOTHING MORE (#540).
+ *
+ * `allocation-stale` is raised at the adoption that proves the host's id
+ * allocation stamp stands below an id the world already stored. Every world a
+ * current host can open was written with its stamp, so this is a host defect,
+ * and there is no repair to run. From that refusal on, any id this runner
+ * minted could collide with one a stored partition it never loaded holds --
+ * and the half-finished adoption has left its tree in no state worth reading
+ * -- so every operation that touches the game refuses with the SAME refusal,
+ * on every host, until the host is fixed and the world is built again.
+ *
+ * Roster and residency bookkeeping (`seat`, `unseat`, `residency`, `evict`)
+ * and the migration plan reads (`migrationShape`, `migrationSources`) touch no
+ * stored element and stay answerable, so a host can still say what it holds
+ * while it reports the defect.
+ */
+function stopsOnStaleStamp(handle: WorldRunnerHandle): WorldRunnerHandle {
+  let stoppedBy: WorldRefusal | undefined;
+  const gate =
+    <A extends unknown[], R>(op: (...args: A) => Promise<R>) =>
+    async (...args: A): Promise<R> => {
+      if (stoppedBy !== undefined) throw stoppedBy;
+      try {
+        return await op(...args);
+      } catch (error) {
+        if (error instanceof WorldRefusal && error.code === "allocation-stale") stoppedBy = error;
+        throw error;
+      }
+    };
+  return {
+    ...handle,
+    declare: gate(handle.declare),
+    genesis: gate(handle.genesis),
+    serialize: gate(handle.serialize),
+    migrateAll: gate(handle.migrateAll),
+    declarePick: gate(handle.declarePick),
+    resolvePick: gate(handle.resolvePick),
+    declareQuote: gate(handle.declareQuote),
+    resolveQuote: gate(handle.resolveQuote),
+    createPartition: gate(handle.createPartition),
+    declareViews: gate(handle.declareViews),
+    viewsFor: gate(handle.viewsFor),
+    declareOffers: gate(handle.declareOffers),
+    offersFor: gate(handle.offersFor),
+    apply: gate(handle.apply),
   };
 }
 

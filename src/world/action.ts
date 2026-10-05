@@ -729,7 +729,7 @@ export function bindWorldFacilities(game: Game, facilities: WorldClockFacilities
  * callback would read `undefined.partition` and report a TypeError from inside
  * library code.
  */
-export function worldFacilitiesOf(game: Game): WorldClockFacilities {
+function worldFacilitiesOf(game: Game): WorldClockFacilities {
   const facilities = (game as unknown as FacilitiesHolder)[FACILITIES_KEY];
   if (facilities === undefined) {
     throw worldRefusal(

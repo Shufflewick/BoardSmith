@@ -582,12 +582,6 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
       return stored === undefined ? 0 : Number(stored);
     },
 
-    recordAllocation(nextElementId: number): void {
-      transact(() => {
-        stmt.writeMeta.run(NEXT_ELEMENT_ID_KEY, String(nextElementId));
-      });
-    },
-
     nextElementId(): number | undefined {
       const stored = meta(NEXT_ELEMENT_ID_KEY);
       // UNDEFINED IS AN ANSWER (#377): the world's genesis has not run, and

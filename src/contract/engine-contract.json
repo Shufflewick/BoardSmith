@@ -1,7 +1,7 @@
 {
-  "revision": 129,
+  "revision": 130,
   "bundleProtocol": 2,
-  "surfaceHash": "6cf4146f749f7e86",
+  "surfaceHash": "1e84ac6f1cc2b806",
   "payloadHash": "40d5b63bde8d6007",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1105,6 +1105,15 @@
       "payloadHash": "40d5b63bde8d6007",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "The host-only seat close is renamed from expireTimedSeat to expireSeat, with the same inputs { type: 'expireSeat', player, idleAction, args, boundaryKey }, and it now works on any step, not only one that declares a time limit (#494 ruling: any host deadline closes a held seat the way a step timeout does): it runs the idle action as the seat's own action when the step offers it, otherwise drops the seat's held follow-up and ends its part (the turn passes, or the seat is marked done), recorded as the existing seatExpiry history entry so replay agrees. It is refused only when the seat can take neither, or as stale by its boundaryKey. The platform must use the name expireSeat, not expireTimedSeat (which its unmerged branch still uses), everywhere it builds or allowlists the op (the builders table, the executor's validation schema, OP_BUILDERS), still compose it only from its own timers and never from a client message, and may now submit it from any host deadline (such as a table's round deadline) on an untimed step, instead of failing the round when a seat holds a follow-up."
+    },
+    {
+      "revision": 130,
+      "date": "2026-10-05",
+      "bundleProtocol": 2,
+      "surfaceHash": "1e84ac6f1cc2b806",
+      "payloadHash": "40d5b63bde8d6007",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "boardsmith/world exports the two steps every world host runs: runDueOccurrences, the occurrence loop for a due event, which answers resumeDue at the occurrence that refused (so a refused catch-up never re-runs what already ran, #538) and nextDue on success; and dispatchStep, the dispatch order (declaration walk, ONE schedule allowance read, apply, plan). ResidentWorld uses both; the platform should replace its own copies with them and read the allowance once (ShufflewickPub #569). The barrel is now an explicit list: 21 in-package helpers are no longer public (bindWorldFacilities, worldFacilitiesOf, assertCandidateBudget, readOnlyProjection, unkeyedScheduleRefusal, keyedScheduleRefusal, scheduleBatchRefusal, worldQueueRefusal, createInlinedPartitionStore, createWorldRunner, worldVacateByClockAction, worldNoticesPerSeat, WORLD_ORDERINGS, NOTICE_SCOPE, stampNotice, boxFull, MAX_ORDER_ID_LENGTH, assertWorldMigration, declaredSources, assertCreatedRoots, assertAnsweredAllocations); none has a platform caller (#539). A stale id allocation stamp is no longer repaired: once allocation-stale is raised the runner refuses every game-touching call with it, so the world stops and the host defect stays visible; the platform should drop its own repair (#540, ShufflewickPub #575)."
     }
   ]
 }
