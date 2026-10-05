@@ -2840,7 +2840,7 @@ argument** and **storage arrives as an interface**.
 
 | This library owns | A host owns |
 | --- | --- |
-| What a world *is*: residency, the declaration walk, rollback baselines, the dirty set, per-seat views, event routing by scope | The session that holds a world in memory, sockets and transport |
+| What a world *is*: residency, the declaration walk, rollback baselines, the dirty set, per-seat views, event routing by scope, and the order one dispatch runs in (`dispatchStep`: walk, one allowance read, apply, plan) | The session that holds a world in memory, sockets and transport, and when a dispatch's effects are made durable |
 | Genesis, seat assignment and the seat ceiling | Attach, authentication, who is allowed in |
 | Schedule semantics: drift-free recurrence, keyed upserts, catch-up, the caps, and the occurrence loop a due event runs through (`runDueOccurrences`) | The queue itself, the alarm that fires it, the drain |
 | The partition-store *interface* (`WorldPartitionStore`, `WorldPartitionWriter`) and the naming and size rules every store must enforce | The store: a Durable Object's storage, a SQLite file, an in-memory map, its key layout and its atomicity |

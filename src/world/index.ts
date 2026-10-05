@@ -60,6 +60,7 @@ export * from './declaration.js';
 export * from './readonly.js';
 export * from './schedule.js';
 export * from './schedule-api.js';
+export * from './dispatch.js';
 export * from './engine.js';
 export * from './runner.js';
 export * from './definition.js';

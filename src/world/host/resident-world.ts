@@ -59,7 +59,7 @@ import {
   createWorld,
   nextDueBatch,
   runDueOccurrences,
-  planSchedules,
+  dispatchStep,
   rearmAt,
   readWorldDefinition,
   settleDeclaration,
@@ -962,79 +962,56 @@ export class ResidentWorld {
     const { player, command, timing, arrivedAt } = request;
     const runner = this.#world.runner;
 
-    // WALK THE ACTION'S DECLARATION (BoardSmith #169). One round per step, in
-    // the order the author wrote them: round one, then each selection's own,
-    // then what execute writes. No ceiling and no `declaration-unsettled`,
-    // because the length is the action's own selection count -- see
-    // `walkDeclaration`, and `settleDeclaration` beside it, which is still what
-    // a VIEW needs.
-    const answered = await walkDeclaration(
-      // THE SAME INSTANT THE APPLY BELOW IS STAMPED WITH (#375), so the
-      // declaration and the handler it precedes agree about what time it is.
-      (supplied, declared) =>
-        runner.declare(
-          command,
-          player,
-          supplied,
-          // AND THE WHOLE OCCURRENCE ON THE CLOCK'S ROAD (#271). A scheduled
-          // declaration is answered against the occurrence it is running --
-          // its own `due`, and how many occurrences were folded into it --
-          // because a catch-up names one partition per occurrence and a walk
-          // that could not see the fold had to guess a ceiling.
-          timing === null ? { kind: "arrival", now: arrivedAt } : { kind: "scheduled", timing },
-          declared,
-        ),
-      (name) =>
-        this.#readPartition(
-          name,
-          `Action "${command.name}" needs partition "${name}", which this world's store does not have.`,
-        ),
-      // ONE POINT READ PER CHAIR THE WALK NAMED (ShufflewickPub #423). The walk
-      // hands back what it collected and `apply` below takes exactly that, so
-      // no host can drive the declaration and then hand the handler a different
-      // set of answers.
-      (seat) => Promise.resolve(this.#store.activityOf(seat)),
-      // AND ONE POINT READ PER NOTICE BOX IT NAMED (ShufflewickPub #521) -- the
-      // box, never the seat's partition.
-      (seat) => Promise.resolve({ seat, box: this.#store.noticeBox(seat) }),
+    // THE ORDER EVERY HOST SHARES (#539): walk the action's declaration
+    // (BoardSmith #169), read this owner's allowance ONCE, apply with it, and
+    // plan the command's schedules against the same allowance. The checkpoint
+    // below is this host's own, per command.
+    const { result, plan } = await dispatchStep(
+      { player, command, timing, arrivedAt },
+      {
+        declare: (supplied, when, declared) =>
+          runner.declare(command, player, supplied, when, declared),
+        readPartition: (name) =>
+          this.#readPartition(
+            name,
+            `Action "${command.name}" needs partition "${name}", which this world's store does not have.`,
+          ),
+        // ONE POINT READ PER CHAIR THE WALK NAMED (ShufflewickPub #423), and
+        // per notice box (ShufflewickPub #521) -- the box, never the seat's
+        // partition.
+        readActivity: (seat) => Promise.resolve(this.#store.activityOf(seat)),
+        readNoticeBox: (seat) => Promise.resolve({ seat, box: this.#store.noticeBox(seat) }),
+        allowance: (asking) => Promise.resolve(this.#allowanceFor(asking)),
+        apply: ({ allowance, answers }) =>
+          runner.apply({
+            player,
+            command,
+            timing,
+            arrivedAt,
+            allowance,
+            // DERIVED HERE AND NEVER STORED. Who is watching is the host's
+            // answer from its open connections at the instant it asks -- a
+            // parked world reports nobody rather than a memory of an audience
+            // that went home.
+            presence: this.#presence(),
+            // READ BEFORE THE COMMAND RUNS (#383), which is what makes it the
+            // watermark from BEFORE this arrival: the handler is told when this
+            // seat was last here, not that it is here now.
+            activity: this.#activityFor(request.about ?? player),
+            ...answers,
+          }),
+        planning: (owner) => {
+          const pending = this.#store.pendingEvents();
+          return Promise.resolve({
+            nextSeq: this.#store.nextSeq(),
+            mintId: this.#mintId,
+            replaces: (key: string) =>
+              pending.find((event) => event.owner === owner && event.key === key)?.id,
+          });
+        },
+      },
+      this.#budgets,
     );
-
-    const owner = player ?? WORLD_OWNER;
-    // ONE ALLOWANCE, read once and used by both the apply and the plan. Two
-    // reads either side of a command that scheduled something would let the
-    // parent's re-plan judge against numbers the child never saw.
-    const allowance = this.#allowanceFor(owner);
-    const result = await runner.apply({
-      player,
-      command,
-      timing,
-      arrivedAt,
-      allowance,
-      // DERIVED HERE AND NEVER STORED. Who is watching is the host's answer
-      // from its open connections at the instant it asks -- a parked world
-      // reports nobody rather than a memory of an audience that went home.
-      presence: this.#presence(),
-      // READ BEFORE THE COMMAND RUNS (#383), which is what makes it the
-      // watermark from BEFORE this arrival: the handler is told when this seat
-      // was last here, not that it is here now, which it can see for itself.
-      activity: this.#activityFor(request.about ?? player),
-      ...answered,
-    });
-
-    // THE PARENT IS THE ONLY WRITER. `ctx.schedule()` refused inside the
-    // handler at the offending line, where the rollback unwinds it; this is the
-    // authority that actually mints the events.
-    const pending = this.#store.pendingEvents();
-    const plan = planSchedules(result.schedules, {
-      owner: player,
-      arrivedAt,
-      nextSeq: this.#store.nextSeq(),
-      mintId: this.#mintId,
-      allowance,
-      budgets: this.#budgets,
-      replaces: (key) => pending.find((event) => event.owner === owner && event.key === key)?.id,
-    });
-    if (!plan.ok) throw plan.refusal;
 
     // RECORDED BEFORE THE CHECKPOINT, deliberately: a restart that finds a
     // non-empty dirty set is being told the truth about which partitions'

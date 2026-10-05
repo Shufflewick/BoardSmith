@@ -1,7 +1,7 @@
 {
   "revision": 130,
   "bundleProtocol": 2,
-  "surfaceHash": "a798dbd5aecd1982",
+  "surfaceHash": "e0f7fb43ccfcee3f",
   "payloadHash": "40d5b63bde8d6007",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1110,10 +1110,10 @@
       "revision": 130,
       "date": "2026-10-05",
       "bundleProtocol": 2,
-      "surfaceHash": "a798dbd5aecd1982",
+      "surfaceHash": "e0f7fb43ccfcee3f",
       "payloadHash": "40d5b63bde8d6007",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "boardsmith/world exports runDueOccurrences, the one occurrence loop a host runs a due event through: it answers resumeDue at the occurrence that refused (so a refused catch-up never re-runs what already ran, #538) and nextDue on success. ResidentWorld uses it; the platform should replace its own loop with it (ShufflewickPub #569)."
+      "summary": "boardsmith/world exports the two steps every world host runs: runDueOccurrences, the occurrence loop for a due event, which answers resumeDue at the occurrence that refused (so a refused catch-up never re-runs what already ran, #538) and nextDue on success; and dispatchStep, the dispatch order (declaration walk, ONE schedule allowance read, apply, plan). ResidentWorld uses both; the platform should replace its own copies with them and read the allowance once (ShufflewickPub #569)."
     }
   ]
 }
