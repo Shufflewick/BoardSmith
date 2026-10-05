@@ -111,7 +111,6 @@ const options = { playerCount: 1, seed: 'bs352' };
 function makeHost(def: GameDefinitionLike = runeDef, seed = options.seed) {
   return new SnapshotSessionHost({
     playerCount: 1,
-    botSeats: [],
     executeOp: (snap, pend, op) => executeOp(def, { ...options, seed }, snap, pend, op),
     record: () => {}, push: () => {},
   });

@@ -454,10 +454,8 @@ export class MultiplayerHost {
   private readonly reconnecting = new Map<number, () => void>();
   private session: DevSession | null = null;
   /**
-   * Live bot-seat list passed to the session; mutated as humans take/leave seats.
-   * `readonly` on purpose: the session's bot pump holds THIS array reference for
-   * the life of the session, so every later `addBotSeat`/`removeBotSeat` must be an
-   * in-place mutation. Reassigning would silently detach the pump from the list.
+   * The seats a bot plays, changed as humans take and leave seats. The game's
+   * host keeps its own copy, which `announceRoster` brings up to date.
    */
   private readonly botSeats: Array<{ seat: number; level?: string }> = [];
   /** The client (if any) that follows the active seat — it controls whichever
@@ -478,8 +476,6 @@ export class MultiplayerHost {
     playerState: (frame) => (frame.view as { state?: unknown } | undefined)?.state,
     perPushFields: ['serverNow'],
   });
-  /** The bot roster the game's host was last told about -- see `announceRoster`. */
-  private announcedRoster = '';
   /**
    * Maps an in-flight requestId to the client that issued it, so the matching
    * `server_response` is routed back to the REQUESTING client — not the acting
@@ -651,16 +647,15 @@ export class MultiplayerHost {
   }
 
   /**
-   * Tell the game's host when the bot roster changed since it was last told
-   * (`rosterChanged()`, #487), so every page learns of the change now and not
-   * with the next move. Called after every message and before every bot pump,
-   * since the roster is changed in many places and the pump reads it.
+   * Tell the game's host the bot roster (`setBotSeats()`, #537), so the pump
+   * plays the right seats and every page learns of a change now, not with the
+   * next move. Called after every message and before every bot pump, since the
+   * roster is changed in many places. The host publishes only when whether a
+   * bot plays here changed, so telling it an unchanged roster costs nothing.
    */
   private announceRoster(): void {
-    const roster = this.botSeats.map((s) => s.seat).join(',');
-    if (this.phase !== 'playing' || !this.session || roster === this.announcedRoster) return;
-    this.announcedRoster = roster;
-    this.session.host.rosterChanged();
+    if (this.phase !== 'playing' || !this.session) return;
+    this.session.host.setBotSeats(this.botSeats);
   }
 
   private async dispatch(clientId: string, msg: ClientInbound): Promise<void> {
@@ -1120,7 +1115,7 @@ export class MultiplayerHost {
     });
   }
 
-  /** Rebuild the shared bot-seat list in place from currently open seats. */
+  /** Rebuild the bot-seat list from currently open seats. */
   private rebuildBotSeats(): void {
     this.botSeats.length = 0;
     for (let seat = 1; seat <= this.opts.playerCount; seat++) {
@@ -1231,10 +1226,10 @@ export class MultiplayerHost {
     const humanSeats = new Set(
       [...this.seats.values()].filter((s) => this.heldByHuman(s.seat)).map((s) => s.seat),
     );
-    // Seed the live bot-seat list from the current open seats — in place, since
-    // the session's bot pump holds this array reference. Mutated later as humans
-    // take over seats (removeBotSeat) or give them up (addBotSeat). A follower
-    // drives every seat, so while one follows no bot plays (#460).
+    // Seed the bot-seat list from the current open seats; the session starts
+    // with it. Changed later as humans take over seats (removeBotSeat) or give
+    // them up (addBotSeat), and announced to the host by `announceRoster`. A
+    // follower drives every seat, so while one follows no bot plays (#460).
     if (this.followerClientId === null) this.rebuildBotSeats();
     else this.botSeats.length = 0;
 
@@ -1318,7 +1313,6 @@ export class MultiplayerHost {
         this.deliverServerResponse(seat, requestId, result),
     });
 
-    const startRoster = this.botSeats.map((s) => s.seat).join(',');
     // Only commit to 'playing' if the game actually starts — otherwise a failed
     // start would strand clients on an empty board. On failure, stay in the lobby
     // and surface the reason.
@@ -1332,8 +1326,6 @@ export class MultiplayerHost {
     }
 
     this.session = session;
-    // The host published its opening views with the roster it started under.
-    this.announcedRoster = startRoster;
     this.phase = 'playing';
     this.starting = false;
     this.stranded = null;

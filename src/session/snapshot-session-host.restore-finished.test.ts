@@ -3,9 +3,9 @@
  * real outcome (#490).
  *
  * The steps are the issue's: play a game to its end, take `durableState()` and
- * the views last handed to `record`, restore a second host from them, then
- * `broadcastCurrent()` or `rosterChanged()`. The persisted state crosses a JSON
- * round trip, the way a Durable Object's storage hands it back.
+ * the views last handed to `record`, and restore a second host from them with
+ * `SnapshotSessionHost.restore()`, which publishes. The persisted state crosses
+ * a JSON round trip, the way a Durable Object's storage hands it back.
  */
 import { describe, it, expect, expectTypeOf } from 'vitest';
 import { Game, Player, Action, defineFlow, execute, loop, actionStep, type GameOptions } from '../engine/index.js';
@@ -17,6 +17,7 @@ import {
   winnersOf,
   type PublishMeta,
   type SnapshotHostState,
+  type SnapshotSessionAdapters,
 } from './snapshot-session-host.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 
@@ -70,7 +71,7 @@ function actionFinishDef(flowEnds: boolean): GameDefinitionLike {
  * A game that names a leader while play goes on: `getWinners()` is overridden to
  * report the seat with the most points, and the flow never ends. An op reports
  * that seat in `winners` with `isComplete` false, a state the engine really
- * produces, so `restoreFrom` must take it back.
+ * produces, so `restore` must take it back.
  */
 function leaderDef(): GameDefinitionLike {
   class LeaderGame extends Game<LeaderGame, Player> {
@@ -97,15 +98,20 @@ function leaderDef(): GameDefinitionLike {
 
 const options = { playerCount: 3, seed: 'bs490' };
 
-function makeHost(def: GameDefinitionLike) {
+function makeAdapters(def: GameDefinitionLike) {
   const records: Array<{ views: unknown[]; spectator: unknown; meta: PublishMeta }> = [];
-  const host = new SnapshotSessionHost({
+  const adapters: SnapshotSessionAdapters = {
     playerCount: options.playerCount,
     executeOp: (snap, pend, op) => executeOp(def, options, snap, pend, op),
     push: () => {},
     record: ({ players, spectator }, meta) => records.push({ views: players, spectator, meta }),
-  });
-  return { host, records };
+  };
+  return { adapters, records };
+}
+
+function makeHost(def: GameDefinitionLike) {
+  const { adapters, records } = makeAdapters(def);
+  return { host: new SnapshotSessionHost(adapters), records };
 }
 
 /** The first seat the host says owes a move plays `win`. */
@@ -126,9 +132,9 @@ async function playWin(host: SnapshotSessionHost, records: Array<{ meta: Publish
 function restoreSecond(def: GameDefinitionLike, first: ReturnType<typeof makeHost>) {
   const stored = JSON.parse(JSON.stringify(first.host.durableState())) as SnapshotHostState;
   const last = first.records.at(-1)!;
-  const second = makeHost(def);
-  second.host.restoreFrom({ ...stored, playerViews: last.views, spectatorView: last.spectator });
-  return second;
+  const { adapters, records } = makeAdapters(def);
+  const host = SnapshotSessionHost.restore(adapters, { ...stored, playerViews: last.views, spectatorView: last.spectator });
+  return { host, records };
 }
 
 /** Steps 1-3: finish a game on one host, restore a second from what it left. */
@@ -152,23 +158,21 @@ async function restoredFromActionFinish(flowEnds: boolean) {
 }
 
 describe('a host restored from a finished game publishes its outcome (#490)', () => {
-  it('broadcastCurrent() after the restore records the game as complete, with its winners', async () => {
+  it('the restore records the game as complete, with its winners', async () => {
     const { host, records } = await restoredFromFinished([2]);
-    host.broadcastCurrent();
-    expect(records.at(-1)!.meta).toMatchObject({ isComplete: true, winners: [2], isDraw: false });
+    expect(records.at(-1)!.meta).toMatchObject({ cause: 'restore', isComplete: true, winners: [2], isDraw: false });
     expect(host.isComplete).toBe(true);
     expect(host.winners).toEqual([2]);
   });
 
-  it('rosterChanged() after the restore records the game as complete, with its winners', async () => {
+  it('a republish after the restore records the game as complete, with its winners', async () => {
     const { host, records } = await restoredFromFinished([1, 3]);
-    host.rosterChanged();
-    expect(records.at(-1)!.meta).toMatchObject({ isComplete: true, winners: [1, 3], isDraw: false });
+    host.broadcastCurrent();
+    expect(records.at(-1)!.meta).toMatchObject({ cause: 'republish', isComplete: true, winners: [1, 3], isDraw: false });
   });
 
   it('a finished game with no winners is restored as a draw, not as a running game', async () => {
-    const { host, records } = await restoredFromFinished([]);
-    host.broadcastCurrent();
+    const { records } = await restoredFromFinished([]);
     expect(records.at(-1)!.meta).toMatchObject({ isComplete: true, winners: [], isDraw: true });
     expect(records.at(-1)!.meta.turnBoundary.dueSeats).toEqual([]);
   });
@@ -189,38 +193,37 @@ describe('a host restored from a finished game publishes its outcome (#490)', ()
     const first = makeHost(def);
     await first.host.start();
     const { snapshot, pendingStates } = JSON.parse(JSON.stringify(first.host.durableState())) as SnapshotHostState;
-    const { host, records } = makeHost(def);
-    host.restoreFrom({ snapshot, pendingStates });
-    host.broadcastCurrent();
+    const { adapters, records } = makeAdapters(def);
+    SnapshotSessionHost.restore(adapters, { snapshot, pendingStates });
     expect(records.at(-1)!.meta).toMatchObject({ isComplete: true, winners: [3], isDraw: false });
     expect(records.at(-1)!.meta.turnBoundary.dueSeats).toEqual([]);
   });
 
-  it('restoreFrom refuses a snapshot without its flow state or its winners, naming what is missing', async () => {
+  it('restore refuses a snapshot without its flow state or its winners, naming what is missing', async () => {
     const { host } = makeHost(finishedGameDef([2]));
     await host.start();
     const stored = JSON.parse(JSON.stringify(host.durableState())) as SnapshotHostState;
-    const fresh = makeHost(finishedGameDef([2])).host;
+    const { adapters, records } = makeAdapters(finishedGameDef([2]));
     const { flowState: _f, ...noFlow } = stored.snapshot!;
-    expect(() => fresh.restoreFrom({ ...stored, snapshot: noFlow as typeof stored.snapshot })).toThrow(/flow state/);
+    expect(() => SnapshotSessionHost.restore(adapters, { ...stored, snapshot: noFlow as typeof stored.snapshot })).toThrow(/flow state/);
     const { winners: _w, ...noWinners } = stored.snapshot!;
-    expect(() => fresh.restoreFrom({ ...stored, snapshot: noWinners as typeof stored.snapshot })).toThrow(/winners/);
-    expect(() => fresh.restoreFrom({ ...stored, snapshot: null })).toThrow(/snapshot/);
+    expect(() => SnapshotSessionHost.restore(adapters, { ...stored, snapshot: noWinners as typeof stored.snapshot })).toThrow(/winners/);
+    expect(() => SnapshotSessionHost.restore(adapters, { ...stored, snapshot: null })).toThrow(/snapshot/);
+    expect(records).toEqual([]);
   });
 
-  it('restoreFrom refuses winners that are not seats of this table', async () => {
+  it('restore refuses winners that are not seats of this table', async () => {
     const { host } = makeHost(finishedGameDef([2]));
     await host.start();
     const stored = host.durableState();
-    const fresh = makeHost(finishedGameDef([2])).host;
+    const { adapters } = makeAdapters(finishedGameDef([2]));
     for (const winners of [[0], [4], [1.5], ['2']] as unknown as number[][]) {
-      expect(() => fresh.restoreFrom({ ...stored, snapshot: { ...stored.snapshot!, winners } })).toThrow(/seats 1 to 3/);
+      expect(() => SnapshotSessionHost.restore(adapters, { ...stored, snapshot: { ...stored.snapshot!, winners } })).toThrow(/seats 1 to 3/);
     }
   });
 
   it('a game a seat finishes with an action op is restored as complete, with that seat the winner', async () => {
-    const { seat, host, records } = await restoredFromActionFinish(true);
-    host.rosterChanged();
+    const { seat, records } = await restoredFromActionFinish(true);
     expect(records.at(-1)!.meta).toMatchObject({ isComplete: true, winners: [seat], isDraw: false });
     expect(records.at(-1)!.meta.turnBoundary.dueSeats).toEqual([]);
   });
@@ -235,7 +238,6 @@ describe('a host restored from a finished game publishes its outcome (#490)', ()
     expect(winnersOf(first.host.durableState())).toEqual([seat]);
 
     const { host, records } = restoreSecond(def, first);
-    host.broadcastCurrent();
     expect(records.at(-1)!.meta).toMatchObject({ isComplete: false, winners: [seat], isDraw: false });
     expect(records.at(-1)!.meta.turnBoundary.dueSeats).not.toEqual([]);
     expect(winnersOf(host.durableState())).toEqual([seat]);
@@ -243,9 +245,8 @@ describe('a host restored from a finished game publishes its outcome (#490)', ()
 
   it('a game finished inside a loop that does not stop on isFinished() is restored as complete too (#492)', async () => {
     // game.finish([player]) ends the flow whatever loop it is in, so there is
-    // no "winners but not complete" state left for restoreFrom to carry.
+    // no "winners but not complete" state left for restore to carry.
     const { seat, host, records } = await restoredFromActionFinish(false);
-    host.broadcastCurrent();
     expect(records.at(-1)!.meta).toMatchObject({ isComplete: true, winners: [seat], isDraw: false });
     expect(isCompleteOf(host.durableState())).toBe(true);
     expect(winnersOf(host.durableState())).toEqual([seat]);

@@ -220,10 +220,10 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
         return { ...base, botMoved: false };
       },
       record: () => {}, push: () => {},
-      botSeats: [{ seat: 2 }],
     };
 
     const host = new SnapshotSessionHost(adapters);
+    host.setBotSeats([{ seat: 2 }]);
     await host.start();
 
     const firstConversion = host.handleOp(2, { type: 'convertSeatToBot', seat: 2 });
@@ -295,11 +295,11 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
         return { ...base };
       },
       record: () => {}, push: () => {},
-      botSeats: [{ seat: 2 }],
     };
 
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const host = new SnapshotSessionHost(adapters);
+    host.setBotSeats([{ seat: 2 }]);
     await host.start();
 
     // Must terminate, not hang.

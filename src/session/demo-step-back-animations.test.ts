@@ -40,20 +40,22 @@ describe('demo step back (#449 review)', () => {
     }, { skip: 'drop' });
 
     let moves = 0;
+    const causes: string[] = [];
     const host = new SnapshotSessionHost({
       playerCount: 2,
       // The demo plays every seat at the first bot seat's level; one search
       // iteration is all a move needs here.
-      botSeats: [{ seat: 2, level: '1' }],
       executeOp: async (snap, pend, op) => {
         const res = await executeOp(def, options, snap, pend, op);
         if (op.type === 'action' && res.success) moves++;
         return res;
       },
-      push: () => {}, record: ({ players: views }) => {
+      push: () => {}, record: ({ players: views }, meta) => {
         seat1.value = (views[0] as { state: SeatState }).state;
+        causes.push(meta.cause);
       },
     });
+    host.setBotSeats([{ seat: 2, level: '1' }]);
     await host.start();
 
     const settle = async () => {
@@ -71,9 +73,12 @@ describe('demo step back (#449 review)', () => {
     expect(delivered).toHaveLength(1);
 
     const epochBefore = seat1.value?.restoreEpoch;
+    const causesBefore = causes.length;
     await host.handleOp(1, { type: 'demoControl', control: 'back' });
     await settle();
     expect(seat1.value?.restoreEpoch).not.toBe(epochBefore);
+    // Stepping back changes the game, so it is published as a change (#537).
+    expect(causes.slice(causesBefore)[0]).toBe('change');
 
     await host.handleOp(1, { type: 'demoControl', control: 'step' });
     await until(() => moves === 2);

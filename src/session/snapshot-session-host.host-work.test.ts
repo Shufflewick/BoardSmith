@@ -84,7 +84,6 @@ function countingSession(options: { botSeats?: Array<{ seat: number }>; botsStop
   };
   const host = new SnapshotSessionHost({
     playerCount: 1,
-    botSeats: options.botSeats,
     executeOp,
     hostWork: gate.gate,
     push: () => {}, record: ({ players: playerViews }) => {
@@ -92,6 +91,7 @@ function countingSession(options: { botSeats?: Array<{ seat: number }>; botsStop
       if (view !== undefined) views.push(view.state);
     },
   });
+  host.setBotSeats(options.botSeats ?? []);
   /** The edited rules are adopted, as `boardsmith dev` does once they have loaded. */
   const adopt = (step: number) =>
     host.adoptReloadedRules(async (snapshot): Promise<RulesReload> => {

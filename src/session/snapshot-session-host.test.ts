@@ -334,11 +334,11 @@ describe('SnapshotSessionHost', () => {
           return { ...baseResult };
         },
         record: () => {}, push: () => {},
-        botSeats: [{ seat: 2 }],
       };
 
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
       // `start()` pumps the bot itself, so the spy has to be in place first —
       // the rejection this test is about happens on that very first pump.
       await host.start();
@@ -386,11 +386,11 @@ describe('SnapshotSessionHost', () => {
             return { ...baseResult };
           },
           record: () => {}, push: () => {},
-          botSeats: [{ seat: 2 }],
           debug: true,
         };
 
         const host = new SnapshotSessionHost(adapters);
+        host.setBotSeats([{ seat: 2 }]);
         await host.start();
         botCallCount = 0; // start() pumps once on its own — measure only the restore.
 
@@ -434,10 +434,10 @@ describe('SnapshotSessionHost', () => {
           return { ...baseResult };
         },
         push: () => {}, record: ({ players: views }, meta) => broadcastLog.push([views, meta]),
-        botSeats: [{ seat: 2 }],
       };
 
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
       await host.start();
 
       broadcastLog.length = 0;
@@ -498,10 +498,10 @@ describe('SnapshotSessionHost', () => {
           return { ...baseResult };
         },
         record: () => {}, push: () => {},
-        botSeats: [{ seat: 1 }],
       };
 
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 1 }]);
       await host.start();
 
       const pump1 = host.runBotTurns(); // stalls on the first botTurn
@@ -559,10 +559,10 @@ describe('SnapshotSessionHost', () => {
           return { ...baseResult };
         },
         record: () => {}, push: () => {},
-        botSeats: [{ seat: 2 }],
       };
 
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
       await host.start();
 
       const pump = host.runBotTurns(); // starts, blocks in the first botTurn
@@ -591,9 +591,9 @@ describe('SnapshotSessionHost', () => {
         }
         return realExecOp(snap, pend, op);
       };
-      adapters.botSeats = [{ seat: 2 }];
 
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
       await host.start();
       broadcastLog.length = 0;
 
@@ -629,12 +629,12 @@ describe('SnapshotSessionHost', () => {
           return { ...base };
         },
         record: () => {}, push: () => {},
-        botSeats: [{ seat: 2 }],
       };
 
       const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
       await host.start();
 
       // Must terminate (not hang) and stop exactly at the cap.
@@ -755,9 +755,9 @@ describe('SnapshotSessionHost', () => {
           return { ...base };
         },
         record: () => {}, push: () => {},
-        botSeats: [{ seat: 2 }],
       };
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
       await host.start();
       const startCalls = calls.length;
 
@@ -889,9 +889,9 @@ describe('SnapshotSessionHost', () => {
 
     it('injects state.hasBotPlayers === true into every broadcast view when botSeats is set', async () => {
       const { adapters, broadcastLog } = makeAdapters(simpleGameDef, gameOptions, {
-        botSeats: [{ seat: 2 }],
       });
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
       await host.start();
       broadcastLog.length = 0;
 
@@ -907,10 +907,9 @@ describe('SnapshotSessionHost', () => {
       }
     });
 
-    // ── Test (2): identity short-circuit when no botSeats and no transient state
+    // ── Test (2): no hasBotPlayers when no seat is a bot
 
-    it('returns views unchanged (no hasBotPlayers) when botSeats is absent and no transient state', async () => {
-      // No botSeats in adapters
+    it('says nothing of bots (no hasBotPlayers) when no seat is a bot', async () => {
       const { adapters, broadcastLog } = makeAdapters(simpleGameDef, gameOptions);
       const host = new SnapshotSessionHost(adapters);
       await host.start();
@@ -1007,9 +1006,9 @@ describe('SnapshotSessionHost', () => {
 
     it('hint op stores hintAnnotation and re-broadcasts with state.hint on the seat', async () => {
       const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
-        botSeats: [{ seat: 2 }],
       });
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
       await host.start();
       broadcastLog.length = 0;
 
@@ -1030,9 +1029,9 @@ describe('SnapshotSessionHost', () => {
 
     it('heatmapToggle visible=true broadcasts heatmap.visible===true with entries', async () => {
       const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
-        botSeats: [{ seat: 2 }],
       });
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
       await host.start();
       broadcastLog.length = 0;
 
@@ -1050,9 +1049,9 @@ describe('SnapshotSessionHost', () => {
 
     it('heatmapToggle visible=false broadcasts heatmap.visible===false with empty entries', async () => {
       const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
-        botSeats: [{ seat: 2 }],
       });
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
       await host.start();
       broadcastLog.length = 0;
 
@@ -1069,9 +1068,9 @@ describe('SnapshotSessionHost', () => {
 
     it('clears seat hint from transient state after a successful action by that seat', async () => {
       const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
-        botSeats: [{ seat: 2 }],
       });
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
       await host.start();
 
       // Request a hint for seat 1
@@ -1092,7 +1091,6 @@ describe('SnapshotSessionHost', () => {
     // live position rather than freezing where it was first enabled.
     it('recomputes a visible heatmap after the owner acts (stays fresh, not frozen)', async () => {
       const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
-        botSeats: [{ seat: 2 }],
       });
       // Count the heatmap recompute calls routed through executeOp.
       const realExec = adapters.executeOp;
@@ -1102,6 +1100,7 @@ describe('SnapshotSessionHost', () => {
         return realExec(snap, pend, op);
       };
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
       await host.start();
 
       // Toggle the heatmap on for seat 1 (compute #1).
@@ -1123,9 +1122,9 @@ describe('SnapshotSessionHost', () => {
 
     it('clears all transient state (hint + heatmap) on undo', async () => {
       const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
-        botSeats: [{ seat: 2 }],
       });
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
       await host.start();
 
       // First perform an action so undo has something to undo
@@ -1150,9 +1149,9 @@ describe('SnapshotSessionHost', () => {
 
     it('demoControl pause/speed are reflected in broadcast demoControls, and stop cleans up with no leaked timer', async () => {
       const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
-        botSeats: [{ seat: 2 }],
       });
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
       await host.start();
 
       // Start with a very long delay so the loop parks at the pace-gate after
@@ -1202,9 +1201,9 @@ describe('SnapshotSessionHost', () => {
 
     it('per-seat hint and heatmap coexist — storing heatmap does not overwrite hint', async () => {
       const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
-        botSeats: [{ seat: 2 }],
       });
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
       await host.start();
       broadcastLog.length = 0;
 
@@ -1222,9 +1221,9 @@ describe('SnapshotSessionHost', () => {
 
     it('rejects hint with an actionable error while demoRunning is true', async () => {
       const { adapters } = makeAdapters(botGameDef, botGameOptions, {
-        botSeats: [{ seat: 2 }],
       });
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
       await host.start();
 
       // Directly set demoRunning to simulate a running demo
@@ -1312,7 +1311,6 @@ describe('SnapshotSessionHost', () => {
           return executeOp(botGameDef, opts, snap, pend, op);
         },
         push: () => {}, record: ({ players: views }, meta) => broadcastLog.push([views, meta]),
-        botSeats: [{ seat: 1 }],
       };
       return { adapters, broadcastLog };
     }
@@ -1337,6 +1335,7 @@ describe('SnapshotSessionHost', () => {
 
       const { adapters, broadcastLog } = makeDemoAdapters(botGameOptions);
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 1 }]);
       await host.start();
       broadcastLog.length = 0;
 
@@ -1392,6 +1391,7 @@ describe('SnapshotSessionHost', () => {
       // maxSuggestions:2 → loop runs 2 full moves then botSuggest returns failure
       const { adapters, broadcastLog } = makeDemoAdapters(botGameOptions, { maxSuggestions: 2 });
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 1 }]);
       await host.start();
       broadcastLog.length = 0;
 
@@ -1427,6 +1427,7 @@ describe('SnapshotSessionHost', () => {
 
       const { adapters, broadcastLog } = makeDemoAdapters(botGameOptions);
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 1 }]);
       await host.start();
       broadcastLog.length = 0;
 
@@ -1471,6 +1472,7 @@ describe('SnapshotSessionHost', () => {
 
       const { adapters, broadcastLog } = makeDemoAdapters(botGameOptions);
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 1 }]);
       await host.start();
       broadcastLog.length = 0;
 
@@ -1508,6 +1510,7 @@ describe('SnapshotSessionHost', () => {
 
       const { adapters, broadcastLog } = makeDemoAdapters(botGameOptions, { maxSuggestions: 1 });
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 1 }]);
       await host.start();
       broadcastLog.length = 0;
 
@@ -1546,6 +1549,7 @@ describe('SnapshotSessionHost', () => {
       };
 
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 1 }]);
       await host.start();
       broadcastLog.length = 0;
 
@@ -1580,10 +1584,10 @@ describe('SnapshotSessionHost', () => {
 
     it('demoStart throws a lockout error when adapters.teachingDisabled is true', async () => {
       const { adapters } = makeAdapters(botGameDef, botGameOptions, {
-        botSeats: [{ seat: 2 }],
         teachingDisabled: true,
       });
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
       await host.start();
 
       await expect(host.handleOp(1, { type: 'demoStart' })).rejects.toThrow(
@@ -1595,10 +1599,10 @@ describe('SnapshotSessionHost', () => {
 
     it('demoStop succeeds (is not guarded) when teachingDisabled is true', async () => {
       const { adapters } = makeAdapters(botGameDef, botGameOptions, {
-        botSeats: [{ seat: 2 }],
         teachingDisabled: true,
       });
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
       await host.start();
 
       // demoStop should not throw even when teachingDisabled is true.
@@ -1628,8 +1632,7 @@ describe('SnapshotSessionHost', () => {
     // ── Test (4): state.teachingDisabled === true even with NO other transient state ─
     //
     // This is the critical criterion 4 case: a lockout-only session with no hint/heatmap/
-    // demo/botSeats must STILL reflect the flag. The hasTransient short-circuit must not
-    // skip injection for this case.
+    // demo/bot seats must STILL reflect the flag.
 
     it('reflects teachingDisabled into broadcast even when there is no other transient state', async () => {
       const { adapters, broadcastLog } = makeAdapters(simpleGameDef, gameOptions, {
@@ -1655,9 +1658,9 @@ describe('SnapshotSessionHost', () => {
     it('broadcasts state.teachingDisabled === false when teachingDisabled is absent', async () => {
       // teachingDisabled not set in adapters — must still appear as false in every view.
       const { adapters, broadcastLog } = makeAdapters(simpleGameDef, gameOptions, {
-        botSeats: [{ seat: 2 }], // ensure hasTransient is true so mergeTransientState runs
       });
       const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
       await host.start();
       broadcastLog.length = 0;
 

@@ -16,7 +16,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { createHeadlessSession } from '../headless-session.js';
-import { SnapshotSessionHost } from '../snapshot-session-host.js';
+import { SnapshotSessionHost, type SnapshotSessionAdapters } from '../snapshot-session-host.js';
 import { executeOp, type OpResult } from '../stateless-ops.js';
 import type { GameStateSnapshot } from '../../engine/index.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../../engine/flow/boundary-key.js';
@@ -260,20 +260,21 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
      * plus a started game it has NOT been given -- what a restore starts from.
      */
     async function freshHostAndStartedGame() {
-      const metas: Array<{ turnBoundary: { key: string; dueSeats: number[] } }> = [];
-      const host = new SnapshotSessionHost({
+      const metas: Array<{ cause: string; turnBoundary: { key: string; dueSeats: number[] } }> = [];
+      const adapters: SnapshotSessionAdapters = {
         playerCount: 2,
         executeOp: (snap, pend, op) => executeOp(simultaneousRoundsFixtureDefinition, twoSeats, snap, pend, op),
         push: () => {}, record: (_views, meta) => {
           metas.push(meta);
         },
-      });
+      };
+      const host = new SnapshotSessionHost(adapters);
       const started = await executeOp(simultaneousRoundsFixtureDefinition, twoSeats, null, null, { type: 'start' });
-      return { host, metas, started, snapshot: started.snapshot as GameStateSnapshot };
+      return { adapters, host, metas, started, snapshot: started.snapshot as GameStateSnapshot };
     }
 
     it('the platform\'s old restore shape -- assigning `snapshot` alone -- is not spellable', async () => {
-      const { host, started, snapshot } = await freshHostAndStartedGame();
+      const { adapters, host, started, snapshot } = await freshHostAndStartedGame();
 
       // This is verbatim what the platform's `reconstructHostIfNeeded` does
       // after a Durable Object eviction: hand the host a snapshot and NOTHING
@@ -283,33 +284,34 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
       // strict-mode, so it also throws at runtime rather than silently no-opping
       // in a build that skipped typechecking.
       expect(() => {
-        // @ts-expect-error -- `snapshot` has no setter; use restoreFrom({ snapshot, pendingStates }).
+        // @ts-expect-error -- `snapshot` has no setter; use SnapshotSessionHost.restore().
         host.snapshot = started.snapshot;
       }).toThrow(/only a getter/);
       expect(host.snapshot).toBeNull();
 
       // The sanctioned path checks the snapshot carries its flow state.
-      host.restoreFrom({ snapshot, pendingStates: {} });
-      expect(host.snapshot).toBe(started.snapshot);
-      expect(host.flowState).toEqual(started.flowState);
+      const restored = SnapshotSessionHost.restore(adapters, { snapshot, pendingStates: {} });
+      expect(restored.snapshot).toBe(started.snapshot);
+      expect(restored.flowState).toEqual(started.flowState);
     });
 
-    it('restoreFrom REFUSES a snapshot without a flow state, naming what is missing', async () => {
-      const { host, snapshot } = await freshHostAndStartedGame();
+    it('restore REFUSES a snapshot without a flow state, naming what is missing', async () => {
+      const { adapters, metas, snapshot } = await freshHostAndStartedGame();
       const { flowState: _dropped, ...withoutFlow } = snapshot;
 
-      expect(() => host.restoreFrom({ snapshot: withoutFlow as GameStateSnapshot, pendingStates: {} })).toThrow(
-        /flow state/i,
-      );
+      expect(() =>
+        SnapshotSessionHost.restore(adapters, { snapshot: withoutFlow as GameStateSnapshot, pendingStates: {} }),
+      ).toThrow(/flow state/i);
+      expect(metas).toEqual([]);
     });
 
     it('a restored host then broadcasts the REAL boundary, not an empty one', async () => {
-      const { host, metas, started, snapshot } = await freshHostAndStartedGame();
+      const { adapters, metas, started, snapshot } = await freshHostAndStartedGame();
 
-      host.restoreFrom({ snapshot, pendingStates: {}, playerViews: started.playerViews });
-      host.broadcastCurrent();
+      SnapshotSessionHost.restore(adapters, { snapshot, pendingStates: {}, playerViews: started.playerViews });
 
       expect(metas.length).toBe(1);
+      expect(metas[0].cause).toBe('restore');
       expect(metas[0].turnBoundary.dueSeats).toEqual([1, 2]);
       expect(metas[0].turnBoundary.key).toBe(flowBoundaryKey(started.flowState as never));
     });

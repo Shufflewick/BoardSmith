@@ -252,22 +252,30 @@ const host = new SnapshotSessionHost({
 ```
 
 Stamp per-push fields such as a send time in `push`, after the host has
-compared. When a seat passes between a person and the bot, call
-`host.rosterChanged()` at once: the views say whether a bot plays here, and
-without the call that change would reach every page with the next move. A host
-that wakes from hibernation passes the views it last recorded to
-`restoreFrom({ ..., playerViews, spectatorView })`, so the first change after
-waking pushes only the seats it changes. The host takes those views as what
-the pages show, so call `host.broadcastCurrent()` right after restoring: a
-seat that passed between a person and the bot while the host slept is pushed
-to every page, and when nothing differs the gate makes it a no-op.
+compared. `meta.cause` says why the host published: `change` when the game
+changed, `republish` when it restated an unchanged game (a hint, a demo frame,
+`broadcastCurrent()`), `restore` and `roster` as below. Keep per-change
+bookkeeping, such as reporting a turn, to `change`.
 
-What `restoreFrom` takes besides the views is the `SnapshotHostState` the
-`persist` adapter was handed (and `host.durableState()` returns): `snapshot`
-and `pendingStates`. Store it whole. The snapshot carries the flow state and
-the winners the game declared, so read the game's state through
-`flowStateOf(state)`, `isCompleteOf(state)` and `winnersOf(state)` (all from
-`boardsmith/session-host`) instead of storing copies beside it.
+The host owns the bot roster. Tell it which seats a bot plays with
+`host.setBotSeats(seats)` before `start()`, and again whenever that changes (a
+seat passes between a person and the bot, or anything a derived roster depends
+on changes). It publishes with cause `roster` only when whether a bot plays here
+changed, so calling it with the same answer costs nothing. It does not wake the
+bot pump; send `convertSeatToBot` for that.
+
+A host that wakes from hibernation is built with
+`SnapshotSessionHost.restore(adapters, { ...state, playerViews, spectatorView, botSeats })`.
+`state` is the `SnapshotHostState` the `persist` adapter was handed (and
+`host.durableState()` returns): `snapshot` and `pendingStates`. Store it whole.
+The views are the ones the host last recorded, which the pages still show.
+`restore` publishes once, with cause `restore`, pushing only what differs from
+them (a seat that passed between a person and the bot while the host slept),
+and nothing when nothing does.
+
+The snapshot carries the flow state and the winners the game declared, so read
+them through `flowStateOf(state)`, `isCompleteOf(state)` and `winnersOf(state)`
+(all from `boardsmith/session-host`) instead of storing copies beside it.
 
 ### Pushing state from your own host
 
