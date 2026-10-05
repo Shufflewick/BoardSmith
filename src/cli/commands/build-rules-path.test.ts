@@ -12,7 +12,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
-import { buildCommand } from './build.js';
+import { buildCommand, buildProject } from './build.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /** A real game class, so the build can load the rules it compiled. */
@@ -85,5 +85,22 @@ describe('boardsmith build honours paths.rules (#531)', () => {
     expect(withDecoyError).toBeUndefined();
     expect(builtManifest(withDecoy).playerCount).toEqual({ min: 3, max: 5 });
     expect(builtRules(withDecoy)).not.toMatch(/maxPlayers:\s*9/);
+  });
+});
+
+describe('boardsmith build stops by throwing, so a command running it stops too (#532)', () => {
+  it('rejects, naming the file and key, when package.json states no version', async () => {
+    const dir = customRulesProject(false);
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'fixture' }));
+    await expect(buildProject(dir, {})).rejects.toThrow(/package\.json[\s\S]*version/);
+  });
+
+  it('rejects naming the rules entry it looked for when paths.rules points nowhere', async () => {
+    const dir = customRulesProject(false);
+    writeFileSync(
+      join(dir, 'boardsmith.json'),
+      JSON.stringify({ name: 'fixture', backend: 'table', paths: { rules: 'missing/rules' } }),
+    );
+    await expect(buildProject(dir, {})).rejects.toThrow(join(dir, 'missing', 'rules', 'index.ts'));
   });
 });

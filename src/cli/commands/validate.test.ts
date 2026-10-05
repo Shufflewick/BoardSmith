@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   ALLOWED_TOP_LEVEL_KEYS,
   CONVEX_SINK_KEYS,
@@ -23,6 +23,7 @@ import {
   validateRequiredFiles,
   successGuidance,
   typeScriptFailureDetails,
+  validateProject,
 } from './validate.js';
 import { ENGINE_REVISION } from '../../contract/index.js';
 import {
@@ -1099,5 +1100,22 @@ describe('typeScriptFailureDetails names the engine change a type error runs int
   it('gives the errors alone for a game never built, or built against this revision', () => {
     expect(typeScriptFailureDetails(game(undefined), DIAGNOSTICS)).toEqual(DIAGNOSTICS);
     expect(typeScriptFailureDetails(game(ENGINE_REVISION), DIAGNOSTICS)).toEqual(DIAGNOSTICS);
+  });
+});
+
+describe('validateProject stops by throwing, so a command running it stops too (#532)', () => {
+  it('rejects with the failure line after printing each check, instead of ending the process', async () => {
+    const dir = tempTree('bs-validate-throws-');
+    writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table', playerCount: { min: 2, max: 4 } }));
+    const printed: string[] = [];
+    const log = vi.spyOn(console, 'log').mockImplementation((line?: unknown) => void printed.push(String(line)));
+    try {
+      // A type check already run, as verify hands one over, so this fixture needs no compiler.
+      const typeCheck = { result: { name: 'TypeScript', passed: true, message: '' }, programFiles: [] };
+      await expect(validateProject(dir, { typeCheck })).rejects.toThrow('Validation failed. Please fix the issues above.');
+    } finally {
+      log.mockRestore();
+    }
+    expect(printed.join('\n')).toContain('playerCount');
   });
 });

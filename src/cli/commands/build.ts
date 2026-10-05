@@ -368,8 +368,16 @@ export function buildOutputDir(cwd: string, outDir: string | undefined): string 
   return resolveUserPath(cwd, outDir ?? DEFAULT_OUT_DIR);
 }
 
+/** `boardsmith build`, in the current directory. */
 export async function buildCommand(options: BuildOptions): Promise<void> {
-  const cwd = process.cwd();
+  await buildProject(process.cwd(), options);
+}
+
+/**
+ * Builds the project in `cwd`. Throws, with a message saying what to fix, when it cannot, so a
+ * caller (`publish`, `verify`) stops there and the CLI exits non-zero.
+ */
+export async function buildProject(cwd: string, options: BuildOptions): Promise<void> {
   const outDir = buildOutputDir(cwd, options.outDir);
 
   // `build` means "produce this workspace's distributable artifact". In a game
@@ -385,12 +393,7 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
   // from boardsmith.json (ShufflewickPub #240), so both files are read here —
   // before anything is compiled.
   const { config, pkg } = requireGameProjectManifests(cwd);
-  try {
-    resolveGameVersion(config, pkg);
-  } catch (error) {
-    console.error(chalk.red(`Error: ${(error as Error).message}`));
-    process.exit(1);
-  }
+  resolveGameVersion(config, pkg);
   // The rules are read from where the manifest says they are (#531): the
   // bundle and the manifest derived from it must come from the same rules
   // `dev`, `simulate` and `validate` test.

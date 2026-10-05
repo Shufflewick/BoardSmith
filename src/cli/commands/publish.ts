@@ -181,7 +181,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     // and let the existing initiatePublish catch it later
   }
 
-  // -- Validate (exits process on failure) --
+  // -- Validate (throws, stopping publish, on failure) --
   console.log(chalk.cyan('Running pre-publish validation...\n'));
   await validateCommand();
 
