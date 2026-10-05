@@ -453,15 +453,17 @@ describe('stateless ops', () => {
 });
 
 /**
- * Time limits always win (#494, ruled). When a timed step's window runs out the
- * host submits one `expireTimedSeat` op per seat still due, naming the game's
- * idle action. A seat holding a follow-up is closed like any other: with the
- * idle action when the step offers it (which drops the follow-up), else by
- * dropping the follow-up and ending the seat's part. That close runs no
- * action, so the history records it as a seat expiry: a replay re-applies it,
- * and undo never reaches behind it.
+ * Host deadlines always win (#494, ruled). When a host's deadline for a seat
+ * passes, a step's own time limit or any deadline the host keeps itself, the
+ * host submits one `expireSeat` op per seat still due, naming the game's idle
+ * action. A seat holding a follow-up is closed like any other: with the idle
+ * action when the step offers it (which drops the follow-up), else by dropping
+ * the follow-up and ending the seat's part. That close runs no action, so the
+ * history records it as a seat expiry: a replay re-applies it, and undo never
+ * reaches behind it. A step needs no time limit for this: the deadline is the
+ * host's, so the op closes a seat on any step.
  */
-describe('a timed step whose window ran out', () => {
+describe('a host deadline that passed for a seat', () => {
   const SEAT_1_EXPIRED = { kind: 'seatExpiry', player: 1, undoable: false };
 
   async function scoutedTimed(shape: Shape, decline: boolean, timed = true) {
@@ -472,7 +474,7 @@ describe('a timed step whose window ran out', () => {
     });
     expect((scouted.flowState as FlowState).followUps).toHaveLength(1);
     const expire = (snapshot: OpResult['snapshot'], seat = 1, boundaryKey = boundaryKeyOf(snapshot)) => executeOp(def, gameOptions, snapshot, null, {
-      type: 'expireTimedSeat', player: seat, idleAction: 'rest', args: {}, boundaryKey,
+      type: 'expireSeat', player: seat, idleAction: 'rest', args: {}, boundaryKey,
     });
     const action = (snapshot: OpResult['snapshot'], seat: number, actionName: string) => executeOp(def, gameOptions, snapshot, null, {
       type: 'action', actionName, player: seat, args: {}, boundaryKey: boundaryKeyOf(snapshot),
@@ -483,21 +485,23 @@ describe('a timed step whose window ran out', () => {
   }
 
   for (const shape of ['turn', 'simultaneous'] as const) {
-    it(`${shape}: the idle action the step offers closes the held seat and drops its follow-up`, async () => {
-      const { scouted, expire, history } = await scoutedTimed(shape, true);
+    for (const timed of [true, false]) {
+    const step = timed ? 'timed step' : 'step with no time limit';
+    it(`${shape}, ${step}: the idle action the step offers closes the held seat and drops its follow-up`, async () => {
+      const { scouted, expire, history } = await scoutedTimed(shape, true, timed);
 
       const closed = await expire(scouted.snapshot);
 
       expect(closed.success).toBe(true);
       expect((closed.flowState as FlowState).followUps).toBeUndefined();
-      const runner = GameRunner.fromSnapshot(closed.snapshot as GameStateSnapshot, raidClass(shape, true, true));
+      const runner = GameRunner.fromSnapshot(closed.snapshot as GameStateSnapshot, raidClass(shape, true, timed));
       expect(runner.game.rested).toEqual([1]);
       // The idle action ran as the seat's own action, so that is what the history holds.
       expect(historyLabels(history(closed))).toEqual(['scout:1', 'rest:1']);
     });
 
-    it(`${shape}: with no idle action offered, the held seat's follow-up is dropped and its part ends`, async () => {
-      const { scouted, expire, action, history } = await scoutedTimed(shape, false);
+    it(`${shape}, ${step}: with no idle action offered, the held seat's follow-up is dropped and its part ends`, async () => {
+      const { scouted, expire, action, history } = await scoutedTimed(shape, false, timed);
 
       // A player cannot do this: the idle action itself is refused.
       expect((await action(scouted.snapshot, 1, 'rest')).success).toBe(false);
@@ -512,28 +516,56 @@ describe('a timed step whose window ran out', () => {
       } else {
         expect(state.awaitingPlayers?.find((p) => p.playerIndex === 1)?.completed).toBe(true);
       }
-      const runner = GameRunner.fromSnapshot(closed.snapshot as GameStateSnapshot, raidClass(shape, false, true));
+      const runner = GameRunner.fromSnapshot(closed.snapshot as GameStateSnapshot, raidClass(shape, false, timed));
       expect(runner.game.rested).toEqual([]);
       expect(runner.game.looted).toEqual([]);
       expect(history(closed)).toEqual([expect.objectContaining({ name: 'scout', player: 1 }), SEAT_1_EXPIRED]);
     });
 
-    it(`${shape}: an untimed step has no timed seat to expire`, async () => {
-      const { scouted, expire } = await scoutedTimed(shape, false, false);
+    it(`${shape}, ${step}: a history holding an expiry replays to the same position`, async () => {
+      const { scouted, expire, action, history } = await scoutedTimed(shape, false, timed);
+      const closed = await expire(scouted.snapshot);
+      const after = await action(closed.snapshot, 2, 'scout');
+      expect(after.success).toBe(true);
+      expect(historyLabels(history(after))).toEqual(['scout:1', 'seatExpiry:1', 'scout:2']);
 
-      const refused = await expire(scouted.snapshot);
+      const replayed = GameRunner.replay(
+        { GameClass: raidClass(shape, false, timed), gameType: 'raid', gameOptions },
+        history(after),
+      );
+
+      expect(replayed.actionHistory).toEqual(history(after));
+      expect(replayed.game.scouted).toEqual([1, 2]);
+      expect(replayed.game.looted).toEqual([]);
+      // The same seats owed, held and done, and the same counts. `position` is
+      // left out: its `iterations` entries record how a position was reached,
+      // not where it is (see boundary-key.ts), and its variables hold element ids.
+      const live = GameRunner.fromSnapshot(after.snapshot as GameStateSnapshot, raidClass(shape, false, timed));
+      const { position: _replayedPosition, ...replayedState } = replayed.getFlowState()!;
+      const { position: _livePosition, ...liveState } = live.getFlowState()!;
+      expect(replayedState).toEqual(liveState);
+      expect(replayed.getFlowState()!.position.path).toEqual(live.getFlowState()!.position.path);
+    });
+
+    it(`${shape}, ${step}: a seat holding no follow-up and not offered the idle action is refused`, async () => {
+      const { scouted, expire, history } = await scoutedTimed(shape, false, timed);
+
+      // Seat 2 holds nothing, and the step offers no 'rest': there is no way to close it.
+      const refused = await expire(scouted.snapshot, 2);
 
       expect(refused.success).toBe(false);
-      expect(refused.error).toContain('no time limit');
+      expect(refused.error).toMatch(shape === 'turn' ? /Not Player 2's turn/ : /rest is not available/);
       expect(refused.snapshot).toBeNull();
+      expect(historyLabels(history(scouted))).toEqual(['scout:1']);
     });
+    }
 
     it(`${shape}: a player's action op cannot close a held seat, whatever it carries`, async () => {
       const { def, scouted, expire } = await scoutedTimed(shape, false);
 
       const refused = await executeOp(def, gameOptions, scouted.snapshot, null, {
         type: 'action', actionName: 'rest', player: 1, args: {}, boundaryKey: boundaryKeyOf(scouted.snapshot),
-        // @ts-expect-error -- the action op has no timeout flag: closing a timed seat is its own host-only op.
+        // @ts-expect-error -- the action op has no timeout flag: closing a seat at a deadline is its own host-only op.
         onTimeout: true,
       });
 
@@ -562,31 +594,6 @@ describe('a timed step whose window ran out', () => {
 
       expect(stale.success).toBe(false);
       expect(stale.error).toBe(STALE_SUBMISSION_MESSAGE);
-    });
-
-    it(`${shape}: a history holding an expiry replays to the same position`, async () => {
-      const { scouted, expire, action, history } = await scoutedTimed(shape, false);
-      const closed = await expire(scouted.snapshot);
-      const after = await action(closed.snapshot, 2, 'scout');
-      expect(after.success).toBe(true);
-      expect(historyLabels(history(after))).toEqual(['scout:1', 'seatExpiry:1', 'scout:2']);
-
-      const replayed = GameRunner.replay(
-        { GameClass: raidClass(shape, false, true), gameType: 'raid', gameOptions },
-        history(after),
-      );
-
-      expect(replayed.actionHistory).toEqual(history(after));
-      expect(replayed.game.scouted).toEqual([1, 2]);
-      expect(replayed.game.looted).toEqual([]);
-      // The same seats owed, held and done, and the same counts. `position` is
-      // left out: its `iterations` entries record how a position was reached,
-      // not where it is (see boundary-key.ts), and its variables hold element ids.
-      const live = GameRunner.fromSnapshot(after.snapshot as GameStateSnapshot, raidClass(shape, false, true));
-      const { position: _replayedPosition, ...replayedState } = replayed.getFlowState()!;
-      const { position: _livePosition, ...liveState } = live.getFlowState()!;
-      expect(replayedState).toEqual(liveState);
-      expect(replayed.getFlowState()!.position.path).toEqual(live.getFlowState()!.position.path);
     });
 
     it(`${shape}: a replay refuses an expiry for a seat that holds no follow-up`, () => {
@@ -652,7 +659,7 @@ describe('a timed step whose window ran out', () => {
       type: 'action', actionName: 'scout', player: 1, args: {}, boundaryKey: boundaryKeyOf(started.snapshot),
     });
     const closed = await executeOp(def, gameOptions, scouted.snapshot, null, {
-      type: 'expireTimedSeat', player: 1, idleAction: 'rest', args: {}, boundaryKey: boundaryKeyOf(scouted.snapshot),
+      type: 'expireSeat', player: 1, idleAction: 'rest', args: {}, boundaryKey: boundaryKeyOf(scouted.snapshot),
     });
     expect(closed.success).toBe(true);
     // The same seat goes on with its turn in the next step, two entries in.

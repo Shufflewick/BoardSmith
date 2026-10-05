@@ -1,5 +1,5 @@
 {
-  "revision": 128,
+  "revision": 129,
   "bundleProtocol": 2,
   "surfaceHash": "6cf4146f749f7e86",
   "payloadHash": "40d5b63bde8d6007",
@@ -1096,6 +1096,15 @@
       "payloadHash": "40d5b63bde8d6007",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A multi-step action taken pick by pick is now gated by its condition (#493), decided in one place, GameRunner.refusalToPick(action, seat, pending), which the runner, PendingActionManager (GameSession) and the stateless selectionStep op all ask before a pick. The first pick is refused when the condition does not hold (\"'<action>' is not available to you right now: '<label>' does not hold.\"); a later pick, including the one that completes the action, is refused when the condition held right after the seat's own previous pick and does not hold now, so another seat's move took it away (\"'<action>' is no longer available to you: the game changed since your last choice, and '<label>' no longer holds.\"), with nothing run or recorded and the pending action left open. An action whose own picks (a repeat's onEach) end its condition still completes, and a held follow-up's condition is never checked. PendingActionState and SerializedPendingActionState gain conditionHeld?: boolean, which the platform's persisted pendingStates must carry through unchanged; a pending state persisted without it is treated as starting the action, so its condition must hold at its next pick."
+    },
+    {
+      "revision": 129,
+      "date": "2026-10-05",
+      "bundleProtocol": 2,
+      "surfaceHash": "6cf4146f749f7e86",
+      "payloadHash": "40d5b63bde8d6007",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "The host-only seat close is renamed from expireTimedSeat to expireSeat, with the same inputs { type: 'expireSeat', player, idleAction, args, boundaryKey }, and it now works on any step, not only one that declares a time limit (#494 ruling: any host deadline closes a held seat the way a step timeout does): it runs the idle action as the seat's own action when the step offers it, otherwise drops the seat's held follow-up and ends its part (the turn passes, or the seat is marked done), recorded as the existing seatExpiry history entry so replay agrees. It is refused only when the seat can take neither, or as stale by its boundaryKey. The platform must use the name expireSeat, not expireTimedSeat (which its unmerged branch still uses), everywhere it builds or allowlists the op (the builders table, the executor's validation schema, OP_BUILDERS), still compose it only from its own timers and never from a client message, and may now submit it from any host deadline (such as a table's round deadline) on an untimed step, instead of failing the round when a seat holds a follow-up."
     }
   ]
 }

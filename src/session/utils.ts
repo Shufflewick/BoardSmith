@@ -488,7 +488,7 @@ export function assertUndoAllowed(args: {
   for (let i = turnStartActionIndex; i < actionHistory.length; i++) {
     const entry = actionHistory[i];
     if (entry.undoable !== false) continue;
-    // A timed seat the host closed is not the seat's own move to take back.
+    // A seat the host closed at a deadline is not the seat's own move to take back.
     if (isSeatExpiry(entry)) {
       throw new UndoRefusedError(
         `Cannot undo: seat ${entry.player}'s time ran out and the host closed its part of the step, which cannot be taken back.`,

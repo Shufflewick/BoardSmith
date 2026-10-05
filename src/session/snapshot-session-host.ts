@@ -987,7 +987,7 @@ export class SnapshotSessionHost {
    */
   private async applyMutatingOp(seat: number, op: Op): Promise<OpResult> {
     // An op that closes the seat (the seat's own action, or the host closing a
-    // timed seat) runs without the seat's in-progress selection: it does not
+    // seat at a deadline) runs without the seat's in-progress selection: it does not
     // continue those picks. They are dropped only once the close SUCCEEDS. A
     // refused close changed nothing, and it may be refused precisely because
     // the round it named is over (a stale submission), in which case the picks

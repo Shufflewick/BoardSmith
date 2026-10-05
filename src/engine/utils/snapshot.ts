@@ -49,7 +49,7 @@ export interface GameStateSnapshot {
   /** Flow engine state (if flow is active) */
   flowState?: FlowState;
 
-  /** Action history: every action taken and every timed seat the host closed, for undo and replay */
+  /** Action history: every action taken and every seat the host closed at a deadline, for undo and replay */
   actionHistory: HistoryEntry[];
 
   /** Random seed for deterministic replay */

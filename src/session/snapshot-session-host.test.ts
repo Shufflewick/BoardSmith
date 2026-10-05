@@ -673,7 +673,7 @@ describe('SnapshotSessionHost', () => {
 
     it('a refused close, stale or player-sent, leaves the seat\'s picks in the new round intact, live and saved', async () => {
       const closes: Array<(oldKey: string) => Op> = [
-        (oldKey) => ({ type: 'expireTimedSeat', player: 1, idleAction: 'pick', args: {}, boundaryKey: oldKey }),
+        (oldKey) => ({ type: 'expireSeat', player: 1, idleAction: 'pick', args: {}, boundaryKey: oldKey }),
         (oldKey) => ({ type: 'action', actionName: 'pick', player: 1, args: { color: 'green', size: 'L' }, boundaryKey: oldKey }),
         // Refused for its arguments rather than its key.
         () => ({ type: 'action', actionName: 'pick', player: 1, args: { color: 'purple', size: 'L' }, boundaryKey: '' }),
@@ -735,7 +735,7 @@ describe('SnapshotSessionHost', () => {
       expect(host.durableState().pendingStates['1']).toBeUndefined();
     });
 
-    it('a timed-seat close drops the seat\'s in-progress selection too, and drives the bot pump after it', async () => {
+    it('a deadline seat close drops the seat\'s in-progress selection too, and drives the bot pump after it', async () => {
       const calls: Array<{ type: string; pendingState: Record<string, unknown> | null }> = [];
       const base: OpResult = {
         success: true,
@@ -767,12 +767,12 @@ describe('SnapshotSessionHost', () => {
         boundaryKey: boundaryKeyOfHost(host),
       });
       const closed = await host.handleOp(1, {
-        type: 'expireTimedSeat', player: 1, idleAction: 'rest', args: {}, boundaryKey: boundaryKeyOfHost(host),
+        type: 'expireSeat', player: 1, idleAction: 'rest', args: {}, boundaryKey: boundaryKeyOfHost(host),
       });
       expect(closed.success).toBe(true);
 
       const closeCall = calls[startCalls + 1];
-      expect(closeCall).toEqual({ type: 'expireTimedSeat', pendingState: null });
+      expect(closeCall).toEqual({ type: 'expireSeat', pendingState: null });
       // The close ended the seat's part, so the bot seat was asked to move next.
       expect(calls.slice(startCalls + 2).map((c) => c.type)).toContain('botTurn');
       // And the seat's half-made picks are gone for good.

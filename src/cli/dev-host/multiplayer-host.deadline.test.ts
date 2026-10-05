@@ -175,8 +175,8 @@ function makeHost(
   const errors = (clientId: string) =>
     sent.filter((e) => e.clientId === clientId && e.msg.type === 'error').map((e) => (e.msg as { message: string }).message);
   /** Whether `op` is a seat's move or the host closing that seat's timed step. */
-  const closesSeat = (op: Op): op is Extract<Op, { type: 'action' | 'expireTimedSeat' }> =>
-    op.type === 'action' || op.type === 'expireTimedSeat';
+  const closesSeat = (op: Op): op is Extract<Op, { type: 'action' | 'expireSeat' }> =>
+    op.type === 'action' || op.type === 'expireSeat';
   const actionsFor = (seat: number) =>
     executed.filter((e) => closesSeat(e.op) && e.op.player === seat);
   const commit = (clientId: string, requestId: string) =>
@@ -204,7 +204,7 @@ function makeHost(
   };
   const actions = () => executed.filter((e) => closesSeat(e.op));
   /** Every timed-seat close the host submitted, in order. */
-  const expiries = () => executed.filter((e) => e.op.type === 'expireTimedSeat');
+  const expiries = () => executed.filter((e) => e.op.type === 'expireSeat');
   /** The one error the host reported to seat 1's client, once it arrives. */
   const reported = async () => {
     await vi.waitFor(() => expect(errors('A')).toHaveLength(1));
@@ -261,7 +261,7 @@ describe('MultiplayerHost step deadlines (#302)', () => {
 
     await vi.waitFor(() => expect(h.actionsFor(2)).toHaveLength(1));
     const [idle] = h.actionsFor(2);
-    expect(idle.op).toEqual({ type: 'expireTimedSeat', idleAction: 'commit', args: {}, player: 2, boundaryKey: armedKey });
+    expect(idle.op).toEqual({ type: 'expireSeat', idleAction: 'commit', args: {}, player: 2, boundaryKey: armedKey });
     expect(idle.result.success).toBe(true);
     // Seat 1 had already committed, so nothing more was submitted for it.
     expect(h.actionsFor(1)).toHaveLength(1);
@@ -288,7 +288,7 @@ describe('MultiplayerHost step deadlines (#302)', () => {
 
     await vi.waitFor(() => expect(h.expiries()).toHaveLength(2));
     for (const idle of h.expiries()) {
-      expect(idle.op).toMatchObject({ type: 'expireTimedSeat', idleAction: 'commit' });
+      expect(idle.op).toMatchObject({ type: 'expireSeat', idleAction: 'commit' });
       expect(idle.result.success).toBe(true);
     }
     await vi.waitFor(() => expect(h.lastFrame('A').view).toMatchObject({ flowState: { complete: true } }));
@@ -310,7 +310,7 @@ describe('MultiplayerHost step deadlines (#302)', () => {
     const [humanCommit, timerCommit] = h.actionsFor(1);
     expect(humanCommit.op.type).toBe('action');
     expect(humanCommit.result.success).toBe(true);
-    expect(timerCommit.op).toMatchObject({ type: 'expireTimedSeat', boundaryKey: armedKey });
+    expect(timerCommit.op).toMatchObject({ type: 'expireSeat', boundaryKey: armedKey });
     expect(timerCommit.result).toMatchObject({ success: false, error: STALE_SUBMISSION_MESSAGE });
     // Seat 1 still owes a move in the new round: nothing was spent on its behalf.
     expect(clients.key('A')).not.toBe(armedKey);

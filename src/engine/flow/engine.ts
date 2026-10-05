@@ -495,9 +495,10 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   /**
-   * The open step's time ran out while `seat` held a follow-up, and the step
-   * does not offer that seat the game's idle action. Time limits always win
-   * (#494): the follow-up is dropped and the seat's part ends, as if it had
+   * A host deadline passed (the step's time limit, or one the host keeps on
+   * any step) while `seat` held a follow-up, and the step does not offer that
+   * seat the game's idle action. Host deadlines always win (#494): the
+   * follow-up is dropped and the seat's part ends, as if it had
    * finished. In an action step that ends the step; in a simultaneous step the
    * seat is marked done and the step ends when its `allDone` says so.
    *
@@ -507,9 +508,9 @@ export class FlowEngine<G extends Game = Game> {
    * `turnScope: 'continue'` step carries on from. It is not a move: the chain
    * it ended never completed, so move limits do not see it.
    *
-   * Only for a host closing a timed step: `GameRunner.closeExpiredHeldSeat`
-   * checks that the step declared a time limit and the seat holds a follow-up
-   * before calling this.
+   * Only for a host closing a seat at a deadline: `GameRunner.closeExpiredHeldSeat`
+   * checks that the seat holds a follow-up the step's idle action cannot
+   * replace before calling this.
    */
   expireHeldSeat(seat: number): FlowState {
     const frame = this.stack[this.stack.length - 1];

@@ -2,14 +2,14 @@
  * Test-side readers of a game's action history.
  *
  * The history holds two kinds of entry since #494: an action a seat took, and a
- * timed seat the host closed (`SerializedSeatExpiry`). A test that lists what
+ * seat the host closed at a deadline (`SerializedSeatExpiry`). A test that lists what
  * happened wants one label per entry whichever kind it is, and a test that
  * inspects an action's args wants to say so and fail loudly if the entry is
  * not one, rather than cast past the difference.
  */
 import { isSeatExpiry, type HistoryEntry, type SerializedAction } from '../../engine/index.js';
 
-/** `name:seat` for an action, `seatExpiry:seat` for a closed timed seat, in order. */
+/** `name:seat` for an action, `seatExpiry:seat` for a seat the host closed at a deadline, in order. */
 export function historyLabels(history: readonly HistoryEntry[]): string[] {
   return history.map((entry) => (isSeatExpiry(entry) ? `seatExpiry:${entry.player}` : `${entry.name}:${entry.player}`));
 }

@@ -3244,9 +3244,9 @@ export class Game<
   }
 
   /**
-   * End a seat's part in the open timed step when its time ran out while it
-   * held a follow-up the step offers no idle action beside (#494: time limits
-   * always win). See `FlowEngine.expireHeldSeat`; hosts reach it through
+   * End a seat's part in the open step when a host deadline passed while it
+   * held a follow-up the step offers no idle action beside (#494: host
+   * deadlines always win). See `FlowEngine.expireHeldSeat`; hosts reach it through
    * `GameRunner.closeExpiredHeldSeat`.
    */
   expireHeldSeat(seat: number): FlowState {

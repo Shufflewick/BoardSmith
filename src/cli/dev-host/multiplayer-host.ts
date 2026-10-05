@@ -1735,7 +1735,7 @@ export class MultiplayerHost {
   ): Promise<OpResult> {
     try {
       return await window.session.host.handleOp(seat, {
-        type: 'expireTimedSeat',
+        type: 'expireSeat',
         player: seat,
         idleAction: idle.name,
         args: idle.args ?? {},

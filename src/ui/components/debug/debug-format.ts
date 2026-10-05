@@ -59,8 +59,8 @@ export function formatActionName(name: string): string {
 }
 
 /**
- * What the History tab shows for one entry: the action's name, or, for a timed
- * seat the host closed when its window ran out, that no action was taken.
+ * What the History tab shows for one entry: the action's name, or, for a seat
+ * the host closed when its deadline passed, that no action was taken.
  */
 export function formatHistoryEntry(entry: HistoryEntry): string {
   return 'name' in entry ? formatActionName(entry.name) : 'Time ran out (seat closed)';

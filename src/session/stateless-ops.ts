@@ -78,21 +78,22 @@ export type Op =
       args: Record<string, unknown>;
     } & BoundaryStamped)
   /**
-   * A host closing a timed step whose window ran out, for one seat still due
-   * (#494: time limits always win). Only a host composes it, from its own
-   * timer: no wire op maps to it, so nothing a client sends can become one.
-   * The seat is closed the way the step allows: the game's idle action,
-   * `idleAction` with `args`, runs as the seat's own action when the step
-   * offers it (which drops any follow-up the seat held); otherwise, when the
-   * seat holds a follow-up, the follow-up is dropped and the seat's part ends
-   * without an action (`GameRunner.closeExpiredHeldSeat`), recorded in the
-   * history as a seat expiry. Refused when the open step declares no time
-   * limit, or when the seat can take neither. Stamped with the boundary the
-   * host armed its timer under, so a round a human closed first refuses it as
-   * stale instead of landing it in the next round.
+   * A host closing one seat still due because a deadline the host keeps has
+   * passed: a step's own time limit, or any deadline of the host's own on any
+   * step, timed or not (#494: host deadlines always win). Only a host composes
+   * it, from its own timer: no wire op maps to it, so nothing a client sends
+   * can become one. The seat is closed the way the step allows: the game's
+   * idle action, `idleAction` with `args`, runs as the seat's own action when
+   * the step offers it (which drops any follow-up the seat held); otherwise,
+   * when the seat holds a follow-up, the follow-up is dropped and the seat's
+   * part ends without an action (`GameRunner.closeExpiredHeldSeat`), recorded
+   * in the history as a seat expiry. Refused when the seat can take neither.
+   * Stamped with the boundary the host armed its timer under, so a round a
+   * human closed first refuses it as stale instead of landing it in the next
+   * round.
    */
   | ({
-      type: 'expireTimedSeat';
+      type: 'expireSeat';
       player: number;
       idleAction: string;
       args: Record<string, unknown>;
@@ -193,17 +194,17 @@ export type SubmissionOpType = Extract<Op, BoundaryStamped>['type'];
 const SUBMISSION_OP_TYPE_MAP: Record<SubmissionOpType, true> = {
   action: true,
   selectionStep: true,
-  expireTimedSeat: true,
+  expireSeat: true,
 };
 
 /**
  * Whether `op` ends a seat's part of the open step, by its own action or by
- * the host closing its timed seat. A host treats both the same way after the
+ * the host closing it at a deadline. A host treats both the same way after the
  * op runs: the seat's half-made picks are dropped, its hint cleared, and the
  * bot seats asked whether the step is now theirs.
  */
-export function closesSeat(op: Op): op is Extract<Op, { type: 'action' | 'expireTimedSeat' }> {
-  return op.type === 'action' || op.type === 'expireTimedSeat';
+export function closesSeat(op: Op): op is Extract<Op, { type: 'action' | 'expireSeat' }> {
+  return op.type === 'action' || op.type === 'expireSeat';
 }
 export const SUBMISSION_OP_TYPES: ReadonlySet<Op['type']> = new Set(
   Object.keys(SUBMISSION_OP_TYPE_MAP) as SubmissionOpType[],
@@ -686,25 +687,18 @@ function handleAction(
 }
 
 /**
- * The host's timed-seat close: the idle action as the seat's own action when
- * the step offers it, else the held seat's expiry. The result carries the
+ * The host's deadline close of one seat: the idle action as the seat's own
+ * action when the step offers it, else the held seat's expiry. The result carries the
  * state envelope only: the host is the caller, not a seat, so there is no
  * follow-up to offer and no return value to hand back.
  */
-function handleExpireTimedSeat(
+function handleExpireSeat(
   def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
-  op: Extract<Op, { type: 'expireTimedSeat' }>,
+  op: Extract<Op, { type: 'expireSeat' }>,
 ): OpResult {
   const runner = runnerFromSnapshot(snapshot, def);
-  if (runner.getFlowState()?.timeLimitMs === undefined) {
-    return errorResult(
-      `The open step declares no time limit, so there is no timed seat to expire for seat ${op.player}.`,
-      'protocol',
-    );
-  }
-
   const expired = runner.closeExpiredHeldSeat(op.player, op.idleAction);
   if (!expired) {
     const actionResult = runner.performAction(op.idleAction, op.player, op.args);
@@ -1567,8 +1561,8 @@ export async function executeOp(
     switch (op.type) {
       case 'action':
         return handleAction(def, gameOptions, snap, op);
-      case 'expireTimedSeat':
-        return handleExpireTimedSeat(def, gameOptions, snap, op);
+      case 'expireSeat':
+        return handleExpireSeat(def, gameOptions, snap, op);
       case 'selectionStep':
         return handleSelectionStep(def, gameOptions, snap, pendingState, op);
       case 'resolveChoices':
