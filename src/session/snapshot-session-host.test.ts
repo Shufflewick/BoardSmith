@@ -451,7 +451,7 @@ describe('SnapshotSessionHost', () => {
       expect(broadcastLog).toHaveLength(1);
 
       // Snapshot updated to the moved state
-      expect((host.snapshot as { turn: number }).turn).toBe(1);
+      expect((host.snapshot as unknown as { turn: number }).turn).toBe(1);
     });
 
     it('serializes concurrent runBotTurns calls (opChain — no overlapping pump execution)', async () => {
@@ -575,7 +575,7 @@ describe('SnapshotSessionHost', () => {
       // Order proves serialization: the pump fully wrote before the human read,
       // and the human read the pump's result (v:1), not the stale base (v:0).
       expect(events).toEqual(['bot-read', 'bot-write', 'human-read:v=1']);
-      expect((host.snapshot as { v: number }).v).toBe(2);
+      expect((host.snapshot as unknown as { v: number }).v).toBe(2);
     });
 
     it('triggers runBotTurns automatically after a successful human action', async () => {

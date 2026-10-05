@@ -1,6 +1,6 @@
 import type { Op, OpResult } from './stateless-ops.js';
 import { READ_ONLY_OP_TYPES, closesSeat, debugOpRefusal } from './stateless-ops.js';
-import type { Annotation } from '../engine/index.js';
+import type { Annotation, FlowState, GameStateSnapshot } from '../engine/index.js';
 import { dueSeats, type SeatActivityState } from '../engine/flow/seat-activity.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
 import { stepTimeLimitMs, type StepTimeLimitState } from '../engine/flow/step-time-limit.js';
@@ -85,24 +85,48 @@ export interface TurnBoundary {
  * returns it, and {@link SnapshotSessionHost.restoreFrom} requires it: store
  * what you were handed and pass it back whole.
  *
+ * `snapshot` holds the game, including its flow state and the winners the game
+ * declared (#536). Read those with {@link flowStateOf}, {@link isCompleteOf} and
+ * {@link winnersOf} rather than storing them a second time: a copy kept beside
+ * the snapshot can be saved at a different moment and disagree with it.
+ *
  * `pendingStates` is each seat's half-finished multi-step selection, keyed by
  * seat number (a string key, because this value crosses JSON). It is part of
  * the durable state rather than UI state: a repeating selection's picks exist
  * only here, and its `onEach` has already changed `snapshot`, so a snapshot
  * restored without them holds a move that no selection owns (#320).
- *
- * `isComplete` and `winners` are the game's outcome as the last op reported
- * it. The snapshot is opaque to the host, so it cannot work them out again: a
- * host restored without them would publish a finished game as running (#490).
  */
 export interface SnapshotHostState {
-  snapshot: unknown;
-  flowState: unknown;
+  /** The game, or `null` before it has started. */
+  snapshot: GameStateSnapshot | null;
   pendingStates: Record<string, Record<string, unknown>>;
-  /** Whether the game has ended. */
-  isComplete: boolean;
-  /** The winning seats the game has declared; empty for a draw. */
-  winners: number[];
+}
+
+/** The whole-game flow state of `state`'s snapshot, or `null` before the game has started. */
+export function flowStateOf(state: Pick<SnapshotHostState, 'snapshot'>): FlowState | null {
+  return state.snapshot?.flowState ?? null;
+}
+
+/** Whether `state`'s game has ended. */
+export function isCompleteOf(state: Pick<SnapshotHostState, 'snapshot'>): boolean {
+  return flowStateOf(state)?.complete ?? false;
+}
+
+/**
+ * The seats `state`'s game names as winners: empty for a draw or a game still
+ * running, unless the game overrides `getWinners()` to name a leader mid-game.
+ */
+export function winnersOf(state: Pick<SnapshotHostState, 'snapshot'>): number[] {
+  return state.snapshot?.winners ?? [];
+}
+
+/**
+ * The snapshot an op answered with. `executeOp` builds it with the runner's
+ * `getSnapshot()`; the op result carries it as `unknown` because it crosses
+ * the executor boundary as JSON.
+ */
+function snapshotOf(res: OpResult): GameStateSnapshot | null {
+  return res.snapshot as GameStateSnapshot | null;
 }
 
 /**
@@ -273,26 +297,31 @@ function withoutHostState(state: Record<string, unknown>): Record<string, unknow
 }
 
 export class SnapshotSessionHost {
-  // `snapshot` and `flowState` are ONE value in two halves, and they are exposed
-  // read-only so a caller cannot restore one without the other. A host holding a
-  // snapshot but no flow state would compute `dueSeats: []` and broadcast it as
-  // though that were the answer — BUG-006 reborn on the live post-eviction path.
-  // The only way in from outside is `restoreFrom()`, which takes the pair.
-  private _snapshot: unknown = null;
-  private _flowState: unknown = null;
+  // The game, exposed read-only: the only way in from outside is `restoreFrom()`,
+  // which checks the snapshot carries its flow state and winners. The flow
+  // state, the outcome and the turn boundary are all read out of it (#536).
+  private _snapshot: GameStateSnapshot | null = null;
 
   /** The authoritative game snapshot. Restore it via {@link restoreFrom}. */
-  get snapshot(): unknown {
+  get snapshot(): GameStateSnapshot | null {
     return this._snapshot;
   }
 
-  /** The whole-game flow state matching {@link snapshot}. Restore it via {@link restoreFrom}. */
-  get flowState(): unknown {
-    return this._flowState;
+  /** The whole-game flow state inside {@link snapshot}. */
+  get flowState(): FlowState | null {
+    return flowStateOf(this);
   }
 
-  isComplete = false;
-  winners: number[] = [];
+  /** Whether the game has ended. */
+  get isComplete(): boolean {
+    return isCompleteOf(this);
+  }
+
+  /** The winning seats the game has declared; empty for a draw. */
+  get winners(): number[] {
+    return winnersOf(this);
+  }
+
   private pendingStates = new Map<number, Record<string, unknown>>();
   private botPumpRunning = false;
   /**
@@ -575,17 +604,6 @@ export class SnapshotSessionHost {
    */
   broadcastCurrent(): void {
     if (this.disposed) return; // F-12: a dead session never broadcasts.
-    // Second enforcement point behind restoreFrom(): even a bug INSIDE this
-    // class must not reach a broadcast that names no seats because the flow
-    // state went missing. Silence here is indistinguishable, to every seat,
-    // from "the game says nobody is up".
-    if (this._snapshot !== null && this._flowState === null) {
-      throw new Error(
-        'SnapshotSessionHost holds a snapshot but no flow state, so it cannot state a turn ' +
-          'boundary — broadcasting one now would tell every seat that nobody owes a move. ' +
-          'Restore the whole persisted state with restoreFrom({ snapshot, flowState, pendingStates }).',
-      );
-    }
     this.publish();
   }
 
@@ -630,10 +648,7 @@ export class SnapshotSessionHost {
   durableState(): SnapshotHostState {
     return {
       snapshot: this._snapshot,
-      flowState: this._flowState,
       pendingStates: Object.fromEntries(this.pendingStates),
-      isComplete: this.isComplete,
-      winners: [...this.winners],
     };
   }
 
@@ -641,15 +656,14 @@ export class SnapshotSessionHost {
    * Restore a host from persisted state after its process died (a Durable Object
    * eviction, a worker restart). Takes the {@link SnapshotHostState} WHOLE:
    *
-   * - `snapshot` and `flowState` are one value. A host given only a snapshot
-   *   would answer "who owes a move?" with the empty set and broadcast that as
-   *   the truth.
+   * - `snapshot` must carry its flow state and its winners. Without the flow
+   *   state the host would answer "who owes a move?" with the empty set and
+   *   broadcast that as the truth; without the winners a finished game would be
+   *   published with no outcome (#490).
    * - `pendingStates` is each seat's in-progress selection, captured with that
    *   snapshot. Without it a player who paused mid-action loses their picks,
    *   and a repeating selection's `onEach` moves stay on the board with no
    *   action left to finish (#320).
-   * - `isComplete` and `winners` are the game's outcome. Without them a host
-   *   restored from a finished game publishes it as running (#490).
    *
    * @param state.playerViews Optional last-known player views, so a
    *   `broadcastCurrent()` before the next op still carries board state.
@@ -665,20 +679,10 @@ export class SnapshotSessionHost {
    * the gate makes it a no-op when nothing differs.
    */
   restoreFrom(state: SnapshotHostState & { playerViews?: unknown[]; spectatorView?: unknown }): void {
-    if (state.flowState === null || state.flowState === undefined) {
-      throw new Error(
-        'restoreFrom requires the flowState that was captured with this snapshot: without it the ' +
-          'host cannot say which seats owe a move, and would broadcast an empty due-seat set as ' +
-          'the answer. Persist flowState alongside snapshot and pass both.',
-      );
-    }
+    const snapshot = this.restorableSnapshot(state.snapshot);
     const pendingStates = this.restorablePendingStates(state.pendingStates);
-    const winners = this.restorableWinners(state.isComplete, state.winners);
-    this._snapshot = state.snapshot;
-    this._flowState = state.flowState;
+    this._snapshot = snapshot;
     this.pendingStates = pendingStates;
-    this.isComplete = state.isComplete;
-    this.winners = winners;
     if (state.playerViews) this.lastPlayerViews = state.playerViews;
     if (state.spectatorView !== undefined) this.lastSpectatorView = state.spectatorView;
     // The gate holds the views exactly as given: they are what the pages show.
@@ -690,25 +694,33 @@ export class SnapshotSessionHost {
   }
 
   /**
-   * `restoreFrom`'s check that the outcome is given, and names seats of this table.
-   * Winners with `isComplete` false are taken as they are: a game that
+   * `restoreFrom`'s check that the snapshot is a started game carrying its flow
+   * state and its winners, and that the winners are seats of this table.
+   * Winners in a game that has not ended are taken as they are: a game that
    * overrides `getWinners()` to name the leader while play goes on reports
    * exactly that, and `restoreFrom` accepts anything `durableState()` can
    * return.
    */
-  private restorableWinners(isComplete: unknown, winners: unknown): number[] {
-    if (typeof isComplete !== 'boolean') {
+  private restorableSnapshot(snapshot: unknown): GameStateSnapshot {
+    if (snapshot === null || typeof snapshot !== 'object') {
       throw new Error(
-        'restoreFrom requires isComplete, the game outcome persisted with this snapshot: without ' +
-          'it a finished game would be published as running. Store the whole value the persist ' +
-          'adapter hands you and pass it back.',
+        'restoreFrom requires the snapshot of a started game. Store the whole value the persist ' +
+          'adapter hands you and pass it back; a game that never started has nothing to restore.',
+      );
+    }
+    const { flowState, winners } = snapshot as Partial<GameStateSnapshot>;
+    if (flowState === null || typeof flowState !== 'object') {
+      throw new Error(
+        'restoreFrom was given a snapshot without its flow state: without it the host cannot say ' +
+          'which seats owe a move, and would broadcast an empty due-seat set as the answer. The ' +
+          'snapshot was not written by this engine; restore what the persist adapter handed you.',
       );
     }
     if (!Array.isArray(winners)) {
       throw new Error(
-        'restoreFrom requires winners, the winning seats persisted with this snapshot (an empty ' +
-          'array when no winner is declared). Store the whole value the persist adapter ' +
-          'hands you and pass it back.',
+        'restoreFrom was given a snapshot without its winners (an empty array when no winner is ' +
+          'declared): without them a finished game would be published with no outcome. The ' +
+          'snapshot was not written by this engine; restore what the persist adapter handed you.',
       );
     }
     for (const seat of winners) {
@@ -719,7 +731,7 @@ export class SnapshotSessionHost {
         );
       }
     }
-    return [...winners] as number[];
+    return snapshot as GameStateSnapshot;
   }
 
   /** `restoreFrom`'s check that every pending selection names a seat of this table. */
@@ -750,7 +762,7 @@ export class SnapshotSessionHost {
   /**
    * The engine answering its own question, from the flow state it already holds.
    * ONE expression, used at both broadcast construction sites: `apply()` assigns
-   * `this._flowState` BEFORE it broadcasts, so a re-broadcast necessarily
+   * `this._snapshot` BEFORE it broadcasts, so a re-broadcast necessarily
    * republishes the identical boundary rather than minting a new one.
    *
    * Routed through `dueSeats` / `flowBoundaryKey` / `stepTimeLimitMs` — never a
@@ -759,22 +771,20 @@ export class SnapshotSessionHost {
   private turnBoundary(): TurnBoundary {
     // A finished game has no seats that owe a move. `dueSeats` already returns
     // [] for a completed flow (it is not awaiting input); this is belt-and-braces
-    // for a host whose `isComplete` was set from an op result.
+    // for a flow state that is complete while still awaiting input.
+    const flowState = this.flowState;
     const timeLimitMs = this.isComplete
       ? undefined
-      : stepTimeLimitMs(this._flowState as StepTimeLimitState | null);
+      : stepTimeLimitMs(flowState as StepTimeLimitState | null);
     return {
-      key: flowBoundaryKey(this._flowState as BoundaryKeyState | null),
-      dueSeats: this.isComplete ? [] : dueSeats(this._flowState as SeatActivityState | null),
+      key: flowBoundaryKey(flowState as BoundaryKeyState | null),
+      dueSeats: this.isComplete ? [] : dueSeats(flowState as SeatActivityState | null),
       ...(timeLimitMs === undefined ? {} : { timeLimitMs }),
     };
   }
 
   private async apply(res: OpResult, seat?: number): Promise<void> {
-    this._snapshot = res.snapshot;
-    this._flowState = res.flowState;
-    this.isComplete = res.isComplete;
-    this.winners = res.winners;
+    this._snapshot = snapshotOf(res);
     // FLOW-01/03: every state-mutating op's stateEnvelope() carries a fresh
     // flowDebugInfo (shared serializeFlowDebugInfo — same shape as
     // GameSession.broadcast() and the debug:flow-state op). Carry it forward
@@ -1572,10 +1582,7 @@ export class SnapshotSessionHost {
       this.demoHistory.push(prev);
       throw new Error(`The demo could not step back a move: ${res.error ?? 'the restore failed'}`);
     }
-    this._snapshot = res.snapshot;
-    this._flowState = res.flowState;
-    this.isComplete = res.isComplete;
-    this.winners = res.winners;
+    this._snapshot = snapshotOf(res);
     this.lastPlayerViews = res.playerViews;
     if (res.flowDebugInfo) this.lastFlowDebugInfo = res.flowDebugInfo;
     this.narrationText = null;

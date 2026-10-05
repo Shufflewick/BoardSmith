@@ -263,11 +263,11 @@ seat that passed between a person and the bot while the host slept is pushed
 to every page, and when nothing differs the gate makes it a no-op.
 
 What `restoreFrom` takes besides the views is the `SnapshotHostState` the
-`persist` adapter was handed (and `host.durableState()` returns): `snapshot`,
-`flowState`, `pendingStates`, and the game's outcome, `isComplete` and
-`winners`. Store it whole. The outcome is required because the host cannot
-read it back out of the snapshot, and a host restored without it would publish
-a finished game as running.
+`persist` adapter was handed (and `host.durableState()` returns): `snapshot`
+and `pendingStates`. Store it whole. The snapshot carries the flow state and
+the winners the game declared, so read the game's state through
+`flowStateOf(state)`, `isCompleteOf(state)` and `winnersOf(state)` (all from
+`boardsmith/session-host`) instead of storing copies beside it.
 
 ### Pushing state from your own host
 

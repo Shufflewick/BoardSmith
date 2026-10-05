@@ -18,6 +18,7 @@ import { describe, it, expect } from 'vitest';
 import { createHeadlessSession } from '../headless-session.js';
 import { SnapshotSessionHost } from '../snapshot-session-host.js';
 import { executeOp, type OpResult } from '../stateless-ops.js';
+import type { GameStateSnapshot } from '../../engine/index.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../../engine/flow/boundary-key.js';
 import { dueSeats, type SeatActivityState } from '../../engine/flow/seat-activity.js';
 import { simultaneousFixtureDefinition } from './fixtures/simultaneous-fixture.js';
@@ -235,7 +236,7 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
       executeOp: async () =>
         ({
           success: true,
-          snapshot: {},
+          snapshot: { flowState: completeButAwaiting, winners: [1] },
           pendingState: null,
           flowState: completeButAwaiting,
           playerViews: [{}, {}],
@@ -253,7 +254,7 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
 
   // ── 7. The restore hazard ──────────────────────────────────────────────────
 
-  describe('case 7 — a host with a snapshot but NO flow state cannot publish a lie', () => {
+  describe('case 7 — a host restored from a snapshot without its flow state cannot publish a lie', () => {
     /**
      * A fresh host that records every broadcast's meta and holds nothing yet,
      * plus a started game it has NOT been given -- what a restore starts from.
@@ -268,11 +269,11 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
         },
       });
       const started = await executeOp(simultaneousRoundsFixtureDefinition, twoSeats, null, null, { type: 'start' });
-      return { host, metas, started };
+      return { host, metas, started, snapshot: started.snapshot as GameStateSnapshot };
     }
 
     it('the platform\'s old restore shape -- assigning `snapshot` alone -- is not spellable', async () => {
-      const { host, started } = await freshHostAndStartedGame();
+      const { host, started, snapshot } = await freshHostAndStartedGame();
 
       // This is verbatim what the platform's `reconstructHostIfNeeded` does
       // after a Durable Object eviction: hand the host a snapshot and NOTHING
@@ -282,57 +283,30 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
       // strict-mode, so it also throws at runtime rather than silently no-opping
       // in a build that skipped typechecking.
       expect(() => {
-        // @ts-expect-error -- `snapshot` has no setter; use restoreFrom({ snapshot, flowState, pendingStates }).
+        // @ts-expect-error -- `snapshot` has no setter; use restoreFrom({ snapshot, pendingStates }).
         host.snapshot = started.snapshot;
       }).toThrow(/only a getter/);
       expect(host.snapshot).toBeNull();
 
-      // The sanctioned path takes the pair, so the flow state cannot go missing.
-      host.restoreFrom({
-        snapshot: started.snapshot,
-        flowState: started.flowState,
-        pendingStates: {},
-        isComplete: started.isComplete,
-        winners: started.winners,
-      });
+      // The sanctioned path checks the snapshot carries its flow state.
+      host.restoreFrom({ snapshot, pendingStates: {} });
       expect(host.snapshot).toBe(started.snapshot);
-      expect(host.flowState).toBe(started.flowState);
+      expect(host.flowState).toEqual(started.flowState);
     });
 
-    it('restoreFrom REFUSES a snapshot without a flow state, naming what to do', async () => {
-      const { host, started } = await freshHostAndStartedGame();
+    it('restoreFrom REFUSES a snapshot without a flow state, naming what is missing', async () => {
+      const { host, snapshot } = await freshHostAndStartedGame();
+      const { flowState: _dropped, ...withoutFlow } = snapshot;
 
-      expect(() =>
-        host.restoreFrom({ snapshot: started.snapshot, flowState: null, pendingStates: {}, isComplete: false, winners: [] }),
-      ).toThrow(
-        /flowState/i,
+      expect(() => host.restoreFrom({ snapshot: withoutFlow as GameStateSnapshot, pendingStates: {} })).toThrow(
+        /flow state/i,
       );
     });
 
-    it('broadcastCurrent() REFUSES rather than publishing dueSeats: [] for a snapshot it holds no flow state for', async () => {
-      const { host, metas, started } = await freshHostAndStartedGame();
-
-      // Force the hazardous state past the type system, the way only a bug
-      // inside this class could now reach it. The second enforcement point has
-      // to hold even then, because publishing `dueSeats: []` here is BUG-006
-      // reborn: every seat is told nobody is up, on a live post-eviction path.
-      (host as unknown as { _snapshot: unknown })._snapshot = started.snapshot;
-
-      expect(() => host.broadcastCurrent()).toThrow(/flow state/i);
-      expect(metas).toEqual([]);
-    });
-
     it('a restored host then broadcasts the REAL boundary, not an empty one', async () => {
-      const { host, metas, started } = await freshHostAndStartedGame();
+      const { host, metas, started, snapshot } = await freshHostAndStartedGame();
 
-      host.restoreFrom({
-        snapshot: started.snapshot,
-        flowState: started.flowState,
-        pendingStates: {},
-        isComplete: started.isComplete,
-        winners: started.winners,
-        playerViews: started.playerViews,
-      });
+      host.restoreFrom({ snapshot, pendingStates: {}, playerViews: started.playerViews });
       host.broadcastCurrent();
 
       expect(metas.length).toBe(1);

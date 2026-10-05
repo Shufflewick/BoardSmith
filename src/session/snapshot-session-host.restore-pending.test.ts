@@ -57,8 +57,7 @@ describe('SnapshotSessionHost restores in-progress selections (#320)', () => {
     await pick(host, 'p1');
 
     const last = persisted.at(-1)!;
-    expect(Object.keys(last).sort()).toEqual(['flowState', 'isComplete', 'pendingStates', 'snapshot', 'winners']);
-    expect(last.flowState).toEqual(JSON.parse(JSON.stringify(host.flowState)));
+    expect(Object.keys(last).sort()).toEqual(['pendingStates', 'snapshot']);
     expect(Object.keys(last.pendingStates)).toEqual(['1']);
     expect(JSON.parse(JSON.stringify(host.durableState()))).toEqual(last);
   });
@@ -80,8 +79,7 @@ describe('SnapshotSessionHost restores in-progress selections (#320)', () => {
     const done = await pick(second.host, 'stop');
     expect(done.success).toBe(true);
     expect(done.actionComplete).toBe(true);
-    const game = second.host.snapshot as { state: { attributes: { collected: unknown } } };
-    expect(game.state.attributes.collected).toEqual(['p1', 'p2', 'stop']);
+    expect(second.host.snapshot!.state.attributes.collected).toEqual(['p1', 'p2', 'stop']);
   });
 
   it("a restored seat's pending action is broadcast to that seat only", async () => {
@@ -117,10 +115,10 @@ describe('SnapshotSessionHost restores in-progress selections (#320)', () => {
   it('restoreFrom requires the pending states, so a consumer cannot persist a subset', async () => {
     const first = makeHost();
     await first.host.start();
-    const { snapshot, flowState } = first.persisted.at(-1)!;
+    const { snapshot } = first.persisted.at(-1)!;
     const { host } = makeHost();
     // @ts-expect-error -- pendingStates is required: persist what persist handed you.
-    expect(() => host.restoreFrom({ snapshot, flowState })).toThrow(/pendingStates/);
+    expect(() => host.restoreFrom({ snapshot })).toThrow(/pendingStates/);
   });
 
   it('a refused action keeps the pending selection, in memory and in storage alike', async () => {

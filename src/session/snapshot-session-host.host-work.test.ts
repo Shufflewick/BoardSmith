@@ -96,9 +96,9 @@ function countingSession(options: { botSeats?: Array<{ seat: number }>; botsStop
   const adopt = (step: number) =>
     host.adoptReloadedRules(async (snapshot): Promise<RulesReload> => {
       rules.step = step;
-      return { kind: 'restored', result: result({ count: (snapshot as Count).count }) };
+      return { kind: 'restored', result: result({ count: (snapshot as unknown as Count).count }) };
     });
-  return { host, gate, views, adopt, count: () => (host.snapshot as Count).count };
+  return { host, gate, views, adopt, count: () => (host.snapshot as unknown as Count).count };
 }
 
 afterEach(() => vi.useRealTimers());

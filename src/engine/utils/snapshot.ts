@@ -50,6 +50,17 @@ export interface GameStateSnapshot {
   /** Flow engine state (if flow is active) */
   flowState?: FlowState;
 
+  /**
+   * The seats `game.getWinners()` named when the snapshot was taken: the
+   * winners of a finished game, `[]` for a draw or a game still running, or
+   * whatever a game that overrides `getWinners()` reports mid-game.
+   *
+   * A record for hosts that cannot run the game's code (a platform whose rules
+   * run in a separate executor), so the snapshot alone states the outcome.
+   * `fromSnapshot` does not read it back: the engine keeps asking the game.
+   */
+  winners: number[];
+
   /** Action history: every action taken and every seat the host closed at a deadline, for undo and replay */
   actionHistory: HistoryEntry[];
 
@@ -260,6 +271,9 @@ export interface ActionCheckpoint {
   /** Flow engine position at this checkpoint (if flow is active). */
   flowState?: FlowState;
 
+  /** The seats `game.getWinners()` named at this checkpoint (see `GameStateSnapshot.winners`). */
+  winners: number[];
+
   /** Element sequence counter (`game._ctx.sequence`) at this checkpoint. */
   sequence?: number;
 
@@ -450,6 +464,7 @@ export function createSnapshot(
     // would hold every seat's private log.
     messageLog: game.serializeMessageLog(opts?.forSeat),
     flowState: flowState ?? undefined,
+    winners: game.getWinners().map((p) => p.seat),
     actionHistory: [...actionHistory],
     seed,
     sequence: game._ctx.sequence,
@@ -482,6 +497,7 @@ export function createActionCheckpoint(game: Game): ActionCheckpoint {
   return {
     state: game.toJSON(),
     flowState: flowState ?? undefined,
+    winners: game.getWinners().map((p) => p.seat),
     sequence: game._ctx.sequence,
     randomState: game.getRandomState(),
     // A watermark into the snapshot-level log, not a copy of it — see
