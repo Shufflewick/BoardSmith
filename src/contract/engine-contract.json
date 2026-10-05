@@ -1,7 +1,7 @@
 {
-  "revision": 129,
+  "revision": 130,
   "bundleProtocol": 2,
-  "surfaceHash": "6cf4146f749f7e86",
+  "surfaceHash": "9b75d510b1ae81fe",
   "payloadHash": "40d5b63bde8d6007",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1105,6 +1105,15 @@
       "payloadHash": "40d5b63bde8d6007",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "The host-only seat close is renamed from expireTimedSeat to expireSeat, with the same inputs { type: 'expireSeat', player, idleAction, args, boundaryKey }, and it now works on any step, not only one that declares a time limit (#494 ruling: any host deadline closes a held seat the way a step timeout does): it runs the idle action as the seat's own action when the step offers it, otherwise drops the seat's held follow-up and ends its part (the turn passes, or the seat is marked done), recorded as the existing seatExpiry history entry so replay agrees. It is refused only when the seat can take neither, or as stale by its boundaryKey. The platform must use the name expireSeat, not expireTimedSeat (which its unmerged branch still uses), everywhere it builds or allowlists the op (the builders table, the executor's validation schema, OP_BUILDERS), still compose it only from its own timers and never from a client message, and may now submit it from any host deadline (such as a table's round deadline) on an untimed step, instead of failing the round when a seat holds a follow-up."
+    },
+    {
+      "revision": 130,
+      "date": "2026-10-05",
+      "bundleProtocol": 2,
+      "surfaceHash": "9b75d510b1ae81fe",
+      "payloadHash": "40d5b63bde8d6007",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "SnapshotSessionHost's durable state is stored once (#536) and its calls cannot be made in the wrong order (#537). GameStateSnapshot (and each ActionCheckpoint) now records winners, the seats game.getWinners() named; SnapshotHostState is just { snapshot, pendingStates }, and the flow state, isComplete and winners are read from the snapshot through the new flowStateOf, isCompleteOf and winnersOf exports of boardsmith/session-host, so the platform drops flowState, isComplete and winners from its persisted payload. restoreFrom and the follow-up broadcastCurrent are replaced by the static SnapshotSessionHost.restore(adapters, { snapshot, pendingStates, playerViews?, spectatorView?, botSeats? }), which refuses a snapshot without its flow state or winners and publishes once itself. The adapters' live botSeats getter and rosterChanged() are replaced by host.setBotSeats(seats), which the platform calls before start() and whenever its roster or anything a derived roster depends on changes (it may be called from record); it publishes only when hasBotPlayers flips. PublishMeta gains cause: 'change' | 'republish' | 'restore' | 'roster', so the platform's own republishing flag can go: do per-change bookkeeping only for 'change'. Games must be built on this revision or later, because the host reads winners from the snapshot the bundle returns. createPlayerView reports availableActions: [] for a seat that cannot act (#498)."
     }
   ]
 }
