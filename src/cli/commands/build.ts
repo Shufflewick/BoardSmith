@@ -9,7 +9,7 @@ import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 import { buildCli, CLI_ENTRY, CLI_OUTFILE } from '../lib/build-cli.js';
 import { resolveUserPath } from '../lib/user-path.js';
 import { commandBuildDir } from '../lib/project-paths.js';
-import { requireGameProjectManifests } from '../lib/game-project.js';
+import { requireGameProjectManifests, requireRulesIndex, resolveRulesDir } from '../lib/game-project.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import { readWorldDefinition, type WorldDefinition } from '../../world/index.js';
 import type { GameBackend, GameDefinition } from '../../session/index.js';
@@ -391,6 +391,11 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     console.error(chalk.red(`Error: ${(error as Error).message}`));
     process.exit(1);
   }
+  // The rules are read from where the manifest says they are (#531): the
+  // bundle and the manifest derived from it must come from the same rules
+  // `dev`, `simulate` and `validate` test.
+  const rulesPath = resolveRulesDir(cwd, config);
+  const rulesIndexPath = requireRulesIndex(rulesPath);
 
   console.log(chalk.cyan(`\nBuilding ${config.displayName || config.name}...\n`));
 
@@ -405,7 +410,7 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
         outDir: join(outDir, 'rules'),
         copyPublicDir: false,
         lib: {
-          entry: join(cwd, 'src/rules/index.ts'),
+          entry: rulesIndexPath,
           name: config.name,
           fileName: () => 'rules.js',
           formats: ['cjs'],
@@ -477,7 +482,6 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     // Load the COMPILED gameDefinition (Node-side) so playerCount can be
     // derived from code, never copied from the raw boardsmith.json spread
     // (CLIX-01 / T-135-07 — mirrors simulate.ts:158-167).
-    const rulesPath = join(cwd, 'src', 'rules');
     // Build's own build directory (WR-02, #391): `.boardsmith` is SHARED with
     // pack's tarballs, the scratch directory, chunk worktrees and the other
     // commands' build directories. Only ever create and delete what build owns.

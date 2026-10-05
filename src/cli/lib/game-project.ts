@@ -99,9 +99,10 @@ export function resolveRulesDir(cwd: string, config: { paths?: { rules?: string 
 /**
  * THE ONE PLACE A COMMAND CHECKS THE RULES ARE THERE.
  *
- * `dev` and `simulate` both load the compiled rules through
- * `loadGameDefinition`, and both first checked for the entry point by hand so
- * the failure names the missing file instead of a module-resolution stack.
+ * `build`, `dev`, `simulate` and `evolve-bot-weights` load the compiled rules
+ * through `loadGameDefinition`, and each first checks for the entry point by
+ * hand so the failure names the missing file instead of a module-resolution
+ * stack.
  *
  * @returns the path to the rules entry point, which `dev` also hands to its
  * Vite plugin as the module to re-export `gameDefinition` from.
@@ -110,7 +111,11 @@ export function requireRulesIndex(rulesPath: string): string {
   const rulesIndexPath = join(rulesPath, 'index.ts');
   if (!existsSync(rulesIndexPath)) {
     console.error(chalk.red(`Error: Rules not found at ${rulesIndexPath}`));
-    console.error(chalk.dim('Make sure your game has a src/rules/index.ts that exports gameDefinition'));
+    console.error(
+      chalk.dim(
+        `Make sure ${rulesIndexPath} exists and exports gameDefinition, or point "paths.rules" in boardsmith.json at the directory that holds your rules`,
+      ),
+    );
     process.exit(1);
   }
   return rulesIndexPath;
