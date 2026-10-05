@@ -85,17 +85,17 @@ export function buildDevtoolsPayload(params: DevtoolsParams): DevtoolsStateMessa
 
 /**
  * Build and post the devtools state update message to window.parent, if and
- * only if both `isDevBuild` and `platformMode` are true.
+ * only if both `isDevBuild` and `inHost` are true.
  *
  * The `postMessage` parameter defaults to `window.parent.postMessage` and is
  * injectable so tests can spy on calls without touching the real DOM.
  */
 export function maybePostDevtoolsUpdate(
-  guard: { isDevBuild: boolean; platformMode: boolean },
+  guard: { isDevBuild: boolean; inHost: boolean },
   params: DevtoolsParams,
   postMessage: (message: unknown, targetOrigin: string) => void = (msg, origin) =>
     window.parent.postMessage(msg, origin),
 ): void {
-  if (!guard.isDevBuild || !guard.platformMode) return;
+  if (!guard.isDevBuild || !guard.inHost) return;
   postMessage(buildDevtoolsPayload(params), '*');
 }

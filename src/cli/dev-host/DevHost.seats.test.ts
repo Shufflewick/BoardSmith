@@ -61,7 +61,6 @@ class FakeWebSocket {
 // ── Test config fixture ───────────────────────────────────────────────────────
 
 const TEST_CONFIG: DevHostConfig = {
-  gameType: 'test-game',
   displayName: 'Test Game',
   minPlayers: 2,
   maxPlayers: 4,

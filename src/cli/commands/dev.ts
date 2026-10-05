@@ -568,7 +568,6 @@ function buildDevConfig(args: {
     playerOptions?: Record<string, unknown>;
   };
   return {
-    gameType: gd.gameType,
     displayName: gd.displayName ?? gd.gameType,
     minPlayers: args.minPlayers,
     maxPlayers: args.maxPlayers,
