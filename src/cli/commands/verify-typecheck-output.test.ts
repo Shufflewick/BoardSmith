@@ -15,7 +15,8 @@ import { writeFiles } from '../lib/verify-result.test-helper.js';
 import { typeCheckProject, type TypeCheckRun } from './validate.js';
 import { VERIFY_CHECKS } from './verify.js';
 
-const project = join(tempTree('bs-verify-typecheck-output-'), 'game');
+const tree = tempTree('bs-verify-typecheck-output-');
+const project = join(tree, 'game');
 await fs.mkdir(project, { recursive: true });
 await writeFiles(project, {
   'tsconfig.json': JSON.stringify({
