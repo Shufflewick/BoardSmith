@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, readdirSync } from 'node:fs';
 import { join, relative, sep, resolve as resolvePath } from 'node:path';
 import chalk from 'chalk';
 import ora from 'ora';
@@ -76,9 +76,12 @@ interface ValidationRun {
  * `typecheck` check, and vue-tsc is the slowest step); without one, validation runs its own.
  */
 async function runValidation(
-  cwd: string,
+  projectDir: string,
   options: { typeCheck?: TypeCheckRun } = {},
 ): Promise<ValidationRun> {
+  // The real path, as a shell's working directory always is, so paths the tools report (vue-tsc's
+  // program, vitest's file list) compare equal to paths built from it.
+  const cwd = realpathSync(projectDir);
   const configPath = requireGameProject(cwd);
   const results: ValidationResult[] = [];
 
@@ -552,7 +555,8 @@ async function validateMetadata(cwd: string): Promise<ValidationResult> {
  * `vue-tsc` compiles SFCs for real: props are checked, and each file's `vue`
  * resolves from its own location, so a game can upgrade vue whenever it likes.
  */
-export async function typeCheckProject(cwd: string): Promise<TypeCheckRun> {
+export async function typeCheckProject(projectDir: string): Promise<TypeCheckRun> {
+  const cwd = realpathSync(projectDir);
   // `--listFiles` because the test-coverage check reads the program this compiled.
   let run: { code: number; stdout: string };
   try {

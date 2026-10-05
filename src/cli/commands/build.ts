@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync, cpSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync, mkdirSync, cpSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { build as viteBuild } from 'vite';
 import chalk from 'chalk';
@@ -377,7 +377,11 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
  * Builds the project in `cwd`. Throws, with a message saying what to fix, when it cannot, so a
  * caller (`publish`, `verify`) stops there and the CLI exits non-zero.
  */
-export async function buildProject(cwd: string, options: BuildOptions): Promise<void> {
+export async function buildProject(projectDir: string, options: BuildOptions): Promise<void> {
+  // The real path, as a shell's working directory always is: Vite names each HTML entry by its
+  // path relative to the root, and a root reached through a symlink (macOS's /var is
+  // /private/var) puts the entry outside it.
+  const cwd = realpathSync(projectDir);
   const outDir = buildOutputDir(cwd, options.outDir);
 
   // `build` means "produce this workspace's distributable artifact". In a game
