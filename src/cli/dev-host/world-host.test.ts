@@ -40,6 +40,20 @@ import { LocalWorldHost, devWorldPlayer, type WorldDevRequest } from './world-ho
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { worldElementIds } from '../../engine/element/element-ids.js';
 
+/** Run SQL against a world store behind its back, for a state the store
+ *  itself never writes. */
+function execOnStore(path: string, ...statements: string[]): void {
+  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
+    DatabaseSync: new (file: string) => { exec(sql: string): void; close(): void };
+  };
+  const db = new DatabaseSync(path);
+  try {
+    for (const sql of statements) db.exec(sql);
+  } finally {
+    db.close();
+  }
+}
+
 /**
  * THE SAME STORE, AS LAYOUT 7 LEFT IT (#482).
  *
@@ -49,16 +63,11 @@ import { worldElementIds } from '../../engine/element/element-ids.js';
  * only ever writes the layout it is on.
  */
 function rewindStoreToLayout7(path: string): void {
-  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
-    DatabaseSync: new (file: string) => { exec(sql: string): void; close(): void };
-  };
-  const db = new DatabaseSync(path);
-  try {
-    db.exec("DELETE FROM meta WHERE key = 'elementIdKey'");
-    db.exec("UPDATE meta SET value = '7' WHERE key = 'schemaVersion'");
-  } finally {
-    db.close();
-  }
+  execOnStore(
+    path,
+    "DELETE FROM meta WHERE key = 'elementIdKey'",
+    "UPDATE meta SET value = '7' WHERE key = 'schemaVersion'",
+  );
 }
 
 /**
@@ -67,15 +76,7 @@ function rewindStoreToLayout7(path: string): void {
  * through SQLite directly.
  */
 function lowerAllocationStamp(path: string, nextElementId: number): void {
-  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
-    DatabaseSync: new (file: string) => { exec(sql: string): void; close(): void };
-  };
-  const db = new DatabaseSync(path);
-  try {
-    db.exec(`UPDATE meta SET value = '${nextElementId}' WHERE key = 'nextElementId'`);
-  } finally {
-    db.close();
-  }
+  execOnStore(path, `UPDATE meta SET value = '${nextElementId}' WHERE key = 'nextElementId'`);
 }
 
 // ── A world bundle, in the shape a real one exports ─────────────────────────
@@ -289,6 +290,11 @@ let orderCounter = 0;
 function nextOrder(): { id: string; at: number } {
   orderCounter += 1;
   return { id: `order-${orderCounter}`, at: 0 };
+}
+
+/** The `stack` verb, sent once as a page sends it. */
+function stackOrder(requestId: string): WorldDevRequest {
+  return { type: 'action', order: nextOrder(), requestId, action: 'stack', args: {} };
 }
 
 interface Sent {
@@ -2067,13 +2073,7 @@ describe('#218: partitions created on first use', () => {
    */
   it('restarts on a world an ordinary command grew', async () => {
     const first = await attached({ dir, definition: bundle() });
-    await first.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'r1',
-      action: 'stack',
-      args: {},
-    });
+    await first.host.handleMessage('c1', stackOrder('r1'));
     expect(last(first.sent, 'c1', 'world_response')).toMatchObject({ ok: true });
     const grown = first.store.nextElementId()!;
     await first.host.close();
@@ -2082,13 +2082,7 @@ describe('#218: partitions created on first use', () => {
     // own store holds rather than below it.
     const second = await attached({ dir, definition: bundle() });
     expect(second.store.nextElementId()).toBe(grown);
-    await second.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'r2',
-      action: 'stack',
-      args: {},
-    });
+    await second.host.handleMessage('c1', stackOrder('r2'));
 
     expect(last(second.sent, 'c1', 'world_response')).toMatchObject({ ok: true });
     await second.host.close();
@@ -2100,13 +2094,7 @@ describe('#218: partitions created on first use', () => {
     // host defect. Repairing it quietly on the next run would hide that defect;
     // the world refuses instead, and says it is the host's to report.
     const first = await attached({ dir, definition: bundle() });
-    await first.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'r1',
-      action: 'stack',
-      args: {},
-    });
+    await first.host.handleMessage('c1', stackOrder('r1'));
     await first.host.close();
 
     // The grown bytes, under a stamp lowered behind the store's back.
@@ -2115,13 +2103,7 @@ describe('#218: partitions created on first use', () => {
     await damaged.host.start();
     await damaged.host.handleMessage('c1', { type: 'hello' });
     await damaged.host.handleMessage('c1', { type: 'attach', seat: 1 });
-    await damaged.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'r2',
-      action: 'stack',
-      args: {},
-    });
+    await damaged.host.handleMessage('c1', stackOrder('r2'));
 
     const response = last(damaged.sent, 'c1', 'world_response') as {
       ok: boolean;

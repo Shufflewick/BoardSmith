@@ -20,9 +20,10 @@ import {
   type WorldBudgets,
   type WorldDefinition,
 } from '../../world/index.js';
-import { ResidentWorld, type WorldHostClock } from '../../world/host/index.js';
-import { openWorldStore, worldStorePath } from './world-store.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { ResidentWorld } from '../../world/host/index.js';
+import { frozenClock } from './frozen-clock.test-helper.js';
+import { openWorldStore, worldStorePath } from './world-store.js';
 
 const MINUTE = 60_000;
 const OPENED = 1_700_000_000_000;
@@ -78,22 +79,6 @@ function bundle(): ConstructorParameters<typeof ResidentWorld>[0]['definition'] 
   } as ConstructorParameters<typeof ResidentWorld>[0]['definition'];
 }
 
-/** A clock moved by hand; nothing fires on its own. */
-function frozenClock(start: number): WorldHostClock & { set(to: number): void } {
-  let now = start;
-  return {
-    now: () => now,
-    arm: () => {},
-    yieldTurn: () =>
-      new Promise<void>((resolve) => {
-        setImmediate(resolve);
-      }),
-    set(to) {
-      now = to;
-    },
-  };
-}
-
 let dir: string;
 beforeEach(() => {
   dir = tempTree('bs-catch-up-refusal-');
@@ -120,74 +105,58 @@ async function behindBy(minutes: number, budgets: WorldBudgets = worldBudgets())
   await world.start();
   await world.clockCommand('arm', {});
   clock.set(OPENED + minutes * MINUTE + MINUTE / 2);
-  return {
-    world,
-    marks: async () => {
-      const stored = await store.read(LOG);
-      const attributes = (stored?.json as { attributes?: Record<string, string> }).attributes ?? {};
-      return attributes.marks ?? '';
-    },
-    queuedDue: () => store.pendingEvents().map((event) => `${(event.due - OPENED) / MINUTE}m`),
+  /** One wake of the clock, and what it left: the log, and where the queue
+   *  holds the tick. */
+  const wake = async () => {
+    await world.fireDue();
+    const stored = await store.read(LOG);
+    const attributes = (stored?.json as { attributes?: Record<string, string> }).attributes ?? {};
+    return {
+      marks: attributes.marks ?? '',
+      queued: store.pendingEvents().map((event) => `${(event.due - OPENED) / MINUTE}m`),
+    };
   };
+  return { world, wake };
 }
 
 describe('#538: a refused catch-up resumes at the occurrence that refused', () => {
   it('applies every occurrence once when a later one refuses once', async () => {
-    const { world, marks, queuedDue } = await behindBy(4);
+    const { world, wake } = await behindBy(4);
     refuseOn = (call) => call === 3;
 
-    await world.fireDue();
-    expect(await marks()).toBe('1m,2m');
-    expect(queuedDue()).toEqual(['3m']);
-
-    await world.fireDue();
-    expect(await marks()).toBe('1m,2m,3m,4m');
-    expect(queuedDue()).toEqual(['5m']);
+    expect(await wake()).toEqual({ marks: '1m,2m', queued: ['3m'] });
+    expect(await wake()).toEqual({ marks: '1m,2m,3m,4m', queued: ['5m'] });
     await world.close();
   });
 
   it('never re-applies the earlier occurrences while a later one keeps refusing', async () => {
-    const { world, marks, queuedDue } = await behindBy(4);
+    const { world, wake } = await behindBy(4);
     refuseOn = (_call, due) => due === '3m';
 
-    for (let wake = 0; wake < 3; wake++) {
-      await world.fireDue();
-      expect(await marks()).toBe('1m,2m');
-      expect(queuedDue()).toEqual(['3m']);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      expect(await wake()).toEqual({ marks: '1m,2m', queued: ['3m'] });
     }
     await world.close();
   });
 
   it('keeps the event where it was when the FIRST occurrence refuses', async () => {
-    const { world, marks, queuedDue } = await behindBy(4);
+    const { world, wake } = await behindBy(4);
     refuseOn = (call) => call === 1;
 
-    await world.fireDue();
-    expect(await marks()).toBe('');
-    expect(queuedDue()).toEqual(['1m']);
-
-    await world.fireDue();
-    expect(await marks()).toBe('1m,2m,3m,4m');
+    expect(await wake()).toEqual({ marks: '', queued: ['1m'] });
+    expect(await wake()).toEqual({ marks: '1m,2m,3m,4m', queued: ['5m'] });
     await world.close();
   });
 
   it('keeps the fold when the coalesced call refuses (ShufflewickPub #155)', async () => {
     // Two real iterations, then one call standing for 3m, 4m and 5m.
-    const { world, marks, queuedDue } = await behindBy(
-      5,
-      worldBudgets({ catchUpMaxRealIterations: 2 }),
-    );
+    const { world, wake } = await behindBy(5, worldBudgets({ catchUpMaxRealIterations: 2 }));
     refuseOn = (_call, due) => due === '5m' && calls === 3;
 
-    await world.fireDue();
-    expect(await marks()).toBe('1m,2m');
     // Resumed at the FIRST occurrence the coalesced call stood for, so the
     // occurrences it carried are still owed rather than erased.
-    expect(queuedDue()).toEqual(['3m']);
-
-    await world.fireDue();
-    expect(await marks()).toBe('1m,2m,3m,4m,5m');
-    expect(queuedDue()).toEqual(['6m']);
+    expect(await wake()).toEqual({ marks: '1m,2m', queued: ['3m'] });
+    expect(await wake()).toEqual({ marks: '1m,2m,3m,4m,5m', queued: ['6m'] });
     await world.close();
   });
 });

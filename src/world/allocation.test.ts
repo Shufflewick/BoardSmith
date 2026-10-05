@@ -114,6 +114,16 @@ async function hostHoldingStamp(nextElementId: number) {
   return runner;
 }
 
+/** A host holding a stamp below room `c`'s id, and what adopting `c` threw. */
+async function staleStampProved() {
+  const genesis = await storedWorld();
+  const stale = await hostHoldingStamp(1_000_001);
+  const refusal = await stale
+    .declare(READ_A, "p1", { c: genesis.partitions.c! }, arrival(1_000), { declaredActivity: [], declaredNotices: [] })
+    .catch((error: unknown) => error);
+  return { genesis, stale, refusal };
+}
+
 /** That host with room `a` hydrated: exactly what a command declaring only
  *  `a` leaves resident, and nothing else. */
 async function hostHoldingA(genesis: Awaited<ReturnType<typeof storedWorld>>) {
@@ -209,12 +219,7 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
     // stamp its own command minted under would therefore refuse every
     // room-touching verb while the park ladder sat still and the publisher's
     // health score paid for a platform defect.
-    const genesis = await storedWorld();
-    const stale = await hostHoldingStamp(1_000_001);
-
-    const refusal = await stale
-      .declare(READ_A, "p1", { c: genesis.partitions.c! }, arrival(1_000), { declaredActivity: [], declaredNotices: [] })
-      .catch((error: unknown) => error);
+    const { refusal } = await staleStampProved();
 
     expect(refusal).toBeInstanceOf(WorldRefusal);
     expect((refusal as WorldRefusal).code).toBe("allocation-stale");
@@ -231,11 +236,7 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
     // stale; from then on the runner refuses everything that touches the game
     // with that same refusal -- including the creation that would collide and
     // a command that names only a room the stale stamp does not contradict.
-    const genesis = await storedWorld();
-    const stale = await hostHoldingStamp(1_000_001);
-    const proof = await stale
-      .declare(READ_A, "p1", { c: genesis.partitions.c! }, arrival(1_000), { declaredActivity: [], declaredNotices: [] })
-      .catch((error: unknown) => error);
+    const { genesis, stale, refusal: proof } = await staleStampProved();
     expect((proof as WorldRefusal).code).toBe("allocation-stale");
 
     await expect(stale.createPartition("dynamic")).rejects.toBe(proof);
