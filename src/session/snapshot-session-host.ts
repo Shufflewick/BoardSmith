@@ -135,7 +135,7 @@ const SNAPSHOT_SOURCE = {
     missing: 'executeOp answered a successful op with no snapshot, so there is no game to publish. ' +
       'Return the snapshot executeOp produced.',
     given: 'executeOp answered with a snapshot',
-    remedy: 'The game was built on an engine older than this host (before engine contract r130), or ' +
+    remedy: 'The game was built on an engine older than this host (before engine contract r131), or ' +
       'the executeOp adapter changed the snapshot; rebuild the game on this engine.',
     foreign: 'The game named a winner that is not a seat at this table.',
   },

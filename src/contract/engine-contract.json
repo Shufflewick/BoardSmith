@@ -1,7 +1,7 @@
 {
-  "revision": 130,
+  "revision": 131,
   "bundleProtocol": 2,
-  "surfaceHash": "73065b2fecac1fbc",
+  "surfaceHash": "44d3dc2d962030d8",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1110,10 +1110,19 @@
       "revision": 130,
       "date": "2026-10-05",
       "bundleProtocol": 2,
-      "surfaceHash": "73065b2fecac1fbc",
+      "surfaceHash": "1e84ac6f1cc2b806",
+      "payloadHash": "40d5b63bde8d6007",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "boardsmith/world exports the two steps every world host runs: runDueOccurrences, the occurrence loop for a due event, which answers resumeDue at the occurrence that refused (so a refused catch-up never re-runs what already ran, #538) and nextDue on success; and dispatchStep, the dispatch order (declaration walk, ONE schedule allowance read, apply, plan). ResidentWorld uses both; the platform should replace its own copies with them and read the allowance once (ShufflewickPub #569). The barrel is now an explicit list: 21 in-package helpers are no longer public (bindWorldFacilities, worldFacilitiesOf, assertCandidateBudget, readOnlyProjection, unkeyedScheduleRefusal, keyedScheduleRefusal, scheduleBatchRefusal, worldQueueRefusal, createInlinedPartitionStore, createWorldRunner, worldVacateByClockAction, worldNoticesPerSeat, WORLD_ORDERINGS, NOTICE_SCOPE, stampNotice, boxFull, MAX_ORDER_ID_LENGTH, assertWorldMigration, declaredSources, assertCreatedRoots, assertAnsweredAllocations); none has a platform caller (#539). A stale id allocation stamp is no longer repaired: once allocation-stale is raised the runner refuses every game-touching call with it, so the world stops and the host defect stays visible; the platform should drop its own repair (#540, ShufflewickPub #575)."
+    },
+    {
+      "revision": 131,
+      "date": "2026-10-05",
+      "bundleProtocol": 2,
+      "surfaceHash": "44d3dc2d962030d8",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "SnapshotSessionHost's durable state is stored once (#536) and its calls cannot be made in the wrong order (#537). GameStateSnapshot (and each ActionCheckpoint) now records winners, the seats game.getWinners() named; SnapshotHostState is just { snapshot, pendingStates }, and the flow state, isComplete and winners are read from the snapshot through the new flowStateOf, isCompleteOf and winnersOf exports of boardsmith/session-host, so the platform drops flowState, isComplete and winners from its persisted payload. restoreFrom and the follow-up broadcastCurrent are replaced by the static SnapshotSessionHost.restore(adapters, { snapshot, pendingStates, botSeats, playerViews?, spectatorView? }) (botSeats required, [] when no bot plays), which refuses a snapshot without its flow state or winners and publishes once itself. The host applies the same check to every op result, so a game built on an engine before r130 is refused loudly instead of a won game being published as a draw. The adapters' live botSeats getter and rosterChanged() are replaced by host.setBotSeats(seats), which the platform calls before start() and whenever its roster or anything a derived roster depends on changes (it may be called from record); it publishes only when hasBotPlayers flips. PublishMeta gains cause: 'change' | 'republish' | 'restore' | 'roster', so the platform's own republishing flag can go: do per-change bookkeeping only for 'change'. Games must be built on this revision or later, because the host reads winners from the snapshot the bundle returns. createPlayerView reports availableActions: [] for a seat that cannot act (#498)."
+      "summary": "SnapshotSessionHost's durable state is stored once (#536) and its calls cannot be made in the wrong order (#537). GameStateSnapshot (and each ActionCheckpoint) now records winners, the seats game.getWinners() named; SnapshotHostState is just { snapshot, pendingStates }, and the flow state, isComplete and winners are read from the snapshot through the new flowStateOf, isCompleteOf and winnersOf exports of boardsmith/session-host, so the platform drops flowState, isComplete and winners from its persisted payload. restoreFrom and the follow-up broadcastCurrent are replaced by the static SnapshotSessionHost.restore(adapters, { snapshot, pendingStates, botSeats, playerViews?, spectatorView? }) (botSeats required, [] when no bot plays), which refuses a snapshot without its flow state or winners and publishes once itself. The host applies the same check to every op result, so a game built on an engine before r131 is refused loudly instead of a won game being published as a draw. The adapters' live botSeats getter and rosterChanged() are replaced by host.setBotSeats(seats), which the platform calls before start() and whenever its roster or anything a derived roster depends on changes (it may be called from record); it publishes only when hasBotPlayers flips. PublishMeta gains cause: 'change' | 'republish' | 'restore' | 'roster', so the platform's own republishing flag can go: do per-change bookkeeping only for 'change'. Games must be built on this revision (r131) or later, because the host reads winners from the snapshot the bundle returns. createPlayerView reports availableActions: [] for a seat that cannot act (#498)."
     }
   ]
 }
