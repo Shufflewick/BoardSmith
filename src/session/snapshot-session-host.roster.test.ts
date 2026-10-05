@@ -13,6 +13,8 @@ import { flowBoundaryKey, type BoundaryKeyState } from '../engine/index.js';
 import { executeOp } from './stateless-ops.js';
 import {
   SnapshotSessionHost,
+  type BotSeat,
+  type HostRestore,
   type PublishCause,
   type PublishMeta,
   type SnapshotSessionAdapters,
@@ -64,6 +66,23 @@ describe('the call order is not the platform\'s to remember (#537)', () => {
     expectTypeOf<SnapshotSessionHost>().not.toHaveProperty('restoreFrom');
     expectTypeOf<SnapshotSessionHost>().not.toHaveProperty('rosterChanged');
     expectTypeOf<PublishMeta['cause']>().toEqualTypeOf<'change' | 'republish' | 'restore' | 'roster'>();
+    // The roster is stated on restore, never assumed: an omitted one would be
+    // published as "no bots" and then corrected, pushing every page twice.
+    expectTypeOf<HostRestore['botSeats']>().toEqualTypeOf<BotSeat[]>();
+  });
+
+  it('refuses an op whose snapshot carries no winners, rather than publishing a won game as a draw', async () => {
+    const a = adapters();
+    const host = new SnapshotSessionHost({
+      ...a.value,
+      executeOp: async (snap, pend, op) => {
+        const res = await a.value.executeOp(snap, pend, op);
+        const { winners: _dropped, ...withoutWinners } = res.snapshot as Record<string, unknown>;
+        return { ...res, snapshot: withoutWinners };
+      },
+    });
+    await expect(host.start()).rejects.toThrow(/winners/);
+    expect(a.records).toEqual([]);
   });
 
   it('a host restored after a seat passed to the bot while it slept pushes every page the change, with cause restore', async () => {
@@ -89,6 +108,7 @@ describe('the call order is not the platform\'s to remember (#537)', () => {
       ...first.host.durableState(),
       playerViews: last.views,
       spectatorView: last.spectator,
+      botSeats: [],
     });
     expect(second.records.map((r) => r.cause)).toEqual(['restore']);
     expect(second.pushes).toEqual([]);

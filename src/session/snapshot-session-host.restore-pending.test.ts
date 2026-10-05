@@ -81,7 +81,7 @@ describe('SnapshotSessionHost restores in-progress selections (#320)', () => {
 
     // The process dies. A fresh host is built from storage alone.
     const stored = first.persisted.at(-1)!;
-    const second = restoredHost(stored);
+    const second = restoredHost({ ...stored, botSeats: [] });
 
     const next = await pick(second.host, 'p2');
     expect(next.success).toBe(true);
@@ -99,7 +99,7 @@ describe('SnapshotSessionHost restores in-progress selections (#320)', () => {
     await pick(first.host, 'p1');
     const lastViews = first.broadcasts.at(-1)!;
 
-    const second = restoredHost({ ...first.persisted.at(-1)!, playerViews: lastViews });
+    const second = restoredHost({ ...first.persisted.at(-1)!, playerViews: lastViews, botSeats: [] });
 
     const views = second.broadcasts.at(-1) as Array<{ state: { pendingAction?: RepeatingPending } }>;
     expect(views[0]!.state.pendingAction?.repeating?.accumulated).toEqual(['p1']);
@@ -114,7 +114,7 @@ describe('SnapshotSessionHost restores in-progress selections (#320)', () => {
     const pending = stored.pendingStates['1']!;
 
     for (const key of ['0', '3', 'seat1', '1.5']) {
-      expect(() => restoredHost({ ...stored, pendingStates: { [key]: pending } })).toThrow(
+      expect(() => restoredHost({ ...stored, pendingStates: { [key]: pending }, botSeats: [] })).toThrow(
         /pending selection.*seat/i,
       );
     }
@@ -125,7 +125,7 @@ describe('SnapshotSessionHost restores in-progress selections (#320)', () => {
     await first.host.start();
     const { snapshot } = first.persisted.at(-1)!;
     // @ts-expect-error -- pendingStates is required: persist what persist handed you.
-    expect(() => restoredHost({ snapshot })).toThrow(/pendingStates/);
+    expect(() => restoredHost({ snapshot, botSeats: [] })).toThrow(/pendingStates/);
   });
 
   it('a refused action keeps the pending selection, in memory and in storage alike', async () => {

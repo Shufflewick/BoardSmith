@@ -269,6 +269,8 @@ A host that wakes from hibernation is built with
 `state` is the `SnapshotHostState` the `persist` adapter was handed (and
 `host.durableState()` returns): `snapshot` and `pendingStates`. Store it whole.
 The views are the ones the host last recorded, which the pages still show.
+`botSeats` is required (`[]` when no bot plays): a restore that left it out
+would publish "no bots" and push every page again once the roster was set.
 `restore` publishes once, with cause `restore`, pushing only what differs from
 them (a seat that passed between a person and the bot while the host slept),
 and nothing when nothing does.

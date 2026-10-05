@@ -290,7 +290,7 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
       expect(host.snapshot).toBeNull();
 
       // The sanctioned path checks the snapshot carries its flow state.
-      const restored = SnapshotSessionHost.restore(adapters, { snapshot, pendingStates: {} });
+      const restored = SnapshotSessionHost.restore(adapters, { snapshot, pendingStates: {}, botSeats: [] });
       expect(restored.snapshot).toBe(started.snapshot);
       expect(restored.flowState).toEqual(started.flowState);
     });
@@ -300,7 +300,7 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
       const { flowState: _dropped, ...withoutFlow } = snapshot;
 
       expect(() =>
-        SnapshotSessionHost.restore(adapters, { snapshot: withoutFlow as GameStateSnapshot, pendingStates: {} }),
+        SnapshotSessionHost.restore(adapters, { snapshot: withoutFlow as GameStateSnapshot, pendingStates: {}, botSeats: [] }),
       ).toThrow(/flow state/i);
       expect(metas).toEqual([]);
     });
@@ -308,7 +308,7 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
     it('a restored host then broadcasts the REAL boundary, not an empty one', async () => {
       const { adapters, metas, started, snapshot } = await freshHostAndStartedGame();
 
-      SnapshotSessionHost.restore(adapters, { snapshot, pendingStates: {}, playerViews: started.playerViews });
+      SnapshotSessionHost.restore(adapters, { snapshot, pendingStates: {}, playerViews: started.playerViews, botSeats: [] });
 
       expect(metas.length).toBe(1);
       expect(metas[0].cause).toBe('restore');

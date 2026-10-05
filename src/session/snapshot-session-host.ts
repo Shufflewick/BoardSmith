@@ -119,14 +119,27 @@ export function winnersOf(state: Pick<SnapshotHostState, 'snapshot'>): number[] 
   return state.snapshot?.winners ?? [];
 }
 
-/**
- * The snapshot an op answered with. `executeOp` builds it with the runner's
- * `getSnapshot()`; the op result carries it as `unknown` because it crosses
- * the executor boundary as JSON.
- */
-function snapshotOf(res: OpResult): GameStateSnapshot | null {
-  return res.snapshot as GameStateSnapshot | null;
-}
+/** Where a snapshot the host is about to hold came from: storage, or an op's answer. */
+type SnapshotSource = 'restore' | 'op';
+
+/** How {@link SnapshotSessionHost}'s snapshot check names the snapshot, and what to do about it, per source. */
+const SNAPSHOT_SOURCE = {
+  restore: {
+    missing: 'restore requires the snapshot of a started game. Store the whole value the persist ' +
+      'adapter hands you and pass it back; a game that never started has nothing to restore.',
+    given: 'restore was given a snapshot',
+    remedy: 'The snapshot was not written by this engine; restore what the persist adapter handed you.',
+    foreign: 'The persisted state does not belong to this table.',
+  },
+  op: {
+    missing: 'executeOp answered a successful op with no snapshot, so there is no game to publish. ' +
+      'Return the snapshot executeOp produced.',
+    given: 'executeOp answered with a snapshot',
+    remedy: 'The game was built on an engine older than this host (before engine contract r130), or ' +
+      'the executeOp adapter changed the snapshot; rebuild the game on this engine.',
+    foreign: 'The game named a winner that is not a seat at this table.',
+  },
+} as const;
 
 /**
  * What became of a game when the rules it runs on were replaced underneath it
@@ -181,8 +194,12 @@ export interface HostRestore extends SnapshotHostState {
   playerViews?: unknown[];
   /** The spectator view the host last handed `record`, likewise. */
   spectatorView?: unknown;
-  /** The seats a bot plays now. None when omitted. */
-  botSeats?: BotSeat[];
+  /**
+   * The seats a bot plays now, `[]` when none. Required: a host restored
+   * without its roster would publish "no bots", and the `setBotSeats` that
+   * corrected it would push every page a second time.
+   */
+  botSeats: BotSeat[];
 }
 
 /** The game's end and turn boundary, handed beside every record and push. */
@@ -705,10 +722,10 @@ export class SnapshotSessionHost {
    */
   static restore(adapters: SnapshotSessionAdapters, state: HostRestore): SnapshotSessionHost {
     const host = new SnapshotSessionHost(adapters);
-    const snapshot = host.restorableSnapshot(state.snapshot);
+    const snapshot = host.checkedSnapshot(state.snapshot, 'restore');
     host.pendingStates = host.restorablePendingStates(state.pendingStates);
     host._snapshot = snapshot;
-    host.botSeats = (state.botSeats ?? []).map((s) => ({ ...s }));
+    host.botSeats = state.botSeats.map((s) => ({ ...s }));
     if (state.playerViews) host.lastPlayerViews = state.playerViews;
     if (state.spectatorView !== undefined) host.lastSpectatorView = state.spectatorView;
     // The gate holds the views exactly as given: they are what the pages show.
@@ -721,40 +738,36 @@ export class SnapshotSessionHost {
   }
 
   /**
-   * `restore`'s check that the snapshot is a started game carrying its flow
-   * state and its winners, and that the winners are seats of this table.
-   * Winners in a game that has not ended are taken as they are: a game that
-   * overrides `getWinners()` to name the leader while play goes on reports
-   * exactly that, and `restore` accepts anything `durableState()` can
-   * return.
+   * The check every snapshot passes before the host holds it, from `restore`
+   * or from an op's answer: a started game carrying its flow state and its
+   * winners, and winners that are seats of this table. Without the flow state
+   * the host would publish "nobody owes a move"; without the winners a won game
+   * would be published as a draw. Winners in a game that has not ended are
+   * taken as they are: a game that overrides `getWinners()` to name the leader
+   * while play goes on reports exactly that, and `restore` accepts anything
+   * `durableState()` can return.
    */
-  private restorableSnapshot(snapshot: unknown): GameStateSnapshot {
-    if (snapshot === null || typeof snapshot !== 'object') {
-      throw new Error(
-        'restore requires the snapshot of a started game. Store the whole value the persist ' +
-          'adapter hands you and pass it back; a game that never started has nothing to restore.',
-      );
-    }
+  private checkedSnapshot(snapshot: unknown, source: SnapshotSource): GameStateSnapshot {
+    const say = SNAPSHOT_SOURCE[source];
+    if (snapshot === null || typeof snapshot !== 'object') throw new Error(say.missing);
     const { flowState, winners } = snapshot as Partial<GameStateSnapshot>;
     if (flowState === null || typeof flowState !== 'object') {
       throw new Error(
-        'restore was given a snapshot without its flow state: without it the host cannot say ' +
-          'which seats owe a move, and would broadcast an empty due-seat set as the answer. The ' +
-          'snapshot was not written by this engine; restore what the persist adapter handed you.',
+        `${say.given} without its flow state: without it the host cannot say which seats owe a ` +
+          `move, and would broadcast an empty due-seat set as the answer. ${say.remedy}`,
       );
     }
     if (!Array.isArray(winners)) {
       throw new Error(
-        'restore was given a snapshot without its winners (an empty array when no winner is ' +
-          'declared): without them a finished game would be published with no outcome. The ' +
-          'snapshot was not written by this engine; restore what the persist adapter handed you.',
+        `${say.given} without its winners (an empty array when no winner is declared): without ` +
+          `them a won game would be published as a draw. ${say.remedy}`,
       );
     }
     for (const seat of winners) {
       if (!Number.isInteger(seat) || seat < 1 || seat > this.adapters.playerCount) {
         throw new Error(
-          `restore was given winner ${JSON.stringify(seat)}, but this table has seats ` +
-            `1 to ${this.adapters.playerCount}. The persisted state does not belong to this table.`,
+          `${say.given} naming winner ${JSON.stringify(seat)}, but this table has seats ` +
+            `1 to ${this.adapters.playerCount}. ${say.foreign}`,
         );
       }
     }
@@ -811,7 +824,7 @@ export class SnapshotSessionHost {
   }
 
   private async apply(res: OpResult, seat?: number): Promise<void> {
-    this._snapshot = snapshotOf(res);
+    this._snapshot = this.checkedSnapshot(res.snapshot, 'op');
     // FLOW-01/03: every state-mutating op's stateEnvelope() carries a fresh
     // flowDebugInfo (shared serializeFlowDebugInfo — same shape as
     // GameSession.broadcast() and the debug:flow-state op). Carry it forward

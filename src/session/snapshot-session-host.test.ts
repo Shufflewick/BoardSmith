@@ -304,7 +304,7 @@ describe('SnapshotSessionHost', () => {
       // the client, none on the server. Failing must be observable.
       const baseResult: OpResult = {
         success: true,
-        snapshot: { stubbed: true },
+        snapshot: { stubbed: true, flowState: {}, winners: [] },
         pendingState: null,
         flowState: { awaitingInput: true, currentPlayer: 1 },
         playerViews: [null, null],
@@ -317,7 +317,7 @@ describe('SnapshotSessionHost', () => {
       const adapters: SnapshotSessionAdapters = {
         playerCount: 2,
         executeOp: async (_snap, _pend, op) => {
-          if (op.type === 'start') return { ...baseResult, snapshot: { turn: 0 } };
+          if (op.type === 'start') return { ...baseResult, snapshot: { turn: 0, flowState: {}, winners: [] } };
           if (op.type === 'botTurn') {
             botCallCount++;
             return {
@@ -366,7 +366,7 @@ describe('SnapshotSessionHost', () => {
         // the bot motionless indefinitely.
         const baseResult: OpResult = {
           success: true,
-          snapshot: { stubbed: true },
+          snapshot: { stubbed: true, flowState: {}, winners: [] },
           pendingState: null,
           flowState: null,
           playerViews: [],
@@ -403,7 +403,7 @@ describe('SnapshotSessionHost', () => {
     it('runBotTurns loops while botMoved:true then stops, applying each move', async () => {
       // Use a stub executeOp that answers start normally, then returns botMoved:true
       // once and botMoved:false on the next call.
-      const baseSnapshot = { stubbed: true };
+      const baseSnapshot = { stubbed: true, flowState: {}, winners: [] };
       const baseResult: OpResult = {
         success: true,
         snapshot: baseSnapshot,
@@ -422,14 +422,14 @@ describe('SnapshotSessionHost', () => {
         playerCount: 2,
         executeOp: async (_snap, _pend, op) => {
           if (op.type === 'start') {
-            return { ...baseResult, snapshot: { turn: 0 } };
+            return { ...baseResult, snapshot: { turn: 0, flowState: {}, winners: [] } };
           }
           if (op.type === 'botTurn') {
             botCallCount++;
             if (botCallCount === 1) {
-              return { ...baseResult, snapshot: { turn: 1 }, botMoved: true, botPlayer: 2 };
+              return { ...baseResult, snapshot: { turn: 1, flowState: {}, winners: [] }, botMoved: true, botPlayer: 2 };
             }
-            return { ...baseResult, snapshot: { turn: 1 }, botMoved: false };
+            return { ...baseResult, snapshot: { turn: 1, flowState: {}, winners: [] }, botMoved: false };
           }
           return { ...baseResult };
         },
@@ -469,7 +469,7 @@ describe('SnapshotSessionHost', () => {
 
       const baseResult: OpResult = {
         success: true,
-        snapshot: {},
+        snapshot: { flowState: {}, winners: [] },
         pendingState: null,
         flowState: {},
         playerViews: [],
@@ -526,7 +526,7 @@ describe('SnapshotSessionHost', () => {
 
       const baseResult: OpResult = {
         success: true,
-        snapshot: { v: 0 },
+        snapshot: { v: 0, flowState: {}, winners: [] },
         pendingState: null,
         flowState: { awaitingInput: true, currentPlayer: 2 },
         playerViews: [null, null],
@@ -539,14 +539,14 @@ describe('SnapshotSessionHost', () => {
       const adapters: SnapshotSessionAdapters = {
         playerCount: 2,
         executeOp: async (snap, _pend, op) => {
-          if (op.type === 'start') return { ...baseResult, snapshot: { v: 0 } };
+          if (op.type === 'start') return { ...baseResult, snapshot: { v: 0, flowState: {}, winners: [] } };
           if (op.type === 'botTurn') {
             botCall++;
             if (botCall === 1) {
               events.push('bot-read');
               await botTurnGate; // hold the pump open
               events.push('bot-write');
-              return { ...baseResult, snapshot: { v: 1 }, botMoved: true, botPlayer: 2 };
+              return { ...baseResult, snapshot: { v: 1, flowState: {}, winners: [] }, botMoved: true, botPlayer: 2 };
             }
             return { ...baseResult, snapshot: snap as object, botMoved: false };
           }
@@ -554,7 +554,7 @@ describe('SnapshotSessionHost', () => {
             // The human op MUST observe the snapshot the pump wrote (v:1), never
             // the pre-pump base (v:0) — proving it did not run against stale state.
             events.push(`human-read:v=${(snap as { v: number }).v}`);
-            return { ...baseResult, snapshot: { v: 2 }, flowState: { awaitingInput: true, currentPlayer: 1 } };
+            return { ...baseResult, snapshot: { v: 2, flowState: { awaitingInput: true, currentPlayer: 1 }, winners: [] }, flowState: { awaitingInput: true, currentPlayer: 1 } };
           }
           return { ...baseResult };
         },
@@ -606,7 +606,7 @@ describe('SnapshotSessionHost', () => {
     it('caps the bot pump at MAX_BOT_MOVES (500) and logs when a runaway bundle never stops', async () => {
       const base: OpResult = {
         success: true,
-        snapshot: {},
+        snapshot: { flowState: {}, winners: [] },
         pendingState: null,
         flowState: {},
         playerViews: [],
@@ -710,7 +710,7 @@ describe('SnapshotSessionHost', () => {
     it('a successful player action clears the seat\'s in-progress picks and runs without them', async () => {
       const calls: Array<{ type: string; pendingState: Record<string, unknown> | null }> = [];
       const base: OpResult = {
-        success: true, snapshot: {}, pendingState: null, flowState: {}, playerViews: [], isComplete: false, winners: [],
+        success: true, snapshot: { flowState: {}, winners: [] }, pendingState: null, flowState: {}, playerViews: [], isComplete: false, winners: [],
       };
       const adapters: SnapshotSessionAdapters = {
         playerCount: 2,
@@ -739,7 +739,7 @@ describe('SnapshotSessionHost', () => {
       const calls: Array<{ type: string; pendingState: Record<string, unknown> | null }> = [];
       const base: OpResult = {
         success: true,
-        snapshot: {},
+        snapshot: { flowState: {}, winners: [] },
         pendingState: null,
         flowState: {},
         playerViews: [],

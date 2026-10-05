@@ -57,7 +57,8 @@ function countingSession(options: { botSeats?: Array<{ seat: number }>; botsStop
   const views: Count[] = [];
   const result = (snapshot: Count, extra: Partial<OpResult> = {}): OpResult => ({
     success: true,
-    snapshot,
+    // The host holds only a snapshot that carries its flow state and winners.
+    snapshot: { ...snapshot, flowState: {}, winners: [] },
     pendingState: null,
     flowState: {},
     playerViews: [{ state: { count: snapshot.count } }],

@@ -133,7 +133,7 @@ function restoreSecond(def: GameDefinitionLike, first: ReturnType<typeof makeHos
   const stored = JSON.parse(JSON.stringify(first.host.durableState())) as SnapshotHostState;
   const last = first.records.at(-1)!;
   const { adapters, records } = makeAdapters(def);
-  const host = SnapshotSessionHost.restore(adapters, { ...stored, playerViews: last.views, spectatorView: last.spectator });
+  const host = SnapshotSessionHost.restore(adapters, { ...stored, playerViews: last.views, spectatorView: last.spectator, botSeats: [] });
   return { host, records };
 }
 
@@ -194,7 +194,7 @@ describe('a host restored from a finished game publishes its outcome (#490)', ()
     await first.host.start();
     const { snapshot, pendingStates } = JSON.parse(JSON.stringify(first.host.durableState())) as SnapshotHostState;
     const { adapters, records } = makeAdapters(def);
-    SnapshotSessionHost.restore(adapters, { snapshot, pendingStates });
+    SnapshotSessionHost.restore(adapters, { snapshot, pendingStates, botSeats: [] });
     expect(records.at(-1)!.meta).toMatchObject({ isComplete: true, winners: [3], isDraw: false });
     expect(records.at(-1)!.meta.turnBoundary.dueSeats).toEqual([]);
   });
@@ -205,10 +205,10 @@ describe('a host restored from a finished game publishes its outcome (#490)', ()
     const stored = JSON.parse(JSON.stringify(host.durableState())) as SnapshotHostState;
     const { adapters, records } = makeAdapters(finishedGameDef([2]));
     const { flowState: _f, ...noFlow } = stored.snapshot!;
-    expect(() => SnapshotSessionHost.restore(adapters, { ...stored, snapshot: noFlow as typeof stored.snapshot })).toThrow(/flow state/);
+    expect(() => SnapshotSessionHost.restore(adapters, { ...stored, snapshot: noFlow as typeof stored.snapshot, botSeats: [] })).toThrow(/flow state/);
     const { winners: _w, ...noWinners } = stored.snapshot!;
-    expect(() => SnapshotSessionHost.restore(adapters, { ...stored, snapshot: noWinners as typeof stored.snapshot })).toThrow(/winners/);
-    expect(() => SnapshotSessionHost.restore(adapters, { ...stored, snapshot: null })).toThrow(/snapshot/);
+    expect(() => SnapshotSessionHost.restore(adapters, { ...stored, snapshot: noWinners as typeof stored.snapshot, botSeats: [] })).toThrow(/winners/);
+    expect(() => SnapshotSessionHost.restore(adapters, { ...stored, snapshot: null, botSeats: [] })).toThrow(/snapshot/);
     expect(records).toEqual([]);
   });
 
@@ -218,7 +218,7 @@ describe('a host restored from a finished game publishes its outcome (#490)', ()
     const stored = host.durableState();
     const { adapters } = makeAdapters(finishedGameDef([2]));
     for (const winners of [[0], [4], [1.5], ['2']] as unknown as number[][]) {
-      expect(() => SnapshotSessionHost.restore(adapters, { ...stored, snapshot: { ...stored.snapshot!, winners } })).toThrow(/seats 1 to 3/);
+      expect(() => SnapshotSessionHost.restore(adapters, { ...stored, snapshot: { ...stored.snapshot!, winners }, botSeats: [] })).toThrow(/seats 1 to 3/);
     }
   });
 
