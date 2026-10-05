@@ -72,7 +72,6 @@ import {
   planMigration,
   receiptFloor,
   resolveOrder,
-  worldIdAllocationOf,
   type PlannedEvent,
   type RoutedEvent,
   type SeatActivityStamp,
@@ -366,41 +365,12 @@ export class ResidentWorld {
    * unit. Everything this class does on its own already runs inside it.
    */
   run<T>(body: () => Promise<T>): Promise<T> {
-    const next = this.#lock.then(
-      () => this.#runRepairing(body),
-      () => this.#runRepairing(body),
-    );
+    const next = this.#lock.then(body, body);
     // Swallowed HERE and nowhere else: the chain must survive a rejection, or
     // one refused command would strand every later one behind a dead promise.
     // The caller still gets the rejection through `next`.
     this.#lock = next.catch(() => {});
     return next;
-  }
-
-  /**
-   * THE REPAIR ROAD FOR A WORLD WHOSE STAMP IS ALREADY STALE (#224).
-   *
-   * For the world whose stamp is present and WRONG -- written by a host that
-   * checkpointed a partition an ordinary command had grown and kept the number
-   * it had before the growth. Such a world refuses every verb that touches the
-   * grown room, forever, with a message that names the repair and no way to run
-   * it.
-   *
-   * Driven by the refusal rather than by a check on every wake, because the
-   * check is O(every stored partition) and the refusal is proof. A world that
-   * is not broken pays nothing.
-   */
-  async #runRepairing<T>(body: () => Promise<T>): Promise<T> {
-    try {
-      return await body();
-    } catch (error) {
-      if (!(error instanceof WorldRefusal) || error.code !== "allocation-stale") throw error;
-      // The refusal is raised at ADOPT, before any command has written
-      // anything, and the repair throws the resident tree away -- so the retry
-      // starts from stored bytes rather than from a half-run command.
-      await this.#repairAllocationStamp();
-      return await body();
-    }
   }
 
   // ── construction and residency ─────────────────────────────────────────────
@@ -576,32 +546,6 @@ export class ResidentWorld {
       this.rearm();
     });
     return { migrated };
-  }
-
-  /**
-   * REWRITE A STALE ALLOCATION STAMP FROM THE BYTES IT IS STALE AGAINST (#224).
-   *
-   * Deriving the stamp means reading every stored partition, which is the
-   * O(world) cost this whole mode exists to avoid -- so it runs only off the
-   * `allocation-stale` refusal, which is proof the stamp is wrong, and a
-   * healthy world never pays for it. Every stored id is read back to its
-   * counter value with the world's own key (#482).
-   */
-  async #repairAllocationStamp(): Promise<void> {
-    const stored: StoredPartition[] = [];
-    for (const name of this.#store.partitionNames()) {
-      stored.push(
-        await this.#readPartition(
-          name,
-          `Repairing this world's id allocation needs partition "${name}", which its store ` +
-            `does not have.`,
-        ),
-      );
-    }
-    this.#store.recordAllocation(worldIdAllocationOf(stored, this.#store.elementIdKey()));
-    // The runner this world holds was built over the stale number. Rebuild it
-    // over the one just written, before anything adopts against the old one.
-    this.#discardResident();
   }
 
   /** Upgrade this world's bytes to the rules that are about to run them (#200). */

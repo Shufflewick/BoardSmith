@@ -219,16 +219,37 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
     expect(refusal).toBeInstanceOf(WorldRefusal);
     expect((refusal as WorldRefusal).code).toBe("allocation-stale");
     expect(ownerOf(refusal)).toBe("platform");
-    // And it still names the repair, which is the only thing a host can act on.
-    expect((refusal as WorldRefusal).message).toMatch(/worldIdAllocationOf/);
+    // And it says what it is: a host defect to report, with no repair to run
+    // (#540). Every world a current host can open was written with its stamp.
+    expect((refusal as WorldRefusal).message).toMatch(/host defect/);
+    expect((refusal as WorldRefusal).message).not.toMatch(/worldIdAllocationOf/);
   });
 
-  it("derives the repair stamp from stored bytes, for a world that has none", async () => {
-    // The supported repair for a world that was already occupied when this
-    // landed, and for one whose roots have already collided: read what is
-    // stored, read each id back to its counter value with the world's key,
-    // take the highest, and write the stamp above it. It is
-    // O(stored) ONCE, at the repair, and never again.
+  it("STOPS the runner once a stale stamp is proved, so nothing mints over a stored id (#540)", async () => {
+    // Room `b` was minted from 1_000_001, so a host holding that stamp would
+    // mint its next root on `b`'s identity. Adopting `c` proves the stamp
+    // stale; from then on the runner refuses everything that touches the game
+    // with that same refusal -- including the creation that would collide and
+    // a command that names only a room the stale stamp does not contradict.
+    const genesis = await storedWorld();
+    const stale = await hostHoldingStamp(1_000_001);
+    const proof = await stale
+      .declare(READ_A, "p1", { c: genesis.partitions.c! }, arrival(1_000), { declaredActivity: [], declaredNotices: [] })
+      .catch((error: unknown) => error);
+    expect((proof as WorldRefusal).code).toBe("allocation-stale");
+
+    await expect(stale.createPartition("dynamic")).rejects.toBe(proof);
+    await expect(
+      stale.declare(READ_A, "p1", { a: genesis.partitions.a! }, arrival(1_000), { declaredActivity: [], declaredNotices: [] }),
+    ).rejects.toBe(proof);
+    await expect(stale.viewsFor(["p1"])).rejects.toBe(proof);
+    await expect(stale.serialize(["a"])).rejects.toBe(proof);
+  });
+
+  it("derives the stamp a world's stored bytes call for", async () => {
+    // The check a test or an audit runs against a host's stamp: read what is
+    // stored, read each id back to its counter value with the world's key, and
+    // the stamp the bytes need is one above the highest.
     const genesis = await storedWorld();
     const records: StoredPartition[] = ROOMS.map((name) => genesis.partitions[name]!);
 

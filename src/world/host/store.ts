@@ -219,17 +219,6 @@ export interface WorldStore extends WorldPartitionStore, WorldPartitionWriter {
    */
   nextElementId(): number | undefined;
 
-  /**
-   * REWRITE A STALE STAMP (#224).
-   *
-   * The one repair door, for a stamp the `allocation-stale` refusal proved
-   * stands below the world's own bytes. Every other write that moves the
-   * allocation carries it in the transaction that minted the ids; this one has
-   * no ids to carry, because it is derived from bytes that are already
-   * durable.
-   */
-  recordAllocation(nextElementId: number): void;
-
   /** Every partition this world holds, by name. A migration is the one caller:
    *  it transforms all of them, and nothing else in this host ever wants the
    *  whole list (that would be the O(world) read residency exists to delete). */

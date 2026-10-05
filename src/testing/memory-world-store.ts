@@ -302,10 +302,6 @@ export function createMemoryWorldStore(
 
     stateVersion: () => stateVersion,
 
-    recordAllocation(nextElementId: number): void {
-      allocation = nextElementId;
-    },
-
     elementIdKey: () => elementIdKey,
 
     nextElementId: () => allocation,

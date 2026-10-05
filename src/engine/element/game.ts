@@ -2124,9 +2124,10 @@ export class Game<
           `Cannot adopt partition "${json.name ?? json.className}": it holds element id ` +
             `${maxAdoptedId}, minted at or above this world's id allocation stamp of ` +
             `${this._ctx.sequence}. The stamp is stale, so the next id this world minted would ` +
-            `collide with one it has already stored. Repair it by writing the stamp that ` +
-            `\`worldIdAllocationOf\` derives from every stored partition, passing it back as ` +
-            `\`nextElementId\`, then wake the world again.`
+            `collide with one it has already stored. This is a host defect: the host lost or ` +
+            `lowered the \`nextElementId\` a checkpoint reported, and every world a current host ` +
+            `can open was written with its stamp. The world stops here rather than mint over its ` +
+            `own ids; report the defect against the host that ran it.`
         );
       }
       this._ctx.sequence = maxAdoptedCursor + 1;

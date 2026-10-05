@@ -61,6 +61,23 @@ function rewindStoreToLayout7(path: string): void {
   }
 }
 
+/**
+ * A STAMP LOWERED BEHIND THE STORE'S BACK (#540). The store has no door that
+ * writes a stamp on its own, so a host defect that lost one is reproduced
+ * through SQLite directly.
+ */
+function lowerAllocationStamp(path: string, nextElementId: number): void {
+  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
+    DatabaseSync: new (file: string) => { exec(sql: string): void; close(): void };
+  };
+  const db = new DatabaseSync(path);
+  try {
+    db.exec(`UPDATE meta SET value = '${nextElementId}' WHERE key = 'nextElementId'`);
+  } finally {
+    db.close();
+  }
+}
+
 // ── A world bundle, in the shape a real one exports ─────────────────────────
 
 class Hearth extends Space<Village> {
@@ -2077,11 +2094,11 @@ describe('#218: partitions created on first use', () => {
     await second.host.close();
   });
 
-  it('repairs a stamp an older host left standing below its own bytes (#224)', async () => {
-    // The road for a world that is ALREADY broken: written by a host that grew
-    // a partition and kept the number it had before the growth. The refusal is
-    // proof, so the repair runs off the refusal rather than off a scan every
-    // wake.
+  it('refuses a stamp standing below its own bytes, and leaves it as it found it (#540)', async () => {
+    // No world this host can open was written by the r51-r58 hosts that left
+    // such a stamp behind (#224), so a stale stamp on a current world is a NEW
+    // host defect. Repairing it quietly on the next run would hide that defect;
+    // the world refuses instead, and says it is the host's to report.
     const first = await attached({ dir, definition: bundle() });
     await first.host.handleMessage('c1', {
       type: 'action',
@@ -2090,12 +2107,11 @@ describe('#218: partitions created on first use', () => {
       action: 'stack',
       args: {},
     });
-    const honest = first.store.nextElementId()!;
     await first.host.close();
 
-    // Exactly what the old host stored: the grown bytes, the pre-growth stamp.
+    // The grown bytes, under a stamp lowered behind the store's back.
+    lowerAllocationStamp(worldStorePath(dir), WORLD_PARTITION_ID_FLOOR + 1);
     const damaged = openHost({ dir, definition: bundle() });
-    damaged.store.recordAllocation(WORLD_PARTITION_ID_FLOOR + 1);
     await damaged.host.start();
     await damaged.host.handleMessage('c1', { type: 'hello' });
     await damaged.host.handleMessage('c1', { type: 'attach', seat: 1 });
@@ -2107,9 +2123,16 @@ describe('#218: partitions created on first use', () => {
       args: {},
     });
 
-    expect(last(damaged.sent, 'c1', 'world_response')).toMatchObject({ ok: true });
-    // Repaired from the bytes themselves, not from the number that was wrong.
-    expect(damaged.store.nextElementId()).toBeGreaterThanOrEqual(honest);
+    const response = last(damaged.sent, 'c1', 'world_response') as {
+      ok: boolean;
+      code?: string;
+      message?: string;
+    };
+    expect(response).toMatchObject({ ok: false, code: 'allocation-stale' });
+    expect(response.message).toMatch(/host defect/);
+    expect(response.message).not.toMatch(/worldIdAllocationOf/);
+    // Nothing rewrote it: the defect is still there to be seen.
+    expect(damaged.store.nextElementId()).toBe(WORLD_PARTITION_ID_FLOOR + 1);
     await damaged.host.close();
   });
 

@@ -387,22 +387,17 @@ adoption that proves it, from the bytes, rather than at the collision it would
 otherwise cause hours later. It is platform-owned: a host that hands back a stale
 number hands back the same number on the next wake, so a park ladder should park
 on it rather than retry, and a publisher's health score should not be debited for
-it. The repair is the one below.
+it.
 
-**Repairing a stale stamp.** Derive the stamp from the partitions the store
-already holds -- whole `{ parentId, json }` records, because each one's parent is
-checked against the world's root under the key -- reading each id back with the
-world's key, and write it:
-
-```ts
-import { worldIdAllocationOf } from 'boardsmith/world';
-
-store.recordAllocation(worldIdAllocationOf(await readEveryStoredPartition(), storedKey));
-```
-
-That is the only O(world) read in the scheme, so it runs only off the
-`allocation-stale` refusal, which is proof the stamp is wrong; a healthy world
-never pays for the scan. `boardsmith dev` repairs a world exactly this way.
+There is no repair for it (#540). Every world a current host can open was
+written with its stamp, so a stale one means the host lost or lowered the
+`nextElementId` a checkpoint reported: a host defect, and one a quiet rewrite
+would hide. `boardsmith dev` and `TestWorld` stop the world at the refusal --
+nothing more runs, not even its clock, and every later call is refused with the
+same sentence -- so the defect is in front of whoever is looking until the host
+is fixed. `worldIdAllocationOf` derives the stamp a world's stored bytes call
+for, for a test or an audit that checks a host kept its stamp; it is O(world)
+and is never a step a host runs on a live world.
 
 ## An action: declare, then execute
 
@@ -2720,7 +2715,7 @@ thing next time.
 | `allocation-undeclared` | A host asked for a partition to be created on demand without handing the world its durable id allocation stamp, so any id minted would be a guess. See [a created root's identity is durable](#a-created-roots-identity-is-durable). |
 | `element-id-key-invalid` | A host built a world without its element id key, or with one that is not 24 lowercase hex digits (#482). Mint the key once, when the world is created, with `mintWorldElementIdKey()`, store it with the world, and pass it on every wake. Platform-owned and deterministic, so park rather than retry. |
 | `element-id-key-mismatch` | A stored partition does not hang from this world's root under the key the world was built with, so its bytes were minted under another key: the host passed a different world's key, minted a new one on a wake, or is serving bytes from before keyed ids (#482). Raised before anything is adopted. Pass the key stored with the world. Platform-owned and deterministic. |
-| `allocation-stale` | A host handed back a stamp standing below an id its own stored bytes hold, so the next id minted would collide with one already written. Raised at the adoption that proves it. Repair by deriving the stamp with `worldIdAllocationOf` over every stored partition. |
+| `allocation-stale` | A host handed back a stamp standing below an id its own stored bytes hold, so the next id minted would collide with one already written. Raised at the adoption that proves it. A host defect with no repair: the world stops (#540). |
 | `child-timeout` | The bundle did not answer a host's call inside its deadline. |
 | `invalid-notice` | `ctx.world.notify` was handed a notice a box cannot hold: a seat outside the world, no `whenFull`, a payload JSON cannot carry, one past `noticeMaxBytes` -- or the world declares no `world.notices`. See [notices](#notices-a-lasting-line-for-one-seat-without-loading-it). |
 | `notice-batch-cap` | One dispatch sent more notices than `maxNoticesPerCommand`. |

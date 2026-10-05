@@ -755,14 +755,15 @@ function buildGenesis(
 }
 
 /**
- * THE ALLOCATION STAMP AN OCCUPIED WORLD SHOULD HAVE (ShufflewickPub #377).
+ * THE ALLOCATION STAMP A WORLD'S STORED BYTES CALL FOR (ShufflewickPub #377).
  *
- * The supported repair, and the only O(stored) step in the whole scheme: read
- * every partition the world holds, read each element id back to the counter
- * value it was minted from with the world's `elementIdKey` (#482), and the
- * stamp is one above the highest. Run it when the `allocation-stale` refusal
- * proves a stamp wrong, persist what it returns, and the world never pays for
- * it again.
+ * Read every partition the world holds, read each element id back to the
+ * counter value it was minted from with the world's `elementIdKey` (#482), and
+ * the stamp is one above the highest. O(stored), so it is a CHECK -- a test or
+ * an audit asking whether a host kept its stamp at or above what its bytes
+ * need -- and never a step a host runs on a live world. A stale stamp is a host
+ * defect that stops the world (`allocation-stale`, #540), not something to
+ * rewrite.
  *
  * It reads BYTES, not a live tree: a host can answer this from storage without
  * hydrating anything into a game.
