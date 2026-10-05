@@ -59,6 +59,7 @@ import {
   createWorld,
   nextDueBatch,
   occurrencesDue,
+  resumeDueOf,
   planSchedules,
   rearmAt,
   readWorldDefinition,
@@ -1187,14 +1188,21 @@ export class ResidentWorld {
       now,
       this.#budgets.catchUpMaxRealIterations,
     );
-    const advanced: PlannedEvent[] =
-      nextDue === null ? [] : [{ ...event, due: nextDue, attempts: 0 }];
     let ran = 0;
     for (const [index, timing] of occurrences.entries()) {
       // A RECURRENCE CAN END THE WORLD on one of several occurrences due at
       // once, and the rest belong to a world that no longer runs (#395).
       if (this.completed) break;
-      const last = index === occurrences.length - 1;
+      // WHERE THE QUEUE STANDS ONCE THIS OCCURRENCE IS DURABLE (#538): at the
+      // next occurrence still owed, or past the whole plan on the last one.
+      // Committed with every occurrence and not only the last, because each
+      // one checkpoints on its own -- a later refusal must find the event
+      // already moved past what ran, or the next wake runs it again. The next
+      // occurrence's due goes through `resumeDueOf`, so a coalesced call that
+      // has not run yet is still owed every occurrence it stood for.
+      const following = occurrences[index + 1];
+      const owedDue =
+        following === undefined ? nextDue : resumeDueOf(following, event.everyMs);
       try {
         const events = await this.#dispatch({
           player: null,
@@ -1206,15 +1214,16 @@ export class ResidentWorld {
           // THE EVENT'S OWNER IS WHO IT IS ABOUT (#383), which is not who is
           // charged for it. A seat's own deadline rechecks that seat.
           about: event.owner,
-          settle: last ? [event.id] : [],
-          rearm: last ? advanced : [],
+          settle: [event.id],
+          rearm: owedDue === null ? [] : [{ ...event, due: owedDue, attempts: 0 }],
         });
         this.#onEvents(events);
         ran += 1;
       } catch (error) {
-        // A DUE EVENT THAT REFUSED IS SAID OUT LOUD AND LEFT QUEUED. Its
-        // effects rolled back, so the world is unchanged; dropping it silently
-        // is how a world stops ticking with nobody told.
+        // A DUE EVENT THAT REFUSED IS SAID OUT LOUD AND LEFT QUEUED, at the
+        // occurrence that refused. Its effects rolled back, so the world is
+        // unchanged; dropping it silently is how a world stops ticking with
+        // nobody told.
         this.#onNotice(
           `The scheduled action "${event.action}" refused, and stays queued: ${messageOf(error)}`,
         );
