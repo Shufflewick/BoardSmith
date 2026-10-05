@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { scanSandboxViolations, scanSourceForSandboxViolations } from './sandbox-scan.js';
+import { SANDBOX_LINT_CONFIG, scanSandboxViolations, scanSourceForSandboxViolations } from './sandbox-scan.js';
+import { configs } from '../../eslint-plugin/index.js';
+import { enabledRules } from '../../eslint-plugin/enabled-rules.test-helper.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 describe('scanSandboxViolations', () => {
@@ -178,5 +180,13 @@ describe('scanSandboxViolations', () => {
 
     expect(viaSingleFile.length).toBeGreaterThan(0);
     expect(viaSingleFile).toEqual(viaWholeDir);
+  });
+});
+
+describe('the rules boardsmith validate enforces (#534)', () => {
+  it('are the plugin\'s recommended config, file for file', async () => {
+    for (const file of ['src/rules/game.ts', 'src/shared/deck.ts', 'src/ui/App.vue', 'src/ui/animate.ts']) {
+      expect(await enabledRules(SANDBOX_LINT_CONFIG, file), file).toEqual(await enabledRules(configs.recommended, file));
+    }
   });
 });
