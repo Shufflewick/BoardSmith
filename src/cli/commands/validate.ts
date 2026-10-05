@@ -58,10 +58,12 @@ export function hasBlockingFailure(results: ValidationResult[]): boolean {
   return results.some((r) => !r.passed && r.severity !== 'warning');
 }
 
-/** One `vue-tsc --noEmit --listFiles` run: its verdict, and the program it compiled. */
+/** One `vue-tsc --noEmit --listFiles` run: its verdict, the program it compiled, and what it said. */
 export interface TypeCheckRun {
   result: ValidationResult;
   programFiles: string[];
+  /** Every line the compiler printed except the file listing: each diagnostic in full. */
+  compilerReport: string[];
 }
 
 /** Every check's verdict, and which backend the project declares. */
@@ -565,10 +567,13 @@ export async function typeCheckProject(projectDir: string): Promise<TypeCheckRun
     return {
       result: { name: 'TypeScript', passed: false, message: `Failed to run the TypeScript compiler: ${(error as Error).message}` },
       programFiles: [],
+      compilerReport: [],
     };
   }
   const programFiles = parseProgramFiles(run.stdout);
-  if (run.code === 0) return { result: { name: 'TypeScript', passed: true, message: '' }, programFiles };
+  const listed = new Set(programFiles);
+  const compilerReport = run.stdout.split('\n').filter((line) => line.trim() !== '' && !listed.has(line.trim()));
+  if (run.code === 0) return { result: { name: 'TypeScript', passed: true, message: '' }, programFiles, compilerReport };
   const allErrors = run.stdout.split('\n').filter((line) => line.includes('error TS'));
   return {
     result: {
@@ -578,6 +583,7 @@ export async function typeCheckProject(projectDir: string): Promise<TypeCheckRun
       details: typeScriptFailureDetails(cwd, allErrors),
     },
     programFiles,
+    compilerReport,
   };
 }
 

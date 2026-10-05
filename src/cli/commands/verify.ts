@@ -315,10 +315,10 @@ async function testCheck(ctx: VerifyContext): Promise<CheckOutcome> {
 
 /** 2. vue-tsc over the project's tsconfig.json, the run `validate` reports too. */
 async function typecheckCheck(ctx: VerifyContext): Promise<CheckOutcome> {
-  const { result } = await ctx.typeCheck();
+  const { result, compilerReport } = await ctx.typeCheck();
   if (result.passed) return { passed: true, summary: 'No type errors.' };
-  for (const line of result.details ?? []) console.log(line);
-  return { passed: false, summary: `${result.message}.`, next: 'Run `boardsmith typecheck` to see every error.' };
+  for (const line of compilerReport) console.log(line);
+  return { passed: false, summary: `${result.message}.`, next: 'Fix the errors above, then run `boardsmith verify` again.' };
 }
 
 /** 3. `boardsmith build`, run in this process. */

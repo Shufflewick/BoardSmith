@@ -1111,7 +1111,7 @@ describe('validateProject stops by throwing, so a command running it stops too (
     const log = vi.spyOn(console, 'log').mockImplementation((line?: unknown) => void printed.push(String(line)));
     try {
       // A type check already run, as verify hands one over, so this fixture needs no compiler.
-      const typeCheck = { result: { name: 'TypeScript', passed: true, message: '' }, programFiles: [] };
+      const typeCheck = { result: { name: 'TypeScript', passed: true, message: '' }, programFiles: [], compilerReport: [] };
       await expect(validateProject(dir, { typeCheck })).rejects.toThrow('Validation failed. Please fix the issues above.');
     } finally {
       log.mockRestore();
