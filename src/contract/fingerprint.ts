@@ -1788,6 +1788,23 @@ export async function computePayloadHash(): Promise<string> {
   const flowPosition = game.getFlowState()?.position;
   assertCoversElementBindings(flowPosition);
 
+  // A SEAT THAT CANNOT ACT (#498). At the sequential step only seat 2 is up,
+  // so seat 1's view reports `availableActions: []`; GameShell reads that list,
+  // and an engine that went back to omitting it would move this hash.
+  const sequentialViews = runner.getAllPlayerViews();
+  assertSeatThatCannotAct(sequentialViews);
+
+  // THE OUTCOME THE SNAPSHOT RECORDS (#536). A host that cannot run the game
+  // reads the winners from the stored snapshot, so the field is part of what
+  // the platform stores, even while it is empty mid-game.
+  const storedWinners = runner.getSnapshot().winners;
+  if (!Array.isArray(storedWinners)) {
+    throw new Error(
+      'The engine-contract fixture\'s snapshot carries no winners array. A host reads the outcome '
+      + 'from it (#536); fix createSnapshot before recording the contract.',
+    );
+  }
+
   // THE SEEDED GENERATOR (#483). The platform stores `snapshot.randomState`
   // with every game and restores it on every load, so the state's written form
   // and the sequence the generator draws decide what a stored game means: an
@@ -1828,6 +1845,8 @@ export async function computePayloadHash(): Promise<string> {
       openingFlowState,
       publishedStateFields,
       flowPosition,
+      sequentialViews,
+      storedWinners,
       storedRandomState,
       nextDraws,
       worldWire: WORLD_WIRE_FIXTURE,
@@ -1843,6 +1862,20 @@ export async function computePayloadHash(): Promise<string> {
       worldDeclaration,
     }),
   );
+}
+
+/** Fail loud unless some seat in `views` is shown as unable to act, with an empty action list. */
+function assertSeatThatCannotAct(views: unknown[]): void {
+  const idle = views.filter((view) => {
+    const flow = (view as { flowState?: { isMyTurn?: boolean; availableActions?: unknown } }).flowState;
+    return flow?.isMyTurn === false && Array.isArray(flow.availableActions) && flow.availableActions.length === 0;
+  });
+  if (idle.length === 0) {
+    throw new Error(
+      'The engine-contract fixture has no seat that cannot act with availableActions: [] at its '
+      + 'sequential step, so the hash would not see how such a seat is reported (#498). Fix the fixture.',
+    );
+  }
 }
 
 /**
