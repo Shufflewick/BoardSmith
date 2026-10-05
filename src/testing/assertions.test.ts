@@ -172,7 +172,7 @@ describe('assertActionAvailable — TEST-03: trace-on-failure', () => {
 });
 
 // ---------------------------------------------------------------------------
-// TEST-04: assertFlowState — actionsMode option
+// doAction and assertActionAvailable print the same Selections block (#519)
 // ---------------------------------------------------------------------------
 
 describe('Selections block (#519)', () => {

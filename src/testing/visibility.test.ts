@@ -2,8 +2,8 @@
  * VIS-01: Per-seat element-visibility utilities.
  *
  * Verifies that:
- * (1) `isElementVisible` correctly classify owner-visible, owner-hidden, count-only, all-visible,
- *     and spectator (seat 0) elements.
+ * (1) `isElementVisible` correctly classifies owner-visible, owner-hidden,
+ *     count-only, all-visible, and spectator (seat 0) elements.
  * (2) Fast-path parity: with no `static playerView`, `isElementVisible` result
  *     equals `element.isVisibleTo(seat)` exactly.
  * (3) Post-transform correctness: with a `static playerView` that strips an

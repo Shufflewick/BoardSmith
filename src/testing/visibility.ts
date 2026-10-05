@@ -1,9 +1,9 @@
 /**
  * Hidden-info visibility utilities for testing BoardSmith games (VIS-01).
  *
- * Provides `isElementVisible`, a visibility predicate derived from the SAME serialization path the wire uses
- * (`Game.toJSONForPlayer(seat)`), so tests never drift from what a seat's
- * client actually receives.
+ * Provides `isElementVisible`, a visibility predicate derived from the SAME
+ * serialization path the wire uses (`Game.toJSONForPlayer(seat)`), so tests
+ * never drift from what a seat's client actually receives.
  *
  * @module
  */
