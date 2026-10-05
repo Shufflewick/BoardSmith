@@ -605,6 +605,7 @@ export interface SerializedPendingActionState {
   };
   currentSelectionIndex: number;
   onSelectFired?: number[];
+  conditionHeld?: boolean;
 }
 
 /**

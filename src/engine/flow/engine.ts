@@ -476,7 +476,7 @@ export class FlowEngine<G extends Game = Game> {
       if (!playerState || !player) {
         throw new Error(
           `Seat ${seat} is not awaited by the open simultaneous step, so its action cannot be settled there. ` +
-            `Ask GameRunner.refusalToAct(action, seat) before running a pending action.`,
+            `Ask GameRunner.refusalToPick(action, seat, pending) before running a pending action.`,
         );
       }
       return this.settleSimultaneousAction(frame, playerState, player, result);
@@ -485,7 +485,7 @@ export class FlowEngine<G extends Game = Game> {
     if (frame?.node.type === 'action-step' && this.currentPlayer?.seat !== seat) {
       throw new Error(
         `Seat ${seat} took an action, but the open action step is awaiting seat ${this.currentPlayer?.seat}, ` +
-          `so it cannot be settled there. Ask GameRunner.refusalToAct(action, seat) before running a pending action.`,
+          `so it cannot be settled there. Ask GameRunner.refusalToPick(action, seat, pending) before running a pending action.`,
       );
     }
 
