@@ -565,7 +565,7 @@ describe('a host deadline that passed for a seat', () => {
 
       const refused = await executeOp(def, gameOptions, scouted.snapshot, null, {
         type: 'action', actionName: 'rest', player: 1, args: {}, boundaryKey: boundaryKeyOf(scouted.snapshot),
-        // @ts-expect-error -- the action op has no timeout flag: closing a timed seat is its own host-only op.
+        // @ts-expect-error -- the action op has no timeout flag: closing a seat at a deadline is its own host-only op.
         onTimeout: true,
       });
 

@@ -1424,10 +1424,10 @@ Two things end a hold anyway, by ruling:
   window or any deadline the host keeps itself on any step (a table's
   hours-long round, say), the host closes each seat still due with an
   `expireSeat` op naming the game's `idleAction`. The step needs no time limit
-  for the op: the deadline is the host's. A seat holding a follow-up takes the idle action if the step
-  offers it (which drops the follow-up, like any other action); if the step
-  does not offer it, the follow-up is dropped and the seat's part ends as if it
-  had finished: the turn passes on (`actionStep`), or the seat is marked done
+  for the op: the deadline is the host's. A seat holding a follow-up takes the
+  idle action if the step offers it (which drops the follow-up, like any other
+  action); if the step does not offer it, the follow-up is dropped and the
+  seat's part ends as if it had finished: the turn passes on (`actionStep`), or the seat is marked done
   (`simultaneousActionStep`). No action runs then, so the action history
   records a **seat expiry** instead (`{ kind: 'seatExpiry', player, undoable:
   false }`, a `HistoryEntry` beside the `SerializedAction` entries): a replay
@@ -1940,10 +1940,10 @@ actionStep({
   alone: no client message maps to it, so a player cannot close a seat by
   dressing an action up as a timeout. The same op closes a seat at any other
   deadline the host keeps, on a step with no time limit too. Time limits always
-  win: a seat holding a
-  follow-up is closed too, by the idle action when the step offers it, and
-  otherwise by dropping its follow-up and ending its part, which the history
-  records as a seat expiry (see "A Follow-up Holds Its Seat").
+  win: a seat holding a follow-up is closed too, by the idle action when the
+  step offers it, and otherwise by dropping its follow-up and ending its part,
+  which the history records as a seat expiry (see "A Follow-up Holds Its
+  Seat").
 - So a game with a timed step **must declare `idleAction`** in
   `boardsmith.json`. `boardsmith validate` and `boardsmith build` refuse it
   otherwise, naming the step. A bot is not an alternative: a timed-out seat is

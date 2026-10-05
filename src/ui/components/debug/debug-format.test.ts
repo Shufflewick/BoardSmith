@@ -142,7 +142,7 @@ describe('formatHistoryEntry', () => {
     expect(formatHistoryEntry({ name: 'playCard', player: 1, args: {} })).toBe('Play Card');
   });
 
-  it('says that a timed seat was closed by the host, which took no action', () => {
+  it('says that the host closed a seat at a deadline, which took no action', () => {
     expect(formatHistoryEntry({ kind: 'seatExpiry', player: 1 })).toBe('Time ran out (seat closed)');
   });
 });
