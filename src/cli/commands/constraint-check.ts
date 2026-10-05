@@ -374,6 +374,9 @@ export const runVitest: TestRunner = async (projectDir, files) => {
   const reportDir = await fs.mkdtemp(join(tmpdir(), 'boardsmith-constraint-run-'));
   const reportPath = join(reportDir, 'report.json');
   try {
+    // Not `runVitestRecorded` (lib/vitest-run.ts), which prints the run to the terminal: this run's
+    // output, stdout and stderr together, is handed back to the caller to report, and the JSON
+    // report says which files ran.
     const args = ['vitest', 'run', '--reporter=default', '--reporter=json', `--outputFile.json=${reportPath}`, ...files];
     const { ok, output } = await new Promise<{ ok: boolean; output: string }>((done) => {
       const child = spawn('npx', args, { cwd: projectDir, shell: process.platform === 'win32' });

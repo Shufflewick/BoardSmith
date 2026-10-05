@@ -416,7 +416,9 @@ interface Runner {
 
 /**
  * Runs vitest to its end, or kills it and every worker it started once `timeoutMs` passes (a mutant
- * can turn a loop infinite). Resolves with its exit code, or false when it was killed.
+ * can turn a loop infinite). Resolves with its exit code, or false when it was killed. Not
+ * `runVitestRecorded` (lib/vitest-run.ts): a mutant run needs that timeout and the kill of the
+ * whole process group, and prints nothing.
  */
 function runVitest(
   bin: string,

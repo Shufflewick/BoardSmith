@@ -24,6 +24,7 @@ import {
 import { readDistDir, createZip } from '../lib/zip.js';
 import { requireGameProject, resolveRulesDir } from '../lib/game-project.js';
 import { commandBuildDir } from '../lib/project-paths.js';
+import { runToolCapturingStdout } from '../lib/run-tool.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
 import { GAME_BACKENDS, capabilityContradictions, isGameBackend } from '../../session/index.js';
 import type { GameDefinition } from '../../session/index.js';
@@ -739,28 +740,16 @@ async function validateTestTypeCoverage(
 
 /** Ask vitest for the files it would run, without running them. */
 async function listVitestFiles(cwd: string): Promise<{ ok: boolean; files: string[] }> {
-  return new Promise((resolve) => {
-    const child = spawn('npx', ['vitest', 'list', '--filesOnly'], {
-      cwd,
-      shell: true,
-      stdio: 'pipe',
-    });
-
-    let output = '';
-    child.stdout?.on('data', (data) => { output += data; });
-
-    child.on('close', (code) => {
-      resolve({
-        ok: code === 0,
-        files: output
-          .split('\n')
-          .map((line) => line.trim())
-          .filter((line) => line.length > 0),
-      });
-    });
-
-    child.on('error', () => resolve({ ok: false, files: [] }));
-  });
+  // Not `runVitestRecorded`: that runs tests and records their progress, and this only lists them.
+  const listed = await runToolCapturingStdout('vitest', ['list', '--filesOnly'], { cwd }).catch(() => undefined);
+  if (listed === undefined) return { ok: false, files: [] };
+  return {
+    ok: listed.code === 0,
+    files: listed.stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0),
+  };
 }
 
 async function validateSecurity(cwd: string): Promise<ValidationResult> {
