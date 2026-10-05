@@ -10,6 +10,7 @@ import {
   catchUpPlan,
   occurrencesDue,
   resumeDueOf,
+  runDueOccurrences,
   nextDueBatch,
   rearmAt,
   scheduleBatchRefusal,
@@ -301,6 +302,83 @@ describe("occurrencesDue — what the drain actually runs, and where it re-arms"
     expect(behind.occurrences).toHaveLength(WORLD_CATCHUP_MAX_REAL_ITERATIONS + 1);
     expect(behind.nextDue).toBe(73 * HOUR);
     expect(behind.nextDue).toBeGreaterThan(72 * HOUR);
+  });
+});
+
+describe("runDueOccurrences — the one occurrence loop every host runs (#538, #539)", () => {
+  const HOUR = 3_600_000;
+  // Two real iterations and then a coalesced call, so a short case reaches the
+  // fold.
+  const FOLD_AFTER_TWO = { catchUpMaxRealIterations: 2 };
+
+  /** A host's `call`: records each occurrence and where the queue would stand
+   *  once it is durable, refusing or ending where the case says. */
+  function host(options: { refuseAt?: number; endAt?: number } = {}) {
+    const calls: Array<{ due: number; missedCount: number; owedDue: number | null }> = [];
+    const call = async (timing: { due: number; missedCount: number }, owedDue: number | null) => {
+      const index = calls.length;
+      calls.push({ ...timing, owedDue });
+      if (index === options.refuseAt) throw new Error(`refused at ${index}`);
+      return { ended: index === options.endAt };
+    };
+    return { calls, call };
+  }
+
+  test("a ONE-SHOT is one call, and nothing is owed after it", async () => {
+    const { calls, call } = host();
+    const outcome = await runDueOccurrences({ due: 1000, seq: 1 }, 9999, BUDGETS, call);
+    expect(calls).toEqual([{ due: 1000, missedCount: 0, owedDue: null }]);
+    expect(outcome).toEqual({ kind: "ran", ran: 1, ended: false, nextDue: null });
+  });
+
+  test("a BEHIND recurrence runs its real iterations, then the coalesced call", async () => {
+    const { calls, call } = host();
+    const outcome = await runDueOccurrences(
+      { due: 0, seq: 1, everyMs: HOUR },
+      4 * HOUR,
+      FOLD_AFTER_TWO,
+      call,
+    );
+    // Each occurrence is told where the queue stands once IT is durable: the
+    // next occurrence still owed -- the coalesced call's FIRST folded hour, so
+    // the fold survives a refusal -- and past the whole plan on the last.
+    expect(calls).toEqual([
+      { due: 0, missedCount: 0, owedDue: HOUR },
+      { due: HOUR, missedCount: 0, owedDue: 2 * HOUR },
+      { due: 4 * HOUR, missedCount: 2, owedDue: 5 * HOUR },
+    ]);
+    expect(outcome).toEqual({ kind: "ran", ran: 3, ended: false, nextDue: 5 * HOUR });
+  });
+
+  test("a refusal at the FIRST occurrence resumes where the event already was", async () => {
+    const { call } = host({ refuseAt: 0 });
+    const outcome = await runDueOccurrences({ due: 0, seq: 1, everyMs: HOUR }, 4 * HOUR, FOLD_AFTER_TWO, call);
+    expect(outcome).toMatchObject({ kind: "refused", ran: 0, resumeDue: 0 });
+    expect((outcome as { error: Error }).error.message).toBe("refused at 0");
+  });
+
+  test("a refusal at a LATER occurrence resumes at that occurrence, not the first", async () => {
+    // #538: the occurrences before it are durable, and resuming at the
+    // original due would run them again.
+    const { calls, call } = host({ refuseAt: 1 });
+    const outcome = await runDueOccurrences({ due: 0, seq: 1, everyMs: HOUR }, 4 * HOUR, FOLD_AFTER_TWO, call);
+    expect(calls).toHaveLength(2);
+    expect(outcome).toMatchObject({ kind: "refused", ran: 1, resumeDue: HOUR });
+  });
+
+  test("a refusal on the COALESCED call resumes at the first occurrence it stood for (#155)", async () => {
+    const { call } = host({ refuseAt: 2 });
+    const outcome = await runDueOccurrences({ due: 0, seq: 1, everyMs: HOUR }, 4 * HOUR, FOLD_AFTER_TWO, call);
+    // Not 4h, the call's own due: a retry stamped there recomputes to one
+    // occurrence carrying nothing, and hours 2 and 3 are erased.
+    expect(outcome).toMatchObject({ kind: "refused", ran: 2, resumeDue: 2 * HOUR });
+  });
+
+  test("an occurrence that ENDS the world is the last one run, and nothing is re-armed", async () => {
+    const { calls, call } = host({ endAt: 1 });
+    const outcome = await runDueOccurrences({ due: 0, seq: 1, everyMs: HOUR }, 4 * HOUR, FOLD_AFTER_TWO, call);
+    expect(calls).toHaveLength(2);
+    expect(outcome).toEqual({ kind: "ran", ran: 2, ended: true, nextDue: null });
   });
 });
 

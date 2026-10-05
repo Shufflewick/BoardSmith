@@ -2047,6 +2047,8 @@ queue, rather than failing a check on the way in.
   that fell behind is **caught up, not replayed**: a few real occurrences and
   then one coalesced call carrying `timing.missedCount`, which is what stops a
   world that was away for a week from delivering a week of notifications at once.
+  If one of those occurrences refuses, the event stays queued at the occurrence
+  that refused: the ones before it are durable and are never run again (#538).
 
 **A scheduled event costs a wake, so do not buy one you do not need.** If the
 effect is only visible when somebody next looks, write a `completesAt` timestamp
@@ -2840,7 +2842,7 @@ argument** and **storage arrives as an interface**.
 | --- | --- |
 | What a world *is*: residency, the declaration walk, rollback baselines, the dirty set, per-seat views, event routing by scope | The session that holds a world in memory, sockets and transport |
 | Genesis, seat assignment and the seat ceiling | Attach, authentication, who is allowed in |
-| Schedule semantics: drift-free recurrence, keyed upserts, catch-up, the caps | The queue itself, the alarm that fires it, the drain |
+| Schedule semantics: drift-free recurrence, keyed upserts, catch-up, the caps, and the occurrence loop a due event runs through (`runDueOccurrences`) | The queue itself, the alarm that fires it, the drain |
 | The partition-store *interface* (`WorldPartitionStore`, `WorldPartitionWriter`) and the naming and size rules every store must enforce | The store: a Durable Object's storage, a SQLite file, an in-memory map, its key layout and its atomicity |
 | The refusal vocabulary and each refusal's owner | The consequence: dead letters, the park ladder, ending a season, rate limits, ejection |
 | The read-only projection a declaration sees | Hibernation and eviction timing, the presence ledger, how long a grace is |

@@ -58,8 +58,7 @@ import {
   assertSeatWithinWorld,
   createWorld,
   nextDueBatch,
-  occurrencesDue,
-  resumeDueOf,
+  runDueOccurrences,
   planSchedules,
   rearmAt,
   readWorldDefinition,
@@ -1178,59 +1177,46 @@ export class ResidentWorld {
    * A ONE-SHOT IS ONE CALL AT ITS OWN DUE. A RECURRENCE THAT FELL BEHIND IS
    * INTEGRATED, not replayed: at most `catchUpMaxRealIterations` real
    * iterations and then one coalesced call carrying how many got no call at
-   * all, so a world that was away for a week is caught up in one wake.
+   * all, so a world that was away for a week is caught up in one wake. The
+   * loop is `runDueOccurrences`, the one every host runs (#539).
    *
    * Answers how many calls it made, which is a batch's own measure of progress.
    */
   async #runQueued(event: PlannedEvent, now: number): Promise<number> {
-    const { occurrences, nextDue } = occurrencesDue(
-      event,
-      now,
-      this.#budgets.catchUpMaxRealIterations,
-    );
-    let ran = 0;
-    for (const [index, timing] of occurrences.entries()) {
+    const outcome = await runDueOccurrences(event, now, this.#budgets, async (timing, owedDue) => {
+      const events = await this.#dispatch({
+        player: null,
+        command: { name: event.action, args: event.args },
+        timing,
+        // ITS `now` IS ITS `due`, never the wall clock at execution: a world
+        // that drained late must produce the state a punctual one would.
+        arrivedAt: timing.due,
+        // THE EVENT'S OWNER IS WHO IT IS ABOUT (#383), which is not who is
+        // charged for it. A seat's own deadline rechecks that seat.
+        about: event.owner,
+        // SETTLED AND RE-ARMED WITH EVERY OCCURRENCE (#538), at the next one
+        // still owed: each occurrence checkpoints on its own, so a later
+        // refusal must find the event already past what ran, or the next wake
+        // runs it again.
+        settle: [event.id],
+        rearm: owedDue === null ? [] : [{ ...event, due: owedDue, attempts: 0 }],
+      });
+      this.#onEvents(events);
       // A RECURRENCE CAN END THE WORLD on one of several occurrences due at
       // once, and the rest belong to a world that no longer runs (#395).
-      if (this.completed) break;
-      // WHERE THE QUEUE STANDS ONCE THIS OCCURRENCE IS DURABLE (#538): at the
-      // next occurrence still owed, or past the whole plan on the last one.
-      // Committed with every occurrence and not only the last, because each
-      // one checkpoints on its own -- a later refusal must find the event
-      // already moved past what ran, or the next wake runs it again. The next
-      // occurrence's due goes through `resumeDueOf`, so a coalesced call that
-      // has not run yet is still owed every occurrence it stood for.
-      const following = occurrences[index + 1];
-      const owedDue =
-        following === undefined ? nextDue : resumeDueOf(following, event.everyMs);
-      try {
-        const events = await this.#dispatch({
-          player: null,
-          command: { name: event.action, args: event.args },
-          timing,
-          // ITS `now` IS ITS `due`, never the wall clock at execution: a world
-          // that drained late must produce the state a punctual one would.
-          arrivedAt: timing.due,
-          // THE EVENT'S OWNER IS WHO IT IS ABOUT (#383), which is not who is
-          // charged for it. A seat's own deadline rechecks that seat.
-          about: event.owner,
-          settle: [event.id],
-          rearm: owedDue === null ? [] : [{ ...event, due: owedDue, attempts: 0 }],
-        });
-        this.#onEvents(events);
-        ran += 1;
-      } catch (error) {
-        // A DUE EVENT THAT REFUSED IS SAID OUT LOUD AND LEFT QUEUED, at the
-        // occurrence that refused. Its effects rolled back, so the world is
-        // unchanged; dropping it silently is how a world stops ticking with
-        // nobody told.
-        this.#onNotice(
-          `The scheduled action "${event.action}" refused, and stays queued: ${messageOf(error)}`,
-        );
-        break;
-      }
+      return { ended: this.completed };
+    });
+    if (outcome.kind === "refused") {
+      // A DUE EVENT THAT REFUSED IS SAID OUT LOUD AND LEFT QUEUED, at the
+      // occurrence that refused -- which is where the last occurrence that ran
+      // already re-armed it, so there is nothing more to write. Its effects
+      // rolled back, so the world is unchanged; dropping it silently is how a
+      // world stops ticking with nobody told.
+      this.#onNotice(
+        `The scheduled action "${event.action}" refused, and stays queued: ${messageOf(outcome.error)}`,
+      );
     }
-    return ran;
+    return outcome.ran;
   }
 
   /**

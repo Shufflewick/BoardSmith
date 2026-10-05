@@ -1,7 +1,7 @@
 {
-  "revision": 129,
+  "revision": 130,
   "bundleProtocol": 2,
-  "surfaceHash": "6cf4146f749f7e86",
+  "surfaceHash": "a798dbd5aecd1982",
   "payloadHash": "40d5b63bde8d6007",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1105,6 +1105,15 @@
       "payloadHash": "40d5b63bde8d6007",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "The host-only seat close is renamed from expireTimedSeat to expireSeat, with the same inputs { type: 'expireSeat', player, idleAction, args, boundaryKey }, and it now works on any step, not only one that declares a time limit (#494 ruling: any host deadline closes a held seat the way a step timeout does): it runs the idle action as the seat's own action when the step offers it, otherwise drops the seat's held follow-up and ends its part (the turn passes, or the seat is marked done), recorded as the existing seatExpiry history entry so replay agrees. It is refused only when the seat can take neither, or as stale by its boundaryKey. The platform must use the name expireSeat, not expireTimedSeat (which its unmerged branch still uses), everywhere it builds or allowlists the op (the builders table, the executor's validation schema, OP_BUILDERS), still compose it only from its own timers and never from a client message, and may now submit it from any host deadline (such as a table's round deadline) on an untimed step, instead of failing the round when a seat holds a follow-up."
+    },
+    {
+      "revision": 130,
+      "date": "2026-10-05",
+      "bundleProtocol": 2,
+      "surfaceHash": "a798dbd5aecd1982",
+      "payloadHash": "40d5b63bde8d6007",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "boardsmith/world exports runDueOccurrences, the one occurrence loop a host runs a due event through: it answers resumeDue at the occurrence that refused (so a refused catch-up never re-runs what already ran, #538) and nextDue on success. ResidentWorld uses it; the platform should replace its own loop with it (ShufflewickPub #569)."
     }
   ]
 }
