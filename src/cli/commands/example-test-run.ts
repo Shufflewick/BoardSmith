@@ -51,7 +51,11 @@ interface VitestJsonReport {
   }[];
 }
 
-/** Runs one test file with the project's vitest and returns its JSON report. */
+/**
+ * Runs one test file with the project's vitest and returns its JSON report. Not
+ * `runVitestRecorded` (lib/vitest-run.ts), which prints the run for a person: this command reads
+ * each test's result from vitest's JSON reporter instead.
+ */
 async function runVitestReport(projectDir: string, relTestFilePath: string): Promise<VitestJsonReport> {
   const outDir = await fs.mkdtemp(join(tmpdir(), 'boardsmith-example-run-'));
   const outFile = join(outDir, 'report.json');

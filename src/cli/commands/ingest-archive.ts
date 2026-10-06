@@ -2,7 +2,7 @@ import {
   designRulebookDir,
 } from '../lib/project-paths.js';
 import { resolveUserPath } from '../lib/user-path.js';
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import chalk from 'chalk';
@@ -142,10 +142,6 @@ export function normalizeEdition(raw: string | undefined): string {
  */
 export const GAPS_BEGIN = '<!-- boardsmith:gaps:begin -->';
 export const GAPS_END = '<!-- boardsmith:gaps:end -->';
-
-function sha256(buf: Buffer): string {
-  return createHash('sha256').update(buf).digest('hex');
-}
 
 /** ISO date (YYYY-MM-DD) in local time — the value written to `Transcribed:`. */
 function isoDate(now: Date): string {
@@ -324,7 +320,7 @@ export async function ingestGapsCommand(
   let relabelled = 0;
   if (!options.skipRelabel) {
     relabelled = (
-      await ingestRelabelCommand({ project: projectDir, json: false, quiet: options.quiet })
+      await relabelDerivedLines({ project: projectDir, quiet: options.quiet })
     ).relabelled;
   }
   const rulebookDir = designRulebookDir(projectDir);
@@ -444,7 +440,8 @@ export const PRESENTATION_LEXICON = Object.freeze([
 ]);
 
 /**
- * `boardsmith ingest-relabel` — move presentation descriptions off the `Derived (p.N):` prefix.
+ * Move presentation descriptions off the `Derived (p.N):` prefix. The first step of
+ * `boardsmith ingest-gaps` (and of `ingest-check`), not a command of its own (#534).
  *
  * INGEST-02 exists because rule-bearing inferences must be separable from presentation notes.
  * Twelve mechanisms were tried to get transcription to make that split at write time and the
@@ -474,8 +471,8 @@ const RELABEL_DERIVED_LINE_RE = new RegExp(
   `^(\\s*)Derived (${DERIVED_CITATION_BODY_SOURCE}):(.*)$`,
 );
 
-export async function ingestRelabelCommand(
-  options: { project?: string; json?: boolean; dryRun?: boolean; quiet?: boolean } = {},
+export async function relabelDerivedLines(
+  options: { project?: string; quiet?: boolean } = {},
 ): Promise<{ relabelled: number; changes: Array<{ file: string; line: number; matched: string }> }> {
   const projectDir = resolve(options.project ?? process.cwd());
   const dir = designRulebookDir(projectDir);
@@ -508,14 +505,10 @@ export async function ingestRelabelCommand(
       touched = true;
     }
 
-    if (touched && !options.dryRun) await fs.writeFile(full, lines.join('\n'));
+    if (touched) await fs.writeFile(full, lines.join('\n'));
   }
 
   const result = { relabelled: changed.length, changes: changed };
-  if (options.json) {
-    console.log(JSON.stringify(result, null, 2));
-    return result;
-  }
   if (options.quiet) return result;
   if (!changed.length) {
     console.log(chalk.green('✓ No Derived (p. line carries presentation-only vocabulary'));
@@ -523,7 +516,7 @@ export async function ingestRelabelCommand(
   }
   console.log(
     chalk.green(
-      `✓ Relabelled ${changed.length} line${changed.length === 1 ? '' : 's'} Derived → Visual${options.dryRun ? ' (dry run — nothing written)' : ''}`,
+      `✓ Relabelled ${changed.length} line${changed.length === 1 ? '' : 's'} Derived → Visual`,
     ),
   );
   for (const c of changed) {
@@ -584,7 +577,7 @@ async function assertArchiveSlotFree(source: SourceToArchive): Promise<void> {
   } catch {
     return; // Not archived yet -- the normal path.
   }
-  if (sha256(existing) !== sha256(source.bytes)) {
+  if (sha256Hex(existing) !== sha256Hex(source.bytes)) {
     throw new Error(
       `${source.relArchivePath} already exists in this project and differs from ${source.sourcePath}.\n` +
         `Remove or rename the archived copy and re-run, or pass --project to target a different project.`,
@@ -596,8 +589,8 @@ async function assertArchiveSlotFree(source: SourceToArchive): Promise<void> {
 async function archiveSource(source: SourceToArchive): Promise<string> {
   await fs.mkdir(dirname(source.archivePath), { recursive: true });
   await fs.writeFile(source.archivePath, source.bytes);
-  const sourceHash = sha256(await fs.readFile(source.archivePath));
-  if (sourceHash !== sha256(source.bytes)) {
+  const sourceHash = sha256Hex(await fs.readFile(source.archivePath));
+  if (sourceHash !== sha256Hex(source.bytes)) {
     throw new Error(`Archived copy at ${source.relArchivePath} does not match the source. Aborting.`);
   }
   return sourceHash;

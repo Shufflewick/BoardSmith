@@ -28,71 +28,12 @@ export interface SandboxViolation {
 }
 
 /**
- * Security rules — enforced for EVERY game source file, including UI. These
- * guard capabilities no game should have regardless of where the code runs:
- * network access, filesystem access, and eval.
+ * What `boardsmith validate` and `boardsmith lint` enforce: the plugin's own `configs.recommended`
+ * (its rule groups, with determinism off for `src/ui/**`), over every script and SFC under `src/`.
+ * The rule list lives once, in the plugin (#534), so the scan cannot enable a different set from
+ * the one a game's own ESLint config gets.
  */
-const SECURITY_RULES: Linter.RulesRecord = {
-  'boardsmith/no-network': 'error',
-  'boardsmith/no-filesystem': 'error',
-  'boardsmith/no-eval': 'error',
-};
-
-/**
- * Determinism rules — enforced only for code that runs inside the executor
- * sandbox: the rules bundle (built from `src/rules`) and any shared modules it
- * imports. The executor must be deterministic and synchronous so games can be
- * replayed for undo and explored by the MCTS bot, and because Workers freeze the
- * clock during sync execution (so timers never fire there anyway).
- *
- * These are deliberately NOT applied to `src/ui`: the UI bundle runs in the
- * browser iframe, never in the executor, so timers and randomness there (e.g.
- * `requestAnimationFrame`-driven animations) are legitimate and cannot affect
- * game-state determinism.
- */
-const DETERMINISM_RULES: Linter.RulesRecord = {
-  'boardsmith/no-timers': 'error',
-  'boardsmith/no-nondeterministic': 'error',
-};
-
-/**
- * Identity/state-shape rules — guard against two anti-patterns that corrupt undo/replay and MCTS
- * exploration without tripping any of the rules above: comparing `GameElement` instances by `===`
- * (identity is not stable across clone/replay) and persisting a raw element array as game state
- * (elements are already tracked by the element tree; a second array copy drifts from it). Enforced
- * project-wide alongside `SECURITY_RULES`/`DETERMINISM_RULES` — CR-01 (178-REVIEW.md) found these
- * two were named in `GENERATED_TEST_SANDBOX_RULES` (`example-test-emit.ts`) but never actually
- * enabled here, making that gate's restriction to them a silent no-op rather than a real filter.
- */
-const IDENTITY_RULES: Linter.RulesRecord = {
-  'boardsmith/no-element-identity-comparison': 'error',
-  'boardsmith/no-element-array-state': 'error',
-};
-
-/**
- * Silence rules — guard against a code path whose failure mode is silence
- * (#161). A per-item dispatch written as a chain of `if (...) { ...; continue; }`
- * with nothing after it resolves an unmatched item to NOTHING: no outcome, no
- * refusal, no record. To a player the card was played and simply had no
- * effect, and no test fails, because nothing asserts that every item produces
- * an outcome. Enforced project-wide: the shape is a defect wherever it is
- * written, not only inside the executor sandbox.
- */
-const SILENCE_RULES: Linter.RulesRecord = {
-  'boardsmith/no-silent-dispatch-fallthrough': 'error',
-};
-
-/**
- * Ownership rules — guard the names the engine owns on every Game (#346). A
- * game zone called `pile` works until the first restore, then silently reads
- * the engine's container instead, because the engine never saves `pile` and
- * rebuilds it itself. Enforced project-wide: the class can live anywhere.
- */
-const OWNERSHIP_RULES: Linter.RulesRecord = {
-  'boardsmith/no-engine-field-shadow': 'error',
-};
-
-const FLAT_CONFIG: Linter.Config[] = [
+export const SANDBOX_LINT_CONFIG: Linter.Config[] = [
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.vue'],
     languageOptions: {
@@ -105,20 +46,8 @@ const FLAT_CONFIG: Linter.Config[] = [
         sourceType: 'module',
       },
     },
-    plugins: {
-      boardsmith: plugin as unknown as NonNullable<Linter.Config['plugins']>[string],
-    },
-    rules: { ...SECURITY_RULES, ...DETERMINISM_RULES, ...IDENTITY_RULES, ...SILENCE_RULES, ...OWNERSHIP_RULES },
   },
-  {
-    // UI runs in the browser, not the executor sandbox: relax the determinism
-    // rules here while keeping the security rules above in force.
-    files: ['src/ui/**'],
-    rules: {
-      'boardsmith/no-timers': 'off',
-      'boardsmith/no-nondeterministic': 'off',
-    },
-  },
+  ...plugin.configs.recommended,
 ];
 
 /**
@@ -166,7 +95,7 @@ function collectSourceFiles(dir: string, files: string[] = []): string[] {
 
 /**
  * Scan ONE source string's worth of already-extracted code (a whole file's contents, or a
- * `.vue` SFC's already-extracted `<script>` body) against `FLAT_CONFIG`.
+ * `.vue` SFC's already-extracted `<script>` body) against `SANDBOX_LINT_CONFIG`.
  *
  * This is the per-file body `scanSandboxViolations` used to run inline, factored out so a
  * caller with a single in-memory source string — not yet written to disk, or never destined to
@@ -179,7 +108,7 @@ function collectSourceFiles(dir: string, files: string[] = []): string[] {
  * match an absolute path) — pass the path this code would live at if it were written.
  *
  * `ruleIds`, when supplied, further restricts the REPORTED violation set to exactly those rule
- * ids — the underlying lint pass still runs the full `FLAT_CONFIG` (so the `src/ui/**`
+ * ids — the underlying lint pass still runs the full `SANDBOX_LINT_CONFIG` (so the `src/ui/**`
  * determinism relaxation still applies correctly), and violations for rules outside `ruleIds`
  * are simply not included in the return. Omit it to get every violation `scanSandboxViolations`
  * would report for this one file.
@@ -192,7 +121,7 @@ export function scanSourceForSandboxViolations(
   const linter = new Linter();
   const violations: SandboxViolation[] = [];
 
-  const messages = linter.verify(code, FLAT_CONFIG, relPath);
+  const messages = linter.verify(code, SANDBOX_LINT_CONFIG, relPath);
   for (const m of messages) {
     // Only report violations of our own sandbox rules. ESLint also emits
     // messages for parser errors and for unknown rules referenced in inline

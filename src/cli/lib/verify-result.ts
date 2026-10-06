@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { ENGINE_REVISION } from '../../contract/index.js';
 import { boardsmithPackageRoot, readBoardsmithVersion } from './boardsmith-version.js';
 import { chunkVerifyBase } from './chunk-commits.js';
-import { gitOutput as git } from './git-output.js';
+import { gitOutput as git, gitSucceeds } from './git-output.js';
 
 /**
  * The result `boardsmith verify` writes, and the one question every done claim asks of it (#452).
@@ -214,11 +214,8 @@ export async function checkoutState(projectDir: string): Promise<{ commit: strin
 }
 
 /** Whether `commit` is `descendant` or one of its ancestors. A commit git does not know is neither. */
-async function isAncestor(projectDir: string, commit: string, descendant: string): Promise<boolean> {
-  return git(projectDir, ['merge-base', '--is-ancestor', commit, descendant]).then(
-    () => true,
-    () => false,
-  );
+function isAncestor(projectDir: string, commit: string, descendant: string): Promise<boolean> {
+  return gitSucceeds(projectDir, ['merge-base', '--is-ancestor', commit, descendant]);
 }
 
 /**

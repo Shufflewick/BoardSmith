@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
 import { isAbsolute, posix, relative, resolve, sep } from 'node:path';
 import chalk from 'chalk';
@@ -24,6 +24,7 @@ import {
 import { atomicWriteFile } from './verify-run.js';
 import { checkConstraints } from './constraint-check.js';
 import { verifiedProblem } from '../lib/verify-result.js';
+import { escapeRegExp } from '../lib/regexp.js';
 
 /**
  * `boardsmith chunk-signoff` / `boardsmith chunk-waiver` / `checkSignoff()`: who may say a chunk
@@ -249,10 +250,6 @@ async function needsDesignerPlaytest(projectDir: string, slug: string, chunkText
 // What a sign-off is bound to
 // ---------------------------------------------------------------------------------------------
 
-function sha256(data: string | Buffer): string {
-  return createHash('sha256').update(data).digest('hex');
-}
-
 const MISSING = 'missing';
 const OUTSIDE_PROJECT = 'outside-project';
 
@@ -279,7 +276,7 @@ export async function chunkCodeFiles(projectDir: string, chunkText: string): Pro
     }
     if (isInside(design, abs)) continue;
     const content = await fs.readFile(abs).catch(() => undefined);
-    files[path] = content ? sha256(content) : MISSING;
+    files[path] = content ? sha256Hex(content) : MISSING;
   }
   return files;
 }
@@ -1067,10 +1064,6 @@ export async function recordReopen(slug: string, options: ReopenOptions): Promis
   const updatedChunk = writeSignoffBlock(chunkText, body, rel).replace(/^Status:.*$/m, 'Status: built');
   await atomicWriteFile(chunkMdPath(dir, slug), updatedChunk);
   await atomicWriteFile(designPath(dir, SKETCH_MD), updatedSketch);
-}
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 interface WaiverOptions {

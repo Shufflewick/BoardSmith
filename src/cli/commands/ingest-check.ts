@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import chalk from 'chalk';
-import { ingestGapsCommand, ingestRelabelCommand } from './ingest-archive.js';
+import { ingestGapsCommand, relabelDerivedLines } from './ingest-archive.js';
 import { checkSliceSources, describeSliceSourceProblems } from './rulebook-sources.js';
 import {
   describeUnanchoredExamples,
@@ -39,7 +39,7 @@ export async function ingestCheckCommand(
   options: { project?: string; json?: boolean } = {},
 ): Promise<void> {
   const projectDir = resolve(options.project ?? process.cwd());
-  const relabel = await ingestRelabelCommand({ project: projectDir, quiet: true });
+  const relabel = await relabelDerivedLines({ project: projectDir, quiet: true });
   const gaps = await ingestGapsCommand({ project: projectDir, skipRelabel: true, quiet: true });
   const examples = await reanchorExampleLedger(projectDir);
   // Which document a slice came from is a fact only the transcription knows, so a slice that does
@@ -77,7 +77,7 @@ export async function ingestCheckCommand(
 
 /** What one `ingest-check` run found and did. */
 interface IngestCheck {
-  relabel: Awaited<ReturnType<typeof ingestRelabelCommand>>;
+  relabel: Awaited<ReturnType<typeof relabelDerivedLines>>;
   gaps: Awaited<ReturnType<typeof ingestGapsCommand>>;
   examples: ReanchorResult;
   /** `describeSliceSourceProblems`' lines, or none when every slice names a recorded document. */

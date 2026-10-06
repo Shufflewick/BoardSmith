@@ -1112,6 +1112,11 @@ describe('chunk-provenance-status', () => {
     return map;
   }
 
+  it('names design/chunks/ when the project has no chunks directory', async () => {
+    const project = tempTree('chunk-provenance-no-chunks-');
+    await expect(chunkProvenanceStatusCommand({ project, json: true })).rejects.toThrow(/No design\/chunks\/ directory/);
+  });
+
   it('a well-formed full block reports state full', async () => {
     const { project } = await makeStatusProject();
     await addChunk(project, 'jab', 'verified', 'rulebook/01-setup-and-round-structure.md');

@@ -1,4 +1,4 @@
-import { promises as fs } from 'node:fs';
+import { existsSync, promises as fs } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
@@ -63,6 +63,23 @@ export async function chunkSlugs(projectDir: string): Promise<string[]> {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw err;
   }
+}
+
+/**
+ * {@link chunkSlugs} for a command that reads every chunk and has nothing to report without them:
+ * a project with no `design/chunks/` directory is refused with a message saying where the command
+ * looks, instead of being read as a project with no chunks.
+ */
+export async function requireChunkSlugs(projectDir: string): Promise<string[]> {
+  if (!existsSync(designChunksDir(projectDir))) {
+    throw new Error(
+      `No ${DESIGN_DIR}/${CHUNKS_DIR}/ directory in ${projectDir}.\n` +
+        `This command looks for ${DESIGN_DIR}/${CHUNKS_DIR}/<slug>/${CHUNK_MD} files — run it from a\n` +
+        `BoardSmith game project directory, or pass --project <dir>.\n` +
+        `If this project still uses the old flat layout, run: boardsmith doctor --fix`,
+    );
+  }
+  return chunkSlugs(projectDir);
 }
 
 /** Absolute path to one chunk's `CHUNK.md`. */

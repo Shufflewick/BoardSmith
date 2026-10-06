@@ -8,9 +8,10 @@
  * failure, and records the outcome for the commit it ran on:
  *
  *   1. test       the full suite, exactly as `boardsmith test` with no pattern runs it
- *   2. typecheck  `boardsmith typecheck`
- *   3. build      `boardsmith build`
- *   4. validate   `boardsmith validate`
+ *   2. typecheck  vue-tsc over the project's tsconfig.json, as `boardsmith typecheck` runs it
+ *   3. build      `boardsmith build`, in this process
+ *   4. validate   `boardsmith validate`, in this process, reporting the typecheck's own run rather
+ *                 than compiling the project a second time (#532)
  *   5. smoke      `tests/browser/smoke.spec.ts` in Chromium against `boardsmith dev`, served from a
  *                 fresh copy of the project (`smoke.ts`): a seated player takes every offered action
  *                 and presses every board control, and any page error, console error, failed
@@ -40,13 +41,11 @@
  * which mutates nothing, cannot stand in for it. `chunk-signoff <slug>` asks that question, and
  * `chunk-gate-transition`, which builds no chunk, the plain one (`verifiedProblem`).
  */
-import { spawn } from 'node:child_process';
 import { existsSync, promises as fs } from 'node:fs';
 import { join, relative, resolve as pathResolve } from 'node:path';
 import chalk from 'chalk';
-import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
 import { chunkVerifyBase } from '../lib/chunk-commits.js';
-import { gitOutput as git } from '../lib/git-output.js';
+import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { type MutantCache, openMutantCache } from '../lib/mutant-cache.js';
 import { scratchDir } from '../lib/project-paths.js';
 import { testRunScopeProblem } from '../lib/test-run-scope.js';
@@ -67,7 +66,8 @@ import {
 import { isChunkCode } from './test-step-check.js';
 import { runSmoke } from './smoke.js';
 import { runDiffMutationCheck } from './test-step-mutation.js';
-import { runTypecheck } from './typecheck.js';
+import { buildProject } from './build.js';
+import { type TypeCheckRun, typeCheckProject, validateProject } from './validate.js';
 
 const short = (commit: string) => commit.slice(0, 12);
 
@@ -196,6 +196,11 @@ interface VerifyContext {
   mutantCache: MutantCache;
   earlier: ReadonlyMap<VerifyCheckName, VerifyCheckResult>;
   log: (line: string) => void;
+  /**
+   * The project's type check, run the first time a check asks and shared after that: the
+   * `typecheck` check and `validate`'s TypeScript step report the same vue-tsc run (#532).
+   */
+  typeCheck: () => Promise<TypeCheckRun>;
 }
 
 type CheckOutcome = Omit<VerifyCheckResult, 'name'>;
@@ -308,35 +313,34 @@ async function testCheck(ctx: VerifyContext): Promise<CheckOutcome> {
   return { passed: true, summary: `${plural(counts.passed, 'test')} passed in ${plural(counts.files, 'file')}.`, counts };
 }
 
-/** 2. `boardsmith typecheck`: vue-tsc over the project's tsconfig.json. */
+/** 2. vue-tsc over the project's tsconfig.json, the run `validate` reports too. */
 async function typecheckCheck(ctx: VerifyContext): Promise<CheckOutcome> {
-  const code = await runTypecheck(ctx.projectDir);
-  return code === 0
-    ? { passed: true, summary: 'No type errors.' }
-    : { passed: false, summary: `vue-tsc found type errors (exit code ${code}).`, next: 'Run `boardsmith typecheck` to see them.' };
+  const { result, compilerReport } = await ctx.typeCheck();
+  if (result.passed) return { passed: true, summary: 'No type errors.' };
+  for (const line of compilerReport) console.log(line);
+  return { passed: false, summary: `${result.message}.`, next: 'Fix the errors above, then run `boardsmith verify` again.' };
 }
 
-/**
- * Runs `boardsmith <command>` in the project as a separate process, as a user would, and reports
- * how it exited. `build` and `validate` end the process they run in when they fail, so they cannot
- * run inside this one.
- */
-function cliCheck(command: 'build' | 'validate'): CheckRunner {
-  return async (ctx) => {
-    const bin = join(boardsmithPackageRoot(), 'bin', 'boardsmith.js');
-    const code = await new Promise<number | null>((resolve, reject) => {
-      const child = spawn(process.execPath, [bin, command], { cwd: ctx.projectDir, stdio: 'inherit' });
-      child.on('error', reject);
-      child.on('close', resolve);
-    });
-    return code === 0
-      ? { passed: true, summary: `\`boardsmith ${command}\` passed.` }
-      : {
-          passed: false,
-          summary: `\`boardsmith ${command}\` failed (exit code ${code}).`,
-          next: `Run \`boardsmith ${command}\` to see why.`,
-        };
-  };
+/** 3. `boardsmith build`, run in this process. */
+async function buildCheck(ctx: VerifyContext): Promise<CheckOutcome> {
+  try {
+    await buildProject(ctx.projectDir, {});
+    return { passed: true, summary: '`boardsmith build` passed.' };
+  } catch (error) {
+    console.log(chalk.red((error as Error).message));
+    return { passed: false, summary: '`boardsmith build` failed.', next: 'Run `boardsmith build` to see why.' };
+  }
+}
+
+/** 4. `boardsmith validate`, run in this process on the type check the run already has. */
+async function validateCheck(ctx: VerifyContext): Promise<CheckOutcome> {
+  try {
+    await validateProject(ctx.projectDir, { typeCheck: await ctx.typeCheck() });
+    return { passed: true, summary: '`boardsmith validate` passed.' };
+  } catch (error) {
+    console.log(chalk.red((error as Error).message));
+    return { passed: false, summary: '`boardsmith validate` failed.', next: 'Run `boardsmith validate` to see why.' };
+  }
 }
 
 const NO_MUTANTS = Object.freeze({ files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, reused: 0 });
@@ -428,8 +432,8 @@ async function smokeCheck(ctx: VerifyContext): Promise<CheckOutcome> {
 export const VERIFY_CHECKS: Readonly<Record<VerifyCheckName, CheckRunner>> = Object.freeze({
   test: testCheck,
   typecheck: typecheckCheck,
-  build: cliCheck('build'),
-  validate: cliCheck('validate'),
+  build: buildCheck,
+  validate: validateCheck,
   smoke: smokeCheck,
   mutation: mutationCheck,
 });
@@ -452,10 +456,7 @@ function requireGameProject(projectDir: string): void {
  * not, writing the result would itself make the tree dirty, and no result could ever count.
  */
 async function requireResultIgnored(projectDir: string): Promise<void> {
-  const ignored = await git(projectDir, ['check-ignore', '-q', '--no-index', '.boardsmith/verify/result.json']).then(
-    () => true,
-    () => false,
-  );
+  const ignored = await gitSucceeds(projectDir, ['check-ignore', '-q', '--no-index', '.boardsmith/verify/result.json']);
   if (!ignored) {
     throw new Error(
       "This project's .gitignore does not leave .boardsmith/ out of git, so the result `boardsmith verify` writes " +
@@ -538,8 +539,10 @@ export async function runVerify(options: {
   const mutantCache = await openMutantCache(projectDir);
   const log = options.log ?? ((line: string) => console.error(chalk.dim(line)));
   if (mutantCache.unavailable !== undefined) log(`${mutantCache.unavailable}; every mutant runs.`);
+  let typeCheck: Promise<TypeCheckRun> | undefined;
   const checks = await runChecks(options.checks ?? VERIFY_CHECKS, {
     projectDir,
+    typeCheck: () => (typeCheck ??= typeCheckProject(projectDir)),
     head,
     base,
     changed: await changedSince(projectDir, base.commit),

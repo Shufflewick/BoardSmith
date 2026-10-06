@@ -27,7 +27,7 @@
 import { relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { ESCALATION_LADDER, type WorkRole } from '../lib/agent-roles.js';
-import { gitOutput as git } from '../lib/git-output.js';
+import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { assertBareName } from '../lib/user-name.js';
 import {
   type VerifyResult,
@@ -86,10 +86,7 @@ async function sinceCommit(projectDir: string, since: string, head: string): Pro
   } catch {
     throw refusal;
   }
-  const isBefore = await git(projectDir, ['merge-base', '--is-ancestor', commit, head]).then(
-    () => true,
-    () => false,
-  );
+  const isBefore = await gitSucceeds(projectDir, ['merge-base', '--is-ancestor', commit, head]);
   if (!isBefore) throw refusal;
   return commit;
 }

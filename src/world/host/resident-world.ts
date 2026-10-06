@@ -58,8 +58,8 @@ import {
   assertSeatWithinWorld,
   createWorld,
   nextDueBatch,
-  occurrencesDue,
-  planSchedules,
+  runDueOccurrences,
+  dispatchStep,
   rearmAt,
   readWorldDefinition,
   settleDeclaration,
@@ -72,7 +72,6 @@ import {
   planMigration,
   receiptFloor,
   resolveOrder,
-  worldIdAllocationOf,
   type PlannedEvent,
   type RoutedEvent,
   type SeatActivityStamp,
@@ -366,41 +365,12 @@ export class ResidentWorld {
    * unit. Everything this class does on its own already runs inside it.
    */
   run<T>(body: () => Promise<T>): Promise<T> {
-    const next = this.#lock.then(
-      () => this.#runRepairing(body),
-      () => this.#runRepairing(body),
-    );
+    const next = this.#lock.then(body, body);
     // Swallowed HERE and nowhere else: the chain must survive a rejection, or
     // one refused command would strand every later one behind a dead promise.
     // The caller still gets the rejection through `next`.
     this.#lock = next.catch(() => {});
     return next;
-  }
-
-  /**
-   * THE REPAIR ROAD FOR A WORLD WHOSE STAMP IS ALREADY STALE (#224).
-   *
-   * For the world whose stamp is present and WRONG -- written by a host that
-   * checkpointed a partition an ordinary command had grown and kept the number
-   * it had before the growth. Such a world refuses every verb that touches the
-   * grown room, forever, with a message that names the repair and no way to run
-   * it.
-   *
-   * Driven by the refusal rather than by a check on every wake, because the
-   * check is O(every stored partition) and the refusal is proof. A world that
-   * is not broken pays nothing.
-   */
-  async #runRepairing<T>(body: () => Promise<T>): Promise<T> {
-    try {
-      return await body();
-    } catch (error) {
-      if (!(error instanceof WorldRefusal) || error.code !== "allocation-stale") throw error;
-      // The refusal is raised at ADOPT, before any command has written
-      // anything, and the repair throws the resident tree away -- so the retry
-      // starts from stored bytes rather than from a half-run command.
-      await this.#repairAllocationStamp();
-      return await body();
-    }
   }
 
   // ── construction and residency ─────────────────────────────────────────────
@@ -576,32 +546,6 @@ export class ResidentWorld {
       this.rearm();
     });
     return { migrated };
-  }
-
-  /**
-   * REWRITE A STALE ALLOCATION STAMP FROM THE BYTES IT IS STALE AGAINST (#224).
-   *
-   * Deriving the stamp means reading every stored partition, which is the
-   * O(world) cost this whole mode exists to avoid -- so it runs only off the
-   * `allocation-stale` refusal, which is proof the stamp is wrong, and a
-   * healthy world never pays for it. Every stored id is read back to its
-   * counter value with the world's own key (#482).
-   */
-  async #repairAllocationStamp(): Promise<void> {
-    const stored: StoredPartition[] = [];
-    for (const name of this.#store.partitionNames()) {
-      stored.push(
-        await this.#readPartition(
-          name,
-          `Repairing this world's id allocation needs partition "${name}", which its store ` +
-            `does not have.`,
-        ),
-      );
-    }
-    this.#store.recordAllocation(worldIdAllocationOf(stored, this.#store.elementIdKey()));
-    // The runner this world holds was built over the stale number. Rebuild it
-    // over the one just written, before anything adopts against the old one.
-    this.#discardResident();
   }
 
   /** Upgrade this world's bytes to the rules that are about to run them (#200). */
@@ -1018,79 +962,56 @@ export class ResidentWorld {
     const { player, command, timing, arrivedAt } = request;
     const runner = this.#world.runner;
 
-    // WALK THE ACTION'S DECLARATION (BoardSmith #169). One round per step, in
-    // the order the author wrote them: round one, then each selection's own,
-    // then what execute writes. No ceiling and no `declaration-unsettled`,
-    // because the length is the action's own selection count -- see
-    // `walkDeclaration`, and `settleDeclaration` beside it, which is still what
-    // a VIEW needs.
-    const answered = await walkDeclaration(
-      // THE SAME INSTANT THE APPLY BELOW IS STAMPED WITH (#375), so the
-      // declaration and the handler it precedes agree about what time it is.
-      (supplied, declared) =>
-        runner.declare(
-          command,
-          player,
-          supplied,
-          // AND THE WHOLE OCCURRENCE ON THE CLOCK'S ROAD (#271). A scheduled
-          // declaration is answered against the occurrence it is running --
-          // its own `due`, and how many occurrences were folded into it --
-          // because a catch-up names one partition per occurrence and a walk
-          // that could not see the fold had to guess a ceiling.
-          timing === null ? { kind: "arrival", now: arrivedAt } : { kind: "scheduled", timing },
-          declared,
-        ),
-      (name) =>
-        this.#readPartition(
-          name,
-          `Action "${command.name}" needs partition "${name}", which this world's store does not have.`,
-        ),
-      // ONE POINT READ PER CHAIR THE WALK NAMED (ShufflewickPub #423). The walk
-      // hands back what it collected and `apply` below takes exactly that, so
-      // no host can drive the declaration and then hand the handler a different
-      // set of answers.
-      (seat) => Promise.resolve(this.#store.activityOf(seat)),
-      // AND ONE POINT READ PER NOTICE BOX IT NAMED (ShufflewickPub #521) -- the
-      // box, never the seat's partition.
-      (seat) => Promise.resolve({ seat, box: this.#store.noticeBox(seat) }),
+    // THE ORDER EVERY HOST SHARES (#539): walk the action's declaration
+    // (BoardSmith #169), read this owner's allowance ONCE, apply with it, and
+    // plan the command's schedules against the same allowance. The checkpoint
+    // below is this host's own, per command.
+    const { result, plan } = await dispatchStep(
+      { player, command, timing, arrivedAt },
+      {
+        declare: (supplied, when, declared) =>
+          runner.declare(command, player, supplied, when, declared),
+        readPartition: (name) =>
+          this.#readPartition(
+            name,
+            `Action "${command.name}" needs partition "${name}", which this world's store does not have.`,
+          ),
+        // ONE POINT READ PER CHAIR THE WALK NAMED (ShufflewickPub #423), and
+        // per notice box (ShufflewickPub #521) -- the box, never the seat's
+        // partition.
+        readActivity: (seat) => Promise.resolve(this.#store.activityOf(seat)),
+        readNoticeBox: (seat) => Promise.resolve({ seat, box: this.#store.noticeBox(seat) }),
+        allowance: (asking) => Promise.resolve(this.#allowanceFor(asking)),
+        apply: ({ allowance, answers }) =>
+          runner.apply({
+            player,
+            command,
+            timing,
+            arrivedAt,
+            allowance,
+            // DERIVED HERE AND NEVER STORED. Who is watching is the host's
+            // answer from its open connections at the instant it asks -- a
+            // parked world reports nobody rather than a memory of an audience
+            // that went home.
+            presence: this.#presence(),
+            // READ BEFORE THE COMMAND RUNS (#383), which is what makes it the
+            // watermark from BEFORE this arrival: the handler is told when this
+            // seat was last here, not that it is here now.
+            activity: this.#activityFor(request.about ?? player),
+            ...answers,
+          }),
+        planning: (owner) => {
+          const pending = this.#store.pendingEvents();
+          return Promise.resolve({
+            nextSeq: this.#store.nextSeq(),
+            mintId: this.#mintId,
+            replaces: (key: string) =>
+              pending.find((event) => event.owner === owner && event.key === key)?.id,
+          });
+        },
+      },
+      this.#budgets,
     );
-
-    const owner = player ?? WORLD_OWNER;
-    // ONE ALLOWANCE, read once and used by both the apply and the plan. Two
-    // reads either side of a command that scheduled something would let the
-    // parent's re-plan judge against numbers the child never saw.
-    const allowance = this.#allowanceFor(owner);
-    const result = await runner.apply({
-      player,
-      command,
-      timing,
-      arrivedAt,
-      allowance,
-      // DERIVED HERE AND NEVER STORED. Who is watching is the host's answer
-      // from its open connections at the instant it asks -- a parked world
-      // reports nobody rather than a memory of an audience that went home.
-      presence: this.#presence(),
-      // READ BEFORE THE COMMAND RUNS (#383), which is what makes it the
-      // watermark from BEFORE this arrival: the handler is told when this seat
-      // was last here, not that it is here now, which it can see for itself.
-      activity: this.#activityFor(request.about ?? player),
-      ...answered,
-    });
-
-    // THE PARENT IS THE ONLY WRITER. `ctx.schedule()` refused inside the
-    // handler at the offending line, where the rollback unwinds it; this is the
-    // authority that actually mints the events.
-    const pending = this.#store.pendingEvents();
-    const plan = planSchedules(result.schedules, {
-      owner: player,
-      arrivedAt,
-      nextSeq: this.#store.nextSeq(),
-      mintId: this.#mintId,
-      allowance,
-      budgets: this.#budgets,
-      replaces: (key) => pending.find((event) => event.owner === owner && event.key === key)?.id,
-    });
-    if (!plan.ok) throw plan.refusal;
 
     // RECORDED BEFORE THE CHECKPOINT, deliberately: a restart that finds a
     // non-empty dirty set is being told the truth about which partitions'
@@ -1233,51 +1154,46 @@ export class ResidentWorld {
    * A ONE-SHOT IS ONE CALL AT ITS OWN DUE. A RECURRENCE THAT FELL BEHIND IS
    * INTEGRATED, not replayed: at most `catchUpMaxRealIterations` real
    * iterations and then one coalesced call carrying how many got no call at
-   * all, so a world that was away for a week is caught up in one wake.
+   * all, so a world that was away for a week is caught up in one wake. The
+   * loop is `runDueOccurrences`, the one every host runs (#539).
    *
    * Answers how many calls it made, which is a batch's own measure of progress.
    */
   async #runQueued(event: PlannedEvent, now: number): Promise<number> {
-    const { occurrences, nextDue } = occurrencesDue(
-      event,
-      now,
-      this.#budgets.catchUpMaxRealIterations,
-    );
-    const advanced: PlannedEvent[] =
-      nextDue === null ? [] : [{ ...event, due: nextDue, attempts: 0 }];
-    let ran = 0;
-    for (const [index, timing] of occurrences.entries()) {
+    const outcome = await runDueOccurrences(event, now, this.#budgets, async (timing, owedDue) => {
+      const events = await this.#dispatch({
+        player: null,
+        command: { name: event.action, args: event.args },
+        timing,
+        // ITS `now` IS ITS `due`, never the wall clock at execution: a world
+        // that drained late must produce the state a punctual one would.
+        arrivedAt: timing.due,
+        // THE EVENT'S OWNER IS WHO IT IS ABOUT (#383), which is not who is
+        // charged for it. A seat's own deadline rechecks that seat.
+        about: event.owner,
+        // SETTLED AND RE-ARMED WITH EVERY OCCURRENCE (#538), at the next one
+        // still owed: each occurrence checkpoints on its own, so a later
+        // refusal must find the event already past what ran, or the next wake
+        // runs it again.
+        settle: [event.id],
+        rearm: owedDue === null ? [] : [{ ...event, due: owedDue, attempts: 0 }],
+      });
+      this.#onEvents(events);
       // A RECURRENCE CAN END THE WORLD on one of several occurrences due at
       // once, and the rest belong to a world that no longer runs (#395).
-      if (this.completed) break;
-      const last = index === occurrences.length - 1;
-      try {
-        const events = await this.#dispatch({
-          player: null,
-          command: { name: event.action, args: event.args },
-          timing,
-          // ITS `now` IS ITS `due`, never the wall clock at execution: a world
-          // that drained late must produce the state a punctual one would.
-          arrivedAt: timing.due,
-          // THE EVENT'S OWNER IS WHO IT IS ABOUT (#383), which is not who is
-          // charged for it. A seat's own deadline rechecks that seat.
-          about: event.owner,
-          settle: last ? [event.id] : [],
-          rearm: last ? advanced : [],
-        });
-        this.#onEvents(events);
-        ran += 1;
-      } catch (error) {
-        // A DUE EVENT THAT REFUSED IS SAID OUT LOUD AND LEFT QUEUED. Its
-        // effects rolled back, so the world is unchanged; dropping it silently
-        // is how a world stops ticking with nobody told.
-        this.#onNotice(
-          `The scheduled action "${event.action}" refused, and stays queued: ${messageOf(error)}`,
-        );
-        break;
-      }
+      return { ended: this.completed };
+    });
+    if (outcome.kind === "refused") {
+      // A DUE EVENT THAT REFUSED IS SAID OUT LOUD AND LEFT QUEUED, at the
+      // occurrence that refused -- which is where the last occurrence that ran
+      // already re-armed it, so there is nothing more to write. Its effects
+      // rolled back, so the world is unchanged; dropping it silently is how a
+      // world stops ticking with nobody told.
+      this.#onNotice(
+        `The scheduled action "${event.action}" refused, and stays queued: ${messageOf(outcome.error)}`,
+      );
     }
-    return ran;
+    return outcome.ran;
   }
 
   /**

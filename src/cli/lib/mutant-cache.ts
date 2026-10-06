@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { sha256Hex } from './hash.js';
 import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { boardsmithPackageRoot } from './boardsmith-version.js';
@@ -84,8 +85,6 @@ export const BOOKKEEPING_RECORDS: readonly RegExp[] = Object.freeze([
   /^design\/chunks\/[^/]+\/CHUNK\.md$/,
   /^design\/run-log\/[^/]+\.md$/,
 ]);
-
-const sha256 = (text: string | Buffer) => createHash('sha256').update(text).digest('hex');
 
 /** `dir` and each of its parents, up to the filesystem root: the folders Node resolves packages from. */
 function ancestors(dir: string): string[] {
@@ -185,7 +184,7 @@ async function ignoredEntryPointsHash(root: string): Promise<string> {
     if (hashed.has(path)) return;
     const full = join(root, path);
     const stat = await fs.stat(full).catch(() => undefined);
-    hashed.set(path, stat === undefined ? 'absent' : stat.isDirectory() ? await folderContentHash(full) : sha256(await fs.readFile(full)));
+    hashed.set(path, stat === undefined ? 'absent' : stat.isDirectory() ? await folderContentHash(full) : sha256Hex(await fs.readFile(full)));
   };
   for (const target of targets) {
     const star = target.indexOf('*');
@@ -210,7 +209,7 @@ async function ignoredEntryPointsHash(root: string): Promise<string> {
       }
     }
   }
-  return sha256(JSON.stringify([...hashed].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))));
+  return sha256Hex(JSON.stringify([...hashed].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))));
 }
 
 /**
@@ -251,7 +250,7 @@ async function repositoryTreeHash(projectDir: string): Promise<string> {
     })
     .filter(({ path }) => !isBookkeeping(path))
     .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-  return sha256(entries.map(({ object, path }) => `${object}\t${path}`).join('\0'));
+  return sha256Hex(entries.map(({ object, path }) => `${object}\t${path}`).join('\0'));
 }
 
 /**
@@ -266,10 +265,10 @@ async function installedPackagesHash(projectDir: string): Promise<string> {
   for (const dir of ancestors(await fs.realpath(projectDir))) {
     const record = await readIfPresent(join(dir, 'node_modules', '.package-lock.json'));
     if (record === undefined) continue;
-    const digest = sha256(record);
+    const digest = sha256Hex(record);
     if (!records.includes(digest)) records.push(digest);
   }
-  return sha256(records.join('\0'));
+  return sha256Hex(records.join('\0'));
 }
 
 /** True when `path` is `dir` or lies inside it. */
@@ -354,7 +353,7 @@ export async function linkedPackagesHash(projectDir: string): Promise<string> {
       if (scanned.has(dir)) continue;
       scanned.add(dir);
       const record = await readIfPresent(join(dir, 'node_modules', '.package-lock.json'));
-      if (record !== undefined && !gameFolders.has(dir)) named.set(`record ${dir}`, sha256(record));
+      if (record !== undefined && !gameFolders.has(dir)) named.set(`record ${dir}`, sha256Hex(record));
       for (const link of await installedLinks(join(dir, 'node_modules'))) {
         let target: string;
         try {
@@ -377,7 +376,7 @@ export async function linkedPackagesHash(projectDir: string): Promise<string> {
     }
   }
   await scan(game);
-  return sha256(JSON.stringify([...named].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))));
+  return sha256Hex(JSON.stringify([...named].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))));
 }
 
 /** The cache file, in the git common directory every checkout of the repository shares. */
@@ -436,7 +435,7 @@ export async function openMutantCache(projectDir: string): Promise<MutantCache> 
   ]);
   const used = new Map<string, CachedOutcome>();
   const keyOf = (m: MutantText) =>
-    sha256(JSON.stringify([CACHE_FORMAT, tools, process.version, tree, installed, linked, prefix, m.file, sha256(m.source)]));
+    sha256Hex(JSON.stringify([CACHE_FORMAT, tools, process.version, tree, installed, linked, prefix, m.file, sha256Hex(m.source)]));
 
   return {
     get(mutant) {

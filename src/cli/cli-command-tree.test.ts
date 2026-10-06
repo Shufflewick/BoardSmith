@@ -32,6 +32,12 @@ describe('the command tree (#348)', () => {
   });
 });
 
+describe('commands that are steps of another command (#534)', () => {
+  it('has no ingest-relabel: ingest-gaps relabels first, so a separate command is one to forget', () => {
+    expect(createProgram().commands.map((c) => c.name())).not.toContain('ingest-relabel');
+  });
+});
+
 describe('boardsmith claude uninstall --local (#348)', () => {
   const skills = installedSkillsTree('bs-cli-claude-uninstall-');
 

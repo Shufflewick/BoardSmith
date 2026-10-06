@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
 import { resolve } from 'node:path';
 import chalk from 'chalk';
@@ -80,10 +80,6 @@ interface GateTransitionResult {
   claims: Record<string, number[]>;
 }
 
-function sha256(data: string | Buffer): string {
-  return createHash('sha256').update(data).digest('hex');
-}
-
 /**
  * The single hash a sign-off recorded before #396, computed the way it was: every manifest path
  * that is not a bare design ledger name, each paired with its content hash, in path order. Used
@@ -101,9 +97,9 @@ async function wholeFileHash(projectDir: string, chunkText: string): Promise<str
   for (const path of paths) {
     const abs = resolveManifestPath(projectDir, path);
     const content = abs === 'escapes' ? undefined : await fs.readFile(abs).catch(() => undefined);
-    lines.push(`${path}\t${abs === 'escapes' ? 'outside the project' : content ? sha256(content) : 'missing'}`);
+    lines.push(`${path}\t${abs === 'escapes' ? 'outside the project' : content ? sha256Hex(content) : 'missing'}`);
   }
-  return sha256(lines.join('\n'));
+  return sha256Hex(lines.join('\n'));
 }
 
 async function readChunk(dir: string, slug: string): Promise<string | undefined> {

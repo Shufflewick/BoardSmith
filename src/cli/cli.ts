@@ -18,7 +18,6 @@ import { installClaudeCommand, uninstallClaudeCommand } from './commands/install
 import {
   ingestArchiveCommand,
   ingestGapsCommand,
-  ingestRelabelCommand,
 } from './commands/ingest-archive.js';
 import { ingestCheckCommand } from './commands/ingest-check.js';
 import { exampleLedgerUpgradeCommand } from './commands/example-ledger-upgrade.js';
@@ -359,14 +358,6 @@ export function createProgram(): Command {
     .action(async (document: string, slices: string[], options) => {
       await ingestSliceSourceCommand(document, slices, options);
     });
-
-  program
-    .command('ingest-relabel')
-    .description('Relabel Derived (p. lines that are pure presentation descriptions as Visual (p.')
-    .option('--project <dir>', 'Project directory (defaults to cwd)')
-    .option('--dry-run', 'Report what would change without writing')
-    .option('--json', 'Emit JSON instead of human-readable output')
-    .action(discardResult(ingestRelabelCommand));
 
   // Provenance: record or repair a chunk's `## Verified Against` block. Same mechanical-work-
   // belongs-in-code rationale as the ingest-* family above (171-CONTEXT.md).

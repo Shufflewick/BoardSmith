@@ -8,16 +8,13 @@
  * tools come to disagree about what a ledger says: before #436 this reader knew only real numbers,
  * so it read a chunk branch's provisional entry as part of the numbered entry above it.
  */
+import { escapeRegExp } from './regexp.js';
 
 const SLUG = '[A-Za-z0-9_-]+';
 /** A provisional entry number, `@<slug>.<n>`, written on a parallel chunk branch until merge (#294). */
 export const PROVISIONAL_NUMBER = `@${SLUG}\\.\\d+`;
 /** The number part of an entry id, real or provisional: `12`, or `@trading.1`. */
 export const ENTRY_NUMBER = `(?:\\d+|${PROVISIONAL_NUMBER})`;
-
-export function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 /**
  * The heading line of a `<kind>` entry whose number matches `number` (a regex source, captured as

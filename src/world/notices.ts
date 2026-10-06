@@ -265,7 +265,7 @@ function invalidNotice(action: string, why: string) {
 }
 
 /** The refusal a `refuse` notice meets at a full box, on every host. */
-export function boxFull(seat: number, perSeat: number) {
+function boxFull(seat: number, perSeat: number) {
   return worldRefusal(
     "notice-box-full",
     `Seat ${seat}'s notice box already holds ${perSeat} notices, the most this world keeps for one ` +

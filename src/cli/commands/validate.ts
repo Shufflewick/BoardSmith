@@ -1,6 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, readdirSync } from 'node:fs';
 import { join, relative, sep, resolve as resolvePath } from 'node:path';
-import { spawn } from 'node:child_process';
 import chalk from 'chalk';
 import ora from 'ora';
 import { scanSandboxViolations } from '../lib/sandbox-scan.js';
@@ -24,6 +23,7 @@ import {
 import { readDistDir, createZip } from '../lib/zip.js';
 import { requireGameProject, resolveRulesDir } from '../lib/game-project.js';
 import { commandBuildDir } from '../lib/project-paths.js';
+import { runToolCapturingStdout } from '../lib/run-tool.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
 import { GAME_BACKENDS, capabilityContradictions, isGameBackend } from '../../session/index.js';
 import type { GameDefinition } from '../../session/index.js';
@@ -58,19 +58,33 @@ export function hasBlockingFailure(results: ValidationResult[]): boolean {
   return results.some((r) => !r.passed && r.severity !== 'warning');
 }
 
-/** One `vue-tsc --noEmit --listFiles` run: its verdict, and the program it compiled. */
-interface TypeCheckRun {
+/** One `vue-tsc --noEmit --listFiles` run: its verdict, the program it compiled, and what it said. */
+export interface TypeCheckRun {
   result: ValidationResult;
   programFiles: string[];
+  /** Every line the compiler printed except the file listing: each diagnostic in full. */
+  compilerReport: string[];
 }
 
-export async function validateCommand(): Promise<void> {
-  const cwd = process.cwd();
+/** Every check's verdict, and which backend the project declares. */
+interface ValidationRun {
+  results: ValidationResult[];
+  worldMode: boolean;
+}
 
+/**
+ * Runs every pre-publish check on the project in `cwd` and returns the verdicts, printing nothing.
+ * `typeCheck` is a type check of the project already run (`boardsmith verify` runs one for its own
+ * `typecheck` check, and vue-tsc is the slowest step); without one, validation runs its own.
+ */
+async function runValidation(
+  projectDir: string,
+  options: { typeCheck?: TypeCheckRun } = {},
+): Promise<ValidationRun> {
+  // The real path, as a shell's working directory always is, so paths the tools report (vue-tsc's
+  // program, vitest's file list) compare equal to paths built from it.
+  const cwd = realpathSync(projectDir);
   const configPath = requireGameProject(cwd);
-
-  console.log(chalk.cyan('\nValidating game...\n'));
-
   const results: ValidationResult[] = [];
 
   // Which BACKEND this game declares, read once. `backend` is the single
@@ -84,7 +98,7 @@ export async function validateCommand(): Promise<void> {
   results.push(await validateMetadata(cwd));
 
   // 2. TypeScript compilation
-  const typeCheck = await validateTypeScript(cwd);
+  const typeCheck = options.typeCheck ?? (await typeCheckProject(cwd));
   results.push(typeCheck.result);
 
   // 2b. Every file vitest runs is in the program that just type-checked.
@@ -108,14 +122,27 @@ export async function validateCommand(): Promise<void> {
   // 8. The compiled rules agree with boardsmith.json, exactly as build requires.
   results.push(await validateRulesAgreement(cwd));
 
+  return { results, worldMode };
+}
+
+/**
+ * Validates the project in `cwd` and prints every verdict. Throws when a check blocks, so a caller
+ * (`publish`, `verify`) stops there, and the CLI exits non-zero with the message.
+ */
+export async function validateProject(cwd: string, options: { typeCheck?: TypeCheckRun } = {}): Promise<void> {
+  console.log(chalk.cyan('\nValidating game...\n'));
+  const { results, worldMode } = await runValidation(cwd, options);
   printResults(results);
   if (hasBlockingFailure(results)) {
-    console.log(chalk.red('Validation failed. Please fix the issues above.\n'));
-    process.exit(1);
+    throw new Error('Validation failed. Please fix the issues above.');
   }
-
   const warnings = results.filter((r) => !r.passed && r.severity === 'warning').length;
   for (const line of successGuidance(worldMode, warnings)) console.log(line);
+}
+
+/** `boardsmith validate`, in the current directory. */
+export async function validateCommand(): Promise<void> {
+  await validateProject(process.cwd());
 }
 
 /** One check's icon and status word: pass, advisory warning, or failure. */
@@ -530,52 +557,34 @@ async function validateMetadata(cwd: string): Promise<ValidationResult> {
  * `vue-tsc` compiles SFCs for real: props are checked, and each file's `vue`
  * resolves from its own location, so a game can upgrade vue whenever it likes.
  */
-async function validateTypeScript(cwd: string): Promise<TypeCheckRun> {
-  return new Promise((resolve) => {
-    const child = spawn('npx', ['vue-tsc', '--noEmit', '--listFiles'], {
-      cwd,
-      shell: true,
-      stdio: 'pipe',
-    });
-
-    let output = '';
-    child.stdout?.on('data', (data) => { output += data; });
-    child.stderr?.on('data', (data) => { output += data; });
-
-    child.on('close', (code) => {
-      const programFiles = parseProgramFiles(output);
-      if (code === 0) {
-        resolve({
-          result: { name: 'TypeScript', passed: true, message: '' },
-          programFiles,
-        });
-      } else {
-        const allErrors = output.split('\n').filter(line =>
-          line.includes('error TS')
-        );
-        resolve({
-          result: {
-            name: 'TypeScript',
-            passed: false,
-            message: 'TypeScript compilation failed',
-            details: typeScriptFailureDetails(cwd, allErrors),
-          },
-          programFiles,
-        });
-      }
-    });
-
-    child.on('error', () => {
-      resolve({
-        result: {
-          name: 'TypeScript',
-          passed: false,
-          message: 'Failed to run TypeScript compiler',
-        },
-        programFiles: [],
-      });
-    });
-  });
+export async function typeCheckProject(projectDir: string): Promise<TypeCheckRun> {
+  const cwd = realpathSync(projectDir);
+  // `--listFiles` because the test-coverage check reads the program this compiled.
+  let run: { code: number; stdout: string };
+  try {
+    run = await runToolCapturingStdout('vue-tsc', ['--noEmit', '--listFiles', '-p', 'tsconfig.json'], { cwd });
+  } catch (error) {
+    return {
+      result: { name: 'TypeScript', passed: false, message: `Failed to run the TypeScript compiler: ${(error as Error).message}` },
+      programFiles: [],
+      compilerReport: [],
+    };
+  }
+  const programFiles = parseProgramFiles(run.stdout);
+  const listed = new Set(programFiles);
+  const compilerReport = run.stdout.split('\n').filter((line) => line.trim() !== '' && !listed.has(line.trim()));
+  if (run.code === 0) return { result: { name: 'TypeScript', passed: true, message: '' }, programFiles, compilerReport };
+  const allErrors = run.stdout.split('\n').filter((line) => line.includes('error TS'));
+  return {
+    result: {
+      name: 'TypeScript',
+      passed: false,
+      message: 'TypeScript compilation failed',
+      details: typeScriptFailureDetails(cwd, allErrors),
+    },
+    programFiles,
+    compilerReport,
+  };
 }
 
 /**
@@ -739,28 +748,16 @@ async function validateTestTypeCoverage(
 
 /** Ask vitest for the files it would run, without running them. */
 async function listVitestFiles(cwd: string): Promise<{ ok: boolean; files: string[] }> {
-  return new Promise((resolve) => {
-    const child = spawn('npx', ['vitest', 'list', '--filesOnly'], {
-      cwd,
-      shell: true,
-      stdio: 'pipe',
-    });
-
-    let output = '';
-    child.stdout?.on('data', (data) => { output += data; });
-
-    child.on('close', (code) => {
-      resolve({
-        ok: code === 0,
-        files: output
-          .split('\n')
-          .map((line) => line.trim())
-          .filter((line) => line.length > 0),
-      });
-    });
-
-    child.on('error', () => resolve({ ok: false, files: [] }));
-  });
+  // Not `runVitestRecorded`: that runs tests and records their progress, and this only lists them.
+  const listed = await runToolCapturingStdout('vitest', ['list', '--filesOnly'], { cwd }).catch(() => undefined);
+  if (listed === undefined) return { ok: false, files: [] };
+  return {
+    ok: listed.code === 0,
+    files: listed.stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0),
+  };
 }
 
 async function validateSecurity(cwd: string): Promise<ValidationResult> {

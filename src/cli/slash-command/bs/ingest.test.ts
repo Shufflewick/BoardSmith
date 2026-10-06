@@ -540,7 +540,7 @@ describe('v4.9 INGEST-02 — relabel command and shared lexicon', () => {
     // ingest-gaps must actually call the relabel first, not just document that it does.
     // (The call captures a return value since 2026-07-28 — `ingest-check` needs to know whether
     // anything was relabelled — so this matches the guarded call, not one exact spelling of it.)
-    expect(cmd).toMatch(/if \(!options\.skipRelabel\) \{[\s\S]{0,120}?ingestRelabelCommand\(/);
+    expect(cmd).toMatch(/if \(!options\.skipRelabel\) \{[\s\S]{0,120}?relabelDerivedLines\(/);
   });
 
   it('the relabel command changes only the prefix, never the text', () => {

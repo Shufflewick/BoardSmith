@@ -9,7 +9,7 @@ import chalk from 'chalk';
 import { parseRulings } from './build-manifest.js';
 import { allocatedNumber } from '../lib/ledger-entries.js';
 import { readFencedJsonLedger } from '../lib/fenced-json-ledger.js';
-import { atomicWriteFile, RUN_ID_RE, runRootDir, stagingSlicesDir } from './verify-run.js';
+import { atomicWriteFile, listRunIds, RUN_ID_RE, runRootDir, stagingSlicesDir } from './verify-run.js';
 
 /**
  * `verify-ruling-recheck.ts` — CHECK-01's mechanical half (176-CONTEXT.md decision 2): the CLI
@@ -195,21 +195,6 @@ export function enumerateRulingsForRecheck(rulingsText: string): RulingEnumerati
 export type FreshTranscriptionResolution =
   | { scopeLimited: false; runId: string; stagingDir: string; slicePaths: string[] }
   | { scopeLimited: true; reason: string; missingPath: string };
-
-/** All run-ids present under this project's `rulebook/.verify/`, sorted (empty if none). */
-async function listRunIds(projectDir: string): Promise<string[]> {
-  const verifyRoot = join(designRulebookDir(projectDir), '.verify');
-  let entries: Array<{ name: string; isDirectory(): boolean }>;
-  try {
-    entries = await fs.readdir(verifyRoot, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  return entries
-    .filter((e) => e.isDirectory() && RUN_ID_RE.test(e.name))
-    .map((e) => e.name)
-    .sort();
-}
 
 /**
  * Resolves the fresh STAGED transcription a re-check judgment reads against — never the live

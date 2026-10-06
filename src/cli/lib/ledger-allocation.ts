@@ -15,7 +15,8 @@
  * a comment, is not a citation (`citableText`, #437). `chunk-merge` refuses a branch that added a real number,
  * so the only way a number reaches `main` from a parallel branch is through this allocation.
  */
-import { PROVISIONAL_NUMBER, blankComments, citableText, entryHeadingPattern, escapeRegExp } from './ledger-entries.js';
+import { PROVISIONAL_NUMBER, blankComments, citableText, entryHeadingPattern } from './ledger-entries.js';
+import { escapeRegExp } from './regexp.js';
 import { CONSTRAINTS_MD, DECISIONS_MD, FILINGS_MD, QUESTIONS_MD, RULINGS_MD } from './project-paths.js';
 
 /** One kind of numbered entry: its ledger, its heading word, and what separates word and number. */

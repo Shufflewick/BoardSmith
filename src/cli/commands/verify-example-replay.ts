@@ -1,5 +1,5 @@
 import { designChunksDir, designRulebookDir } from '../lib/project-paths.js';
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
@@ -414,9 +414,7 @@ export interface SliceWithoutExamplesRecord {
  */
 function sliceExtractionHash(slice: { path: string; text: string }): string {
   const { lines } = buildExampleExtractionPayload(slice);
-  return createHash('sha256')
-    .update(lines.map((l) => l.text).join('\n'))
-    .digest('hex');
+  return sha256Hex(lines.map((l) => l.text).join('\n'));
 }
 
 const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
