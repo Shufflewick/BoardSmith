@@ -26,6 +26,7 @@ import {
 import { createBot, parseBotLevel } from '../bot/index.js';
 import type { BotMove } from '../bot/types.js';
 import { describeMoveForHint } from './move-summary.js';
+import { PERSIST_KEY, PERSIST_PRIVATE_KEY, type PersistCommit } from '../persistence/persistence.js';
 import { PickHandler } from './pick-handler.js';
 import {
   offerFollowUp,
@@ -344,6 +345,13 @@ export interface StateEnvelope {
    * same serializer the session broadcast and `debugFlowState` use).
    */
   flowDebugInfo: SerializedFlowDebugInfo;
+  /**
+   * What the game asked the host to store (#527): the values of its reserved
+   * `persist` and `persistPrivate` root attributes, read off the game root
+   * after the op. No view carries either. A host commits this at game over;
+   * `readPersistCommit` (`boardsmith/persistence`) validates it.
+   */
+  persistCommit: PersistCommit;
 }
 
 /** What a move that may chain on returns to the seat that made it. */
@@ -599,7 +607,21 @@ function stateEnvelope(runner: GameRunner, playerCount: number): StateEnvelope {
     // alongside its own per-seat pendingAction lookup (see
     // SnapshotSessionHost.mergeTransientState / lastFlowDebugInfo).
     flowDebugInfo: serializeFlowDebugInfo(runner.game),
+    persistCommit: persistCommitOf(snapshot),
   };
+}
+
+/**
+ * The reserved commit attributes of the game `snapshot` holds, as the game
+ * set them. Read from the snapshot's own serialization of the game root, the
+ * one place both channels live, so the commit is the game's and no view's.
+ */
+function persistCommitOf(snapshot: GameStateSnapshot): PersistCommit {
+  const attributes = snapshot.state.attributes;
+  const commit: PersistCommit = {};
+  if (attributes[PERSIST_KEY] !== undefined) commit.public = attributes[PERSIST_KEY];
+  if (attributes[PERSIST_PRIVATE_KEY] !== undefined) commit.private = attributes[PERSIST_PRIVATE_KEY];
+  return commit;
 }
 
 function errorResult(

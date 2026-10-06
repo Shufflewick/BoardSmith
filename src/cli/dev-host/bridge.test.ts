@@ -126,6 +126,7 @@ describe('dev host bridge', () => {
       playerViews: [{ state: { secret: 'should-not-appear' } }],
       spectatorView: { state: { secret: 'spectator' } },
       flowDebugInfo: {} as SerializedFlowDebugInfo,
+      persistCommit: { private: { entries: [] } },
     };
 
     it('returns only the move outcome for an action', () => {
@@ -441,6 +442,7 @@ describe('dev host bridge', () => {
         playerViews: [],
         spectatorView: undefined,
         flowDebugInfo: {} as SerializedFlowDebugInfo,
+        persistCommit: {},
       };
       const warningExecuteOp = ((_snap: unknown, _pend: unknown, op: ExecutableOp): Promise<OpResult> => {
         if (op.type === 'start') return Promise.resolve({ success: true, ...game });

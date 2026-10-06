@@ -65,6 +65,7 @@ function countingSession(options: { botSeats?: Array<{ seat: number }>; botsStop
     playerViews: [{ state: { count: snapshot.count } }],
     spectatorView: undefined,
     flowDebugInfo: {} as SerializedFlowDebugInfo,
+    persistCommit: {},
   });
   const executeOp = stubExecuteOp(async (snapshot, _pending, op) => {
     const at = snapshot as Count;

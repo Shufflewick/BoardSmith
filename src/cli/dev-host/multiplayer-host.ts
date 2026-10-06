@@ -37,8 +37,6 @@ import type { GameOptionDefinition } from '../../session/types.js';
 import {
   PERSIST_KEY,
   PersistenceStore,
-  takePrivateCommit,
-  type PrivateChannelCarrier,
   type PersistPlayer,
 } from '../../persistence/index.js';
 import { mintSeed } from '../../utils/random.js';
@@ -392,16 +390,10 @@ function devPlayerToken(seat: number): string {
 }
 
 /**
- * The failure frame a REFUSED COMMIT returns to `SnapshotSessionHost`.
- *
- * Mirrors production's `game-session.ts:refuseOp` field for field, which in
- * turn mirrors the session layer's own error frame: nulled state, empty views,
- * `isComplete: false`. Those fields are never read -- the host returns the
- * result untouched before `apply()` sees it -- and echoing the pre-action state
- * instead would invent a second convention for the same thing.
- *
- * `category: 'executor'` because the refusal came from the platform's rules,
- * not from the game's own.
+ * The refusal the dev host answers an op with when the platform's rules, not
+ * the game's, refuse it: the shared `OpFailure`, which carries no state, so
+ * the host keeps the game it holds. `category: 'executor'` because the
+ * refusal came from the platform's rules.
  */
 function refusedOp(error: string): OpFailure {
   return { success: false, error, category: 'executor' };
@@ -411,28 +403,6 @@ function refusedCommit(reason: string): OpFailure {
   return refusedOp(
     `This game cannot finish because the record it tried to store was refused: ${reason}.`,
   );
-}
-
-/**
- * The STRIP half of the private channel, fail-closed.
- *
- * `persistPrivate` is not an `OpResult` field: the executor re-emits it as a
- * top-level one on the way out, and the session layer's type has no reason to
- * know about a channel it never reads. The carrier type is what names it.
- *
- * The strip THROWS on a divergent per-player secret (the views disagree about
- * the value, so no single commit can carry it). Production's runner surfaces
- * that throw as a failed op; the same fail-closed answer is returned here, so
- * nothing is applied, broadcast or persisted and the acting player reads the
- * same refusal they would read in production.
- */
-function stripPrivateChannel<R extends OpResult>(result: R): (R & PrivateChannelCarrier) | OpFailure {
-  if (!result.success) return result;
-  try {
-    return takePrivateCommit(result as R & PrivateChannelCarrier);
-  } catch (error) {
-    return refusedOp(error instanceof Error ? error.message : String(error));
-  }
 }
 
 export class MultiplayerHost {
@@ -1154,43 +1124,29 @@ export class MultiplayerHost {
   }
 
   /**
-   * Both durable channels, on the way OUT of one op.
-   *
-   * Two things happen here and the ORDER is the whole guarantee, because it is
-   * production's order (`games/src/game-session.ts:runOp` ->
-   * `stageCompletionCommit`), and this function sits at the same seam: after
-   * the op ran, before `SnapshotSessionHost` has applied or broadcast anything.
-   *
-   *   STRIP  -- `persistPrivate` comes off the spectator view and off every
-   *             player view, on EVERY successful op, and is re-emitted as a
-   *             top-level field. Unconditional and not gated on completion or
-   *             on any opt-in: the attribute name is reserved, and a strip that
-   *             depended on a flag would leak for exactly the game that got the
-   *             flag wrong.
-   *   COMMIT -- on the op that ENDS the game, the store is handed both channels
-   *             and may REFUSE. A refused commit refuses the op: the snapshot
-   *             does not advance, nobody is told the game is over, and the
-   *             acting player is given the reason. Without that a developer
-   *             would watch a game finish locally and then watch the identical
-   *             move be refused in production.
+   * The op that ENDS the game commits what the game asked the host to store
+   * (`persistCommit`, both channels), and the store may REFUSE it. That is
+   * production's order (`games/src/game-session.ts`): after the op ran, before
+   * `SnapshotSessionHost` has applied or published anything. A refused commit
+   * refuses the op: the snapshot does not advance, nobody is told the game is
+   * over, and the acting player is given the reason. Without that a developer
+   * would watch a game finish locally and then watch the identical move be
+   * refused in production.
    */
-  private applyPersistenceChannels<R extends OpResult>(result: R): R | OpFailure {
-    const stripped = stripPrivateChannel(result);
+  private commitAtGameOver<R extends OpResult>(result: R): R | OpFailure {
     const persistence = this.opts.persistence;
-    if (!persistence || !stripped.success || !('snapshot' in stripped) || !stripped.snapshot.flowState?.complete) {
-      return stripped;
+    if (!persistence || !result.success || !('snapshot' in result) || !result.snapshot.flowState?.complete) {
+      return result;
     }
-
     const outcome = persistence.store.commit({
       players: this.persistPlayers,
-      spectatorView: stripped.spectatorView,
-      persistPrivate: stripped.persistPrivate,
+      commit: result.persistCommit,
       gameVersion: persistence.gameVersion,
       now: persistence.now ?? Date.now,
     });
     if (!outcome.ok) return refusedCommit(outcome.reason);
     if (outcome.written > 0) persistence.onChange?.();
-    return stripped;
+    return result;
   }
 
   // ── Game start ────────────────────────────────────────────────────────────
@@ -1286,7 +1242,7 @@ export class MultiplayerHost {
         // by `debugOn()`, the same answer the session gets below.
         { ...hostOptions, debug: this.debugOn() },
       );
-      return this.applyPersistenceChannels(raw);
+      return this.commitAtGameOver(raw);
     };
 
     const session = createDevSession({
@@ -1419,10 +1375,7 @@ export class MultiplayerHost {
         snapshot,
         { teachingDisabled: this.opts.teachingDisabled },
       );
-      if (carried.kind === 'failed') return carried;
-      const stripped = stripPrivateChannel(carried.result);
-      if (!stripped.success) return { kind: 'failed', reason: stripped.error };
-      return { ...carried, result: stripped };
+      return carried;
     });
     if (outcome.kind === 'failed') {
       // A game that cannot go on has no step to close.

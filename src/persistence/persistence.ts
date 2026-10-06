@@ -36,32 +36,27 @@
  *          `playerOptions` and the rest. The bundle already receives
  *          gameOptions; this is one more field in it.
  *
- *   WRITE (game over): the host reads a reserved GAME-ROOT ATTRIBUTE named
- *          `persist` out of the final spectator view -- the same
- *          `lastSpectatorView` the Durable Object already caches. A BoardSmith
- *          game's own Game-class attributes are serialized into
- *          `spectatorView.state.view.attributes` by the engine's existing
- *          `toJSONForPlayer` path, so a game participates by setting one
- *          attribute and nothing else. There is no new executor field, no new
- *          op, and no engine change.
+ *   WRITE (game over): a game sets one of two reserved GAME-ROOT ATTRIBUTES,
+ *          `persist` (public) or `persistPrivate` (sealed). After every op
+ *          that runs the game the executor reads both off the game root and
+ *          returns them on the op result as ONE field,
+ *          `StateEnvelope.persistCommit` (`{ public?, private? }`), and leaves
+ *          both out of every seat's and the spectator's view (#527). The
+ *          host stores the result field at game over; it never digs a commit
+ *          out of a view and never strips one off a view.
  *
- * **The `persist` channel is PUBLIC, and that is by construction.** The
- * spectator view is the position-0, no-hidden-information view, broadcast to
- * spectators and sent to reconnecting clients. Anything a game puts in
- * `persist` is therefore visible to everyone watching, and that is correct for
- * the things it exists for (leaderboards, death logs, records). It must never
- * be used for secrets.
+ * **The `persist` channel is PUBLIC**: a row it writes may be shown to anyone
+ * (leaderboards, death logs, records), so it must never hold a secret, and a
+ * sealed `player:` key on it is refused. It no longer rides the spectator
+ * view: a commit is a record for the host to store, not board state.
  *
  * ## The PRIVATE channel
  *
  * Campaigns must store sealed scenarios and unrevealed content, and a
  * fog-of-war world must emit per-player secrets; neither can use a channel
  * that publishes what it writes. So there is a SECOND reserved game-root
- * attribute, `persistPrivate`, which never appears on any outgoing view. It is
- * lifted off the spectator view and off every player view before a result
- * leaves the executor, and re-emitted as a top-level `persistPrivate` field --
- * see `private-channel.ts` for the strip, and for why the PRODUCTION strip
- * lives in the executor's runner rather than here.
+ * attribute, `persistPrivate`, which no view carries. Both channels are read
+ * from the one game root, so they cannot disagree between seats.
  *
  * What the private channel is NOT: it is not a READ scope of any kind. Private
  * means "does not leave the session over a broadcast path", which is what makes
@@ -90,16 +85,9 @@ export const PERSIST_KEY = "persist";
 
 /**
  * The PRIVATE half of the same channel (#3): the reserved Game-root attribute
- * a game sets to commit something it does NOT want broadcast, and -- the same
- * word again -- the field the executor re-emits it under once it has stripped
- * it from every outgoing view.
- *
- * Declared here AND in `executor/src/persist-private.ts` because `games/` and
- * `executor/` are separate deployable units that cannot import from each
- * other, the same constraint `PERSIST_MAX_COMMIT_BYTES` records below. The
- * agreement is proved from both ends: `executor/test/persist-private.test.ts`
- * asserts a real bundle's value arrives under this name, and this unit's
- * `games/test/persistence.test.ts` reads it under the same one.
+ * a game sets to commit something no one but the host may see. The engine
+ * keeps it out of every view and hands it to the host as
+ * `persistCommit.private` (#527).
  */
 // @platform-limit PERSIST_PRIVATE_KEY
 export const PERSIST_PRIVATE_KEY = "persistPrivate";
@@ -111,7 +99,7 @@ export const PERSIST_PRIVATE_KEY = "persistPrivate";
  * (`convex/persistenceQuotas.ts:PLAYER_KEY_PREFIX` is the authoritative
  * declaration). This copy exists for the single clause only this worker can
  * enforce: a sealed key arriving on the PUBLIC `persist` attribute is a
- * contradiction -- the spectator view broadcasts what it carries -- and the
+ * contradiction -- the public channel is for records anyone may see -- and the
  * channel an entry rode is unknowable once the two are merged for the wire.
  *
  * Declared in both units because `games/` and `convex/` cannot import from
@@ -275,7 +263,19 @@ export interface PersistPlayer {
 }
 
 /**
- * The outcome of looking for a commit in the final spectator view.
+ * What a game asked the host to store, as the op result carries it
+ * (`StateEnvelope.persistCommit`): the values of the reserved `persist` and
+ * `persistPrivate` game-root attributes, serialized, each absent when the game
+ * has not set it. Validated only when it is committed, by
+ * {@link readPersistCommit}.
+ */
+export interface PersistCommit {
+  public?: unknown;
+  private?: unknown;
+}
+
+/**
+ * The outcome of reading a game's commit.
  *
  * `absent` and `invalid` are separate on purpose. A game that opts into
  * persistence but ends a particular play with nothing to record is normal and
@@ -294,23 +294,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Dig the reserved attribute out of the engine's spectator view. Every step
- * is a shape check rather than an assertion: `lastSpectatorView` is whatever
- * the executor last returned, and a game that has not started, has errored, or
- * simply has no such attribute must land on `absent`, not throw.
- */
-function readPersistAttribute(spectatorView: unknown): unknown {
-  if (!isPlainObject(spectatorView)) return undefined;
-  const state = spectatorView.state;
-  if (!isPlainObject(state)) return undefined;
-  const view = state.view;
-  if (!isPlainObject(view)) return undefined;
-  const attributes = view.attributes;
-  if (!isPlainObject(attributes)) return undefined;
-  return attributes[PERSIST_KEY];
-}
-
-/**
  * Read and serialize the commit a finished game is asking the platform to
  * store, across BOTH channels.
  *
@@ -321,10 +304,8 @@ function readPersistAttribute(spectatorView: unknown): unknown {
  * the stage/settle pair provides. There is one store and one commit; two
  * ways in.
  *
- * `privateCommit` is the executor's top-level `persistPrivate` field, already
- * lifted off every view by `executor/src/persist-private.ts` -- so it arrives
- * as the ATTRIBUTE VALUE, not as a view to dig through, and this file never
- * has to know how the executor found it.
+ * `commit` is the op result's `persistCommit`: both attribute values, read
+ * off the game root by the engine, so this file never looks inside a view.
  *
  * Serialization happens HERE, not in the game and not in Convex. `value` is
  * stored as a JSON STRING for the identical reason `plays.endState` is one:
@@ -334,13 +315,10 @@ function readPersistAttribute(spectatorView: unknown): unknown {
  * game element in a record. Doing it here means the bundle deals in plain
  * JSON in both directions and never learns that the constraint exists.
  */
-export function readPersistCommit(
-  spectatorView: unknown,
-  privateCommit: unknown,
-): PersistCommitResult {
-  const publicSide = parseCommit(readPersistAttribute(spectatorView), PERSIST_KEY);
+export function readPersistCommit(commit: PersistCommit): PersistCommitResult {
+  const publicSide = parseCommit(commit.public, PERSIST_KEY);
   if (publicSide.kind === "invalid") return publicSide;
-  const privateSide = parseCommit(privateCommit, PERSIST_PRIVATE_KEY);
+  const privateSide = parseCommit(commit.private, PERSIST_PRIVATE_KEY);
   if (privateSide.kind === "invalid") return privateSide;
 
   const publicEntries = publicSide.kind === "ok" ? publicSide.entries : [];
@@ -413,8 +391,8 @@ function parseCommit(raw: unknown, attributeName: string): PersistCommitResult {
  * Why this entry may not be written on the channel it arrived on, or `null`.
  *
  * A SEALED key on the PUBLIC channel is always an authoring mistake: the
- * `persist` attribute rides the spectator view to everyone watching, while the
- * `player:` prefix declares the row one player's secret. Only this side of the
+ * `persist` attribute is for records anyone may see, while the `player:`
+ * prefix declares the row one player's secret. Only this side of the
  * wire can refuse it -- Convex receives the channels merged (see
  * `PLAYER_KEY_PREFIX`).
  */
@@ -427,7 +405,7 @@ function sealedKeyOnPublicChannel(
   if (!key.startsWith(PLAYER_KEY_PREFIX)) return null;
   return (
     `${attributeName}.entries[${index}] writes the per-player key "${key}" on the ` +
-    `public "${PERSIST_KEY}" attribute, which is broadcast to every spectator. Sealed ` +
+    `public "${PERSIST_KEY}" attribute, which is for records anyone may see. Sealed ` +
     `"${PLAYER_KEY_PREFIX}" rows must be written on the private "${PERSIST_PRIVATE_KEY}" ` +
     `attribute instead`
   );
