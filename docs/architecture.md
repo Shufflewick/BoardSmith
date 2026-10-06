@@ -253,7 +253,7 @@ the deployment platform that hosts the session (see Runtime Isolation below).
 | `client` | Browser SDK | `MeepleClient`, `GameConnection` |
 | `ui` | Vue components | `GameShell`, composables |
 | `bot` | MCTS bot | `createBot`, `MCTSBot` |
-| `bot-trainer` | Bot training | `introspectGame`, `generateBotCode`, `WeightEvolver` |
+| `bot-trainer` | Bot weight evolution | `WeightEvolver`, `readObjectiveWeights`, `updateBotWeights` |
 | `cli` | Dev tools | Commands (init, dev, build, etc.) |
 | `testing` | Test utilities | `createTestGame`, assertions |
 | `eslint-plugin` | Linting rules | Sandbox security rules |
