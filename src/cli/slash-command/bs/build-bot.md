@@ -76,19 +76,7 @@ Verify we're in a valid BoardSmith game project:
 
 ---
 
-## Phase 2: Game Introspection
-
-Run introspection to understand the game:
-
-```bash
-npx boardsmith analyze --json
-```
-
-This provides:
-- Element types and their properties
-- Player properties and scoring
-- Board structure (hex vs grid, dimensions)
-- Win conditions and game type hints
+## Phase 2: Read the Rules
 
 **Read the game rules files:**
 - `src/rules/elements.ts` - Element classes, properties

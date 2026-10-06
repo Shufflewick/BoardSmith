@@ -12,7 +12,6 @@ import { auditCommand } from './commands/audit.js';
 import { contractCommand } from './commands/contract.js';
 import { harnessIngestCommand } from './commands/harness-ingest.js';
 import { ingestSliceSourceCommand } from './commands/rulebook-sources.js';
-import { analyzeCommand } from './commands/analyze.js';
 import { simulateCommand } from './commands/simulate.js';
 import { installClaudeCommand, uninstallClaudeCommand } from './commands/install-claude-command.js';
 import {
@@ -278,14 +277,6 @@ export function createProgram(): Command {
       'Rewrite the committed world-format corpus — a deliberate format break that ends every live world holding the old bytes',
     )
     .action(contractCommand);
-
-  // Analysis
-  program
-    .command('analyze')
-    .description('Analyze game complexity and structure')
-    .option('--json', 'Output results as JSON')
-    .option('-v, --verbose', 'Show detailed information')
-    .action(analyzeCommand);
 
   // Headless simulation
   program
