@@ -8,7 +8,7 @@ import {
   simultaneousActionStep,
   type GameOptions,
 } from '../engine/index.js';
-import { executeOp, type GameDefinitionLike, type Op, type OpResult } from './stateless-ops.js';
+import { executeOp, type GameDefinitionLike, type ExecutableOp, type Op, type OpResult } from './stateless-ops.js';
 import { SnapshotSessionHost } from './snapshot-session-host.js';
 import { GameSession } from './game-session.js';
 import { BotController } from './bot-controller.js';
@@ -70,7 +70,7 @@ describe('#421: SnapshotSessionHost with a bot seat whose move is refused', () =
     const botTurns: Array<{ seats: number[]; result: OpResult }> = [];
     const host = new SnapshotSessionHost({
       playerCount: 3,
-      executeOp: async (snapshot, pendingState, op: Op) => {
+      executeOp: async (snapshot, pendingState, op: ExecutableOp) => {
         const result = await executeOp(stubbornDef, gameOptions, snapshot, pendingState, op);
         if (op.type === 'botTurn') botTurns.push({ seats: op.seats.map((s) => s.seat), result });
         return result;

@@ -28,7 +28,7 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { executeOp, SUBMISSION_OP_TYPES, type GameDefinitionLike, type Op } from '../stateless-ops.js';
+import { executeOp, SUBMISSION_OP_TYPES, type GameDefinitionLike, type ExecutableOp, type Op } from '../stateless-ops.js';
 import type { HeadlessOp } from '../headless-session.js';
 import { boundaryKeyOf } from './boundary-stamp.js';
 import type { GameStateSnapshot } from '../../runtime/index.js';
@@ -67,7 +67,7 @@ function statelessSession(
         SUBMISSION_OP_TYPES.has(op.type) && (op as { boundaryKey?: string }).boundaryKey === undefined
           ? { ...op, boundaryKey: boundaryKeyOf(snapshot) }
           : op
-      ) as Op;
+      ) as ExecutableOp;
       const res = await executeOp(def, gameOptions, snapshot, null, stamped, hostOptions);
       if (res.success) snapshot = JSON.parse(JSON.stringify(res.snapshot));
       return res;

@@ -15,7 +15,7 @@
  * prod stay in lockstep.
  */
 
-import { SnapshotSessionHost, debuggingOffMessage, type Op, type OpResult, type SnapshotSessionAdapters, type PublishMeta, type BotSeat } from '../../session/index.js';
+import { SnapshotSessionHost, debuggingOffMessage, type ExecutableOp, type Op, type OpResult, type SnapshotSessionAdapters, type PublishMeta, type BotSeat } from '../../session/index.js';
 import { record, getEntries, type LogEntry } from './log-capture.js';
 
 /** Wire op names the embedded GameShell sends (snake_case, prod payload shapes). */
@@ -81,7 +81,7 @@ export interface DevSessionOptions {
   executeOp: (
     snapshot: unknown,
     pendingState: Record<string, unknown> | null,
-    op: Op,
+    op: ExecutableOp,
   ) => Promise<OpResult>;
   /**
    * Optional persistence adapter (ERR-03/ERR-04). When configured, a failure

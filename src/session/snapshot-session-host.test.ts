@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../engine/index.js';
 import type { Annotation } from '../engine/index.js';
 import type { BotStrategy } from '../bot/types.js';
-import { executeOp, type GameDefinitionLike, type Op, type OpResult } from './stateless-ops.js';
+import { executeOp, type GameDefinitionLike, type ExecutableOp, type Op, type OpResult } from './stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 import { BotGame, botGameDef, botGameOptions } from './testing/fixtures/bot-game-fixture.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
@@ -253,7 +253,7 @@ describe('SnapshotSessionHost', () => {
       // a custom executeOp that tracks pendingState passed per seat.
 
       const calls: Array<{ pendingState: Record<string, unknown> | null }> = [];
-      const realExecOp = (snap: unknown, pend: Record<string, unknown> | null, op: Op) =>
+      const realExecOp = (snap: unknown, pend: Record<string, unknown> | null, op: ExecutableOp) =>
         executeOp(twoStepGameDef, twoStepGameOptions, snap, pend, op);
 
       const { adapters } = makeAdapters(twoStepGameDef, twoStepGameOptions);

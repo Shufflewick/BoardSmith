@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../engine/index.js';
-import { executeOp, DEBUG_OP_TYPES, type GameDefinitionLike, type Op, type OpResult } from './stateless-ops.js';
+import { executeOp, DEBUG_OP_TYPES, type GameDefinitionLike, type ExecutableOp, type Op, type OpResult } from './stateless-ops.js';
 import { SnapshotSessionHost } from './snapshot-session-host.js';
 import { GameSession } from './game-session.js';
 import { boundaryKeyOf, boundaryKeyOfHost } from './testing/boundary-stamp.js';
@@ -248,7 +248,7 @@ describe('executeOp debug ops', () => {
 // ---------------------------------------------------------------------------
 
 /** One instance of every debug op, each valid against a two-pass game. */
-const EVERY_DEBUG_OP: Op[] = [
+const EVERY_DEBUG_OP: ExecutableOp[] = [
   { type: 'debugHistory' },
   { type: 'debugStateAt', actionIndex: 1, player: 1 },
   { type: 'debugStateDiff', fromIndex: 0, toIndex: 1, player: 1 },
@@ -261,7 +261,7 @@ const EVERY_DEBUG_OP: Op[] = [
 ];
 
 /** The debug ops that report one seat's view. */
-const SEAT_VIEW_OPS: Op[] = [
+const SEAT_VIEW_OPS: ExecutableOp[] = [
   { type: 'debugStateAt', actionIndex: 1, player: 2 },
   { type: 'debugStateDiff', fromIndex: 0, toIndex: 1, player: 2 },
   { type: 'debugActionTraces', player: 2 },

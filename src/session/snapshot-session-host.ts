@@ -1,4 +1,4 @@
-import type { Op, OpResult } from './stateless-ops.js';
+import type { ExecutableOp, Op, OpResult } from './stateless-ops.js';
 import { READ_ONLY_OP_TYPES, closesSeat, debugOpRefusal } from './stateless-ops.js';
 import type { Annotation, FlowState, GameStateSnapshot } from '../engine/index.js';
 import { dueSeats, type SeatActivityState } from '../engine/flow/seat-activity.js';
@@ -214,7 +214,7 @@ export interface PublishMeta {
 
 export interface SnapshotSessionAdapters {
   playerCount: number;
-  executeOp: (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) => Promise<OpResult>;
+  executeOp: (snapshot: unknown, pendingState: Record<string, unknown> | null, op: ExecutableOp) => Promise<OpResult>;
   /**
    * THE STATE OF RECORD, after every publish: every seat's view, indexed by
    * seat - 1 (`players[0]` is seat 1), and the spectator's, with the turn
@@ -1027,7 +1027,7 @@ export class SnapshotSessionHost {
    * drives any bot turns the move handed off to — all before the next enqueued
    * mutation can begin.
    */
-  private async applyMutatingOp(seat: number, op: Op): Promise<OpResult> {
+  private async applyMutatingOp(seat: number, op: ExecutableOp): Promise<OpResult> {
     // An op that closes the seat (the seat's own action, or the host closing a
     // seat at a deadline) runs without the seat's in-progress selection: it does not
     // continue those picks. They are dropped only once the close SUCCEEDS. A

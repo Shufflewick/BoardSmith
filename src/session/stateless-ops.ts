@@ -69,7 +69,12 @@ export interface BoundaryStamped {
   boundaryKey: string;
 }
 
-export type Op =
+/**
+ * The ops a platform executor runs: everything a deployed game needs, and
+ * nothing that only `boardsmith dev` sends. A platform receives these over a
+ * wire and validates them with {@link parseExecutorOp}.
+ */
+export type ExecutorOp =
   | { type: 'start' }
   | ({
       type: 'action';
@@ -81,16 +86,16 @@ export type Op =
    * A host closing one seat still due because a deadline the host keeps has
    * passed: a step's own time limit, or any deadline of the host's own on any
    * step, timed or not (#494: host deadlines always win). Only a host composes
-   * it, from its own timer: no wire op maps to it, so nothing a client sends
-   * can become one. The seat is closed the way the step allows: the game's
-   * idle action, `idleAction` with `args`, runs as the seat's own action when
-   * the step offers it (which drops any follow-up the seat held); otherwise,
-   * when the seat holds a follow-up, the follow-up is dropped and the seat's
-   * part ends without an action (`GameRunner.closeExpiredHeldSeat`), recorded
-   * in the history as a seat expiry. Refused when the seat can take neither.
-   * Stamped with the boundary the host armed its timer under, so a round a
-   * human closed first refuses it as stale instead of landing it in the next
-   * round.
+   * it, from its own timer: no client message maps to it, so nothing a client
+   * sends can become one. The seat is closed the way the step allows: the
+   * game's idle action, `idleAction` with `args`, runs as the seat's own action
+   * when the step offers it (which drops any follow-up the seat held);
+   * otherwise, when the seat holds a follow-up, the follow-up is dropped and the
+   * seat's part ends without an action (`GameRunner.closeExpiredHeldSeat`),
+   * recorded in the history as a seat expiry. Refused when the seat can take
+   * neither. Stamped with the boundary the host armed its timer under, so a
+   * round a human closed first refuses it as stale instead of landing it in the
+   * next round.
    */
   | ({
       type: 'expireSeat';
@@ -115,9 +120,17 @@ export type Op =
     }
   | { type: 'cancelAction'; player: number }
   | { type: 'undo'; player: number }
-  | { type: 'botTurn'; seats: Array<{ seat: number; level?: string }> }
-  // Debug ops (dev-only; the debug panel issues these over the platform bridge).
-  // Read-only ops report state without mutating; the rest edit state like a move.
+  | { type: 'botTurn'; seats: Array<{ seat: number; level?: string }> };
+
+/**
+ * The ops only `boardsmith dev` sends. `executeOp` runs them, each behind its
+ * own gate: the debug family needs `hostOptions.debug`, and the teaching ops
+ * are refused when `hostOptions.teachingDisabled` is set. A platform executor
+ * does not accept them ({@link parseExecutorOp} refuses every one).
+ */
+export type DevOp =
+  // Debug ops: the debug panel issues these over the dev bridge. Read-only ops
+  // report state without mutating; the rest edit state like a move.
   | { type: 'debugHistory' }
   | { type: 'debugStateAt'; actionIndex: number; player: number }
   | { type: 'debugStateDiff'; fromIndex: number; toIndex: number; player: number }
@@ -127,39 +140,40 @@ export type Op =
   // seat's own pending action (perspective-scoped via the threaded pendingState).
   | { type: 'debugFlowState'; player: number }
   | { type: 'debugRewind'; actionIndex: number }
+  | { type: 'debugReorder'; cardId: number; targetIndex: number }
+  | { type: 'debugTransfer'; cardId: number; targetDeckId: number; position: 'first' | 'last' }
+  | { type: 'debugShuffle'; deckId: number }
   /**
    * restoreEarlier: go back to a WHOLE earlier snapshot of this game that the
    * host kept itself -- a demo stepping back one move. Run against the CURRENT
    * snapshot, and a restore in every sense a client sees
-   * (`restoreEarlierSnapshot`): the restore epoch advances, so seats
-   * drop stale element ids and reset their animation watermark. A host op: no
-   * wire op maps to it.
+   * (`restoreEarlierSnapshot`): the restore epoch advances, so seats drop stale
+   * element ids and reset their animation watermark. Only the host composes it
+   * (`SnapshotSessionHost`'s demo); no client message maps to it.
    */
   | { type: 'restoreEarlier'; snapshot: unknown }
-  | { type: 'debugReorder'; cardId: number; targetIndex: number }
-  | { type: 'debugTransfer'; cardId: number; targetDeckId: number; position: 'first' | 'last' }
-  | { type: 'debugShuffle'; deckId: number }
   | { type: 'startTutorial'; player: number }
   | { type: 'exitTutorial'; player: number }
   | { type: 'hint'; seat: number }
   | { type: 'heatmapToggle'; seat: number; visible: boolean }
   // botSuggest: read-only preview — runs MCTS and returns the suggested move WITHOUT
-  // mutating the snapshot. Consumed by runDemoLoop in SnapshotSessionHost.
-  | { type: 'botSuggest'; seats: Array<{ seat: number; level?: string }> }
-  // demoStart / demoStop are host lifecycle ops handled by SnapshotSessionHost.handleOp
-  // directly (they need the broadcast adapter + cancellable async lifetime that the
-  // stateless executor does not have). They are in the Op union for type-safety when
-  // passed through bridge.ts translateOp → handleOp. They MUST NOT be added to the
-  // executeOp switch — see fallback at the end of the switch for the guard.
+  // mutating the snapshot. Sent by the demo loop in SnapshotSessionHost.
+  | { type: 'botSuggest'; seats: Array<{ seat: number; level?: string }> };
+
+/**
+ * The lifecycle ops `SnapshotSessionHost.handleOp` handles itself. They need
+ * the host's broadcast adapter, its bot pump or a cancellable async lifetime,
+ * none of which the stateless executor has, so `executeOp` does not accept
+ * them.
+ */
+export type HostOp =
   | { type: 'demoStart'; delay?: number }
   | { type: 'demoStop' }
   // demoControl: live playback control for a running demo (pause/play/step one move/
-  // step back one move) and speed (inter-move delay in ms). Host lifecycle op like
-  // demoStart/demoStop — handled in SnapshotSessionHost.handleOp, never in executeOp.
+  // step back one move) and speed (inter-move delay in ms).
   | { type: 'demoControl'; control: 'pause' | 'play' | 'step' | 'back'; delay?: number }
   /**
-   * convertSeatToBot: a seat is now played by a bot. A host lifecycle op like the
-   * demo family — handled in `SnapshotSessionHost.handleOp`, never in executeOp.
+   * convertSeatToBot: a seat is now played by a bot.
    *
    * It exists so a conversion is an EVENT THE ENGINE ACKNOWLEDGES AND ACTS ON.
    * The host's bot pump reads the roster the platform last stated with
@@ -177,8 +191,14 @@ export type Op =
    */
   | { type: 'convertSeatToBot'; seat: number };
 
+/** Every op a `SnapshotSessionHost` accepts through `handleOp`. */
+export type Op = ExecutorOp | DevOp | HostOp;
+
+/** The ops `executeOp` runs: every op except the host's own lifecycle ops. */
+export type ExecutableOp = ExecutorOp | DevOp;
+
 /** The op types that carry a player's intent, and therefore a boundary key. */
-export type SubmissionOpType = Extract<Op, BoundaryStamped>['type'];
+export type SubmissionOpType = Extract<ExecutorOp, BoundaryStamped>['type'];
 
 /**
  * The submission op types, enumerated ONCE.
@@ -563,7 +583,7 @@ export const STALE_SUBMISSION_MESSAGE =
  * already existed". Those are its only two outcomes — it can narrow what is
  * permitted and can never widen it.
  */
-function refuseStaleSubmission(snapshot: GameStateSnapshot | null, op: Op): OpResult | undefined {
+function refuseStaleSubmission(snapshot: GameStateSnapshot | null, op: ExecutableOp): OpResult | undefined {
   if (!('boundaryKey' in op)) return undefined;
   // Equality against the key this very snapshot's flow position mints. No
   // parsing, no structural tolerance, and no default for an absent or
@@ -1505,7 +1525,7 @@ export async function executeOp(
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: unknown,
   pendingState: Record<string, unknown> | null,
-  op: Op,
+  op: ExecutableOp,
   hostOptions?: {
     teachingDisabled?: boolean;
     seedSnapshot?: GameStateSnapshot;
@@ -1669,14 +1689,15 @@ export async function executeOp(
         return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
       }
     }
-    // Fallback for host-only ops (demoStart / demoStop / demoControl /
-    // convertSeatToBot) that are intercepted by SnapshotSessionHost.handleOp
-    // before reaching this function. If they somehow reach executeOp, fail loud
-    // rather than silently returning undefined. This branch also satisfies
-    // TypeScript's return-completeness check now that those ops are in the Op
-    // union.
+    // Every op type has a case above, so `op` is `never` here: an op added to
+    // `ExecutorOp` or `DevOp` without a case is a compile error on this line.
+    // Only a caller that bypassed the type (a host's lifecycle op, an op read
+    // off a wire without `parseExecutorOp`) arrives, and it is refused by name.
+    const unhandled: never = op;
     return errorResult(
-      `Op type '${(op as { type: string }).type}' is a host lifecycle op and cannot be executed directly`,
+      `executeOp does not run '${(unhandled as { type: unknown }).type}' ops. A host lifecycle op ` +
+        '(demoStart, demoStop, demoControl, convertSeatToBot) goes to SnapshotSessionHost.handleOp; ' +
+        'any other op must be one ExecutorOp or DevOp names.',
       'protocol',
     );
   } catch (err) {

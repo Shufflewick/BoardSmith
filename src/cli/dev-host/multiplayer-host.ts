@@ -18,7 +18,7 @@
 import { createDevSession, type DevSession } from './bridge.js';
 import {
   StatePushGate,
-  type Op,
+  type ExecutableOp,
   type OpResult,
   type GamePreset,
   type RulesReload,
@@ -261,7 +261,7 @@ export interface MultiplayerHostOptions {
     gameOptions: { playerCount: number; [key: string]: unknown },
     snapshot: unknown,
     pendingState: Record<string, unknown> | null,
-    op: Op,
+    op: ExecutableOp,
     hostOptions?: { teachingDisabled?: boolean; seedSnapshot?: GameStateSnapshot; debug?: boolean },
   ) => Promise<OpResult>;
   /** Deliver a message to one client (the WS layer maps clientId → socket). */
@@ -1281,7 +1281,7 @@ export class MultiplayerHost {
     const executeOp = async (
       snapshot: unknown,
       pendingState: Record<string, unknown> | null,
-      op: Op,
+      op: ExecutableOp,
     ) => {
       const raw = await this.executeOp(
         op.type === 'start' ? startGameOptions : baseOptions,

@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { executeOp, type GameDefinitionLike, type Op, type OpResult } from '../stateless-ops.js';
+import { executeOp, type GameDefinitionLike, type ExecutableOp, type OpResult } from '../stateless-ops.js';
 import { ErrorCode } from '../../types/protocol.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../../engine/flow/boundary-key.js';
 import { simultaneousRoundsFixtureDefinition } from './fixtures/simultaneous-rounds-fixture.js';
@@ -31,7 +31,7 @@ const OPTIONS = { playerCount: 2, seed: 'stale-submission' };
  */
 const STALE_MESSAGE = 'The round you acted in has closed; reload to see the current round.';
 
-function run(def: GameDefinitionLike, snapshot: unknown, op: Op, pending: Record<string, unknown> | null = null) {
+function run(def: GameDefinitionLike, snapshot: unknown, op: ExecutableOp, pending: Record<string, unknown> | null = null) {
   return executeOp(def, OPTIONS, snapshot, pending, op);
 }
 

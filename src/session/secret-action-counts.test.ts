@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { executeOp, type Op, type OpResult } from './stateless-ops.js';
+import { executeOp, type ExecutableOp, type OpResult } from './stateless-ops.js';
 import { flowBoundaryKey, type BoundaryKeyState, type GameStateSnapshot } from '../engine/index.js';
 import type { SessionInfo } from './types.js';
 import {
@@ -47,7 +47,7 @@ async function statelessGame() {
         player: seat,
         args: {},
         boundaryKey: flowBoundaryKey(last.flowState as BoundaryKeyState),
-      } as Op;
+      } as ExecutableOp;
       const res = await executeOp(secretDeploymentDefinition, options, last.snapshot, null, op);
       if (res.success) last = res;
       return res;
