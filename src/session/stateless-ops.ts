@@ -161,21 +161,19 @@ export type Op =
    * convertSeatToBot: a seat is now played by a bot. A host lifecycle op like the
    * demo family — handled in `SnapshotSessionHost.handleOp`, never in executeOp.
    *
-   * It exists so a conversion is an EVENT THE ENGINE ACKNOWLEDGES AND ACTS ON,
-   * replacing "mutate a config object and hope the host re-reads it". The re-read
-   * always worked — `runBotTurnsInner` re-reads `adapters.botSeats` on every
-   * iteration — but nothing woke the pump when the roster changed with no other
-   * op in flight, so a table converted between moves just sat there; and with no
-   * op to send, no engine test could express a conversion at all.
+   * It exists so a conversion is an EVENT THE ENGINE ACKNOWLEDGES AND ACTS ON.
+   * The host's bot pump reads the roster the platform last stated with
+   * `SnapshotSessionHost.setBotSeats` on every iteration, but `setBotSeats`
+   * does not wake the pump, so a table converted between moves would just sit
+   * there. This op is the wake, and it refuses a seat the roster does not name.
    *
-   * **It deliberately carries NO level, and must never grow one.** The roster
-   * stays the ADAPTER's: a seat's level comes from `adapters.botSeats` at the
-   * moment the pump reads it, which is also where the platform's caretaker
-   * one-window authorization lives. A `level` here would have nowhere to go
-   * without the host keeping a seat→bot copy that fights the DO's roster on
-   * restore and would let a caretaker bot act outside the window it was
-   * authorized for. Set the level on the roster; this op says only "the roster
-   * changed — acknowledge it and go".
+   * **It deliberately carries NO level, and must never grow one.** The roster is
+   * the one statement of which seats a bot plays and how strongly: a seat's
+   * level comes from the `setBotSeats` list, and a platform whose bots may act
+   * only inside a window (a caretaker) states that by calling `setBotSeats`
+   * again when the window changes. A `level` here would be a second statement
+   * that could disagree with it. Set the level on the roster; this op says only
+   * "the roster changed: acknowledge it and go".
    */
   | { type: 'convertSeatToBot'; seat: number };
 

@@ -263,19 +263,17 @@ describe('BSMITH-05: a submission composed against a closed boundary', () => {
 });
 
 /**
- * The token the engine HANDS OUT and the token the guard ACCEPTS are computed
- * from two different places, and that is a real hazard.
+ * The guard compares a submission's key against `snapshot.flowState`, because
+ * `executeOp` is stateless and the snapshot is all it is given.
+ * `SnapshotSessionHost` hands out the key from that same value (#536), but an
+ * op result also reports the flow state a second time, as `OpResult.flowState`,
+ * and a host that hands out keys from that copy depends on it equalling the
+ * snapshot's. If they ever diverged, EVERY legitimate submission from such a
+ * host would be refused, wedging the table with a message telling players to
+ * reload into a round they can never act in. No other test in this file would
+ * notice: they all read the key from the same side they submit it to.
  *
- * The broadcast key comes from `OpResult.flowState` (via
- * `SnapshotSessionHost.turnBoundary()`, which reads `this._flowState`). The
- * guard compares against `snapshot.flowState`, because `executeOp` is stateless
- * and the snapshot is all it is given. If those two ever diverged, EVERY
- * legitimate submission would be refused — the whole system would wedge, with
- * a message telling players to reload into a round they can never act in. No
- * other test in this file would notice: they all read the key from the same
- * side they submit it to.
- *
- * This is the cross-unit identity test that holds the two halves together.
+ * This holds the copy equal to the snapshot's for as long as op results carry it.
  */
 describe('BSMITH-05: the key handed out is the key accepted', () => {
   it('OpResult.flowState and OpResult.snapshot.flowState agree, on every op of a full multi-round game', async () => {

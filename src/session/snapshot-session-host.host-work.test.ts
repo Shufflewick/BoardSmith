@@ -57,7 +57,8 @@ function countingSession(options: { botSeats?: Array<{ seat: number }>; botsStop
   const views: Count[] = [];
   const result = (snapshot: Count, extra: Partial<OpResult> = {}): OpResult => ({
     success: true,
-    snapshot,
+    // The host holds only a snapshot that carries its flow state and winners.
+    snapshot: { ...snapshot, flowState: {}, winners: [] },
     pendingState: null,
     flowState: {},
     playerViews: [{ state: { count: snapshot.count } }],
@@ -84,7 +85,6 @@ function countingSession(options: { botSeats?: Array<{ seat: number }>; botsStop
   };
   const host = new SnapshotSessionHost({
     playerCount: 1,
-    botSeats: options.botSeats,
     executeOp,
     hostWork: gate.gate,
     push: () => {}, record: ({ players: playerViews }) => {
@@ -92,13 +92,14 @@ function countingSession(options: { botSeats?: Array<{ seat: number }>; botsStop
       if (view !== undefined) views.push(view.state);
     },
   });
+  host.setBotSeats(options.botSeats ?? []);
   /** The edited rules are adopted, as `boardsmith dev` does once they have loaded. */
   const adopt = (step: number) =>
     host.adoptReloadedRules(async (snapshot): Promise<RulesReload> => {
       rules.step = step;
-      return { kind: 'restored', result: result({ count: (snapshot as Count).count }) };
+      return { kind: 'restored', result: result({ count: (snapshot as unknown as Count).count }) };
     });
-  return { host, gate, views, adopt, count: () => (host.snapshot as Count).count };
+  return { host, gate, views, adopt, count: () => (host.snapshot as unknown as Count).count };
 }
 
 afterEach(() => vi.useRealTimers());

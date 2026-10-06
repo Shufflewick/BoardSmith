@@ -15,7 +15,7 @@
  * prod stay in lockstep.
  */
 
-import { SnapshotSessionHost, debuggingOffMessage, type Op, type OpResult, type SnapshotSessionAdapters, type PublishMeta } from '../../session/index.js';
+import { SnapshotSessionHost, debuggingOffMessage, type Op, type OpResult, type SnapshotSessionAdapters, type PublishMeta, type BotSeat } from '../../session/index.js';
 import { record, getEntries, type LogEntry } from './log-capture.js';
 
 /** Wire op names the embedded GameShell sends (snake_case, prod payload shapes). */
@@ -59,8 +59,8 @@ export type WireOp =
 
 export interface DevSessionOptions {
   playerCount: number;
-  /** bot seats (1-indexed) with optional per-seat difficulty. */
-  botSeats?: Array<{ seat: number; level?: string }>;
+  /** The seats a bot plays when the session starts; change them later with `host.setBotSeats`. */
+  botSeats?: BotSeat[];
   /**
    * When true, teaching/assist features (hint, heatmap, demo, tutorial) are rejected
    * fail-loud for this session. Mirrors `--lock-teaching` in `boardsmith dev`.
@@ -384,7 +384,6 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
 
   const host = new SnapshotSessionHost({
     playerCount: opts.playerCount,
-    botSeats: opts.botSeats,
     teachingDisabled: opts.teachingDisabled,
     // A getter, so the host asks on every op (see `DevSessionOptions.debug`).
     get debug() {
@@ -412,6 +411,8 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
       for (const { seat, view } of changed) if (seat > 0) opts.postGameState(seat, view, meta);
     },
   });
+
+  host.setBotSeats(opts.botSeats ?? []);
 
   async function handleServerRequest(
     seat: number,
