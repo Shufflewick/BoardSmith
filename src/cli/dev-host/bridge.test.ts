@@ -112,7 +112,7 @@ describe('dev host bridge', () => {
       const r = shapeResult('action', {
         success: true,
         followUp: { action: 'next' },
-        snapshot: {},
+        snapshot: { flowState: {}, winners: [] },
         pendingState: null,
         flowState: {},
         playerViews: [],
@@ -127,7 +127,7 @@ describe('dev host bridge', () => {
       const r = shapeResult('resolve_choices', {
         success: true,
         choices: ['red', 'blue'],
-        snapshot: {},
+        snapshot: { flowState: {}, winners: [] },
         pendingState: null,
         flowState: {},
         playerViews: [],
@@ -168,7 +168,7 @@ describe('dev host bridge', () => {
       const r = shapeResult('action', {
         success: true,
         followUp: undefined,
-        snapshot: {},
+        snapshot: { flowState: {}, winners: [] },
         pendingState: null,
         flowState: {},
         playerViews: [],
@@ -186,7 +186,7 @@ describe('dev host bridge', () => {
         success: true,
         done: true,
         actionComplete: true,
-        snapshot: {},
+        snapshot: { flowState: {}, winners: [] },
         pendingState: null,
         flowState: {},
         playerViews: [],
@@ -203,7 +203,7 @@ describe('dev host bridge', () => {
       const r = shapeResult('resolve_choices', {
         success: true,
         choices: ['red', 'blue'],
-        snapshot: {},
+        snapshot: { flowState: {}, winners: [] },
         pendingState: null,
         flowState: {},
         playerViews: [],
@@ -227,7 +227,7 @@ describe('dev host bridge', () => {
         success: false,
         error: 'It is not your turn.',
         errorCode: 'NOT_YOUR_TURN' as unknown as OpResult['errorCode'],
-        snapshot: {},
+        snapshot: { flowState: {}, winners: [] },
         pendingState: null,
         flowState: {},
         playerViews: [],
@@ -242,7 +242,7 @@ describe('dev host bridge', () => {
         success: false,
         error: 'Engine failed to process selection.',
         errorCode: 'ENGINE_ERROR' as unknown as OpResult['errorCode'],
-        snapshot: {},
+        snapshot: { flowState: {}, winners: [] },
         pendingState: null,
         flowState: {},
         playerViews: [],
@@ -255,7 +255,7 @@ describe('dev host bridge', () => {
     it('returns only {success,error} for hint and heatmap-toggle (no playerViews leak)', () => {
       const base = {
         success: true,
-        snapshot: {},
+        snapshot: { flowState: {}, winners: [] },
         pendingState: null,
         flowState: {},
         playerViews: [{ state: { secret: 'should-not-appear' } }],
@@ -275,7 +275,7 @@ describe('dev host bridge', () => {
     it('returns only {success,error} for demo-start and demo-stop (no playerViews leak, RESEARCH Pitfall 7)', () => {
       const base = {
         success: true,
-        snapshot: {},
+        snapshot: { flowState: {}, winners: [] },
         pendingState: null,
         flowState: {},
         playerViews: [{ state: { isDemoRunning: true } }],
@@ -515,7 +515,7 @@ describe('dev host bridge', () => {
         if (op.type === 'start') {
           return Promise.resolve({
             success: true,
-            snapshot: {},
+            snapshot: { flowState: {}, winners: [] },
             pendingState: null,
             flowState: {},
             playerViews: [],
@@ -525,7 +525,7 @@ describe('dev host bridge', () => {
         }
         return Promise.resolve({
           success: true,
-          snapshot: {},
+          snapshot: { flowState: {}, winners: [] },
           pendingState: null,
           flowState: {},
           playerViews: [],
@@ -560,7 +560,7 @@ describe('dev host bridge', () => {
         if (op.type === 'start') {
           return Promise.resolve({
             success: true,
-            snapshot: {},
+            snapshot: { flowState: {}, winners: [] },
             pendingState: null,
             flowState: {},
             playerViews: [],

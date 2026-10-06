@@ -118,7 +118,7 @@
     "paths": {
       "x-convex-sink": false,
       "type": "object",
-      "description": "Optional overrides for the rules/ui source directories (paths.rules, paths.ui). Read by dev.ts, simulate.ts, evolve-bot-weights.ts.",
+      "description": "Optional overrides for the rules/ui source directories (paths.rules, paths.ui). Read by build.ts, dev.ts, simulate.ts, validate.ts, evolve-bot-weights.ts.",
       "additionalProperties": false,
       "properties": {
         "rules": {

@@ -32,6 +32,7 @@ import {
   appendLedgerLine,
   atomicWriteFile,
   ledgerFilePath,
+  listRunIds,
   parseLedgerBody,
   readLedgerOrThrow,
   resolveLedgerState,
@@ -638,21 +639,6 @@ export async function resolveProvenance(
 // -------------------------------------------------------------------------------------------
 // Run-scoped commands (174-CONTEXT.md decision 5): verify-classify-pairs, -record, -status.
 // -------------------------------------------------------------------------------------------
-
-/** All run-ids present under this project's `rulebook/.verify/`, sorted (empty if none). */
-async function listRunIds(projectDir: string): Promise<string[]> {
-  const verifyRoot = join(designRulebookDir(projectDir), '.verify');
-  let entries: Array<{ name: string; isDirectory(): boolean }>;
-  try {
-    entries = await fs.readdir(verifyRoot, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  return entries
-    .filter((e) => e.isDirectory() && RUN_ID_RE.test(e.name))
-    .map((e) => e.name)
-    .sort();
-}
 
 /**
  * Mirrors `verifyRunStatusCommand`'s "most recent run" resolution — never a second lookup style.

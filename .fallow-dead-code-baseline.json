@@ -485,9 +485,7 @@
     "src/testing/test-game.ts:ActionExecutionError.name",
     "src/testing/test-game.ts:TestGame.getCurrentPlayer",
     "src/testing/test-game.ts:TestGame.getSnapshot",
-    "src/testing/test-game.ts:TestGame.action",
-    "src/testing/test-game.ts:TestGame.isElementVisible",
-    "src/testing/test-game.ts:TestGame.getVisibleElements"
+    "src/testing/test-game.ts:TestGame.action"
   ],
   "unresolved_imports": [
     "src/cli/dev-host/host.html:./__HOST_MAIN_SRC__",

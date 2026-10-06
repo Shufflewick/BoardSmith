@@ -1,5 +1,5 @@
-import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
+import { gitSucceeds } from '../lib/git-output.js';
 import { join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import {
@@ -174,23 +174,15 @@ async function move(projectDir: string, from: string, to: string): Promise<void>
  */
 async function untrack(projectDir: string, path: string): Promise<void> {
   if (!(await gitTracks(projectDir, path))) return;
-  await runGit(projectDir, ['rm', '--cached', '--quiet', '--', path]);
+  await gitSucceeds(projectDir, ['rm', '--cached', '--quiet', '--', path]);
 }
 
-function runGit(projectDir: string, args: string[]): Promise<{ ok: boolean }> {
-  return new Promise((resolvePromise) => {
-    execFile('git', args, { cwd: projectDir }, (err) => resolvePromise({ ok: !err }));
-  });
+function gitTracks(projectDir: string, path: string): Promise<boolean> {
+  return gitSucceeds(projectDir, ['ls-files', '--error-unmatch', '--', path]);
 }
 
-async function gitTracks(projectDir: string, path: string): Promise<boolean> {
-  const { ok } = await runGit(projectDir, ['ls-files', '--error-unmatch', '--', path]);
-  return ok;
-}
-
-async function gitMv(projectDir: string, from: string, to: string): Promise<boolean> {
-  const { ok } = await runGit(projectDir, ['mv', '--', from, to]);
-  return ok;
+function gitMv(projectDir: string, from: string, to: string): Promise<boolean> {
+  return gitSucceeds(projectDir, ['mv', '--', from, to]);
 }
 
 /** Design artifacts stranded in the project root. */

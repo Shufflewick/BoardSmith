@@ -1,6 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import chalk from 'chalk';
 import { resolveUserPath } from './user-path.js';
 
 /**
@@ -40,14 +39,17 @@ interface GameProjectPackage {
  * command to tell an author something slightly different about the same
  * mistake.
  *
+ * Throws rather than exiting, like every guard here (#532), so a command run
+ * inside another one (`verify` runs `validate` and `build`) stops there too.
+ *
  * @returns the path to `boardsmith.json`, for the caller that then reads it.
  */
 export function requireGameProject(cwd: string): string {
   const configPath = join(cwd, 'boardsmith.json');
   if (!existsSync(configPath)) {
-    console.error(chalk.red('Error: boardsmith.json not found'));
-    console.error(chalk.dim('Make sure you are in a BoardSmith game project directory'));
-    process.exit(1);
+    throw new Error(
+      'boardsmith.json not found.\nMake sure you are in a BoardSmith game project directory.',
+    );
   }
   return configPath;
 }
@@ -74,11 +76,10 @@ export function requireGameProjectManifests(cwd: string): {
 
   const pkgPath = join(cwd, 'package.json');
   if (!existsSync(pkgPath)) {
-    console.error(chalk.red('Error: package.json not found'));
-    console.error(
-      chalk.dim('A BoardSmith game states its version in package.json, and the build reads it from there.'),
+    throw new Error(
+      'package.json not found.\n' +
+        'A BoardSmith game states its version in package.json, and the build reads it from there.',
     );
-    process.exit(1);
   }
   const pkg: GameProjectPackage = JSON.parse(readFileSync(pkgPath, 'utf-8'));
 
@@ -99,9 +100,10 @@ export function resolveRulesDir(cwd: string, config: { paths?: { rules?: string 
 /**
  * THE ONE PLACE A COMMAND CHECKS THE RULES ARE THERE.
  *
- * `dev` and `simulate` both load the compiled rules through
- * `loadGameDefinition`, and both first checked for the entry point by hand so
- * the failure names the missing file instead of a module-resolution stack.
+ * `build`, `dev`, `simulate` and `evolve-bot-weights` load the compiled rules
+ * through `loadGameDefinition`, and each first checks for the entry point by
+ * hand so the failure names the missing file instead of a module-resolution
+ * stack.
  *
  * @returns the path to the rules entry point, which `dev` also hands to its
  * Vite plugin as the module to re-export `gameDefinition` from.
@@ -109,9 +111,11 @@ export function resolveRulesDir(cwd: string, config: { paths?: { rules?: string 
 export function requireRulesIndex(rulesPath: string): string {
   const rulesIndexPath = join(rulesPath, 'index.ts');
   if (!existsSync(rulesIndexPath)) {
-    console.error(chalk.red(`Error: Rules not found at ${rulesIndexPath}`));
-    console.error(chalk.dim('Make sure your game has a src/rules/index.ts that exports gameDefinition'));
-    process.exit(1);
+    throw new Error(
+      `Rules not found at ${rulesIndexPath}.\n` +
+        `Make sure ${rulesIndexPath} exists and exports gameDefinition, or point "paths.rules" in ` +
+        'boardsmith.json at the directory that holds your rules.',
+    );
   }
   return rulesIndexPath;
 }

@@ -17,6 +17,7 @@
 import { designRecordPath } from '../lib/project-paths.js';
 import { parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
 import { resolve as pathResolve } from 'node:path';
+import { escapeRegExp } from '../lib/regexp.js';
 
 /** The locked finding-kind enum from 172-CONTEXT.md decision 7. Never a hand-written union. */
 export const FINDING_KINDS = Object.freeze([
@@ -39,16 +40,6 @@ export interface Finding {
   chunk: string;
   subject: string;
   detail: string;
-}
-
-/**
- * Escapes a string for literal use inside a `RegExp`. `heading` values passed to
- * `findHeadingIndex`/`extractSection` are markdown heading text (`## Build Manifest`), not
- * user-supplied regex source — this exists so a heading containing regex-special characters
- * (none of this phase's headings do, but a future caller's might) cannot corrupt the anchor.
- */
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**

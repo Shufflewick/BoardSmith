@@ -162,10 +162,14 @@ describe('ANNOTATION_CITATION_SOURCES', () => {
 });
 
 describe('derived-line-pattern.ts leaf-module constraint', () => {
-  it('has zero import statements', async () => {
-    const source = await fs.readFile(join(HERE, 'derived-line-pattern.ts'), 'utf-8');
-    const importLines = source.split('\n').filter((line) => /^import\b/.test(line));
-    expect(importLines).toEqual([]);
+  // A module that imports nothing cannot close a cycle, so this one may import only such modules.
+  it('imports nothing but lib/regexp.ts, which itself imports nothing', async () => {
+    const importLines = async (path: string) =>
+      (await fs.readFile(path, 'utf-8')).split('\n').filter((line) => /^import\b/.test(line));
+    expect(await importLines(join(HERE, 'derived-line-pattern.ts'))).toEqual([
+      "import { escapeRegExp } from '../lib/regexp.js';",
+    ]);
+    expect(await importLines(join(HERE, '..', 'lib', 'regexp.ts'))).toEqual([]);
   });
 });
 

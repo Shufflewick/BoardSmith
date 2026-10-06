@@ -8,7 +8,7 @@ no DOM, no WebSocket, no UI. Everything here runs in-process against a
 If you instead want to drive the game **through the real UI in a browser**
 (clicking elements, listening for `boardsmith:action-resolved`), see
 [Browser Testing](./browser-testing.md). For test-specific ergonomics
-(`TestGame`, `playUntilComplete`, assertions), see
+(`TestGame`, `simulateRandomGames`, assertions), see
 [boardsmith/testing](./api/testing.md) — this guide focuses on the raw
 engine introspection APIs those utilities are built on.
 
@@ -66,7 +66,7 @@ hatch for tests that deliberately exercise the failure path),
 transport concerns. `createTestGame(GameClass, options)` is a thin
 convenience wrapper around `TestGame.create`. See
 [boardsmith/testing](./api/testing.md) for the full surface (assertions,
-`playUntilComplete`, `ActionBuilder`, etc.) — this guide only covers the
+`simulateRandomGames`, `ActionBuilder`, etc.) — this guide only covers the
 introspection primitives those utilities are built on.
 
 All player seats throughout the engine, session, and testing layers are
@@ -216,9 +216,9 @@ sample):
 enumerateLegalMoves(testGame.game, 1, { maxPerAction: 20 });
 ```
 
-`playUntilComplete` (from `boardsmith/testing`) is built directly on this
-function — see [boardsmith/testing](./api/testing.md#driving-a-game-to-completion)
-if you just need "drive to completion," not raw enumeration.
+If you just need "drive to completion," not raw enumeration, use
+`simulateRandomGames` from `boardsmith/testing` — see
+[boardsmith/testing](./api/testing.md#random-game-simulation).
 
 ### `game.getPlayerView(seat)` / `testGame.getPlayerView(seat)`
 
@@ -369,7 +369,7 @@ If you don't supply a seed, `TestGame.create` uses the fixed literal
 never `Date.now()`/`Math.random`). Pass an explicit `seed` when you want a
 *different* deterministic run (e.g. comparing two agent strategies against
 different shuffles). The resolved seed is exposed as `testGame.seed` and
-included in `doAction`/`assertActionAvailable`/`playUntilComplete` failure
+included in `doAction`/`assertActionAvailable` failure
 messages, so a failing run is one copy-paste from a deterministic repro.
 
 ```typescript
@@ -378,9 +378,9 @@ game.setRandomState(state): void    // restore it — the next game.random() dra
 ```
 
 To reproduce a run by hand, construct a new game with the same seed and
-re-submit the same sequence of actions in order. `GameStuckError`'s
-recorded `flowState` plus `TestGame.getActionHistory()` give you enough
-to do it.
+re-submit the same sequence of actions in order.
+`TestGame.getActionHistory()` gives you enough to do it, and
+`replayRandomGame` does it for a run of `simulateRandomGames`.
 
 This is a **debugging technique, not the restore mechanism.** The engine
 never rebuilds state this way (see "Undo, Checkpoint & Time-Travel"
@@ -546,7 +546,7 @@ data without opening a browser.
 
 ## See Also
 
-- [boardsmith/testing](./api/testing.md) — `TestGame`, `playUntilComplete`,
+- [boardsmith/testing](./api/testing.md) — `TestGame`, `simulateRandomGames`,
   `ActionBuilder`, assertions with auto-trace failures.
 - [Browser Testing](./browser-testing.md) — driving a game through the real
   UI in a browser (DOM selection, `window.__BOARDSMITH_DEVTOOLS`,

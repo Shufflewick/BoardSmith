@@ -30,6 +30,7 @@ import {
   type AdjudicationRecord,
   type ImpactRecord,
 } from './verify-run.js';
+import { escapeRegExp } from '../lib/regexp.js';
 
 /**
  * `verify-impact.ts` — Phase 175's impact-map / repair-gating surface: VERIFY-05's
@@ -144,10 +145,6 @@ export interface RulesStalenessRecord {
   /** Verbatim quote of the reading AFTER the change. Omitted (not rendered) when absent. */
   changedReading?: string;
   adjudication: string;
-}
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**

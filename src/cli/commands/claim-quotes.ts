@@ -48,7 +48,7 @@
  * READ-ONLY: never writes a file.
  */
 
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import chalk from 'chalk';
@@ -254,7 +254,7 @@ function normalize(text: string): string {
 
 /** What a claim's text is recorded as: line wrapping and blank lines do not change it. */
 function claimTextHash(claim: ParsedClaim): string {
-  return createHash('sha256').update(normalize(claim.lines.join('\n'))).digest('hex');
+  return sha256Hex(normalize(claim.lines.join('\n')));
 }
 
 /**

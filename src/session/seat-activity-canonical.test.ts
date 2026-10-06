@@ -9,6 +9,7 @@ import {
   dueSeats,
   canSeatAct,
   availableActionsForSeat,
+  createPlayerView,
   type GameOptions,
   type FlowState,
 } from '../engine/index.js';
@@ -153,5 +154,36 @@ describe('debug action traces use the canonical predicate', () => {
     const flow2 = seat2.flowContext as { isMyTurn: boolean; flowAllowedActions: string[] };
     expect(flow2.isMyTurn).toBe(false);
     expect(flow2.flowAllowedActions).toEqual([]);
+  });
+});
+
+describe('createPlayerView uses the canonical predicates (#498)', () => {
+  // A restored checkpoint can carry `awaitingPlayers` from the step it was
+  // taken in while the flow is no longer awaiting input. The view must give
+  // the same answer as canSeatAct / availableActionsForSeat, not its own.
+  const leftover: FlowState = {
+    position: {} as FlowState['position'],
+    complete: false,
+    awaitingInput: false,
+    awaitingPlayers: [{ playerIndex: 1, availableActions: ['pass'], completed: false }],
+  };
+
+  function viewOf(flowState: FlowState, seat: number) {
+    const game = new PassGame({ playerCount: 2, seed: 'view-seed' });
+    game.getFlowState = () => flowState;
+    return createPlayerView(game, seat);
+  }
+
+  it('agrees with canSeatAct when awaitingPlayers outlives awaitingInput', () => {
+    const view = viewOf(leftover, 1);
+    expect(view.flowState?.isMyTurn).toBe(canSeatAct(leftover, 1));
+    expect(view.flowState?.availableActions).toEqual(availableActionsForSeat(leftover, 1));
+  });
+
+  it('gives a seat with no actions an empty list, as availableActionsForSeat does', () => {
+    const fs = sequentialState(2, ['pass']);
+    const view = viewOf(fs, 1);
+    expect(view.flowState?.isMyTurn).toBe(false);
+    expect(view.flowState?.availableActions).toEqual([]);
   });
 });

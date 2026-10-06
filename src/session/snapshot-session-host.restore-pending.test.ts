@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { executeOp, type OpResult } from './stateless-ops.js';
 import {
   SnapshotSessionHost,
+  type HostRestore,
   type SnapshotHostState,
   type SnapshotSessionAdapters,
 } from './snapshot-session-host.js';
@@ -21,10 +22,10 @@ import { repeatingCollectDefinition as collectDef } from './testing/fixtures/rep
 
 const options = { playerCount: 2, seed: 'bs320' };
 
-function makeHost(extra: Partial<SnapshotSessionAdapters> = {}) {
+function makeAdapters(extra: Partial<SnapshotSessionAdapters> = {}) {
   const broadcasts: unknown[][] = [];
   const persisted: SnapshotHostState[] = [];
-  const host = new SnapshotSessionHost({
+  const adapters: SnapshotSessionAdapters = {
     playerCount: options.playerCount,
     executeOp: (snap, pend, op) => executeOp(collectDef, options, snap, pend, op),
     push: () => {}, record: ({ players: views }) => broadcasts.push(views),
@@ -33,8 +34,19 @@ function makeHost(extra: Partial<SnapshotSessionAdapters> = {}) {
       persisted.push(JSON.parse(JSON.stringify(state)) as SnapshotHostState);
     },
     ...extra,
-  });
-  return { host, broadcasts, persisted };
+  };
+  return { adapters, broadcasts, persisted };
+}
+
+function makeHost(extra: Partial<SnapshotSessionAdapters> = {}) {
+  const { adapters, ...rest } = makeAdapters(extra);
+  return { host: new SnapshotSessionHost(adapters), ...rest };
+}
+
+/** A fresh process's host, built from what storage handed back. */
+function restoredHost(state: HostRestore) {
+  const { adapters, ...rest } = makeAdapters();
+  return { host: SnapshotSessionHost.restore(adapters, state), ...rest };
 }
 
 function pick(host: SnapshotSessionHost, value: string): Promise<OpResult> {
@@ -57,8 +69,7 @@ describe('SnapshotSessionHost restores in-progress selections (#320)', () => {
     await pick(host, 'p1');
 
     const last = persisted.at(-1)!;
-    expect(Object.keys(last).sort()).toEqual(['flowState', 'isComplete', 'pendingStates', 'snapshot', 'winners']);
-    expect(last.flowState).toEqual(JSON.parse(JSON.stringify(host.flowState)));
+    expect(Object.keys(last).sort()).toEqual(['pendingStates', 'snapshot']);
     expect(Object.keys(last.pendingStates)).toEqual(['1']);
     expect(JSON.parse(JSON.stringify(host.durableState()))).toEqual(last);
   });
@@ -70,8 +81,7 @@ describe('SnapshotSessionHost restores in-progress selections (#320)', () => {
 
     // The process dies. A fresh host is built from storage alone.
     const stored = first.persisted.at(-1)!;
-    const second = makeHost();
-    second.host.restoreFrom(stored);
+    const second = restoredHost({ ...stored, botSeats: [] });
 
     const next = await pick(second.host, 'p2');
     expect(next.success).toBe(true);
@@ -80,8 +90,7 @@ describe('SnapshotSessionHost restores in-progress selections (#320)', () => {
     const done = await pick(second.host, 'stop');
     expect(done.success).toBe(true);
     expect(done.actionComplete).toBe(true);
-    const game = second.host.snapshot as { state: { attributes: { collected: unknown } } };
-    expect(game.state.attributes.collected).toEqual(['p1', 'p2', 'stop']);
+    expect(second.host.snapshot!.state.attributes.collected).toEqual(['p1', 'p2', 'stop']);
   });
 
   it("a restored seat's pending action is broadcast to that seat only", async () => {
@@ -90,16 +99,14 @@ describe('SnapshotSessionHost restores in-progress selections (#320)', () => {
     await pick(first.host, 'p1');
     const lastViews = first.broadcasts.at(-1)!;
 
-    const second = makeHost();
-    second.host.restoreFrom({ ...first.persisted.at(-1)!, playerViews: lastViews });
-    second.host.broadcastCurrent();
+    const second = restoredHost({ ...first.persisted.at(-1)!, playerViews: lastViews, botSeats: [] });
 
     const views = second.broadcasts.at(-1) as Array<{ state: { pendingAction?: RepeatingPending } }>;
     expect(views[0]!.state.pendingAction?.repeating?.accumulated).toEqual(['p1']);
     expect(views[1]!.state.pendingAction).toBeUndefined();
   });
 
-  it('restoreFrom refuses pending states keyed by anything but a seat of this table', async () => {
+  it('restore refuses pending states keyed by anything but a seat of this table', async () => {
     const first = makeHost();
     await first.host.start();
     await pick(first.host, 'p1');
@@ -107,20 +114,18 @@ describe('SnapshotSessionHost restores in-progress selections (#320)', () => {
     const pending = stored.pendingStates['1']!;
 
     for (const key of ['0', '3', 'seat1', '1.5']) {
-      const { host } = makeHost();
-      expect(() => host.restoreFrom({ ...stored, pendingStates: { [key]: pending } })).toThrow(
+      expect(() => restoredHost({ ...stored, pendingStates: { [key]: pending }, botSeats: [] })).toThrow(
         /pending selection.*seat/i,
       );
     }
   });
 
-  it('restoreFrom requires the pending states, so a consumer cannot persist a subset', async () => {
+  it('restore requires the pending states, so a consumer cannot persist a subset', async () => {
     const first = makeHost();
     await first.host.start();
-    const { snapshot, flowState } = first.persisted.at(-1)!;
-    const { host } = makeHost();
+    const { snapshot } = first.persisted.at(-1)!;
     // @ts-expect-error -- pendingStates is required: persist what persist handed you.
-    expect(() => host.restoreFrom({ snapshot, flowState })).toThrow(/pendingStates/);
+    expect(() => restoredHost({ snapshot, botSeats: [] })).toThrow(/pendingStates/);
   });
 
   it('a refused action keeps the pending selection, in memory and in storage alike', async () => {

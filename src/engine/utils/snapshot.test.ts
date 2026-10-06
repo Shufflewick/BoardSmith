@@ -10,6 +10,7 @@ import {
   eachPlayer,
   actionStep,
   createSnapshot,
+  createActionCheckpoint,
   createPlayerView,
   createAllPlayerViews,
 } from '../index.js';
@@ -84,6 +85,31 @@ describe('GameStateSnapshot', () => {
 
       expect(snapshot.actionHistory).toHaveLength(1);
       expect(snapshot.actionHistory[0]).toMatchObject({ name: 'test' });
+    });
+  });
+
+  describe('createSnapshot records winners (#536)', () => {
+    // A host that cannot run the game reads the outcome from the snapshot, so
+    // the snapshot records whatever game.getWinners() says at that moment.
+    it('records [] for a game still running', () => {
+      expect(createSnapshot(game, 'test-game').winners).toEqual([]);
+    });
+
+    it('records the winners of a finished game', () => {
+      game.finish([game.getPlayer(2)!]);
+      expect(createSnapshot(game, 'test-game').winners).toEqual([2]);
+      expect(createActionCheckpoint(game).winners).toEqual([2]);
+    });
+
+    it('records a leader a game names mid-game by overriding getWinners()', () => {
+      class LeaderGame extends Game<LeaderGame, Player> {
+        override getWinners(): Player[] {
+          return [this.getPlayer(1)!];
+        }
+      }
+      const leader = new LeaderGame({ playerCount: 2, seed: 'leader' });
+      expect(leader.isFinished()).toBe(false);
+      expect(createSnapshot(leader, 'leader').winners).toEqual([1]);
     });
   });
 

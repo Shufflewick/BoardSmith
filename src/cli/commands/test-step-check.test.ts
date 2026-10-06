@@ -225,14 +225,21 @@ describe('findDispatchedVerbs', () => {
       findDispatchedVerbs(`
 testGame.doAction(1, 'a');
 testGame.tryAction(1, 'b', {});
-simulateAction(testGame, 1, 'c');
-simulateActions(testGame, [[1, 'd'], [2, 'e', {}]]);
-assertActionSucceeds(testGame, 1, 'f');
 runner.performAction('g', 1, {});
 await world.take(1, 'h');
 testGame.action('i', 1).select('x', 2).execute();
 `),
-    ).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']);
+    ).toEqual(['a', 'b', 'g', 'h', 'i']);
+  });
+
+  it('does not count the removed simulateAction / simulateActions / assertActionSucceeds helpers (#517)', () => {
+    expect(
+      findDispatchedVerbs(`
+simulateAction(testGame, 1, 'c');
+simulateActions(testGame, [[1, 'd'], [2, 'e', {}]]);
+assertActionSucceeds(testGame, 1, 'f');
+`),
+    ).toEqual([]);
   });
 
   it('does not count a direct function call, a builder never executed, a failure-only dispatch, or a skipped test', () => {
@@ -322,6 +329,13 @@ export const pass = Action.create('pass');
   const DISPATCHES_BOTH = `import { it } from 'vitest';
 it('claim 1 and 2', () => { testGame.doAction(1, 'bid'); testGame.doAction(1, 'pass'); });
 `;
+
+  // git quotes a non-ASCII path unless asked not to, and a quoted path matches no file read elsewhere (#531).
+  it('reads a chunk file with a non-ASCII name by its real path', async () => {
+    await build({ 'src/rules/enchère.ts': RULES, 'tests/auction.test.ts': DISPATCHES_BOTH }, '| tests/auction.test.ts | 1, 2 | yes |\n');
+    const result = await checkTestStep(project, 'auction');
+    expect([...result.added.keys()]).toEqual(['src/rules/enchère.ts']);
+  });
 
   it('passes a chunk whose manifest names real claim tests and whose verbs go through the engine', async () => {
     await build(

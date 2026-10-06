@@ -40,7 +40,8 @@ import {
   type WorldBudgets,
   type WorldDefinition,
 } from '../../world/index.js';
-import { ResidentWorld, type WorldHostClock } from '../../world/host/index.js';
+import { ResidentWorld } from '../../world/host/index.js';
+import { frozenClock } from './frozen-clock.test-helper.js';
 import { openWorldStore, worldStorePath } from './world-store.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
@@ -166,24 +167,6 @@ function bundle(): ConstructorParameters<typeof ResidentWorld>[0]['definition'] 
       actions: [mark, arm],
     } as WorldDefinition,
   } as ConstructorParameters<typeof ResidentWorld>[0]['definition'];
-}
-
-/** A clock a case moves by hand. `arm` is recorded and never fired: every
- *  drain below is asked for, so nothing runs between an assertion and the line
- *  that set it up. */
-function frozenClock(start: number): WorldHostClock & { set(to: number): void } {
-  let now = start;
-  return {
-    now: () => now,
-    arm: () => {},
-    yieldTurn: () =>
-      new Promise<void>((resolve) => {
-        setImmediate(resolve);
-      }),
-    set(to) {
-      now = to;
-    },
-  };
 }
 
 const OPENED = 1_700_000_000_000;

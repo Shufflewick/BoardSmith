@@ -10,13 +10,13 @@ import type { Op, OpResult } from '../stateless-ops.js';
 /**
  * BSMITH-03 — a seat converted to bot MID-GAME is actually played by a bot.
  *
- * The mechanism was never the gap. `handleBotTurn` takes its seat list as a
- * per-call argument and `runBotTurnsInner` re-reads `adapters.botSeats` on every
- * iteration, so a roster that changes mid-game has always been honoured. What
- * did not exist was (a) any engine-side ACKNOWLEDGEMENT of the conversion —
- * without which the engine's own harness froze `botSeats` at construction and a
- * mid-game conversion was not even expressible — and (b) a SELF-WAKE, since the
- * pump only ever ran when some other op drove it.
+ * `handleBotTurn` takes its seat list as a per-call argument and the bot pump
+ * reads the roster the host was last given (`setBotSeats`) on every iteration,
+ * so a roster that changes mid-game is honoured from the next move. What a
+ * conversion also needs is (a) an engine-side ACKNOWLEDGEMENT, the
+ * `convertSeatToBot` op, which refuses a seat the roster does not name, and
+ * (b) a SELF-WAKE, since the pump otherwise runs only when some other op
+ * drives it.
  *
  * Every assertion below is on a bot MOVING: the boundary the engine itself
  * publishes, and the action history the engine itself records. Never on a flag.
@@ -190,7 +190,7 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
     // dropped whenever a pump happens to be in flight is not a wake.
     const base: OpResult = {
       success: true,
-      snapshot: {},
+      snapshot: { flowState: {}, winners: [] },
       pendingState: null,
       flowState: {},
       playerViews: [],
@@ -220,10 +220,10 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
         return { ...base, botMoved: false };
       },
       record: () => {}, push: () => {},
-      botSeats: [{ seat: 2 }],
     };
 
     const host = new SnapshotSessionHost(adapters);
+    host.setBotSeats([{ seat: 2 }]);
     await host.start();
 
     const firstConversion = host.handleOp(2, { type: 'convertSeatToBot', seat: 2 });
@@ -275,7 +275,7 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
     // the conversion went through `runBotTurnsInner` and not a clone of it.
     const base: OpResult = {
       success: true,
-      snapshot: {},
+      snapshot: { flowState: {}, winners: [] },
       pendingState: null,
       flowState: {},
       playerViews: [],
@@ -295,11 +295,11 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
         return { ...base };
       },
       record: () => {}, push: () => {},
-      botSeats: [{ seat: 2 }],
     };
 
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const host = new SnapshotSessionHost(adapters);
+    host.setBotSeats([{ seat: 2 }]);
     await host.start();
 
     // Must terminate, not hang.

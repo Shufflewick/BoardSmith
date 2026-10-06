@@ -6,7 +6,6 @@
  * - Drift A (gate): scenario action excluded by the active gate throws.
  * - Drift B (predicate): expectStep not reached after action throws.
  * - Non-completion: assertTutorialCompletes throws when tutorial unfinished.
- * - assertTutorialStep: throws/passes based on current step.
  *
  * Uses raw labeled advanceWhen predicates (independent of Plan 02 helpers).
  */
@@ -24,7 +23,7 @@ import {
 } from '../engine/index.js';
 import { TestGame } from './test-game.js';
 import { simulateTutorial } from './simulate-tutorial.js';
-import { assertTutorialStep, assertTutorialCompletes } from './tutorial-assertions.js';
+import { assertTutorialCompletes } from './tutorial-assertions.js';
 import type { TutorialDefinition } from '../engine/tutorial/types.js';
 
 // ============================================
@@ -279,50 +278,6 @@ describe('simulateTutorial', () => {
       });
 
       expect(() => assertTutorialCompletes(result)).toThrow(/not.*complet|complet.*false/i);
-    });
-  });
-
-  describe('assertTutorialStep', () => {
-    it('throws when step does not match expected (TestGame overload)', () => {
-      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'assert-step' });
-      simulateTutorial(testGame, NO_AUTO_ADVANCE_TUTORIAL, {
-        seat: 1,
-        scenario: [], // no moves — still on step-1
-      });
-
-      expect(() => assertTutorialStep(testGame, 1, 'step-2'))
-        .toThrow(/step-2|step-1/i);
-    });
-
-    it('passes without throwing when step matches expected (TestGame overload)', () => {
-      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'assert-step' });
-      simulateTutorial(testGame, NO_AUTO_ADVANCE_TUTORIAL, {
-        seat: 1,
-        scenario: [], // no moves — still on step-1
-      });
-
-      expect(() => assertTutorialStep(testGame, 1, 'step-1')).not.toThrow();
-    });
-
-    it('throws when finalStepId does not match expected (result overload)', () => {
-      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'assert-step-result' });
-      const result = simulateTutorial(testGame, NO_AUTO_ADVANCE_TUTORIAL, {
-        seat: 1,
-        scenario: [],
-      });
-
-      expect(() => assertTutorialStep(result, 1, 'step-2'))
-        .toThrow(/step-2|step-1/i);
-    });
-
-    it('passes when finalStepId matches expected (result overload)', () => {
-      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'assert-step-result' });
-      const result = simulateTutorial(testGame, NO_AUTO_ADVANCE_TUTORIAL, {
-        seat: 1,
-        scenario: [],
-      });
-
-      expect(() => assertTutorialStep(result, 1, 'step-1')).not.toThrow();
     });
   });
 

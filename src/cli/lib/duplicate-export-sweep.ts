@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex } from './hash.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { runToolCapturingStdout } from './run-tool.js';
@@ -122,7 +122,7 @@ export function baselineKey(finding: DuplicateExportFinding): string {
  * file starting to export the name does.
  */
 export function fingerprintOf(key: string): string {
-  return SWEEP_FINGERPRINT_PREFIX + createHash('sha256').update(key).digest('hex').slice(0, 16);
+  return SWEEP_FINGERPRINT_PREFIX + sha256Hex(key).slice(0, 16);
 }
 
 /** `path:line` for every declaration, in the order fallow reported them. */

@@ -3,7 +3,7 @@ import { ref, nextTick } from 'vue';
 import type { AnimationEvent } from '../engine/index.js';
 import { executeOp } from './stateless-ops.js';
 import { botGameDef, botGameOptions } from './testing/fixtures/bot-game-fixture.js';
-import { SnapshotSessionHost } from './snapshot-session-host.js';
+import { SnapshotSessionHost, type SnapshotHostState } from './snapshot-session-host.js';
 import { createAnimationEvents, animationTimeline } from '../ui/composables/useAnimationEvents.js';
 
 // A demo's "back" puts the game one move back. The move it then plays has
@@ -40,20 +40,26 @@ describe('demo step back (#449 review)', () => {
     }, { skip: 'drop' });
 
     let moves = 0;
+    const causes: string[] = [];
+    const persisted: SnapshotHostState[] = [];
     const host = new SnapshotSessionHost({
       playerCount: 2,
       // The demo plays every seat at the first bot seat's level; one search
       // iteration is all a move needs here.
-      botSeats: [{ seat: 2, level: '1' }],
       executeOp: async (snap, pend, op) => {
         const res = await executeOp(def, options, snap, pend, op);
         if (op.type === 'action' && res.success) moves++;
         return res;
       },
-      push: () => {}, record: ({ players: views }) => {
+      persist: (state) => {
+        persisted.push(state);
+      },
+      push: () => {}, record: ({ players: views }, meta) => {
         seat1.value = (views[0] as { state: SeatState }).state;
+        causes.push(meta.cause);
       },
     });
+    host.setBotSeats([{ seat: 2, level: '1' }]);
     await host.start();
 
     const settle = async () => {
@@ -71,9 +77,17 @@ describe('demo step back (#449 review)', () => {
     expect(delivered).toHaveLength(1);
 
     const epochBefore = seat1.value?.restoreEpoch;
+    const causesBefore = causes.length;
+    const persistedBefore = persisted.length;
     await host.handleOp(1, { type: 'demoControl', control: 'back' });
     await settle();
     expect(seat1.value?.restoreEpoch).not.toBe(epochBefore);
+    // Stepping back changes the game, so it is published as a change (#537).
+    expect(causes.slice(causesBefore)[0]).toBe('change');
+    // ...and saved: what storage holds is the position the demo stepped back to.
+    expect(persisted.length).toBe(persistedBefore + 1);
+    expect(persisted.at(-1)!.snapshot).toBe(host.snapshot);
+    expect(persisted.at(-1)!.snapshot!.actionHistory).toHaveLength(0);
 
     await host.handleOp(1, { type: 'demoControl', control: 'step' });
     await until(() => moves === 2);

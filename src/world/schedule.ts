@@ -18,6 +18,10 @@
  *
  * ## Every function here is pure
  *
+ * `runDueOccurrences` is the one exception, and only in that it awaits the
+ * dispatch a host hands it: what it decides is still a function of its
+ * arguments and of which calls threw.
+ *
  * Driving this policy needs no Durable Object, no alarm and no wall clock, and
  * that is what lets one set of tests hold the same behaviour true of a laptop
  * host and a hosting platform. Every ceiling arrives as an argument from
@@ -276,6 +280,95 @@ export function occurrencesDue(
     return { occurrences: [{ due: event.due, missedCount: 0 }], nextDue: event.due + interval };
   }
   return { occurrences: plan, nextDue: last.due + interval };
+}
+
+/**
+ * HOW ONE OCCURRENCE OF A DUE EVENT WENT, as a host's `call` answers it.
+ *
+ * `ended` is true when that occurrence ended the world (#395): the occurrences
+ * after it belong to a world that no longer runs anything.
+ */
+export interface DueOccurrenceRan {
+  readonly ended: boolean;
+}
+
+/**
+ * WHAT ONE DUE EVENT CAME TO, once every occurrence that could run has.
+ *
+ * `ran` -- every occurrence ran, or one ended the world. `nextDue` is where the
+ * recurrence goes next (`occurrencesDue`'s answer), or null for a one-shot and
+ * for a world that ended.
+ *
+ * `refused` -- the occurrence at index `ran` threw `error`, and nothing after
+ * it was tried. `resumeDue` is where the event must stand for a retry to owe
+ * exactly what is left: its own `due` when the first occurrence refused, and
+ * otherwise `resumeDueOf` of the one that refused, so a refused coalesced call
+ * keeps its fold (#155) and the occurrences before it are not run twice (#538).
+ *
+ * DUES, NOT ROWS. How a host turns a due back into a queued row -- the same
+ * sequence number, or a freshly reserved one -- is the host's, so this answers
+ * the instant and the host builds the row.
+ */
+export type DueOccurrencesOutcome =
+  | {
+      readonly kind: "ran";
+      readonly ran: number;
+      readonly ended: boolean;
+      readonly nextDue: number | null;
+    }
+  | {
+      readonly kind: "refused";
+      readonly ran: number;
+      readonly error: unknown;
+      readonly resumeDue: number;
+    };
+
+/**
+ * RUN ONE DUE EVENT: EVERY OCCURRENCE OF IT THAT IS DUE AT `now`, IN ORDER
+ * (#539).
+ *
+ * The one occurrence loop, so every host agrees about what a refused catch-up
+ * does. It is pure apart from `call`, which is the host's dispatch of one
+ * occurrence: `occurrencesDue` decides the occurrences, each is handed to
+ * `call` in order, and the first that throws stops the loop and is answered as
+ * `refused` rather than rethrown, so the host decides what its failure means.
+ *
+ * `call` is also told `owedDue`: where the queue stands once THAT occurrence is
+ * durable -- the next occurrence still owed, through `resumeDueOf` so a
+ * coalesced call that has not run yet still owes everything it stands for, or
+ * `nextDue` on the last. A host that checkpoints per occurrence commits the
+ * event re-armed there in the same write (#538), so a later refusal finds the
+ * event already past what ran; a host that checkpoints per batch can ignore it
+ * and use the outcome. Either way the two answers agree: a refusal at index
+ * k > 0 resumes at the `owedDue` occurrence k - 1 was handed.
+ */
+export async function runDueOccurrences(
+  event: ScheduledEvent,
+  now: number,
+  budgets: { readonly catchUpMaxRealIterations: number },
+  call: (
+    timing: { readonly due: number; readonly missedCount: number },
+    owedDue: number | null,
+  ) => Promise<DueOccurrenceRan>,
+): Promise<DueOccurrencesOutcome> {
+  const { occurrences, nextDue } = occurrencesDue(event, now, budgets.catchUpMaxRealIterations);
+  for (const [index, timing] of occurrences.entries()) {
+    const following = occurrences[index + 1];
+    const owedDue = following === undefined ? nextDue : resumeDueOf(following, event.everyMs);
+    let ran: DueOccurrenceRan;
+    try {
+      ran = await call(timing, owedDue);
+    } catch (error) {
+      return {
+        kind: "refused",
+        ran: index,
+        error,
+        resumeDue: index === 0 ? event.due : resumeDueOf(timing, event.everyMs),
+      };
+    }
+    if (ran.ended) return { kind: "ran", ran: index + 1, ended: true, nextDue: null };
+  }
+  return { kind: "ran", ran: occurrences.length, ended: false, nextDue };
 }
 
 /**

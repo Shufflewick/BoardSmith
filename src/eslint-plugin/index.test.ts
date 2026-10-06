@@ -7,7 +7,8 @@
 import { describe, it, expect } from 'vitest';
 import { Linter } from 'eslint';
 import tseslintParser from '@typescript-eslint/parser';
-import plugin, { rules, configs } from './index.js';
+import plugin, { rules, configs, ruleGroups } from './index.js';
+import { enabledRules } from './enabled-rules.test-helper.js';
 
 /** Every rule the plugin ships, by its public name. */
 const RULE_NAMES = [
@@ -22,7 +23,8 @@ const RULE_NAMES = [
   'no-engine-field-shadow',
 ];
 
-const recommended = () => configs.recommended;
+/** The recommended config's block that applies to every file. */
+const recommended = () => configs.recommended[0];
 
 describe('plugin metadata', () => {
   it('identifies itself so ESLint can report which plugin flagged a problem', () => {
@@ -71,7 +73,7 @@ describe('recommended config', () => {
   it('registers the plugin under the boardsmith namespace', () => {
     // Flat config takes an OBJECT here, not the ESLint 8 string array; getting
     // this wrong makes every `boardsmith/*` rule reference unresolvable.
-    expect(recommended().plugins.boardsmith).toBe(plugin);
+    expect(recommended().plugins?.boardsmith).toBe(plugin);
   });
 
   it('turns on every rule the plugin ships', () => {
@@ -94,12 +96,39 @@ describe('recommended config', () => {
   });
 });
 
+describe('rule groups (#534)', () => {
+  it('place every rule the plugin ships in exactly one group', () => {
+    const grouped = Object.values(ruleGroups).flat();
+    expect([...grouped].sort()).toEqual(Object.keys(rules).sort());
+    expect(new Set(grouped).size).toBe(grouped.length);
+  });
+
+  it('recommended enables every rule for rules code, and all but determinism for src/ui', async () => {
+    const all = Object.keys(rules).map((name) => `boardsmith/${name}`).sort();
+    expect(await enabledRules(configs.recommended, 'src/rules/game.ts')).toEqual(all);
+    const determinism = ruleGroups.determinism.map((name) => `boardsmith/${name}`);
+    expect(await enabledRules(configs.recommended, 'src/ui/App.vue')).toEqual(all.filter((r) => !determinism.includes(r)));
+  });
+
+  it('recommended does not report setTimeout in a src/ui file, which boardsmith validate accepts', () => {
+    const messages = new Linter().verify(
+      'setTimeout(() => {}, 10);',
+      [
+        { files: ['**/*.ts'], languageOptions: { parser: tseslintParser, parserOptions: { ecmaVersion: 'latest', sourceType: 'module' } } },
+        ...configs.recommended,
+      ],
+      'src/ui/animate.ts',
+    );
+    expect(messages).toEqual([]);
+  });
+});
+
 describe('end-to-end through ESLint', () => {
   /** Lints source with the recommended config, exactly as a game project would. */
   const lint = (code: string) =>
     new Linter().verify(code, [
       { languageOptions: { parser: tseslintParser, parserOptions: { ecmaVersion: 'latest', sourceType: 'module' } } },
-      recommended(),
+      ...configs.recommended,
     ]);
 
   it('accepts a well-behaved game file with no complaints', () => {

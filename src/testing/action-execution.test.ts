@@ -1,8 +1,6 @@
 /**
- * The `boardsmith/testing` action-simulation surface that games write their own
- * tests against: `simulateAction`, `simulateActions`, `assertActionSucceeds`,
+ * How a game's own tests run an action and check its outcome:
  * `assertActionFails`, and the `ActionExecutionError` `doAction` throws.
- * `play-until-complete.test.ts` covers the loop driver in the same module.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -17,12 +15,7 @@ import {
   type FlowContext,
 } from '../engine/index.js';
 import { TestGame, ActionExecutionError } from './test-game.js';
-import {
-  simulateAction,
-  simulateActions,
-  assertActionSucceeds,
-  assertActionFails,
-} from './simulate-action.js';
+import { assertActionFails } from './assertions.js';
 
 /** Players alternate adding 1-3 to a shared total; the game ends at 6. */
 class PickGame extends Game<PickGame, Player> {
@@ -60,111 +53,6 @@ class PickGame extends Game<PickGame, Player> {
 }
 
 const newGame = () => TestGame.create(PickGame, { playerCount: 2 });
-
-describe('simulateAction', () => {
-  it('performs the action and reports success', () => {
-    const testGame = newGame();
-    const result = simulateAction(testGame, 1, 'pick', { value: 2 });
-    expect(result.success).toBe(true);
-    expect(testGame.game.total).toBe(2);
-  });
-
-  it('echoes back what was attempted, so a failed assertion is self-describing', () => {
-    const result = simulateAction(newGame(), 1, 'pick', { value: 3 });
-    expect(result.action).toBe('pick');
-    expect(result.playerSeat).toBe(1);
-    expect(result.args).toEqual({ value: 3 });
-  });
-
-  it('returns a failed result instead of throwing when the action is rejected', () => {
-    const testGame = newGame();
-    const result = simulateAction(testGame, 1, 'cheat', { value: 1 });
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('cheating is not allowed');
-    expect(testGame.game.total).toBe(0);
-  });
-
-  it('returns a failed result for the wrong seat rather than throwing', () => {
-    const result = simulateAction(newGame(), 2, 'pick', { value: 1 });
-    expect(result.success).toBe(false);
-    expect(result.error).toBeTruthy();
-  });
-
-  it('returns a failed result for an action that does not exist', () => {
-    const result = simulateAction(newGame(), 1, 'noSuchAction', {});
-    expect(result.success).toBe(false);
-    expect(result.action).toBe('noSuchAction');
-  });
-
-  it('defaults args to an empty object', () => {
-    const result = simulateAction(newGame(), 1, 'pick');
-    expect(result.args).toEqual({});
-  });
-});
-
-describe('simulateActions', () => {
-  it('runs the actions in order and returns one result each', () => {
-    const testGame = newGame();
-    const results = simulateActions(testGame, [
-      [1, 'pick', { value: 2 }],
-      [2, 'pick', { value: 3 }],
-    ]);
-    expect(results.map((r) => r.success)).toEqual([true, true]);
-    expect(testGame.game.total).toBe(5);
-  });
-
-  it('labels each result with the seat and action that produced it', () => {
-    const results = simulateActions(newGame(), [
-      [1, 'pick', { value: 1 }],
-      [2, 'pick', { value: 1 }],
-    ]);
-    expect(results.map((r) => [r.playerSeat, r.action])).toEqual([[1, 'pick'], [2, 'pick']]);
-  });
-
-  it('keeps going after a failure and reports it in place', () => {
-    const testGame = newGame();
-    const results = simulateActions(testGame, [
-      [1, 'pick', { value: 1 }],
-      [1, 'pick', { value: 1 }], // out of turn — seat 2 is up
-      [2, 'pick', { value: 1 }],
-    ]);
-    expect(results.map((r) => r.success)).toEqual([true, false, true]);
-    expect(testGame.game.total).toBe(2);
-  });
-
-  it('treats an omitted args tuple slot as no arguments', () => {
-    const results = simulateActions(newGame(), [[1, 'pick']]);
-    expect(results[0].args).toEqual({});
-  });
-
-  it('returns an empty array for an empty script', () => {
-    expect(simulateActions(newGame(), [])).toEqual([]);
-  });
-});
-
-describe('assertActionSucceeds', () => {
-  it('returns the result when the action succeeds', () => {
-    const result = assertActionSucceeds(newGame(), 1, 'pick', { value: 2 });
-    expect(result.success).toBe(true);
-    expect(result.action).toBe('pick');
-  });
-
-  it('applies the action, it does not merely check it', () => {
-    const testGame = newGame();
-    assertActionSucceeds(testGame, 1, 'pick', { value: 3 });
-    expect(testGame.game.total).toBe(3);
-  });
-
-  it('throws naming the action, the seat and the engine reason', () => {
-    expect(() => assertActionSucceeds(newGame(), 1, 'cheat', { value: 1 }))
-      .toThrow(/action 'cheat' by player 1 to succeed.*cheating is not allowed/s);
-  });
-
-  it('throws when the seat is not the one to act', () => {
-    expect(() => assertActionSucceeds(newGame(), 2, 'pick', { value: 1 }))
-      .toThrow(/to succeed, but it failed/);
-  });
-});
 
 describe('assertActionFails', () => {
   it('returns the failed result when the action is rejected', () => {

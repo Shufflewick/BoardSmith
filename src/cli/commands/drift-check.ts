@@ -8,7 +8,8 @@
  *
  * THIS IS THE FIRST COMMAND IN THE CODEBASE TO SHELL OUT TO GIT AS A SUBPROCESS. It sets the
  * convention Phase 173 will copy:
- *   - `execFile` with an argv array, never `exec`/`execSync` with a shell string. `init.ts` uses
+ *   - git runs through `gitOutput` (`lib/git-output.ts`), which spawns it with an argv array
+ *     (`execFile`), never `exec`/`execSync` with a shell string. `init.ts` uses
  *     `execSync` for a FIXED, hard-coded command (`git init`); this module's hash comes from a
  *     hand-editable `CHUNK.md`, so that pattern is deliberately NOT copied here.
  *   - `cwd` is mandatory and explicit on every invocation, and is always the resolved GAME
@@ -29,7 +30,6 @@
  */
 
 import { promises as fs } from 'node:fs';
-import { execFile } from 'node:child_process';
 import { join, relative, resolve as pathResolve, sep } from 'node:path';
 import {
   type Finding,
@@ -37,36 +37,8 @@ import {
   extractVerifiedCommitHash,
   resolveManifestPath,
 } from './build-manifest.js';
-import {
-  CHUNK_MD,
-  CHUNKS_DIR,
-  DESIGN_DIR,
-  designChunksDir,
-} from '../lib/project-paths.js';
-
-/**
- * A hand-written promisified wrapper, NOT `promisify(execFile)`. Node's `execFile` carries a
- * `util.promisify.custom` implementation that `promisify()` prefers when present; a test-time
- * mock of `execFile` (`vi.fn(actual.execFile)`) does not carry that symbol over, which silently
- * changes `promisify`'s resolution shape from `{ stdout, stderr }` to a positional `[stdout,
- * stderr]` array. Calling the callback form directly here keeps behavior identical whether
- * `execFile` is the real implementation or a test mock wrapping it.
- */
-function execFileAsync(
-  cmd: string,
-  args: string[],
-  options: { cwd: string },
-): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolvePromise, reject) => {
-    execFile(cmd, args, options, (error, stdout, stderr) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolvePromise({ stdout: stdout.toString(), stderr: stderr.toString() });
-    });
-  });
-}
+import { CHUNK_MD, designChunksDir, requireChunkSlugs } from '../lib/project-paths.js';
+import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 
 /**
  * Closes T-172-01: a hand-edited `## Verified Commit Hash` is untrusted input reaching a git
@@ -98,9 +70,7 @@ export async function diffedFilesSince(
   if (!HASH_SHAPE.test(hash)) return UNRESOLVABLE;
 
   try {
-    const { stdout } = await execFileAsync('git', ['diff', '--name-only', hash, 'HEAD'], {
-      cwd: projectDir,
-    });
+    const stdout = await git(projectDir, ['diff', '--name-only', hash, 'HEAD']);
     return stdout
       .split('\n')
       .map((line) => line.trim())
@@ -115,18 +85,12 @@ export async function diffedFilesSince(
  * Distinguishes "hash exists but is not an ancestor of HEAD" from "hash unresolvable" — both map
  * to `drift-unknown` in the caller, but with a different `detail`. Never hand-parses `git log`.
  */
-async function isAncestorOfHead(projectDir: string, hash: string): Promise<boolean> {
-  try {
-    await execFileAsync('git', ['merge-base', '--is-ancestor', hash, 'HEAD'], { cwd: projectDir });
-    return true;
-  } catch {
-    return false;
-  }
+function isAncestorOfHead(projectDir: string, hash: string): Promise<boolean> {
+  return gitSucceeds(projectDir, ['merge-base', '--is-ancestor', hash, 'HEAD']);
 }
 
 async function resolveHead(projectDir: string): Promise<string> {
-  const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: projectDir });
-  return stdout.trim();
+  return (await git(projectDir, ['rev-parse', 'HEAD'])).trim();
 }
 
 /**
@@ -137,7 +101,7 @@ async function resolveHead(projectDir: string): Promise<string> {
  */
 async function assertGitRepo(projectDir: string): Promise<void> {
   try {
-    await execFileAsync('git', ['rev-parse', '--show-toplevel'], { cwd: projectDir });
+    await git(projectDir, ['rev-parse', '--show-toplevel']);
   } catch {
     throw new Error(
       `${projectDir} is not a git repository (or git is not installed).\n` +
@@ -202,21 +166,7 @@ export async function driftCheckCommand(
   const head = await resolveHead(projectDir);
 
   const chunksDir = designChunksDir(projectDir);
-  let chunkDirEntries: Array<{ name: string; isDirectory(): boolean }>;
-  try {
-    chunkDirEntries = await fs.readdir(chunksDir, { withFileTypes: true });
-  } catch {
-    throw new Error(
-      `No ${DESIGN_DIR}/${CHUNKS_DIR}/ directory in ${projectDir}.\n` +
-        `This command looks for ${DESIGN_DIR}/${CHUNKS_DIR}/<slug>/${CHUNK_MD} files — run it from a\n` +
-        `BoardSmith game project directory, or pass --project <dir>.\n` +
-        `If this project still uses the old flat layout, run: boardsmith doctor --fix`,
-    );
-  }
-  const slugs = chunkDirEntries
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .sort();
+  const slugs = await requireChunkSlugs(projectDir);
 
   const findings: Finding[] = [];
   const chunks: ChunkDrift[] = [];

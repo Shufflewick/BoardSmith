@@ -1,5 +1,30 @@
 # Migration Guide
 
+## `boardsmith/testing` has one way to do each thing
+
+`boardsmith/testing` dropped the exports that duplicated another one or that
+nothing used (#517, #518, #519). A game test that imports one of them stops
+type-checking. Replace each as follows:
+
+| Removed | Use instead |
+|---|---|
+| `assertActionSucceeds(g, seat, action, args)` | `g.doAction(seat, action, args)`, which throws with the availability trace, flow position and seed |
+| `simulateAction(g, seat, action, args)` | `g.tryAction(seat, action, args)`; the result no longer echoes `action` / `playerSeat` / `args` |
+| `simulateActions(g, steps)` | a loop of `g.tryAction(...)` |
+| `SimulateActionResult` | `ActionExecutionResult` from `boardsmith/runtime` |
+| `playUntilComplete(g)`, `GameStuckError`, `PlayUntilCompleteOptions` | `simulateRandomGames(GameClass, { ... })` or `replayRandomGame(...)`; for a test about `enumerateLegalMoves` itself, a short loop over it with `doAction` |
+| `assertFlowState(g, { ... })`, `ExpectedFlowState`, `FlowStateAssertionResult` | `assertActionAvailable` / `assertActionNotAvailable`, or read `g.getFlowState()` |
+| `assertGameFinished(g, { winner })` | `expect(g.isComplete()).toBe(true)` and `g.getWinners()` |
+| `getVisibleElements(game, seat)`, `testGame.getVisibleElements(seat)` | `game.all(...).filter((e) => isElementVisible(e, seat))` |
+| `testGame.isElementVisible(el, seat)` | the standalone `isElementVisible(el, seat)` |
+| `assertTutorialStep(...)` | `assertTutorialCompletes(result)`, or `result.finalStepId` |
+| `viewPlayerRef(...)`, `assertViewFixtureShape(...)`, `ViewPlayerRef` | capture a real view with `testGame.getPlayerView(seat)` or `renderAsSeat` instead of building one by hand |
+
+`assertActionFails` now returns an `ActionExecutionResult`. The random
+simulator now asks the engine's `dueSeats` which seats may act, the same rule
+every host uses, so a simultaneous step is never played for a stale
+`currentPlayer`.
+
 ## GameShell's `providesOwnGameOverUI` is now `providesOwnGameOverUi`
 
 Written in kebab-case, `provides-own-game-over-ui` camelized to
@@ -134,8 +159,6 @@ removed/changed API.
 - The headless test-harness module moved and lost its old import path.
 - `ElementCollection.shuffle()` now requires an explicit RNG argument — no
   silent `Math.random()` fallback.
-- `playUntilComplete()` is deterministic by default (a fixed literal seed)
-  instead of defaulting to `Math.random()`-derived randomness.
 - Animation helpers (`useElementAnimation`, `useFLIP`, `useFlyingElements`)
   now fail loud in development when a target element has no anchor
   attribute, instead of silently no-oping.
@@ -173,27 +196,7 @@ If you were shuffling a `Deck`/`Space` via its own `.shuffle()` method
 through internally and was never affected by this break. This change only
 affects direct callers of the lower-level `ElementCollection.shuffle(random)`.
 
-### Step 3: `playUntilComplete()` is now deterministic by default
-
-```typescript
-// Before — no-options calls used Math.random()-derived randomness,
-// producing a different playthrough on every run.
-playUntilComplete(testGame);
-
-// After — no-options calls use a fixed literal seed
-// ('playUntilComplete-default'), so re-running the same test reproduces the
-// identical command history. Pass your own `seed` or `rng` to vary it.
-playUntilComplete(testGame);                          // now reproducible by default
-playUntilComplete(testGame, { seed: 'my-run-seed' });  // explicit seed
-playUntilComplete(testGame, { rng: () => 0 });         // escape-hatch: fully custom rng
-```
-
-No call-site changes are required — this is a behavior change, not a
-signature change. If a test was relying on non-determinism across repeated
-`playUntilComplete()` calls in the same process (rare), pass a different
-`seed` per call.
-
-### Step 4: Animation helpers fail loud on missing anchors
+### Step 3: Animation helpers fail loud on missing anchors
 
 ```typescript
 // Before — a custom board element missing data-bs-el-id silently failed to
@@ -208,7 +211,7 @@ Fix by spreading `anchorAttrs(ref, type)` (or `useSelectable()`'s `attrs`)
 onto every animated/draggable board element — see
 [Custom UI Guide: Anchor Requirements & Fail-Loud](./custom-ui-guide.md#anchor-requirements--fail-loud-animation).
 
-### Step 5: `onPersistenceError` signature change
+### Step 4: `onPersistenceError` signature change
 
 ```typescript
 // Before
@@ -228,7 +231,7 @@ See [Agent Control: Structured Errors (ERR)](./agent-control.md#structured-error
 for the full `persistenceHealthy`/`lastPersistenceError` observable-state
 story this enables.
 
-### Step 6: `anchorAttrs()` signature change
+### Step 5: `anchorAttrs()` signature change
 
 ```typescript
 // Before
@@ -248,7 +251,6 @@ missing-anchor bug in your board names the actual component, not a generic
 
 - [ ] Update `createHeadlessSession` imports from `boardsmith/session/testing/headless-harness` to `boardsmith/session`
 - [ ] Pass an explicit RNG to any direct `ElementCollection.shuffle()` calls (not `Deck`/`Space.shuffle()` — that wrapper is unaffected)
-- [ ] Review any test relying on `playUntilComplete()` non-determinism across repeated calls; pass an explicit `seed` if so
 - [ ] Spread `anchorAttrs(ref, type)` (or `useSelectable()`'s `attrs`) onto every custom board element that animates or drag-drops
 - [ ] Update any `onPersistenceError` callback to accept `(error, consecutiveFailures, healthy)`
 - [ ] Pass a `type` label to `anchorAttrs()` calls in custom renderer components (optional but recommended)

@@ -1,7 +1,8 @@
 import {
   designRulebookDir,
 } from '../lib/project-paths.js';
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
+import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
@@ -230,10 +231,6 @@ export interface AdjudicationRecord {
   recordedAt: string;
 }
 
-function sha256(buf: Buffer): string {
-  return createHash('sha256').update(buf).digest('hex');
-}
-
 /** `date -u +%Y-%m-%dT%H:%M:%SZ`-shaped, with `:` replaced by `-`. Minted BY THIS COMMAND. */
 function mintRunId(now: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -287,6 +284,23 @@ export function runRootDir(projectDir: string, runId: string): string {
     );
   }
   return dir;
+}
+
+/**
+ * Every verify run's id under `<projectDir>/rulebook/.verify/`, oldest first: run-ids sort
+ * lexicographically because the format is fixed-width UTC. Empty when there are none.
+ */
+export async function listRunIds(projectDir: string): Promise<string[]> {
+  let entries: Array<{ name: string; isDirectory(): boolean }>;
+  try {
+    entries = await fs.readdir(join(designRulebookDir(projectDir), '.verify'), { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((e) => e.isDirectory() && RUN_ID_RE.test(e.name))
+    .map((e) => e.name)
+    .sort();
 }
 
 /**
@@ -1188,7 +1202,7 @@ export async function verifyRunRecordCommand(
 
   const bytes = await fs.readFile(sliceAbs);
   if (range) await assertSliceNamesRangeDocument(projectDir, bytes.toString('utf-8'), slice, range);
-  const hash = sha256(bytes);
+  const hash = sha256Hex(bytes);
   const record: LedgerRecord = {
     unitId: unit,
     slicePath: relToStaging,
@@ -1255,25 +1269,12 @@ export async function verifyRunStatusCommand(
   options: VerifyRunOptions & { runId?: string } = {},
 ): Promise<VerifyRunStatusResult> {
   const projectDir = resolve(options.project ?? process.cwd());
-  const verifyRoot = join(designRulebookDir(projectDir), '.verify');
 
   let runId = options.runId;
   if (runId) {
     assertValidRunId(runId);
   } else {
-    let entries: Array<{ name: string; isDirectory(): boolean }>;
-    try {
-      entries = await fs.readdir(verifyRoot, { withFileTypes: true });
-    } catch {
-      throw new Error(
-        `No verify runs found under rulebook/.verify/ in ${projectDir}.\n` +
-          `Run \`boardsmith verify-run-init\` first.`,
-      );
-    }
-    const runIds = entries
-      .filter((e) => e.isDirectory() && RUN_ID_RE.test(e.name))
-      .map((e) => e.name)
-      .sort();
+    const runIds = await listRunIds(projectDir);
     if (runIds.length === 0) {
       throw new Error(
         `No verify runs found under rulebook/.verify/ in ${projectDir}.\n` +
@@ -1314,7 +1315,7 @@ export async function verifyRunStatusCommand(
       );
       continue;
     }
-    if (sha256(bytes) !== rec.sha256) {
+    if (sha256Hex(bytes) !== rec.sha256) {
       warnings.push(
         `unit "${rec.unitId}"'s recorded sha256 no longer matches ${rec.slicePath} on disk — ` +
           `treating as NOT recorded (hand-edit or tamper detected)`,

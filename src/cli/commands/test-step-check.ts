@@ -38,10 +38,8 @@
  *
  * Any finding exits non-zero. There is no flag that skips a check.
  */
-import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { join, relative, resolve as pathResolve, sep } from 'node:path';
-import { promisify } from 'node:util';
 import chalk from 'chalk';
 import {
   claimsInForce,
@@ -66,10 +64,9 @@ import { scriptRegions } from './test-step-sfc.js';
 import { findCodeRun, type CodeRunContext } from './test-step-code-run.js';
 import { findHandBuiltShellContext } from './test-step-shell-context.js';
 import { findChunkCommits } from '../lib/chunk-commits.js';
+import { gitOutput as git } from '../lib/git-output.js';
 import { chunkMdPath, relChunkMdPath } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
-
-const execFileAsync = promisify(execFile);
 
 const TEST_STEP_FINDING_KINDS = Object.freeze([
   'spec-manifest-empty',
@@ -175,11 +172,6 @@ export function parseSpecManifest(chunkText: string): SpecManifest {
 // -------------------------------------------------------------------------------------------
 // git: which lines this chunk wrote
 // -------------------------------------------------------------------------------------------
-
-async function git(projectDir: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync('git', args, { cwd: projectDir, maxBuffer: 256 * 1024 * 1024 });
-  return stdout;
-}
 
 /** The hash git blame gives a line that is not committed yet. */
 const UNCOMMITTED = '0'.repeat(40);

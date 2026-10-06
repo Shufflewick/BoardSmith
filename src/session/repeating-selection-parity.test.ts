@@ -22,20 +22,20 @@ import {
   repeatingCollectDefinition as collectDef,
 } from './testing/fixtures/repeating-collect-fixture.js';
 import { GameRunner } from '../runtime/runner.js';
-import type { GameStateSnapshot } from '../engine/index.js';
+import { enumerateLegalMoves, type GameStateSnapshot } from '../engine/index.js';
 import { createTestGame } from '../testing/test-game.js';
 import { simulateRandomGames } from '../testing/random-simulation.js';
-import { playUntilComplete } from '../testing/simulate-action.js';
 
 const options = { playerCount: 1, seed: 'bs325' };
 
 function makeHost(botSeats: Array<{ seat: number; level?: string }> = []) {
-  return new SnapshotSessionHost({
+  const host = new SnapshotSessionHost({
     playerCount: options.playerCount,
-    botSeats,
     executeOp: (snap, pend, op) => executeOp(collectDef, options, snap, pend, op),
     record: () => {}, push: () => {},
   });
+  host.setBotSeats(botSeats);
+  return host;
 }
 
 /** What a collect left behind: onEach's calls, execute's argument, and the pieces. */
@@ -168,9 +168,19 @@ describe('the in-process paths run the same protocol (#325)', () => {
     expect(gameOutcome(testGame.game)).toEqual(pickedThenStopped);
   });
 
-  it('playUntilComplete (which plays enumerateLegalMoves) plays whole repeats that onEach ran for', () => {
+  it('the moves enumerateLegalMoves offers play whole repeats that onEach ran for', () => {
     const testGame = createTestGame(RepeatingCollectGame, { playerCount: 1, seed: 'bs325' });
-    playUntilComplete(testGame, { maxMoves: 20 });
+    // Play the longest offered move each turn, so a repeat runs onEach for
+    // more than one pick, until the game ends.
+    let longest = 0;
+    for (let turn = 0; turn < 20 && !testGame.isComplete(); turn++) {
+      const move = enumerateLegalMoves(testGame.game, 1).reduce((a, b) =>
+        (b.args.token as unknown[]).length > (a.args.token as unknown[]).length ? b : a);
+      longest = Math.max(longest, (move.args.token as unknown[]).length);
+      testGame.doAction(1, move.action, move.args);
+    }
+    expect(testGame.isComplete()).toBe(true);
+    expect(longest).toBeGreaterThan(1);
     const game = testGame.game;
     const picked = game.eachCalls.filter((c) => c !== 'stop');
     expect(game.hand.all(Token).map((t) => t.name)).toEqual(picked);

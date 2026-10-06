@@ -40,6 +40,20 @@ import { LocalWorldHost, devWorldPlayer, type WorldDevRequest } from './world-ho
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { worldElementIds } from '../../engine/element/element-ids.js';
 
+/** Run SQL against a world store behind its back, for a state the store
+ *  itself never writes. */
+function execOnStore(path: string, ...statements: string[]): void {
+  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
+    DatabaseSync: new (file: string) => { exec(sql: string): void; close(): void };
+  };
+  const db = new DatabaseSync(path);
+  try {
+    for (const sql of statements) db.exec(sql);
+  } finally {
+    db.close();
+  }
+}
+
 /**
  * THE SAME STORE, AS LAYOUT 7 LEFT IT (#482).
  *
@@ -49,16 +63,20 @@ import { worldElementIds } from '../../engine/element/element-ids.js';
  * only ever writes the layout it is on.
  */
 function rewindStoreToLayout7(path: string): void {
-  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
-    DatabaseSync: new (file: string) => { exec(sql: string): void; close(): void };
-  };
-  const db = new DatabaseSync(path);
-  try {
-    db.exec("DELETE FROM meta WHERE key = 'elementIdKey'");
-    db.exec("UPDATE meta SET value = '7' WHERE key = 'schemaVersion'");
-  } finally {
-    db.close();
-  }
+  execOnStore(
+    path,
+    "DELETE FROM meta WHERE key = 'elementIdKey'",
+    "UPDATE meta SET value = '7' WHERE key = 'schemaVersion'",
+  );
+}
+
+/**
+ * A STAMP LOWERED BEHIND THE STORE'S BACK (#540). The store has no door that
+ * writes a stamp on its own, so a host defect that lost one is reproduced
+ * through SQLite directly.
+ */
+function lowerAllocationStamp(path: string, nextElementId: number): void {
+  execOnStore(path, `UPDATE meta SET value = '${nextElementId}' WHERE key = 'nextElementId'`);
 }
 
 // ── A world bundle, in the shape a real one exports ─────────────────────────
@@ -272,6 +290,11 @@ let orderCounter = 0;
 function nextOrder(): { id: string; at: number } {
   orderCounter += 1;
   return { id: `order-${orderCounter}`, at: 0 };
+}
+
+/** The `stack` verb, sent once as a page sends it. */
+function stackOrder(requestId: string): WorldDevRequest {
+  return { type: 'action', order: nextOrder(), requestId, action: 'stack', args: {} };
 }
 
 interface Sent {
@@ -2050,13 +2073,7 @@ describe('#218: partitions created on first use', () => {
    */
   it('restarts on a world an ordinary command grew', async () => {
     const first = await attached({ dir, definition: bundle() });
-    await first.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'r1',
-      action: 'stack',
-      args: {},
-    });
+    await first.host.handleMessage('c1', stackOrder('r1'));
     expect(last(first.sent, 'c1', 'world_response')).toMatchObject({ ok: true });
     const grown = first.store.nextElementId()!;
     await first.host.close();
@@ -2065,51 +2082,39 @@ describe('#218: partitions created on first use', () => {
     // own store holds rather than below it.
     const second = await attached({ dir, definition: bundle() });
     expect(second.store.nextElementId()).toBe(grown);
-    await second.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'r2',
-      action: 'stack',
-      args: {},
-    });
+    await second.host.handleMessage('c1', stackOrder('r2'));
 
     expect(last(second.sent, 'c1', 'world_response')).toMatchObject({ ok: true });
     await second.host.close();
   });
 
-  it('repairs a stamp an older host left standing below its own bytes (#224)', async () => {
-    // The road for a world that is ALREADY broken: written by a host that grew
-    // a partition and kept the number it had before the growth. The refusal is
-    // proof, so the repair runs off the refusal rather than off a scan every
-    // wake.
+  it('refuses a stamp standing below its own bytes, and leaves it as it found it (#540)', async () => {
+    // No world this host can open was written by the r51-r58 hosts that left
+    // such a stamp behind (#224), so a stale stamp on a current world is a NEW
+    // host defect. Repairing it quietly on the next run would hide that defect;
+    // the world refuses instead, and says it is the host's to report.
     const first = await attached({ dir, definition: bundle() });
-    await first.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'r1',
-      action: 'stack',
-      args: {},
-    });
-    const honest = first.store.nextElementId()!;
+    await first.host.handleMessage('c1', stackOrder('r1'));
     await first.host.close();
 
-    // Exactly what the old host stored: the grown bytes, the pre-growth stamp.
+    // The grown bytes, under a stamp lowered behind the store's back.
+    lowerAllocationStamp(worldStorePath(dir), WORLD_PARTITION_ID_FLOOR + 1);
     const damaged = openHost({ dir, definition: bundle() });
-    damaged.store.recordAllocation(WORLD_PARTITION_ID_FLOOR + 1);
     await damaged.host.start();
     await damaged.host.handleMessage('c1', { type: 'hello' });
     await damaged.host.handleMessage('c1', { type: 'attach', seat: 1 });
-    await damaged.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'r2',
-      action: 'stack',
-      args: {},
-    });
+    await damaged.host.handleMessage('c1', stackOrder('r2'));
 
-    expect(last(damaged.sent, 'c1', 'world_response')).toMatchObject({ ok: true });
-    // Repaired from the bytes themselves, not from the number that was wrong.
-    expect(damaged.store.nextElementId()).toBeGreaterThanOrEqual(honest);
+    const response = last(damaged.sent, 'c1', 'world_response') as {
+      ok: boolean;
+      code?: string;
+      message?: string;
+    };
+    expect(response).toMatchObject({ ok: false, code: 'allocation-stale' });
+    expect(response.message).toMatch(/host defect/);
+    expect(response.message).not.toMatch(/worldIdAllocationOf/);
+    // Nothing rewrote it: the defect is still there to be seen.
+    expect(damaged.store.nextElementId()).toBe(WORLD_PARTITION_ID_FLOOR + 1);
     await damaged.host.close();
   });
 
