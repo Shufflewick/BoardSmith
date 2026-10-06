@@ -1742,6 +1742,12 @@ export async function computePayloadHash(): Promise<string> {
     }
   }
 
+  // The two reserved commit attributes (#527). No view carries either: the
+  // executor hands them to the host as `persistCommit` instead. Set here so a
+  // change to that (a view that carries one again) moves `payloadHash`.
+  game.persist = { entries: [{ key: 'hall-of-fame', value: 'Alice' }] };
+  game.persistPrivate = { entries: [{ key: 'player:alice/sheet', value: { hp: 3 } }] };
+
   // Start the flow so the views carry real flow state. Without this every view
   // reports `flowState: undefined` and the hash covers only board
   // serialization — which is exactly how the flow layer stayed invisible in the
