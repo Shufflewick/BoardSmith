@@ -1,7 +1,7 @@
 import { SnapshotSessionHost } from './snapshot-session-host.js';
 import { executeOp, SUBMISSION_OP_TYPES, type GameDefinitionLike, type Op } from './stateless-ops.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
-import type { SnapshotSessionAdapters } from './snapshot-session-host.js';
+import type { BotSeat, SnapshotSessionAdapters } from './snapshot-session-host.js';
 
 /**
  * An op as a headless CALLER writes it: a submission may omit `boundaryKey`,
@@ -63,28 +63,18 @@ type BroadcastMeta = Parameters<SnapshotSessionAdapters['record']>[1];
 export function createHeadlessSession(
   def: GameDefinitionLike,
   gameOptions: { playerCount: number; seed?: string },
-  botSeats: Array<{ seat: number; level?: string }> = [],
+  botSeats: BotSeat[] = [],
 ) {
   const broadcasts: unknown[] = [];
   const metas: BroadcastMeta[] = [];
   const pushes: Array<ReadonlyArray<{ seat: number; view: unknown }>> = [];
   const spectatorViews: unknown[] = [];
-  // The roster is a LIVE list this harness owns, handed to the host through a
-  // GETTER — the same shape the platform DO supplies (`get botSeats()` over
-  // `slots[].isBot` + `mindedSeats`). The positional `botSeats` argument seeds it;
-  // it is not its identity, so `makeSeatBot` below can change it mid-game.
-  //
-  // Before this, the argument was passed straight through as a frozen array and
-  // "seat 2 became bot at move 7" was not expressible in the engine's own harness
-  // at all — which is why nothing had ever asserted that the engine plays a
-  // converted seat, even though the pump re-reads the roster on every iteration
-  // and always could.
-  const botRoster: Array<{ seat: number; level?: string }> = [...botSeats];
+  // The roster this harness owns. The positional `botSeats` argument seeds it,
+  // and `makeSeatBot` below changes it mid-game, telling the host each time
+  // (`setBotSeats`), as a platform does when a seat passes to the bot.
+  const botRoster: BotSeat[] = [...botSeats];
   const host = new SnapshotSessionHost({
     playerCount: gameOptions.playerCount,
-    get botSeats() {
-      return botRoster;
-    },
     // Debug ops run (#481): a headless session has one in-process caller
     // driving every seat, so there is no other player to keep a view from. A
     // seat-view debug op still answers only for the seat `send` names.
@@ -105,6 +95,7 @@ export function createHeadlessSession(
       pushes.push(structuredClone(changed));
     },
   });
+  host.setBotSeats(botRoster);
   return {
     host,
     broadcasts,
@@ -128,10 +119,9 @@ export function createHeadlessSession(
      * DO's `mindSeats` flips `slots[seat].isBot`.
      *
      * This is HALF of a conversion. It tells the host the roster changed
-     * (`rosterChanged()`), so every page learns it now rather than with some
-     * later move (#487), but it does not wake the pump: the roster is the
-     * adapter's, and the engine is told about the change by the
-     * `convertSeatToBot` op, which is also what wakes the pump. Flipping the
+     * (`setBotSeats()`), so every page learns it now rather than with some
+     * later move (#487), but it does not wake the pump: the
+     * `convertSeatToBot` op is what wakes the pump. Flipping the
      * roster and never sending the op leaves the table parked — send the op.
      * Sending the op without flipping the roster is refused loudly.
      *
@@ -140,7 +130,7 @@ export function createHeadlessSession(
     makeSeatBot(seat: number, level?: string) {
       if (botRoster.some((s) => s.seat === seat)) return;
       botRoster.push({ seat, level });
-      host.rosterChanged();
+      host.setBotSeats(botRoster);
     },
     async start() {
       await host.start();

@@ -91,7 +91,7 @@ describe('#321: a simultaneous step entered after an action step', () => {
     // The host-embedded player view.
     const seat1View = createPlayerView(game, 1);
     expect(seat1View.flowState?.isMyTurn).toBe(false);
-    expect(seat1View.flowState?.availableActions).toBeUndefined();
+    expect(seat1View.flowState?.availableActions).toEqual([]);
 
     // The debug description names the step's seats, not the last action step's seat.
     const debug = game.getFlowDebugInfo();

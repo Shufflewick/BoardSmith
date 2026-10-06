@@ -6,6 +6,7 @@ import type { ElementJSON } from '../element/types.js';
 import type { TutorialStepView } from '../tutorial/types.js';
 import type { RandomState } from '../../utils/random.js';
 import { getActiveTutorialStepView } from '../tutorial/gate.js';
+import { canSeatAct, availableActionsForSeat } from '../flow/seat-activity.js';
 
 /**
  * Complete game state snapshot for persistence/transmission
@@ -48,6 +49,17 @@ export interface GameStateSnapshot {
 
   /** Flow engine state (if flow is active) */
   flowState?: FlowState;
+
+  /**
+   * The seats `game.getWinners()` named when the snapshot was taken: the
+   * winners of a finished game, `[]` for a draw or a game still running, or
+   * whatever a game that overrides `getWinners()` reports mid-game.
+   *
+   * A record for hosts that cannot run the game's code (a platform whose rules
+   * run in a separate executor), so the snapshot alone states the outcome.
+   * `fromSnapshot` does not read it back: the engine keeps asking the game.
+   */
+  winners: number[];
 
   /** Action history: every action taken and every seat the host closed at a deadline, for undo and replay */
   actionHistory: HistoryEntry[];
@@ -259,6 +271,9 @@ export interface ActionCheckpoint {
   /** Flow engine position at this checkpoint (if flow is active). */
   flowState?: FlowState;
 
+  /** The seats `game.getWinners()` named at this checkpoint (see `GameStateSnapshot.winners`). */
+  winners: number[];
+
   /** Element sequence counter (`game._ctx.sequence`) at this checkpoint. */
   sequence?: number;
 
@@ -367,7 +382,8 @@ export interface PlayerStateView {
   flowState?: {
     awaitingInput: boolean;
     isMyTurn: boolean;
-    availableActions?: string[];
+    /** Empty when this player cannot act. */
+    availableActions: string[];
   };
 
   /** Messages visible to this player */
@@ -448,6 +464,7 @@ export function createSnapshot(
     // would hold every seat's private log.
     messageLog: game.serializeMessageLog(opts?.forSeat),
     flowState: flowState ?? undefined,
+    winners: game.getWinners().map((p) => p.seat),
     actionHistory: [...actionHistory],
     seed,
     sequence: game._ctx.sequence,
@@ -480,6 +497,7 @@ export function createActionCheckpoint(game: Game): ActionCheckpoint {
   return {
     state: game.toJSON(),
     flowState: flowState ?? undefined,
+    winners: game.getWinners().map((p) => p.seat),
     sequence: game._ctx.sequence,
     randomState: game.getRandomState(),
     // A watermark into the snapshot-level log, not a copy of it — see
@@ -498,32 +516,6 @@ export function createPlayerView(
   playerPosition: number
 ): PlayerStateView {
   const flowState = game.getFlowState();
-
-  // Resolve this player's turn status and available actions, handling BOTH
-  // sequential action steps (flowState.currentPlayer / flowState.availableActions)
-  // and simultaneous action steps (flowState.awaitingPlayers[].availableActions).
-  // Mirrors buildPlayerState() and GameShell so host-embedded views (which read
-  // this PlayerStateView) match the BoardSmith dev server. Without the
-  // awaitingPlayers branch, simultaneous steps (e.g. a "choose your landing"
-  // phase) report zero available actions and no action buttons render.
-  let isMyTurn = false;
-  let availableActions: string[] | undefined;
-  if (flowState) {
-    const awaiting = flowState.awaitingPlayers;
-    if (awaiting && awaiting.length > 0) {
-      const entry = awaiting.find(
-        (p) => p.playerIndex === playerPosition && !p.completed
-      );
-      isMyTurn = entry !== undefined;
-      availableActions = entry?.availableActions;
-    } else {
-      isMyTurn = flowState.currentPlayer === playerPosition;
-      availableActions =
-        flowState.awaitingInput && isMyTurn
-          ? flowState.availableActions
-          : undefined;
-    }
-  }
 
   // Tutorial projection — parity with buildPlayerState (T-104-07).
   // Uses the shared getActiveTutorialStepView helper so this call site and
@@ -544,8 +536,8 @@ export function createPlayerView(
     state: game.toJSONForPlayer(playerPosition),
     flowState: flowState ? {
       awaitingInput: flowState.awaitingInput,
-      isMyTurn,
-      availableActions,
+      isMyTurn: canSeatAct(flowState, playerPosition),
+      availableActions: availableActionsForSeat(flowState, playerPosition),
     } : undefined,
     // Seat-scoped: `messageTo()` messages addressed to other seats are withheld
     // here, not hidden in the UI — this is the payload the client receives.

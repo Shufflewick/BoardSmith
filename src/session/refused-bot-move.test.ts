@@ -70,7 +70,6 @@ describe('#421: SnapshotSessionHost with a bot seat whose move is refused', () =
     const botTurns: Array<{ seats: number[]; result: OpResult }> = [];
     const host = new SnapshotSessionHost({
       playerCount: 3,
-      botSeats: [{ seat: 2, level: 'easy' }, { seat: 3, level: 'easy' }],
       executeOp: async (snapshot, pendingState, op: Op) => {
         const result = await executeOp(stubbornDef, gameOptions, snapshot, pendingState, op);
         if (op.type === 'botTurn') botTurns.push({ seats: op.seats.map((s) => s.seat), result });
@@ -78,6 +77,7 @@ describe('#421: SnapshotSessionHost with a bot seat whose move is refused', () =
       },
       record: () => {}, push: () => {},
     });
+    host.setBotSeats([{ seat: 2, level: 'easy' }, { seat: 3, level: 'easy' }]);
     const refusalsOfSeat2 = () =>
       botTurns.filter((t) => !t.result.success && t.result.botPlayer === 2).length;
     return { host, botTurns, refusalsOfSeat2 };

@@ -1,7 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { flowBoundaryKey, type BoundaryKeyState } from '../engine/index.js';
-import { _clearShownWarnings } from '../utils/dev.js';
-import { SnapshotSessionHost } from './snapshot-session-host.js';
+import { SnapshotSessionHost, type BotSeat } from './snapshot-session-host.js';
 import { executeOp } from './stateless-ops.js';
 import { createHeadlessSession } from './headless-session.js';
 import { StatePushGate } from './state-push-gate.js';
@@ -142,30 +140,41 @@ describe('SnapshotSessionHost pushes only the seats whose view changed (#487)', 
     expect(table.broadcasts).toHaveLength(6);
   });
 
+  /** A fresh process's host, restored from what `table` left and the views its pages hold. */
+  function restoredFrom(table: Awaited<ReturnType<typeof secretTable>>['table'], botSeats: BotSeat[] = []) {
+    const pushes: number[][] = [];
+    const broadcasts: unknown[][] = [];
+    const host = SnapshotSessionHost.restore(
+      {
+        playerCount: 2,
+        executeOp: (snap, pend, op) => executeOp(secretDeploymentDefinition, { playerCount: 2, seed: 'bs487' }, snap, pend, op),
+        record: (views) => broadcasts.push(views.players),
+        push: (changed) => pushes.push(changed.map((c) => c.seat)),
+      },
+      {
+        ...table.host.durableState(),
+        playerViews: table.broadcasts.at(-1) as unknown[],
+        spectatorView: table.spectatorViews.at(-1),
+        botSeats,
+      },
+    );
+    return { host, pushes, broadcasts };
+  }
+
   it('a host restored with the views its pages hold pushes them nothing until something they may see changes', async () => {
     const { table } = await secretTable();
-    const restored = createHeadlessSession(secretDeploymentDefinition, { playerCount: 2, seed: 'bs487' });
-    restored.host.restoreFrom({
-      ...table.host.durableState(),
-      playerViews: table.broadcasts.at(-1) as unknown[],
-      spectatorView: table.spectatorViews.at(-1),
-    });
+    const restored = restoredFrom(table);
+    expect(restored.pushes).toEqual([]);
     const key = table.metas.at(-1)!.turnBoundary.key;
     expect((await restored.host.handleOp(1, { type: 'action', actionName: 'placePack', player: 1, args: {}, boundaryKey: key })).success).toBe(true);
-    expect(restored.pushes.map((push) => push.map((p) => p.seat))).toEqual([[1]]);
+    expect(restored.pushes).toEqual([[1]]);
   });
 
   it('a host restored after a seat passed to the bot while it slept pushes every page the change', async () => {
     const { table } = await secretTable();
     // The pages were last pushed a table with no bot; the roster now has one.
-    const restored = createHeadlessSession(secretDeploymentDefinition, { playerCount: 2, seed: 'bs487' }, [{ seat: 2 }]);
-    restored.host.restoreFrom({
-      ...table.host.durableState(),
-      playerViews: table.broadcasts.at(-1) as unknown[],
-      spectatorView: table.spectatorViews.at(-1),
-    });
-    restored.host.rosterChanged();
-    expect(restored.pushes.map((push) => push.map((p) => p.seat))).toEqual([[0, 1, 2]]);
+    const restored = restoredFrom(table, [{ seat: 2 }]);
+    expect(restored.pushes).toEqual([[0, 1, 2]]);
   });
 
   it('a host restored after a person took the bot\'s seat while it slept pushes every page the change', async () => {
@@ -173,14 +182,8 @@ describe('SnapshotSessionHost pushes only the seats whose view changed (#487)', 
     table.makeSeatBot(2);
     expect((table.broadcasts.at(-1) as Array<{ state: { hasBotPlayers?: boolean } }>)[0]!.state.hasBotPlayers).toBe(true);
     // The pages were last pushed a table with a bot; the roster now has none.
-    const restored = createHeadlessSession(secretDeploymentDefinition, { playerCount: 2, seed: 'bs487' });
-    restored.host.restoreFrom({
-      ...table.host.durableState(),
-      playerViews: table.broadcasts.at(-1) as unknown[],
-      spectatorView: table.spectatorViews.at(-1),
-    });
-    restored.host.rosterChanged();
-    expect(restored.pushes.map((push) => push.map((p) => p.seat))).toEqual([[0, 1, 2]]);
+    const restored = restoredFrom(table);
+    expect(restored.pushes).toEqual([[0, 1, 2]]);
     expect((restored.broadcasts.at(-1) as Array<{ state: { hasBotPlayers?: boolean } }>)[0]!.state.hasBotPlayers).toBeUndefined();
   });
 
@@ -190,32 +193,5 @@ describe('SnapshotSessionHost pushes only the seats whose view changed (#487)', 
     table.makeSeatBot(2);
     // Every view now says a bot plays here.
     expect(pushedSince(from)).toEqual([[0, 1, 2]]);
-  });
-
-  it('warns when the roster changed and nobody called rosterChanged()', async () => {
-    _clearShownWarnings();
-    const roster: Array<{ seat: number }> = [];
-    const pushes: number[][] = [];
-    const host = new SnapshotSessionHost({
-      playerCount: 2,
-      get botSeats() {
-        return roster;
-      },
-      // A bot that never moves: the warning is about the roster, not the bot's play.
-      executeOp: (snap, pend, op) =>
-        executeOp(secretDeploymentDefinition, { playerCount: 2, seed: 'bs487' }, snap, pend, op.type === 'botTurn' ? { ...op, seats: [] } : op),
-      record: () => {},
-      push: (changed) => pushes.push(changed.map((c) => c.seat)),
-    });
-    await host.start();
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      roster.push({ seat: 2 });
-      const boundaryKey = flowBoundaryKey(host.flowState as BoundaryKeyState);
-      expect((await host.handleOp(1, { type: 'action', actionName: 'placePack', player: 1, args: {}, boundaryKey })).success).toBe(true);
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining('rosterChanged()'));
-    } finally {
-      warn.mockRestore();
-    }
   });
 });

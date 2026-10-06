@@ -30,12 +30,13 @@ import { playUntilComplete } from '../testing/simulate-action.js';
 const options = { playerCount: 1, seed: 'bs325' };
 
 function makeHost(botSeats: Array<{ seat: number; level?: string }> = []) {
-  return new SnapshotSessionHost({
+  const host = new SnapshotSessionHost({
     playerCount: options.playerCount,
-    botSeats,
     executeOp: (snap, pend, op) => executeOp(collectDef, options, snap, pend, op),
     record: () => {}, push: () => {},
   });
+  host.setBotSeats(botSeats);
+  return host;
 }
 
 /** What a collect left behind: onEach's calls, execute's argument, and the pieces. */
