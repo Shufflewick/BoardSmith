@@ -33,7 +33,7 @@ import { enumerateLegalMoves } from '../engine/utils/enumerate-moves.js';
 // ============================================================================
 // Test games — each registers a single `chooseElements` action over 3 pieces
 // (>=3 so C(3,2) yields multiple combos) whose `multiSelect` is function-valued.
-// Each game exposes only ONE action so bot.play()'s enumerateAllMoves result
+// Each game exposes only ONE action so bot.play()'s root moves
 // is driven entirely by that action's multiSelect resolution.
 // ============================================================================
 

@@ -75,7 +75,7 @@ describe('MCTS element-tree rollback (F-01)', () => {
     b.rootCommandCount = b.searchGame.commandHistory.length;
 
     const flowState = b.searchGame.getFlowState();
-    const moves = b.enumerateAllMoves(b.searchGame, flowState);
+    const moves = b.movesFor(b.searchGame, flowState, b.playerIndex, { sample: false });
     expect(moves.length).toBe(3); // three cards to draw -> real expansion
 
     const root = b.createNode(flowState, null, null, moves, 0);

@@ -1,7 +1,6 @@
 import type {
   Game,
   GameOptions,
-  Player,
   FlowState,
   HistoryEntry,
   ActionDefinition,
@@ -9,7 +8,7 @@ import type {
   GameStateSnapshot,
   FollowUpAction,
 } from '../engine/index.js';
-import { createSnapshot, canSeatAct, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
+import { createSnapshot, canSeatAct, dueSeats, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
 import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
 import { constructGame } from '../engine/element/game.js';
 import type {
@@ -22,6 +21,12 @@ import { SeededRandom, mintSeed } from '../utils/random.js';
 
 /** Game class constructor type */
 type GameClass<G extends Game = Game> = new (options: GameOptions) => G;
+
+/**
+ * The most moves the root keeps, and the most arg sets one action contributes
+ * below it, to bound the search's branching.
+ */
+const MAX_SAMPLED_ARGS = 20;
 
 /**
  * What became of a move the search made in the world it is in (#421).
@@ -279,7 +284,7 @@ export class MCTSBot<G extends Game = Game> {
 
     // CR-01 (159): build the redacted search sandbox FIRST, then enumerate/
     // threat-check/UCT-weight from it -- never from `this.game` (full truth).
-    // `enumerateAllMoves` -> `getSelectionChoices` and the game-supplied
+    // `movesFor` -> `getSelectionChoices` and the game-supplied
     // `threatResponseMoves`/`uctConstant` hooks can read arbitrary game state;
     // running them against `this.game` would leak opponents' hidden info into
     // the bot's ROOT decision even though the search tree below it was
@@ -301,7 +306,7 @@ export class MCTSBot<G extends Game = Game> {
       ?? Math.sqrt(2);
 
     // Get ALL available moves first (without sampling) for threat response analysis
-    const allMoves = this.enumerateAllMoves(this.searchGame, flowState);
+    const allMoves = this.movesFor(this.searchGame, flowState, this.playerIndex, { sample: false });
     if (allMoves.length === 0) {
       // See play()'s doc comment: a stall for this seat, not a session lock.
       this.lastStallReason =
@@ -339,12 +344,10 @@ export class MCTSBot<G extends Game = Game> {
         // every move, quietly undoing the game's "you MUST block" ruling.
         this.forcedRootMoveKeys = new Set(moves.map(m => this.getMoveKey(m)));
       } else {
-        // No threat - sample normally
-        moves = allMoves.length > 20 ? this.sampleMovesWithPreserved(allMoves, 20, []) : allMoves;
+        moves = this.sampleRootMoves(allMoves);
       }
     } else {
-      // No threat response configured - sample normally
-      moves = allMoves.length > 20 ? this.sampleMovesWithPreserved(allMoves, 20, []) : allMoves;
+      moves = this.sampleRootMoves(allMoves);
     }
 
     // Clear the RAVE table for a fresh search
@@ -534,13 +537,17 @@ export class MCTSBot<G extends Game = Game> {
    * for a seat that is not to move here, so none of them may be made, and no
    * move for the other seat may be added under a node that scores its
    * children for this one.
+   *
+   * The root is the bot's own decision, so it matches any world where the
+   * bot's seat may act, wherever the step lists it (#522).
    */
   private turnMatchesWorld(node: MCTSNode): boolean {
     const live = this.worldFlowState();
-    return (
-      Boolean(live.complete) === Boolean(node.flowState.complete) &&
-      this.getCurrentPlayerFromFlowState(live) === node.currentPlayer
-    );
+    if (Boolean(live.complete) !== Boolean(node.flowState.complete)) return false;
+    if (live.complete) return true;
+    return node.parent === null
+      ? canSeatAct(live, node.currentPlayer)
+      : this.seatToMove(live) === node.currentPlayer;
   }
 
   /**
@@ -596,7 +603,9 @@ export class MCTSBot<G extends Game = Game> {
   private refreshNodeForWorld(node: MCTSNode): Set<string> {
     // The world's own flow state, not the one `node` was grown in (#421).
     const live = this.worldFlowState();
-    const enumerated = live.complete ? [] : this.enumerateMovesForSimulation(this.searchGame!, live);
+    const enumerated = live.complete
+      ? []
+      : this.movesFor(this.searchGame!, live, node.currentPlayer, { sample: true });
 
     const forced = node.parent === null ? this.forcedRootMoveKeys : undefined;
     const legalMoves = forced
@@ -719,24 +728,25 @@ export class MCTSBot<G extends Game = Game> {
     // live (reveal-leaking) state — the sequentialized-reveal defect for ≥3
     // co-deciders. The `every(!completed)` guard makes it idempotent mid-step.
     this.maybeCaptureSimultaneousBaseline(this.worldFlowState());
-    return this.makeSearchMove(node.parentMove!).outcome;
+    return this.makeSearchMove(node.parentMove!, node.parent!.currentPlayer).outcome;
   }
 
   /**
-   * Make `move` in `searchGame` for the seat this world has to move, and say
-   * whether the engine took it (#421).
+   * Make `move` in `searchGame` for `seat`, the seat it was listed for, and say
+   * whether the engine took it (#421). The caller passes the seat of the node
+   * the move was listed at; recomputing it here once let a move listed for one
+   * seat be made as another (#522).
    *
    * A refused move does not throw: the flow stays where it was and reports the
    * refusal on the state it returns. The search used to read that state as the
    * position the move led to, so every refused move became a child that scored
    * the unchanged position as if the move had been played.
    */
-  private makeSearchMove(move: BotMove): { outcome: SearchMoveOutcome; flowState: FlowState } {
+  private makeSearchMove(move: BotMove, seat: number): { outcome: SearchMoveOutcome; flowState: FlowState } {
     const game = this.searchGame!;
-    const acting = this.getCurrentPlayerFromFlowState(this.worldFlowState());
     let flowState: FlowState;
     try {
-      flowState = game.continueFlow(move.action, this.rebindArgs(move.args), acting);
+      flowState = game.continueFlow(move.action, this.rebindArgs(move.args), seat);
     } catch {
       // The flow itself threw, possibly after the move changed the game.
       return { outcome: 'refusedAfterChanges', flowState: this.worldFlowState() };
@@ -772,7 +782,7 @@ export class MCTSBot<G extends Game = Game> {
     // Record command count before applying move
     const commandCountBefore = this.searchGame!.commandHistory.length;
 
-    const { outcome, flowState } = this.makeSearchMove(move);
+    const { outcome, flowState } = this.makeSearchMove(move, node.currentPlayer);
     if (outcome !== 'made') {
       // Not a move this node can make: never offer it here again.
       node.refusedMoveKeys.add(this.getMoveKey(move));
@@ -782,8 +792,10 @@ export class MCTSBot<G extends Game = Game> {
     // Calculate how many commands this move generated
     const commandCount = this.searchGame!.commandHistory.length - commandCountBefore;
 
-    // Get available moves for the NEXT player (whoever's turn it is now)
-    const newMoves = flowState.complete ? [] : this.enumerateMovesForSimulation(this.searchGame!, flowState);
+    // The moves of the seat that moves next, which is the seat the child records.
+    const newMoves = flowState.complete
+      ? []
+      : this.movesFor(this.searchGame!, flowState, this.seatToMove(flowState), { sample: true });
 
     // Create child node with command count (no snapshot needed!)
     const child = this.createNode(flowState, node, move, newMoves, commandCount);
@@ -822,14 +834,14 @@ export class MCTSBot<G extends Game = Game> {
       // must run before this iteration's move mutates searchGame.
       this.maybeCaptureSimultaneousBaseline(flowState);
 
-      // Get available moves for the current player (whoever's turn it is)
-      const moves = this.enumerateMovesForSimulation(this.searchGame, flowState);
+      // One seat lists the moves and makes the one chosen (#522).
+      const currentPlayer = this.seatToMove(flowState);
+      const moves = this.movesFor(this.searchGame, flowState, currentPlayer, { sample: true });
       if (moves.length === 0) {
         break;
       }
 
       // Select move: use playoutPolicy if available, otherwise random
-      const currentPlayer = this.getCurrentPlayerFromFlowState(flowState);
       let move: BotMove;
 
       if (this.playoutPolicy) {
@@ -840,7 +852,7 @@ export class MCTSBot<G extends Game = Game> {
         move = this.rng.pick(moves);
       }
 
-      const made = this.makeSearchMove(move);
+      const made = this.makeSearchMove(move, currentPlayer);
       if (made.outcome === 'refusedAfterChanges') return null;
       // A clean refusal changed nothing: evaluate the position as it stands.
       if (made.outcome === 'refused') break;
@@ -1040,135 +1052,90 @@ export class MCTSBot<G extends Game = Game> {
     return canSeatAct(flowState, this.playerIndex);
   }
 
-  /**
-   * The actions the bot's own seat may take: its entry in a simultaneous step,
-   * or the action step's actions when that step is its turn. Never another
-   * seat's actions, which would be enumerated as if the bot could take them.
-   */
-  private getAvailableActionsForBot(flowState: FlowState): string[] {
-    return availableActionsForSeat(flowState, this.playerIndex);
-  }
-
   // ============================================================================
   // SECTION: Move Enumeration
-  // Purpose: Discover and enumerate all legal moves for action selection
+  // Purpose: One seat rule and one move enumerator for every node (#522)
   // ============================================================================
 
   /**
-   * Discover all legal moves available to the bot player at the current game state.
-   * Queries available actions from flowState, then generates all valid argument
-   * combinations for each action by examining selection definitions.
-   * Returns an array of {action, args} pairs ready for tree expansion.
+   * The seat that moves next below the root: the first due seat that has a
+   * move to make, either an action the step lists for it or a follow-up it
+   * holds. A seat holding a follow-up is listed with no actions, so it comes
+   * first in its own right rather than being skipped (#522).
    *
-   * NOTE: This method samples moves to limit branching factor (max 20 per selection).
-   * For threat response, use enumerateAllMoves() first to get the full list.
+   * Only for a flow state that is not complete. The root's seat is always the
+   * bot's own, whatever order the step lists its seats in.
    */
-  private enumerateMoves(game: G | null, flowState: FlowState): BotMove[] {
-    return this.enumerateMovesInternal(game, flowState, false);
-  }
-
-  /**
-   * Enumerate ALL legal moves without sampling.
-   * Used for threat response analysis where we need to check all possible blocking cells.
-   */
-  private enumerateAllMoves(game: G | null, flowState: FlowState): BotMove[] {
-    return this.enumerateMovesInternal(game, flowState, true);
-  }
-
-  /**
-   * Internal move enumeration with optional sampling control.
-   */
-  private enumerateMovesInternal(game: G | null, flowState: FlowState, noSampling: boolean): BotMove[] {
-    const moves: BotMove[] = [];
-    if (!game) return moves;
-    const actions = this.getAvailableActionsForBot(flowState);
-    const player = game.getPlayer(this.playerIndex);
-
-    for (const actionName of actions) {
-      const actionDef = game.getAction(actionName);
-      if (!actionDef) continue;
-
-      // Generate all valid argument combinations
-      const argCombos = this.enumerateSelectionsInternal(game, actionDef, player, noSampling);
-      for (const args of argCombos) {
-        moves.push({ action: actionName, args });
-      }
+  private seatToMove(flowState: FlowState): number {
+    const seat = dueSeats(flowState).find(
+      (s) => availableActionsForSeat(flowState, s).length > 0 || followUpForSeat(flowState, s) !== undefined,
+    );
+    if (seat === undefined) {
+      throw new Error(
+        'The bot reached a position in its search where the game is not over but no seat has a move. ' +
+          'This is a BoardSmith bug; please report it with the game that triggered it.',
+      );
     }
-
-    moves.push(...this.followUpMoves(game, flowState, this.playerIndex, noSampling));
-    return moves;
+    return seat;
   }
 
   /**
-   * The moves of the follow-up `seat` holds, if any: its action with the args
-   * it was published with bound. While the step offers the seat nothing else,
-   * these are its only moves, so a bot that skipped them would stall the step.
+   * Every move `seat` may make in `flowState`: its listed actions with every
+   * legal set of args, then the follow-up it holds, if any. Args are in wire
+   * form (element ids). With `sample`, each action contributes at most 20 arg
+   * sets, drawn from the bot's own random source, to bound the branching.
+   *
+   * This is the bot's only enumerator, and the seat it is given is the seat
+   * the moves are later made for (#522). Each action's args come from the
+   * engine's own gated enumerator, `enumerateActionMoves`, so the bot never
+   * reaches a move `enumerateLegalMoves` would refuse (#19).
+   *
+   * Within a simultaneous step, args are drawn from the pre-reveal baseline
+   * when one was captured (T-159-07): a co-decider's moves must not depend on
+   * what an earlier co-decider already picked. The action list and follow-up
+   * still come from `flowState`, the world's own position.
    */
-  private followUpMoves(game: Game, flowState: FlowState, seat: number, noSampling: boolean): BotMove[] {
-    const followUp = followUpForSeat(flowState, seat);
-    const actionDef = followUp && game.getAction(followUp.action);
-    const player = game.getPlayer(seat);
-    if (!followUp || !actionDef || !player) return [];
-    return this.enumerateSelectionsInternal(game, actionDef, player, noSampling, followUp)
-      .map((args) => ({ action: followUp.action, args }));
-  }
-
-  /**
-   * Enumerate all valid moves for the current player (whoever's turn it is)
-   * Used during MCTS simulation (expand/playout)
-   */
-  private enumerateMovesForSimulation(game: G, flowState: FlowState): BotMove[] {
-    const moves: BotMove[] = [];
-
-    // T-159-07: within a simultaneous step, enumerate against the pre-reveal
-    // baseline (if one was captured) instead of the live, possibly-mutated
-    // `game` -- a co-decider's move set must not depend on an earlier
-    // co-decider's already-committed pick. Outside a simultaneous step (or
-    // before any baseline exists), `game` is used unchanged.
+  private movesFor(game: G, flowState: FlowState, seat: number, options: { sample: boolean }): BotMove[] {
     const enumerationGame: G =
       flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0 && this.simultaneousBaseline
         ? this.simultaneousBaseline
         : game;
-
-    // Get the current player from flow state
-    let currentPlayerIndex = flowState.currentPlayer;
-    let actions: string[] = flowState.availableActions ?? [];
-
-    // For simultaneous actions, pick the first awaiting player
-    if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
-      const firstAwaiting = flowState.awaitingPlayers.find(p => !p.completed);
-      if (firstAwaiting) {
-        currentPlayerIndex = firstAwaiting.playerIndex;
-        actions = firstAwaiting.availableActions;
-      }
-    }
-
-    if (currentPlayerIndex === undefined) {
-      return moves;
-    }
-
-    // Read the player/actionDef from the SAME game instance we enumerate
-    // against -- actionDef closures (chooseFrom choices, filters) are bound
-    // to their owning game instance, so mixing instances would enumerate
-    // against the wrong element graph.
-    const player = enumerationGame.getPlayer(currentPlayerIndex);
+    // The player and action definitions come from the SAME game instance the
+    // args are enumerated against: their closures are bound to it.
+    const player = enumerationGame.getPlayer(seat);
     if (!player) {
-      return moves;
+      throw new Error(
+        `The bot was asked for the moves of seat ${seat}, which this game does not have. ` +
+          'This is a BoardSmith bug; please report it with the game that triggered it.',
+      );
     }
 
-    for (const actionName of actions) {
+    const moves: BotMove[] = [];
+    const add = (actionDef: ActionDefinition, followUp?: FollowUpAction) => {
+      const serialized = enumerateActionMoves(enumerationGame, actionDef, player, { followUp })
+        .map((args) => this.serializeArgs(args, actionDef.selections));
+      const kept = options.sample && serialized.length > MAX_SAMPLED_ARGS
+        ? this.rng.shuffle(serialized).slice(0, MAX_SAMPLED_ARGS)
+        : serialized;
+      for (const args of kept) moves.push({ action: actionDef.name, args });
+    };
+
+    for (const actionName of availableActionsForSeat(flowState, seat)) {
       const actionDef = enumerationGame.getAction(actionName);
-      if (!actionDef) continue;
-
-      // Generate all valid argument combinations
-      const argCombos = this.enumerateSelections(enumerationGame, actionDef, player);
-      for (const args of argCombos) {
-        moves.push({ action: actionName, args });
-      }
+      if (actionDef) add(actionDef);
     }
+    // While the step offers the seat nothing else, its follow-up is its only
+    // move, so a search that skipped it would stall the step.
+    const followUp = followUpForSeat(flowState, seat);
+    const followUpDef = followUp && enumerationGame.getAction(followUp.action);
+    if (followUp && followUpDef) add(followUpDef, followUp);
 
-    moves.push(...this.followUpMoves(enumerationGame, flowState, currentPlayerIndex, false));
     return moves;
+  }
+
+  /** The root's moves, sampled down to {@link MAX_SAMPLED_ARGS} when there are more. */
+  private sampleRootMoves(moves: BotMove[]): BotMove[] {
+    return moves.length > MAX_SAMPLED_ARGS ? this.rng.shuffle(moves).slice(0, MAX_SAMPLED_ARGS) : moves;
   }
 
   /**
@@ -1202,66 +1169,6 @@ export class MCTSBot<G extends Game = Game> {
     return this.restoreGame(snapshot) as G;
   }
 
-  /**
-   * Get the current player index from flow state (for simulation)
-   */
-  private getCurrentPlayerFromFlowState(flowState: FlowState): number {
-    // For simultaneous actions, pick the first awaiting player
-    if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
-      const firstAwaiting = flowState.awaitingPlayers.find(p => !p.completed && p.availableActions.length > 0);
-      if (firstAwaiting) {
-        return firstAwaiting.playerIndex;
-      }
-    }
-    return flowState.currentPlayer ?? this.playerIndex;
-  }
-
-  /**
-   * Enumerate all valid argument combinations for an action (with sampling)
-   */
-  private enumerateSelections(
-    game: Game,
-    actionDef: ActionDefinition,
-    player: Player
-  ): Record<string, unknown>[] {
-    return this.enumerateSelectionsInternal(game, actionDef, player, false);
-  }
-
-  /**
-   * Internal method with sampling control.
-   * Delegates to the shared `enumerateActionMoves` utility, which applies every
-   * gate the game can write — `condition`, `choices`/`disabled`, `validate` —
-   * and drops an action whose rules cannot be answered from this seat's
-   * redacted sandbox (#19). The bot had its own ungated loop here, so it could
-   * play moves `enumerateLegalMoves` would refuse and `performAction` then
-   * rejected, halting the pump.
-   *
-   * The shared enumerator returns in-process element objects. This wrapper
-   * applies the bot's serializeArgs (converting objects to wire IDs) and — when
-   * noSampling is false — limits the result set with the bot's seeded-RNG
-   * sampleChoices.
-   */
-  private enumerateSelectionsInternal(
-    game: Game,
-    actionDef: ActionDefinition,
-    player: Player,
-    noSampling: boolean,
-    followUp?: FollowUpAction,
-  ): Record<string, unknown>[] {
-    // Shared enumerator: fully gated, element objects (no serialization, no sampling)
-    const combos = enumerateActionMoves(game, actionDef, player, { followUp });
-
-    // Bot wire format: convert element objects to numeric IDs
-    const serialized = combos.map(args => this.serializeArgs(args, actionDef.selections));
-
-    if (noSampling) return serialized;
-
-    // Bot sampling: limit branching factor using seeded RNG (bot-specific concern)
-    const maxChoices = 20;
-    return serialized.length > maxChoices
-      ? this.sampleChoices(serialized, maxChoices)
-      : serialized;
-  }
 
   /**
    * Serialize a choice value for action args
@@ -1306,68 +1213,6 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     return serialized;
-  }
-
-  /**
-   * Sample choices to limit branching
-   */
-  private sampleChoices<T>(choices: T[], maxCount: number): T[] {
-    if (choices.length <= maxCount) return choices;
-
-    const sampled: T[] = [];
-    const indices = new Set<number>();
-
-    while (sampled.length < maxCount) {
-      const idx = this.rng.nextInt(choices.length);
-      if (!indices.has(idx)) {
-        indices.add(idx);
-        sampled.push(choices[idx]);
-      }
-    }
-
-    return sampled;
-  }
-
-  /**
-   * Sample moves while preserving specified critical moves.
-   * Used to ensure threat response blocking moves survive random sampling.
-   *
-   * @param moves - All available moves
-   * @param maxCount - Maximum total moves to return
-   * @param preserve - Moves that must be included (e.g., blocking moves)
-   * @returns Sampled moves with preserved moves guaranteed to be included
-   */
-  private sampleMovesWithPreserved(
-    moves: BotMove[],
-    maxCount: number,
-    preserve: BotMove[]
-  ): BotMove[] {
-    if (moves.length <= maxCount) return moves;
-
-    // Start with preserved moves
-    const preserveKeys = new Set(preserve.map(m => JSON.stringify(m)));
-    const result: BotMove[] = [...preserve];
-    const resultKeys = new Set(preserveKeys);
-
-    // If preserved moves already exceed limit, just return them
-    if (result.length >= maxCount) {
-      return result.slice(0, maxCount);
-    }
-
-    // Sample from remaining moves to fill up to maxCount
-    const remaining = moves.filter(m => !preserveKeys.has(JSON.stringify(m)));
-    const needed = maxCount - result.length;
-
-    if (remaining.length <= needed) {
-      // Add all remaining
-      result.push(...remaining);
-    } else {
-      // Random sample from remaining
-      const sampled = this.sampleChoices(remaining, needed);
-      result.push(...sampled);
-    }
-
-    return result;
   }
 
   // ============================================================================
@@ -1511,17 +1356,8 @@ export class MCTSBot<G extends Game = Game> {
       }
     }
 
-    // v4.8-MCTS-UNDO: capture the plain-property bookkeeping `undoCommands`
-    // can never revert (see MCTSNode.phase/.winners doc). Read from
-    // `this.searchGame` (the live sandbox), which is already positioned at
-    // this node's state by the caller (expandIncremental / runSearch).
-    const nodeWinners = (this.searchGame as unknown as { settings?: { winners?: number[] } } | null)
-      ?.settings?.winners;
-
     return {
       flowState,
-      phase: this.searchGame?.phase ?? 'started',
-      winners: nodeWinners ? [...nodeWinners] : undefined,
       parent,
       parentMove,
       commandCount,
@@ -1530,14 +1366,12 @@ export class MCTSBot<G extends Game = Game> {
       untriedMoves,
       visits: 0,
       value: 0,
-      // Not `flowState.currentPlayer` directly: inside a simultaneous step that field is absent
-      // (the engine tracks per-seat progress in `awaitingPlayers` instead, #321), so every
-      // co-decider node was attributed to the bot's own seat. `selectChild`/`backpropagate` then
-      // read the OPPONENT's simultaneous decision as the bot's own, making the search max-max
-      // optimistic -- it assumed the opponent would pick whatever suited the bot, and never
-      // explored the refutation. `getCurrentPlayerFromFlowState` resolves the awaiting seat and
-      // otherwise falls back to this very expression, so sequential steps are unchanged.
-      currentPlayer: this.getCurrentPlayerFromFlowState(flowState),
+      // The seat whose moves this node lists and makes (#522). The root is the bot's own
+      // decision. Below it, `seatToMove`: not `flowState.currentPlayer`, which a simultaneous
+      // step never advances (#321), so every co-decider node was once read as the bot's own and
+      // the search assumed the opponent would cooperate. A finished game has no seat to move;
+      // its node has no children, so the bot's seat stands in.
+      currentPlayer: parent === null || flowState.complete ? this.playerIndex : this.seatToMove(flowState),
       proofNumber,
       disproofNumber,
       isProven,
