@@ -247,7 +247,6 @@ import {
   TestGame,
   simulateTutorial,
   assertTutorialCompletes,
-  assertTutorialStep,
 } from 'boardsmith/testing';
 import type { TutorialScenarioMove } from 'boardsmith/testing';
 ```

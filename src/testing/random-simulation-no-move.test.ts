@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   Game,
   Player,
@@ -11,7 +11,7 @@ import {
   simultaneousActionStep,
   type GameOptions,
 } from '../engine/index.js';
-import { simulateRandomGames, replayRandomGame } from './random-simulation.js';
+import { simulateRandomGames, replayRandomGame, noSeatHasEnabledAction } from './random-simulation.js';
 
 /**
  * Both seats spend coins in one simultaneous step that never ends on its own,
@@ -340,5 +340,29 @@ describe('#383: a game whose seats can always act can still rest', () => {
 
     expect(replay.resting).toBe(true);
     expect(replay.actionCount).toBe(2);
+  });
+});
+
+describe('#518: the simulator asks dueSeats which seats may act', () => {
+  it('offers the awaiting seats of a simultaneous step, not a stale currentPlayer', () => {
+    // Seat 1 has coins but has finished the step; seat 2 is still due and is
+    // broke, so its only action is refused. The flow state also carries a stale
+    // currentPlayer (seat 1) with its old actions, the shape #321 once produced.
+    const game = new CoinGame({ playerCount: 2, seed: 'stale-current-518', coins: [3, 0] } as GameOptions);
+    game.startFlow();
+    expect(game.isAwaitingInput()).toBe(true);
+    const real = game.getFlowState()!;
+    vi.spyOn(game, 'getFlowState').mockReturnValue({
+      ...real,
+      currentPlayer: 1,
+      availableActions: ['spend'],
+      awaitingPlayers: [
+        { playerIndex: 1, availableActions: [], completed: true },
+        { playerIndex: 2, availableActions: ['spend'], completed: false },
+      ],
+    });
+
+    // Only seat 2 is due, and its one action is refused: nobody can move.
+    expect(noSeatHasEnabledAction(game)).toBe(true);
   });
 });

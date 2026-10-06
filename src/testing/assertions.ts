@@ -1,192 +1,68 @@
 /**
  * Assertion helpers for testing BoardSmith games.
  *
- * Provides test assertions for checking game state, player elements,
- * action availability, and game completion.
+ * Provides test assertions for action availability, action failure and
+ * per-seat element visibility.
  *
  * @module
  */
 
 import type { TestGame } from './test-game.js';
 import { canSeatAct, availableActionsForSeat, type GameElement } from '../engine/index.js';
-import { _collectAvailableActions } from './simulate-action.js';
+import { formatSelectionLines } from './debug.js';
 import { isElementVisible } from './visibility.js';
+import type { ActionExecutionResult } from '../runtime/index.js';
 
 /**
- * Expected flow state for assertions.
- */
-export interface ExpectedFlowState {
-  /** Player position who should be acting */
-  currentPlayer?: number;
-  /**
-   * Actions that should be available.
-   *
-   * Use `actionsMode` to control whether this must be an exact set or a subset:
-   * - `'exact'` (default) — both missing AND extra actions fail the assertion.
-   * - `'contains'` — only missing actions fail; extra available actions are allowed.
-   */
-  actions?: string[];
-  /**
-   * How to compare the `actions` list against available actions.
-   *
-   * - `'exact'` (default) — the available actions must match `actions` exactly;
-   *   both missing and extra actions are assertion failures.
-   *   This is backward-compatible with the pre-actionsMode behavior (D-06).
-   * - `'contains'` — only checks that every action in `actions` is available;
-   *   extra available actions are permitted. Opt into this for tests that only
-   *   care about a subset of actions being present.
-   */
-  actionsMode?: 'exact' | 'contains';
-  /** Whether game should be complete */
-  complete?: boolean;
-  /** Whether game should be awaiting input */
-  awaitingInput?: boolean;
-  /** Current phase name */
-  phase?: string;
-}
-
-/**
- * Result of a flow state assertion.
- */
-export interface FlowStateAssertionResult {
-  passed: boolean;
-  message: string;
-  expected: ExpectedFlowState;
-  actual: {
-    currentPlayer?: number;
-    actions?: string[];
-    complete: boolean;
-    awaitingInput: boolean;
-    phase?: string;
-  };
-}
-
-/**
- * Assert that the game flow is in the expected state.
+ * Assert that an action fails.
  *
- * Checks any combination of: current player, available actions,
- * completion status, awaiting input status, and phase.
+ * Performs the action with `testGame.tryAction` and throws if it succeeds.
+ * Optionally checks that the error matches an expected string or pattern. To
+ * run an action that should succeed, call `testGame.doAction`, which throws
+ * with the full availability trace when it does not.
  *
  * @param testGame - The test game instance
- * @param expected - The expected flow state properties
- * @returns The assertion result with actual vs expected values
- * @throws Error if any expected property doesn't match
+ * @param playerSeat - The player seat performing the action (1-indexed)
+ * @param actionName - The name of the action to perform
+ * @param args - Arguments for the action
+ * @param expectedError - Optional string the error must contain, or regex it must match
+ * @returns The failed action result
+ * @throws Error if the action succeeds, or if expectedError is given and doesn't match
  *
  * @example
  * ```typescript
- * assertFlowState(testGame, {
- *   currentPlayer: 1,
- *   actions: ['move', 'attack'],
- *   awaitingInput: true,
- * });
+ * assertActionFails(testGame, 1, 'playCard', { card: wrongCard });
+ * assertActionFails(testGame, 1, 'playCard', { card: wrongCard }, 'not your turn');
  * ```
  */
-export function assertFlowState(
+export function assertActionFails(
   testGame: TestGame,
-  expected: ExpectedFlowState
-): FlowStateAssertionResult {
-  const flowState = testGame.getFlowState();
-  const errors: string[] = [];
+  playerSeat: number,
+  actionName: string,
+  args: Record<string, unknown> = {},
+  expectedError?: string | RegExp
+): ActionExecutionResult {
+  const result = testGame.tryAction(playerSeat, actionName, args);
 
-  const actual = {
-    currentPlayer: flowState?.currentPlayer,
-    // Collect actions from both sequential (availableActions) and simultaneous
-    // (awaitingPlayers[*].availableActions) turns. flowState?.availableActions is
-    // undefined during simultaneous steps, so reading it directly caused false
-    // "missing action" failures. _collectAvailableActions handles both modes.
-    actions: flowState ? _collectAvailableActions(flowState) : undefined,
-    complete: testGame.isComplete(),
-    awaitingInput: testGame.isAwaitingInput(),
-    phase: flowState?.currentPhase,
-  };
-
-  if (expected.currentPlayer !== undefined && actual.currentPlayer !== expected.currentPlayer) {
-    errors.push(`Expected current player ${expected.currentPlayer}, got ${actual.currentPlayer}`);
+  if (result.success) {
+    throw new Error(
+      `Expected action '${actionName}' by player ${playerSeat} to fail, but it succeeded`
+    );
   }
 
-  if (expected.complete !== undefined && actual.complete !== expected.complete) {
-    errors.push(`Expected complete=${expected.complete}, got ${actual.complete}`);
-  }
+  if (expectedError) {
+    const errorMatches = typeof expectedError === 'string'
+      ? result.error?.includes(expectedError)
+      : expectedError.test(result.error ?? '');
 
-  if (expected.awaitingInput !== undefined && actual.awaitingInput !== expected.awaitingInput) {
-    errors.push(`Expected awaitingInput=${expected.awaitingInput}, got ${actual.awaitingInput}`);
-  }
-
-  if (expected.phase !== undefined && actual.phase !== expected.phase) {
-    errors.push(`Expected phase="${expected.phase}", got "${actual.phase}"`);
-  }
-
-  if (expected.actions !== undefined) {
-    const actualActions = actual.actions ?? [];
-    const missingActions = expected.actions.filter(a => !actualActions.includes(a));
-    if (missingActions.length > 0) {
-      errors.push(`Missing expected actions: ${missingActions.join(', ')}`);
-    }
-    // Extra-actions check: only runs in 'exact' mode (default).
-    // Use actionsMode:'contains' to allow extra available actions.
-    const mode = expected.actionsMode ?? 'exact';
-    if (mode === 'exact') {
-      const extraActions = actualActions.filter(a => !expected.actions!.includes(a));
-      if (extraActions.length > 0) {
-        errors.push(`Unexpected available actions: ${extraActions.join(', ')}`);
-      }
-    }
-  }
-
-  const passed = errors.length === 0;
-  const message = passed ? 'Flow state matches expected' : errors.join('; ');
-
-  if (!passed) {
-    throw new Error(`Flow state assertion failed: ${message}`);
-  }
-
-  return { passed, message, expected, actual };
-}
-
-/**
- * Assert that the game is finished with expected winner(s).
- *
- * Verifies the game is complete and optionally checks the winning player(s).
- *
- * @param testGame - The test game instance
- * @param options - Optional winner constraints: { winner } for single winner, { winners } for multiple
- * @throws Error if game is not complete or winners don't match
- *
- * @example
- * ```typescript
- * assertGameFinished(testGame, { winner: 1 });  // Player 1 won
- * assertGameFinished(testGame, { winners: [1, 2] });  // Draw between players 1 and 2
- * assertGameFinished(testGame);  // Just assert game is finished
- * ```
- */
-export function assertGameFinished(
-  testGame: TestGame,
-  options?: { winner?: number; winners?: number[] }
-): void {
-  if (!testGame.isComplete()) {
-    throw new Error('Expected game to be finished, but it is not complete');
-  }
-
-  if (options?.winner !== undefined) {
-    const winners = testGame.getWinners();
-    if (winners.length !== 1 || winners[0].seat !== options.winner) {
-      const actualWinners = winners.map(w => w.seat).join(', ');
-      throw new Error(`Expected player ${options.winner} to win, but winners are: [${actualWinners}]`);
-    }
-  }
-
-  if (options?.winners !== undefined) {
-    const winners = testGame.getWinners();
-    const actualPositions = winners.map(w => w.seat).sort();
-    const expectedPositions = [...options.winners].sort();
-
-    if (actualPositions.length !== expectedPositions.length ||
-        !actualPositions.every((p, i) => p === expectedPositions[i])) {
+    if (!errorMatches) {
       throw new Error(
-        `Expected winners [${expectedPositions.join(', ')}], but got [${actualPositions.join(', ')}]`
+        `Expected error to match ${expectedError}, but got: ${result.error}`
       );
     }
   }
+
+  return result;
 }
 
 /**
@@ -227,11 +103,7 @@ export function assertActionAvailable(
     // actionable trace — called ONLY on the failure path (no perf regression).
     const player = testGame.getPlayer(playerSeat);
     const debugInfo = testGame.game.debugActionAvailability(actionName, player);
-    const selLines = debugInfo.details.selections
-      .map(s =>
-        `  ${s.passed ? '✓' : '✗'} '${s.name}': ${s.choices} choices${s.note ? ` — ${s.note}` : ''}`
-      )
-      .join('\n');
+    const selLines = formatSelectionLines(debugInfo);
     throw new Error(
       `Action "${actionName}" is not available for player ${playerSeat}.\n` +
       `Available actions: [${availableActions.join(', ')}]\n` +

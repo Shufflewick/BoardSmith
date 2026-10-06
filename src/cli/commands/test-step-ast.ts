@@ -406,17 +406,14 @@ const DISPATCH_ENTRY_POINTS: Readonly<Record<string, number>> = Object.freeze({
   doAction: 1,
   tryAction: 1,
   take: 1,
-  simulateAction: 2,
-  assertActionSucceeds: 2,
   performAction: 0,
 });
 
 /** Names every way a verb counts as dispatched, for error messages. */
 export const DISPATCH_FORMS =
   "testGame.doAction(seat, 'verb'), testGame.tryAction(seat, 'verb'), " +
-  "testGame.action('verb', seat)...execute(), simulateAction(testGame, seat, 'verb'), " +
-  "simulateActions(testGame, [[seat, 'verb']]), assertActionSucceeds(testGame, seat, 'verb'), " +
-  "runner.performAction('verb', seat), world.take(seat, 'verb'), or a helper of the project's own " +
+  "testGame.action('verb', seat)...execute(), runner.performAction('verb', seat), " +
+  "world.take(seat, 'verb'), or a helper of the project's own " +
   'under tests/ that passes the verb name it is given to one of these (or to the world engine\'s applyCommand)';
 
 const dispatchArgument: VerbArgument = (call, wrappers) => {
@@ -430,15 +427,6 @@ const dispatchArgument: VerbArgument = (call, wrappers) => {
 /** Every project function (a test harness, usually) that dispatches a verb named by a parameter. */
 export function findDispatchWrappers(sources: readonly SourceFile[]): Map<string, number> {
   return findWrappers(sources, dispatchArgument, [...Object.keys(DISPATCH_ENTRY_POINTS), 'applyCommand']);
-}
-
-/** The verbs in `simulateActions(testGame, [[seat, 'verb', args], ...])`. */
-function simulateActionsVerbs(call: AstNode): Array<string | undefined> {
-  const steps = argAt(call, 1);
-  if (!isNode(steps) || steps.type !== 'ArrayExpression') return [];
-  return (steps.elements as AstNode[])
-    .filter((step) => isNode(step) && step.type === 'ArrayExpression')
-    .map((step) => literalText((step.elements as AstNode[])[1]));
 }
 
 /** The verb of `x.action('verb', seat).select(...).execute()`, found by walking back the chain. */
@@ -457,7 +445,6 @@ function executedBuilderVerb(executeCallee: AstNode): string | undefined {
 function callVerbs(call: AstNode, wrappers: Wrappers): Array<string | undefined> {
   const callee = call.callee as AstNode;
   const name = calleeName(callee);
-  if (name === 'simulateActions') return simulateActionsVerbs(call);
   if (name === 'execute' && callee.type === 'MemberExpression') return [executedBuilderVerb(callee)];
   return [literalText(dispatchArgument(call, wrappers))];
 }

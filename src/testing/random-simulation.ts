@@ -19,6 +19,7 @@ import type {
   Player,
   GameElement,
 } from '../engine/index.js';
+import { dueSeats, availableActionsForSeat } from '../engine/index.js';
 import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
 import { createTestGame, type TestGame } from './test-game.js';
 import { SeededRandom } from '../utils/random.js';
@@ -203,14 +204,15 @@ export interface SimulationResults {
   seed: string;
 }
 
-/** The seats a flow state is waiting on, each with the actions it offers them. @internal */
+/**
+ * The seats a flow state is waiting on, each with the actions it offers them,
+ * answered by the engine's one rule for who may act (`dueSeats`). @internal
+ */
 function offeredSeats(flowState: FlowState): Array<{ seat: number; actionNames: string[] }> {
-  if (flowState.currentPlayer !== undefined && flowState.availableActions) {
-    return [{ seat: flowState.currentPlayer, actionNames: flowState.availableActions }];
-  }
-  return (flowState.awaitingPlayers ?? [])
-    .filter((p) => !p.completed)
-    .map((p) => ({ seat: p.playerIndex, actionNames: p.availableActions }));
+  return dueSeats(flowState).map((seat) => ({
+    seat,
+    actionNames: availableActionsForSeat(flowState, seat),
+  }));
 }
 
 /**
