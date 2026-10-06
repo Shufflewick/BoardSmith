@@ -38,7 +38,7 @@ vi.mock('../../bot-trainer/index.js', async (importOriginal) => {
       private readonly gameType: string,
       private readonly modulePath: string,
     ) {}
-    async evolve(objectives: Array<{ featureId: string; weight: number }>) {
+    async evolve(objectives: Array<{ id: string; weight: number }>) {
       const bundleExistedDuringEvolution = existsSync(this.modulePath);
       let bundleExportedGameClass = false;
       if (bundleExistedDuringEvolution) {
@@ -111,8 +111,9 @@ async function evolveIn(dir: string, options: Parameters<typeof evolveBotWeights
 const evolvedDir = projectWith(
   [
     `import { DeadEndGame } from ${JSON.stringify(fixture)};`,
+    `import { objectives } from './bot.js';`,
     `export const gameDefinition = { gameClass: DeadEndGame, gameType: 'dead-end', displayName: 'Fixture',`,
-    `  minPlayers: 3, maxPlayers: 4 };`,
+    `  minPlayers: 3, maxPlayers: 4, bot: { objectives } };`,
   ].join('\n'),
 );
 const scratchFile = join(scratchDir(evolvedDir), 'keep.txt');
@@ -122,6 +123,15 @@ const evolved = await evolveIn(evolvedDir, { generations: '1', population: '1', 
 
 const brokenDir = projectWith('export const gameDefinition = ;\n');
 const broken = await evolveIn(brokenDir, { generations: '1', population: '1' });
+
+const noBotDir = projectWith(
+  [
+    `import { DeadEndGame } from ${JSON.stringify(fixture)};`,
+    `export const gameDefinition = { gameClass: DeadEndGame, gameType: 'dead-end', displayName: 'Fixture',`,
+    `  minPlayers: 3, maxPlayers: 4 };`,
+  ].join('\n'),
+);
+const noBot = await evolveIn(noBotDir, { generations: '1', population: '1' });
 
 describe('evolve-bot-weights bundles the rules into its own build directory (#399)', () => {
   it('evolves against a fresh bundle of the source rules and removes only that bundle', () => {
@@ -144,5 +154,11 @@ describe('evolve-bot-weights bundles the rules into its own build directory (#39
     expect((broken.error as Error).message).toContain("Evolving this bot's weights failed");
     expect(broken.evolverCalls).toHaveLength(0);
     expect(existsSync(commandBuildDir(brokenDir, 'evolve-bot-weights'))).toBe(false);
+  });
+
+  it("refuses a game whose gameDefinition wires no bot objectives, before evolving anything (#523)", () => {
+    expect(noBot.error).toBeInstanceOf(Error);
+    expect((noBot.error as Error).message).toMatch(/no bot\.objectives/);
+    expect(noBot.evolverCalls).toHaveLength(0);
   });
 });

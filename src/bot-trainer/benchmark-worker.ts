@@ -5,10 +5,9 @@
 import { parentPort } from 'worker_threads';
 import type { Game } from '../engine/index.js';
 import type { GameClass } from '../engine/index.js';
-import type { LearnedObjective, SerializableGameStructure } from './types.js';
+import type { BotStrategy } from '../bot/index.js';
+import type { ObjectiveWeight } from './types.js';
 import { benchmarkBot, type BenchmarkConfig } from './benchmark.js';
-import { deserializeGameStructure } from './simulator.js';
-import { generateCandidateFeatures } from './feature-generator.js';
 
 if (!parentPort) {
   throw new Error('benchmark-worker.ts must be run as a worker thread');
@@ -24,12 +23,10 @@ export interface BenchmarkRequest {
   gameModulePath: string;
   /** Game type identifier */
   gameType: string;
-  /** Objectives to benchmark */
-  objectives: LearnedObjective[];
-  /** Benchmark configuration (without features - worker regenerates them) */
-  config: Omit<BenchmarkConfig, 'features'>;
-  /** Serialized game structure for feature regeneration */
-  structure: SerializableGameStructure;
+  /** The weights to give the game's own objectives, by id */
+  weights: ObjectiveWeight[];
+  /** Benchmark configuration */
+  config: BenchmarkConfig;
 }
 
 /**
@@ -69,7 +66,7 @@ export interface BenchmarkErrorResponse {
  * Message handler for incoming benchmark requests.
  */
 parentPort.on('message', async (request: BenchmarkRequest) => {
-  const { individualIndex, gameModulePath, gameType, objectives, config, structure } = request;
+  const { individualIndex, gameModulePath, gameType, weights, config } = request;
 
   try {
     // Dynamically import the game module (need file:// URL for local imports in workers)
@@ -88,15 +85,14 @@ parentPort.on('message', async (request: BenchmarkRequest) => {
 
     const GameClassRef = gameDefinition.gameClass as GameClass<Game>;
 
-    // Deserialize structure and regenerate features
-    const gameStructure = deserializeGameStructure(structure);
-    const features = generateCandidateFeatures(gameStructure);
-
-    // Run the benchmark with regenerated features
-    const result = await benchmarkBot(GameClassRef, gameType, objectives, {
-      ...config,
-      features,
-    });
+    // The game's own bot, so its own objective checkers are what is scored.
+    const result = await benchmarkBot(
+      GameClassRef,
+      gameType,
+      gameDefinition.bot as BotStrategy | undefined,
+      weights,
+      config,
+    );
 
     // Post result back to parent
     const response: BenchmarkResponse = {

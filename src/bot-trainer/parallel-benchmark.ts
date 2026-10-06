@@ -7,7 +7,7 @@ import { cpus } from 'os';
 import { extname } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { createRequire } from 'module';
-import type { LearnedObjective, SerializableGameStructure } from './types.js';
+import type { ObjectiveWeight } from './types.js';
 import type { BenchmarkConfig } from './benchmark.js';
 import type {
   BenchmarkRequest,
@@ -83,8 +83,7 @@ export type BenchmarkProgressCallback = (completed: number, total: number) => vo
  *
  * @param gameModulePath - Absolute path to the compiled game module (.js)
  * @param gameType - Game type identifier
- * @param population - Array of objective sets (each represents one individual)
- * @param structure - Serialized game structure for feature regeneration in workers
+ * @param population - Array of weight sets (each represents one individual)
  * @param config - Benchmark configuration (game count, MCTS iterations, etc.)
  * @param options - Worker pool configuration
  * @param onProgress - Optional progress callback
@@ -93,9 +92,8 @@ export type BenchmarkProgressCallback = (completed: number, total: number) => vo
 export async function runParallelBenchmarks(
   gameModulePath: string,
   gameType: string,
-  population: LearnedObjective[][],
-  structure: SerializableGameStructure,
-  config: Omit<BenchmarkConfig, 'features'>,
+  population: ObjectiveWeight[][],
+  config: BenchmarkConfig,
   options?: ParallelBenchmarkOptions,
   onProgress?: BenchmarkProgressCallback
 ): Promise<number[]> {
@@ -244,9 +242,8 @@ export async function runParallelBenchmarks(
         individualIndex: index,
         gameModulePath,
         gameType,
-        objectives: population[index],
+        weights: population[index],
         config,
-        structure,
       };
 
       workerState.worker.postMessage(request);

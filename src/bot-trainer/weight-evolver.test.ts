@@ -5,19 +5,20 @@
  * the generation count, and that the best candidate ever seen is what comes out.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { LearnedObjective, TrainingProgress } from './types.js';
+import type { ObjectiveWeight, TrainingProgress } from './types.js';
 import type { WeightEvolverConfig } from './weight-evolver.js';
-import { Game, Player } from '../engine/index.js';
+import { Game, Player, Action, defineFlow, actionStep, type GameOptions } from '../engine/index.js';
+import type { BotStrategy } from '../bot/index.js';
 
 /** Fitness for each benchmarked population, controlled per test. */
-let fitnessOf: (objectives: LearnedObjective[]) => number;
-const benchmarkCalls: LearnedObjective[][][] = [];
+let fitnessOf: (objectives: ObjectiveWeight[]) => number;
+const benchmarkCalls: ObjectiveWeight[][][] = [];
 
 vi.mock('./parallel-benchmark.js', () => ({
   runParallelBenchmarks: vi.fn(async (
     _path: string,
     _type: string,
-    population: LearnedObjective[][],
+    population: ObjectiveWeight[][],
   ) => {
     benchmarkCalls.push(population);
     return population.map((individual) => fitnessOf(individual));
@@ -27,19 +28,25 @@ vi.mock('./parallel-benchmark.js', () => ({
 const { WeightEvolver } = await import('./weight-evolver.js');
 const { runParallelBenchmarks } = await import('./parallel-benchmark.js');
 
-class EvolveGame extends Game<EvolveGame, Player> {}
+class EvolveGame extends Game<EvolveGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(Action.create<EvolveGame>('pass').execute(() => {}));
+    this.setFlow(defineFlow({ root: actionStep({ actions: ['pass'] }) }));
+  }
+}
 
-const objectives = (...weights: number[]): LearnedObjective[] =>
-  weights.map((weight, i) => ({
-    featureId: `f${i}`,
-    description: `feature ${i}`,
-    weight,
-    checkerCode: '(game, p) => true',
-    correlation: 0.5,
-  }));
+/** The game's own bot: objectives f0 to f3. */
+const bot: BotStrategy = {
+  objectives: () =>
+    Object.fromEntries(['f0', 'f1', 'f2', 'f3'].map((id) => [id, { checker: () => 0, weight: 1 }])),
+};
+
+const objectives = (...weights: number[]): ObjectiveWeight[] =>
+  weights.map((weight, i) => ({ id: `f${i}`, weight }));
 
 const evolver = (config: Partial<WeightEvolverConfig> = {}) =>
-  new WeightEvolver(EvolveGame, 'evolve-game', '/tmp/game.js', {
+  new WeightEvolver(EvolveGame, 'evolve-game', '/tmp/game.js', bot, {
     evolutionGenerations: 2,
     evolutionMu: 2,
     evolutionLambda: 3,
@@ -49,7 +56,7 @@ const evolver = (config: Partial<WeightEvolverConfig> = {}) =>
   });
 
 /** Total weight of an individual — a stand-in for "how good is this candidate". */
-const totalWeight = (individual: LearnedObjective[]) =>
+const totalWeight = (individual: ObjectiveWeight[]) =>
   individual.reduce((sum, o) => sum + o.weight, 0);
 
 beforeEach(() => {
@@ -63,6 +70,11 @@ describe('WeightEvolver.evolve', () => {
     await expect(evolver().evolve([])).rejects.toThrow('No objectives provided for evolution');
   });
 
+  it("refuses, naming it, a weight for an objective the game's bot does not define, before benchmarking", async () => {
+    await expect(evolver().evolve([...objectives(5), { id: 'ghost', weight: 1 }])).rejects.toThrow(/'ghost'/);
+    expect(benchmarkCalls).toEqual([]);
+  });
+
   it('benchmarks the supplied objectives once, first, to get a baseline', async () => {
     fitnessOf = () => 0.42;
     const result = await evolver().evolve(objectives(5));
@@ -74,10 +86,9 @@ describe('WeightEvolver.evolve', () => {
     fitnessOf = (individual) => Math.min(1, Math.abs(totalWeight(individual)) / 20);
     const result = await evolver().evolve(objectives(5, -3));
 
-    expect(result.objectives.map((o) => o.featureId)).toEqual(['f0', 'f1']);
+    expect(result.objectives.map((o) => o.id)).toEqual(['f0', 'f1']);
     for (const objective of result.objectives) {
       expect(Number.isFinite(objective.weight)).toBe(true);
-      expect(objective.checkerCode).toBe('(game, p) => true');
     }
     expect(result.bestFitness).toBeGreaterThanOrEqual(0);
     expect(result.bestFitness).toBeLessThanOrEqual(1);
@@ -104,7 +115,7 @@ describe('WeightEvolver.evolve', () => {
   it('keeps the objective identities while varying the weights', async () => {
     await evolver({ evolutionGenerations: 1 }).evolve(objectives(5, -3));
     for (const individual of benchmarkCalls[1]) {
-      expect(individual.map((o) => o.featureId)).toEqual(['f0', 'f1']);
+      expect(individual.map((o) => o.id)).toEqual(['f0', 'f1']);
     }
   });
 
@@ -160,8 +171,7 @@ describe('WeightEvolver.evolve', () => {
     const progress: TrainingProgress[] = [];
     await evolver({ evolutionGenerations: 2, onProgress: (p) => progress.push(p) })
       .evolve(objectives(5));
-    expect(progress[0].message).toContain('Analyzing game structure');
-    expect(progress.some((p) => p.message.includes('Benchmarking initial'))).toBe(true);
+    expect(progress[0].message).toContain('Benchmarking initial');
     expect(progress.at(-1)!.iteration).toBe(2);
     expect(progress.at(-1)!.totalIterations).toBe(2);
   });
@@ -181,7 +191,7 @@ describe('WeightEvolver.evolve', () => {
     await evolver({ evolutionBenchmarkGames: 12, benchmarkMCTSIterations: 7 })
       .evolve(objectives(5));
     for (const call of vi.mocked(runParallelBenchmarks).mock.calls) {
-      expect(call[4]).toMatchObject({ gameCount: 12, mctsIterations: 7 });
+      expect(call[3]).toMatchObject({ gameCount: 12, mctsIterations: 7 });
     }
   });
 

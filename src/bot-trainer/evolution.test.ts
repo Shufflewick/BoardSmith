@@ -1,22 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import type { LearnedObjective } from './types.js';
-import {
-  mutateWeights,
-  crossoverWeights,
-  selectBest,
-  generateOffspring,
-  createSeededRandom,
-} from './evolution.js';
+import type { ObjectiveWeight } from './types.js';
+import { mutateWeights, crossoverWeights, selectBest, generateOffspring } from './evolution.js';
+import { createSeededRandom } from '../utils/random.js';
 
 // Helper to create test objectives
-function createObjective(featureId: string, weight: number): LearnedObjective {
-  return {
-    featureId,
-    description: `Test feature ${featureId}`,
-    weight,
-    checkerCode: `() => true`,
-    correlation: 0.5,
-  };
+function createObjective(id: string, weight: number): ObjectiveWeight {
+  return { id, weight };
 }
 
 describe('evolution', () => {
@@ -62,7 +51,7 @@ describe('evolution', () => {
 
       const mutated = mutateWeights(objectives, 1.0, rng);
 
-      expect(mutated.map(o => o.featureId)).toEqual(['feature-a', 'feature-b']);
+      expect(mutated.map(o => o.id)).toEqual(['feature-a', 'feature-b']);
     });
 
     it('changes weights', () => {
@@ -122,18 +111,6 @@ describe('evolution', () => {
       expect(mutated[0]).not.toBe(objectives[0]);
     });
 
-    it('preserves other objective properties', () => {
-      const objectives = [
-        createObjective('feature-a', 5),
-      ];
-      const rng = createSeededRandom('preserve');
-
-      const mutated = mutateWeights(objectives, 1.0, rng);
-
-      expect(mutated[0].description).toBe(objectives[0].description);
-      expect(mutated[0].checkerCode).toBe(objectives[0].checkerCode);
-      expect(mutated[0].correlation).toBe(objectives[0].correlation);
-    });
   });
 
   describe('crossoverWeights', () => {
@@ -151,7 +128,7 @@ describe('evolution', () => {
       const child = crossoverWeights(parent1, parent2, rng);
 
       // Child should have features from both parents
-      const childIds = child.map(o => o.featureId);
+      const childIds = child.map(o => o.id);
       // feature-a is in both, so it should always be present
       expect(childIds).toContain('feature-a');
     });
@@ -163,7 +140,7 @@ describe('evolution', () => {
 
       const child = crossoverWeights(parent1, parent2, rng);
 
-      const sharedFeature = child.find(o => o.featureId === 'shared');
+      const sharedFeature = child.find(o => o.id === 'shared');
       expect(sharedFeature).toBeDefined();
       // Weight should be from one parent or the other
       expect([10, -10]).toContain(sharedFeature!.weight);
@@ -207,9 +184,9 @@ describe('evolution', () => {
 
       const selected = selectBest(population, fitnesses, 3);
 
-      expect(selected[0][0].featureId).toBe('best');
-      expect(selected[1][0].featureId).toBe('middle');
-      expect(selected[2][0].featureId).toBe('worst');
+      expect(selected[0][0].id).toBe('best');
+      expect(selected[1][0].id).toBe('middle');
+      expect(selected[2][0].id).toBe('worst');
     });
 
     it('handles mu larger than population', () => {
@@ -255,7 +232,7 @@ describe('evolution', () => {
 
       // All offspring should have the same feature (from single parent)
       for (const child of offspring) {
-        expect(child[0].featureId).toBe('a');
+        expect(child[0].id).toBe('a');
       }
 
       // At least some weights should differ from parent

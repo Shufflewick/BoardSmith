@@ -9,7 +9,7 @@
  * how well MCTS plays.
  */
 import { describe, it, expect } from 'vitest';
-import { benchmarkBot } from './benchmark.js';
+import { benchmarkBot, weightedObjectives } from './benchmark.js';
 import {
   Game,
   Player,
@@ -17,11 +17,13 @@ import {
   defineFlow,
   eachPlayer,
   actionStep,
+  loop,
   sequence,
   simultaneousActionStep,
   type GameOptions,
 } from '../engine/index.js';
-import type { LearnedObjective } from './types.js';
+import type { Objective } from '../bot/index.js';
+import type { ObjectiveWeight } from './types.js';
 
 /** Every player acts once; the seat named by `winningSeat` always wins. */
 class FixedWinnerGame extends Game<FixedWinnerGame, Player> {
@@ -127,11 +129,11 @@ class ActThenAcknowledgeGame extends Game<ActThenAcknowledgeGame, AcknowledgingP
   }
 }
 
-const noObjectives: LearnedObjective[] = [];
+const noWeights: ObjectiveWeight[] = [];
 
 const benchmark = (gameCount: number, outcome: typeof DecisiveGame.outcome) => {
   DecisiveGame.outcome = outcome;
-  return benchmarkBot(DecisiveGame, 'decisive', noObjectives, {
+  return benchmarkBot(DecisiveGame, 'decisive', undefined, noWeights, {
     gameCount,
     mctsIterations: 1,
     maxActions: 10,
@@ -227,7 +229,7 @@ describe('benchmarkBot', () => {
     // and finish() names no winner. The game decided a tie, so a draw is the
     // honest reading. What must NOT be a draw is a game that never got there
     // (#37) — see the incomplete-outcome tests below.
-    const result = await benchmarkBot(FixedWinnerGame, 'fixed', noObjectives, {
+    const result = await benchmarkBot(FixedWinnerGame, 'fixed', undefined, noWeights, {
       gameCount: 2,
       mctsIterations: 1,
       maxActions: 4,
@@ -240,7 +242,7 @@ describe('benchmarkBot', () => {
   });
 
   it('plays through a simultaneous step, acting for each seat that is due', async () => {
-    const result = await benchmarkBot(ActThenAcknowledgeGame, 'act-then-acknowledge', noObjectives, {
+    const result = await benchmarkBot(ActThenAcknowledgeGame, 'act-then-acknowledge', undefined, noWeights, {
       gameCount: 2,
       mctsIterations: 1,
       maxActions: 10,
@@ -260,24 +262,6 @@ describe('benchmarkBot', () => {
       expect(rate).toBeGreaterThanOrEqual(0);
       expect(rate).toBeLessThanOrEqual(1);
     }
-  });
-
-  it('runs with learned objectives supplied', async () => {
-    DecisiveGame.outcome = 'seat1';
-    const result = await benchmarkBot(DecisiveGame, 'decisive', [{
-      featureId: 'always-true',
-      description: 'always true',
-      weight: 5,
-      checkerCode: '() => true',
-      correlation: 0.5,
-    }], {
-      gameCount: 2,
-      mctsIterations: 1,
-      maxActions: 10,
-      timeout: 5000,
-      seed: 'with-objectives',
-    });
-    expect(result.gamesPlayed).toBe(2);
   });
 });
 
@@ -311,7 +295,7 @@ class ExplodingGame extends Game<ExplodingGame, Player> {
 
 describe('benchmarkBot on a game that cannot finish (#37)', () => {
   const runExploding = (overrides: Record<string, unknown> = {}) =>
-    benchmarkBot(ExplodingGame, 'exploding', noObjectives, {
+    benchmarkBot(ExplodingGame, 'exploding', undefined, noWeights, {
       gameCount: 4,
       mctsIterations: 1,
       maxActions: 10,
@@ -358,5 +342,88 @@ describe('a healthy benchmark reports no failures', () => {
     expect(result.incompleteRate).toBe(0);
     expect(result.failures).toEqual([]);
     expect(result.gamesPlayed).toBe(4);
+  });
+});
+
+/**
+ * Each seat in turn adds 1 or 2 to its own total; the first to 12 wins. Long
+ * enough that a search's playouts stop before the end, so the bot scores
+ * positions with its objectives rather than with the game's result.
+ */
+class RaceGame extends Game<RaceGame, Player> {
+  totals: Record<number, number> = { 1: 0, 2: 0 };
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(
+      Action.create<RaceGame>('step')
+        .chooseFrom('by', { choices: [1, 2] })
+        .execute((args, ctx) => {
+          const game = ctx.game as RaceGame;
+          game.totals[ctx.player.seat] += args.by as number;
+          if (game.totals[ctx.player.seat] >= 12) game.finish([ctx.player]);
+        }),
+    );
+    this.setFlow(defineFlow({ root: loop({ maxIterations: 20, do: eachPlayer({ do: actionStep({ actions: ['step'] }) }) }) }));
+  }
+}
+
+/** The game's own objectives, with ids no generated feature has; counts each checker's calls. */
+function raceObjectives() {
+  const calls = { lead: 0, 'long-stride': 0 };
+  const objectives = (game: Game, seat: number): Record<string, Objective> => {
+    const race = game as RaceGame;
+    return {
+      lead: { checker: () => (calls.lead++, race.totals[seat] > race.totals[3 - seat] ? 1 : 0), weight: 4 },
+      'long-stride': { checker: () => (calls['long-stride']++, race.totals[seat] / 12), weight: 2 },
+    };
+  };
+  return { calls, objectives };
+}
+
+describe("benchmarkBot scores the game's own objectives (#523)", () => {
+  const config = { gameCount: 2, mctsIterations: 20, maxActions: 40, timeout: 30_000, seed: 'race' };
+
+  it("calls every one of the game's objective checkers", async () => {
+    const { calls, objectives } = raceObjectives();
+    const result = await benchmarkBot(RaceGame, 'race', { objectives }, [
+      { id: 'lead', weight: 6 },
+      { id: 'long-stride', weight: -1 },
+    ], config);
+
+    expect(result.gamesPlayed).toBe(2);
+    expect(calls.lead).toBeGreaterThan(0);
+    expect(calls['long-stride']).toBeGreaterThan(0);
+  });
+
+  it('refuses, naming it, a weight for an objective the game does not define', async () => {
+    const { calls, objectives } = raceObjectives();
+    await expect(
+      benchmarkBot(RaceGame, 'race', { objectives }, [{ id: 'lead', weight: 6 }, { id: 'ghost', weight: 1 }], config),
+    ).rejects.toThrow(/'ghost'/);
+    expect(calls.lead).toBe(0);
+  });
+
+  it('refuses weights for a game whose bot has no objectives', async () => {
+    await expect(benchmarkBot(RaceGame, 'race', undefined, [{ id: 'lead', weight: 6 }], config))
+      .rejects.toThrow(/no bot\.objectives/);
+  });
+});
+
+describe('weightedObjectives', () => {
+  const game = new RaceGame({ playerCount: 2, seed: 'weighted' });
+
+  it("gives an objective the evolved weight and keeps the game's checker", () => {
+    const { calls, objectives } = raceObjectives();
+    const weighted = weightedObjectives(objectives, [{ id: 'lead', weight: 9 }])(game, 1);
+
+    expect(weighted.lead.weight).toBe(9);
+    weighted.lead.checker(game, 1);
+    expect(calls.lead).toBe(1);
+  });
+
+  it("keeps the game's own weight for an objective with no evolved weight", () => {
+    const { objectives } = raceObjectives();
+    expect(weightedObjectives(objectives, [{ id: 'lead', weight: 9 }])(game, 1)['long-stride'].weight).toBe(2);
   });
 });
