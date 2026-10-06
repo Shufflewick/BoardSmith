@@ -1,5 +1,5 @@
 {
-  "revision": 131,
+  "revision": 132,
   "bundleProtocol": 2,
   "surfaceHash": "44d3dc2d962030d8",
   "payloadHash": "3f10d70c457a15ba",
@@ -1123,6 +1123,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "SnapshotSessionHost's durable state is stored once (#536) and its calls cannot be made in the wrong order (#537). GameStateSnapshot (and each ActionCheckpoint) now records winners, the seats game.getWinners() named; SnapshotHostState is just { snapshot, pendingStates }, and the flow state, isComplete and winners are read from the snapshot through the new flowStateOf, isCompleteOf and winnersOf exports of boardsmith/session-host, so the platform drops flowState, isComplete and winners from its persisted payload. restoreFrom and the follow-up broadcastCurrent are replaced by the static SnapshotSessionHost.restore(adapters, { snapshot, pendingStates, botSeats, playerViews?, spectatorView? }) (botSeats required, [] when no bot plays), which refuses a snapshot without its flow state or winners and publishes once itself. The host applies the same check to every op result, so a game built on an engine before r131 is refused loudly instead of a won game being published as a draw. The adapters' live botSeats getter and rosterChanged() are replaced by host.setBotSeats(seats), which the platform calls before start() and whenever its roster or anything a derived roster depends on changes (it may be called from record); it publishes only when hasBotPlayers flips. PublishMeta gains cause: 'change' | 'republish' | 'restore' | 'roster', so the platform's own republishing flag can go: do per-change bookkeeping only for 'change'. Games must be built on this revision (r131) or later, because the host reads winners from the snapshot the bundle returns. createPlayerView reports availableActions: [] for a seat that cannot act (#498)."
+    },
+    {
+      "revision": 132,
+      "date": "2026-10-06",
+      "bundleProtocol": 2,
+      "surfaceHash": "44d3dc2d962030d8",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "GameShell runs only inside a host iframe: its gameType, displayName, playerCount, apiUrl and defaultBotPlayers props are removed (a game passes only :uis), opened directly it shows one 'runs inside a host' sentence, and the HTTP client, matchmaking, GameLobby, WaitingRoom, GameHeader and HamburgerMenu are gone from boardsmith/client and boardsmith/ui. The controls menu no longer offers 'Leave game' (the host page owns leaving). In dev builds GameShell adds a dev-only Auto UI entry itself; games drop it from uis.ts. The Debug panel takes its seat count from the state's players. A game whose App.vue still passes the removed props no longer type-checks on this revision; its source drops them (bundles already built carry their own shell)."
     }
   ]
 }
