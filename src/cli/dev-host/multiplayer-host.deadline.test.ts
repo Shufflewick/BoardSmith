@@ -23,11 +23,11 @@ import {
 } from '../../engine/index.js';
 import {
   executeOp,
-  STALE_SUBMISSION_MESSAGE,
   type GameDefinitionLike,
   type Op,
   type OpResult,
 } from '../../session/index.js';
+import { ErrorCode } from '../../types/protocol.js';
 import {
   fixedDeployDefinition,
   untimedDeployDefinition,
@@ -311,7 +311,7 @@ describe('MultiplayerHost step deadlines (#302)', () => {
     expect(humanCommit.op.type).toBe('action');
     expect(humanCommit.result.success).toBe(true);
     expect(timerCommit.op).toMatchObject({ type: 'expireSeat', boundaryKey: armedKey });
-    expect(timerCommit.result).toMatchObject({ success: false, error: STALE_SUBMISSION_MESSAGE });
+    expect(timerCommit.result).toMatchObject({ success: false, errorCode: ErrorCode.STALE_SUBMISSION });
     // Seat 1 still owes a move in the new round: nothing was spent on its behalf.
     expect(clients.key('A')).not.toBe(armedKey);
     expect(h.due('A')).toContain(1);

@@ -16,6 +16,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { executeOp, type GameDefinitionLike, type Op, type OpResult } from '../stateless-ops.js';
+import { ErrorCode } from '../../types/protocol.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../../engine/flow/boundary-key.js';
 import { simultaneousRoundsFixtureDefinition } from './fixtures/simultaneous-rounds-fixture.js';
 import { collectTurnsFixtureDefinition } from './fixtures/collect-turns-fixture.js';
@@ -128,7 +129,7 @@ describe('BSMITH-05: a submission composed against a closed boundary', () => {
     expect(committed(retry, 1)).toBe(true);
   });
 
-  it('case 4: resolves an OpResult — never throws, and never fabricates an errorCode', async () => {
+  it('case 4: resolves an OpResult — never throws, and names the refusal with its own code (#535)', async () => {
     const { def, roundOneKey, roundTwo } = await simultaneousAtRoundTwo();
 
     const promise = run(def, roundTwo.snapshot, {
@@ -137,10 +138,11 @@ describe('BSMITH-05: a submission composed against a closed boundary', () => {
 
     await expect(promise).resolves.toMatchObject({ success: false });
     const stale = await promise;
-    // `OpResult.errorCode` is "undefined for protocol-level failures that have
-    // no upstream errorCode to forward — never fabricated". The staleness guard
-    // runs before any runner call, so there is nothing to forward.
-    expect(stale.errorCode).toBeUndefined();
+    // A stale refusal is the engine's own outcome, not a forwarded failure, so
+    // it carries the engine's own code: a host tells it apart from every other
+    // refusal by the code, never by the message, which is copy (#535).
+    expect(stale.errorCode).toBe('STALE_SUBMISSION');
+    expect(stale.errorCode).toBe(ErrorCode.STALE_SUBMISSION);
     expect(stale.category).toBe('protocol');
   });
 
@@ -231,7 +233,7 @@ describe('BSMITH-05: a submission composed against a closed boundary', () => {
     });
 
     expect(stale.success).toBe(false);
-    expect(stale.error).toBe(STALE_MESSAGE);
+    expect(stale.errorCode).toBe(ErrorCode.STALE_SUBMISSION);
     // Before the fix this completes the action and moves the item into held-1.
     expect(stale.actionComplete).toBeUndefined();
     expect(stale.snapshot).toBeNull();
@@ -255,8 +257,7 @@ describe('BSMITH-05: a submission composed against a closed boundary', () => {
         boundaryKey: value as string,
       });
       expect(result.success).toBe(false);
-      expect(result.error).toBe(STALE_MESSAGE);
-      expect(result.errorCode).toBeUndefined();
+      expect(result.errorCode).toBe(ErrorCode.STALE_SUBMISSION);
       expect(committed(result, 1)).toBe(false);
     }
   });

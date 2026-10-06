@@ -34,7 +34,8 @@ import { _clearShownWarnings } from '../utils/dev.js';
 import { GameRunner } from '../runtime/runner.js';
 import { MCTSBot } from '../bot/mcts-bot.js';
 import { GameSession } from './game-session.js';
-import { executeOp, STALE_SUBMISSION_MESSAGE, type GameDefinitionLike, type OpResult } from './stateless-ops.js';
+import { executeOp, type GameDefinitionLike, type OpResult } from './stateless-ops.js';
+import { ErrorCode } from '../types/protocol.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { historyLabels } from './testing/history-labels.js';
 
@@ -593,7 +594,7 @@ describe('a host deadline that passed for a seat', () => {
       const stale = await expire(moved.snapshot, 2, armedKey);
 
       expect(stale.success).toBe(false);
-      expect(stale.error).toBe(STALE_SUBMISSION_MESSAGE);
+      expect(stale.errorCode).toBe(ErrorCode.STALE_SUBMISSION);
     });
 
     it(`${shape}: a replay refuses an expiry for a seat that holds no follow-up`, () => {

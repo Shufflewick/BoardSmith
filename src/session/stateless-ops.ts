@@ -251,10 +251,11 @@ export interface OpResult {
   success: boolean;
   error?: string;
   /**
-   * Structured error code, threaded through from the underlying runner/
-   * pick-handler result when one exists (e.g. NOT_YOUR_TURN, ENGINE_ERROR,
-   * CHOICES_EVALUATION_ERROR). Undefined for protocol-level failures that have
-   * no upstream errorCode to forward — never fabricated.
+   * Structured error code. A failure forwarded from the runner or the pick
+   * handler carries the code they gave (e.g. NOT_YOUR_TURN, ENGINE_ERROR,
+   * CHOICES_EVALUATION_ERROR), and a code is never invented for one that gave
+   * none. The engine's own protocol refusals carry their own code
+   * (STALE_SUBMISSION).
    */
   errorCode?: ErrorCode;
   category?: 'bundle' | 'executor' | 'protocol';
@@ -568,10 +569,10 @@ function refuseStaleSubmission(snapshot: GameStateSnapshot | null, op: Op): OpRe
   // parsing, no structural tolerance, and no default for an absent or
   // wrong-typed value: anything that is not equal is stale.
   if (op.boundaryKey === flowBoundaryKey(snapshot?.flowState as BoundaryKeyState | undefined)) return undefined;
-  // 'protocol', and no errorCode: this refusal is raised here, ahead of any
-  // runner call, so there is no upstream ErrorCode to forward and one must
-  // never be fabricated (see OpResult.errorCode).
-  return errorResult(STALE_SUBMISSION_MESSAGE, 'protocol');
+  // The engine's own outcome, with its own code (#535): a stale refusal is
+  // normal (the round resolved without this seat), and a host must tell it
+  // apart from every other refusal without reading the message.
+  return errorResult(STALE_SUBMISSION_MESSAGE, 'protocol', ErrorCode.STALE_SUBMISSION);
 }
 
 function selectDueBotSeat(

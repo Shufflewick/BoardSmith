@@ -17,7 +17,6 @@
 
 import { createDevSession, type DevSession } from './bridge.js';
 import {
-  STALE_SUBMISSION_MESSAGE,
   StatePushGate,
   type Op,
   type OpResult,
@@ -39,6 +38,7 @@ import {
   type PersistPlayer,
 } from '../../persistence/index.js';
 import { mintSeed } from '../../utils/random.js';
+import { ErrorCode } from '../../types/protocol.js';
 
 interface SeatInfo {
   seat: number;
@@ -1686,7 +1686,7 @@ export class MultiplayerHost {
       if (this.session !== window.session) return;
       const result = await this.submitIdleAction(window, idle, seat);
       if (!result.success) {
-        this.reportIdleRefusal(idle.name, seat, result.error);
+        this.reportIdleRefusal(idle.name, seat, result);
         return;
       }
     }
@@ -1698,8 +1698,8 @@ export class MultiplayerHost {
    * timer's op waited its turn, which is the ordinary race; anything else means
    * the declared idle action cannot close this step.
    */
-  private reportIdleRefusal(idleName: string, seat: number, error: string | undefined): void {
-    if (error === STALE_SUBMISSION_MESSAGE) {
+  private reportIdleRefusal(idleName: string, seat: number, refusal: { error?: string; errorCode?: ErrorCode }): void {
+    if (refusal.errorCode === ErrorCode.STALE_SUBMISSION) {
       console.info(
         `[boardsmith dev] The step's time ran out just as the round moved on by itself, so the ` +
           `idle action for seat ${seat} was not needed.`,
@@ -1708,7 +1708,7 @@ export class MultiplayerHost {
     }
     this.reportDeadlineFailure(
       `The step's time ran out, and the idle action "${idleName}" was refused for seat ${seat}: ` +
-        `${error ?? 'no reason given'}. "idleAction" in boardsmith.json must name an action ` +
+        `${refusal.error ?? 'no reason given'}. "idleAction" in boardsmith.json must name an action ` +
         'every seat still due can always take.',
     );
   }
