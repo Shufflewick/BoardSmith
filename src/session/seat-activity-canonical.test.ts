@@ -15,6 +15,7 @@ import {
 } from '../engine/index.js';
 import { isPlayersTurn } from './utils.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
+import { succeeded } from './op-result.test-helper.js';
 
 // ---------------------------------------------------------------------------
 // These tests pin the canonical "who can act now?" predicates that collapse
@@ -135,22 +136,22 @@ const passOptions = { playerCount: 2, seed: 'seat-activity-seed' };
 
 describe('debug action traces use the canonical predicate', () => {
   it('reports no flow-allowed actions for a seat that is not its turn', async () => {
-    const start = await executeOp(passDef, passOptions, null, null, { type: 'start' });
+    const start = succeeded(await executeOp(passDef, passOptions, null, null, { type: 'start' }));
 
     // Seat 1 is the current (sequential) player.
-    const seat1 = await executeOp(passDef, passOptions, start.snapshot, null, {
+    const seat1 = succeeded(await executeOp(passDef, passOptions, start.snapshot, null, {
       type: 'debugActionTraces',
       player: 1,
-    }, { debug: true });
+    }, { debug: true }));
     const flow1 = seat1.flowContext as { isMyTurn: boolean; flowAllowedActions: string[] };
     expect(flow1.isMyTurn).toBe(true);
     expect(flow1.flowAllowedActions).toEqual(['pass']);
 
     // Seat 2 cannot act -> it must NOT inherit seat 1's allowed actions.
-    const seat2 = await executeOp(passDef, passOptions, start.snapshot, null, {
+    const seat2 = succeeded(await executeOp(passDef, passOptions, start.snapshot, null, {
       type: 'debugActionTraces',
       player: 2,
-    }, { debug: true });
+    }, { debug: true }));
     const flow2 = seat2.flowContext as { isMyTurn: boolean; flowAllowedActions: string[] };
     expect(flow2.isMyTurn).toBe(false);
     expect(flow2.flowAllowedActions).toEqual([]);

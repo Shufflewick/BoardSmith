@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, defineFlow, execute, type GameOptions } from '../engine/index.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
+import { succeeded } from './op-result.test-helper.js';
 
 // ---------------------------------------------------------------------------
 // A flow that runs to completion INSIDE start(): the whole result is decided in
@@ -41,11 +42,11 @@ const instantWinOptions = { playerCount: 2, seed: 'instant-win-seed' };
 
 describe('a flow completing inside start() publishes its winners', () => {
   it('the start op result carries the flow-declared winners, not an empty draw', async () => {
-    const res = await executeOp(instantWinGameDef, instantWinOptions, null, {}, { type: 'start' });
+    const res = succeeded(await executeOp(instantWinGameDef, instantWinOptions, null, {}, { type: 'start' }));
 
     expect(res.success).toBe(true);
-    expect(res.isComplete).toBe(true);
-    expect(res.winners).toEqual([2]);
+    expect(res.snapshot.flowState?.complete).toBe(true);
+    expect(res.snapshot.winners).toEqual([2]);
   });
 
   it('the host broadcasts isDraw:false with the winner seat', async () => {

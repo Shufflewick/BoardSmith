@@ -1,6 +1,15 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../../engine/index.js';
-import { executeOp, type GameDefinitionLike, type OpResult } from '../../session/index.js';
+import { Game, Player, Action, defineFlow, actionStep, loop, type FollowUpOffer, type GameOptions, type GameStateSnapshot } from '../../engine/index.js';
+import {
+  executeOp,
+  type ExecutableOp,
+  type ExecuteOpAdapter,
+  type GameDefinitionLike,
+  type OpResult,
+  type StateEnvelope,
+} from '../../session/index.js';
+import type { SerializedFlowDebugInfo } from '../../session/types.js';
+import { ErrorCode } from '../../types/protocol.js';
 import { createDevSession, translateOp, shapeResult } from './bridge.js';
 import { boundaryKeyOfHost } from '../../session/testing/boundary-stamp.js';
 import { getEntries, clearEntries, record } from './log-capture.js';
@@ -108,32 +117,24 @@ describe('dev host bridge', () => {
   });
 
   describe('shapeResult', () => {
-    it('returns only {success,error,followUp} for an action', () => {
-      const r = shapeResult('action', {
-        success: true,
-        followUp: { action: 'next' },
-        snapshot: { flowState: {}, winners: [] },
-        pendingState: null,
-        flowState: {},
-        playerViews: [],
-        isComplete: false,
-        winners: [],
-        choices: ['leaked'],
-      });
-      expect(r).toEqual({ success: true, error: undefined, followUp: { action: 'next' } });
+    /**
+     * A game as an op result carries it: every seat's view and the whole
+     * snapshot, none of which may reach the one seat a reply goes to.
+     */
+    const ENVELOPE: StateEnvelope = {
+      snapshot: { flowState: { secret: 'snapshot' } } as unknown as GameStateSnapshot,
+      playerViews: [{ state: { secret: 'should-not-appear' } }],
+      spectatorView: { state: { secret: 'spectator' } },
+      flowDebugInfo: {} as SerializedFlowDebugInfo,
+    };
+
+    it('returns only the move outcome for an action', () => {
+      const r = shapeResult('action', { success: true, ...ENVELOPE, followUp: { action: 'next' } as FollowUpOffer });
+      expect(r).toEqual({ success: true, followUp: { action: 'next' } });
     });
 
-    it('returns only the pick answer for resolve_choices, never the state envelope (#450)', () => {
-      const r = shapeResult('resolve_choices', {
-        success: true,
-        choices: ['red', 'blue'],
-        snapshot: { flowState: {}, winners: [] },
-        pendingState: null,
-        flowState: {},
-        playerViews: [],
-        isComplete: false,
-        winners: [],
-      });
+    it('returns only the pick answer for resolveChoices (#450)', () => {
+      const r = shapeResult('resolveChoices', { success: true, choices: ['red', 'blue'] });
       expect(r).toEqual({
         success: true,
         choices: ['red', 'blue'],
@@ -144,153 +145,81 @@ describe('dev host bridge', () => {
       });
     });
 
-    it('forwards the resolved ordered-list bounds for resolve_choices (#480)', () => {
-      const r = shapeResult('resolve_choices', {
+    it('forwards the resolved ordered-list bounds for resolveChoices (#480)', () => {
+      const r = shapeResult('resolveChoices', {
         success: true,
         choices: ['university', 'shipyard'],
         orderedList: { min: 1, max: 3 },
-        snapshot: null,
-        pendingState: null,
-        flowState: null,
-        playerViews: [],
-        isComplete: false,
-        winners: [],
       });
       expect(r.orderedList).toEqual({ min: 1, max: 3 });
     });
 
     // ── warnings threading (ERR-01 T-126-09) ────────────────────────────────
     //
-    // shapeResult is a manual allowlist (RESEARCH Pitfall 4) — warnings added
-    // to OpResult are invisible on the wire unless explicitly forwarded.
+    // shapeResult is an allowlist (RESEARCH Pitfall 4): a pick's warnings are
+    // invisible on the wire unless explicitly forwarded.
 
-    it("forwards result.warnings on the 'action' case", () => {
-      const r = shapeResult('action', {
+    it('forwards a selection step\'s warnings', () => {
+      const r = shapeResult('selectionStep', {
         success: true,
-        followUp: undefined,
-        snapshot: { flowState: {}, winners: [] },
+        ...ENVELOPE,
         pendingState: null,
-        flowState: {},
-        playerViews: [],
-        isComplete: false,
-        winners: [],
-        warnings: [{ code: 'BOARD_REFS_ERROR', message: 'boardRefs boom', source: 'boardRefs(...)' }],
-      });
-      expect((r as Record<string, unknown>).warnings).toEqual([
-        { code: 'BOARD_REFS_ERROR', message: 'boardRefs boom', source: 'boardRefs(...)' },
-      ]);
-    });
-
-    it("forwards result.warnings on the 'selection_step' case", () => {
-      const r = shapeResult('selection_step', {
-        success: true,
         done: true,
         actionComplete: true,
-        snapshot: { flowState: {}, winners: [] },
-        pendingState: null,
-        flowState: {},
-        playerViews: [],
-        isComplete: false,
-        winners: [],
         warnings: [{ code: 'DISPLAY_ERROR', message: 'display boom', source: 'display(...)' }],
       });
-      expect((r as Record<string, unknown>).warnings).toEqual([
-        { code: 'DISPLAY_ERROR', message: 'display boom', source: 'display(...)' },
-      ]);
+      expect(r.warnings).toEqual([{ code: 'DISPLAY_ERROR', message: 'display boom', source: 'display(...)' }]);
+      expect(r).not.toHaveProperty('pendingState');
+      expect(r).not.toHaveProperty('playerViews');
     });
 
-    it("forwards result.warnings on the 'resolve_choices' case", () => {
-      const r = shapeResult('resolve_choices', {
+    it('forwards a choices answer\'s warnings', () => {
+      const r = shapeResult('resolveChoices', {
         success: true,
         choices: ['red', 'blue'],
-        snapshot: { flowState: {}, winners: [] },
-        pendingState: null,
-        flowState: {},
-        playerViews: [],
-        isComplete: false,
-        winners: [],
         warnings: [{ code: 'BOARD_REFS_ERROR', message: 'boardRefs boom', source: 'boardRefs(...)' }],
       });
-      expect((r as Record<string, unknown>).warnings).toEqual([
-        { code: 'BOARD_REFS_ERROR', message: 'boardRefs boom', source: 'boardRefs(...)' },
-      ]);
+      expect(r.warnings).toEqual([{ code: 'BOARD_REFS_ERROR', message: 'boardRefs boom', source: 'boardRefs(...)' }]);
     });
 
     // ── errorCode threading (ERR-02 / CR-01 regression) ─────────────────────
-    //
-    // shapeResult is a manual allowlist (RESEARCH Pitfall 4) — errorCode added
-    // to OpResult is invisible on the wire unless explicitly forwarded, just
-    // like warnings above.
 
-    it("forwards result.errorCode on a failing 'action' case", () => {
+    it('forwards a refused action\'s errorCode', () => {
       const r = shapeResult('action', {
         success: false,
         error: 'It is not your turn.',
-        errorCode: 'NOT_YOUR_TURN' as unknown as OpResult['errorCode'],
-        snapshot: { flowState: {}, winners: [] },
-        pendingState: null,
-        flowState: {},
-        playerViews: [],
-        isComplete: false,
-        winners: [],
+        errorCode: ErrorCode.NOT_YOUR_TURN,
+        category: 'bundle',
       });
-      expect((r as Record<string, unknown>).errorCode).toBe('NOT_YOUR_TURN');
+      expect(r).toEqual({ success: false, error: 'It is not your turn.', errorCode: 'NOT_YOUR_TURN' });
     });
 
-    it("forwards result.errorCode on a failing 'selection_step' case", () => {
-      const r = shapeResult('selection_step', {
+    it('forwards a refused selection step\'s errorCode', () => {
+      const r = shapeResult('selectionStep', {
         success: false,
         error: 'Engine failed to process selection.',
-        errorCode: 'ENGINE_ERROR' as unknown as OpResult['errorCode'],
-        snapshot: { flowState: {}, winners: [] },
-        pendingState: null,
-        flowState: {},
-        playerViews: [],
-        isComplete: false,
-        winners: [],
+        errorCode: ErrorCode.ENGINE_ERROR,
+        category: 'bundle',
       });
       expect(r).toEqual({ success: false, error: 'Engine failed to process selection.', errorCode: 'ENGINE_ERROR' });
     });
 
-    it('returns only {success,error} for hint and heatmap-toggle (no playerViews leak)', () => {
-      const base = {
-        success: true,
-        snapshot: { flowState: {}, winners: [] },
-        pendingState: null,
-        flowState: {},
-        playerViews: [{ state: { secret: 'should-not-appear' } }],
-        isComplete: false,
-        winners: [],
-      };
-
-      const hintResult = shapeResult('hint', base);
+    it('returns only {success,error} for hint and heatmapToggle (no playerViews leak)', () => {
+      const annotation = { text: 'here' };
+      const hintResult = shapeResult('hint', { success: true, ...ENVELOPE, hintAnnotation: { seat: 1, annotation } });
       expect(hintResult).toEqual({ success: true, error: undefined });
-      expect((hintResult as Record<string, unknown>).playerViews).toBeUndefined();
 
-      const heatmapResult = shapeResult('heatmap-toggle', base);
+      const heatmapResult = shapeResult('heatmapToggle', {
+        success: true,
+        ...ENVELOPE,
+        heatmapUpdate: { seat: 1, visible: true, entries: [] },
+      });
       expect(heatmapResult).toEqual({ success: true, error: undefined });
-      expect((heatmapResult as Record<string, unknown>).playerViews).toBeUndefined();
     });
 
-    it('returns only {success,error} for demo-start and demo-stop (no playerViews leak, RESEARCH Pitfall 7)', () => {
-      const base = {
-        success: true,
-        snapshot: { flowState: {}, winners: [] },
-        pendingState: null,
-        flowState: {},
-        playerViews: [{ state: { isDemoRunning: true } }],
-        isComplete: false,
-        winners: [],
-      };
-
-      const demoStartResult = shapeResult('demo-start', base);
-      expect(demoStartResult).toEqual({ success: true, error: undefined });
-      expect((demoStartResult as Record<string, unknown>).playerViews).toBeUndefined();
-      expect((demoStartResult as Record<string, unknown>).isDemoRunning).toBeUndefined();
-
-      const demoStopResult = shapeResult('demo-stop', base);
-      expect(demoStopResult).toEqual({ success: true, error: undefined });
-      expect((demoStopResult as Record<string, unknown>).playerViews).toBeUndefined();
+    it('returns only {success,error} for demoStart and demoStop (RESEARCH Pitfall 7)', () => {
+      expect(shapeResult('demoStart', { success: true })).toEqual({ success: true, error: undefined });
+      expect(shapeResult('demoStop', { success: true })).toEqual({ success: true, error: undefined });
     });
   });
 
@@ -506,34 +435,22 @@ describe('dev host bridge', () => {
       expect(persistenceEntries[2]).toMatchObject({ severity: 'error' });
     });
 
-    it("a resolved op's OpResult.warnings are captured as 'warning' entries sourced by the wireOp", async () => {
-      const warningExecuteOp = (
-        _snap: unknown,
-        _pend: Record<string, unknown> | null,
-        op: { type: string },
-      ): Promise<OpResult> => {
-        if (op.type === 'start') {
-          return Promise.resolve({
-            success: true,
-            snapshot: { flowState: {}, winners: [] },
-            pendingState: null,
-            flowState: {},
-            playerViews: [],
-            isComplete: false,
-            winners: [],
-          });
-        }
+    it("a pick's warnings are captured as 'warning' entries sourced by the wireOp", async () => {
+      const game: StateEnvelope = {
+        snapshot: { flowState: {}, winners: [] } as unknown as GameStateSnapshot,
+        playerViews: [],
+        spectatorView: undefined,
+        flowDebugInfo: {} as SerializedFlowDebugInfo,
+      };
+      const warningExecuteOp = ((_snap: unknown, _pend: unknown, op: ExecutableOp): Promise<OpResult> => {
+        if (op.type === 'start') return Promise.resolve({ success: true, ...game });
         return Promise.resolve({
           success: true,
-          snapshot: { flowState: {}, winners: [] },
-          pendingState: null,
-          flowState: {},
-          playerViews: [],
-          isComplete: false,
-          winners: [],
+          ...game,
+          pendingState: { picked: 'x' },
           warnings: [{ code: 'BOARD_REFS_ERROR', message: 'boardRefs boom', source: 'boardRefs(...)' }],
         });
-      };
+      }) as ExecuteOpAdapter;
       const session = createDevSession({
         debug: () => false,
         playerCount: 1,
@@ -543,33 +460,29 @@ describe('dev host bridge', () => {
       });
 
       await session.start();
-      await session.handleServerRequest(1, 'r1', 'action', { actionName: 'pass', args: {}, boundaryKey: boundaryKeyOfHost(session.host) });
+      await session.handleServerRequest(1, 'r1', 'selection_step', {
+        selectionName: 'x', value: 1, boundaryKey: boundaryKeyOfHost(session.host),
+      });
 
-      const warningEntries = getEntries().filter((e) => e.source === 'action');
+      const warningEntries = getEntries().filter((e) => e.source === 'selection_step');
       expect(warningEntries).toHaveLength(1);
       expect(warningEntries[0]).toMatchObject({ severity: 'warning', message: 'boardRefs boom' });
     });
 
     it('a server_request that throws is captured as an error entry sourced by the wireOp (bridge.ts:325)', async () => {
       const responses: Array<Record<string, unknown>> = [];
-      const throwingExecuteOp = (
-        _snap: unknown,
-        _pend: Record<string, unknown> | null,
-        op: { type: string },
-      ): Promise<OpResult> => {
+      const throwingExecuteOp = ((_snap: unknown, _pend: unknown, op: ExecutableOp): Promise<OpResult> => {
         if (op.type === 'start') {
           return Promise.resolve({
             success: true,
-            snapshot: { flowState: {}, winners: [] },
-            pendingState: null,
-            flowState: {},
+            snapshot: { flowState: {}, winners: [] } as unknown as GameStateSnapshot,
             playerViews: [],
-            isComplete: false,
-            winners: [],
+            spectatorView: undefined,
+            flowDebugInfo: {} as SerializedFlowDebugInfo,
           });
         }
         throw new Error('executor boom');
-      };
+      }) as ExecuteOpAdapter;
       const session = createDevSession({
         debug: () => false,
         playerCount: 1,
@@ -707,18 +620,6 @@ describe('dev host bridge', () => {
       );
       // No snapshot mutation: the (unused) view reference is unchanged.
       expect(session.viewForSeat(1)).toBe(stateBefore);
-    });
-
-    it("shapeResult('debug:logs', result) returns { success, error, entries }", () => {
-      const r = shapeResult('debug:logs', {
-        success: true,
-        entries: [{ severity: 'warning', message: 'x', source: 'y', timestamp: 1 }],
-      } as unknown as OpResult);
-      expect(r).toEqual({
-        success: true,
-        error: undefined,
-        entries: [{ severity: 'warning', message: 'x', source: 'y', timestamp: 1 }],
-      });
     });
 
     it('regression: debugLogs is never added to the executeOp Op union / READ_ONLY_OP_TYPES (purity contract)', () => {

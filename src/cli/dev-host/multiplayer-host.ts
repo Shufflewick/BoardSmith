@@ -19,7 +19,11 @@ import { createDevSession, type DevSession } from './bridge.js';
 import {
   StatePushGate,
   type ExecutableOp,
+  type ExecuteOpAdapter,
+  type OpFailure,
+  type OpOfType,
   type OpResult,
+  type OpResultFor,
   type GamePreset,
   type RulesReload,
   type TurnBoundary,
@@ -257,13 +261,13 @@ export interface MultiplayerHostOptions {
    * must own them. `hostOptions` carries host-level session policy
    * (`teachingDisabled`, `seedSnapshot`) separately from the game's own options.
    */
-  executeOp: (
+  executeOp: <T extends ExecutableOp['type']>(
     gameOptions: { playerCount: number; [key: string]: unknown },
     snapshot: unknown,
     pendingState: Record<string, unknown> | null,
-    op: ExecutableOp,
+    op: OpOfType<T>,
     hostOptions?: { teachingDisabled?: boolean; seedSnapshot?: GameStateSnapshot; debug?: boolean },
-  ) => Promise<OpResult>;
+  ) => Promise<OpResultFor<T>>;
   /** Deliver a message to one client (the WS layer maps clientId → socket). */
   send: (clientId: string, message: HostOutbound) => void;
   /** Seed source for a fresh game (defaults to `mintSeed`, 128 bits from the secure random source). */
@@ -399,21 +403,11 @@ function devPlayerToken(seat: number): string {
  * `category: 'executor'` because the refusal came from the platform's rules,
  * not from the game's own.
  */
-function refusedOp(error: string): OpResult {
-  return {
-    success: false,
-    error,
-    category: 'executor',
-    snapshot: null,
-    pendingState: null,
-    flowState: null,
-    playerViews: [],
-    isComplete: false,
-    winners: [],
-  };
+function refusedOp(error: string): OpFailure {
+  return { success: false, error, category: 'executor' };
 }
 
-function refusedCommit(reason: string): OpResult {
+function refusedCommit(reason: string): OpFailure {
   return refusedOp(
     `This game cannot finish because the record it tried to store was refused: ${reason}.`,
   );
@@ -432,9 +426,10 @@ function refusedCommit(reason: string): OpResult {
  * nothing is applied, broadcast or persisted and the acting player reads the
  * same refusal they would read in production.
  */
-function stripPrivateChannel(result: OpResult): OpResult & PrivateChannelCarrier {
+function stripPrivateChannel<R extends OpResult>(result: R): (R & PrivateChannelCarrier) | OpFailure {
+  if (!result.success) return result;
   try {
-    return takePrivateCommit(result as OpResult & PrivateChannelCarrier);
+    return takePrivateCommit(result as R & PrivateChannelCarrier);
   } catch (error) {
     return refusedOp(error instanceof Error ? error.message : String(error));
   }
@@ -1179,10 +1174,12 @@ export class MultiplayerHost {
    *             would watch a game finish locally and then watch the identical
    *             move be refused in production.
    */
-  private applyPersistenceChannels(result: OpResult): OpResult {
+  private applyPersistenceChannels<R extends OpResult>(result: R): R | OpFailure {
     const stripped = stripPrivateChannel(result);
     const persistence = this.opts.persistence;
-    if (!persistence || !stripped.success || !stripped.isComplete) return stripped;
+    if (!persistence || !stripped.success || !('snapshot' in stripped) || !stripped.snapshot.flowState?.complete) {
+      return stripped;
+    }
 
     const outcome = persistence.store.commit({
       players: this.persistPlayers,
@@ -1278,11 +1275,7 @@ export class MultiplayerHost {
     // FEAT-01/168-02: seedSnapshot rides here too (never gameOptions) so a
     // `--seed` restart still starts from the seed, not a fresh game.
     const hostOptions = { teachingDisabled: this.opts.teachingDisabled, seedSnapshot: this.opts.seedSnapshot };
-    const executeOp = async (
-      snapshot: unknown,
-      pendingState: Record<string, unknown> | null,
-      op: ExecutableOp,
-    ) => {
+    const executeOp: ExecuteOpAdapter = async (snapshot, pendingState, op) => {
       const raw = await this.executeOp(
         op.type === 'start' ? startGameOptions : baseOptions,
         snapshot,
@@ -1428,9 +1421,7 @@ export class MultiplayerHost {
       );
       if (carried.kind === 'failed') return carried;
       const stripped = stripPrivateChannel(carried.result);
-      if (!stripped.success) {
-        return { kind: 'failed', reason: stripped.error ?? 'its private record could not be separated from the views' };
-      }
+      if (!stripped.success) return { kind: 'failed', reason: stripped.error };
       return { ...carried, result: stripped };
     });
     if (outcome.kind === 'failed') {

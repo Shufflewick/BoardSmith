@@ -20,6 +20,7 @@ import {
   type SnapshotSessionAdapters,
 } from './snapshot-session-host.js';
 import { secretDeploymentDefinition } from './testing/fixtures/secret-deployment-fixture.js';
+import { stubExecuteOp, succeeded } from './op-result.test-helper.js';
 
 const options = { playerCount: 2, seed: 'bs537' };
 
@@ -32,7 +33,7 @@ function adapters(onRecord?: (meta: PublishMeta) => void) {
   const value: SnapshotSessionAdapters = {
     playerCount: options.playerCount,
     executeOp: (snap, pend, op) =>
-      executeOp(secretDeploymentDefinition, options, snap, pend, op.type === 'botTurn' ? { ...op, seats: [] } : op),
+      executeOp(secretDeploymentDefinition, options, snap, pend, op.type === 'botTurn' ? { ...op, seats: [] } as typeof op : op),
     record: (views, meta) => {
       records.push({ cause: meta.cause, views: views.players, spectator: views.spectator });
       onRecord?.(meta);
@@ -56,7 +57,7 @@ function hasBots(view: unknown): boolean {
 
 async function act(host: SnapshotSessionHost, seat: number, actionName: string) {
   const boundaryKey = flowBoundaryKey(host.flowState as BoundaryKeyState);
-  const res = await host.handleOp(seat, { type: 'action', actionName, player: seat, args: {}, boundaryKey });
+  const res = succeeded(await host.handleOp(seat, { type: 'action', actionName, player: seat, args: {}, boundaryKey }));
   expect(res.success).toBe(true);
 }
 
@@ -75,11 +76,12 @@ describe('the call order is not the platform\'s to remember (#537)', () => {
     const a = adapters();
     const host = new SnapshotSessionHost({
       ...a.value,
-      executeOp: async (snap, pend, op) => {
-        const res = await a.value.executeOp(snap, pend, op);
-        const { winners: _dropped, ...withoutWinners } = res.snapshot as Record<string, unknown>;
+      executeOp: stubExecuteOp(async (snap, pend, op) => {
+        const res = succeeded(await a.value.executeOp(snap, pend, op));
+        if (!('snapshot' in res)) return res;
+        const { winners: _dropped, ...withoutWinners } = res.snapshot as unknown as Record<string, unknown>;
         return { ...res, snapshot: withoutWinners };
-      },
+      }),
     });
     await expect(host.start()).rejects.toThrow(/winners/);
     expect(a.records).toEqual([]);

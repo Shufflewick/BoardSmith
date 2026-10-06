@@ -23,6 +23,7 @@ import { GameRunner } from '../runtime/index.js';
 import { GameSession } from './game-session.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
+import { succeeded } from './op-result.test-helper.js';
 
 /** One seat calls a number, forever. The smallest game an undo can act on. */
 class CallGame extends Game<CallGame, Player> {
@@ -68,7 +69,7 @@ function newSession() {
 }
 
 async function start(seedSnapshot?: GameStateSnapshot): Promise<GameStateSnapshot> {
-  const result = await executeOp(definition, gameOptions, null, null, { type: 'start' }, { seedSnapshot });
+  const result = succeeded(await executeOp(definition, gameOptions, null, null, { type: 'start' }, { seedSnapshot }));
   expect(result.success).toBe(true);
   return result.snapshot as GameStateSnapshot;
 }
@@ -101,10 +102,10 @@ describe('#356: a game has an identity of its own', () => {
 
   it('is kept by every stateless op on the same game', async () => {
     const started = await start();
-    const acted = await executeOp(definition, gameOptions, started, null, {
+    const acted = succeeded(await executeOp(definition, gameOptions, started, null, {
       type: 'action', actionName: 'call', player: 1, args: { n: 3 },
       boundaryKey: boundaryKeyOf(started),
-    });
+    }));
     expect(acted.success).toBe(true);
     expect((acted.snapshot as GameStateSnapshot).gameInstanceId).toBe(started.gameInstanceId);
   });

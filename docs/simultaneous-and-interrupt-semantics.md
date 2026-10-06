@@ -215,22 +215,14 @@ simultaneous) and `src/session/testing/fixtures/collect-turns-fixture.ts`
 | 6 | Sequential games too | On a sequential fixture, a previous turn's key is refused and the current key succeeds. The rule is not simultaneous-only. |
 | 7 | `selectionStep` | A mid-action selection composed against a closed boundary is refused, by the same single guard. |
 | 8 | Malformed key | A wrong-typed / absurd key is a plain mismatch: the same graceful refusal, no separate parse path, no throw. |
-| 9 | The key handed out IS the key accepted | Across a full multi-round game, `OpResult.flowState` and `OpResult.snapshot.flowState` yield the same key, and every current-key submission is accepted. |
 
-### On case 9, and why it is not redundant
+### Why there is no case 9 any more
 
-The guard compares a submission's key against `snapshot.flowState`, because
-`executeOp` is stateless and the snapshot is all it is given.
-`SnapshotSessionHost` hands out the key from that same value: its
-`turnBoundary()` reads the flow state out of the snapshot it holds (#536), so
-for that host the two cannot diverge. An op result still reports the flow state
-a second time, as `OpResult.flowState`, and a host that hands out keys from that
-copy depends on it equalling the snapshot's. If they ever diverged, EVERY
-legitimate submission from such a host would be refused: the system would wedge,
-telling players to reload into a round they could never act in. No other case
-here would notice, because they all read the key from the same side they submit
-it to. Case 9 holds the copy equal to the snapshot's for as long as op results
-carry it.
+The guard compares a submission's key against `snapshot.flowState`, and a host
+hands out keys from that same value. Op results once reported the flow state a
+second time beside the snapshot, and a case held the two equal. That copy is
+gone (#536): a result carries the flow state only inside its snapshot, so there
+is no second value to diverge.
 
 ### On case 7, and why the selection path is still guarded
 

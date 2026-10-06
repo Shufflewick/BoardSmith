@@ -14,9 +14,12 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { Op, OpResult } from './stateless-ops.js';
+import type { OpSuccess } from './stateless-ops.js';
+import type { GameStateSnapshot } from '../engine/index.js';
+import type { SerializedFlowDebugInfo } from './types.js';
 import type { HostWorkGate } from './host-work-gate.js';
 import { SnapshotSessionHost, type RulesReload } from './snapshot-session-host.js';
+import { stubExecuteOp } from './op-result.test-helper.js';
 
 type Count = { count: number };
 
@@ -55,34 +58,31 @@ function countingSession(options: { botSeats?: Array<{ seat: number }>; botsStop
   const rules = { step: 1 };
   const gate = manualGate();
   const views: Count[] = [];
-  const result = (snapshot: Count, extra: Partial<OpResult> = {}): OpResult => ({
+  const result = (snapshot: Count): OpSuccess<'start'> => ({
     success: true,
     // The host holds only a snapshot that carries its flow state and winners.
-    snapshot: { ...snapshot, flowState: {}, winners: [] },
-    pendingState: null,
-    flowState: {},
+    snapshot: { ...snapshot, flowState: {}, winners: [] } as unknown as GameStateSnapshot,
     playerViews: [{ state: { count: snapshot.count } }],
-    isComplete: false,
-    winners: [],
-    ...extra,
+    spectatorView: undefined,
+    flowDebugInfo: {} as SerializedFlowDebugInfo,
   });
-  const executeOp = async (snapshot: unknown, _pending: unknown, op: Op): Promise<OpResult> => {
+  const executeOp = stubExecuteOp(async (snapshot, _pending, op) => {
     const at = snapshot as Count;
     switch (op.type) {
       case 'start':
         return result({ count: 0 });
       case 'botSuggest':
-        return result(at, { botPlayer: 1, suggestedAction: 'bump', suggestedArgs: {} });
+        return { ...result(at), botPlayer: 1, suggestedAction: 'bump', suggestedArgs: {} };
       case 'action':
         return result({ count: at.count + rules.step });
       case 'botTurn':
         options.onBotTurn?.();
-        if (at.count >= (options.botsStopAt ?? 0)) return result(at, { botMoved: false });
-        return result({ count: at.count + rules.step }, { botMoved: true });
+        if (at.count >= (options.botsStopAt ?? 0)) return { ...result(at), botMoved: false };
+        return { ...result({ count: at.count + rules.step }), botMoved: true };
       default:
         throw new Error(`this test's game does not answer ${op.type}`);
     }
-  };
+  });
   const host = new SnapshotSessionHost({
     playerCount: 1,
     executeOp,

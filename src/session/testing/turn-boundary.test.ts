@@ -28,6 +28,7 @@ import {
 } from './fixtures/simultaneous-rounds-fixture.js';
 import { collectTurnsFixtureDefinition } from './fixtures/collect-turns-fixture.js';
 import { botGameDef, botGameOptions } from './fixtures/bot-game-fixture.js';
+import { stubExecuteOp, succeeded } from '../op-result.test-helper.js';
 
 const twoSeats = { playerCount: 2, seed: 'turn-boundary' };
 
@@ -233,16 +234,11 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
     const metas: Array<{ isComplete: boolean; turnBoundary: { key: string; dueSeats: number[] } }> = [];
     const host = new SnapshotSessionHost({
       playerCount: 2,
-      executeOp: async () =>
-        ({
-          success: true,
-          snapshot: { flowState: completeButAwaiting, winners: [1] },
-          pendingState: null,
-          flowState: completeButAwaiting,
-          playerViews: [{}, {}],
-          isComplete: true,
-          winners: [1],
-        }) as unknown as OpResult,
+      executeOp: stubExecuteOp(async () => ({
+        success: true,
+        snapshot: { flowState: completeButAwaiting, winners: [1] },
+        playerViews: [{}, {}],
+      })),
       push: () => {}, record: (_views, meta) => metas.push(meta),
     });
     await host.start();
@@ -269,7 +265,7 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
         },
       };
       const host = new SnapshotSessionHost(adapters);
-      const started = await executeOp(simultaneousRoundsFixtureDefinition, twoSeats, null, null, { type: 'start' });
+      const started = succeeded(await executeOp(simultaneousRoundsFixtureDefinition, twoSeats, null, null, { type: 'start' }));
       return { adapters, host, metas, started, snapshot: started.snapshot as GameStateSnapshot };
     }
 
@@ -292,7 +288,7 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
       // The sanctioned path checks the snapshot carries its flow state.
       const restored = SnapshotSessionHost.restore(adapters, { snapshot, pendingStates: {}, botSeats: [] });
       expect(restored.snapshot).toBe(started.snapshot);
-      expect(restored.flowState).toEqual(started.flowState);
+      expect(restored.flowState).toEqual(started.snapshot.flowState);
     });
 
     it('restore REFUSES a snapshot without a flow state, naming what is missing', async () => {
@@ -313,7 +309,7 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
       expect(metas.length).toBe(1);
       expect(metas[0].cause).toBe('restore');
       expect(metas[0].turnBoundary.dueSeats).toEqual([1, 2]);
-      expect(metas[0].turnBoundary.key).toBe(flowBoundaryKey(started.flowState as never));
+      expect(metas[0].turnBoundary.key).toBe(flowBoundaryKey(started.snapshot.flowState as never));
     });
   });
 });

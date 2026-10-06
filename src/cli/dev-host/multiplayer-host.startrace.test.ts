@@ -19,7 +19,7 @@
  */
 import { beforeEach, describe, it, expect } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, eachPlayer, type GameOptions } from '../../engine/index.js';
-import { executeOp, type GameDefinitionLike, type ExecutableOp, type OpResult } from '../../session/index.js';
+import { executeOp, type GameDefinitionLike } from '../../session/index.js';
 import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
 import { manualGraceTimer } from './reconnect-grace.test-helper.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
@@ -78,13 +78,7 @@ function makeRaceHost(gate: { promise: Promise<void> } | null) {
     minPlayers: 2,
     maxPlayers: raceDef.maxPlayers,
     makeSeed: () => 'race',
-    executeOp: async (
-      gameOptions: { playerCount: number; [key: string]: unknown },
-      snap: unknown,
-      pend: Record<string, unknown> | null,
-      op: ExecutableOp,
-      hostOptions?: { teachingDisabled?: boolean },
-    ): Promise<OpResult> => {
+    executeOp: async (gameOptions, snap, pend, op, hostOptions) => {
       if (op.type === 'start' && gate) await gate.promise;
       return executeOp(raceDef, gameOptions, snap, pend, op, hostOptions);
     },

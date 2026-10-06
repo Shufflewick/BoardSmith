@@ -34,10 +34,11 @@ import { _clearShownWarnings } from '../utils/dev.js';
 import { GameRunner } from '../runtime/runner.js';
 import { MCTSBot } from '../bot/mcts-bot.js';
 import { GameSession } from './game-session.js';
-import { executeOp, type GameDefinitionLike, type OpResult } from './stateless-ops.js';
+import { executeOp, type GameDefinitionLike, type StateEnvelope } from './stateless-ops.js';
 import { ErrorCode } from '../types/protocol.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { historyLabels } from './testing/history-labels.js';
+import { succeeded } from './op-result.test-helper.js';
 
 type Shape = 'turn' | 'simultaneous';
 
@@ -392,12 +393,13 @@ describe('GameSession', () => {
 describe('stateless ops', () => {
   async function play(shape: Shape) {
     const def: GameDefinitionLike = { gameClass: raidClass(shape, false), gameType: 'raid', minPlayers: 2, maxPlayers: 3 };
-    let last: OpResult = await executeOp(def, gameOptions, null, {}, { type: 'start' });
+    let last: StateEnvelope = succeeded(await executeOp(def, gameOptions, null, {}, { type: 'start' }));
     const action = async (seat: number, actionName: string) => {
-      last = await executeOp(def, gameOptions, last.snapshot, null, {
+      const moved = succeeded(await executeOp(def, gameOptions, last.snapshot, null, {
         type: 'action', actionName, player: seat, args: {}, boundaryKey: boundaryKeyOf(last.snapshot),
-      });
-      return last;
+      }));
+      last = moved;
+      return moved;
     };
     const loot = async (seat: number, by: number) => {
       const first = await executeOp(def, gameOptions, last.snapshot, null, {
@@ -405,11 +407,12 @@ describe('stateless ops', () => {
         initialArgs: { by }, boundaryKey: boundaryKeyOf(last.snapshot),
       });
       if (!first.success) return first;
-      last = await executeOp(def, gameOptions, first.snapshot, first.pendingState, {
+      const second = succeeded(await executeOp(def, gameOptions, first.snapshot, first.pendingState, {
         type: 'selectionStep', player: seat, selectionName: 'what', value: 'gold', actionName: 'loot',
         initialArgs: { by, where: 'north' }, boundaryKey: boundaryKeyOf(first.snapshot),
-      });
-      return last;
+      }));
+      last = second;
+      return second;
     };
     return { action, loot, get last() { return last; } };
   }
@@ -431,25 +434,25 @@ describe('stateless ops', () => {
   for (const shape of ['turn', 'simultaneous'] as const) {
     it(`${shape}: a bot seat holding a follow-up takes it through the botTurn op`, async () => {
       const def: GameDefinitionLike = { gameClass: raidClass(shape, false), gameType: 'raid', minPlayers: 2, maxPlayers: 3 };
-      const started = await executeOp(def, gameOptions, null, {}, { type: 'start' });
-      const scouted = await executeOp(def, gameOptions, started.snapshot, null, {
+      const started = succeeded(await executeOp(def, gameOptions, null, {}, { type: 'start' }));
+      const scouted = succeeded(await executeOp(def, gameOptions, started.snapshot, null, {
         type: 'action', actionName: 'scout', player: 1, args: {}, boundaryKey: boundaryKeyOf(started.snapshot),
-      });
+      }));
 
-      const turn = await executeOp(def, gameOptions, scouted.snapshot, null, { type: 'botTurn', seats: [{ seat: 1, level: '8' }] });
+      const turn = succeeded(await executeOp(def, gameOptions, scouted.snapshot, null, { type: 'botTurn', seats: [{ seat: 1, level: '8' }] }));
 
       expect(turn).toMatchObject({ success: true, botMoved: true, botPlayer: 1 });
-      expect((turn.flowState as FlowState).followUps).toBeUndefined();
+      expect((turn.snapshot.flowState as FlowState).followUps).toBeUndefined();
     });
   }
 
   it('turn-based: the turn stays with the seat until it takes its follow-up', async () => {
     const g = await play('turn');
     await g.action(1, 'scout');
-    expect((g.last.flowState as FlowState).currentPlayer).toBe(1);
+    expect((g.last.snapshot.flowState as FlowState).currentPlayer).toBe(1);
 
     expect(await g.loot(1, 1)).toMatchObject({ success: true, actionComplete: true });
-    expect((g.last.flowState as FlowState).currentPlayer).toBe(2);
+    expect((g.last.snapshot.flowState as FlowState).currentPlayer).toBe(2);
   });
 });
 
@@ -469,19 +472,19 @@ describe('a host deadline that passed for a seat', () => {
 
   async function scoutedTimed(shape: Shape, decline: boolean, timed = true) {
     const def: GameDefinitionLike = { gameClass: raidClass(shape, decline, timed), gameType: 'raid', minPlayers: 2, maxPlayers: 3 };
-    const started = await executeOp(def, gameOptions, null, {}, { type: 'start' });
-    const scouted = await executeOp(def, gameOptions, started.snapshot, null, {
+    const started = succeeded(await executeOp(def, gameOptions, null, {}, { type: 'start' }));
+    const scouted = succeeded(await executeOp(def, gameOptions, started.snapshot, null, {
       type: 'action', actionName: 'scout', player: 1, args: {}, boundaryKey: boundaryKeyOf(started.snapshot),
-    });
-    expect((scouted.flowState as FlowState).followUps).toHaveLength(1);
-    const expire = (snapshot: OpResult['snapshot'], seat = 1, boundaryKey = boundaryKeyOf(snapshot)) => executeOp(def, gameOptions, snapshot, null, {
+    }));
+    expect((scouted.snapshot.flowState as FlowState).followUps).toHaveLength(1);
+    const expire = (snapshot: GameStateSnapshot, seat = 1, boundaryKey = boundaryKeyOf(snapshot)) => executeOp(def, gameOptions, snapshot, null, {
       type: 'expireSeat', player: seat, idleAction: 'rest', args: {}, boundaryKey,
     });
-    const action = (snapshot: OpResult['snapshot'], seat: number, actionName: string) => executeOp(def, gameOptions, snapshot, null, {
+    const action = (snapshot: GameStateSnapshot, seat: number, actionName: string) => executeOp(def, gameOptions, snapshot, null, {
       type: 'action', actionName, player: seat, args: {}, boundaryKey: boundaryKeyOf(snapshot),
     });
-    const undo = (snapshot: OpResult['snapshot'], seat: number) => executeOp(def, gameOptions, snapshot, null, { type: 'undo', player: seat });
-    const history = (result: OpResult) => (result.snapshot as GameStateSnapshot).actionHistory;
+    const undo = (snapshot: GameStateSnapshot, seat: number) => executeOp(def, gameOptions, snapshot, null, { type: 'undo', player: seat });
+    const history = (result: StateEnvelope) => result.snapshot.actionHistory;
     return { def, scouted, expire, action, undo, history };
   }
 
@@ -491,10 +494,10 @@ describe('a host deadline that passed for a seat', () => {
     it(`${shape}, ${step}: the idle action the step offers closes the held seat and drops its follow-up`, async () => {
       const { scouted, expire, history } = await scoutedTimed(shape, true, timed);
 
-      const closed = await expire(scouted.snapshot);
+      const closed = succeeded(await expire(scouted.snapshot));
 
       expect(closed.success).toBe(true);
-      expect((closed.flowState as FlowState).followUps).toBeUndefined();
+      expect((closed.snapshot.flowState as FlowState).followUps).toBeUndefined();
       const runner = GameRunner.fromSnapshot(closed.snapshot as GameStateSnapshot, raidClass(shape, true, timed));
       expect(runner.game.rested).toEqual([1]);
       // The idle action ran as the seat's own action, so that is what the history holds.
@@ -507,10 +510,10 @@ describe('a host deadline that passed for a seat', () => {
       // A player cannot do this: the idle action itself is refused.
       expect((await action(scouted.snapshot, 1, 'rest')).success).toBe(false);
 
-      const closed = await expire(scouted.snapshot);
+      const closed = succeeded(await expire(scouted.snapshot));
 
       expect(closed.success).toBe(true);
-      const state = closed.flowState as FlowState;
+      const state = closed.snapshot.flowState as FlowState;
       expect(state.followUps).toBeUndefined();
       if (shape === 'turn') {
         expect(state.currentPlayer).toBe(2);
@@ -525,8 +528,8 @@ describe('a host deadline that passed for a seat', () => {
 
     it(`${shape}, ${step}: a history holding an expiry replays to the same position`, async () => {
       const { scouted, expire, action, history } = await scoutedTimed(shape, false, timed);
-      const closed = await expire(scouted.snapshot);
-      const after = await action(closed.snapshot, 2, 'scout');
+      const closed = succeeded(await expire(scouted.snapshot));
+      const after = succeeded(await action(closed.snapshot, 2, 'scout'));
       expect(after.success).toBe(true);
       expect(historyLabels(history(after))).toEqual(['scout:1', 'seatExpiry:1', 'scout:2']);
 
@@ -552,11 +555,11 @@ describe('a host deadline that passed for a seat', () => {
       const { scouted, expire, history } = await scoutedTimed(shape, false, timed);
 
       // Seat 2 holds nothing, and the step offers no 'rest': there is no way to close it.
-      const refused = await expire(scouted.snapshot, 2);
+      const closed = await expire(scouted.snapshot, 2);
 
-      expect(refused.success).toBe(false);
-      expect(refused.error).toMatch(shape === 'turn' ? /Not Player 2's turn/ : /rest is not available/);
-      expect(refused.snapshot).toBeNull();
+      expect(closed.success).toBe(false);
+      expect(closed.error).toMatch(shape === 'turn' ? /Not Player 2's turn/ : /rest is not available/);
+      expect(closed).not.toHaveProperty('snapshot');
       expect(historyLabels(history(scouted))).toEqual(['scout:1']);
     });
     }
@@ -581,11 +584,11 @@ describe('a host deadline that passed for a seat', () => {
       const armedKey = boundaryKeyOf(scouted.snapshot);
       // Close the round the host armed its timer under: in a turn-based step the
       // next seat's turn, in a simultaneous step the next round, once every seat is done.
-      let moved = await expire(scouted.snapshot);
+      let moved = succeeded(await expire(scouted.snapshot));
       if (shape === 'simultaneous') {
         for (const seat of [2, 3]) {
-          moved = await action(moved.snapshot, seat, 'scout');
-          moved = await expire(moved.snapshot, seat);
+          moved = succeeded(await action(moved.snapshot, seat, 'scout'));
+          moved = succeeded(await expire(moved.snapshot, seat));
         }
       }
       expect(moved.success).toBe(true);
@@ -607,37 +610,37 @@ describe('a host deadline that passed for a seat', () => {
 
   it('simultaneous: the expiry counts in the step, and only the seats that acted after it can undo', async () => {
     const { scouted, expire, action, undo } = await scoutedTimed('simultaneous', false);
-    expect((scouted.flowState as FlowState).moveCount).toBe(1);
+    expect((scouted.snapshot.flowState as FlowState).moveCount).toBe(1);
 
-    const closed = await expire(scouted.snapshot);
-    expect((closed.flowState as FlowState).moveCount).toBe(2);
+    const closed = succeeded(await expire(scouted.snapshot));
+    expect((closed.snapshot.flowState as FlowState).moveCount).toBe(2);
 
     // The closed seat cannot take its own closure back.
     const refused = await undo(closed.snapshot, 1);
     expect(refused.success).toBe(false);
     expect(refused.error).toBe("Cannot undo: seat 1's time ran out and the host closed its part of the step, which cannot be taken back.");
 
-    const after = await action(closed.snapshot, 2, 'scout');
-    expect((after.flowState as FlowState).moveCount).toBe(3);
-    const undone = await undo(after.snapshot, 2);
+    const after = succeeded(await action(closed.snapshot, 2, 'scout'));
+    expect((after.snapshot.flowState as FlowState).moveCount).toBe(3);
+    const undone = succeeded(await undo(after.snapshot, 2));
     expect(undone.success).toBe(true);
     expect((undone.snapshot as GameStateSnapshot).actionHistory).toHaveLength(2);
-    expect((undone.flowState as FlowState).awaitingPlayers?.find((p) => p.playerIndex === 1)?.completed).toBe(true);
+    expect((undone.snapshot.flowState as FlowState).awaitingPlayers?.find((p) => p.playerIndex === 1)?.completed).toBe(true);
   });
 
   it('turn-based: the next seat starts a fresh turn behind the expiry', async () => {
     const { scouted, expire, action, undo } = await scoutedTimed('turn', false);
-    const closed = await expire(scouted.snapshot);
-    expect((closed.flowState as FlowState)).toMatchObject({ currentPlayer: 2, moveCount: 0 });
+    const closed = succeeded(await expire(scouted.snapshot));
+    expect((closed.snapshot.flowState as FlowState)).toMatchObject({ currentPlayer: 2, moveCount: 0 });
 
-    const after = await action(closed.snapshot, 2, 'scout');
-    expect((after.flowState as FlowState).moveCount).toBe(1);
-    const undone = await undo(after.snapshot, 2);
+    const after = succeeded(await action(closed.snapshot, 2, 'scout'));
+    expect((after.snapshot.flowState as FlowState).moveCount).toBe(1);
+    const undone = succeeded(await undo(after.snapshot, 2));
     expect(undone.success).toBe(true);
     expect((undone.snapshot as GameStateSnapshot).actionHistory).toEqual([
       expect.objectContaining({ name: 'scout', player: 1 }), SEAT_1_EXPIRED,
     ]);
-    expect((undone.flowState as FlowState).currentPlayer).toBe(2);
+    expect((undone.snapshot.flowState as FlowState).currentPlayer).toBe(2);
   });
 
   it('turn-based: a continuing turn counts the expiry, so undo cannot reach behind it', async () => {
@@ -655,21 +658,21 @@ describe('a host deadline that passed for a seat', () => {
       }
     }
     const def: GameDefinitionLike = { gameClass: TwoStepTurn, gameType: 'raid', minPlayers: 2, maxPlayers: 3 };
-    const started = await executeOp(def, gameOptions, null, {}, { type: 'start' });
-    const scouted = await executeOp(def, gameOptions, started.snapshot, null, {
+    const started = succeeded(await executeOp(def, gameOptions, null, {}, { type: 'start' }));
+    const scouted = succeeded(await executeOp(def, gameOptions, started.snapshot, null, {
       type: 'action', actionName: 'scout', player: 1, args: {}, boundaryKey: boundaryKeyOf(started.snapshot),
-    });
-    const closed = await executeOp(def, gameOptions, scouted.snapshot, null, {
+    }));
+    const closed = succeeded(await executeOp(def, gameOptions, scouted.snapshot, null, {
       type: 'expireSeat', player: 1, idleAction: 'rest', args: {}, boundaryKey: boundaryKeyOf(scouted.snapshot),
-    });
+    }));
     expect(closed.success).toBe(true);
     // The same seat goes on with its turn in the next step, two entries in.
-    expect(closed.flowState as FlowState).toMatchObject({ currentPlayer: 1, availableActions: ['wait'], moveCount: 2 });
+    expect(closed.snapshot.flowState as FlowState).toMatchObject({ currentPlayer: 1, availableActions: ['wait'], moveCount: 2 });
 
-    const waited = await executeOp(def, gameOptions, closed.snapshot, null, {
+    const waited = succeeded(await executeOp(def, gameOptions, closed.snapshot, null, {
       type: 'action', actionName: 'wait', player: 1, args: {}, boundaryKey: boundaryKeyOf(closed.snapshot),
-    });
-    expect(waited.flowState as FlowState).toMatchObject({ currentPlayer: 1, moveCount: 3 });
+    }));
+    expect(waited.snapshot.flowState as FlowState).toMatchObject({ currentPlayer: 1, moveCount: 3 });
 
     const refused = await executeOp(def, gameOptions, waited.snapshot, null, { type: 'undo', player: 1 });
     expect(refused.success).toBe(false);

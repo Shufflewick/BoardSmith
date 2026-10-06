@@ -8,6 +8,7 @@ import { crossPhaseFixtureDefinition, CrossPhaseGame } from './fixtures/simultan
 import { GameSession } from '../game-session.js';
 import type { Op } from '../stateless-ops.js';
 import { ErrorCode } from '../../types/protocol.js';
+import { succeeded, refused } from '../op-result.test-helper.js';
 
 /**
  * Parity contract: drives the SAME SnapshotSessionHost + executeOp snapshot
@@ -31,18 +32,18 @@ describe('collect-equipment parity contract', () => {
     const session = newSession();
     await session.start();
 
-    const explore = await session.send(1, { type: 'action', actionName: 'explore', player: 1, args: {} });
+    const explore = succeeded(await session.send(1, { type: 'action', actionName: 'explore', player: 1, args: {} }));
     expect(explore.success).toBe(true);
     const followUpArgs = (explore.followUp as { args: Record<string, unknown> }).args;
 
     // Read the stash items currently available to collect.
-    const before = await session.send(1, {
+    const before = succeeded(await session.send(1, {
       type: 'resolveChoices',
       actionName: 'collect',
       player: 1,
       selectionName: 'item',
       args: {},
-    });
+    }));
     expect(before.success).toBe(true);
     const itemsBefore = (before.validElements as ValidElement[]) ?? [];
     expect(itemsBefore.length).toBeGreaterThan(0);
@@ -56,17 +57,17 @@ describe('collect-equipment parity contract', () => {
       value: firstId,
       actionName: 'collect',
       initialArgs: followUpArgs,
-    } as Op);
+    });
     expect(step.success).toBe(true);
 
     // After equipping, the same item must NOT still be in the stash.
-    const after = await session.send(1, {
+    const after = succeeded(await session.send(1, {
       type: 'resolveChoices',
       actionName: 'collect',
       player: 1,
       selectionName: 'item',
       args: {},
-    });
+    }));
     expect(after.success).toBe(true);
     const idsAfter = ((after.validElements as ValidElement[]) ?? []).map((e) => e.id);
     expect(idsAfter).not.toContain(firstId);
@@ -78,18 +79,18 @@ describe('collect-equipment parity contract', () => {
     const session = newSession();
     await session.start();
 
-    const explore = await session.send(1, { type: 'action', actionName: 'explore', player: 1, args: {} });
+    const explore = succeeded(await session.send(1, { type: 'action', actionName: 'explore', player: 1, args: {} }));
     expect(explore.success).toBe(true);
     const followUpArgs = (explore.followUp as { args: Record<string, unknown> }).args;
 
-    const res = await session.send(1, {
+    const res = succeeded(await session.send(1, {
       type: 'selectionStep',
       player: 1,
       selectionName: 'item',
       value: null,
       actionName: 'collect',
       initialArgs: followUpArgs,
-    } as Op);
+    }));
 
     expect(res.success).toBe(true);
     expect(res.actionComplete).toBe(true);
@@ -99,7 +100,7 @@ describe('collect-equipment parity contract', () => {
     const session = newSession();
     await session.start();
 
-    const explore = await session.send(1, { type: 'action', actionName: 'explore', player: 1, args: {} });
+    const explore = succeeded(await session.send(1, { type: 'action', actionName: 'explore', player: 1, args: {} }));
     expect(explore.success).toBe(true);
     expect(() => structuredClone(explore.followUp)).not.toThrow();
   });
@@ -129,7 +130,7 @@ async function statelessAfterLock() {
 
 async function statelessLockThenUndo() {
   const session = await statelessAfterLock();
-  return session.send(1, { type: 'undo', player: 1 } as Op);
+  return session.send(1, { type: 'undo', player: 1 });
 }
 
 function newStatefulSession() {
@@ -170,7 +171,7 @@ describe('undo-fence parity: stateless and stateful executors agree', () => {
       args: {},
     });
     expect(statelessEnd.success).toBe(true);
-    const statelessUndo = await statelessSession.send(1, { type: 'undo', player: 1 } as Op);
+    const statelessUndo = await statelessSession.send(1, { type: 'undo', player: 1 });
 
     const statefulSession = newStatefulSession();
     const statefulEnd = await statefulSession.performAction('endGame', 1, {});
@@ -207,12 +208,12 @@ describe('undo-fence parity: stateless and stateful executors agree', () => {
     const session = createHeadlessSession(undoFenceFixtureDefinition, undoFenceGameOptions);
     await session.start();
     // No actions taken yet -> "no actions to undo" on the current turn.
-    const noActions = await session.send(1, { type: 'undo', player: 1 } as Op);
+    const noActions = await session.send(1, { type: 'undo', player: 1 });
     expect(noActions.success).toBe(false);
     expect(noActions.errorCode).toBe(ErrorCode.NO_ACTIONS_TO_UNDO);
 
     // Out-of-range seat -> INVALID_PLAYER, matching the stateful twin.
-    const badSeat = await session.send(1, { type: 'undo', player: 99 } as Op);
+    const badSeat = await session.send(1, { type: 'undo', player: 99 });
     expect(badSeat.success).toBe(false);
     expect(badSeat.errorCode).toBe(ErrorCode.INVALID_PLAYER);
   });
@@ -304,7 +305,7 @@ describe('execute-barrier parity: stateless and stateful executors agree', () =>
     const statelessSession = createHeadlessSession(executeBarrierFixtureDefinition, executeBarrierGameOptions);
     await statelessSession.start();
     await playThroughExecuteBarrierStateless((op) => statelessSession.send(1, op));
-    const statelessUndo = await statelessSession.send(1, { type: 'undo', player: 1 } as Op);
+    const statelessUndo = await statelessSession.send(1, { type: 'undo', player: 1 });
 
     const statefulSession = newExecuteBarrierStatefulSession();
     await playThroughExecuteBarrierStateful(statefulSession);
@@ -413,7 +414,7 @@ describe('simultaneous-undo parity: stateless and stateful executors agree', () 
     await statelessSession.start();
     expect((await statelessSession.send(1, { type: 'action', actionName: 'commit', player: 1, args: {} })).success).toBe(true);
     expect((await statelessSession.send(2, { type: 'action', actionName: 'commit', player: 2, args: {} })).success).toBe(true);
-    const statelessUndo = await statelessSession.send(2, { type: 'undo', player: 2 } as Op);
+    const statelessUndo = await statelessSession.send(2, { type: 'undo', player: 2 });
 
     const statefulSession = newSimultaneousStatefulSession();
     expect((await statefulSession.performAction('commit', 1, {})).success).toBe(true);
@@ -429,7 +430,7 @@ describe('simultaneous-undo parity: stateless and stateful executors agree', () 
     // per-seat boundary (nothing else acted, so the boundary itself would
     // otherwise allow it).
     const statelessSession = await simultaneousStatelessAfterSeatTwo('lockCommit');
-    const statelessUndo = await statelessSession.send(2, { type: 'undo', player: 2 } as Op);
+    const statelessUndo = await statelessSession.send(2, { type: 'undo', player: 2 });
 
     const statefulSession = newSimultaneousStatefulSession();
     expect((await statefulSession.performAction('lockCommit', 2, {})).success).toBe(true);
@@ -444,7 +445,7 @@ describe('simultaneous-undo parity: stateless and stateful executors agree', () 
 
   it('seat-2 undo once finished: same refusal decision and message', async () => {
     const statelessSession = await simultaneousStatelessAfterSeatTwo('endGame');
-    const statelessUndo = await statelessSession.send(2, { type: 'undo', player: 2 } as Op);
+    const statelessUndo = await statelessSession.send(2, { type: 'undo', player: 2 });
 
     const statefulSession = newSimultaneousStatefulSession();
     expect((await statefulSession.performAction('endGame', 2, {})).success).toBe(true);
@@ -481,7 +482,7 @@ describe('simultaneous-undo adversarial verification (T-160-04/05/06)', () => {
     expect((await session.send(2, { type: 'action', actionName: 'commit', player: 2, args: {} })).success).toBe(true);
     expect((await session.send(1, { type: 'action', actionName: 'commit', player: 1, args: {} })).success).toBe(true);
 
-    const undo = await session.send(2, { type: 'undo', player: 2 } as Op);
+    const undo = refused(await session.send(2, { type: 'undo', player: 2 }));
     expect(undo.success).toBe(false);
     expect(undo.errorCode).toBe(ErrorCode.NO_ACTIONS_TO_UNDO);
 
@@ -492,7 +493,7 @@ describe('simultaneous-undo adversarial verification (T-160-04/05/06)', () => {
     // Refused ops carry no playerViews (errorResult short-circuits) -- read
     // current state via a follow-up debug op instead.
     void seat1View;
-    const check = await session.send(1, { type: 'debugFlowState', player: 1 } as Op);
+    const check = await session.send(1, { type: 'debugFlowState', player: 1 });
     expect(check.success).toBe(true);
   });
 
@@ -524,7 +525,7 @@ describe('simultaneous-undo adversarial verification (T-160-04/05/06)', () => {
     const b = await session.send(2, { type: 'action', actionName: 'commitB', player: 2, args: {} });
     expect(b.success).toBe(true);
 
-    const undo = await session.send(2, { type: 'undo', player: 2 } as Op);
+    const undo = succeeded(await session.send(2, { type: 'undo', player: 2 }));
     expect(undo.success).toBe(true);
 
     // Step A's action must survive -- proven by seat 2 still being

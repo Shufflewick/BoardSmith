@@ -1,5 +1,5 @@
 import { SnapshotSessionHost } from './snapshot-session-host.js';
-import { executeOp, SUBMISSION_OP_TYPES, type GameDefinitionLike, type Op } from './stateless-ops.js';
+import { executeOp, SUBMISSION_OP_TYPES, type GameDefinitionLike, type Op, type OpOfType, type OpResultFor } from './stateless-ops.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
 import type { BotSeat, SnapshotSessionAdapters } from './snapshot-session-host.js';
 
@@ -22,6 +22,9 @@ type WithOptionalBoundary<T> = T extends { boundaryKey: string }
 // would collapse `action` and `selectionStep` into their common keys and make
 // `args`/`value` unrepresentable.
 export type HeadlessOp = WithOptionalBoundary<Op>;
+
+/** The headless op of type `T`, so `send` answers with that op's own result. */
+type HeadlessOpOf<T extends Op['type']> = { [K in T]: WithOptionalBoundary<OpOfType<K>> }[T];
 
 /** The `meta` object the host hands to every broadcast, captured verbatim. */
 type BroadcastMeta = Parameters<SnapshotSessionAdapters['record']>[1];
@@ -135,18 +138,19 @@ export function createHeadlessSession(
     async start() {
       await host.start();
     },
-    async send(seat: number, op: HeadlessOp) {
+    async send<T extends Op['type']>(seat: number, op: HeadlessOpOf<T>): Promise<OpResultFor<T>> {
       structuredClone(op); // throws DataCloneError if a payload carries a non-cloneable game object
       // Stamp the host's CURRENT boundary only when the caller supplied none.
       // Never `??` over a supplied key — an explicit key, including a stale one,
       // is the caller's statement of which round it composed against.
       const needsStamp =
         SUBMISSION_OP_TYPES.has(op.type) && (op as { boundaryKey?: string }).boundaryKey === undefined;
+      // With its key stamped, the op is the `T` op the host takes.
       const stamped = (
         needsStamp
           ? { ...op, boundaryKey: flowBoundaryKey(host.flowState as BoundaryKeyState | null) }
           : op
-      ) as Op;
+      ) as OpOfType<T>;
       return host.handleOp(seat, stamped);
     },
   };

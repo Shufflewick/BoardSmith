@@ -6,6 +6,7 @@ import { executeOp, type GameDefinitionLike, type ExecutableOp, type Op, type Op
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 import { BotGame, botGameDef, botGameOptions } from './testing/fixtures/bot-game-fixture.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
+import { stubExecuteOp, succeeded } from './op-result.test-helper.js';
 
 // ---------------------------------------------------------------------------
 // Inline game: player 1 repeatedly takes a "pass" action in a loop.
@@ -151,7 +152,7 @@ describe('SnapshotSessionHost', () => {
 
       const resultPromise = host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
       // Push 'response' AFTER the promise resolves
-      const result = await resultPromise;
+      const result = succeeded(await resultPromise);
       eventLog.push('response');
 
       // The last broadcast must appear before 'response'
@@ -177,13 +178,13 @@ describe('SnapshotSessionHost', () => {
       broadcastLog.length = 0;
       const snapshotBefore = host.snapshot;
 
-      const result = await host.handleOp(1, {
+      const result = succeeded(await host.handleOp(1, {
         type: 'resolveChoices',
         actionName: 'pick',
         player: 1,
         selectionName: 'color',
         args: {},
-      });
+      }));
 
       expect(result.success).toBe(true);
       // No broadcast
@@ -208,14 +209,14 @@ describe('SnapshotSessionHost', () => {
       broadcastLog.length = 0;
 
       // Step 1: choose color
-      const step1 = await host.handleOp(1, {
+      const step1 = succeeded(await host.handleOp(1, {
         type: 'selectionStep',
         player: 1,
         selectionName: 'color',
         value: 'red',
         actionName: 'pick',
         boundaryKey: boundaryKeyOfHost(host),
-      });
+      }));
 
       expect(step1.success).toBe(true);
       expect(step1.actionComplete).toBe(false);
@@ -225,7 +226,7 @@ describe('SnapshotSessionHost', () => {
       const snapshotAfterStep1 = host.snapshot;
 
       // Step 2: choose size — the host threads the stored pendingState automatically
-      const step2 = await host.handleOp(1, {
+      const step2 = succeeded(await host.handleOp(1, {
         type: 'selectionStep',
         player: 1,
         selectionName: 'size',
@@ -233,7 +234,7 @@ describe('SnapshotSessionHost', () => {
         actionName: 'pick',
         initialArgs: { color: 'red' },
         boundaryKey: boundaryKeyOfHost(host),
-      });
+      }));
 
       expect(step2.success).toBe(true);
       expect(step2.actionComplete).toBe(true);
@@ -253,13 +254,10 @@ describe('SnapshotSessionHost', () => {
       // a custom executeOp that tracks pendingState passed per seat.
 
       const calls: Array<{ pendingState: Record<string, unknown> | null }> = [];
-      const realExecOp = (snap: unknown, pend: Record<string, unknown> | null, op: ExecutableOp) =>
-        executeOp(twoStepGameDef, twoStepGameOptions, snap, pend, op);
-
       const { adapters } = makeAdapters(twoStepGameDef, twoStepGameOptions);
       adapters.executeOp = (snap, pend, op) => {
         calls.push({ pendingState: pend });
-        return realExecOp(snap, pend, op);
+        return executeOp(twoStepGameDef, twoStepGameOptions, snap, pend, op);
       };
 
       const host = new SnapshotSessionHost(adapters);
@@ -302,21 +300,17 @@ describe('SnapshotSessionHost', () => {
       // pump did `if (!res.success || !res.botMoved) break` with no output, and
       // the game sat forever on a seat nothing would ever drive — no error on
       // the client, none on the server. Failing must be observable.
-      const baseResult: OpResult = {
+      const baseResult = {
         success: true,
         snapshot: { stubbed: true, flowState: {}, winners: [] },
-        pendingState: null,
-        flowState: { awaitingInput: true, currentPlayer: 1 },
         playerViews: [null, null],
-        isComplete: false,
-        winners: [],
         botMoved: false,
       };
 
       let botCallCount = 0;
       const adapters: SnapshotSessionAdapters = {
         playerCount: 2,
-        executeOp: async (_snap, _pend, op) => {
+        executeOp: stubExecuteOp(async (_snap, _pend, op) => {
           if (op.type === 'start') return { ...baseResult, snapshot: { turn: 0, flowState: {}, winners: [] } };
           if (op.type === 'botTurn') {
             botCallCount++;
@@ -324,15 +318,11 @@ describe('SnapshotSessionHost', () => {
               success: false,
               error: 'Missing required selection: namedType',
               snapshot: null,
-              pendingState: null,
-              flowState: null,
               playerViews: [],
-              isComplete: false,
-              winners: [],
             };
           }
           return { ...baseResult };
-        },
+        }),
         record: () => {}, push: () => {},
       };
 
@@ -364,27 +354,23 @@ describe('SnapshotSessionHost', () => {
         // seat is never going to take — so without this the table just sits
         // there. Reproduced in `boardsmith dev`: a rewind onto player 2 left
         // the bot motionless indefinitely.
-        const baseResult: OpResult = {
+        const baseResult = {
           success: true,
           snapshot: { stubbed: true, flowState: {}, winners: [] },
-          pendingState: null,
-          flowState: null,
           playerViews: [],
-          isComplete: false,
-          winners: [],
           botMoved: false,
         };
 
         let botCallCount = 0;
         const adapters: SnapshotSessionAdapters = {
           playerCount: 2,
-          executeOp: async (_snap, _pend, op) => {
+          executeOp: stubExecuteOp(async (_snap, _pend, op) => {
             if (op.type === 'botTurn') {
               botCallCount++;
               return { ...baseResult, botMoved: false };
             }
             return { ...baseResult };
-          },
+          }),
           record: () => {}, push: () => {},
           debug: true,
         };
@@ -404,14 +390,10 @@ describe('SnapshotSessionHost', () => {
       // Use a stub executeOp that answers start normally, then returns botMoved:true
       // once and botMoved:false on the next call.
       const baseSnapshot = { stubbed: true, flowState: {}, winners: [] };
-      const baseResult: OpResult = {
+      const baseResult = {
         success: true,
         snapshot: baseSnapshot,
-        pendingState: null,
-        flowState: { awaitingInput: true, currentPlayer: 1 },
         playerViews: [null, null],
-        isComplete: false,
-        winners: [],
         botMoved: false,
       };
 
@@ -420,7 +402,7 @@ describe('SnapshotSessionHost', () => {
 
       const adapters: SnapshotSessionAdapters = {
         playerCount: 2,
-        executeOp: async (_snap, _pend, op) => {
+        executeOp: stubExecuteOp(async (_snap, _pend, op) => {
           if (op.type === 'start') {
             return { ...baseResult, snapshot: { turn: 0, flowState: {}, winners: [] } };
           }
@@ -432,7 +414,7 @@ describe('SnapshotSessionHost', () => {
             return { ...baseResult, snapshot: { turn: 1, flowState: {}, winners: [] }, botMoved: false };
           }
           return { ...baseResult };
-        },
+        }),
         push: () => {}, record: ({ players: views }, meta) => broadcastLog.push([views, meta]),
       };
 
@@ -462,25 +444,21 @@ describe('SnapshotSessionHost', () => {
       // dev-host relies on holds: botTurn executions never overlap.
       let concurrentBotTurns = 0;
       let maxConcurrentBotTurns = 0;
-      let resolveFirstBotCall!: (v: OpResult) => void;
-      const firstBotCallPromise = new Promise<OpResult>((res) => {
+      let resolveFirstBotCall!: (v: unknown) => void;
+      const firstBotCallPromise = new Promise<unknown>((res) => {
         resolveFirstBotCall = res;
       });
 
-      const baseResult: OpResult = {
+      const baseResult = {
         success: true,
         snapshot: { flowState: {}, winners: [] },
-        pendingState: null,
-        flowState: {},
         playerViews: [],
-        isComplete: false,
-        winners: [],
       };
 
       let botCall = 0;
       const adapters: SnapshotSessionAdapters = {
         playerCount: 2,
-        executeOp: async (_snap, _pend, op) => {
+        executeOp: stubExecuteOp(async (_snap, _pend, op) => {
           if (op.type === 'start') return { ...baseResult };
           if (op.type === 'botTurn') {
             concurrentBotTurns++;
@@ -496,7 +474,7 @@ describe('SnapshotSessionHost', () => {
             }
           }
           return { ...baseResult };
-        },
+        }),
         record: () => {}, push: () => {},
       };
 
@@ -524,21 +502,17 @@ describe('SnapshotSessionHost', () => {
         releaseBotTurn = res;
       });
 
-      const baseResult: OpResult = {
+      const baseResult = {
         success: true,
         snapshot: { v: 0, flowState: {}, winners: [] },
-        pendingState: null,
-        flowState: { awaitingInput: true, currentPlayer: 2 },
         playerViews: [null, null],
-        isComplete: false,
-        winners: [],
         botMoved: false,
       };
 
       let botCall = 0;
       const adapters: SnapshotSessionAdapters = {
         playerCount: 2,
-        executeOp: async (snap, _pend, op) => {
+        executeOp: stubExecuteOp(async (snap, _pend, op) => {
           if (op.type === 'start') return { ...baseResult, snapshot: { v: 0, flowState: {}, winners: [] } };
           if (op.type === 'botTurn') {
             botCall++;
@@ -557,7 +531,7 @@ describe('SnapshotSessionHost', () => {
             return { ...baseResult, snapshot: { v: 2, flowState: { awaitingInput: true, currentPlayer: 1 }, winners: [] }, flowState: { awaitingInput: true, currentPlayer: 1 } };
           }
           return { ...baseResult };
-        },
+        }),
         record: () => {}, push: () => {},
       };
 
@@ -604,14 +578,10 @@ describe('SnapshotSessionHost', () => {
     });
 
     it('caps the bot pump at MAX_BOT_MOVES (500) and logs when a runaway bundle never stops', async () => {
-      const base: OpResult = {
+      const base = {
         success: true,
         snapshot: { flowState: {}, winners: [] },
-        pendingState: null,
-        flowState: {},
         playerViews: [],
-        isComplete: false,
-        winners: [],
         botMoved: true,
       };
 
@@ -620,14 +590,14 @@ describe('SnapshotSessionHost', () => {
         playerCount: 2,
         // A buggy bundle that ALWAYS reports a move was made — would loop forever
         // without the cap.
-        executeOp: async (_snap, _pend, op) => {
+        executeOp: stubExecuteOp(async (_snap, _pend, op) => {
           if (op.type === 'start') return { ...base, botMoved: false };
           if (op.type === 'botTurn') {
             botCallCount++;
             return { ...base, botMoved: true };
           }
           return { ...base };
-        },
+        }),
         record: () => {}, push: () => {},
       };
 
@@ -662,10 +632,10 @@ describe('SnapshotSessionHost', () => {
       const done = await host.handleOp(1, { type: 'action', actionName: 'pick', player: 1, args: { color: 'red', size: 'S' }, boundaryKey: oldKey });
       expect(done.success).toBe(true);
       expect(boundaryKeyOfHost(host)).not.toBe(oldKey);
-      const step = await host.handleOp(1, {
+      const step = succeeded(await host.handleOp(1, {
         type: 'selectionStep', player: 1, selectionName: 'color', value: 'blue', actionName: 'pick',
         boundaryKey: boundaryKeyOfHost(host),
-      });
+      }));
       expect(step.success).toBe(true);
       expect(step.actionComplete).toBe(false);
       return oldKey;
@@ -698,10 +668,10 @@ describe('SnapshotSessionHost', () => {
         expect(persisted.length).toBe(savesBefore);
         expect(host.durableState().pendingStates['1']).toEqual(pickedBefore);
         // The seat finishes the pick it had started.
-        const finish = await host.handleOp(1, {
+        const finish = succeeded(await host.handleOp(1, {
           type: 'selectionStep', player: 1, selectionName: 'size', value: 'M', actionName: 'pick',
           boundaryKey: boundaryKeyOfHost(host),
-        });
+        }));
         expect(finish.success).toBe(true);
         expect(finish.actionComplete).toBe(true);
       }
@@ -709,16 +679,16 @@ describe('SnapshotSessionHost', () => {
 
     it('a successful player action clears the seat\'s in-progress picks and runs without them', async () => {
       const calls: Array<{ type: string; pendingState: Record<string, unknown> | null }> = [];
-      const base: OpResult = {
+      const base = {
         success: true, snapshot: { flowState: {}, winners: [] }, pendingState: null, flowState: {}, playerViews: [], isComplete: false, winners: [],
       };
       const adapters: SnapshotSessionAdapters = {
         playerCount: 2,
-        executeOp: async (_snap, pend, op) => {
+        executeOp: stubExecuteOp(async (_snap, pend, op) => {
           calls.push({ type: op.type, pendingState: pend });
           if (op.type === 'selectionStep') return { ...base, actionComplete: false, pendingState: { step: 'mid' } };
           return { ...base };
-        },
+        }),
         record: () => {}, push: () => {},
       };
       const host = new SnapshotSessionHost(adapters);
@@ -737,23 +707,19 @@ describe('SnapshotSessionHost', () => {
 
     it('a deadline seat close drops the seat\'s in-progress selection too, and drives the bot pump after it', async () => {
       const calls: Array<{ type: string; pendingState: Record<string, unknown> | null }> = [];
-      const base: OpResult = {
+      const base = {
         success: true,
         snapshot: { flowState: {}, winners: [] },
-        pendingState: null,
-        flowState: {},
         playerViews: [],
-        isComplete: false,
-        winners: [],
       };
       const adapters: SnapshotSessionAdapters = {
         playerCount: 2,
-        executeOp: async (_snap, pend, op) => {
+        executeOp: stubExecuteOp(async (_snap, pend, op) => {
           calls.push({ type: op.type, pendingState: pend });
           if (op.type === 'selectionStep') return { ...base, actionComplete: false, pendingState: { step: 'mid' } };
           if (op.type === 'botTurn') return { ...base, botMoved: false };
           return { ...base };
-        },
+        }),
         record: () => {}, push: () => {},
       };
       const host = new SnapshotSessionHost(adapters);
@@ -1096,7 +1062,8 @@ describe('SnapshotSessionHost', () => {
       const realExec = adapters.executeOp;
       let heatmapComputes = 0;
       adapters.executeOp = (snap, pend, op) => {
-        if (op.type === 'heatmapToggle' && op.visible) heatmapComputes++;
+        const asked: ExecutableOp = op;
+        if (asked.type === 'heatmapToggle' && asked.visible) heatmapComputes++;
         return realExec(snap, pend, op);
       };
       const host = new SnapshotSessionHost(adapters);
@@ -1275,7 +1242,7 @@ describe('SnapshotSessionHost', () => {
 
       const adapters: SnapshotSessionAdapters = {
         playerCount: opts.playerCount,
-        executeOp: async (snap, pend, op) => {
+        executeOp: stubExecuteOp(async (snap, pend, op) => {
           if (op.type === 'botSuggest') {
             suggestCount++;
             if (extra.maxSuggestions !== undefined && suggestCount > extra.maxSuggestions) {
@@ -1285,22 +1252,14 @@ describe('SnapshotSessionHost', () => {
                 error: 'No actable seat (simulated game-over)',
                 category: 'protocol' as const,
                 snapshot: snap,
-                pendingState: null,
-                flowState: {},
                 playerViews: [],
-                isComplete: false,
-                winners: [],
               };
             }
             // Return a deterministic canned move (direction='left')
             return {
               success: true,
               snapshot: snap,
-              flowState: {},
               playerViews: [],
-              isComplete: false,
-              winners: [],
-              pendingState: null,
               botPlayer: 1,
               suggestedAction: 'move',
               suggestedArgs: { direction: 'left' } as Record<string, unknown>,
@@ -1309,7 +1268,7 @@ describe('SnapshotSessionHost', () => {
           // All other ops (including 'action') use the real executeOp for
           // genuine game state advancement
           return executeOp(botGameDef, opts, snap, pend, op);
-        },
+        }),
         push: () => {}, record: ({ players: views }, meta) => broadcastLog.push([views, meta]),
       };
       return { adapters, broadcastLog };
@@ -1711,14 +1670,14 @@ describe('SnapshotSessionHost', () => {
       await host.start();
 
       // Seat 1 begins (but does not complete) the two-step 'pick' action.
-      const step1 = await host.handleOp(1, {
+      const step1 = succeeded(await host.handleOp(1, {
         type: 'selectionStep',
         player: 1,
         selectionName: 'color',
         value: 'red',
         actionName: 'pick',
         boundaryKey: boundaryKeyOfHost(host),
-      });
+      }));
       expect(step1.success).toBe(true);
       expect(step1.actionComplete).toBe(false);
 

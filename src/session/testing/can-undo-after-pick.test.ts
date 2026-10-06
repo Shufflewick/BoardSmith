@@ -35,6 +35,7 @@ import { buildPlayerState } from '../utils.js';
 import { createHeadlessSession } from '../headless-session.js';
 import { GameSession } from '../game-session.js';
 import type { BroadcastAdapter, PlayerGameState, StateUpdate } from '../types.js';
+import { succeeded } from '../op-result.test-helper.js';
 
 /** One seat, one frame: `move` in one step, `pair` in two picks. */
 class PickGame extends Game<PickGame, Player> {
@@ -128,8 +129,7 @@ async function observeStateless(max: number, upTo: number): Promise<Observed> {
             value: step.value,
             player: 1,
           });
-    expect(res.success, res.error).toBe(true);
-    returned = (res.playerViews[0] as { state: PlayerGameState }).state;
+    returned = (succeeded(res).playerViews[0] as { state: PlayerGameState }).state;
   }
   const broadcast = (session.broadcasts.at(-1) as Array<{ state: PlayerGameState }>)[0].state;
   const undo = await session.send(1, { type: 'undo', player: 1 });

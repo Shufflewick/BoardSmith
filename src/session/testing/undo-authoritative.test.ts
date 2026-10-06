@@ -12,7 +12,8 @@ import {
   loop,
   type GameOptions,
 } from '../../engine/index.js';
-import type { GameDefinitionLike, Op } from '../stateless-ops.js';
+import type { GameDefinitionLike, OpResult } from '../stateless-ops.js';
+import { succeeded } from '../op-result.test-helper.js';
 
 /**
  * Authoritative-undo contract. Drives the SAME SnapshotSessionHost + executeOp
@@ -56,8 +57,10 @@ function spaceChildIds(snapshot: unknown, spaceName: string): number[] {
   return (space?.children ?? []).map((c: any) => c.id as number);
 }
 
-function currentPlayer(result: { flowState: unknown }): number | undefined {
-  return (result.flowState as { currentPlayer?: number } | undefined)?.currentPlayer;
+/** The seat whose turn the game `result` holds is on, or `undefined` when the op was refused. */
+function currentPlayer(result: OpResult): number | undefined {
+  if (!result.success || !('snapshot' in result)) return undefined;
+  return result.snapshot.flowState?.currentPlayer;
 }
 
 describe('authoritative undo across a prior pending mutation (155-03 contract)', () => {
@@ -66,20 +69,20 @@ describe('authoritative undo across a prior pending mutation (155-03 contract)',
     await session.start();
 
     // ── Turn 1 (player 1): explore, then collect one item into held-1 ─────────
-    const explore = await session.send(1, { type: 'action', actionName: 'explore', player: 1, args: {} });
+    const explore = succeeded(await session.send(1, { type: 'action', actionName: 'explore', player: 1, args: {} }));
     expect(explore.success).toBe(true);
     const followUpArgs = (explore.followUp as { args: Record<string, unknown> }).args;
 
-    const choices = await session.send(1, {
+    const choices = succeeded(await session.send(1, {
       type: 'resolveChoices', actionName: 'collect', player: 1, selectionName: 'item', args: {},
-    });
+    }));
     expect(choices.success).toBe(true);
     const collectedId = ((choices.validElements as ValidElement[]) ?? [])[0].id;
 
-    const collect = await session.send(1, {
+    const collect = succeeded(await session.send(1, {
       type: 'selectionStep', player: 1, selectionName: 'item', value: collectedId,
       actionName: 'collect', initialArgs: followUpArgs,
-    } as Op);
+    }));
     expect(collect.success).toBe(true);
     expect(collect.actionComplete).toBe(true);
     // Sanity: the item is now in held-1, not the stash.
@@ -105,7 +108,7 @@ describe('authoritative undo across a prior pending mutation (155-03 contract)',
     // The second step declares `turnScope: 'continue'`, so turn 3's run carries
     // across the frame boundary its first action closed: the undo is granted
     // and rewinds exactly that one action.
-    const undo = await session.send(1, { type: 'undo', player: 1 } as Op);
+    const undo = succeeded(await session.send(1, { type: 'undo', player: 1 }));
     expect(undo.success).toBe(true);
 
     // Back at the START of turn 3 -- player 1 is due again with the turn's
@@ -180,18 +183,18 @@ describe('undo within the currently-active action-step frame (positive case, 155
     await session.start();
 
     // Player 1's WHOLE turn (both required moves) -- history = [move, move], score = 2.
-    expect((await session.send(1, { type: 'action', actionName: 'move', player: 1, args: {} } as Op)).success).toBe(true);
-    const p1turnEnd = await session.send(1, { type: 'action', actionName: 'move', player: 1, args: {} } as Op);
+    expect((await session.send(1, { type: 'action', actionName: 'move', player: 1, args: {} })).success).toBe(true);
+    const p1turnEnd = await session.send(1, { type: 'action', actionName: 'move', player: 1, args: {} });
     expect(p1turnEnd.success).toBe(true);
     expect(currentPlayer(p1turnEnd)).toBe(2);
 
     // Player 2's first move of their turn -- frame open, moveCount === 1.
-    const p2move1 = await session.send(2, { type: 'action', actionName: 'move', player: 2, args: {} } as Op);
+    const p2move1 = succeeded(await session.send(2, { type: 'action', actionName: 'move', player: 2, args: {} }));
     expect(p2move1.success).toBe(true);
     expect(currentPlayer(p2move1)).toBe(2); // step still open, repeatUntil not yet true
     expect((p2move1.snapshot as { state?: { attributes?: { score?: number } } }).state?.attributes?.score).toBe(3);
 
-    const undo = await session.send(2, { type: 'undo', player: 2 } as Op);
+    const undo = succeeded(await session.send(2, { type: 'undo', player: 2 }));
     expect(undo.success).toBe(true);
 
     // Exactly player 2's one pending move was undone -- player 1's whole,

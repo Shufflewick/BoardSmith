@@ -43,7 +43,7 @@ async function secretTable() {
     makeSeed: () => 'bs487',
     clock,
     executeOp: (gameOptions, snap, pend, op, hostOptions) =>
-      executeOp(secretDeploymentDefinition, gameOptions, snap, pend, op.type === 'botTurn' ? { ...op, seats: [] } : op, hostOptions),
+      executeOp(secretDeploymentDefinition, gameOptions, snap, pend, op.type === 'botTurn' ? { ...op, seats: [] } as typeof op : op, hostOptions),
     send: (clientId, msg) => {
       sent.push({ clientId, msg });
       clients.remember(clientId, msg);

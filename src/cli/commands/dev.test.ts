@@ -20,6 +20,7 @@ import {
   resolvePreset,
 } from './dev.js';
 import { describeTableReload, tableShapeChange } from './dev-table-runtime.js';
+import type { OpSuccess } from '../../session/index.js';
 
 /**
  * PROC-02 regressions for CLIX-01/CLIX-02/CLIX-04/CLIX-06 (135-06-PLAN.md).
@@ -403,12 +404,5 @@ describe('#343: a table reloads its rules when they are saved', () => {
   });
 });
 
-const emptyResult = {
-  success: true,
-  snapshot: null,
-  pendingState: null,
-  flowState: null,
-  playerViews: [],
-  isComplete: false,
-  winners: [],
-};
+/** The restored game. `describeTableReload` reads only what became of it, never the game itself. */
+const emptyResult = {} as Omit<OpSuccess<'start'>, 'success'>;
