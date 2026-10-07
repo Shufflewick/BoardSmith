@@ -90,10 +90,10 @@ function healthFindings(source) {
     cwd: dir,
     encoding: 'utf8',
   });
-  const start = run.stdout.indexOf('{');
+  const start = run.error ? -1 : run.stdout.indexOf('{');
   if (start === -1) {
     throw new Error(
-      `fallow did not report: ${run.stderr || run.stdout}\n`
+      `fallow did not report: ${run.error?.message || run.stderr || run.stdout}\n`
         + '`boardsmith audit` runs this same binary. Install it with `npm i -g fallow`.',
     );
   }
