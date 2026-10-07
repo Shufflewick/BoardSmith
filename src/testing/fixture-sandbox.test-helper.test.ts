@@ -1,7 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { accessSync, constants, copyFileSync, lstatSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
-import { join, relative, isAbsolute } from 'node:path';
+import {
+  accessSync,
+  constants,
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, join, relative, isAbsolute } from 'node:path';
 import { fixtureSandbox } from './fixture-sandbox.test-helper.js';
 import { tempTree } from './temp-tree.test-helper.js';
 
@@ -13,10 +23,45 @@ import { tempTree } from './temp-tree.test-helper.js';
  * outside the sandbox's tree, whatever path it is handed.
  */
 
+/**
+ * A runnable copy of this process's node at `<dir>/bin/node`.
+ *
+ * An official build is one file, but a macOS build that links its libraries
+ * through `@rpath` (Homebrew's: `@rpath/libnode.*.dylib`, found through
+ * `@loader_path/../lib`) dies in dyld when copied alone (#542). Each `@rpath`
+ * library is copied to the same place relative to the copy as it sits
+ * relative to the real binary, so the copy resolves it the same way.
+ */
+function runnableNodeCopy(dir: string): string {
+  const realNode = realpathSync(process.execPath);
+  const copy = join(dir, 'bin', 'node');
+  mkdirSync(dirname(copy));
+  copyFileSync(realNode, copy, constants.COPYFILE_FICLONE);
+  if (process.platform !== 'darwin') return copy;
+
+  const otool = (flag: string) => {
+    const run = spawnSync('otool', [flag, realNode], { encoding: 'utf8' });
+    if (run.status !== 0) {
+      const why = run.error?.message ?? run.stderr;
+      throw new Error(`otool ${flag} ${realNode} failed: ${why}. Install the Xcode command line tools.`);
+    }
+    return run.stdout;
+  };
+  const rpaths = [...otool('-l').matchAll(/cmd LC_RPATH\s+cmdsize \d+\s+path (\S+)/g)].map((m) => m[1]!);
+  const libraries = [...otool('-L').matchAll(/^\s+@rpath\/(\S+)/gm)].map((m) => m[1]!);
+  for (const library of libraries) {
+    const rpath = rpaths.find((r) => existsSync(join(r.replace('@loader_path', dirname(realNode)), library)));
+    if (!rpath) throw new Error(`${realNode} links @rpath/${library}, which none of its rpaths (${rpaths.join(', ')}) holds.`);
+    const target = join(rpath.replace('@loader_path', dirname(copy)), library);
+    mkdirSync(dirname(target), { recursive: true });
+    copyFileSync(join(rpath.replace('@loader_path', dirname(realNode)), library), target, constants.COPYFILE_FICLONE);
+  }
+  return copy;
+}
+
 /** A copy of node outside every sandbox, so the #430 reproduction can only ever damage a copy. */
 const nodeCopyDir = tempTree('bs-sandbox-node-copy-');
-const nodeCopy = join(nodeCopyDir, 'node');
-copyFileSync(process.execPath, nodeCopy, constants.COPYFILE_FICLONE);
+const nodeCopy = runnableNodeCopy(nodeCopyDir);
 
 function inside(root: string, path: string): boolean {
   const rel = relative(realpathSync(root), path);
