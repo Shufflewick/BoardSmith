@@ -60,7 +60,8 @@ function runnableNodeCopy(dir: string): string {
 }
 
 /** A copy of node outside every sandbox, so the #430 reproduction can only ever damage a copy. */
-const nodeCopy = runnableNodeCopy(tempTree('bs-sandbox-node-copy-'));
+const nodeCopyDir = tempTree('bs-sandbox-node-copy-');
+const nodeCopy = runnableNodeCopy(nodeCopyDir);
 
 function inside(root: string, path: string): boolean {
   const rel = relative(realpathSync(root), path);
