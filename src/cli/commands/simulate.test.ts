@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -16,7 +16,8 @@ import {
 import { runSimulation, runReplay, simulateCommand, resolveSimulationGameOptions } from './simulate.js';
 import { DeadEndGame } from './simulate.fixture.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { commandBuildDir, scratchDir } from '../lib/project-paths.js';
+import { scratchDir } from '../lib/project-paths.js';
+import { commandBuildDirs } from '../lib/command-build-dirs.test-helper.js';
 
 /**
  * Minimal always-completing game (mirrors the fixture used by
@@ -248,7 +249,7 @@ function projectWithAuthorFiles(rules: string): { dir: string; expectAuthorFiles
     expectAuthorFilesKept: () => {
       expect(readFileSync(scratchFile, 'utf-8')).toBe('keep me\n');
       expect(readFileSync(worktreeFile, 'utf-8')).toBe('unfinished chunk\n');
-      expect(existsSync(commandBuildDir(dir, 'simulate')), 'simulate left its build directory behind').toBe(false);
+      expect(commandBuildDirs(dir, 'simulate'), 'simulate left its build directory behind').toEqual([]);
     },
   };
 }

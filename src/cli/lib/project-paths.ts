@@ -172,21 +172,6 @@ export function scratchDir(projectDir: string): string {
   return join(projectDir, SCRATCH_DIR);
 }
 
-/** The CLI commands that bundle a project's rules into a build directory of their own. */
-type BuildingCommand = 'dev' | 'simulate' | 'build' | 'validate' | 'evolve-bot-weights';
-
-/**
- * Where `command` writes the rules bundle it removes when it ends.
- *
- * Each command gets its own subdirectory of `.boardsmith/`, and removes only
- * that. `.boardsmith/` itself is never a command's to remove: it also holds the
- * scratch directory and the git worktrees of chunks built side by side, and
- * `boardsmith dev` stopping once deleted both (#391).
- */
-export function commandBuildDir(projectDir: string, command: BuildingCommand): string {
-  return join(projectDir, '.boardsmith', `${command}-tmp`);
-}
-
 /**
  * WHERE A PATH WRITTEN IN A DESIGN RECORD POINTS (#409). Every reader of a design record, whether
  * a Build Manifest row, a claim's `Source:`/`Searched:` line, or a script or capture a ledger or

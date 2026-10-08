@@ -1,4 +1,4 @@
-import { readFileSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import chalk from 'chalk';
 
 import type { Game, GameOptions } from '../../engine/index.js';
@@ -13,7 +13,7 @@ import { selectGameOptions, type GameOptionSelection } from '../../session/game-
 import type { GameOptionDefinition } from '../../session/types.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { simulateReplayCommand } from '../lib/replay-command.js';
-import { commandBuildDir } from '../lib/project-paths.js';
+import { withCommandBuildDir } from '../lib/command-build-dir.js';
 
 interface SimulateOptions {
   games: string;
@@ -211,64 +211,46 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
 
   const context = getProjectContext(cwd);
 
-  // Simulate's own build directory, removed below; never `.boardsmith/` itself (#391).
-  const tempDir = commandBuildDir(cwd, 'simulate');
-  mkdirSync(tempDir, { recursive: true });
-
-  let gameDefinition;
-  try {
-    ({ gameDefinition } = await loadGameDefinition(rulesPath, tempDir, context));
-  } catch (error) {
+  // This run's own build directory (#543), removed once the games have run; never `.boardsmith/`
+  // itself (#391).
+  const outcome = await withCommandBuildDir(cwd, 'simulate', async (tempDir) => {
+    let gameDefinition;
     try {
-      rmSync(tempDir, { recursive: true, force: true });
-    } catch {
-      // best-effort cleanup; do not mask the original error
+      ({ gameDefinition } = await loadGameDefinition(rulesPath, tempDir, context));
+    } catch (error) {
+      // THROWN, NOT PRINTED (#240): `cli.ts`'s handler renders it as one line,
+      // where the error object printed its whole stack and internal paths.
+      throw new Error(
+        `Failed to load this game's rules: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
-    // THROWN, NOT PRINTED (#240): `cli.ts`'s handler renders it as one line,
-    // where the error object printed its whole stack and internal paths.
-    throw new Error(
-      `Failed to load this game's rules: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
 
-  let gameOptions: Record<string, unknown>;
-  try {
-    gameOptions = resolveSimulationGameOptions(gameDefinition.gameOptions, options.gameOption);
-  } catch (error) {
-    console.error(chalk.red((error as Error).message));
+    let gameOptions: Record<string, unknown>;
     try {
-      rmSync(tempDir, { recursive: true, force: true });
-    } catch {
-      // best-effort cleanup; do not mask the original error
+      gameOptions = resolveSimulationGameOptions(gameDefinition.gameOptions, options.gameOption);
+    } catch (error) {
+      console.error(chalk.red((error as Error).message));
+      return undefined;
     }
+
+    const gameClass = gameDefinition.gameClass as new (options: GameOptions) => Game;
+    if (options.replay !== undefined) {
+      const games = [await runReplay(gameClass, { seed: options.replay, players: playersCount, gameOptions })];
+      return { heading: `Replay of game seed ${options.replay}:`, games, gameOptions };
+    }
+    const report = await runSimulation(gameClass, {
+      count: gamesCount,
+      players: playersCount,
+      seed: options.seed,
+      gameOptions,
+    });
+    return { heading: `Simulation Results (seed: ${report.baseSeed}):`, games: report.games, gameOptions };
+  });
+  if (outcome === undefined) {
     process.exitCode = 1;
     return;
   }
-
-  const gameClass = gameDefinition.gameClass as new (options: GameOptions) => Game;
-  let heading: string;
-  let games: PerGameReport[];
-  try {
-    if (options.replay !== undefined) {
-      games = [await runReplay(gameClass, { seed: options.replay, players: playersCount, gameOptions })];
-      heading = `Replay of game seed ${options.replay}:`;
-    } else {
-      const report = await runSimulation(gameClass, {
-        count: gamesCount,
-        players: playersCount,
-        seed: options.seed,
-        gameOptions,
-      });
-      games = report.games;
-      heading = `Simulation Results (seed: ${report.baseSeed}):`;
-    }
-  } finally {
-    try {
-      rmSync(tempDir, { recursive: true, force: true });
-    } catch {
-      // best-effort cleanup; do not fail the command over it
-    }
-  }
+  const { heading, games, gameOptions } = outcome;
 
   if (options.json) {
     console.log(JSON.stringify(games, null, 2));

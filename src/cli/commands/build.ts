@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, realpathSync, writeFileSync, mkdirSync, cpSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync, mkdirSync, cpSync } from 'node:fs';
 import { join } from 'node:path';
 import { build as viteBuild } from 'vite';
 import chalk from 'chalk';
@@ -8,7 +8,7 @@ import { ENGINE_REVISION } from '../../contract/index.js';
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 import { buildCli, CLI_ENTRY, CLI_OUTFILE } from '../lib/build-cli.js';
 import { resolveUserPath } from '../lib/user-path.js';
-import { commandBuildDir } from '../lib/project-paths.js';
+import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { requireGameProjectManifests, requireRulesIndex, resolveRulesDir } from '../lib/game-project.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import { readWorldDefinition, type WorldDefinition } from '../../world/index.js';
@@ -508,21 +508,10 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
     // (CLIX-01 / T-135-07 — mirrors simulate.ts:158-167).
     // Build's own build directory (WR-02, #391): `.boardsmith` is SHARED with
     // pack's tarballs, the scratch directory, chunk worktrees and the other
-    // commands' build directories. Only ever create and delete what build owns.
-    const tempDir = commandBuildDir(cwd, 'build');
-    mkdirSync(tempDir, { recursive: true });
-
-    let gameDefinition: GameDefinition;
-    try {
-      ({ gameDefinition } = await loadGameDefinition(rulesPath, tempDir, context));
-    } finally {
-      try {
-        // Removes only build's directory, never the shared .boardsmith parent.
-        rmSync(tempDir, { recursive: true, force: true });
-      } catch {
-        // best-effort cleanup; do not mask the original error
-      }
-    }
+    // runs' build directories. Only ever create and delete what this run owns (#543).
+    const { gameDefinition } = await withCommandBuildDir(cwd, 'build', (tempDir) =>
+      loadGameDefinition(rulesPath, tempDir, context),
+    );
 
     const manifest = deriveManifest(
       config,
