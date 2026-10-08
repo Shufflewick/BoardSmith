@@ -233,7 +233,7 @@ function reachAll<T extends Iterable<GameElement>>(owner: GameElement, found: T)
  * own internals. A game that sets any of them does not get a slightly odd
  * element, it gets a tree whose identity system no longer holds.
  */
-export const RESERVED_ELEMENT_KEYS: ReadonlySet<string> = new Set(['id', '_t', '_ctx']);
+const RESERVED_ELEMENT_KEYS: ReadonlySet<string> = new Set(['id', '_t', '_ctx']);
 
 /**
  * Thrown when `create()`/`createMany()` is handed an attribute that would
