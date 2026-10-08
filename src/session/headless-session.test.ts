@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { createHeadlessSession } from './headless-session.js';
 import { eachPlayerFixtureDefinition } from './testing/fixtures/each-player-fixture.js';
-import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../engine/index.js';
+import { Game, Player, Action, defineFlow, actionStep, eachPlayer, loop, type GameOptions } from '../engine/index.js';
 import type { GameDefinitionLike } from './stateless-ops.js';
+import { selectGameOptions } from './game-option-selection.js';
 
 /**
  * Public-path tests for `createHeadlessSession` (boardsmith/session).
@@ -111,5 +112,102 @@ describe('createHeadlessSession (public path)', () => {
 
     const result = await session.send(1, { type: 'action', actionName: 'roll', player: 1, args: {} });
     expect(result.success).toBe(true);
+  });
+});
+
+/**
+ * A two-seat table where each seat in turn adds to its own tally. `step` is a
+ * game option, so a test can show a chosen option reaching the game.
+ */
+class TallyGame extends Game<TallyGame, Player> {
+  tallies: number[] = [0, 0];
+  step: number;
+
+  constructor(options: GameOptions & { step?: number }) {
+    super(options);
+    this.step = options.step ?? 1;
+    this.registerAction(
+      Action.create('add').execute((_args, ctx) => {
+        this.tallies[ctx.player.seat - 1] += this.step;
+        return { success: true };
+      }),
+    );
+    this.setFlow(
+      defineFlow({
+        root: loop({ maxIterations: 20, do: eachPlayer({ do: actionStep({ actions: ['add'] }) }) }),
+      }),
+    );
+  }
+}
+
+const tallyGameDef = { gameClass: TallyGame, gameType: 'tally', minPlayers: 2, maxPlayers: 2 };
+
+/** The tallies a seat's published view shows. */
+function talliesIn(state: { view: unknown }): number[] {
+  return (state.view as { attributes: { tallies: number[] } }).attributes.tallies;
+}
+
+describe('createHeadlessSession as a test harness (#529)', () => {
+  it("reads a seat's state of record after a move", async () => {
+    const session = createHeadlessSession(tallyGameDef, { playerCount: 2, seed: 'harness' });
+    await session.start();
+    expect(session.playerState(1).isMyTurn).toBe(true);
+
+    const result = await session.send(1, { type: 'action', actionName: 'add', player: 1, args: {} });
+    expect(result.success).toBe(true);
+
+    const seat1 = session.playerState(1);
+    expect(seat1.isMyTurn).toBe(false);
+    expect(talliesIn(seat1)).toEqual([1, 0]);
+    expect(session.playerState(2).isMyTurn).toBe(true);
+  });
+
+  it('refuses to read a seat that is not at the table, or a table that has not started', async () => {
+    const session = createHeadlessSession(tallyGameDef, { playerCount: 2, seed: 'harness' });
+    expect(() => session.playerState(1)).toThrow(/start\(\)/);
+    await session.start();
+    expect(() => session.playerState(3)).toThrow(/seats 1 to 2/);
+  });
+
+  it('reads the game as it stands now, typed as the game class, as a copy', async () => {
+    const session = createHeadlessSession(tallyGameDef, { playerCount: 2, seed: 'harness' });
+    await session.start();
+    await session.send(1, { type: 'action', actionName: 'add', player: 1, args: {} });
+
+    const game: TallyGame = session.readGame();
+    expect(game.tallies).toEqual([1, 0]);
+
+    // An edit to the copy is not an edit to the table.
+    game.tallies[0] = 99;
+    expect(session.readGame().tallies).toEqual([1, 0]);
+  });
+
+  it('arranges a position that the next move and every seat then see', async () => {
+    const session = createHeadlessSession(tallyGameDef, { playerCount: 2, seed: 'harness' });
+    await session.start();
+
+    await session.arrange((game) => {
+      game.tallies = [10, 20];
+    });
+    expect(talliesIn(session.playerState(2))).toEqual([10, 20]);
+
+    await session.send(1, { type: 'action', actionName: 'add', player: 1, args: {} });
+    expect(session.readGame().tallies).toEqual([11, 20]);
+  });
+
+  it("starts the game with the players' names and a chosen game option", async () => {
+    const options = selectGameOptions({ step: { type: 'number', label: 'Step', default: 1 } }, { step: 5 });
+    const session = createHeadlessSession(tallyGameDef, {
+      playerCount: 2,
+      seed: 'harness',
+      playerNames: ['Alice', 'Bob'],
+      options,
+    });
+    await session.start();
+    await session.send(1, { type: 'action', actionName: 'add', player: 1, args: {} });
+
+    const game = session.readGame();
+    expect(game.tallies).toEqual([5, 0]);
+    expect(game.getPlayer(2)!.name).toBe('Bob');
   });
 });

@@ -1,7 +1,18 @@
 import { SnapshotSessionHost } from './snapshot-session-host.js';
-import { executeOp, SUBMISSION_OP_TYPES, type GameDefinitionLike, type Op, type OpOfType, type OpResultFor } from './stateless-ops.js';
+import {
+  executeOp,
+  runnerFromSnapshot,
+  SUBMISSION_OP_TYPES,
+  type GameDefinitionLike,
+  type Op,
+  type OpOfType,
+  type OpResultFor,
+} from './stateless-ops.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
+import type { Game, GameClass } from '../engine/index.js';
 import type { BotSeat, SnapshotSessionAdapters } from './snapshot-session-host.js';
+import type { GameOptionSelection } from './game-option-selection.js';
+import type { PlayerGameState } from './types.js';
 
 /**
  * An op as a headless CALLER writes it: a submission may omit `boundaryKey`,
@@ -28,6 +39,20 @@ type HeadlessOpOf<T extends Op['type']> = { [K in T]: WithOptionalBoundary<OpOfT
 
 /** The `meta` object the host hands to every broadcast, captured verbatim. */
 type BroadcastMeta = Parameters<SnapshotSessionAdapters['record']>[1];
+
+/** One seat's published view, as the host hands it to `record`. */
+interface SeatView {
+  state: PlayerGameState;
+}
+
+/** How a headless table is set up: who sits at it, the seed, and the game options chosen. */
+export interface HeadlessGameOptions {
+  playerCount: number;
+  seed?: string;
+  playerNames?: string[];
+  /** The players' choice of the game's declared options, admitted by `selectGameOptions`. */
+  options?: GameOptionSelection;
+}
 
 /**
  * Drives a SnapshotSessionHost with an IN-PROCESS executeOp, forcing every op
@@ -63,11 +88,15 @@ type BroadcastMeta = Parameters<SnapshotSessionAdapters['record']>[1];
  * console.log(session.metas.at(-1)?.turnBoundary.dueSeats);
  * ```
  */
-export function createHeadlessSession(
-  def: GameDefinitionLike,
-  gameOptions: { playerCount: number; seed?: string },
+export function createHeadlessSession<G extends Game = Game>(
+  def: GameDefinitionLike & { gameClass: GameClass<G> },
+  tableOptions: HeadlessGameOptions,
   botSeats: BotSeat[] = [],
 ) {
+  const { options, ...table } = tableOptions;
+  // The players' choice first and the table's own fields after it, so a
+  // selection cannot name the seat count, the names or the seed.
+  const gameOptions = { ...options, ...table };
   const broadcasts: unknown[] = [];
   const metas: BroadcastMeta[] = [];
   const pushes: Array<ReadonlyArray<{ seat: number; view: unknown }>> = [];
@@ -99,6 +128,11 @@ export function createHeadlessSession(
     },
   });
   host.setBotSeats(botRoster);
+  function currentSnapshot() {
+    const snapshot = host.snapshot;
+    if (!snapshot) throw new Error('The table has no game yet. Call start() before reading or arranging it.');
+    return snapshot;
+  }
   return {
     host,
     broadcasts,
@@ -152,6 +186,39 @@ export function createHeadlessSession(
           : op
       ) as OpOfType<T>;
       return host.handleOp(seat, stamped);
+    },
+    /**
+     * `seat`'s state of record: what the host last published to that seat,
+     * read again after every move the way a page receives a broadcast.
+     */
+    playerState(seat: number): PlayerGameState {
+      const views = broadcasts.at(-1) as SeatView[] | undefined;
+      if (!views) {
+        throw new Error('The table has not published a state yet. Call start() before reading a seat.');
+      }
+      if (!Number.isInteger(seat) || seat < 1 || seat > views.length) {
+        throw new Error(`There is no seat ${seat} at this table; it has seats 1 to ${views.length}.`);
+      }
+      return views[seat - 1].state;
+    },
+    /**
+     * A copy of the game as it stands now, rebuilt from the host's snapshot
+     * the way every op rebuilds it. Read from it; an edit to it changes
+     * nothing at the table. To set up a position, use {@link arrange}.
+     */
+    readGame(): G {
+      return runnerFromSnapshot(currentSnapshot(), { ...def, randomness: 'allowed' }).game as G;
+    },
+    /**
+     * Set up a position between moves: `edit` changes a copy of the game, and
+     * the table then restores that copy as a debug restore does, so every
+     * seat is published the new position and the next move plays from it.
+     */
+    async arrange(edit: (game: G) => void): Promise<void> {
+      const runner = runnerFromSnapshot(currentSnapshot(), { ...def, randomness: 'allowed' });
+      edit(runner.game as G);
+      const result = await host.handleOp(1, { type: 'restoreEarlier', snapshot: runner.getSnapshot() });
+      if (!result.success) throw new Error(`The arranged position could not be restored: ${result.error}`);
     },
   };
 }

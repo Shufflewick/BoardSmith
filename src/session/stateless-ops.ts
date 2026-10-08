@@ -10,7 +10,7 @@
  */
 
 import type { Game, GameClass, GameCommand, TutorialDefinition, Annotation, FlowState, FollowUpOffer } from '../engine/index.js';
-import { ErrorCode } from '../types/protocol.js';
+import { ErrorCode, type ChoiceWithRefs, type ValidElement } from '../types/protocol.js';
 import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState } from '../engine/index.js';
 import type { BoundaryKeyState } from '../engine/index.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
@@ -394,8 +394,8 @@ export interface OpSuccessFields {
     warnings?: WarningEntry[];
   };
   resolveChoices: {
-    choices?: unknown[];
-    validElements?: unknown[];
+    choices?: ChoiceWithRefs[];
+    validElements?: ValidElement[];
     multiSelect?: { min: number; max?: number };
     /**
      * The ordered-list bounds of the step this answered (#249, #480), resolved
@@ -1315,7 +1315,12 @@ async function handleBotSuggest(
  * the session layer must re-supply them on every fromSnapshot/fromCheckpoint call,
  * mirroring game-session.ts's replaceRunner guard).
  */
-function runnerFromSnapshot(
+/**
+ * The runner `snapshot` holds, built the way every op builds it: with the
+ * definition's checkpoint and undo policies, the host's randomness policy, and
+ * the tutorial re-supplied. `createHeadlessSession` reads a test's game with it.
+ */
+export function runnerFromSnapshot(
   snapshot: GameStateSnapshot,
   def: RunnerDef,
 ): GameRunner {
