@@ -9,7 +9,7 @@
  * no memory between calls.
  */
 
-import type { Game, GameClass, GameCommand, TutorialDefinition, Annotation, FlowState, FollowUpOffer } from '../engine/index.js';
+import type { Game, GameClass, GameCommand, TutorialDefinition, Annotation, FlowState, FollowUpOffer, HistoryEntry } from '../engine/index.js';
 import { ErrorCode, type ChoiceWithRefs, type ValidElement } from '../types/protocol.js';
 import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState } from '../engine/index.js';
 import type { BoundaryKeyState } from '../engine/index.js';
@@ -420,7 +420,7 @@ export interface OpSuccessFields {
      */
     botStalled?: { seat: number; reason: string };
   };
-  debugHistory: { actionHistory: unknown[] };
+  debugHistory: { actionHistory: HistoryEntry[] };
   debugStateAt: { historicalState: unknown };
   debugStateDiff: { diff: unknown };
   debugActionTraces: { traces: unknown[]; flowContext: unknown };
