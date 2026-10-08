@@ -77,7 +77,8 @@ here.
          claims coverage no test gives is a false record, not a formatting slip.
        - **Every verb the chunk adds is dispatched through the engine** in at least one of the
          chunk's tests: `testGame.doAction`, `tryAction`, `action(...).execute()`,
-         `runner.performAction`, or a world's `take`,
+         `runner.performAction`, an `action` op sent to the live session host
+         (`session.send(seat, { type: 'action', actionName: 'verb', ... })`), or a world's `take`,
          with the verb's name written literally. Calling the rules function directly skips the
          engine's selections, conditions and flow, so it does not count, and neither does a verb
          only ever dispatched through `assertActionFails`.
@@ -387,16 +388,22 @@ above).
    precedents together, one for shape and one for real-wiring: `CardRenderer.a11y.test.ts`'s
    individual-control shape (mount the component, `trigger('keydown', { key: 'Enter' })`, assert
    the expected handler fired exactly once) for the control-level assertion, and the real wiring
-   for the full completion path: a live `GameSession`, and the controller and board bridge built
-   by `useTableActionWiring` from `boardsmith/ui`, the same function GameShell wires them with.
+   for the full completion path: the live session host, started with `createHeadlessSession` from
+   `boardsmith/session` (the same `SnapshotSessionHost` the dev host and the platform run), and the
+   controller and board bridge built by `useTableActionWiring` from `boardsmith/ui`, the same
+   function GameShell wires them with.
    A mocked controller misses the real
    `fill → fetchChoicesForPick → snapshotVersion++ → currentChoices` reactive chain, so this test
    must exercise the real wiring, not a mock. Never call `useActionController` and a board bridge
    by hand: which state fields the bridge reads is the engine's business, and it changes.
 
    ```typescript
+   // Before mounting: the game's own definition, so its checkpoint and undo policies apply.
+   const session = createHeadlessSession(gameDefinition, { playerCount: 2, seed: 'kbd' });
+   await session.start();
+
    // Inside the test host component's setup().
-   const seatState = ref(session.buildPlayerState(seat));   // re-read after every move
+   const seatState = ref(session.playerState(seat));   // re-read after every move
    const board = createBoardInteraction();
    provideBoardInteraction(board);
    const { controller, actionMetadata, disabledActions } = useTableActionWiring({
@@ -407,12 +414,16 @@ above).
      boardInteraction: board,
      autoEndTurn: ref(true),
      isViewingHistory: ref(false),
-     sendAction: (name, args) => session.performAction(name, seat, args),
-     fetchPickChoices: async (action, pick, player, args) => session.getPickChoices(action, pick, player, args),
+     sendAction: (actionName, args) => session.send(seat, { type: 'action', actionName, player: seat, args }),
+     fetchPickChoices: (actionName, selectionName, player, args) =>
+       session.send(player, { type: 'resolveChoices', actionName, selectionName, player, args }),
    });
    ```
 
-   Re-read `seatState` from the session after each move, the way a broadcast arrives. Undo, rewind
+   Re-read `seatState` from the session after each move, the way a broadcast arrives. Read the
+   game itself with `session.readGame()`, again after each move: it is a copy rebuilt from the
+   host's snapshot, so an edit to it changes nothing. Set up a position (a die's face, a card on
+   top) with `await session.arrange((game) => { ... })` between moves. Undo, rewind
    and a new game are handled from that state alone: the helper tears down an open pick when the
    state says the game tree changed, so a test never passes `restoreEpoch` or `gameInstanceId`.
 
