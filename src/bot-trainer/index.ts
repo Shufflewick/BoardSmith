@@ -1,106 +1,16 @@
-// Introspection
-export {
-  introspectGame,
-  createIntrospectionGame,
-  printGameStructure,
-  estimateComplexity,
-  type GameComplexity,
-} from './introspector.js';
-
-// Feature generation
-export {
-  generateCandidateFeatures,
-  filterFeaturesByCategory,
-  getFeatureSummary,
-  printFeatures,
-} from './feature-generator.js';
-
-// Feature templates
-export { FEATURE_TEMPLATES, type FeatureTemplate } from './feature-templates.js';
-
-// Game-structure serialization (for worker-thread communication)
-export {
-  serializeGameStructure,
-  deserializeGameStructure,
-} from './simulator.js';
-
-// Parallel benchmarks
-export {
-  runParallelBenchmarks,
-  type ParallelBenchmarkOptions,
-  type IndividualFitness,
-} from './parallel-benchmark.js';
-
-// Analysis
-export {
-  analyzeFeatures,
-  analyzeActions,
-  selectTopFeatures,
-  correlationToWeight,
-  printAnalysisSummary,
-} from './analyzer.js';
-
-// Code generation
-export {
-  generateBotCode,
-  updateBotWeights,
-  type CodeGeneratorOptions,
-  type UpdateWeightsOptions,
-} from './code-generator.js';
-
-// Weight evolution (focused alternative to full training)
+// Weight evolution: what `boardsmith evolve-bot-weights` uses to tune the
+// weights of a game's own bot objectives.
 export {
   WeightEvolver,
   type WeightEvolverConfig,
   type WeightEvolutionResult,
 } from './weight-evolver.js';
 
-// bot file parsing (for incremental training)
+// Reading and writing the objective weights in bot.ts
 export {
-  parseExistingBot,
-  parsedToLearned,
-  mergeObjectives,
-  getCumulativeStats,
-  type ParsedBotFile,
-  type ParsedObjective,
-} from './bot-parser.js';
+  readObjectiveWeights,
+  updateBotWeights,
+  type UpdateWeightsOptions,
+} from './objective-weights.js';
 
-// Benchmark evaluation
-export {
-  benchmarkBot,
-  type BenchmarkConfig,
-  type BenchmarkResult,
-} from './benchmark.js';
-
-// Evolution (weight optimization)
-export {
-  createSeededRandom,
-  mutateWeights,
-  crossoverWeights,
-  selectBest,
-  generateOffspring,
-} from './evolution.js';
-
-// Types
-export type { GameClass } from '../engine/index.js';
-export type {
-  GameStructure,
-  ElementTypeInfo,
-  PlayerTypeInfo,
-  SpatialInfo,
-  CandidateFeature,
-  StateSnapshot,
-  GameData,
-  FeatureStats,
-  ActionStats,
-  LearnedObjective,
-  LearnedActionPreference,
-  TrainingResult,
-  TrainingConfig,
-  TrainingProgress,
-  // Serializable types for worker thread communication
-  SerializableElementTypeInfo,
-  SerializableGameStructure,
-} from './types.js';
-
-export { DEFAULT_TRAINING_CONFIG } from './types.js';
+export type { ObjectiveWeight, TrainingProgress } from './types.js';

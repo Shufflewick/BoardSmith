@@ -125,11 +125,11 @@ describe('enumerateLegalMoves', () => {
   // ─── Test 4: Parity with MCTSBot enumeration on identical state ────────────
   //
   // After extraction, enumerateLegalMoves must surface the same concrete moves
-  // as the bot's full (noSampling=true) enumeration. The bot serializes element
+  // as the bot's full (unsampled) enumeration. The bot serializes element
   // args to numeric IDs; we project our element-object args to IDs for the
   // set-equality comparison.
 
-  it('returns the same move set as MCTSBot.enumerateAllMoves on identical state', () => {
+  it('returns the same move set as the MCTSBot root enumeration on identical state', () => {
     const flowState = game.getFlowState()!;
 
     // Seed the bot so its results are deterministic (though noSampling path is used here)
@@ -139,9 +139,9 @@ describe('enumerateLegalMoves', () => {
       seed: 'parity-test',
     });
 
-    // Access bot's full enumeration (noSampling=true) via private method
+    // The bot's unsampled enumeration for its own seat, as its root uses it
     const botMoves: Array<{ action: string; args: Record<string, unknown> }> =
-      (bot as any).enumerateAllMoves(game, flowState);
+      (bot as any).movesFor(game, flowState, 1, { sample: false });
 
     // Project enumerateLegalMoves results: element → numeric ID for comparison
     const coreMoves = enumerateLegalMoves(game, 1);

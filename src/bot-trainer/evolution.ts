@@ -10,11 +10,7 @@
  * 3. Select top µ from combined population (µ+λ) as next parents
  */
 
-import type { LearnedObjective } from './types.js';
-import { createSeededRandom } from '../utils/random.js';
-
-// Re-export for backwards compatibility
-export { createSeededRandom };
+import type { ObjectiveWeight } from './types.js';
 
 /**
  * Generate Gaussian random number using Box-Muller transform.
@@ -55,10 +51,10 @@ const CROSSOVER_PROBABILITY = 0.2;
  * @returns New array with mutated weights
  */
 export function mutateWeights(
-  objectives: LearnedObjective[],
+  objectives: ObjectiveWeight[],
   sigma: number,
   rng: () => number
-): LearnedObjective[] {
+): ObjectiveWeight[] {
   return objectives.map(obj => {
     let newWeight = obj.weight;
 
@@ -94,22 +90,22 @@ export function mutateWeights(
  * @returns Child objective set
  */
 export function crossoverWeights(
-  parent1: LearnedObjective[],
-  parent2: LearnedObjective[],
+  parent1: ObjectiveWeight[],
+  parent2: ObjectiveWeight[],
   rng: () => number
-): LearnedObjective[] {
+): ObjectiveWeight[] {
   // Build maps for efficient lookup
-  const map1 = new Map(parent1.map(o => [o.featureId, o]));
-  const map2 = new Map(parent2.map(o => [o.featureId, o]));
+  const map1 = new Map(parent1.map(o => [o.id, o]));
+  const map2 = new Map(parent2.map(o => [o.id, o]));
 
   // Get all unique feature IDs
-  const allFeatureIds = new Set([...map1.keys(), ...map2.keys()]);
+  const allIds = new Set([...map1.keys(), ...map2.keys()]);
 
-  const child: LearnedObjective[] = [];
+  const child: ObjectiveWeight[] = [];
 
-  for (const featureId of allFeatureIds) {
-    const obj1 = map1.get(featureId);
-    const obj2 = map2.get(featureId);
+  for (const id of allIds) {
+    const obj1 = map1.get(id);
+    const obj2 = map2.get(id);
 
     if (obj1 && obj2) {
       // Feature in both parents: randomly pick one
@@ -140,10 +136,10 @@ export function crossoverWeights(
  * @returns Top mu individuals sorted by fitness (highest first)
  */
 export function selectBest(
-  population: LearnedObjective[][],
+  population: ObjectiveWeight[][],
   fitnesses: number[],
   mu: number
-): LearnedObjective[][] {
+): ObjectiveWeight[][] {
   if (population.length === 0) {
     return [];
   }
@@ -174,19 +170,19 @@ export function selectBest(
  * @returns Array of lambda offspring
  */
 export function generateOffspring(
-  parents: LearnedObjective[][],
+  parents: ObjectiveWeight[][],
   lambda: number,
   sigma: number,
   rng: () => number
-): LearnedObjective[][] {
+): ObjectiveWeight[][] {
   if (parents.length === 0) {
     return [];
   }
 
-  const offspring: LearnedObjective[][] = [];
+  const offspring: ObjectiveWeight[][] = [];
 
   for (let i = 0; i < lambda; i++) {
-    let child: LearnedObjective[];
+    let child: ObjectiveWeight[];
 
     // Decide: pure mutation or crossover
     if (parents.length > 1 && rng() < CROSSOVER_PROBABILITY) {

@@ -51,9 +51,9 @@ This document provides an overview of the BoardSmith package architecture and ho
 │  ┌────────────┐          │  Game session management                         │
 │  │ bot-trainer│          │  - SnapshotSessionHost (handleOp, bots)          │
 │  └────────────┘          │  - executeOp (one op, from a snapshot)           │
-│  - Self-play training    │  - createHeadlessSession (tests)                 │
-│  - Feature generation    │  - persist / record / push adapters              │
-│  - Code generation       │  - Game option selection                         │
+│  - Weight evolution of   │  - createHeadlessSession (tests)                 │
+│    the game's objectives │  - persist / record / push adapters              │
+│  - Benchmarking          │  - Game option selection                         │
 │                          │                                                  │
 │                          ├──────────────────┐                              │
 │                          ▼                  ▼                              │
@@ -266,7 +266,7 @@ Runtime Isolation below).
 | `client` | Browser SDK | `MeepleClient`, `GameConnection` |
 | `ui` | Vue components | `GameShell`, composables |
 | `bot` | MCTS bot | `createBot`, `MCTSBot` |
-| `bot-trainer` | Bot training | `introspectGame`, `generateBotCode`, `WeightEvolver` |
+| `bot-trainer` | Bot weight evolution | `WeightEvolver`, `readObjectiveWeights`, `updateBotWeights` |
 | `cli` | Dev tools | Commands (init, dev, build, etc.) |
 | `testing` | Test utilities | `createTestGame`, assertions |
 | `eslint-plugin` | Linting rules | Sandbox security rules |

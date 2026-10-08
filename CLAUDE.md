@@ -43,7 +43,7 @@ Have a subagent read the relevant docs in the docs folder to get started.
 - **client** - TypeScript SDK for connecting to game servers with matchmaking and state management.
 - **runtime** - Game execution: serialization, snapshots, per-action checkpoints, and GameRunner for action execution.
 - **testing** - Test utilities: TestGame, action simulation, random simulation, assertions, and scenario builders.
-- **bot-trainer** - Bot training: MCTS bots, parallel training, feature generation, weight evolution, and benchmarking.
+- **bot-trainer** - Bot tuning: weight evolution of the game's own objectives from `bot.ts`, and benchmarking.
 - **bot** - Bot creation using Monte Carlo Tree Search with configurable difficulty.
 - **eslint-plugin** - ESLint rules enforcing game design constraints (no-network, no-timers, no-nondeterministic, etc).
 - **cli** - Command-line interface for dev server, game creation, testing, and local server setup.
