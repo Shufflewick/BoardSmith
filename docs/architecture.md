@@ -51,9 +51,9 @@ This document provides an overview of the BoardSmith package architecture and ho
 │  ┌────────────┐          │  Game session management                         │
 │  │ bot-trainer│          │  - GameSession (create, performAction)           │
 │  └────────────┘          │  - Storage adapters                              │
-│  - Self-play training    │  - Broadcast adapters                            │
-│  - Feature generation    │  - Bot controller                                 │
-│  - Code generation       │  - Lobby system                                  │
+│  - Weight evolution of   │  - Broadcast adapters                            │
+│    the game's objectives │  - Bot controller                                 │
+│  - Benchmarking          │  - Lobby system                                  │
 │                          │                                                  │
 │                          ├──────────────────┐                              │
 │                          ▼                  ▼                              │

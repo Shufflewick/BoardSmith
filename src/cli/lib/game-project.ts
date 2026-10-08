@@ -33,11 +33,10 @@ interface GameProjectPackage {
 /**
  * THE ONE PLACE A COMMAND CHECKS IT IS IN A GAME PROJECT.
  *
- * `evolve-bot-weights`, `simulate`, `test` and `validate` (and the since
- * removed `analyze`) each carried a verbatim copy of this: the same path, the
- * same two lines of advice and the same exit code. Five copies of one sentence
- * is five chances for a command to tell an author something slightly
- * different about the same mistake.
+ * `evolve-bot-weights`, `simulate`, `test` and `validate` each carried a
+ * verbatim copy of this: the same path, the same two lines of advice and the
+ * same exit code. Four copies of one sentence is four chances for a command to
+ * tell an author something slightly different about the same mistake.
  *
  * Throws rather than exiting, like every guard here (#532), so a command run
  * inside another one (`verify` runs `validate` and `build`) stops there too.
