@@ -13,7 +13,8 @@ import DebugButton from './DebugButton.vue';
 
 defineProps<{
   playerSeat: number;
-  playerCount: number;
+  /** The seats at the table, as the host numbers them (from 1). One button each. */
+  seats: readonly number[];
   /** True while the restart button is armed and awaiting its second click. */
   restartConfirming: boolean;
   /** Whether the game log holds anything to copy or clear. */
@@ -41,8 +42,8 @@ const emit = defineEmits<{
         <div class="action-group">
           <h4>Player Perspective</h4>
           <div class="player-buttons">
-            <DebugButton v-for="i in playerCount" :key="i - 1" @click="emit('switch-player', i - 1)" :class="{ active: playerSeat === i - 1 }" >
-              Player {{ i }}
+            <DebugButton v-for="seat in seats" :key="seat" @click="emit('switch-player', seat)" :class="{ active: playerSeat === seat }" >
+              Player {{ seat }}
             </DebugButton>
           </div>
           <p class="hint">Switch to view the game as a different player</p>
@@ -93,7 +94,7 @@ const emit = defineEmits<{
           </div>
           <div class="state-item">
             <span class="label">Seat:</span>
-            <span class="value monospace">{{ playerSeat }} / {{ playerCount }}</span>
+            <span class="value monospace">{{ playerSeat }} / {{ seats.length }}</span>
           </div>
           <div class="shortcut-hint">
             <kbd>Ctrl/Cmd+D</kbd> Toggle debug panel

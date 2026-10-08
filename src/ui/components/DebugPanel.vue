@@ -78,12 +78,12 @@ const props = withDefaults(defineProps<DebugPanelProps>(), {
 });
 
 /**
- * How many seats the running game has: the players in the state the host sent
+ * The seats of the running game: the players in the state the host sent
  * (#525). The Controls tab draws one "switch player" button per seat from it.
  */
-const seatCount = computed(() => {
+const seats = computed<number[]>(() => {
   const players = props.state?.state?.players;
-  return Array.isArray(players) ? players.length : 0;
+  return Array.isArray(players) ? players.map((player: { seat: number }) => player.seat) : [];
 });
 
 const emit = defineEmits<{
@@ -591,7 +591,7 @@ function handleRestartClick() {
         <ControlsTab
           v-show="activeTab === 'controls'"
           :player-seat="props.playerSeat"
-          :player-count="seatCount"
+          :seats="seats"
           :restart-confirming="restartConfirming"
           :history-has-messages="props.historyHasMessages"
           v-model:show-raw-state="showRawState"

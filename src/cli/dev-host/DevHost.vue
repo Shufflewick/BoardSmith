@@ -345,6 +345,12 @@ function onWindowMessage(event: MessageEvent): void {
     restartGame();
     return;
   }
+  // The Debug panel's seat buttons: also a host-chrome op, the same switch the
+  // header's seat switcher makes (#525).
+  if (data.type === 'server_request' && data.op === 'debug:switch-seat') {
+    switchSeat(Number(data.payload?.seat));
+    return;
+  }
   if (data.type === 'server_request') {
     wsSend({
       type: 'server_request',
