@@ -24,6 +24,7 @@ import {
   type OpOfType,
   type OpResult,
   type OpResultFor,
+  type StateEnvelope,
   type GamePreset,
   type RulesReload,
   type TurnBoundary,
@@ -397,6 +398,12 @@ function devPlayerToken(seat: number): string {
  */
 function refusedOp(error: string): OpFailure {
   return { success: false, error, category: 'executor' };
+}
+
+/** The game `result` left behind, when it is a successful op that ended the game; otherwise `null`. */
+function endedGame(result: OpResult): StateEnvelope | null {
+  if (!result.success || !('snapshot' in result)) return null;
+  return result.snapshot.flowState?.complete ? result : null;
 }
 
 function refusedCommit(reason: string): OpFailure {
@@ -1135,12 +1142,11 @@ export class MultiplayerHost {
    */
   private commitAtGameOver<R extends OpResult>(result: R): R | OpFailure {
     const persistence = this.opts.persistence;
-    if (!persistence || !result.success || !('snapshot' in result) || !result.snapshot.flowState?.complete) {
-      return result;
-    }
+    const ended = endedGame(result);
+    if (!persistence || !ended) return result;
     const outcome = persistence.store.commit({
       players: this.persistPlayers,
-      commit: result.persistCommit,
+      commit: ended.persistCommit,
       gameVersion: persistence.gameVersion,
       now: persistence.now ?? Date.now,
     });

@@ -21,12 +21,19 @@ import {
   type ExecuteOpAdapter,
   type Op,
   type OpFailure,
+  type OpResult,
   type OpResultFor,
   type SnapshotSessionAdapters,
   type PublishMeta,
   type BotSeat,
 } from '../../session/index.js';
 import { record, getEntries } from './log-capture.js';
+import type { WarningEntry } from '../../types/protocol.js';
+
+/** The structured warnings a successful op carried (a pick or a choices query), or none. */
+function warningsOf(result: OpResult): readonly WarningEntry[] {
+  return result.success && 'warnings' in result ? (result.warnings ?? []) : [];
+}
 
 /** Wire op names the embedded GameShell sends (snake_case, prod payload shapes). */
 export type WireOp =
@@ -448,9 +455,7 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
       // Dual-channel warnings capture (ERR-04): a pick's structured warnings
       // (Plan 126-03) also feed the debug:logs ring buffer, sourced by wireOp,
       // in addition to riding the reply itself.
-      if (result.success && 'warnings' in result) {
-        for (const w of result.warnings ?? []) record('warning', w.message, wireOp);
-      }
+      for (const w of warningsOf(result)) record('warning', w.message, wireOp);
       opts.postServerResponse(seat, requestId, shapeResult(op.type, result));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
