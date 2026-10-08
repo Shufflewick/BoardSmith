@@ -15,7 +15,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Game, GAME_ROOT_FIELD_AUDIENCE, constructGame, type GameOptions } from './game.js';
-import type { GameCommand } from '../command/types.js';
+import type { TutorialProgress } from '../tutorial/types.js';
 import { Space } from './space.js';
 import { ENGINE_OWNED_GAME_FIELDS, describeEngineFieldShadow } from './engine-owned-fields.js';
 import { TestGame } from '../../testing/test-game.js';
@@ -37,9 +37,9 @@ class ShadowsPileGame extends Game<ShadowsPileGame> {
   }
 }
 
-class InitializesCommandHistoryGame extends Game<InitializesCommandHistoryGame> {
+class InitializesTutorialProgressGame extends Game<InitializesTutorialProgressGame> {
   // A field initializer: TypeScript accepts an overwrite that has one.
-  commandHistory: GameCommand[] = [];
+  tutorialProgress: Map<number, TutorialProgress> = new Map();
 }
 
 class ReplacesSettingsGame extends Game<ReplacesSettingsGame> {
@@ -97,8 +97,8 @@ describe('constructGame refuses a subclass that shadows an engine field (#346)',
     expect(message).toContain('"myPile"');
   });
 
-  it('refuses a field initializer for `commandHistory`', () => {
-    expect(() => constructGame(InitializesCommandHistoryGame, { playerCount: 2 })).toThrow('"commandHistory"');
+  it('refuses a field initializer for `tutorialProgress`', () => {
+    expect(() => constructGame(InitializesTutorialProgressGame, { playerCount: 2 })).toThrow('"tutorialProgress"');
   });
 
   it('refuses an assignment to `settings`', () => {

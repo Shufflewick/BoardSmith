@@ -95,41 +95,14 @@ describe('animate - callback', () => {
     expect(callbackRan).toBe(true);
   });
 
-  it('should generate separate commands for callback mutations', () => {
+  it('applies callback mutations to the game, outside the event data', () => {
     const warrior = game.first(Token, 'warrior')!;
 
     game.animate('combat', { damage: 5 }, () => {
-      // Explicitly execute a command in the callback, as game code would
-      game.execute({
-        type: 'SET_ATTRIBUTE',
-        elementId: warrior.id,
-        attribute: 'hp',
-        value: 5,
-      });
+      warrior.hp = 5;
     });
 
-    // The command history should have the ANIMATE command, then a SET_ATTRIBUTE
-    const commands = game.commandHistory;
-    const animateIdx = commands.findIndex(c => c.type === 'ANIMATE');
-    const setAttrIdx = commands.findIndex(c => c.type === 'SET_ATTRIBUTE');
-
-    expect(animateIdx).toBeGreaterThanOrEqual(0);
-    expect(setAttrIdx).toBeGreaterThan(animateIdx);
-  });
-
-  it('should NOT include callback mutations in event data', () => {
-    const warrior = game.first(Token, 'warrior')!;
-
-    game.animate('combat', { damage: 5 }, () => {
-      // This generates a SET_ATTRIBUTE command, but it should NOT appear in the event data
-      game.execute({
-        type: 'SET_ATTRIBUTE',
-        elementId: warrior.id,
-        attribute: 'hp',
-        value: 5,
-      });
-    });
-
+    expect(warrior.hp).toBe(5);
     const event = game.pendingAnimationEvents[0];
     expect(event.data).toEqual({ damage: 5 });
     expect(event).not.toHaveProperty('mutations');
@@ -150,82 +123,47 @@ describe('animate - callback', () => {
       });
     }).toThrow('Callback failed');
 
-    // The ANIMATE command should still be on the stack even after callback error
-    const animateCommands = game.commandHistory.filter(c => c.type === 'ANIMATE');
-    expect(animateCommands).toHaveLength(1);
+    // The event was emitted before the callback ran, so it is still buffered.
+    expect(game.pendingAnimationEvents).toHaveLength(1);
   });
 });
 
-describe('animate - command stack', () => {
+describe('animate - no command record (#499)', () => {
   let game: TestGame;
 
   beforeEach(() => {
     game = createTestGame();
   });
 
-  it('should add ANIMATE command to commandHistory', () => {
-    game.animate('score', { points: 10 });
+  it('puts one event in the animation buffer and keeps no command history', () => {
+    game.animate('x', {});
 
-    const animateCommands = game.commandHistory.filter(c => c.type === 'ANIMATE');
-    expect(animateCommands).toHaveLength(1);
-
-    const cmd = animateCommands[0] as { type: string; eventType: string; data: Record<string, unknown> };
-    expect(cmd.eventType).toBe('score');
-    expect(cmd.data).toEqual({ points: 10 });
+    expect(game.pendingAnimationEvents).toHaveLength(1);
+    expect(game.pendingAnimationEvents[0].type).toBe('x');
+    // The command undo system is gone: nothing records or rolls back commands.
+    // @ts-expect-error Game has no execute() (#499)
+    expect(game.execute).toBeUndefined();
+    // @ts-expect-error Game has no commandHistory (#499)
+    expect(game.commandHistory).toBeUndefined();
+    // @ts-expect-error Game has no undoLastCommand() (#499)
+    expect(game.undoLastCommand).toBeUndefined();
   });
 
-  it('should not be invertible (undoLastCommand returns false)', () => {
-    game.animate('score', { points: 10 });
-
-    const undone = game.undoLastCommand();
-    expect(undone).toBe(false);
-  });
-
-  it('should produce multiple ANIMATE commands in order', () => {
+  it('buffers events in the order they were emitted', () => {
     game.animate('attack', { target: 'a' });
     game.animate('defend', { shield: true });
     game.animate('heal', { amount: 3 });
 
-    const animateCommands = game.commandHistory.filter(c => c.type === 'ANIMATE');
-    expect(animateCommands).toHaveLength(3);
-
-    const types = animateCommands.map(c => (c as { eventType: string }).eventType);
-    expect(types).toEqual(['attack', 'defend', 'heal']);
+    expect(game.pendingAnimationEvents.map((e) => e.type)).toEqual(['attack', 'defend', 'heal']);
   });
 
-  it('should survive JSON serialization round-trip via toJSON', () => {
+  it('serializes buffered events through toJSON', () => {
     game.animate('score', { points: 10 });
 
     const json = game.toJSON();
-
-    // commandHistory includes ANIMATE commands
-    const animateInHistory = game.commandHistory.filter(c => c.type === 'ANIMATE');
-    expect(animateInHistory).toHaveLength(1);
-
-    // The JSON includes animation events in the serialized state
-    expect(json.animationEvents).toBeDefined();
     expect(json.animationEvents).toHaveLength(1);
     expect(json.animationEvents![0].type).toBe('score');
     expect(json.animationEvents![0].data).toEqual({ points: 10 });
-  });
-
-  it('should rebuild animation events when replaying commands on a new game', () => {
-    game.animate('score', { points: 10 });
-    game.animate('bonus', { multiplier: 2 });
-
-    const originalCommands = [...game.commandHistory];
-
-    // Create a fresh game and replay the commands
-    const freshGame = new TestGame({ playerCount: 2 });
-    freshGame.create(Board, 'board');
-    freshGame.replayCommands(originalCommands);
-
-    const events = freshGame.pendingAnimationEvents;
-    expect(events).toHaveLength(2);
-    expect(events[0].type).toBe('score');
-    expect(events[0].data).toEqual({ points: 10 });
-    expect(events[1].type).toBe('bonus');
-    expect(events[1].data).toEqual({ multiplier: 2 });
   });
 });
 

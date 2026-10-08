@@ -5,7 +5,7 @@ This document provides an overview of the BoardSmith package architecture and ho
 > **The one architectural fact to know first: BoardSmith is state-authoritative,
 > not event-sourced.** The snapshot — the whole element tree, flow position,
 > sequence counter and RNG position — is the source of truth. `actionHistory`
-> and `commandHistory` exist for undo bookkeeping and diagnostics, and are
+> exists for undo bookkeeping and diagnostics, and is
 > **never replayed to rebuild state**. Undo and time-travel restore a per-action
 > checkpoint directly. See [State Authority](#state-authority) below, and
 > [state-size.md](./state-size.md) for the cost that follows from it.
@@ -161,9 +161,9 @@ Game Instance (runtime)
 
 ### State Authority
 
-**The snapshot is the source of truth. `actionHistory` and `commandHistory`
-exist for undo bookkeeping and diagnostics, and are never replayed to rebuild
-state.** BoardSmith is state-authoritative, not event-sourced — if you are
+**The snapshot is the source of truth. `actionHistory` exists for undo
+bookkeeping and diagnostics, and is never replayed to rebuild state.**
+BoardSmith is state-authoritative, not event-sourced — if you are
 designing around an authoritative event log, audit trail, spectator replay, or
 incremental reconstruction, the engine does not work that way.
 
@@ -177,11 +177,10 @@ GameRunner.fromSnapshot(snapshot, GameClass) → the game, exactly as it was
 ```
 
 Replay is not merely unused — it is *unsound* here. Selection-step and pending
-mutations (`Piece.putInto` inside a completed pending action) are recorded in
-neither the command history nor the action history, so replaying an action
-history loses them and mis-positions the flow. That crashed real games, and is
-why `fromSnapshot` deliberately does not call `replayCommands`, `start()`, or
-re-run `actionHistory`.
+mutations (`Piece.putInto` inside a completed pending action) are not recorded
+in the action history, so replaying an action history loses them and
+mis-positions the flow. That crashed real games, and is why `fromSnapshot`
+deliberately does not call `start()` or re-run `actionHistory`.
 
 Time-travel — undo, rewind, `getStateAtAction` — is likewise restore, not
 replay. The runner captures a per-action **checkpoint** (a full tree copy plus
@@ -199,10 +198,6 @@ does not. Bound it with `checkpoints: { max }` on the game definition; an undo
 reaching past the retained window is refused with a message naming the policy.
 See **[state-size.md](./state-size.md)** — a reader who assumes replay will not
 understand why saved size scales with action count.
-
-`Game#commandHistory` is populated only by the engine's internal `execute()`,
-which drives the ANIMATE event stream. Game rule code never calls it and must
-not treat it as an audit log (see [core-concepts.md](./core-concepts.md)).
 
 ### Visibility Control
 

@@ -33,16 +33,13 @@ const BUILTIN_ELEMENT_CLASSES: ReadonlyArray<ElementClass> = [
   Grid, GridCell, HexGrid, HexCell,
 ];
 import { Player } from '../player/player.js';
-import type { GameCommand, CommandResult } from '../command/types.js';
-import { executeCommand, undoCommand } from '../command/executor.js';
-import { createInverseCommand } from '../command/inverse.js';
 import {
   canPlayerSee,
   redactVisibilityForSeat,
   redactedVisibilityFor,
   type VisibilityMode,
   type VisibilityState,
-} from '../command/visibility.js';
+} from './visibility.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor, type PerformOptions } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition, FlowDebugInfo } from '../flow/types.js';
@@ -1053,12 +1050,6 @@ export class Game<
   /** Game settings */
   settings: Record<string, unknown> = {};
 
-  /** Command history for event sourcing */
-  commandHistory: GameCommand[] = [];
-
-  /** Inverse command history for undo (parallel to commandHistory) */
-  private _inverseHistory: (GameCommand | null)[] = [];
-
   /** Registered actions */
   private _actions: Map<string, ActionDefinition> = new Map();
 
@@ -1134,7 +1125,6 @@ export class Game<
     ...Space.unserializableAttributes,
     'pile',
     'random',
-    'commandHistory',
     '_actions',
     '_actionExecutor',
     '_flowDefinition',
@@ -1491,13 +1481,6 @@ export class Game<
 
     // Check pile
     return this.pile.atId(id);
-  }
-
-  /**
-   * Get an element class by name (for command execution)
-   */
-  getElementClass(className: string): ElementClass | undefined {
-    return this._ctx.classRegistry.get(className);
   }
 
   // ============================================
@@ -2232,79 +2215,6 @@ export class Game<
         `once a partition is not resident. It is a construction option and not a switch ` +
         `because a subclass constructor builds the game's furniture before any switch could run.`
     );
-  }
-
-  // ============================================
-  // Command Execution
-  // ============================================
-
-  /**
-   * Execute a command and record it in history
-   */
-  execute(command: GameCommand): CommandResult {
-    // Capture inverse BEFORE executing (needed for proper undo)
-    const inverse = createInverseCommand(this, command);
-
-    const result = executeCommand(this, command);
-    if (result.success) {
-      this.commandHistory.push(command);
-      this._inverseHistory.push(inverse);
-    }
-    return result;
-  }
-
-  /**
-   * Replay commands to rebuild state
-   */
-  replayCommands(commands: GameCommand[]): void {
-    for (const command of commands) {
-      const result = executeCommand(this, command);
-      if (!result.success) {
-        throw new Error(`Failed to replay command: ${result.error}`);
-      }
-      this.commandHistory.push(command);
-      // Can't compute inverse during replay - set to null
-      this._inverseHistory.push(null);
-    }
-  }
-
-  /**
-   * Undo the last command in history.
-   * Returns false if history is empty or last command is not invertible.
-   *
-   * @internal Used by MCTS for efficient state rollback
-   */
-  undoLastCommand(): boolean {
-    if (this.commandHistory.length === 0) return false;
-
-    const lastInverse = this._inverseHistory[this._inverseHistory.length - 1];
-    if (!lastInverse) {
-      // Command not invertible
-      return false;
-    }
-
-    const lastCommand = this.commandHistory[this.commandHistory.length - 1];
-    const result = undoCommand(this, lastCommand, lastInverse);
-
-    if (result.success) {
-      this.commandHistory.pop();
-      this._inverseHistory.pop();
-    }
-
-    return result.success;
-  }
-
-  /**
-   * Undo multiple commands from history.
-   * Stops and returns false if any command is not invertible.
-   *
-   * @internal Used by MCTS for efficient state rollback
-   */
-  undoCommands(count: number): boolean {
-    for (let i = 0; i < count; i++) {
-      if (!this.undoLastCommand()) return false;
-    }
-    return true;
   }
 
   // ============================================
@@ -4181,9 +4091,9 @@ export class Game<
   }
 
   /**
-   * Internal method to add a message (called by command executor)
+   * Append a message to the log: `message()` and `messageTo()` are the ways in.
    */
-  addMessageInternal(
+  private addMessageInternal(
     text: string,
     data?: Record<string, unknown>,
     to?: number[],
@@ -4344,8 +4254,9 @@ export class Game<
    * @param type - Event type identifier (e.g., 'combat', 'score-item')
    * @param data - Event-specific data payload (must be JSON-serializable)
    * @param callback - Optional callback to advance truth (convenience).
-   *   Runs immediately as normal game code. Its mutations are NOT captured
-   *   as event metadata -- they generate their own commands on the stack.
+   *   Runs immediately as normal game code, after the event is buffered. Its
+   *   mutations change the game like any other code; they are not recorded
+   *   in the event.
    *
    * @example
    * ```typescript
@@ -4360,7 +4271,7 @@ export class Game<
    * ```
    */
   animate(type: string, data: Record<string, unknown>, callback?: () => void): void {
-    this.execute({ type: 'ANIMATE', eventType: type, data });
+    this.pushAnimationEvent(type, data);
     if (callback) {
       callback();
     }
@@ -4406,7 +4317,7 @@ export class Game<
           `Spectators see only public events, so use animate() for an event they should see.`,
       );
     }
-    this.execute({ type: 'ANIMATE', eventType: type, data, to: seats });
+    this.pushAnimationEvent(type, data, seats);
   }
 
   /**
@@ -4442,10 +4353,10 @@ export class Game<
   }
 
   /**
-   * Push an animation event to the buffer.
-   * @internal Called by command executor -- do not call directly from game code.
+   * Push an animation event to the buffer: `animate()` and `animateTo()` are
+   * the ways in. `to` lists the receiving seats; absent means everyone.
    */
-  pushAnimationEvent(eventType: string, data: Record<string, unknown>, to?: number[]): void {
+  private pushAnimationEvent(eventType: string, data: Record<string, unknown>, to?: number[]): void {
     this._animationEventSeq++;
     // Every recipient numbers the event in its own sequence (#489): a public
     // event goes to every seat and the spectator (0), a private one to its
@@ -5173,8 +5084,7 @@ export class Game<
    * to adopt a serialized tree without replaying history — used both by
    * `restoreGame()` and by state-authoritative snapshot restore, so that direct
    * tree mutations (e.g. `Piece.putInto` inside a completed pending action,
-   * which are recorded in neither commandHistory nor actionHistory) survive a
-   * snapshot round-trip.
+   * which is not recorded in actionHistory) survive a snapshot round-trip.
    */
   loadSerializedState(
     json: ReturnType<Game['toJSON']>,

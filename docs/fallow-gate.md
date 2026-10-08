@@ -174,7 +174,6 @@ next time their file is edited, and the answer will be to split them:
 | function | cyclomatic | cognitive |
 |---|---|---|
 | `src/cli/commands/verify-impact.ts` `parseRulesStaleness` | 18 | 14 |
-| `src/engine/command/inverse.ts` `createInverseCommand` | 18 | 1 |
 | `src/world/definition.ts` `createWorld` | 18 | 11 |
 | `src/cli/commands/audit.ts` `auditCommand` | 16 | 10 |
 | `src/engine/flow/walk-flow-nodes.ts` `walkFlowNodes` | 16 | 9 |

@@ -68,7 +68,7 @@ exported, deterministic capability: `GameRunner.fromSnapshot` in
 `src/runtime/runner.ts` (~line 608).
 
 `fromSnapshot` is explicitly documented in its own source comment as "fully
-STATE-AUTHORITATIVE, NO replay": it does NOT call `replayCommands`, `start()`,
+STATE-AUTHORITATIVE, NO replay": it does NOT call `start()`
 or re-run `actionHistory` through `continueFlow`. Instead it:
 
 1. Constructs a fresh `GameRunner` with the snapshot's `gameOptions` (or a

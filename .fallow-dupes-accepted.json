@@ -206,13 +206,6 @@
       ]
     },
     {
-      "content": "4be5906683de5885",
-      "lines": 10,
-      "files": [
-        "src/engine/command/executor.ts"
-      ]
-    },
-    {
       "content": "4dace8fa408e42d2",
       "lines": 6,
       "files": [
@@ -350,13 +343,6 @@
       ]
     },
     {
-      "content": "88b3a337494f60f6",
-      "lines": 17,
-      "files": [
-        "src/engine/command/executor.ts"
-      ]
-    },
-    {
       "content": "8c5df45e8e5c36f7",
       "lines": 17,
       "files": [
@@ -489,13 +475,6 @@
       "files": [
         "src/ui/components/auto-ui/renderers/HandRenderer.vue",
         "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
-      ]
-    },
-    {
-      "content": "b862e24a50f50cff",
-      "lines": 41,
-      "files": [
-        "src/engine/command/inverse.ts"
       ]
     },
     {

@@ -15,7 +15,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Game, Player, Action, ActionExecutor } from '../index.js';
+import { Game, Player, Action } from '../index.js';
+import { ActionExecutor } from './action.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
 
 // ============================================================

@@ -62,7 +62,8 @@ class HiddenInfoGame extends Game<HiddenInfoGame, Player> {
    *  `objectives` checker below so scoring is a pure state READ with no
    *  mutation to undo. (Originally chosen to also dodge v4.8-MCTS-UNDO --
    *  `game.finish()`'s `settings.winners`/`phase` mutation used to leak
-   *  across simulated branches because `undoCommands` never reverted it.
+   *  across simulated branches because the old incremental command undo
+   *  never reverted it.
    *  That is now fixed in `backpropagateWithUndo` (resyncs bookkeeping to
    *  the root node every backpropagation), so this fixture could call
    *  `finish()` too -- kept non-terminal anyway since that's the simplest
@@ -426,7 +427,7 @@ describe('MCTSBot simultaneous-step soundness with 3 co-deciders (F-07)', () => 
     // the descent (applyMoveToSearchGame) must capture it. Pre-fix it did not.
 
     const rootFlow = bot.searchGame.getFlowState();
-    const root = bot.createNode(rootFlow, null, null, [], 0);
+    const root = bot.createNode(rootFlow, null, null, []);
 
     // Descend seat 1's pick. applyMoveToSearchGame captures the pre-reveal
     // baseline from the world (fresh at the root), then applies the move.
@@ -435,13 +436,13 @@ describe('MCTSBot simultaneous-step soundness with 3 co-deciders (F-07)', () => 
     // which is the seat the node's own moves are made as (#522).
     const move1 = { action: 'pick', args: { choice: pick1 } };
     bot.applyMoveToSearchGame({ parent: root, parentMove: move1 });
-    const child1 = bot.createNode(bot.searchGame.getFlowState(), root, move1, [], 0);
+    const child1 = bot.createNode(bot.searchGame.getFlowState(), root, move1, []);
     expect(child1.currentPlayer).toBe(2);
 
     // Descend seat 2's pick (step now mid; baseline must persist from root).
     const move2 = { action: 'pick', args: { choice: pick2 } };
     bot.applyMoveToSearchGame({ parent: child1, parentMove: move2 });
-    const child2 = bot.createNode(bot.searchGame.getFlowState(), child1, move2, [], 0);
+    const child2 = bot.createNode(bot.searchGame.getFlowState(), child1, move2, []);
     expect(child2.currentPlayer).toBe(3);
 
     // Enumerate seat 3's moves — must be reveal-blind (pre-reveal baseline).

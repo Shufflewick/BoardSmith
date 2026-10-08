@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { MonotonicTrack, UniqueTrack, CounterTrack } from './track.js';
 
 describe('Track (shared behaviour, exercised through MonotonicTrack)', () => {
@@ -99,20 +99,6 @@ describe('Track (shared behaviour, exercised through MonotonicTrack)', () => {
     expect(track.getLastEntry()).toEqual({ value: 2, points: 3, isSpecial: false });
   });
 
-  it('removeLastInternal drops the last entry', () => {
-    const track = make();
-    track.add(1);
-    track.add(2);
-    track.removeLastInternal();
-    expect(track.getEntries().map((e) => e.value)).toEqual([1]);
-  });
-
-  it('removeLastInternal on an empty track is a safe no-op', () => {
-    const track = make();
-    expect(() => track.removeLastInternal()).not.toThrow();
-    expect(track.length).toBe(0);
-  });
-
   it('clear empties the track and its score', () => {
     const track = make();
     track.add(1);
@@ -152,63 +138,26 @@ describe('Track (shared behaviour, exercised through MonotonicTrack)', () => {
     expect(track.length).toBe(1);
   });
 
-  describe('command emitter', () => {
-    it('routes an add through the emitter instead of mutating state', () => {
+  describe('add', () => {
+    it('writes the entry itself and returns the points of the row it filled (#499)', () => {
       const track = make();
-      const emit = vi.fn();
-      track.setCommandEmitter(emit);
-      track.add(4, true);
-      expect(emit).toHaveBeenCalledWith('fulminate', 4, true);
-      expect(track.isEmpty()).toBe(true);
+      // There is no command path: add() is the one write.
+      // @ts-expect-error Track has no setCommandEmitter() (#499)
+      expect(track.setCommandEmitter).toBeUndefined();
+
+      expect(track.add(1)).toBe(1);
+      expect(track.add(2, true)).toBe(3);
+      expect(track.getEntries()).toEqual([
+        { value: 1, points: 1, isSpecial: false },
+        { value: 2, points: 3, isSpecial: true },
+      ]);
     });
 
-    it('still returns the points the entry will earn', () => {
+    it('enforces the track rule and leaves the entries alone when it refuses', () => {
       const track = make();
-      track.setCommandEmitter(vi.fn());
-      expect(track.add(4)).toBe(1);
-    });
-
-    it('reports the points of the row it filled when the emitter applies the add synchronously', () => {
-      const track = make();
-      track.setCommandEmitter((_id, value, isSpecial) => track.addInternal(value, isSpecial));
-
-      const first = track.add(1);
-      expect(first).toBe(track.getEntries()[0].points);
-      expect(first).toBe(1);
-
-      const second = track.add(2);
-      expect(second).toBe(track.getEntries()[1].points);
-      expect(second).toBe(3);
-
-      const third = track.add(3);
-      expect(third).toBe(track.getEntries()[2].points);
-      expect(third).toBe(6);
-
-      expect(first + second + third).toBe(track.getPointsBreakdown().entries);
-    });
-
-    it('still enforces the track rule before emitting', () => {
-      const track = make();
-      const emit = vi.fn();
-      track.addInternal(5);
-      track.setCommandEmitter(emit);
-      expect(() => track.add(2)).toThrow();
-      expect(emit).not.toHaveBeenCalled();
-    });
-
-    it('addInternal bypasses the emitter so the executor can apply the change', () => {
-      const track = make();
-      const emit = vi.fn();
-      track.setCommandEmitter(emit);
-      track.addInternal(4);
-      expect(emit).not.toHaveBeenCalled();
-      expect(track.getEntries().map((e) => e.value)).toEqual([4]);
-    });
-
-    it('addInternal enforces the rule too', () => {
-      const track = make();
-      track.addInternal(5);
-      expect(() => track.addInternal(2)).toThrow('Cannot add value 2 to track fulminate');
+      track.add(5);
+      expect(() => track.add(2)).toThrow('Cannot add value 2 to track fulminate');
+      expect(track.getEntries().map((e) => e.value)).toEqual([5]);
     });
   });
 });
@@ -275,10 +224,8 @@ describe('MonotonicTrack', () => {
   });
 
   it('compares against the last entry, not the largest so far', () => {
-    const track = increasing({ allowEqual: true });
-    track.add(1);
-    track.add(5);
-    track.removeLastInternal();
+    const track = increasing();
+    track.fromJSON({ entries: [{ value: 5, points: 0 }, { value: 1, points: 0 }] });
     expect(track.canAdd(2)).toBe(true);
   });
 
@@ -430,14 +377,5 @@ describe('CounterTrack', () => {
     track.increment();
     track.increment();
     expect(track.getEntries().map((e) => e.value)).toEqual([1, 2]);
-  });
-
-  it('routes increment through the command emitter when one is set', () => {
-    const track = make();
-    const emit = vi.fn();
-    track.setCommandEmitter(emit);
-    track.increment();
-    expect(emit).toHaveBeenCalledWith('poison', 1, false);
-    expect(track.count).toBe(0);
   });
 });

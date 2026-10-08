@@ -39,7 +39,7 @@ const read = (name: string) => readFileSync(join(DOCS, name), 'utf-8');
 const FALSE_CLAIMS: Array<{ pattern: RegExp; why: string }> = [
   {
     pattern: /(state|it) is (always )?(reconstructed|reconstructible|rebuilt|restored) by replaying/i,
-    why: 'State is restored from a snapshot or a per-action checkpoint. Replay is unsound here: selection-step mutations are recorded in neither commandHistory nor actionHistory.',
+    why: 'State is restored from a snapshot or a per-action checkpoint. Replay is unsound here: selection-step mutations are not recorded in actionHistory.',
   },
   {
     pattern: /GameRunner\.replay\s*\(/,

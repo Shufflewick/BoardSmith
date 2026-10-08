@@ -395,7 +395,7 @@ describe("#408/#411/#413 -- which seats hold the same projection", () => {
 
   it("refuses while an animation event is addressed to one seat", () => {
     const game = newSquare();
-    game.pushAnimationEvent('whisper', { to: 'seat one' }, [1]);
+    game.animateTo(1, 'whisper', { to: 'seat one' });
     const { predicted, observed } = grouping(game);
     expect(observed).toEqual([[1], [2]]);
     expect(predicted).toBe(null);

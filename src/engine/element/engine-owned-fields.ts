@@ -7,7 +7,7 @@
  * at first: TypeScript accepts a narrowing redeclaration (`pile!: Pile` narrows
  * `GameElement`), and a freshly constructed game behaves. But the engine owns
  * these fields' lifecycle. The unserializable ones (`pile`, `random`,
- * `commandHistory`, ...) are never written by `toJSON()` and are rebuilt by the
+ * `_actions`, ...) are never written by `toJSON()` and are rebuilt by the
  * engine's own constructor on restore, so after any session op, undo or bot
  * search the game's value is gone and the field points at the engine's copy
  * again. The serialized ones (`phase`, `settings`, `messages`, ...) are
@@ -61,10 +61,8 @@ export const ENGINE_OWNED_GAME_FIELDS = {
   random: 'fixed',
   messages: 'engine-set',
   settings: 'fixed',
-  commandHistory: 'fixed',
   tutorialProgress: 'fixed',
   tutorialDefinition: 'engine-set',
-  _inverseHistory: 'fixed',
   _actions: 'fixed',
   _actionExecutor: 'fixed',
   _flowDefinition: 'engine-set',

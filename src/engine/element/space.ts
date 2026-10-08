@@ -2,8 +2,8 @@ import { GameElement } from './game-element.js';
 import type { ElementClass, ElementAttributes, ElementContext, ElementJSON } from './types.js';
 import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
-import type { VisibilityMode, VisibilityState } from '../command/visibility.js';
-import { copyVisibilityState, visibilityFromMode } from '../command/visibility.js';
+import type { VisibilityMode, VisibilityState } from './visibility.js';
+import { copyVisibilityState, visibilityFromMode } from './visibility.js';
 
 /**
  * Event handler for element enter/exit events

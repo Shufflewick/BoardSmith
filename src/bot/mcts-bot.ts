@@ -75,8 +75,6 @@ export class MCTSBot<G extends Game = Game> {
 
   /** Live game instance used during search (cloned from original) */
   private searchGame: G | null = null;
-  /** Command history length at root node (for undo calculations) */
-  private rootCommandCount: number = 0;
   /** Root snapshot for fallback recovery */
   private rootSnapshot: GameStateSnapshot | null = null;
   /**
@@ -324,7 +322,7 @@ export class MCTSBot<G extends Game = Game> {
     // #73: under determinization one world offering a single move says nothing
     // about the others, so the fast path is only sound without a sampler.
     if (allMoves.length === 1 && !this.determinize) {
-      const root = this.createNode(flowState, null, null, allMoves, 0);
+      const root = this.createNode(flowState, null, null, allMoves);
       return { move: allMoves[0], root };
     }
 
@@ -353,19 +351,8 @@ export class MCTSBot<G extends Game = Game> {
     // Clear the RAVE table for a fresh search
     this.raveTable.clear();
 
-    // rootCommandCount tracks the command baseline on `searchGame` (built
-    // above) for undo -- recomputed here since threat-response/sampling ran
-    // between the clone and this point but never mutated `searchGame`.
-    this.rootCommandCount = this.searchGame.commandHistory.length;
-
     // Create root node with moves (blocking-only when threatened, sampled otherwise)
-    const root = this.createNode(
-      flowState,
-      null,
-      null,
-      moves,
-      0 // root has 0 commands from parent
-    );
+    const root = this.createNode(flowState, null, null, moves);
 
     // Run MCTS iterations with timeout failsafe
     const startTime = Date.now();
@@ -781,9 +768,6 @@ export class MCTSBot<G extends Game = Game> {
     // Pick first untried move (ordering determined at node creation by moveOrdering hook)
     const move = node.untriedMoves.shift()!;
 
-    // Record command count before applying move
-    const commandCountBefore = this.searchGame!.commandHistory.length;
-
     const { outcome, flowState } = this.makeSearchMove(move, node.currentPlayer);
     if (outcome !== 'made') {
       // Not a move this node can make: never offer it here again.
@@ -791,17 +775,15 @@ export class MCTSBot<G extends Game = Game> {
       return outcome === 'refused' ? node : null;
     }
 
-    // Calculate how many commands this move generated
-    const commandCount = this.searchGame!.commandHistory.length - commandCountBefore;
-
     // The moves of the seat that moves next, which is the seat the child records.
     // A finished game, or a step held open with no seat to move, has none.
     const nextSeat = flowState.complete ? undefined : this.seatToMove(flowState);
     const newMoves =
       nextSeat === undefined ? [] : this.movesFor(this.searchGame!, flowState, nextSeat, { sample: true });
 
-    // Create child node with command count (no snapshot needed!)
-    const child = this.createNode(flowState, node, move, newMoves, commandCount);
+    // Create child node (no snapshot needed: the search game is reset to the
+    // root by a full restore after each iteration)
+    const child = this.createNode(flowState, node, move, newMoves);
     node.children.push(child);
 
     return child;
@@ -925,8 +907,8 @@ export class MCTSBot<G extends Game = Game> {
 
     // Backpropagate up the tree, updating pure node bookkeeping (visits, value,
     // proof numbers). NOTE: this loop must NOT touch `searchGame` -- the game is
-    // reset to root state below via a full authoritative restore, not via
-    // per-node `undoCommands`. See the block after the loop for why.
+    // reset to root state below via a full authoritative restore. See the
+    // block after the loop for why.
     while (node !== null) {
       node.visits++;
       // Value is from perspective of player who just moved to reach this node
@@ -945,30 +927,18 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     // v4.8 F-01 (bot-02): reset `searchGame` to the ROOT position via a full
-    // authoritative restore rather than incremental `undoCommands`.
+    // authoritative restore. Element moves (`Piece.putInto` -> `moveToInternal`)
+    // splice `_t.children` directly and plain custom-property mutations are
+    // just assignments, so nothing short of adopting the serialized root again
+    // rolls a move back. A full restore is state-authoritative (adopts the
+    // serialized element tree, flow position, phase/winners, sequence). The
+    // stored tree-node move args resolve by element id (`resolveArgs` ->
+    // `getElementById`), and ids are stable across restore, so replaying the
+    // tree path on the fresh instance is sound.
     //
-    // Incremental undo was fundamentally unsound: the ONLY engine call that
-    // records a command is `game.execute()` (an ANIMATE event). Every element
-    // move -- `Piece.putInto` -> `moveToInternal` -- splices `_t.children`
-    // directly and records NOTHING, and plain custom-property mutations aren't
-    // commands either. So for any real game whose actions move elements or
-    // mutate custom state (cards, checkers, Seven, OTP...), `node.commandCount`
-    // is 0, `undoCommands` is a no-op, and every EXPAND + playout permanently
-    // corrupted the search game -- from iteration 2 the tree was replayed onto
-    // progressively fictional state.
-    //
-    // A full restore is state-authoritative (adopts the serialized element
-    // tree, flow position, phase/winners, sequence), so it correctly rolls back
-    // element-tree AND custom-property mutations that `undoCommands` never
-    // could. The stored tree-node move args resolve by element id
-    // (`resolveArgs` -> `getElementById`), and ids are stable across restore, so
-    // replaying the tree path on the fresh instance is sound.
-    //
-    // TRADEOFF: this is O(tree size) per iteration instead of O(commands
-    // undone). We deliberately choose correctness over the cheaper-but-broken
-    // incremental undo. RNG advancement is preserved across iterations (below)
-    // so playouts stay varied -- a naive restore would reset the RNG and make
-    // every iteration's playout identical.
+    // This is O(tree size) per iteration. RNG advancement is preserved across
+    // iterations (below) so playouts stay varied -- a naive restore would reset
+    // the RNG and make every iteration's playout identical.
     this.restoreSearchGameToRoot();
   }
 
@@ -984,7 +954,6 @@ export class MCTSBot<G extends Game = Game> {
     const rngState = this.searchGame.getRandomState();
     this.searchGame = this.restoreGame(this.rootSnapshot) as G;
     this.searchGame.setRandomState(rngState);
-    this.rootCommandCount = this.searchGame.commandHistory.length;
     // F-07: drop any baseline captured last iteration — it was cloned from the
     // now-discarded searchGame instance. It is re-captured fresh during this
     // iteration's descent/expand when a fresh simultaneous step is reached.
@@ -1242,18 +1211,12 @@ export class MCTSBot<G extends Game = Game> {
    *
    * Mirrors `GameRunner.fromSnapshot`: the snapshot carries the complete
    * authoritative state (element tree, flow position, sequence counter, seeded
-   * RNG), so we adopt those directly instead of replaying command/action
-   * history. Replay was unsound for the search root: selection-step /
-   * pending-completed actions mutate the tree via `Piece.putInto` and are
-   * recorded in NEITHER commandHistory NOR actionHistory, so a root carrying
-   * such a mutation lost it on every clone and the bot searched from a wrong
-   * position. Adopting the serialized tree keeps those mutations.
-   *
-   * MCTS still drives the search incrementally on the returned game: it appends
-   * commands (with valid inverses) and rolls them back via `undoCommands` down
-   * to `rootCommandCount`, which the caller recomputes from THIS game's
-   * commandHistory length right after restore — so the (empty) command baseline
-   * here is correct, only the delta matters.
+   * RNG), so we adopt those directly instead of replaying action history.
+   * Replay was unsound for the search root: selection-step /
+   * pending-completed actions mutate the tree via `Piece.putInto` and are not
+   * recorded in actionHistory, so a root carrying such a mutation lost it on
+   * every clone and the bot searched from a wrong position. Adopting the
+   * serialized tree keeps those mutations.
    */
   private restoreGame(snapshot: GameStateSnapshot): Game {
     // The game's own constructor options, custom ones (playerConfigs), its
@@ -1328,7 +1291,6 @@ export class MCTSBot<G extends Game = Game> {
     parent: MCTSNode | null,
     parentMove: BotMove | null,
     allMoves: BotMove[],
-    commandCount: number
   ): MCTSNode {
     // Order moves if moveOrdering hook is available
     // This determines exploration order: first moves are tried first
@@ -1365,7 +1327,6 @@ export class MCTSBot<G extends Game = Game> {
       flowState,
       parent,
       parentMove,
-      commandCount,
       children: [],
       allMoves: allMoves,
       untriedMoves,
