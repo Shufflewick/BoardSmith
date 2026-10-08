@@ -222,3 +222,6 @@ export function createHeadlessSession<G extends Game = Game>(
     },
   };
 }
+
+/** A table {@link createHeadlessSession} returns, playing a `G`: name it to pass one to a test helper. */
+export type HeadlessSession<G extends Game = Game> = ReturnType<typeof createHeadlessSession<G>>;

@@ -159,7 +159,7 @@ export type { HostWorkGate } from './host-work-gate.js';
 // Headless Simulation
 // ============================================
 
-export { createHeadlessSession } from './headless-session.js';
+export { createHeadlessSession, type HeadlessSession, type HeadlessGameOptions } from './headless-session.js';
 
 /**
  * THE BACKEND AND THE CAPABILITY SET IT RESOLVES TO (#171).
