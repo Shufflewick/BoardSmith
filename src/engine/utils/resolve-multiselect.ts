@@ -27,6 +27,18 @@
 import type { ActionContext, Selection } from '../index.js';
 
 /**
+ * A resolved count config (`number | { min?, max? }`) as `{ min, max? }`, with
+ * `max` absent when unbounded. The one place both resolvers decide that.
+ */
+function boundsOf(resolved: unknown): { min: number; max?: number } {
+  if (typeof resolved === 'number') return { min: 1, max: resolved };
+  const config = (resolved ?? {}) as { min?: number; max?: number };
+  return config.max === undefined
+    ? { min: config.min ?? 1 }
+    : { min: config.min ?? 1, max: config.max };
+}
+
+/**
  * resolveOrderedList — the same single source of truth for a choice selection's
  * `orderedList` bounds (#249).
  *
@@ -48,13 +60,7 @@ export function resolveOrderedList(
     ? (orderedList as (c: ActionContext) => unknown)(ctx)
     : orderedList;
 
-  if (resolved === undefined) return undefined;
-  if (typeof resolved === 'number') return { min: 1, max: resolved };
-
-  const config = resolved as { min?: number; max?: number };
-  return config.max === undefined
-    ? { min: config.min ?? 1 }
-    : { min: config.min ?? 1, max: config.max };
+  return resolved === undefined ? undefined : boundsOf(resolved);
 }
 
 export function resolveMultiSelect(
@@ -71,16 +77,5 @@ export function resolveMultiSelect(
   // try/catch — a thrown error must propagate to the caller (fail loud).
   const resolved = typeof multiSelect === 'function' ? multiSelect(ctx) : multiSelect;
 
-  if (resolved === undefined) {
-    return undefined;
-  }
-
-  if (typeof resolved === 'number') return { min: 1, max: resolved };
-  const config = (typeof resolved === 'object' && resolved !== null ? resolved : {}) as {
-    min?: number;
-    max?: number;
-  };
-  return config.max === undefined
-    ? { min: config.min ?? 1 }
-    : { min: config.min ?? 1, max: config.max };
+  return resolved === undefined ? undefined : boundsOf(resolved);
 }
