@@ -311,10 +311,27 @@ tree happened to hold. See "The duplication baseline is keyed by CONTENT" below.
 Generating from a clean tree is the point: a baseline taken from a dirty tree
 bakes in the very findings the gate is supposed to catch.
 
-The last full re-record was #545, for fallow 3.28.0. The accepted duplication
-fell from about 1100 groups to 101, mostly because test files are no longer
-scanned for duplication, and the dead-code baseline lost most of its unused
-types and class members, which 3.x no longer reports for this repository.
+The last full re-record was #545, for fallow 3.28.0. What it changed:
+
+- **Test files are out of duplication, by decision.** fallow 2.103.0 and later
+  skip `*.test.*`, `*.spec.*`, `__tests__` and `__mocks__` in `fallow dupes` by
+  default. The human ruling on #545 (2026-10-08) keeps that default, so
+  `.fallowrc.json` does not set `duplicates.ignoreDefaults: false`. Duplication
+  between test files is no longer gated. The accepted duplication fell from
+  about 1100 groups to 101, mostly for this reason.
+- **The dead-code baseline shrank.** 3.x no longer reports most of the unused
+  types and class members 2.48.0 did for this repository.
+- **61 `fallow-ignore-next-line unused-class-member` comments were deleted, not
+  accepted.** Under 3.28.0 they suppressed nothing, and fallow reports such a
+  comment as a stale suppression. A stale suppression is keyed by file and
+  line, so accepting it would have failed `--changes` for whoever next moved a
+  line above it. The class notes that explained them were rewritten. The saved
+  baseline has no stale suppressions.
+- **It accepted debt that main added after 2026-10-02.** No gate ran the audit
+  then, and 2.48.0 reported each item as drift. The re-record accepted it so the
+  pin could land, and #550 lists every item to remove or keep on purpose: three
+  duplications, complexity growth in five files, two unused exports, 13 unused
+  component props and two unused emits.
 
 ## The merge refuses baseline drift (#545)
 

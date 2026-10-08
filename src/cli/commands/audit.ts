@@ -438,8 +438,9 @@ interface Audit {
 const outcomeOf = (code: number): AuditOutcome => (code === 0 ? 'pass' : 'fail');
 
 /**
- * Code-quality audits. Deliberately not part of `boardsmith lint`: these are
- * slow, advisory sweeps you run after a refactor, not a per-commit gate.
+ * Code-quality audits. Deliberately not part of `boardsmith lint`. The two
+ * baseline checks are also a merge gate: `.agent-policy.json`'s verify list
+ * runs them, so `agent-policy verify` and a thread merge refuse drift (#545).
  */
 function buildAudits(
   options: AuditOptions,
@@ -565,13 +566,11 @@ async function rekeyAction(cwd: string, conflicting: boolean): Promise<void> {
  * was about to correct -- which is the drifted-baseline false block of #232,
  * reproduced inside the tool that exists to remove it.
  *
- * This is also the answer to "where does the re-address run so a merge cannot
- * land drifted". BoardSmith has no CI and no merge hook of its own; the audit
- * every task runs before it merges is the one place in reach, and putting the
- * re-address there means the addresses a merge publishes are the addresses of
- * the tree being merged. A later run on `main` corrects whatever the merge
- * itself shifted, and until it does the drift is no longer a block -- it is a
- * thing the next audit silently fixes and reports.
+ * The merge gate runs `dupesBaseline` too (#545). A re-address writes the two
+ * dupes files, and verify refuses a check that changes the tree, so a branch
+ * whose addresses moved -- or a merge that moved them -- is refused until the
+ * branch runs this audit and commits what it rewrote. The addresses on `main`
+ * are therefore always the addresses of the tree that was merged.
  */
 export const AUDIT_ORDER = ['dupesBaseline', 'changes', 'duplication', 'healthBaseline'] as const;
 
