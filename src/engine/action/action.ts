@@ -33,7 +33,7 @@ import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
 import { findMatchingChoice, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
 import { numberRuleErrors } from './number-rules.js';
 import { textRuleErrors } from './text-rules.js';
-import { resolveOrderedList } from '../utils/resolve-multiselect.js';
+import { resolveMultiSelect, resolveOrderedList } from '../utils/resolve-multiselect.js';
 
 // Re-export Action class from action-builder
 export { Action };
@@ -1041,10 +1041,9 @@ export class ActionExecutor {
           }
         }
 
-        const multiSelect = orderedList !== undefined
+        const multiSelectConfig = orderedList !== undefined
           ? undefined
-          : (selection as ChoiceSelection).multiSelect;
-        const multiSelectConfig = typeof multiSelect === 'function' ? multiSelect(context) : multiSelect;
+          : resolveMultiSelect(selection, context);
         if (multiSelectConfig !== undefined) {
           if (!Array.isArray(value)) {
             errors.push(`Selection "${selection.name}" is multi-select and expected an array, got ${typeof value}: ${JSON.stringify(value)}`);
@@ -1056,9 +1055,7 @@ export class ActionExecutor {
             if (this.hasDuplicateChoiceItems(value, choices)) {
               errors.push(`Selection "${selection.name}" contains duplicate choices`);
             }
-            const min = typeof multiSelectConfig === 'number' ? 1 : (multiSelectConfig.min ?? 1);
-            const max = typeof multiSelectConfig === 'number' ? multiSelectConfig : multiSelectConfig.max;
-            errors.push(...choiceCountErrors(selection.name, value.length, min, max));
+            errors.push(...choiceCountErrors(selection.name, value.length, multiSelectConfig.min, multiSelectConfig.max));
           }
         }
       }
@@ -1129,8 +1126,7 @@ export class ActionExecutor {
       // Enforce multiSelect min/max bounds on the submitted count.
       // multiSelect can be a number (max, with implicit min 1), a { min, max }
       // config, or a function returning either. Mirror pick-handler.ts resolution.
-      const multiSelect = (selection as ElementsSelection).multiSelect;
-      const multiSelectConfig = typeof multiSelect === 'function' ? multiSelect(context) : multiSelect;
+      const multiSelectConfig = resolveMultiSelect(selection, context);
       if (multiSelectConfig !== undefined) {
         // Reject duplicates before the count check (WR-04): repeated
         // elements (or repeated IDs of the same element) must not satisfy
@@ -1138,8 +1134,7 @@ export class ActionExecutor {
         if (Array.isArray(value) && this.hasDuplicateElementItems(value)) {
           errors.push(`Selection "${selection.name}" contains duplicate elements`);
         }
-        const min = typeof multiSelectConfig === 'number' ? 1 : (multiSelectConfig.min ?? 1);
-        const max = typeof multiSelectConfig === 'number' ? multiSelectConfig : multiSelectConfig.max;
+        const { min, max } = multiSelectConfig;
         const count = Array.isArray(value) ? value.length : 1;
         if (count < min) {
           errors.push(`Selection "${selection.name}" requires at least ${min} element${min === 1 ? '' : 's'}, got ${count}`);
