@@ -1211,7 +1211,8 @@ export class MCTSBot<G extends Game = Game> {
    *
    * Mirrors `GameRunner.fromSnapshot`: the snapshot carries the complete
    * authoritative state (element tree, flow position, sequence counter, seeded
-   * RNG), so we adopt those directly instead of replaying action history. Replay was unsound for the search root: selection-step /
+   * RNG), so we adopt those directly instead of replaying action history.
+   * Replay was unsound for the search root: selection-step /
    * pending-completed actions mutate the tree via `Piece.putInto` and are not
    * recorded in actionHistory, so a root carrying such a mutation lost it on
    * every clone and the bot searched from a wrong position. Adopting the

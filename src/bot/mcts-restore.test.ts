@@ -150,9 +150,10 @@ describe('MCTSBot restoreGame with execute block', () => {
 
   it('restoreGame preserves direct tree mutations not recorded in action history', () => {
     // A pending/selection action's execute moves a piece via Piece.putInto, which
-    // mutates the element tree DIRECTLY — not recorded in actionHistory. The MCTS search root can carry such a mutation, so restoring
-    // the root by replaying history (the old behavior) silently loses it and the
-    // bot searches from the wrong position. Authoritative restore adopts the
+    // mutates the element tree DIRECTLY — not recorded in actionHistory. The
+    // MCTS search root can carry such a mutation, so restoring the root by
+    // replaying history (the old behavior) silently loses it and the bot
+    // searches from the wrong position. Authoritative restore adopts the
     // serialized tree and keeps the mutation.
     class MutationGame extends Game<MutationGame, Player> {
       stash!: Space<MutationGame>;

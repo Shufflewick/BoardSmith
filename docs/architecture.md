@@ -162,7 +162,8 @@ Game Instance (runtime)
 ### State Authority
 
 **The snapshot is the source of truth. `actionHistory` exists for undo
-bookkeeping and diagnostics, and is never replayed to rebuild state.** BoardSmith is state-authoritative, not event-sourced — if you are
+bookkeeping and diagnostics, and is never replayed to rebuild state.**
+BoardSmith is state-authoritative, not event-sourced — if you are
 designing around an authoritative event log, audit trail, spectator replay, or
 incremental reconstruction, the engine does not work that way.
 
@@ -177,9 +178,9 @@ GameRunner.fromSnapshot(snapshot, GameClass) → the game, exactly as it was
 
 Replay is not merely unused — it is *unsound* here. Selection-step and pending
 mutations (`Piece.putInto` inside a completed pending action) are not recorded
-in the action history, so replaying an action history loses them and mis-positions the flow. That crashed real games, and is
-why `fromSnapshot` deliberately does not call `start()` or re-run
-`actionHistory`.
+in the action history, so replaying an action history loses them and
+mis-positions the flow. That crashed real games, and is why `fromSnapshot`
+deliberately does not call `start()` or re-run `actionHistory`.
 
 Time-travel — undo, rewind, `getStateAtAction` — is likewise restore, not
 replay. The runner captures a per-action **checkpoint** (a full tree copy plus
