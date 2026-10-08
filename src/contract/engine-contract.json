@@ -1,7 +1,7 @@
 {
-  "revision": 134,
+  "revision": 135,
   "bundleProtocol": 2,
-  "surfaceHash": "85d9346b723d035e",
+  "surfaceHash": "69d383663e693961",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1146,7 +1146,16 @@
       "revision": 134,
       "date": "2026-10-08",
       "bundleProtocol": 2,
-      "surfaceHash": "85d9346b723d035e",
+      "surfaceHash": "69d383663e693961",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "boardsmith/session no longer exports the stateful GameSession or BotController (nor the types only they used: GameSessionOptions, SessionActionResult, UndoResult, ReadOnlyRunnerFacade, StoredGameState, StorageAdapter, BroadcastAdapter, SessionInfo, StateUpdate, LobbyUpdate, ActionRequest, UpdateNameRequest, GameConfig, BotSeatConfig); no host ran them, every host runs SnapshotSessionHost over executeOp. createHeadlessSession gains playerState(seat), readGame(), arrange(edit), and playerNames, options and teachingDisabled table options, and is the harness game tests use. ElementDiff is now exported from the session ops and types the debugStateDiff result; resolveChoices and debugHistory results name their choice, element and history entry types. No change to snapshots, views or ops."
+    },
+    {
+      "revision": 135,
+      "date": "2026-10-08",
+      "bundleProtocol": 2,
+      "surfaceHash": "69d383663e693961",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "An unbounded multiSelect ({ min: 1 } with no max) now reaches the wire with max ABSENT on a table as well as a world, in buildActionMetadata, Game#getActionSpace and the pick answer. Before, a table sent max: Infinity, which JSON turns into null, and the action panel read null as a cap of nothing (BoardSmith #508, ShufflewickPub #378). No fingerprint sees this: the fixtures carry no unbounded multiSelect. The platform must run this build for a table's unbounded picks to stop arriving with max: null."

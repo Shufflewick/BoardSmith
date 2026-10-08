@@ -20,7 +20,7 @@ import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, type GameOptions } from '../engine/index.js';
 import type { GameStateSnapshot } from '../engine/utils/snapshot.js';
 import { GameRunner } from '../runtime/index.js';
-import { GameSession } from './game-session.js';
+import { createHeadlessSession } from './headless-session.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { succeeded } from './op-result.test-helper.js';
@@ -62,10 +62,11 @@ function newRunner(): GameRunner<CallGame> {
   return runner;
 }
 
-function newSession() {
-  return GameSession.create<CallGame>({
-    gameType: 'call', GameClass: CallGame, playerCount: 2, playerNames: ['Ada', 'Bo'], seed: 'game-instance-356',
-  });
+/** A started table on the live session host. */
+async function newSession() {
+  const session = createHeadlessSession(definition, { ...gameOptions, playerNames: ['Ada', 'Bo'] });
+  await session.start();
+  return session;
 }
 
 async function start(seedSnapshot?: GameStateSnapshot): Promise<GameStateSnapshot> {
@@ -90,12 +91,12 @@ describe('#356: a game has an identity of its own', () => {
   });
 
   it('is kept by an undo, which moves restoreEpoch instead', async () => {
-    const session = newSession();
-    const before = session.buildPlayerState(1).gameInstanceId;
-    expect((await session.performAction('call', 1, { n: 2 })).success).toBe(true);
-    expect((await session.undoToTurnStart(1)).success).toBe(true);
+    const session = await newSession();
+    const before = session.playerState(1).gameInstanceId;
+    expect((await session.send(1, { type: 'action', actionName: 'call', player: 1, args: { n: 2 } })).success).toBe(true);
+    expect((await session.send(1, { type: 'undo', player: 1 })).success).toBe(true);
 
-    const after = session.buildPlayerState(1);
+    const after = session.playerState(1);
     expect(after.restoreEpoch).toBe(1);
     expect(after.gameInstanceId).toBe(before);
   });
@@ -124,9 +125,10 @@ describe('#356: a game has an identity of its own', () => {
     expect(seeded2.gameInstanceId).not.toBe(seeded1.gameInstanceId);
   });
 
-  it('is published to every seat, spectators included', () => {
-    const session = newSession();
-    const published = [0, 1, 2].map((seat) => session.buildPlayerState(seat).gameInstanceId);
+  it('is published to every seat, spectators included', async () => {
+    const session = await newSession();
+    const spectator = (session.spectatorViews.at(-1) as { state: { gameInstanceId: string } }).state;
+    const published = [spectator.gameInstanceId, session.playerState(1).gameInstanceId, session.playerState(2).gameInstanceId];
     expect(published[0]).toMatch(/\S/);
     expect(new Set(published).size).toBe(1);
   });

@@ -221,4 +221,4 @@ The bot automatically handles:
 
 - [Bot System Guide](../bot-system.md) - Detailed bot system documentation
 - [boardsmith/bot-trainer](./bot-trainer.md) - Train and improve bot weights
-- [boardsmith/session](./session.md) - Using bot with GameSession
+- [boardsmith/session](./session.md) - Bot seats on the session host

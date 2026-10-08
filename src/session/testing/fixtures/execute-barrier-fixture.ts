@@ -39,8 +39,8 @@
  *    UNRELATED finished-phase fence (T-155-05's sibling, not this defect).
  *    `idle` is never invoked by the regression tests.
  *
- * Works with BOTH `createHeadlessSession` (stateless) and `GameSession.create`
- * (stateful), mirroring `collect-turns-fixture.ts`'s export shape.
+ * Exports the game class and a definition for `createHeadlessSession`,
+ * mirroring `collect-turns-fixture.ts`'s export shape.
  */
 
 import {

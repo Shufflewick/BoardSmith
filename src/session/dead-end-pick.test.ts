@@ -20,7 +20,8 @@
  */
 import { describe, test, expect, beforeEach } from 'vitest';
 import { Game, Player, Piece, Space, Action, defineFlow, actionStep, type GameOptions } from '../engine/index.js';
-import { GameSession } from './game-session.js';
+import { createHeadlessSession, type HeadlessSession } from './headless-session.js';
+import { succeeded } from './op-result.test-helper.js';
 import { ErrorCode } from '../types/protocol.js';
 
 class Item extends Piece<EquipGame> {
@@ -89,26 +90,29 @@ class EquipGame extends Game<EquipGame, Player> {
 }
 
 describe('#270 — a step with nothing to pick refuses, and says what was asked and why', () => {
-  let session: GameSession<EquipGame>;
+  let session: HeadlessSession<EquipGame>;
 
-  beforeEach(() => {
-    session = GameSession.create({
-      gameType: 'test-dead-end',
-      GameClass: EquipGame,
-      playerCount: 2,
-      playerNames: ['Alice', 'Bob'],
-    });
+  beforeEach(async () => {
+    session = createHeadlessSession(
+      { gameClass: EquipGame, gameType: 'test-dead-end', minPlayers: 2, maxPlayers: 2 },
+      { playerCount: 2, playerNames: ['Alice', 'Bob'] },
+    );
+    await session.start();
   });
 
-  test('refuses the step, on the channel a refused pick already travels', () => {
-    const result = session.getPickChoices('equip', 'item', 1, { slot: 'head' });
+  /** Seat 1 asks for `selectionName`'s answers in `actionName`, given the answers in `args`. */
+  const choicesFor = (actionName: string, selectionName: string, args: Record<string, unknown> = {}) =>
+    session.send(1, { type: 'resolveChoices', actionName, selectionName, player: 1, args });
+
+  test('refuses the step, on the channel a refused pick already travels', async () => {
+    const result = await choicesFor('equip', 'item', { slot: 'head' });
 
     expect(result.success).toBe(false);
     expect(result.errorCode).toBe(ErrorCode.PICK_HAS_NO_CANDIDATES);
   });
 
-  test('names the question, the verb, and the answer that narrowed it', () => {
-    const { error } = session.getPickChoices('equip', 'item', 1, { slot: 'head' });
+  test('names the question, the verb, and the answer that narrowed it', async () => {
+    const { error } = await choicesFor('equip', 'item', { slot: 'head' });
 
     expect(error).toContain('Item');          // what is being asked for
     expect(error).toContain('Equip an item'); // which verb is asking
@@ -116,30 +120,27 @@ describe('#270 — a step with nothing to pick refuses, and says what was asked 
     expect(error).toContain('head');
   });
 
-  test('tells the player what to do about it', () => {
-    const { error } = session.getPickChoices('equip', 'item', 1, { slot: 'head' });
+  test('tells the player what to do about it', async () => {
+    const { error } = await choicesFor('equip', 'item', { slot: 'head' });
 
     expect(error?.toLowerCase()).toContain('cancel');
   });
 
-  test('says nothing of the kind when the step CAN be answered', () => {
-    const result = session.getPickChoices('equip', 'item', 1, { slot: 'hand' });
+  test('says nothing of the kind when the step CAN be answered', async () => {
+    const result = succeeded(await choicesFor('equip', 'item', { slot: 'hand' }));
 
-    expect(result.success).toBe(true);
     expect(result.choices?.map((c) => c.value)).toEqual(['Oak Shield', 'Short Sword']);
   });
 
-  test('leaves an OPTIONAL step alone: skipping it is the answer', () => {
-    const result = session.getPickChoices('equipMaybe', 'item', 1, { slot: 'head' });
+  test('leaves an OPTIONAL step alone: skipping it is the answer', async () => {
+    const result = succeeded(await choicesFor('equipMaybe', 'item', { slot: 'head' }));
 
-    expect(result.success).toBe(true);
     expect(result.choices).toEqual([]);
   });
 
-  test('leaves an all-greyed step alone: every row already carries its reason', () => {
-    const result = session.getPickChoices('equipGreyed', 'item', 1);
+  test('leaves an all-greyed step alone: every row already carries its reason', async () => {
+    const result = succeeded(await choicesFor('equipGreyed', 'item'));
 
-    expect(result.success).toBe(true);
     expect(result.validElements).toHaveLength(2);
     expect(result.validElements?.every((e) => e.disabled === 'Too heavy to lift')).toBe(true);
   });

@@ -75,9 +75,9 @@ interface BoardActionBridgeOptions {
    * including the `validElements` frozen into the open pick's snapshot: the
    * epoch moves when the runner of this game was replaced (undo / rewind), and
    * the id moves when the game itself was (New game, #356). The bridge tears
-   * the pick down on either, which is the client-side half of what
-   * `GameSession`'s `replaceRunner` already does for its own element-id state
-   * (hint, heatmap, pending actions).
+   * the pick down on either, which is the client-side half of what the host
+   * already does for its own element-id state (hint, heatmap, pending
+   * selections) on an undo or rewind.
    *
    * `undefined` while no state has arrived yet, and from a host with no table
    * (a world): nothing observed, so nothing is torn down.
@@ -462,8 +462,8 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   //
   // Unconditional, unlike the availableActions teardown above: that one spares a
   // server-pending followUp because the server still holds it. Here the server
-  // has already discarded every pending action (`PendingActionManager.updateRunner`,
-  // called from `replaceRunner`; a new game has none), so sparing it would strand
+  // has already discarded every pending selection (the host clears them all on an
+  // undo or rewind; a new game has none), so sparing it would strand
   // the client holding a chain the server has forgotten.
   //
   // Compared with the last identity OBSERVED rather than the watcher's previous

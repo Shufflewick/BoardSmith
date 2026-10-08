@@ -1,7 +1,6 @@
 /**
  * PickHandler - Encapsulates pick choice resolution logic
  *
- * Extracted from GameSession to reduce cognitive load and improve testability.
  * Handles choice, element, elements, number, and text pick types.
  * A "pick" represents a choice the player must make during action resolution.
  */
@@ -19,11 +18,11 @@ import type { GameRunner } from '../runtime/index.js';
 import {
   ErrorCode,
   type PickChoicesResponse,
-  type StoredGameState,
   type WarningEntry,
 } from './types.js';
 import type { ValidElement } from '../types/protocol.js';
 import { PendingActionManager, type PickStepResult } from './pending-action-manager.js';
+import { actionForSeat, serializePendingActionState } from './utils.js';
 import { resolveMultiSelect, resolveOrderedList } from '../engine/utils/resolve-multiselect.js';
 import {
   deadEndPickMessage,
@@ -31,11 +30,6 @@ import {
   formatElementCandidates,
   type AnnotatedCandidate,
 } from '../engine/element/pick-candidates.js';
-
-/** Serialize a pending action's state to a JSON-safe object (Set -> array). */
-function serializePendingState(s: PendingActionState): Record<string, unknown> {
-  return { ...s, onSelectFired: s.onSelectFired ? Array.from(s.onSelectFired) : undefined };
-}
 
 /** Restore a pending action's state from its JSON-safe form (array -> Set). */
 function deserializePendingState(s: Record<string, unknown>): PendingActionState {
@@ -179,19 +173,11 @@ export class PickHandler<G extends Game = Game> {
   }
 
   /**
-   * Update the runner reference (needed after hot reload)
-   */
-  updateRunner(runner: GameRunner<G>): PickHandler<G> {
-    return new PickHandler(runner, this.#playerCount);
-  }
-
-  /**
    * Process one selection step for an action with a multi-step or repeating
    * selection, statelessly. The caller (e.g. the ShufflewickPub executor)
    * persists `priorPendingState` between steps and passes it back; on the first
    * step it is omitted and the pending action is auto-created from `actionName`
-   * + `initialArgs`. Reuses PendingActionManager (with no-op persistence) so the
-   * behaviour matches the dev server exactly. Mutates the underlying game when a
+   * + `initialArgs`. Mutates the underlying game when a
    * step has side effects or completes the action, so the caller should read a
    * fresh snapshot afterwards.
    *
@@ -206,19 +192,7 @@ export class PickHandler<G extends Game = Game> {
     initialArgs?: Record<string, unknown>,
     priorPendingState?: Record<string, unknown> | null,
   ): Promise<PickStepResult & { pendingState: Record<string, unknown> | null }> {
-    const storedState = {
-      gameType: (this.#runner as unknown as { gameType?: string }).gameType ?? '',
-      playerCount: this.#playerCount,
-      playerNames: [],
-      actionHistory: this.#runner.actionHistory,
-      createdAt: 0,
-    } as unknown as StoredGameState;
-
-    const manager = new PendingActionManager(this.#runner, storedState, undefined, {
-      save: async () => {},
-      broadcast: () => {},
-      scheduleBotCheck: () => {},
-    });
+    const manager = new PendingActionManager(this.#runner, this.#playerCount);
 
     if (priorPendingState) {
       manager.setPendingAction(playerPosition, deserializePendingState(priorPendingState));
@@ -233,7 +207,7 @@ export class PickHandler<G extends Game = Game> {
     );
 
     const pending = manager.getPendingAction(playerPosition);
-    return { ...result, pendingState: pending ? serializePendingState(pending) : null };
+    return { ...result, pendingState: pending ? { ...serializePendingActionState(pending) } : null };
   }
 
   /**
@@ -242,18 +216,7 @@ export class PickHandler<G extends Game = Game> {
    */
   cancelPendingAction(playerPosition: number, priorPendingState: Record<string, unknown> | null): void {
     if (!priorPendingState) return;
-    const storedState = {
-      gameType: (this.#runner as unknown as { gameType?: string }).gameType ?? '',
-      playerCount: this.#playerCount,
-      playerNames: [],
-      actionHistory: this.#runner.actionHistory,
-      createdAt: 0,
-    } as unknown as StoredGameState;
-    const manager = new PendingActionManager(this.#runner, storedState, undefined, {
-      save: async () => {},
-      broadcast: () => {},
-      scheduleBotCheck: () => {},
-    });
+    const manager = new PendingActionManager(this.#runner, this.#playerCount);
     manager.setPendingAction(playerPosition, deserializePendingState(priorPendingState));
     manager.cancelPendingAction(playerPosition);
   }
@@ -275,16 +238,9 @@ export class PickHandler<G extends Game = Game> {
     playerPosition: number,
     currentArgs: Record<string, unknown> = {}
   ): PickChoicesResponse {
-    // Validate player seat (1-indexed)
-    if (playerPosition < 1 || playerPosition > this.#playerCount) {
-      return { success: false, error: `Invalid player: ${playerPosition}. Player seats are 1-indexed (1 to ${this.#playerCount}).`, errorCode: ErrorCode.INVALID_PLAYER };
-    }
-
-    // Get action definition
-    const action = this.#runner.game.getAction(actionName);
-    if (!action) {
-      return { success: false, error: `Action not found: ${actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND };
-    }
+    const found = actionForSeat(this.#runner.game, this.#playerCount, playerPosition, actionName);
+    if ('refusal' in found) return found.refusal;
+    const { action } = found;
 
     // Find the pick
     const selection = action.selections.find(s => s.name === selectionName);

@@ -10,43 +10,33 @@
  * reads them itself, off the seat state it is handed, and GameShell calls it
  * too, so a test wired with it is wired the way production is.
  *
- * These drive a real `GameSession`, as a game's test does: the seat state is
- * `buildPlayerState(seat)`, re-read after every move.
+ * These drive the live session host (`createHeadlessSession`), as a game's
+ * test does: the seat state is `playerState(seat)`, re-read after every move.
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ref, type Ref } from 'vue';
 import type { VueWrapper } from '@vue/test-utils';
-import { GameSession } from '../../session/game-session.js';
+import type { HeadlessSession } from '../../session/headless-session.js';
 import type { PlayerGameState } from '../../session/types.js';
 import { MoveGame } from '../../session/move-game.test-helper.js';
 import { createBoardInteraction, type BoardInteraction } from './useBoardInteraction.js';
 import type { TableActionWiring } from './useTableActionWiring.js';
-import { mountTableWiring, settle } from './table-wiring.test-helper.js';
+import { mountTableWiring, settle, startTable } from './table-wiring.test-helper.js';
 
 const SEAT = 1;
 
-function newSession(seed: string) {
-  return GameSession.create<MoveGame>({
-    gameType: 'move',
-    GameClass: MoveGame,
-    playerCount: 2,
-    playerNames: ['Alice', 'Bob'],
-    seed,
-  });
-}
-
 interface Table {
-  session: GameSession<MoveGame>;
+  session: HeadlessSession<MoveGame>;
   seatState: Ref<PlayerGameState>;
   board: BoardInteraction;
   wiring: TableActionWiring;
   /** Re-reads the seat's state, as a broadcast would deliver it. */
   broadcast: () => void;
   /** Replaces the game, as the dev host's New game does. */
-  newGame: (seed: string) => void;
-  /** The live game. */
+  newGame: (seed: string) => Promise<void>;
+  /** The game as it stands now. */
   game: () => MoveGame;
   /** Clicks a room on the board; the move's state broadcast lands in the table's delivery order. */
   moveTo: (room: string) => Promise<void>;
@@ -66,9 +56,9 @@ afterEach(() => {
   for (const wrapper of mounted.splice(0)) wrapper.unmount();
 });
 
-function mountTable(delivery: Delivery = 'reply-first'): Table {
-  let session = newSession('bs378');
-  const seatState = ref(session.buildPlayerState(SEAT)) as Ref<PlayerGameState>;
+async function mountTable(delivery: Delivery = 'reply-first'): Promise<Table> {
+  let session = await startTable(MoveGame, 'bs378');
+  const seatState = ref(session.playerState(SEAT)) as Ref<PlayerGameState>;
   const board = createBoardInteraction();
   // Exactly the transport build/test.md shows a game. The new state reaches
   // the seat as a separate broadcast: after the action's own reply
@@ -80,7 +70,7 @@ function mountTable(delivery: Delivery = 'reply-first'): Table {
     boardInteraction: board,
     autoEndTurn: true,
     afterPerform: () => {
-      if (delivery === 'state-first') seatState.value = session.buildPlayerState(SEAT);
+      if (delivery === 'state-first') seatState.value = session.playerState(SEAT);
     },
   });
   mounted.push(wrapper);
@@ -90,17 +80,17 @@ function mountTable(delivery: Delivery = 'reply-first'): Table {
     seatState,
     board,
     wiring,
-    broadcast: () => { seatState.value = session.buildPlayerState(SEAT); },
-    newGame: (seed) => {
-      session = newSession(seed);
-      seatState.value = session.buildPlayerState(SEAT);
+    broadcast: () => { seatState.value = session.playerState(SEAT); },
+    newGame: async (seed) => {
+      session = await startTable(MoveGame, seed);
+      seatState.value = session.playerState(SEAT);
     },
-    game: () => session.runner.game,
+    game: () => session.readGame(),
     moveTo: async (room) => {
-      board.triggerElementSelect({ id: session.runner.game.roomIds(room)[0] });
+      board.triggerElementSelect({ id: session.readGame().roomIds(room)[0] });
       await settle();
       if (delivery === 'reply-first') {
-        seatState.value = session.buildPlayerState(SEAT);
+        seatState.value = session.playerState(SEAT);
         await settle();
       }
     },
@@ -116,7 +106,7 @@ function expectOfferedFromTheStart(table: Table): void {
 
 describe('useTableActionWiring drives the board from the seat state alone (#378)', () => {
   it('opens the pick on the board and a board click completes the move', async () => {
-    const table = mountTable();
+    const table = await mountTable();
     await settle();
 
     expect(table.wiring.controller.currentAction.value).toBe('move');
@@ -131,7 +121,7 @@ describe('useTableActionWiring drives the board from the seat state alone (#378)
 
   for (const delivery of ['reply-first', 'state-first'] as const) {
     it(`reopens the sole action for the next move whichever lands first: ${delivery} (#384)`, async () => {
-      const table = mountTable(delivery);
+      const table = await mountTable(delivery);
       await settle();
 
       await table.moveTo('hold');
@@ -147,12 +137,12 @@ describe('useTableActionWiring drives the board from the seat state alone (#378)
   }
 
   it('re-deals the open pick after an undo, with no restoreEpoch passed by the caller', async () => {
-    const table = mountTable();
+    const table = await mountTable();
     await settle();
     await table.moveTo('engine');
     expect(table.offered()).toEqual(table.game().roomIds('bridge', 'hold'));
 
-    const undo = await table.session.undoToTurnStart(SEAT);
+    const undo = await table.session.send(SEAT, { type: 'undo', player: SEAT });
     expect(undo.success).toBe(true);
     table.broadcast();
     await settle();
@@ -161,7 +151,7 @@ describe('useTableActionWiring drives the board from the seat state alone (#378)
   });
 
   it('re-deals the open pick after a new game, with no gameInstanceId passed by the caller', async () => {
-    const table = mountTable();
+    const table = await mountTable();
     await settle();
     // Move the pawn so the open pick is computed from a position the new game
     // does not share. Element ids are the same in both games (same setup), so
@@ -170,15 +160,17 @@ describe('useTableActionWiring drives the board from the seat state alone (#378)
 
     // A new game opens at the same step with the same actions, and the same
     // restoreEpoch (0): only the game's identity moved.
-    table.newGame('bs378-second');
+    await table.newGame('bs378-second');
     await settle();
 
     expectOfferedFromTheStart(table);
   });
 
   it('refuses a disabled action on the board, reading the reason from the seat state', async () => {
-    const table = mountTable();
-    table.game().tired = true;
+    const table = await mountTable();
+    await table.session.arrange((game) => {
+      game.tired = true;
+    });
     table.broadcast();
     await settle();
 
@@ -188,7 +180,7 @@ describe('useTableActionWiring drives the board from the seat state alone (#378)
   });
 
   it('hands back the action metadata it read, so a panel is fed the same record', async () => {
-    const table = mountTable();
+    const table = await mountTable();
     await settle();
     expect(Object.keys(table.wiring.actionMetadata.value)).toEqual(['move']);
     expect(table.wiring.actionMetadata.value).toEqual(table.seatState.value.actionMetadata);

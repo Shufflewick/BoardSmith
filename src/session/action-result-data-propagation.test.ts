@@ -5,7 +5,7 @@
  * The defect this file exists to catch was invisible to every author-level
  * test, because `game.performAction()` has always returned the real
  * `ActionResult`. What dropped `data` was the chain ABOVE the engine — the
- * flow state, the runner, the session, the stateless-ops envelope, and the
+ * flow state, the runner, the session host, the stateless-ops envelope, and the
  * dev-host response whitelist — four hand-maintained field lists, each of
  * which silently omits a field by default.
  *
@@ -24,7 +24,7 @@ import {
   type GameOptions,
 } from '../engine/index.js';
 import { GameRunner } from '../runtime/runner.js';
-import { GameSession } from './game-session.js';
+import { createHeadlessSession } from './headless-session.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { shapeResult } from '../cli/dev-host/bridge.js';
@@ -78,12 +78,12 @@ class ReportingGame extends Game<ReportingGame, Player> {
   }
 }
 
-const gameDef: GameDefinitionLike = {
+const gameDef = {
   gameClass: ReportingGame,
   gameType: 'reporting',
   minPlayers: 1,
   maxPlayers: 2,
-};
+} satisfies GameDefinitionLike;
 
 const gameOptions = { playerCount: 2, seed: 'bug-017' };
 
@@ -97,14 +97,11 @@ function makeRunner(): GameRunner<ReportingGame> {
   return runner;
 }
 
-function makeSession() {
-  return GameSession.create({
-    gameType: 'reporting',
-    GameClass: ReportingGame,
-    playerCount: 2,
-    playerNames: ['Alice', 'Bob'],
-    seed: 'bug-017',
-  });
+/** A started table on the live session host (`SnapshotSessionHost` over `executeOp`). */
+async function makeSession() {
+  const session = createHeadlessSession(gameDef, { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'bug-017' });
+  await session.start();
+  return session;
 }
 
 describe('BUG-017 — ActionResult.data across layer boundaries', () => {
@@ -145,30 +142,32 @@ describe('BUG-017 — ActionResult.data across layer boundaries', () => {
     });
   });
 
-  describe('GameSession.performAction', () => {
-    it('returns data and message to the acting seat', async () => {
-      const session = makeSession();
-      const result = await session.performAction('viewMap', 1, {});
+  describe('SnapshotSessionHost action op', () => {
+    it('returns data and message to the acting seat, and publishes them to no seat', async () => {
+      const session = await makeSession();
+      const result = succeeded(await session.send(1, { type: 'action', actionName: 'viewMap', player: 1, args: {} }));
 
-      expect(result.success).toBe(true);
       expect(result.data).toEqual({ cartography: CARTOGRAPHY });
       expect(result.message).toBe(NARRATION);
+      expect(JSON.stringify(session.broadcasts)).not.toContain('cartography');
+      expect(JSON.stringify(session.spectatorViews)).not.toContain('cartography');
     });
   });
 
-  describe('GameSession.processSelectionStep', () => {
+  describe('SnapshotSessionHost selectionStep op', () => {
     it('returns data and message on the step that completes the action', async () => {
-      const session = makeSession();
+      const session = await makeSession();
+      const step = (selectionName: string, value: string) =>
+        session.send(1, { type: 'selectionStep', player: 1, selectionName, value, actionName: 'appraise' });
 
-      const mid = await session.processSelectionStep(1, 'item', 'sword', 'appraise');
+      const mid = succeeded(await step('item', 'sword'));
       expect(mid.actionComplete).toBeFalsy();
       expect(mid.data).toBeUndefined();
 
-      const done = await session.processSelectionStep(1, 'lens', 'fine');
+      const done = succeeded(await step('lens', 'fine'));
       expect(done.actionComplete).toBe(true);
       expect(done.data).toEqual({ appraisal: 'sword:fine' });
       expect(done.message).toBe(NARRATION);
-      expect(done.actionResult?.data).toEqual({ appraisal: 'sword:fine' });
     });
   });
 

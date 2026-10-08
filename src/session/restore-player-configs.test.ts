@@ -1,24 +1,24 @@
 /**
- * Tests that playerConfigs survives GameSession.restore() for lobby games.
+ * A game's lobby-built constructor options (`playerConfigs`) reach every game
+ * the live host rebuilds, including after the host itself is restored.
  *
- * Bug: After HMR or server restart, storedState.gameOptions only contained
- * host-level options (not playerConfigs). The constructor ran without
- * playerConfigs, so constructor-time logic (e.g. setting up bot flags,
- * roles like isDictator) produced wrong results. MCTS clones then
- * captured these incomplete options via getConstructorOptions(), causing
- * flow divergence in simulations.
- *
- * Fix: GameSession now reconstructs playerConfigs from lobbySlots in all
- * game reconstruction paths (restore, HMR dev transfer, HMR replay,
- * checkpoint restore).
+ * A host hands `playerConfigs` to the game only on the `start` op (the dev host
+ * and the platform build it from their lobby); every later op rebuilds the game
+ * from the snapshot. So constructor-time logic that reads `playerConfigs` (a
+ * role such as MERC's dictator, a per-seat bot flag) must find them in the
+ * snapshot's own constructor options, or the rebuilt game silently diverges
+ * from the one that started: after a process restart, and on every op.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { GameSession } from './game-session.js';
-import { Game, Player, defineFlow, actionStep, Action, type GameOptions } from '../engine/index.js';
-import type { PlayerConfig, PlayerOptionDefinition } from './types.js';
+import { Game, defineFlow, actionStep, loop, Action, type GameOptions } from '../engine/index.js';
+import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
+import { runnerFromSnapshot } from './runner-from-snapshot.js';
+import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
+import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
+import type { PlayerConfig } from './types.js';
 
-// Track what playerConfigs the constructor received
+// What the most recently built game's constructor received.
 let capturedPlayerConfigs: PlayerConfig[] | undefined;
 
 class RestoreTestGame extends Game {
@@ -28,147 +28,66 @@ class RestoreTestGame extends Game {
     super(options);
     capturedPlayerConfigs = options.playerConfigs;
 
-    if (options.playerConfigs) {
-      const leader = options.playerConfigs.find(c => (c as any).isDictator === true);
-      if (leader) {
-        this.leaderSeat = options.playerConfigs.indexOf(leader) + 1;
-      }
-    }
+    const leader = options.playerConfigs?.find((c) => c.isDictator === true);
+    if (leader) this.leaderSeat = options.playerConfigs!.indexOf(leader) + 1;
 
-    this.registerAction(
-      Action.create('pass')
-        .execute(() => ({ success: true }))
-    );
-
-    this.setFlow(defineFlow({
-      root: actionStep({ actions: ['pass'] }),
-    }));
+    this.registerAction(Action.create('pass').execute(() => ({ success: true })));
+    this.setFlow(defineFlow({ root: loop({ maxIterations: 100, do: actionStep({ actions: ['pass'], turnScope: 'restart' }) }) }));
   }
 }
 
-describe('playerConfigs survives GameSession.restore()', () => {
+const def = {
+  gameClass: RestoreTestGame,
+  gameType: 'restore-test',
+  minPlayers: 3,
+  maxPlayers: 3,
+} satisfies GameDefinitionLike;
+
+const playerConfigs: PlayerConfig[] = [
+  { name: 'Alice', isDictator: false },
+  { name: 'Bob', isDictator: false },
+  { name: 'Charlie', isDictator: true },
+];
+
+/** Adapters the way a host builds them: lobby options on `start`, the bare seat count after. */
+function adapters(): SnapshotSessionAdapters {
+  const startOptions = { playerCount: 3, seed: 'restore-configs', playerNames: ['Alice', 'Bob', 'Charlie'], playerConfigs };
+  return {
+    playerCount: 3,
+    executeOp: (snap, pend, op) => executeOp(def, op.type === 'start' ? startOptions : { playerCount: 3 }, snap, pend, op),
+    record: () => {},
+    push: () => {},
+  };
+}
+
+function pass(host: SnapshotSessionHost) {
+  return host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
+}
+
+describe('playerConfigs survive every rebuild of the game, including a restored host', () => {
   beforeEach(() => {
     capturedPlayerConfigs = undefined;
   });
 
-  it('should reconstruct playerConfigs from lobbySlots on restore', async () => {
-    // Create a lobby game with exclusive player option (like MERC's isDictator)
-    const session = GameSession.create<RestoreTestGame>({
-      gameType: 'restore-test',
-      GameClass: RestoreTestGame,
-      playerCount: 3,
-      playerNames: ['Alice', 'Bob', 'Charlie'],
-      useLobby: true,
-      creatorId: 'creator-1',
-      playerConfigs: [
-        { name: 'Alice' },
-        { name: 'Bob' },
-        { name: 'Charlie' },
-      ],
-      playerOptionsDefinitions: {
-        isDictator: {
-          type: 'exclusive',
-          label: 'Dictator',
-          default: 'last',
-        },
-      },
-    });
+  it('a game rebuilt after start, and after a restore from JSON, is constructed with the start playerConfigs', async () => {
+    const host = new SnapshotSessionHost(adapters());
+    await host.start();
+    expect(capturedPlayerConfigs).toEqual(playerConfigs);
 
-    // Start the game through the lobby flow
-    await session.claimSeat(1, 'creator-1', 'Alice');
-    await session.claimSeat(2, 'player-2', 'Bob');
-    await session.claimSeat(3, 'player-3', 'Charlie');
-    await session.setReady('creator-1', true);
-    await session.setReady('player-2', true);
-    await session.setReady('player-3', true);
-
-    // Game should be playing now
-    expect(session.isWaitingForPlayers()).toBe(false);
-
-    // Verify the original game got playerConfigs with isDictator on last player
-    expect(capturedPlayerConfigs).toBeDefined();
-    expect(capturedPlayerConfigs![2].isDictator).toBe(true);
-    expect(capturedPlayerConfigs![0].isDictator).toBe(false);
-
-    const originalGame = session.runner.game as RestoreTestGame;
-    expect(originalGame.leaderSeat).toBe(3);
-
-    // Verify getConstructorOptions includes playerConfigs
-    const constructorOpts = originalGame.getConstructorOptions();
-    expect(constructorOpts.playerConfigs).toBeDefined();
-
-    // Now simulate restore (like server restart or HMR replay)
+    // An op after start rebuilds the game from the snapshot alone.
     capturedPlayerConfigs = undefined;
-    const storedState = session.storedState;
+    expect((await pass(host)).success).toBe(true);
+    expect(capturedPlayerConfigs).toEqual(playerConfigs);
 
-    const restored = GameSession.restore<RestoreTestGame>(
-      storedState,
-      RestoreTestGame,
-    );
-
-    // The restored game's constructor should have received playerConfigs
-    expect(capturedPlayerConfigs).toBeDefined();
-    expect(capturedPlayerConfigs).toHaveLength(3);
-    expect(capturedPlayerConfigs![2].isDictator).toBe(true);
-    expect(capturedPlayerConfigs![0].isDictator).toBe(false);
-
-    const restoredGame = restored.runner.game as RestoreTestGame;
-    expect(restoredGame.leaderSeat).toBe(3);
-
-    // And getConstructorOptions on the restored game should also have playerConfigs
-    const restoredOpts = restoredGame.getConstructorOptions();
-    expect(restoredOpts.playerConfigs).toBeDefined();
-    expect((restoredOpts.playerConfigs as any[])[2].isDictator).toBe(true);
-  });
-
-  it('should not add playerConfigs for non-lobby games', () => {
-    // Non-lobby game (e.g., --bot mode or direct creation)
-    const session = GameSession.create<RestoreTestGame>({
-      gameType: 'restore-test',
-      GameClass: RestoreTestGame,
-      playerCount: 2,
-      playerNames: ['Alice', 'Bob'],
-    });
-
+    // A fresh process restores from what storage handed back, then plays on.
+    const stored = JSON.parse(JSON.stringify(host.durableState()));
+    const restored = SnapshotSessionHost.restore(adapters(), { ...stored, botSeats: [] });
     capturedPlayerConfigs = undefined;
-    const storedState = session.storedState;
+    expect((await pass(restored)).success).toBe(true);
+    expect(capturedPlayerConfigs).toEqual(playerConfigs);
 
-    const restored = GameSession.restore<RestoreTestGame>(
-      storedState,
-      RestoreTestGame,
-    );
-
-    // No lobbySlots → no playerConfigs reconstruction
-    expect(capturedPlayerConfigs).toBeUndefined();
-  });
-
-  it('should not add playerConfigs for lobby games still in waiting state', () => {
-    // Lobby game that hasn't started yet (still waiting for players)
-    const session = GameSession.create<RestoreTestGame>({
-      gameType: 'restore-test',
-      GameClass: RestoreTestGame,
-      playerCount: 2,
-      playerNames: ['Alice', 'Bob'],
-      useLobby: true,
-      creatorId: 'creator-1',
-      playerConfigs: [
-        { name: 'Alice' },
-        { name: 'Bob' },
-      ],
-    });
-
-    expect(session.isWaitingForPlayers()).toBe(true);
-
-    capturedPlayerConfigs = undefined;
-    const storedState = session.storedState;
-
-    const restored = GameSession.restore<RestoreTestGame>(
-      storedState,
-      RestoreTestGame,
-    );
-
-    // Game is still in waiting state → don't reconstruct playerConfigs
-    // (the onGameStart callback will handle it when the game actually starts)
-    expect(capturedPlayerConfigs).toBeUndefined();
+    const game = runnerFromSnapshot(restored.snapshot!, { ...def, randomness: 'allowed' }).game as RestoreTestGame;
+    expect(game.leaderSeat).toBe(3);
+    expect(game.getConstructorOptions().playerConfigs).toEqual(playerConfigs);
   });
 });

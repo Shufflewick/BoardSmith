@@ -117,8 +117,8 @@ function capturedCheckpointCount(snapshot: GameStateSnapshot): number {
  * were never captured.
  *
  * Checkpoints are captured through the SNAPSHOT funnel, not by
- * `performAction`: `GameRunner.getSnapshot()` calls `captureCheckpoint()`, and
- * the stateful `GameSession` calls it from its broadcast funnel. A driver that
+ * `performAction`: `GameRunner.getSnapshot()` calls `captureCheckpoint()`, as
+ * the executor does once per op. A driver that
  * performs many actions and snapshots once at the end therefore leaves every
  * slot between them empty. Those slots serialize as `null` but still count
  * toward the window's length, so `checkpointBytes / length` comes out one to

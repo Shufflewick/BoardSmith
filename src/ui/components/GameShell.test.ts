@@ -4,8 +4,8 @@
  *
  * The Teaching group's hint is offered when the host's state says the game has
  * a bot seat: SnapshotSessionHost injects `hasBotPlayers` into broadcast state
- * when botSeats are present. GameSession never sets it (RESEARCH Pitfall 5),
- * so a production table without that field offers no hint.
+ * only while it has bot seats (RESEARCH Pitfall 5), so a table without
+ * that field offers no hint.
  *
  * Behaviors under test:
  *   SH-1: no state, or state without hasBotPlayers -> undefined

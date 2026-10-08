@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../engine/index.js';
 import { executeOp, DEBUG_OP_TYPES, type GameDefinitionLike, type ExecutableOp, type Op, type StateEnvelope } from './stateless-ops.js';
-import { SnapshotSessionHost } from './snapshot-session-host.js';
-import { GameSession } from './game-session.js';
+import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 import { boundaryKeyOf, boundaryKeyOfHost } from './testing/boundary-stamp.js';
 import { collectFixtureDefinition } from './testing/fixtures/collect-fixture.js';
 import { succeeded, refused } from './op-result.test-helper.js';
@@ -242,10 +241,10 @@ describe('executeOp debug ops', () => {
 
 // ---------------------------------------------------------------------------
 // #481: debug ops run only when the host turns debugging on, and a seat can
-// never use one to read another seat's view. Three hosts run debug ops: the
-// pure `executeOp` (ShufflewickPub's executor and the dev host),
-// `SnapshotSessionHost`, and `GameSession`. The dev host's wire bridge is
-// checked in `src/cli/dev-host/bridge.test.ts`.
+// never use one to read another seat's view. Two layers gate them: the pure
+// `executeOp` (ShufflewickPub's executor and the dev host) and the
+// `SnapshotSessionHost` every host runs it under. The dev host's wire bridge
+// is checked in `src/cli/dev-host/bridge.test.ts`.
 // ---------------------------------------------------------------------------
 
 /** One instance of every debug op, each valid against a two-pass game. */
@@ -338,6 +337,27 @@ describe('#481 debug op gate', () => {
       expect(res.actionHistory).toHaveLength(2);
     });
 
+    it('a host restored with debugging off refuses debug ops, though the host that saved the game had it on', async () => {
+      const { host: saved } = await startedHost(true);
+      const stored = JSON.parse(JSON.stringify(saved.durableState()));
+      const adapters = (debug: boolean | undefined): SnapshotSessionAdapters => ({
+        playerCount: 2,
+        debug,
+        executeOp: (snap, pend, op) => executeOp(passDef, { playerCount: 2 }, snap, pend, op, { debug: true }),
+        record: () => {}, push: () => {},
+      });
+
+      const restored = SnapshotSessionHost.restore(adapters(undefined), { ...stored, botSeats: [] });
+      for (const op of EVERY_DEBUG_OP) {
+        const res = refused(await restored.handleOp(1, op));
+        expect(res.error, op.type).toMatch(/debugging is not turned on/i);
+      }
+
+      const restoredWithDebug = SnapshotSessionHost.restore(adapters(true), { ...stored, botSeats: [] });
+      const at = await restoredWithDebug.handleOp(1, { type: 'debugStateAt', actionIndex: 0, player: 1 });
+      expect(at.success, at.error).toBe(true);
+    });
+
     for (const op of SEAT_VIEW_OPS) {
       it(`refuses ${op.type} for another seat's view even with debugging on`, async () => {
         const { host, executed } = await startedHost(true);
@@ -353,75 +373,5 @@ describe('#481 debug op gate', () => {
         expect(res.success).toBe(true);
       });
     }
-  });
-
-  describe('GameSession', () => {
-    function session(debugEnabled?: boolean) {
-      return GameSession.create<PassGame>({
-        gameType: 'pass',
-        GameClass: PassGame,
-        playerCount: 2,
-        playerNames: ['Alice', 'Bob'],
-        seed: 'debug-gate',
-        debugEnabled,
-      });
-    }
-
-    async function passTwice(s: GameSession<PassGame>) {
-      for (let i = 0; i < 2; i++) {
-        const res = await s.performAction('pass', 1, {});
-        expect(res.success).toBe(true);
-      }
-    }
-
-    const calls: Array<[string, (s: GameSession<PassGame>) => Promise<{ success: boolean; error?: string }> | { success: boolean; error?: string }]> = [
-      ['getStateAtAction', (s) => s.getStateAtAction(1, 1)],
-      ['getStateDiff', (s) => s.getStateDiff(0, 1, 1)],
-      ['getActionTraces', (s) => s.getActionTraces(1)],
-      ['rewindToAction', (s) => s.rewindToAction(1)],
-      ['executeDebugCommand', (s) => s.executeDebugCommand({ type: 'SHUFFLE', spaceId: 1 })],
-      ['moveCardToTop', (s) => s.moveCardToTop(1)],
-      ['reorderCard', (s) => s.reorderCard(1, 0)],
-      ['transferCard', (s) => s.transferCard(1, 1)],
-      ['shuffleDeck', (s) => s.shuffleDeck(1)],
-    ];
-
-    for (const [name, call] of calls) {
-      it(`${name} is refused unless the session was created with debugEnabled`, async () => {
-        const s = session();
-        await passTwice(s);
-        const res = await call(s);
-        expect(res.success).toBe(false);
-        expect(res.error).toMatch(/debugging is not turned on/i);
-        expect(s.getHistory().actionHistory).toHaveLength(2);
-      });
-    }
-
-    it('debug calls run when the session was created with debugEnabled', async () => {
-      const s = session(true);
-      await passTwice(s);
-      expect(s.getStateAtAction(1, 1).success).toBe(true);
-      expect((await s.rewindToAction(1)).success).toBe(true);
-    });
-
-    it('a session restored without debugEnabled refuses debug calls, even if the saved one had it on', async () => {
-      const original = session(true);
-      await passTwice(original);
-      const stored = JSON.parse(JSON.stringify(original.storedState));
-
-      const restored = GameSession.restore<PassGame>(stored, PassGame);
-      for (const [name, call] of calls) {
-        const res = await call(restored);
-        expect(res.success, name).toBe(false);
-        expect(res.error).toMatch(/debugging is not turned on/i);
-      }
-
-      const restoredWithDebug = GameSession.restore<PassGame>(
-        JSON.parse(JSON.stringify(original.storedState)), PassGame,
-        undefined, undefined, undefined, undefined, undefined, undefined, true,
-      );
-      const at = restoredWithDebug.getStateAtAction(0, 1);
-      expect(at.success, at.error).toBe(true);
-    });
   });
 });

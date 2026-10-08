@@ -274,8 +274,8 @@ export type GameOptions = {
   /**
    * Tutorial definition (static config, never serialized).
    *
-   * Threaded un-serialized from `GameDefinition.tutorial` via
-   * `GameSession.create()`. Mirrors how `bot` / `_actions` / flow definitions
+   * Threaded un-serialized from `GameDefinition.tutorial` by the `start` op
+   * (`executeOp`). Mirrors how `bot` / `_actions` / flow definitions
    * live on the instance. Stored in `Game.tutorialDefinition` (listed in
    * `unserializableAttributes`).
    */
@@ -1122,8 +1122,8 @@ export class Game<
   /**
    * Tutorial definition (NOT serialized).
    *
-   * Static config threaded from `GameDefinition.tutorial` via
-   * `GameSession.create()` → `GameOptions.tutorial` → constructor. Listed in
+   * Static config threaded from `GameDefinition.tutorial` via the `start` op
+   * (`executeOp`) → `GameOptions.tutorial` → constructor. Listed in
    * `unserializableAttributes` so `toJSON()` / `loadSerializedState()` skip
    * it — the definition is re-supplied each time a runner is constructed,
    * mirroring how `_actions` and flow definitions live on the instance.
@@ -1222,7 +1222,7 @@ export class Game<
     //
     // `tutorial` is intentionally excluded: it is static config (like _actions /
     // flow definitions) that must be re-supplied on restore from the session layer
-    // (`GameSession.restore` → `GameRunnerOptions.gameOptions.tutorial`), NOT
+    // (`executeOp` sets `tutorialDefinition` on every runner it restores), NOT
     // serialized into the snapshot. Storing it here would silently embed it in
     // `snapshot.gameOptions` via `getConstructorOptions()` → `createSnapshot()`.
     // Functions in predicate-style gates would also fail JSON.stringify.
@@ -2659,12 +2659,12 @@ export class Game<
    * The provided function will be called when debug data is requested.
    * Use this to expose game-specific debug information in the debug panel.
    *
-   * Debug payloads are dev-only: they are only broadcast to clients when the
-   * session is created with `GameSessionOptions.debugEnabled: true` (default
+   * Debug payloads are dev-only: they reach a seat's state only when a host
+   * builds it with `buildPlayerState`'s `includeDebugData: true` (default
    * `false`, SEC-04). Do NOT use `registerDebug` to expose hidden/secret game
    * state (a hand's contents, an opponent's hidden hand, deck order, etc) —
-   * enabling `debugEnabled` on a live/production session would broadcast it
-   * to every connected player and spectator. Prefer non-secret diagnostics
+   * a host that included debug data in a live/production session would
+   * broadcast it to every connected player and spectator. Prefer non-secret diagnostics
    * like element counts, tree shape, or public derived state.
    *
    * @example
@@ -5219,7 +5219,7 @@ export class Game<
     // Restore animation events if present.
     //
     // `animationFloor` distinguishes the two callers of this method
-    // (UNDO-04): a FULL session restore (GameSession.restore -> fromSnapshot,
+    // (UNDO-04): a FULL restore of a stored game (GameRunner.fromSnapshot,
     // no floor) is correct to unconditionally ADOPT the persisted counters --
     // the process is starting fresh, there is no live counter to protect. An
     // undo/rewind CHECKPOINT restore (GameRunner.fromCheckpoint) supplies a

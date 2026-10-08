@@ -27,7 +27,6 @@ import {
   actionStep,
   type GameOptions,
 } from '../../../engine/index.js';
-import { GameSession, type GameSessionOptions } from '../../game-session.js';
 import type { GameDefinitionLike } from '../../stateless-ops.js';
 
 class SecretDeploymentPlayer extends Player<SecretDeploymentGame, SecretDeploymentPlayer> {
@@ -105,16 +104,3 @@ export const secretDeploymentDefinition: GameDefinitionLike = {
   minPlayers: 2,
   maxPlayers: 2,
 };
-
-/** A stateful two-seat session of the deployment, players `A` and `B`, dealt from `seed`. */
-export function createSecretDeploymentSession(
-  options: Pick<GameSessionOptions<SecretDeploymentGame>, 'seed' | 'elementIdKey'>,
-): GameSession<SecretDeploymentGame> {
-  return GameSession.create<SecretDeploymentGame>({
-    gameType: secretDeploymentDefinition.gameType,
-    GameClass: SecretDeploymentGame,
-    playerCount: 2,
-    playerNames: ['A', 'B'],
-    ...options,
-  });
-}

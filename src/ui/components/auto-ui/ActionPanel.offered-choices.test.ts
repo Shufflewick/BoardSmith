@@ -12,7 +12,7 @@
  * The engine's answer for the current pick is the one list. A game that wants
  * distinct values across picks says so in its own `choices`, `elements` or
  * `filterBy`, and then the engine's list is already distinct. Every step below
- * asks the real `GameSession` what it offers for the args answered so far and
+ * asks the live session host what it offers for the args answered so far and
  * holds the panel's buttons and the board's targets to exactly that.
  */
 import { describe, it, expect, afterEach } from 'vitest';
@@ -25,7 +25,7 @@ import { BOARD_INTERACTION_KEY, type BoardInteraction } from '../../composables/
 import type { TableActionWiring } from '../../composables/useTableActionWiring.js';
 import { mountLiveSeat, settle } from '../../composables/table-wiring.test-helper.js';
 import { mailPicks } from '../../composables/send-mail.test-helper.js';
-import type { GameSession } from '../../../session/game-session.js';
+import type { HeadlessSession } from '../../../session/headless-session.js';
 import {
   Game,
   Player,
@@ -112,7 +112,7 @@ afterEach(() => {
 });
 
 interface Table {
-  session: GameSession<PicksGame>;
+  session: HeadlessSession<PicksGame>;
   controller: TableActionWiring['controller'];
   board: BoardInteraction;
   panel: VueWrapper;
@@ -120,7 +120,7 @@ interface Table {
 
 /** Seat 1 of a real table with the panel mounted over the same wiring GameShell uses. */
 async function table(): Promise<Table> {
-  const { session, wiring, board, seatState } = mountLiveSeat(PicksGame, 'bs407', mounted);
+  const { session, wiring, board, seatState } = await mountLiveSeat(PicksGame, 'bs407', mounted);
   const Host = defineComponent({
     setup: () => () =>
       h(ActionPanel, {
@@ -157,11 +157,17 @@ function panelOptions(panel: VueWrapper): string[] {
  * engine's elements, or the elements its choices name. Returns the engine's labels so a test can say which one it
  * is choosing.
  */
-function expectPanelOffersWhatTheEngineOffers(t: Table, action: string): string[] {
+async function expectPanelOffersWhatTheEngineOffers(t: Table, action: string): Promise<string[]> {
   const pick = t.controller.currentPick.value;
   expect(pick, 'a pick should be open').toBeTruthy();
-  const offered = t.session.getPickChoices(action, pick!.name, SEAT, { ...t.controller.currentArgs.value });
-  expect(offered.success, `the engine refused to answer "${pick!.name}": ${offered.error}`).toBe(true);
+  const offered = await t.session.send(SEAT, {
+    type: 'resolveChoices',
+    actionName: action,
+    selectionName: pick!.name,
+    player: SEAT,
+    args: { ...t.controller.currentArgs.value },
+  });
+  if (!offered.success) throw new Error(`the engine refused to answer "${pick!.name}": ${offered.error}`);
 
   // An element pick's board targets are its elements; a choice pick's are the
   // elements its choices name.
@@ -198,14 +204,14 @@ describe('the Action Panel offers exactly what the engine offers (#407)', () => 
   it('offers the value an earlier pick took when the narrowed list still holds it (the issue repro)', async () => {
     const t = await table();
     await startFromPanel(t, 'sendMail');
-    expectPanelOffersWhatTheEngineOffers(t, 'sendMail');
+    await expectPanelOffersWhatTheEngineOffers(t, 'sendMail');
     await choose(t, 'Player 3');
 
     expect(t.controller.currentPick.value?.name).toBe('recipient');
-    expect(expectPanelOffersWhatTheEngineOffers(t, 'sendMail')).toEqual(['Player 3', 'Player 30']);
+    expect(await expectPanelOffersWhatTheEngineOffers(t, 'sendMail')).toEqual(['Player 3', 'Player 30']);
     await choose(t, 'Player 3');
 
-    expect(t.session.runner.game.done).toEqual([
+    expect(t.session.readGame().done).toEqual([
       { action: 'sendMail', args: { to: 'Player 3', recipient: 'Player 3' } },
     ]);
   });
@@ -213,13 +219,13 @@ describe('the Action Panel offers exactly what the engine offers (#407)', () => 
   it('offers a repeat of an earlier choice when the game allows one', async () => {
     const t = await table();
     await startFromPanel(t, 'paint');
-    expectPanelOffersWhatTheEngineOffers(t, 'paint');
+    await expectPanelOffersWhatTheEngineOffers(t, 'paint');
     await choose(t, 'red');
 
-    expect(expectPanelOffersWhatTheEngineOffers(t, 'paint')).toEqual(['red', 'blue']);
+    expect(await expectPanelOffersWhatTheEngineOffers(t, 'paint')).toEqual(['red', 'blue']);
     await choose(t, 'red');
 
-    expect(t.session.runner.game.done).toEqual([{ action: 'paint', args: { first: 'red', second: 'red' } }]);
+    expect(t.session.readGame().done).toEqual([{ action: 'paint', args: { first: 'red', second: 'red' } }]);
   });
 
   it('hides an earlier choice only because the game narrowed its own list', async () => {
@@ -227,30 +233,30 @@ describe('the Action Panel offers exactly what the engine offers (#407)', () => 
     await startFromPanel(t, 'mix');
     await choose(t, 'red');
 
-    expect(expectPanelOffersWhatTheEngineOffers(t, 'mix')).toEqual(['blue']);
+    expect(await expectPanelOffersWhatTheEngineOffers(t, 'mix')).toEqual(['blue']);
   });
 
   it('offers, on the panel and the board, an element an earlier pick took when the game allows it', async () => {
     const t = await table();
     await startFromPanel(t, 'stack');
-    const first = expectPanelOffersWhatTheEngineOffers(t, 'stack');
+    const first = await expectPanelOffersWhatTheEngineOffers(t, 'stack');
     expect(first).toHaveLength(2);
     await choose(t, first[0]!);
 
     expect(t.controller.currentPick.value?.name).toBe('top');
-    expect(expectPanelOffersWhatTheEngineOffers(t, 'stack')).toEqual(first);
+    expect(await expectPanelOffersWhatTheEngineOffers(t, 'stack')).toEqual(first);
   });
 
   it('offers, on the panel and the board, a choice an earlier pick took when the game allows it', async () => {
     const t = await table();
     await startFromPanel(t, 'swap');
-    expectPanelOffersWhatTheEngineOffers(t, 'swap');
+    await expectPanelOffersWhatTheEngineOffers(t, 'swap');
     await choose(t, 'amber');
 
     expect(t.controller.currentPick.value?.name).toBe('right');
-    expect(expectPanelOffersWhatTheEngineOffers(t, 'swap')).toEqual(['amber', 'jade']);
+    expect(await expectPanelOffersWhatTheEngineOffers(t, 'swap')).toEqual(['amber', 'jade']);
     await choose(t, 'amber');
 
-    expect(t.session.runner.game.done).toEqual([{ action: 'swap', args: { left: 'amber', right: 'amber' } }]);
+    expect(t.session.readGame().done).toEqual([{ action: 'swap', args: { left: 'amber', right: 'amber' } }]);
   });
 });

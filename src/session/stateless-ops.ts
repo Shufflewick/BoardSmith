@@ -9,8 +9,8 @@
  * no memory between calls.
  */
 
-import type { Game, GameClass, GameCommand, TutorialDefinition, Annotation, FlowState, FollowUpOffer } from '../engine/index.js';
-import { ErrorCode } from '../types/protocol.js';
+import type { Game, GameClass, GameCommand, TutorialDefinition, Annotation, FlowState, FollowUpOffer, HistoryEntry } from '../engine/index.js';
+import { ErrorCode, type ChoiceWithRefs, type ValidElement } from '../types/protocol.js';
 import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState } from '../engine/index.js';
 import type { BoundaryKeyState } from '../engine/index.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
@@ -28,11 +28,13 @@ import type { BotMove } from '../bot/types.js';
 import { describeMoveForHint } from './move-summary.js';
 import { PERSIST_KEY, PERSIST_PRIVATE_KEY, type PersistCommit } from '../persistence/persistence.js';
 import { PickHandler } from './pick-handler.js';
+import { runnerFromSnapshot } from './runner-from-snapshot.js';
 import {
   offerFollowUp,
   buildPlayerState,
   buildActionTraces,
   computeElementDiff,
+  type ElementChanges,
   serializeFlowDebugInfo,
   assertUndoAllowed,
   UndoRefusedError,
@@ -394,8 +396,8 @@ export interface OpSuccessFields {
     warnings?: WarningEntry[];
   };
   resolveChoices: {
-    choices?: unknown[];
-    validElements?: unknown[];
+    choices?: ChoiceWithRefs[];
+    validElements?: ValidElement[];
     multiSelect?: { min: number; max?: number };
     /**
      * The ordered-list bounds of the step this answered (#249, #480), resolved
@@ -420,9 +422,9 @@ export interface OpSuccessFields {
      */
     botStalled?: { seat: number; reason: string };
   };
-  debugHistory: { actionHistory: unknown[] };
+  debugHistory: { actionHistory: HistoryEntry[] };
   debugStateAt: { historicalState: unknown };
-  debugStateDiff: { diff: unknown };
+  debugStateDiff: { diff: ElementDiff };
   debugActionTraces: { traces: unknown[]; flowContext: unknown };
   /** The asking seat's own pending action, beside the envelope's `flowDebugInfo`. */
   debugFlowState: { pendingAction?: SerializedPendingActionState };
@@ -479,6 +481,14 @@ export type OpResultFor<T extends Op['type']> = OpSuccess<T> | OpFailure;
 /** What any op answers. Narrow it by the op that was sent with {@link OpResultFor}. */
 export type OpResult = { [T in Op['type']]: OpResultFor<T> }[Op['type']];
 
+/** What the `debugStateDiff` op answers: the elements that changed between two action indices. */
+export interface ElementDiff extends ElementChanges {
+  /** The from action index */
+  fromIndex: number;
+  /** The to action index */
+  toIndex: number;
+}
+
 // ---------------------------------------------------------------------------
 // GameDefinitionLike
 // ---------------------------------------------------------------------------
@@ -504,7 +514,7 @@ export interface GameDefinitionLike {
   maxPlayers?: number;
   /**
    * Optional tutorial definition — threaded un-serialized into each runner
-   * (mirrors how game-session.ts re-supplies it after fromSnapshot/fromCheckpoint).
+   * this module builds (`handleStart`, `runnerFromSnapshot`, `runnerFromCheckpoint`).
    * When present, `buildPlayerState` emits `hasTutorial: true` in every broadcast.
    */
   tutorial?: TutorialDefinition;
@@ -602,7 +612,7 @@ function stateEnvelope(runner: GameRunner, playerCount: number): StateEnvelope {
     snapshot,
     playerViews: buildViews(runner, playerCount),
     spectatorView: buildSpectatorView(runner),
-    // Computed once for every seat (mirrors GameSession.broadcast()).
+    // Computed once for every seat.
     // SnapshotSessionHost merges this into every per-seat view's `state`
     // alongside its own per-seat pendingAction lookup (see
     // SnapshotSessionHost.mergeTransientState / lastFlowDebugInfo).
@@ -743,7 +753,7 @@ function handleStart(
     };
   }
 
-  // Thread tutorial definition un-serialized (mirrors game-session.ts create()).
+  // Thread tutorial definition un-serialized.
   // The game constructor strips `tutorial` from _constructorOptions so it is not
   // persisted in the snapshot; runnerFromSnapshot re-supplies it on restore.
   const effectiveOptions = def.tutorial
@@ -766,7 +776,7 @@ function handleStart(
   };
 }
 
-/** Mirror game-session.ts: advance the tutorial of every seat whose tutorial is running. */
+/** Advance the tutorial of every seat whose tutorial is running. */
 function advanceRunningTutorials(game: Game): void {
   for (const [seat, progress] of game.tutorialProgress) {
     if (progress.status === 'running') {
@@ -924,7 +934,7 @@ function handleUndo(
 ): OpResultFor<'undo'> {
   const runner = runnerFromSnapshot(snapshot, def);
 
-  // Validate player seat (1-indexed) — parity with StateHistory.undoToTurnStart.
+  // Validate player seat (1-indexed).
   if (op.player < 1 || op.player > gameOptions.playerCount) {
     return errorResult(
       `Invalid player: ${op.player}. Player seats are 1-indexed (1 to ${gameOptions.playerCount}).`,
@@ -933,8 +943,7 @@ function handleUndo(
     );
   }
 
-  // The one undo rule (#373), shared with the stateful twin
-  // (state-history.ts) and with the `canUndo` every seat is sent, so the
+  // The one undo rule (#373), shared with the `canUndo` every seat is sent, so the
   // offer and this decision cannot disagree. It is also the server-side
   // enforcement (UNDO-01/UNDO-02): the client's `canUndo` is never trusted.
   const decision = decideUndo(runner, op.player);
@@ -1115,8 +1124,7 @@ async function handleHint(
     );
   }
 
-  // Extract the board highlight target using the same priority chain as
-  // GameSession.#extractMoveTarget(): hintTargetFromMove first, then DEST_ARGS fallback.
+  // Extract the board highlight target: hintTargetFromMove first, then DEST_ARGS fallback.
   let target: import('../engine/index.js').ElementRef | undefined;
   if (def.bot.hintTargetFromMove) {
     target = def.bot.hintTargetFromMove(move);
@@ -1166,7 +1174,7 @@ async function handleHeatmapToggle(
   }
 
   // visible=false short-circuit: clear heatmap entries without running the bot
-  // (mirrors game-session.ts:1041-1043 — no MCTS needed to hide the overlay).
+  // (no MCTS needed to hide the overlay).
   if (!op.visible) {
     return {
       success: true,
@@ -1198,7 +1206,7 @@ async function handleHeatmapToggle(
 
   const { stats } = await bot.playWithStats();
 
-  // Deduplicate by cell key — mirrors game-session.ts:1007-1026 #buildHeatmapEntries.
+  // Deduplicate by cell key.
   // Keep the highest normalizedValue per cell key; mark exactly one isBest=true.
   const byCell = new Map<string, HeatmapEntry>();
   for (const stat of stats) {
@@ -1308,27 +1316,6 @@ async function handleBotSuggest(
 // ---------------------------------------------------------------------------
 // Debug op handlers
 // ---------------------------------------------------------------------------
-
-/**
- * Restore a runner from a snapshot and thread the tutorial definition back onto
- * the game (tutorials are unserializable attributes excluded from the snapshot;
- * the session layer must re-supply them on every fromSnapshot/fromCheckpoint call,
- * mirroring game-session.ts's replaceRunner guard).
- */
-function runnerFromSnapshot(
-  snapshot: GameStateSnapshot,
-  def: RunnerDef,
-): GameRunner {
-  const runner = GameRunner.fromSnapshot(
-    snapshot,
-    def.gameClass,
-    { checkpoints: def.checkpoints, randomness: def.randomness, undo: def.undo },
-  );
-  if (def.tutorial) {
-    (runner.game as Game).tutorialDefinition = def.tutorial;
-  }
-  return runner;
-}
 
 /**
  * Reconstruct the runner at a historical action index AUTHORITATIVELY from the
@@ -1514,8 +1501,8 @@ function handleDebugRewind(
       ErrorCode.INVALID_ACTION_INDEX,
     );
   }
-  // Parity with StateHistory.rewindToAction: a target at or past the current
-  // history length is a forward rewind, not a no-op — reject it identically.
+  // A target at or past the current history length is a forward rewind, not a
+  // no-op — reject it.
   if (op.actionIndex >= historyLength) {
     return errorResult(
       `Cannot rewind forward: target ${op.actionIndex} >= current ${historyLength}`,

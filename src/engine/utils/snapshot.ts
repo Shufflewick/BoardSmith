@@ -133,10 +133,9 @@ export interface GameStateSnapshot {
    * and carried through `getSnapshot`/`fromSnapshot` so it survives the
    * stateless boundary and a cold restart.
    *
-   * This is the DURABLE form of the fact `GameSession`'s `replaceRunner`
-   * already acts on locally: after a restore, every element id captured from
-   * the old runner is stale. The session clears its own such state (hint,
-   * heatmap, pending actions) inline; broadcasting the epoch as
+   * After a restore, every element id captured from the old runner is stale.
+   * The host clears its own such state (hint, heatmap, pending selections)
+   * inline (`SnapshotSessionHost.applyMutatingOp`); broadcasting the epoch as
    * `PlayerGameState.restoreEpoch` lets CLIENTS — which hold exactly the same
    * kind of state in an open pick's `validElements` — invalidate theirs from a
    * `!==` comparison instead of deducing it from a rewound `actionCount` (which

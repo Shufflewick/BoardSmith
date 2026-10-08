@@ -232,6 +232,27 @@ testGame.action('i', 1).select('x', 2).execute();
     ).toEqual(['a', 'b', 'g', 'h', 'i']);
   });
 
+  it("counts an action op sent to the live session host, the verb as its literal actionName (#529)", () => {
+    expect(
+      findDispatchedVerbs(`
+await session.send(1, { type: 'action', actionName: 'j', player: 1, args: {} });
+await session.send(1, { type: 'resolveChoices', actionName: 'notDispatched', selectionName: 's', player: 1, args: {} });
+await session.send(1, { actionName: 'untyped', player: 1, args: {} });
+`),
+    ).toEqual(['j']);
+  });
+
+  it("counts a project helper that sends the action op it is handed a verb for (#529)", () => {
+    const harness = `
+export function act(session: Session, seat: number, verb: string) {
+  return session.send(seat, { type: 'action', actionName: verb, player: seat, args: {} });
+}
+`;
+    const wrappers = findDispatchWrappers([{ path: 'tests/support/table.ts', text: harness }]);
+    expect([...wrappers.entries()]).toEqual([['act', 2]]);
+    expect(findDispatchedVerbs("await act(session, 1, 'k');\n", 'tests/a.test.ts', wrappers)).toEqual(['k']);
+  });
+
   it('does not count the removed simulateAction / simulateActions / assertActionSucceeds helpers (#517)', () => {
     expect(
       findDispatchedVerbs(`

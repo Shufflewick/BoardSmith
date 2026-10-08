@@ -10,10 +10,10 @@
  *      the `Annotation[]` type (construction below is the type-level assertion).
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { Game, Player, Space, Action, defineFlow, loop, eachPlayer, actionStep, type FlowContext } from '../index.js';
 import { GameRunner } from '../../runtime/runner.js';
-import { TutorialController } from '../../session/tutorial-controller.js';
+import { initialProgress, nextProgress } from './progress.js';
 import { getActiveTutorialStepView } from './gate.js';
 import type { Annotation, AnnotationTarget, TutorialDefinition } from './types.js';
 
@@ -130,8 +130,7 @@ describe('annotation content model — projection round-trip', () => {
     });
     runner.start();
 
-    const controller = new TutorialController(() => runner, { broadcast: vi.fn() });
-    controller.start(1); // activates 'step-with-content'
+    runner.game.tutorialProgress.set(1, initialProgress(ANNOTATION_TUTORIAL)); // activates 'step-with-content'
 
     const view = getActiveTutorialStepView(runner.game, 1);
 
@@ -154,11 +153,10 @@ describe('annotation content model — projection round-trip', () => {
     });
     runner.start();
 
-    const controller = new TutorialController(() => runner, { broadcast: vi.fn() });
-    controller.start(1); // activates 'step-with-content'
-
-    // Advance to the step that has no content
-    controller.advance(1); // moves to 'step-without-content'
+    // Start the tutorial on its first step, then advance to the step that has
+    // no content, with the engine's own progress functions.
+    runner.game.tutorialProgress.set(1, initialProgress(ANNOTATION_TUTORIAL));
+    runner.game.tutorialProgress.set(1, nextProgress(ANNOTATION_TUTORIAL, 'step-with-content'));
 
     const view = getActiveTutorialStepView(runner.game, 1);
 
@@ -205,8 +203,7 @@ describe('annotation content model — projection round-trip', () => {
     });
     runner.start();
 
-    const controller = new TutorialController(() => runner, { broadcast: vi.fn() });
-    controller.start(1);
+    runner.game.tutorialProgress.set(1, initialProgress(allKindsTutorial));
 
     const view = getActiveTutorialStepView(runner.game, 1);
 

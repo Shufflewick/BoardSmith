@@ -6,7 +6,7 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { Action, Game, Piece, Player, Space, actionStep, defineFlow, loop } from '../index.js';
 import { GameRunner } from '../../runtime/runner.js';
-import { GameSession } from '../../session/game-session.js';
+import { createHeadlessSession } from '../../session/headless-session.js';
 
 class Card extends Piece<CardGame> {}
 class Pile extends Space<CardGame> {}
@@ -108,13 +108,18 @@ describe('a game started without a seed (#483)', () => {
     expect(deal()).not.toEqual(deal());
   });
 
-  it('a session started without a seed records a 128-bit seed that Math.random did not choose', () => {
+  it('a session started without a seed records a 128-bit seed that Math.random did not choose', async () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.25);
-    const seedOf = () =>
-      GameSession.create({ gameType: 'card-game', GameClass: CardGame, playerCount: 2, playerNames: ['A', 'B'] })
-        .runner.getSnapshot().seed;
-    const first = seedOf();
+    const seedOf = async () => {
+      const session = createHeadlessSession(
+        { gameClass: CardGame, gameType: 'card-game', minPlayers: 2, maxPlayers: 2 },
+        { playerCount: 2, playerNames: ['A', 'B'] },
+      );
+      await session.start();
+      return session.host.snapshot?.seed;
+    };
+    const first = await seedOf();
     expect(first).toMatch(/^[0-9a-f]{32}$/);
-    expect(seedOf()).not.toBe(first);
+    expect(await seedOf()).not.toBe(first);
   });
 });

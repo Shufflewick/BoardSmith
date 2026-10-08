@@ -5,8 +5,8 @@
  * Those moves are recorded in neither the command nor the action history, so
  * they are the case restore has to get right: they exist only in the snapshot,
  * and the picks that caused them exist only in the seat's pending state until
- * the selection ends with 'stop'. Used by the GameSession restore tests (F42)
- * and the SnapshotSessionHost pending-selection restore tests (#320).
+ * the selection ends with 'stop'. Used by the authoritative restore tests
+ * (F42) and the SnapshotSessionHost pending-selection restore tests (#320).
  *
  * Player 1 keeps the turn (`repeatUntil: () => false`), so undo stays
  * available after a completed collect. `execute` records the `token` argument

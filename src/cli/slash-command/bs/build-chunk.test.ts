@@ -455,6 +455,21 @@ describe('TDD-01 — red-before-green enforcement across spec/build/test', () =>
 });
 
 /**
+ * #529 — the keyboard test the a11y floor asks for drives the live session host. The stateful
+ * `GameSession` it used to name is gone, so a session that copied the old example would write a
+ * test that cannot import.
+ */
+describe('#529 — the keyboard test runs on the live session host', () => {
+  it('test.md names createHeadlessSession and its seat state, and never GameSession', () => {
+    const test = read('build/test.md');
+    expect(test).toContain('createHeadlessSession');
+    expect(test).toContain('session.playerState(seat)');
+    expect(test).toContain("session.send(seat, { type: 'action', actionName, player: seat, args })");
+    expect(test).not.toMatch(/\bGameSession\b|buildPlayerState|getPickChoices/);
+  });
+});
+
+/**
  * #290 — the test step cannot pass on tests that cannot fail. The rules are stated in spec.md
  * (where the tests are written) and test.md (where they are gated), and the gate is a real CLI
  * command, so a session that skims the prose still hits a non-zero exit.
