@@ -25,7 +25,7 @@ import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.j
 import { freePort } from '../lib/free-port.js';
 import { hostHoldings } from '../dev-host/shutdown.js';
 import { loadWorldRuntime, startWorldDevServer } from './dev-world.js';
-import { makeCommandBuildDir } from '../lib/project-paths.js';
+import { makeCommandBuildDir } from '../lib/command-build-dir.js';
 
 /** This checkout, which is the library every fixture resolves against. */
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');

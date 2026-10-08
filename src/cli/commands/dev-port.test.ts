@@ -19,7 +19,7 @@ import { createServer, type AddressInfo, type Server } from 'node:net';
 import { join } from 'node:path';
 
 import { loadWorldRuntime, startWorldDevServer } from './dev-world.js';
-import { makeCommandBuildDir } from '../lib/project-paths.js';
+import { makeCommandBuildDir } from '../lib/command-build-dir.js';
 import { hostHoldings } from '../dev-host/shutdown.js';
 import { worldStoreDir, worldStorePath } from '../dev-host/world-store.js';
 import { devProject, EXIT_WITHIN_MS, spawnDev } from './dev-project.test-helper.js';

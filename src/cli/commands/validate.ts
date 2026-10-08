@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, realpathSync, rmSync, statSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync, readdirSync } from 'node:fs';
 import { join, relative, sep, resolve as resolvePath } from 'node:path';
 import chalk from 'chalk';
 import ora from 'ora';
@@ -22,7 +22,7 @@ import {
 } from '../lib/bundle-limits.js';
 import { readDistDir, createZip } from '../lib/zip.js';
 import { requireGameProject, resolveRulesDir } from '../lib/game-project.js';
-import { makeCommandBuildDir } from '../lib/project-paths.js';
+import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { runToolCapturingStdout } from '../lib/run-tool.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
 import { GAME_BACKENDS, capabilityContradictions, isGameBackend } from '../../session/index.js';
@@ -1279,8 +1279,7 @@ async function withProjectBundle<T>(
 ): Promise<T> {
   const config = JSON.parse(readFileSync(join(cwd, 'boardsmith.json'), 'utf-8')) as { paths?: { rules?: string } };
   const rulesPath = resolveRulesDir(cwd, config);
-  const tempDir = makeCommandBuildDir(cwd, 'validate');
-  try {
+  return withCommandBuildDir(cwd, 'validate', async (tempDir) => {
     const { importRuntimeBundle, getProjectContext, cliSourceFile, toPosix } = await import('./game-runtime.js');
     const bundle = await importRuntimeBundle({
       rulesPath,
@@ -1289,10 +1288,8 @@ async function withProjectBundle<T>(
       context: getProjectContext(cwd),
       exports: exports((pathUnderCli) => toPosix(cliSourceFile(pathUnderCli))),
     });
-    return await use(bundle);
-  } finally {
-    rmSync(tempDir, { recursive: true, force: true });
-  }
+    return use(bundle);
+  });
 }
 
 // ---------------------------------------------------------------------------

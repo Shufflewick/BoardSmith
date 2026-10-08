@@ -20,7 +20,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { commandBuildDirPrefix, scratchDir } from '../lib/project-paths.js';
+import { scratchDir } from '../lib/project-paths.js';
+import { commandBuildDirPrefix } from '../lib/command-build-dir.js';
 import { commandBuildDirs } from '../lib/command-build-dirs.test-helper.js';
 
 interface EvolverCall {

@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { commandBuildDirPrefix } from './project-paths.js';
+import { commandBuildDirPrefix } from './command-build-dir.js';
 
 /**
  * The build directories of `command` on disk in `projectDir` right now, as absolute paths. A test

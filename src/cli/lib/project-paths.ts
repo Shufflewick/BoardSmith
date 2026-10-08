@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, promises as fs } from 'node:fs';
+import { existsSync, promises as fs } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
@@ -170,37 +170,6 @@ export const SCRATCH_DIR = join('.boardsmith', 'scratch');
 /** Absolute path to a project's scratch directory. */
 export function scratchDir(projectDir: string): string {
   return join(projectDir, SCRATCH_DIR);
-}
-
-/** The CLI commands that bundle a project's rules into a build directory of their own. */
-type BuildingCommand = 'dev' | 'simulate' | 'build' | 'validate' | 'evolve-bot-weights';
-
-/**
- * The name every build directory of `command` starts with, inside `.boardsmith/`. Each run's
- * directory is this followed by a few random characters (see {@link makeCommandBuildDir}).
- */
-export function commandBuildDirPrefix(command: BuildingCommand): string {
-  return `${command}-tmp-`;
-}
-
-/**
- * Makes a fresh, empty directory for one run of `command` to write its rules bundle into, and
- * returns its absolute path. The run removes it when it ends, and removes nothing else.
- *
- * EVERY RUN GETS ITS OWN (#543). A fixed `.boardsmith/<command>-tmp/` was shared by every run of
- * that command in the project, so two validates of one game at once (two worktrees' suites on one
- * machine) wrote into one folder, and the first to finish deleted the bundle the other was about
- * to import.
- *
- * It sits inside the project, not the OS temp directory, so the bundle resolves the project's
- * own `node_modules`. `.boardsmith/` itself is never a command's to remove: it also holds the
- * scratch directory and the git worktrees of chunks built side by side, and `boardsmith dev`
- * stopping once deleted both (#391).
- */
-export function makeCommandBuildDir(projectDir: string, command: BuildingCommand): string {
-  const parent = join(projectDir, '.boardsmith');
-  mkdirSync(parent, { recursive: true });
-  return mkdtempSync(join(parent, commandBuildDirPrefix(command)));
 }
 
 /**

@@ -12,7 +12,7 @@ import { MultiplayerHost, type TableRules } from '../dev-host/multiplayer-host.j
 import { claimDevHostSocket } from '../dev-host/connection-handler.js';
 import { devStorePath, loadDevStore } from '../dev-host/persistence-file-store.js';
 import { resetWorldStore, worldResetNotice, worldStoreDir } from '../dev-host/world-store.js';
-import { announceHost, hostHoldings, onShutdown } from '../dev-host/shutdown.js';
+import { announceHost, hostHoldings, onShutdown, type HostHoldings } from '../dev-host/shutdown.js';
 import { requireFreePort } from '../dev-host/port.js';
 import type { PersistenceStore } from '../../persistence/index.js';
 import { getProjectContext, toPosix } from './game-runtime.js';
@@ -22,7 +22,7 @@ import { findUnknownKeys } from '../lib/config-schema.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { resolveWorldMode } from '../lib/world-project.js';
 import { resolveUserPath } from '../lib/user-path.js';
-import { makeCommandBuildDir } from '../lib/project-paths.js';
+import { makeCommandBuildDir } from '../lib/command-build-dir.js';
 import { loadWorldRuntime, startWorldDevServer, type WorldRuntime } from './dev-world.js';
 import {
   devNotFoundMiddleware,
@@ -587,25 +587,6 @@ function buildDevConfig(args: {
 }
 
 /**
- * Runs a validator that throws `DevFlagError` or `GameOptionSelectionError`;
- * on failure prints the actionable `chalk.red` message and exits non-zero
- * (`devCommand`'s `process.exit(1)` convention). Any other error rethrows —
- * this only intercepts intentional flag/host validation failures, not
- * unexpected bugs.
- */
-function exitOnDevFlagError<T>(fn: () => T): T {
-  try {
-    return fn();
-  } catch (error) {
-    if (error instanceof DevFlagError || error instanceof GameOptionSelectionError) {
-      console.error(chalk.red(error.message));
-      process.exit(1);
-    }
-    throw error;
-  }
-}
-
-/**
  * The cross-session store for this run, or `null` for a game that declares no
  * persistence (#41 item 2).
  *
@@ -624,10 +605,6 @@ function openDevStore(
   return devStore;
 }
 
-// a 460-line entrypoint over every threshold before #41 added the dev store;
-// the wiring it gained lives in `openDevStore` rather than inline. Splitting
-// the command itself is its own change.
-// fallow-ignore-next-line complexity
 export async function devCommand(options: DevOptions): Promise<void> {
   // ONE ORDERLY STOP, FROM THE FIRST LINE (#366, #386): everything this run
   // acquires is held here as it is acquired, so a Ctrl+C while the rules are
@@ -635,11 +612,34 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // then, and one after "Ready!" releases all of it.
   const holdings = hostHoldings();
   onShutdown(holdings, { say: (line) => console.log(chalk.dim(line)) });
+  try {
+    await startDev(options, holdings);
+  } catch (error) {
+    // A START THAT FAILS RELEASES WHAT IT HELD, TOO (#543): the build directory
+    // this run made, and anything opened after it. Without this every failed
+    // start left one more `dev-tmp-*` directory behind.
+    await holdings.run().catch((stopError: Error) => console.error(chalk.red(stopError.message)));
+    // A flag or host setting the game refuses is the author's to fix: say what
+    // is wrong and exit non-zero. Anything else is rethrown for `cli.ts` to
+    // render as one line.
+    if (error instanceof DevFlagError || error instanceof GameOptionSelectionError) {
+      console.error(chalk.red(error.message));
+      process.exit(1);
+    }
+    throw error;
+  }
+}
+
+// a 460-line entrypoint over every threshold before #41 added the dev store;
+// the wiring it gained lives in `openDevStore` rather than inline. Splitting
+// the command itself is its own change.
+// fallow-ignore-next-line complexity
+async function startDev(options: DevOptions, holdings: HostHoldings): Promise<void> {
 
   // Fail-fast on non-numeric --port/--players/--bot (CLIX-06) — actionable
   // errors before any server work, matching simulate.ts's Number.isInteger idiom.
-  const port = exitOnDevFlagError(() => parsePositiveInt('port', options.port));
-  const botPlayers = exitOnDevFlagError(() => parseBotSeats(options.bot));
+  const port = parsePositiveInt('port', options.port);
+  const botPlayers = parseBotSeats(options.bot);
   // NOTE: --players is resolved AFTER gameDefinition loads (D14) — its default
   // is the game's minPlayers, not a literal, so it cannot be parsed this early.
 
@@ -647,7 +647,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // LAN exposure. This REVERSES the previous LAN-by-default (0.0.0.0) per the
   // F32 verdict in 135-FINDINGS-VERIFICATION.md. Combining --lan with an
   // explicit --host errors (WR-04).
-  const { host, isNonLocal } = exitOnDevFlagError(() => resolveHost({ host: options.host, lan: options.lan }));
+  const { host, isNonLocal } = resolveHost({ host: options.host, lan: options.lan });
   const cwd = process.cwd();
 
   if (UNSAFE_PORTS.has(port)) {
@@ -672,7 +672,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // any server work, mirroring the other flag validators above) and threads
   // the resulting GameStateSnapshot into MultiplayerHost below.
   const seedSnapshot = options.seed !== undefined
-    ? exitOnDevFlagError(() => parseSeedFile(resolveUserPath(process.cwd(), options.seed as string)))
+    ? parseSeedFile(resolveUserPath(process.cwd(), options.seed as string))
     : undefined;
 
   // #41 item 3. Parsed with the other flag validators so a typo fails before
@@ -711,7 +711,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // whole and belongs with the store rather than with the host that will use
   // it, so it lands here in one piece.
   if (options.reset === true) {
-    exitOnDevFlagError(() => assertWorldProjectForReset(worldMode));
+    assertWorldProjectForReset(worldMode);
     console.log(chalk.dim(`  ${worldResetNotice(resetWorldStore(cwd), worldStoreDir(cwd))}`));
   }
 
@@ -872,14 +872,15 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // D13/DEVHOST-01: --game-option/--preset resolve into the SELECTED gameOptions
   // (flag beats preset beats default). A preset's player count is honored only
   // when --players was NOT explicitly passed (an explicit --players always wins).
-  const gameOptionFlags = exitOnDevFlagError(() => parseGameOptionFlags(options.gameOption));
+  const gameOptionFlags = parseGameOptionFlags(options.gameOption);
   const presetBundle =
     options.preset !== undefined
-      ? exitOnDevFlagError(() => resolvePreset(gameDefinition.presets, options.preset as string))
+      ? resolvePreset(gameDefinition.presets, options.preset as string)
       : undefined;
-  const selectedGameOptions = exitOnDevFlagError(() =>
-    selectGameOptions(gameDefinition.gameOptions, { ...presetBundle?.options, ...gameOptionFlags }),
-  );
+  const selectedGameOptions = selectGameOptions(gameDefinition.gameOptions, {
+    ...presetBundle?.options,
+    ...gameOptionFlags,
+  });
   const rawPlayers = options.players ?? (presetBundle?.playerCount !== undefined ? String(presetBundle.playerCount) : undefined);
 
   // CLIX-06 / F34 (Pitfall 3): out-of-range --players now ERRORS (naming the
@@ -887,8 +888,8 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // this EFFECTIVE count, not the raw pre-clamp CLI value — both checks must
   // run here, after minPlayers/maxPlayers are known. D14: an UNSET --players
   // defaults to minPlayers instead of a hardcoded '2'.
-  const effectivePlayerCount = exitOnDevFlagError(() => resolvePlayerCount(rawPlayers, minPlayers, maxPlayers));
-  exitOnDevFlagError(() => validateBotSeats(botPlayers, effectivePlayerCount));
+  const effectivePlayerCount = resolvePlayerCount(rawPlayers, minPlayers, maxPlayers);
+  validateBotSeats(botPlayers, effectivePlayerCount);
 
   const devConfig = buildDevConfig({
     gameDefinition,

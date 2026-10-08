@@ -11,7 +11,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { makeCommandBuildDir } from '../lib/project-paths.js';
+import { makeCommandBuildDir } from '../lib/command-build-dir.js';
 
 export function rulesProject(prefix: string, source: string) {
   const dir = tempTree(prefix);

@@ -34,7 +34,7 @@ import {
   encodedRulesBytes,
 } from '../lib/bundle-limits.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { makeCommandBuildDir } from '../lib/project-paths.js';
+import { makeCommandBuildDir } from '../lib/command-build-dir.js';
 import {
   fixedDeployDefinition,
   untimedDeployDefinition,
