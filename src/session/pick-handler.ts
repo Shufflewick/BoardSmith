@@ -213,7 +213,6 @@ export class PickHandler<G extends Game = Game> {
     initialArgs?: Record<string, unknown>,
     priorPendingState?: Record<string, unknown> | null,
   ): Promise<PickStepResult & { pendingState: Record<string, unknown> | null }> {
-
     const manager = new PendingActionManager(this.#runner, this.#playerCount);
 
     if (priorPendingState) {

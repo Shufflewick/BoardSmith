@@ -44,7 +44,7 @@ import {
 
 - `createHeadlessSession(definition, tableOptions, botSeats?)` - Runs a `SnapshotSessionHost` in process over `executeOp`, for tests, simulations and agents
 - `HeadlessSession<G>` - The table `createHeadlessSession` returns
-- `HeadlessGameOptions` - `{ playerCount, seed?, playerNames?, options? }`
+- `HeadlessGameOptions` - `{ playerCount, seed?, playerNames?, options?, teachingDisabled? }`; `teachingDisabled` locks hints, the heatmap, the demo and the tutorial at both the host and `executeOp`
 
 ### Utilities
 

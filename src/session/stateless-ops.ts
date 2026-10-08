@@ -1317,7 +1317,6 @@ async function handleBotSuggest(
 // Debug op handlers
 // ---------------------------------------------------------------------------
 
-
 /**
  * Reconstruct the runner at a historical action index AUTHORITATIVELY from the
  * snapshot's per-action checkpoints — never by replay. `actionCheckpoints[k]` is
