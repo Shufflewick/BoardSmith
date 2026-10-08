@@ -60,11 +60,6 @@ export interface TrackConfig {
 }
 
 /**
- * Callback for emitting track commands
- */
-export type TrackCommandEmitter = (trackId: string, value: number, isSpecial: boolean) => void;
-
-/**
  * Base class for scoring tracks
  */
 export abstract class Track {
@@ -77,9 +72,6 @@ export abstract class Track {
 
   protected entries: TrackEntry[] = [];
 
-  /** Optional command emitter for integration with game command system */
-  private commandEmitter?: TrackCommandEmitter;
-
   constructor(config: TrackConfig) {
     this.id = config.id;
     this.name = config.name ?? config.id;
@@ -87,14 +79,6 @@ export abstract class Track {
     this.pointsPerEntry = config.pointsPerEntry ?? new Array(config.maxEntries).fill(0);
     this.completionBonus = config.completionBonus ?? 0;
     this.allowSpecialEntries = config.allowSpecialEntries ?? false;
-  }
-
-  /**
-   * Set a command emitter for this track.
-   * When set, add() will emit commands instead of directly modifying state.
-   */
-  setCommandEmitter(emitter: TrackCommandEmitter): void {
-    this.commandEmitter = emitter;
   }
 
   /**
@@ -106,31 +90,10 @@ export abstract class Track {
 
   /**
    * Add a value to the track.
-   * If a command emitter is set, this emits a command instead of directly modifying state.
+   * @throws if {@link canAdd} refuses the value
    * @returns The points earned for this entry
    */
   add(value: number, isSpecial: boolean = false): number {
-    if (!this.canAdd(value, isSpecial)) {
-      throw new Error(`Cannot add value ${value} to track ${this.id}`);
-    }
-
-    // If command emitter is set, emit command instead of modifying directly.
-    // The position is captured before emitting because a synchronous emitter has
-    // already advanced entries.length by the time the emitter returns.
-    if (this.commandEmitter) {
-      const position = this.entries.length;
-      this.commandEmitter(this.id, value, isSpecial);
-      return this.pointsPerEntry[position] ?? 0;
-    }
-
-    return this.addInternal(value, isSpecial);
-  }
-
-  /**
-   * Internal add method - directly modifies state (used by command executor)
-   * @internal
-   */
-  addInternal(value: number, isSpecial: boolean = false): number {
     if (!this.canAdd(value, isSpecial)) {
       throw new Error(`Cannot add value ${value} to track ${this.id}`);
     }
@@ -140,16 +103,6 @@ export abstract class Track {
 
     this.entries.push({ value, points, isSpecial });
     return points;
-  }
-
-  /**
-   * Remove the last entry from the track (used for undo)
-   * @internal
-   */
-  removeLastInternal(): void {
-    if (this.entries.length > 0) {
-      this.entries.pop();
-    }
   }
 
   /**

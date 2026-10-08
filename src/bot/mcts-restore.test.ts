@@ -148,10 +148,9 @@ describe('MCTSBot restoreGame with execute block', () => {
     expect(['a', 'b', 'c']).toContain(move.args.option);
   });
 
-  it('restoreGame preserves direct tree mutations not recorded in command/action history', () => {
+  it('restoreGame preserves direct tree mutations not recorded in action history', () => {
     // A pending/selection action's execute moves a piece via Piece.putInto, which
-    // mutates the element tree DIRECTLY — recorded in neither commandHistory nor
-    // actionHistory. The MCTS search root can carry such a mutation, so restoring
+    // mutates the element tree DIRECTLY — not recorded in actionHistory. The MCTS search root can carry such a mutation, so restoring
     // the root by replaying history (the old behavior) silently loses it and the
     // bot searches from the wrong position. Authoritative restore adopts the
     // serialized tree and keeps the mutation.
@@ -187,7 +186,6 @@ describe('MCTSBot restoreGame with execute block', () => {
     // Direct tree mutation — exactly what a pending action's execute does.
     game.token.putInto(game.held);
     expect(game.token.parent?.name).toBe('held');
-    expect(game.commandHistory.length).toBe(0); // proves it is NOT a recorded command
 
     const snapshot = createSnapshot(game, 'mutation', [], 'mut');
 

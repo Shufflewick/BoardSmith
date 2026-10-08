@@ -1,7 +1,7 @@
 import type { GameElement } from './game-element.js';
 import type { Game } from './game.js';
 import type { Player } from '../player/player.js';
-import type { VisibilityState } from '../command/visibility.js';
+import type { VisibilityState } from './visibility.js';
 import type { ElementIds, WorldElementIds } from './element-ids.js';
 
 /**

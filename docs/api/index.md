@@ -1,10 +1,10 @@
 # boardsmith
 
-> Core game engine - elements, actions, flow, and commands.
+> Core game engine - elements, actions, flow, and visibility.
 
 ## When to Use
 
-Import from `boardsmith` when building game logic. This is the root export containing all element classes (Game, Card, Piece, etc.), action definitions, flow control, and the command system for event sourcing.
+Import from `boardsmith` when building game logic. This is the root export containing all element classes (Game, Card, Piece, etc.), action definitions, flow control, and element visibility.
 
 ## Usage
 
@@ -57,11 +57,8 @@ import {
 - `UniqueTrack` - Track with unique values
 - `CounterTrack` - Simple numeric counter
 
-### Command System
+### Visibility
 
-- `executeCommand()` - Execute a game command
-- `undoCommand()` - Undo a command
-- `createInverseCommand()` - Create inverse for undo
 - `canPlayerSee()` - Check visibility for player
 - `visibilityFromMode()` - Convert mode to visibility state
 - `resolveVisibility()` - Resolve visibility configuration
@@ -70,7 +67,6 @@ import {
 ### Action System
 
 - `Action` - Define player actions with selections
-- `ActionExecutor` - Execute actions with validation
 - `evaluateCondition()` - Evaluate action conditions
 
 ### Filter Helpers
@@ -137,8 +133,6 @@ import {
 - `Ability` - Player ability type
 - `TrackEntry` - Track entry type
 - `TrackConfig` - Track configuration
-- `GameCommand` - Command type union
-- `CommandResult` - Command execution result
 - `SelectionType` - Selection type enum
 - `Selection` - Selection definition
 - `ActionContext` - Action execution context

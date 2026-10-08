@@ -116,9 +116,9 @@ export interface BotMoveStats {
 /**
  * Internal node in the MCTS search tree
  *
- * Uses path-based state management: nodes track the number of commands
- * executed to reach them from their parent, enabling efficient undo-based
- * state rollback instead of full snapshot restoration.
+ * Path-based: a node stores the move that reached it, not a snapshot. Each
+ * iteration replays the path from the root on a game restored from the root
+ * snapshot.
  */
 export interface MCTSNode {
   /** Flow state at this node (small, kept as snapshot) */
@@ -127,8 +127,6 @@ export interface MCTSNode {
   parent: MCTSNode | null;
   /** Move that led to this node from parent */
   parentMove: BotMove | null;
-  /** Number of commands executed to reach this state from parent */
-  commandCount: number;
   /** Child nodes that have been explored */
   children: MCTSNode[];
   /** All legal moves at this position (cached, enumerated once per node) */

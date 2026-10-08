@@ -2026,7 +2026,7 @@ an outcome — verify that test fails when a branch is removed.
 ### The Problem
 
 Every `Game` already has fields the engine owns: `pile`, `random`, `phase`,
-`settings`, `messages`, `commandHistory`, `tutorialProgress`, and the internal
+`settings`, `messages`, `tutorialProgress`, and the internal
 `_`-prefixed ones. A game that reuses one of those names for its own state
 replaces the engine's value:
 

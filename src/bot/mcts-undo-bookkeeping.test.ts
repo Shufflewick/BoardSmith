@@ -15,23 +15,19 @@ import {
 import { MCTSBot } from './mcts-bot.js';
 
 // ============================================================================
-// v4.8-MCTS-UNDO: MCTS's incremental `undoCommands` reverts only commands
-// recorded in `game.commandHistory`. It does NOT restore plain-property
-// mutations (`game.finish()`'s `settings.winners`/`phase`) or the flow
-// engine's own internal bookkeeping (`awaitingPlayers[].completed`, mutated
-// in place by `resumeSimultaneousAction`, never recorded as a GameCommand).
-// Both fixtures below drive the bot's low-level EXPAND/BACKPROPAGATE
-// primitives directly (mirrors mcts-redaction.test.ts fixture 2) so the leak
-// is isolated to exactly `backpropagateWithUndo`, with no tree search
-// nondeterminism involved.
+// v4.8-MCTS-UNDO: MCTS used to roll the search game back with an incremental
+// command undo, which reverted only recorded commands. It did NOT restore
+// plain-property mutations (`game.finish()`'s `settings.winners`/`phase`) or
+// the flow engine's own internal bookkeeping (`awaitingPlayers[].completed`,
+// mutated in place by `resumeSimultaneousAction`). The search game is now
+// reset by a full restore of the root snapshot. Both fixtures below drive the
+// bot's low-level EXPAND/BACKPROPAGATE primitives directly (mirrors
+// mcts-redaction.test.ts fixture 2) so the check is isolated to exactly
+// `backpropagateWithUndo`, with no tree search nondeterminism involved.
 //
 // Fixture 1 deliberately avoids touching any GameElement (uses a plain
-// `picks` dict instead of pieces) so the flow-bookkeeping leak under test is
-// isolated from the separate, already-documented limitation that ordinary
-// element mutations (`Piece.putInto`, `create`) are never recorded as
-// GameCommands in the first place (see mcts-restore.test.ts's "restoreGame
-// preserves direct tree mutations..." test, which proves
-// `game.commandHistory.length` stays 0 after `putInto`) -- out of scope here.
+// `picks` dict instead of pieces) so the flow-bookkeeping case is isolated
+// from element moves, which mcts-element-rollback.test.ts covers.
 // ============================================================================
 
 class SimultaneousGame extends Game<SimultaneousGame, Player> {
@@ -97,7 +93,6 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
     // EXPAND/BACKPROPAGATE directly so the test is deterministic.
     bot.rootSnapshot = bot.captureSnapshot();
     bot.searchGame = bot.restoreGame(bot.rootSnapshot);
-    bot.rootCommandCount = bot.searchGame.commandHistory.length;
 
     const rootFlowState = bot.searchGame.getFlowState();
     const root = bot.createNode(
@@ -109,7 +104,6 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
         { action: 'pick', args: { choice: 'y' } },
         { action: 'pick', args: { choice: 'z' } },
       ],
-      0,
     );
 
     // First simulated branch: seat 1 picks 'x'. This completes seat 1 in the
@@ -186,7 +180,6 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
 
     bot.rootSnapshot = bot.captureSnapshot();
     bot.searchGame = bot.restoreGame(bot.rootSnapshot);
-    bot.rootCommandCount = bot.searchGame.commandHistory.length;
 
     const rootFlowState = bot.searchGame.getFlowState();
     const root = bot.createNode(
@@ -198,7 +191,6 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
         { action: 'play', args: { option: 'b' } },
         { action: 'play', args: { option: 'c' } },
       ],
-      0,
     );
 
     // First simulated branch: seat 1 plays 'a', finishing the game.
@@ -211,9 +203,9 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
     bot.backpropagateWithUndo(child, 1, [], []);
 
     // Root cause proof: `game.finish()` sets `phase`/`settings.winners` as
-    // plain properties -- undoCommands (element-tree only) never reverts
-    // them, so the searchGame is left claiming the game is finished even
-    // though we are logically back at the (unfinished) root.
+    // plain properties -- the old command undo (element-tree only) never reverted
+    // them, which left the searchGame claiming the game was finished even
+    // though we were logically back at the (unfinished) root.
     expect((bot.searchGame as FinishGame).isFinished()).toBe(false);
     expect((bot.searchGame as any).settings.winners).toBeUndefined();
 

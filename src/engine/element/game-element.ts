@@ -12,14 +12,14 @@ import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
 import { PersistentMap } from './persistent-map.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE } from './hidden-placeholder.js';
-import type { VisibilityMode, VisibilityState } from '../command/visibility.js';
+import type { VisibilityMode, VisibilityState } from './visibility.js';
 import {
   DEFAULT_VISIBILITY,
   canPlayerSee,
   copyVisibilityState,
   resolveVisibility,
   visibilityFromMode,
-} from '../command/visibility.js';
+} from './visibility.js';
 import { devWarn, isDevMode } from '../../utils/dev.js';
 import { RedactedAttributeError, type RedactionReason } from '../errors.js';
 import {
@@ -1279,13 +1279,6 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    */
   clearVisibility(): void {
     this._visibility = undefined;
-  }
-
-  /**
-   * Internal method to set visibility (called by command executor)
-   */
-  setVisibilityInternal(visibility: VisibilityState): void {
-    this._visibility = visibility;
   }
 
   /**

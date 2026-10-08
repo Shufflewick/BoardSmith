@@ -100,48 +100,20 @@ export type {
   MonotonicTrackConfig,
   UniqueTrackConfig,
   CounterTrackConfig,
-  TrackCommandEmitter,
 } from './scoring/index.js';
 
-// Command system (event sourcing)
+// Element visibility
 export {
-  executeCommand,
-  undoCommand,
-  createInverseCommand,
   canPlayerSee,
   visibilityFromMode,
   resolveVisibility,
   DEFAULT_VISIBILITY,
-} from './command/index.js';
+} from './element/visibility.js';
 
-export type {
-  GameCommand,
-  CommandResult,
-  BaseCommand,
-  CreateElementCommand,
-  CreateManyCommand,
-  MoveCommand,
-  RemoveCommand,
-  ShuffleCommand,
-  SetAttributeCommand,
-  SetVisibilityCommand,
-  AddVisibleToCommand,
-  SetCurrentPlayerCommand,
-  MessageCommand,
-  StartGameCommand,
-  EndGameCommand,
-  SetOrderCommand,
-  TrackAddCommand,
-  TrackRemoveLastCommand,
-  AnimateCommand,
-  TrackOwner,
-  VisibilityConfig,
-  VisibilityMode,
-  VisibilityState,
-} from './command/index.js';
+export type { VisibilityMode, VisibilityState } from './element/visibility.js';
 
 // Action system
-export { Action, ActionExecutor, evaluateCondition } from './action/index.js';
+export { Action, evaluateCondition } from './action/index.js';
 
 // Filter helpers for multi-step selections
 export {

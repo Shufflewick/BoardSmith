@@ -3,7 +3,7 @@
  *
  * `isComplete` comes from the flow and `winners` from the game, and only
  * `turnLoop` and `stateAwareLoop` used to stop on `game.isFinished()`. A game
- * that called `this.finish([p])` (or ran the END_GAME command) from inside an
+ * that called `this.finish([p])` from inside an
  * `eachPlayer`, `loop`, `sequence` or `repeat` therefore kept waiting on the
  * next action step: every host reported `isComplete: false` beside a winner,
  * and players could keep acting in a game that was over.
@@ -50,13 +50,6 @@ class EndingGame extends Game<EndingGame, Player> {
         game.ran.push(`win:${ctx.player.seat}`);
         game.finish([ctx.player]);
       }),
-      // Ends the game through the END_GAME command instead.
-      Action.create<EndingGame>('concede').prompt('Concede').execute((_a, ctx) => {
-        const game = ctx.game as EndingGame;
-        game.ran.push(`concede:${ctx.player.seat}`);
-        const other = game.players.find((p) => p.seat !== ctx.player.seat)!;
-        game.execute({ type: 'END_GAME', winners: [other.seat] });
-      }),
       // Ends the game and still asks for a follow-up, which must not be offered.
       Action.create<EndingGame>('winThenPass').prompt('Win, then pass').execute((_a, ctx) => {
         const game = ctx.game as EndingGame;
@@ -68,7 +61,7 @@ class EndingGame extends Game<EndingGame, Player> {
   }
 }
 
-const ACTIONS = ['pass', 'win', 'concede', 'winThenPass'];
+const ACTIONS = ['pass', 'win', 'winThenPass'];
 
 function start(root: FlowNode<EndingGame>, playerCount = 3): GameRunner<EndingGame> {
   const runner = new GameRunner({
@@ -142,15 +135,6 @@ describe('a game finished inside any flow construct is complete', () => {
         expectNoFurtherActions(runner);
       });
 
-      it('ends the flow when an action runs the END_GAME command', () => {
-        const runner = start(build());
-
-        expect(runner.performAction('concede', 1, {}).success).toBe(true);
-
-        expectOver(runner, [2]);
-        expectNoFurtherActions(runner);
-      });
-
       it('offers no follow-up an action that finished the game asked for', () => {
         const runner = start(build());
 
@@ -193,14 +177,6 @@ describe('a simultaneous step', () => {
     expectOver(runner, [2]);
   });
 
-  it('ends the flow on END_GAME too', () => {
-    const runner = start(build());
-
-    expect(runner.performAction('concede', 3, {}).success).toBe(true);
-
-    expectOver(runner, [1]);
-    expectNoFurtherActions(runner);
-  });
 });
 
 describe('a game finished by a flow node rather than an action', () => {
@@ -226,7 +202,7 @@ describe('a game finished by a flow node rather than an action', () => {
   it('a game finished during start() never opens a step', () => {
     const runner = start(
       sequence(
-        execute<EndingGame>((ctx) => ctx.game.execute({ type: 'END_GAME', winners: [2] })),
+        execute<EndingGame>((ctx) => ctx.game.finish([ctx.game.getPlayer(2)!])),
         eachPlayer({ do: step() }),
       ),
     );
