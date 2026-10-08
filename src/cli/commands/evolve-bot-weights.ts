@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cpus } from 'node:os';
 import chalk from 'chalk';
@@ -6,7 +6,7 @@ import ora from 'ora';
 import type { ObjectiveWeight, TrainingProgress } from '../../bot-trainer/index.js';
 import type { BotStrategy } from '../../bot/index.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
-import { commandBuildDir } from '../lib/project-paths.js';
+import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 
 interface EvolveBotWeightsOptions {
@@ -57,101 +57,98 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
 
   const spinner = ora('Bundling the game rules...').start();
 
-  // Evolve-bot-weights' own build directory, removed below; never `.boardsmith/`
+  // This run's own build directory (#543), removed below; never `.boardsmith/`
   // itself (#391). The rules are bundled from source here rather than read from
   // some earlier build, so the weights are tuned against the rules as they are
   // now (#399). The bundle stays until the evolution ends: the worker threads
   // load the game from it.
-  const tempDir = commandBuildDir(cwd, 'evolve-bot-weights');
-  mkdirSync(tempDir, { recursive: true });
+  await withCommandBuildDir(cwd, 'evolve-bot-weights', async (tempDir) => {
+    try {
+      const { gameDefinition, bundlePath: modulePath } = await loadGameDefinition(
+        rulesDir,
+        tempDir,
+        getProjectContext(cwd),
+      );
 
-  try {
-    const { gameDefinition, bundlePath: modulePath } = await loadGameDefinition(
-      rulesDir,
-      tempDir,
-      getProjectContext(cwd),
-    );
+      const GameClass = gameDefinition.gameClass;
+      const gameType = gameDefinition.gameType || config.name;
+      const bot = requireBotObjectives(gameDefinition.bot);
 
-    const GameClass = gameDefinition.gameClass;
-    const gameType = gameDefinition.gameType || config.name;
-    const bot = requireBotObjectives(gameDefinition.bot);
+      spinner.succeed('Game rules bundled');
 
-    spinner.succeed('Game rules bundled');
+      // Import trainer
+      spinner.start('Initializing weight optimizer...');
 
-    // Import trainer
-    spinner.start('Initializing weight optimizer...');
+      const { WeightEvolver, readObjectiveWeights, updateBotWeights } = await import('../../bot-trainer/index.js');
 
-    const { WeightEvolver, readObjectiveWeights, updateBotWeights } = await import('../../bot-trainer/index.js');
+      spinner.succeed('Weight optimizer initialized');
 
-    spinner.succeed('Weight optimizer initialized');
+      // Parse existing bot
+      spinner.start('Parsing existing bot.ts...');
+      const existingObjectives = readObjectiveWeights(readFileSync(botPath, 'utf-8'));
 
-    // Parse existing bot
-    spinner.start('Parsing existing bot.ts...');
-    const existingObjectives = readObjectiveWeights(readFileSync(botPath, 'utf-8'));
+      if (existingObjectives.length === 0) {
+        throw new Error(
+          `${botPath} has no objectives to optimize. Use /bs-build-bot to create a bot with objectives first.`,
+        );
+      }
 
-    if (existingObjectives.length === 0) {
+      spinner.succeed(`Found ${existingObjectives.length} objectives to optimize`);
+
+      if (options.verbose) printExistingObjectives(existingObjectives);
+
+      // Run evolution
+      spinner.start(`Evolving weights (${generations} generations x ${population} population)...`);
+      const startTime = Date.now();
+
+      const evolver = new WeightEvolver(GameClass, gameType, modulePath, bot, {
+        workerCount,
+        evolutionGenerations: generations,
+        evolutionLambda: population,
+        benchmarkMCTSIterations: mctsIterations,
+        seed: `evolve-${Date.now()}`,
+        onProgress: (progress: TrainingProgress) => {
+          spinner.text = chalk.cyan(progress.message);
+        },
+      });
+
+      const result = await evolver.evolve(existingObjectives);
+
+      const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+      spinner.succeed(`Evolution complete in ${duration}s`);
+
+      printEvolutionResult(result);
+
+      // Update the bot.ts file with new weights
+      spinner.start('Updating bot.ts with optimized weights...');
+
+      const originalCode = readFileSync(botPath, 'utf-8');
+      const updatedCode = updateBotWeights(originalCode, result.objectives, {
+        addMetadata: true,
+        evolutionStats: {
+          generations,
+          population,
+          initialWinRate: result.initialFitness,
+          finalWinRate: result.bestFitness,
+        },
+      });
+
+      writeFileSync(botPath, updatedCode, 'utf-8');
+      spinner.succeed(`Updated ${botPath}`);
+
+      printNextSteps();
+    } catch (error) {
+      spinner.fail('Weight evolution failed');
+      // THROWN, NOT PRINTED (#240): `cli.ts`'s handler renders one clean line.
+      // `--verbose` used to add the stack on top of the printed error object, and
+      // it is gone rather than kept behind a flag: CLAUDE.md's rule that a stack
+      // trace never reaches a user has no opt-out, and a flag that turns the
+      // forbidden output back on is the rule with a hole in it.
       throw new Error(
-        `${botPath} has no objectives to optimize. Use /bs-build-bot to create a bot with objectives first.`,
+        `Evolving this bot's weights failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-
-    spinner.succeed(`Found ${existingObjectives.length} objectives to optimize`);
-
-    if (options.verbose) printExistingObjectives(existingObjectives);
-
-    // Run evolution
-    spinner.start(`Evolving weights (${generations} generations x ${population} population)...`);
-    const startTime = Date.now();
-
-    const evolver = new WeightEvolver(GameClass, gameType, modulePath, bot, {
-      workerCount,
-      evolutionGenerations: generations,
-      evolutionLambda: population,
-      benchmarkMCTSIterations: mctsIterations,
-      seed: `evolve-${Date.now()}`,
-      onProgress: (progress: TrainingProgress) => {
-        spinner.text = chalk.cyan(progress.message);
-      },
-    });
-
-    const result = await evolver.evolve(existingObjectives);
-
-    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-    spinner.succeed(`Evolution complete in ${duration}s`);
-
-    printEvolutionResult(result);
-
-    // Update the bot.ts file with new weights
-    spinner.start('Updating bot.ts with optimized weights...');
-
-    const originalCode = readFileSync(botPath, 'utf-8');
-    const updatedCode = updateBotWeights(originalCode, result.objectives, {
-      addMetadata: true,
-      evolutionStats: {
-        generations,
-        population,
-        initialWinRate: result.initialFitness,
-        finalWinRate: result.bestFitness,
-      },
-    });
-
-    writeFileSync(botPath, updatedCode, 'utf-8');
-    spinner.succeed(`Updated ${botPath}`);
-
-    printNextSteps();
-  } catch (error) {
-    spinner.fail('Weight evolution failed');
-    // THROWN, NOT PRINTED (#240): `cli.ts`'s handler renders one clean line.
-    // `--verbose` used to add the stack on top of the printed error object, and
-    // it is gone rather than kept behind a flag: CLAUDE.md's rule that a stack
-    // trace never reaches a user has no opt-out, and a flag that turns the
-    // forbidden output back on is the rule with a hole in it.
-    throw new Error(
-      `Evolving this bot's weights failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  } finally {
-    rmSync(tempDir, { recursive: true, force: true });
-  }
+  });
 }
 
 /**

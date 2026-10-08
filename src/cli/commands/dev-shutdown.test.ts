@@ -22,7 +22,8 @@ import { devProject, EXIT_WITHIN_MS, spawnDev, type DevRunEnding } from './dev-p
 import { freePort } from '../lib/free-port.js';
 import { openWorldStore, worldStorePath } from '../dev-host/world-store.js';
 import { worldBudgets } from '../../world/index.js';
-import { commandBuildDir, scratchDir } from '../lib/project-paths.js';
+import { scratchDir } from '../lib/project-paths.js';
+import { commandBuildDirs } from '../lib/command-build-dirs.test-helper.js';
 
 /**
  * #391: WHAT `.boardsmith/` HOLDS THAT DEV DID NOT MAKE, AND MUST NOT REMOVE.
@@ -71,7 +72,7 @@ async function stopWhileOptimising(cwd: string, signal: NodeJS.Signals): Promise
     run.child.on('exit', () => resolve(false));
   });
   if (!(await ready)) return run.ended;
-  expect(existsSync(commandBuildDir(cwd, 'dev')), 'dev is ready without its build directory').toBe(true);
+  expect(commandBuildDirs(cwd, 'dev'), 'dev is ready without its build directory').toHaveLength(1);
 
   const base = `http://127.0.0.1:${port}`;
   const page = await (await fetch(`${base}/`)).text();
@@ -95,7 +96,7 @@ async function expectStoppedWhole(cwd: string, signal: NodeJS.Signals = 'SIGINT'
   expect(run.code, run.output).toBe(0);
   // The build directory is the teardown's last step, so it is gone only if
   // everything before it, Vite included, finished closing.
-  expect(existsSync(commandBuildDir(cwd, 'dev')), `the teardown never finished:\n${run.output}`).toBe(false);
+  expect(commandBuildDirs(cwd, 'dev'), `the teardown never finished:\n${run.output}`).toEqual([]);
   expectAuthorFilesKept();
 }
 
@@ -154,7 +155,7 @@ async function stopDuringStartup(cwd: string, stage: string): Promise<void> {
     run.child.on('exit', () => resolve(false));
   });
   expect(reached, `boardsmith dev ended before it printed "${stage}":\n${run.output()}`).toBe(true);
-  expect(existsSync(commandBuildDir(cwd, 'dev')), `dev printed "${stage}" before making its build directory`).toBe(true);
+  expect(commandBuildDirs(cwd, 'dev'), `dev printed "${stage}" before making its build directory`).toHaveLength(1);
   run.child.kill('SIGINT');
   const ended = await run.ended;
   expect(ended.stuck, `boardsmith dev was still running ${EXIT_WITHIN_MS}ms after it started:\n${ended.output}`).toBe(false);
@@ -162,7 +163,7 @@ async function stopDuringStartup(cwd: string, stage: string): Promise<void> {
   expect(ended.output).toContain('Shutting down...');
   expect(ended.output, 'the teardown reported something it could not close').not.toContain('Still open');
   expect(ended.code, ended.output).toBe(0);
-  expect(existsSync(commandBuildDir(cwd, 'dev')), `the build directory was left behind:\n${ended.output}`).toBe(false);
+  expect(commandBuildDirs(cwd, 'dev'), `the build directory was left behind:\n${ended.output}`).toEqual([]);
   expectAuthorFilesKept();
 }
 

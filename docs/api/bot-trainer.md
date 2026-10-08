@@ -50,7 +50,7 @@ a property whose value is an object literal with both a `checker` and a
 ## Training from the CLI
 
 Run `evolve-bot-weights` from the game project. It bundles the rules from source
-into `.boardsmith/evolve-bot-weights-tmp/` (removed when it ends), reads the
+into a fresh `.boardsmith/evolve-bot-weights-tmp-<run>/` (removed when it ends), reads the
 weights of the objectives in the rules directory's `bot.ts`, evolves them by
 benchmarking the game's own bot in parallel, and writes the new weights back into
 that `bot.ts`:
