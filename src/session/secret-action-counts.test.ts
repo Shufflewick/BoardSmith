@@ -1,11 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { executeOp, type OpResult, type StateEnvelope } from './stateless-ops.js';
 import { flowBoundaryKey, type BoundaryKeyState, type GameStateSnapshot } from '../engine/index.js';
-import type { SessionInfo } from './types.js';
-import {
-  secretDeploymentDefinition,
-  createSecretDeploymentSession,
-} from './testing/fixtures/secret-deployment-fixture.js';
+import { secretDeploymentDefinition } from './testing/fixtures/secret-deployment-fixture.js';
 import { succeeded } from './op-result.test-helper.js';
 
 // #449: what a seat or a spectator receives must not let it count another
@@ -18,10 +14,11 @@ import { succeeded } from './op-result.test-helper.js';
 // index in the whole history.
 
 // One seed for both runs, so seat 1's secret placements are the only
-// difference between them. The stateless runs also need one element id key
-// (#447), and a start op refuses a key from outside, so every stateless run
-// starts from the same saved position (`hostOptions.seedSnapshot`), the way a
-// host resumes a game it holds; the stateful runs pass the key as the host.
+// difference between them. The runs also need one element id key (#447), and
+// a start op refuses a key from outside, so every run starts from the same
+// saved position (`hostOptions.seedSnapshot`), the way a host resumes a game
+// it holds. (The stateful GameSession this file also drove was removed, #529;
+// every host runs this executor.)
 const options = { playerCount: 2, seed: 'bs449', elementIdKey: '0000000000000449' };
 const statelessOptions = { playerCount: options.playerCount, seed: options.seed };
 let dealtPosition: GameStateSnapshot | undefined;
@@ -99,37 +96,6 @@ async function statelessSeenBySeat2AndSpectator(packs: number) {
   };
 }
 
-/** A stateful session whose broadcasts to seat 2 and to a spectator are recorded. */
-function statefulGame() {
-  const session = createSecretDeploymentSession({ seed: options.seed, elementIdKey: options.elementIdKey });
-  const watchers: SessionInfo[] = [
-    { connectionId: 'seat-2', playerSeat: 2, isSpectator: false },
-    { connectionId: 'spectator', playerSeat: 0, isSpectator: true },
-  ];
-  const sent: Array<{ to: SessionInfo; message: unknown }> = [];
-  session.setBroadcaster({
-    getSessions: () => watchers,
-    send: (to, message) => sent.push({ to, message: structuredClone(message) }),
-  });
-  const table: Table = {
-    act: (seat, actionName) => session.performAction(actionName, seat, {}),
-    undo: (seat) => session.undoToTurnStart(seat),
-  };
-  return { session, table, sent, seat2: watchers[0], spectator: watchers[1] };
-}
-
-async function statefulSeenBySeat2AndSpectator(packs: number) {
-  const { session, table, sent, seat2, spectator } = statefulGame();
-  await seat1PlacesPacks(table, packs);
-  expect((await session.performAction('done', 2, {})).success).toBe(true);
-  const lastTo = (who: SessionInfo) => {
-    const message = sent.filter((s) => s.to === who).at(-1)?.message;
-    expect(message).toBeDefined();
-    return message;
-  };
-  return { seat2: lastTo(seat2), spectator: lastTo(spectator), getState2: session.getState(2), getState0: session.getState(0) };
-}
-
 /** `gameInstanceId` names the game, and two separate games are compared here. */
 function sameGameId(value: unknown): string {
   return JSON.stringify(value).replace(/"gameInstanceId":"[^"]*"/g, '"gameInstanceId":"<game>"');
@@ -161,21 +127,6 @@ describe("a seat cannot count another seat's secret actions (#449)", () => {
       expect(JSON.stringify(view.state.view)).toContain('"packs":0');
       const seat1 = game.last.playerViews[0] as { state: { view: unknown } };
       expect(JSON.stringify(seat1.state.view)).toContain('"packs":1');
-    });
-  });
-
-  describe('stateful GameSession', () => {
-    it("seat 2's and the spectator's broadcasts and getState are the same whether seat 1 placed 0 or 2 secret packs", async () => {
-      const none = await statefulSeenBySeat2AndSpectator(0);
-      const two = await statefulSeenBySeat2AndSpectator(2);
-      expect(sameGameId(two.seat2)).toBe(sameGameId(none.seat2));
-      expect(sameGameId(two.spectator)).toBe(sameGameId(none.spectator));
-      expect(sameGameId(two.getState2)).toBe(sameGameId(none.getState2));
-      expect(sameGameId(two.getState0)).toBe(sameGameId(none.getState0));
-    });
-
-    it("the undo refusal seat 2 reads does not depend on seat 1's secret actions", async () => {
-      await expectSeat2RefusalBlindToSeat1(async () => statefulGame().table);
     });
   });
 });

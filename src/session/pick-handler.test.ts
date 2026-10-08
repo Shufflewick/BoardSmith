@@ -1,7 +1,31 @@
 import { describe, test, expect, beforeEach, vi } from 'vitest';
-import { Game, Player, Space, Piece, Action, defineFlow, actionStep, type GameOptions } from '../engine/index.js';
-import { GameSession } from './game-session.js';
+import { Game, Player, Space, Piece, Action, defineFlow, actionStep, type GameOptions, type GameClass } from '../engine/index.js';
+import { createHeadlessSession, type HeadlessSession } from './headless-session.js';
+import { succeeded } from './op-result.test-helper.js';
 import { ErrorCode } from '../types/protocol.js';
+
+// These run on the live session host (`SnapshotSessionHost` over `executeOp`),
+// which answers a pick's choices with the `resolveChoices` op; the stateful
+// GameSession they once drove was removed (#529).
+
+/** A started table of `gameClass` with `playerNames` seated. */
+async function startTable<G extends Game>(gameClass: GameClass<G>, gameType: string, playerNames: string[]) {
+  const n = playerNames.length;
+  const table = createHeadlessSession<G>({ gameClass, gameType, minPlayers: n, maxPlayers: n }, { playerCount: n, playerNames });
+  await table.start();
+  return table;
+}
+
+/** Seat `player`'s answers for `selectionName` in `actionName`, given the answers in `args`. */
+function pickChoices(
+  table: HeadlessSession,
+  actionName: string,
+  selectionName: string,
+  player: number,
+  args: Record<string, unknown> = {},
+) {
+  return table.send(player, { type: 'resolveChoices', actionName, selectionName, player, args });
+}
 
 // Custom element class for test game
 class Item extends Piece<TestPickGame> {
@@ -93,20 +117,15 @@ class TestPickGame extends Game<TestPickGame, Player> {
 }
 
 describe('PickHandler disabled threading', () => {
-  let session: GameSession<TestPickGame>;
+  let session: HeadlessSession<TestPickGame>;
 
-  beforeEach(() => {
-    session = GameSession.create({
-      gameType: 'test-pick',
-      GameClass: TestPickGame,
-      playerCount: 2,
-      playerNames: ['Alice', 'Bob'],
-    });
+  beforeEach(async () => {
+    session = await startTable(TestPickGame, 'test-pick', ['Alice', 'Bob']);
   });
 
   describe('choice selection: disabled choices carry reason string', () => {
-    test('disabled callback result is threaded to wire choices', () => {
-      const result = session.getPickChoices('pickFruit', 'fruit', 1);
+    test('disabled callback result is threaded to wire choices', async () => {
+      const result = succeeded(await pickChoices(session, 'pickFruit', 'fruit', 1));
       expect(result.success).toBe(true);
       expect(result.choices).toHaveLength(3);
 
@@ -124,8 +143,8 @@ describe('PickHandler disabled threading', () => {
   });
 
   describe('element selection: disabled elements carry reason string', () => {
-    test('disabled callback result is threaded to wire elements', () => {
-      const result = session.getPickChoices('pickItem', 'item', 1);
+    test('disabled callback result is threaded to wire elements', async () => {
+      const result = succeeded(await pickChoices(session, 'pickItem', 'item', 1));
       expect(result.success).toBe(true);
       expect(result.validElements).toHaveLength(3);
 
@@ -143,8 +162,8 @@ describe('PickHandler disabled threading', () => {
   });
 
   describe('sparse representation: enabled items have no disabled field at all', () => {
-    test('enabled choices do not have disabled key in object', () => {
-      const result = session.getPickChoices('pickFruit', 'fruit', 1);
+    test('enabled choices do not have disabled key in object', async () => {
+      const result = succeeded(await pickChoices(session, 'pickFruit', 'fruit', 1));
 
       for (const choice of result.choices!) {
         if (choice.value !== 'banana') {
@@ -153,8 +172,8 @@ describe('PickHandler disabled threading', () => {
       }
     });
 
-    test('enabled elements do not have disabled key in object', () => {
-      const result = session.getPickChoices('pickItem', 'item', 1);
+    test('enabled elements do not have disabled key in object', async () => {
+      const result = succeeded(await pickChoices(session, 'pickItem', 'item', 1));
 
       for (const elem of result.validElements!) {
         if (elem.display !== 'Shield') {
@@ -165,8 +184,8 @@ describe('PickHandler disabled threading', () => {
   });
 
   describe('no disabled callback: all items have no disabled field', () => {
-    test('choices without disabled callback have no disabled field', () => {
-      const result = session.getPickChoices('pickColor', 'color', 1);
+    test('choices without disabled callback have no disabled field', async () => {
+      const result = succeeded(await pickChoices(session, 'pickColor', 'color', 1));
       expect(result.success).toBe(true);
       expect(result.choices).toHaveLength(3);
 
@@ -177,8 +196,8 @@ describe('PickHandler disabled threading', () => {
   });
 
   describe('elements (multi-select) selection: disabled elements carry reason string', () => {
-    test('disabled callback result is threaded to wire elements for multi-select', () => {
-      const result = session.getPickChoices('pickItems', 'items', 1);
+    test('disabled callback result is threaded to wire elements for multi-select', async () => {
+      const result = succeeded(await pickChoices(session, 'pickItems', 'items', 1));
       expect(result.success).toBe(true);
       expect(result.validElements).toHaveLength(3);
 
@@ -194,8 +213,8 @@ describe('PickHandler disabled threading', () => {
   });
 
   describe('choice selection: filterBy uses resolved args from action executor', () => {
-    test('dependent choices are filtered consistently with action validation', () => {
-      const result = session.getPickChoices('pickByType', 'item', 1, { type: 'weapon' });
+    test('dependent choices are filtered consistently with action validation', async () => {
+      const result = succeeded(await pickChoices(session, 'pickByType', 'item', 1, { type: 'weapon' }));
       expect(result.success).toBe(true);
       expect(result.choices).toBeDefined();
       expect(result.choices!.map(c => c.display)).toEqual(['sword', 'shield']);
@@ -343,20 +362,15 @@ class BoardRefsGame extends Game<BoardRefsGame, Player> {
 }
 
 describe('PickHandler refs construction (D-01)', () => {
-  let session: GameSession<BoardRefsGame>;
+  let session: HeadlessSession<BoardRefsGame>;
 
-  beforeEach(() => {
-    session = GameSession.create({
-      gameType: 'test-board-refs',
-      GameClass: BoardRefsGame,
-      playerCount: 1,
-      playerNames: ['Alice'],
-    });
+  beforeEach(async () => {
+    session = await startTable(BoardRefsGame, 'test-board-refs', ['Alice']);
   });
 
   describe('choice pick with boardRefs callback', () => {
-    test('choice.refs equals the array returned by boardRefs()', () => {
-      const result = session.getPickChoices('move', 'dest', 1);
+    test('choice.refs equals the array returned by boardRefs()', async () => {
+      const result = succeeded(await pickChoices(session, 'move', 'dest', 1));
       expect(result.success).toBe(true);
       expect(result.choices).toHaveLength(2);
 
@@ -373,8 +387,8 @@ describe('PickHandler refs construction (D-01)', () => {
   });
 
   describe('element pick with boardRef callback', () => {
-    test('validElem.refs equals [{ ref: <callback result>, role: "highlight" }]', () => {
-      const result = session.getPickChoices('selectSquare', 'sq', 1);
+    test('validElem.refs equals [{ ref: <callback result>, role: "highlight" }]', async () => {
+      const result = succeeded(await pickChoices(session, 'selectSquare', 'sq', 1));
       expect(result.success).toBe(true);
       expect(result.validElements).toBeDefined();
 
@@ -390,8 +404,8 @@ describe('PickHandler refs construction (D-01)', () => {
   });
 
   describe('element pick without boardRef (default)', () => {
-    test('validElem.refs === [{ ref: { id, notation? }, role: "highlight" }]', () => {
-      const result = session.getPickChoices('selectSquareDefault', 'sq', 1);
+    test('validElem.refs === [{ ref: { id, notation? }, role: "highlight" }]', async () => {
+      const result = succeeded(await pickChoices(session, 'selectSquareDefault', 'sq', 1));
       expect(result.success).toBe(true);
       expect(result.validElements).toBeDefined();
 
@@ -412,21 +426,16 @@ describe('PickHandler refs construction (D-01)', () => {
 // ============================================================
 
 describe('PickHandler structured warnings (ERR-01)', () => {
-  let session: GameSession<BoardRefsGame>;
+  let session: HeadlessSession<BoardRefsGame>;
 
-  beforeEach(() => {
-    session = GameSession.create({
-      gameType: 'test-board-refs',
-      GameClass: BoardRefsGame,
-      playerCount: 1,
-      playerNames: ['Alice'],
-    });
+  beforeEach(async () => {
+    session = await startTable(BoardRefsGame, 'test-board-refs', ['Alice']);
   });
 
-  test('a throwing boardRefs() produces a structured warning and the choice is still returned/selectable', () => {
+  test('a throwing boardRefs() produces a structured warning and the choice is still returned/selectable', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
-      const result = session.getPickChoices('moveThrowBoardRefs', 'dest', 1);
+      const result = succeeded(await pickChoices(session, 'moveThrowBoardRefs', 'dest', 1));
 
       expect(result.success).toBe(true);
       expect(result.choices).toHaveLength(1);
@@ -444,10 +453,10 @@ describe('PickHandler structured warnings (ERR-01)', () => {
     }
   });
 
-  test('a throwing display() produces a structured warning, falls back to a default label, and echoes to console', () => {
+  test('a throwing display() produces a structured warning, falls back to a default label, and echoes to console', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
-      const result = session.getPickChoices('selectSquareThrowDisplay', 'sq', 1);
+      const result = succeeded(await pickChoices(session, 'selectSquareThrowDisplay', 'sq', 1));
 
       expect(result.success).toBe(true);
       expect(result.validElements).toBeDefined();
@@ -472,10 +481,10 @@ describe('PickHandler structured warnings (ERR-01)', () => {
     }
   });
 
-  test('a throwing boardRef() produces a stable-coded warning and the {id} fallback is still returned', () => {
+  test('a throwing boardRef() produces a stable-coded warning and the {id} fallback is still returned', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
-      const result = session.getPickChoices('selectSquareThrowBoardRef', 'sq', 1);
+      const result = succeeded(await pickChoices(session, 'selectSquareThrowBoardRef', 'sq', 1));
 
       expect(result.success).toBe(true);
       expect(result.validElements).toBeDefined();
@@ -494,20 +503,20 @@ describe('PickHandler structured warnings (ERR-01)', () => {
     }
   });
 
-  test('regression: a throwing getChoices() still returns success:false with the existing CHOICES_EVALUATION_ERROR errorCode', () => {
-    const result = session.getPickChoices('pickThrowChoices', 'option', 1, { trigger: true });
+  test('regression: a throwing getChoices() still returns success:false with the existing CHOICES_EVALUATION_ERROR errorCode', async () => {
+    const result = await pickChoices(session, 'pickThrowChoices', 'option', 1, { trigger: true });
 
     expect(result.success).toBe(false);
     expect(result.errorCode).toBe(ErrorCode.CHOICES_EVALUATION_ERROR);
-    expect(result.warnings).toBeUndefined();
+    expect('warnings' in result).toBe(false);
   });
 
-  test('warning messages contain no stack trace or file path', () => {
+  test('warning messages contain no stack trace or file path', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
-      const boardRefsResult = session.getPickChoices('moveThrowBoardRefs', 'dest', 1);
-      const displayResult = session.getPickChoices('selectSquareThrowDisplay', 'sq', 1);
-      const boardRefResult = session.getPickChoices('selectSquareThrowBoardRef', 'sq', 1);
+      const boardRefsResult = succeeded(await pickChoices(session, 'moveThrowBoardRefs', 'dest', 1));
+      const displayResult = succeeded(await pickChoices(session, 'selectSquareThrowDisplay', 'sq', 1));
+      const boardRefResult = succeeded(await pickChoices(session, 'selectSquareThrowBoardRef', 'sq', 1));
 
       for (const result of [boardRefsResult, displayResult, boardRefResult]) {
         for (const warning of result.warnings ?? []) {

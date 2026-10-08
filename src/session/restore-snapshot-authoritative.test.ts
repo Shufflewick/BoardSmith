@@ -1,16 +1,20 @@
 /**
- * Audit F42: GameSession.restore() must be SNAPSHOT-AUTHORITATIVE.
+ * Audit F42: a restore must be SNAPSHOT-AUTHORITATIVE.
  *
- * Restore reconstructs game state via GameRunner.fromSnapshot(storedState.snapshot),
- * NOT via GameRunner.replay(actionHistory). Replay is unsound: selection-step /
- * pending-completed mutations (e.g. a Piece moved inside a repeating selection's
- * onEach) are recorded in neither command nor action history, so replaying an
- * incomplete actionHistory mis-positions the flow and loses those mutations.
+ * A host restores game state from its stored snapshot, NOT by replaying the
+ * action history. Replay is unsound: selection-step / pending-completed
+ * mutations (e.g. a Piece moved inside a repeating selection's onEach) are
+ * recorded in neither command nor action history, so replaying an incomplete
+ * actionHistory mis-positions the flow and loses those mutations.
  *
- * These tests prove:
+ * These run on the live session host: `SnapshotSessionHost.restore` takes back
+ * the JSON round-trip of `durableState()` (a cold restart), and every op it then
+ * runs rebuilds the game from that snapshot. (They were written against the
+ * stateful GameSession's restore, which was removed, #529.) They prove:
  *   1. A multi-step / repeating-selection action's pending mutations survive a
  *      save -> (JSON round-trip, simulating a cold restart) -> restore EXACTLY.
- *   2. restore() calls GameRunner.fromSnapshot and NEVER GameRunner.replay.
+ *   2. The restored host rebuilds its game with GameRunner.fromSnapshot and
+ *      NEVER GameRunner.replay.
  *   3. Undo and time-travel work AFTER restore (they were silently dead when
  *      restore cold-replayed action history, because the per-action undo
  *      checkpoints were never reconstructed).
@@ -32,49 +36,60 @@ import {
   type GameOptions,
 } from '../engine/index.js';
 import { GameRunner } from '../runtime/index.js';
-import { GameSession } from './game-session.js';
-import type { StorageAdapter, StoredGameState } from './types.js';
+import { createHeadlessSession } from './headless-session.js';
+import { SnapshotSessionHost, type SnapshotHostState } from './snapshot-session-host.js';
+import { executeOp, runnerFromSnapshot, type GameDefinitionLike } from './stateless-ops.js';
+import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
+import { succeeded } from './op-result.test-helper.js';
+import type { PlayerGameState } from './types.js';
 import type { TutorialDefinition } from '../engine/tutorial/types.js';
 // The test game is a repeating selection whose onEach moves pieces. The moves
 // happen DURING the multi-step selection (not in execute), so they are exactly
 // the kind of "pending mutation" that action-history replay cannot reproduce.
 import { RepeatingCollectGame as CollectGame, Token } from './testing/fixtures/repeating-collect-fixture.js';
 
-/**
- * In-memory storage that simulates a real cold restart: it persists a JSON
- * round-trip of the stored state (exactly what a SQLite/KV adapter would do),
- * so any non-JSON-serializable custom state would be lost here too.
- */
-class JsonRoundTripStorage implements StorageAdapter {
-  saved: string | null = null;
-  async save(state: StoredGameState): Promise<void> {
-    this.saved = JSON.stringify(state);
-  }
-  async load(): Promise<StoredGameState | null> {
-    return this.saved ? (JSON.parse(this.saved) as StoredGameState) : null;
-  }
+/** What a store hands back after a cold restart: a JSON round-trip of what the host persisted. */
+function coldStored(state: SnapshotHostState): SnapshotHostState {
+  return JSON.parse(JSON.stringify(state)) as SnapshotHostState;
 }
 
+/**
+ * A host restored in a fresh process from `state`, running `def` with debug ops
+ * on, and the seat views it publishes. It is restored without the pages' views,
+ * so it publishes the first views it builds itself, after its next op.
+ */
+function restoredHost(def: GameDefinitionLike, options: Parameters<typeof executeOp>[1], state: SnapshotHostState) {
+  const published: Array<Array<{ state: PlayerGameState }>> = [];
+  const host = SnapshotSessionHost.restore(
+    {
+      playerCount: options.playerCount,
+      debug: true,
+      executeOp: (snap, pend, op) => executeOp(def, options, snap, pend, op, { debug: true }),
+      record: (views) => published.push(views.players as Array<{ state: PlayerGameState }>),
+      push: () => {},
+    },
+    { ...state, botSeats: [] },
+  );
+  return { host, published };
+}
+
+const collectDef = { gameClass: CollectGame, gameType: 'collect', minPlayers: 2, maxPlayers: 2 } satisfies GameDefinitionLike;
+const collectOptions = { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'f42-seed' };
+
 async function buildPlayedSession() {
-  const storage = new JsonRoundTripStorage();
-  const session = GameSession.create<CollectGame>({
-    gameType: 'collect',
-    GameClass: CollectGame,
-    playerCount: 2,
-    playerNames: ['Alice', 'Bob'],
-    seed: 'f42-seed',
-    storage,
-  });
+  const session = createHeadlessSession(collectDef, collectOptions);
+  await session.start();
 
   // Drive one full multi-step 'collect': pick p1, pick p2, then stop. The two
   // picks move p1 and p2 into the hand via onEach before execute() runs.
-  await session.processSelectionStep(1, 'token', 'p1', 'collect');
-  await session.processSelectionStep(1, 'token', 'p2');
-  const done = await session.processSelectionStep(1, 'token', 'stop');
-  expect(done.success).toBe(true);
+  const pick = (value: string) =>
+    session.send(1, { type: 'selectionStep', player: 1, selectionName: 'token', value, actionName: 'collect' });
+  expect((await pick('p1')).success).toBe(true);
+  expect((await pick('p2')).success).toBe(true);
+  const done = succeeded(await pick('stop'));
   expect(done.actionComplete).toBe(true);
 
-  return { session, storage };
+  return { session, stored: coldStored(session.host.durableState()) };
 }
 
 function tokenNames(space: Space<CollectGame>): string[] {
@@ -85,48 +100,46 @@ function tokenNames(space: Space<CollectGame>): string[] {
     .sort();
 }
 
-describe('F42: GameSession.restore is snapshot-authoritative', () => {
+describe('F42: a restored SnapshotSessionHost is snapshot-authoritative', () => {
   it('persists a snapshot and reconstructs the exact post-multi-step state', async () => {
-    const { session, storage } = await buildPlayedSession();
+    const { session, stored } = await buildPlayedSession();
 
-    // Sanity: the pending mutations actually happened in the live game.
-    const liveGame = session.runner.game;
+    // Sanity: the pending mutations actually happened in the game.
+    const liveGame = session.readGame();
     expect(tokenNames(liveGame.hand)).toEqual(['p1', 'p2']);
     expect(tokenNames(liveGame.stash)).toEqual(['p3']);
-
     const liveJson = JSON.stringify(liveGame.toJSON());
 
-    // Cold restart: load the JSON-round-tripped stored state.
-    const loaded = await storage.load();
-    expect(loaded).not.toBeNull();
-    expect(loaded!.snapshot).toBeDefined();
-
-    const restored = GameSession.restore<CollectGame>(loaded!, CollectGame);
+    expect(stored.snapshot).not.toBeNull();
+    const { host } = restoredHost(collectDef, collectOptions, stored);
 
     // The restored tree is byte-for-byte identical to the live one — the pending
     // onEach moves survived because state, not action history, was authoritative.
-    expect(JSON.stringify(restored.runner.game.toJSON())).toEqual(liveJson);
-    expect(tokenNames(restored.runner.game.hand)).toEqual(['p1', 'p2']);
-    expect(tokenNames(restored.runner.game.stash)).toEqual(['p3']);
+    const restoredGame = runnerFromSnapshot(host.snapshot!, { ...collectDef, randomness: 'allowed' }).game as CollectGame;
+    expect(JSON.stringify(restoredGame.toJSON())).toEqual(liveJson);
+    expect(tokenNames(restoredGame.hand)).toEqual(['p1', 'p2']);
+    expect(tokenNames(restoredGame.stash)).toEqual(['p3']);
 
     // actionHistory is preserved (for undo turn-detection) — exactly one entry
     // for the completed multi-step action.
-    expect(restored.runner.actionHistory).toHaveLength(1);
-    expect(restored.runner.actionHistory[0]).toMatchObject({ name: 'collect' });
+    const history = succeeded(await host.handleOp(1, { type: 'debugHistory' })).actionHistory;
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({ name: 'collect' });
   });
 
-  it('uses GameRunner.fromSnapshot and never GameRunner.replay', async () => {
-    const { storage } = await buildPlayedSession();
-    const loaded = await storage.load();
+  it('rebuilds with GameRunner.fromSnapshot and never GameRunner.replay', async () => {
+    const { stored } = await buildPlayedSession();
 
     const fromSnapshotSpy = vi.spyOn(GameRunner, 'fromSnapshot');
     const replaySpy = vi.spyOn(GameRunner, 'replay');
 
     try {
-      GameSession.restore<CollectGame>(loaded!, CollectGame);
+      const { host } = restoredHost(collectDef, collectOptions, stored);
+      expect(host.snapshot).toEqual(stored.snapshot);
+      expect((await host.handleOp(1, { type: 'undo', player: 1 })).success).toBe(true);
 
-      expect(fromSnapshotSpy).toHaveBeenCalledTimes(1);
-      expect(fromSnapshotSpy.mock.calls[0][0]).toBe(loaded!.snapshot);
+      expect(fromSnapshotSpy).toHaveBeenCalled();
+      expect(fromSnapshotSpy.mock.calls[0][0]).toEqual(stored.snapshot);
       expect(replaySpy).not.toHaveBeenCalled();
     } finally {
       fromSnapshotSpy.mockRestore();
@@ -135,9 +148,8 @@ describe('F42: GameSession.restore is snapshot-authoritative', () => {
   });
 
   it('supports undo after restore (dead under the old replay restore)', async () => {
-    const { storage } = await buildPlayedSession();
-    const loaded = await storage.load();
-    const restored = GameSession.restore<CollectGame>(loaded!, CollectGame);
+    const { stored } = await buildPlayedSession();
+    const { host } = restoredHost(collectDef, collectOptions, stored);
 
     // It is still player 1's turn (the action-step repeats), so the just-completed
     // 'collect' is undoable. Under the OLD replay restore this returned the
@@ -149,58 +161,55 @@ describe('F42: GameSession.restore is snapshot-authoritative', () => {
     // checkpoint, so the board view is not asserted here — that fold is an
     // orthogonal, pre-existing checkpoint property. What F42 fixes is that undo is
     // no longer DEAD after a restore.)
-    const undo = await restored.undoToTurnStart(1);
+    const undo = await host.handleOp(1, { type: 'undo', player: 1 });
     expect(undo.success).toBe(true);
-    expect(undo.actionsUndone).toBe(1);
-    expect(restored.runner.actionHistory).toHaveLength(0);
+    expect(succeeded(await host.handleOp(1, { type: 'debugHistory' })).actionHistory).toHaveLength(0);
   });
 
-  it('supports time-travel (getStateAtAction) after restore', async () => {
-    const { storage } = await buildPlayedSession();
-    const loaded = await storage.load();
-    const restored = GameSession.restore<CollectGame>(
-      loaded!, CollectGame, undefined, undefined, undefined, undefined, undefined, undefined, true,
-    );
+  it('supports time-travel (debugStateAt) after restore', async () => {
+    const { stored } = await buildPlayedSession();
+    const { host } = restoredHost(collectDef, collectOptions, stored);
 
-    // State at action 0 (turn start, before collect) — hand empty.
-    const at0 = restored.getStateAtAction(0, 1);
-    expect(at0.success).toBe(true);
-
+    // State at action 0 (turn start, before collect).
+    expect((await host.handleOp(1, { type: 'debugStateAt', actionIndex: 0, player: 1 })).success).toBe(true);
     // State at action 1 (after collect completed) — current state.
-    const at1 = restored.getStateAtAction(1, 1);
-    expect(at1.success).toBe(true);
+    expect((await host.handleOp(1, { type: 'debugStateAt', actionIndex: 1, player: 1 })).success).toBe(true);
 
-    // The current (restored) game still reflects the collected state — viewing
-    // history did not mutate it.
-    expect(tokenNames(restored.runner.game.hand)).toEqual(['p1', 'p2']);
+    // The restored game still reflects the collected state — viewing history
+    // did not mutate it.
+    const game = runnerFromSnapshot(host.snapshot!, { ...collectDef, randomness: 'allowed' }).game as CollectGame;
+    expect(tokenNames(game.hand)).toEqual(['p1', 'p2']);
   });
 
   it('fails loud when stored state has no snapshot (no silent replay fallback)', async () => {
-    const { storage } = await buildPlayedSession();
-    const loaded = await storage.load();
+    const { stored } = await buildPlayedSession();
 
-    // Simulate stored state saved before the snapshot field existed.
-    const snapshotless: StoredGameState = { ...loaded!, snapshot: undefined };
-
-    expect(() => GameSession.restore<CollectGame>(snapshotless, CollectGame)).toThrow(
-      /no snapshot/
+    expect(() => restoredHost(collectDef, collectOptions, { ...stored, snapshot: null })).toThrow(
+      /restore requires the snapshot of a started game/,
     );
   });
 });
 
 // ---------------------------------------------------------------------------
-// BL-01: restore() must re-supply tutorialDefinition so gating + lifecycle
-// survive a cold server restart (snapshot round-trip).
+// BL-01: a restore must keep the tutorial definition, so gating and the
+// tutorial's lifecycle survive a cold restart (snapshot round-trip). The
+// definition is not serialized; the live host threads it from the game
+// definition onto every game it rebuilds.
 // ---------------------------------------------------------------------------
 
 class TutorialRestoreGame extends Game<TutorialRestoreGame, Player> {
+  /** How many `move`s have been made; RESTORE_TUTORIAL's first step advances on one. */
+  moves = 0;
+
   constructor(options: GameOptions) {
     super(options);
 
     const moveAction = Action.create('move')
       .prompt('Move')
       .chooseFrom('piece', { choices: ['a', 'b', 'c'] })
-      .execute(() => {});
+      .execute(() => {
+        this.moves += 1;
+      });
 
     const passAction = Action.create('pass')
       .prompt('Pass')
@@ -224,136 +233,73 @@ class TutorialRestoreGame extends Game<TutorialRestoreGame, Player> {
 
 const RESTORE_TUTORIAL: TutorialDefinition = {
   steps: [
-    { id: 'step-1', gate: { action: 'move' } },
+    {
+      id: 'step-1',
+      gate: { action: 'move' },
+      advanceWhen: { 'a piece has moved': ({ game }) => (game as TutorialRestoreGame).moves > 0 },
+    },
     { id: 'step-2', gate: { action: 'pass' } },
   ],
 };
 
-class TutorialRoundTripStorage implements StorageAdapter {
-  saved: string | null = null;
-  async save(state: StoredGameState): Promise<void> {
-    this.saved = JSON.stringify(state);
-  }
-  async load(): Promise<StoredGameState | null> {
-    return this.saved ? (JSON.parse(this.saved) as StoredGameState) : null;
-  }
+const tutorialDef = {
+  gameClass: TutorialRestoreGame,
+  gameType: 'tutorial-restore',
+  minPlayers: 2,
+  maxPlayers: 2,
+  tutorial: RESTORE_TUTORIAL,
+} satisfies GameDefinitionLike;
+
+/** A table whose seat 1 has started the tutorial, as a store holds it after a cold restart. */
+async function storedTutorialTable(seed: string) {
+  const options = { playerCount: 2, playerNames: ['Alice', 'Bob'], seed };
+  const session = createHeadlessSession(tutorialDef, options);
+  await session.start();
+  expect((await session.send(1, { type: 'startTutorial', player: 1 })).success).toBe(true);
+  return { options, stored: coldStored(session.host.durableState()) };
 }
 
-describe('BL-01: GameSession.restore() re-supplies tutorialDefinition', () => {
-  it('gating reason survives snapshot → restore when tutorial param is passed', async () => {
-    // Create a session with a tutorial definition
-    const storage = new TutorialRoundTripStorage();
-    const session = GameSession.create<TutorialRestoreGame>({
-      gameType: 'tutorial-restore',
-      GameClass: TutorialRestoreGame,
-      playerCount: 2,
-      playerNames: ['Alice', 'Bob'],
-      seed: 'bl01-seed',
-      storage,
-      tutorial: RESTORE_TUTORIAL,
+describe('BL-01: a restored SnapshotSessionHost keeps the tutorial definition', () => {
+  it('gating survives snapshot → restore', async () => {
+    const { options, stored } = await storedTutorialTable('bl01-seed');
+    const { host } = restoredHost(tutorialDef, options, stored);
+
+    // After restore, gating must still be active: 'pass' is out of step and refused.
+    const pass = await host.handleOp(1, {
+      type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host),
     });
+    expect(pass).toMatchObject({ success: false, error: expect.stringContaining('Tutorial step requires') });
 
-    // Start the tutorial for seat 1 (step-1 gates to 'move')
-    session.startTutorial(1);
-
-    // Re-snapshot after startTutorial so the persisted snapshot carries
-    // tutorialProgress (the snapshot at create() time predates the mutation).
-    session.storedState.snapshot = session.runner.getSnapshot();
-
-    // Force a save so storage has the snapshot
-    await (storage as TutorialRoundTripStorage).save(session.storedState);
-
-    // Cold restart: JSON round-trip, then restore WITH the tutorial definition
-    const loaded = await storage.load();
-    expect(loaded).not.toBeNull();
-    expect(loaded!.snapshot).toBeDefined();
-
-    const restored = GameSession.restore<TutorialRestoreGame>(
-      loaded!,
-      TutorialRestoreGame,
-      undefined,
-      undefined,
-      RESTORE_TUTORIAL,
-    );
-
-    // After restore, gating must still be active:
-    // 'pass' is out-of-step and must have a disabled reason
-    const disabledActions = restored.runner.game.getDisabledActions(1);
-    expect('pass' in disabledActions).toBe(true);
-    expect(disabledActions['pass']).toBeTruthy();
-
-    // The allowed action 'move' must NOT be disabled
-    expect('move' in disabledActions).toBe(false);
+    // The allowed action 'move' is not.
+    const move = await host.handleOp(1, {
+      type: 'action', actionName: 'move', player: 1, args: { piece: 'a' }, boundaryKey: boundaryKeyOfHost(host),
+    });
+    expect(move.success).toBe(true);
   });
 
-  it('getActiveStep resolves to the running step after restore', async () => {
-    const storage = new TutorialRoundTripStorage();
-    const session = GameSession.create<TutorialRestoreGame>({
-      gameType: 'tutorial-restore',
-      GameClass: TutorialRestoreGame,
-      playerCount: 2,
-      playerNames: ['Alice', 'Bob'],
-      seed: 'bl01-seed-2',
-      storage,
-      tutorial: RESTORE_TUTORIAL,
+  it('the running step advances after restore', async () => {
+    const { options, stored } = await storedTutorialTable('bl01-seed-2');
+    const { host, published } = restoredHost(tutorialDef, options, stored);
+
+    const move = await host.handleOp(1, {
+      type: 'action', actionName: 'move', player: 1, args: { piece: 'a' }, boundaryKey: boundaryKeyOfHost(host),
     });
+    expect(move.success).toBe(true);
 
-    session.startTutorial(1);
-    session.storedState.snapshot = session.runner.getSnapshot();
-    await (storage as TutorialRoundTripStorage).save(session.storedState);
-
-    const loaded = await storage.load();
-    const restored = GameSession.restore<TutorialRestoreGame>(
-      loaded!,
-      TutorialRestoreGame,
-      undefined,
-      undefined,
-      RESTORE_TUTORIAL,
-    );
-
-    // advance() must succeed (tutorialDefinition is present on the runner)
-    expect(() => restored.advanceTutorial(1)).not.toThrow();
-    // After advancing from step-1, gating should now be 'pass' (step-2)
-    const disabledAfter = restored.runner.game.getDisabledActions(1);
-    expect('move' in disabledAfter).toBe(true);
-    expect('pass' in disabledAfter).toBe(false);
-  });
-
-  it('restore() WITHOUT tutorial param loses gating (documents the pre-fix behavior)', async () => {
-    // This test documents what happens when restore() is called without the tutorial
-    // definition — gating silently vanishes. This is the bug BL-01 fixes when the
-    // tutorial param IS supplied; WITHOUT it, the definition remains undefined.
-    const storage = new TutorialRoundTripStorage();
-    const session = GameSession.create<TutorialRestoreGame>({
-      gameType: 'tutorial-restore',
-      GameClass: TutorialRestoreGame,
-      playerCount: 2,
-      playerNames: ['Alice', 'Bob'],
-      seed: 'bl01-seed-3',
-      storage,
-      tutorial: RESTORE_TUTORIAL,
-    });
-
-    session.startTutorial(1);
-    session.storedState.snapshot = session.runner.getSnapshot();
-    await (storage as TutorialRoundTripStorage).save(session.storedState);
-
-    const loaded = await storage.load();
-    // Restore WITHOUT tutorial — tutorialDefinition is not re-supplied
-    const restored = GameSession.restore<TutorialRestoreGame>(loaded!, TutorialRestoreGame);
-
-    // tutorialDefinition is absent — gating is completely gone
-    const disabledActions = restored.runner.game.getDisabledActions(1);
-    expect(disabledActions).toEqual({});
+    // step-1's advanceWhen fired, so seat 1 is on step-2, which gates to 'pass'.
+    const seat1 = published.at(-1)![0]!.state;
+    expect(seat1.tutorial?.stepId).toBe('step-2');
+    expect(seat1.disabledActions?.['move']).toBeTruthy();
+    expect(seat1.disabledActions?.['pass']).toBeUndefined();
   });
 });
 
 // ---------------------------------------------------------------------------
 // SEC-01/F1/F7 companion assertion (case d of the D-SEC-01 coverage contract
-// in plan 131-02): GameSession.restore() must preserve `Space._zoneVisibility`
-// so a hidden zone stays hidden to the opponent after a cold restore. This is
-// the session-layer restore path — the other four paths (fromSnapshot, undo,
-// rewind, stateless-ops) are asserted in
+// in plan 131-02): a host's restore must preserve `Space._zoneVisibility` so a
+// hidden zone stays hidden to the opponent after a cold restore. This is the
+// session-host restore path — the other paths (fromSnapshot, undo, rewind,
+// stateless-ops) are asserted in
 // src/engine/element/zone-visibility-restore.test.ts.
 //
 // Uses a plain `Space` (not `Deck`/`Hand`): those classes set their OWN
@@ -395,43 +341,24 @@ class ZoneGame extends Game<ZoneGame, Player> {
   }
 }
 
-class ZoneJsonRoundTripStorage implements StorageAdapter {
-  saved: string | null = null;
-  async save(state: StoredGameState): Promise<void> {
-    this.saved = JSON.stringify(state);
-  }
-  async load(): Promise<StoredGameState | null> {
-    return this.saved ? (JSON.parse(this.saved) as StoredGameState) : null;
-  }
-}
+const zoneDef = { gameClass: ZoneGame, gameType: 'zone-vis-session-test', minPlayers: 2, maxPlayers: 2 } satisfies GameDefinitionLike;
 
-describe('SEC-01/F1/F7 companion: GameSession.restore() preserves zone visibility', () => {
-  it('opponent view of a hidden zone is byte-identical before/after GameSession.restore()', async () => {
-    const storage = new ZoneJsonRoundTripStorage();
-    const session = GameSession.create<ZoneGame>({
-      gameType: 'zone-vis-session-test',
-      GameClass: ZoneGame,
-      playerCount: 2,
-      playerNames: ['Alice', 'Bob'],
-      seed: 'sec01-seed',
-      storage,
+describe('SEC-01/F1/F7 companion: a restored SnapshotSessionHost preserves zone visibility', () => {
+  it("the opponent's view of a hidden zone is byte-identical with and without a cold restore", async () => {
+    const options = { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'sec01-seed' };
+    const session = createHeadlessSession(zoneDef, options);
+    await session.start();
+    const { host, published } = restoredHost(zoneDef, options, coldStored(session.host.durableState()));
+
+    // The same move, on the table that never restarted and on the restored one.
+    expect((await session.send(1, { type: 'action', actionName: 'noop', player: 1, args: {} })).success).toBe(true);
+    const restoredMove = await host.handleOp(1, {
+      type: 'action', actionName: 'noop', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host),
     });
+    expect(restoredMove.success).toBe(true);
 
-    const before = JSON.stringify(session.runner.game.toJSONForPlayer(2));
-
-    // Persist the live snapshot so storage carries the hidden-zone state
-    // (mirrors the BL-01 tests above — session.create()'s initial snapshot
-    // predates any later mutation, so re-snapshot before saving).
-    session.storedState.snapshot = session.runner.getSnapshot();
-    await storage.save(session.storedState);
-
-    const loaded = await storage.load();
-    expect(loaded).not.toBeNull();
-    expect(loaded!.snapshot).toBeDefined();
-
-    const restored = GameSession.restore<ZoneGame>(loaded!, ZoneGame);
-
-    const after = JSON.stringify(restored.runner.game.toJSONForPlayer(2));
-    expect(after).toBe(before);
+    const before = session.playerState(2).view;
+    expect(JSON.stringify(before)).not.toContain('"suit"');
+    expect(JSON.stringify(published.at(-1)![1]!.state.view)).toBe(JSON.stringify(before));
   });
 });

@@ -2,10 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { executeOp } from './stateless-ops.js';
 import type { PlayerGameState } from './types.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/index.js';
-import {
-  secretDeploymentDefinition,
-  createSecretDeploymentSession,
-} from './testing/fixtures/secret-deployment-fixture.js';
+import { createHeadlessSession } from './headless-session.js';
+import { secretDeploymentDefinition } from './testing/fixtures/secret-deployment-fixture.js';
 import { succeeded } from './op-result.test-helper.js';
 
 // #23 put `animateTo`'s audience on the game view; the session's own
@@ -15,16 +13,27 @@ import { succeeded } from './op-result.test-helper.js';
 
 const eventTypes = (state: PlayerGameState | undefined) => (state?.animationEvents ?? []).map((e) => e.type);
 
-describe("a seat's state carries only the animation events it may see", () => {
-  it('stateful session: seat 1 sees its private event, seat 2 and the spectator do not', async () => {
-    const session = createSecretDeploymentSession({ seed: 'animate-to' });
-    expect((await session.performAction('placePack', 1, {})).success).toBe(true);
+/** A started table of the deployment on the live session host, and each seat's state of record (0 = the spectator). */
+async function liveTable() {
+  const table = createHeadlessSession(secretDeploymentDefinition, { playerCount: 2, seed: 'animate-to' });
+  await table.start();
+  const act = async (seat: number, actionName: string) =>
+    expect((await table.send(seat, { type: 'action', actionName, player: seat, args: {} })).success).toBe(true);
+  const stateOf = (seat: number): PlayerGameState =>
+    seat === 0 ? (table.spectatorViews.at(-1) as { state: PlayerGameState }).state : table.playerState(seat);
+  return { act, stateOf };
+}
 
-    expect(eventTypes(session.getState(1).state)).toEqual(['packPlaced']);
-    const seat2 = session.getState(2).state!;
+describe("a seat's state carries only the animation events it may see", () => {
+  it('live session host: seat 1 sees its private event, seat 2 and the spectator do not', async () => {
+    const { act, stateOf } = await liveTable();
+    await act(1, 'placePack');
+
+    expect(eventTypes(stateOf(1))).toEqual(['packPlaced']);
+    const seat2 = stateOf(2);
     expect(seat2.animationEvents).toBeUndefined();
     expect(seat2.lastAnimationEventId).toBeUndefined();
-    expect(session.getState(0).state!.animationEvents).toBeUndefined();
+    expect(stateOf(0).animationEvents).toBeUndefined();
     // The id counter counts every seat's events, so it stays out of a seat's view.
     expect(seat2.view).not.toHaveProperty('animationEventSeq');
   });
@@ -48,17 +57,17 @@ describe("a seat's state carries only the animation events it may see", () => {
   });
 
   it('a public animation still reaches every seat and the spectator', async () => {
-    const session = createSecretDeploymentSession({ seed: 'animate-to' });
-    expect((await session.performAction('signal', 1, {})).success).toBe(true);
-    for (const seat of [0, 1, 2]) expect(eventTypes(session.getState(seat).state)).toEqual(['signal']);
+    const { act, stateOf } = await liveTable();
+    await act(1, 'signal');
+    for (const seat of [0, 1, 2]) expect(eventTypes(stateOf(seat))).toEqual(['signal']);
   });
 
   it("seat 2's ids do not count seat 1's private animations (#489)", async () => {
     const idOfSignalAfter = async (privatePacks: number) => {
-      const session = createSecretDeploymentSession({ seed: 'animate-to' });
-      for (let i = 0; i < privatePacks; i++) expect((await session.performAction('placePack', 1, {})).success).toBe(true);
-      expect((await session.performAction('signal', 2, {})).success).toBe(true);
-      return { seat1: session.getState(1).state!, seat2: session.getState(2).state!, spectator: session.getState(0).state! };
+      const { act, stateOf } = await liveTable();
+      for (let i = 0; i < privatePacks; i++) await act(1, 'placePack');
+      await act(2, 'signal');
+      return { seat1: stateOf(1), seat2: stateOf(2), spectator: stateOf(0) };
     };
     const none = await idOfSignalAfter(0);
     const two = await idOfSignalAfter(2);
@@ -70,8 +79,8 @@ describe("a seat's state carries only the animation events it may see", () => {
   });
 
   it('each state names the seat whose numbers its ids are, 0 for the spectator (#489)', async () => {
-    const session = createSecretDeploymentSession({ seed: 'animate-to' });
-    expect([0, 1, 2].map((seat) => session.getState(seat).state!.viewerSeat)).toEqual([0, 1, 2]);
+    const { stateOf } = await liveTable();
+    expect([0, 1, 2].map((seat) => stateOf(seat).viewerSeat)).toEqual([0, 1, 2]);
     const options = { playerCount: 2, seed: 'animate-to' };
     const start = succeeded(await executeOp(secretDeploymentDefinition, options, null, null, { type: 'start' }));
     const viewerSeat = (view: unknown) => (view as { state: PlayerGameState }).state.viewerSeat;

@@ -10,8 +10,9 @@
  * - there is no explicit decline: the seat drops its follow-up only by taking
  *   another action the step offers it.
  *
- * Each case is driven through the session-free GameRunner, a GameSession and
- * the stateless op executor, so every host reads the same per-seat state.
+ * Each case is driven through the session-free GameRunner, the live session
+ * host (`SnapshotSessionHost`, which replaced the stateful GameSession, #529)
+ * and the stateless op executor, so every host reads the same per-seat state.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
@@ -33,7 +34,7 @@ import {
 import { _clearShownWarnings } from '../utils/dev.js';
 import { GameRunner } from '../runtime/runner.js';
 import { MCTSBot } from '../bot/mcts-bot.js';
-import { GameSession } from './game-session.js';
+import { createHeadlessSession } from './headless-session.js';
 import { executeOp, type GameDefinitionLike, type StateEnvelope } from './stateless-ops.js';
 import { ErrorCode } from '../types/protocol.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
@@ -292,61 +293,67 @@ describe('a held follow-up with no valid choices warns in development', () => {
   }
 });
 
-describe('GameSession', () => {
-  function session(shape: Shape): GameSession<RaidGame> {
-    return GameSession.create({
-      gameType: 'raid',
-      GameClass: raidClass(shape, false),
-      playerCount: 3,
-      playerNames: ['A', 'B', 'C'],
-      seed: 'follow-up-hold',
-    });
+describe('live session host', () => {
+  /** A started live-host table of `GameClass`, with the moves these cases make. */
+  async function session(GameClass: typeof RaidGame) {
+    const table = createHeadlessSession(
+      { gameClass: GameClass, gameType: 'raid', minPlayers: 2, maxPlayers: 3 },
+      { ...gameOptions, playerNames: ['A', 'B', 'C'] },
+    );
+    await table.start();
+    return {
+      table,
+      act: (seat: number, actionName: string) => table.send(seat, { type: 'action', actionName, player: seat, args: {} }),
+      pick: (seat: number, selectionName: string, value: string, actionName?: string, initialArgs?: Record<string, unknown>) =>
+        table.send(seat, { type: 'selectionStep', player: seat, selectionName, value, actionName, initialArgs }),
+      undo: (seat: number) => table.send(seat, { type: 'undo', player: seat }),
+    };
   }
 
   it('simultaneous: two seats each hold their own follow-up; each takes its own, neither the other', async () => {
-    const s = session('simultaneous');
-    const one = await s.performAction('scout', 1, {});
-    const two = await s.performAction('scout', 2, {});
+    const s = await session(raidClass('simultaneous', false));
+    const one = succeeded(await s.act(1, 'scout'));
+    const two = succeeded(await s.act(2, 'scout'));
     expect(one.followUp).toMatchObject({ action: 'loot', args: { by: 1 } });
     expect(two.followUp).toMatchObject({ action: 'loot', args: { by: 2 } });
 
-    // Seat 1 is refused as seat 2, then takes its own.
-    expect(await s.processSelectionStep(3, 'where', 'north', 'loot', { by: 2 })).toMatchObject({
+    // Seat 3 is refused as seat 2, then seats 1 and 2 each take their own.
+    expect(await s.pick(3, 'where', 'north', 'loot', { by: 2 })).toMatchObject({
       success: false,
       error: NOT_YOURS,
     });
-    expect((await s.processSelectionStep(1, 'where', 'north', 'loot', { by: 1 })).success).toBe(true);
-    expect(await s.processSelectionStep(1, 'what', 'gold')).toMatchObject({ success: true, actionComplete: true });
-    expect((await s.processSelectionStep(2, 'where', 'south', 'loot', { by: 2 })).success).toBe(true);
-    expect(await s.processSelectionStep(2, 'what', 'gems')).toMatchObject({ success: true, actionComplete: true });
-    expect(s.runner.game.looted).toEqual([1, 2]);
+    expect((await s.pick(1, 'where', 'north', 'loot', { by: 1 })).success).toBe(true);
+    expect(await s.pick(1, 'what', 'gold')).toMatchObject({ success: true, actionComplete: true });
+    expect((await s.pick(2, 'where', 'south', 'loot', { by: 2 })).success).toBe(true);
+    expect(await s.pick(2, 'what', 'gems')).toMatchObject({ success: true, actionComplete: true });
+    expect(s.table.readGame().looted).toEqual([1, 2]);
   });
 
   for (const shape of ['turn', 'simultaneous'] as const) {
     it(`${shape}: undo to the turn start takes the follow-up back with the action that returned it`, async () => {
-      const s = session(shape);
-      await s.performAction('scout', 1, {});
-      expect(s.runner.getFlowState()?.followUps).toHaveLength(1);
+      const s = await session(raidClass(shape, false));
+      expect((await s.act(1, 'scout')).success).toBe(true);
+      expect(s.table.host.flowState?.followUps).toHaveLength(1);
 
-      const undone = await s.undoToTurnStart(1);
+      const undone = await s.undo(1);
 
       expect(undone.success).toBe(true);
-      expect(s.runner.getFlowState()?.followUps).toBeUndefined();
-      expect(s.runner.game.scouted).toEqual([]);
+      expect(s.table.host.flowState?.followUps).toBeUndefined();
+      expect(s.table.readGame().scouted).toEqual([]);
     });
   }
 
   it('publishes a held follow-up in its own seat\'s state only, so a reloaded page can resume it', async () => {
-    const s = session('simultaneous');
-    await s.performAction('scout', 1, {});
+    const s = await session(raidClass('simultaneous', false));
+    expect((await s.act(1, 'scout')).success).toBe(true);
 
-    expect(s.buildPlayerState(1, { includeActionMetadata: true }).followUp).toMatchObject({
+    expect(s.table.playerState(1).followUp).toMatchObject({
       action: 'loot',
       args: { by: 1 },
       metadata: { name: 'loot' },
     });
-    expect(s.buildPlayerState(2, { includeActionMetadata: true }).followUp).toBeUndefined();
-    expect(s.buildPlayerState(0, { includeActionMetadata: false }).followUp).toBeUndefined();
+    expect(s.table.playerState(2).followUp).toBeUndefined();
+    expect((s.table.spectatorViews.at(-1) as { state: { followUp?: unknown } }).state.followUp).toBeUndefined();
   });
 
   it('turn-based: undo to the turn start reaches back over a whole follow-up chain (#495)', async () => {
@@ -363,30 +370,28 @@ describe('GameSession', () => {
         }));
       }
     }
-    const s = GameSession.create({
-      gameType: 'raid', GameClass: TwoMoveRaid, playerCount: 3, playerNames: ['A', 'B', 'C'], seed: 'follow-up-hold',
-    });
-    await s.performAction('scout', 1, {});
-    await s.processSelectionStep(1, 'where', 'north', 'loot', { by: 1 });
-    expect(await s.processSelectionStep(1, 'what', 'gold')).toMatchObject({ success: true, actionComplete: true });
-    expect(s.runner.getFlowState()).toMatchObject({ currentPlayer: 1, moveCount: 2, movesRemaining: 1 });
+    const s = await session(TwoMoveRaid);
+    expect((await s.act(1, 'scout')).success).toBe(true);
+    expect((await s.pick(1, 'where', 'north', 'loot', { by: 1 })).success).toBe(true);
+    expect(await s.pick(1, 'what', 'gold')).toMatchObject({ success: true, actionComplete: true });
+    expect(s.table.host.flowState).toMatchObject({ currentPlayer: 1, moveCount: 2, movesRemaining: 1 });
 
-    const undone = await s.undoToTurnStart(1);
+    const undone = await s.undo(1);
 
     expect(undone.success).toBe(true);
-    expect(s.runner.game.scouted).toEqual([]);
-    expect(s.runner.game.looted).toEqual([]);
-    expect(s.runner.getFlowState()).toMatchObject({ currentPlayer: 1, moveCount: 0 });
+    expect(s.table.readGame().scouted).toEqual([]);
+    expect(s.table.readGame().looted).toEqual([]);
+    expect(s.table.host.flowState).toMatchObject({ currentPlayer: 1, moveCount: 0 });
   });
 
   it('turn-based: the turn stays with the seat until it takes its follow-up', async () => {
-    const s = session('turn');
-    await s.performAction('scout', 1, {});
-    expect(s.runner.getFlowState()?.currentPlayer).toBe(1);
+    const s = await session(raidClass('turn', false));
+    expect((await s.act(1, 'scout')).success).toBe(true);
+    expect(s.table.host.flowState?.currentPlayer).toBe(1);
 
-    expect((await s.processSelectionStep(1, 'where', 'north', 'loot', { by: 1 })).success).toBe(true);
-    expect(await s.processSelectionStep(1, 'what', 'gold')).toMatchObject({ success: true, actionComplete: true });
-    expect(s.runner.getFlowState()?.currentPlayer).toBe(2);
+    expect((await s.pick(1, 'where', 'north', 'loot', { by: 1 })).success).toBe(true);
+    expect(await s.pick(1, 'what', 'gold')).toMatchObject({ success: true, actionComplete: true });
+    expect(s.table.host.flowState?.currentPlayer).toBe(2);
   });
 });
 
