@@ -53,13 +53,6 @@
       ]
     },
     {
-      "content": "024c846a5915ec51",
-      "lines": 7,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
-      ]
-    },
-    {
       "content": "0401b67e4c467f83",
       "lines": 5,
       "files": [
@@ -144,13 +137,6 @@
       ]
     },
     {
-      "content": "068953345045c9a5",
-      "lines": 13,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
-      ]
-    },
-    {
       "content": "06a6ab40190b445a",
       "lines": 13,
       "files": [
@@ -219,14 +205,6 @@
       "files": [
         "src/cli/dev-host/DevHost.debug-relay.test.ts",
         "src/cli/dev-host/DevHost.gameoptions.test.ts"
-      ]
-    },
-    {
-      "content": "085f5da6773c15a1",
-      "lines": 19,
-      "files": [
-        "src/cli/commands/analyze.ts",
-        "src/cli/commands/lint.ts"
       ]
     },
     {
@@ -452,13 +430,6 @@
       ]
     },
     {
-      "content": "1053edde4cf26d05",
-      "lines": 15,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
-      ]
-    },
-    {
       "content": "108142b300583293",
       "lines": 7,
       "files": [
@@ -470,13 +441,6 @@
       "lines": 6,
       "files": [
         "src/ui/components/ControlsMenu.tutorial-toggle.test.ts"
-      ]
-    },
-    {
-      "content": "10bc64571f3be5dc",
-      "lines": 9,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
       ]
     },
     {
@@ -538,13 +502,6 @@
       "lines": 12,
       "files": [
         "src/ui/composables/useBoardActionBridge.test.ts"
-      ]
-    },
-    {
-      "content": "11b8d871b6c19e7d",
-      "lines": 7,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
       ]
     },
     {
@@ -618,13 +575,6 @@
       "lines": 9,
       "files": [
         "src/ui/components/auto-ui/auto-ui-helpers.test.ts"
-      ]
-    },
-    {
-      "content": "1349fe3bee55f9cb",
-      "lines": 10,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
       ]
     },
     {
@@ -780,13 +730,6 @@
       ]
     },
     {
-      "content": "19ef00b2bb30be2e",
-      "lines": 6,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
-      ]
-    },
-    {
       "content": "1a05964104c2ba13",
       "lines": 13,
       "files": [
@@ -865,13 +808,6 @@
       "lines": 26,
       "files": [
         "src/ui/composables/useActionController.ts"
-      ]
-    },
-    {
-      "content": "1dbca273ccdf7579",
-      "lines": 10,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
       ]
     },
     {
@@ -1062,13 +998,6 @@
       "files": [
         "src/cli/slash-command/bs/build-game.test.ts",
         "src/cli/slash-command/bs/ingest.test.ts"
-      ]
-    },
-    {
-      "content": "242c3960a9396042",
-      "lines": 11,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
       ]
     },
     {
@@ -1589,13 +1518,6 @@
       ]
     },
     {
-      "content": "3be1788f85e7a57e",
-      "lines": 7,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
-      ]
-    },
-    {
       "content": "3bf4af151ebc20c0",
       "lines": 20,
       "files": [
@@ -1789,13 +1711,6 @@
       "lines": 5,
       "files": [
         "src/engine/flow/turn-scope.test.ts"
-      ]
-    },
-    {
-      "content": "428cfeafad0c6632",
-      "lines": 13,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
       ]
     },
     {
@@ -2110,13 +2025,6 @@
       ]
     },
     {
-      "content": "4e69841377fc0ec1",
-      "lines": 9,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
-      ]
-    },
-    {
       "content": "4e8cba7398fe62bb",
       "lines": 9,
       "files": [
@@ -2216,13 +2124,6 @@
       "lines": 12,
       "files": [
         "src/ui/composables/useElementAnimation.test.ts"
-      ]
-    },
-    {
-      "content": "5482d474af483de5",
-      "lines": 13,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
       ]
     },
     {
@@ -2504,13 +2405,6 @@
       ]
     },
     {
-      "content": "5dc103263682f2d8",
-      "lines": 13,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
-      ]
-    },
-    {
       "content": "5df5885b1b3437ce",
       "lines": 8,
       "files": [
@@ -2598,13 +2492,6 @@
       ]
     },
     {
-      "content": "60140980bca16c35",
-      "lines": 17,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
-      ]
-    },
-    {
       "content": "604b12f3bc0441f9",
       "lines": 9,
       "files": [
@@ -2661,13 +2548,6 @@
       "files": [
         "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
         "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
-      ]
-    },
-    {
-      "content": "62126351b37ff69c",
-      "lines": 9,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
       ]
     },
     {
@@ -2959,25 +2839,11 @@
       ]
     },
     {
-      "content": "6c11203bb3bcf358",
-      "lines": 9,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
-      ]
-    },
-    {
       "content": "6c1ca7a60639b6e2",
       "lines": 15,
       "files": [
         "src/session/game-session.test.ts",
         "src/session/stateless-ops.test.ts"
-      ]
-    },
-    {
-      "content": "6c26261d3417986c",
-      "lines": 6,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
       ]
     },
     {
@@ -3303,13 +3169,6 @@
       "lines": 6,
       "files": [
         "src/cli/dev-host/multiplayer-host.gameoptions.test.ts"
-      ]
-    },
-    {
-      "content": "78c749921159b2ea",
-      "lines": 18,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
       ]
     },
     {
@@ -3923,20 +3782,6 @@
       ]
     },
     {
-      "content": "8c8e9811841e0c52",
-      "lines": 16,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
-      ]
-    },
-    {
-      "content": "8d0e3454234c807d",
-      "lines": 7,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
-      ]
-    },
-    {
       "content": "8de561f0dcd9bd18",
       "lines": 15,
       "files": [
@@ -4536,13 +4381,6 @@
       ]
     },
     {
-      "content": "a38a697af8c439ea",
-      "lines": 9,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
-      ]
-    },
-    {
       "content": "a3ba2a687113f6c6",
       "lines": 8,
       "files": [
@@ -4622,13 +4460,6 @@
       "lines": 14,
       "files": [
         "src/engine/tutorial/gate.test.ts"
-      ]
-    },
-    {
-      "content": "a66f6044efb79546",
-      "lines": 10,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
       ]
     },
     {
@@ -4906,13 +4737,6 @@
       "lines": 7,
       "files": [
         "src/ui/composables/useFocusTrap.test.ts"
-      ]
-    },
-    {
-      "content": "af211eff093545f4",
-      "lines": 9,
-      "files": [
-        "src/bot-trainer/introspector.ts"
       ]
     },
     {
@@ -5519,13 +5343,6 @@
       ]
     },
     {
-      "content": "c32907b6f54d0e54",
-      "lines": 16,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
-      ]
-    },
-    {
       "content": "c35b0edb28029350",
       "lines": 6,
       "files": [
@@ -5830,13 +5647,6 @@
       ]
     },
     {
-      "content": "cf6fb260e185f660",
-      "lines": 7,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
-      ]
-    },
-    {
       "content": "cf8e6f5ee8f33509",
       "lines": 24,
       "files": [
@@ -5971,13 +5781,6 @@
       "lines": 11,
       "files": [
         "src/session/tutorial-controller.test.ts"
-      ]
-    },
-    {
-      "content": "d31c849ffe8fc7dc",
-      "lines": 8,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
       ]
     },
     {
