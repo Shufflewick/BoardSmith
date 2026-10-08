@@ -492,7 +492,6 @@ export class Action<
    *
    * @returns The builder for chaining
    */
-  // fallow-ignore-next-line unused-class-member
   destructive(): this {
     this.definition.destructive = true;
     return this;

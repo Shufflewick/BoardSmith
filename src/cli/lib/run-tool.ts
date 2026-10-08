@@ -1,6 +1,7 @@
 import { createWriteStream, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { createRequire } from 'node:module';
 
 export interface RunToolOptions {
   /** Directory to run the tool in. Also where `node_modules/.bin` is looked up. */
@@ -18,13 +19,66 @@ interface ToolEnd {
 }
 
 /**
+ * Tools boardsmith itself depends on at an exact version, keyed by bin name,
+ * each mapped to its entry script inside the package.
+ *
+ * These run from boardsmith's OWN install whatever the cwd, because their
+ * output is a verdict boardsmith reasons about against committed baselines:
+ * fallow's findings change between releases, so a game's own copy or a global
+ * one on PATH would grade the same tree differently on every machine (#545).
+ */
+const BOARDSMITH_TOOLS: Readonly<Record<string, string>> = {
+  fallow: 'fallow/bin/fallow',
+};
+
+/** The entry script of `bin` in boardsmith's own install, or a readable error. */
+function boardsmithToolScript(bin: string, entry: string): string {
+  try {
+    return createRequire(import.meta.url).resolve(entry);
+  } catch {
+    throw new Error(
+      `boardsmith depends on ${bin}, but its install has no copy of it.\n`
+      + 'Reinstall boardsmith\'s dependencies with: npm install',
+    );
+  }
+}
+
+/**
+ * The command and arguments that run `bin` for a workspace at `cwd`: the one
+ * resolution every spawn of a developer tool goes through, exported so a test
+ * that must run the same binary as `boardsmith audit` can.
+ */
+export function toolCommand(bin: string, args: string[], cwd: string): { command: string; commandArgs: string[] } {
+  const entry = BOARDSMITH_TOOLS[bin];
+  if (entry !== undefined) {
+    // Resolved from this module, so it is the copy boardsmith's package.json
+    // pins, and run with this Node, so no shell or PATH lookup is involved.
+    return { command: process.execPath, commandArgs: [boardsmithToolScript(bin, entry), ...args] };
+  }
+  const localBin = join(cwd, 'node_modules', '.bin', bin);
+  return existsSync(localBin)
+    ? { command: localBin, commandArgs: args }
+    : { command: 'npx', commandArgs: [bin, ...args] };
+}
+
+/**
+ * The fallow command a report tells a developer to run from `cwd`, naming the
+ * same pinned copy `boardsmith audit` runs. `npx fallow` would not: outside
+ * this repository it finds a global fallow or fetches the latest one.
+ */
+export function fallowCommandLine(args: string[], cwd: string): string {
+  const script = boardsmithToolScript('fallow', BOARDSMITH_TOOLS.fallow);
+  return ['node', relative(cwd, script), ...args].join(' ');
+}
+
+/**
  * Spawn a developer tool the same way for every BoardSmith workspace, so
  * `boardsmith <command>` is the single way to invoke it.
  *
- * Prefers the workspace's own `node_modules/.bin/<bin>` so a declared
- * devDependency is always what runs — no network fetch, no version drift. Falls
- * back to `npx` only for tools that are deliberately NOT dependencies
- * (`jscpd`, `fallow`), matching how they have always been invoked.
+ * A tool boardsmith depends on (`BOARDSMITH_TOOLS`) runs from boardsmith's own
+ * install. Any other tool prefers the workspace's own `node_modules/.bin/<bin>`
+ * so a declared devDependency is always what runs, and falls back to `npx` only
+ * for `jscpd`, which is deliberately not a dependency.
  *
  * `output` decides where the child's output goes: inherited (the developer
  * reads it), stdout piped back to the caller (a command reasons about it), or
@@ -37,10 +91,7 @@ function spawnTool(
   options: RunToolOptions & { env?: NodeJS.ProcessEnv },
   output: Output,
 ): Promise<ToolEnd> {
-  const localBin = join(options.cwd, 'node_modules', '.bin', bin);
-  const useLocal = existsSync(localBin);
-  const command = useLocal ? localBin : 'npx';
-  const commandArgs = useLocal ? args : [bin, ...args];
+  const { command, commandArgs } = toolCommand(bin, args, options.cwd);
 
   return new Promise((resolve, reject) => {
     const child = spawn(command, commandArgs, {
@@ -50,10 +101,10 @@ function spawnTool(
       // warnings belong on the developer's terminal, not in the parsed value.
       stdio: output === 'inherit' ? 'inherit' : output === 'capture' ? ['inherit', 'pipe', 'inherit'] : ['inherit', 'pipe', 'pipe'],
       // On Windows both `npx` and the `.bin` shims are batch files, which
-      // `spawn` cannot execute without a shell. Everywhere else, running
+      // `spawn` cannot execute without a shell; Node itself needs none. Everywhere else, running
       // without a shell keeps glob arguments (e.g. 'src/**/*.vue') intact so
       // the tool does its own matching rather than the shell doing it first.
-      shell: process.platform === 'win32',
+      shell: process.platform === 'win32' && command !== process.execPath,
     });
 
     // Buffered whole and decoded ONCE at the end. A chunk boundary can fall

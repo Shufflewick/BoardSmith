@@ -111,6 +111,7 @@ describe('runChangedFilesAudit', () => {
           streamed.push(args);
           return streamCode;
         },
+        rerun: 'node fallow/bin/fallow audit',
       },
     };
   }
@@ -184,10 +185,11 @@ describe('runChangedFilesAudit', () => {
     const result = await runChangedFilesAudit({
       capture: async () => ({ code: 127, stdout: 'command not found' }),
       stream: async () => 127,
+      rerun: 'node fallow/bin/fallow audit',
     });
 
     expect(result.outcome).toBe('fail');
-    expect(result.report).toContain('fallow audit');
+    expect(result.report).toContain('node fallow/bin/fallow audit');
     expect(result.report).toContain('127');
   });
 });

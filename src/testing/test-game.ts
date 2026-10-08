@@ -515,9 +515,6 @@ export class TestGame<G extends Game = Game> {
    * Nothing here names an identity field. It is the full `toJSON()` of every
    * element, and what counts as identity is decided by the gate.
    */
-  // Called through the `HiddenInfoSubject` interface rather than by name, which
-  // the dead-code scan does not resolve.
-  // fallow-ignore-next-line unused-class-member
   unredactedElements(): readonly ElementJSON[] {
     return this.game.all(GameElement).map((element) => element.toJSON());
   }

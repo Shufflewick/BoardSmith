@@ -78,9 +78,7 @@ export const neighboursOf = (seat: number, settlers: number = SETTLERS): number[
 // file, so a scan of the repository alone reports them unused. That is the same
 // false positive an element's attributes always produce.
 export class Holding extends Space<VillageFixture> {
-  // fallow-ignore-next-line unused-class-member
   seat = 0;
-  // fallow-ignore-next-line unused-class-member
   standing = 0;
   // fallow-ignore-next-line unused-class-member
   woodpile = 0;
