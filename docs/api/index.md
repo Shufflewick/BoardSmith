@@ -124,7 +124,7 @@ import {
 - `ElementAttributes` - Element attributes
 - `Sorter` - Sort comparison function
 - `GameOptions` - Game constructor options
-- `GameClass` - A game's class: constructs a game from `GameOptions` (what `GameSession.create`, the runner and the bots take)
+- `GameClass` - A game's class: constructs a game from `GameOptions` (what the session host, the runner and the bots take)
 - `GameRandom` - The type of `game.random`: a seeded generator whose state can be captured and restored
 - `GamePhase` - Game phase enum
 - `PlayerViewFunction` - Player view function

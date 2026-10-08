@@ -224,9 +224,9 @@ flat in the action count, which is the point of setting one.
 ### Why the snapshot call belongs inside the loop
 
 Checkpoints are captured through the SNAPSHOT funnel, not by `performAction`.
-`GameRunner.getSnapshot()` calls `captureCheckpoint()`, and the stateful
-`GameSession` calls it from its broadcast funnel — which is why a host has a
-checkpoint per action. A driver that performs 300 actions and snapshots once at
+`GameRunner.getSnapshot()` calls `captureCheckpoint()`, and `executeOp` calls
+it after every op it runs (every op answers with a fresh snapshot) — which is
+why a host has a checkpoint per action. A driver that performs 300 actions and snapshots once at
 the end leaves every slot between them uncaptured. They still count toward the
 window's length, so `bytesPerCheckpoint` comes out one to two orders of
 magnitude too small (measured at 17x to 219x across six games), and the budget

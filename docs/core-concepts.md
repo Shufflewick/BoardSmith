@@ -521,8 +521,8 @@ player chooses is limited to the options the game declared
 (`GameDefinition.gameOptions`), and `selectGameOptions` in `boardsmith/session`
 is the one way such a choice is admitted: it refuses an undeclared key, a
 host-owned key and a value of the wrong type, and returns a
-`GameOptionSelection`, which is the only thing `GameSession` and the lobby
-will store. The stateless executor refuses `elementIdKey` on a `start` op
+`GameOptionSelection`, which is the only thing the `boardsmith dev` host's
+lobby and `createHeadlessSession` take as a player's choice. The stateless executor refuses `elementIdKey` on a `start` op
 outright, since a new game mints its own. A host that assembles a game's
 options itself must keep a client's object out of them, or hand it to
 `selectGameOptions` first.
@@ -564,9 +564,9 @@ sent every seat a fresh state, a seat whose board did not change would still
 learn THAT someone moved, and when.
 
 So BoardSmith's hosts never push a seat or a spectator a state identical to
-the last one it was sent (#487). `GameSession` compares per connection;
-`SnapshotSessionHost`, and so `boardsmith dev`, compares per seat and hands its
-adapter only the views that changed. The platform adopts the same behaviour
+the last one it was sent (#487). `SnapshotSessionHost`, which every host
+runs (`boardsmith dev` and `createHeadlessSession` included), compares per seat
+and hands its adapter only the views that changed. The platform adopts the same behaviour
 when it re-vendors this engine. Two parts of the payload are compared
 specially:
 
