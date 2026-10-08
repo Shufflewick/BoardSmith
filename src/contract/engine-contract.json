@@ -1,5 +1,5 @@
 {
-  "revision": 135,
+  "revision": 136,
   "bundleProtocol": 2,
   "surfaceHash": "e5b3e01ba492cb59",
   "payloadHash": "3f10d70c457a15ba",
@@ -1153,6 +1153,15 @@
     },
     {
       "revision": 135,
+      "date": "2026-10-08",
+      "bundleProtocol": 2,
+      "surfaceHash": "69d383663e693961",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "An unbounded multiSelect ({ min: 1 } with no max) now reaches the wire with max ABSENT on a table as well as a world, in buildActionMetadata, Game#getActionSpace and the pick answer. Before, a table sent max: Infinity, which JSON turns into null, and the action panel read null as a cap of nothing (BoardSmith #508, ShufflewickPub #378). No fingerprint sees this: the fixtures carry no unbounded multiSelect. The platform must run this build for a table's unbounded picks to stop arriving with max: null."
+    },
+    {
+      "revision": 136,
       "date": "2026-10-08",
       "bundleProtocol": 2,
       "surfaceHash": "e5b3e01ba492cb59",

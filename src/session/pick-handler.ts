@@ -23,7 +23,7 @@ import {
 import type { ValidElement } from '../types/protocol.js';
 import { PendingActionManager, type PickStepResult } from './pending-action-manager.js';
 import { actionForSeat, serializePendingActionState } from './utils.js';
-import { resolveOrderedList } from '../engine/utils/resolve-multiselect.js';
+import { resolveMultiSelect, resolveOrderedList } from '../engine/utils/resolve-multiselect.js';
 import {
   deadEndPickMessage,
   formatChoiceCandidates,
@@ -100,7 +100,7 @@ function answerPick(
     return {
       success: true,
       choices,
-      multiSelect: resolveMultiSelectConfig(selection.multiSelect, ctx),
+      multiSelect: resolveMultiSelect(selection, ctx),
       // The ORDERED-LIST bounds for THIS step (#249), resolved here for the
       // reason multiSelect is: a bound that reads an earlier selection's value
       // is only knowable once that value is bound, and the static metadata was
@@ -116,7 +116,7 @@ function answerPick(
     success: true,
     validElements,
     multiSelect: selection.type === 'elements'
-      ? resolveMultiSelectConfig(selection.multiSelect, ctx)
+      ? resolveMultiSelect(selection, ctx)
       : undefined,
     warnings: said(),
   };
@@ -154,27 +154,6 @@ function deadEnd(
     }),
     errorCode: ErrorCode.PICK_HAS_NO_CANDIDATES,
   };
-}
-
-/**
- * A `multiSelect` config as the WIRE carries it: absent max means unlimited.
- *
- * Deliberately not `resolveMultiSelect` from the engine, which normalises an
- * unlimited maximum to `Infinity` for enumeration's arithmetic. `Infinity`
- * does not survive `JSON.stringify` -- it arrives as `null` -- so the wire
- * keeps the field absent instead, and this is the one place that decides it.
- */
-function resolveMultiSelectConfig(
-  multiSelect: unknown,
-  ctx: { game: Game; player: Player; args: Record<string, unknown> },
-): { min: number; max?: number } | undefined {
-  if (multiSelect === undefined) return undefined;
-  const config = typeof multiSelect === 'function'
-    ? (multiSelect as (c: typeof ctx) => number | { min?: number; max?: number } | undefined)(ctx)
-    : (multiSelect as number | { min?: number; max?: number });
-  if (config === undefined) return undefined;
-  if (typeof config === 'number') return { min: 1, max: config };
-  return { min: config.min ?? 1, max: config.max };
 }
 
 /**

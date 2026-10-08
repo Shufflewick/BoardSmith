@@ -599,7 +599,7 @@ function _valuesToTry(
   const combinations = generateCombinations(
     choices,
     resolved.min,
-    resolved.max,
+    resolved.max ?? Infinity,
     MAX_MULTISELECT_COMBINATIONS,
   );
 
