@@ -243,8 +243,7 @@ describe('executeOp debug ops', () => {
 // #481: debug ops run only when the host turns debugging on, and a seat can
 // never use one to read another seat's view. Two layers gate them: the pure
 // `executeOp` (ShufflewickPub's executor and the dev host) and the
-// `SnapshotSessionHost` every host runs it under. (The stateful GameSession,
-// which had a gate of its own, was removed, #529.) The dev host's wire bridge
+// `SnapshotSessionHost` every host runs it under. The dev host's wire bridge
 // is checked in `src/cli/dev-host/bridge.test.ts`.
 // ---------------------------------------------------------------------------
 

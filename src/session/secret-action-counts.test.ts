@@ -17,8 +17,7 @@ import { succeeded } from './op-result.test-helper.js';
 // difference between them. The runs also need one element id key (#447), and
 // a start op refuses a key from outside, so every run starts from the same
 // saved position (`hostOptions.seedSnapshot`), the way a host resumes a game
-// it holds. (The stateful GameSession this file also drove was removed, #529;
-// every host runs this executor.)
+// it holds. Every host runs this executor.
 const options = { playerCount: 2, seed: 'bs449', elementIdKey: '0000000000000449' };
 const statelessOptions = { playerCount: options.playerCount, seed: options.seed };
 let dealtPosition: GameStateSnapshot | undefined;

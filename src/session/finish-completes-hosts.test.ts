@@ -5,7 +5,7 @@
  * Hosts read `isComplete` from the flow and `winners` from the game. A game
  * that called `this.finish([p])` inside an `eachPlayer` turn used to leave the
  * flow waiting on the next seat, so the stateless op result, the snapshot
- * host's broadcast (and the stateful GameSession, since removed, #529) all
+ * host's broadcast all
  * said "not complete" beside a winner, and the next seat was still offered its
  * turn.
  */

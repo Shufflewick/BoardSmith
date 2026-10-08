@@ -1635,10 +1635,9 @@ describe('SnapshotSessionHost', () => {
   });
 
   // ── flowDebugInfo + pendingAction introspection (Plan 04 Task 4 fix) ───────
-  // The dev host (`boardsmith dev`) runs SnapshotSessionHost, NOT GameSession —
-  // it has its own broadcast injection point (mergeTransientState). This proves
-  // that path also carries the shared flowDebugInfo/pendingAction fields, closing
-  // the gap the browser verification caught (Task 1 only wired GameSession).
+  // SnapshotSessionHost merges these into every seat's view itself
+  // (mergeTransientState). This proves that path carries the shared
+  // flowDebugInfo/pendingAction fields.
 
   describe('flowDebugInfo + pendingAction (dev-host parity)', () => {
     type FlowView = {

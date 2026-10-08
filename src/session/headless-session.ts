@@ -1,13 +1,13 @@
 import { SnapshotSessionHost } from './snapshot-session-host.js';
 import {
   executeOp,
-  runnerFromSnapshot,
   SUBMISSION_OP_TYPES,
   type GameDefinitionLike,
   type Op,
   type OpOfType,
   type OpResultFor,
 } from './stateless-ops.js';
+import { runnerFromSnapshot } from './runner-from-snapshot.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
 import type { Game, GameClass } from '../engine/index.js';
 import type { BotSeat, SnapshotSessionAdapters } from './snapshot-session-host.js';

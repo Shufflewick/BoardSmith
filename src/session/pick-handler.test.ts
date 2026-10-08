@@ -5,8 +5,7 @@ import { succeeded } from './op-result.test-helper.js';
 import { ErrorCode } from '../types/protocol.js';
 
 // These run on the live session host (`SnapshotSessionHost` over `executeOp`),
-// which answers a pick's choices with the `resolveChoices` op; the stateful
-// GameSession they once drove was removed (#529).
+// which answers a pick's choices with the `resolveChoices` op.
 
 /** A started table of `gameClass` with `playerNames` seated. */
 async function startTable<G extends Game>(gameClass: GameClass<G>, gameType: string, playerNames: string[]) {

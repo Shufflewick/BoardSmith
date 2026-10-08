@@ -11,7 +11,7 @@
  *   another action the step offers it.
  *
  * Each case is driven through the session-free GameRunner, the live session
- * host (`SnapshotSessionHost`, which replaced the stateful GameSession, #529)
+ * host (`SnapshotSessionHost`)
  * and the stateless op executor, so every host reads the same per-seat state.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';

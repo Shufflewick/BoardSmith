@@ -15,8 +15,7 @@
  *
  * Each case is driven through all three completion paths: the session-free
  * GameRunner, the live session host (`SnapshotSessionHost`, which holds each
- * seat's pending state between ops; it replaced the stateful GameSession,
- * #529), and the stateless `selectionStep` op.
+ * seat's pending state between ops), and the stateless `selectionStep` op.
  */
 import { describe, it, expect } from 'vitest';
 import {

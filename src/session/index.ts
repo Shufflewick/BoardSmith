@@ -5,29 +5,19 @@
  * (local development, Cloudflare Workers, etc.) while keeping game designers
  * isolated from implementation details.
  *
+ * Every host runs the same `SnapshotSessionHost` over the pure `executeOp`:
+ * the `boardsmith dev` host, ShufflewickPub, and `createHeadlessSession`, which
+ * drives one in process for tests and simulations.
+ *
  * @example
  * ```typescript
- * import {
- *   GameSession,
- *   generateGameId,
- *   type GameDefinition,
- *   type StorageAdapter,
- *   type BroadcastAdapter,
- * } from 'boardsmith/session';
+ * import { createHeadlessSession } from 'boardsmith/session';
+ * import { gameDefinition } from './rules/index.js';
  *
- * // Create a game session
- * const session = GameSession.create({
- *   gameType: 'checkers',
- *   GameClass: CheckersGame,
- *   playerCount: 2,
- *   playerNames: ['Alice', 'Bob'],
- * });
- *
- * // Get state for a player
- * const { flowState, state } = session.getState(0);
- *
- * // Perform an action
- * const result = await session.performAction('move', 0, { from: 'a3', to: 'b4' });
+ * const session = createHeadlessSession(gameDefinition, { playerCount: 2, seed: 'demo' });
+ * await session.start();
+ * await session.send(1, { type: 'action', actionName: 'move', player: 1, args: { to: 'b4' } });
+ * const seat1 = session.playerState(1); // what seat 1 was last published
  * ```
  */
 
@@ -39,16 +29,8 @@ export type { CheckpointPolicy, UndoPolicy, GameClass } from '../engine/index.js
 
 export type {
   GameDefinition,
-  GameConfig,
-  StoredGameState,
   PlayerGameState,
-  SessionInfo,
-  StateUpdate,
-  BotSeatConfig,
-  StorageAdapter,
-  BroadcastAdapter,
   CreateGameRequest,
-  ActionRequest,
   WebSocketMessage,
   // Player option types
   PlayerOptionDefinition,
@@ -66,12 +48,10 @@ export type {
   SlotStatus,
   LobbySlot,
   LobbyInfo,
-  LobbyUpdate,
   ClaimSeatRequest,
   ClaimSeatResponse,
   JoinLobbyRequest,
   JoinLobbyResponse,
-  UpdateNameRequest,
   // Pick types
   PickMetadata,
   PickFilter,
@@ -109,19 +89,6 @@ export {
 // ============================================
 // Core Classes
 // ============================================
-
-export {
-  GameSession,
-  type GameSessionOptions,
-  type SessionActionResult,
-  type UndoResult,
-  type ElementDiff,
-  // Public return type of `session.runner` (SESS-01 read-only facade) — external
-  // consumers need to name it (e.g. helper fn parameters) without deep imports.
-  type ReadOnlyRunnerFacade,
-} from './game-session.js';
-
-export { BotController } from './bot-controller.js';
 
 // The one way a client's choice of game options is admitted (#447).
 export {

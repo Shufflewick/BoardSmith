@@ -2,10 +2,10 @@
  * SEC-04 / F15: `registerDebug()` payloads (`customDebug`) must NOT be
  * present in what a seat or a spectator is sent.
  *
- * F15 found the stateful GameSession attaching `registerDebug()` data
- * (Information Disclosure of hidden game state) to every player's and every
- * spectator's state. GameSession was removed (#529); every host now runs
- * `SnapshotSessionHost` over `executeOp`, and this pins that its views carry no
+ * F15 found a session host attaching `registerDebug()` data (Information
+ * Disclosure of hidden game state) to every player's and every spectator's
+ * state. Every host runs `SnapshotSessionHost` over `executeOp`, and this
+ * pins that its views carry no
  * `customDebug`, even on a host with debug ops enabled.
  */
 

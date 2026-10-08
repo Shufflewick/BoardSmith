@@ -4,8 +4,7 @@
  * A checkpoint restore (undo, rewind) invalidates every piece of state holding
  * element ids from the old runner. Clients hold state of exactly that kind (an
  * open pick's `validElements`) and need to be told. These run on the live
- * session host (`SnapshotSessionHost` over `executeOp`); the stateful
- * GameSession they once drove was removed (#529).
+ * session host (`SnapshotSessionHost` over `executeOp`).
  *
  * These tests prove the fact is now STATED, and stated in one place:
  *   1. Every seat's broadcast state carries `restoreEpoch`, starting at 0.

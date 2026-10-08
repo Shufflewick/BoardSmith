@@ -12,7 +12,8 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Game, defineFlow, actionStep, loop, Action, type GameOptions } from '../engine/index.js';
-import { executeOp, runnerFromSnapshot, type GameDefinitionLike } from './stateless-ops.js';
+import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
+import { runnerFromSnapshot } from './runner-from-snapshot.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 import type { PlayerConfig } from './types.js';

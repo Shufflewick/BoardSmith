@@ -462,8 +462,8 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   //
   // Unconditional, unlike the availableActions teardown above: that one spares a
   // server-pending followUp because the server still holds it. Here the server
-  // has already discarded every pending action (`PendingActionManager.updateRunner`,
-  // called from `replaceRunner`; a new game has none), so sparing it would strand
+  // has already discarded every pending selection (the host clears them all on an
+  // undo or rewind; a new game has none), so sparing it would strand
   // the client holding a chain the server has forgotten.
   //
   // Compared with the last identity OBSERVED rather than the watcher's previous

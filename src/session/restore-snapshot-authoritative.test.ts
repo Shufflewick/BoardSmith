@@ -9,8 +9,7 @@
  *
  * These run on the live session host: `SnapshotSessionHost.restore` takes back
  * the JSON round-trip of `durableState()` (a cold restart), and every op it then
- * runs rebuilds the game from that snapshot. (They were written against the
- * stateful GameSession's restore, which was removed, #529.) They prove:
+ * runs rebuilds the game from that snapshot. They prove:
  *   1. A multi-step / repeating-selection action's pending mutations survive a
  *      save -> (JSON round-trip, simulating a cold restart) -> restore EXACTLY.
  *   2. The restored host rebuilds its game with GameRunner.fromSnapshot and
@@ -38,7 +37,8 @@ import {
 import { GameRunner } from '../runtime/index.js';
 import { createHeadlessSession } from './headless-session.js';
 import { SnapshotSessionHost, type SnapshotHostState } from './snapshot-session-host.js';
-import { executeOp, runnerFromSnapshot, type GameDefinitionLike } from './stateless-ops.js';
+import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
+import { runnerFromSnapshot } from './runner-from-snapshot.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 import { succeeded } from './op-result.test-helper.js';
 import type { PlayerGameState } from './types.js';

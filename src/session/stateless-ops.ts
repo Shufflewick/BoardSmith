@@ -28,11 +28,13 @@ import type { BotMove } from '../bot/types.js';
 import { describeMoveForHint } from './move-summary.js';
 import { PERSIST_KEY, PERSIST_PRIVATE_KEY, type PersistCommit } from '../persistence/persistence.js';
 import { PickHandler } from './pick-handler.js';
+import { runnerFromSnapshot } from './runner-from-snapshot.js';
 import {
   offerFollowUp,
   buildPlayerState,
   buildActionTraces,
   computeElementDiff,
+  type ElementChanges,
   serializeFlowDebugInfo,
   assertUndoAllowed,
   UndoRefusedError,
@@ -422,7 +424,7 @@ export interface OpSuccessFields {
   };
   debugHistory: { actionHistory: HistoryEntry[] };
   debugStateAt: { historicalState: unknown };
-  debugStateDiff: { diff: unknown };
+  debugStateDiff: { diff: ElementDiff };
   debugActionTraces: { traces: unknown[]; flowContext: unknown };
   /** The asking seat's own pending action, beside the envelope's `flowDebugInfo`. */
   debugFlowState: { pendingAction?: SerializedPendingActionState };
@@ -478,6 +480,14 @@ export type OpResultFor<T extends Op['type']> = OpSuccess<T> | OpFailure;
 
 /** What any op answers. Narrow it by the op that was sent with {@link OpResultFor}. */
 export type OpResult = { [T in Op['type']]: OpResultFor<T> }[Op['type']];
+
+/** What the `debugStateDiff` op answers: the elements that changed between two action indices. */
+export interface ElementDiff extends ElementChanges {
+  /** The from action index */
+  fromIndex: number;
+  /** The to action index */
+  toIndex: number;
+}
 
 // ---------------------------------------------------------------------------
 // GameDefinitionLike
@@ -1307,27 +1317,6 @@ async function handleBotSuggest(
 // Debug op handlers
 // ---------------------------------------------------------------------------
 
-/**
- * The runner `snapshot` holds, built the way every op builds it: with the
- * definition's checkpoint and undo policies, the host's randomness policy, and
- * the tutorial definition threaded back onto the game (tutorials are
- * unserializable attributes excluded from the snapshot, so every restore must
- * re-supply them). `createHeadlessSession` reads a test's game with it.
- */
-export function runnerFromSnapshot(
-  snapshot: GameStateSnapshot,
-  def: RunnerDef,
-): GameRunner {
-  const runner = GameRunner.fromSnapshot(
-    snapshot,
-    def.gameClass,
-    { checkpoints: def.checkpoints, randomness: def.randomness, undo: def.undo },
-  );
-  if (def.tutorial) {
-    (runner.game as Game).tutorialDefinition = def.tutorial;
-  }
-  return runner;
-}
 
 /**
  * Reconstruct the runner at a historical action index AUTHORITATIVELY from the
