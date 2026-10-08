@@ -5,14 +5,14 @@
  * Hosts read `isComplete` from the flow and `winners` from the game. A game
  * that called `this.finish([p])` inside an `eachPlayer` turn used to leave the
  * flow waiting on the next seat, so the stateless op result, the snapshot
- * host's broadcast and a GameSession's player state all said "not complete"
- * beside a winner, and the next seat was still offered its turn.
+ * host's broadcast (and the stateful GameSession, since removed, #529) all
+ * said "not complete" beside a winner, and the next seat was still offered its
+ * turn.
  */
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, defineFlow, eachPlayer, actionStep, type GameOptions } from '../engine/index.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters, type PublishMeta } from './snapshot-session-host.js';
-import { GameSession } from './game-session.js';
 import { boundaryKeyOf, boundaryKeyOfHost } from './testing/boundary-stamp.js';
 import { succeeded } from './op-result.test-helper.js';
 
@@ -93,27 +93,9 @@ describe('SnapshotSessionHost', () => {
       expect(view.state.isMyTurn).toBe(false);
       expect(view.state.availableActions).toEqual([]);
     }
-  });
-});
-
-describe('GameSession', () => {
-  it('reports the finished game complete with its winner and offers seat 2 nothing', async () => {
-    const session = GameSession.create({
-      gameType: 'finish-in-turn',
-      GameClass: FinishInTurnGame,
-      playerCount: 3,
-      playerNames: ['A', 'B', 'C'],
-      seed: 'finish-in-turn',
+    const next = await host.handleOp(2, {
+      type: 'action', actionName: 'pass', player: 2, args: {}, boundaryKey: boundaryKeyOfHost(host),
     });
-
-    expect((await session.performAction('win', 1, {})).success).toBe(true);
-
-    const { flowState, state } = session.getState(2);
-    expect(flowState?.complete).toBe(true);
-    expect(state?.isMyTurn).toBe(false);
-    expect(state?.availableActions).toEqual([]);
-    expect(session.runner.isComplete()).toBe(true);
-    expect(session.runner.getWinners().map((p) => p.seat)).toEqual([1]);
-    expect((await session.performAction('pass', 2, {})).success).toBe(false);
+    expect(next.success).toBe(false);
   });
 });

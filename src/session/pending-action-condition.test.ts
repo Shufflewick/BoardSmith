@@ -16,7 +16,9 @@
  * still completes, and a held follow-up is never gated by its condition.
  *
  * Each case is driven through all three pending-action paths: the session-free
- * GameRunner, a GameSession, and the stateless `selectionStep` op.
+ * GameRunner, the live session host (`SnapshotSessionHost`, which holds each
+ * seat's pending state between ops; it replaced the stateful GameSession,
+ * #529), and the stateless `selectionStep` op.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -29,7 +31,7 @@ import {
   type GameOptions,
 } from '../engine/index.js';
 import { GameRunner } from '../runtime/runner.js';
-import { GameSession } from './game-session.js';
+import { createHeadlessSession } from './headless-session.js';
 import { executeOp, type GameDefinitionLike, type StateEnvelope } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { historyLabels } from './testing/history-labels.js';
@@ -115,7 +117,7 @@ class QuarryGame extends Game<QuarryGame, Player> {
 }
 
 const gameOptions = { playerCount: 3, seed: 'pending-condition' };
-const gameDef: GameDefinitionLike = { gameClass: QuarryGame, gameType: 'quarry', minPlayers: 2, maxPlayers: 3 };
+const gameDef = { gameClass: QuarryGame, gameType: 'quarry', minPlayers: 2, maxPlayers: 3 } satisfies GameDefinitionLike;
 
 const STONE_GONE =
   "'build' is no longer available to you: the game changed since your last choice, " +
@@ -129,14 +131,24 @@ function runner(): GameRunner<QuarryGame> {
   return r;
 }
 
-function session(): GameSession<QuarryGame> {
-  return GameSession.create({
-    gameType: 'quarry',
-    GameClass: QuarryGame,
+/** A started live-host table, with the moves these cases make. */
+async function session() {
+  const table = createHeadlessSession(gameDef, {
     playerCount: 3,
     playerNames: ['A', 'B', 'C'],
     seed: 'pending-condition',
   });
+  await table.start();
+  return {
+    act: (actionName: string, player: number) => table.send(player, { type: 'action', actionName, player, args: {} }),
+    pick: (selectionName: string, value: string, actionName?: string, initialArgs?: Record<string, unknown>) =>
+      table.send(1, { type: 'selectionStep', player: 1, selectionName, value, actionName, initialArgs }),
+    ran: () => table.readGame().ran,
+    async history() {
+      const h = succeeded(await table.send(1, { type: 'debugHistory' }));
+      return historyLabels(h.actionHistory);
+    },
+  };
 }
 
 describe('GameRunner', () => {
@@ -235,59 +247,59 @@ describe('GameRunner', () => {
   });
 });
 
-describe('GameSession', () => {
+describe('live session host', () => {
   it("refuses to complete a pending action once another seat's move took its condition away", async () => {
-    const s = session();
-    expect((await s.processSelectionStep(1, 'where', 'north', 'build')).success).toBe(true);
-    expect((await s.performAction('take', 2, {})).success).toBe(true);
-    const historyBefore = historyLabels(s.runner.actionHistory);
+    const s = await session();
+    expect((await s.pick('where', 'north', 'build')).success).toBe(true);
+    expect((await s.act('take', 2)).success).toBe(true);
+    const historyBefore = await s.history();
 
-    const step = await s.processSelectionStep(1, 'what', 'wall');
+    const step = await s.pick('what', 'wall');
 
     expect(step).toMatchObject({ success: false, error: STONE_GONE, errorCode: 'ACTION_NOT_AVAILABLE' });
-    expect(s.runner.game.ran).toEqual(['take:2']);
-    expect(historyLabels(s.runner.actionHistory)).toEqual(historyBefore);
+    expect(s.ran()).toEqual(['take:2']);
+    expect(await s.history()).toEqual(historyBefore);
   });
 
   it('refuses the first pick of an action whose condition does not hold', async () => {
-    const s = session();
-    expect((await s.performAction('take', 2, {})).success).toBe(true);
+    const s = await session();
+    expect((await s.act('take', 2)).success).toBe(true);
 
-    const step = await s.processSelectionStep(1, 'where', 'north', 'build');
+    const step = await s.pick('where', 'north', 'build');
 
     expect(step).toMatchObject({ success: false, error: STONE_GONE_AT_START, errorCode: 'ACTION_NOT_AVAILABLE' });
   });
 
   it('treats a resume from initialArgs alone as the start, so the condition must hold then', async () => {
-    const s = session();
-    expect((await s.performAction('take', 2, {})).success).toBe(true);
+    const s = await session();
+    expect((await s.act('take', 2)).success).toBe(true);
 
-    const step = await s.processSelectionStep(1, 'what', 'wall', 'build', { where: 'north' });
+    const step = await s.pick('what', 'wall', 'build', { where: 'north' });
 
     expect(step).toMatchObject({ success: false, error: STONE_GONE_AT_START, errorCode: 'ACTION_NOT_AVAILABLE' });
-    expect(s.runner.game.ran).toEqual(['take:2']);
+    expect(s.ran()).toEqual(['take:2']);
   });
 
   it("completes an action whose own picks end its condition, with another seat's move in between", async () => {
-    const s = session();
-    expect((await s.processSelectionStep(1, 'spot', 'east', 'dig')).success).toBe(true);
-    expect((await s.performAction('rest', 2, {})).success).toBe(true);
+    const s = await session();
+    expect((await s.pick('spot', 'east', 'dig')).success).toBe(true);
+    expect((await s.act('rest', 2)).success).toBe(true);
 
-    const step = await s.processSelectionStep(1, 'spot', 'stop');
+    const step = await s.pick('spot', 'stop');
 
     expect(step).toMatchObject({ success: true, actionComplete: true });
-    expect(historyLabels(s.runner.actionHistory)).toEqual(['rest:2', 'dig:1']);
+    expect(await s.history()).toEqual(['rest:2', 'dig:1']);
   });
 
   it('completes a held follow-up pick by pick although its condition does not hold', async () => {
-    const s = session();
-    expect((await s.performAction('scout', 1, {})).followUp?.action).toBe('loot');
-    expect((await s.processSelectionStep(1, 'where', 'north', 'loot')).success).toBe(true);
+    const s = await session();
+    expect(succeeded(await s.act('scout', 1)).followUp?.action).toBe('loot');
+    expect((await s.pick('where', 'north', 'loot')).success).toBe(true);
 
-    const step = await s.processSelectionStep(1, 'what', 'gold');
+    const step = await s.pick('what', 'gold');
 
     expect(step).toMatchObject({ success: true, actionComplete: true });
-    expect(s.runner.game.ran).toEqual(['loot:1']);
+    expect(s.ran()).toEqual(['loot:1']);
   });
 });
 

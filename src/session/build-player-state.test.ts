@@ -14,8 +14,8 @@ import {
 } from '../engine/index.js';
 import { createPlayerView } from '../engine/utils/snapshot.js';
 import { GameRunner } from '../runtime/runner.js';
-import { GameSession } from './game-session.js';
-import { TutorialController } from './tutorial-controller.js';
+import { createHeadlessSession } from './headless-session.js';
+import { initialProgress, nextProgress } from '../engine/tutorial/progress.js';
 import { buildPlayerState, buildActionMetadata, buildSingleActionMetadata } from './utils.js';
 import type { TutorialDefinition } from '../engine/tutorial/types.js';
 import { useActionController, type EnrichedActionMetadata } from '../ui/composables/useActionController.js';
@@ -216,6 +216,9 @@ describe('buildPlayerState - animation events (SES-02)', () => {
 // ============================================
 
 class TutorialParityGame extends Game<TutorialParityGame, Player> {
+  /** How many `move`s have been made; the cross-layer tutorial advances on the first. */
+  moves = 0;
+
   constructor(options: { playerCount: number; playerNames?: string[]; seed?: string }) {
     super(options);
     this.registerElements([ParitySpace]);
@@ -223,7 +226,9 @@ class TutorialParityGame extends Game<TutorialParityGame, Player> {
     const moveAction = Action.create('move')
       .prompt('Move a piece')
       .chooseFrom('piece', { choices: ['a', 'b', 'c'] })
-      .execute(() => {});
+      .execute(() => {
+        this.moves += 1;
+      });
 
     const passAction = Action.create('pass')
       .prompt('Pass')
@@ -259,13 +264,28 @@ const SUPPRESS_TUTORIAL: TutorialDefinition = {
   ],
 };
 
+/**
+ * A seat's tutorial lifecycle written straight onto the game, the way the
+ * `startTutorial`/`exitTutorial` ops and the auto-advance pump write it, so the
+ * projections below are tested against the engine's own progress values.
+ */
+function tutorialOf(game: Game, def: TutorialDefinition) {
+  return {
+    start: (seat: number) => game.tutorialProgress.set(seat, initialProgress(def)),
+    advance: (seat: number) =>
+      game.tutorialProgress.set(seat, nextProgress(def, game.tutorialProgress.get(seat)?.stepId ?? null)),
+    exit: (seat: number) =>
+      game.tutorialProgress.set(seat, { stepId: game.tutorialProgress.get(seat)?.stepId ?? null, status: 'exited' }),
+  };
+}
+
 // ============================================
 // Parity tests: buildPlayerState vs createPlayerView
 // ============================================
 
 describe('tutorial projection parity (buildPlayerState vs createPlayerView)', () => {
   let runner: GameRunner<TutorialParityGame>;
-  let controller: TutorialController<TutorialParityGame>;
+  let controller: ReturnType<typeof tutorialOf>;
 
   beforeEach(() => {
     runner = new GameRunner<TutorialParityGame>({
@@ -279,7 +299,7 @@ describe('tutorial projection parity (buildPlayerState vs createPlayerView)', ()
       },
     });
     runner.start();
-    controller = new TutorialController(() => runner, { broadcast: vi.fn() });
+    controller = tutorialOf(runner.game, PARITY_TUTORIAL);
   });
 
   it('omits tutorial + disabledActions when no tutorial running', () => {
@@ -391,65 +411,67 @@ describe('tutorial projection parity (buildPlayerState vs createPlayerView)', ()
 });
 
 // ============================================
-// Cross-layer integration: engine → controller → projection + undo lockstep
+// Cross-layer integration: engine → live session host → projection + rewind lockstep
 // ============================================
 
-describe('cross-layer integration: engine progress → controller → projection', () => {
-  let session: GameSession<TutorialParityGame>;
+/** PARITY_TUTORIAL's steps, with the first one advancing once a piece has moved. */
+const CROSS_LAYER_TUTORIAL: TutorialDefinition = {
+  steps: [
+    {
+      id: 'intro',
+      gate: { action: 'move' },
+      suppressAutoFill: true,
+      advanceWhen: { 'a piece has moved': ({ game }) => (game as TutorialParityGame).moves > 0 },
+    },
+    { id: 'next', gate: { action: 'pass' } },
+  ],
+};
 
-  beforeEach(() => {
-    session = GameSession.create({
-      gameType: 'parity-test',
-      GameClass: TutorialParityGame,
-      playerCount: 2,
-      playerNames: ['Alice', 'Bob'],
-      seed: 'cross-layer',
-      debugEnabled: true,
-      tutorial: PARITY_TUTORIAL,
-    });
-  });
+describe('cross-layer integration: engine progress → live session host → projection', () => {
+  async function newSession() {
+    const session = createHeadlessSession(
+      { gameClass: TutorialParityGame, gameType: 'parity-test', minPlayers: 2, maxPlayers: 2, tutorial: CROSS_LAYER_TUTORIAL },
+      { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'cross-layer' },
+    );
+    await session.start();
+    expect((await session.send(1, { type: 'startTutorial', player: 1 })).success).toBe(true);
+    return session;
+  }
 
   it('startTutorial → projection shows step + gated action reason', async () => {
-    session.startTutorial(1);
+    const session = await newSession();
 
-    const state = session.buildPlayerState(1);
+    const state = session.playerState(1);
 
-    expect(state?.tutorial?.stepId).toBe('intro');
+    expect(state.tutorial?.stepId).toBe('intro');
     // 'pass' should be in disabledActions (gated by current step that requires 'move')
-    expect(state?.disabledActions?.['pass']).toBeDefined();
+    expect(state.disabledActions?.['pass']).toBeDefined();
   });
 
   it('rewind rewinds the active step in lockstep (tutorialProgress is serialized state)', async () => {
-    session.startTutorial(1);
+    const session = await newSession();
+    expect(session.playerState(1).tutorial?.stepId).toBe('intro');
 
-    // Verify step is 'intro'
-    expect(session.buildPlayerState(1)?.tutorial?.stepId).toBe('intro');
-
-    // Player performs an action (captured in action history as index 0)
-    const result = await session.performAction('move', 1, { piece: 'a' });
+    // The player moves (action index 0), and the step's advanceWhen moves it on to 'next'.
+    const result = await session.send(1, { type: 'action', actionName: 'move', player: 1, args: { piece: 'a' } });
     expect(result.success).toBe(true);
+    expect(session.playerState(1).tutorial?.stepId).toBe('next');
 
-    // Controller advances after the action — step moves to 'next'
-    // The checkpoint at index 1 now has step 'next' in tutorialProgress
-    session.advanceTutorial(1);
-    expect(session.buildPlayerState(1)?.tutorial?.stepId).toBe('next');
-
-    // Rewind to before action 0 (i.e., action index 0 = state before first player action).
-    // tutorialProgress is serialized with game state, so it rewinds to 'intro'.
-    const rewindResult = await session.rewindToAction(0);
+    // Rewind to before action 0. tutorialProgress is serialized with the game
+    // state, so the step rewinds to 'intro' with it.
+    const rewindResult = await session.send(1, { type: 'debugRewind', actionIndex: 0 });
     expect(rewindResult.success).toBe(true);
 
-    // After rewind, the active step reverts to 'intro'
-    expect(session.buildPlayerState(1)?.tutorial?.stepId).toBe('intro');
+    expect(session.playerState(1).tutorial?.stepId).toBe('intro');
   });
 
   it('gating is inert after exit — all available actions enabled', async () => {
-    session.startTutorial(1);
-    session.exitTutorial(1);
+    const session = await newSession();
+    expect((await session.send(1, { type: 'exitTutorial', player: 1 })).success).toBe(true);
 
-    const state = session.buildPlayerState(1);
-    expect(state?.tutorial).toBeUndefined();
-    expect(state?.disabledActions).toBeUndefined();
+    const state = session.playerState(1);
+    expect(state.tutorial).toBeUndefined();
+    expect(state.disabledActions).toBeUndefined();
   });
 });
 
@@ -474,8 +496,7 @@ describe('end-to-end suppressAutoFill: buildPlayerState projection → useAction
     runner.start();
 
     // Start tutorial so the step is active
-    const controller = new TutorialController(() => runner, { broadcast: vi.fn() });
-    controller.start(1);
+    tutorialOf(runner.game, SUPPRESS_TUTORIAL).start(1);
 
     // Get the REAL buildPlayerState projection (not a hand-authored literal)
     const pgs = buildPlayerState(runner, ['Alice', 'Bob'], 1);
