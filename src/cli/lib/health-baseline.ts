@@ -21,6 +21,8 @@
  * @module
  */
 
+import { fallowCommandLine } from './run-tool.js';
+
 /** One finding category's count for one file, as fallow saves it. */
 interface BaselineCount {
   count: number;
@@ -103,7 +105,7 @@ export function compareHealthBaselines(
  * An actionable report for a drifted baseline: what drifted, which way, and
  * the one command that fixes it.
  */
-export function describeBaselineDrift(drift: BaselineDrift[]): string {
+export function describeBaselineDrift(drift: BaselineDrift[], cwd: string): string {
   const lines = [
     `The committed .fallow-health-baseline.json no longer describes this tree (${drift.length} drifted ${drift.length === 1 ? 'entry' : 'entries'}).`,
     '',
@@ -124,7 +126,7 @@ export function describeBaselineDrift(drift: BaselineDrift[]): string {
   lines.push(
     '',
     'Regenerate it from a clean checkout of main:',
-    '  npx fallow health --save-baseline .fallow-health-baseline.json',
+    `  ${fallowCommandLine(['health', '--save-baseline', '.fallow-health-baseline.json'], cwd)}`,
     '',
     'See docs/fallow-gate.md — regenerate deliberately, never to turn a red board green.',
   );

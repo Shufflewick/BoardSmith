@@ -77,11 +77,13 @@ describe('describeBaselineDrift', () => {
         current: 7,
         direction: 'unrecorded',
       },
-    ]);
+    ], process.cwd());
 
     expect(message).toContain('src/engine/action/action.ts');
     expect(message).toContain('complexity_critical');
-    expect(message).toContain('fallow health --save-baseline');
+    // The pinned fallow (#545): `npx fallow` could record with another version.
+    expect(message).toContain('node_modules/fallow/bin/fallow health --save-baseline');
+    expect(message).not.toContain('npx');
     expect(message).toContain('docs/fallow-gate.md');
   });
 });

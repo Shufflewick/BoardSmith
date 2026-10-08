@@ -1,4 +1,5 @@
 {
+  "kind": "health",
   "finding_counts": {
     "scripts/ingest-harness/check.mjs": {
       "complexity_high": {
@@ -124,9 +125,14 @@
         "count": 1
       }
     },
-    "src/cli/commands/simulate.ts": {
+    "src/cli/commands/test-step-coverage.ts": {
       "complexity_moderate": {
         "count": 1
+      }
+    },
+    "src/cli/commands/test-step-mutation.ts": {
+      "complexity_moderate": {
+        "count": 2
       }
     },
     "src/cli/commands/trace-check.ts": {
@@ -216,19 +222,19 @@
       }
     },
     "src/cli/dev-host/DevHost.vue": {
+      "complexity_critical": {
+        "count": 1
+      },
       "complexity_moderate": {
         "count": 2
       }
     },
-    "src/cli/dev-host/bridge.ts": {
-      "complexity_high": {
-        "count": 1
-      },
+    "src/cli/dev-host/WorldDevHost.vue": {
       "complexity_moderate": {
         "count": 1
       }
     },
-    "src/cli/dev-host/config-types.ts": {
+    "src/cli/dev-host/bridge.ts": {
       "complexity_moderate": {
         "count": 1
       }
@@ -241,6 +247,11 @@
     "src/cli/lib/asset-scan.ts": {
       "complexity_critical": {
         "count": 1
+      }
+    },
+    "src/cli/lib/mutant-cache.ts": {
+      "complexity_high": {
+        "count": 2
       }
     },
     "src/cli/slash-command/bs/build-chunk.test.ts": {
@@ -256,7 +267,7 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 6
+        "count": 8
       }
     },
     "src/engine/action/helpers.ts": {
@@ -299,6 +310,9 @@
       "complexity_critical": {
         "count": 2
       },
+      "complexity_high": {
+        "count": 1
+      },
       "complexity_moderate": {
         "count": 8
       }
@@ -325,15 +339,10 @@
     },
     "src/engine/flow/engine.ts": {
       "complexity_high": {
-        "count": 1
+        "count": 2
       },
       "complexity_moderate": {
-        "count": 12
-      }
-    },
-    "src/engine/flow/seat-activity.ts": {
-      "complexity_moderate": {
-        "count": 1
+        "count": 13
       }
     },
     "src/engine/flow/walk-flow-nodes.ts": {
@@ -350,6 +359,11 @@
       }
     },
     "src/engine/utils/arg-builder.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/engine/utils/enumerate-moves.ts": {
       "complexity_moderate": {
         "count": 1
       }
@@ -389,31 +403,9 @@
         "count": 5
       }
     },
-    "src/session/bot-controller.ts": {
+    "src/session/game-option-selection.ts": {
       "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "src/session/game-session.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "complexity_high": {
-        "count": 1
-      },
-      "complexity_moderate": {
-        "count": 5
-      }
-    },
-    "src/session/lobby-manager.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "complexity_high": {
-        "count": 1
-      },
-      "complexity_moderate": {
-        "count": 6
+        "count": 3
       }
     },
     "src/session/move-summary.ts": {
@@ -426,22 +418,12 @@
         "count": 1
       }
     },
-    "src/session/pick-handler.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/session/snapshot-session-host.ts": {
       "complexity_high": {
         "count": 1
       },
       "complexity_moderate": {
         "count": 5
-      }
-    },
-    "src/session/state-history.ts": {
-      "complexity_moderate": {
-        "count": 1
       }
     },
     "src/session/stateless-ops.ts": {
@@ -458,11 +440,6 @@
       },
       "complexity_moderate": {
         "count": 1
-      }
-    },
-    "src/testing/assertions.ts": {
-      "complexity_moderate": {
-        "count": 2
       }
     },
     "src/testing/debug.ts": {
@@ -489,11 +466,6 @@
         "count": 1
       }
     },
-    "src/testing/simulate-action.ts": {
-      "complexity_critical": {
-        "count": 1
-      }
-    },
     "src/testing/simulate-tutorial.ts": {
       "complexity_high": {
         "count": 1
@@ -504,17 +476,38 @@
         "count": 1
       }
     },
+    "src/ui/components/ControlsMenu.vue": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
     "src/ui/components/DebugPanel.vue": {
+      "complexity_moderate": {
+        "count": 2
+      }
+    },
+    "src/ui/components/GameShell.vue": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "src/ui/components/PlayShell.vue": {
       "complexity_moderate": {
         "count": 1
       }
     },
-    "src/ui/components/GameShell.vue": {
+    "src/ui/components/PlayersPanel.vue": {
       "complexity_high": {
         "count": 1
       }
     },
     "src/ui/components/auto-ui/ActionPanel.vue": {
+      "complexity_critical": {
+        "count": 1
+      },
       "complexity_moderate": {
         "count": 3
       }
@@ -547,14 +540,22 @@
         "count": 2
       }
     },
+    "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
     "src/ui/components/auto-ui/renderers/HandRenderer.vue": {
+      "complexity_high": {
+        "count": 1
+      },
       "complexity_moderate": {
         "count": 1
       }
     },
     "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue": {
       "complexity_moderate": {
-        "count": 1
+        "count": 2
       }
     },
     "src/ui/components/auto-ui/renderers/SpaceRenderer.vue": {
@@ -565,6 +566,31 @@
     "src/ui/components/auto-ui/useAutoRendererAnimations.ts": {
       "complexity_moderate": {
         "count": 2
+      }
+    },
+    "src/ui/components/debug/ActionsTab.vue": {
+      "complexity_critical": {
+        "count": 1
+      }
+    },
+    "src/ui/components/debug/DecksTab.vue": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "src/ui/components/debug/ElementsTab.vue": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/ui/components/debug/HistoryTab.vue": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "src/ui/components/debug/StateTab.vue": {
+      "complexity_moderate": {
+        "count": 1
       }
     },
     "src/ui/components/debug/debug-view-tree.ts": {
@@ -582,7 +608,7 @@
     },
     "src/ui/components/helpers/FlyingCardsOverlay.vue": {
       "complexity_moderate": {
-        "count": 1
+        "count": 2
       }
     },
     "src/ui/components/helpers/HintOverlay.vue": {
@@ -596,6 +622,9 @@
       }
     },
     "src/ui/components/helpers/ZoomPreviewOverlay.vue": {
+      "complexity_high": {
+        "count": 1
+      },
       "complexity_moderate": {
         "count": 1
       }
@@ -687,6 +716,11 @@
         "count": 1
       }
     },
+    "src/ui/world/WorldShell.vue": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
     "src/world/action.ts": {
       "complexity_moderate": {
         "count": 1
@@ -708,47 +742,55 @@
       }
     }
   },
-  "production_coverage_findings": [],
+  "runtime_coverage_findings": [],
   "target_keys": [
     "src/engine/element/game.ts:complexity",
+    "src/ui/components/auto-ui/ActionPanel.vue:complexity",
     "src/ui/composables/useActionController.ts:complexity",
-    "src/engine/command/executor.ts:circular dependency",
     "src/ui/components/debug/debug-format.ts:high impact",
-    "src/ui/composables/useBoardActionBridge.ts:high impact",
-    "src/engine/element/game-element.ts:complexity",
-    "src/engine/tutorial/gate.ts:circular dependency",
-    "src/session/game-session.ts:complexity",
-    "src/engine/action/action.ts:circular dependency",
-    "src/session/stateless-ops.ts:complexity",
+    "src/engine/command/executor.ts:circular dependency",
     "src/session/snapshot-session-host.ts:complexity",
+    "src/engine/element/game-element.ts:complexity",
+    "src/session/stateless-ops.ts:complexity",
+    "src/session/utils.ts:complexity",
+    "src/engine/action/action.ts:circular dependency",
     "src/cli/commands/chunk-provenance.ts:complexity",
     "src/cli/commands/verify-example-replay.ts:complexity",
-    "src/ui/components/GameShell.vue:complexity",
-    "src/engine/tutorial/progress.ts:complexity",
-    "src/cli/commands/dev.ts:complexity",
-    "src/cli/commands/ingest-archive.ts:complexity",
-    "src/bot/mcts-bot.ts:complexity",
-    "src/engine/command/inverse.ts:circular dependency",
-    "src/cli/commands/publish.ts:complexity",
-    "src/bot-trainer/benchmark.ts:complexity",
-    "src/cli/commands/verify-run.ts:complexity",
-    "src/cli/commands/verify-derive-check.ts:circular dependency",
-    "src/ui/composables/useFlyingElements.ts:complexity",
-    "src/cli/commands/drift-check.ts:complexity",
-    "src/cli/commands/verify-classify.ts:complexity",
-    "src/session/pending-action-manager.ts:complexity",
-    "src/engine/action/choice-matching.ts:high impact",
     "src/testing/dom-leak.ts:complexity",
+    "src/ui/components/GameShell.vue:complexity",
+    "src/cli/commands/ingest-archive.ts:complexity",
+    "src/ui/composables/useBoardActionBridge.ts:high impact",
+    "src/bot/mcts-bot.ts:complexity",
+    "src/engine/tutorial/gate.ts:circular dependency",
+    "src/cli/commands/dev.ts:complexity",
+    "src/cli/commands/verify-run.ts:complexity",
+    "src/engine/tutorial/progress.ts:complexity",
+    "src/ui/composables/useFlyingElements.ts:complexity",
+    "src/cli/commands/publish.ts:complexity",
+    "src/engine/command/inverse.ts:circular dependency",
+    "src/cli/commands/drift-check.ts:complexity",
+    "src/cli/commands/trace-check.ts:complexity",
+    "src/cli/commands/verify-derive-check.ts:circular dependency",
+    "src/bot-trainer/benchmark.ts:complexity",
+    "src/cli/commands/verify-classify.ts:complexity",
+    "src/engine/flow/engine.ts:complexity",
+    "src/cli/dev-host/DevHost.vue:complexity",
+    "src/testing/debug.ts:complexity",
+    "src/engine/action/choice-matching.ts:high impact",
+    "src/session/pending-action-manager.ts:complexity",
+    "src/cli/commands/test-step-ast.ts:high impact",
     "src/testing/random-simulation.ts:complexity",
     "src/cli/commands/lint.ts:complexity",
-    "src/testing/debug.ts:complexity",
-    "src/cli/commands/test-step-ast.ts:high impact",
-    "src/testing/simulate-action.ts:complexity",
-    "src/ui/components/auto-ui/auto-ui-helpers.ts:complexity",
+    "src/ui/components/auto-ui/renderers/HandRenderer.vue:complexity",
+    "src/ui/components/helpers/ZoomPreviewOverlay.vue:complexity",
+    "src/ui/components/debug/HistoryTab.vue:complexity",
     "src/cli/commands/verify-enumerate.ts:complexity",
-    "src/cli/commands/trace-check.ts:complexity",
+    "src/ui/components/auto-ui/auto-ui-helpers.ts:complexity",
+    "src/ui/components/PlayersPanel.vue:complexity",
     "src/cli/lib/asset-scan.ts:complexity",
-    "src/session/lobby-manager.ts:complexity",
+    "src/ui/components/debug/DecksTab.vue:complexity",
+    "src/ui/components/ControlsMenu.vue:complexity",
+    "src/ui/components/debug/ActionsTab.vue:complexity",
     "src/ui/components/dice/Die3D.vue:complexity"
   ]
 }

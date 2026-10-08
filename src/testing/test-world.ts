@@ -184,10 +184,9 @@ function manualClock(start: number): ManualClock {
  * not launched has no partitions and nothing to look at, and making a caller
  * remember to launch it would be a harness whose easy path is the wrong one.
  *
- * A PUBLIC MEMBER ONLY TESTS CALL CARRIES A `fallow-ignore-next-line
- * unused-class-member`. Test files and a game's own suite are not consumers the
- * dead-code scan counts -- `ResidentWorld` carries the same note for the same
- * reason. The members `boardsmith validate`'s world audit drives need none.
+ * Members only tests call need no `fallow-ignore` marker: the pinned fallow
+ * (3.28.0) does not report them, and the markers an older fallow needed were
+ * removed in #545.
  */
 export class TestWorld {
   readonly #world: ResidentWorld;
@@ -236,25 +235,21 @@ export class TestWorld {
   }
 
   /** How many seats this world's own rules declare. */
-  // fallow-ignore-next-line unused-class-member
   get seatCount(): number {
     return this.#world.seatCount;
   }
 
   /** Which committed state this world is publishing (#244). */
-  // fallow-ignore-next-line unused-class-member
   get revision(): number {
     return this.#world.revision;
   }
 
   /** What time it is in this world. */
-  // fallow-ignore-next-line unused-class-member
   get now(): number {
     return this.#world.now();
   }
 
   /** Has this world reported that it is complete? */
-  // fallow-ignore-next-line unused-class-member
   get completed(): boolean {
     return this.#world.completed;
   }
@@ -262,7 +257,6 @@ export class TestWorld {
   /** The durable player id a seat is filed under, which is what every world
    *  call takes. Exposed because a test asserting on a stored roster or a
    *  receipt needs the same name the world uses. */
-  // fallow-ignore-next-line unused-class-member
   playerOf(seat: number): string {
     return worldSeatPlayer(seat);
   }
@@ -406,7 +400,6 @@ export class TestWorld {
    * at the instant the clock arrived -- so the state a test sees is the state
    * waiting would have produced.
    */
-  // fallow-ignore-next-line unused-class-member
   async advanceClock(byMs: number): Promise<void> {
     if (!Number.isFinite(byMs) || byMs < 0) {
       throw new Error(
@@ -438,7 +431,6 @@ export class TestWorld {
    * invisible on the instance that ran genesis, because it has held the real
    * objects all along. Worth a call in any test that then asserts on a view.
    */
-  // fallow-ignore-next-line unused-class-member
   async wake(): Promise<void> {
     await this.#world.run(async () => {
       await this.#world.wake();
@@ -474,7 +466,6 @@ export class TestWorld {
    * is never part of a seat's view: it is what `ctx.world.notify` left and a
    * `takeNotices` has not yet moved into the game's own state.
    */
-  // fallow-ignore-next-line unused-class-member
   noticeBox(seat: number): WorldNoticeBox {
     return this.#store.noticeBox(seat);
   }
