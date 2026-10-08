@@ -1,7 +1,7 @@
 {
-  "revision": 133,
+  "revision": 134,
   "bundleProtocol": 2,
-  "surfaceHash": "85d9346b723d035e",
+  "surfaceHash": "69d383663e693961",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1141,6 +1141,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "Two changes the platform must run. (1) MCTS bot (#522): search moves are made for the seat they were listed for, and a step held open by allDone scores as a leaf; no fingerprint moves, so only this revision carries the fix to the platform. (2) GameShell runs only inside a host iframe (#515, #525): its gameType, displayName, playerCount, apiUrl and defaultBotPlayers props are removed (a game passes only :uis; a template that still passes them is not a type error, the values just fall through as unused attributes, so games should delete them), opened directly it shows one 'runs inside a host' sentence, and the HTTP client, matchmaking, GameLobby, WaitingRoom, GameHeader and HamburgerMenu are gone from boardsmith/client and boardsmith/ui. The controls menu no longer offers 'Leave game' (the host page owns leaving). In dev builds GameShell adds a dev-only Auto UI entry itself; games drop it from uis.ts. The Debug panel draws one seat button per seat in the state's players, numbered as the host numbers seats. The postMessage protocol between GameShell and its host is unchanged, and bundles already built carry their own shell."
+    },
+    {
+      "revision": 134,
+      "date": "2026-10-08",
+      "bundleProtocol": 2,
+      "surfaceHash": "69d383663e693961",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "boardsmith/session no longer exports the stateful GameSession or BotController (nor the types only they used: GameSessionOptions, SessionActionResult, UndoResult, ReadOnlyRunnerFacade, StoredGameState, StorageAdapter, BroadcastAdapter, SessionInfo, StateUpdate, LobbyUpdate, ActionRequest, UpdateNameRequest, GameConfig, BotSeatConfig); no host ran them, every host runs SnapshotSessionHost over executeOp. createHeadlessSession gains playerState(seat), readGame(), arrange(edit), and playerNames, options and teachingDisabled table options, and is the harness game tests use. ElementDiff is now exported from the session ops and types the debugStateDiff result; resolveChoices and debugHistory results name their choice, element and history entry types. No change to snapshots, views or ops."
     }
   ]
 }

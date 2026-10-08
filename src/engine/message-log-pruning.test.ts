@@ -54,8 +54,9 @@ function played(actions: number): GameRunner<ChattyGame> {
   runner.start();
   for (let i = 0; i < actions; i++) {
     runner.performAction('speak', (i % 2) + 1, {});
-    // What GameSession's broadcast funnel does after every action; a bare
-    // runner has no funnel, so the test plays that part.
+    // What every op of the session host does after the action (executeOp's
+    // `runner.getSnapshot()` records the op's checkpoint); a bare runner has
+    // no op around it, so the test plays that part.
     runner.captureCheckpoint();
   }
   return runner;

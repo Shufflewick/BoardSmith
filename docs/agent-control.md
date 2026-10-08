@@ -292,47 +292,51 @@ action while the tree itself does not. Bound it with
 action count — an undo that reaches past the retained window is refused
 with a message naming the policy, rather than approximated.
 
-These five methods live on `GameSession` (`boardsmith/session`) — the
-stateful session wrapper used by the dev server and production hosts, not
-on the lower-level `TestGame`/`GameRunner`. If you're writing a headless
-in-process test or bot, you likely only need `TestGame.getSnapshot()`
-(below); reach for `GameSession` when you need turn-scoped undo or
-debug-time-travel semantics (e.g. building a dev tool or an "undo my last
-move" feature for a real session).
+A session reaches undo and time travel through five ops, sent to the
+session host (`SnapshotSessionHost.handleOp`, which every host runs) and run
+by the pure `executeOp` (`boardsmith/session`). In a headless test or agent
+loop, `createHeadlessSession` drives that host in process, and its `send`
+answers each op with that op's own result. If you only need to save and
+restore a game, `TestGame.getSnapshot()` (below) is enough.
 
 ```typescript
-import { GameSession, type UndoResult, type ElementDiff } from 'boardsmith/session';
+import { createHeadlessSession } from 'boardsmith/session';
+
+const session = createHeadlessSession(gameDefinition, { playerCount: 2, seed: 'repro' });
+await session.start();
+const undo = await session.send(1, { type: 'undo', player: 1 });
+if (!undo.success) throw new Error(undo.error);
 ```
 
-`getStateAtAction`, `getStateDiff`, `getActionTraces` and `rewindToAction`
-are debug methods: they refuse unless the session was created with
-`debugEnabled: true` (pass it again as `GameSession.restore`'s last argument
-after a restore). They build whichever seat's view the caller names, so a host
-that forwards a player's request must pass that player's own seat.
+`debugStateAt`, `debugStateDiff`, `debugActionTraces` and `debugRewind` are
+debug ops: the host refuses them unless it was built with `debug: true`
+(`createHeadlessSession` always is). A debug op that builds a seat's view runs
+only when its `player` is the seat that sent it, so a host that forwards a
+player's request passes that player's own seat.
 
-- **`session.getStateAtAction(actionIndex, playerPosition)`** — the
+- **`{ type: 'debugStateAt', actionIndex, player }`** — the
   perspective-correct state as of a specific action count, restored from
-  the checkpoint captured at that boundary (not replayed). Returns
-  `{ success, state?, error? }`; fails with a message distinguishing
-  "pruned by the retention policy" from "never captured".
-- **`session.getStateDiff(fromIndex, toIndex, playerPosition)`** — compute
-  which element IDs were added, removed, or changed between two action
-  indices. Returns `{ success, diff?: ElementDiff, error? }`.
-- **`session.getActionTraces(playerPosition)`** — availability traces for
-  every registered action (why each is/isn't currently available),
-  equivalent to `game.debugActionAvailability()` run over the full action
-  set.
-- **`await session.undoToTurnStart(playerPosition)`** — undo all of a
-  player's actions back to the start of their current turn. Only succeeds
-  if it's currently that player's turn and they've made at least one
-  action this turn. Returns a `Promise<UndoResult>`.
-- **`await session.rewindToAction(targetActionIndex)`** — discard every
-  action after `targetActionIndex` and continue play from there. Intended
-  for debug/development use, not normal gameplay undo.
+  the checkpoint captured at that boundary (not replayed), as
+  `historicalState`. Refused with a message distinguishing "pruned by the
+  retention policy" from "never captured".
+- **`{ type: 'debugStateDiff', fromIndex, toIndex, player }`** — which
+  element IDs were added, removed, or changed between two action indices,
+  as `diff` (an `ElementDiff`).
+- **`{ type: 'debugActionTraces', player }`** — availability traces for
+  every registered action (why each is/isn't currently available), as
+  `traces` and `flowContext`, equivalent to `game.debugActionAvailability()`
+  run over the full action set.
+- **`{ type: 'undo', player }`** — undo all of a player's actions back to
+  the start of their current turn. Only succeeds if it's currently that
+  player's turn and they've made at least one action this turn. Not a debug
+  op: a platform executor runs it too.
+- **`{ type: 'debugRewind', actionIndex }`** — discard every action after
+  `actionIndex` and continue play from there. Intended for
+  debug/development use, not normal gameplay undo.
 
 For lighter-weight snapshotting in a headless test or agent loop —
-capturing the full game state to restore later without going through
-`GameSession` — use `TestGame`/`GameRunner`:
+capturing the full game state to restore later without a session host —
+use `TestGame`/`GameRunner`:
 
 ```typescript
 const snapshot = testGame.getSnapshot();   // GameStateSnapshot — action history + seed + metadata
@@ -482,7 +486,7 @@ const client = createDevHostClient(url, { wsImplementation: WebSocket as unknown
 
 ### `OpResult.warnings` / `errorCode`
 
-Session-layer ops (`performAction`, selection steps, etc.) can carry
+Session ops (`action`, `selectionStep`, `resolveChoices`, etc.) can carry
 **structured, non-fatal warnings** alongside a successful result, and a
 machine-checkable **`errorCode`** alongside a failure — instead of forcing a
 caller to string-match `error` messages.
@@ -498,7 +502,13 @@ interface WarningEntry {
 ```typescript
 import { ErrorCode } from 'boardsmith/session';
 
-const result = await session.performAction(seat, actionName, args);
+const result = await session.send(seat, {
+  type: 'selectionStep',
+  player: seat,
+  selectionName,
+  value,
+  actionName,
+});
 if (!result.success) {
   // Branch on errorCode, not on result.error's exact wording.
   if (result.errorCode === ErrorCode.ACTION_NOT_AVAILABLE) {
@@ -510,15 +520,18 @@ result.warnings?.forEach(w => console.log(`[${w.source}] ${w.code}: ${w.message}
 
 ### Persistence health: `onPersistenceError` / `lastPersistenceError` / `persistenceHealthy`
 
-Both `GameSession` and the dev host's `SnapshotSessionHost` surface storage
-failures as **observable state**, not just a console log an agent can't see:
+`SnapshotSessionHost`, which every host runs, surfaces storage failures as
+**observable state**, not just a console log an agent can't see:
 
 ```typescript
-const session = GameSession.create({
-  GameClass,
-  gameType: 'my-game',
+import { SnapshotSessionHost } from 'boardsmith/session';
+
+const host = new SnapshotSessionHost({
   playerCount: 2,
-  storage,
+  executeOp,
+  record,
+  push,
+  persist: (state) => storage.put(state),
   onPersistenceError: (error, consecutiveFailures, healthy) => {
     // error: { message, timestamp } — message never contains a stack trace
     // consecutiveFailures: running count since the last successful save
@@ -526,8 +539,8 @@ const session = GameSession.create({
   },
 });
 
-session.lastPersistenceError; // most recent error, or null
-session.persistenceHealthy;   // false once 3 consecutive saves have failed
+host.lastPersistenceError; // most recent error, or null
+host.persistenceHealthy;   // false once 3 consecutive saves have failed
 ```
 
 `persistenceHealthy` recovers to `true` on the very next successful save.

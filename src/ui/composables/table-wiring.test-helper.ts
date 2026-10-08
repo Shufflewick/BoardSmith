@@ -1,20 +1,20 @@
 /**
  * ONE SEAT OF A REAL TABLE, WIRED THE WAY GAMESHELL WIRES IT.
  *
- * `useTableActionWiring` over a live `GameSession`, with the transport
- * build/test.md shows a game: actions go to `session.performAction`, pick lists
- * come from `session.getPickChoices`. Tests of the wiring itself (#378, #384)
- * and tests that drive an action's picks through it (#392, #407) share this, so
- * a test wired here is wired the way production is.
+ * `useTableActionWiring` over the live session host (`createHeadlessSession`),
+ * with the transport build/test.md shows a game: actions go to the host as
+ * `action` ops, pick lists come from `resolveChoices` ops. Tests of the wiring
+ * itself (#378, #384) and tests that drive an action's picks through it (#392,
+ * #407) share this, so a test wired here is wired the way production is.
  *
  * Call it from a test body; it mounts a host component, so unmount the returned
  * wrapper when the test is done. `mountLiveSeat` does the common case (seat 1 of
- * a fresh two-player session) in one call.
+ * a fresh two-player table) in one call.
  */
 import { computed, defineComponent, h, nextTick, ref, type Ref } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import type { Game, GameClass } from '../../engine/index.js';
-import { GameSession } from '../../session/game-session.js';
+import { createHeadlessSession, type HeadlessSession } from '../../session/headless-session.js';
 import type { PlayerGameState } from '../../session/types.js';
 import { createBoardInteraction, type BoardInteraction } from './useBoardInteraction.js';
 import { useTableActionWiring, type TableActionWiring } from './useTableActionWiring.js';
@@ -27,19 +27,29 @@ export async function settle(): Promise<void> {
   }
 }
 
+/** A started two-player table of `GameClass`, seeded with `seed`. */
+export async function startTable<G extends Game>(GameClass: GameClass<G>, seed: string): Promise<HeadlessSession<G>> {
+  const session = createHeadlessSession(
+    { gameClass: GameClass, gameType: seed, minPlayers: 2, maxPlayers: 2 },
+    { playerCount: 2, seed, playerNames: ['Alice', 'Bob'] },
+  );
+  await session.start();
+  return session;
+}
+
 interface TableWiringOptions<G extends Game> {
-  /** The live session. A getter, so a test may replace the game under the seat. */
-  session: () => GameSession<G>;
+  /** The live table. A getter, so a test may replace the game under the seat. */
+  session: () => HeadlessSession<G>;
   seat: number;
   /** This seat's published state; the test decides when a broadcast lands in it. */
   seatState: Ref<PlayerGameState>;
   boardInteraction: BoardInteraction;
   autoEndTurn: boolean;
-  /** Runs after the session applied an action and before its reply returns. */
+  /** Runs after the table applied an action and before its reply returns. */
   afterPerform?: () => void;
   /**
-   * Wire the selection-step transport too (`session.processSelectionStep`), as
-   * GameShell does: a follow-up's picks travel through it.
+   * Wire the selection-step transport too (`selectionStep` and `cancelAction`
+   * ops), as GameShell does: a follow-up's picks travel through it.
    */
   withPickStep?: boolean;
 }
@@ -59,18 +69,20 @@ export function mountTableWiring<G extends Game>(
         boardInteraction,
         autoEndTurn: ref(options.autoEndTurn),
         isViewingHistory: ref(false),
-        sendAction: async (name, args) => {
-          const result = await session().performAction(name, seat, args);
+        sendAction: async (actionName, args) => {
+          const result = await session().send(seat, { type: 'action', actionName, player: seat, args });
           afterPerform?.();
           return result;
         },
-        fetchPickChoices: async (action, pick, player, args) =>
-          session().getPickChoices(action, pick, player, args),
+        fetchPickChoices: async (actionName, selectionName, player, args) =>
+          session().send(player, { type: 'resolveChoices', actionName, selectionName, player, args }),
         ...(options.withPickStep
           ? {
               pickStep: async (player: number, selectionName: string, value: unknown, actionName: string, initialArgs?: Record<string, unknown>) =>
-                session().processSelectionStep(player, selectionName, value, actionName, initialArgs),
-              cancelPendingAction: async (player: number) => session().cancelPendingAction(player),
+                session().send(player, { type: 'selectionStep', player, selectionName, value, actionName, initialArgs }),
+              cancelPendingAction: async (player: number) => {
+                await session().send(player, { type: 'cancelAction', player });
+              },
             }
           : {}),
       });
@@ -83,7 +95,7 @@ export function mountTableWiring<G extends Game>(
 
 /** Seat 1 of a live table, as `mountLiveSeat` returns it. */
 interface LiveSeat<G extends Game> {
-  session: GameSession<G>;
+  session: HeadlessSession<G>;
   wiring: TableActionWiring;
   board: BoardInteraction;
   /** This seat's published state, re-read after every action the seat takes. */
@@ -91,31 +103,25 @@ interface LiveSeat<G extends Game> {
 }
 
 /**
- * Seat 1 of a new two-player `GameSession`, wired with auto mode off and its
- * state re-published as soon as each of its actions is applied. The wrapper is
- * pushed onto `mounted` for the test's `afterEach` to unmount.
+ * Seat 1 of a new two-player table, wired with auto mode off and its state
+ * re-read as soon as each of its actions is applied. The wrapper is pushed onto
+ * `mounted` for the test's `afterEach` to unmount.
  */
-export function mountLiveSeat<G extends Game>(
+export async function mountLiveSeat<G extends Game>(
   GameClass: GameClass<G>,
   seed: string,
   mounted: VueWrapper[],
-): LiveSeat<G> {
+): Promise<LiveSeat<G>> {
   const board = createBoardInteraction();
-  const session = GameSession.create<G>({
-    GameClass,
-    gameType: seed,
-    seed,
-    playerCount: 2,
-    playerNames: ['Alice', 'Bob'],
-  });
-  const seatState = ref(session.buildPlayerState(1)) as Ref<PlayerGameState>;
+  const session = await startTable(GameClass, seed);
+  const seatState = ref(session.playerState(1)) as Ref<PlayerGameState>;
   const { wiring, wrapper } = mountTableWiring({
     seat: 1,
     session: () => session,
     boardInteraction: board,
     seatState,
     autoEndTurn: false,
-    afterPerform: () => { seatState.value = session.buildPlayerState(1); },
+    afterPerform: () => { seatState.value = session.playerState(1); },
   });
   mounted.push(wrapper);
   return { session, wiring, board, seatState };

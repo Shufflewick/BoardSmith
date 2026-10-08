@@ -14,7 +14,8 @@
  *   as the CURRENT seat's move.
  *
  * Each case is driven through all three completion paths: the session-free
- * GameRunner, a GameSession, and the stateless `selectionStep` op.
+ * GameRunner, the live session host (`SnapshotSessionHost`, which holds each
+ * seat's pending state between ops), and the stateless `selectionStep` op.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -28,9 +29,10 @@ import {
   simultaneousActionStep,
   type FlowNode,
   type GameOptions,
+  type GameClass,
 } from '../engine/index.js';
 import { GameRunner } from '../runtime/runner.js';
-import { GameSession } from './game-session.js';
+import { createHeadlessSession } from './headless-session.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { historyLabels } from './testing/history-labels.js';
@@ -90,18 +92,27 @@ function runner(GameClass: typeof BuildGame): GameRunner<BuildGame> {
   return r;
 }
 
-function session(GameClass: typeof BuildGame): GameSession<BuildGame> {
-  return GameSession.create({
-    gameType: 'build',
-    GameClass,
+function def<G extends Game>(GameClass: GameClass<G>) {
+  return { gameClass: GameClass, gameType: 'build', minPlayers: 2, maxPlayers: 3 } satisfies GameDefinitionLike;
+}
+
+/** A started live-host table of `GameClass`, with the moves these cases make. */
+async function session<G extends Game>(GameClass: GameClass<G>) {
+  const table = createHeadlessSession<G>(def(GameClass), {
     playerCount: 3,
     playerNames: ['A', 'B', 'C'],
     seed: 'pending-offer',
   });
-}
-
-function def(GameClass: typeof BuildGame): GameDefinitionLike {
-  return { gameClass: GameClass, gameType: 'build', minPlayers: 2, maxPlayers: 3 };
+  await table.start();
+  return {
+    table,
+    act: (actionName: string, player: number) => table.send(player, { type: 'action', actionName, player, args: {} }),
+    pick: (player: number, selectionName: string, value: string, actionName?: string) =>
+      table.send(player, { type: 'selectionStep', player, selectionName, value, actionName }),
+    async historyLength() {
+      return succeeded(await table.send(1, { type: 'debugHistory' })).actionHistory.length;
+    },
+  };
 }
 
 describe('GameRunner', () => {
@@ -149,31 +160,31 @@ describe('GameRunner', () => {
   });
 });
 
-describe('GameSession', () => {
+describe('live session host', () => {
   it('refuses to complete a pending action once another seat has finished the game', async () => {
-    const s = session(SimultaneousBuildGame);
-    expect((await s.processSelectionStep(2, 'where', 'north', 'build')).success).toBe(true);
+    const s = await session(SimultaneousBuildGame);
+    expect((await s.pick(2, 'where', 'north', 'build')).success).toBe(true);
 
-    expect((await s.performAction('win', 1, {})).success).toBe(true);
-    const historyAtEnd = s.runner.actionHistory.length;
+    expect((await s.act('win', 1)).success).toBe(true);
+    const historyAtEnd = await s.historyLength();
 
-    const step = await s.processSelectionStep(2, 'what', 'farm');
+    const step = await s.pick(2, 'what', 'farm');
 
     expect(step.success).toBe(false);
     expect(step.error).toBe('The game is finished.');
-    expect(s.runner.game.built).toEqual([]);
-    expect(s.runner.actionHistory.length).toBe(historyAtEnd);
+    expect(s.table.readGame().built).toEqual([]);
+    expect(await s.historyLength()).toBe(historyAtEnd);
   });
 
   it('refuses a pending action from a seat whose turn it is not', async () => {
-    const s = session(TurnBuildGame);
+    const s = await session(TurnBuildGame);
 
-    const step = await s.processSelectionStep(3, 'where', 'north', 'build');
+    const step = await s.pick(3, 'where', 'north', 'build');
 
     expect(step.success).toBe(false);
     expect(step.error).toBe("It's not your turn.");
-    expect(s.runner.game.built).toEqual([]);
-    expect(s.runner.getFlowState()?.currentPlayer).toBe(1);
+    expect(s.table.readGame().built).toEqual([]);
+    expect(s.table.host.flowState?.currentPlayer).toBe(1);
   });
 });
 
@@ -276,25 +287,19 @@ describe('a follow-up belongs to the seat that published it', () => {
     expect(historyLabels(r.actionHistory)).toEqual(['scout:1', 'loot:1']);
   });
 
-  it('GameSession: another seat is refused it; only the publishing seat is offered it', async () => {
-    const s = GameSession.create({
-      gameType: 'scout',
-      GameClass: ScoutGame,
-      playerCount: 3,
-      playerNames: ['A', 'B', 'C'],
-      seed: 'pending-offer',
-    });
-    const scouted = await s.performAction('scout', 1, {});
+  it('live session host: another seat is refused it; the publishing seat takes it', async () => {
+    const s = await session(ScoutGame);
+    const scouted = succeeded(await s.act('scout', 1));
     expect(scouted.followUp?.action).toBe('loot');
 
-    const stolen = await s.processSelectionStep(2, 'where', 'north', 'loot');
+    const stolen = await s.pick(2, 'where', 'north', 'loot');
     expect(stolen).toMatchObject({ success: false, error: NOT_YOURS, errorCode: 'ACTION_NOT_AVAILABLE' });
-    expect(s.runner.game.looted).toEqual([]);
+    expect(s.table.readGame().looted).toEqual([]);
 
-    expect((await s.processSelectionStep(1, 'where', 'north', 'loot')).success).toBe(true);
-    const done = await s.processSelectionStep(1, 'what', 'gold');
+    expect((await s.pick(1, 'where', 'north', 'loot')).success).toBe(true);
+    const done = await s.pick(1, 'what', 'gold');
     expect(done).toMatchObject({ success: true, actionComplete: true });
-    expect(s.runner.game.looted).toEqual([1]);
+    expect(s.table.readGame().looted).toEqual([1]);
   });
 
   it('stateless selectionStep op: another seat is refused it; the publishing seat takes it', async () => {

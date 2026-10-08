@@ -807,8 +807,8 @@ if (isDevBuild) {
 const { previewState } = useZoomPreview();
 
 // ── Teaching controls state (bot-01/02/03) ────────────────────────────────────
-// isDemoRunning is derived from broadcast state — injected by GameSession.broadcast()
-// when #demoMode is true. This ensures all connections (second window, reconnect)
+// isDemoRunning is derived from broadcast state — merged into every seat's view
+// by SnapshotSessionHost while a demo runs. This ensures all connections (second window, reconnect)
 // see the correct toggle state rather than a local ref that can desync (WR-04).
 const isDemoRunning = computed(
   () => (state.value?.state as any)?.isDemoRunning ?? false
@@ -847,8 +847,8 @@ function setDemoSpeed(delay: number): void {
 }
 
 // Show the Teaching group when the game has a bot seat. SnapshotSessionHost
-// injects hasBotPlayers into broadcast state when botSeats are present.
-// GameSession never sets it (RESEARCH Pitfall 5).
+// injects hasBotPlayers into broadcast state only while it has bot seats
+// (RESEARCH Pitfall 5).
 const showHintProp = computed<boolean | undefined>(() =>
   (state.value?.state as any)?.hasBotPlayers ? true : undefined
 );

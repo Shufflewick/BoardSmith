@@ -16,7 +16,7 @@
  * The Action Panel and a custom UI read the same `currentPick`, so both are held
  * here: the world-shaped action through the controller a world wires, and a
  * table action with `dependsOn` through `useTableActionWiring` over a real
- * `GameSession` -- the wiring GameShell and a game's own board test use.
+ * live session host -- the wiring GameShell and a game's own board test use.
  * `ActionPanel.pick-order.test.ts` holds the mounted panel.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
@@ -27,7 +27,7 @@ import type { EnrichedActionMetadata, PickChoicesResult } from './useActionContr
 import { PEOPLE, recipientChoices, mailPicks } from './send-mail.test-helper.js';
 import type { TableActionWiring } from './useTableActionWiring.js';
 import { mountLiveSeat, settle } from './table-wiring.test-helper.js';
-import type { GameSession } from '../../session/game-session.js';
+import type { HeadlessSession } from '../../session/headless-session.js';
 import {
   Game,
   Player,
@@ -167,8 +167,8 @@ afterEach(() => {
 });
 
 /** A mail table at seat 1, with `sendMail` started and `to` answered. */
-async function answeredTo(to: string): Promise<{ session: GameSession<MailGame>; controller: TableActionWiring['controller'] }> {
-  const { session, wiring } = mountLiveSeat(MailGame, 'bs392', mounted);
+async function answeredTo(to: string): Promise<{ session: HeadlessSession<MailGame>; controller: TableActionWiring['controller'] }> {
+  const { session, wiring } = await mountLiveSeat(MailGame, 'bs392', mounted);
   const { controller } = wiring;
   await controller.start('sendMail');
   await settle();
@@ -189,7 +189,7 @@ describe('a table action asks a dependsOn optional pick where it is declared (#3
     await controller.fill('item', 'coin');
     await settle();
 
-    expect(session.runner.game.sent).toEqual([{ to: 'Player 3', recipient: 'Player 30', item: 'coin' }]);
+    expect(session.readGame().sent).toEqual([{ to: 'Player 3', recipient: 'Player 30', item: 'coin' }]);
   });
 
   it('skips the dependent optional pick in place', async () => {
@@ -202,6 +202,6 @@ describe('a table action asks a dependsOn optional pick where it is declared (#3
     await controller.fill('item', 'none');
     await settle();
 
-    expect(session.runner.game.sent).toEqual([{ to: 'Player 4', item: 'none' }]);
+    expect(session.readGame().sent).toEqual([{ to: 'Player 4', item: 'none' }]);
   });
 });

@@ -296,10 +296,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * (`completePendingAction` here, `PendingActionManager` on the session
    * layer) happens via `continueFlowAfterPendingAction` -- called AFTER
    * `recordSerializedAction` already pushed to history. `captureCheckpoint()`
-   * is the one chokepoint both executors already call once the WHOLE op
-   * (including any such trailing flow advance) has settled -- the stateless
-   * path via `getSnapshot()`, the stateful path via `GameSession.broadcast()`
-   * (see that method's doc comment) -- so it is also the correct place to
+   * is the one chokepoint the executor already calls, via `getSnapshot()`,
+   * once the WHOLE op (including any such trailing flow advance) has settled,
+   * so it is also the correct place to
    * observe whether an execute() node ran during this op.
    */
   private recordExecuteBarrierAdvance(): void {
@@ -316,8 +315,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * `PendingActionManager`'s session-layer state machine, but is a session-free
    * path built directly on `ActionExecutor.createPendingActionState` /
    * `processSelectionStep` / `processRepeatingStep` / `executePendingAction` —
-   * there is no storage/broadcast callback plumbing here since `GameRunner` has
-   * no `GameSession`. Cleared automatically when the action completes.
+   * there is no storage/broadcast callback plumbing here: `GameRunner` has no
+   * host. Cleared automatically when the action completes.
    */
   private pendingActions: Map<number, PendingActionState> = new Map();
 
@@ -397,10 +396,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * ahead of it (redo state left by an undo) are dropped. Calling this after
    * every state change — each recorded action AND each trailing
    * pending/selection mutation — makes the head capture the complete
-   * turn-boundary state, which undo restores authoritatively. The stateless
-   * path calls it via `getSnapshot`; the stateful `GameSession` calls it from
-   * its broadcast funnel; `PendingActionManager` calls it after every pick
-   * that changes the game, in both paths. Build a seat's state only after it
+   * turn-boundary state, which undo restores authoritatively. The executor
+   * calls it via `getSnapshot`, and `PendingActionManager` calls it after
+   * every pick that changes the game. Build a seat's state only after it
    * has run for the op: `canUndo` reads the window it leaves (#385).
    *
    * Then the window is trimmed to `checkpoints.max` (default: unbounded),
@@ -705,7 +703,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
   /**
    * Start tracking a multi-step / repeating-selection action for a player,
-   * session-free (no `GameSession`/`PendingActionManager` involved). Uses
+   * session-free (no `PendingActionManager` involved). Uses
    * `ActionExecutor.createPendingActionState` directly — the same primitive
    * `PendingActionManager.startPendingAction` uses on the session layer.
    *
@@ -768,8 +766,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * now, or `undefined` when it may. `pending` is the seat's open pending state,
    * or `undefined` when the pick about to be processed starts the action. Every
    * pending-action path (`processSelectionStep` here, and
-   * `PendingActionManager` for `GameSession` and the stateless `selectionStep`
-   * op) asks this before any pick is processed, and calls `notePickTaken`
+   * `PendingActionManager` for the `selectionStep` op) asks this before any pick is processed, and calls `notePickTaken`
    * after each pick that leaves the action open.
    *
    * First, the flow must offer the action to the seat (`refusalToAct`). Then

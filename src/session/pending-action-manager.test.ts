@@ -1,10 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { Game, Player, Piece, Space, Action, defineFlow, actionStep, deserializeAction, type GameOptions } from '../engine/index.js';
 import { recordedAction } from './testing/history-labels.js';
 import { GameRunner } from '../runtime/index.js';
 import { PendingActionManager } from './pending-action-manager.js';
 import { computeUndoInfo } from './utils.js';
-import { ErrorCode, type StoredGameState } from './types.js';
+import { ErrorCode } from './types.js';
 
 class Equipment extends Piece<EquipGame> {
   slot!: string;
@@ -119,22 +119,8 @@ function createOptionalManager() {
   });
   runner.start();
 
-  const storedState: StoredGameState = {
-    playerCount: 1,
-    playerNames: ['Alice'],
-    gameType: 'optional',
-    actionHistory: [],
-    createdAt: Date.now(),
-  };
-
-  const callbacks = {
-    save: vi.fn().mockResolvedValue(undefined),
-    broadcast: vi.fn(),
-    scheduleBotCheck: vi.fn(),
-  };
-
-  const manager = new PendingActionManager(runner, storedState, undefined, callbacks);
-  return { manager, callbacks, game: runner.game };
+  const manager = new PendingActionManager(runner, gameOptions.playerCount);
+  return { manager, game: runner.game };
 }
 
 function createEquipManager() {
@@ -151,22 +137,8 @@ function createEquipManager() {
   });
   runner.start();
 
-  const storedState: StoredGameState = {
-    playerCount: 2,
-    playerNames: ['Alice', 'Bob'],
-    gameType: 'test',
-    actionHistory: [],
-    createdAt: Date.now(),
-  };
-
-  const callbacks = {
-    save: vi.fn().mockResolvedValue(undefined),
-    broadcast: vi.fn(),
-    scheduleBotCheck: vi.fn(),
-  };
-
-  const manager = new PendingActionManager(runner, storedState, undefined, callbacks);
-  return { manager, callbacks, game: runner.game, runner };
+  const manager = new PendingActionManager(runner, gameOptions.playerCount);
+  return { manager, game: runner.game, runner };
 }
 
 function createManager() {
@@ -183,36 +155,11 @@ function createManager() {
   });
   runner.start();
 
-  const storedState: StoredGameState = {
-    playerCount: 2,
-    playerNames: ['Alice', 'Bob'],
-    gameType: 'test',
-    actionHistory: [],
-    createdAt: Date.now(),
-  };
-
-  const callbacks = {
-    save: vi.fn().mockResolvedValue(undefined),
-    broadcast: vi.fn(),
-    scheduleBotCheck: vi.fn(),
-  };
-
-  const manager = new PendingActionManager(runner, storedState, undefined, callbacks);
-  return { manager, callbacks, game: runner.game, runner };
+  const manager = new PendingActionManager(runner, gameOptions.playerCount);
+  return { manager, game: runner.game, runner };
 }
 
 describe('PendingActionManager', () => {
-  it('broadcasts during intermediate selection steps so onSelect animations reach clients', async () => {
-    const { manager, callbacks } = createManager();
-
-    // Process the first selection (color) — action is NOT complete yet (size remains)
-    const result = await manager.processSelectionStep(1, 'color', 'red', 'pick');
-
-    expect(result.success).toBe(true);
-    expect(result.actionComplete).toBe(false);
-    expect(callbacks.broadcast).toHaveBeenCalled();
-  });
-
   it('includes animation events from onSelect in the returned state', async () => {
     const { manager } = createManager();
 

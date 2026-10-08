@@ -219,8 +219,8 @@ describe('tutorialProgress undo rewind', () => {
     const result = runner.performAction('movePawn', 1, {});
     expect(result.success).toBe(true);
 
-    // Mutate progress to 's2' AFTER the action (simulates TutorialController
-    // advancing the step in the session layer post-action)
+    // Mutate progress to 's2' AFTER the action (simulates the tutorial
+    // advancing a step after a move)
     runner.game.tutorialProgress.set(1, { stepId: 's2', status: 'running' });
     expect(runner.game.tutorialProgress.get(1)?.stepId).toBe('s2');
 

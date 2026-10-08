@@ -2,8 +2,8 @@
  * ONE TYPE NAME, ONE DECLARATION, ACROSS EVERY PUBLIC ENTRY POINT (#367, #369, #374-#376).
  *
  * `ActionResult` was declared four times: in the engine (what an action's
- * `execute()` returns), in the session (what `GameSession.performAction`
- * returns), in the client (what the server answers an action request with) and
+ * `execute()` returns), in the session (what its session class's
+ * `performAction` returned), in the client (what the server answers an action request with) and
  * in the UI (what the action controller resolves). `boardsmith`,
  * `boardsmith/session` and `boardsmith/client` each exported theirs under that
  * one name, so a game importing from two of them got two different types with

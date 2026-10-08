@@ -24,7 +24,7 @@ import {
   actionStep,
   type GameOptions,
 } from '../index.js';
-import { GameSession } from '../../session/index.js';
+import { createHeadlessSession } from '../../session/index.js';
 
 class PlanPlayer extends Player<PlanGame, PlanPlayer> {
   static override visibleAttributes = ['score'];
@@ -78,18 +78,16 @@ describe('visibleAttributes covers game fields only (#448)', () => {
     expect(attrs.secretPlan).toBeUndefined();
   });
 
-  it("the session's player list gives another seat the opponent's name and colour", () => {
-    const session = GameSession.create({
-      gameType: 'plan',
-      GameClass: PlanGame,
-      playerCount: 2,
-      playerNames: ['Ann', 'Bo'],
-      seed: 'plan',
-    });
-    const ann = session.getState(2).state!.players.find((p) => p.seat === 1)!;
+  it("the session's player list gives another seat the opponent's name and colour", async () => {
+    const session = createHeadlessSession(
+      { gameClass: PlanGame, gameType: 'plan', minPlayers: 2, maxPlayers: 2 },
+      { playerCount: 2, playerNames: ['Ann', 'Bo'], seed: 'plan' },
+    );
+    await session.start();
+    const ann = session.playerState(2).players.find((p) => p.seat === 1)!;
 
     expect(ann.name).toBe('Ann');
-    expect(ann.color).toBe(session.runner.game.getPlayer(1)!.color);
+    expect(ann.color).toBe(session.readGame().getPlayer(1)!.color);
     expect((ann as Record<string, unknown>).secretPlan).toBeUndefined();
   });
 

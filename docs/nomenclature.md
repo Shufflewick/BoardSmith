@@ -86,7 +86,7 @@ Core concepts represent the foundational building blocks of any BoardSmith game.
 
 **Definition:** A single game instance from start to finish. A session tracks the complete state of one game being played.
 
-**In Code:** `GameSession` class; manages game lifecycle
+**In Code:** `SnapshotSessionHost` holds a session's game and runs every op on it through `executeOp`; `createHeadlessSession` runs one in process for tests and simulations
 **Related Terms:** Rules, Flow, Player
 **Usage:**
 - "Start a new session with 4 players"

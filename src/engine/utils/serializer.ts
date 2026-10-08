@@ -122,8 +122,8 @@ export function deserializeValue(
  * `actionHistory`, which is engine-owned state that a snapshot serializes and a
  * replay compares: a clock reading here makes two runs of the same seed produce
  * byte-different output, which is the non-determinism the engine's own lint
- * rules forbid game code from introducing. Wall-clock time is stamped at the
- * session boundary instead — see `GameSession`.
+ * rules forbid game code from introducing. A host that wants to know when a
+ * move was made records that itself, outside the game's state.
  */
 export function serializeAction(
   actionName: string,

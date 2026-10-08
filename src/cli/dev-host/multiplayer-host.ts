@@ -1214,8 +1214,7 @@ export class MultiplayerHost {
       ...this.buildColorGameOptions(),
       playerOptions: perSeatOptions,
       playerIsBot: Array.from({ length: playerCount }, (_, i) => !humanSeats.has(i + 1)),
-      // Mirror the production lobby's playerConfigs (game-session.ts builds the
-      // same shape from lobby slots) so games that read
+      // The per-seat playerConfigs a lobby builds from its slots, so games that read
       // options.playerConfigs[seat-1] — e.g. per-seat isBot to drive in-flow bot —
       // behave identically in dev. Without this a bot seat is invisible to such
       // games: they treat the bot seat as a human, build an interactive turn, and
@@ -1424,8 +1423,7 @@ export class MultiplayerHost {
    * DEVHOST-04 / F-04: engine game options that actually deliver the palette to
    * `player.color`. The `Game` constructor assigns `player.color = colors[i]`
    * from a TOP-LEVEL `colors` array (and `colorLabel` from `colorLabels`) — it
-   * never reads `playerOptions[i].color`. The production `game-session.ts` path
-   * threads exactly this. We build `colors` from each seat's chosen/default
+   * never reads `playerOptions[i].color`. We build `colors` from each seat's chosen/default
    * color so both the palette AND any lobby color choices reach the engine.
    * Returns `{}` (engine keeps its DEFAULT_COLOR_PALETTE) unless EVERY seat has
    * a resolved color — a partial array would misalign seats.

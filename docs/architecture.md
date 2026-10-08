@@ -49,11 +49,11 @@ This document provides an overview of the BoardSmith package architecture and ho
 │       │                  │                                                  │
 │       ▼                  │                                                  │
 │  ┌────────────┐          │  Game session management                         │
-│  │ bot-trainer│          │  - GameSession (create, performAction)           │
-│  └────────────┘          │  - Storage adapters                              │
-│  - Weight evolution of   │  - Broadcast adapters                            │
-│    the game's objectives │  - Bot controller                                 │
-│  - Benchmarking          │  - Lobby system                                  │
+│  │ bot-trainer│          │  - SnapshotSessionHost (handleOp, bots)          │
+│  └────────────┘          │  - executeOp (one op, from a snapshot)           │
+│  - Weight evolution of   │  - createHeadlessSession (tests)                 │
+│    the game's objectives │  - persist / record / push adapters              │
+│  - Benchmarking          │  - Game option selection                         │
 │                          │                                                  │
 │                          ├──────────────────┐                              │
 │                          ▼                  ▼                              │
@@ -110,7 +110,11 @@ actionController.execute(name, args)
 GameShell ──► postMessage ───────────────► Host (deployment platform)
     │                                           │
     │                                           ▼
-    │                                    GameSession.performAction()
+    │                                    SnapshotSessionHost.handleOp()
+    │                                           │
+    │                                           ▼
+    │                                    executeOp(): rebuild a GameRunner
+    │                                    from the stored snapshot
     │                                           │
     │                                           ▼
     │                                    GameRunner.performAction()
@@ -222,25 +226,34 @@ The `playerView()` method filters state based on these visibility rules.
 
 ### Platform Adapters
 
-`GameSession` exposes `StorageAdapter` and `BroadcastAdapter` *interfaces*
-(`src/session/types.ts`) for platform-specific concerns. BoardSmith ships the
-interfaces only — concrete storage/transport implementations are supplied by
-the deployment platform that hosts the session (see Runtime Isolation below).
+Every host runs a game the same way: a `SnapshotSessionHost`
+(`src/session/snapshot-session-host.ts`) holds the game's snapshot and runs
+each op through the pure `executeOp` (`src/session/stateless-ops.ts`), which
+rebuilds the game from that snapshot, runs the op and answers with the new
+snapshot and every seat's view. The `boardsmith dev` host,
+`createHeadlessSession` and ShufflewickPub all run it.
+
+The host does no I/O of its own. The deployment platform hands it adapters
+(`SnapshotSessionAdapters`): `executeOp` (in process, or over a wire to an
+isolated executor), `persist` for the durable state, and `record` and `push`
+for the views it publishes. BoardSmith ships the interfaces only; concrete
+storage and transport are supplied by the platform that hosts the session (see
+Runtime Isolation below).
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                   GameSession                       │
+│                SnapshotSessionHost                  │
+│        (snapshot, pending selections, bots)         │
 │                                                     │
-│  ┌─────────────────┐      ┌──────────────────┐      │
-│  │ StorageAdapter  │      │ BroadcastAdapter │      │
-│  │  (interface)    │      │   (interface)    │      │
-│  └────────┬────────┘      └────────┬─────────┘      │
-└───────────┼─────────────────────────┼───────────────┘
-            │                         │
-            ▼                         ▼
-   Persistence implementation   Transport implementation
-   supplied by the host         supplied by the host
-   (e.g. KV, in-memory)         (e.g. WebSocket fan-out)
+│  ┌───────────┐  ┌───────────┐  ┌─────────────────┐  │
+│  │ executeOp │  │  persist  │  │  record / push  │  │
+│  └─────┬─────┘  └─────┬─────┘  └────────┬────────┘  │
+└────────┼──────────────┼─────────────────┼───────────┘
+         │              │                 │
+         ▼              ▼                 ▼
+   Rules, run in   Storage supplied  Transport supplied
+   process or in   by the host       by the host (e.g.
+   an executor     (e.g. KV)         WebSocket fan-out)
 ```
 
 ## Package Responsibilities
@@ -249,7 +262,7 @@ the deployment platform that hosts the session (see Runtime Isolation below).
 |---------|---------------|-------------|
 | `engine` | Game rules framework | `Game`, `Action`, `Flow`, elements |
 | `runtime` | Game execution | `GameRunner` |
-| `session` | Session management | `GameSession`, adapter interfaces |
+| `session` | Session management | `SnapshotSessionHost`, `executeOp`, `createHeadlessSession` |
 | `client` | Dev-host driver, audio, state types | `createDevHostClient`, `audioService`, `GameState` |
 | `ui` | Vue components | `GameShell`, composables |
 | `bot` | MCTS bot | `createBot`, `MCTSBot` |

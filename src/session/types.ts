@@ -6,12 +6,11 @@
  * session surface — they are defined once, in one place.
  */
 
-import type { FlowState, PublicFlowState, HistoryEntry, Game, GameClass, AnimationEvent, GameStateSnapshot, PendingActionState } from '../engine/index.js';
+import type { FlowState, Game, GameClass, AnimationEvent, PendingActionState } from '../engine/index.js';
 import type { BotStrategy } from '../bot/index.js';
 import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
 import type { CheckpointPolicy, UndoPolicy } from '../engine/index.js';
 import type { WorldDefinition } from '../world/definition.js';
-import type { GameOptionSelection } from './game-option-selection.js';
 import type {
   LobbyState,
   SlotStatus,
@@ -155,7 +154,7 @@ export interface GameDefinition {
    * Optional tutorial definition for this game.
    *
    * Threaded un-serialized (like `bot`) from here into the engine via
-   * `GameSession.create()` → `GameOptions.tutorial` → `Game.tutorialDefinition`.
+   * the `start` op (`executeOp`) → `GameOptions.tutorial` → `Game.tutorialDefinition`.
    * The definition is static config (step ids, gates, reserved content) and
    * must NOT be serialized — mirrors the `_actions` / `bot` pattern.
    */
@@ -261,95 +260,9 @@ export interface GamePreset {
   players?: PlayerConfig[];
 }
 
-/**
- * Game configuration (player count limits)
- */
-export interface GameConfig {
-  minPlayers: number;
-  maxPlayers: number;
-}
-
 // ============================================
 // Game State Types
 // ============================================
-
-/**
- * Persisted game state - stored in database/storage
- */
-export interface StoredGameState {
-  gameType: string;
-  playerCount: number;
-  playerNames: string[];
-  playerIds?: string[];
-  seed?: string;
-  actionHistory: HistoryEntry[];
-  /**
-   * Wall-clock time each `actionHistory` entry was recorded, parallel to it by
-   * index. SESSION-owned, and deliberately kept out of the entries themselves
-   * (#54): `actionHistory` is the engine's array, and a clock reading inside it
-   * makes two runs of the same seed produce byte-different snapshots. Arrival
-   * time is a session-level fact, so the session stores it on the side and
-   * merges it back in `GameSession.getHistory()`.
-   */
-  actionTimestamps?: number[];
-  /**
-   * Authoritative game-state snapshot — the SINGLE source of truth that
-   * {@link StoredGameState} reconstructs from on cold restore.
-   *
-   * Produced by `runner.getSnapshot()`, it carries the full element tree, flow
-   * position, sequence counter, RNG state, original constructor options, and the
-   * per-action undo checkpoints. `GameSession.restore()` rebuilds via
-   * `GameRunner.fromSnapshot(snapshot)` — it does NOT replay `actionHistory`,
-   * because selection-step and pending-completed mutations are recorded in
-   * neither command nor action history and replaying them mis-positions the flow.
-   *
-   * `actionHistory` is still persisted alongside it, but ONLY for undo
-   * turn-detection (`computeUndoInfo`) — never for state reconstruction.
-   *
-   * Optional only so the type can model stored state loaded from older
-   * persistence that predates this field; `restore()` fails loud when it is
-   * absent rather than silently falling back to unsound replay.
-   */
-  snapshot?: GameStateSnapshot;
-  createdAt: number;
-  botSeats?: BotSeatConfig;
-  /**
-   * Host anti-cheat lockout (LOCK-01), mirrored from `GameSessionOptions.teachingDisabled`
-   * at `create()` time. Persisted (RST-02/F16) so it survives `GameSession.restore()` —
-   * without this field, a cold restart silently re-enabled hint/heatmap/demo access.
-   */
-  teachingDisabled?: boolean;
-  /**
-   * Session display name, mirrored from `GameSessionOptions.displayName` at `create()`
-   * time. Persisted (RST-02/F16) so it survives `GameSession.restore()`, mirroring
-   * `botSeats`'s round-trip.
-   */
-  displayName?: string;
-  /**
-   * The player-chosen game options the game is (re)started with: only the
-   * options the game declared, admitted by `selectGameOptions`. The engine's
-   * and the session's own fields (`seed`, `elementIdKey`, `playerCount`, ...)
-   * are never in here; the session supplies them itself (#447).
-   */
-  gameOptions?: GameOptionSelection;
-  /** Lobby state - 'waiting' until all players join, then 'playing' */
-  lobbyState?: LobbyState;
-  /** Per-slot information for lobby (who claimed what, bot status, etc.) */
-  lobbySlots?: LobbySlot[];
-  /** Creator's player ID */
-  creatorId?: string;
-  /** Min/max players for this game type (for lobby slot management) */
-  minPlayers?: number;
-  maxPlayers?: number;
-  /** Player options definitions (for initializing defaults when claiming) */
-  playerOptionsDefinitions?: Record<string, PlayerOptionDefinition>;
-  /** Game options definitions (for host to modify in lobby) */
-  gameOptionsDefinitions?: Record<string, GameOptionDefinition>;
-  /** Whether players can select colors in the lobby */
-  colorSelectionEnabled?: boolean;
-  /** Available color palette (hex strings) */
-  colors?: string[];
-}
 
 // THE PICK SHAPE IS OWNED BY ../types/protocol.js (#251).
 //
@@ -384,7 +297,7 @@ export type {
  * A single per-cell entry in the evaluation heatmap.
  *
  * Session-layer only, never serialized. Built from {@link BotMoveStats} by
- * `GameSession.#buildHeatmapEntries()` — one entry per distinct destination
+ * the `heatmapToggle` op — one entry per distinct destination
  * cell, keeping the highest normalizedValue when multiple moves share a cell.
  */
 export interface HeatmapEntry {
@@ -446,7 +359,7 @@ export interface PlayerGameState {
    * previous runner is stale and must be discarded — an open pick's
    * `validElements`, a drag in progress, any cached element-id list. The
    * session layer clears its own state of exactly that kind at the same moment
-   * (`GameSession`'s `replaceRunner`: hint, heatmap, pending actions); this
+   * (the host's hint, heatmap and pending selections on an undo or rewind); this
    * field is how clients get told, and `useAnimationEvents` resets its
    * watermarks on the same change.
    */
@@ -499,36 +412,36 @@ export interface PlayerGameState {
   disabledActions?: Record<string, string>;
   /**
    * Session-layer only, never serialized. Transient move hint annotation for
-   * this seat. Present only after `GameSession.requestHint(seat)` is called
+   * this seat. Present only after the seat's `hint` op
    * and before the next action on that seat or an undo/rewind clears it.
    *
-   * Injected post-`buildPlayerState()` in `GameSession.broadcast()`.
+   * Merged into the seat's view by `SnapshotSessionHost.mergeTransientState`.
    */
   hint?: { annotation: Annotation };
   /**
    * Session-layer only, never serialized. Evaluation heatmap for this seat.
    * Present (and updated) while the player has the heatmap overlay toggled on
-   * via `GameSession.setHeatmapVisible(seat, true)`.
+   * with the `heatmapToggle` op.
    *
-   * Injected post-`buildPlayerState()` in `GameSession.broadcast()`.
+   * Merged into the seat's view by `SnapshotSessionHost.mergeTransientState`.
    */
   heatmap?: { visible: boolean; entries: HeatmapEntry[] };
   /**
    * Session-layer only, never serialized. Narration text for the current bot
-   * demo move. Present between the `onBeforeMove` hook firing and the move
+   * demo move. Present between the host announcing the move and the move
    * broadcasting; `undefined` otherwise.
    *
-   * Injected post-`buildPlayerState()` in `GameSession.broadcast()`.
+   * Merged into the seat's view by `SnapshotSessionHost.mergeTransientState`.
    */
   narration?: { text: string };
   /**
    * Session-layer only, never serialized. True while a bot-vs-bot demo is
-   * running (startDemo() has been called and stopDemo() has not). Present in
+   * running (a `demoStart` op and no `demoStop` since). Present in
    * broadcast state so all connected clients (including reconnecting windows
    * and second-window scenarios) derive this flag from session truth rather
    * than a local Vue ref that can desync (WR-04).
    *
-   * Injected post-`buildPlayerState()` in `GameSession.broadcast()`.
+   * Merged into the seat's view by `SnapshotSessionHost.mergeTransientState`.
    * Absent (undefined) when no demo is running.
    */
   isDemoRunning?: boolean;
@@ -547,7 +460,7 @@ export interface PlayerGameState {
    * broadcast player state so reconnecting clients and second windows derive their
    * gating from session truth rather than a local init message that may not replay.
    *
-   * Injected post-`buildPlayerState()` in `GameSession.broadcast()` (D-03).
+   * Merged into the seat's view by `SnapshotSessionHost.mergeTransientState` (D-03).
    * Always present (both true and false) so consumers can rely on it without
    * undefined-checks.
    */
@@ -561,19 +474,19 @@ export interface PlayerGameState {
    * server-side — `describe()` is a method and does not survive the wire, so
    * it is never sent; only this plain string is.
    *
-   * Injected post-`buildPlayerState()` in `GameSession.broadcast()`.
+   * Merged into the seat's view by `SnapshotSessionHost.mergeTransientState`.
    */
   flowDebugInfo?: SerializedFlowDebugInfo;
   /**
    * This seat's OWN pending multi-step action snapshot (or `undefined` when
    * none is in progress).
    *
-   * SECURITY: this MUST be sourced per-seat via `GameSession.getPendingAction(effectivePosition)`
-   * inside the broadcast loop — never a single value shared across seats. A
+   * SECURITY: this MUST be sourced per seat (the host keeps each seat's pending
+   * state apart) — never a single value shared across seats. A
    * seat must never receive another seat's accumulated pending-action args
    * (T-123-07, the phase's flagged hidden-info leak threat).
    *
-   * Injected post-`buildPlayerState()` in `GameSession.broadcast()`. Always
+   * Merged into the seat's view by `SnapshotSessionHost.mergeTransientState`. Always
    * the JSON-safe serialized form (`SerializedPendingActionState`), never the
    * live engine `PendingActionState` (its `onSelectFired: Set<number>` does
    * not survive `JSON.stringify` — see `serializePendingActionState()` in
@@ -589,7 +502,7 @@ export interface PlayerGameState {
  * `PendingActionState.onSelectFired` is a `Set<number>`, which does not
  * survive `JSON.stringify` (`JSON.stringify(new Set([1,2]))` produces `"{}"`).
  * This type replaces it with a plain `number[]`. This is the single shared
- * serialized shape reused by `GameSession.broadcast()`, `PickHandler`'s
+ * serialized shape reused by `PickHandler`'s
  * selection-step responses, and `SnapshotSessionHost`/`stateless-ops.ts`'s
  * `debug:flow-state` op — no divergent wire shapes across those channels
  * (CR-01/WR-01).
@@ -646,83 +559,17 @@ export type { LobbyState, SlotStatus, LobbySlot, LobbyInfo };
 // Session Types
 // ============================================
 
-/**
- * One connection a `BroadcastAdapter` pushes to.
- */
-export interface SessionInfo {
-  /**
-   * Names this CONNECTION, not the seat: give each socket its own id when it
-   * opens and never reuse it. `GameSession` pushes a connection nothing
-   * identical to the last state it sent it (#487), so a page that reconnects
-   * must arrive under a new id to be sent the full state.
-   */
-  connectionId: string;
-  playerId?: string;
-  playerSeat: number;
-  isSpectator: boolean;
-}
-
-/**
- * State update message sent to clients
- */
-export interface StateUpdate {
-  type: 'state';
-  /** What every seat may see of the flow (#449) -- see {@link PublicFlowState}. */
-  flowState: PublicFlowState | undefined;
-  state: PlayerGameState;
-  playerSeat: number;
-  isSpectator: boolean;
-}
-
 // ============================================
 // Bot Types
 // ============================================
-
-/**
- * bot player configuration
- */
-export interface BotSeatConfig {
-  players: number[];
-  level: string;
-}
 
 // ============================================
 // Adapter Interfaces
 // ============================================
 
-/**
- * Storage adapter interface for persisting game state
- */
-export interface StorageAdapter {
-  save(state: StoredGameState): Promise<void>;
-  load(): Promise<StoredGameState | null>;
-}
-
-/**
- * Broadcast adapter interface for real-time updates
- */
-export interface BroadcastAdapter<TSession = SessionInfo> {
-  /**
-   * The connections open right now, one entry per connection. A connection
-   * absent from one call is forgotten, so it is sent the full state when it
-   * is listed again.
-   */
-  getSessions(): TSession[];
-  send(session: TSession, message: unknown): void;
-}
-
 // ============================================
 // Request/Response Types
 // ============================================
-
-/**
- * Request to perform an action
- */
-export interface ActionRequest {
-  action: string;
-  player: number;
-  args: Record<string, unknown>;
-}
 
 // WebSocketMessage (a discriminated union) is owned by ../types/protocol.js
 // (single source of truth) and re-exported here for the session surface.
@@ -735,22 +582,4 @@ export type { PlayerConfig, CreateGameRequest, ClaimSeatRequest, ClaimSeatRespon
 // ============================================
 // Lobby Request/Response Types
 // ============================================
-
-/**
- * Request to update player name
- */
-export interface UpdateNameRequest {
-  /** Player's unique ID */
-  playerId: string;
-  /** New name */
-  name: string;
-}
-
-/**
- * Lobby state update message sent to clients
- */
-export interface LobbyUpdate {
-  type: 'lobby';
-  lobby: LobbyInfo;
-}
 

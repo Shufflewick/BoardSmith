@@ -4,16 +4,12 @@ import {
   Player,
   Action,
   defineFlow,
-  actionStep,
   simultaneousActionStep,
   type GameOptions,
 } from '../engine/index.js';
 import { executeOp, type ExecutableOp, type GameDefinitionLike, type OpResultFor } from './stateless-ops.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 import { SnapshotSessionHost } from './snapshot-session-host.js';
-import { GameSession } from './game-session.js';
-import { BotController } from './bot-controller.js';
-import { BotGame } from './testing/fixtures/bot-game-fixture.js';
 
 // ============================================================================
 // #421: a bot whose move is refused must never spin.
@@ -117,73 +113,4 @@ describe('#421: SnapshotSessionHost with a bot seat whose move is refused', () =
     expect(refusalsOfSeat2()).toBe(3);
     expect(refusalLogs()).toHaveLength(3);
   });
-});
-
-// ----------------------------------------------------------------------------
-// GameSession drives its bots itself, off a scheduler.
-// ----------------------------------------------------------------------------
-
-/** Seat 2 is a bot and always to move; every move it makes is refused. */
-class RefusedBotGame extends Game<RefusedBotGame, Player> {
-  constructor(options: GameOptions) {
-    super(options);
-    this.registerAction(
-      Action.create('move')
-        .chooseFrom('n', { choices: () => [1, 2] })
-        .execute(() => ({ success: false, error: REFUSAL })),
-    );
-    this.setFlow(defineFlow({
-      root: actionStep({ actions: ['move'], player: (ctx) => ctx.game.getPlayer(2)! }),
-    }));
-  }
-}
-
-/** Long enough for several of GameSession's bot checks (each waits 300 ms first). */
-const settle = () => new Promise((resolve) => setTimeout(resolve, 1500));
-
-describe('#421: GameSession bot checks', () => {
-  it('a refused bot move is reported once and not retried while nothing changes', async () => {
-    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const checks = vi.spyOn(BotController.prototype, 'checkAndPlay');
-    GameSession.create({
-      gameType: 'refused-bot',
-      GameClass: RefusedBotGame,
-      playerCount: 2,
-      playerNames: ['Human', 'Bot'],
-      botSeats: { players: [2], level: 'easy' },
-    });
-
-    await vi.waitFor(
-      () => expect(errors.mock.calls.some((c) => String(c[0]).includes(REFUSAL))).toBe(true),
-      { timeout: 30_000 },
-    );
-    await settle();
-
-    expect(checks).toHaveBeenCalledTimes(1);
-    const refusalLogs = errors.mock.calls.map((c) => String(c[0])).filter((m) => m.includes(REFUSAL));
-    expect(refusalLogs).toHaveLength(1);
-    expect(refusalLogs[0]).toMatch(/seat 2/);
-  }, 60_000);
-
-  it('does not keep checking while a human is to move, and checks again when the human moves', async () => {
-    const checks = vi.spyOn(BotController.prototype, 'checkAndPlay');
-    // BotGame: seat 1, a human, is always to move; the bot in seat 2 never is.
-    const session = GameSession.create({
-      gameType: 'human-to-move',
-      GameClass: BotGame,
-      playerCount: 2,
-      playerNames: ['Human', 'Bot'],
-      botSeats: { players: [2], level: 'easy' },
-    });
-
-    await vi.waitFor(() => expect(checks).toHaveBeenCalled(), { timeout: 30_000 });
-    await settle();
-    expect(checks).toHaveBeenCalledTimes(1);
-
-    const result = await session.performAction('move', 1, { direction: 'left' });
-    expect(result.success).toBe(true);
-    await vi.waitFor(() => expect(checks).toHaveBeenCalledTimes(2), { timeout: 30_000 });
-    await settle();
-    expect(checks).toHaveBeenCalledTimes(2);
-  }, 60_000);
 });

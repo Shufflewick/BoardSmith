@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createHeadlessSession, type HeadlessOp } from '../headless-session.js';
-import { GameSession } from '../game-session.js';
-import { executeBarrierFixtureDefinition, ExecuteBarrierGame } from './fixtures/execute-barrier-fixture.js';
+import { executeBarrierFixtureDefinition } from './fixtures/execute-barrier-fixture.js';
 import { bookkeepingExecuteFixtureDefinition, BookkeepingExecuteGame } from './fixtures/bookkeeping-execute-fixture.js';
 import type { Op } from '../stateless-ops.js';
 import { ErrorCode } from '../../types/index.js';
@@ -14,8 +13,7 @@ import { ErrorCode } from '../../types/index.js';
  * IS the durability proof the plan asks for: every assertion below runs
  * through `createHeadlessSession`, whose runner never survives an op with
  * any in-memory flow state intact -- only what's actually persisted in the
- * `GameStateSnapshot` (or, for the stateful executor, what
- * `GameRunner.fromCheckpoint` rehydrates) can possibly enforce the fence.
+ * `GameStateSnapshot` can possibly enforce the fence.
  *
  * Fixture: `sequence(actionStep(act1), execute(score += 1), actionStep(act2,
  * maxMoves: 2))`, single player (`execute-barrier-fixture.ts`). See that
@@ -43,7 +41,7 @@ async function playThroughToBarrierCrossingPoint(
   expect(act2b.success).toBe(true);
 }
 
-describe('UNDO-02 execute-barrier (stateless)', () => {
+describe('UNDO-02 execute-barrier', () => {
   it('refuses an undo that would rewind past a completed execute() node', async () => {
     const session = createHeadlessSession(executeBarrierFixtureDefinition, gameOptions);
     await session.start();
@@ -109,69 +107,11 @@ describe('UNDO-02 execute-barrier (stateless)', () => {
   });
 });
 
-describe('UNDO-02 execute-barrier (stateful)', () => {
-  function newStatefulSession() {
-    return GameSession.create<ExecuteBarrierGame>({
-      gameType: 'execute-barrier',
-      GameClass: ExecuteBarrierGame,
-      playerCount: 1,
-      playerNames: ['A'],
-      seed: 't',
-      debugEnabled: true,
-    });
-  }
-
-  async function playThroughToBarrierCrossingPointStateful(session: GameSession<ExecuteBarrierGame>) {
-    const act1 = await session.performAction('act1', 1, {});
-    expect(act1.success).toBe(true);
-    const act2a = await session.performAction('act2', 1, {});
-    expect(act2a.success).toBe(true);
-    const act2b = await session.performAction('act2', 1, {});
-    expect(act2b.success).toBe(true);
-  }
-
-  it('refuses an undo that would rewind past a completed execute() node', async () => {
-    const session = newStatefulSession();
-    await playThroughToBarrierCrossingPointStateful(session);
-
-    const undo = await session.undoToTurnStart(1);
-    expect(undo.success).toBe(false);
-  });
-
-  it('the execute() side effect survives the refused undo attempt', async () => {
-    const session = newStatefulSession();
-    await playThroughToBarrierCrossingPointStateful(session);
-    await session.undoToTurnStart(1);
-
-    const scoreAfter = (session.runner.getSnapshot().state as { attributes?: { score?: number } }).attributes?.score;
-    expect(scoreAfter).toBe(1);
-  });
-
-  it('negative control: an undo that stops short of the barrier (mid actionStep2) still succeeds', async () => {
-    const session = newStatefulSession();
-    const act1 = await session.performAction('act1', 1, {});
-    expect(act1.success).toBe(true);
-    const act2a = await session.performAction('act2', 1, {});
-    expect(act2a.success).toBe(true);
-
-    const undo = await session.undoToTurnStart(1);
-    expect(undo.success).toBe(true);
-  });
-
-  it('rewindToAction() targeting an index before the barrier is refused', async () => {
-    const session = newStatefulSession();
-    await playThroughToBarrierCrossingPointStateful(session);
-
-    const rewind = await session.rewindToAction(0);
-    expect(rewind.success).toBe(false);
-  });
-});
-
 /**
  * The other half of the contract: an UNMARKED `execute()` fences NOTHING.
  *
- * Same flow shape as the fixture above, minus `{ irreversible: true }`. Both
- * executors must let undo and rewind cross it, because everything the node
+ * Same flow shape as the fixture above, minus `{ irreversible: true }`. Undo
+ * and rewind must be let across it, because everything the node
  * touched is game state and the checkpoint restores state.
  *
  * This is the case the blanket fence got wrong. A bookkeeping node after an
@@ -181,7 +121,7 @@ describe('UNDO-02 execute-barrier (stateful)', () => {
  * behind the current turn in almost any real game.
  */
 describe('UNDO-02: a bookkeeping (unmarked) execute() does not fence undo', () => {
-  it('stateless: undo is never refused BY THE FENCE (only by its own scope rules)', async () => {
+  it('undo is never refused BY THE FENCE (only by its own scope rules)', async () => {
     const session = createHeadlessSession(bookkeepingExecuteFixtureDefinition, gameOptions);
     await session.start();
 
@@ -197,36 +137,21 @@ describe('UNDO-02: a bookkeeping (unmarked) execute() does not fence undo', () =
     expect(undo.errorCode).not.toBe(ErrorCode.UNDO_NOT_ALLOWED);
   });
 
-  it('stateless: debugRewind targeting an index before it is allowed', async () => {
-    const session = createHeadlessSession(bookkeepingExecuteFixtureDefinition, gameOptions);
+  it('debugRewind crosses it, and the state it wrote is restored', async () => {
+    const session = createHeadlessSession(
+      { ...bookkeepingExecuteFixtureDefinition, gameClass: BookkeepingExecuteGame },
+      gameOptions,
+    );
     await session.start();
 
     await playThroughToBarrierCrossingPoint((op) => session.send(1, op));
+    // The bookkeeping node ran: the flag it wrote is live.
+    expect(session.readGame().turnFlag).toBe(1);
 
     const rewind = await session.send(1, { type: 'debugRewind', actionIndex: 0 });
     expect(rewind.success).toBe(true);
-  });
-
-  it('stateful: rewindToAction crosses it, and the state it wrote is restored', async () => {
-    const session = GameSession.create<BookkeepingExecuteGame>({
-      gameType: 'bookkeeping-execute',
-      GameClass: BookkeepingExecuteGame,
-      playerCount: 1,
-      playerNames: ['A'],
-      seed: 't',
-      debugEnabled: true,
-    });
-
-    await session.performAction('act1', 1, {});
-    await session.performAction('act2', 1, {});
-    await session.performAction('act2', 1, {});
-    // The bookkeeping node ran: the flag it wrote is live.
-    expect(session.runner.game.turnFlag).toBe(1);
-
-    const rewind = await session.rewindToAction(0);
-    expect(rewind.success).toBe(true);
-    // Rewinding BEHIND the node restores the state as it stood before it —
+    // Rewinding BEHIND the node restores the state as it stood before it,
     // which is exactly why crossing it is sound.
-    expect(session.runner.game.turnFlag).toBe(0);
+    expect(session.readGame().turnFlag).toBe(0);
   });
 });

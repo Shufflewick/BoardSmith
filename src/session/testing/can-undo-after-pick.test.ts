@@ -12,10 +12,9 @@
  * action, a pick at a time) from a fresh session, then requires, at every step:
  * the state returned to the acting seat and the next broadcast agree on
  * `canUndo`, and the undo the seat is then offered succeeds (and one it is not
- * offered is refused). The stateless executor is driven through
- * `createHeadlessSession`, the public stateless `PickHandler` directly (the
- * path whose returned state went stale), and the stateful `GameSession`
- * through its own methods.
+ * offered is refused). The executor is driven through `createHeadlessSession`,
+ * and the public stateless `PickHandler` directly (the path whose returned
+ * state went stale).
  */
 import { describe, expect, it } from 'vitest';
 
@@ -33,8 +32,7 @@ import { executeOp, type GameDefinitionLike } from '../stateless-ops.js';
 import { PickHandler } from '../pick-handler.js';
 import { buildPlayerState } from '../utils.js';
 import { createHeadlessSession } from '../headless-session.js';
-import { GameSession } from '../game-session.js';
-import type { BroadcastAdapter, PlayerGameState, StateUpdate } from '../types.js';
+import type { PlayerGameState } from '../types.js';
 import { succeeded } from '../op-result.test-helper.js';
 
 /** One seat, one frame: `move` in one step, `pair` in two picks. */
@@ -136,37 +134,6 @@ async function observeStateless(max: number, upTo: number): Promise<Observed> {
   return { returned: canUndoOf(returned), broadcast: canUndoOf(broadcast), undoSucceeded: undo.success };
 }
 
-async function observeSession(max: number, upTo: number): Promise<Observed> {
-  const broadcasts: PlayerGameState[] = [];
-  const session = GameSession.create<PickGame>({
-    gameType: `pick-max-${max}`,
-    GameClass: PickGame,
-    playerCount: 1,
-    playerNames: ['Solo'],
-    seed: 'pick-385',
-    checkpoints: { max },
-  });
-  const broadcaster: BroadcastAdapter = {
-    getSessions: () => [{ connectionId: 'seat-1', playerSeat: 1, isSpectator: false }],
-    send: (_session, message) => {
-      broadcasts.push((message as StateUpdate).state);
-    },
-  };
-  session.setBroadcaster(broadcaster);
-  let returned: PlayerGameState | undefined;
-  for (const step of SCRIPT.slice(0, upTo)) {
-    const res =
-      step.kind === 'action'
-        ? await session.performAction(step.actionName, 1, {})
-        : await session.processSelectionStep(1, step.selectionName, step.value, 'pair');
-    expect(res.success, res.error).toBe(true);
-    returned = res.state;
-  }
-  const broadcast = broadcasts.at(-1)!;
-  const undo = await session.undoToTurnStart(1);
-  return { returned: canUndoOf(returned), broadcast: canUndoOf(broadcast), undoSucceeded: undo.success };
-}
-
 /**
  * `PickHandler`, the public stateless pick API (#385's stale path): the state it
  * returns to the acting seat, the state the executor broadcasts from the same
@@ -211,7 +178,6 @@ const STEPS = SCRIPT.map((_, i) => i + 1);
 describe.each([
   ['stateless executor', observeStateless],
   ['stateless PickHandler', observePickHandler],
-  ['stateful GameSession', observeSession],
 ])('#385: canUndo after each step agrees everywhere (%s)', (_path, observe) => {
   describe.each([1, 2, 3])('checkpoints: { max: %i }', (max) => {
     it.each(STEPS)('after step %i, the returned state, the broadcast and the undo agree', async (upTo) => {

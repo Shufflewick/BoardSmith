@@ -136,15 +136,17 @@ export interface TutorialGateContext {
 
 ### Tutorial lifecycle and the ControlsMenu
 
-The lifecycle methods live on `GameSession`:
+A tutorial is started and left with two ops, which a host sends through
+`SnapshotSessionHost.handleOp` and `executeOp` runs (`src/session/stateless-ops.ts`):
 
 ```typescript
-// src/session/game-session.ts
-session.startTutorial(seat)   // activates step 1, runs auto-advance pump, broadcasts
-session.advanceTutorial(seat) // moves to next step (or sets 'completed' on last step)
-session.skipTutorial(seat)    // same forward move as advance; same semantics
-session.exitTutorial(seat)    // sets status 'exited'; gate enforcement is lifted
+{ type: 'startTutorial', player: seat } // runs the tutorial's setup, activates step 1, runs the auto-advance pump
+{ type: 'exitTutorial', player: seat }  // sets status 'exited'; gate enforcement is lifted
 ```
+
+There is no op to advance a step. After every move, `executeOp` runs the
+auto-advance pump for every seat whose tutorial is running, so a step moves on
+when its `advanceWhen` predicate is true.
 
 `TutorialProgress.status` progresses through: `'running'` → `'completed'` (all steps passed) or `'exited'` (learner quit early). Gate enforcement is active only when `status === 'running'`.
 
@@ -353,11 +355,11 @@ Steps that auto-advance instantly (because their `advanceWhen` is already true w
 
 ### Move hints
 
-Call `GameSession.requestHint(seat)` to fetch a move suggestion from an ephemeral MCTS search. The hint is rendered by `HintOverlay` as a highlight ring with a text bubble, cleared automatically after the next action on that seat or after an undo:
+Send the `hint` op to fetch a move suggestion from an ephemeral MCTS search. The host keeps the hint as teaching state and publishes it to that seat, where `HintOverlay` renders it as a highlight ring with a text bubble, cleared automatically after the next action on that seat or after an undo:
 
 ```typescript
-// src/session/game-session.ts
-async requestHint(seat: number): Promise<void>
+// src/session/stateless-ops.ts
+{ type: 'hint', seat }
 ```
 
 The hint target is derived via the game's `hintTargetFromMove` hook in `GameDefinition.bot`. The hook receives the bot's suggested `BotMove` and returns an `ElementRef` (or `undefined` for a floating bubble):
@@ -384,31 +386,28 @@ For the hint overlay to anchor to the right element, that element must carry `da
 
 ### bot-vs-bot demo
 
-Call `GameSession.startDemo()` to enter demo mode: all seats are bot-controlled, and each move is announced (narration text broadcast) before it executes. Call `GameSession.stopDemo()` to restore the original bot controller:
+Send the `demoStart` op to enter demo mode: all seats are bot-controlled, and each move is announced (narration text broadcast) before it executes. `demoStop` ends it, and `demoControl` pauses, plays, steps one move forward or back, or changes the speed. `SnapshotSessionHost.handleOp` runs these three itself; `executeOp` never sees them:
 
 ```typescript
-// src/session/game-session.ts
-startDemo(options?: {
-  narrator?: (action: string, player: number, args: Record<string, unknown>) => string;
-  delay?: number;  // ms between announcement and execution, default 1200
-}): void
-
-stopDemo(): void
+// src/session/stateless-ops.ts (HostOp)
+{ type: 'demoStart', delay?: number }  // ms between announcement and execution, default 1200
+{ type: 'demoStop' }
+{ type: 'demoControl', control: 'pause' | 'play' | 'step' | 'back', delay?: number }
 ```
 
-The default narrator formats: `"PlayerName: actionName destination"` — it uses a destination-extraction heuristic (`describeMoveDestination`) rather than dumping JSON. Supply a custom `narrator` for games with rich arg types (objects, nested references) where that heuristic cannot produce a readable move description.
+The default narration reads "Player N: actionName" (the host is not handed player names) and adds only destination-like args (`to`, `destination`, `target`, `square`, `cell`, `position`) rather than dumping JSON. Supply the host's `narrateMove(player, action, args)` adapter for games with rich arg types (objects, nested references) where that cannot produce a readable move description. A hidden-information game must supply it, because the narration is broadcast to every seat.
 
-Internally, `startDemo` saves the current `BotController`, builds an all-seats bot controller, installs an `onBeforeMove` hook that sets `#narrationText` and broadcasts before each move, then starts the bot loop. `stopDemo` restores the original controller and clears the narration hook.
+Internally, the demo loop asks for the next move with the read-only `botSuggest` op, sets the narration and broadcasts it, waits the delay, then makes that exact move with an `action` op, so the narrated move and the made move are always the same.
 
 **Caveat — bot-seat gating:** The demo affordance requires a bot seat to be present. In the `boardsmith dev` host, the "Follow-active-seat" feature hands control of whichever seat is active to the dev window, removing that seat's bot presence. Driving a seat with Follow-active-seat therefore prevents the demo from running for that seat. This is a dev-host testing caveat, not a production limitation.
 
 ### Evaluation heatmap
 
-`GameSession.setHeatmapVisible(seat, visible)` runs an ephemeral MCTS search and shades grid cells with move-quality scores:
+The `heatmapToggle` op runs an ephemeral MCTS search and shades grid cells with move-quality scores:
 
 ```typescript
-// src/session/game-session.ts
-async setHeatmapVisible(seat: number, visible: boolean): Promise<void>
+// src/session/stateless-ops.ts
+{ type: 'heatmapToggle', seat, visible }
 ```
 
 **The heatmap is BOARD-ONLY.** It shades grid cells via `data-bs-el-*` anchors. A gridless card game (like go-fish) has no board cells to shade — the heatmap entries would produce no visible highlights because there are no matching DOM elements. Do not attempt to use the heatmap for move quality visualization in card games; treat it as a grid-game feature only. A card-game move-quality visualization is a deferred future idea.
@@ -445,24 +444,26 @@ Action.create('ask')
 
 ## 6. Host Teaching Lockout
 
-### GameSessionOptions.teachingDisabled
+### teachingDisabled
 
-Set `teachingDisabled: true` when creating a `GameSession` to lock out the bot-driven teaching features for competitive or restricted sessions:
+A host locks out the bot-driven teaching features for competitive or restricted sessions in two places, set once when the session is created:
 
 ```typescript
-// src/session/game-session.ts
-// Options field (line ~116):
-teachingDisabled?: boolean;
+// src/session/snapshot-session-host.ts: the host adapters
+new SnapshotSessionHost({ /* ... */ teachingDisabled: true });
+
+// src/session/stateless-ops.ts: executeOp's hostOptions, never gameOptions
+executeOp(definition, gameOptions, snapshot, pendingState, op, { teachingDisabled: true });
 ```
 
-When `teachingDisabled` is `true`, calling any of the following throws immediately with the message `"Teaching features are disabled for this session."`:
+When it is on, each of these ops is refused with the message `"Teaching features are disabled for this session."`:
 
-- `requestHint(seat)` — move hint
-- `setHeatmapVisible(seat, visible)` — evaluation heatmap
-- `startDemo(options?)` — bot-vs-bot demo
-- `startTutorial(seat)` — tutorial
+- `hint` — move hint
+- `heatmapToggle` — evaluation heatmap
+- `demoStart` — bot-vs-bot demo (refused by the host)
+- `startTutorial` — tutorial
 
-`exitTutorial(seat)` and per-action `.help()` text are **never** gated by `teachingDisabled`.
+`exitTutorial` and per-action `.help()` text are **never** gated by `teachingDisabled`.
 
 The UI reflects the lockout: the Teaching group in the controls menu is hidden when `teachingDisabled` is broadcast via game state.
 

@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { createHeadlessSession } from '../headless-session.js';
-import { GameSession } from '../game-session.js';
 import {
   Game,
   Player,
@@ -91,7 +90,7 @@ function scoreOf(snapshot: unknown): number | undefined {
   return (snapshot as { state?: { attributes?: { score?: number } } })?.state?.attributes?.score;
 }
 
-describe('UNDO-03 solo-wipe regression (stateless)', () => {
+describe('UNDO-03 solo-wipe regression', () => {
   it('one undo removes exactly the pending act move -- the two prior pass turns survive', async () => {
     const session = createHeadlessSession(soloWipeFixtureDefinition, gameOptions);
     await session.start();
@@ -160,65 +159,6 @@ describe('UNDO-03 solo-wipe regression (stateless)', () => {
     // that the fix bounds undo to the CURRENTLY open action-step frame and
     // never falls back to scanning arbitrarily far into history.
     const undo2 = await session.send(1, { type: 'undo', player: 1 });
-    expect(undo2.success).toBe(false);
-  });
-});
-
-describe('UNDO-03 solo-wipe regression (stateful)', () => {
-  function newStatefulSession() {
-    return GameSession.create<SoloWipeGame>({
-      gameType: 'solo-wipe',
-      GameClass: SoloWipeGame,
-      playerCount: 1,
-      playerNames: ['A'],
-      seed: 't',
-    });
-  }
-
-  it('one undo removes exactly the pending act move -- the two prior pass turns survive', async () => {
-    const session = newStatefulSession();
-
-    expect((await session.performAction('pass', 1, {})).success).toBe(true);
-    expect((await session.performAction('pass', 1, {})).success).toBe(true);
-
-    const act = await session.performAction('act', 1, {});
-    expect(act.success).toBe(true);
-    expect((session.runner.getSnapshot().state as { attributes?: { score?: number } }).attributes?.score).toBe(12);
-
-    const undo = await session.undoToTurnStart(1);
-    expect(undo.success).toBe(true);
-    expect((session.runner.getSnapshot().state as { attributes?: { score?: number } }).attributes?.score).toBe(2);
-  });
-
-  it('undo is incremental and repeatable across two act-then-undo cycles', async () => {
-    const session = newStatefulSession();
-
-    await session.performAction('pass', 1, {});
-    await session.performAction('pass', 1, {});
-
-    await session.performAction('act', 1, {});
-    const undo1 = await session.undoToTurnStart(1);
-    expect(undo1.success).toBe(true);
-    expect((session.runner.getSnapshot().state as { attributes?: { score?: number } }).attributes?.score).toBe(2);
-
-    await session.performAction('act', 1, {});
-    const undo2 = await session.undoToTurnStart(1);
-    expect(undo2.success).toBe(true);
-    expect((session.runner.getSnapshot().state as { attributes?: { score?: number } }).attributes?.score).toBe(2);
-  });
-
-  it('two undos in a row (no intervening action) never wipes the game', async () => {
-    const session = newStatefulSession();
-
-    await session.performAction('pass', 1, {});
-    await session.performAction('pass', 1, {});
-    await session.performAction('act', 1, {});
-
-    const undo1 = await session.undoToTurnStart(1);
-    expect(undo1.success).toBe(true);
-    expect((session.runner.getSnapshot().state as { attributes?: { score?: number } }).attributes?.score).toBe(2);
-
-    const undo2 = await session.undoToTurnStart(1);
     expect(undo2.success).toBe(false);
   });
 });

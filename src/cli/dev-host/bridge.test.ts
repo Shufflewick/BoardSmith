@@ -135,10 +135,10 @@ describe('dev host bridge', () => {
     });
 
     it('returns only the pick answer for resolveChoices (#450)', () => {
-      const r = shapeResult('resolveChoices', { success: true, choices: ['red', 'blue'] });
+      const r = shapeResult('resolveChoices', { success: true, choices: [{ value: 'red', display: 'Red' }, { value: 'blue', display: 'Blue' }] });
       expect(r).toEqual({
         success: true,
-        choices: ['red', 'blue'],
+        choices: [{ value: 'red', display: 'Red' }, { value: 'blue', display: 'Blue' }],
         validElements: undefined,
         multiSelect: undefined,
         orderedList: undefined,
@@ -149,7 +149,7 @@ describe('dev host bridge', () => {
     it('forwards the resolved ordered-list bounds for resolveChoices (#480)', () => {
       const r = shapeResult('resolveChoices', {
         success: true,
-        choices: ['university', 'shipyard'],
+        choices: [{ value: 'university', display: 'University' }, { value: 'shipyard', display: 'Shipyard' }],
         orderedList: { min: 1, max: 3 },
       });
       expect(r.orderedList).toEqual({ min: 1, max: 3 });
@@ -177,7 +177,7 @@ describe('dev host bridge', () => {
     it('forwards a choices answer\'s warnings', () => {
       const r = shapeResult('resolveChoices', {
         success: true,
-        choices: ['red', 'blue'],
+        choices: [{ value: 'red', display: 'Red' }, { value: 'blue', display: 'Blue' }],
         warnings: [{ code: 'BOARD_REFS_ERROR', message: 'boardRefs boom', source: 'boardRefs(...)' }],
       });
       expect(r.warnings).toEqual([{ code: 'BOARD_REFS_ERROR', message: 'boardRefs boom', source: 'boardRefs(...)' }]);
