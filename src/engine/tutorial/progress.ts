@@ -48,7 +48,7 @@ export function initialProgress(def: TutorialDefinition): TutorialProgress {
  *   definition (stale data after a tutorial refactor). Fail loud so authors catch this
  *   at dev/test time rather than silently skipping to the wrong step.
  *
- * Does NOT mutate the game. Callers (TutorialController, autoAdvanceTutorial)
+ * Does NOT mutate the game. Callers (autoAdvanceTutorial)
  * are responsible for writing the returned progress.
  */
 export function nextProgress(def: TutorialDefinition, currentStepId: string | null): TutorialProgress {

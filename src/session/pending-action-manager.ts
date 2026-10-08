@@ -1,7 +1,6 @@
 /**
  * PendingActionManager - Encapsulates pending action state machine
  *
- * Extracted from GameSession to reduce cognitive load and improve testability.
  * Handles the step-by-step processing of actions with repeating selections.
  */
 
@@ -18,7 +17,7 @@ import {
 import { buildPlayerState, offerFollowUp } from './utils.js';
 
 /**
- * Callbacks for PendingActionManager to interact with GameSession.
+ * Callbacks for PendingActionManager to interact with its caller.
  * Using callbacks avoids circular dependencies.
  */
 export interface PendingActionCallbacks {
@@ -100,8 +99,7 @@ export class PendingActionManager<G extends Game = Game> {
   /**
    * Whether `registerDebug()` payloads (`customDebug`) are attached to the
    * player state returned from selection-step processing (SEC-04/F15).
-   * Mirrors `GameSession`'s `#debugEnabled` — threaded in at construction,
-   * never toggled. Defaults to `false`.
+   * Threaded in at construction, never toggled. Defaults to `false`.
    */
   readonly #debugEnabled: boolean;
 

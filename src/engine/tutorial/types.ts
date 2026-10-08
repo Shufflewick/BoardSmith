@@ -306,7 +306,7 @@ export interface TutorialDefinition {
   steps: TutorialStep[];
 
   /**
-   * Optional setup callback applied by `startTutorial` (and `TutorialController.start`)
+   * Optional setup callback applied by the `startTutorial` op
    * to put the board into the tutorial's deterministic starting position before the
    * first step is activated.
    *

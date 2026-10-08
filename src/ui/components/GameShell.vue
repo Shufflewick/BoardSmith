@@ -845,7 +845,7 @@ const gameOverWinners = computed(() =>
 const opponentPlayers = computed(() => players.value.filter(p => p.seat !== playerSeat.value));
 
 // Per-seat live connection status for the players panel. The lobby slots are the
-// only source of truth for human presence (lobby-manager.setPlayerConnected), kept
+// only source of truth for human presence (the host's lobby marks who is connected), kept
 // reactive in `lobbyInfo` for the life of the session. bot slots and modes with no
 // lobby (e.g. --bot) leave `connected` undefined so PlayersPanel renders no indicator
 // rather than fabricating presence we don't actually know.
@@ -1064,8 +1064,8 @@ if (isDevBuild) {
 const { previewState } = useZoomPreview();
 
 // ── Teaching controls state (bot-01/02/03) ────────────────────────────────────
-// isDemoRunning is derived from broadcast state — injected by GameSession.broadcast()
-// when #demoMode is true. This ensures all connections (second window, reconnect)
+// isDemoRunning is derived from broadcast state — merged into every seat's view
+// by SnapshotSessionHost while a demo runs. This ensures all connections (second window, reconnect)
 // see the correct toggle state rather than a local ref that can desync (WR-04).
 const isDemoRunning = computed(
   () => (state.value?.state as any)?.isDemoRunning ?? false
@@ -1106,9 +1106,7 @@ function setDemoSpeed(delay: number): void {
 // Show Teaching group when:
 //   (a) Production lobby path: at least one bot slot in lobbyInfo — unchanged.
 //   (b) Dev-host (platform mode) path: SnapshotSessionHost injects hasBotPlayers
-//       into broadcast state when botSeats are present. GameSession (production)
-//       never sets hasBotPlayers, so this branch is unreachable in prod (safe
-//       by construction — RESEARCH Pitfall 5).
+//       into broadcast state when botSeats are present.
 const showHintProp = computed<boolean | undefined>(() => {
   // Production lobby path — unchanged
   if (lobbyInfo.value?.slots?.some(s => s.botLevel != null)) return true;

@@ -23,9 +23,8 @@ import type { ErrorCode } from '../types/protocol.js';
 
 /**
  * Error thrown by every `MeepleClient` HTTP method on `!response.ok` or
- * `data.success === false`. `errorCode` is OPTIONAL — lobby-manager.ts
- * populates no `errorCode` today (see 136-FINDINGS-VERIFICATION.md F25), so
- * this type never fabricates one client-side.
+ * `data.success === false`. `errorCode` is OPTIONAL — a server may send none,
+ * so this type never fabricates one client-side.
  */
 export class MeepleClientError extends Error {
   errorCode?: ErrorCode;

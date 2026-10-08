@@ -75,9 +75,9 @@ interface BoardActionBridgeOptions {
    * including the `validElements` frozen into the open pick's snapshot: the
    * epoch moves when the runner of this game was replaced (undo / rewind), and
    * the id moves when the game itself was (New game, #356). The bridge tears
-   * the pick down on either, which is the client-side half of what
-   * `GameSession`'s `replaceRunner` already does for its own element-id state
-   * (hint, heatmap, pending actions).
+   * the pick down on either, which is the client-side half of what the host
+   * already does for its own element-id state (hint, heatmap, pending
+   * selections) on an undo or rewind.
    *
    * `undefined` while no state has arrived yet, and from a host with no table
    * (a world): nothing observed, so nothing is torn down.

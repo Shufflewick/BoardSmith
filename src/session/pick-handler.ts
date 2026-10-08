@@ -1,7 +1,6 @@
 /**
  * PickHandler - Encapsulates pick choice resolution logic
  *
- * Extracted from GameSession to reduce cognitive load and improve testability.
  * Handles choice, element, elements, number, and text pick types.
  * A "pick" represents a choice the player must make during action resolution.
  */

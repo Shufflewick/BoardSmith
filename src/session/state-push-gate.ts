@@ -34,8 +34,8 @@
  */
 export interface StatePushGateOptions<F> {
   /**
-   * The `PlayerGameState` inside a frame (`frame.state` for a `GameSession`
-   * update, `view.state` for a `SnapshotSessionHost` player view), or
+   * The `PlayerGameState` inside a frame (`view.state` for a
+   * `SnapshotSessionHost` player view), or
    * `undefined` when the frame carries none. Its `animationEvents` and
    * `lastAnimationEventId`, and its game view's `animationEvents`, are compared
    * by id as described above.

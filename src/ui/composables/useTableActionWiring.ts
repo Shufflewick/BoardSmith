@@ -35,7 +35,7 @@ import { useBoardActionBridge, type RunnerIdentity } from './useBoardActionBridg
 
 /**
  * The fields of a seat's published state this wiring reads. Both
- * `PlayerGameState` (what `GameSession.buildPlayerState` returns) and the
+ * `PlayerGameState` (what the host publishes to a seat) and the
  * client's `PlayerState` satisfy it.
  */
 export interface TableSeatState {
