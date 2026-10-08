@@ -22,6 +22,8 @@ export interface TutorialDefinition {
 
 `steps` is the ordered sequence of teaching beats. `setup` is an optional callback called by `startTutorial` immediately before the first step activates — use it to put the board into a deterministic preset so the teaching beats are always meaningful regardless of what game was running before the learner opened the tutorial.
 
+After `setup`, `startTutorial` puts the flow back at its beginning (`Game.restartFlowForTutorial()`), so the tutorial opens on the turn of the first seat the flow prompts, even when the learner opened it during another seat's turn. That restart runs none of the game's opening: not the flow's `setup`, and not the `execute` nodes before the first step that needs input, so an opening that deals or rolls does not do it again. Flow variables keep their values. The learner is expected to be that first seat, the same assumption `afterTurns` makes. A game starts once: a second `startFlow()` is refused, and this restart is the one way to put a running flow back at its start.
+
 ```typescript
 // ~/BoardSmithGames/checkers/src/rules/tutorial.ts
 export const CHECKERS_TUTORIAL: TutorialDefinition = {
@@ -140,7 +142,7 @@ A tutorial is started and left with two ops, which a host sends through
 `SnapshotSessionHost.handleOp` and `executeOp` runs (`src/session/stateless-ops.ts`):
 
 ```typescript
-{ type: 'startTutorial', player: seat } // runs the tutorial's setup, activates step 1, runs the auto-advance pump
+{ type: 'startTutorial', player: seat } // runs the tutorial's setup, restarts the flow, activates step 1, runs the auto-advance pump
 { type: 'exitTutorial', player: seat }  // sets status 'exited'; gate enforcement is lifted
 ```
 

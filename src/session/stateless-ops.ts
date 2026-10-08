@@ -1755,6 +1755,9 @@ async function runOp(
         // the board is in the deterministic tutorial position before any advanceWhen
         // predicates fire. setup is optional; games without a preset omit it.
         def.tutorial.setup?.(runner.game as Game);
+        // #546: a tutorial begins on the learner's turn, so hand the turn back
+        // to the flow's first seat. This runs none of the game's opening again.
+        runner.game.restartFlowForTutorial();
         runner.game.tutorialProgress.set(op.player, initialProgress(def.tutorial));
         // CR-01: pump auto-advance immediately after setting initial progress so steps
         // with always-true advanceWhen predicates (e.g. capture-tip) advance before

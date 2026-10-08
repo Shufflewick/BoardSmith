@@ -1,7 +1,7 @@
 {
-  "revision": 134,
+  "revision": 135,
   "bundleProtocol": 2,
-  "surfaceHash": "69d383663e693961",
+  "surfaceHash": "e5b3e01ba492cb59",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1150,6 +1150,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "boardsmith/session no longer exports the stateful GameSession or BotController (nor the types only they used: GameSessionOptions, SessionActionResult, UndoResult, ReadOnlyRunnerFacade, StoredGameState, StorageAdapter, BroadcastAdapter, SessionInfo, StateUpdate, LobbyUpdate, ActionRequest, UpdateNameRequest, GameConfig, BotSeatConfig); no host ran them, every host runs SnapshotSessionHost over executeOp. createHeadlessSession gains playerState(seat), readGame(), arrange(edit), and playerNames, options and teachingDisabled table options, and is the harness game tests use. ElementDiff is now exported from the session ops and types the debugStateDiff result; resolveChoices and debugHistory results name their choice, element and history entry types. No change to snapshots, views or ops."
+    },
+    {
+      "revision": 135,
+      "date": "2026-10-08",
+      "bundleProtocol": 2,
+      "surfaceHash": "e5b3e01ba492cb59",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A game starts once: a second Game.startFlow() (or GameRunner.start / TestGame.start) is refused with a readable error instead of re-running the flow's setup and opening execute nodes (#502); the startTutorial op now hands the turn back to the flow's first seat through the new Game.restartFlowForTutorial(), which re-runs neither the flow's setup nor its opening execute nodes, so a tutorial opened during the opponent's turn no longer leaves the learner with no action (#546)."
     }
   ]
 }
