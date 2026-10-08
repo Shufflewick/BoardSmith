@@ -255,28 +255,104 @@ reported as `cyclomatic`, and that no finding carries an `add-tests` action or a
 `crap` field. With no `health` block, or with one that leaves `maxCrap` at 30,
 it fails.
 
+## Which fallow runs, and why it is pinned (#545)
+
+fallow is an exact `dependencies` entry of the boardsmith package (3.28.0), and
+every place boardsmith runs it resolves THAT copy from boardsmith's own install
+and runs it with the current Node: `toolCommand` in `src/cli/lib/run-tool.ts`
+for `boardsmith audit` and the sweep, and the same function for
+`scripts/fallow-gate-honesty.test.mjs`. A game's own `node_modules/.bin/fallow`,
+a global fallow on PATH and `npx` are never used. A game gets the same fallow
+through boardsmith, whether it links boardsmith or installs a vendored `.tgz`.
+
+The reason is that fallow's findings change between releases, and the
+baselines only mean anything against the release that recorded them. Until
+#545 the audit ran whatever fallow was on PATH. The baselines had been recorded
+with a global 2.48.0; a fresh machine installed 3.32.0, and on a clean `main`
+the same tree failed with 21 unaccepted and 865 "accepted but absent" clone
+groups, because fallow 2.103.0 and later skip `*.test.*` files in duplication by
+default. Every branch failed the same way, so the gate could not tell a
+branch's findings from the tool's.
+
+3.28.0 was chosen as the newest release at least two weeks old when it was
+pinned (2026-10-08). 3.20.0 to 3.31.0 all gave the same duplication result on
+this tree. 3.32.0 was one day old and reads the tree differently again.
+
+To move to another fallow, do it in one change: bump the exact version in
+`package.json`, run `npm install`, and re-record every baseline as below.
+
 ## Regenerating the baselines
 
-Do this deliberately — never to turn a red board green.
+Do this deliberately, never to turn a red board green, and in its own commit.
+Run it from a clean checkout after `npm install`, so `node_modules/.bin/fallow`
+is the pinned copy:
 
 ```bash
-git worktree add /tmp/bs-baseline main
-cd /tmp/bs-baseline
-npx fallow dead-code --save-baseline .fallow-dead-code-baseline.json
-npx fallow health   --save-baseline .fallow-health-baseline.json
-cp .fallow-*.json ~/BoardSmith/
-git worktree remove /tmp/bs-baseline
+node_modules/.bin/fallow dead-code --save-baseline .fallow-dead-code-baseline.json
+node_modules/.bin/fallow health   --save-baseline .fallow-health-baseline.json
 ```
 
-The duplication baseline is NOT in that list, and must not be regenerated this
-way: it is derived from `.fallow-dupes-accepted.json` by
-`boardsmith audit --rekey-dupes`, which re-addresses only the debt whose content
-still matches. A raw `fallow dupes --save-baseline` would forgive whatever new
-duplication the tree happened to hold. See "The duplication baseline is keyed by
-CONTENT" below.
+Both exit 1 because the tree has findings; the file they write is what counts.
 
-Generating from a clean `main` worktree is the point: a baseline taken from a
-dirty tree bakes in the very findings the gate is supposed to catch.
+The duplication baseline is NOT regenerated with `fallow dupes --save-baseline`:
+it is derived from `.fallow-dupes-accepted.json`. Day to day,
+`boardsmith audit` keeps it addressed and `--rekey-dupes` only narrows it. To
+record a tree from scratch, which is only right when the fallow version
+changes, remove the record and let `--rekey-dupes` write both files:
+
+```bash
+git rm .fallow-dupes-accepted.json
+node bin/boardsmith.js audit --rekey-dupes
+```
+
+A raw `fallow dupes --save-baseline` would forgive whatever new duplication the
+tree happened to hold. See "The duplication baseline is keyed by CONTENT" below.
+
+Generating from a clean tree is the point: a baseline taken from a dirty tree
+bakes in the very findings the gate is supposed to catch.
+
+The last full re-record was #545, for fallow 3.28.0. What it changed:
+
+- **Test files are out of duplication, by decision.** fallow 2.103.0 and later
+  skip `*.test.*`, `*.spec.*`, `__tests__` and `__mocks__` in `fallow dupes` by
+  default. The human ruling on #545 (2026-10-08) keeps that default, so
+  `.fallowrc.json` does not set `duplicates.ignoreDefaults: false`. Duplication
+  between test files is no longer gated. The accepted duplication fell from
+  about 1100 groups to 101, mostly for this reason.
+- **The dead-code baseline shrank.** 3.x no longer reports most of the unused
+  types and class members 2.48.0 did for this repository.
+- **61 `fallow-ignore-next-line unused-class-member` comments were deleted, not
+  accepted.** Under 3.28.0 they suppressed nothing, and fallow reports such a
+  comment as a stale suppression. A stale suppression is keyed by file and
+  line, so accepting it would have failed `--changes` for whoever next moved a
+  line above it. The class notes that explained them were rewritten. The saved
+  baseline has no stale suppressions.
+- **It accepted debt that main added after 2026-10-02.** No gate ran the audit
+  then, and 2.48.0 reported each item as drift. The re-record accepted it so the
+  pin could land, and #550 lists every item to remove or keep on purpose: three
+  duplications, complexity growth in five files, two unused exports, 13 unused
+  component props and two unused emits.
+
+## The merge refuses baseline drift (#545)
+
+`.agent-policy.json`'s verify list runs
+`boardsmith audit --dupes-baseline --health-baseline` before the test suite, so
+`agent-policy verify` and `npm run thread:merge`'s check of the merged tree
+both fail when either baseline no longer describes the tree. Before this, no
+gate ran the audit; under the fallow that recorded them, the baselines described
+`main` until 2026-10-02 and then drifted with almost every merge.
+
+Only the two whole-repository checks are in the list. `--changes` is scoped by
+fallow's own base detection (the branch's upstream or `origin/HEAD`), so on a
+merged tree it would audit whatever the remote happened to point at, and on
+`main` right after a merge it checks nothing. `--duplication` runs jscpd through
+`npx`, which is not pinned.
+
+When the audit re-addresses moved clone groups it writes the two dupes files,
+and verify then fails with "a check changed the working tree". Commit the
+rewritten files and verify again. On a merge, the same refusal means the merge
+itself moved lines: merge `main` into the branch, run `boardsmith audit`, and
+commit what it rewrites.
 
 ## Drift is checked, not scheduled
 
@@ -553,15 +629,13 @@ after it would grade the branch against an address book the same run was about
 to correct: #232's false block, reproduced inside the tool that exists to remove
 it.
 
-That placement is also the answer to "so a merge cannot land drifted". This repo
-has no CI and no merge hook of its own, and the ShufflewickPub commit hook runs
-a raw `fallow audit` with no `boardsmith` in the loop, so it cannot be the place
-either. The audit every task runs before it merges is the one point in reach,
-and putting the re-address there means the addresses a merge publishes are the
-addresses of the tree that was merged. A merge can still shift lines that
-neither parent's audit saw -- but that residue is no longer a trap. It is a
-thing the next audit fixes silently and reports, instead of a block against a
-stranger.
+That placement is also why the merge check can run it. The ShufflewickPub
+commit hook runs a raw `fallow audit` with no `boardsmith` in the loop, so it
+cannot be the place. Since #545 the verify list runs the dupes and health
+baseline checks, so the addresses a merge publishes are the addresses of the
+tree that was merged: a merge that moves lines neither parent's audit saw is
+refused until the branch re-addresses them (see "The merge refuses baseline
+drift" above).
 
 Selector runs stay honest: `boardsmith audit --changes` on its own does not
 scan duplication and so does not re-address anything. A flag asks for one check

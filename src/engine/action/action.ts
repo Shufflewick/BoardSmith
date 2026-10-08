@@ -1949,9 +1949,6 @@ export class ActionExecutor {
    * already made (#325): from the same choices `processRepeatingStep` checks a
    * pick against, not from a copy of that rule.
    */
-  // Called by enumerate-moves through game.getActionExecutor(), which the
-  // dead-code scan does not follow.
-  // fallow-ignore-next-line unused-class-member
   repeatingPickCandidates(
     action: ActionDefinition,
     player: Player,
@@ -2386,9 +2383,6 @@ export class ActionExecutor {
    * pending action it assembled so it offers only moves `executePendingAction`
    * would accept.
    */
-  // Called by enumerate-moves through game.getActionExecutor(), which the
-  // dead-code scan does not follow.
-  // fallow-ignore-next-line unused-class-member
   pendingActionRefusal(
     action: ActionDefinition,
     player: Player,

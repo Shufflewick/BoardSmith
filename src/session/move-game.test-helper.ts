@@ -24,9 +24,6 @@ export class MoveGame extends Game<MoveGame, Player> {
   rooms: Room[] = [];
 
   /** When true, `move` stays offered but is disabled with a reason. */
-  // This and the two helpers below are read through `session.runner.game`,
-  // which fallow cannot follow.
-  // fallow-ignore-next-line unused-class-member
   tired = false;
 
   constructor(options: GameOptions) {
@@ -64,13 +61,11 @@ export class MoveGame extends Game<MoveGame, Player> {
     );
   }
 
-  // fallow-ignore-next-line unused-class-member
   pawnRoom(): string {
     return this.first(Pawn)!.parent!.name!;
   }
 
   /** The element ids of the named rooms, sorted ascending. */
-  // fallow-ignore-next-line unused-class-member
   roomIds(...names: string[]): number[] {
     return names.map((n) => this.rooms.find((r) => r.name === n)!.id).sort((a, b) => a - b);
   }

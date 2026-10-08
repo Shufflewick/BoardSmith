@@ -34,7 +34,6 @@ export class Vault extends Space<VaultWorld> {
   codeword = '';
   /** One asterisk per coin stashed. A string for the reason every attribute
    *  here is one. */
-  // fallow-ignore-next-line unused-class-member
   tally = '';
 }
 

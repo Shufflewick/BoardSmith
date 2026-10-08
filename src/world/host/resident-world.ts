@@ -44,14 +44,12 @@
  * single-threaded here exactly as a world lock makes it single-threaded on the
  * platform.
  *
- * ## EVERY PUBLIC MEMBER CARRIES A `fallow-ignore-next-line unused-class-member`
+ * ## Every public member is called through a private field
  *
- * Every one of them is called, by `LocalWorldHost` and by `TestWorld`, through
- * a private field holding this class -- which is a reference the dead-code scan
- * does not resolve. The comments are there so a genuinely unused member still
- * stands out; the alternative was a gate that fails on a class nothing is wrong
- * with, which teaches a reader to ignore it. `src/world/action.ts` carries the
- * same note for the same reason.
+ * `LocalWorldHost` and `TestWorld` call each one through a private field
+ * holding this class. The pinned fallow (3.28.0) resolves that reference, so
+ * no member needs a `fallow-ignore` marker; the markers an older fallow needed
+ * were removed in #545.
  */
 import {
   WORLD_OWNER,
@@ -304,13 +302,11 @@ export class ResidentWorld {
   }
 
   /** How many seats this world's own rules declare. */
-  // fallow-ignore-next-line unused-class-member
   get seatCount(): number {
     return this.#world.seatCount;
   }
 
   /** Which committed state this world is publishing (#244). */
-  // fallow-ignore-next-line unused-class-member
   get revision(): number {
     return this.#revision;
   }
@@ -328,7 +324,6 @@ export class ResidentWorld {
   }
 
   /** How far ahead of the wall clock this world is running (#216). */
-  // fallow-ignore-next-line unused-class-member
   get skewMs(): number {
     return this.#skewMs;
   }
@@ -339,13 +334,11 @@ export class ResidentWorld {
   }
 
   /** Which partitions are resident right now. The wake control's evidence. */
-  // fallow-ignore-next-line unused-class-member
   residency(): readonly { readonly name: string; readonly lastUsed: number }[] {
     return this.#world.runner.residency();
   }
 
   /** How many partitions the last `wake` dropped. */
-  // fallow-ignore-next-line unused-class-member
   residencyBeforeLastWake(): number {
     return this.#droppedOnWake;
   }
@@ -517,7 +510,6 @@ export class ResidentWorld {
    * every command it ever received for a partition whose absence nothing
    * explains.
    */
-  // fallow-ignore-next-line unused-class-member
   async start(): Promise<WorldStartOutcome> {
     let migrated: WorldStartOutcome["migrated"] = undefined;
     await this.run(async () => {
@@ -623,7 +615,6 @@ export class ResidentWorld {
    * joins a world that has been recording for four hundred days is found four
    * hundred days idle by the first sweep after they arrive.
    */
-  // fallow-ignore-next-line unused-class-member
   seat(player: string, seat: number): void {
     assertSeatWithinWorld(player, seat, this.#world.seatCount);
     this.#world.runner.seat(player, seat);
@@ -644,7 +635,6 @@ export class ResidentWorld {
    * A failure that leaves NOBODY projectable -- the declaration itself could not
    * be settled -- is raised, because there is no per-player answer to give.
    */
-  // fallow-ignore-next-line unused-class-member
   async viewsFor(players: readonly string[]): Promise<WorldSeatProjections> {
     const runner = this.#world.runner;
     let declined: Record<string, { code?: string; message: string }> = {};
@@ -695,7 +685,6 @@ export class ResidentWorld {
    * declaration and each selection's own, and every round it names is read out
    * of the store before it is asked again.
    */
-  // fallow-ignore-next-line unused-class-member
   async offersFor(player: string): Promise<readonly WorldActionOffer[]> {
     const runner = this.#world.runner;
     await walkDeclaration(
@@ -744,7 +733,6 @@ export class ResidentWorld {
    * hydrated for a pick nobody went on to submit is cold by `residency`'s own
    * ordering and the first thing evicted.
    */
-  // fallow-ignore-next-line unused-class-member
   async resolvePick(
     player: string,
     action: string,
@@ -782,7 +770,6 @@ export class ResidentWorld {
    * IT IS A READ, on exactly the terms the pick is. A player being told a price
    * has not paid one, and the world is where it was when they came to it.
    */
-  // fallow-ignore-next-line unused-class-member
   async quote(
     player: string,
     action: string,
@@ -818,7 +805,6 @@ export class ResidentWorld {
    * run, and the candidates the FIRST attempt consumed are never revalidated,
    * because consuming them is what it did.
    */
-  // fallow-ignore-next-line unused-class-member
   async command(request: {
     player: string;
     /** THE ORDER'S DURABLE IDENTITY (#195), minted by the caller before the
@@ -903,7 +889,6 @@ export class ResidentWorld {
    * an event written to the store with no timer behind it waits for whatever
    * the world does next.
    */
-  // fallow-ignore-next-line unused-class-member
   async clockCommand(name: string, args: Record<string, unknown>): Promise<void> {
     // AN ENDED WORLD HEARS NOTHING FROM ITS CLOCK EITHER (#395). The platform
     // drops a presence transition on an ended world the same way: nobody is
@@ -924,7 +909,6 @@ export class ResidentWorld {
 
   /** The bundle's own presence declaration, which is what a host's arrival and
    *  departure policy is written against. */
-  // fallow-ignore-next-line unused-class-member
   get presenceHooks(): WorldPresenceDeclaration | undefined {
     return this.#presenceDeclaration;
   }
@@ -1282,7 +1266,6 @@ export class ResidentWorld {
    * Answers null when nothing is scheduled, because there is then nothing to
    * fire and no clock to move.
    */
-  // fallow-ignore-next-line unused-class-member
   async fireDue(): Promise<WorldFireOutcome | null> {
     const pending = this.#store.pendingEvents();
     if (pending.length === 0) return null;
@@ -1314,7 +1297,6 @@ export class ResidentWorld {
    * The dirty set is written FIRST. Rebuilding over unwritten bytes would lose
    * them and call it a wake. Answers how many partitions were dropped.
    */
-  // fallow-ignore-next-line unused-class-member
   async wake(): Promise<number> {
     const dirty = this.#store.dirtyPartitions();
     if (dirty.length > 0) {
@@ -1332,7 +1314,6 @@ export class ResidentWorld {
    * durable bytes are older than the last command -- but there is no reason to
    * leave one behind when a host is stopping in an orderly way.
    */
-  // fallow-ignore-next-line unused-class-member
   async close(): Promise<void> {
     await this.settled();
     this.#closed = true;
@@ -1382,7 +1363,6 @@ export class ResidentWorld {
 
   /** Has this world been closed? A host's own timers must not reach a world
    *  that has stopped. */
-  // fallow-ignore-next-line unused-class-member
   get closed(): boolean {
     return this.#closed;
   }

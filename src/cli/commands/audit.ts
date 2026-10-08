@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { requireBoardsmithWorkspace } from '../lib/project-context.js';
-import { runTool, runToolCapturingStdout } from '../lib/run-tool.js';
+import { fallowCommandLine, runTool, runToolCapturingStdout } from '../lib/run-tool.js';
 import { selectChecks } from '../lib/select-checks.js';
 import {
   compareHealthBaselines,
@@ -99,7 +99,7 @@ export async function runHealthBaselineCheck(
     if (drift.length === 0) {
       return { code: 0, report: `${HEALTH_BASELINE_FILE} still describes this tree.` };
     }
-    return { code: 1, report: describeBaselineDrift(drift) };
+    return { code: 1, report: describeBaselineDrift(drift, cwd) };
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -155,7 +155,7 @@ async function readDupes(
         failure:
           `\`fallow dupes\` exited ${code} without a readable report or baseline, so drift in `
           + `${ACCEPTED_DUPES_FILE} cannot be ruled out.\n`
-          + 'Run `npx fallow dupes` here to see what it says.',
+          + `Run \`${fallowCommandLine(['dupes'], cwd)}\` here to see what it says.`,
       };
     }
     return {
@@ -332,11 +332,14 @@ interface FallowAuditRunner {
   capture: (args: string[]) => Promise<{ code: number; stdout: string }>;
   /** `fallow audit <args>`, output streamed to the developer's terminal. */
   stream: (args: string[]) => Promise<number>;
+  /** The command a developer runs to read `fallow audit`'s own report. */
+  rerun: string;
 }
 
 const fallowAuditRunner = (cwd: string): FallowAuditRunner => ({
   capture: (args) => runToolCapturingStdout('fallow', ['audit', ...args], { cwd }),
   stream: (args) => runTool('fallow', ['audit', ...args], { cwd }),
+  rerun: fallowCommandLine(['audit'], cwd),
 });
 
 /** The fields of `fallow audit --format json` this command reasons about. */
@@ -391,7 +394,7 @@ export async function runChangedFilesAudit(
       outcome: 'fail',
       report:
         `\`fallow audit\` exited ${code} without a readable JSON verdict, so nothing was audited.\n`
-        + 'Run `npx fallow audit` here to see what it reported.',
+        + `Run \`${runner.rerun}\` here to see what it reported.`,
     };
   }
 
@@ -435,8 +438,9 @@ interface Audit {
 const outcomeOf = (code: number): AuditOutcome => (code === 0 ? 'pass' : 'fail');
 
 /**
- * Code-quality audits. Deliberately not part of `boardsmith lint`: these are
- * slow, advisory sweeps you run after a refactor, not a per-commit gate.
+ * Code-quality audits. Deliberately not part of `boardsmith lint`. The two
+ * baseline checks are also a merge gate: `.agent-policy.json`'s verify list
+ * runs them, so `agent-policy verify` and a thread merge refuse drift (#545).
  */
 function buildAudits(
   options: AuditOptions,
@@ -562,13 +566,11 @@ async function rekeyAction(cwd: string, conflicting: boolean): Promise<void> {
  * was about to correct -- which is the drifted-baseline false block of #232,
  * reproduced inside the tool that exists to remove it.
  *
- * This is also the answer to "where does the re-address run so a merge cannot
- * land drifted". BoardSmith has no CI and no merge hook of its own; the audit
- * every task runs before it merges is the one place in reach, and putting the
- * re-address there means the addresses a merge publishes are the addresses of
- * the tree being merged. A later run on `main` corrects whatever the merge
- * itself shifted, and until it does the drift is no longer a block -- it is a
- * thing the next audit silently fixes and reports.
+ * The merge gate runs `dupesBaseline` too (#545). A re-address writes the two
+ * dupes files, and verify refuses a check that changes the tree, so a branch
+ * whose addresses moved -- or a merge that moved them -- is refused until the
+ * branch runs this audit and commits what it rewrote. The addresses on `main`
+ * are therefore always the addresses of the tree that was merged.
  */
 export const AUDIT_ORDER = ['dupesBaseline', 'changes', 'duplication', 'healthBaseline'] as const;
 

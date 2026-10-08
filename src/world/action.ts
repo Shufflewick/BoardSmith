@@ -846,15 +846,13 @@ function forwardCount<G extends Game, C>(
  * any other route, so the omission here is a signpost and not the enforcement.
  */
 /*
- * EVERY METHOD BELOW CARRIES A `fallow-ignore-next-line unused-class-member`.
- *
- * They are the AUTHORING SURFACE, and its callers are world bundles in other
- * repositories -- `~/BoardSmithGames`, a publisher's own project, the template
- * `boardsmith init --world` writes. Nothing inside this repository calls
- * `.chooseElement()` except a test, so a dead-code scan that only sees this
- * repository reports the whole builder as unused. That is the documented false
- * positive for this library's public API, and marking each one is how the scan
- * stays useful for the members that really are dead.
+ * The methods below are the AUTHORING SURFACE, and its callers are world
+ * bundles in other repositories -- `~/BoardSmithGames`, a publisher's own
+ * project, the template `boardsmith init --world` writes. The pinned fallow
+ * (3.28.0) counts this repository's own calls and needs no `fallow-ignore`
+ * marker on them; the markers an older fallow needed were removed in #545. If a
+ * later fallow reports the builder as unused, that is the documented false
+ * positive for this library's public API, not dead code.
  */
 export class WorldAction<G extends Game = Game, A extends Record<string, unknown> = NoArgs> {
   private readonly definition: ActionDefinition;
@@ -887,7 +885,6 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * answers to one question, and which one wins would be a fact about
    * evaluation order rather than about the game.
    */
-  // fallow-ignore-next-line unused-class-member
   needs(declare: (context: WorldNeedsContext<G>) => readonly string[]): this {
     // BEFORE THE FIRST SELECTION it is round one; AFTER THE LAST it is the
     // execute round. Called twice in the same place it is two rounds, and the
@@ -946,7 +943,6 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    *   });
    * ```
    */
-  // fallow-ignore-next-line unused-class-member
   noticeBox(declare: (context: WorldNeedsContext<G>) => number | null): this {
     this.askNoticeBox(this.definition.selections.length, declare as unknown as WorldNoticeSeatNeeds);
     return this;
@@ -963,14 +959,12 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
     return this;
   }
 
-  // fallow-ignore-next-line unused-class-member
   help(text: string): this {
     this.inner.help(text);
     return this;
   }
 
   /** Offer this action only when the world says it is relevant here. */
-  // fallow-ignore-next-line unused-class-member
   condition(config: Record<string, (context: WorldActionContext<G>) => boolean>): this {
     const forwarded: Record<string, (context: AnyContext) => boolean> = {};
     for (const [label, predicate] of Object.entries(config)) {
@@ -981,7 +975,6 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   }
 
   /** Offer it greyed out, with the reason why. */
-  // fallow-ignore-next-line unused-class-member
   disabled(fn: (context: WorldActionContext<G>) => string | false): this {
     this.inner.disabled((context) => fn(withWorld<G>(context as AnyContext)));
     return this;
@@ -1032,7 +1025,6 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * player and waits, because a price shown in the same tick as the charge is
    * the defect this method exists for.
    */
-  // fallow-ignore-next-line unused-class-member
   quote(fn: (args: Partial<A>, context: WorldActionContext<G>) => readonly string[] | null): this {
     (this.definition.world as { quote?: WorldQuote }).quote = (args, context) =>
       fn(args as Partial<A>, withWorld<G>(context as AnyContext));
@@ -1040,14 +1032,12 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   }
 
   /** Surface a no-selection action rather than taking the beat for the player. */
-  // fallow-ignore-next-line unused-class-member
   manual(): this {
     this.inner.manual();
     return this;
   }
 
   /** Keep it off the action panel; the board can still drive it. */
-  // fallow-ignore-next-line unused-class-member
   suppressFromActionPanel(): this {
     this.inner.suppressFromActionPanel();
     return this;
@@ -1058,7 +1048,6 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * (#268) -- a different plate, an inset ring, a marker glyph and a
    * screen-reader label. Presentation only; it confirms nothing on its own.
    */
-  // fallow-ignore-next-line unused-class-member
   destructive(): this {
     this.inner.destructive();
     return this;
@@ -1073,14 +1062,12 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * actions is the case the feature was asked for. Navigation only -- opening a
    * group sends no command and dirties no partition.
    */
-  // fallow-ignore-next-line unused-class-member
   group(...path: string[]): this {
     this.inner.group(...path);
     return this;
   }
 
   /** Place its button within its menu level; lower sorts earlier (#228). */
-  // fallow-ignore-next-line unused-class-member
   order(order: number): this {
     this.inner.order(order);
     return this;
@@ -1096,8 +1083,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   // TWO OVERLOADS, because `multiSelect` is what decides whether the argument
   // is a `T` or a `T[]`, and a handler should not have to be told which. Each
   // signature is a "member" to the dead-code pass and each is reached only by
-  // games, so all three carry the same marker the other verbs do.
-  // fallow-ignore-next-line unused-class-member
+  // games.
   chooseFrom<K extends string, T, P = undefined>(
     name: K,
     options: WorldChoiceOptions<G, T, P> & {
@@ -1108,7 +1094,6 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   // A LIST IS A THIRD SIGNATURE AND NOT A FLAG (#249). `orderedList?: never` on
   // the other two is what makes "both" a compile error at the call site rather
   // than a refusal the author meets at the first submission that repeats.
-  // fallow-ignore-next-line unused-class-member
   chooseFrom<K extends string, T, P = undefined>(
     name: K,
     options: WorldChoiceOptions<G, T, P> & {
@@ -1116,12 +1101,10 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       multiSelect?: never;
     },
   ): WorldAction<G, AddArg<A, K, T[]>>;
-  // fallow-ignore-next-line unused-class-member
   chooseFrom<K extends string, T, P = undefined>(
     name: K,
     options: WorldChoiceOptions<G, T, P> & { multiSelect?: undefined; orderedList?: undefined },
   ): WorldAction<G, AddArg<A, K, T>>;
-  // fallow-ignore-next-line unused-class-member
   chooseFrom<K extends string, T, P = undefined>(
     name: K,
     options: WorldChoiceOptions<G, T, P> & {
@@ -1170,7 +1153,6 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * candidates the declaration named rather than the five hundred a static
    * choice list would.
    */
-  // fallow-ignore-next-line unused-class-member
   chooseElement<K extends string, T extends GameElement, P = undefined>(
     name: K,
     options: WorldElementOptions<G, T, P> & {
@@ -1206,7 +1188,6 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * board SEARCH finds a set whose size is a fact about other players. The
    * candidates are authored; the count is `multiSelect`.
    */
-  // fallow-ignore-next-line unused-class-member
   chooseElements<K extends string, T extends GameElement, P = undefined>(
     name: K,
     options: WorldElementOptions<G, T, P> & {
@@ -1240,7 +1221,6 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * fields live (an empire's description outlives any one session), so this is
    * the facade the option was asked for on.
    */
-  // fallow-ignore-next-line unused-class-member
   enterText<K extends string>(
     name: K,
     options: {
@@ -1284,7 +1264,6 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * built. A world offer is enumerated in one frame, so the labels travel with
    * the pick like every other static fact about it.
    */
-  // fallow-ignore-next-line unused-class-member
   enterNumber<K extends string>(
     name: K,
     options: {
@@ -1359,7 +1338,6 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
 
   /** The definition so far, for inspection. Registering one that never reached
    *  `.execute(fn)` is refused by `registerAction`, exactly as a table's is. */
-  // fallow-ignore-next-line unused-class-member
   build(): ActionDefinition {
     return this.definition;
   }
@@ -1383,13 +1361,11 @@ export class WorldClockAction<G extends Game = Game> {
     this.action = WorldAction.create<G>(name, true);
   }
 
-  // fallow-ignore-next-line unused-class-member
   prompt(prompt: string): this {
     this.action.prompt(prompt);
     return this;
   }
 
-  // fallow-ignore-next-line unused-class-member
   needs(declare: (context: WorldClockNeedsContext<G>) => readonly string[]): this {
     // A seatless action has no selections, so every round comes before execute.
     // Called more than once they are consecutive rounds, and the second reads
@@ -1420,7 +1396,6 @@ export class WorldClockAction<G extends Game = Game> {
    * row: a schedule row is a memory, and the thing being rechecked is whether
    * the memory is still true.
    */
-  // fallow-ignore-next-line unused-class-member
   about(declare: (context: WorldClockNeedsContext<G>) => number | null): this {
     this.action.askAbout(0, declare as unknown as WorldSeatNeeds);
     return this;
@@ -1440,13 +1415,11 @@ export class WorldClockAction<G extends Game = Game> {
    *   .execute((args, { world }) => { world.takeNotices(Number(args.seat)); ... });
    * ```
    */
-  // fallow-ignore-next-line unused-class-member
   noticeBox(declare: (context: WorldClockNeedsContext<G>) => number | null): this {
     this.action.askNoticeBox(0, declare as unknown as WorldNoticeSeatNeeds);
     return this;
   }
 
-  // fallow-ignore-next-line unused-class-member
   execute(
     fn: (args: Record<string, unknown>, context: WorldClockContext<G>) => ActionResult | void,
   ): ActionDefinition {

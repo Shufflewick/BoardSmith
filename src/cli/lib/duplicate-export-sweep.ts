@@ -1,7 +1,7 @@
 import { sha256Hex } from './hash.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { runToolCapturingStdout } from './run-tool.js';
+import { fallowCommandLine, runToolCapturingStdout } from './run-tool.js';
 
 /**
  * THE WHOLE-REPOSITORY SWEEP FOR DUPLICATE EXPORTS (#265).
@@ -243,7 +243,7 @@ export async function sweepDuplicateExports(
       report:
         `\`fallow dead-code --duplicate-exports\` exited ${code} without a readable report, so `
         + 'the whole repository was NOT swept.\n'
-        + `Run \`npx fallow --baseline ${DEAD_CODE_BASELINE_FILE} dead-code --duplicate-exports\` `
+        + `Run \`${fallowCommandLine(['--baseline', DEAD_CODE_BASELINE_FILE, 'dead-code', '--duplicate-exports'], cwd)}\` `
         + 'here to see what it says.',
     };
   }
