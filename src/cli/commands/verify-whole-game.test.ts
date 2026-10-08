@@ -76,6 +76,7 @@ it('draws the board with the actions it is offered', () => {
         [k.myPlayer as symbol]: computed(() => undefined),
         [k.playerSeat as symbol]: ref(1),
         [k.isMyTurn as symbol]: ref(true),
+        [k.isViewingHistory as symbol]: ref(false),
         [k.availableActions as symbol]: computed(() => ['tend']),
         [k.actionController as symbol]: {},
         [k.platformRequest as symbol]: async () => ({}),
