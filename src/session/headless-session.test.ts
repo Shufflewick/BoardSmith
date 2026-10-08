@@ -211,3 +211,35 @@ describe('createHeadlessSession as a test harness (#529)', () => {
     expect(game.getPlayer(2)!.name).toBe('Bob');
   });
 });
+
+describe('createHeadlessSession with teaching locked (#529)', () => {
+  const LOCKOUT = 'Teaching features are disabled for this session.';
+
+  it('refuses every teaching op, at the host and at the executor alike', async () => {
+    const session = createHeadlessSession(tallyGameDef, { playerCount: 2, seed: 'locked', teachingDisabled: true });
+    await session.start();
+
+    // The executor refuses these.
+    for (const op of [
+      { type: 'hint', seat: 1 },
+      { type: 'heatmapToggle', seat: 1, visible: true },
+      { type: 'startTutorial', player: 1 },
+    ] as const) {
+      const result = await session.send(1, op);
+      expect(result.success, op.type).toBe(false);
+      expect(result.error, op.type).toBe(LOCKOUT);
+    }
+    // The host refuses the demo itself.
+    await expect(session.send(1, { type: 'demoStart' })).rejects.toThrow(LOCKOUT);
+    // And every seat is told.
+    expect(session.playerState(1).teachingDisabled).toBe(true);
+  });
+
+  it('leaves teaching on by default', async () => {
+    const session = createHeadlessSession(tallyGameDef, { playerCount: 2, seed: 'unlocked' });
+    await session.start();
+    const result = await session.send(1, { type: 'startTutorial', player: 1 });
+    expect(result.error).not.toBe(LOCKOUT);
+    expect(session.playerState(1).teachingDisabled).not.toBe(true);
+  });
+});

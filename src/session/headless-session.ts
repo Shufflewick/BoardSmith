@@ -52,6 +52,12 @@ export interface HeadlessGameOptions {
   playerNames?: string[];
   /** The players' choice of the game's declared options, admitted by `selectGameOptions`. */
   options?: GameOptionSelection;
+  /**
+   * Lock the teaching tools (hints, the move-quality heatmap, the demo and the
+   * tutorial) for the whole session, as a host does for a ranked table. Both
+   * the host and the executor refuse them, and every seat is told.
+   */
+  teachingDisabled?: boolean;
 }
 
 /**
@@ -93,7 +99,7 @@ export function createHeadlessSession<G extends Game = Game>(
   tableOptions: HeadlessGameOptions,
   botSeats: BotSeat[] = [],
 ) {
-  const { options, ...table } = tableOptions;
+  const { options, teachingDisabled, ...table } = tableOptions;
   // The players' choice first and the table's own fields after it, so a
   // selection cannot name the seat count, the names or the seed.
   const gameOptions = { ...options, ...table };
@@ -111,7 +117,8 @@ export function createHeadlessSession<G extends Game = Game>(
     // driving every seat, so there is no other player to keep a view from. A
     // seat-view debug op still answers only for the seat `send` names.
     debug: true,
-    executeOp: (snap, pend, op) => executeOp(def, gameOptions, snap, pend, op, { debug: true }),
+    teachingDisabled,
+    executeOp: (snap, pend, op) => executeOp(def, gameOptions, snap, pend, op, { debug: true, teachingDisabled }),
     record: (views, meta) => {
       // structuredClone here mirrors the production postMessage boundary: a
       // broadcast carrying a live game object would throw a DataCloneError.
