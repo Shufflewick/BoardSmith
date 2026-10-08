@@ -8,7 +8,8 @@ import {
   simultaneousActionStep,
   type GameOptions,
 } from '../engine/index.js';
-import { executeOp, type GameDefinitionLike, type Op, type OpResult } from './stateless-ops.js';
+import { executeOp, type ExecutableOp, type GameDefinitionLike, type OpResultFor } from './stateless-ops.js';
+import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 import { SnapshotSessionHost } from './snapshot-session-host.js';
 import { GameSession } from './game-session.js';
 import { BotController } from './bot-controller.js';
@@ -67,12 +68,15 @@ afterEach(() => {
 describe('#421: SnapshotSessionHost with a bot seat whose move is refused', () => {
   function makeHost() {
     const gameOptions = { playerCount: 3, seed: 'bs421-host' };
-    const botTurns: Array<{ seats: number[]; result: OpResult }> = [];
+    const botTurns: Array<{ seats: number[]; result: OpResultFor<'botTurn'> }> = [];
     const host = new SnapshotSessionHost({
       playerCount: 3,
-      executeOp: async (snapshot, pendingState, op: Op) => {
+      executeOp: async (snapshot, pendingState, op) => {
         const result = await executeOp(stubbornDef, gameOptions, snapshot, pendingState, op);
-        if (op.type === 'botTurn') botTurns.push({ seats: op.seats.map((s) => s.seat), result });
+        const asked: ExecutableOp = op;
+        if (asked.type === 'botTurn') {
+          botTurns.push({ seats: asked.seats.map((s) => s.seat), result: result as OpResultFor<'botTurn'> });
+        }
         return result;
       },
       record: () => {}, push: () => {},
@@ -93,7 +97,7 @@ describe('#421: SnapshotSessionHost with a bot seat whose move is refused', () =
     await host.runBotTurns();
     // Seat 2 is asked first and refused. Seat 3 still moves, which changes the
     // game, so seat 2 is asked once more, at the new state, and refused again.
-    expect(botTurns.filter((t) => t.result.botMoved && t.result.botPlayer === 3)).toHaveLength(1);
+    expect(botTurns.filter((t) => t.result.success && t.result.botMoved && t.result.botPlayer === 3)).toHaveLength(1);
     expect(refusalsOfSeat2()).toBe(2);
     expect(refusalLogs()).toHaveLength(2);
     expect(refusalLogs()[0]).toMatch(/seat 2\b/);
@@ -104,7 +108,9 @@ describe('#421: SnapshotSessionHost with a bot seat whose move is refused', () =
     expect(refusalsOfSeat2()).toBe(2);
 
     // The human moves, so the state changed: seat 2 gets exactly one more try.
-    const human = await host.handleOp(1, { type: 'action', actionName: 'move', player: 1, args: {} } as Op);
+    const human = await host.handleOp(1, {
+      type: 'action', actionName: 'move', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host),
+    });
     expect(human.success).toBe(true);
     expect(refusalsOfSeat2()).toBe(3);
     await host.runBotTurns();

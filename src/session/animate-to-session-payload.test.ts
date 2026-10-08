@@ -6,6 +6,7 @@ import {
   secretDeploymentDefinition,
   createSecretDeploymentSession,
 } from './testing/fixtures/secret-deployment-fixture.js';
+import { succeeded } from './op-result.test-helper.js';
 
 // #23 put `animateTo`'s audience on the game view; the session's own
 // `state.animationEvents` (the list the UI plays) must honour it too, or a seat
@@ -30,14 +31,14 @@ describe("a seat's state carries only the animation events it may see", () => {
 
   it('stateless executor: the same, for every player view and the spectator view', async () => {
     const options = { playerCount: 2, seed: 'animate-to' };
-    const start = await executeOp(secretDeploymentDefinition, options, null, null, { type: 'start' });
-    const placed = await executeOp(secretDeploymentDefinition, options, start.snapshot, null, {
+    const start = succeeded(await executeOp(secretDeploymentDefinition, options, null, null, { type: 'start' }));
+    const placed = succeeded(await executeOp(secretDeploymentDefinition, options, start.snapshot, null, {
       type: 'action',
       actionName: 'placePack',
       player: 1,
       args: {},
-      boundaryKey: flowBoundaryKey(start.flowState as BoundaryKeyState),
-    });
+      boundaryKey: flowBoundaryKey(start.snapshot.flowState as BoundaryKeyState),
+    }));
     expect(placed.success).toBe(true);
     const stateOf = (view: unknown) => (view as { state: PlayerGameState }).state;
 
@@ -72,7 +73,7 @@ describe("a seat's state carries only the animation events it may see", () => {
     const session = createSecretDeploymentSession({ seed: 'animate-to' });
     expect([0, 1, 2].map((seat) => session.getState(seat).state!.viewerSeat)).toEqual([0, 1, 2]);
     const options = { playerCount: 2, seed: 'animate-to' };
-    const start = await executeOp(secretDeploymentDefinition, options, null, null, { type: 'start' });
+    const start = succeeded(await executeOp(secretDeploymentDefinition, options, null, null, { type: 'start' }));
     const viewerSeat = (view: unknown) => (view as { state: PlayerGameState }).state.viewerSeat;
     expect([start.spectatorView, ...start.playerViews].map(viewerSeat)).toEqual([0, 1, 2]);
   });

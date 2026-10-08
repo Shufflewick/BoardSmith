@@ -28,7 +28,7 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { executeOp, SUBMISSION_OP_TYPES, type GameDefinitionLike, type Op } from '../stateless-ops.js';
+import { executeOp, SUBMISSION_OP_TYPES, type GameDefinitionLike, type ExecutableOp, type OpResult } from '../stateless-ops.js';
 import type { HeadlessOp } from '../headless-session.js';
 import { boundaryKeyOf } from './boundary-stamp.js';
 import type { GameStateSnapshot } from '../../runtime/index.js';
@@ -40,6 +40,7 @@ import {
   fencedUncheckpointedScumDefinition,
   constructorDrawDefinition,
 } from './fixtures/random-scumming-fixture.js';
+import { refused } from '../op-result.test-helper.js';
 
 type HostOptions = Parameters<typeof executeOp>[5];
 
@@ -67,9 +68,9 @@ function statelessSession(
         SUBMISSION_OP_TYPES.has(op.type) && (op as { boundaryKey?: string }).boundaryKey === undefined
           ? { ...op, boundaryKey: boundaryKeyOf(snapshot) }
           : op
-      ) as Op;
-      const res = await executeOp(def, gameOptions, snapshot, null, stamped, hostOptions);
-      if (res.success) snapshot = JSON.parse(JSON.stringify(res.snapshot));
+      ) as ExecutableOp;
+      const res: OpResult = await executeOp(def, gameOptions, snapshot, null, stamped, hostOptions);
+      if (res.success && 'snapshot' in res) snapshot = JSON.parse(JSON.stringify(res.snapshot));
       return res;
     },
   };
@@ -232,12 +233,12 @@ describe("#18 order-entry sessions (hostOptions.randomness: 'forbidden')", () =>
       .toBe(true);
     const before = JSON.stringify(s.snapshot);
 
-    const drew = await s.send({ type: 'action', actionName: 'gamble', player: 1, args: {} });
+    const drew = refused(await s.send({ type: 'action', actionName: 'gamble', player: 1, args: {} }));
     expect(drew.success).toBe(false);
     expect(drew.error).toMatch(/order-entry/);
     expect(drew.error).toMatch(/resolution session/);
     // Refuse-and-preserve: no snapshot is emitted, so the host keeps the old one.
-    expect(drew.snapshot).toBeNull();
+    expect(drew).not.toHaveProperty('snapshot');
     expect(JSON.stringify(s.snapshot)).toBe(before);
 
     // And the session is still usable afterwards.
@@ -283,7 +284,7 @@ describe("#18 order-entry sessions (hostOptions.randomness: 'forbidden')", () =>
     const s = statelessSession(unfencedScumDefinition, soloOptions, forbidden);
     expect((await s.send({ type: 'start' })).success).toBe(true);
 
-    const bot = await s.send({ type: 'botTurn', seats: [{ seat: 1, level: 'easy' }] } as Op);
+    const bot = await s.send({ type: 'botTurn', seats: [{ seat: 1, level: 'easy' }] });
     expect(bot.success).toBe(false);
     expect(bot.error).toMatch(/order-entry session/);
     expect(bot.error).toMatch(/randomness/);

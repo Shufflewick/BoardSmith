@@ -27,12 +27,11 @@ import type { PersistPlayer } from './persistence.js';
 const SEATED: PersistPlayer[] = [{ seat: 1, playerId: 'p1' }];
 
 /** A commit carrying `entries` on the PRIVATE channel -- where a sealed key is
- *  allowed to ride at all (the public one broadcasts what it carries). */
+ *  allowed to ride at all (the public one is for records anyone may see). */
 function commitOf(store: PersistenceStore, entries: unknown[], players = SEATED) {
   return store.commit({
     players,
-    spectatorView: null,
-    persistPrivate: { entries },
+    commit: { private: { entries } },
     gameVersion: 'dev',
     now: () => 1,
   });

@@ -47,6 +47,7 @@ import { StateHistory } from '../../session/state-history.js';
 import { executeOp, type GameDefinitionLike } from '../../session/stateless-ops.js';
 import { boundaryKeyOf } from '../../session/testing/boundary-stamp.js';
 import type { StoredGameState } from '../../session/types.js';
+import { succeeded } from '../../session/op-result.test-helper.js';
 
 // ---------------------------------------------------------------------------
 // Minimal test game: a plain Space whose contents are explicitly hidden via
@@ -212,13 +213,13 @@ describe('SEC-01/F1/F7: zone visibility survives restore (byte-identity of oppon
       maxPlayers: 2,
     };
 
-    const startResult = await executeOp(
+    const startResult = succeeded(await executeOp(
       def,
       { playerCount: 2, seed: 'zone-vis-seed' },
       null,
       null,
       { type: 'start' }
-    );
+    ));
     expect(startResult.success).toBe(true);
     const startPlayerViews = (startResult as unknown as { playerViews: Array<{ state: { view: unknown } }> })
       .playerViews;

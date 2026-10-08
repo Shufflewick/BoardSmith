@@ -23,19 +23,20 @@ import {
   uncheckpointedScumDefinition,
   unfencedScumDefinition,
 } from '../../session/testing/fixtures/random-scumming-fixture.js';
+import { succeeded } from '../../session/op-result.test-helper.js';
 
 /** Seat 1's state after it starts a game and makes one ordinary move. */
 async function stateAfterOneMove(def: GameDefinitionLike): Promise<PlayerGameState> {
   const gameOptions = { playerCount: 1, seed: 'undo-controls' };
-  const started = await executeOp(def, gameOptions, null, null, { type: 'start' });
+  const started = succeeded(await executeOp(def, gameOptions, null, null, { type: 'start' }));
   const snapshot = JSON.parse(JSON.stringify(started.snapshot));
-  const moved = await executeOp(def, gameOptions, snapshot, null, {
+  const moved = succeeded(await executeOp(def, gameOptions, snapshot, null, {
     type: 'action',
     actionName: 'move',
     player: 1,
     args: {},
     boundaryKey: boundaryKeyOf(snapshot),
-  });
+  }));
   expect(moved.success, moved.error).toBe(true);
   return (JSON.parse(JSON.stringify(moved.playerViews)) as Array<{ state: PlayerGameState }>)[0].state;
 }

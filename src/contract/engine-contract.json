@@ -1,7 +1,7 @@
 {
-  "revision": 131,
+  "revision": 132,
   "bundleProtocol": 2,
-  "surfaceHash": "44d3dc2d962030d8",
+  "surfaceHash": "85d9346b723d035e",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1123,6 +1123,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "SnapshotSessionHost's durable state is stored once (#536) and its calls cannot be made in the wrong order (#537). GameStateSnapshot (and each ActionCheckpoint) now records winners, the seats game.getWinners() named; SnapshotHostState is just { snapshot, pendingStates }, and the flow state, isComplete and winners are read from the snapshot through the new flowStateOf, isCompleteOf and winnersOf exports of boardsmith/session-host, so the platform drops flowState, isComplete and winners from its persisted payload. restoreFrom and the follow-up broadcastCurrent are replaced by the static SnapshotSessionHost.restore(adapters, { snapshot, pendingStates, botSeats, playerViews?, spectatorView? }) (botSeats required, [] when no bot plays), which refuses a snapshot without its flow state or winners and publishes once itself. The host applies the same check to every op result, so a game built on an engine before r131 is refused loudly instead of a won game being published as a draw. The adapters' live botSeats getter and rosterChanged() are replaced by host.setBotSeats(seats), which the platform calls before start() and whenever its roster or anything a derived roster depends on changes (it may be called from record); it publishes only when hasBotPlayers flips. PublishMeta gains cause: 'change' | 'republish' | 'restore' | 'roster', so the platform's own republishing flag can go: do per-change bookkeeping only for 'change'. Games must be built on this revision (r131) or later, because the host reads winners from the snapshot the bundle returns. createPlayerView reports availableActions: [] for a seat that cannot act (#498)."
+    },
+    {
+      "revision": 132,
+      "date": "2026-10-06",
+      "bundleProtocol": 2,
+      "surfaceHash": "85d9346b723d035e",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Op contract (BoardSmith #530, #535, #527, #536 step 5). (1) Op is now ExecutorOp | DevOp | HostOp; executeOp takes ExecutorOp | DevOp only, and boardsmith/session exports parseExecutorOp(value) -> { ok, op } | { ok: false, error }: strict, refuses unknown keys, requires boundaryKey on action/expireSeat/selectionStep. The executor should send the op as one field and validate it with parseExecutorOp instead of its own valibot schemas and request-to-op translator (ShufflewickPub #558). (2) OpResult is a union per op (OpResultFor<T>): every refusal is OpFailure { success: false, error, errorCode?, category, botPlayer? } with no snapshot, flowState, playerViews, isComplete or winners; every op that runs the game returns StateEnvelope { snapshot, playerViews, spectatorView, flowDebugInfo, persistCommit }; a resolveChoices success has only its answer fields; pendingState is on selectionStep results only. The top-level flowState, isComplete and winners are gone from every result: read snapshot.flowState and snapshot.winners (or flowStateOf/isCompleteOf/winnersOf from boardsmith/session-host); share OpResultFor instead of OpResult & ActionReturnValue casts. (3) A stale submission is refused with errorCode STALE_SUBMISSION: test for the code, never the message, and stop inferring staleness from boundary keys in game-session.ts (ShufflewickPub #560; the executor must forward errorCode). (4) No player or spectator view carries the reserved persist or persistPrivate attributes any more; every state-changing result carries persistCommit { public?, private? } read off the game root, and readPersistCommit(commit) and PersistenceStore.commit({ commit }) take it. takePrivateCommit and PrivateChannelCarrier are deleted: delete executor/src/persist-private.ts and its conformance test, and commit result.persistCommit at game over instead of digging it out of the last spectator view (ShufflewickPub #556)."
     }
   ]
 }

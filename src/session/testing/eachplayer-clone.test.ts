@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { createHeadlessSession } from '../headless-session.js';
+import type { OpResult } from '../stateless-ops.js';
 import { eachPlayerFixtureDefinition } from './fixtures/each-player-fixture.js';
+import { succeeded } from '../op-result.test-helper.js';
 
 /**
  * `eachPlayer` binds the current Player as a LIVE element into
@@ -12,8 +14,10 @@ import { eachPlayerFixtureDefinition } from './fixtures/each-player-fixture.js';
 
 const gameOptions = { playerCount: 2, seed: 't' };
 
-function currentPlayer(result: { flowState: unknown }): number | undefined {
-  return (result.flowState as { currentPlayer?: number } | undefined)?.currentPlayer;
+/** The seat whose turn the game `result` holds is on, or `undefined` when the op was refused. */
+function currentPlayer(result: OpResult): number | undefined {
+  if (!result.success || !('snapshot' in result)) return undefined;
+  return result.snapshot.flowState?.currentPlayer;
 }
 
 describe('eachPlayer flow-state crosses the structured-clone boundary', () => {
@@ -37,7 +41,7 @@ describe('eachPlayer flow-state crosses the structured-clone boundary', () => {
   it('serializes element-valued flow variables in the snapshot (no live class instances)', async () => {
     const session = createHeadlessSession(eachPlayerFixtureDefinition, gameOptions);
     await session.start();
-    const res = await session.send(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+    const res = succeeded(await session.send(1, { type: 'action', actionName: 'pass', player: 1, args: {} }));
 
     // The snapshot must be structured-cloneable end to end (executor RPC / DO storage).
     expect(() => structuredClone(res.snapshot)).not.toThrow();

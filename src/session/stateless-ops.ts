@@ -26,6 +26,7 @@ import {
 import { createBot, parseBotLevel } from '../bot/index.js';
 import type { BotMove } from '../bot/types.js';
 import { describeMoveForHint } from './move-summary.js';
+import { PERSIST_KEY, PERSIST_PRIVATE_KEY, type PersistCommit } from '../persistence/persistence.js';
 import { PickHandler } from './pick-handler.js';
 import {
   offerFollowUp,
@@ -69,7 +70,12 @@ export interface BoundaryStamped {
   boundaryKey: string;
 }
 
-export type Op =
+/**
+ * The ops a platform executor runs: everything a deployed game needs, and
+ * nothing that only `boardsmith dev` sends. A platform receives these over a
+ * wire and validates them with {@link parseExecutorOp}.
+ */
+export type ExecutorOp =
   | { type: 'start' }
   | ({
       type: 'action';
@@ -81,16 +87,16 @@ export type Op =
    * A host closing one seat still due because a deadline the host keeps has
    * passed: a step's own time limit, or any deadline of the host's own on any
    * step, timed or not (#494: host deadlines always win). Only a host composes
-   * it, from its own timer: no wire op maps to it, so nothing a client sends
-   * can become one. The seat is closed the way the step allows: the game's
-   * idle action, `idleAction` with `args`, runs as the seat's own action when
-   * the step offers it (which drops any follow-up the seat held); otherwise,
-   * when the seat holds a follow-up, the follow-up is dropped and the seat's
-   * part ends without an action (`GameRunner.closeExpiredHeldSeat`), recorded
-   * in the history as a seat expiry. Refused when the seat can take neither.
-   * Stamped with the boundary the host armed its timer under, so a round a
-   * human closed first refuses it as stale instead of landing it in the next
-   * round.
+   * it, from its own timer: no client message maps to it, so nothing a client
+   * sends can become one. The seat is closed the way the step allows: the
+   * game's idle action, `idleAction` with `args`, runs as the seat's own action
+   * when the step offers it (which drops any follow-up the seat held);
+   * otherwise, when the seat holds a follow-up, the follow-up is dropped and the
+   * seat's part ends without an action (`GameRunner.closeExpiredHeldSeat`),
+   * recorded in the history as a seat expiry. Refused when the seat can take
+   * neither. Stamped with the boundary the host armed its timer under, so a
+   * round a human closed first refuses it as stale instead of landing it in the
+   * next round.
    */
   | ({
       type: 'expireSeat';
@@ -115,9 +121,17 @@ export type Op =
     }
   | { type: 'cancelAction'; player: number }
   | { type: 'undo'; player: number }
-  | { type: 'botTurn'; seats: Array<{ seat: number; level?: string }> }
-  // Debug ops (dev-only; the debug panel issues these over the platform bridge).
-  // Read-only ops report state without mutating; the rest edit state like a move.
+  | { type: 'botTurn'; seats: Array<{ seat: number; level?: string }> };
+
+/**
+ * The ops only `boardsmith dev` sends. `executeOp` runs them, each behind its
+ * own gate: the debug family needs `hostOptions.debug`, and the teaching ops
+ * are refused when `hostOptions.teachingDisabled` is set. A platform executor
+ * does not accept them ({@link parseExecutorOp} refuses every one).
+ */
+export type DevOp =
+  // Debug ops: the debug panel issues these over the dev bridge. Read-only ops
+  // report state without mutating; the rest edit state like a move.
   | { type: 'debugHistory' }
   | { type: 'debugStateAt'; actionIndex: number; player: number }
   | { type: 'debugStateDiff'; fromIndex: number; toIndex: number; player: number }
@@ -127,39 +141,40 @@ export type Op =
   // seat's own pending action (perspective-scoped via the threaded pendingState).
   | { type: 'debugFlowState'; player: number }
   | { type: 'debugRewind'; actionIndex: number }
+  | { type: 'debugReorder'; cardId: number; targetIndex: number }
+  | { type: 'debugTransfer'; cardId: number; targetDeckId: number; position: 'first' | 'last' }
+  | { type: 'debugShuffle'; deckId: number }
   /**
    * restoreEarlier: go back to a WHOLE earlier snapshot of this game that the
    * host kept itself -- a demo stepping back one move. Run against the CURRENT
    * snapshot, and a restore in every sense a client sees
-   * (`restoreEarlierSnapshot`): the restore epoch advances, so seats
-   * drop stale element ids and reset their animation watermark. A host op: no
-   * wire op maps to it.
+   * (`restoreEarlierSnapshot`): the restore epoch advances, so seats drop stale
+   * element ids and reset their animation watermark. Only the host composes it
+   * (`SnapshotSessionHost`'s demo); no client message maps to it.
    */
   | { type: 'restoreEarlier'; snapshot: unknown }
-  | { type: 'debugReorder'; cardId: number; targetIndex: number }
-  | { type: 'debugTransfer'; cardId: number; targetDeckId: number; position: 'first' | 'last' }
-  | { type: 'debugShuffle'; deckId: number }
   | { type: 'startTutorial'; player: number }
   | { type: 'exitTutorial'; player: number }
   | { type: 'hint'; seat: number }
   | { type: 'heatmapToggle'; seat: number; visible: boolean }
   // botSuggest: read-only preview — runs MCTS and returns the suggested move WITHOUT
-  // mutating the snapshot. Consumed by runDemoLoop in SnapshotSessionHost.
-  | { type: 'botSuggest'; seats: Array<{ seat: number; level?: string }> }
-  // demoStart / demoStop are host lifecycle ops handled by SnapshotSessionHost.handleOp
-  // directly (they need the broadcast adapter + cancellable async lifetime that the
-  // stateless executor does not have). They are in the Op union for type-safety when
-  // passed through bridge.ts translateOp → handleOp. They MUST NOT be added to the
-  // executeOp switch — see fallback at the end of the switch for the guard.
+  // mutating the snapshot. Sent by the demo loop in SnapshotSessionHost.
+  | { type: 'botSuggest'; seats: Array<{ seat: number; level?: string }> };
+
+/**
+ * The lifecycle ops `SnapshotSessionHost.handleOp` handles itself. They need
+ * the host's broadcast adapter, its bot pump or a cancellable async lifetime,
+ * none of which the stateless executor has, so `executeOp` does not accept
+ * them.
+ */
+export type HostOp =
   | { type: 'demoStart'; delay?: number }
   | { type: 'demoStop' }
   // demoControl: live playback control for a running demo (pause/play/step one move/
-  // step back one move) and speed (inter-move delay in ms). Host lifecycle op like
-  // demoStart/demoStop — handled in SnapshotSessionHost.handleOp, never in executeOp.
+  // step back one move) and speed (inter-move delay in ms).
   | { type: 'demoControl'; control: 'pause' | 'play' | 'step' | 'back'; delay?: number }
   /**
-   * convertSeatToBot: a seat is now played by a bot. A host lifecycle op like the
-   * demo family — handled in `SnapshotSessionHost.handleOp`, never in executeOp.
+   * convertSeatToBot: a seat is now played by a bot.
    *
    * It exists so a conversion is an EVENT THE ENGINE ACKNOWLEDGES AND ACTS ON.
    * The host's bot pump reads the roster the platform last stated with
@@ -177,8 +192,22 @@ export type Op =
    */
   | { type: 'convertSeatToBot'; seat: number };
 
+/** Every op a `SnapshotSessionHost` accepts through `handleOp`. */
+export type Op = ExecutorOp | DevOp | HostOp;
+
+/**
+ * The op of type `T`. Functions that answer each op with its own result take
+ * their op as this rather than as a type parameter of the op itself, so `T` is
+ * inferred from the op's `type` and an object literal is still checked for
+ * fields its op does not declare.
+ */
+export type OpOfType<T extends Op['type']> = { [K in T]: Extract<Op, { type: K }> }[T];
+
+/** The ops `executeOp` runs: every op except the host's own lifecycle ops. */
+export type ExecutableOp = ExecutorOp | DevOp;
+
 /** The op types that carry a player's intent, and therefore a boundary key. */
-export type SubmissionOpType = Extract<Op, BoundaryStamped>['type'];
+export type SubmissionOpType = Extract<ExecutorOp, BoundaryStamped>['type'];
 
 /**
  * The submission op types, enumerated ONCE.
@@ -231,126 +260,224 @@ const DEBUG_OP_TYPE_MAP: Record<DebugOpType, true> = {
 };
 export const DEBUG_OP_TYPES: ReadonlySet<Op['type']> = new Set(Object.keys(DEBUG_OP_TYPE_MAP) as DebugOpType[]);
 
-/** The read-only debug ops — reported without mutating or broadcasting state. */
-export const READ_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set([
-  'resolveChoices',
-  'debugHistory',
-  'debugStateAt',
-  'debugStateDiff',
-  'debugActionTraces',
-  'debugFlowState',
-  // botSuggest is read-only: runs MCTS to preview a move but does NOT mutate the snapshot.
-  'botSuggest',
-]);
+/**
+ * The ops that report without changing the game: a choices query, the
+ * read-only debug ops, and the demo's move preview. A host runs them without
+ * applying, publishing or persisting anything.
+ */
+export type ReadOnlyOpType =
+  | 'resolveChoices'
+  | 'debugHistory'
+  | 'debugStateAt'
+  | 'debugStateDiff'
+  | 'debugActionTraces'
+  | 'debugFlowState'
+  | 'botSuggest';
+
+const READ_ONLY_OP_TYPE_MAP: Record<ReadOnlyOpType, true> = {
+  resolveChoices: true,
+  debugHistory: true,
+  debugStateAt: true,
+  debugStateDiff: true,
+  debugActionTraces: true,
+  debugFlowState: true,
+  botSuggest: true,
+};
+export const READ_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set(Object.keys(READ_ONLY_OP_TYPE_MAP) as ReadOnlyOpType[]);
+
+/** Whether `op` reports without changing the game ({@link ReadOnlyOpType}). */
+export function isReadOnlyOp(op: Op): op is Extract<Op, { type: ReadOnlyOpType }> {
+  return READ_ONLY_OP_TYPES.has(op.type);
+}
 
 // ---------------------------------------------------------------------------
 // OpResult
 // ---------------------------------------------------------------------------
 
-export interface OpResult {
-  success: boolean;
-  error?: string;
+/** Where a refusal came from: the game's own rules, the executor, or the op itself. */
+export type OpFailureCategory = 'bundle' | 'executor' | 'protocol';
+
+/**
+ * Every refused op, whatever its type. A refusal changed nothing, so it
+ * carries no state: the caller keeps the state it already holds.
+ */
+export interface OpFailure {
+  success: false;
+  error: string;
   /**
-   * Structured error code, threaded through from the underlying runner/
-   * pick-handler result when one exists (e.g. NOT_YOUR_TURN, ENGINE_ERROR,
-   * CHOICES_EVALUATION_ERROR). Undefined for protocol-level failures that have
-   * no upstream errorCode to forward — never fabricated.
+   * Structured error code. A failure forwarded from the runner or the pick
+   * handler carries the code they gave (e.g. NOT_YOUR_TURN, ENGINE_ERROR,
+   * CHOICES_EVALUATION_ERROR), and a code is never invented for one that gave
+   * none. The engine's own protocol refusals carry their own code
+   * (STALE_SUBMISSION).
    */
   errorCode?: ErrorCode;
-  category?: 'bundle' | 'executor' | 'protocol';
+  category: OpFailureCategory;
   /**
-   * Structured, inspectable warnings carried up from a pick response (e.g.
-   * boardRefs()/display()/boardRef() throwing but recovering via a graceful
-   * fallback). Never flips success:false — see WarningEntry.
+   * Set only by a refused `botTurn`: the bot seat whose move the game refused,
+   * so a host can hold that seat back until the game changes instead of asking
+   * it for the same move again (#421).
    */
-  warnings?: WarningEntry[];
+  botPlayer?: number;
+}
 
+/**
+ * The game after an op, on every op that runs the game (all but a choices
+ * query). It holds the state ONCE: the flow state and the winners the game
+ * declared are read out of `snapshot` (`snapshot.flowState`,
+ * `snapshot.winners`, or `flowStateOf`/`isCompleteOf`/`winnersOf` from
+ * `boardsmith/session-host`), never reported a second time beside it (#536).
+ *
+ * `playerViews` (indexed by seat - 1) and `spectatorView` are for the host to
+ * publish. Neither is a reply to the seat that sent the op: a host shapes its
+ * reply from the op's own fields.
+ */
+export interface StateEnvelope {
+  snapshot: GameStateSnapshot;
+  playerViews: unknown[];
   /**
-   * `ActionResult.data` from the action this op executed — the acting seat's
-   * return value (BUG-017). Set by the `action` op and by the `selectionStep`
-   * op that completes a multi-step action; absent everywhere else.
-   *
-   * Reaches only the caller of this op. It is NOT part of the state envelope
-   * and is never broadcast (per-seat player views publish no such field).
+   * Public observer view: seat 0, no hidden information, no action metadata.
+   * The same `{ flowState, state }` shape as a player view.
+   */
+  spectatorView: unknown;
+  /**
+   * The flow position for the debug panel, computed once for every seat (the
+   * same serializer the session broadcast and `debugFlowState` use).
+   */
+  flowDebugInfo: SerializedFlowDebugInfo;
+  /**
+   * What the game asked the host to store (#527): the values of its reserved
+   * `persist` and `persistPrivate` root attributes, read off the game root
+   * after the op. No view carries either. A host commits this at game over;
+   * `readPersistCommit` (`boardsmith/persistence`) validates it.
+   */
+  persistCommit: PersistCommit;
+}
+
+/** What a move that may chain on returns to the seat that made it. */
+interface MoveOutcome {
+  /** The follow-up the action chained to, with its action's metadata. */
+  followUp?: FollowUpOffer;
+  /**
+   * `ActionResult.data` from the action this op executed: the acting seat's
+   * return value (BUG-017). Reaches only the caller of this op, never a view.
    */
   data?: Record<string, unknown>;
   /** `ActionResult.message` from the action this op executed (BUG-012). */
   message?: string;
-
-  // Op-specific fields
-  /** The follow-up the action chained to, with its action's metadata. */
-  followUp?: FollowUpOffer;
-  done?: boolean;
-  nextChoices?: unknown[];
-  actionComplete?: boolean;
-  choices?: unknown[];
-  validElements?: unknown[];
-  multiSelect?: { min: number; max?: number };
-  /**
-   * The ordered-list bounds of the step a `resolveChoices` op answered (#249,
-   * #480), resolved against the selections already made. Absent on a step that
-   * is not an ordered list.
-   */
-  orderedList?: { min: number; max?: number };
-  botMoved?: boolean;
-  /** The bot seat that moved, or on a refused `botTurn`, the seat whose move was refused. */
-  botPlayer?: number;
-  /**
-   * A bot seat that was due but could not move (#29).
-   *
-   * `botMoved` is false for both "no bot seat was due" and "a bot seat was due
-   * and could not act", and those need telling apart: the second is a stalled
-   * seat a host should report, and it used to be an exception that escaped
-   * executeOp and locked the whole table instead. Present only in the second
-   * case.
-   */
-  botStalled?: { seat: number; reason: string };
-  /**
-   * The seat a `convertSeatToBot` op converted — the engine's ACKNOWLEDGEMENT
-   * that it saw the conversion, as opposed to a roster mutation it may or may
-   * not have noticed. Present only on a successful `convertSeatToBot`.
-   *
-   * It is an echo, not a record: the host stores nothing about the conversion
-   * and the snapshot carries nothing about it. The roster remains the adapter's.
-   */
-  convertedSeat?: number;
-
-  // Transient teaching annotation results — consumed by SnapshotSessionHost
-  // to update transientTeachingState. Returned by hint/heatmapToggle ops.
-  hintAnnotation?: { seat: number; annotation: Annotation };
-  heatmapUpdate?: { seat: number; visible: boolean; entries: HeatmapEntry[] };
-
-  // botSuggest result — the previewed move (read-only; snapshot is NOT mutated).
-  // Consumed by runDemoLoop in SnapshotSessionHost (never by executeOp).
-  suggestedAction?: string;
-  suggestedArgs?: Record<string, unknown>;
-
-  // Debug op fields
-  actionHistory?: unknown[];
-  historicalState?: unknown;
-  diff?: unknown;
-  traces?: unknown[];
-  flowContext?: unknown;
-  // debug:flow-state result fields — the SAME shared serialized shape as the
-  // session broadcast (Plan 04 Task 1), no divergent structure across channels.
-  flowDebugInfo?: SerializedFlowDebugInfo;
-  pendingAction?: SerializedPendingActionState;
-
-  // State envelope — present on every op that changes state. A `resolveChoices`
-  // answer goes to one seat and changes nothing, so it carries none: `snapshot`
-  // and `flowState` are null and `playerViews` is empty (#450).
-  snapshot: unknown;
-  pendingState: Record<string, unknown> | null;
-  flowState: unknown;
-  playerViews: unknown[];
-  isComplete: boolean;
-  winners: number[];
-  // Public observer (spectator) view — position 0, no hidden info, no action
-  // metadata. Mirrors a per-player view's `{ flowState, state }` shape so a host
-  // can read `spectatorView.state` exactly like `playerViews[i].state`. Present
-  // on every state-mutating op (start + ops that spread stateEnvelope).
-  spectatorView?: unknown;
 }
+
+/**
+ * The fields each op returns on success, beside the {@link StateEnvelope} when
+ * it has one ({@link OpSuccess}). One entry per op type: an op added to `Op`
+ * without one here does not compile.
+ */
+export interface OpSuccessFields {
+  start: Record<never, never>;
+  action: MoveOutcome;
+  /**
+   * The host closed the seat, so no seat is the caller: there is no follow-up
+   * to offer and no return value to hand back.
+   */
+  expireSeat: Record<never, never>;
+  selectionStep: MoveOutcome & {
+    /** The acting seat's half-made selection, or `null` once the action completed or was dropped. */
+    pendingState: Record<string, unknown> | null;
+    done?: boolean;
+    nextChoices?: unknown[];
+    actionComplete?: boolean;
+    /**
+     * Structured, inspectable warnings carried up from the pick (e.g.
+     * boardRefs()/display()/boardRef() throwing but recovering via a graceful
+     * fallback). A warning never refuses the op — see WarningEntry.
+     */
+    warnings?: WarningEntry[];
+  };
+  resolveChoices: {
+    choices?: unknown[];
+    validElements?: unknown[];
+    multiSelect?: { min: number; max?: number };
+    /**
+     * The ordered-list bounds of the step this answered (#249, #480), resolved
+     * against the selections already made. Absent on a step that is not an
+     * ordered list.
+     */
+    orderedList?: { min: number; max?: number };
+    warnings?: WarningEntry[];
+  };
+  cancelAction: Record<never, never>;
+  undo: Record<never, never>;
+  botTurn: {
+    /** The bot seat that moved. */
+    botPlayer?: number;
+    /** Whether a bot seat moved. False when none was due, or one was due and stalled. */
+    botMoved: boolean;
+    /**
+     * A bot seat that was due but could not move (#29). `botMoved` is false
+     * both when no bot seat was due and when one could not act; this tells
+     * the second apart, as a stalled seat a host should report. Present only
+     * in the second case.
+     */
+    botStalled?: { seat: number; reason: string };
+  };
+  debugHistory: { actionHistory: unknown[] };
+  debugStateAt: { historicalState: unknown };
+  debugStateDiff: { diff: unknown };
+  debugActionTraces: { traces: unknown[]; flowContext: unknown };
+  /** The asking seat's own pending action, beside the envelope's `flowDebugInfo`. */
+  debugFlowState: { pendingAction?: SerializedPendingActionState };
+  debugRewind: Record<never, never>;
+  debugReorder: Record<never, never>;
+  debugTransfer: Record<never, never>;
+  debugShuffle: Record<never, never>;
+  restoreEarlier: Record<never, never>;
+  startTutorial: Record<never, never>;
+  exitTutorial: Record<never, never>;
+  /** The hint for one seat, which the host keeps as teaching state. */
+  hint: { hintAnnotation: { seat: number; annotation: Annotation } };
+  /** The heatmap for one seat, which the host keeps as teaching state. */
+  heatmapToggle: { heatmapUpdate: { seat: number; visible: boolean; entries: HeatmapEntry[] } };
+  /** The move a bot seat would make, previewed without making it. */
+  botSuggest: { botPlayer: number; suggestedAction: string; suggestedArgs: Record<string, unknown> };
+  demoStart: Record<never, never>;
+  demoStop: Record<never, never>;
+  demoControl: Record<never, never>;
+  /**
+   * The seat a `convertSeatToBot` op converted: the engine's ACKNOWLEDGEMENT
+   * that it saw the conversion. An echo, not a record: the host stores
+   * nothing about the conversion and the roster remains the adapter's.
+   */
+  convertSeatToBot: { convertedSeat: number };
+}
+
+/**
+ * The ops whose success carries no {@link StateEnvelope}: a choices query
+ * changes nothing and answers one seat (#450), and the host's lifecycle ops
+ * publish through the host itself.
+ */
+type StatelessOpType = 'resolveChoices' | HostOp['type'];
+
+/**
+ * What every success shares. `error` and `errorCode` are named only to say they
+ * are absent, so `result.error` reads as `undefined` on a success without
+ * narrowing first.
+ */
+interface Succeeded {
+  success: true;
+  error?: undefined;
+  errorCode?: undefined;
+}
+
+/** A successful `T` op: its own fields, and the game when the op runs it. */
+export type OpSuccess<T extends Op['type']> = T extends Op['type']
+  ? Succeeded & (T extends StatelessOpType ? Record<never, never> : StateEnvelope) & OpSuccessFields[T]
+  : never;
+
+/** What a `T` op answers: its success, or the shared refusal. */
+export type OpResultFor<T extends Op['type']> = OpSuccess<T> | OpFailure;
+
+/** What any op answers. Narrow it by the op that was sent with {@link OpResultFor}. */
+export type OpResult = { [T in Op['type']]: OpResultFor<T> }[Op['type']];
 
 // ---------------------------------------------------------------------------
 // GameDefinitionLike
@@ -467,53 +594,47 @@ function buildSpectatorView(runner: GameRunner): unknown {
   };
 }
 
-function stateEnvelope(runner: GameRunner, playerCount: number): {
-  snapshot: unknown;
-  flowState: unknown;
-  playerViews: unknown[];
-  spectatorView: unknown;
-  isComplete: boolean;
-  winners: number[];
-  pendingState: null;
-  flowDebugInfo: SerializedFlowDebugInfo;
-} {
+function stateEnvelope(runner: GameRunner, playerCount: number): StateEnvelope {
   // getSnapshot() records the op's checkpoint, so it runs before any view is
   // built: each view's canUndo reads the settled checkpoint window (#385).
   const snapshot = runner.getSnapshot();
   return {
     snapshot,
-    flowState: runner.getFlowState(),
     playerViews: buildViews(runner, playerCount),
     spectatorView: buildSpectatorView(runner),
-    isComplete: runner.isComplete(),
-    winners: runner.getWinners().map((p) => p.seat),
-    pendingState: null,
-    // Present on every state-mutating op (top-level, computed once — mirrors
-    // GameSession.broadcast()'s "compute once, reuse across seats" pattern).
+    // Computed once for every seat (mirrors GameSession.broadcast()).
     // SnapshotSessionHost merges this into every per-seat view's `state`
-    // alongside the host's own per-seat pendingAction lookup (see
+    // alongside its own per-seat pendingAction lookup (see
     // SnapshotSessionHost.mergeTransientState / lastFlowDebugInfo).
     flowDebugInfo: serializeFlowDebugInfo(runner.game),
+    persistCommit: persistCommitOf(snapshot),
   };
+}
+
+/**
+ * The reserved commit attributes of the game `snapshot` holds, as the game
+ * set them. Read from the snapshot's own serialization of the game root, the
+ * one place both channels live, so the commit is the game's and no view's.
+ */
+function persistCommitOf(snapshot: GameStateSnapshot): PersistCommit {
+  const attributes = snapshot.state.attributes;
+  const commit: PersistCommit = {};
+  if (attributes[PERSIST_KEY] !== undefined) commit.public = attributes[PERSIST_KEY];
+  if (attributes[PERSIST_PRIVATE_KEY] !== undefined) commit.private = attributes[PERSIST_PRIVATE_KEY];
+  return commit;
 }
 
 function errorResult(
   error: unknown,
-  category: OpResult['category'] = 'bundle',
+  category: OpFailureCategory = 'bundle',
   errorCode?: ErrorCode,
-): OpResult {
+): OpFailure {
   const message = error instanceof Error ? error.message : String(error);
   return {
     success: false,
     error: message,
-    errorCode,
+    ...(errorCode === undefined ? {} : { errorCode }),
     category,
-    snapshot: null,
-    pendingState: null,
-    flowState: null,
-    playerViews: [],
-    isComplete: false,
-    winners: [],
   };
 }
 
@@ -526,7 +647,7 @@ function errorResult(
  *   debug op that reports a seat's view (it names a `player`) is refused unless
  *   that `player` is the asking seat, so no seat can read another seat's view.
  */
-export function debugOpRefusal(op: Op, debug: boolean, askingSeat?: number): OpResult | null {
+export function debugOpRefusal(op: Op, debug: boolean, askingSeat?: number): OpFailure | null {
   if (!DEBUG_OP_TYPES.has(op.type)) return null;
   if (!debug) return errorResult(debuggingOffMessage(op.type), 'protocol');
   if (askingSeat !== undefined && 'player' in op && op.player !== askingSeat) {
@@ -562,16 +683,16 @@ export const STALE_SUBMISSION_MESSAGE =
  * already existed". Those are its only two outcomes — it can narrow what is
  * permitted and can never widen it.
  */
-function refuseStaleSubmission(snapshot: GameStateSnapshot | null, op: Op): OpResult | undefined {
+function refuseStaleSubmission(snapshot: GameStateSnapshot | null, op: ExecutableOp): OpFailure | undefined {
   if (!('boundaryKey' in op)) return undefined;
   // Equality against the key this very snapshot's flow position mints. No
   // parsing, no structural tolerance, and no default for an absent or
   // wrong-typed value: anything that is not equal is stale.
   if (op.boundaryKey === flowBoundaryKey(snapshot?.flowState as BoundaryKeyState | undefined)) return undefined;
-  // 'protocol', and no errorCode: this refusal is raised here, ahead of any
-  // runner call, so there is no upstream ErrorCode to forward and one must
-  // never be fabricated (see OpResult.errorCode).
-  return errorResult(STALE_SUBMISSION_MESSAGE, 'protocol');
+  // The engine's own outcome, with its own code (#535): a stale refusal is
+  // normal (the round resolved without this seat), and a host must tell it
+  // apart from every other refusal without reading the message.
+  return errorResult(STALE_SUBMISSION_MESSAGE, 'protocol', ErrorCode.STALE_SUBMISSION);
 }
 
 function selectDueBotSeat(
@@ -589,7 +710,7 @@ function handleStart(
   def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   seedSnapshot?: GameStateSnapshot,
-): OpResult {
+): OpResultFor<'start'> {
   // A new game mints its own element id key (#447). The only key a start op
   // could carry is one a client wrote into the host's options, and a client
   // that chooses the key can decode every id it is sent; a host restoring a
@@ -659,7 +780,7 @@ function handleAction(
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'action' }>,
-): OpResult {
+): OpResultFor<'action'> {
   const runner = runnerFromSnapshot(snapshot, def);
   const actionResult = runner.performAction(op.actionName, op.player, op.args);
 
@@ -674,9 +795,6 @@ function handleAction(
   return {
     success: true,
     ...stateEnvelope(runner, gameOptions.playerCount),
-    // stateEnvelope() re-reads flowState from the runner; actionResult.flowState
-    // is the authoritative value returned by performAction — override with it.
-    flowState: actionResult.flowState,
     followUp: offerFollowUp(game, actionResult.flowState, op.player),
     // The acting seat's return value from execute() (BUG-017/BUG-012).
     data: actionResult.data,
@@ -695,7 +813,7 @@ function handleExpireSeat(
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'expireSeat' }>,
-): OpResult {
+): OpResultFor<'expireSeat'> {
   const runner = runnerFromSnapshot(snapshot, def);
   const expired = runner.closeExpiredHeldSeat(op.player, op.idleAction);
   if (!expired) {
@@ -715,7 +833,7 @@ async function handleSelectionStep(
   snapshot: GameStateSnapshot,
   pendingState: Record<string, unknown> | null,
   op: Extract<Op, { type: 'selectionStep' }>,
-): Promise<OpResult> {
+): Promise<OpResultFor<'selectionStep'>> {
   const runner = runnerFromSnapshot(snapshot, def);
 
   const handler = new PickHandler(runner, gameOptions.playerCount);
@@ -756,7 +874,7 @@ function handleResolveChoices(
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'resolveChoices' }>,
-): OpResult {
+): OpResultFor<'resolveChoices'> {
   const runner = runnerFromSnapshot(snapshot, def);
 
   const handler = new PickHandler(runner, gameOptions.playerCount);
@@ -772,12 +890,6 @@ function handleResolveChoices(
   // has none to report.
   return {
     success: true,
-    snapshot: null,
-    pendingState: null,
-    flowState: null,
-    playerViews: [],
-    isComplete: runner.isComplete(),
-    winners: runner.getWinners().map((p) => p.seat),
     choices: result.choices,
     validElements: result.validElements,
     multiSelect: result.multiSelect,
@@ -792,7 +904,7 @@ function handleCancelAction(
   snapshot: GameStateSnapshot,
   pendingState: Record<string, unknown> | null,
   op: Extract<Op, { type: 'cancelAction' }>,
-): OpResult {
+): OpResultFor<'cancelAction'> {
   const runner = runnerFromSnapshot(snapshot, def);
 
   const handler = new PickHandler(runner, gameOptions.playerCount);
@@ -809,7 +921,7 @@ function handleUndo(
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'undo' }>,
-): OpResult {
+): OpResultFor<'undo'> {
   const runner = runnerFromSnapshot(snapshot, def);
 
   // Validate player seat (1-indexed) — parity with StateHistory.undoToTurnStart.
@@ -860,12 +972,12 @@ async function handleBotTurn(
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'botTurn' }>,
-): Promise<OpResult> {
+): Promise<OpResultFor<'botTurn'>> {
   const runner = runnerFromSnapshot(snapshot, def);
 
   const flowState = runner.getFlowState() as BotFlowState | undefined;
 
-  const notDue: OpResult = {
+  const notDue: OpSuccess<'botTurn'> = {
     success: true,
     ...stateEnvelope(runner, gameOptions.playerCount),
     botMoved: false,
@@ -939,9 +1051,6 @@ async function handleBotTurn(
   return {
     success: true,
     ...stateEnvelope(runner, gameOptions.playerCount),
-    // stateEnvelope() re-reads flowState from the runner; actionResult.flowState
-    // is the authoritative value returned by performAction — override with it.
-    flowState: actionResult.flowState,
     botMoved: true,
     botPlayer,
   };
@@ -960,7 +1069,7 @@ async function handleHint(
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'hint' }>,
   teachingDisabled: boolean,
-): Promise<OpResult> {
+): Promise<OpResultFor<'hint'>> {
   // Fail-loud: teaching features locked out by the host (via hostOptions —
   // deliberately NOT gameOptions, see WR-04/D-01 on executeOp).
   if (teachingDisabled) {
@@ -1037,7 +1146,7 @@ async function handleHeatmapToggle(
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'heatmapToggle' }>,
   teachingDisabled: boolean,
-): Promise<OpResult> {
+): Promise<OpResultFor<'heatmapToggle'>> {
   // Fail-loud: teaching features locked out by the host (via hostOptions —
   // deliberately NOT gameOptions, see WR-04/D-01 on executeOp).
   if (teachingDisabled) {
@@ -1145,7 +1254,7 @@ async function handleBotSuggest(
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'botSuggest' }>,
-): Promise<OpResult> {
+): Promise<OpResultFor<'botSuggest'>> {
   // Fail-loud: no bot config means suggestion is impossible.
   if (!def.bot?.objectives) {
     return errorResult('No bot configuration on this game — botSuggest is unavailable.', 'protocol');
@@ -1251,7 +1360,7 @@ function handleRestoreEarlier(
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'restoreEarlier' }>,
-): OpResult {
+): OpResultFor<'restoreEarlier'> {
   const runner = restoreEarlierSnapshot(snapshot, op.snapshot as GameStateSnapshot, def.gameClass, {
     checkpoints: def.checkpoints,
     randomness: def.randomness,
@@ -1267,7 +1376,7 @@ function handleDebugHistory(
   def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
-): OpResult {
+): OpResultFor<'debugHistory'> {
   const runner = runnerFromSnapshot(snapshot, def);
   return {
     success: true,
@@ -1281,7 +1390,7 @@ function handleDebugStateAt(
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'debugStateAt' }>,
-): OpResult {
+): OpResultFor<'debugStateAt'> {
   const current = runnerFromSnapshot(snapshot, def);
   const historyLength = current.actionHistory.length;
   if (op.actionIndex < 0 || op.actionIndex > historyLength) {
@@ -1306,7 +1415,7 @@ function handleDebugStateDiff(
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'debugStateDiff' }>,
-): OpResult {
+): OpResultFor<'debugStateDiff'> {
   const current = runnerFromSnapshot(snapshot, def);
   const historyLength = current.actionHistory.length;
   if (op.fromIndex < 0 || op.fromIndex > historyLength) {
@@ -1337,7 +1446,7 @@ function handleDebugActionTraces(
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'debugActionTraces' }>,
-): OpResult {
+): OpResultFor<'debugActionTraces'> {
   if (op.player < 1 || op.player > gameOptions.playerCount) {
     return errorResult(`Invalid player seat: ${op.player}.`, 'protocol');
   }
@@ -1370,7 +1479,7 @@ function handleDebugFlowState(
   snapshot: GameStateSnapshot,
   pendingState: Record<string, unknown> | null,
   op: Extract<Op, { type: 'debugFlowState' }>,
-): OpResult {
+): OpResultFor<'debugFlowState'> {
   if (op.player < 1 || op.player > gameOptions.playerCount) {
     return errorResult(`Invalid player seat: ${op.player}.`, 'protocol');
   }
@@ -1395,7 +1504,7 @@ function handleDebugRewind(
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'debugRewind' }>,
-): OpResult {
+): OpResultFor<'debugRewind'> {
   const current = runnerFromSnapshot(snapshot, def);
   const historyLength = current.actionHistory.length;
   if (op.actionIndex < 0) {
@@ -1446,7 +1555,7 @@ function handleDebugCommand(
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   command: GameCommand,
-): OpResult {
+): OpResultFor<'debugReorder' | 'debugTransfer' | 'debugShuffle'> {
   const runner = runnerFromSnapshot(snapshot, def);
   const result = executeCommand(runner.game as Game, command);
   if (!result.success) {
@@ -1499,18 +1608,35 @@ function handleDebugCommand(
  *                       `player` is the asking seat, as `SnapshotSessionHost`
  *                       does.
  */
-export async function executeOp(
+export async function executeOp<T extends ExecutableOp['type']>(
   definition: GameDefinitionLike,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: unknown,
   pendingState: Record<string, unknown> | null,
-  op: Op,
-  hostOptions?: {
-    teachingDisabled?: boolean;
-    seedSnapshot?: GameStateSnapshot;
-    randomness?: RandomnessPolicy;
-    debug?: boolean;
-  } | null,
+  op: OpOfType<T>,
+  hostOptions?: ExecuteOpHostOptions | null,
+): Promise<OpResultFor<T>> {
+  // `runOp` answers each op from the case that matched its type, so its answer
+  // is this op's. TypeScript narrows `op` inside a switch but cannot carry that
+  // narrowing back out to a generic return type, so it is stated here, once.
+  return (await runOp(definition, gameOptions, snapshot, pendingState, op, hostOptions)) as OpResultFor<T>;
+}
+
+/** The host's session policy for one op (see {@link executeOp}). */
+export interface ExecuteOpHostOptions {
+  teachingDisabled?: boolean;
+  seedSnapshot?: GameStateSnapshot;
+  randomness?: RandomnessPolicy;
+  debug?: boolean;
+}
+
+async function runOp(
+  definition: GameDefinitionLike,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: unknown,
+  pendingState: Record<string, unknown> | null,
+  op: ExecutableOp,
+  hostOptions: ExecuteOpHostOptions | null | undefined,
 ): Promise<OpResult> {
   try {
     // #481: debug ops read every seat's history and edit the game outside its
@@ -1668,14 +1794,15 @@ export async function executeOp(
         return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
       }
     }
-    // Fallback for host-only ops (demoStart / demoStop / demoControl /
-    // convertSeatToBot) that are intercepted by SnapshotSessionHost.handleOp
-    // before reaching this function. If they somehow reach executeOp, fail loud
-    // rather than silently returning undefined. This branch also satisfies
-    // TypeScript's return-completeness check now that those ops are in the Op
-    // union.
+    // Every op type has a case above, so `op` is `never` here: an op added to
+    // `ExecutorOp` or `DevOp` without a case is a compile error on this line.
+    // Only a caller that bypassed the type (a host's lifecycle op, an op read
+    // off a wire without `parseExecutorOp`) arrives, and it is refused by name.
+    const unhandled: never = op;
     return errorResult(
-      `Op type '${(op as { type: string }).type}' is a host lifecycle op and cannot be executed directly`,
+      `executeOp does not run '${(unhandled as { type: unknown }).type}' ops. A host lifecycle op ` +
+        '(demoStart, demoStop, demoControl, convertSeatToBot) goes to SnapshotSessionHost.handleOp; ' +
+        'any other op must be one ExecutorOp or DevOp names.',
       'protocol',
     );
   } catch (err) {

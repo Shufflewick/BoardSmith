@@ -93,7 +93,7 @@ function makeHost(overrides: { baseGameOptions?: GameOptionSelection } = {}) {
     executeOp: async (gameOptions, snap, pend, op, hostOptions) => {
       if (op.type === 'start') startOptions = gameOptions;
       const result = await executeOp(def, gameOptions, snap, pend, op, hostOptions);
-      if (op.type === 'start' && result.success) {
+      if (op.type === 'start' && result.success && 'snapshot' in result) {
         startedKey = (result.snapshot as { gameOptions?: { elementIdKey?: string } }).gameOptions?.elementIdKey;
       }
       return result;

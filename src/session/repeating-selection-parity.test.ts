@@ -25,6 +25,7 @@ import { GameRunner } from '../runtime/runner.js';
 import { enumerateLegalMoves, type GameStateSnapshot } from '../engine/index.js';
 import { createTestGame } from '../testing/test-game.js';
 import { simulateRandomGames } from '../testing/random-simulation.js';
+import { succeeded } from './op-result.test-helper.js';
 
 const options = { playerCount: 1, seed: 'bs325' };
 
@@ -129,7 +130,7 @@ describe('a repeating selection is one protocol on every path (#325)', () => {
   it('a bot plays the repeat protocol: every pick runs onEach, and execute receives an array ending at the terminator', async () => {
     const host = makeHost();
     await host.start();
-    const result = await host.handleOp(1, { type: 'botTurn', seats: [{ seat: 1, level: 'easy' }] });
+    const result = succeeded(await host.handleOp(1, { type: 'botTurn', seats: [{ seat: 1, level: 'easy' }] }));
     expect(result.error).toBeUndefined();
     expect(result.botMoved).toBe(true);
 

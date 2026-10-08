@@ -14,6 +14,7 @@ import {
   type GameOptions,
 } from '../index.js';
 import type { GameDefinitionLike, Op } from '../../session/stateless-ops.js';
+import { succeeded } from '../../session/op-result.test-helper.js';
 
 /**
  * A turn made of several actions has exactly two shapes in this API, and until
@@ -183,11 +184,11 @@ class AlternatingGame extends ScoreGame {
 }
 
 async function act(session: ReturnType<typeof createHeadlessSession>, seat = 1) {
-  return session.send(seat, { type: 'action', actionName: 'act', player: seat, args: {} } as Op);
+  return session.send(seat, { type: 'action', actionName: 'act', player: seat, args: {} });
 }
 
 async function undo(session: ReturnType<typeof createHeadlessSession>, seat = 1) {
-  return session.send(seat, { type: 'undo', player: seat } as Op);
+  return session.send(seat, { type: 'undo', player: seat });
 }
 
 describe("turnScope: 'continue' gives a re-entered step real undo reach", () => {
@@ -195,14 +196,14 @@ describe("turnScope: 'continue' gives a re-entered step real undo reach", () => 
     const session = createHeadlessSession(def(ContinueLoopGame, 'continue-loop'), opts);
     await session.start();
 
-    expect(scoreOf((await act(session)).snapshot)).toBe(1);
-    expect(scoreOf((await act(session)).snapshot)).toBe(2);
-    const third = await act(session);
+    expect(scoreOf(succeeded(await act(session)).snapshot)).toBe(1);
+    expect(scoreOf(succeeded(await act(session)).snapshot)).toBe(2);
+    const third = succeeded(await act(session));
     expect(scoreOf(third.snapshot)).toBe(3);
 
     // The defect this file exists for: before `turnScope`, this was refused
     // with "No actions to undo" while the seat was still mid-turn.
-    const rewound = await undo(session);
+    const rewound = succeeded(await undo(session));
     expect(rewound.success).toBe(true);
     expect(scoreOf(rewound.snapshot)).toBe(0);
   });
@@ -213,7 +214,7 @@ describe("turnScope: 'continue' gives a re-entered step real undo reach", () => 
 
     const counts: Array<number | undefined> = [];
     for (let i = 0; i < 3; i++) {
-      const result = await act(session);
+      const result = succeeded(await act(session));
       counts.push((result.snapshot as { flowState?: { moveCount?: number } })?.flowState?.moveCount);
     }
     expect(counts).toEqual([1, 2, 3]);
@@ -223,10 +224,10 @@ describe("turnScope: 'continue' gives a re-entered step real undo reach", () => 
     const session = createHeadlessSession(def(SequenceTurnGame, 'sequence-turn'), opts);
     await session.start();
 
-    expect(scoreOf((await act(session)).snapshot)).toBe(1);
-    expect(scoreOf((await act(session)).snapshot)).toBe(2);
+    expect(scoreOf(succeeded(await act(session)).snapshot)).toBe(1);
+    expect(scoreOf(succeeded(await act(session)).snapshot)).toBe(2);
 
-    const rewound = await undo(session);
+    const rewound = succeeded(await undo(session));
     expect(rewound.success).toBe(true);
     expect(scoreOf(rewound.snapshot)).toBe(0);
   });

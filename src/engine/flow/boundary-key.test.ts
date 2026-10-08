@@ -21,6 +21,7 @@ import {
   TOTAL_ROUNDS,
 } from '../../session/testing/fixtures/simultaneous-rounds-fixture.js';
 import { collectTurnsFixtureDefinition } from '../../session/testing/fixtures/collect-turns-fixture.js';
+import { succeeded } from '../../session/op-result.test-helper.js';
 
 const twoSeats = { playerCount: 2, seed: 'boundary-key' };
 
@@ -168,21 +169,21 @@ describe('flowBoundaryKey', () => {
     // Restore a FRESH runner from the mid-round snapshot — what the platform DO
     // does every time it is evicted. `debugFlowState` is a read-only op: it
     // rebuilds the runner via runnerFromSnapshot and reports its flow state.
-    const restored = await executeOp(
+    const restored = succeeded(await executeOp(
       simultaneousRoundsFixtureDefinition,
       twoSeats,
       session.host.snapshot,
       null,
       { type: 'debugFlowState', player: 1 },
       { debug: true },
-    );
+    ));
     expect(restored.success).toBe(true);
 
     // Byte-identical: a key that changed on restore would re-stamp the round
     // clock and re-notify every seat on every eviction.
-    expect(flowBoundaryKey(restored.flowState as BoundaryKeyState)).toBe(keyBefore);
+    expect(flowBoundaryKey(restored.snapshot.flowState as BoundaryKeyState)).toBe(keyBefore);
     // And the restored runner is genuinely mid-round, not re-started.
-    expect(dueSeats(restored.flowState as SeatActivityState)).toEqual([2]);
+    expect(dueSeats(restored.snapshot.flowState as SeatActivityState)).toEqual([2]);
   });
 
   it('negative contract — undefined and null yield defined, stable strings and never throw', () => {

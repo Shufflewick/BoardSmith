@@ -7,7 +7,7 @@
  * JSON-round-trips the persisted state, the way a Durable Object's storage does.
  */
 import { describe, it, expect } from 'vitest';
-import { executeOp, type OpResult } from './stateless-ops.js';
+import { executeOp } from './stateless-ops.js';
 import {
   SnapshotSessionHost,
   type HostRestore,
@@ -19,6 +19,7 @@ import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 // onEach moves a token during the selection, so the persisted snapshot holds a
 // mutation that belongs to an unfinished action.
 import { repeatingCollectDefinition as collectDef } from './testing/fixtures/repeating-collect-fixture.js';
+import { succeeded } from './op-result.test-helper.js';
 
 const options = { playerCount: 2, seed: 'bs320' };
 
@@ -49,7 +50,7 @@ function restoredHost(state: HostRestore) {
   return { host: SnapshotSessionHost.restore(adapters, state), ...rest };
 }
 
-function pick(host: SnapshotSessionHost, value: string): Promise<OpResult> {
+function pick(host: SnapshotSessionHost, value: string) {
   return host.handleOp(1, {
     type: 'selectionStep',
     player: 1,
@@ -83,11 +84,11 @@ describe('SnapshotSessionHost restores in-progress selections (#320)', () => {
     const stored = first.persisted.at(-1)!;
     const second = restoredHost({ ...stored, botSeats: [] });
 
-    const next = await pick(second.host, 'p2');
+    const next = succeeded(await pick(second.host, 'p2'));
     expect(next.success).toBe(true);
     expect((next.pendingState as RepeatingPending).repeating?.accumulated).toEqual(['p1', 'p2']);
 
-    const done = await pick(second.host, 'stop');
+    const done = succeeded(await pick(second.host, 'stop'));
     expect(done.success).toBe(true);
     expect(done.actionComplete).toBe(true);
     expect(second.host.snapshot!.state.attributes.collected).toEqual(['p1', 'p2', 'stop']);
