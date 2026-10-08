@@ -25,10 +25,9 @@
  * Byte-identity contract: for every restore path below,
  * `JSON.stringify(game.toJSONForPlayer(opponentSeat))` before the restore
  * must strictly equal the same call after the restore. One dedicated `it()`
- * per path — see the D-SEC-01 coverage contract in the plan. The
- * `GameSession.restore()` case lives in the companion file
- * `src/session/restore-snapshot-authoritative.test.ts` (session-layer
- * concern per the CONTEXT.md test-placement decision).
+ * per path — see the D-SEC-01 coverage contract in the plan. The undo,
+ * time-travel and cold-restore cases drive the session host every platform
+ * runs, and compare the opponent's published view.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -43,10 +42,10 @@ import {
   type GameOptions,
 } from '../index.js';
 import { GameRunner } from '../../runtime/index.js';
-import { StateHistory } from '../../session/state-history.js';
 import { executeOp, type GameDefinitionLike } from '../../session/stateless-ops.js';
-import { boundaryKeyOf } from '../../session/testing/boundary-stamp.js';
-import type { StoredGameState } from '../../session/types.js';
+import { createHeadlessSession } from '../../session/headless-session.js';
+import { SnapshotSessionHost, type SnapshotHostState } from '../../session/snapshot-session-host.js';
+import { boundaryKeyOf, boundaryKeyOfHost } from '../../session/testing/boundary-stamp.js';
 import { succeeded } from '../../session/op-result.test-helper.js';
 
 // ---------------------------------------------------------------------------
@@ -117,6 +116,22 @@ function opponentView(runner: GameRunner<ZoneVisGame>): string {
   return JSON.stringify(runner.game.toJSONForPlayer(OPPONENT_SEAT));
 }
 
+const zoneVisDefinition: GameDefinitionLike = {
+  gameClass: ZoneVisGame,
+  gameType: 'zone-vis-test',
+  minPlayers: 2,
+  maxPlayers: 2,
+};
+
+const zoneVisOptions = { playerCount: 2, seed: 'zone-vis-seed' };
+
+/** A started table on the in-process session host, and the opponent's first published view. */
+async function startZoneVisSession() {
+  const session = createHeadlessSession(zoneVisDefinition, zoneVisOptions);
+  await session.start();
+  return { session, before: JSON.stringify(session.playerState(OPPONENT_SEAT).view) };
+}
+
 /** Simulate a cold-storage round-trip (matches production storage adapters). */
 function roundTripJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -142,76 +157,64 @@ describe('SEC-01/F1/F7: zone visibility survives restore (byte-identity of oppon
     expect(opponentView(restored)).toBe(before);
   });
 
-  it('(b) survives undo via StateHistory', async () => {
-    const runner = buildRunner();
-    const before = opponentView(runner);
+  it('(b) survives undo', async () => {
+    const { session, before } = await startZoneVisSession();
 
-    // Give seat 1 something to undo — turn-start checkpoint (index 0) still
-    // has the hidden zone from the constructor, matching `before`.
-    const actionResult = runner.performAction('noop', 1, {});
+    // Give seat 1 something to undo — the turn-start checkpoint still has the
+    // hidden zone from the constructor, matching `before`.
+    const actionResult = await session.send(1, { type: 'action', actionName: 'noop', player: 1, args: {} });
     expect(actionResult.success).toBe(true);
 
-    let currentRunner = runner;
-    const storedState = {
-      actionHistory: currentRunner.actionHistory,
-      playerCount: 2,
-      playerNames: ['Alice', 'Bob'],
-    } as unknown as StoredGameState;
-
-    const history = new StateHistory<ZoneVisGame>(ZoneVisGame, storedState, () => currentRunner, {
-      replaceRunner: (r) => {
-        currentRunner = r;
-      },
-      save: async () => {},
-      broadcast: () => {},
-    });
-
-    const undoResult = await history.undoToTurnStart(1);
+    const undoResult = await session.send(1, { type: 'undo', player: 1 });
     expect(undoResult.success).toBe(true);
 
-    expect(opponentView(currentRunner)).toBe(before);
+    expect(JSON.stringify(session.playerState(OPPONENT_SEAT).view)).toBe(before);
   });
 
-  it('(c) survives rewind / time-travel via StateHistory.getStateAtAction', async () => {
-    const runner = buildRunner();
-    const before = opponentView(runner);
+  it('(c) survives rewind / time-travel via debugStateAt', async () => {
+    const { session, before } = await startZoneVisSession();
 
-    const actionResult = runner.performAction('noop', 1, {});
+    const actionResult = await session.send(1, { type: 'action', actionName: 'noop', player: 1, args: {} });
     expect(actionResult.success).toBe(true);
 
-    const storedState = {
-      actionHistory: runner.actionHistory,
-      playerCount: 2,
-      playerNames: ['Alice', 'Bob'],
-    } as unknown as StoredGameState;
-
-    const history = new StateHistory<ZoneVisGame>(ZoneVisGame, storedState, () => runner, {
-      replaceRunner: () => {},
-      save: async () => {},
-      broadcast: () => {},
-    });
-
     // Action index 0 = turn-start checkpoint, before the 'noop' action.
-    const result = history.getStateAtAction(0, OPPONENT_SEAT);
-    expect(result.success).toBe(true);
+    const result = succeeded(
+      await session.send(OPPONENT_SEAT, { type: 'debugStateAt', actionIndex: 0, player: OPPONENT_SEAT }),
+    );
 
-    expect(JSON.stringify(result.state!.view)).toBe(before);
+    expect(JSON.stringify((result.historicalState as { view: unknown }).view)).toBe(before);
   });
 
-  it('(d) [companion assertion — see src/session/restore-snapshot-authoritative.test.ts for GameSession.restore()]', () => {
-    // Intentionally empty placeholder documenting where case (d) lives, per
-    // the plan's test-placement rule: it MUST exist in exactly one file and
-    // is asserted in the session-layer companion suite, not duplicated here.
-    expect(true).toBe(true);
+  it('(d) survives a cold restore of the session host from its durable state', async () => {
+    const { session, before } = await startZoneVisSession();
+    const actionResult = await session.send(1, { type: 'action', actionName: 'noop', player: 1, args: {} });
+    expect(actionResult.success).toBe(true);
+
+    // What storage hands back after the process died: the durable state, as JSON.
+    const stored = roundTripJson(session.host.durableState()) as SnapshotHostState;
+    const published: unknown[][] = [];
+    const restored = SnapshotSessionHost.restore(
+      {
+        playerCount: zoneVisOptions.playerCount,
+        executeOp: (snap, pend, op) => executeOp(zoneVisDefinition, zoneVisOptions, snap, pend, op),
+        record: ({ players }) => published.push(players),
+        push: () => {},
+      },
+      { ...stored, botSeats: [] },
+    );
+
+    // The restored host builds its next views from the stored snapshot.
+    const next = await restored.handleOp(1, {
+      type: 'action', actionName: 'noop', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(restored),
+    });
+    expect(next.success).toBe(true);
+
+    const restoredView = (published.at(-1)![OPPONENT_SEAT - 1] as { state: { view: unknown } }).state.view;
+    expect(JSON.stringify(restoredView)).toBe(before);
   });
 
   it('(e) survives the stateless-ops path (playerViews built after GameRunner.fromSnapshot)', async () => {
-    const def: GameDefinitionLike = {
-      gameClass: ZoneVisGame,
-      gameType: 'zone-vis-test',
-      minPlayers: 2,
-      maxPlayers: 2,
-    };
+    const def = zoneVisDefinition;
 
     const startResult = succeeded(await executeOp(
       def,

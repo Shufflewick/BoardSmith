@@ -7,7 +7,7 @@
  * `settings: this.settings` by reference (and `game-element.ts` /
  * `space.ts` emitted the live `_visibility` / `_zoneVisibility` objects).
  * `createActionCheckpoint`/`createSnapshot` store the result as-is, and the
- * live-session undo/rewind/time-travel paths never JSON-round-trip it, so:
+ * in-process undo/rewind/time-travel paths never JSON-round-trip it, so:
  *
  *   1. every retained checkpoint shared ONE settings object and ONE messages
  *      array with the live game — post-checkpoint mutations retroactively
@@ -33,8 +33,7 @@ import {
   type GameOptions,
 } from '../index.js';
 import { GameRunner } from '../../runtime/index.js';
-import { StateHistory } from '../../session/state-history.js';
-import type { StoredGameState } from '../../session/types.js';
+import { createHeadlessSession } from '../../session/headless-session.js';
 
 class Card extends Piece<AliasGame> {}
 class Zone extends Space<AliasGame> {}
@@ -89,6 +88,24 @@ function buildRunner(): GameRunner<AliasGame> {
   });
   runner.start();
   return runner;
+}
+
+/**
+ * A started two-seat table on the host every platform runs, driven in process:
+ * its ops hand snapshots and checkpoints around as live objects, never as JSON.
+ *
+ * The host rebuilds the game from its snapshot on every op, so a checkpoint
+ * there is never shared with the game a later op mutates. The two undo tests
+ * that use it hold the rollback itself; the copy guarantee CR-02 is about is
+ * held by the three `toJSON()`/`fromSnapshot` tests above them.
+ */
+async function startAliasSession() {
+  const session = createHeadlessSession(
+    { gameClass: AliasGame, gameType: 'checkpoint-aliasing-test', minPlayers: 2, maxPlayers: 2 },
+    { playerCount: 2, seed: 'alias-seed' },
+  );
+  await session.start();
+  return session;
 }
 
 describe('CR-02: toJSON emits copies — checkpoints do not alias live game state', () => {
@@ -147,66 +164,36 @@ describe('CR-02: toJSON emits copies — checkpoints do not alias live game stat
     expect((state.settings.stash as { nested: string }).nested).toBe('undone-value');
   });
 
-  it('undoToTurnStart rolls back game.message() output and settings mutations (live path, no JSON round-trip)', async () => {
-    const runner = buildRunner();
-    const messagesBefore = runner.game.messages.length;
+  it('undo rolls back game.message() output and settings mutations (in-process host, no JSON round-trip)', async () => {
+    const session = await startAliasSession();
+    const messagesBefore = session.readGame().messages.length;
 
-    const actionResult = runner.performAction('logAndStash', 1, {});
+    const actionResult = await session.send(1, { type: 'action', actionName: 'logAndStash', player: 1, args: {} });
     expect(actionResult.success).toBe(true);
-    expect(runner.game.messages.length).toBe(messagesBefore + 1);
-    expect(runner.game.settings.stash).toBeDefined();
+    expect(session.readGame().messages.length).toBe(messagesBefore + 1);
+    expect(session.readGame().settings.stash).toBeDefined();
 
-    let currentRunner = runner;
-    const storedState = {
-      actionHistory: currentRunner.actionHistory,
-      playerCount: 2,
-      playerNames: ['Alice', 'Bob'],
-    } as unknown as StoredGameState;
-
-    const history = new StateHistory<AliasGame>(AliasGame, storedState, () => currentRunner, {
-      replaceRunner: (r) => {
-        currentRunner = r;
-      },
-      save: async () => {},
-      broadcast: () => {},
-    });
-
-    const undoResult = await history.undoToTurnStart(1);
+    const undoResult = await session.send(1, { type: 'undo', player: 1 });
     expect(undoResult.success).toBe(true);
 
     // Both the message and the settings mutation from the undone action must
     // be gone — before the fix they survived (the checkpoint aliased them).
-    expect(currentRunner.game.messages.length).toBe(messagesBefore);
-    expect(currentRunner.game.settings.stash).toBeUndefined();
+    expect(session.readGame().messages.length).toBe(messagesBefore);
+    expect(session.readGame().settings.stash).toBeUndefined();
   });
 
-  it('undoToTurnStart rolls back an in-place zone-visibility grant (live path, no JSON round-trip)', async () => {
-    const runner = buildRunner();
+  it('undo rolls back an in-place zone-visibility grant (in-process host, no JSON round-trip)', async () => {
+    const session = await startAliasSession();
 
-    const actionResult = runner.performAction('grantVisibility', 1, {});
+    const actionResult = await session.send(1, { type: 'action', actionName: 'grantVisibility', player: 1, args: {} });
     expect(actionResult.success).toBe(true);
-    expect(runner.game.zone.getZoneVisibility()?.addPlayers).toEqual([2]);
+    expect(session.readGame().zone.getZoneVisibility()?.addPlayers).toEqual([2]);
 
-    let currentRunner = runner;
-    const storedState = {
-      actionHistory: currentRunner.actionHistory,
-      playerCount: 2,
-      playerNames: ['Alice', 'Bob'],
-    } as unknown as StoredGameState;
-
-    const history = new StateHistory<AliasGame>(AliasGame, storedState, () => currentRunner, {
-      replaceRunner: (r) => {
-        currentRunner = r;
-      },
-      save: async () => {},
-      broadcast: () => {},
-    });
-
-    const undoResult = await history.undoToTurnStart(1);
+    const undoResult = await session.send(1, { type: 'undo', player: 1 });
     expect(undoResult.success).toBe(true);
 
     // The grant from the undone action must be rolled back — seat 2 must not
     // see the hidden zone's contents after undo.
-    expect(currentRunner.game.zone.getZoneVisibility()?.addPlayers ?? []).not.toContain(2);
+    expect(session.readGame().zone.getZoneVisibility()?.addPlayers ?? []).not.toContain(2);
   });
 });

@@ -27,7 +27,7 @@ import {
   type BoundaryKeyState,
   type GameOptions,
 } from '../index.js';
-import { GameSession, executeOp, type GameDefinitionLike } from '../../session/index.js';
+import { createHeadlessSession, executeOp, type GameDefinitionLike } from '../../session/index.js';
 import { GameRunner } from '../../runtime/index.js';
 import { succeeded, refused } from '../../session/op-result.test-helper.js';
 
@@ -81,40 +81,64 @@ class ShopGame extends Game<ShopGame, Player> {
 /** The shop as a platform host runs it, op by op. */
 const shopDefinition = { gameClass: ShopGame, gameType: 'shop', minPlayers: 2, maxPlayers: 2 } satisfies GameDefinitionLike;
 
+type ViewNode = { name?: string; children?: Array<{ id: number; name?: string }> };
+
 /** Seat 1 buys `secret` items in secret, then seat 2 buys one; seat 2's view of its own item's id. */
 async function idSeat2Sees(secret: number): Promise<number> {
   // One seed and one id key for every run, so the hidden purchases are the
-  // only difference between them.
-  const session = GameSession.create({
-    gameType: 'shop',
+  // only difference between them. A start op mints its own key and refuses
+  // one supplied from outside, so the game is started by a runner given the
+  // key, and the host's ops take it from that runner's snapshot, as they take
+  // a restored game's.
+  const options = { playerCount: 2, playerNames: ['Ann', 'Bo'], seed: 'shop' };
+  const runner = new GameRunner({
     GameClass: ShopGame,
-    playerCount: 2,
-    playerNames: ['Ann', 'Bo'],
-    seed: 'shop',
-    elementIdKey: '0123456789abcdef',
+    gameType: 'shop',
+    gameOptions: { ...options, elementIdKey: '0123456789abcdef' },
   });
-  const first = await session.performAction('buySecretly', 1, { count: secret });
-  expect(first.success, first.error).toBe(true);
-  const second = await session.performAction('buy', 2, {});
-  expect(second.success, second.error).toBe(true);
+  runner.start();
+  let snapshot = runner.getSnapshot();
+  const act = async (actionName: string, player: number, args: Record<string, unknown>) => {
+    const result = succeeded(await executeOp(shopDefinition, options, snapshot, null, {
+      type: 'action',
+      actionName,
+      player,
+      args,
+      boundaryKey: flowBoundaryKey(snapshot.flowState as BoundaryKeyState),
+    }));
+    snapshot = result.snapshot;
+    return result;
+  };
+  await act('buySecretly', 1, { count: secret });
+  const second = await act('buy', 2, {});
 
-  const view = session.getState(2).state!.view as { children?: Array<{ name?: string; children?: Array<{ id: number; name?: string }> }> };
+  const view = (second.playerViews[1] as { state: { view: { children?: ViewNode[] } } }).state.view;
   const shelf = view.children!.find((child) => child.name === 'shelf')!;
   return shelf.children!.find((child) => child.name === 'bought-by-2')!.id;
+}
+
+/** A started shop table on the in-process session host. */
+async function startShop(seed: string) {
+  const session = createHeadlessSession(shopDefinition, { playerCount: 2, playerNames: ['Ann', 'Bo'], seed });
+  await session.start();
+  return session;
 }
 
 describe('a hidden creation cannot be counted through element ids (#447)', () => {
   it("seat 2's own new element does not carry the number of seat 1's secret purchases", async () => {
     const baseline = await idSeat2Sees(0);
+    // The same purchases mint the same id, so the differences below are the
+    // hidden purchases' doing and nothing else's.
+    expect(await idSeat2Sees(0)).toBe(baseline);
     for (const secret of [1, 2, 3, 4, 5]) {
       expect(await idSeat2Sees(secret) - baseline).not.toBe(secret);
     }
   });
 
   it('the vault really is hidden from seat 2, so the id was the only channel', async () => {
-    const session = GameSession.create({ gameType: 'shop', GameClass: ShopGame, playerCount: 2, playerNames: ['Ann', 'Bo'], seed: 'shop' });
-    await session.performAction('buySecretly', 1, { count: 2 });
-    const view = session.getState(2).state!.view as { children?: Array<{ name?: string; children?: unknown; childCount?: unknown }> };
+    const session = await startShop('shop');
+    succeeded(await session.send(1, { type: 'action', actionName: 'buySecretly', player: 1, args: { count: 2 } }));
+    const view = session.playerState(2).view as { children?: Array<{ name?: string; children?: unknown; childCount?: unknown }> };
     const vault = view.children!.find((child) => child.name === 'vault')!;
     expect('children' in vault).toBe(false);
     expect('childCount' in vault).toBe(false);
@@ -162,17 +186,16 @@ describe('opaque ids keep replay, restore and undo exact (#447)', () => {
   });
 
   it('an undone creation, made again, gets the id it had', async () => {
-    const session = GameSession.create({ gameType: 'shop', GameClass: ShopGame, playerCount: 2, playerNames: ['Ann', 'Bo'], seed: 'undo', debugEnabled: true });
-    await session.performAction('buySecretly', 1, { count: 1 });
-    await session.performAction('buy', 2, {});
-    const before = session.runner.game.shelf.first(Item)!.id;
+    const session = await startShop('undo');
+    succeeded(await session.send(1, { type: 'action', actionName: 'buySecretly', player: 1, args: { count: 1 } }));
+    succeeded(await session.send(2, { type: 'action', actionName: 'buy', player: 2, args: {} }));
+    const before = session.readGame().shelf.first(Item)!.id;
 
-    const rewound = await session.rewindToAction(1);
-    expect(rewound.success, rewound.error).toBe(true);
-    expect(session.runner.game.shelf.first(Item)).toBeUndefined();
+    succeeded(await session.send(1, { type: 'debugRewind', actionIndex: 1 }));
+    expect(session.readGame().shelf.first(Item)).toBeUndefined();
 
-    await session.performAction('buy', 2, {});
-    expect(session.runner.game.shelf.first(Item)!.id).toBe(before);
+    succeeded(await session.send(2, { type: 'action', actionName: 'buy', player: 2, args: {} }));
+    expect(session.readGame().shelf.first(Item)!.id).toBe(before);
   });
 
   it('refuses to load a tree whose ids were minted under another key', () => {
@@ -202,16 +225,6 @@ describe('the id key does not rest on the seed (#447 review)', () => {
 
     expect(key).toMatch(/^[0-9a-f]{16}$/);
     expect(runner.getSnapshot().gameOptions?.elementIdKey).toBe(key);
-  });
-
-  it('never sends the key to a seat', async () => {
-    const session = GameSession.create({ gameType: 'shop', GameClass: ShopGame, playerCount: 2, playerNames: ['Ann', 'Bo'], seed: 'k' });
-    await session.performAction('buySecretly', 1, { count: 1 });
-    const key = session.runner.game.getConstructorOptions().elementIdKey as string;
-
-    for (const seat of [1, 2]) {
-      expect(JSON.stringify(session.getState(seat))).not.toContain(key);
-    }
   });
 
   it('the stateless executor sends the key only in the snapshot the host keeps, never in a seat or spectator view', async () => {
