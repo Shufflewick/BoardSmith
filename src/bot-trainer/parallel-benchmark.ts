@@ -24,18 +24,6 @@ export interface ParallelBenchmarkOptions {
 }
 
 /**
- * Result for a single individual in the population
- */
-export interface IndividualFitness {
-  /** Index of this individual in the population */
-  index: number;
-  /** Win rate achieved (0 if errored) */
-  winRate: number;
-  /** Whether evaluation succeeded */
-  success: boolean;
-}
-
-/**
  * How to start a benchmark worker (#401): its entry file is `benchmark-worker`
  * beside this module, with this module's own extension.
  *

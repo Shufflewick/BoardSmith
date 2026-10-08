@@ -4,6 +4,7 @@ import { cpus } from 'node:os';
 import chalk from 'chalk';
 import ora from 'ora';
 import type { ObjectiveWeight, TrainingProgress } from '../../bot-trainer/index.js';
+import type { BotStrategy } from '../../bot/index.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { commandBuildDir } from '../lib/project-paths.js';
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
@@ -73,14 +74,7 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
 
     const GameClass = gameDefinition.gameClass;
     const gameType = gameDefinition.gameType || config.name;
-    // The weights tuned are those of the objectives the game's bot plays with.
-    const bot = gameDefinition.bot;
-    if (!bot?.objectives) {
-      throw new Error(
-        "the game's gameDefinition has no bot.objectives, so there are no objectives to weigh. " +
-          'Set gameDefinition.bot.objectives to the objectives function bot.ts exports.',
-      );
-    }
+    const bot = requireBotObjectives(gameDefinition.bot);
 
     spinner.succeed('Game rules bundled');
 
@@ -158,6 +152,20 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
+}
+
+/**
+ * The game's bot strategy, refused unless it wires up objectives: the weights
+ * tuned are those of the objectives the game's bot plays with (#523).
+ */
+function requireBotObjectives(bot: BotStrategy | undefined): BotStrategy {
+  if (!bot?.objectives) {
+    throw new Error(
+      "the game's gameDefinition has no bot.objectives, so there are no objectives to weigh. " +
+        'Set gameDefinition.bot.objectives to the objectives function bot.ts exports.',
+    );
+  }
+  return bot;
 }
 
 /** The run's settings, from the flags or their defaults. */
