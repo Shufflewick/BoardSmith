@@ -6,37 +6,15 @@ BoardSmith provides Vue 3 components and composables for building game UIs. The 
 
 ### GameShell
 
-The main wrapper component that provides the complete game UI structure: header, player panels, game board area, action panel, and game history.
+The main wrapper component that provides the complete game UI structure: player panels, game board area, action panel, and game history. It runs inside a host's iframe (`boardsmith dev` locally, Shufflewick in production); opened directly it only says so.
+
+The board itself is not a slot. `GameShell` renders the default UI from the game's registry in `src/ui/uis.ts` (see [Dev-time UI switcher](#dev-time-ui-switcher)) and hands it the props listed under [Board props](#board-props).
 
 ```vue
 <template>
   <GameShell
-    game-type="my-game"
-    display-name="My Game"
-    :player-count="2"
+    :uis="uis"
   >
-    <!-- Custom game board -->
-    <template #game-board="{
-      state,
-      gameView,
-      playerSeat,
-      isMyTurn,
-      availableActions,
-      actionArgs,
-      actionController,
-      setBoardPrompt
-    }">
-      <GameTable
-        :game-view="gameView"
-        :player-seat="playerSeat"
-        :is-my-turn="isMyTurn"
-        :available-actions="availableActions"
-        :action-args="actionArgs"
-        :action-controller="actionController"
-        :set-board-prompt="setBoardPrompt"
-      />
-    </template>
-
     <!-- Custom player stats display. The slot also receives interaction state so a
          player's panel can be actionable (e.g. tap your own ability to use it), not
          just informational: playerSeat (the local seat), isMyTurn, availableActions,
@@ -66,7 +44,7 @@ The main wrapper component that provides the complete game UI structure: header,
 
 <script setup lang="ts">
 import { GameShell } from 'boardsmith/ui';
-import GameTable from './components/GameTable.vue';
+import uis from './uis.js';
 </script>
 ```
 
@@ -146,14 +124,17 @@ Note that `Game.nextPlayer()` is **not** one of them — it is a hardcoded seat
 successor, and it disagrees with the real turn order in exactly the games that
 need this.
 
-#### Slot Props
+#### Board props
 
-The `#game-board` slot receives:
+The board component (the registry's default UI, or the dev switcher's
+selection) receives:
 
 | Prop | Type | Description |
 |------|------|-------------|
 | `state` | `GameState` | Full game state |
 | `gameView` | `object` | Player-filtered view of game state |
+| `players` | `object[]` | Every seat's player, in seat order |
+| `myPlayer` | `object` | This seat's player |
 | `playerSeat` | `number` | Current player's seat |
 | `isMyTurn` | `boolean` | Whether it's this player's turn |
 | `availableActions` | `string[]` | Actions available to the player |
@@ -443,18 +424,32 @@ it, so it has to be operable without a pointer.
 
 ### Dev-time UI switcher
 
-Under `boardsmith dev`, the dev host shows a **UI dropdown** to switch which UI
-renders the running game — without a split-screen and without restarting. The
-dropdown lists:
-- the game's primary UI (whatever you render in GameShell's `#game-board` slot),
-- any extra UIs you declare via GameShell's `uis` prop
-  (`:uis="[{ name: 'Compact', component: CompactBoard }]"`), and
-- the built-in **Auto UI** (offered automatically in dev).
+A game declares every board it has in one file, `src/ui/uis.ts`, and passes
+that registry to `<GameShell :uis="uis">`:
 
-The auto-UI peek is dev-only: it is gated behind `import.meta.env.DEV`, so a
-production `boardsmith build` constant-folds it away and a custom-UI game never
-bundles the auto-UI (tree-shaking is preserved — see SHIP-02). A production build
-renders the primary slot UI.
+```ts
+import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui';
+import HeirloomTable from './heirloom/HeirloomTable.vue';
+
+export default defineGameUIs({
+  HeirloomTable: defaultUI(HeirloomTable),
+  Classic: devUI(() => import('./components/CribbageBoard.vue')),
+});
+```
+
+Exactly one entry is `defaultUI()`: that is the board a production build
+renders. `devUI()` entries exist only under `boardsmith dev`.
+
+Under `boardsmith dev`, the dev host shows a **UI dropdown** to switch which UI
+renders the running game, without restarting. It lists every entry in the
+registry, in declared order, and then **Auto**, the built-in auto-UI, which
+`GameShell` adds itself in dev builds. Do not list it in `uis.ts`. A game that
+declares its own entry named `Auto` (an auto-UI game whose default IS the
+auto-UI) keeps that entry, and no second one is added.
+
+Everything dev-only is gated behind `import.meta.env.DEV`, so a production
+`boardsmith build` folds it away: neither `devUI()` boards nor the shell's Auto
+entry reach the bundle, JS or CSS (see SHIP-02 and `treeshake-bundle.test.ts`).
 
 ### DebugPanel
 
@@ -470,106 +465,14 @@ Development tool for inspecting game state, history, and debugging.
 </template>
 ```
 
-## Lobby Components
+## Game Setup
 
-BoardSmith provides a complete lobby system for configuring games before they start. The lobby dynamically renders controls based on game definition metadata.
+A game is configured before it starts by its host, not by `GameShell`: the
+`boardsmith dev` host's Table setup locally, and ShufflewickPub's lobby in
+production. Both read the game options, player options and presets the game
+declares, so a game declares them once and never draws a lobby of its own.
 
-### GameLobby
-
-The main lobby component that fetches game definition metadata and renders configuration UI.
-
-```vue
-<template>
-  <GameLobby
-    :game-type="gameType"
-    :player-count="playerCount"
-    @create="handleCreate"
-  />
-</template>
-
-<script setup lang="ts">
-import { GameLobby } from 'boardsmith/ui';
-
-const gameType = 'hex';
-const playerCount = 2;
-
-function handleCreate(config: { gameOptions: Record<string, unknown>; playerConfigs: PlayerConfig[] }) {
-  // Create game with the configured options
-}
-</script>
-```
-
-The lobby automatically:
-- Fetches game definition from `/games/definitions` endpoint
-- Renders game options (number inputs, selects, toggles)
-- Renders per-player configuration (name, bot toggle, color picker)
-- Shows preset cards for quick setup
-- Validates player count against game limits
-
-### GameOptionsForm
-
-Dynamic form that renders game-level options from metadata.
-
-```vue
-<template>
-  <GameOptionsForm
-    :options="gameDefinition.gameOptions"
-    v-model="gameOptions"
-  />
-</template>
-```
-
-Supports three option types:
-
-| Type | Control | Properties |
-|------|---------|------------|
-| `number` | Number input | `min`, `max`, `step`, `default` |
-| `select` | Dropdown | `choices` (array of `{ value, label }`) |
-| `boolean` | Toggle switch | `default` |
-
-### PlayerConfigList
-
-Per-player configuration with bot toggle and custom options.
-
-```vue
-<template>
-  <PlayerConfigList
-    :player-count="2"
-    :has-bot="true"
-    :player-options="gameDefinition.playerOptions"
-    v-model="playerConfigs"
-  />
-</template>
-```
-
-Features:
-- Player name input
-- bot toggle with level selector (when game has bot)
-- Dynamic rendering of per-player options (color picker, role select, etc.)
-- Shows taken options as disabled with visual indicator
-- Exclusive options render as radio buttons (exactly one player can be selected)
-
-### PresetsPanel
-
-Quick-start preset cards for common game configurations.
-
-```vue
-<template>
-  <PresetsPanel
-    :presets="gameDefinition.presets"
-    @select="applyPreset"
-  />
-</template>
-
-<script setup lang="ts">
-function applyPreset(preset: GamePreset) {
-  // Apply preset.options to gameOptions
-  // Apply preset.players to playerConfigs
-}
-</script>
-```
-
-### Player Colors
+## Player Colors
 
 Players automatically receive colors from the engine's color palette. Access them via the `color` property:
 
@@ -581,7 +484,7 @@ const myColor = player.color;  // '#e74c3c'
 const playerColor = gameView.players[playerSeat - 1].color;
 ```
 
-#### Custom Color Palette
+### Custom Color Palette
 
 To use a custom color palette, specify it in your game definition:
 
@@ -595,9 +498,9 @@ export const gameDefinition = {
 };
 ```
 
-#### Lobby Color Selection
+### Color Selection
 
-To enable players to choose colors in the lobby, define `colorPalette` in `boardsmith.json`:
+To let players choose colors when they set up a game, define `colorPalette` in `boardsmith.json`:
 
 ```json
 {
@@ -609,11 +512,6 @@ To enable players to choose colors in the lobby, define `colorPalette` in `board
 ```
 
 If `colorPalette` is omitted, the standard 8-color palette is used. Plain hex strings are also accepted (e.g., `["#ff0000", "#0000ff"]`).
-
-The color picker in PlayerConfigList:
-- Shows color swatches with labels
-- Disables already-selected colors with X overlay
-- Automatically applies first available color as default
 
 ## Helper Components
 
@@ -674,7 +572,7 @@ Overlay for card flight animations between positions. Teleports to body to rende
 
 ### GameOverlay
 
-Modal overlay that stays **constrained within the game content area**, keeping header and ActionPanel accessible. Unlike FlyingCardsOverlay, this does NOT teleport to body.
+Modal overlay that stays **constrained within the game content area**, keeping the players panel and ActionPanel accessible. Unlike FlyingCardsOverlay, this does NOT teleport to body.
 
 **How it works:** GameOverlay uses `position: fixed` but renders in-place (no Teleport). When inside GameShell's zoom-container (which has `contain: layout`), the fixed positioning is trapped within that container.
 
@@ -724,7 +622,7 @@ const showModal = ref(false);
 - `@click` - Fires when clicking the backdrop (use `@click.stop` on content to prevent)
 
 **Important:**
-- Must be rendered inside a component within GameShell's game-board slot
+- Must be rendered inside the board component GameShell mounts from `src/ui/uis.ts`
 - Use `@click.stop` on your modal content to prevent backdrop clicks from closing
 - Use `position: sticky` on content for tall game boards
 
@@ -1779,7 +1677,7 @@ See [Nomenclature](./nomenclature.md) for animation event terminology definition
 
 ## Action Controller API
 
-The `actionController` (type: `UseActionControllerReturn`) is the unified interface for executing and managing game actions. It's provided via the `#game-board` slot and handles all action execution, wizard mode navigation, and auto-fill logic.
+The `actionController` (type: `UseActionControllerReturn`) is the unified interface for executing and managing game actions. It is passed to the board component as a prop and handles all action execution, wizard mode navigation, and auto-fill logic.
 
 ### Controller Methods
 

@@ -103,13 +103,6 @@ const CONTROLS: Control[] = [
     backdrop: 'var(--bsg-surface)',
   },
   {
-    label: 'WaitingRoom join button',
-    file: resolvePath(__dir, 'components/WaitingRoom.vue'),
-    base: '.join-btn',
-    disabled: '.join-btn:disabled',
-    backdrop: 'var(--bsg-surface)',
-  },
-  {
     label: 'Debug rewind button',
     file: resolvePath(__dir, 'components/debug/HistoryTab.vue'),
     base: '.rewind-btn',

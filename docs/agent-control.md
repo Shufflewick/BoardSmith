@@ -464,11 +464,9 @@ sending a request whose answer would never come.
 
 `getState`/`getLobby`/`serverRequest` are promise-correlated by `requestId`
 with a fail-loud not-open guard and a timeout-reject fallback — there is no
-silent hang. `createDevHostClient` is a separate sibling export from
-`GameConnection` (different wire protocol, no shared class hierarchy) —
-don't mix the two.
+silent hang.
 
-`GameConnection` (and `createDevHostClient`) resolve their WebSocket
+`createDevHostClient` resolves its WebSocket
 constructor via `wsImplementation ?? globalThis.WebSocket`. Node **>=22.4**
 exposes `globalThis.WebSocket` natively and needs no override; on older Node
 versions, pass an explicit `wsImplementation` (e.g. the `ws` package) or

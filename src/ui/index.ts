@@ -3,12 +3,8 @@
 // Core components
 export { default as GameShell } from './components/GameShell.vue';
 export { default as DebugPanel } from './components/DebugPanel.vue';
-export { default as GameHeader } from './components/GameHeader.vue';
 export { default as GameHistory } from './components/GameHistory.vue';
-export { default as GameLobby } from './components/GameLobby.vue';
-export { default as HamburgerMenu } from './components/HamburgerMenu.vue';
 export { default as PlayersPanel } from './components/PlayersPanel.vue';
-export { default as WaitingRoom } from './components/WaitingRoom.vue';
 export { default as Toast } from './components/Toast.vue';
 
 // The one sanctioned path for game art: a missing or broken asset always shows

@@ -24,7 +24,6 @@ export interface DevOptionDef {
 }
 
 export interface DevHostConfig {
-  gameType: string;
   displayName: string;
   minPlayers: number;
   maxPlayers: number;

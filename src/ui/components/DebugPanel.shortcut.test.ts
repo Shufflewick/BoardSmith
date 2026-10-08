@@ -16,8 +16,6 @@ import DebugPanel from './DebugPanel.vue';
 const MIN_PROPS = {
   state: { phase: 'test', round: 1 },
   playerSeat: 1,
-  playerCount: 2,
-  gameId: 'test-game',
   expanded: false,
 };
 

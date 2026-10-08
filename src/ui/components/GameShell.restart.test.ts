@@ -1,75 +1,60 @@
 // @vitest-environment jsdom
 /**
- * GameShell — forward-exit routing (D11 / ENDGAME-02, RED #2)
+ * GameShell — forward-exit routing (D11 / ENDGAME-02), on the REAL shell.
  *
- * `handleMenuItemClick('new-game')` must, in platform mode, route through the
- * SAME restart path as Rematch (`handleRestartGame()` → `platformRequest(
- * 'debug:restart', {})`), NOT the inert `leaveGame()` — which in dev/platform
- * mode goes to a nonexistent lobby and never restarts (RESEARCH Crux 2).
+ * "New game" in the controls menu restarts through the SAME path as Rematch:
+ * a `debug:restart` request to the host, which owns the session.
  *
- * Mounting the full GameShell is impractical here (client/WS wiring — see
- * GameShell.game-over.test.ts's note on the same constraint). Following the
- * established harness convention (GameShell.test.ts, GameShell.tutorial.test.ts,
- * GameShell.ia.test.ts), this test mirrors the PRODUCTION
- * `handleRestartGame`/`handleMenuItemClick` wiring (GameShell.vue:1724-1745,
- * :1760-1770) VERBATIM, POST-FIX: `handleMenuItemClick('new-game')` now routes
- * through `handleRestartGame()` instead of the inert `leaveGame()`. If
- * production changes, this harness must be updated to match.
+ * The menu offers no "Leave game" (#515). Leaving used to drop the iframe onto
+ * a lobby screen that talked to a deleted HTTP server; the host page around
+ * the frame is where a player leaves a game.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
+import { nextTick } from 'vue';
+import ControlsMenu from './ControlsMenu.vue';
+import {
+  enterIframe,
+  leaveIframe,
+  mountPlatformShell,
+} from './GameShell.platform-mount.test-helper.js';
 
-function buildHarness(platformMode: boolean) {
-  const platformRequest = vi.fn(async (_op: string, _payload: Record<string, unknown>) => ({}));
-  const leaveGame = vi.fn();
-  const clientRestartGame = vi.fn(async () => {});
+afterEach(() => {
+  leaveIframe();
+  document.body.innerHTML = '';
+});
 
-  // ── Mirrors GameShell.vue handleRestartGame (:1724-1745) — unchanged by this plan ──
-  async function handleRestartGame() {
-    if (platformMode) {
-      void platformRequest('debug:restart', {});
-      return;
-    }
-    await clientRestartGame();
-  }
-
-  // ── Mirrors GameShell.vue handleMenuItemClick (:1760-1770) — POST-FIX ─────
-  function handleMenuItemClick(id: string) {
-    if (id === 'leave') {
-      leaveGame();
-    } else if (id === 'new-game') {
-      void handleRestartGame();
-    }
-  }
-
-  return { handleMenuItemClick, handleRestartGame, platformRequest, leaveGame, clientRestartGame };
+function requestsFor(posted: unknown[], op: string): unknown[] {
+  return posted.filter((m) => {
+    const message = m as { type?: unknown; op?: unknown };
+    return message.type === 'server_request' && message.op === op;
+  });
 }
 
-describe('GameShell — handleMenuItemClick("new-game") routing (D11)', () => {
-  it('platform mode: requests a restart via platformRequest("debug:restart"), NOT leaveGame()', () => {
-    const { handleMenuItemClick, platformRequest, leaveGame } = buildHarness(true);
+describe('GameShell — "New game" routing (D11)', () => {
+  it('asks the host to restart through debug:restart', async () => {
+    const posted = enterIframe();
+    const wrapper = mountPlatformShell();
+    await nextTick();
 
-    handleMenuItemClick('new-game');
+    wrapper.findComponent(ControlsMenu).vm.$emit('menu-item-click', 'new-game');
+    await nextTick();
 
-    expect(platformRequest).toHaveBeenCalledWith('debug:restart', {});
-    expect(leaveGame).not.toHaveBeenCalled();
+    expect(requestsFor(posted, 'debug:restart')).toHaveLength(1);
+    wrapper.unmount();
   });
+});
 
-  it('non-platform mode: requests a restart via the HTTP client, NOT leaveGame() (parity)', async () => {
-    const { handleMenuItemClick, clientRestartGame, leaveGame } = buildHarness(false);
+describe('the controls menu (#515)', () => {
+  it('offers no "Leave game" item', async () => {
+    enterIframe();
+    const wrapper = mountPlatformShell();
+    await nextTick();
 
-    handleMenuItemClick('new-game');
-    await Promise.resolve(); // flush the async handleRestartGame() microtask
+    await wrapper.find('button[aria-label="Game controls"]').trigger('click');
+    await nextTick();
 
-    expect(clientRestartGame).toHaveBeenCalledTimes(1);
-    expect(leaveGame).not.toHaveBeenCalled();
-  });
-
-  it("CHARACTERIZATION: 'leave' still calls leaveGame() (unchanged branch)", () => {
-    const { handleMenuItemClick, leaveGame, platformRequest } = buildHarness(true);
-
-    handleMenuItemClick('leave');
-
-    expect(leaveGame).toHaveBeenCalledTimes(1);
-    expect(platformRequest).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('New game');
+    expect(document.body.textContent).not.toContain('Leave game');
+    wrapper.unmount();
   });
 });

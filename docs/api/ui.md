@@ -24,14 +24,10 @@ import {
 
 ### Core Components
 
-- `GameShell` - Main game container with header, panels, and layout
+- `GameShell` - Main game container with panels and layout; runs inside a host's iframe
 - `DebugPanel` - Developer debug tools
-- `GameHeader` - Game title and player info
 - `GameHistory` - Action history display
-- `GameLobby` - Pre-game lobby for multiplayer
-- `HamburgerMenu` - Mobile menu
 - `PlayersPanel` - Player list and scores
-- `WaitingRoom` - Waiting for players screen
 - `Toast` - Toast notification component
 
 ### Helper Components
@@ -249,19 +245,29 @@ const { flyingElements } = useFlyingElements({
 
 ### Basic Game Shell
 
+```ts
+// src/ui/uis.ts: every board the game has; exactly one is defaultUI().
+import { defineGameUIs, defaultUI } from 'boardsmith/ui';
+import MyBoard from './components/MyBoard.vue';
+
+export default defineGameUIs({ MyBoard: defaultUI(MyBoard) });
+```
+
 ```vue
+<!-- src/ui/App.vue -->
 <script setup lang="ts">
 import { GameShell } from 'boardsmith/ui';
+import uis from './uis.js';
 </script>
 
 <template>
-  <GameShell game-type="my-game" display-name="My Game">
-    <template #game-board="{ gameView, actionController }">
-      <MyBoard :game-view="gameView" :action-controller="actionController" />
-    </template>
-  </GameShell>
+  <GameShell :uis="uis" />
 </template>
 ```
+
+`GameShell` mounts `MyBoard` and passes it the game state as props
+(`gameView`, `actionController`, `isMyTurn`, ...); see
+[UI Components](../ui-components.md#board-props).
 
 ### Drag and Drop
 

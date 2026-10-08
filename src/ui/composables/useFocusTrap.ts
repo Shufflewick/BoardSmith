@@ -2,7 +2,7 @@
  * useFocusTrap — A11Y-07 shared focus-trap composable
  *
  * Single source of truth for focus management in all three dialogs:
- *   HamburgerMenu drawer, ControlsMenu popover, GameOverCard overlay.
+ *   ControlsMenu popover, GameOverCard overlay.
  *
  * Capabilities:
  *   - open(): saves document.activeElement, then on nextTick focuses first
