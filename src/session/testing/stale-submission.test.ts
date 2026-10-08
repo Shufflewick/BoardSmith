@@ -182,7 +182,7 @@ describe('BSMITH-05: a submission composed against a closed boundary', () => {
     // resumeSimultaneousAction's per-seat strings are ever reached.
     expect(again.error).toBe("Not Player 1's turn");
     expect(again.errorCode).toBe('NOT_YOUR_TURN');
-    expect(again.error).not.toBe(STALE_MESSAGE);
+    expect(again.errorCode).not.toBe(ErrorCode.STALE_SUBMISSION);
   });
 
   it('case 6: the rule is not simultaneous-only — a sequential game refuses a previous step key and accepts the current one', async () => {
@@ -204,7 +204,7 @@ describe('BSMITH-05: a submission composed against a closed boundary', () => {
       type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: firstStepKey,
     }));
     expect(stale.success).toBe(false);
-    expect(stale.error).toBe(STALE_MESSAGE);
+    expect(stale.errorCode).toBe(ErrorCode.STALE_SUBMISSION);
     expect(stale).not.toHaveProperty('snapshot');
 
     const retry = succeeded(await run(def, caretaker.snapshot, {
