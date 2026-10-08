@@ -368,6 +368,8 @@ export class FlowEngine<G extends Game = Game> {
    * a commitment happen since I last checked".
    */
   irreversibleCommitCount = 0;
+  /** True only inside `restartWithoutOpening`'s run: `execute` nodes are passed over. */
+  private skipOpeningExecutes = false;
 
   constructor(game: G, definition: FlowDefinition<G>) {
     this.game = game;
@@ -380,18 +382,42 @@ export class FlowEngine<G extends Game = Game> {
   // ============================================================================
 
   /**
-   * Start the flow from the beginning
+   * Start the flow from the beginning: run the flow's `setup`, then every node
+   * from the root until the flow needs input or completes.
    */
   start(): FlowState {
-    // Run setup if defined
     const context = this.createContext();
     if (this.definition.setup) {
       this.definition.setup(context);
     }
+    this.resetToRoot(context.variables);
+    return this.run();
+  }
 
-    // Initialize stack with root node
+  /**
+   * Put a running flow back at its beginning without running any of its
+   * opening game code: the flow's `setup` is not called, and every `execute`
+   * node met before the flow next needs input is passed over. The flow's
+   * variables are kept as they are, because the setup and executes that set
+   * them already ran once in this game.
+   *
+   * Used by a tutorial start (`Game.restartFlowForTutorial`) to hand the turn
+   * back to the first seat the flow prompts.
+   */
+  restartWithoutOpening(): FlowState {
+    this.resetToRoot(this.variables);
+    this.skipOpeningExecutes = true;
+    try {
+      return this.run();
+    } finally {
+      this.skipOpeningExecutes = false;
+    }
+  }
+
+  /** Clear every position field and stand the flow at its root node. */
+  private resetToRoot(variables: Record<string, unknown>): void {
     this.stack = [{ node: this.definition.root, index: 0, completed: false }];
-    this.variables = { ...context.variables };
+    this.variables = { ...variables };
     this.currentPlayer = this.game.currentPlayer;
     this.awaitingInput = false;
     this.availableActions = [];
@@ -404,9 +430,6 @@ export class FlowEngine<G extends Game = Game> {
     this.actionError = undefined;
     this.actionPartiallyApplied = false;
     this.currentPhase = undefined;
-
-    // Execute until we need input or complete
-    return this.run();
   }
 
   /**
@@ -2264,6 +2287,10 @@ export class FlowEngine<G extends Game = Game> {
     config: ExecuteConfig<G>,
     context: FlowContext<G>
   ): FlowStepResult {
+    if (this.skipOpeningExecutes) {
+      frame.completed = true;
+      return { continue: true, awaitingInput: false };
+    }
     // Run the side effect function
     config.fn(context);
     // Update variables in engine from context
