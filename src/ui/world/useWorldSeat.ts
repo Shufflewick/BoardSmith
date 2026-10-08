@@ -156,6 +156,8 @@ export function useWorldSeat({ host, boardInteraction }: WorldSeatOptions): Worl
       myPlayer: play.myPlayer,
       playerSeat,
       isMyTurn: play.mayAct,
+      // A world has no history to browse.
+      isViewingHistory: computed(() => false),
       availableActions: play.availableActions,
       actionController: controller,
       platformRequest: async () => ({}),

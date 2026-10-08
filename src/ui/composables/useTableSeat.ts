@@ -179,6 +179,13 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
     animationEvents,
   });
 
+  // What the context publishes is gated on history exactly as the board's props
+  // are, so a board and a component under it agree that a seat browsing history
+  // cannot act. The wiring above takes the live values and `isViewingHistory`
+  // itself, which is how it refuses commits during a browse.
+  const shownIsMyTurn = computed(() => isMyTurn.value && !isViewingHistory.value);
+  const shownAvailableActions = computed(() => (isViewingHistory.value ? [] : availableActions.value));
+
   const provisions: Provision[] = [
     [BOARD_INTERACTION_KEY, boardInteraction],
     [ANIMATION_EVENTS_KEY, animationEvents],
@@ -190,9 +197,10 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
       players,
       myPlayer,
       playerSeat,
-      isMyTurn,
+      isMyTurn: shownIsMyTurn,
+      isViewingHistory,
       dueSeats,
-      availableActions,
+      availableActions: shownAvailableActions,
       actionController: wiring.controller,
       timeTravelDiff,
       platformRequest,

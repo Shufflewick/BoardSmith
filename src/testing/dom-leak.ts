@@ -322,8 +322,8 @@ function keyTheShellLacks(kind: ShellKind, caller: string, key: string): string 
   const where = kind === 'world' ? 'in a real world' : 'at a real table';
   const instead =
     kind === 'world'
-      ? "A world's board reads the world with useWorld() and one field of the play context with " +
-        'inject(GAME_CONTEXT_KEYS.<field>); useGameContext() reads a table\'s whole context and throws in a world.'
+      ? "A world's board reads the world with useWorld() and the play context with usePlayContext(); " +
+        'useGameContext() reads a table\'s whole context and throws in a world.'
       : "If this board belongs to a world, stub a world's shell with worldShellContext (or renderAsSeat with the TestWorld).";
   return (
     `${caller} was asked to provide ${key}, which ${shell} never provides, so a board that reads it would ` +

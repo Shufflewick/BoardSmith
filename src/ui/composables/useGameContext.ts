@@ -8,10 +8,13 @@
  * `inject('gameview')` got `undefined` with no error and no type help. That is
  * the opposite of making invalid states unrepresentable.
  *
- * Two ways in, and both are typed:
+ * Three ways in, and all are typed:
  *
- * - `useGameContext()` for the whole bundle. It THROWS outside a `GameShell`,
- *   with a message saying so, rather than handing back a bag of `undefined`s.
+ * - `usePlayContext()` for the half both shells publish. A component that is
+ *   shared between a table and a world reads this; it works under either.
+ * - `useGameContext()` for a table's whole bundle. It THROWS outside a
+ *   `GameShell`, with a message saying so, rather than handing back a bag of
+ *   `undefined`s.
  * - the individual `InjectionKey`s, for a component that wants one value and
  *   wants to decide for itself what a missing one means.
  *
@@ -65,9 +68,19 @@ export interface PlayContext {
   myPlayer: ComputedRef<GameContextPlayer | undefined>;
   /** The viewer's seat; -1 before a seat is assigned (spectator). */
   playerSeat: Ref<number>;
-  /** Whether the viewer may act right now. */
+  /**
+   * Whether the viewer may act right now. False while {@link isViewingHistory}
+   * is true, exactly as the board's `isMyTurn` prop is, so a component under the
+   * board never offers a control the action controller would refuse.
+   */
   isMyTurn: Ref<boolean> | ComputedRef<boolean>;
-  /** Action names available to the viewer this step. */
+  /**
+   * True while the debug panel shows a historical position: `gameView` is that
+   * position, and nothing commits to the live game. A world has no history, so
+   * it is always false there.
+   */
+  isViewingHistory: Ref<boolean> | ComputedRef<boolean>;
+  /** Action names available to the viewer this step. Empty while {@link isViewingHistory} is true. */
   availableActions: ComputedRef<string[]>;
   /** The action controller — the one write path for taking an action. */
   actionController: UseActionControllerReturn;
@@ -96,8 +109,10 @@ export interface GameContext extends PlayContext {
    * waiting on (a seat leaves the list when it commits). Empty when nobody is
    * due. The shell's players panel, its Action Panel and its screen-reader
    * announcements read this same list, so a custom UI that shows who is acting
-   * from it agrees with them. `isMyTurn` is `dueSeats.includes(playerSeat)`.
-   * A world has no turn, so this is a table-only field.
+   * from it agrees with them. It stays LIVE during time travel, as the players
+   * panel does: history changes the board, not whose move it is. So outside
+   * history `isMyTurn` is `dueSeats.includes(playerSeat)`, and during it
+   * `isMyTurn` is false. A world has no turn, so this is a table-only field.
    */
   dueSeats: ComputedRef<number[]>;
   /** What a time-travel step changed, or null when not time travelling. */
@@ -118,7 +133,7 @@ export interface GameContext extends PlayContext {
  * @internal
  */
 export const PLAY_CONTEXT_KEY_NAMES = [
-  'gameView', 'players', 'myPlayer', 'playerSeat', 'isMyTurn', 'availableActions',
+  'gameView', 'players', 'myPlayer', 'playerSeat', 'isMyTurn', 'isViewingHistory', 'availableActions',
   'actionController', 'platformRequest', 'presentation', 'debugHighlight',
 ] as const satisfies readonly (keyof PlayContext)[];
 
@@ -131,6 +146,7 @@ export const GAME_CONTEXT_KEYS: { [K in keyof GameContext]: InjectionKey<GameCon
   myPlayer: Symbol('bs:myPlayer'),
   playerSeat: Symbol('bs:playerSeat'),
   isMyTurn: Symbol('bs:isMyTurn'),
+  isViewingHistory: Symbol('bs:isViewingHistory'),
   availableActions: Symbol('bs:availableActions'),
   actionController: Symbol('bs:actionController'),
   timeTravelDiff: Symbol('bs:timeTravelDiff'),
@@ -160,7 +176,7 @@ export function gameContextProvisions(context: GameContext): Array<readonly [Inj
  * The table-only keys are deliberately left UNPROVIDED rather than filled with
  * nulls: a component that reads `gameState` inside a world is asking a question
  * a world cannot answer, and `useGameContext()`'s error naming the missing
- * fields is a better answer than a `null` that reads as "the game has not
+ * fields and pointing at `usePlayContext()` is a better answer than a `null` that reads as "the game has not
  * started yet".
  *
  * @internal
@@ -170,6 +186,29 @@ export function playContextProvisions(context: PlayContext): Array<readonly [Inj
     (key) => [GAME_CONTEXT_KEYS[key] as InjectionKey<unknown>, context[key]] as const,
   );
 }
+
+/**
+ * Inject `keys` and say which no shell provided. The one read both
+ * `usePlayContext()` and `useGameContext()` make, so they cannot disagree about
+ * what "provided" means.
+ */
+function injectContext<K extends keyof GameContext>(keys: readonly K[]): { context: Pick<GameContext, K>; missing: K[] } {
+  const context = {} as Pick<GameContext, K>;
+  const missing: K[] = [];
+  for (const key of keys) {
+    const value = inject(GAME_CONTEXT_KEYS[key] as InjectionKey<unknown>, undefined);
+    if (value === undefined) missing.push(key);
+    (context as Record<string, unknown>)[key] = value;
+  }
+  return { context, missing };
+}
+
+const ALL_CONTEXT_KEY_NAMES = Object.keys(GAME_CONTEXT_KEYS) as Array<keyof GameContext>;
+
+/** What a test does to give a component the context it reads. */
+const TEST_CONTEXT_ADVICE =
+  `  In a test, mount the component with renderAsSeat, or pass tableShellContext(...).provide ` +
+  `(both from boardsmith/testing) as the mount's global.provide.`;
 
 /**
  * Why `useGameContext()` cannot answer, given the fields no shell provided. A
@@ -183,24 +222,52 @@ function missingContextMessage(missing: readonly string[]): string {
     return (
       `useGameContext() reads a table's whole game context, and this component is inside a world's shell, ` +
       `which never provides a table's own fields (missing: ${missing.join(', ')}).\n` +
-      `  In a world, read one field with inject(GAME_CONTEXT_KEYS.<field>) and the world itself with useWorld().`
+      `  A component that renders in a world reads the shared half with usePlayContext(), ` +
+      `and the world itself with useWorld().`
     );
   }
   return (
     `useGameContext() found no GameShell above this component (missing: ${missing.join(', ')}).\n` +
     `  The game context is published by GameShell, so a component that reads it must be ` +
     `rendered inside one: as a board component, a custom UI, or an overlay.\n` +
-    `  In a test, mount the component with renderAsSeat, or pass tableShellContext(...).provide ` +
-    `(both from boardsmith/testing) as the mount's global.provide.`
+    TEST_CONTEXT_ADVICE
   );
 }
 
 /**
- * Read the whole game context inside a `GameShell`.
+ * Read the half of the context both shells publish: a table's `GameShell` and
+ * a world's shell alike.
+ *
+ * For a component that renders in both, such as a panel a game shares between
+ * its table and its world, or one that only needs the seat and the action
+ * controller. Throws when neither shell is above this component.
+ *
+ * @example
+ * ```typescript
+ * const { playerSeat, isMyTurn, actionController } = usePlayContext();
+ * ```
+ */
+export function usePlayContext(): PlayContext {
+  const { context, missing } = injectContext(PLAY_CONTEXT_KEY_NAMES);
+  if (missing.length > 0) {
+    throw new Error(
+      `usePlayContext() found no shell above this component (missing: ${missing.join(', ')}).\n` +
+      `  The play context is published by a table's GameShell and by a world's shell, so a component ` +
+      `that reads it must be rendered inside one.\n` +
+      TEST_CONTEXT_ADVICE,
+    );
+  }
+  return context;
+}
+
+/**
+ * Read a table's whole game context inside a `GameShell`.
  *
  * Throws when there is no shell above this component, which is the only honest
  * answer: every field would be `undefined`, and the first `.value` read would
- * fail somewhere far from the cause.
+ * fail somewhere far from the cause. Throws inside a world's shell too, which
+ * has no table fields; a component that renders there reads
+ * {@link usePlayContext} instead.
  *
  * @example
  * ```typescript
@@ -208,31 +275,23 @@ function missingContextMessage(missing: readonly string[]): string {
  * ```
  */
 export function useGameContext(): GameContext {
-  const context = {} as GameContext;
-  const missing: string[] = [];
-
-  for (const key of Object.keys(GAME_CONTEXT_KEYS) as Array<keyof GameContext>) {
-    const value = inject(GAME_CONTEXT_KEYS[key] as InjectionKey<unknown>, undefined);
-    if (value === undefined) missing.push(key);
-    (context as unknown as Record<string, unknown>)[key] = value;
-  }
-
+  const { context, missing } = injectContext(ALL_CONTEXT_KEY_NAMES);
   if (missing.length > 0) throw new Error(missingContextMessage(missing));
-
   return context;
 }
 
 /**
- * Read the context if there is one, or `undefined` outside a `GameShell`.
+ * Read a table's whole context if there is one, or `undefined` anywhere else:
+ * outside any shell, and inside a world's shell, which has no table fields.
+ * It never throws.
  *
- * For a component that legitimately renders both inside and outside the shell.
+ * For a component that legitimately renders both inside and outside a table.
  * Prefer {@link useGameContext} otherwise — a component that needs the context
  * should say so by failing.
  */
 export function tryUseGameContext(): GameContext | undefined {
-  const actionController = inject(GAME_CONTEXT_KEYS.actionController, undefined);
-  if (actionController === undefined) return undefined;
-  return useGameContext();
+  const { context, missing } = injectContext(ALL_CONTEXT_KEY_NAMES);
+  return missing.length > 0 ? undefined : context;
 }
 
 /**
