@@ -180,7 +180,7 @@ describe('#19: enumerating another seat\'s moves inside a redacted search sandbo
       { objectives: () => ({ nothing: { weight: 1, checker: () => 0 } }) },
     );
 
-    const moves = (bot as any).enumerateMovesInternal(game, game.getFlowState()!, true) as Array<{ action: string }>;
+    const moves = (bot as any).movesFor(game, game.getFlowState()!, 1, { sample: false }) as Array<{ action: string }>;
 
     expect(moves.map((m) => m.action)).not.toContain('camp');
     expect(moves.map((m) => m.action)).toContain('travel');

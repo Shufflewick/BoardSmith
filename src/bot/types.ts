@@ -1,4 +1,4 @@
-import type { Game, FlowState, ElementRef, GamePhase } from '../engine/index.js';
+import type { Game, FlowState, ElementRef } from '../engine/index.js';
 
 /**
  * Sample one concrete world out of a seat's information set (#73).
@@ -123,21 +123,6 @@ export interface BotMoveStats {
 export interface MCTSNode {
   /** Flow state at this node (small, kept as snapshot) */
   flowState: FlowState;
-  /**
-   * `searchGame.phase` captured at this node's creation (v4.8-MCTS-UNDO).
-   * `game.finish()` / `continueFlow`'s terminal-completion path set `phase`
-   * as a plain property mutation, OUTSIDE the command system that
-   * `undoCommands` reverts -- so it is captured per-node here and resynced
-   * to the root node's value after every `backpropagateWithUndo` call
-   * (see `restoreNodeBookkeeping`), instead of leaking forward across
-   * search iterations.
-   */
-  phase: GamePhase;
-  /**
-   * `searchGame.settings.winners` captured at this node's creation. Same
-   * rationale as `phase` -- `game.finish()` sets it as a plain property.
-   */
-  winners: number[] | undefined;
   /** Parent node (null for root) */
   parent: MCTSNode | null;
   /** Move that led to this node from parent */
@@ -160,7 +145,11 @@ export interface MCTSNode {
   visits: number;
   /** Cumulative value (wins) from this node */
   value: number;
-  /** Which player is to move at this node */
+  /**
+   * The seat that moves at this node: the seat its moves are listed for and
+   * made as (#522). The bot's own seat at the root; below it, the first due
+   * seat with a move to make.
+   */
   currentPlayer: number;
   /** Leaves needed to prove this subtree is a win (lower = easier to prove win) */
   proofNumber: number;

@@ -51,9 +51,9 @@ This document provides an overview of the BoardSmith package architecture and ho
 │  ┌────────────┐          │  Game session management                         │
 │  │ bot-trainer│          │  - GameSession (create, performAction)           │
 │  └────────────┘          │  - Storage adapters                              │
-│  - Self-play training    │  - Broadcast adapters                            │
-│  - Feature generation    │  - Bot controller                                 │
-│  - Code generation       │  - Lobby system                                  │
+│  - Weight evolution of   │  - Broadcast adapters                            │
+│    the game's objectives │  - Bot controller                                 │
+│  - Benchmarking          │  - Lobby system                                  │
 │                          │                                                  │
 │                          ├──────────────────┐                              │
 │                          ▼                  ▼                              │
@@ -253,7 +253,7 @@ the deployment platform that hosts the session (see Runtime Isolation below).
 | `client` | Dev-host driver, audio, state types | `createDevHostClient`, `audioService`, `GameState` |
 | `ui` | Vue components | `GameShell`, composables |
 | `bot` | MCTS bot | `createBot`, `MCTSBot` |
-| `bot-trainer` | Bot training | `introspectGame`, `generateBotCode`, `WeightEvolver` |
+| `bot-trainer` | Bot weight evolution | `WeightEvolver`, `readObjectiveWeights`, `updateBotWeights` |
 | `cli` | Dev tools | Commands (init, dev, build, etc.) |
 | `testing` | Test utilities | `createTestGame`, assertions |
 | `eslint-plugin` | Linting rules | Sandbox security rules |

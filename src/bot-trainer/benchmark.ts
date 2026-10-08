@@ -1,9 +1,8 @@
 import { dueSeats, type Game } from '../engine/index.js';
 import { GameRunner, type GameRunnerOptions } from '../runtime/index.js';
-import { createBot, type BotStrategy } from '../bot/index.js';
-import { SeededRandom } from '../utils/random.js';
+import { createBot, type BotStrategy, type Objective } from '../bot/index.js';
 import type { GameClass } from '../engine/index.js';
-import type { LearnedObjective, CandidateFeature } from './types.js';
+import type { ObjectiveWeight } from './types.js';
 
 /**
  * Benchmark configuration
@@ -19,8 +18,6 @@ export interface BenchmarkConfig {
   seed?: string;
   /** MCTS iterations for the trained bot (default 100 for quality evaluation) */
   mctsIterations?: number;
-  /** Candidate features for evaluating objectives (required for objectives to work) */
-  features?: CandidateFeature[];
   /**
    * Return a result even when some games did not finish, instead of throwing.
    *
@@ -78,21 +75,30 @@ export interface BenchmarkResult {
 }
 
 /**
- * Benchmark a trained bot against a random baseline.
+ * Benchmark the game's own bot, with `weights` in place of its objectives'
+ * weights, against a near-random baseline.
  *
- * Plays games where trained bot faces random player in both positions
- * to eliminate first-player advantage bias.
+ * Plays games where the trained bot faces the baseline in both positions
+ * to eliminate first-player advantage bias. The trained bot is `bot`, the
+ * strategy the game's `gameDefinition.bot` declares, so what is scored is the
+ * game's own objective checkers (#523); only their weights change.
+ *
+ * Throws before any game is played when a weight names an objective the game
+ * does not define (see {@link weightedObjectives}).
  *
  * @param GameClass - The game class constructor
  * @param gameType - The game type identifier
- * @param objectives - Learned objectives from training
+ * @param bot - The game's bot strategy (`gameDefinition.bot`), or undefined
+ *   for a game without one, which can only be benchmarked with no weights
+ * @param weights - The weight to give each of the game's objectives, by id
  * @param config - Benchmark configuration
  * @returns Benchmark results with win rate statistics
  */
 export async function benchmarkBot<G extends Game>(
   GameClass: GameClass<G>,
   gameType: string,
-  objectives: LearnedObjective[],
+  bot: BotStrategy | undefined,
+  weights: ObjectiveWeight[],
   config: BenchmarkConfig = {}
 ): Promise<BenchmarkResult> {
   const gameCount = config.gameCount ?? 100;
@@ -100,7 +106,7 @@ export async function benchmarkBot<G extends Game>(
   const maxActions = config.maxActions ?? 300;
   const seed = config.seed ?? 'benchmark';
   const mctsIterations = config.mctsIterations ?? 100;
-  const features = config.features ?? [];
+  const trainedBot = weightedBot(GameClass, gameType, bot, weights);
 
   // Split games evenly between the two seats so first-player advantage is not
   // scored as skill; an odd count gives the extra game to seat 0.
@@ -121,8 +127,7 @@ export async function benchmarkBot<G extends Game>(
   for (const { trainedPlayerIndex, seed: gameSeed } of schedule) {
     const { outcome, reason } = await runBenchmarkGame(GameClass, gameType, {
       trainedPlayerIndex,
-      objectives,
-      features,
+      trainedBot,
       mctsIterations,
       timeout,
       maxActions,
@@ -180,8 +185,7 @@ export async function benchmarkBot<G extends Game>(
 
 interface BenchmarkGameOptions {
   trainedPlayerIndex: number;
-  objectives: LearnedObjective[];
-  features: CandidateFeature[];
+  trainedBot: BotStrategy | undefined;
   mctsIterations: number;
   timeout: number;
   maxActions: number;
@@ -205,7 +209,7 @@ async function runBenchmarkGame<G extends Game>(
   gameType: string,
   options: BenchmarkGameOptions
 ): Promise<BenchmarkGameResult> {
-  const { trainedPlayerIndex, objectives, features, mctsIterations, timeout, maxActions, seed } = options;
+  const { trainedPlayerIndex, trainedBot, mctsIterations, timeout, maxActions, seed } = options;
   const randomPlayerIndex = trainedPlayerIndex === 0 ? 1 : 0;
   const startTime = Date.now();
 
@@ -223,9 +227,6 @@ async function runBenchmarkGame<G extends Game>(
     };
     const runner = new GameRunner(runnerOptions);
     let flowState = runner.start();
-
-    // Create objectives function for MCTS
-    const botObjectives = createObjectivesFunction(objectives, features);
 
     let actionCount = 0;
 
@@ -256,7 +257,7 @@ async function runBenchmarkGame<G extends Game>(
         currentPlayer,
         runner.actionHistory,
         isTrainedSeat ? mctsIterations : 1,
-        isTrainedSeat && objectives.length > 0 ? { objectives: botObjectives } : undefined
+        isTrainedSeat ? trainedBot : undefined
       );
 
       let action: string;
@@ -327,31 +328,64 @@ async function runBenchmarkGame<G extends Game>(
 }
 
 /**
- * Create an objectives function from learned objectives
+ * The game's own `bot`, with its objectives reweighted by `weights`. Checks
+ * the weights against the objectives the game returns at its starting
+ * position, so a weight for an objective the game does not define fails
+ * before a game is played. The evolver calls it for that check alone, before
+ * it hands any work to a benchmark worker.
  */
-function createObjectivesFunction(
-  learnedObjectives: LearnedObjective[],
-  features: CandidateFeature[]
-): BotStrategy['objectives'] {
-  // Build feature lookup map
-  const featureMap = new Map(features.map(f => [f.id, f]));
+export function weightedBot<G extends Game>(
+  GameClass: GameClass<G>,
+  gameType: string,
+  bot: BotStrategy | undefined,
+  weights: ObjectiveWeight[],
+): BotStrategy | undefined {
+  if (weights.length === 0) return bot;
+  if (!bot?.objectives) {
+    throw new Error(
+      `There are weights for the objectives ${quoteIds(weights.map((w) => w.id))}, but this game's ` +
+        'gameDefinition has no bot.objectives to weigh. Export the objectives function from bot.ts and ' +
+        'set it as gameDefinition.bot.objectives, the way the game\'s bot uses it in play.',
+    );
+  }
+  const objectives = weightedObjectives(bot.objectives, weights);
+  const runner = new GameRunner({ GameClass, gameType, gameOptions: { playerCount: 2, seed: 'objective-check' } });
+  runner.start();
+  objectives(runner.game, 1);
+  return { ...bot, objectives };
+}
 
+/**
+ * The game's objectives with each one's weight replaced by the weight
+ * `weights` gives its id. An objective with no weight keeps the game's own.
+ *
+ * Throws, naming them, when `weights` names an objective the game's function
+ * did not return: a weight for an objective that does not exist would be
+ * tuned against nothing (#523).
+ */
+export function weightedObjectives(
+  gameObjectives: NonNullable<BotStrategy['objectives']>,
+  weights: ObjectiveWeight[],
+): NonNullable<BotStrategy['objectives']> {
+  const weightById = new Map(weights.map((w) => [w.id, w.weight]));
   return (game: Game, playerIndex: number) => {
-    const objectives: Record<string, { checker: () => number; weight: number }> = {};
-
-    for (const obj of learnedObjectives) {
-      const feature = featureMap.get(obj.featureId);
-      if (!feature) continue;
-
-      objectives[obj.featureId] = {
-        checker: () => {
-          // Evaluate the feature and convert boolean to number (0 or 1)
-          return feature.evaluate(game, playerIndex) ? 1 : 0;
-        },
-        weight: obj.weight,
-      };
+    const objectives = gameObjectives(game, playerIndex);
+    const unknown = [...weightById.keys()].filter((id) => !(id in objectives));
+    if (unknown.length > 0) {
+      throw new Error(
+        `bot.ts has weights for ${quoteIds(unknown)}, which the game's objectives function does not ` +
+          `return (it returns ${quoteIds(Object.keys(objectives))}). Rename the weight to the id the ` +
+          'objectives function uses, or add that objective to it.',
+      );
     }
-
-    return objectives;
+    const weighted: Record<string, Objective> = {};
+    for (const [id, objective] of Object.entries(objectives)) {
+      weighted[id] = { ...objective, weight: weightById.get(id) ?? objective.weight };
+    }
+    return weighted;
   };
+}
+
+function quoteIds(ids: string[]): string {
+  return ids.length === 0 ? 'none' : ids.map((id) => `'${id}'`).join(', ');
 }

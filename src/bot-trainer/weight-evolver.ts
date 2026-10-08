@@ -4,19 +4,12 @@
  */
 import type { Game } from '../engine/index.js';
 import type { GameClass } from '../engine/index.js';
-import type {
-  GameStructure,
-  LearnedObjective,
-  TrainingProgress,
-} from './types.js';
-import { introspectGame, createIntrospectionGame } from './introspector.js';
-import { serializeGameStructure } from './simulator.js';
+import type { BotStrategy } from '../bot/index.js';
+import type { ObjectiveWeight, TrainingProgress } from './types.js';
+import { weightedBot } from './benchmark.js';
 import { runParallelBenchmarks } from './parallel-benchmark.js';
-import {
-  createSeededRandom,
-  generateOffspring,
-  selectBest,
-} from './evolution.js';
+import { createSeededRandom } from '../utils/random.js';
+import { generateOffspring, selectBest } from './evolution.js';
 
 /**
  * Configuration for weight evolution.
@@ -51,7 +44,7 @@ export interface WeightEvolverConfig {
  */
 export interface WeightEvolutionResult {
   /** Optimized objectives with new weights */
-  objectives: LearnedObjective[];
+  objectives: ObjectiveWeight[];
   /** Best fitness achieved (win rate 0-1) */
   bestFitness: number;
   /** Initial fitness before evolution (win rate 0-1) */
@@ -77,8 +70,8 @@ export class WeightEvolver<G extends Game = Game> {
   private GameClass: GameClass<G>;
   private gameType: string;
   private gameModulePath: string;
+  private bot: BotStrategy;
   private config: WeightEvolverConfig;
-  private structure: GameStructure | null = null;
 
   /**
    * Create a new WeightEvolver.
@@ -86,17 +79,20 @@ export class WeightEvolver<G extends Game = Game> {
    * @param GameClass - The game class constructor
    * @param gameType - The game type identifier
    * @param gameModulePath - Absolute path to the compiled game module (.js file)
+   * @param bot - The game's bot strategy, `gameDefinition.bot` from that module
    * @param config - Evolution configuration
    */
   constructor(
     GameClass: GameClass<G>,
     gameType: string,
     gameModulePath: string,
+    bot: BotStrategy,
     config: WeightEvolverConfig = {}
   ) {
     this.GameClass = GameClass;
     this.gameType = gameType;
     this.gameModulePath = gameModulePath;
+    this.bot = bot;
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
 
@@ -106,23 +102,15 @@ export class WeightEvolver<G extends Game = Game> {
    * @param objectives - Existing objectives to evolve weights for
    * @returns Evolution result with optimized objectives and fitness
    */
-  async evolve(objectives: LearnedObjective[]): Promise<WeightEvolutionResult> {
+  async evolve(objectives: ObjectiveWeight[]): Promise<WeightEvolutionResult> {
     if (objectives.length === 0) {
       throw new Error('No objectives provided for evolution');
     }
 
-    // Discover structure for benchmarking
-    this.reportProgress({
-      iteration: 0,
-      totalIterations: this.config.evolutionGenerations ?? 5,
-      gamesCompleted: 0,
-      totalGames: 0,
-      bestWinRate: 0,
-      featuresSelected: objectives.length,
-      message: 'Analyzing game structure...',
-    });
-
-    this.structure = this.discoverStructure();
+    // Every weight must name one of the game's objectives. Checked here, in
+    // this process, because a worker that refuses a candidate scores it 0
+    // and evolution would carry on tuning weights that do nothing.
+    weightedBot(this.GameClass, this.gameType, this.bot, objectives);
 
     // Benchmark initial objectives to get baseline
     this.reportProgress({
@@ -131,7 +119,7 @@ export class WeightEvolver<G extends Game = Game> {
       gamesCompleted: 0,
       totalGames: this.config.evolutionBenchmarkGames ?? 50,
       bestWinRate: 0,
-      featuresSelected: objectives.length,
+      objectiveCount: objectives.length,
       message: 'Benchmarking initial objectives...',
     });
 
@@ -139,7 +127,6 @@ export class WeightEvolver<G extends Game = Game> {
       this.gameModulePath,
       this.gameType,
       [objectives],
-      serializeGameStructure(this.structure),
       {
         gameCount: this.config.evolutionBenchmarkGames ?? 50,
         mctsIterations: this.config.benchmarkMCTSIterations ?? 100,
@@ -166,9 +153,9 @@ export class WeightEvolver<G extends Game = Game> {
    * Run evolutionary weight optimization.
    */
   private async runEvolution(
-    initialObjectives: LearnedObjective[],
+    initialObjectives: ObjectiveWeight[],
     initialFitness: number
-  ): Promise<{ objectives: LearnedObjective[]; bestFitness: number }> {
+  ): Promise<{ objectives: ObjectiveWeight[]; bestFitness: number }> {
     const generations = this.config.evolutionGenerations ?? 5;
     const mu = this.config.evolutionMu ?? 5;
     const lambda = this.config.evolutionLambda ?? 20;
@@ -177,7 +164,7 @@ export class WeightEvolver<G extends Game = Game> {
 
     // Initialize parent population with slight variations
     const rng = createSeededRandom(`${this.config.seed ?? 'evolution'}-init`);
-    let parents: LearnedObjective[][] = [initialObjectives];
+    let parents: ObjectiveWeight[][] = [initialObjectives];
 
     // Fill initial population with mutations
     const initialOffspring = generateOffspring([initialObjectives], mu - 1, sigma * 0.5, rng);
@@ -194,7 +181,7 @@ export class WeightEvolver<G extends Game = Game> {
         gamesCompleted: 0,
         totalGames: lambda,
         bestWinRate: bestFitness,
-        featuresSelected: bestObjectives.length,
+        objectiveCount: bestObjectives.length,
         message: `Evolution ${gen}/${generations}: Generating ${lambda} offspring...`,
       });
 
@@ -211,7 +198,7 @@ export class WeightEvolver<G extends Game = Game> {
         gamesCompleted: 0,
         totalGames: population.length,
         bestWinRate: bestFitness,
-        featuresSelected: bestObjectives.length,
+        objectiveCount: bestObjectives.length,
         message: `Evolution ${gen}/${generations}: Evaluating ${population.length} candidates...`,
       });
 
@@ -220,7 +207,6 @@ export class WeightEvolver<G extends Game = Game> {
         this.gameModulePath,
         this.gameType,
         population,
-        serializeGameStructure(this.structure!),
         {
           gameCount: benchmarkGames,
           mctsIterations: this.config.benchmarkMCTSIterations ?? 100,
@@ -236,7 +222,7 @@ export class WeightEvolver<G extends Game = Game> {
             gamesCompleted: completed,
             totalGames: total,
             bestWinRate: bestFitness,
-            featuresSelected: bestObjectives.length,
+            objectiveCount: bestObjectives.length,
             message: `Evolution ${gen}/${generations}: Evaluated ${completed}/${total}`,
           });
         }
@@ -262,20 +248,12 @@ export class WeightEvolver<G extends Game = Game> {
         gamesCompleted: population.length,
         totalGames: population.length,
         bestWinRate: bestFitness,
-        featuresSelected: bestObjectives.length,
+        objectiveCount: bestObjectives.length,
         message: `Evolution ${gen}/${generations}: Best fitness ${(bestFitness * 100).toFixed(1)}%`,
       });
     }
 
     return { objectives: bestObjectives, bestFitness };
-  }
-
-  /**
-   * Discover game structure.
-   */
-  private discoverStructure(): GameStructure {
-    const game = createIntrospectionGame(this.GameClass);
-    return introspectGame(game);
   }
 
   /**

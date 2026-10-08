@@ -57,45 +57,23 @@ vi.mock('os', async (importOriginal) => {
 
 const { runParallelBenchmarks } = await import('./parallel-benchmark.js');
 
-import type { LearnedObjective, SerializableGameStructure } from './types.js';
+import type { ObjectiveWeight } from './types.js';
 
-const objectives = (weight: number): LearnedObjective[] => [{
-  featureId: `f${weight}`,
-  description: 'f',
-  weight,
-  checkerCode: '(g, p) => true',
-  correlation: 0.5,
-}];
-
-const structure: SerializableGameStructure = {
-  elementTypes: {},
-  playerInfo: { numericProperties: [], booleanProperties: [], stringProperties: [] },
-  spatialInfo: { hasBoard: false, isHex: false },
-  playerCount: 2,
-  winConditionInfo: {
-    gameType: 'unknown',
-    confidence: 0,
-    indicators: [],
-    scoreBased: false,
-    eliminationBased: false,
-    connectionBased: false,
-    collectionBased: false,
-  },
-};
+const objectives = (weight: number): ObjectiveWeight[] => [{ id: `f${weight}`, weight }];
 
 const config = { gameCount: 10, mctsIterations: 5, timeout: 1000, maxActions: 100, seed: 's' };
 
 const run = (
-  population: LearnedObjective[][],
+  population: ObjectiveWeight[][],
   options?: { workerCount?: number },
   onProgress?: (completed: number, total: number) => void,
-) => runParallelBenchmarks('/game.js', 'test', population, structure, config, options, onProgress);
+) => runParallelBenchmarks('/game.js', 'test', population, config, options, onProgress);
 
 beforeEach(() => {
   createdWorkers = [];
   terminated = 0;
   // Fitness mirrors the individual's weight so results can be matched to inputs.
-  behaviour = (request) => ({ winRate: request.objectives[0].weight / 100 });
+  behaviour = (request) => ({ winRate: request.weights[0].weight / 100 });
 });
 
 afterEach(() => {
@@ -136,13 +114,13 @@ describe('runParallelBenchmarks', () => {
     expect(sentIndexes).toEqual([0, 1, 2]);
   });
 
-  it('passes the game module, type, config and structure through to the worker', async () => {
+  it('passes the game module, type, weights and config through to the worker', async () => {
     await run([objectives(10)]);
     expect(createdWorkers[0].received[0]).toMatchObject({
       gameModulePath: '/game.js',
       gameType: 'test',
+      weights: objectives(10),
       config,
-      structure,
     });
   });
 
