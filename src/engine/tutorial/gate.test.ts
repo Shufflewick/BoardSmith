@@ -20,7 +20,6 @@ import {
   type FlowContext,
 } from '../index.js';
 import { GameRunner } from '../../runtime/runner.js';
-import { TutorialController } from '../../session/tutorial-controller.js';
 import { getActionLevelDisabledReasons, getGateReasonForValue, getActiveStep } from './gate.js';
 import type { TutorialDefinition, TutorialStep } from './types.js';
 

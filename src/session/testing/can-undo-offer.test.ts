@@ -8,18 +8,15 @@
  * the state a seat is actually sent, then sends the undo, and requires the two
  * to agree: offered means it succeeds, not offered means it is refused.
  *
- * The stateless executor (`executeOp`, the path the platform and `boardsmith
- * dev` run) is driven through `createHeadlessSession`, and the stateful
- * `GameSession` through its own undo.
+ * The executor (`executeOp`, the path the platform and `boardsmith dev` run)
+ * is driven through `createHeadlessSession`.
  */
 import { describe, expect, it } from 'vitest';
 
 import type { GameDefinitionLike } from '../stateless-ops.js';
 import { createHeadlessSession, type HeadlessOp } from '../headless-session.js';
-import { GameSession } from '../game-session.js';
 import type { PlayerGameState } from '../types.js';
 import {
-  ScumGame,
   fencedScumDefinition,
   fencedSimulScumDefinition,
   fencedUncheckpointedScumDefinition,
@@ -71,7 +68,7 @@ async function expectOfferMatchesUndo(s: Session, seat: number, offered: boolean
 
 const solo = { playerCount: 1, seed: 'can-undo' };
 
-describe('#373: canUndo agrees with the undo it offers (stateless executor)', () => {
+describe('#373: canUndo agrees with the undo it offers ', () => {
   it('CONTROL: a game with no policy offers the undo, and it succeeds', async () => {
     const s = statelessSession(unfencedScumDefinition, solo);
     await s.start();
@@ -133,42 +130,5 @@ describe('#373: canUndo agrees with the undo it offers (stateless executor)', ()
     await s.start();
     await play(s, 1, 'act1', 'act2', 'act2');
     await expectOfferMatchesUndo(s, 1, false);
-  });
-});
-
-describe('#373: canUndo agrees with the undo it offers (stateful GameSession)', () => {
-  function session(policy: Pick<GameDefinitionLike, 'checkpoints' | 'undo'>) {
-    return GameSession.create<ScumGame>({
-      gameType: 'scum',
-      GameClass: ScumGame,
-      playerCount: 1,
-      playerNames: ['Solo'],
-      seed: 'can-undo',
-      ...policy,
-    });
-  }
-
-  async function expectSessionOffer(s: GameSession<ScumGame>, offered: boolean) {
-    expect(s.buildPlayerState(1).canUndo).toBe(offered);
-    const undo = await s.undoToTurnStart(1);
-    expect(undo.success, undo.error).toBe(offered);
-  }
-
-  it('CONTROL: a game with no policy offers the undo, and it succeeds', async () => {
-    const s = session({});
-    expect((await s.performAction('gamble', 1, {})).success).toBe(true);
-    await expectSessionOffer(s, true);
-  });
-
-  it('does not offer an undo when the game turns checkpoints off', async () => {
-    const s = session({ checkpoints: { enabled: false } });
-    expect((await s.performAction('move', 1, {})).success).toBe(true);
-    await expectSessionOffer(s, false);
-  });
-
-  it('does not offer an undo across a random draw when the game fences it', async () => {
-    const s = session({ undo: { fenceRandomRewind: true } });
-    expect((await s.performAction('gamble', 1, {})).success).toBe(true);
-    await expectSessionOffer(s, false);
   });
 });

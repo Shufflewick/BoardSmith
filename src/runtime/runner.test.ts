@@ -648,7 +648,8 @@ describe('GameRunner', () => {
       expect(runner.game.commandHistory.length).toBe(4);
 
       // Drive several actions, refreshing the per-action checkpoint after each one
-      // exactly as GameSession does from its broadcast funnel (game-session.ts).
+      // exactly as every op of the session host does (executeOp's
+      // `runner.getSnapshot()` in stateless-ops.ts).
       // This is what accumulates one retained full snapshot per action.
       for (const [action, seat] of [['draw', 1], ['draw', 2], ['draw', 1], ['draw', 2]] as const) {
         expect(runner.performAction(action, seat, {}).success).toBe(true);

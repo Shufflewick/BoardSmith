@@ -271,12 +271,21 @@ type VerbArgument = (call: AstNode, wrappers: Wrappers) => AstNode | undefined;
 const argAt = (call: AstNode, index: number) => (call.arguments as AstNode[])[index];
 
 /** The value of an object literal's `name` property: `{ name: command, args }`. */
-function nameProperty(node: AstNode | undefined): AstNode | undefined {
+function nameProperty(node: AstNode | undefined, key = 'name'): AstNode | undefined {
   if (!isNode(node) || node.type !== 'ObjectExpression') return undefined;
   const property = (node.properties as AstNode[]).find(
-    (p) => p.type === 'Property' && isNode(p.key) && (p.key as AstNode).name === 'name',
+    (p) => p.type === 'Property' && isNode(p.key) && (p.key as AstNode).name === key,
   );
   return property?.value as AstNode | undefined;
+}
+
+/**
+ * The `actionName` of an `action` op, `{ type: 'action', actionName, ... }`, as
+ * a test sends it to the live session host (`session.send(seat, op)`), or
+ * undefined for any other op.
+ */
+function actionOpName(node: AstNode | undefined): AstNode | undefined {
+  return literalText(nameProperty(node, 'type')) === 'action' ? nameProperty(node, 'actionName') : undefined;
 }
 
 const isFunction = (n: unknown): n is AstNode => isNode(n) && FUNCTION_TYPES.has(n.type);
@@ -399,8 +408,9 @@ export function findDefinedVerbs(
 /**
  * The engine entry points a test can dispatch a verb through, and which argument carries the
  * verb's name. `assertActionFails` is deliberately absent: a verb only ever seen failing has not
- * been shown to work. `action(...)` counts only when the builder is `execute()`d, and the world
- * engine's `applyCommand(player, { name, args })` carries the name inside its command object.
+ * been shown to work. `action(...)` counts only when the builder is `execute()`d, the world
+ * engine's `applyCommand(player, { name, args })` carries the name inside its command object, and
+ * the live session host's `send(seat, { type: 'action', actionName, ... })` inside its op.
  */
 const DISPATCH_ENTRY_POINTS: Readonly<Record<string, number>> = Object.freeze({
   doAction: 1,
@@ -413,6 +423,7 @@ const DISPATCH_ENTRY_POINTS: Readonly<Record<string, number>> = Object.freeze({
 export const DISPATCH_FORMS =
   "testGame.doAction(seat, 'verb'), testGame.tryAction(seat, 'verb'), " +
   "testGame.action('verb', seat)...execute(), runner.performAction('verb', seat), " +
+  "session.send(seat, { type: 'action', actionName: 'verb', ... }) on the live session host, " +
   "world.take(seat, 'verb'), or a helper of the project's own " +
   'under tests/ that passes the verb name it is given to one of these (or to the world engine\'s applyCommand)';
 
@@ -421,12 +432,13 @@ const dispatchArgument: VerbArgument = (call, wrappers) => {
   if (name === undefined) return undefined;
   if (name in DISPATCH_ENTRY_POINTS) return argAt(call, DISPATCH_ENTRY_POINTS[name]);
   if (name === 'applyCommand') return nameProperty(argAt(call, 1));
+  if (name === 'send') return actionOpName(argAt(call, 1));
   return wrappers.has(name) ? argAt(call, wrappers.get(name)!) : undefined;
 };
 
 /** Every project function (a test harness, usually) that dispatches a verb named by a parameter. */
 export function findDispatchWrappers(sources: readonly SourceFile[]): Map<string, number> {
-  return findWrappers(sources, dispatchArgument, [...Object.keys(DISPATCH_ENTRY_POINTS), 'applyCommand']);
+  return findWrappers(sources, dispatchArgument, [...Object.keys(DISPATCH_ENTRY_POINTS), 'applyCommand', 'send']);
 }
 
 /** The verb of `x.action('verb', seat).select(...).execute()`, found by walking back the chain. */

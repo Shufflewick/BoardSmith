@@ -109,11 +109,13 @@ Two existing entry points already plug snapshots in:
   `MultiplayerHost.startGame` (`src/cli/dev-host/multiplayer-host.ts`
   ~line 646) is what computes `startGameOptions` and routes the CLI's
   `boardsmith dev` session through this same `start` op.
-- **Stateful path.** `GameSession.restore` (`src/session/game-session.ts`
-  ~line 838) is the stateful-session equivalent: it requires
-  `storedState.snapshot` and calls `GameRunner.fromSnapshot` directly
-  (snapshot-authoritative restore, same non-replay guarantee), throwing a
-  descriptive error if no snapshot is present.
+- **Host restore path.** `SnapshotSessionHost.restore`
+  (`src/session/snapshot-session-host.ts`) brings a host back from the
+  durable state its `persist` adapter was handed. It requires that state's
+  `snapshot`, refuses a missing or foreign one with a descriptive error, and
+  never replays; every op it then runs rebuilds the game from that snapshot
+  with `runnerFromSnapshot`, which calls `GameRunner.fromSnapshot`
+  (snapshot-authoritative restore, same non-replay guarantee).
 
 Because both paths already treat "the snapshot" as opaque authoritative
 state and both already call into `fromSnapshot`, seeding either path is a
@@ -193,7 +195,7 @@ client-side render path.
 solved, exported, and deterministic.** `GameRunner.fromSnapshot` is public
 API, state-authoritative (not replay-based, so it doesn't inherit replay's
 known unsoundness), and already wired through both the stateless dev-host
-path and the stateful `GameSession.restore` path. The perceived cost of this
+path and the `SnapshotSessionHost.restore` path. The perceived cost of this
 feature was too high going in — most of "seed a game into a state" is
 already built.
 

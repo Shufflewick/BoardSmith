@@ -2,10 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { computeElementDiff } from './utils.js';
 
 /**
- * Regression test for F6: the element-diff algorithm used by GameSession's
- * state-history diff (state-history.ts) and the stateless executor's debug
- * state diff (stateless-ops.ts) must be ONE shared implementation, so the two
- * call sites can never drift.
+ * Regression test for F6: the element-diff algorithm behind the
+ * `debugStateDiff` op (stateless-ops.ts) is ONE shared implementation in
+ * utils.ts.
  *
  * This test pins the behavior of the shared computeElementDiff helper. Before
  * the fix this function did not exist (the algorithm was copy-pasted into both

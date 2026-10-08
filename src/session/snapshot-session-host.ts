@@ -34,10 +34,7 @@ type MutatingOp = Exclude<ExecutableOp, { type: ReadOnlyOpType | 'hint' | 'heatm
 
 /**
  * Consecutive persist() failures before `persistenceHealthy` flips false
- * (ERR-03). Mirrors GameSession's `PERSISTENCE_UNHEALTHY_THRESHOLD` so both
- * hosts escalate at the same count — this class duplicates the shape rather
- * than sharing a base class (this codebase has no shared host base class;
- * see serializeFlowDebugInfo-as-function for the same established pattern).
+ * (ERR-03).
  */
 const PERSISTENCE_UNHEALTHY_THRESHOLD = 3;
 
@@ -289,8 +286,7 @@ export interface SnapshotSessionAdapters {
   /**
    * Injectable hook invoked whenever `persist()` fails (ERR-03). Never
    * rethrown — a throwing hook is swallowed and echoed via `console.error`
-   * so it can never crash gameplay (T-126-06). Symmetric with
-   * `GameSessionOptions.onPersistenceError`.
+   * so it can never crash gameplay (T-126-06).
    *
    * @param error Sanitized `{message, timestamp}` — never a stack trace (T-126-05).
    * @param consecutiveFailures Running count of consecutive persist failures.
@@ -408,12 +404,12 @@ export class SnapshotSessionHost {
    */
   private opChain: Promise<unknown> = Promise.resolve();
 
-  // Persistence health (ERR-03) — symmetric with GameSession's persistence surface.
+  // Persistence health (ERR-03): see lastPersistenceError / persistenceHealthy.
   private lastPersistenceErrorEntry: PersistenceErrorEntry | null = null;
   private persistenceConsecutiveFailures = 0;
 
-  // Transient teaching state — persists between ops, merged into every broadcast
-  // post-buildPlayerState (mirrors GameSession.broadcast() injection pattern).
+  // Transient teaching state — persists between ops, merged into every seat's
+  // view after the executor built it (mergeTransientState).
   transientTeachingState = new Map<number, {
     hint?: { annotation: Annotation };
     heatmap?: { visible: boolean; entries: HeatmapEntry[] };
@@ -453,8 +449,8 @@ export class SnapshotSessionHost {
   }
 
   // Flow-debug snapshot (FLOW-01/03): computed by the pure executor's
-  // stateEnvelope() (shared serializeFlowDebugInfo — same wire shape as
-  // GameSession.broadcast() and the debug:flow-state op) and carried forward
+  // stateEnvelope() (shared serializeFlowDebugInfo — same wire shape as the
+  // debug:flow-state op) and carried forward
   // here so demo/control broadcasts (which re-broadcast lastPlayerViews via
   // broadcastCurrent(), not a fresh executeOp result) still show the last
   // known flow position. Public game structure (T-123-08) — safe to share
@@ -540,7 +536,7 @@ export class SnapshotSessionHost {
 
   /**
    * Runs `adapters.persist()` without ever letting it crash the caller
-   * (ERR-03 / T-126-03) — the counterpart to GameSession's #persistSafely.
+   * (ERR-03 / T-126-03).
    * On success, resets the consecutive-failure counter. On failure,
    * increments it, records a sanitized lastPersistenceError, echoes via
    * console.error, and invokes onPersistenceError (itself guarded so a
@@ -858,8 +854,8 @@ export class SnapshotSessionHost {
   private async apply(res: StateEnvelope, seat?: number, pending: Record<string, unknown> | null = null): Promise<void> {
     this._snapshot = this.checkedSnapshot(res.snapshot, 'op');
     // FLOW-01/03: every state-mutating op's stateEnvelope() carries a fresh
-    // flowDebugInfo (shared serializeFlowDebugInfo — same shape as
-    // GameSession.broadcast() and the debug:flow-state op). Carry it forward
+    // flowDebugInfo (shared serializeFlowDebugInfo — same shape as the
+    // debug:flow-state op). Carry it forward
     // so demo/control re-broadcasts (broadcastCurrent(), no fresh op result)
     // still show the last known flow position.
     this.lastFlowDebugInfo = res.flowDebugInfo;
@@ -986,8 +982,8 @@ export class SnapshotSessionHost {
 
     // Teaching ops (hint / heatmapToggle): compute annotation, store in
     // transient state, re-broadcast via broadcastCurrent() — NOT apply() because
-    // these ops do NOT change game state (mirrors the production GameSession
-    // pattern: transient hints/heatmaps are injected post-buildPlayerState).
+    // these ops do NOT change game state: transient hints/heatmaps are merged
+    // into each seat's view after the executor built it.
     if (op.type === 'hint' || op.type === 'heatmapToggle') {
       // RESEARCH Pitfall 3: reject concurrent bot searches while demo is running.
       if (this.demoRunning) {
@@ -1055,8 +1051,8 @@ export class SnapshotSessionHost {
     const pending = 'pendingState' in res ? res.pendingState : null;
     const actionCompleted = closing || ('actionComplete' in res && res.actionComplete === true);
 
-    // Clear hint for the acting seat on successful action/selectionStep (completion).
-    // Mirrors GameSession.performAction: this.#hint.delete(player).
+    // Clear hint for the acting seat on successful action/selectionStep (completion):
+    // a hint answers the position the seat was in, which its move just changed.
     if (actionCompleted) {
       const seatTransient = this.transientTeachingState.get(seat);
       if (seatTransient?.hint) {
@@ -1069,14 +1065,13 @@ export class SnapshotSessionHost {
       }
     }
 
-    // Clear ALL transient state on undo/rewind (mirrors game-session.ts:312-313).
+    // Clear ALL transient state on undo/rewind: it describes a position that is gone.
     if (op.type === 'undo' || op.type === 'debugRewind') {
       this.transientTeachingState.clear();
       this.narrationText = null;
       // Pending selections belong to that list: they hold element ids from the
-      // replaced runner, exactly like the hint/heatmap above. GameSession does
-      // this for EVERY seat (`PendingActionManager.updateRunner` clears the whole
-      // map); `apply` below only ever drops the ACTING seat's, so a simultaneous
+      // replaced runner, exactly like the hint/heatmap above, so every seat's
+      // goes. `apply` below only ever drops the ACTING seat's, so a simultaneous
       // step would leave another seat mid-chain against a game tree that no
       // longer exists. Clients are told the same fact by `restoreEpoch`.
       this.pendingStates.clear();
@@ -1097,9 +1092,9 @@ export class SnapshotSessionHost {
     }
     // Keep any visible "Show move quality" heatmaps current as play proceeds:
     // recompute for the seat whose turn it now is, drop stale chips for the rest.
-    // Mirrors GameSession.#refreshVisibleHeatmaps (the hint is already cleared on
-    // each action above; the heatmap must be refreshed the same way or it freezes
-    // at the position where it was first toggled on).
+    // (The hint is already cleared on each action above; the heatmap must be
+    // refreshed the same way or it freezes at the position where it was first
+    // toggled on.)
     if (actionCompleted) {
       await this.refreshVisibleHeatmaps();
     }
@@ -1536,7 +1531,7 @@ export class SnapshotSessionHost {
       return 'failed';
     }
 
-    // Clear the acting seat's hint (mirrors performAction hint.delete(player)).
+    // Clear the acting seat's hint, as applyMutatingOp does for a human move.
     const seatTransient = this.transientTeachingState.get(botPlayer);
     if (seatTransient?.hint) {
       const { hint: _h, ...rest } = seatTransient;
@@ -1628,9 +1623,8 @@ export class SnapshotSessionHost {
    *    (Checkers, Hex) are unaffected because their destination args use these
    *    standard key names.
    *
-   * Mirrors the default narrator in game-session.ts:1142-1149 but uses
-   * "Player N" instead of the player name (no player-name threading in
-   * the stateless path — RESEARCH open-Q2 RESOLVED).
+   * Uses "Player N" rather than the player's name: the host is not handed
+   * player names.
    */
   private buildNarration(player: number, action: string, args: Record<string, unknown>): string {
     if (this.adapters.narrateMove) {

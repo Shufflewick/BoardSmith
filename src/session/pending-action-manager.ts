@@ -1,7 +1,6 @@
 /**
  * PendingActionManager - Encapsulates pending action state machine
  *
- * Extracted from GameSession to reduce cognitive load and improve testability.
  * Handles the step-by-step processing of actions with repeating selections.
  */
 
@@ -10,25 +9,10 @@ import { toPublicFlowState } from '../engine/index.js';
 import type { GameRunner } from '../runtime/index.js';
 import {
   ErrorCode,
-  type StorageAdapter,
-  type StoredGameState,
   type PlayerGameState,
   type WarningEntry,
 } from './types.js';
-import { buildPlayerState, offerFollowUp } from './utils.js';
-
-/**
- * Callbacks for PendingActionManager to interact with GameSession.
- * Using callbacks avoids circular dependencies.
- */
-export interface PendingActionCallbacks {
-  /** Save the current state to storage */
-  save(): Promise<void>;
-  /** Broadcast state updates to all clients */
-  broadcast(): void;
-  /** Schedule a bot check (non-blocking) */
-  scheduleBotCheck(): void;
-}
+import { actionForSeat, buildPlayerState, offerFollowUp } from './utils.js';
 
 /**
  * Result from processing a pick step.
@@ -83,49 +67,23 @@ export interface PickStepResult {
  * tracking progress through multi-step action flows.
  *
  * Every step that changes the game runs in one order: change the game, record
- * the op's checkpoint (`runner.captureCheckpoint()`), save, broadcast, then
- * build the state returned to the acting seat. `canUndo` in that state asks the
- * checkpoint window whether the turn start is still retained (`decideUndo`), so
- * a state built before the checkpoint is recorded reads the window one step
- * stale and can offer an undo a small `checkpoints.max` has already dropped
- * (#385). The manager records the checkpoint itself rather than leaving it to
- * the broadcast callback, because the stateless `PickHandler` has no broadcast.
+ * the op's checkpoint (`runner.captureCheckpoint()`), then build the state
+ * returned to the acting seat. `canUndo` in that state asks the checkpoint
+ * window whether the turn start is still retained (`decideUndo`), so a state
+ * built before the checkpoint is recorded reads the window one step stale and
+ * can offer an undo a small `checkpoints.max` has already dropped (#385).
+ *
+ * `PickHandler` builds one per selection step, seeded with the seat's pending
+ * state, and the host persists what is left of it.
  */
 export class PendingActionManager<G extends Game = Game> {
-  #runner: GameRunner<G>;
-  readonly #storedState: StoredGameState;
-  readonly #storage?: StorageAdapter;
-  readonly #callbacks: PendingActionCallbacks;
+  readonly #runner: GameRunner<G>;
+  readonly #playerCount: number;
   readonly #pendingActions: Map<number, PendingActionState> = new Map();
-  /**
-   * Whether `registerDebug()` payloads (`customDebug`) are attached to the
-   * player state returned from selection-step processing (SEC-04/F15).
-   * Mirrors `GameSession`'s `#debugEnabled` — threaded in at construction,
-   * never toggled. Defaults to `false`.
-   */
-  readonly #debugEnabled: boolean;
 
-  constructor(
-    runner: GameRunner<G>,
-    storedState: StoredGameState,
-    storage: StorageAdapter | undefined,
-    callbacks: PendingActionCallbacks,
-    debugEnabled = false
-  ) {
+  constructor(runner: GameRunner<G>, playerCount: number) {
     this.#runner = runner;
-    this.#storedState = storedState;
-    this.#storage = storage;
-    this.#callbacks = callbacks;
-    this.#debugEnabled = debugEnabled;
-  }
-
-  /**
-   * Update the runner reference (needed after hot reload)
-   */
-  updateRunner(runner: GameRunner<G>): void {
-    this.#runner = runner;
-    // Clear pending actions when runner changes (they reference old game state)
-    this.#pendingActions.clear();
+    this.#playerCount = playerCount;
   }
 
   /**
@@ -138,14 +96,8 @@ export class PendingActionManager<G extends Game = Game> {
     errorCode?: ErrorCode;
     pendingState?: PendingActionState;
   } {
-    if (playerPosition < 1 || playerPosition > this.#storedState.playerCount) {
-      return { success: false, error: `Invalid player: ${playerPosition}. Player seats are 1-indexed (1 to ${this.#storedState.playerCount}).`, errorCode: ErrorCode.INVALID_PLAYER };
-    }
-
-    const action = this.#runner.game.getAction(actionName);
-    if (!action) {
-      return { success: false, error: `Action not found: ${actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND };
-    }
+    const found = actionForSeat(this.#runner.game, this.#playerCount, playerPosition, actionName);
+    if ('refusal' in found) return found.refusal;
 
     const executor = this.#runner.game.getActionExecutor();
     const pendingState = executor.createPendingActionState(actionName, playerPosition);
@@ -242,14 +194,6 @@ export class PendingActionManager<G extends Game = Game> {
       // onEach may have modified game state.
       this.#runner.captureCheckpoint();
 
-      // Persist if storage adapter is provided
-      if (this.#storage) {
-        await this.#callbacks.save();
-      }
-
-      // Broadcast state updates to all clients
-      this.#callbacks.broadcast();
-
       // Check if the action is now complete
       if (result.done && executor.isPendingActionComplete(action, pendingState)) {
         return this.#completePendingAction(executor, action, player, pendingState, playerPosition);
@@ -262,7 +206,7 @@ export class PendingActionManager<G extends Game = Game> {
         done: result.done,
         nextChoices: result.nextChoices,
         actionComplete: false,
-        state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
+        state: this.#seatState(playerPosition),
       };
     }
 
@@ -283,15 +227,12 @@ export class PendingActionManager<G extends Game = Game> {
     // onSelect may have modified game state (e.g. animation events).
     this.#runner.captureCheckpoint();
 
-    // Broadcast state updates to all clients
-    this.#callbacks.broadcast();
-
     // More selections needed
     return {
       success: true,
       done: true,
       actionComplete: false,
-      state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
+      state: this.#seatState(playerPosition),
     };
   }
 
@@ -328,23 +269,6 @@ export class PendingActionManager<G extends Game = Game> {
   }
 
   /**
-   * Check if an action has repeating selections.
-   */
-  hasRepeatingSelections(actionName: string): boolean {
-    const action = this.#runner.game.getAction(actionName);
-    if (!action) return false;
-    const executor = this.#runner.game.getActionExecutor();
-    return executor.hasRepeatingSelections(action);
-  }
-
-  /**
-   * Clear all pending actions (e.g., after hot reload)
-   */
-  clearAll(): void {
-    this.#pendingActions.clear();
-  }
-
-  /**
    * Nothing of a pending action may run unless the flow offers it to this
    * seat now: not on a finished game, and not as another seat's move (#492),
    * and not once another seat's move took its condition away (#493,
@@ -361,6 +285,11 @@ export class PendingActionManager<G extends Game = Game> {
     if (!name) return undefined;
     const refusal = this.#runner.refusalToPick(name, playerPosition, pendingState);
     return refusal && { success: false, error: refusal.error, errorCode: refusal.errorCode };
+  }
+
+  /** The acting seat's state after a step, as the step result returns it. */
+  #seatState(playerPosition: number): PlayerGameState {
+    return buildPlayerState(this.#runner, [], playerPosition, { includeActionMetadata: true });
   }
 
   async #completePendingAction(
@@ -397,14 +326,6 @@ export class PendingActionManager<G extends Game = Game> {
       this.#runner.recordSerializedAction(serializedAction);
       this.#runner.game.continueFlowAfterPendingAction(actionResult, playerPosition);
       this.#runner.captureCheckpoint();
-      this.#storedState.actionHistory = this.#runner.actionHistory;
-
-      if (this.#storage) {
-        await this.#callbacks.save();
-      }
-
-      this.#callbacks.broadcast();
-      this.#callbacks.scheduleBotCheck();
     }
 
     const flowState = this.#runner.getFlowState();
@@ -417,11 +338,11 @@ export class PendingActionManager<G extends Game = Game> {
         success: actionResult.success,
         error: actionResult.error,
         flowState: toPublicFlowState(flowState),
-        state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
+        state: this.#seatState(playerPosition),
         data: actionResult.data,
         message: actionResult.message,
       },
-      state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
+      state: this.#seatState(playerPosition),
       followUp: offerFollowUp(this.#runner.game, flowState, playerPosition),
       // Hoisted beside followUp so a multi-step action's return value reaches
       // the ops layer on the same footing as a single-step one (BUG-017).

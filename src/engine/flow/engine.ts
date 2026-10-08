@@ -255,7 +255,7 @@ interface ExecutionFrame<G extends Game = Game> {
  *   getWinners: (ctx) => [getWinner(ctx)]
  * });
  *
- * // Engine is created internally by GameSession
+ * // Engine is created internally by GameRunner
  * const engine = new FlowEngine(game, flow);
  * const state = engine.start();
  *
@@ -1197,8 +1197,8 @@ export class FlowEngine<G extends Game = Game> {
   restore(position: FlowPosition): void {
     // Relink serialized element-valued flow variables back to live elements of
     // this game (inverse of getPosition's serializeFlowVariables). Doing it here
-    // means every restore path — runner.fromSnapshot, MCTS clone, and the HMR
-    // dev-transfer in game-session — is covered without each caller relinking.
+    // means every restore path — runner.fromSnapshot, MCTS clone, and a rules
+    // reload in the dev host — is covered without each caller relinking.
     // `this.hiddenIdRemap` (CR-02, 159) is only ever set by a redacted-clone
     // restore (`restoreFullState`); plain position-only restores leave it
     // `undefined`, matching prior behavior exactly.

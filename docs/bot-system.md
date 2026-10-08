@@ -174,29 +174,32 @@ export const checkersBotStrategy: BotStrategy = {
 };
 ```
 
-## Integration with GameSession
+## Integration with the session host
 
-The `boardsmith/session` package integrates bot automatically:
+Every host runs bots the same way: the game definition's `bot` field carries
+the game's `BotStrategy`, and the host's roster says which seats a bot plays.
+`SnapshotSessionHost` takes the roster with `host.setBotSeats(seats)`, and
+`createHeadlessSession` takes it as its third argument:
 
 ```typescript
-import { GameSession } from 'boardsmith/session';
-import { MyGame } from './game.js';
-import { myGameBotStrategy } from './bot.js';
+import { createHeadlessSession } from 'boardsmith/session';
+import { gameDefinition } from './index.js'; // its `bot` field is myGameBotStrategy
 
-const session = GameSession.create({
-  GameClass: MyGame,
-  gameType: 'my-game',
-  playerCount: 2,
-  playerNames: ['You', 'Computer'],
-  botSeats: { players: [1], level: 'hard' },  // Player 1 is a bot at 'hard' level
-  botStrategy: myGameBotStrategy,             // Optional custom objectives
-});
+const session = createHeadlessSession(
+  gameDefinition,
+  { playerCount: 2, playerNames: ['You', 'Computer'] },
+  [{ seat: 2, level: 'hard' }], // seat 2 is a bot at 'hard' level
+);
+await session.start();
 
-// bot will automatically play when it's player 1's turn
+// After every move the host runs its bot pump, so seat 2 plays whenever it is
+// due. start() does not run the pump; when a bot seat moves first, run it once:
+await session.host.runBotTurns();
 ```
 
-> `botSeats` declares which seats are bots (`players`) and the difficulty (`level`).
-> The game's custom objectives/threat hooks go in `botStrategy`.
+> Each roster entry names a seat (seats are 1-indexed) and an optional `level`.
+> The game's custom objectives and threat hooks go in the definition's `bot`
+> field, which every op that builds a bot reads.
 
 A bot moves when the game hands it a turn, and a move the game refuses is
 reported once on the console, naming the seat and the game's reason. The bot is

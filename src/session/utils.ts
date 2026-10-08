@@ -58,8 +58,7 @@ export function isPlayersTurn(flowState: FlowState | undefined, playerPosition: 
  * FlowDebugInfo and does NOT survive serialization, so it is captured here
  * into a plain `description` string before anything is sent to a client.
  *
- * Single shared serializer reused by both session hosts (GameSession's live
- * broadcast() and SnapshotSessionHost's stateless op path) plus the
+ * Single shared serializer reused by every op's state envelope and the
  * debug:flow-state op — one source of truth for the wire shape (Pit of
  * Success: no divergent per-host copies).
  */
@@ -74,6 +73,41 @@ export function serializeFlowDebugInfo(game: Game): SerializedFlowDebugInfo {
   };
 }
 
+/** Why a seat may not pick for an action: the seat is not at the table, or the game has no such action. */
+export interface SeatActionRefusal {
+  success: false;
+  error: string;
+  errorCode: ErrorCode;
+}
+
+/**
+ * The action `actionName` names, for `seat` at a table of `playerCount`, or the
+ * refusal when the seat is not at the table or the game has no such action.
+ * `PendingActionManager` and `PickHandler` both ask it first, so a pick and a
+ * step are refused the same way.
+ */
+export function actionForSeat(
+  game: Game,
+  playerCount: number,
+  seat: number,
+  actionName: string,
+): { action: ActionDefinition } | { refusal: SeatActionRefusal } {
+  if (seat < 1 || seat > playerCount) {
+    return {
+      refusal: {
+        success: false,
+        error: `Invalid player: ${seat}. Player seats are 1-indexed (1 to ${playerCount}).`,
+        errorCode: ErrorCode.INVALID_PLAYER,
+      },
+    };
+  }
+  const action = game.getAction(actionName);
+  if (!action) {
+    return { refusal: { success: false, error: `Action not found: ${actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND } };
+  }
+  return { action };
+}
+
 /**
  * Serialize a live `PendingActionState` into its JSON-safe wire shape
  * (`SerializedPendingActionState`) — `onSelectFired`'s `Set<number>` becomes a
@@ -86,8 +120,8 @@ export function serializeFlowDebugInfo(game: Game): SerializedFlowDebugInfo {
  * same guarantee `GameRunner.getPendingAction()` (runtime/runner.ts) provides
  * on the testing path.
  *
- * Single shared serializer reused by `GameSession.broadcast()`, `PickHandler`
- * (selection-step responses), and the `debug:flow-state` stateless op — one
+ * Single shared serializer reused by `PickHandler` (selection-step
+ * responses) and the `debug:flow-state` op — one
  * wire shape for `PendingActionState` everywhere (Pit of Success: no
  * divergent per-host copies, mirroring `serializeFlowDebugInfo()` above).
  */
@@ -213,10 +247,9 @@ export function computeUndoInfo(
 
 /**
  * The minimal `FlowState` shape {@link computeUndoEligibility} reads. Kept
- * structural (not the concrete engine `FlowState`) so both executors --
- * `state-history.ts` (real `FlowState`) and `stateless-ops.ts` (its own
- * narrower `BotFlowState`) -- can pass their own flow-state type without a
- * cast, the same way `seat-activity.ts`'s `SeatActivityState` does.
+ * structural (not the concrete engine `FlowState`) so a caller with a
+ * narrower flow-state type (`stateless-ops.ts`'s `BotFlowState`) can pass it
+ * without a cast, the same way `seat-activity.ts`'s `SeatActivityState` does.
  */
 export interface UndoFlowState {
   currentPlayer?: number;
@@ -234,8 +267,8 @@ export interface UndoFlowState {
 
 /**
  * The refusal a seat gets when it is eligible to undo but `actionsThisTurn`
- * is 0, shared by both executors (`state-history.ts` `undoToTurnStart` and
- * `stateless-ops.ts` `handleUndo`) so the two cannot drift.
+ * is 0, shared by `stateless-ops.ts` `handleUndo` and every seat's `canUndo`
+ * so the two cannot drift.
  *
  * Normally that genuinely means "you have not acted yet this turn". But a
  * seat that just acted and was immediately re-prompted in a fresh action-step
@@ -390,10 +423,8 @@ function computeUndoEligibility(
 /**
  * Thrown by {@link assertUndoAllowed} when a server-side undo/rewind fence
  * refuses the operation. Never a silent no-op (D-02 / T-155-04): every
- * refusal carries an actionable message naming why, and the two undo
- * executors (`stateless-ops.ts`) catch it at their own OpResult boundary
- * while the two stateful methods (`state-history.ts`) already have a
- * try/catch that converts any thrown Error into `{ success: false, error }`.
+ * refusal carries an actionable message naming why, and the undo and rewind
+ * ops (`stateless-ops.ts`) catch it at their OpResult boundary.
  *
  * Message content is intentionally limited to the action name or the phase
  * reason -- no file paths, line numbers, or stack traces (project hard rule;
@@ -418,10 +449,9 @@ export class UndoRefusedError extends Error {
 }
 
 /**
- * Single shared server-side undo/rewind guard (D-01/D-09) consumed by ALL
- * FOUR undo/rewind entry points -- `stateless-ops.ts`'s `handleUndo` and
- * `handleDebugRewind`, and `state-history.ts`'s `undoToTurnStart` and
- * `rewindToAction`. This is the fix for UNDO-01 (`.notUndoable()` was never
+ * Single shared server-side undo/rewind guard (D-01/D-09) consumed by both
+ * undo/rewind entry points -- `stateless-ops.ts`'s `handleUndo` and
+ * `handleDebugRewind`. This is the fix for UNDO-01 (`.notUndoable()` was never
  * enforced server-side -- only hidden via the client's advisory `canUndo`)
  * and UNDO-02 (the `finished`-phase fence AND the durable execute()-barrier
  * fence).
@@ -546,9 +576,8 @@ type UndoDecision =
   | { allowed: false; error: string; errorCode: ErrorCode };
 
 /**
- * THE undo rule (#373). Both undo executors (`state-history.ts`
- * `undoToTurnStart` and `stateless-ops.ts` `handleUndo`) call it to decide an
- * undo, and `buildPlayerState` calls it to set `canUndo`, so the control a
+ * THE undo rule (#373). The undo op (`stateless-ops.ts` `handleUndo`) calls
+ * it to decide an undo, and `buildPlayerState` calls it to set `canUndo`, so the control a
  * seat is offered and the undo the server takes are one decision and cannot
  * disagree. A seat is offered Undo exactly when this allows it.
  *
@@ -828,7 +857,8 @@ export function buildPlayerState(
 
 /**
  * The added/removed/changed element IDs between two state views.
- * `StateHistory`'s `ElementDiff` adds the action indices they were taken at.
+ * `ElementDiff` (the `debugStateDiff` op's answer) adds the action indices
+ * they were taken at.
  */
 export interface ElementChanges {
   added: number[];
@@ -889,8 +919,7 @@ function collectElements(
  * - `changed` if it moved to a different parent OR its comparable
  *   attributes changed.
  *
- * This is the single source of truth shared by GameSession's state-history
- * diff and the stateless executor's debug state diff.
+ * The `debugStateDiff` op answers with it.
  */
 export function computeElementDiff(fromView: unknown, toView: unknown): ElementChanges {
   const fromElements = new Map<number, ComparableElement>();
