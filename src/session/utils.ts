@@ -73,6 +73,41 @@ export function serializeFlowDebugInfo(game: Game): SerializedFlowDebugInfo {
   };
 }
 
+/** Why a seat may not pick for an action: the seat is not at the table, or the game has no such action. */
+export interface SeatActionRefusal {
+  success: false;
+  error: string;
+  errorCode: ErrorCode;
+}
+
+/**
+ * The action `actionName` names, for `seat` at a table of `playerCount`, or the
+ * refusal when the seat is not at the table or the game has no such action.
+ * `PendingActionManager` and `PickHandler` both ask it first, so a pick and a
+ * step are refused the same way.
+ */
+export function actionForSeat(
+  game: Game,
+  playerCount: number,
+  seat: number,
+  actionName: string,
+): { action: ActionDefinition } | { refusal: SeatActionRefusal } {
+  if (seat < 1 || seat > playerCount) {
+    return {
+      refusal: {
+        success: false,
+        error: `Invalid player: ${seat}. Player seats are 1-indexed (1 to ${playerCount}).`,
+        errorCode: ErrorCode.INVALID_PLAYER,
+      },
+    };
+  }
+  const action = game.getAction(actionName);
+  if (!action) {
+    return { refusal: { success: false, error: `Action not found: ${actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND } };
+  }
+  return { action };
+}
+
 /**
  * Serialize a live `PendingActionState` into its JSON-safe wire shape
  * (`SerializedPendingActionState`) — `onSelectFired`'s `Set<number>` becomes a

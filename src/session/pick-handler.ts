@@ -22,6 +22,7 @@ import {
 } from './types.js';
 import type { ValidElement } from '../types/protocol.js';
 import { PendingActionManager, type PickStepResult } from './pending-action-manager.js';
+import { actionForSeat, serializePendingActionState } from './utils.js';
 import { resolveOrderedList } from '../engine/utils/resolve-multiselect.js';
 import {
   deadEndPickMessage,
@@ -29,11 +30,6 @@ import {
   formatElementCandidates,
   type AnnotatedCandidate,
 } from '../engine/element/pick-candidates.js';
-
-/** Serialize a pending action's state to a JSON-safe object (Set -> array). */
-function serializePendingState(s: PendingActionState): Record<string, unknown> {
-  return { ...s, onSelectFired: s.onSelectFired ? Array.from(s.onSelectFired) : undefined };
-}
 
 /** Restore a pending action's state from its JSON-safe form (array -> Set). */
 function deserializePendingState(s: Record<string, unknown>): PendingActionState {
@@ -233,7 +229,7 @@ export class PickHandler<G extends Game = Game> {
     );
 
     const pending = manager.getPendingAction(playerPosition);
-    return { ...result, pendingState: pending ? serializePendingState(pending) : null };
+    return { ...result, pendingState: pending ? { ...serializePendingActionState(pending) } : null };
   }
 
   /**
@@ -264,16 +260,9 @@ export class PickHandler<G extends Game = Game> {
     playerPosition: number,
     currentArgs: Record<string, unknown> = {}
   ): PickChoicesResponse {
-    // Validate player seat (1-indexed)
-    if (playerPosition < 1 || playerPosition > this.#playerCount) {
-      return { success: false, error: `Invalid player: ${playerPosition}. Player seats are 1-indexed (1 to ${this.#playerCount}).`, errorCode: ErrorCode.INVALID_PLAYER };
-    }
-
-    // Get action definition
-    const action = this.#runner.game.getAction(actionName);
-    if (!action) {
-      return { success: false, error: `Action not found: ${actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND };
-    }
+    const found = actionForSeat(this.#runner.game, this.#playerCount, playerPosition, actionName);
+    if ('refusal' in found) return found.refusal;
+    const { action } = found;
 
     // Find the pick
     const selection = action.selections.find(s => s.name === selectionName);

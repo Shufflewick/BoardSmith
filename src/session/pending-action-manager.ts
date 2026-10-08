@@ -12,7 +12,7 @@ import {
   type PlayerGameState,
   type WarningEntry,
 } from './types.js';
-import { buildPlayerState, offerFollowUp } from './utils.js';
+import { actionForSeat, buildPlayerState, offerFollowUp } from './utils.js';
 
 /**
  * Result from processing a pick step.
@@ -96,14 +96,8 @@ export class PendingActionManager<G extends Game = Game> {
     errorCode?: ErrorCode;
     pendingState?: PendingActionState;
   } {
-    if (playerPosition < 1 || playerPosition > this.#playerCount) {
-      return { success: false, error: `Invalid player: ${playerPosition}. Player seats are 1-indexed (1 to ${this.#playerCount}).`, errorCode: ErrorCode.INVALID_PLAYER };
-    }
-
-    const action = this.#runner.game.getAction(actionName);
-    if (!action) {
-      return { success: false, error: `Action not found: ${actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND };
-    }
+    const found = actionForSeat(this.#runner.game, this.#playerCount, playerPosition, actionName);
+    if ('refusal' in found) return found.refusal;
 
     const executor = this.#runner.game.getActionExecutor();
     const pendingState = executor.createPendingActionState(actionName, playerPosition);
