@@ -190,14 +190,6 @@
       ]
     },
     {
-      "content": "3fbeb9e19478adaf",
-      "lines": 14,
-      "files": [
-        "src/session/game-session.ts",
-        "src/session/stateless-ops.ts"
-      ]
-    },
-    {
       "content": "414676b490ecfa18",
       "lines": 23,
       "files": [
@@ -243,24 +235,10 @@
       ]
     },
     {
-      "content": "574f5b9f74a6bc78",
-      "lines": 21,
-      "files": [
-        "src/session/lobby-manager.ts"
-      ]
-    },
-    {
       "content": "587c819dbf096ab7",
       "lines": 12,
       "files": [
         "src/ui/composables/useGameGrid.ts"
-      ]
-    },
-    {
-      "content": "5cdf8b03355f47d7",
-      "lines": 10,
-      "files": [
-        "src/session/lobby-manager.ts"
       ]
     },
     {
@@ -277,20 +255,6 @@
       "files": [
         "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
         "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
-      ]
-    },
-    {
-      "content": "6560452e87a055f6",
-      "lines": 13,
-      "files": [
-        "src/session/pick-handler.ts"
-      ]
-    },
-    {
-      "content": "67e4c7e534cdea20",
-      "lines": 11,
-      "files": [
-        "src/session/lobby-manager.ts"
       ]
     },
     {
@@ -343,13 +307,6 @@
       "files": [
         "src/session/testing/fixtures/bookkeeping-execute-fixture.ts",
         "src/session/testing/fixtures/execute-barrier-fixture.ts"
-      ]
-    },
-    {
-      "content": "7ffb445d297bf34d",
-      "lines": 24,
-      "files": [
-        "src/session/lobby-manager.ts"
       ]
     },
     {
@@ -434,13 +391,6 @@
       ]
     },
     {
-      "content": "93e76d3f0c099abb",
-      "lines": 10,
-      "files": [
-        "src/session/lobby-manager.ts"
-      ]
-    },
-    {
       "content": "94d2217b30b2606a",
       "lines": 21,
       "files": [
@@ -465,20 +415,6 @@
       ]
     },
     {
-      "content": "9e84afeface92264",
-      "lines": 26,
-      "files": [
-        "src/session/lobby-manager.ts"
-      ]
-    },
-    {
-      "content": "9fdd935918f84ff4",
-      "lines": 22,
-      "files": [
-        "src/session/lobby-manager.ts"
-      ]
-    },
-    {
       "content": "a021f38caf4b3cd5",
       "lines": 7,
       "files": [
@@ -492,13 +428,6 @@
       "files": [
         "src/engine/element/game-element.ts",
         "src/engine/utils/serializer.ts"
-      ]
-    },
-    {
-      "content": "a57a1b280940fab8",
-      "lines": 14,
-      "files": [
-        "src/session/lobby-manager.ts"
       ]
     },
     {
@@ -530,13 +459,6 @@
       "lines": 20,
       "files": [
         "src/session/stateless-ops.ts"
-      ]
-    },
-    {
-      "content": "b14716cf02ad66ad",
-      "lines": 26,
-      "files": [
-        "src/session/lobby-manager.ts"
       ]
     },
     {
@@ -581,13 +503,6 @@
       "lines": 29,
       "files": [
         "src/ui/components/auto-ui/useAutoRendererAnimations.ts"
-      ]
-    },
-    {
-      "content": "ba9d6d8b3cef8458",
-      "lines": 10,
-      "files": [
-        "src/session/lobby-manager.ts"
       ]
     },
     {
@@ -677,20 +592,6 @@
       ]
     },
     {
-      "content": "e155ce64c8e363e5",
-      "lines": 11,
-      "files": [
-        "src/session/lobby-manager.ts"
-      ]
-    },
-    {
-      "content": "e77155009a77c169",
-      "lines": 13,
-      "files": [
-        "src/session/lobby-manager.ts"
-      ]
-    },
-    {
       "content": "ec5f8cbeca8feebc",
       "lines": 8,
       "files": [
@@ -719,13 +620,6 @@
       "files": [
         "src/ui/components/helpers/FlyingCardsOverlay.vue",
         "src/ui/components/helpers/ZoomPreviewOverlay.vue"
-      ]
-    },
-    {
-      "content": "f28ceccc25805742",
-      "lines": 11,
-      "files": [
-        "src/session/lobby-manager.ts"
       ]
     },
     {

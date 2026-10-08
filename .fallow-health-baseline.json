@@ -403,36 +403,9 @@
         "count": 5
       }
     },
-    "src/session/bot-controller.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/session/game-option-selection.ts": {
       "complexity_moderate": {
         "count": 3
-      }
-    },
-    "src/session/game-session.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "complexity_high": {
-        "count": 1
-      },
-      "complexity_moderate": {
-        "count": 5
-      }
-    },
-    "src/session/lobby-manager.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "complexity_high": {
-        "count": 1
-      },
-      "complexity_moderate": {
-        "count": 6
       }
     },
     "src/session/move-summary.ts": {
@@ -445,22 +418,12 @@
         "count": 1
       }
     },
-    "src/session/pick-handler.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/session/snapshot-session-host.ts": {
       "complexity_high": {
         "count": 1
       },
       "complexity_moderate": {
         "count": 5
-      }
-    },
-    "src/session/state-history.ts": {
-      "complexity_moderate": {
-        "count": 1
       }
     },
     "src/session/stateless-ops.ts": {
@@ -788,7 +751,6 @@
     "src/engine/command/executor.ts:circular dependency",
     "src/session/snapshot-session-host.ts:complexity",
     "src/engine/element/game-element.ts:complexity",
-    "src/session/game-session.ts:complexity",
     "src/session/stateless-ops.ts:complexity",
     "src/session/utils.ts:complexity",
     "src/engine/action/action.ts:circular dependency",
@@ -797,9 +759,9 @@
     "src/testing/dom-leak.ts:complexity",
     "src/ui/components/GameShell.vue:complexity",
     "src/cli/commands/ingest-archive.ts:complexity",
+    "src/ui/composables/useBoardActionBridge.ts:high impact",
     "src/bot/mcts-bot.ts:complexity",
     "src/engine/tutorial/gate.ts:circular dependency",
-    "src/ui/composables/useBoardActionBridge.ts:high impact",
     "src/cli/commands/dev.ts:complexity",
     "src/cli/commands/verify-run.ts:complexity",
     "src/engine/tutorial/progress.ts:complexity",
@@ -807,15 +769,15 @@
     "src/cli/commands/publish.ts:complexity",
     "src/engine/command/inverse.ts:circular dependency",
     "src/cli/commands/drift-check.ts:complexity",
-    "src/cli/commands/verify-derive-check.ts:circular dependency",
     "src/cli/commands/trace-check.ts:complexity",
+    "src/cli/commands/verify-derive-check.ts:circular dependency",
     "src/bot-trainer/benchmark.ts:complexity",
     "src/cli/commands/verify-classify.ts:complexity",
     "src/engine/flow/engine.ts:complexity",
-    "src/session/pending-action-manager.ts:complexity",
     "src/cli/dev-host/DevHost.vue:complexity",
     "src/testing/debug.ts:complexity",
     "src/engine/action/choice-matching.ts:high impact",
+    "src/session/pending-action-manager.ts:complexity",
     "src/cli/commands/test-step-ast.ts:high impact",
     "src/testing/random-simulation.ts:complexity",
     "src/cli/commands/lint.ts:complexity",
@@ -828,7 +790,6 @@
     "src/cli/lib/asset-scan.ts:complexity",
     "src/ui/components/debug/DecksTab.vue:complexity",
     "src/ui/components/ControlsMenu.vue:complexity",
-    "src/session/lobby-manager.ts:complexity",
     "src/ui/components/debug/ActionsTab.vue:complexity",
     "src/ui/components/dice/Die3D.vue:complexity"
   ]
