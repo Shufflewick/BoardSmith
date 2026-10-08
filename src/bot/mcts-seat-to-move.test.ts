@@ -145,3 +145,67 @@ describe('MCTSBot: one seat per search node (#522)', () => {
     for (const { by, seat } of lootChildren) expect(by).toBe(seat);
   });
 });
+
+/**
+ * Two seats each pick once, and the step stays open after both have picked:
+ * `allDone` is held false by something outside the step, the engine's
+ * external-gate pattern (one-two-punch closes its blind bid this way). Below
+ * the root the search reaches a position where the game is not over and no
+ * seat has a move.
+ */
+class GatedPickGame extends Game<GatedPickGame, Player> {
+  picked: number[] = [];
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerActions(
+      Action.create<GatedPickGame>('pick')
+        .chooseFrom('card', { choices: ['ace', 'king', 'queen'] })
+        .execute((_a, ctx) => {
+          (ctx.game as GatedPickGame).picked.push(ctx.player.seat);
+        }),
+    );
+    this.setFlow(
+      defineFlow({
+        root: simultaneousActionStep({
+          actions: ['pick'],
+          playerDone: (ctx, player) => (ctx.game as GatedPickGame).picked.includes(player.seat),
+          allDone: () => false,
+        }),
+      }),
+    );
+  }
+}
+
+describe('MCTSBot: a step held open after every seat is done', () => {
+  function gatedBot(seat: number) {
+    const game = new GatedPickGame({ playerCount: 2, playerNames: ['A', 'B'], seed: 'gated' });
+    game.startFlow();
+    const bot = new MCTSBot(game, GatedPickGame, 'gated', seat, [], {
+      iterations: 100,
+      playoutDepth: 6,
+      seed: `gated-${seat}`,
+      timeout: Infinity,
+      async: false,
+    });
+    return { game, bot };
+  }
+
+  it('plays its own move, scoring the stalled position as a leaf', async () => {
+    const { bot } = gatedBot(1);
+    const move = await bot.play();
+    expect(move?.action).toBe('pick');
+  });
+
+  it('gives the stalled node no moves and the bot\'s seat, as for a finished game', async () => {
+    const { bot } = gatedBot(1);
+    const { root } = await (bot as unknown as { runSearch(): Promise<{ root: MCTSNode }> }).runSearch();
+    const stalled = everyNode(root).filter((node) => node.parent !== null && node.parent.parent !== null);
+    expect(stalled.length).toBeGreaterThan(0);
+    for (const node of stalled) {
+      expect(node.flowState.complete).toBeFalsy();
+      expect(node.allMoves).toEqual([]);
+      expect(node.currentPlayer).toBe(1);
+    }
+  });
+});

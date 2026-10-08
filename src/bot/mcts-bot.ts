@@ -545,9 +545,11 @@ export class MCTSBot<G extends Game = Game> {
     const live = this.worldFlowState();
     if (Boolean(live.complete) !== Boolean(node.flowState.complete)) return false;
     if (live.complete) return true;
-    return node.parent === null
-      ? canSeatAct(live, node.currentPlayer)
-      : this.seatToMove(live) === node.currentPlayer;
+    if (node.parent === null) return canSeatAct(live, node.currentPlayer);
+    // A world held open with no seat to move matches only a node held open the same way.
+    const liveSeat = this.seatToMove(live);
+    if ((liveSeat === undefined) !== (this.seatToMove(node.flowState) === undefined)) return false;
+    return liveSeat === undefined || liveSeat === node.currentPlayer;
   }
 
   /**
@@ -793,9 +795,10 @@ export class MCTSBot<G extends Game = Game> {
     const commandCount = this.searchGame!.commandHistory.length - commandCountBefore;
 
     // The moves of the seat that moves next, which is the seat the child records.
-    const newMoves = flowState.complete
-      ? []
-      : this.movesFor(this.searchGame!, flowState, this.seatToMove(flowState), { sample: true });
+    // A finished game, or a step held open with no seat to move, has none.
+    const nextSeat = flowState.complete ? undefined : this.seatToMove(flowState);
+    const newMoves =
+      nextSeat === undefined ? [] : this.movesFor(this.searchGame!, flowState, nextSeat, { sample: true });
 
     // Create child node with command count (no snapshot needed!)
     const child = this.createNode(flowState, node, move, newMoves, commandCount);
@@ -834,8 +837,12 @@ export class MCTSBot<G extends Game = Game> {
       // must run before this iteration's move mutates searchGame.
       this.maybeCaptureSimultaneousBaseline(flowState);
 
-      // One seat lists the moves and makes the one chosen (#522).
+      // One seat lists the moves and makes the one chosen (#522). With no seat
+      // to move, the step is held open from outside: score the position as it stands.
       const currentPlayer = this.seatToMove(flowState);
+      if (currentPlayer === undefined) {
+        break;
+      }
       const moves = this.movesFor(this.searchGame, flowState, currentPlayer, { sample: true });
       if (moves.length === 0) {
         break;
@@ -1065,18 +1072,16 @@ export class MCTSBot<G extends Game = Game> {
    *
    * Only for a flow state that is not complete. The root's seat is always the
    * bot's own, whatever order the step lists its seats in.
+   *
+   * `undefined` when no seat has a move: a simultaneous step whose seats are
+   * all done but whose `allDone` is still false waits for something outside
+   * the step to close it (the engine's external-gate pattern). The search has
+   * no move to make there, so such a node is a leaf, scored as it stands.
    */
-  private seatToMove(flowState: FlowState): number {
-    const seat = dueSeats(flowState).find(
+  private seatToMove(flowState: FlowState): number | undefined {
+    return dueSeats(flowState).find(
       (s) => availableActionsForSeat(flowState, s).length > 0 || followUpForSeat(flowState, s) !== undefined,
     );
-    if (seat === undefined) {
-      throw new Error(
-        'The bot reached a position in its search where the game is not over but no seat has a move. ' +
-          'This is a BoardSmith bug; please report it with the game that triggered it.',
-      );
-    }
-    return seat;
   }
 
   /**
@@ -1369,9 +1374,12 @@ export class MCTSBot<G extends Game = Game> {
       // The seat whose moves this node lists and makes (#522). The root is the bot's own
       // decision. Below it, `seatToMove`: not `flowState.currentPlayer`, which a simultaneous
       // step never advances (#321), so every co-decider node was once read as the bot's own and
-      // the search assumed the opponent would cooperate. A finished game has no seat to move;
-      // its node has no children, so the bot's seat stands in.
-      currentPlayer: parent === null || flowState.complete ? this.playerIndex : this.seatToMove(flowState),
+      // the search assumed the opponent would cooperate. A finished game, or a step held open
+      // with no seat to move, has no children, so the bot's seat stands in.
+      currentPlayer:
+        parent === null || flowState.complete
+          ? this.playerIndex
+          : (this.seatToMove(flowState) ?? this.playerIndex),
       proofNumber,
       disproofNumber,
       isProven,
