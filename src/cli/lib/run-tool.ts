@@ -1,5 +1,5 @@
 import { createWriteStream, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
 
@@ -31,6 +31,18 @@ const BOARDSMITH_TOOLS: Readonly<Record<string, string>> = {
   fallow: 'fallow/bin/fallow',
 };
 
+/** The entry script of `bin` in boardsmith's own install, or a readable error. */
+function boardsmithToolScript(bin: string, entry: string): string {
+  try {
+    return createRequire(import.meta.url).resolve(entry);
+  } catch {
+    throw new Error(
+      `boardsmith depends on ${bin}, but its install has no copy of it.\n`
+      + 'Reinstall boardsmith\'s dependencies with: npm install',
+    );
+  }
+}
+
 /**
  * The command and arguments that run `bin` for a workspace at `cwd`: the one
  * resolution every spawn of a developer tool goes through, exported so a test
@@ -41,21 +53,22 @@ export function toolCommand(bin: string, args: string[], cwd: string): { command
   if (entry !== undefined) {
     // Resolved from this module, so it is the copy boardsmith's package.json
     // pins, and run with this Node, so no shell or PATH lookup is involved.
-    let script: string;
-    try {
-      script = createRequire(import.meta.url).resolve(entry);
-    } catch {
-      throw new Error(
-        `boardsmith depends on ${bin}, but its install has no copy of it.\n`
-        + 'Reinstall boardsmith\'s dependencies with: npm install',
-      );
-    }
-    return { command: process.execPath, commandArgs: [script, ...args] };
+    return { command: process.execPath, commandArgs: [boardsmithToolScript(bin, entry), ...args] };
   }
   const localBin = join(cwd, 'node_modules', '.bin', bin);
   return existsSync(localBin)
     ? { command: localBin, commandArgs: args }
     : { command: 'npx', commandArgs: [bin, ...args] };
+}
+
+/**
+ * The fallow command a report tells a developer to run from `cwd`, naming the
+ * same pinned copy `boardsmith audit` runs. `npx fallow` would not: outside
+ * this repository it finds a global fallow or fetches the latest one.
+ */
+export function fallowCommandLine(args: string[], cwd: string): string {
+  const script = boardsmithToolScript('fallow', BOARDSMITH_TOOLS.fallow);
+  return ['node', relative(cwd, script), ...args].join(' ');
 }
 
 /**

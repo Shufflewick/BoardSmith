@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdirSync, writeFileSync, chmodSync } from 'node:fs';
-import { delimiter, join } from 'node:path';
+import { delimiter, join, relative } from 'node:path';
 import { createRequire } from 'node:module';
-import { runTool, runToolCapturingStdout } from './run-tool.js';
+import { fallowCommandLine, runTool, runToolCapturingStdout } from './run-tool.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
@@ -181,5 +181,14 @@ describe('fallow', () => {
     } finally {
       process.env.PATH = original;
     }
+  });
+
+  it('names the same fallow in the command it tells a developer to run', () => {
+    const require = createRequire(import.meta.url);
+    const script = require.resolve('fallow/bin/fallow');
+
+    const line = fallowCommandLine(['health', '--save-baseline', 'x.json'], workspace);
+
+    expect(line).toBe(`node ${relative(workspace, script)} health --save-baseline x.json`);
   });
 });
