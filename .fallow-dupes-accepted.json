@@ -4373,14 +4373,6 @@
       ]
     },
     {
-      "content": "a37bc83333938e37",
-      "lines": 19,
-      "files": [
-        "src/bot-trainer/feature-generator.test.ts",
-        "src/bot-trainer/simulator.test.ts"
-      ]
-    },
-    {
       "content": "a3ba2a687113f6c6",
       "lines": 8,
       "files": [
@@ -4618,14 +4610,6 @@
       "files": [
         "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
         "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
-      ]
-    },
-    {
-      "content": "ace519d41471b5e4",
-      "lines": 16,
-      "files": [
-        "src/bot-trainer/feature-generator.test.ts",
-        "src/bot-trainer/introspector.test.ts"
       ]
     },
     {
@@ -5185,13 +5169,6 @@
       "lines": 6,
       "files": [
         "src/cli/commands/verify-repair.test.ts"
-      ]
-    },
-    {
-      "content": "be5bff4e400164f5",
-      "lines": 6,
-      "files": [
-        "src/bot-trainer/feature-generator.test.ts"
       ]
     },
     {
@@ -5904,13 +5881,6 @@
       "lines": 12,
       "files": [
         "src/ui/composables/useSelectable.test.ts"
-      ]
-    },
-    {
-      "content": "d80fddbbb8eee3ae",
-      "lines": 10,
-      "files": [
-        "src/bot-trainer/feature-templates.ts"
       ]
     },
     {
