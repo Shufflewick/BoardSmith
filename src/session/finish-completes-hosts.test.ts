@@ -14,6 +14,7 @@ import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters, type PublishMeta } from './snapshot-session-host.js';
 import { GameSession } from './game-session.js';
 import { boundaryKeyOf, boundaryKeyOfHost } from './testing/boundary-stamp.js';
+import { succeeded } from './op-result.test-helper.js';
 
 class FinishInTurnGame extends Game<FinishInTurnGame, Player> {
   constructor(options: GameOptions) {
@@ -42,23 +43,23 @@ const options = { playerCount: 3, seed: 'finish-in-turn' };
 
 describe('stateless ops', () => {
   it('the action op that finishes the game reports it complete with its winner', async () => {
-    const started = await executeOp(gameDef, options, null, {}, { type: 'start' });
-    expect(started.isComplete).toBe(false);
+    const started = succeeded(await executeOp(gameDef, options, null, {}, { type: 'start' }));
+    expect(started.snapshot.flowState?.complete).toBe(false);
 
-    const res = await executeOp(gameDef, options, started.snapshot, null, {
+    const res = succeeded(await executeOp(gameDef, options, started.snapshot, null, {
       type: 'action', actionName: 'win', player: 1, args: {}, boundaryKey: boundaryKeyOf(started.snapshot),
-    });
+    }));
 
     expect(res.success).toBe(true);
-    expect(res.isComplete).toBe(true);
-    expect(res.winners).toEqual([1]);
+    expect(res.snapshot.flowState?.complete).toBe(true);
+    expect(res.snapshot.winners).toEqual([1]);
   });
 
   it('refuses the next seat an action on the finished game', async () => {
-    const started = await executeOp(gameDef, options, null, {}, { type: 'start' });
-    const finished = await executeOp(gameDef, options, started.snapshot, null, {
+    const started = succeeded(await executeOp(gameDef, options, null, {}, { type: 'start' }));
+    const finished = succeeded(await executeOp(gameDef, options, started.snapshot, null, {
       type: 'action', actionName: 'win', player: 1, args: {}, boundaryKey: boundaryKeyOf(started.snapshot),
-    });
+    }));
 
     const next = await executeOp(gameDef, options, finished.snapshot, null, {
       type: 'action', actionName: 'pass', player: 2, args: {}, boundaryKey: boundaryKeyOf(finished.snapshot),

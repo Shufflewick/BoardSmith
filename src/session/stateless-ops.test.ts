@@ -1,11 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions, type TutorialDefinition } from '../engine/index.js';
 import type { BotStrategy } from '../bot/types.js';
-import { executeOp, READ_ONLY_OP_TYPES, type GameDefinitionLike } from './stateless-ops.js';
+import { executeOp, READ_ONLY_OP_TYPES, type GameDefinitionLike, type StateEnvelope } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { playThenAcknowledgeFixtureDefinition } from './testing/fixtures/play-then-acknowledge-fixture.js';
 import { ErrorCode } from '../types/protocol.js';
 import { PickHandler } from './pick-handler.js';
+import { succeeded, refused } from './op-result.test-helper.js';
 
 // ---------------------------------------------------------------------------
 // Inline game: player 1 repeatedly takes a "pass" action in a loop.
@@ -255,18 +256,18 @@ describe('executeOp', () => {
 
   describe('start', () => {
     it('returns success, a truthy snapshot, views per player, and null pendingState', async () => {
-      const result = await startGame(simpleGameDef, simpleGameOptions);
+      const result = succeeded(await startGame(simpleGameDef, simpleGameOptions));
 
       expect(result.success).toBe(true);
       expect(result.snapshot).toBeTruthy();
       expect(result.playerViews).toHaveLength(simpleGameOptions.playerCount);
-      expect(result.pendingState).toBeNull();
-      expect(result.isComplete).toBe(false);
+      expect(result).not.toHaveProperty('pendingState');
+      expect(result.snapshot.flowState?.complete).toBe(false);
     });
 
     it('fails when playerCount is below minPlayers', async () => {
       // simpleGameDef.minPlayers = 1, so 0 is out-of-range
-      const result = await executeOp(simpleGameDef, { playerCount: 0, seed: 'x' }, null, null, { type: 'start' });
+      const result = refused(await executeOp(simpleGameDef, { playerCount: 0, seed: 'x' }, null, null, { type: 'start' }));
       expect(result.success).toBe(false);
       expect((result as { error: string }).error).toMatch(/playerCount/);
       expect(result.category).toBe('protocol');
@@ -280,31 +281,31 @@ describe('executeOp', () => {
 
   describe('action', () => {
     it('a valid action returns success and a changed snapshot', async () => {
-      const startResult = await startGame(simpleGameDef, simpleGameOptions);
+      const startResult = succeeded(await startGame(simpleGameDef, simpleGameOptions));
       expect(startResult.success).toBe(true);
 
-      const actionResult = await executeOp(
+      const actionResult = succeeded(await executeOp(
         simpleGameDef,
         simpleGameOptions,
         startResult.snapshot,
         null,
         { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOf(startResult.snapshot) },
-      );
+      ));
 
       expect(actionResult.success).toBe(true);
       expect(JSON.stringify(actionResult.snapshot)).not.toBe(JSON.stringify(startResult.snapshot));
     });
 
     it('an unknown action returns success:false', async () => {
-      const startResult = await startGame(simpleGameDef, simpleGameOptions);
+      const startResult = succeeded(await startGame(simpleGameDef, simpleGameOptions));
 
-      const result = await executeOp(
+      const result = refused(await executeOp(
         simpleGameDef,
         simpleGameOptions,
         startResult.snapshot,
         null,
         { type: 'action', actionName: 'nonexistent', player: 1, args: {}, boundaryKey: boundaryKeyOf(startResult.snapshot) },
-      );
+      ));
 
       expect(result.success).toBe(false);
       // The runner's structured errorCode must be threaded through, not
@@ -313,31 +314,31 @@ describe('executeOp', () => {
     });
 
     it('rejects the wrong player with the runner-sourced NOT_YOUR_TURN errorCode', async () => {
-      const startResult = await startGame(simpleGameDef, simpleGameOptions);
+      const startResult = succeeded(await startGame(simpleGameDef, simpleGameOptions));
 
-      const result = await executeOp(
+      const result = refused(await executeOp(
         simpleGameDef,
         simpleGameOptions,
         startResult.snapshot,
         null,
         { type: 'action', actionName: 'pass', player: 2, args: {}, boundaryKey: boundaryKeyOf(startResult.snapshot) },
-      );
+      ));
 
       expect(result.success).toBe(false);
       expect(result.errorCode).toBe(ErrorCode.NOT_YOUR_TURN);
     });
 
     it('surfaces followUp with metadata when the action produces one', async () => {
-      const startResult = await startGame(followUpGameDef, followUpGameOptions);
+      const startResult = succeeded(await startGame(followUpGameDef, followUpGameOptions));
       expect(startResult.success).toBe(true);
 
-      const actionResult = await executeOp(
+      const actionResult = succeeded(await executeOp(
         followUpGameDef,
         followUpGameOptions,
         startResult.snapshot,
         null,
         { type: 'action', actionName: 'begin', player: 1, args: {}, boundaryKey: boundaryKeyOf(startResult.snapshot) },
-      );
+      ));
 
       expect(actionResult.success).toBe(true);
       // Typed as the FollowUpOffer it is (#377), so no cast is needed to read it.
@@ -350,16 +351,16 @@ describe('executeOp', () => {
 
   describe('selectionStep', () => {
     it('first step returns actionComplete:false and non-null pendingState', async () => {
-      const startResult = await startGame(twoStepGameDef, twoStepGameOptions);
+      const startResult = succeeded(await startGame(twoStepGameDef, twoStepGameOptions));
       expect(startResult.success).toBe(true);
 
-      const step1 = await executeOp(
+      const step1 = succeeded(await executeOp(
         twoStepGameDef,
         twoStepGameOptions,
         startResult.snapshot,
         null,
         { type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick', boundaryKey: boundaryKeyOf(startResult.snapshot) },
-      );
+      ));
 
       expect(step1.success).toBe(true);
       expect(step1.actionComplete).toBe(false);
@@ -367,19 +368,19 @@ describe('executeOp', () => {
     });
 
     it('second step (feeding pendingState back) completes the action (pendingState round-trip)', async () => {
-      const startResult = await startGame(twoStepGameDef, twoStepGameOptions);
+      const startResult = succeeded(await startGame(twoStepGameDef, twoStepGameOptions));
 
-      const step1 = await executeOp(
+      const step1 = succeeded(await executeOp(
         twoStepGameDef,
         twoStepGameOptions,
         startResult.snapshot,
         null,
         { type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick', boundaryKey: boundaryKeyOf(startResult.snapshot) },
-      );
+      ));
       expect(step1.success).toBe(true);
       expect(step1.pendingState).not.toBeNull();
 
-      const step2 = await executeOp(
+      const step2 = succeeded(await executeOp(
         twoStepGameDef,
         twoStepGameOptions,
         step1.snapshot,
@@ -393,7 +394,7 @@ describe('executeOp', () => {
           initialArgs: { color: 'red' },
           boundaryKey: boundaryKeyOf(step1.snapshot),
         },
-      );
+      ));
 
       expect(step2.success).toBe(true);
       expect(step2.actionComplete).toBe(true);
@@ -405,10 +406,10 @@ describe('executeOp', () => {
 
   describe('resolveChoices', () => {
     it('returns choices array for a chooseFrom selection', async () => {
-      const startResult = await startGame(twoStepGameDef, twoStepGameOptions);
+      const startResult = succeeded(await startGame(twoStepGameDef, twoStepGameOptions));
       expect(startResult.success).toBe(true);
 
-      const result = await executeOp(
+      const result = succeeded(await executeOp(
         twoStepGameDef,
         twoStepGameOptions,
         startResult.snapshot,
@@ -420,7 +421,7 @@ describe('executeOp', () => {
           selectionName: 'color',
           args: {},
         },
-      );
+      ));
 
       expect(result.success).toBe(true);
       expect(Array.isArray(result.choices)).toBe(true);
@@ -428,10 +429,10 @@ describe('executeOp', () => {
     });
 
     it('surfaces CHOICES_EVALUATION_ERROR when the choices function throws (Pitfall 1 guard)', async () => {
-      const startResult = await startGame(badChoicesGameDef, badChoicesGameOptions);
+      const startResult = succeeded(await startGame(badChoicesGameDef, badChoicesGameOptions));
       expect(startResult.success).toBe(true);
 
-      const result = await executeOp(
+      const result = refused(await executeOp(
         badChoicesGameDef,
         badChoicesGameOptions,
         startResult.snapshot,
@@ -443,7 +444,7 @@ describe('executeOp', () => {
           selectionName: 'option',
           args: { trigger: true },
         },
-      );
+      ));
 
       expect(result.success).toBe(false);
       expect(result.errorCode).toBe(ErrorCode.CHOICES_EVALUATION_ERROR);
@@ -452,10 +453,10 @@ describe('executeOp', () => {
     it('carries structured warnings from a throwing boardRefs() while still succeeding (ERR-01)', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       try {
-        const startResult = await startGame(warningGameDef, warningGameOptions);
+        const startResult = succeeded(await startGame(warningGameDef, warningGameOptions));
         expect(startResult.success).toBe(true);
 
-        const result = await executeOp(
+        const result = succeeded(await executeOp(
           warningGameDef,
           warningGameOptions,
           startResult.snapshot,
@@ -467,7 +468,7 @@ describe('executeOp', () => {
             selectionName: 'dest',
             args: {},
           },
-        );
+        ));
 
         expect(result.success).toBe(true);
         expect(Array.isArray(result.choices)).toBe(true);
@@ -492,7 +493,7 @@ describe('executeOp', () => {
 
   describe('selectionStep warnings threading', () => {
     it('forwards warnings from the pick response onto OpResult', async () => {
-      const startResult = await startGame(twoStepGameDef, twoStepGameOptions);
+      const startResult = succeeded(await startGame(twoStepGameDef, twoStepGameOptions));
       expect(startResult.success).toBe(true);
 
       const spy = vi.spyOn(PickHandler.prototype, 'processSelectionStep').mockResolvedValueOnce({
@@ -504,13 +505,13 @@ describe('executeOp', () => {
       });
 
       try {
-        const step1 = await executeOp(
+        const step1 = succeeded(await executeOp(
           twoStepGameDef,
           twoStepGameOptions,
           startResult.snapshot,
           null,
           { type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick', boundaryKey: boundaryKeyOf(startResult.snapshot) },
-        );
+        ));
 
         expect(step1.success).toBe(true);
         expect(step1.warnings).toBeDefined();
@@ -525,27 +526,27 @@ describe('executeOp', () => {
 
   describe('cancelAction', () => {
     it('returns success with pendingState null after a partial selection', async () => {
-      const startResult = await startGame(twoStepGameDef, twoStepGameOptions);
+      const startResult = succeeded(await startGame(twoStepGameDef, twoStepGameOptions));
 
-      const step1 = await executeOp(
+      const step1 = succeeded(await executeOp(
         twoStepGameDef,
         twoStepGameOptions,
         startResult.snapshot,
         null,
         { type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick', boundaryKey: boundaryKeyOf(startResult.snapshot) },
-      );
+      ));
       expect(step1.success).toBe(true);
 
-      const cancelResult = await executeOp(
+      const cancelResult = succeeded(await executeOp(
         twoStepGameDef,
         twoStepGameOptions,
         step1.snapshot,
         step1.pendingState,
         { type: 'cancelAction', player: 1 },
-      );
+      ));
 
       expect(cancelResult.success).toBe(true);
-      expect(cancelResult.pendingState).toBeNull();
+      expect(cancelResult).not.toHaveProperty('pendingState');
     });
   });
 
@@ -553,28 +554,28 @@ describe('executeOp', () => {
 
   describe('undo', () => {
     it('restores the game to the state before the last action', async () => {
-      const startResult = await startGame(simpleGameDef, simpleGameOptions);
+      const startResult = succeeded(await startGame(simpleGameDef, simpleGameOptions));
       expect(startResult.success).toBe(true);
 
       // Player 1 takes a pass action. Because the flow is a loop, player 1
       // remains the current player after passing, so undo is allowed.
-      const afterAction = await executeOp(
+      const afterAction = succeeded(await executeOp(
         simpleGameDef,
         simpleGameOptions,
         startResult.snapshot,
         null,
         { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOf(startResult.snapshot) },
-      );
+      ));
       expect(afterAction.success).toBe(true);
       const snapshotAfterAction = JSON.stringify(afterAction.snapshot);
 
-      const undoResult = await executeOp(
+      const undoResult = succeeded(await executeOp(
         simpleGameDef,
         simpleGameOptions,
         afterAction.snapshot,
         null,
         { type: 'undo', player: 1 },
-      );
+      ));
 
       expect(undoResult.success).toBe(true);
       expect(JSON.stringify(undoResult.snapshot)).not.toBe(snapshotAfterAction);
@@ -587,15 +588,15 @@ describe('executeOp', () => {
       // reporting the same "no checkpoint" as a genuinely broken snapshot.
       const boundedDef: GameDefinitionLike = { ...simpleGameDef, checkpoints: { max: 3 } };
 
-      let snapshot = (await startGame(boundedDef, simpleGameOptions)).snapshot;
+      let snapshot = succeeded(await startGame(boundedDef, simpleGameOptions)).snapshot;
       for (let i = 0; i < 8; i++) {
-        const result = await executeOp(
+        const result = succeeded(await executeOp(
           boundedDef,
           simpleGameOptions,
           snapshot,
           null,
           { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOf(snapshot) },
-        );
+        ));
         expect(result.success).toBe(true);
         snapshot = result.snapshot;
       }
@@ -625,9 +626,9 @@ describe('executeOp', () => {
       // refuse an undo it can actually serve.
       const boundedDef: GameDefinitionLike = { ...simpleGameDef, checkpoints: { max: 50 } };
 
-      let snapshot = (await startGame(boundedDef, simpleGameOptions)).snapshot;
+      let snapshot = succeeded(await startGame(boundedDef, simpleGameOptions)).snapshot;
       for (let i = 0; i < 8; i++) {
-        snapshot = (await executeOp(
+        snapshot = succeeded(await executeOp(
           boundedDef,
           simpleGameOptions,
           snapshot,
@@ -647,7 +648,7 @@ describe('executeOp', () => {
     });
 
     it('fails when there are no actions to undo', async () => {
-      const startResult = await startGame(simpleGameDef, simpleGameOptions);
+      const startResult = succeeded(await startGame(simpleGameDef, simpleGameOptions));
 
       const undoResult = await executeOp(
         simpleGameDef,
@@ -665,17 +666,17 @@ describe('executeOp', () => {
 
   describe('botTurn', () => {
     it('returns botMoved:true when a flagged bot seat is due to act', async () => {
-      const startResult = await startGame(simpleGameDef, simpleGameOptions);
+      const startResult = succeeded(await startGame(simpleGameDef, simpleGameOptions));
       expect(startResult.success).toBe(true);
 
       // Player 1 is the current player; flag seat 1 as bot.
-      const botResult = await executeOp(
+      const botResult = succeeded(await executeOp(
         simpleGameDef,
         simpleGameOptions,
         startResult.snapshot,
         null,
         { type: 'botTurn', seats: [{ seat: 1, level: 'easy' }] },
-      );
+      ));
 
       expect(botResult.success).toBe(true);
       expect(botResult.botMoved).toBe(true);
@@ -683,17 +684,17 @@ describe('executeOp', () => {
     });
 
     it('returns botMoved:false when no flagged bot seat is currently due', async () => {
-      const startResult = await startGame(simpleGameDef, simpleGameOptions);
+      const startResult = succeeded(await startGame(simpleGameDef, simpleGameOptions));
       expect(startResult.success).toBe(true);
 
       // Seat 2 is flagged but player 1 is due to act — bot should not move.
-      const botResult = await executeOp(
+      const botResult = succeeded(await executeOp(
         simpleGameDef,
         simpleGameOptions,
         startResult.snapshot,
         null,
         { type: 'botTurn', seats: [{ seat: 2, level: 'easy' }] },
-      );
+      ));
 
       expect(botResult.success).toBe(true);
       expect(botResult.botMoved).toBe(false);
@@ -738,13 +739,13 @@ describe('executeOp', () => {
       };
       const concedeOptions = { playerCount: 2, seed: 'concede-seed' };
 
-      const startResult = await executeOp(concedeDef, concedeOptions, null, null, { type: 'start' });
+      const startResult = succeeded(await executeOp(concedeDef, concedeOptions, null, null, { type: 'start' }));
       expect(startResult.success).toBe(true);
 
-      const botResult = await executeOp(concedeDef, concedeOptions, startResult.snapshot, null, {
+      const botResult = succeeded(await executeOp(concedeDef, concedeOptions, startResult.snapshot, null, {
         type: 'botTurn',
         seats: [{ seat: 1, level: 'easy' }],
-      });
+      }));
 
       expect(botResult.success).toBe(true);
       expect(botResult.botMoved).toBe(true);
@@ -773,16 +774,16 @@ describe('executeOp', () => {
     };
 
     it('succeeds and sets tutorialProgress for the given seat when tutorial definition is present', async () => {
-      const startResult = await startGame(simpleGameWithTutorialDef, simpleGameOptions);
+      const startResult = succeeded(await startGame(simpleGameWithTutorialDef, simpleGameOptions));
       expect(startResult.success).toBe(true);
 
-      const result = await executeOp(
+      const result = succeeded(await executeOp(
         simpleGameWithTutorialDef,
         simpleGameOptions,
         startResult.snapshot,
         null,
         { type: 'startTutorial', player: 1 },
-      );
+      ));
 
       expect(result.success).toBe(true);
       expect(result.snapshot).toBeTruthy();
@@ -792,16 +793,16 @@ describe('executeOp', () => {
     });
 
     it('fails with an error when the game has no tutorial definition', async () => {
-      const startResult = await startGame(simpleGameDef, simpleGameOptions);
+      const startResult = succeeded(await startGame(simpleGameDef, simpleGameOptions));
       expect(startResult.success).toBe(true);
 
-      const result = await executeOp(
+      const result = refused(await executeOp(
         simpleGameDef,
         simpleGameOptions,
         startResult.snapshot,
         null,
         { type: 'startTutorial', player: 1 },
-      );
+      ));
 
       expect(result.success).toBe(false);
       expect(result.error).toMatch(/No tutorial definition/);
@@ -809,7 +810,7 @@ describe('executeOp', () => {
     });
 
     it('broadcasts hasTutorial: true in state when tutorial definition is present', async () => {
-      const startResult = await startGame(simpleGameWithTutorialDef, simpleGameOptions);
+      const startResult = succeeded(await startGame(simpleGameWithTutorialDef, simpleGameOptions));
       expect(startResult.success).toBe(true);
 
       // hasTutorial must be present in the initial broadcast (not just after startTutorial)
@@ -818,16 +819,16 @@ describe('executeOp', () => {
     });
 
     it('rejects invalid seat (0) with a protocol error', async () => {
-      const startResult = await startGame(simpleGameWithTutorialDef, simpleGameOptions);
+      const startResult = succeeded(await startGame(simpleGameWithTutorialDef, simpleGameOptions));
       expect(startResult.success).toBe(true);
 
-      const result = await executeOp(
+      const result = refused(await executeOp(
         simpleGameWithTutorialDef,
         simpleGameOptions,
         startResult.snapshot,
         null,
         { type: 'startTutorial', player: 0 },
-      );
+      ));
 
       expect(result.success).toBe(false);
       expect(result.error).toMatch(/Invalid player seat/);
@@ -897,29 +898,29 @@ describe('executeOp', () => {
 
     it('tutorial auto-advances after action in the dev-host stateless path', async () => {
       // Start the game.
-      const startResult = await executeOp(countingGameDef, countingGameOptions, null, null, { type: 'start' });
+      const startResult = succeeded(await executeOp(countingGameDef, countingGameOptions, null, null, { type: 'start' }));
       expect(startResult.success).toBe(true);
 
       // Start tutorial for seat 1 — tutorial should land on step-1.
-      const tutorialStartResult = await executeOp(
+      const tutorialStartResult = succeeded(await executeOp(
         countingGameDef,
         countingGameOptions,
         startResult.snapshot,
         null,
         { type: 'startTutorial', player: 1 },
-      );
+      ));
       expect(tutorialStartResult.success).toBe(true);
       const viewBefore = (tutorialStartResult.playerViews as Array<{ state: { tutorial?: { stepId?: string } } }>)?.[0];
       expect(viewBefore?.state?.tutorial?.stepId).toBe('step-1');
 
       // Perform 'pass' — advanceWhen fires because passCount goes from 0 to 1.
-      const actionResult = await executeOp(
+      const actionResult = succeeded(await executeOp(
         countingGameDef,
         countingGameOptions,
         tutorialStartResult.snapshot,
         null,
         { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOf(tutorialStartResult.snapshot) },
-      );
+      ));
       expect(actionResult.success).toBe(true);
 
       // Tutorial MUST advance to step-2 — proves autoAdvanceTutorial is called
@@ -1000,7 +1001,7 @@ describe('executeOp', () => {
     const botGameOptions = { playerCount: 2, seed: 'bot-seed' };
 
     async function startBotGame() {
-      const res = await executeOp(botGameDef, botGameOptions, null, null, { type: 'start' });
+      const res = succeeded(await executeOp(botGameDef, botGameOptions, null, null, { type: 'start' }));
       if (!res.success) throw new Error('start failed');
       return res.snapshot;
     }
@@ -1009,7 +1010,7 @@ describe('executeOp', () => {
 
     it('hint returns hintAnnotation with text "Suggested move" when seat is awaiting input', async () => {
       const snapshot = await startBotGame();
-      const res = await executeOp(botGameDef, botGameOptions, snapshot, null, { type: 'hint', seat: 1 });
+      const res = succeeded(await executeOp(botGameDef, botGameOptions, snapshot, null, { type: 'hint', seat: 1 }));
 
       expect(res.success).toBe(true);
       expect(res.hintAnnotation).toBeDefined();
@@ -1022,7 +1023,7 @@ describe('executeOp', () => {
     it('hint returns a protocol error when seat is not awaiting input', async () => {
       const snapshot = await startBotGame();
       // Seat 2 never acts in BotGame — seat 1 always goes
-      const res = await executeOp(botGameDef, botGameOptions, snapshot, null, { type: 'hint', seat: 2 });
+      const res = refused(await executeOp(botGameDef, botGameOptions, snapshot, null, { type: 'hint', seat: 2 }));
 
       expect(res.success).toBe(false);
       expect(res.category).toBe('protocol');
@@ -1035,7 +1036,7 @@ describe('executeOp', () => {
       const snapshot = await startBotGame();
       // Explicitly exclude `bot` so the def has no bot config.
       const { bot: _bot, ...noBotDef } = botGameDef;
-      const res = await executeOp(noBotDef, botGameOptions, snapshot, null, { type: 'hint', seat: 1 });
+      const res = refused(await executeOp(noBotDef, botGameOptions, snapshot, null, { type: 'hint', seat: 1 }));
 
       expect(res.success).toBe(false);
       expect(res.category).toBe('protocol');
@@ -1046,9 +1047,9 @@ describe('executeOp', () => {
 
     it('heatmapToggle visible=true returns heatmapUpdate with exactly one isBest entry', async () => {
       const snapshot = await startBotGame();
-      const res = await executeOp(botGameDef, botGameOptions, snapshot, null, {
+      const res = succeeded(await executeOp(botGameDef, botGameOptions, snapshot, null, {
         type: 'heatmapToggle', seat: 1, visible: true,
-      });
+      }));
 
       expect(res.success).toBe(true);
       expect(res.heatmapUpdate).toBeDefined();
@@ -1068,9 +1069,9 @@ describe('executeOp', () => {
       // visible=false must short-circuit BEFORE checking for bot config.
       const { bot: _bot, ...noBotDef } = botGameDef;
       const snapshot = await startBotGame();
-      const res = await executeOp(noBotDef, botGameOptions, snapshot, null, {
+      const res = succeeded(await executeOp(noBotDef, botGameOptions, snapshot, null, {
         type: 'heatmapToggle', seat: 1, visible: false,
-      });
+      }));
 
       expect(res.success).toBe(true);
       expect(res.heatmapUpdate).toBeDefined();
@@ -1084,24 +1085,24 @@ describe('executeOp', () => {
       const snapshot = await startBotGame();
 
       // seat:0 is out-of-range — must fail the same way as visible=true does
-      const res0 = await executeOp(botGameDef, botGameOptions, snapshot, null, {
+      const res0 = refused(await executeOp(botGameDef, botGameOptions, snapshot, null, {
         type: 'heatmapToggle', seat: 0, visible: false,
-      });
+      }));
       expect(res0.success).toBe(false);
       expect(res0.category).toBe('protocol');
       expect(res0.error).toMatch(/invalid seat/i);
 
       // seat:99 is also out-of-range
-      const res99 = await executeOp(botGameDef, botGameOptions, snapshot, null, {
+      const res99 = refused(await executeOp(botGameDef, botGameOptions, snapshot, null, {
         type: 'heatmapToggle', seat: 99, visible: false,
-      });
+      }));
       expect(res99.success).toBe(false);
       expect(res99.category).toBe('protocol');
 
       // seat:1 is valid — visible=false must still succeed for in-range seats
-      const resOk = await executeOp(botGameDef, botGameOptions, snapshot, null, {
+      const resOk = succeeded(await executeOp(botGameDef, botGameOptions, snapshot, null, {
         type: 'heatmapToggle', seat: 1, visible: false,
-      });
+      }));
       expect(resOk.success).toBe(true);
       expect(resOk.heatmapUpdate!.visible).toBe(false);
     });
@@ -1161,14 +1162,14 @@ describe('executeOp', () => {
     const lockedHost = { teachingDisabled: true };
 
     async function startLockGame() {
-      const res = await executeOp(lockBotDef, openOpts, null, null, { type: 'start' });
+      const res = succeeded(await executeOp(lockBotDef, openOpts, null, null, { type: 'start' }));
       if (!res.success) throw new Error('start failed');
       return res.snapshot;
     }
 
     it('hint returns a protocol lockout error when teachingDisabled is true', async () => {
       const snapshot = await startLockGame();
-      const res = await executeOp(lockBotDef, openOpts, snapshot, null, { type: 'hint', seat: 1 }, lockedHost);
+      const res = refused(await executeOp(lockBotDef, openOpts, snapshot, null, { type: 'hint', seat: 1 }, lockedHost));
 
       expect(res.success).toBe(false);
       expect(res.category).toBe('protocol');
@@ -1177,7 +1178,7 @@ describe('executeOp', () => {
 
     it('hint succeeds normally when teachingDisabled is absent', async () => {
       const snapshot = await startLockGame();
-      const res = await executeOp(lockBotDef, openOpts, snapshot, null, { type: 'hint', seat: 1 });
+      const res = succeeded(await executeOp(lockBotDef, openOpts, snapshot, null, { type: 'hint', seat: 1 }));
 
       expect(res.success).toBe(true);
       expect(res.hintAnnotation).toBeDefined();
@@ -1185,9 +1186,9 @@ describe('executeOp', () => {
 
     it('heatmapToggle returns a protocol lockout error when teachingDisabled is true', async () => {
       const snapshot = await startLockGame();
-      const res = await executeOp(lockBotDef, openOpts, snapshot, null, {
+      const res = refused(await executeOp(lockBotDef, openOpts, snapshot, null, {
         type: 'heatmapToggle', seat: 1, visible: true,
-      }, lockedHost);
+      }, lockedHost));
 
       expect(res.success).toBe(false);
       expect(res.category).toBe('protocol');
@@ -1196,9 +1197,9 @@ describe('executeOp', () => {
 
     it('heatmapToggle visible=false also returns a lockout error when teachingDisabled is true', async () => {
       const snapshot = await startLockGame();
-      const res = await executeOp(lockBotDef, openOpts, snapshot, null, {
+      const res = refused(await executeOp(lockBotDef, openOpts, snapshot, null, {
         type: 'heatmapToggle', seat: 1, visible: false,
-      }, lockedHost);
+      }, lockedHost));
 
       expect(res.success).toBe(false);
       expect(res.category).toBe('protocol');
@@ -1207,9 +1208,9 @@ describe('executeOp', () => {
 
     it('startTutorial returns a protocol lockout error when teachingDisabled is true', async () => {
       const snapshot = await startLockGame();
-      const res = await executeOp(lockBotDef, openOpts, snapshot, null, {
+      const res = refused(await executeOp(lockBotDef, openOpts, snapshot, null, {
         type: 'startTutorial', player: 1,
-      }, lockedHost);
+      }, lockedHost));
 
       expect(res.success).toBe(false);
       expect(res.category).toBe('protocol');
@@ -1219,15 +1220,15 @@ describe('executeOp', () => {
     it('exitTutorial succeeds even when teachingDisabled is true (D-06)', async () => {
       // Start the tutorial in an open session first so we have a tutorial-in-progress snapshot.
       const snapshot = await startLockGame();
-      const started = await executeOp(lockBotDef, openOpts, snapshot, null, {
+      const started = succeeded(await executeOp(lockBotDef, openOpts, snapshot, null, {
         type: 'startTutorial', player: 1,
-      });
+      }));
       expect(started.success).toBe(true);
 
       // exitTutorial under the locked options must still succeed.
-      const res = await executeOp(lockBotDef, openOpts, started.snapshot, null, {
+      const res = succeeded(await executeOp(lockBotDef, openOpts, started.snapshot, null, {
         type: 'exitTutorial', player: 1,
-      }, lockedHost);
+      }, lockedHost));
 
       expect(res.success).toBe(true);
     });
@@ -1250,7 +1251,7 @@ describe('executeOp', () => {
     // unlock) assist features — only hostOptions controls the lockout.
     it('a game-defined gameOptions.teachingDisabled has NO effect on assist ops (D-01 non-collision)', async () => {
       const gameOwnOption = { ...openOpts, teachingDisabled: true };
-      const startRes = await executeOp(lockBotDef, gameOwnOption, null, null, { type: 'start' });
+      const startRes = succeeded(await executeOp(lockBotDef, gameOwnOption, null, null, { type: 'start' }));
       expect(startRes.success).toBe(true);
 
       const hintRes = await executeOp(lockBotDef, gameOwnOption, startRes.snapshot, null, {
@@ -1265,7 +1266,7 @@ describe('executeOp', () => {
     });
 
     it('hostOptions.teachingDisabled does not leak into snapshot.gameOptions', async () => {
-      const startRes = await executeOp(lockBotDef, openOpts, null, null, { type: 'start' }, lockedHost);
+      const startRes = succeeded(await executeOp(lockBotDef, openOpts, null, null, { type: 'start' }, lockedHost));
       expect(startRes.success).toBe(true);
 
       const persistedOptions = (startRes.snapshot as { gameOptions?: Record<string, unknown> }).gameOptions;
@@ -1327,7 +1328,7 @@ describe('executeOp', () => {
     const botSuggestOpts = { playerCount: 2, seed: 'bot-suggest-seed' };
 
     async function startBotSuggestGame() {
-      const res = await executeOp(botSuggestGameDef, botSuggestOpts, null, null, { type: 'start' });
+      const res = succeeded(await executeOp(botSuggestGameDef, botSuggestOpts, null, null, { type: 'start' }));
       if (!res.success) throw new Error('start failed');
       return res.snapshot;
     }
@@ -1336,10 +1337,10 @@ describe('executeOp', () => {
 
     it('botSuggest returns success with suggestedAction + suggestedArgs + botPlayer, snapshot unchanged', async () => {
       const snapshot = await startBotSuggestGame();
-      const res = await executeOp(botSuggestGameDef, botSuggestOpts, snapshot, null, {
+      const res = succeeded(await executeOp(botSuggestGameDef, botSuggestOpts, snapshot, null, {
         type: 'botSuggest',
         seats: [{ seat: 1 }],
-      });
+      }));
 
       expect(res.success).toBe(true);
       expect(res.suggestedAction).toBeDefined();
@@ -1355,7 +1356,7 @@ describe('executeOp', () => {
       expect(snapObj.actionHistory ?? []).toHaveLength(0);
 
       // Game is still awaiting the same player (seat 1) for the same actions.
-      const flowState = res.flowState as { currentPlayer?: number; availableActions?: string[] };
+      const flowState = res.snapshot.flowState as { currentPlayer?: number; availableActions?: string[] };
       expect(flowState.currentPlayer).toBe(1);
       expect(flowState.availableActions).toContain('move');
     });
@@ -1365,10 +1366,10 @@ describe('executeOp', () => {
     it('botSuggest returns a protocol error when no seat among the given seats is awaiting input', async () => {
       const snapshot = await startBotSuggestGame();
       // Seat 2 never acts — only seat 1 does
-      const res = await executeOp(botSuggestGameDef, botSuggestOpts, snapshot, null, {
+      const res = refused(await executeOp(botSuggestGameDef, botSuggestOpts, snapshot, null, {
         type: 'botSuggest',
         seats: [{ seat: 2 }],
-      });
+      }));
 
       expect(res.success).toBe(false);
       expect(res.category).toBe('protocol');
@@ -1380,10 +1381,10 @@ describe('executeOp', () => {
     it('botSuggest returns a protocol error when no bot config is on the definition', async () => {
       const { bot: _bot, ...noBotDef } = botSuggestGameDef;
       const snapshot = await startBotSuggestGame();
-      const res = await executeOp(noBotDef, botSuggestOpts, snapshot, null, {
+      const res = refused(await executeOp(noBotDef, botSuggestOpts, snapshot, null, {
         type: 'botSuggest',
         seats: [{ seat: 1 }],
-      });
+      }));
 
       expect(res.success).toBe(false);
       expect(res.category).toBe('protocol');
@@ -1461,16 +1462,16 @@ describe('executeOp', () => {
         tutorial: SETUP_ADVANCE_TUTORIAL,
       };
 
-      const startResult = await startGame(advanceDef, simpleGameOptions);
+      const startResult = succeeded(await startGame(advanceDef, simpleGameOptions));
       expect(startResult.success).toBe(true);
 
-      const result = await executeOp(
+      const result = succeeded(await executeOp(
         advanceDef,
         simpleGameOptions,
         startResult.snapshot,
         null,
         { type: 'startTutorial', player: 1 },
-      );
+      ));
 
       expect(result.success).toBe(true);
       // setup set markerSet=true; the advanceWhen predicate fired → tutorial advanced to step-2.
@@ -1487,14 +1488,14 @@ describe('executeOp', () => {
         tutorial: NO_SETUP_TUTORIAL,
       };
 
-      const startResult = await startGame(noSetupDef, simpleGameOptions);
-      const result = await executeOp(
+      const startResult = succeeded(await startGame(noSetupDef, simpleGameOptions));
+      const result = succeeded(await executeOp(
         noSetupDef,
         simpleGameOptions,
         startResult.snapshot,
         null,
         { type: 'startTutorial', player: 1 },
-      );
+      ));
 
       expect(result.success).toBe(true);
       const view = (result.playerViews as Array<{ state: { tutorial?: { stepId?: string } } }>)?.[0];
@@ -1518,30 +1519,30 @@ describe('executeOp', () => {
     };
 
     it('sets tutorial status to exited and removes the gate', async () => {
-      const startResult = await startGame(gameWithExitTutorialDef, simpleGameOptions);
+      const startResult = succeeded(await startGame(gameWithExitTutorialDef, simpleGameOptions));
       expect(startResult.success).toBe(true);
 
       // Start tutorial first.
-      const tutorialStarted = await executeOp(
+      const tutorialStarted = succeeded(await executeOp(
         gameWithExitTutorialDef,
         simpleGameOptions,
         startResult.snapshot,
         null,
         { type: 'startTutorial', player: 1 },
-      );
+      ));
       expect(tutorialStarted.success).toBe(true);
       // Tutorial is running on step-1.
       const viewRunning = (tutorialStarted.playerViews as Array<{ state: { tutorial?: { stepId?: string } } }>)?.[0];
       expect(viewRunning?.state?.tutorial?.stepId).toBe('step-1');
 
       // Exit the tutorial.
-      const exitResult = await executeOp(
+      const exitResult = succeeded(await executeOp(
         gameWithExitTutorialDef,
         simpleGameOptions,
         tutorialStarted.snapshot,
         null,
         { type: 'exitTutorial', player: 1 },
-      );
+      ));
 
       expect(exitResult.success).toBe(true);
       // After exit, tutorialProgress status is 'exited'; the tutorial step view
@@ -1552,16 +1553,16 @@ describe('executeOp', () => {
     });
 
     it('fails with a protocol error when the game has no tutorial definition', async () => {
-      const startResult = await startGame(simpleGameDef, simpleGameOptions);
+      const startResult = succeeded(await startGame(simpleGameDef, simpleGameOptions));
       expect(startResult.success).toBe(true);
 
-      const result = await executeOp(
+      const result = refused(await executeOp(
         simpleGameDef,
         simpleGameOptions,
         startResult.snapshot,
         null,
         { type: 'exitTutorial', player: 1 },
-      );
+      ));
 
       expect(result.success).toBe(false);
       expect(result.error).toMatch(/No tutorial definition/);
@@ -1569,16 +1570,16 @@ describe('executeOp', () => {
     });
 
     it('rejects invalid seat with a protocol error', async () => {
-      const startResult = await startGame(gameWithExitTutorialDef, simpleGameOptions);
+      const startResult = succeeded(await startGame(gameWithExitTutorialDef, simpleGameOptions));
       expect(startResult.success).toBe(true);
 
-      const result = await executeOp(
+      const result = refused(await executeOp(
         gameWithExitTutorialDef,
         simpleGameOptions,
         startResult.snapshot,
         null,
         { type: 'exitTutorial', player: 0 },
-      );
+      ));
 
       expect(result.success).toBe(false);
       expect(result.error).toMatch(/Invalid player seat/);
@@ -1590,17 +1591,17 @@ describe('executeOp', () => {
 
   describe('debugFlowState', () => {
     it('debug:flow-state op returns flowDebugInfo with a non-empty description and structured fields', async () => {
-      const startResult = await startGame(simpleGameDef, simpleGameOptions);
+      const startResult = succeeded(await startGame(simpleGameDef, simpleGameOptions));
       expect(startResult.success).toBe(true);
 
-      const result = await executeOp(
+      const result = succeeded(await executeOp(
         simpleGameDef,
         simpleGameOptions,
         startResult.snapshot,
         null,
         { type: 'debugFlowState', player: 1 },
         { debug: true },
-      );
+      ));
 
       expect(result.success).toBe(true);
       expect(result.flowDebugInfo).toBeDefined();
@@ -1614,34 +1615,33 @@ describe('executeOp', () => {
       // playThenAcknowledge's root is sequence(eachPlayer(playCard), scoring):
       // after both cards the snapshot is at `scoring`, the sequence's last child.
       const options = { playerCount: 2, seed: 'x' };
-      let result = await startGame(playThenAcknowledgeFixtureDefinition, options);
+      let result: StateEnvelope = succeeded(await startGame(playThenAcknowledgeFixtureDefinition, options));
       for (const [player, card] of [[1, 1], [2, 2]]) {
-        result = await executeOp(playThenAcknowledgeFixtureDefinition, options, result.snapshot, null, {
+        result = succeeded(await executeOp(playThenAcknowledgeFixtureDefinition, options, result.snapshot, null, {
           type: 'action', actionName: 'playCard', player, args: { card }, boundaryKey: boundaryKeyOf(result.snapshot),
-        });
-        expect(result.success).toBe(true);
+        }));
       }
 
-      const debug = await executeOp(playThenAcknowledgeFixtureDefinition, options, result.snapshot, null, {
+      const debug = succeeded(await executeOp(playThenAcknowledgeFixtureDefinition, options, result.snapshot, null, {
         type: 'debugFlowState', player: 1,
-      }, { debug: true });
+      }, { debug: true }));
 
       expect(debug.flowDebugInfo!.step).toBe('scoring');
       expect(debug.flowDebugInfo!.description).toBe('step *scoring*, waiting on seats 1, 2');
     });
 
     it('returns an error result (no throw) for an out-of-range seat', async () => {
-      const startResult = await startGame(simpleGameDef, simpleGameOptions);
+      const startResult = succeeded(await startGame(simpleGameDef, simpleGameOptions));
       expect(startResult.success).toBe(true);
 
-      const result = await executeOp(
+      const result = refused(await executeOp(
         simpleGameDef,
         simpleGameOptions,
         startResult.snapshot,
         null,
         { type: 'debugFlowState', player: 0 },
         { debug: true },
-      );
+      ));
 
       expect(result.success).toBe(false);
       expect(result.error).toMatch(/Invalid player seat/);
@@ -1649,43 +1649,43 @@ describe('executeOp', () => {
     });
 
     it('returns undefined pendingAction when no pendingState is passed', async () => {
-      const startResult = await startGame(simpleGameDef, simpleGameOptions);
+      const startResult = succeeded(await startGame(simpleGameDef, simpleGameOptions));
 
-      const result = await executeOp(
+      const result = succeeded(await executeOp(
         simpleGameDef,
         simpleGameOptions,
         startResult.snapshot,
         null,
         { type: 'debugFlowState', player: 1 },
         { debug: true },
-      );
+      ));
 
       expect(result.success).toBe(true);
       expect(result.pendingAction).toBeUndefined();
     });
 
     it("reflects the requesting seat's own pendingState (perspective-scoped, T-123-10)", async () => {
-      const startResult = await startGame(twoStepGameDef, twoStepGameOptions);
+      const startResult = succeeded(await startGame(twoStepGameDef, twoStepGameOptions));
 
       // Seat 1 begins the two-step 'pick' action but does not complete it.
-      const step1 = await executeOp(
+      const step1 = succeeded(await executeOp(
         twoStepGameDef,
         twoStepGameOptions,
         startResult.snapshot,
         null,
         { type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick', boundaryKey: boundaryKeyOf(startResult.snapshot) },
-      );
+      ));
       expect(step1.success).toBe(true);
       expect(step1.pendingState).not.toBeNull();
 
-      const result = await executeOp(
+      const result = succeeded(await executeOp(
         twoStepGameDef,
         twoStepGameOptions,
         step1.snapshot,
         step1.pendingState,
         { type: 'debugFlowState', player: 1 },
         { debug: true },
-      );
+      ));
 
       expect(result.success).toBe(true);
       expect(result.pendingAction).toBeDefined();

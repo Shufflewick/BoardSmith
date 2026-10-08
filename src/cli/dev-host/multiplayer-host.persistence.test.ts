@@ -22,8 +22,10 @@ import { createDevHostClientMemory } from './test-client-memory.js';
 const clients = createDevHostClientMemory();
 
 /**
- * ShufflewickPub issue #41, items 2 and 4: `boardsmith dev` gains a
- * persistence store and the `persistPrivate` strip.
+ * ShufflewickPub issue #41, items 2 and 4: `boardsmith dev` has a
+ * persistence store, and no view it publishes carries the private channel
+ * (the engine leaves it out of every view and hands it to the host on the op
+ * result, #527).
  *
  * These cases drive the REAL host against the REAL engine and the REAL
  * validation core. Nothing here restates a rule: every refusal asserted below
@@ -195,7 +197,7 @@ describe('boardsmith dev — the persistence store (#41 item 2)', () => {
   });
 });
 
-describe('boardsmith dev — the persistPrivate strip (#41 item 4)', () => {
+describe('boardsmith dev — the private channel (#41 item 4, #527)', () => {
   it('never broadcasts the private attribute, and still commits it', async () => {
     const store = new PersistenceStore();
     const { host, sent } = makeHost({
@@ -220,9 +222,9 @@ describe('boardsmith dev — the persistPrivate strip (#41 item 4)', () => {
   // table because "refused, and nothing written" is the single guarantee.
   it.each([
     {
-      what: 'a sealed key on the PUBLIC channel, which broadcasts what it carries',
+      what: 'a sealed key on the PUBLIC channel, which is for records anyone may see',
       write: { persist: { entries: [{ key: 'player:dev-player-1/sheet', value: { hp: 3 } }] } },
-      because: 'broadcast to every spectator',
+      because: 'for records anyone may see',
     },
     {
       what: 'a sealed key belonging to a player this session does not seat',
@@ -267,15 +269,13 @@ describe('boardsmith dev — the seal has no whole-world bypass (ShufflewickPub 
     const store = new PersistenceStore();
     store.commit({
       players: [{ seat: 1, playerId: 'someone' }],
-      spectatorView: null,
-      persistPrivate: { entries: [{ key: 'player:someone/sheet', value: { hp: 9 } }] },
+      commit: { private: { entries: [{ key: 'player:someone/sheet', value: { hp: 9 } }] } },
       gameVersion: 'dev',
       now: () => 1,
     });
     store.commit({
       players: [],
-      spectatorView: { state: { view: { attributes: { persist: { entries: [{ key: 'weather', value: 'rain' }] } } } } },
-      persistPrivate: null,
+      commit: { public: { entries: [{ key: 'weather', value: 'rain' }] } },
       gameVersion: 'dev',
       now: () => 1,
     });

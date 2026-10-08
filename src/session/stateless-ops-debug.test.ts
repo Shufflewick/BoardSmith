@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../engine/index.js';
-import { executeOp, DEBUG_OP_TYPES, type GameDefinitionLike, type Op, type OpResult } from './stateless-ops.js';
+import { executeOp, DEBUG_OP_TYPES, type GameDefinitionLike, type ExecutableOp, type Op, type StateEnvelope } from './stateless-ops.js';
 import { SnapshotSessionHost } from './snapshot-session-host.js';
 import { GameSession } from './game-session.js';
 import { boundaryKeyOf, boundaryKeyOfHost } from './testing/boundary-stamp.js';
 import { collectFixtureDefinition } from './testing/fixtures/collect-fixture.js';
+import { succeeded, refused } from './op-result.test-helper.js';
 
 // ---------------------------------------------------------------------------
 // Inline game: player 1 repeatedly passes in a loop (player 1 stays current, so
@@ -36,15 +37,15 @@ const passOptions = { playerCount: 2, seed: 'debug-seed' };
 
 /** Start a PassGame and apply N pass actions; return the latest snapshot. */
 async function passNTimes(n: number): Promise<unknown> {
-  let snapshot = (await executeOp(passDef, passOptions, null, null, { type: 'start' })).snapshot;
+  let snapshot = succeeded(await executeOp(passDef, passOptions, null, null, { type: 'start' })).snapshot;
   for (let i = 0; i < n; i++) {
-    const res = await executeOp(passDef, passOptions, snapshot, null, {
+    const res = succeeded(await executeOp(passDef, passOptions, snapshot, null, {
       type: 'action',
       actionName: 'pass',
       player: 1,
       args: {},
       boundaryKey: boundaryKeyOf(snapshot),
-    });
+    }));
     expect(res.success).toBe(true);
     snapshot = res.snapshot;
   }
@@ -61,8 +62,8 @@ interface ViewNode {
   children?: ViewNode[];
 }
 
-/** The view tree for player 1 from an OpResult. */
-function view(res: OpResult): ViewNode {
+/** The view tree for player 1 from an op's game. */
+function view(res: StateEnvelope): ViewNode {
   return (res.playerViews[0] as { state: { view: ViewNode } }).state.view;
 }
 
@@ -94,7 +95,7 @@ describe('executeOp debug ops', () => {
   describe('debugHistory', () => {
     it('returns the full action history', async () => {
       const snapshot = await passNTimes(3);
-      const res = await executeOp(passDef, passOptions, snapshot, null, { type: 'debugHistory' }, { debug: true });
+      const res = succeeded(await executeOp(passDef, passOptions, snapshot, null, { type: 'debugHistory' }, { debug: true }));
       expect(res.success).toBe(true);
       expect(res.actionHistory).toHaveLength(3);
     });
@@ -104,11 +105,11 @@ describe('executeOp debug ops', () => {
     it('returns a player state for each historical index', async () => {
       const snapshot = await passNTimes(2);
       for (const actionIndex of [0, 1, 2]) {
-        const res = await executeOp(passDef, passOptions, snapshot, null, {
+        const res = succeeded(await executeOp(passDef, passOptions, snapshot, null, {
           type: 'debugStateAt',
           actionIndex,
           player: 1,
-        }, { debug: true });
+        }, { debug: true }));
         expect(res.success).toBe(true);
         expect(res.historicalState).toBeTruthy();
         expect((res.historicalState as { view: unknown }).view).toBeTruthy();
@@ -117,11 +118,11 @@ describe('executeOp debug ops', () => {
 
     it('fails for an out-of-range action index', async () => {
       const snapshot = await passNTimes(1);
-      const res = await executeOp(passDef, passOptions, snapshot, null, {
+      const res = refused(await executeOp(passDef, passOptions, snapshot, null, {
         type: 'debugStateAt',
         actionIndex: 99,
         player: 1,
-      }, { debug: true });
+      }, { debug: true }));
       expect(res.success).toBe(false);
     });
   });
@@ -129,12 +130,12 @@ describe('executeOp debug ops', () => {
   describe('debugStateDiff', () => {
     it('returns added/removed/changed id lists', async () => {
       const snapshot = await passNTimes(2);
-      const res = await executeOp(passDef, passOptions, snapshot, null, {
+      const res = succeeded(await executeOp(passDef, passOptions, snapshot, null, {
         type: 'debugStateDiff',
         fromIndex: 0,
         toIndex: 2,
         player: 1,
-      }, { debug: true });
+      }, { debug: true }));
       expect(res.success).toBe(true);
       const diff = res.diff as { added: number[]; removed: number[]; changed: number[] };
       expect(Array.isArray(diff.added)).toBe(true);
@@ -146,10 +147,10 @@ describe('executeOp debug ops', () => {
   describe('debugActionTraces', () => {
     it('returns traces and flow context for the current player', async () => {
       const snapshot = await passNTimes(1);
-      const res = await executeOp(passDef, passOptions, snapshot, null, {
+      const res = succeeded(await executeOp(passDef, passOptions, snapshot, null, {
         type: 'debugActionTraces',
         player: 1,
-      }, { debug: true });
+      }, { debug: true }));
       expect(res.success).toBe(true);
       expect(Array.isArray(res.traces)).toBe(true);
       const flow = res.flowContext as { currentPlayer?: number; isMyTurn: boolean };
@@ -161,13 +162,13 @@ describe('executeOp debug ops', () => {
   describe('debugRewind', () => {
     it('truncates the action history to the rewind point', async () => {
       const snapshot = await passNTimes(3);
-      const rewind = await executeOp(passDef, passOptions, snapshot, null, {
+      const rewind = succeeded(await executeOp(passDef, passOptions, snapshot, null, {
         type: 'debugRewind',
         actionIndex: 1,
-      }, { debug: true });
+      }, { debug: true }));
       expect(rewind.success).toBe(true);
 
-      const history = await executeOp(passDef, passOptions, rewind.snapshot, null, { type: 'debugHistory' }, { debug: true });
+      const history = succeeded(await executeOp(passDef, passOptions, rewind.snapshot, null, { type: 'debugHistory' }, { debug: true }));
       expect(history.actionHistory).toHaveLength(1);
     });
 
@@ -186,16 +187,16 @@ describe('executeOp debug ops', () => {
     const startCollect = () => executeOp(collectFixtureDefinition, collectOptions, null, null, { type: 'start' });
 
     it('debugReorder moves a card to the target index within its deck', async () => {
-      const start = await startCollect();
+      const start = succeeded(await startCollect());
       const stash = findByClass(view(start), 'Stash')!;
       expect(stash.children!.length).toBeGreaterThanOrEqual(3);
       const movedId = stash.children![0].id!;
 
-      const res = await executeOp(collectFixtureDefinition, collectOptions, start.snapshot, null, {
+      const res = succeeded(await executeOp(collectFixtureDefinition, collectOptions, start.snapshot, null, {
         type: 'debugReorder',
         cardId: movedId,
         targetIndex: stash.children!.length - 1,
-      }, { debug: true });
+      }, { debug: true }));
       expect(res.success).toBe(true);
 
       const newStash = findById(view(res), stash.id!)!;
@@ -203,17 +204,17 @@ describe('executeOp debug ops', () => {
     });
 
     it('debugTransfer moves a card into a different deck', async () => {
-      const start = await startCollect();
+      const start = succeeded(await startCollect());
       const stash = findByClass(view(start), 'Stash')!;
       const held = findByClass(view(start), 'Held')!;
       const movedId = stash.children![0].id!;
 
-      const res = await executeOp(collectFixtureDefinition, collectOptions, start.snapshot, null, {
+      const res = succeeded(await executeOp(collectFixtureDefinition, collectOptions, start.snapshot, null, {
         type: 'debugTransfer',
         cardId: movedId,
         targetDeckId: held.id!,
         position: 'last',
-      }, { debug: true });
+      }, { debug: true }));
       expect(res.success).toBe(true);
 
       const newHeld = findById(view(res), held.id!)!;
@@ -221,7 +222,7 @@ describe('executeOp debug ops', () => {
     });
 
     it('debugShuffle succeeds on a real deck and fails on an unknown id', async () => {
-      const start = await startCollect();
+      const start = succeeded(await startCollect());
       const stash = findByClass(view(start), 'Stash')!;
 
       const ok = await executeOp(collectFixtureDefinition, collectOptions, start.snapshot, null, {
@@ -248,7 +249,7 @@ describe('executeOp debug ops', () => {
 // ---------------------------------------------------------------------------
 
 /** One instance of every debug op, each valid against a two-pass game. */
-const EVERY_DEBUG_OP: Op[] = [
+const EVERY_DEBUG_OP: ExecutableOp[] = [
   { type: 'debugHistory' },
   { type: 'debugStateAt', actionIndex: 1, player: 1 },
   { type: 'debugStateDiff', fromIndex: 0, toIndex: 1, player: 1 },
@@ -261,7 +262,7 @@ const EVERY_DEBUG_OP: Op[] = [
 ];
 
 /** The debug ops that report one seat's view. */
-const SEAT_VIEW_OPS: Op[] = [
+const SEAT_VIEW_OPS: ExecutableOp[] = [
   { type: 'debugStateAt', actionIndex: 1, player: 2 },
   { type: 'debugStateDiff', fromIndex: 0, toIndex: 1, player: 2 },
   { type: 'debugActionTraces', player: 2 },
@@ -278,17 +279,17 @@ describe('#481 debug op gate', () => {
       it(`refuses ${op.type} when the host has not turned debugging on`, async () => {
         const snapshot = await passNTimes(2);
         for (const hostOptions of [undefined, null, {}, { debug: false }]) {
-          const res = await executeOp(passDef, passOptions, snapshot, null, op, hostOptions);
+          const res = refused(await executeOp(passDef, passOptions, snapshot, null, op, hostOptions));
           expect(res.success).toBe(false);
           expect(res.error).toMatch(/debugging is not turned on/i);
-          expect(res.snapshot).toBeNull();
+          expect(res).not.toHaveProperty('snapshot');
         }
       });
     }
 
     it('runs a debug op when the host turns debugging on', async () => {
       const snapshot = await passNTimes(2);
-      const res = await executeOp(passDef, passOptions, snapshot, null, { type: 'debugHistory' }, { debug: true });
+      const res = succeeded(await executeOp(passDef, passOptions, snapshot, null, { type: 'debugHistory' }, { debug: true }));
       expect(res.success).toBe(true);
       expect(res.actionHistory).toHaveLength(2);
     });
@@ -322,7 +323,7 @@ describe('#481 debug op gate', () => {
       it(`refuses every debug op, without running it, when debug is ${String(debug)}`, async () => {
         const { host, executed } = await startedHost(debug);
         for (const op of EVERY_DEBUG_OP) {
-          const res = await host.handleOp(1, op);
+          const res = refused(await host.handleOp(1, op));
           expect(res.success, op.type).toBe(false);
           expect(res.error).toMatch(/debugging is not turned on/i);
         }
@@ -332,7 +333,7 @@ describe('#481 debug op gate', () => {
 
     it('runs debug ops when debugging is on', async () => {
       const { host } = await startedHost(true);
-      const res = await host.handleOp(1, { type: 'debugHistory' });
+      const res = succeeded(await host.handleOp(1, { type: 'debugHistory' }));
       expect(res.success).toBe(true);
       expect(res.actionHistory).toHaveLength(2);
     });

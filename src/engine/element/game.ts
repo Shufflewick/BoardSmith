@@ -102,6 +102,7 @@ import { FlowEngine } from '../flow/engine.js';
 import { canSeatAct } from '../flow/seat-activity.js';
 import { checkForVolatileState } from './volatile-state.js';
 import { PersistentMap } from './persistent-map.js';
+import { PERSIST_KEY, PERSIST_PRIVATE_KEY } from '../../persistence/persistence.js';
 import { ENGINE_OWNED_GAME_FIELDS, describeEngineFieldShadow } from './engine-owned-fields.js';
 
 /**
@@ -5146,6 +5147,17 @@ export class Game<
         });
       if (visible.length === 0) delete view.animationEvents;
       else view.animationEvents = visible;
+    }
+
+    // #527: the persistence commit is the HOST's, never a seat's. A game writes
+    // it by setting the reserved root attributes `persist` and `persistPrivate`,
+    // and the executor hands both to the host on the op result
+    // (`StateEnvelope.persistCommit`), so no view carries either: the private
+    // one is sealed, and the public one is a record for the host to store, not
+    // board state. Removed after `static playerView`, so no hook can put them back.
+    if (PERSIST_KEY in view.attributes || PERSIST_PRIVATE_KEY in view.attributes) {
+      const { [PERSIST_KEY]: _public, [PERSIST_PRIVATE_KEY]: _sealed, ...attributes } = view.attributes;
+      view.attributes = attributes;
     }
 
     return view;

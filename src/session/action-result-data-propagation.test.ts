@@ -28,6 +28,7 @@ import { GameSession } from './game-session.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { shapeResult } from '../cli/dev-host/bridge.js';
+import { succeeded } from './op-result.test-helper.js';
 
 // The map an action "returns" to the seat that paid for it. Structured, not
 // prose — the exact thing `message`/`messageTo` cannot carry.
@@ -173,16 +174,16 @@ describe('BUG-017 — ActionResult.data across layer boundaries', () => {
 
   describe('executeOp — the shape the executor returns over the wire', () => {
     it('action op carries data and message', async () => {
-      const start = await executeOp(gameDef, gameOptions, null, null, { type: 'start' });
+      const start = succeeded(await executeOp(gameDef, gameOptions, null, null, { type: 'start' }));
       expect(start.success).toBe(true);
 
-      const result = await executeOp(gameDef, gameOptions, start.snapshot, null, {
+      const result = succeeded(await executeOp(gameDef, gameOptions, start.snapshot, null, {
         type: 'action',
         actionName: 'viewMap',
         player: 1,
         args: {},
         boundaryKey: boundaryKeyOf(start.snapshot),
-      });
+      }));
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual({ cartography: CARTOGRAPHY });
@@ -190,27 +191,27 @@ describe('BUG-017 — ActionResult.data across layer boundaries', () => {
     });
 
     it('selectionStep op carries data and message on the completing step', async () => {
-      const start = await executeOp(gameDef, gameOptions, null, null, { type: 'start' });
+      const start = succeeded(await executeOp(gameDef, gameOptions, null, null, { type: 'start' }));
 
-      const step1 = await executeOp(gameDef, gameOptions, start.snapshot, null, {
+      const step1 = succeeded(await executeOp(gameDef, gameOptions, start.snapshot, null, {
         type: 'selectionStep',
         actionName: 'appraise',
         player: 1,
         selectionName: 'item',
         value: 'shield',
         boundaryKey: boundaryKeyOf(start.snapshot),
-      });
+      }));
       expect(step1.success).toBe(true);
       expect(step1.data).toBeUndefined();
 
-      const step2 = await executeOp(gameDef, gameOptions, step1.snapshot, step1.pendingState, {
+      const step2 = succeeded(await executeOp(gameDef, gameOptions, step1.snapshot, step1.pendingState, {
         type: 'selectionStep',
         actionName: 'appraise',
         player: 1,
         selectionName: 'lens',
         value: 'fine',
         boundaryKey: boundaryKeyOf(step1.snapshot),
-      });
+      }));
 
       expect(step2.actionComplete).toBe(true);
       expect(step2.data).toEqual({ appraisal: 'shield:fine' });
@@ -218,14 +219,14 @@ describe('BUG-017 — ActionResult.data across layer boundaries', () => {
     });
 
     it('does not publish data into any seat\'s player view', async () => {
-      const start = await executeOp(gameDef, gameOptions, null, null, { type: 'start' });
-      const result = await executeOp(gameDef, gameOptions, start.snapshot, null, {
+      const start = succeeded(await executeOp(gameDef, gameOptions, null, null, { type: 'start' }));
+      const result = succeeded(await executeOp(gameDef, gameOptions, start.snapshot, null, {
         type: 'action',
         actionName: 'viewMap',
         player: 1,
         args: {},
         boundaryKey: boundaryKeyOf(start.snapshot),
-      });
+      }));
 
       // The whole point of `data` is that it goes to the acting caller only.
       // A view that carried it would leak one seat's private report to the table.
@@ -239,7 +240,7 @@ describe('BUG-017 — ActionResult.data across layer boundaries', () => {
 
   describe('shapeResult — the dev-host response whitelist', () => {
     it('action responses keep data and message', async () => {
-      const start = await executeOp(gameDef, gameOptions, null, null, { type: 'start' });
+      const start = succeeded(await executeOp(gameDef, gameOptions, null, null, { type: 'start' }));
       const opResult = await executeOp(gameDef, gameOptions, start.snapshot, null, {
         type: 'action',
         actionName: 'viewMap',
@@ -255,15 +256,15 @@ describe('BUG-017 — ActionResult.data across layer boundaries', () => {
     });
 
     it('selection_step responses keep data and message', async () => {
-      const start = await executeOp(gameDef, gameOptions, null, null, { type: 'start' });
-      const step1 = await executeOp(gameDef, gameOptions, start.snapshot, null, {
+      const start = succeeded(await executeOp(gameDef, gameOptions, null, null, { type: 'start' }));
+      const step1 = succeeded(await executeOp(gameDef, gameOptions, start.snapshot, null, {
         type: 'selectionStep',
         actionName: 'appraise',
         player: 1,
         selectionName: 'item',
         value: 'sword',
         boundaryKey: boundaryKeyOf(start.snapshot),
-      });
+      }));
       const step2 = await executeOp(gameDef, gameOptions, step1.snapshot, step1.pendingState, {
         type: 'selectionStep',
         actionName: 'appraise',
@@ -273,7 +274,7 @@ describe('BUG-017 — ActionResult.data across layer boundaries', () => {
         boundaryKey: boundaryKeyOf(step1.snapshot),
       });
 
-      const shaped = shapeResult('selection_step', step2);
+      const shaped = shapeResult('selectionStep', step2);
 
       expect(shaped.data).toEqual({ appraisal: 'sword:coarse' });
       expect(shaped.message).toBe(NARRATION);

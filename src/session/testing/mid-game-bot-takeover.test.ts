@@ -6,6 +6,7 @@ import {
 } from './fixtures/simultaneous-rounds-fixture.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from '../snapshot-session-host.js';
 import type { Op, OpResult } from '../stateless-ops.js';
+import { stubExecuteOp, succeeded, refused } from '../op-result.test-helper.js';
 
 /**
  * BSMITH-03 — a seat converted to bot MID-GAME is actually played by a bot.
@@ -34,7 +35,7 @@ const commit = (session: Session, seat: number) =>
 
 /** The engine's own record of who acted, in order. */
 async function actionHistory(session: Session): Promise<Array<{ name: string; player: number }>> {
-  const res = await session.send(1, { type: 'debugHistory' });
+  const res = succeeded(await session.send(1, { type: 'debugHistory' }));
   return (res.actionHistory as Array<{ name: string; player: number }>).map((a) => ({
     name: a.name,
     player: a.player,
@@ -58,7 +59,7 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
     // The roster is the adapter's half of the conversion (the platform's
     // `mindSeats`); the op is the engine's half.
     session.makeSeatBot(2);
-    const res = await session.send(2, { type: 'convertSeatToBot', seat: 2 });
+    const res = succeeded(await session.send(2, { type: 'convertSeatToBot', seat: 2 }));
 
     expect(res.success, `convertSeatToBot failed: ${res.error ?? ''}`).toBe(true);
     // The engine ACKNOWLEDGES the conversion by naming the seat back.
@@ -139,7 +140,7 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
     // NOTE: no `makeSeatBot(2)`. This is the silent failure being closed — an op
     // that woke a pump for a seat the roster does not back would do nothing at
     // all and say nothing about it.
-    const res = await session.send(2, { type: 'convertSeatToBot', seat: 2 });
+    const res = refused(await session.send(2, { type: 'convertSeatToBot', seat: 2 }));
 
     expect(res.success).toBe(false);
     expect(res.category).toBe('protocol');
@@ -168,7 +169,7 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
     // Re-converting is a legal, harmless re-wake — which is what lets a caller
     // use this op to un-park a table without first working out whether the seat
     // is already a bot.
-    const second = await session.send(2, { type: 'convertSeatToBot', seat: 2 });
+    const second = succeeded(await session.send(2, { type: 'convertSeatToBot', seat: 2 }));
     expect(second.success).toBe(true);
     expect(second.convertedSeat).toBe(2);
 
@@ -188,14 +189,10 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
     // already-converted seat" is precisely how a caller un-parks a table that
     // is stalled on a seat which is already a bot, and a wake that is silently
     // dropped whenever a pump happens to be in flight is not a wake.
-    const base: OpResult = {
+    const base = {
       success: true,
       snapshot: { flowState: {}, winners: [] },
-      pendingState: null,
-      flowState: {},
       playerViews: [],
-      isComplete: false,
-      winners: [],
       botMoved: false,
     };
     const events: string[] = [];
@@ -207,7 +204,7 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
 
     const adapters: SnapshotSessionAdapters = {
       playerCount: 2,
-      executeOp: async (_snap, _pend, op: Op) => {
+      executeOp: stubExecuteOp(async (_snap, _pend, op) => {
         if (op.type !== 'botTurn') return { ...base };
         botTurnCalls++;
         const n = botTurnCalls;
@@ -218,7 +215,7 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
           return { ...base, botMoved: true, botPlayer: 2 };
         }
         return { ...base, botMoved: false };
-      },
+      }),
       record: () => {}, push: () => {},
     };
 
@@ -258,7 +255,7 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
     expect(terminal.dueSeats).toEqual([]);
 
     session.makeSeatBot(2);
-    const res = await session.send(2, { type: 'convertSeatToBot', seat: 2 });
+    const res = refused(await session.send(2, { type: 'convertSeatToBot', seat: 2 }));
 
     expect(res.success).toBe(false);
     expect(res.category).toBe('protocol');
@@ -273,27 +270,23 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
     // forever if the conversion had its own pump instead of reusing the one
     // MAX_BOT_MOVES bounds. The exact cap AND the exact log line are what prove
     // the conversion went through `runBotTurnsInner` and not a clone of it.
-    const base: OpResult = {
+    const base = {
       success: true,
       snapshot: { flowState: {}, winners: [] },
-      pendingState: null,
-      flowState: {},
       playerViews: [],
-      isComplete: false,
-      winners: [],
       botMoved: true,
     };
     let botCallCount = 0;
     const adapters: SnapshotSessionAdapters = {
       playerCount: 2,
-      executeOp: async (_snap, _pend, op: Op) => {
+      executeOp: stubExecuteOp(async (_snap, _pend, op) => {
         if (op.type === 'start') return { ...base, botMoved: false };
         if (op.type === 'botTurn') {
           botCallCount++;
           return { ...base, botMoved: true };
         }
         return { ...base };
-      },
+      }),
       record: () => {}, push: () => {},
     };
 

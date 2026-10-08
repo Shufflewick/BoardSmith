@@ -27,7 +27,7 @@ describe('UNDO-01: notUndoable action blocks undo (stateless)', () => {
     const lock = await session.send(1, { type: 'action', actionName: 'lock', player: 1, args: {} });
     expect(lock.success).toBe(true);
 
-    const undo = await session.send(1, { type: 'undo', player: 1 } as Op);
+    const undo = await session.send(1, { type: 'undo', player: 1 });
 
     expect(undo.success).toBe(false);
     expect(undo.error).toMatch(/lock/i);
@@ -40,7 +40,7 @@ describe('UNDO-01: notUndoable action blocks undo (stateless)', () => {
     const play = await session.send(1, { type: 'action', actionName: 'play', player: 1, args: {} });
     expect(play.success).toBe(true);
 
-    const undo = await session.send(1, { type: 'undo', player: 1 } as Op);
+    const undo = await session.send(1, { type: 'undo', player: 1 });
 
     expect(undo.success).toBe(true);
   });

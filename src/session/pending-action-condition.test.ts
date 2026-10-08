@@ -30,9 +30,10 @@ import {
 } from '../engine/index.js';
 import { GameRunner } from '../runtime/runner.js';
 import { GameSession } from './game-session.js';
-import { executeOp, type GameDefinitionLike, type OpResult } from './stateless-ops.js';
+import { executeOp, type GameDefinitionLike, type StateEnvelope } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { historyLabels } from './testing/history-labels.js';
+import { succeeded } from './op-result.test-helper.js';
 
 class QuarryGame extends Game<QuarryGame, Player> {
   /** Whether the one shared stone is still in the quarry. */
@@ -291,20 +292,24 @@ describe('GameSession', () => {
 });
 
 describe('stateless selectionStep op', () => {
-  async function start(): Promise<OpResult> {
-    return executeOp(gameDef, gameOptions, null, {}, { type: 'start' });
+  async function start(): Promise<StateEnvelope> {
+    return succeeded(await executeOp(gameDef, gameOptions, null, {}, { type: 'start' }));
   }
 
-  async function act(after: OpResult, actionName: string, player: number): Promise<OpResult> {
-    const res = await executeOp(gameDef, gameOptions, after.snapshot, null, {
+  async function act(after: StateEnvelope, actionName: string, player: number): Promise<StateEnvelope> {
+    return succeeded(await executeOp(gameDef, gameOptions, after.snapshot, null, {
       type: 'action', actionName, player, args: {}, boundaryKey: boundaryKeyOf(after.snapshot),
-    });
-    expect(res.success).toBe(true);
-    return res;
+    }));
   }
 
   /** Seat 1's pick, on the game `after` left, continuing the pending state `pending` holds. */
-  function pick(after: OpResult, pending: OpResult | null, actionName: string, selectionName: string, value: string) {
+  function pick(
+    after: StateEnvelope,
+    pending: { pendingState: Record<string, unknown> | null } | null,
+    actionName: string,
+    selectionName: string,
+    value: string,
+  ) {
     return executeOp(gameDef, gameOptions, after.snapshot, pending?.pendingState ?? null, {
       type: 'selectionStep', player: 1, selectionName, value, actionName,
       boundaryKey: boundaryKeyOf(after.snapshot),
@@ -312,8 +317,7 @@ describe('stateless selectionStep op', () => {
   }
 
   it("refuses to complete a pending action once another seat's move took its condition away", async () => {
-    const first = await pick(await start(), null, 'build', 'where', 'north');
-    expect(first.success).toBe(true);
+    const first = succeeded(await pick(await start(), null, 'build', 'where', 'north'));
     const taken = await act(first, 'take', 2);
 
     const step = await pick(taken, first, 'build', 'what', 'wall');
@@ -322,7 +326,7 @@ describe('stateless selectionStep op', () => {
   });
 
   it('completes from the same pending state once its condition holds again after a refusal', async () => {
-    const first = await pick(await start(), null, 'build', 'where', 'north');
+    const first = succeeded(await pick(await start(), null, 'build', 'where', 'north'));
     const taken = await act(first, 'take', 2);
     expect(await pick(taken, first, 'build', 'what', 'wall')).toMatchObject({ success: false, error: STONE_GONE });
 
@@ -343,7 +347,7 @@ describe('stateless selectionStep op', () => {
   });
 
   it("completes an action whose own picks end its condition, with another seat's move in between", async () => {
-    const first = await pick(await start(), null, 'dig', 'spot', 'east');
+    const first = succeeded(await pick(await start(), null, 'dig', 'spot', 'east'));
     expect(first.success).toBe(true);
     const rested = await act(first, 'rest', 2);
 
@@ -353,7 +357,7 @@ describe('stateless selectionStep op', () => {
   });
 
   it('treats a pending state without conditionHeld as the start, so the condition must hold then', async () => {
-    const first = await pick(await start(), null, 'dig', 'spot', 'east');
+    const first = succeeded(await pick(await start(), null, 'dig', 'spot', 'east'));
     expect(first.pendingState).toMatchObject({ conditionHeld: false });
     const { conditionHeld: _dropped, ...withoutRecord } = first.pendingState as Record<string, unknown>;
     const rested = await act(first, 'rest', 2);
@@ -368,7 +372,7 @@ describe('stateless selectionStep op', () => {
   });
 
   it("refuses an action whose picks change the game once another seat's move took its condition away", async () => {
-    const first = await pick(await start(), null, 'dig', 'spot', 'west');
+    const first = succeeded(await pick(await start(), null, 'dig', 'spot', 'west'));
     expect(first.pendingState).toMatchObject({ conditionHeld: true });
     const sapped = await act(first, 'sap', 2);
 
@@ -384,7 +388,7 @@ describe('stateless selectionStep op', () => {
   });
 
   it('completes a held follow-up pick by pick although its condition does not hold', async () => {
-    const first = await pick(await act(await start(), 'scout', 1), null, 'loot', 'where', 'north');
+    const first = succeeded(await pick(await act(await start(), 'scout', 1), null, 'loot', 'where', 'north'));
     expect(first.success).toBe(true);
 
     const step = await pick(first, first, 'loot', 'what', 'gold');

@@ -36,6 +36,19 @@ import {
 - `STANDARD_PLAYER_COLORS` - Full color palette (8 colors)
 - `createColorOption()` - Create color selection option (used internally; define colors via `colorPalette` in boardsmith.json)
 
+### Executor Op Contract
+
+- `executeOp(definition, gameOptions, snapshot, pendingState, op)` - Run one op against a snapshot, statelessly
+- `parseExecutorOp(value)` - Check a value read off a wire is an `ExecutorOp`; returns `{ ok: true, op }` or `{ ok: false, error }`
+- `ParsedExecutorOp` - What `parseExecutorOp` returns
+- `ExecutorOp` - The ops a platform executor runs: `start`, `action`, `expireSeat`, `selectionStep`, `resolveChoices`, `cancelAction`, `undo`, `botTurn`
+- `DevOp` - Ops `executeOp` runs only inside `boardsmith dev` (the `debug*` family, `restoreEarlier`, tutorial, `hint`, `heatmapToggle`, `botSuggest`)
+- `HostOp` - Lifecycle ops `SnapshotSessionHost.handleOp` handles itself and `executeOp` never sees
+- `Op` - `ExecutorOp | DevOp | HostOp`, what `handleOp` takes
+- `OpResultFor<T>` - What an op of type `T` answers: its own success shape, or the shared `OpFailure`
+- `OpResult` - What any op answers; narrow it with `OpResultFor`
+- `OpFailure` - Every refusal: `{ success: false, error, errorCode?, category }`
+
 ### Error Handling
 
 - `ErrorCode` - Error code enum for session errors
@@ -311,6 +324,53 @@ Animation events are compared by id, not by content: the engine empties its
 buffer at the start of every action, so a buffer emptied by another seat's
 action is not news, and only an event with a higher id than the connection was
 last sent is.
+
+### Running ops from a platform executor
+
+An executor receives ops over a network hop. Parse each one with
+`parseExecutorOp` instead of restating the op shapes in your own schema: it
+refuses a key the op does not declare (a schema that strips unknown keys would
+silently lose a `boundaryKey`), requires `boundaryKey` on every submission op,
+and its error names the field and the fix. It never throws.
+
+```typescript
+import { executeOp, parseExecutorOp, ErrorCode, type OpResultFor } from 'boardsmith/session';
+
+const parsed = parseExecutorOp(await request.json());
+if (!parsed.ok) return new Response(parsed.error, { status: 400 });
+
+const result = await executeOp(definition, gameOptions, snapshot, pendingState, parsed.op);
+```
+
+`executeOp` returns `OpResultFor<T>` for the op type it was given, so each
+op's result says what it carries. A success that ran the game carries one
+state envelope: `snapshot` (which holds the flow state and winners; read them
+with `flowStateOf`, `isCompleteOf` and `winnersOf`), `playerViews`,
+`spectatorView`, `flowDebugInfo` and `persistCommit`, plus the op's own fields
+(`followUp`, `data` and `message` on an `action`; `botMoved`, `botPlayer` and
+`botStalled` on a `botTurn`). A `resolveChoices` success carries only its
+answer and no envelope, because a query changes nothing and answers one seat:
+
+```typescript
+function reply(result: OpResultFor<'resolveChoices'>) {
+  if (!result.success) return { error: result.error };
+  return { choices: result.choices, validElements: result.validElements };
+  // result.snapshot does not compile: a choices query returns no state.
+}
+```
+
+The views and the snapshot are for the host to publish, not a reply to the
+seat that sent the op: shape a reply from the op's own fields.
+
+`persistCommit` is what the game asked the host to store (its reserved
+`persist` and `persistPrivate` root attributes). No view carries either; hand
+the result's `persistCommit` to `PersistenceStore.commit` at game over.
+
+Every refusal is an `OpFailure`. Tell refusals apart by `errorCode`, never by
+the message text, which is copy. A submission whose `boundaryKey` names a round
+that has closed is refused with `ErrorCode.STALE_SUBMISSION`; that refusal is
+normal (the round resolved without it), where any other refusal of a
+host-composed op is a fault.
 
 ## See Also
 

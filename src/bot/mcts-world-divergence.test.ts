@@ -17,6 +17,7 @@ import {
 import { executeOp, type GameDefinitionLike } from '../session/index.js';
 import { MCTSBot } from './mcts-bot.js';
 import type { DeterminizeSampler } from './types.js';
+import { succeeded } from '../session/op-result.test-helper.js';
 
 // ============================================================================
 // #421: a search node's seat-to-move is a fact about ONE world.
@@ -149,19 +150,18 @@ describe('#421: an all-bot table of a hidden-hand game', () => {
     const gameOptions = { playerCount, seed: 'bs421-table' };
     const seats = [1, 2, 3].map((seat) => ({ seat, level: 'easy' }));
 
-    let res = await executeOp(definition, gameOptions, null, null, { type: 'start' });
-    expect(res.success).toBe(true);
+    let snapshot = succeeded(await executeOp(definition, gameOptions, null, null, { type: 'start' })).snapshot;
     let moves = 0;
-    while (!res.isComplete) {
-      res = await executeOp(definition, gameOptions, res.snapshot, null, { type: 'botTurn', seats });
-      expect(res.error).toBeUndefined();
+    while (!snapshot.flowState?.complete) {
+      const res = succeeded(await executeOp(definition, gameOptions, snapshot, null, { type: 'botTurn', seats }));
       expect(res.botStalled).toBeUndefined();
       expect(res.botMoved).toBe(true);
+      snapshot = res.snapshot;
       moves++;
       expect(moves).toBeLessThan(300);
     }
 
-    expect(res.winners?.length).toBe(1);
+    expect(snapshot.winners?.length).toBe(1);
     expect(refusals).toEqual([]);
     // A whole game of searches: allowed to be slow on a loaded machine, never to hang.
   }, 120_000);

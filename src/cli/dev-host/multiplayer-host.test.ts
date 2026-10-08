@@ -3,6 +3,7 @@ import { Game, Player, Action, defineFlow, actionStep, loop, eachPlayer, type Ga
 import { executeOp, type GameDefinitionLike } from '../../session/index.js';
 import { MultiplayerHost, type HostOutbound, type MultiplayerHostOptions } from './multiplayer-host.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
+import { succeeded } from '../../session/op-result.test-helper.js';
 
 /** This suite's stand-in browser memory — see test-client-memory.ts. */
 const clients = createDevHostClientMemory();
@@ -749,7 +750,7 @@ describe('MultiplayerHost — restart from a finished game (D11 characterization
   });
 
   it('#460: a host that starts every game from a recorded state refuses to deal from a seed, and says why', async () => {
-    const recorded = await executeOp(altDef, { playerCount: 2, seed: 'recorded' }, null, null, { type: 'start' });
+    const recorded = succeeded(await executeOp(altDef, { playerCount: 2, seed: 'recorded' }, null, null, { type: 'start' }));
     const { host, lastOfType } = makeAltHostWithSeedCapture({
       seedSnapshot: recorded.snapshot as NonNullable<MultiplayerHostOptions['seedSnapshot']>,
     });

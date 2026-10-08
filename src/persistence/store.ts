@@ -64,6 +64,7 @@ import {
   PLAYER_KEY_PREFIX,
   readPersistCommit,
   toStartPayload,
+  type PersistCommit,
   type PersistCommitEntry,
   type PersistPlayer,
   type PersistStartPayload,
@@ -95,10 +96,8 @@ export interface CommitRequest {
    *  this file's header. A session acting for nobody may write nobody's
    *  sealed rows. */
   players: PersistPlayer[];
-  /** The final spectator view, for the PUBLIC channel. */
-  spectatorView: unknown;
-  /** The already-stripped `persistPrivate` value, for the PRIVATE channel. */
-  persistPrivate: unknown;
+  /** What the finishing op returned as its `persistCommit`: both channels. */
+  commit: PersistCommit;
   /** The version stamped onto every row this commit writes. The platform takes
    *  it from the session; `boardsmith dev` has no published version, so the dev
    *  host passes its own marker rather than inventing a plausible one. */
@@ -167,7 +166,7 @@ export class PersistenceStore {
    * enforces rather than a wire does -- the seal.
    */
   commit(request: CommitRequest): CommitOutcome {
-    const parsed = readPersistCommit(request.spectatorView, request.persistPrivate);
+    const parsed = readPersistCommit(request.commit);
     if (parsed.kind === 'absent') return { ok: true, written: 0 };
     if (parsed.kind === 'invalid') return { ok: false, reason: parsed.reason };
 

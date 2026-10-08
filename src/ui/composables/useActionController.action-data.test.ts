@@ -35,7 +35,7 @@ import {
   type GameOptions,
 } from '../../engine/index.js';
 import type { OnSelectContext } from '../../engine/action/index.js';
-import { executeOp, type GameDefinitionLike, type OpResult } from '../../session/stateless-ops.js';
+import { executeOp, type GameDefinitionLike, type OpResultFor } from '../../session/stateless-ops.js';
 import { boundaryKeyOf } from '../../session/testing/boundary-stamp.js';
 import { shapeResult } from '../../cli/dev-host/bridge.js';
 import { useActionController } from './useActionController.js';
@@ -136,14 +136,17 @@ function createHost() {
   const availableActions = ref<string[]>([]);
   const actionMetadata = ref<Record<string, EnrichedActionMetadata> | undefined>(undefined);
 
-  function absorb(result: OpResult): void {
-    if (result.snapshot !== undefined) snapshot = result.snapshot;
-    // `pendingState` is cleared (to null) by the op that completes the action —
-    // absorbing it unconditionally is what keeps the next op well-formed.
-    pendingState = result.pendingState;
+  function absorb(result: OpResultFor<'start' | 'action' | 'selectionStep'>): void {
+    // A refused op changed nothing: the host keeps what it holds.
+    if (!result.success) return;
+    snapshot = result.snapshot;
+    // `pendingState` is cleared (to null) by the op that completes the action,
+    // and only a selection step leaves one behind — absorbing it on every op
+    // is what keeps the next op well-formed.
+    pendingState = 'pendingState' in result ? result.pendingState : null;
 
-    const views = result.playerViews as PlayerView[] | undefined;
-    const seatOne = views?.[0];
+    const views = result.playerViews as PlayerView[];
+    const seatOne = views[0];
     if (!seatOne) return;
     availableActions.value = seatOne.flowState?.availableActions ?? [];
     actionMetadata.value = seatOne.state?.actionMetadata;
@@ -184,7 +187,7 @@ function createHost() {
         boundaryKey: boundaryKeyOf(snapshot),
       });
       absorb(result);
-      return shapeResult('selection_step', result) as unknown as PickStepResponse;
+      return shapeResult('selectionStep', result) as unknown as PickStepResponse;
     },
     async fetchPickChoices(
       actionName: string,
@@ -199,7 +202,7 @@ function createHost() {
         player,
         args: currentArgs,
       });
-      return shapeResult('resolve_choices', result) as unknown as PickChoicesResult;
+      return shapeResult('resolveChoices', result) as unknown as PickChoicesResult;
     },
   };
 }

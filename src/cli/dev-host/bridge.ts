@@ -15,8 +15,25 @@
  * prod stay in lockstep.
  */
 
-import { SnapshotSessionHost, debuggingOffMessage, type Op, type OpResult, type SnapshotSessionAdapters, type PublishMeta, type BotSeat } from '../../session/index.js';
-import { record, getEntries, type LogEntry } from './log-capture.js';
+import {
+  SnapshotSessionHost,
+  debuggingOffMessage,
+  type ExecuteOpAdapter,
+  type Op,
+  type OpFailure,
+  type OpResult,
+  type OpResultFor,
+  type SnapshotSessionAdapters,
+  type PublishMeta,
+  type BotSeat,
+} from '../../session/index.js';
+import { record, getEntries } from './log-capture.js';
+import type { WarningEntry } from '../../types/protocol.js';
+
+/** The structured warnings a successful op carried (a pick or a choices query), or none. */
+function warningsOf(result: OpResult): readonly WarningEntry[] {
+  return result.success && 'warnings' in result ? (result.warnings ?? []) : [];
+}
 
 /** Wire op names the embedded GameShell sends (snake_case, prod payload shapes). */
 export type WireOp =
@@ -78,11 +95,7 @@ export interface DevSessionOptions {
    * this with the authoritative snapshot + the acting seat's pending state; the
    * dev host passes it straight to the pure `executeOp(def, gameOptions, …)`.
    */
-  executeOp: (
-    snapshot: unknown,
-    pendingState: Record<string, unknown> | null,
-    op: Op,
-  ) => Promise<OpResult>;
+  executeOp: ExecuteOpAdapter;
   /**
    * Optional persistence adapter (ERR-03/ERR-04). When configured, a failure
    * is captured into the dev-host log-capture ring buffer via an
@@ -270,103 +283,102 @@ export function translateOp(
   }
 }
 
+/** A shaped reply: what the one seat that sent the op is told. */
+type Reply = Record<string, unknown>;
+
+/** The reply to a refused op: why, and nothing else. */
+function refusal(result: OpFailure): Reply {
+  return { success: false, error: result.error, errorCode: result.errorCode };
+}
+
 /**
- * Shape an OpResult into the response envelope the embedded controller expects
- * for a given wire op (mirrors the DO's per-op `serverX` handlers). Every case
- * is an allowlist: the reply goes to the one seat that asked, and the op result
- * it is cut from carries every seat's view and the unredacted snapshot.
+ * Ops whose results reach the client through `game_state` broadcasts, never
+ * through the reply (teaching, demo and edit ops): the reply says only whether
+ * the op ran (RESEARCH Pitfall 7).
  */
-export function shapeResult(
-  wireOp: string,
-  result: OpResult & { entries?: readonly LogEntry[] },
-): Record<string, unknown> {
-  switch (wireOp) {
-    case 'action':
-      return {
-        success: result.success,
-        error: result.error,
-        errorCode: result.errorCode,
-        followUp: result.followUp,
-        warnings: result.warnings,
-        // The acting seat's return value from execute() (BUG-017/BUG-012).
-        data: result.data,
-        message: result.message,
-      };
-    case 'resolve_choices':
-      // The pick's answer and nothing else (#450). The op result also carries
-      // the state envelope -- every seat's view, the spectator view and the
-      // unredacted snapshot -- and this reply goes to ONE seat.
-      if (!result.success) return { success: false, error: result.error, errorCode: result.errorCode };
-      return {
-        success: true,
-        choices: result.choices,
-        validElements: result.validElements,
-        multiSelect: result.multiSelect,
-        orderedList: result.orderedList,
-        warnings: result.warnings,
-      };
-    case 'selection_step':
-      if (!result.success) return { success: false, error: result.error, errorCode: result.errorCode };
-      return {
-        success: true,
-        done: result.done,
-        nextChoices: result.nextChoices,
-        actionComplete: result.actionComplete,
-        followUp: result.followUp,
-        warnings: result.warnings,
-        // Present only on the step that completes the action (BUG-017/BUG-012).
-        data: result.data,
-        message: result.message,
-      };
-    case 'cancel_action':
-    case 'undo':
-    case 'start-tutorial':
-    case 'exit-tutorial':
-    case 'hint':
-    case 'heatmap-toggle':
-      // Teaching ops: results flow via game_state broadcasts (never via op response).
-      // Return only {success, error} — the client reads state.hint/state.heatmap
-      // from the broadcast, not from this response (RESEARCH Pitfall 7).
-      return { success: result.success, error: result.error };
-    case 'demo-start':
-    case 'demo-stop':
-    case 'demo-control':
-      // Demo lifecycle ops: demo state flows via game_state broadcasts
-      // (isDemoRunning, narration, demoPaused/demoDelay/canStepBack). Client never
-      // reads playerViews from here. Return only {success, error} (RESEARCH Pitfall 7).
-      return { success: result.success, error: result.error };
-    case 'debug:history':
-      return { success: result.success, error: result.error, actionHistory: result.actionHistory };
-    case 'debug:state-at':
-      // DebugPanel reads `data.state`; the op carries it as `historicalState`.
-      return { success: result.success, error: result.error, state: result.historicalState };
-    case 'debug:state-diff':
-      return { success: result.success, error: result.error, diff: result.diff };
-    case 'debug:action-traces':
-      return {
-        success: result.success,
-        error: result.error,
-        traces: result.traces,
-        flowContext: result.flowContext,
-      };
-    case 'debug:flow-state':
-      return {
-        success: result.success,
-        error: result.error,
-        flowDebugInfo: result.flowDebugInfo,
-        pendingAction: result.pendingAction,
-      };
-    case 'debug:rewind':
-    case 'debug:move-to-top':
-    case 'debug:reorder-card':
-    case 'debug:transfer-card':
-    case 'debug:shuffle-deck':
-      return { success: result.success, error: result.error };
-    case 'debug:logs':
-      return { success: result.success, error: result.error, entries: result.entries };
-    default:
-      return { success: false, error: `Unknown server op: '${wireOp}'` };
-  }
+function outcomeOnly(result: { success: boolean; error?: string }): Reply {
+  return { success: result.success, error: result.error };
+}
+
+/**
+ * How each op's result becomes the reply the embedded controller expects
+ * (mirrors the DO's per-op `serverX` handlers). One entry per op type, each
+ * handed that op's own result type, and every entry is an allowlist: the reply
+ * goes to the one seat that asked, and a state-changing op's result carries
+ * every seat's view and the unredacted snapshot.
+ */
+const SHAPERS: { [T in Op['type']]: (result: OpResultFor<T>) => Reply } = {
+  start: outcomeOnly,
+  action: (r) =>
+    r.success
+      ? {
+          success: true,
+          followUp: r.followUp,
+          // The acting seat's return value from execute() (BUG-017/BUG-012).
+          data: r.data,
+          message: r.message,
+        }
+      : refusal(r),
+  expireSeat: outcomeOnly,
+  // The pick's answer and nothing else (#450).
+  resolveChoices: (r) =>
+    r.success
+      ? {
+          success: true,
+          choices: r.choices,
+          validElements: r.validElements,
+          multiSelect: r.multiSelect,
+          orderedList: r.orderedList,
+          warnings: r.warnings,
+        }
+      : refusal(r),
+  selectionStep: (r) =>
+    r.success
+      ? {
+          success: true,
+          done: r.done,
+          nextChoices: r.nextChoices,
+          actionComplete: r.actionComplete,
+          followUp: r.followUp,
+          warnings: r.warnings,
+          // Present only on the step that completes the action (BUG-017/BUG-012).
+          data: r.data,
+          message: r.message,
+        }
+      : refusal(r),
+  cancelAction: outcomeOnly,
+  undo: outcomeOnly,
+  botTurn: outcomeOnly,
+  startTutorial: outcomeOnly,
+  exitTutorial: outcomeOnly,
+  hint: outcomeOnly,
+  heatmapToggle: outcomeOnly,
+  botSuggest: outcomeOnly,
+  demoStart: outcomeOnly,
+  demoStop: outcomeOnly,
+  demoControl: outcomeOnly,
+  convertSeatToBot: outcomeOnly,
+  restoreEarlier: outcomeOnly,
+  debugHistory: (r) => (r.success ? { success: true, actionHistory: r.actionHistory } : refusal(r)),
+  // DebugPanel reads `data.state`; the op carries it as `historicalState`.
+  debugStateAt: (r) => (r.success ? { success: true, state: r.historicalState } : refusal(r)),
+  debugStateDiff: (r) => (r.success ? { success: true, diff: r.diff } : refusal(r)),
+  debugActionTraces: (r) =>
+    r.success ? { success: true, traces: r.traces, flowContext: r.flowContext } : refusal(r),
+  debugFlowState: (r) =>
+    r.success
+      ? { success: true, flowDebugInfo: r.flowDebugInfo, pendingAction: r.pendingAction }
+      : refusal(r),
+  debugRewind: outcomeOnly,
+  debugReorder: outcomeOnly,
+  debugTransfer: outcomeOnly,
+  debugShuffle: outcomeOnly,
+};
+
+/** Shape a `type` op's result into the reply its seat is sent. */
+export function shapeResult<T extends Op['type']>(type: T, result: OpResultFor<T>): Reply {
+  const shape: (result: OpResultFor<T>) => Reply = SHAPERS[type];
+  return shape(result);
 }
 
 /**
@@ -435,21 +447,16 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
         opts.postServerResponse(seat, requestId, { success: false, error: debuggingOffMessage(wireOp) });
         return;
       }
-      const logsResult = { success: true, entries: getEntries() } as unknown as OpResult & {
-        entries: readonly LogEntry[];
-      };
-      opts.postServerResponse(seat, requestId, shapeResult(wireOp, logsResult));
+      opts.postServerResponse(seat, requestId, { success: true, entries: getEntries() });
       return;
     }
     try {
       const result = await host.handleOp(seat, op);
-      // Dual-channel warnings capture (ERR-04): structured OpResult.warnings
+      // Dual-channel warnings capture (ERR-04): a pick's structured warnings
       // (Plan 126-03) also feed the debug:logs ring buffer, sourced by wireOp,
-      // in addition to riding the op result itself (shapeResult passthrough).
-      if (result.warnings?.length) {
-        for (const w of result.warnings) record('warning', w.message, wireOp);
-      }
-      opts.postServerResponse(seat, requestId, shapeResult(wireOp, result));
+      // in addition to riding the reply itself.
+      for (const w of warningsOf(result)) record('warning', w.message, wireOp);
+      opts.postServerResponse(seat, requestId, shapeResult(op.type, result));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       // The message, which is already extracted above for the ring buffer and

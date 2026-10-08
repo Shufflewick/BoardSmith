@@ -114,11 +114,11 @@ And the rule the sentence exists to serve:
 - **The message carries no internals.** No stack trace, no file path, no
   frame path, no internal identifier. It names the round state and the recovery
   action, and nothing else.
-- **No `errorCode` is fabricated.** Per the rule already stated on `OpResult`,
-  `errorCode` is "undefined for protocol-level failures that have no upstream
-  errorCode to forward — never fabricated." A staleness refusal is detected in
-  the session layer before any runner call, so there is no upstream code to
-  forward and the field is absent.
+- **The refusal carries its own code, `ErrorCode.STALE_SUBMISSION`** (#535).
+  A stale refusal is the engine's own outcome, not a failure forwarded from
+  the runner, and it is a normal one: the round resolved without this seat. A
+  host tells it apart from every other refusal by the code. The sentence above
+  is copy, free to change, and no protocol check may compare against it.
 
 ## 4. The authorization rule
 
@@ -210,27 +210,19 @@ simultaneous) and `src/session/testing/fixtures/collect-turns-fixture.ts`
 | 1 | Simultaneous: a `commit` composed in round 1, submitted after round 2 has opened | Refused. The action does **not** land in round 2 — seat 1's `committed` flag in round 2 is still false. |
 | 2 | The refusal message | Exactly the sentence in §3 — named, not pattern-matched loosely. |
 | 3 | The refusal is not a wedge | Immediately re-submitting with the CURRENT key succeeds and the seat commits in round 2. |
-| 4 | No crash | The refusal resolves an `OpResult`; it never throws, and `errorCode` is absent (§3). |
+| 4 | No crash | The refusal resolves an `OpResult`; it never throws, and `errorCode` is `STALE_SUBMISSION` (§3). |
 | 5 | Authorization narrows only | A **correct** key from a seat that has already completed is still refused, with the engine's pre-existing message, unchanged. |
 | 6 | Sequential games too | On a sequential fixture, a previous turn's key is refused and the current key succeeds. The rule is not simultaneous-only. |
 | 7 | `selectionStep` | A mid-action selection composed against a closed boundary is refused, by the same single guard. |
 | 8 | Malformed key | A wrong-typed / absurd key is a plain mismatch: the same graceful refusal, no separate parse path, no throw. |
-| 9 | The key handed out IS the key accepted | Across a full multi-round game, `OpResult.flowState` and `OpResult.snapshot.flowState` yield the same key, and every current-key submission is accepted. |
 
-### On case 9, and why it is not redundant
+### Why there is no case 9 any more
 
-The guard compares a submission's key against `snapshot.flowState`, because
-`executeOp` is stateless and the snapshot is all it is given.
-`SnapshotSessionHost` hands out the key from that same value: its
-`turnBoundary()` reads the flow state out of the snapshot it holds (#536), so
-for that host the two cannot diverge. An op result still reports the flow state
-a second time, as `OpResult.flowState`, and a host that hands out keys from that
-copy depends on it equalling the snapshot's. If they ever diverged, EVERY
-legitimate submission from such a host would be refused: the system would wedge,
-telling players to reload into a round they could never act in. No other case
-here would notice, because they all read the key from the same side they submit
-it to. Case 9 holds the copy equal to the snapshot's for as long as op results
-carry it.
+The guard compares a submission's key against `snapshot.flowState`, and a host
+hands out keys from that same value. Op results once reported the flow state a
+second time beside the snapshot, and a case held the two equal. That copy is
+gone (#536): a result carries the flow state only inside its snapshot, so there
+is no second value to diverge.
 
 ### On case 7, and why the selection path is still guarded
 
