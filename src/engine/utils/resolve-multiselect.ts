@@ -12,7 +12,11 @@
  *
  * Fail-loud tri-state contract:
  *  - concrete `{min,max}` (static or resolved from a function) -> returned,
- *    normalized via `parseMultiSelect`.
+ *    normalized. An unbounded selection OMITS `max` rather than carrying
+ *    `Infinity`: these bounds travel as JSON, where `Infinity` becomes `null`
+ *    and the action panel reads `null` as a cap of nothing (ShufflewickPub
+ *    #378, BoardSmith #508). Enumeration, the one caller that does arithmetic
+ *    with the bound, applies `?? Infinity` itself.
  *  - `undefined` (no multiSelect at all, or the function legitimately
  *    returns `undefined`) -> returned as `undefined`. This is NOT an error —
  *    it means "single-select in this state".
@@ -23,41 +27,24 @@
 import type { ActionContext, Selection } from '../index.js';
 
 /**
- * Parse a multiSelect config value into `{ min, max }`.
- *
- * MOVED HERE from `enumerate-moves.ts`, and the move is the point: this
- * function was that file's only export used by this one, while this file's
- * `resolveMultiSelect` is imported back by `enumerate-moves.ts:227`. That
- * mutual import was a real dependency cycle. `parseMultiSelect` is a pure
- * normalizer with no dependency on enumeration, so it belongs on this side of
- * the pair, and moving it breaks the cycle without a shim module.
+ * A resolved count config (`number | { min?, max? }`) as `{ min, max? }`, with
+ * `max` absent when unbounded. The one place both resolvers decide that.
  */
-function parseMultiSelect(multiSelect: unknown): { min: number; max: number } {
-  if (typeof multiSelect === 'number') {
-    return { min: 1, max: multiSelect };
-  }
-  if (typeof multiSelect === 'object' && multiSelect !== null) {
-    const config = multiSelect as { min?: number; max?: number };
-    return {
-      min: config.min ?? 1,
-      max: config.max ?? Infinity,
-    };
-  }
-  return { min: 1, max: Infinity };
+function boundsOf(resolved: unknown): { min: number; max?: number } {
+  if (typeof resolved === 'number') return { min: 1, max: resolved };
+  const config = (resolved ?? {}) as { min?: number; max?: number };
+  return config.max === undefined
+    ? { min: config.min ?? 1 }
+    : { min: config.min ?? 1, max: config.max };
 }
-
 
 /**
  * resolveOrderedList — the same single source of truth for a choice selection's
  * `orderedList` bounds (#249).
  *
  * Lives beside `resolveMultiSelect` because the two answer the same question
- * about the same selection and must never be resolved two different ways. It
- * differs in exactly one deliberate respect: an unbounded list OMITS `max`
- * rather than normalizing it to `Infinity`. `Infinity` is not JSON — it
- * serializes as `null`, which the action panel read as a cap of nothing
- * (ShufflewickPub #378) — and every consumer of these bounds is the wire or the
- * panel rather than enumeration's arithmetic.
+ * about the same selection and must never be resolved two different ways. Both
+ * omit `max` when unbounded (see the note at the top of this file).
  */
 export function resolveOrderedList(
   selection: Selection,
@@ -73,19 +60,13 @@ export function resolveOrderedList(
     ? (orderedList as (c: ActionContext) => unknown)(ctx)
     : orderedList;
 
-  if (resolved === undefined) return undefined;
-  if (typeof resolved === 'number') return { min: 1, max: resolved };
-
-  const config = resolved as { min?: number; max?: number };
-  return config.max === undefined
-    ? { min: config.min ?? 1 }
-    : { min: config.min ?? 1, max: config.max };
+  return resolved === undefined ? undefined : boundsOf(resolved);
 }
 
 export function resolveMultiSelect(
   selection: Selection,
   ctx: ActionContext,
-): { min: number; max: number } | undefined {
+): { min: number; max?: number } | undefined {
   const multiSelect = (selection as { multiSelect?: unknown }).multiSelect;
 
   if (multiSelect === undefined) {
@@ -96,9 +77,5 @@ export function resolveMultiSelect(
   // try/catch — a thrown error must propagate to the caller (fail loud).
   const resolved = typeof multiSelect === 'function' ? multiSelect(ctx) : multiSelect;
 
-  if (resolved === undefined) {
-    return undefined;
-  }
-
-  return parseMultiSelect(resolved);
+  return resolved === undefined ? undefined : boundsOf(resolved);
 }

@@ -1626,9 +1626,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // that wrote would reach every watcher's frame and be reverted at the next
     // hibernation with nobody told.
     const reading = readOnlyProjection(this.game);
-    const pick = wireSafeMultiSelect(
-      buildPickMetadata(reading, acting, selection, { ...args }),
-    );
+    const pick = buildPickMetadata(reading, acting, selection, { ...args });
     if (selection.type === "number" || selection.type === "text") return pick;
 
     const candidates = this.game
@@ -3611,26 +3609,6 @@ function candidateless(pick: PickMetadata): boolean {
  * -- which makes "the bundle said nothing" and "the bundle said nothing about
  * this" indistinguishable on the far side.
  */
-/**
- * A CAP THE WIRE CAN CARRY (ShufflewickPub #378).
- *
- * `resolveMultiSelect` normalizes "no upper bound" to `Infinity`, which is a
- * perfectly good number in an isolate and is not JSON: `JSON.stringify` writes
- * `null`, and the panel read that as a cap of nothing and disabled every
- * checkbox. An unbounded pick says so by OMITTING `max`, which is what
- * `resolveMultiSelectConfig` and the panel already read as "no upper bound",
- * and what the same shape means everywhere else in the metadata.
- *
- * Only the world path needs this: a table's picks are answered per selection
- * over a live session rather than serialized into a single offer frame.
- */
-function wireSafeMultiSelect(pick: PickMetadata): PickMetadata {
-  const bounds = pick.multiSelect;
-  if (bounds === undefined || Number.isFinite(bounds.max)) return pick;
-  const { max: _unbounded, ...rest } = bounds;
-  return { ...pick, multiSelect: rest as PickMetadata["multiSelect"] };
-}
-
 function offerOf(
   definition: ActionDefinition,
   selections: PickMetadata[],

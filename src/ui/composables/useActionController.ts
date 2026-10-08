@@ -1922,7 +1922,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (multiSelectCfg && !Array.isArray(value)) {
       const error =
         `fill('${selectionName}', ...) rejected: '${selectionName}' is a multiSelect selection ` +
-        `(min ${multiSelectCfg.min}, max ${multiSelectCfg.max}) and requires an array. ` +
+        `(min ${multiSelectCfg.min}, max ${multiSelectCfg.max ?? 'unlimited'}) and requires an array. ` +
         `Use toggleMultiSelect()/confirmMultiSelect(), or pass an array directly to fill().`;
       setError(error);
       return { valid: false, error };
