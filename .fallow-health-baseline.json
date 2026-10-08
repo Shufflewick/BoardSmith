@@ -293,16 +293,6 @@
         "count": 1
       }
     },
-    "src/client/client.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "src/client/game-connection.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/engine/action/action.ts": {
       "complexity_critical": {
         "count": 4
@@ -564,11 +554,6 @@
         "count": 1
       }
     },
-    "src/ui/components/GameLobby.vue": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/ui/components/GameShell.vue": {
       "complexity_high": {
         "count": 1
@@ -728,11 +713,6 @@
       }
     },
     "src/ui/composables/useGameViewHelpers.ts": {
-      "complexity_moderate": {
-        "count": 2
-      }
-    },
-    "src/ui/composables/useLobby.ts": {
       "complexity_moderate": {
         "count": 2
       }
