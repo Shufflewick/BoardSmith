@@ -439,14 +439,14 @@ describe('deriveManifest - the game version', () => {
 
 // WR-02, #391: `.boardsmith` is a SHARED directory (pack tarballs, the scratch
 // directory, chunk worktrees, the other commands' build directories). Every
-// command that bundles the rules builds into its own `commandBuildDir` and
+// command that bundles the rules builds into a `makeCommandBuildDir` of its own run (#543) and
 // removes only that, never the shared parent.
 describe('command build directories (WR-02, #391)', () => {
   for (const command of ['build', 'dev', 'simulate', 'validate'] as const) {
     const src = readFileSync(join(__dirname, `${command}.ts`), 'utf-8');
 
     it(`${command} builds into its own subdirectory of .boardsmith`, () => {
-      expect(src).toContain(`commandBuildDir(cwd, '${command}')`);
+      expect(src).toContain(`makeCommandBuildDir(cwd, '${command}')`);
       // The shared parent must never be a command's directory.
       expect(src).not.toMatch(/join\(cwd, '\.boardsmith'\)/);
     });

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve, relative, dirname } from 'node:path';
 import type { Plugin as VitePlugin } from 'vite';
 import { fileURLToPath } from 'node:url';
@@ -22,7 +22,7 @@ import { findUnknownKeys } from '../lib/config-schema.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { resolveWorldMode } from '../lib/world-project.js';
 import { resolveUserPath } from '../lib/user-path.js';
-import { commandBuildDir } from '../lib/project-paths.js';
+import { makeCommandBuildDir } from '../lib/project-paths.js';
 import { loadWorldRuntime, startWorldDevServer, type WorldRuntime } from './dev-world.js';
 import {
   devNotFoundMiddleware,
@@ -737,11 +737,10 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
   const rulesIndexPath = requireRulesIndex(rulesPath);
 
-  // The Node-side rules bundle is built into dev's own directory, and the stop
+  // The Node-side rules bundle is built into this run's own directory, and the stop
   // removes that directory alone: the rest of `.boardsmith/` holds scratch and
   // chunk worktrees that dev did not make (#391).
-  const tempDir = commandBuildDir(cwd, 'dev');
-  mkdirSync(tempDir, { recursive: true });
+  const tempDir = makeCommandBuildDir(cwd, 'dev');
   holdings.hold([{ name: `the build directory (${tempDir})`, close: () => rmSync(tempDir, { recursive: true, force: true }) }]);
 
   console.log(chalk.dim(`  Loading game rules from ${rulesPath}...`));

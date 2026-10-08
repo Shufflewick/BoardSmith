@@ -1,11 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cpus } from 'node:os';
 import chalk from 'chalk';
 import ora from 'ora';
 import type { LearnedObjective, TrainingProgress } from '../../bot-trainer/index.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
-import { commandBuildDir } from '../lib/project-paths.js';
+import { makeCommandBuildDir } from '../lib/project-paths.js';
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 
 interface EvolveBotWeightsOptions {
@@ -56,13 +56,12 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
 
   const spinner = ora('Bundling the game rules...').start();
 
-  // Evolve-bot-weights' own build directory, removed below; never `.boardsmith/`
+  // This run's own build directory (#543), removed below; never `.boardsmith/`
   // itself (#391). The rules are bundled from source here rather than read from
   // some earlier build, so the weights are tuned against the rules as they are
   // now (#399). The bundle stays until the evolution ends: the worker threads
   // load the game from it.
-  const tempDir = commandBuildDir(cwd, 'evolve-bot-weights');
-  mkdirSync(tempDir, { recursive: true });
+  const tempDir = makeCommandBuildDir(cwd, 'evolve-bot-weights');
 
   try {
     const { gameDefinition, bundlePath: modulePath } = await loadGameDefinition(

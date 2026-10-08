@@ -11,14 +11,13 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { commandBuildDir } from '../lib/project-paths.js';
+import { makeCommandBuildDir } from '../lib/project-paths.js';
 
 export function rulesProject(prefix: string, source: string) {
   const dir = tempTree(prefix);
   const rulesPath = join(dir, 'src', 'rules');
   mkdirSync(rulesPath, { recursive: true });
-  const tempDir = commandBuildDir(dir, 'dev');
-  mkdirSync(tempDir, { recursive: true });
+  const tempDir = makeCommandBuildDir(dir, 'dev');
   const save = (rules: string) => writeFileSync(join(rulesPath, 'index.ts'), rules);
   save(source);
   return { rulesPath, tempDir, save };

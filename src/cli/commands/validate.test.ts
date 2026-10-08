@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
@@ -34,6 +34,7 @@ import {
   encodedRulesBytes,
 } from '../lib/bundle-limits.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { makeCommandBuildDir } from '../lib/project-paths.js';
 import {
   fixedDeployDefinition,
   untimedDeployDefinition,
@@ -801,7 +802,32 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
   it('removes the temp dir it made once the check is done', async () => {
     const cwd = freshProject(wideRules);
     await validateChoiceCardinality(cwd, false);
-    expect(existsSync(join(cwd, '.boardsmith', 'validate-tmp'))).toBe(false);
+    expect(readdirSync(join(cwd, '.boardsmith'))).toEqual([]);
+  }, 30_000);
+
+  // #543: two validates of one game used to share `.boardsmith/validate-tmp/`, so the run that
+  // finished first deleted the bundle the other was about to import.
+  it('lets two validates of the same game run at once, and both leave nothing behind', async () => {
+    const cwd = freshProject(wideRules);
+
+    const results = await Promise.all([validateChoiceCardinality(cwd, false), validateChoiceCardinality(cwd, false)]);
+
+    for (const result of results) expect(result.details!.join('\n')).toContain('shout');
+    expect(readdirSync(join(cwd, '.boardsmith'))).toEqual([]);
+  }, 60_000);
+
+  // #543: the deterministic half of the test above. Whether two runs in one process collide
+  // depends on timing; whether a run removes a directory it did not make does not.
+  it('leaves the build directory of another validate still running alone', async () => {
+    const cwd = freshProject(wideRules);
+    const other = makeCommandBuildDir(cwd, 'validate');
+    writeFileSync(join(other, 'simulate-bundle.mjs'), 'export {};');
+
+    const result = await validateChoiceCardinality(cwd, false);
+
+    expect(result.details!.join('\n')).toContain('shout');
+    expect(existsSync(join(other, 'simulate-bundle.mjs')), 'validate removed another run’s bundle').toBe(true);
+    expect(readdirSync(join(cwd, '.boardsmith'))).toEqual([basename(other)]);
   }, 30_000);
 
   it('plays the game at the seat count its definition starts from', async () => {

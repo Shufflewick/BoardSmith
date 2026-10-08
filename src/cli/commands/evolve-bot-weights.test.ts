@@ -1,6 +1,6 @@
 /**
  * #399: evolve-bot-weights bundles the project's rules itself, from source,
- * into its own `commandBuildDir`, the way simulate does, and hands that bundle
+ * into a `makeCommandBuildDir` of its own run, the way simulate does, and hands that bundle
  * to the weight evolver's workers. It used to look for three prebuilt files,
  * one of which (`.boardsmith/rules-bundle.mjs`) no command writes.
  *
@@ -17,10 +17,11 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { commandBuildDir, scratchDir } from '../lib/project-paths.js';
+import { commandBuildDirPrefix, scratchDir } from '../lib/project-paths.js';
+import { commandBuildDirs } from '../lib/command-build-dirs.test-helper.js';
 
 interface EvolverCall {
   gameType: string;
@@ -129,13 +130,12 @@ describe('evolve-bot-weights bundles the rules into its own build directory (#39
     expect(evolved.evolverCalls).toHaveLength(1);
     const [call] = evolved.evolverCalls;
     expect(call.gameType).toBe('dead-end');
-    expect(dirname(call.modulePath)).toBe(commandBuildDir(evolved.projectDir, 'evolve-bot-weights'));
+    expect(dirname(dirname(call.modulePath))).toBe(join(evolved.projectDir, '.boardsmith'));
+    expect(basename(dirname(call.modulePath))).toMatch(new RegExp(`^${commandBuildDirPrefix('evolve-bot-weights')}`));
     expect(call.bundleExistedDuringEvolution, 'the workers were handed a path with no file behind it').toBe(true);
     expect(call.bundleExportedGameClass, 'the bundle did not export the game class').toBe(true);
 
-    expect(existsSync(commandBuildDir(evolvedDir, 'evolve-bot-weights')), 'the build directory was left behind').toBe(
-      false,
-    );
+    expect(commandBuildDirs(evolvedDir, 'evolve-bot-weights'), 'the build directory was left behind').toEqual([]);
     expect(readFileSync(scratchFile, 'utf-8')).toBe('keep me\n');
   });
 
@@ -143,6 +143,6 @@ describe('evolve-bot-weights bundles the rules into its own build directory (#39
     expect(broken.error).toBeInstanceOf(Error);
     expect((broken.error as Error).message).toContain("Evolving this bot's weights failed");
     expect(broken.evolverCalls).toHaveLength(0);
-    expect(existsSync(commandBuildDir(brokenDir, 'evolve-bot-weights'))).toBe(false);
+    expect(commandBuildDirs(brokenDir, 'evolve-bot-weights')).toEqual([]);
   });
 });
