@@ -9,8 +9,8 @@
  * differ between runs, which defeats exactly the replay and snapshot-equality
  * checks a seeded engine exists to support.
  *
- * Wall-clock time belongs at the session boundary, which is where GameSession
- * stamps it (see game-session.determinism.test.ts).
+ * Wall-clock time, where a host wants it, belongs at the session boundary,
+ * outside the engine's state.
  */
 import { describe, it, expect } from 'vitest';
 import { Game, Space, Piece, Player, Action, defineFlow, loop, eachPlayer, actionStep, type FlowContext } from '../engine/index.js';

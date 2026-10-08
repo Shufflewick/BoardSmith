@@ -16,9 +16,10 @@
  *     return undefined;
  *   });
  *
- * INVARIANT (RESEARCH Pitfall 5): The `hasBotPlayers` branch must NOT fire in
- * production because GameSession never sets that field. The test proves this
- * by checking the production-no-bot case explicitly.
+ * INVARIANT (RESEARCH Pitfall 5): The `hasBotPlayers` branch must NOT fire at
+ * a table with no bot. SnapshotSessionHost sets that field only while it has
+ * bot seats, so a no-bot table never carries it. The test proves this by
+ * checking the no-bot case explicitly.
  *
  * Behaviors under test:
  *   SH-1: Both lobbyInfo absent AND state.hasBotPlayers absent → undefined (production no-bot)
