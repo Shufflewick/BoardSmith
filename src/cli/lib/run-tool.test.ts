@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdirSync, writeFileSync, chmodSync } from 'node:fs';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
+import { createRequire } from 'node:module';
 import { runTool, runToolCapturingStdout } from './run-tool.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
@@ -140,5 +141,45 @@ describe('runToolCapturingStdout', () => {
     });
 
     expect(result.stdout.trim()).toBe('--format');
+  });
+});
+
+/**
+ * fallow decides what the audit gate reports, and its findings change between
+ * releases: 3.x skips test files in `fallow dupes` where 2.48.0 did not, so the
+ * same tree gave a different verdict on every machine that had a different
+ * fallow on PATH (#545). boardsmith therefore depends on one exact fallow, and
+ * runs THAT one wherever it is invoked from: a game project's own
+ * `node_modules/.bin/fallow`, or a global one on PATH, must never be what runs.
+ */
+describe('fallow', () => {
+  const boardsmithFallow = (): string => {
+    const require = createRequire(import.meta.url);
+    const { version } = require('fallow/package.json') as { version: string };
+    return version;
+  };
+
+  it("runs boardsmith's own fallow, not the workspace's", async () => {
+    writeLocalBin('fallow', 'echo "fallow 0.0.0-workspace"');
+
+    const result = await runToolCapturingStdout('fallow', ['--version'], { cwd: workspace });
+
+    expect(result.stdout).toContain(`fallow ${boardsmithFallow()}`);
+  });
+
+  it("runs boardsmith's own fallow, not one on PATH", async () => {
+    const pathDir = join(workspace, 'path-bin');
+    mkdirSync(pathDir);
+    writeFileSync(join(pathDir, 'fallow'), '#!/bin/sh\necho "fallow 0.0.0-path"\n');
+    chmodSync(join(pathDir, 'fallow'), 0o755);
+    const original = process.env.PATH;
+    process.env.PATH = `${pathDir}${delimiter}${original}`;
+    try {
+      const result = await runToolCapturingStdout('fallow', ['--version'], { cwd: workspace });
+
+      expect(result.stdout).toContain(`fallow ${boardsmithFallow()}`);
+    } finally {
+      process.env.PATH = original;
+    }
   });
 });

@@ -49,6 +49,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tempTree } from '../src/testing/temp-tree.test-helper.ts';
+import { toolCommand } from '../src/cli/lib/run-tool.ts';
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -86,7 +87,8 @@ function healthFindings(source) {
   mkdirSync(path.join(dir, 'src'));
   writeFileSync(path.join(dir, 'src', 'main.ts'), source);
 
-  const run = spawnSync('fallow', ['health', '--complexity', '--format', 'json'], {
+  const { command, commandArgs } = toolCommand('fallow', ['health', '--complexity', '--format', 'json'], dir);
+  const run = spawnSync(command, commandArgs, {
     cwd: dir,
     encoding: 'utf8',
   });
@@ -94,7 +96,7 @@ function healthFindings(source) {
   if (start === -1) {
     throw new Error(
       `fallow did not report: ${run.error?.message || run.stderr || run.stdout}\n`
-        + '`boardsmith audit` runs this same binary. Install it with `npm i -g fallow`.',
+        + '`boardsmith audit` runs this same binary. Install it with `npm install`.',
     );
   }
   return JSON.parse(run.stdout.slice(start)).findings;
