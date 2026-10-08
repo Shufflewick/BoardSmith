@@ -1,731 +1,102 @@
 /**
- * Teaching substrate tests (Phase 107)
+ * Teaching tools on the live host: what the host's own teaching cases in
+ * snapshot-session-host.test.ts and stateless-ops.test.ts leave out.
  *
- * Covers:
- * - Task 1 (infrastructure): broadcast injection, clear-on-replace, no-serialization
- * - Task 2 (API): requestHint / clearHint lifecycle (added by Task 2)
- * - Task 3 (heatmap): setHeatmapVisible / buildHeatmapEntries (added by Task 3)
- *
- * Test game: minimal two-player loop so we can occupy a decision point.
+ * - A hint, a heatmap and demo narration are the host's transient state. They
+ *   are merged into the views it publishes and never enter what it stores.
+ * - A debug rewind, like an undo, drops a hint chosen for a position that no
+ *   longer exists.
+ * - A visible heatmap follows the turn: it is emptied (still toggled on) while
+ *   its seat is off turn and recomputed when the seat is on turn again.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TwoPlayerPickGame as TeachingTestGame } from './testing/fixtures/two-player-pick-fixture.js';
-import { Game, Player, Action, defineFlow, actionStep, type GameOptions } from '../engine/index.js';
-import { GameRunner } from '../runtime/runner.js';
-import { GameSession } from './game-session.js';
-import type { PlayerGameState, SessionInfo } from './types.js';
-import { makeMockBroadcaster, type CapturedState } from './capture-broadcaster.test-helper.js';
+import { describe, it, expect } from 'vitest';
+import { TwoPlayerPickGame } from './testing/fixtures/two-player-pick-fixture.js';
+import { createHeadlessSession } from './headless-session.js';
 import type { BotStrategy } from '../bot/index.js';
 
-// ============================================
-// Helpers
-// ============================================
+// Every move scores the same; each pick names its option as the hint target,
+// so a heatmap of the three options is never empty.
+const pickBot: BotStrategy = {
+  objectives: () => ({ moves: { checker: () => 0.5, weight: 1 } }),
+  hintTargetFromMove: (move) => {
+    const option = (move.args as { option?: string }).option;
+    return option ? { notation: option } : undefined;
+  },
+};
 
-/** A fresh session pushing seat 1's state into `captured`, with a hint already shown to seat 1. */
-async function hintedSession() {
-  const session = makeSession();
-  const captured: CapturedState[] = [];
-  session.setBroadcaster(makeMockBroadcaster([{ playerSeat: 1, isSpectator: false }], captured));
-  await (session as unknown as { requestHint(seat: number): Promise<void> }).requestHint(1);
-  expect(captured.at(-1)!.state.hint).toBeDefined();
-  return { session, captured };
-}
+const def = {
+  gameClass: TwoPlayerPickGame,
+  gameType: 'two-player-pick',
+  minPlayers: 2,
+  maxPlayers: 2,
+  bot: pickBot,
+};
 
-function makeSession(options: { debugEnabled?: boolean } = {}) {
-  const session = GameSession.create({
-    gameType: 'teaching-test',
-    GameClass: TeachingTestGame,
-    playerCount: 2,
-    playerNames: ['Alice', 'Bob'],
-    seed: 'test',
-    ...options,
-  });
+async function table() {
+  const session = createHeadlessSession(def, { playerCount: 2, seed: 'teaching', playerNames: ['Alice', 'Bob'] });
+  await session.start();
   return session;
 }
 
-// ============================================
-// Task 1: no-serialization invariant
-// ============================================
+// A hint and a heatmap each run a bot search, so a busy machine can take a
+// while; this is a ceiling for a hung search, not a budget.
+const SEARCH_CEILING = { timeout: 60_000 };
 
-
-/**
- * WAIT FOR THE THING, NOT FOR THE CLOCK (ShufflewickPub #385).
- *
- * A demo runs bot moves on its own scheduler, and the two cases below used to
- * sleep 800ms and assume one had landed. On a loaded machine none had, and the
- * suite failed at random on a claim that was never about elapsed time. This
- * polls for the condition instead and gives up loudly after a ceiling no
- * healthy run comes near.
- */
-async function until(
-  ready: () => boolean,
-  what: string,
-  ceilingMs = 10_000,
-): Promise<void> {
-  const deadline = Date.now() + ceilingMs;
-  while (!ready()) {
-    if (Date.now() > deadline) {
-      throw new Error(`Waited ${ceilingMs}ms for ${what} and it never happened.`);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
+async function pick(session: Awaited<ReturnType<typeof table>>, seat: number) {
+  const result = await session.send(seat, { type: 'action', actionName: 'pick', player: seat, args: { option: 'a' } });
+  if (!result.success) throw new Error(result.error);
 }
 
-/**
- * Teaching fields are session-layer only -- they must never appear in the
- * engine's serialization surface. If any of these appear, a regression has
- * leaked transient UI state into persistent storage.
- */
-function expectNoTeachingFields(snapshot: unknown): void {
-  expect(snapshot).not.toHaveProperty('hint');
-  expect(snapshot).not.toHaveProperty('heatmap');
-  expect(snapshot).not.toHaveProperty('narration');
+function expectNoTeachingFields(stored: unknown): void {
+  const text = JSON.stringify(stored);
+  expect(text).not.toContain('"hint"');
+  expect(text).not.toContain('"heatmap"');
+  expect(text).not.toContain('"narration"');
 }
 
-describe('teaching state — no-serialization invariant', () => {
-  it('runner snapshot never contains hint, heatmap, or narration fields', () => {
-    expectNoTeachingFields(makeSession().runner.getSnapshot());
-  });
+describe('teaching state is never stored', () => {
+  it('the durable state holds no hint, heatmap or narration while seat 1 sees both', SEARCH_CEILING, async () => {
+    const session = await table();
+    expect((await session.send(1, { type: 'hint', seat: 1 })).success).toBe(true);
+    expect((await session.send(1, { type: 'heatmapToggle', seat: 1, visible: true })).success).toBe(true);
 
-  it('captureCheckpoint does not contain teaching fields', async () => {
-    const session = makeSession();
+    const seat1 = session.playerState(1);
+    expect(seat1.hint).toBeDefined();
+    expect(seat1.heatmap?.visible).toBe(true);
 
-    // Perform an action to generate a checkpoint
-    await session.performAction('pick', 1, { option: 'a' });
-
-    expectNoTeachingFields(session.runner.getSnapshot());
-  });
-});
-
-// ============================================
-// Task 1: broadcast injection
-// ============================================
-
-describe('teaching state — broadcast injection', () => {
-  it('broadcast state has no hint/heatmap/narration when none is set', () => {
-    const session = makeSession();
-    const captured: CapturedState[] = [];
-    const broadcaster = makeMockBroadcaster(
-      [{ playerSeat: 1, isSpectator: false }],
-      captured
-    );
-    session.setBroadcaster(broadcaster);
-    session.broadcast();
-
-    expect(captured).toHaveLength(1);
-    const state = captured[0]!.state;
-    // No teaching state was set — fields should be absent (undefined)
-    expect(state.hint).toBeUndefined();
-    expect(state.heatmap).toBeUndefined();
-    expect(state.narration).toBeUndefined();
-  });
-
-  // Injection positive case: after requestHint(), state.hint is populated.
-  // This test is RED until Task 2 implements requestHint().
-  it('broadcast state includes hint annotation when requestHint has been called', async () => {
-    const { captured } = await hintedSession();
-    expect(captured.at(-1)!.state.hint!.annotation.text).toBe('Suggested move');
+    expectNoTeachingFields(session.host.durableState());
   });
 });
 
-// ============================================
-// Task 2: requestHint / clearHint additional behaviors
-// ============================================
+describe('a rewind drops a stale hint', () => {
+  it('the rewind publishes seat 2 no hint', SEARCH_CEILING, async () => {
+    const session = await table();
+    await pick(session, 1);
+    expect((await session.send(2, { type: 'hint', seat: 2 })).success).toBe(true);
+    expect(session.playerState(2).hint).toBeDefined();
 
-describe('teaching state — requestHint / clearHint', () => {
-  it('requestHint on non-acting seat throws actionable error', async () => {
-    const session = makeSession();
-    // Seat 2 (Bob) is NOT currently awaiting input (seat 1 goes first)
-    await expect(
-      (session as unknown as { requestHint(seat: number): Promise<void> }).requestHint(2)
-    ).rejects.toThrow('Cannot hint: seat 2 is not awaiting input');
-  });
+    const rewound = await session.send(2, { type: 'debugRewind', actionIndex: 0 });
+    if (!rewound.success) throw new Error(rewound.error);
 
-  it('requestHint while already in-flight throws actionable error', async () => {
-    const session = makeSession();
-    const hint = session as unknown as { requestHint(seat: number): Promise<void> };
-    // Fire two concurrent requests — second must be rejected loudly
-    const first = hint.requestHint(1);
-    await expect(hint.requestHint(1)).rejects.toThrow('Hint already in progress for seat 1');
-    // Let the first finish (may succeed or fail depending on bot availability)
-    await first.catch(() => {});
-  });
-
-  it('hint clears after the next performAction on that seat', async () => {
-    const { session, captured } = await hintedSession();
-    captured.length = 0;
-
-    await session.performAction('pick', 1, { option: 'a' });
-    expect(captured.at(-1)!.state.hint).toBeUndefined();
-  });
-
-  it('clearHint removes hint and broadcasts', async () => {
-    const { session, captured } = await hintedSession();
-    captured.length = 0;
-
-    (session as unknown as { clearHint(seat: number): void }).clearHint(1);
-    expect(captured).toHaveLength(1);
-    expect(captured.at(-1)!.state.hint).toBeUndefined();
+    expect(session.playerState(2).hint).toBeUndefined();
   });
 });
 
-// ============================================
-// Task 1: clear-on-replace (undo/rewind)
-// ============================================
-
-/** Seat 1 picks twice in one turn, so it can undo its first pick while its turn is still open. */
-class TwoPickTurnGame extends Game<TwoPickTurnGame, Player> {
-  picks = 0;
-  constructor(options: GameOptions) {
-    super(options);
-    this.registerAction(
-      Action.create('pick')
-        .chooseFrom('option', { prompt: 'Pick an option', choices: ['a', 'b', 'c'] })
-        .execute(() => {
-          this.picks += 1;
-        }),
-    );
-    this.setFlow(
-      defineFlow({
-        root: actionStep({
-          actions: ['pick'],
-          player: (ctx) => ctx.game.getPlayer(1)!,
-          repeatUntil: () => this.picks >= 2,
-        }),
-      }),
-    );
-  }
-}
-
-describe('teaching state — clear-on-replace', () => {
-  // A stale hint must be gone after anything that replaces the runner.
-  it('undo clears a stale hint from the broadcast state', async () => {
-    const session = GameSession.create({
-      gameType: 'two-pick-turn',
-      GameClass: TwoPickTurnGame,
-      playerCount: 2,
-      playerNames: ['Alice', 'Bob'],
-      seed: 'test',
-    });
-    const captured: CapturedState[] = [];
-    session.setBroadcaster(makeMockBroadcaster([{ playerSeat: 1, isSpectator: false }], captured));
-
-    // Seat 1 picks once, so its turn is still open and its pick undoable.
-    expect((await session.performAction('pick', 1, { option: 'a' })).success).toBe(true);
-    await (session as unknown as { requestHint(seat: number): Promise<void> }).requestHint(1);
-    expect(captured.at(-1)!.state.hint).toBeDefined();
-
-    captured.length = 0;
-    expect((await session.undoToTurnStart(1)).success).toBe(true);
-    expect(captured.at(-1)!.state.hint).toBeUndefined();
-  });
-
-  it('replacing the runner (a rewind) clears a stale hint from the broadcast state', async () => {
-    // A rewind is a debug op, refused unless debugging is on (#481).
-    const session = makeSession({ debugEnabled: true });
-    const captured: CapturedState[] = [];
-    const broadcaster = makeMockBroadcaster(
-      [{ playerSeat: 2, isSpectator: false }],
-      captured
-    );
-    session.setBroadcaster(broadcaster);
-
-    // Seat 1 picks, so seat 2 is awaiting input and may ask for a hint.
-    expect((await session.performAction('pick', 1, { option: 'a' })).success).toBe(true);
-    await (session as unknown as { requestHint(seat: number): Promise<void> }).requestHint(2);
-    expect(captured.at(-1)!.state.hint).toBeDefined();
-
-    // The rewind's own push (replaceRunner) must carry no hint. Reading it,
-    // rather than a later broadcast(), is the only way to see it: a second
-    // broadcast of the same state sends nothing (#487).
-    captured.length = 0;
-    expect((await session.rewindToAction(0)).success).toBe(true);
-    const lastState = captured.at(-1)!.state;
-    expect(lastState.hint).toBeUndefined();
-  });
-});
-
-// ============================================
-// Task 3: setHeatmapVisible + buildHeatmapEntries
-// ============================================
-
-describe('teaching state — heatmap', () => {
-  it('setHeatmapVisible(seat, false) yields visible:false with empty entries', async () => {
-    const session = makeSession();
-    const captured: CapturedState[] = [];
-    const broadcaster = makeMockBroadcaster(
-      [{ playerSeat: 1, isSpectator: false }],
-      captured
-    );
-    session.setBroadcaster(broadcaster);
-
-    // RED: setHeatmapVisible doesn't exist yet
-    await (session as unknown as { setHeatmapVisible(seat: number, visible: boolean): Promise<void> }).setHeatmapVisible(1, false);
-    const state = captured.at(-1)!.state;
-    expect(state.heatmap).toBeDefined();
-    expect(state.heatmap!.visible).toBe(false);
-    expect(state.heatmap!.entries).toHaveLength(0);
-  });
-
-  it('setHeatmapVisible(seat, true) populates heatmap entries with normalizedValue in [0,1]', async () => {
-    const session = makeSession();
-    const captured: CapturedState[] = [];
-    const broadcaster = makeMockBroadcaster(
-      [{ playerSeat: 1, isSpectator: false }],
-      captured
-    );
-    session.setBroadcaster(broadcaster);
-
-    await (session as unknown as { setHeatmapVisible(seat: number, visible: boolean): Promise<void> }).setHeatmapVisible(1, true);
-    const state = captured.at(-1)!.state;
-    expect(state.heatmap).toBeDefined();
-    expect(state.heatmap!.visible).toBe(true);
-    // All normalizedValues must be in [0, 1]
-    for (const entry of state.heatmap!.entries) {
-      expect(entry.normalizedValue).toBeGreaterThanOrEqual(0);
-      expect(entry.normalizedValue).toBeLessThanOrEqual(1);
-    }
-  });
-
-  it('buildHeatmapEntries: exactly one isBest across non-empty entry set', async () => {
-    const session = makeSession();
-    const captured: CapturedState[] = [];
-    const broadcaster = makeMockBroadcaster(
-      [{ playerSeat: 1, isSpectator: false }],
-      captured
-    );
-    session.setBroadcaster(broadcaster);
-
-    await (session as unknown as { setHeatmapVisible(seat: number, visible: boolean): Promise<void> }).setHeatmapVisible(1, true);
-    const state = captured.at(-1)!.state;
-    const entries = state.heatmap!.entries;
-    if (entries.length > 0) {
-      const bestCount = entries.filter(e => e.isBest).length;
-      expect(bestCount).toBe(1);
-    }
-  });
-
-  it('setHeatmapVisible(seat, true) throws when a recompute is already in flight (WR-03)', async () => {
-    const session = makeSession();
-    // Fire two concurrent setHeatmapVisible(true) calls; the second must throw.
-    const setVisible = (session as unknown as { setHeatmapVisible(s: number, v: boolean): Promise<void> }).setHeatmapVisible.bind(session);
-    const first = setVisible(1, true);
-    await expect(setVisible(1, true)).rejects.toThrow('Heatmap evaluation is already in progress');
-    // Let the first resolve cleanly.
-    await first.catch(() => {});
-  });
-
-  // ── R-11: a visible heatmap must track the live position, not freeze ───────
-  // The hint is cleared as stale on each action; the heatmap is instead
-  // recomputed for whoever is now on turn and cleared for seats that are not.
-  it('clears a visible heatmap off-turn and recomputes it when the seat is on turn again', async () => {
-    // botStrategy with hintTargetFromMove so 'pick' choices yield cell refs →
-    // non-empty heatmap entries (the default makeSession() game produces none).
-    const heatmapBot: BotStrategy = {
-      objectives: () => ({ moves: { checker: () => 0.5, weight: 1 } }),
-      hintTargetFromMove: (move) => {
-        const opt = (move.args as { option?: string }).option;
-        return opt ? { notation: opt } : undefined;
-      },
-    };
-    const session = GameSession.create({
-      gameType: 'teaching-test',
-      GameClass: TeachingTestGame,
-      playerCount: 2,
-      playerNames: ['Alice', 'Bob'],
-      seed: 'test',
-      botStrategy: heatmapBot,
-    });
-    const captured: CapturedState[] = [];
-    session.setBroadcaster(makeMockBroadcaster([{ playerSeat: 1, isSpectator: false }], captured));
-    const setHeatmapVisible = (session as unknown as { setHeatmapVisible(s: number, v: boolean): Promise<void> }).setHeatmapVisible.bind(session);
-
-    // Seat 1 enables the heatmap on their turn → fresh, non-empty entries.
-    await setHeatmapVisible(1, true);
-    expect(captured.at(-1)!.state.heatmap!.entries.length).toBeGreaterThan(0);
-
-    // Seat 1 acts → eachPlayer advances to seat 2 → seat 1's heatmap is stale.
-    // It must be cleared (entries empty) while staying toggled on (visible true).
-    await session.performAction('pick', 1, { option: 'a' });
-    const afterP1 = captured.at(-1)!.state;
-    expect(afterP1.heatmap!.visible).toBe(true);
-    expect(afterP1.heatmap!.entries).toHaveLength(0);
-
-    // Seat 2 acts → back to seat 1's turn → heatmap recomputes (non-empty again).
-    await session.performAction('pick', 2, { option: 'a' });
-    const afterP2 = captured.at(-1)!.state;
-    expect(afterP2.heatmap!.visible).toBe(true);
-    expect(afterP2.heatmap!.entries.length).toBeGreaterThan(0);
-  });
-});
-
-// ============================================
-// Task 2 (Plan 03): Demo mode — startDemo / stopDemo / isDemoRunning
-// ============================================
-
-type DemoSession = {
-  startDemo(options?: { narrator?: (action: string, player: number, args: Record<string, unknown>) => string; delay?: number }): void;
-  stopDemo(): void;
-  isDemoRunning: boolean;
-};
-
-describe('demo mode — startDemo / stopDemo / isDemoRunning', () => {
-  it('isDemoRunning is false by default', () => {
-    const session = makeSession();
-    // RED: isDemoRunning does not exist yet
-    expect((session as unknown as DemoSession).isDemoRunning).toBe(false);
-  });
-
-  it('startDemo sets isDemoRunning to true', () => {
-    const session = makeSession();
-    (session as unknown as DemoSession).startDemo({ delay: 0 });
-    expect((session as unknown as DemoSession).isDemoRunning).toBe(true);
-    // Clean up
-    (session as unknown as DemoSession).stopDemo();
-  });
-
-  it('stopDemo sets isDemoRunning to false', () => {
-    const session = makeSession();
-    (session as unknown as DemoSession).startDemo({ delay: 0 });
-    (session as unknown as DemoSession).stopDemo();
-    expect((session as unknown as DemoSession).isDemoRunning).toBe(false);
-  });
-
-  it('stopDemo clears narration text in broadcast state', () => {
-    const session = makeSession();
-    const captured: CapturedState[] = [];
-    const broadcaster = makeMockBroadcaster(
-      [{ playerSeat: 1, isSpectator: false }, { playerSeat: 2, isSpectator: false }],
-      captured
-    );
-    session.setBroadcaster(broadcaster);
-
-    (session as unknown as DemoSession).startDemo({ delay: 0 });
-    (session as unknown as DemoSession).stopDemo();
-
-    // After stopDemo, broadcast state should have no narration
-    const lastCapture = captured.at(-1);
-    expect(lastCapture?.state.narration).toBeUndefined();
-  });
-
-  it('narration hook sets state.narration before the move executes', async () => {
-    const session = makeSession();
-    const narrationTexts: (string | undefined)[] = [];
-    const captured: CapturedState[] = [];
-
-    const broadcaster = makeMockBroadcaster(
-      [{ playerSeat: 1, isSpectator: false }, { playerSeat: 2, isSpectator: false }],
-      captured
-    );
-    // Intercept sends to track narration timing
-    const originalSend = broadcaster.send.bind(broadcaster);
-    (broadcaster as { send: typeof broadcaster.send }).send = (
-      _session: SessionInfo,
-      update: Record<string, unknown>
-    ) => {
-      const st = (update as { state: PlayerGameState }).state;
-      narrationTexts.push(st.narration?.text);
-      originalSend(_session, update);
-    };
-
-    session.setBroadcaster(broadcaster);
-
-    // Use a narrator that returns a fixed string
-    (session as unknown as DemoSession).startDemo({
-      delay: 0,
-      narrator: (action, player) => `Seat ${player}: ${action}`,
-    });
-
-    // Wait for at least one bot move to be announced.
-    await until(
-      () => narrationTexts.some((text) => text !== undefined),
-      'the demo to narrate a bot move',
-    );
-
-    (session as unknown as DemoSession).stopDemo();
-
-    // At least one broadcast should have had narration text set
-    const narrationBroadcasts = narrationTexts.filter(t => t !== undefined);
-    expect(narrationBroadcasts.length).toBeGreaterThan(0);
-    // Each narration text should follow the "Seat N: action" format
-    for (const text of narrationBroadcasts) {
-      expect(text).toMatch(/^Seat \d+: /);
-    }
-  });
-
-  it('stopDemo restores the original bot controller and clears narration', () => {
-    // Session created WITHOUT bot config — botController is undefined
-    const session = makeSession();
-    const captured: CapturedState[] = [];
-    const broadcaster = makeMockBroadcaster(
-      [{ playerSeat: 1, isSpectator: false }],
-      captured
-    );
-    session.setBroadcaster(broadcaster);
-
-    // Start demo (sets a demo bot controller)
-    (session as unknown as DemoSession).startDemo({ delay: 0 });
-    expect((session as unknown as DemoSession).isDemoRunning).toBe(true);
-
-    // Stop demo — should restore the original (undefined) bot controller
-    (session as unknown as DemoSession).stopDemo();
-    expect((session as unknown as DemoSession).isDemoRunning).toBe(false);
-
-    // After stop, no narration in broadcast
-    const lastState = captured.at(-1);
-    expect(lastState?.state.narration).toBeUndefined();
-  });
-});
-
-// ============================================
-// WR-01: double-startDemo idempotency
-// ============================================
-
-describe('demo mode — double-startDemo idempotency (WR-01)', () => {
-  it('second startDemo() call is a no-op and does not corrupt #savedBotController', () => {
-    const session = makeSession();
-    const demo = session as unknown as DemoSession;
-
-    // First call — saves the original controller (undefined here) and enters demo mode.
-    demo.startDemo({ delay: 0 });
-    expect(demo.isDemoRunning).toBe(true);
-
-    // Second call must be a no-op. If it ran, it would save the demo controller
-    // as #savedBotController, then stopDemo() would restore the wrong controller.
-    demo.startDemo({ delay: 0 });
-
-    // stopDemo must leave the session NOT in demo mode.
-    demo.stopDemo();
-    expect(demo.isDemoRunning).toBe(false);
-
-    // Calling startDemo again on a clean session must still work after one cycle.
-    demo.startDemo({ delay: 0 });
-    expect(demo.isDemoRunning).toBe(true);
-    demo.stopDemo();
-    expect(demo.isDemoRunning).toBe(false);
-  });
-});
-
-// ============================================
-// WR-04: isDemoRunning broadcast
-// ============================================
-
-describe('demo mode — isDemoRunning in broadcast state (WR-04)', () => {
-  it('broadcast state includes isDemoRunning=true after startDemo', () => {
-    const session = makeSession();
-    const captured: CapturedState[] = [];
-    const broadcaster = makeMockBroadcaster(
-      [{ playerSeat: 1, isSpectator: false }],
-      captured
-    );
-    session.setBroadcaster(broadcaster);
-
-    (session as unknown as DemoSession).startDemo({ delay: 0 });
-    const stateAfterStart = captured.at(-1)!.state;
-    expect((stateAfterStart as any).isDemoRunning).toBe(true);
-
-    (session as unknown as DemoSession).stopDemo();
-    const stateAfterStop = captured.at(-1)!.state;
-    expect((stateAfterStop as any).isDemoRunning).toBeUndefined();
-  });
-});
-
-// ============================================
-// Phase 111: teachingDisabled config — fail-loud guards (LOCK-01)
-// ============================================
-
-function makeLockedSession() {
-  return GameSession.create({
-    gameType: 'teaching-test',
-    GameClass: TeachingTestGame,
-    playerCount: 2,
-    playerNames: ['Alice', 'Bob'],
-    seed: 'test',
-    teachingDisabled: true,
-  });
-}
-
-describe('teachingDisabled — fail-loud guards (LOCK-01)', () => {
-  it('requestHint rejects with actionable error when teachingDisabled', async () => {
-    const session = makeLockedSession();
-    await expect(
-      (session as unknown as { requestHint(seat: number): Promise<void> }).requestHint(1)
-    ).rejects.toThrow('Teaching features are disabled for this session.');
-  });
-
-  it('setHeatmapVisible(true) rejects with actionable error when teachingDisabled', async () => {
-    const session = makeLockedSession();
-    await expect(
-      (session as unknown as { setHeatmapVisible(seat: number, visible: boolean): Promise<void> }).setHeatmapVisible(1, true)
-    ).rejects.toThrow('Teaching features are disabled for this session.');
-  });
-
-  it('setHeatmapVisible(false) also rejects when teachingDisabled (crafted visible:false op)', async () => {
-    const session = makeLockedSession();
-    await expect(
-      (session as unknown as { setHeatmapVisible(seat: number, visible: boolean): Promise<void> }).setHeatmapVisible(1, false)
-    ).rejects.toThrow('Teaching features are disabled for this session.');
-  });
-
-  it('startDemo rejects with actionable error when teachingDisabled', () => {
-    const session = makeLockedSession();
-    expect(() => {
-      (session as unknown as DemoSession).startDemo();
-    }).toThrow('Teaching features are disabled for this session.');
-  });
-
-  it('startTutorial rejects with actionable error when teachingDisabled', () => {
-    const session = makeLockedSession();
-    expect(() => {
-      (session as unknown as { startTutorial(seat: number): void }).startTutorial(1);
-    }).toThrow('Teaching features are disabled for this session.');
-  });
-
-  it('exitTutorial is NOT blocked by teachingDisabled (D-06: exiting is always safe)', () => {
-    const session = makeLockedSession();
-    // May throw for other reasons (no tutorial running), but NOT the lockout error
-    let caughtMessage: string | undefined;
-    try {
-      (session as unknown as { exitTutorial(seat: number): void }).exitTutorial(1);
-    } catch (e) {
-      caughtMessage = (e as Error).message;
-    }
-    expect(caughtMessage).not.toBe('Teaching features are disabled for this session.');
-  });
-
-  it('default session (no flag) does not reject requestHint with lockout error', async () => {
-    const session = makeSession();
-    // Seat 2 is not acting so requestHint throws the seat-not-awaiting error,
-    // NOT the lockout error — proving default behavior is unchanged.
-    await expect(
-      (session as unknown as { requestHint(seat: number): Promise<void> }).requestHint(2)
-    ).rejects.toThrow('Cannot hint: seat 2 is not awaiting input');
-  });
-
-  it('default session (no flag) does not reject startDemo with lockout error', () => {
-    const session = makeSession();
-    // startDemo on a default session must not throw the lockout error
-    expect(() => {
-      (session as unknown as DemoSession).startDemo({ delay: 0 });
-    }).not.toThrow('Teaching features are disabled for this session.');
-    (session as unknown as DemoSession).stopDemo();
-  });
-});
-
-// ============================================
-// Phase 111: teachingDisabled broadcast reflection (LOCK-01, D-03)
-// ============================================
-
-describe('teachingDisabled — broadcast reflection (D-03)', () => {
-  it('broadcast state includes teachingDisabled:true for every seat when session is locked', () => {
-    const session = makeLockedSession();
-    const captured: CapturedState[] = [];
-    const broadcaster = makeMockBroadcaster(
-      [{ playerSeat: 1, isSpectator: false }, { playerSeat: 2, isSpectator: false }],
-      captured
-    );
-    session.setBroadcaster(broadcaster);
-    session.broadcast();
-
-    expect(captured).toHaveLength(2);
-    for (const c of captured) {
-      expect(c.state.teachingDisabled).toBe(true);
-    }
-  });
-
-  it('broadcast state includes teachingDisabled:false for default session', () => {
-    const session = makeSession();
-    const captured: CapturedState[] = [];
-    const broadcaster = makeMockBroadcaster(
-      [{ playerSeat: 1, isSpectator: false }],
-      captured
-    );
-    session.setBroadcaster(broadcaster);
-    session.broadcast();
-
-    expect(captured).toHaveLength(1);
-    expect(captured[0]!.state.teachingDisabled).toBe(false);
-  });
-});
-
-// ============================================
-// WR-06: default narrator formats object args as JSON
-// ============================================
-
-describe('demo mode — default narrator formats object args (WR-06)', () => {
-  it('object arg values are JSON.stringify-ed in the default narration text', async () => {
-    const session = makeSession();
-    const narrationTexts: string[] = [];
-    const captured: CapturedState[] = [];
-
-    const broadcaster = makeMockBroadcaster(
-      [{ playerSeat: 1, isSpectator: false }, { playerSeat: 2, isSpectator: false }],
-      captured
-    );
-    const originalSend = broadcaster.send.bind(broadcaster);
-    (broadcaster as { send: typeof broadcaster.send }).send = (
-      sess: SessionInfo,
-      update: Record<string, unknown>
-    ) => {
-      const st = (update as { state: PlayerGameState }).state;
-      if (st.narration?.text) narrationTexts.push(st.narration.text);
-      originalSend(sess, update);
-    };
-    session.setBroadcaster(broadcaster);
-
-    // Use a custom narrator that explicitly passes an object as an arg to test
-    // the default formatter path — supply a custom narrator that mimics the
-    // default but receives args from an actual bot move.
-    // Instead, verify the default narrator wouldn't produce "[object Object]":
-    // inject a synthetic narrator check by mocking at the closure level.
-    let observedNarration: string | undefined;
-    (session as unknown as DemoSession).startDemo({
-      delay: 0,
-      // Inject a custom narrator that checks for [object Object] absence
-      narrator: (_action: string, _player: number, args: Record<string, unknown>) => {
-        // Simulate the default formatter fix: use JSON.stringify for objects
-        const summary = Object.entries(args)
-          .map(([k, v]) => {
-            if (v !== null && typeof v === 'object') return `${k}=${JSON.stringify(v)}`;
-            return `${k}=${String(v)}`;
-          })
-          .join(' ');
-        observedNarration = summary;
-        return `test: ${summary}`;
-      },
-    });
-
-    // Wait for at least one bot move.
-    await until(() => observedNarration !== undefined, 'the demo to narrate a bot move');
-    (session as unknown as DemoSession).stopDemo();
-
-    // The wait above is for narration to EXIST, so this is unconditional now
-    // (ShufflewickPub #385): the guard it used to sit behind meant a run where
-    // no move landed asserted nothing and still passed.
-    expect(observedNarration).not.toContain('[object Object]');
-    // The test game uses string args ('a'/'b'/'c') so object formatting
-    // is exercised by the unit below which tests the formatter directly.
-  });
-
-  it('default narrator formats object args without [object Object]', () => {
-    // Unit test for the formatter logic itself, independent of demo scheduling.
-    // Extract and test the same logic used in the default narrator (WR-06 fix).
-    function formatArgs(args: Record<string, unknown>): string {
-      return Object.entries(args)
-        .map(([k, v]) => {
-          if (v !== null && typeof v === 'object') return `${k}=${JSON.stringify(v)}`;
-          return `${k}=${String(v)}`;
-        })
-        .join(' ');
-    }
-
-    expect(formatArgs({ from: 'c3', to: 'd4' })).toBe('from=c3 to=d4');
-    expect(formatArgs({ piece: { id: 7 } })).toBe('piece={"id":7}');
-    expect(formatArgs({ move: { from: 'c3', to: 'd4' } })).toBe('move={"from":"c3","to":"d4"}');
-    expect(formatArgs({ count: 3, arr: [1, 2] })).toBe('count=3 arr=[1,2]');
-    expect(formatArgs({ val: null })).toBe('val=null');
-    // No [object Object] for any object-valued arg
-    expect(formatArgs({ x: {} })).not.toContain('[object Object]');
+describe('a visible heatmap follows the turn (R-11)', () => {
+  it('is emptied while its seat is off turn and recomputed when the seat is on turn again', SEARCH_CEILING, async () => {
+    const session = await table();
+    expect((await session.send(1, { type: 'heatmapToggle', seat: 1, visible: true })).success).toBe(true);
+    expect(session.playerState(1).heatmap!.entries.length).toBeGreaterThan(0);
+
+    // Seat 1 picks, so it is seat 2's turn: seat 1's heatmap is stale.
+    await pick(session, 1);
+    expect(session.playerState(1).heatmap!.visible).toBe(true);
+    expect(session.playerState(1).heatmap!.entries).toHaveLength(0);
+
+    // Seat 2 picks, so seat 1 is on turn again and its heatmap is recomputed.
+    await pick(session, 2);
+    expect(session.playerState(1).heatmap!.visible).toBe(true);
+    expect(session.playerState(1).heatmap!.entries.length).toBeGreaterThan(0);
   });
 });
