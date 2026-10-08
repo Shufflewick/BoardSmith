@@ -14,6 +14,7 @@ import { parseSource } from './test-step-ast.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { designProjectFixtures } from './design-project.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
+import { plantOtherRuns } from '../lib/command-build-dirs.test-helper.js';
 
 const lines = (...n: number[]) => new Set(n);
 
@@ -196,6 +197,7 @@ async function check(project: string, testSource: string, claims = [1, 2]) {
 describe('runMutationCheck', () => {
   it('passes tests that fail when the implementation is broken', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    const expectOtherRunsKept = plantOtherRuns(project);
     const result = await check(
       project,
       `import { it, expect } from 'vitest';
@@ -207,8 +209,8 @@ it('equal offer', () => { expect(bid(3, 3)).toBe(false); });
     );
     expect(result.findings).toEqual([]);
     expect(result.summary.killed).toBeGreaterThan(0);
-    // The check never leaves its scratch files behind, and never touches the source.
-    await expect(fs.readdir(join(project, '.boardsmith/scratch'))).resolves.toEqual([]);
+    // The check removes only the directory it made (#544), and never touches the source.
+    expectOtherRunsKept();
     expect(await fs.readFile(join(project, 'src/rules.ts'), 'utf-8')).toBe(RULES);
   }, 60_000);
 
@@ -330,7 +332,7 @@ it('a higher offer still wins', () => { expect(bid(3, 4)).toBe(true); expect(bid
       expect(result.summary).toMatchObject({ files: 1 });
       expect(result.summary.killed).toBeGreaterThan(0);
       expect(await fs.readFile(join(project, 'src/rules.ts'), 'utf-8')).toBe(RULES);
-      await expect(fs.readdir(join(project, '.boardsmith/scratch'))).resolves.toEqual([]);
+      await expect(fs.readdir(join(project, '.boardsmith'))).resolves.toEqual([]);
     }, 60_000);
 
     it('reports a pin no break of the code it runs can fail, saying exactly what was broken, and never breaks code it does not run', async () => {
@@ -566,6 +568,7 @@ it('a fee exists', () => { expect(typeof fee).toBe('function'); });
 `,
     });
 
+    const expectOtherRunsKept = plantOtherRuns(project);
     const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2, 5)]]), cache, log: () => {} });
 
     expect(result.notGreen).toBeUndefined();
@@ -580,7 +583,7 @@ it('a fee exists', () => { expect(typeof fee).toBe('function'); });
     expect(result.reused).toBe(0);
     expect([...cache.held.values()].sort()).toEqual(['killed', 'killed', 'survived', 'survived', 'survived']);
     expect(await fs.readFile(join(project, 'src/rules.ts'), 'utf-8')).toBe(RULES_TWO);
-    await expect(fs.readdir(join(project, '.boardsmith/scratch'))).resolves.toEqual([]);
+    expectOtherRunsKept();
 
     // Run again with every outcome held: no vitest run at all, and the same report.
     const logged: string[] = [];
@@ -595,7 +598,7 @@ it('a fee exists', () => { expect(typeof fee).toBe('function'); });
     expect(again.survivors).toEqual(result.survivors);
     expect(logged.every((line) => line.includes('(reused: '))).toBe(true);
     expect(logged).toHaveLength(5);
-    await expect(fs.readdir(join(project, '.boardsmith/scratch'))).resolves.toEqual([]);
+    expectOtherRunsKept();
   }, 120_000);
 
   it('tries no mutant on a red suite, and names the failing tests', async () => {
@@ -606,6 +609,7 @@ it('a fee exists', () => { expect(typeof fee).toBe('function'); });
     const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), cache: memoryCache(), log: () => {} });
     expect(result.notGreen).toEqual(['tests/red.test.ts > is red']);
     expect(result.summary.mutants).toBe(0);
+    await expect(fs.readdir(join(project, '.boardsmith'))).resolves.toEqual([]);
   }, 60_000);
 
   it('runs nothing when no changed line can be mutated', async () => {
