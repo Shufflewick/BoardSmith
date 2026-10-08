@@ -4,32 +4,58 @@
 
 ## When to Use
 
-Import from `boardsmith/session` when managing game sessions, handling bot opponents, or building multiplayer infrastructure. This package provides a unified API for game state management across different platforms.
+Import from `boardsmith/session` when hosting a game, running one headlessly in
+a test or simulation, adding bot opponents, or building multiplayer
+infrastructure.
+
+Every host runs a game the same way: a `SnapshotSessionHost` holds the game's
+snapshot and runs each op through the pure `executeOp`, which rebuilds the game
+from that snapshot, runs the op and answers with the new snapshot and every
+seat's view. The `boardsmith dev` host, `createHeadlessSession` and
+ShufflewickPub all run it.
 
 ## Usage
 
 ```typescript
 import {
-  GameSession,
-  BotController,
+  createHeadlessSession,
+  SnapshotSessionHost,
+  executeOp,
   generateGameId,
   type GameDefinition,
-  type StorageAdapter,
+  type Op,
 } from 'boardsmith/session';
 ```
 
 ## Exports
 
-### Core Classes
+### Session Host
 
-- `GameSession` - Main session manager for game state
-- `BotController` - Manages bot player turns
+- `SnapshotSessionHost` - Holds one game's snapshot, runs ops on it through an `executeOp` adapter, publishes views and drives bot seats
+- `SnapshotSessionAdapters` - What a host is built with: `playerCount`, `executeOp`, `record`, `push`, and optionally `persist`, `onPersistenceError`, `debug`, `teachingDisabled`, `narrateMove`, `hostWork`
+- `SnapshotHostState` - The durable state a host hands `persist`: `snapshot` and `pendingStates`
+- `HostRestore` - What `SnapshotSessionHost.restore` takes: the durable state, the last views and the bot roster
+- `BotSeat` - A seat a bot plays, and how strongly: `{ seat, level? }`
+- `PublishMeta` - Handed beside every record and push: `cause`, `isComplete`, `winners`, `isDraw`, `turnBoundary`
+- `flowStateOf()`, `isCompleteOf()`, `winnersOf()` - Read the flow state, the game's end and its winners out of a snapshot
+- `StatePushGate` - Decides per connection whether a frame is news, for a host that pushes outside `SnapshotSessionHost`
+
+### Headless Session
+
+- `createHeadlessSession(definition, tableOptions, botSeats?)` - Runs a `SnapshotSessionHost` in process over `executeOp`, for tests, simulations and agents
+- `HeadlessSession<G>` - The table `createHeadlessSession` returns
+- `HeadlessGameOptions` - `{ playerCount, seed?, playerNames?, options? }`
 
 ### Utilities
 
 - `generateGameId()` - Generate unique game ID
 - `isPlayersTurn()` - Check if it's a player's turn
 - `buildPlayerState()` - Build player-specific state view
+
+### Game Options
+
+- `selectGameOptions()` - The one way a player's choice of the game's declared options is admitted; returns a `GameOptionSelection`
+- `GameOptionSelection` - An admitted choice of game options
 
 ### Player Colors
 
@@ -38,16 +64,17 @@ import {
 
 ### Executor Op Contract
 
-- `executeOp(definition, gameOptions, snapshot, pendingState, op)` - Run one op against a snapshot, statelessly
+- `executeOp(definition, gameOptions, snapshot, pendingState, op, hostOptions?)` - Run one op against a snapshot, statelessly
 - `parseExecutorOp(value)` - Check a value read off a wire is an `ExecutorOp`; returns `{ ok: true, op }` or `{ ok: false, error }`
 - `ParsedExecutorOp` - What `parseExecutorOp` returns
 - `ExecutorOp` - The ops a platform executor runs: `start`, `action`, `expireSeat`, `selectionStep`, `resolveChoices`, `cancelAction`, `undo`, `botTurn`
 - `DevOp` - Ops `executeOp` runs only inside `boardsmith dev` (the `debug*` family, `restoreEarlier`, tutorial, `hint`, `heatmapToggle`, `botSuggest`)
-- `HostOp` - Lifecycle ops `SnapshotSessionHost.handleOp` handles itself and `executeOp` never sees
+- `HostOp` - Lifecycle ops `SnapshotSessionHost.handleOp` handles itself and `executeOp` never sees (`demoStart`, `demoStop`, `demoControl`, `convertSeatToBot`)
 - `Op` - `ExecutorOp | DevOp | HostOp`, what `handleOp` takes
 - `OpResultFor<T>` - What an op of type `T` answers: its own success shape, or the shared `OpFailure`
 - `OpResult` - What any op answers; narrow it with `OpResultFor`
 - `OpFailure` - Every refusal: `{ success: false, error, errorCode?, category }`
+- `ElementDiff` - What a `debugStateDiff` op answers in `diff`: the element IDs added, removed and changed
 
 ### Error Handling
 
@@ -85,166 +112,136 @@ import {
 - `ClaimSeatRequest` - Claim seat request
 - `ClaimSeatResponse` - Claim seat response
 - `UpdateNameRequest` - Update name request
-- `GameSessionOptions` - Session constructor options
-- `SessionActionResult` - What `GameSession.performAction()` returns
-- `UndoResult` - Undo operation result
 - `ColorChoice` - Color choice option
 - `ColorOptionDefinition` - Color option definition
 
 ## Examples
 
-### Creating a Local Game Session
+### Running a game headlessly
+
+`createHeadlessSession` drives a `SnapshotSessionHost` in process, so a test or
+a simulation plays the game exactly as a host does. Pass the game's exported
+`gameDefinition`, so its checkpoint and undo policies, tutorial and bot
+strategy apply.
 
 ```typescript
-import { GameSession } from 'boardsmith/session';
-import { MyGame } from './game';
+import { createHeadlessSession } from 'boardsmith/session';
+import { gameDefinition } from './index.js';
 
-// Create a new game session
-const session = GameSession.create({
-  gameType: 'my-game',
-  GameClass: MyGame,
+const session = createHeadlessSession(gameDefinition, {
   playerCount: 2,
+  seed: 'repro-1',
   playerNames: ['Alice', 'Bob'],
 });
+await session.start(); // required before anything else
 
-// Get state for a specific player (seats are 1-indexed)
-const { flowState, state } = session.getState(1);
-console.log('Current player:', flowState.currentPlayer);
-console.log('Available actions:', flowState.actions);
-
-// Perform an action
-const result = await session.performAction('move', 1, {
-  from: 'a1',
-  to: 'b2',
+// Seats are 1-indexed. `send` stamps the current boundaryKey on a submission.
+const result = await session.send(1, {
+  type: 'action',
+  actionName: 'move',
+  player: 1,
+  args: { from: 'a1', to: 'b2' },
 });
+if (!result.success) throw new Error(result.error);
 
-if (result.success) {
-  console.log('Move successful!');
-} else {
-  console.error('Move failed:', result.error);
-}
+// What seat 1 was last published, as a page receives it.
+const state = session.playerState(1);
+console.log('Seat 1 may act:', state.isMyTurn);
+
+// The flow state and the end of the game, read off the host.
+console.log(session.host.flowState?.awaitingInput, session.host.isComplete, session.host.winners);
 ```
 
-### Adding bot Opponents
+`send` answers each op with that op's own result; narrow it with
+`if (!result.success)` before reading its fields. An `action` result carries
+`followUp`, `data` and `message`. Every other op works the same way, for
+example `{ type: 'resolveChoices', actionName, selectionName, player, args }`,
+`{ type: 'selectionStep', player, selectionName, value, actionName }`,
+`{ type: 'undo', player }` and the debug ops (`createHeadlessSession` runs with
+debugging on).
+
+The table records everything the host published: `broadcasts` (every seat's
+view, one entry per publish), `spectatorViews`, `metas` (each publish's
+`PublishMeta`, whose `turnBoundary` is the engine's statement of which seats
+owe a move) and `pushes` (only the seats whose view changed).
+
+### Reading and arranging the game
+
+`readGame()` returns a copy of the game rebuilt from the host's snapshot, the
+way every op rebuilds it. Read typed properties from it, and read it again
+after every move: a copy taken before a move is stale, and an edit to it
+changes nothing at the table.
+
+To set up a position between moves, use `arrange`. It edits a copy and then
+restores that copy as a debug restore does, so every seat is published the new
+position and the next move plays from it.
 
 ```typescript
-import { GameSession } from 'boardsmith/session';
-import { MyGame } from './game';
+// `round` stands for any property your game class declares; the copy is typed
+// as your game, from the definition's gameClass.
+const game = session.readGame();
+console.log(game.round);
 
-const session = GameSession.create({
-  gameType: 'my-game',
-  GameClass: MyGame,
-  playerCount: 2,
-  playerNames: ['Human', 'Bot'],
-  botSeatConfig: {
-    players: [1], // Player 1 is a bot
-    level: 'hard',
-  },
-});
-
-// bot moves are handled automatically when it's the bot's turn.
-// Player 1 is a bot here, so the human plays seat 2.
-const result = await session.performAction('move', 2, { from: 'a1', to: 'b2' });
-// After the human moves, bot will automatically play
-```
-
-### Implementing Storage Adapter
-
-```typescript
-import type { StorageAdapter, StoredGameState } from 'boardsmith/session';
-
-class LocalStorageAdapter implements StorageAdapter {
-  constructor(private gameId: string) {}
-
-  async save(state: StoredGameState): Promise<void> {
-    localStorage.setItem(`game:${this.gameId}`, JSON.stringify(state));
-  }
-
-  async load(): Promise<StoredGameState | null> {
-    const data = localStorage.getItem(`game:${this.gameId}`);
-    return data ? JSON.parse(data) : null;
-  }
-}
-
-const session = GameSession.create({
-  gameType: 'my-game',
-  GameClass: MyGame,
-  playerCount: 2,
-  playerNames: ['Alice', 'Bob'],
-  storage: new LocalStorageAdapter('game-123'),
+await session.arrange((game) => {
+  game.round = 5;
 });
 ```
 
-### Restoring a Saved Game
+### Adding bot opponents
+
+The third argument names the seats a bot plays. The game definition's `bot`
+field carries its `BotStrategy`.
 
 ```typescript
-import { GameSession } from 'boardsmith/session';
-import { MyGame } from './game';
+const session = createHeadlessSession(
+  gameDefinition,
+  { playerCount: 2, playerNames: ['Human', 'Bot'] },
+  [{ seat: 2, level: 'hard' }],
+);
+await session.start();
 
-// Load stored state
-const storedState = await storage.load();
-
-if (storedState) {
-  // Restore from saved state
-  const session = GameSession.restore(storedState, MyGame, storage);
-
-  // Continue playing (seats are 1-indexed)
-  const { flowState, state } = session.getState(1);
-}
+// After the human's move the host runs its bot pump, so seat 2 replies
+// before `send` resolves.
+await session.send(1, { type: 'action', actionName: 'move', player: 1, args: { from: 'a1', to: 'b2' } });
 ```
 
-### Multiplayer with Broadcast
+`start()` does not run the bot pump. When a bot seat moves first, run it once
+with `await session.host.runBotTurns()`. To hand a seat to the bot mid-game,
+call `session.makeSeatBot(seat, level)` and then send
+`{ type: 'convertSeatToBot', seat }`: the first changes the roster, the second
+wakes the pump.
+
+On your own `SnapshotSessionHost`, state the roster with
+`host.setBotSeats(seats)` (see below).
+
+### Saving and restoring a game
+
+A host built with a `persist` adapter hands it the whole durable state after
+every op that changes the game. Store that value as given, and build the host
+again from it with `SnapshotSessionHost.restore`:
 
 ```typescript
-import type { BroadcastAdapter, SessionInfo } from 'boardsmith/session';
+import { SnapshotSessionHost, type SnapshotHostState } from 'boardsmith/session';
 
-class WebSocketBroadcaster implements BroadcastAdapter<SessionInfo & { ws: WebSocket }> {
-  // One entry per open socket, made when it opens, with an id never reused.
-  private connections = new Map<string, SessionInfo & { ws: WebSocket }>();
+let saved: SnapshotHostState | null = null;
+const host = new SnapshotSessionHost({ ...adapters, persist: (state) => { saved = state; } });
 
-  open(ws: WebSocket, playerSeat: number): void {
-    const connectionId = crypto.randomUUID();
-    this.connections.set(connectionId, { connectionId, playerSeat, isSpectator: playerSeat === 0, ws });
-    ws.addEventListener('close', () => this.connections.delete(connectionId));
-  }
-
-  getSessions() {
-    return [...this.connections.values()];
-  }
-
-  send(session: SessionInfo & { ws: WebSocket }, message: unknown): void {
-    session.ws.send(JSON.stringify(message));
-  }
-}
-
-const broadcaster = new WebSocketBroadcaster();
-session.setBroadcaster(broadcaster);
-
-// When a socket opens: list it, then broadcast. The new socket gets the full
-// state; every other connection is pushed nothing, because nothing it may see
-// changed.
-broadcaster.open(ws, seat);
-session.broadcast();
+// Later, in a new process:
+const restored = SnapshotSessionHost.restore(adapters, { ...saved!, botSeats: [] });
 ```
 
-`broadcast()` never pushes a connection a state identical to the last one it
-sent it. In a simultaneous step where a seat acts in secret, that push would
-tell everyone else the seat acted, so a seat whose view did not change hears
-nothing (#487). Two consequences for a host:
-
-- `connectionId` names a connection, not a seat. A page that reconnects must
-  arrive under a new id, or it is compared against what its old socket was sent
-  and may be sent nothing.
-- Give a new connection its first state with `broadcast()`, not by sending it
-  `getState()` yourself: the session does not know what you sent, so its next
-  push to that connection would repeat it, and the repeat is itself a signal.
-  A host that must send outside `broadcast()` keeps its own `StatePushGate`
-  (below).
+`host.durableState()` returns the same value on demand. The restore refuses a
+state with no snapshot, or one that does not belong to this table, with a
+message saying what to store instead.
 
 ### `SnapshotSessionHost` compares for you
 
-`SnapshotSessionHost` (from `boardsmith/session-host`) hands its adapter two
-things after every change, and decides itself which seats changed:
+`SnapshotSessionHost` (from `boardsmith/session`, and from
+`boardsmith/session-host`) hands its adapter two things after every change,
+and decides itself which seats changed. It never pushes a seat a view
+identical to the last one it pushed it: in a simultaneous step where a seat
+acts in secret, that push would tell everyone else the seat acted, so a seat
+whose view did not change hears nothing (#487).
 
 ```typescript
 const host = new SnapshotSessionHost({
@@ -294,7 +291,7 @@ them through `flowStateOf(state)`, `isCompleteOf(state)` and `winnersOf(state)`
 
 ### Pushing state from your own host
 
-A host that builds frames outside both of those keeps a `StatePushGate` and
+A host that builds frames outside `SnapshotSessionHost`'s `push` keeps a `StatePushGate` and
 asks it before every push. It is exported from `boardsmith/session` and from
 `boardsmith/session-host`.
 

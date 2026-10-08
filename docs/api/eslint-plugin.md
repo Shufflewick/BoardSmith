@@ -227,7 +227,7 @@ const firstPlayer = Math.floor(this.random() * playerCount);
 const seed = Date.now().toString();
 
 // GOOD: Use provided seed
-// (GameSession provides deterministic seed automatically)
+// (the session host supplies the seed through GameOptions)
 
 // BAD: Fetch card images
 const cardImage = await fetch(`/cards/${card.id}.png`);

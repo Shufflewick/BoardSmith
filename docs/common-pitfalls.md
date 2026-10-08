@@ -1619,14 +1619,16 @@ if (!sector.first(Equipment, { name: 'Loot1' })) {
 this.registerDebug('Element Tree', () => this.debugElementTree());
 ```
 
-`registerDebug` payloads are dev-only: they are only broadcast to clients
-when the session is created with `GameSessionOptions.debugEnabled: true`
-(default `false`). Only register non-secret diagnostics like element counts
-or tree shape this way — never hidden/secret game state (a hand's contents,
-deck order, etc), since enabling `debugEnabled` on a live session broadcasts
-every registered debug entry to all connected players and spectators.
-The same option turns on the session's debug methods (time travel, rewind,
-action traces, deck edits); without it they refuse. In `boardsmith dev` the
+`registerDebug` payloads are dev-only: they reach a seat's state only when a
+host builds it with `buildPlayerState`'s `includeDebugData: true` (default
+`false`). `SnapshotSessionHost`, which every host runs, does not set it, so
+today they are not broadcast at all. Only register non-secret diagnostics like
+element counts or tree shape this way — never hidden/secret game state (a
+hand's contents, deck order, etc), since a host that included debug data in a
+live session would broadcast every registered debug entry to all connected
+players and spectators. The debug ops (time travel, rewind, action traces,
+deck edits) are gated separately: the host refuses them unless it runs with
+`debug: true` (default `false`). In `boardsmith dev` the
 Debug panel and its tools are on only while one person (one browser) holds
 every human seat; once a second person sits down they are off for everyone
 until `boardsmith dev --debug` forces them on.
