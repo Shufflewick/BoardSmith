@@ -61,7 +61,6 @@ class FakeWebSocket {
 // ── Test config fixture ───────────────────────────────────────────────────────
 
 const TEST_CONFIG: DevHostConfig = {
-  gameType: 'test-game',
   displayName: 'Test Game',
   minPlayers: 2,
   maxPlayers: 4,
@@ -270,5 +269,34 @@ describe('DevHost — seat switcher', () => {
     const calls = ws.send.mock.calls.map((c) => JSON.parse(c[0] as string));
     const leaveCall = calls.find((c) => c.type === 'leave');
     expect(leaveCall).toBeUndefined(); // no leave if already in that seat
+  });
+});
+
+// The Debug panel's Controls tab asks for a seat with a `debug:switch-seat`
+// server_request (#525). It is a host-chrome op, like `debug:restart`: the host
+// has no handler for it, so forwarding it switched nothing.
+describe('DevHost — debug:switch-seat from the Debug panel (#525)', () => {
+  function postSwitch(seat: number): void {
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { source: 'shufflewick-game', type: 'server_request', requestId: 'req-s', op: 'debug:switch-seat', payload: { seat } },
+      }),
+    );
+  }
+
+  it('switches to the asked seat the way the seat switcher does', async () => {
+    const wrapper = await mountDevHost();
+    await activateSeat(wrapper, 1);
+    const ws = mockWsInstance!;
+    ws.send.mockClear();
+
+    postSwitch(3);
+    await wrapper.vm.$nextTick();
+
+    const frames = ws.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    expect(frames[0]).toMatchObject({ type: 'leave' });
+    expect(frames[1]).toMatchObject({ type: 'join', seat: 3 });
+    expect(frames.find((f) => f.type === 'server_request')).toBeUndefined();
+    wrapper.unmount();
   });
 });

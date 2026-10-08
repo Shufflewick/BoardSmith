@@ -8,11 +8,11 @@
  * without mounting the full GameShell component.
  *
  * Three behaviors under test:
- *   1. When isDevBuild=true and platformMode=true, maybePostDevtoolsUpdate calls
+ *   1. When isDevBuild=true and inHost=true, maybePostDevtoolsUpdate calls
  *      postMessage with the expected message shape (source, type, payload keys).
  *   2. The boardInteraction field maps validElements to a number[] of IDs,
  *      EXCLUDING any entries whose disabled field is set.
- *   3. When isDevBuild=false OR platformMode=false, no postMessage is sent.
+ *   3. When isDevBuild=false OR inHost=false, no postMessage is sent.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -44,9 +44,9 @@ const BASE_PARAMS = {
 // ---------------------------------------------------------------------------
 
 describe('maybePostDevtoolsUpdate', () => {
-  it('calls postMessage with source and type when isDevBuild=true and platformMode=true', () => {
+  it('calls postMessage with source and type when isDevBuild=true and inHost=true', () => {
     const mockPost = vi.fn();
-    maybePostDevtoolsUpdate({ isDevBuild: true, platformMode: true }, BASE_PARAMS, mockPost);
+    maybePostDevtoolsUpdate({ isDevBuild: true, inHost: true }, BASE_PARAMS, mockPost);
 
     expect(mockPost).toHaveBeenCalledOnce();
     const [msg, origin] = mockPost.mock.calls[0];
@@ -57,7 +57,7 @@ describe('maybePostDevtoolsUpdate', () => {
 
   it('includes all required payload keys: seat, state, availableActions, actionMetadata, boardInteraction', () => {
     const mockPost = vi.fn();
-    maybePostDevtoolsUpdate({ isDevBuild: true, platformMode: true }, BASE_PARAMS, mockPost);
+    maybePostDevtoolsUpdate({ isDevBuild: true, inHost: true }, BASE_PARAMS, mockPost);
 
     const msg = mockPost.mock.calls[0][0];
     expect(msg.seat).toBe(1);
@@ -81,7 +81,7 @@ describe('maybePostDevtoolsUpdate', () => {
     };
     const pendingAction = { actionName: 'ask', playerPosition: 1, collectedArgs: {} } as any;
     maybePostDevtoolsUpdate(
-      { isDevBuild: true, platformMode: true },
+      { isDevBuild: true, inHost: true },
       { ...BASE_PARAMS, flowDebugInfo, pendingAction },
       mockPost,
     );
@@ -93,7 +93,7 @@ describe('maybePostDevtoolsUpdate', () => {
 
   it('flowDebugInfo/pendingAction are undefined (not errors) when absent', () => {
     const mockPost = vi.fn();
-    maybePostDevtoolsUpdate({ isDevBuild: true, platformMode: true }, BASE_PARAMS, mockPost);
+    maybePostDevtoolsUpdate({ isDevBuild: true, inHost: true }, BASE_PARAMS, mockPost);
 
     const msg = mockPost.mock.calls[0][0];
     expect(msg.flowDebugInfo).toBeUndefined();
@@ -140,25 +140,25 @@ describe('buildDevtoolsPayload boardInteraction.validElements', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 3: guard — no postMessage when isDevBuild=false OR platformMode=false
+// Test 3: guard — no postMessage when isDevBuild=false OR inHost=false
 // ---------------------------------------------------------------------------
 
 describe('maybePostDevtoolsUpdate guard', () => {
   it('does NOT call postMessage when isDevBuild=false', () => {
     const mockPost = vi.fn();
-    maybePostDevtoolsUpdate({ isDevBuild: false, platformMode: true }, BASE_PARAMS, mockPost);
+    maybePostDevtoolsUpdate({ isDevBuild: false, inHost: true }, BASE_PARAMS, mockPost);
     expect(mockPost).not.toHaveBeenCalled();
   });
 
-  it('does NOT call postMessage when platformMode=false', () => {
+  it('does NOT call postMessage when inHost=false', () => {
     const mockPost = vi.fn();
-    maybePostDevtoolsUpdate({ isDevBuild: true, platformMode: false }, BASE_PARAMS, mockPost);
+    maybePostDevtoolsUpdate({ isDevBuild: true, inHost: false }, BASE_PARAMS, mockPost);
     expect(mockPost).not.toHaveBeenCalled();
   });
 
   it('does NOT call postMessage when both are false', () => {
     const mockPost = vi.fn();
-    maybePostDevtoolsUpdate({ isDevBuild: false, platformMode: false }, BASE_PARAMS, mockPost);
+    maybePostDevtoolsUpdate({ isDevBuild: false, inHost: false }, BASE_PARAMS, mockPost);
     expect(mockPost).not.toHaveBeenCalled();
   });
 });

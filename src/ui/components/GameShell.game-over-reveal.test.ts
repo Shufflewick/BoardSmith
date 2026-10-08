@@ -85,9 +85,9 @@ async function settle(): Promise<void> {
 
 const mounted: Array<{ unmount(): void }> = [];
 
-async function mountShell(board: ReturnType<typeof defineComponent>, props?: Parameters<typeof mountPlatformShell>[0]['props']) {
+async function mountShell(board: ReturnType<typeof defineComponent>, props?: NonNullable<Parameters<typeof mountPlatformShell>[0]>['props']) {
   enterIframe();
-  const wrapper = mountPlatformShell({ gameType: 'game-over-reveal-test', board, props });
+  const wrapper = mountPlatformShell({ board, props });
   mounted.push(wrapper);
   await nextTick();
   post({ type: 'init', seat: 1 });

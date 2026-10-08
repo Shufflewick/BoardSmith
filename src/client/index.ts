@@ -1,44 +1,17 @@
 /**
- * BoardSmith Client SDK
+ * BoardSmith Client
  *
- * TypeScript client library for connecting to BoardSmith game servers.
+ * - `createDevHostClient` drives a running `boardsmith dev` host from Node or a
+ *   browser: take a seat, read state, perform actions (see docs/agent-control.md).
+ * - `audioService` plays the shell's sounds.
+ * - `GameState`, `PlayerState` and `PublicFlowState` are the shape of the state
+ *   a host sends one seat.
  *
- * @example
- * ```typescript
- * import { MeepleClient } from 'boardsmith/client';
- *
- * const client = new MeepleClient({
- *   baseUrl: 'https://game.example.com',
- * });
- *
- * // Find a match
- * const match = await client.findMatch('go-fish', { playerCount: 3 });
- *
- * // Connect to the game
- * const game = client.connect(match.gameId!, { playerSeat: match.playerSeat });
- *
- * // Subscribe to state changes
- * game.onStateChange((state) => {
- *   console.log('Current player:', state.state.currentPlayer);
- *   console.log('Is my turn:', state.state.isMyTurn);
- * });
- *
- * // Perform an action
- * await game.action('ask', { target: 1, rank: '7' });
- *
- * // Disconnect when done
- * game.disconnect();
- * ```
+ * Games do not connect to a server themselves: a host mounts `GameShell` in an
+ * iframe and feeds it over postMessage.
  */
 
-// Main client
-export { MeepleClient, MeepleClientError, generatePlayerId } from './client.js';
-
-// Game connection
-export { GameConnection } from './game-connection.js';
-
-// Dev-host protocol client (DRIVE-02) — a separate sibling of GameConnection;
-// speaks `boardsmith dev`'s own WS protocol, not the production game protocol.
+// Dev-host protocol client (DRIVE-02): speaks `boardsmith dev`'s own WS protocol.
 export { createDevHostClient } from './dev-host-client.js';
 export type {
   DevHostClient,
@@ -53,40 +26,4 @@ export type {
 export { audioService, type AudioServiceOptions } from './audio.js';
 
 // Types
-export type {
-  // Configuration
-  MeepleClientConfig,
-  GameConnectionConfig,
-
-  // Matchmaking
-  FindMatchOptions,
-  MatchmakingResult,
-  MatchmakingStatus,
-
-  // Game State
-  PublicFlowState,
-  PlayerState,
-  GameState,
-
-  // Connection
-  ConnectionStatus,
-  ActionResponse,
-
-  // Events
-  StateChangeCallback,
-  ErrorCallback,
-  ConnectionCallback,
-
-  // HTTP API
-  CreateGameRequest,
-  CreateGameResponse,
-  ApiResponse,
-
-  // Lobby
-  LobbyState,
-  SlotStatus,
-  LobbySlot,
-  LobbyInfo,
-  ClaimSeatRequest,
-  ClaimSeatResponse,
-} from './types.js';
+export type { PublicFlowState, PlayerState, GameState } from './types.js';

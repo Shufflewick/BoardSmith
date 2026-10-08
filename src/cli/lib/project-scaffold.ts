@@ -421,7 +421,8 @@ import AutoUI from 'boardsmith/ui/auto-ui';
  *
  * devUI() entries exist only under \`boardsmith dev\`. They are stripped from
  * production builds entirely: JS, CSS, and assets. Building your own board?
- * Move defaultUI() onto it and mark Auto as devUI().
+ * Move defaultUI() onto it and delete the Auto line: GameShell offers the
+ * auto-UI under \`boardsmith dev\` by itself.
  */
 export default defineGameUIs({
   Auto: defaultUI(AutoUI),
@@ -430,7 +431,7 @@ export default defineGameUIs({
 `;
   }
   const name = custom.split('/').pop()?.replace(/\.vue$/, '') || 'GameUI';
-  return `import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui';
+  return `import { defineGameUIs, defaultUI } from 'boardsmith/ui';
 import ${name} from '${custom}';
 
 /**
@@ -438,13 +439,13 @@ import ${name} from '${custom}';
  * players get; the compiler rejects zero or two.
  *
  * The shipped board is imported statically so it can never fail to arrive
- * separately from the app. devUI() entries are lazy on purpose: the dynamic
- * import inside a dev-only branch is what lets production strip them entirely,
- * JS, CSS, and assets.
+ * separately from the app. Add other boards with devUI(() => import(...)):
+ * they exist only under \`boardsmith dev\` and production strips them entirely,
+ * JS, CSS, and assets. GameShell offers the auto-UI under \`boardsmith dev\`
+ * by itself; it does not need listing here.
  */
 export default defineGameUIs({
   ${name}: defaultUI(${name}),
-  Auto: devUI(() => import('boardsmith/ui/auto-ui')),
 });
 `;
 }
@@ -468,12 +469,7 @@ import uis from './uis.js';
     slot: one declaration, one render path, so nothing can disagree about
     which UI ships.
   -->
-  <GameShell
-    game-type="${config.name}"
-    display-name="${config.displayName}"
-    :player-count="${config.playerCount.min}"
-    :uis="uis"
-  >
+  <GameShell :uis="uis">
     <template #player-stats="{ player }">
       <div class="player-stat">
         <span class="stat-label">Score:</span>

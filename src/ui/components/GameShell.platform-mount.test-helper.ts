@@ -61,15 +61,6 @@ export function leaveIframe(): void {
 }
 
 interface PlatformShellOptions {
-  /** Named in failures, so two files mounting the shell are told apart. */
-  gameType: string;
-  /**
-   * Stub the lobby as well. A NON-platform mount renders it for real, and the
-   * real one opens a WebSocket to a dev server that is not running -- noise
-   * from a screen such a test makes no claim about. Platform mode never
-   * reaches it.
-   */
-  stubLobby?: boolean;
   /**
    * The board to register as the game's one UI. A test that asserts what a
    * custom UI reads from the context passes a board that reads it; the default
@@ -83,17 +74,11 @@ interface PlatformShellOptions {
   props?: { providesOwnGameOverUi?: boolean; 'provides-own-game-over-ui'?: boolean };
 }
 
-export function mountPlatformShell(options: PlatformShellOptions) {
+export function mountPlatformShell(options: PlatformShellOptions = {}) {
   return mount(GameShell, {
     props: {
-      gameType: options.gameType,
       uis: defineGameUIs({ Stub: defaultUI(options.board ?? StubBoard) }),
       ...options.props,
-    },
-    global: {
-      stubs: {
-        ...(options.stubLobby ? { GameLobby: true } : {}),
-      },
     },
   });
 }

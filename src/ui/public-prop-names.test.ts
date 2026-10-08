@@ -79,7 +79,7 @@ describe('public component prop names (#433)', () => {
     expect(found).toContain("AutoUI from 'boardsmith/ui/auto-ui'");
     expect(found).toContain("Die3D from 'boardsmith/ui/dice'");
     const gameShell = publicComponents.find(({ where }) => where === "GameShell from 'boardsmith/ui'");
-    expect(propNames(gameShell!.component)).toContain('gameType');
+    expect(propNames(gameShell!.component)).toContain('uis');
     const die3d = publicComponents.find(({ where }) => where === "Die3D from 'boardsmith/ui/dice'");
     expect(propNames(die3d!.component).length).toBeGreaterThan(0);
   });

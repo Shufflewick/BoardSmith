@@ -69,7 +69,7 @@
  * </script>
  *
  * <template>
- *   <GameShell game-type="my-game">
+ *   <GameShell :uis="uis">
  *     <template #game-board="{ actionController, gameView }">
  *       <MyGameBoard
  *         :game-view="gameView"

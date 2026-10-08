@@ -8,29 +8,18 @@ The main wrapper component that provides complete game UI structure.
 
 ```vue
 <template>
-  <GameShell
-    game-type="my-game"
-    display-name="My Game"
-    :player-count="2"
-  >
-    <template #game-board="{ gameView, actionController, isMyTurn }">
-      <MyGameTable
-        :game-view="gameView"
-        :action-controller="actionController"
-        :is-my-turn="isMyTurn"
-      />
-    </template>
-  </GameShell>
+  <!-- The board comes from the registry in src/ui/uis.ts; GameShell mounts
+       it and passes it gameView, actionController, isMyTurn and the rest. -->
+  <GameShell :uis="uis" />
 </template>
 ```
 
 **What it provides:**
-- Header with game title and player indicator
 - Player panels showing names, scores, turn state
-- Central game board area (your custom content)
+- Central game board area (your board from `src/ui/uis.ts`)
 - Action panel for selections
 - Undo button (when available)
-- WebSocket connection management
+- The postMessage connection to the host it runs inside
 
 ## ActionPanel
 

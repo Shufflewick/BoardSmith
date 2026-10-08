@@ -150,8 +150,6 @@ function mountPanel(handler?: Op, props: Record<string, unknown> = {}) {
     props: {
       state: STATE,
       playerSeat: 1,
-      playerCount: 2,
-      gameId: 'test-game',
       expanded: true,
       ...props,
     },
@@ -164,7 +162,7 @@ function mountPanel(handler?: Op, props: Record<string, unknown> = {}) {
 /** Mount with NO host bridge provided. */
 function mountBridgeless() {
   const wrapper = mount(DebugPanel, {
-    props: { state: STATE, playerSeat: 1, playerCount: 2, gameId: 'g', expanded: true },
+    props: { state: STATE, playerSeat: 1, expanded: true },
     attachTo: document.body,
   });
   return { wrapper, vm: wrapper.vm as unknown as Vm };
@@ -705,9 +703,9 @@ describe('DebugPanel clipboard and download', () => {
       if (tag === 'a') el.click = () => clicked.push((el as HTMLAnchorElement).download);
       return el;
     });
-    const { vm } = track(mountPanel(undefined, { state: { a: 1 }, gameId: 'abc' }));
+    const { vm } = track(mountPanel(undefined, { state: { a: 1 } }));
     vm.downloadState();
-    expect(clicked).toEqual(['game-state-abc.json']);
+    expect(clicked).toEqual(['game-state.json']);
     expect(revokeURL).toHaveBeenCalledWith('blob:x');
     vi.mocked(document.createElement).mockRestore();
   });

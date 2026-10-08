@@ -1,125 +1,69 @@
 // @vitest-environment jsdom
 /**
- * GameShell — showHintProp computed (Plan 110-01, Task 2)
+ * GameShell — showHintProp (Plan 110-01, Task 2), on the REAL shell.
  *
- * Uses a minimal harness component (same pattern as GameShell.tutorial.test.ts /
- * GameShell.action-help.test.ts) to test the showHintProp computed in isolation
- * without mounting the full WebSocket-dependent GameShell component.
- *
- * Production wiring under test (GameShell.vue showHintProp computed):
- *
- *   const showHintProp = computed<boolean | undefined>(() => {
- *     // Production lobby path — unchanged
- *     if (lobbyInfo.value?.slots?.some(s => s.botLevel != null)) return true;
- *     // Dev-host path: SnapshotSessionHost injects hasBotPlayers into broadcast state
- *     if ((state.value?.state as any)?.hasBotPlayers) return true;
- *     return undefined;
- *   });
- *
- * INVARIANT (RESEARCH Pitfall 5): The `hasBotPlayers` branch must NOT fire at
- * a table with no bot. SnapshotSessionHost sets that field only while it has
- * bot seats, so a no-bot table never carries it. The test proves this by
- * checking the no-bot case explicitly.
+ * The Teaching group's hint is offered when the host's state says the game has
+ * a bot seat: SnapshotSessionHost injects `hasBotPlayers` into broadcast state
+ * only while it has bot seats (RESEARCH Pitfall 5), so a table without
+ * that field offers no hint.
  *
  * Behaviors under test:
- *   SH-1: Both lobbyInfo absent AND state.hasBotPlayers absent → undefined (production no-bot)
- *   SH-2: state.hasBotPlayers = true, lobbyInfo = null → true (dev-host path)
- *   SH-3: lobbyInfo.slots has a bot slot, state.hasBotPlayers absent → true (production lobby)
- *   SH-4: Both lobbyInfo bot slot AND state.hasBotPlayers → true (belt-and-suspenders)
+ *   SH-1: no state, or state without hasBotPlayers -> undefined
+ *   SH-2: state.hasBotPlayers = true -> true
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { ref, computed, watch, nextTick } from 'vue';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { ref, watch, nextTick } from 'vue';
+import ControlsMenu from './ControlsMenu.vue';
+import {
+  enterIframe,
+  leaveIframe,
+  mountPlatformShell,
+} from './GameShell.platform-mount.test-helper.js';
 
-// ── Minimal LobbyInfo-like shape ─────────────────────────────────────────────
-// Only the fields that showHintProp reads are required.
-
-interface SlotLike { botLevel?: string | null }
-interface LobbyInfoLike { slots?: SlotLike[] }
-
-// ── Minimal PlayerGameState shape ────────────────────────────────────────────
-// Only the `hasBotPlayers` field is needed.
-
-interface StateLike { state?: { hasBotPlayers?: boolean } }
-
-// ── Harness: mirrors the exact showHintProp production wiring ─────────────────
-// These refs mirror the shape of lobbyInfo and state in GameShell.vue.
-// If GameShell changes showHintProp, this harness must receive the same fix.
-
-function buildHarness(
-  lobbyInfoValue: LobbyInfoLike | null,
-  stateValue: StateLike | null,
-) {
-  const lobbyInfo = ref<LobbyInfoLike | null>(lobbyInfoValue);
-  const state = ref<StateLike | null>(stateValue);
-
-  // ── Production showHintProp wiring (mirrors GameShell.vue exactly) ────────
-  const showHintProp = computed<boolean | undefined>(() => {
-    // Production lobby path — unchanged
-    if (lobbyInfo.value?.slots?.some(s => s.botLevel != null)) return true;
-    // Dev-host path: SnapshotSessionHost injects hasBotPlayers into broadcast state
-    if ((state.value?.state as any)?.hasBotPlayers) return true;
-    return undefined;
-  });
-
-  return { showHintProp };
+function postState(state: Record<string, unknown>): void {
+  window.dispatchEvent(new MessageEvent('message', {
+    data: {
+      source: 'shufflewick',
+      type: 'game_state',
+      view: {
+        flowState: { currentPlayer: 0, awaitingInput: true, availableActions: [] },
+        state: { view: {}, players: [], currentPlayer: 0, isMyTurn: true, ...state },
+      },
+    },
+  }));
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
+async function mountShowHintShell() {
+  enterIframe();
+  const wrapper = mountPlatformShell();
+  await nextTick();
+  return { wrapper, showHint: () => wrapper.findComponent(ControlsMenu).props('showHint') };
+}
 
-describe('GameShell — showHintProp computed', () => {
+describe('GameShell — showHintProp', () => {
+  afterEach(leaveIframe);
 
-  it('SH-1: returns undefined when BOTH lobbyInfo and state.hasBotPlayers are absent', () => {
-    const { showHintProp } = buildHarness(null, null);
-    expect(showHintProp.value).toBeUndefined();
+  it('SH-1: is undefined before any state arrives', async () => {
+    const { wrapper, showHint } = await mountShowHintShell();
+    expect(showHint()).toBeUndefined();
+    wrapper.unmount();
   });
 
-  it('SH-1b: returns undefined when lobbyInfo has no bot slots and state has no hasBotPlayers', () => {
-    const { showHintProp } = buildHarness(
-      { slots: [{ botLevel: null }, { botLevel: null }] },  // all human
-      { state: {} },
-    );
-    expect(showHintProp.value).toBeUndefined();
+  it('SH-1b: is undefined when the state does not say the game has a bot (production)', async () => {
+    const { wrapper, showHint } = await mountShowHintShell();
+    postState({});
+    await nextTick();
+    expect(showHint()).toBeUndefined();
+    wrapper.unmount();
   });
 
-  it('SH-2: returns true when state.hasBotPlayers is true and lobbyInfo is null (dev-host path)', () => {
-    const { showHintProp } = buildHarness(
-      null,
-      { state: { hasBotPlayers: true } },
-    );
-    expect(showHintProp.value).toBe(true);
-  });
-
-  it('SH-2b: returns true when state.hasBotPlayers is true and lobbyInfo has no bot slots', () => {
-    const { showHintProp } = buildHarness(
-      { slots: [{ botLevel: null }] },
-      { state: { hasBotPlayers: true } },
-    );
-    expect(showHintProp.value).toBe(true);
-  });
-
-  it('SH-3: returns true when lobbyInfo has a bot slot and state.hasBotPlayers is absent (production lobby path)', () => {
-    const { showHintProp } = buildHarness(
-      { slots: [{ botLevel: null }, { botLevel: 'medium' }] },
-      { state: {} },
-    );
-    expect(showHintProp.value).toBe(true);
-  });
-
-  it('SH-3b: returns true when all lobbyInfo slots have bot levels', () => {
-    const { showHintProp } = buildHarness(
-      { slots: [{ botLevel: 'easy' }, { botLevel: 'hard' }] },
-      null,
-    );
-    expect(showHintProp.value).toBe(true);
-  });
-
-  it('SH-4: returns true when both paths are active (belt-and-suspenders)', () => {
-    const { showHintProp } = buildHarness(
-      { slots: [{ botLevel: 'medium' }] },
-      { state: { hasBotPlayers: true } },
-    );
-    expect(showHintProp.value).toBe(true);
+  it('SH-2: is true when the state says the game has a bot seat (dev host)', async () => {
+    const { wrapper, showHint } = await mountShowHintShell();
+    postState({ hasBotPlayers: true });
+    await nextTick();
+    expect(showHint()).toBe(true);
+    wrapper.unmount();
   });
 });
 
@@ -151,9 +95,7 @@ describe('GameShell — showHintProp computed', () => {
 // so a failed action (from ActionPanel OR a custom UI, both sharing the same
 // actionController instance) produces exactly ONE toast via this watch.
 //
-// Uses a minimal harness (same pattern as showHintProp above) that mirrors the
-// exact production watch body, rather than mounting the full WebSocket-
-// dependent GameShell component.
+// Uses a minimal harness that mirrors the exact production watch body.
 // ─────────────────────────────────────────────────────────────────────────
 
 describe('GameShell — actionController.lastError -> toast chokepoint (UIX-01)', () => {

@@ -50,7 +50,6 @@ let opened: ScriptedSocket[] = [];
 const latest = (): ScriptedSocket => opened[opened.length - 1];
 
 const config: DevHostConfig = {
-  gameType: 'server-run',
   displayName: 'Server Run',
   playerCount: 2,
   minPlayers: 2,

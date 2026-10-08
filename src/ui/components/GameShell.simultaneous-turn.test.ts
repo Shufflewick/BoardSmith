@@ -94,7 +94,7 @@ const mounted: Array<{ unmount(): void }> = [];
 
 async function mountAsAlice() {
   enterIframe();
-  const wrapper = mountPlatformShell({ gameType: 'simultaneous-turn-test', board: DueSeatsBoard });
+  const wrapper = mountPlatformShell({ board: DueSeatsBoard });
   mounted.push(wrapper);
   await nextTick();
   post({ type: 'init', seat: 0 });

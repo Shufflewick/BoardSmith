@@ -58,16 +58,16 @@ This document provides an overview of the BoardSmith package architecture and ho
 │                          ├──────────────────┐                              │
 │                          ▼                  ▼                              │
 │                     ┌─────────┐        ┌─────────┐                         │
-│                     │   cli   │        │ client  │  Browser SDK            │
-│                     └─────────┘        └────┬────┘  - MeepleClient         │
-│                     - init                  │       - GameConnection (WS)  │
-│                     - dev                   │       - Vue composables      │
+│                     │   cli   │        │ client  │  Dev-host driver        │
+│                     └─────────┘        └────┬────┘  - createDevHostClient  │
+│                     - init                  │       - audioService         │
+│                     - dev                   │       - state types          │
 │                     - build                 │                              │
-│                     - test          client connects over WebSocket to a    │
-│                     - validate      host PROVIDED BY THE DEPLOYMENT         │
-│                     - publish       PLATFORM — BoardSmith ships no server   │
-│                     - evolve-bot-   or worker module (see Runtime          │
-│                       weights       Isolation below).                       │
+│                     - test          GameShell runs in an iframe of a host  │
+│                     - validate      PROVIDED BY THE DEPLOYMENT PLATFORM     │
+│                     - publish       and talks to it by postMessage —        │
+│                     - evolve-bot-   BoardSmith ships no server or worker   │
+│                       weights       module (see Runtime Isolation below).  │
 │                                             │                              │
 │                                             ▼                              │
 │                                        ┌─────────┐                         │
@@ -107,7 +107,7 @@ UI Click / Bot Decision
 actionController.execute(name, args)
     │
     ▼
-GameConnection.action()  ──► WebSocket ──► Host (deployment platform)
+GameShell ──► postMessage ───────────────► Host (deployment platform)
     │                                           │
     │                                           ▼
     │                                    SnapshotSessionHost.handleOp()
@@ -263,7 +263,7 @@ Runtime Isolation below).
 | `engine` | Game rules framework | `Game`, `Action`, `Flow`, elements |
 | `runtime` | Game execution | `GameRunner` |
 | `session` | Session management | `SnapshotSessionHost`, `executeOp`, `createHeadlessSession` |
-| `client` | Browser SDK | `MeepleClient`, `GameConnection` |
+| `client` | Dev-host driver, audio, state types | `createDevHostClient`, `audioService`, `GameState` |
 | `ui` | Vue components | `GameShell`, composables |
 | `bot` | MCTS bot | `createBot`, `MCTSBot` |
 | `bot-trainer` | Bot weight evolution | `WeightEvolver`, `readObjectiveWeights`, `updateBotWeights` |

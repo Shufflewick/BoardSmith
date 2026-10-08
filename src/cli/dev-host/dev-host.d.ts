@@ -8,7 +8,6 @@ declare module 'virtual:boardsmith-game' {
   /** The author's compiled game definition (gameClass + metadata). */
   export const gameDefinition: {
     gameClass: new (...args: unknown[]) => unknown;
-    gameType: string;
     displayName?: string;
     minPlayers?: number;
     maxPlayers?: number;

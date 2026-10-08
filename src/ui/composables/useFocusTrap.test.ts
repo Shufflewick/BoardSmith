@@ -216,7 +216,6 @@ describe('useFocusTrap', () => {
 
   it('open() applies inert to body-level siblings even when dialog is deeply nested (CR-01)', () => {
     // Simulate real DOM: body > hostRoot > wrapper > dialog
-    // (mirrors HamburgerMenu: body > .game-shell > .hamburger-menu > .menu-drawer)
     const bodySibling = document.createElement('div');
     bodySibling.id = 'body-sibling';
     document.body.appendChild(bodySibling);

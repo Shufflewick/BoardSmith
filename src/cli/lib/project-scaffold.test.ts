@@ -43,7 +43,9 @@ describe('generateAppVue', () => {
     const out = generateAppVue(config);
     expect(out).toContain("import { GameShell } from 'boardsmith/ui'");
     expect(out).toContain("import uis from './uis.js'");
-    expect(out).toContain(':uis="uis"');
+    expect(out).toContain('<GameShell :uis="uis">');
+    // The game's type, name and seat count come from the game itself (#525).
+    expect(out).not.toMatch(/game-type|display-name|player-count/);
     // The slot is gone on purpose: a second way to name the default UI is a
     // second thing that can disagree with src/ui/uis.ts.
     expect(out).not.toContain('#game-board');
@@ -80,11 +82,12 @@ describe('generateUisTs — the single source of truth for a game\'s UIs', () =>
     expect(out).toContain("Custom: devUI(() => import('./components/GameTable.vue'))");
   });
 
-  it('custom ui path: the custom board ships and auto-UI drops to dev-only', () => {
+  it('custom ui path: the custom board ships, and the auto-UI is not listed (GameShell adds it in dev)', () => {
     const out = generateUisTs({ ...config, ui: './ui/components/GameTable.vue' });
     expect(out).toContain('GameTable: defaultUI(GameTable)');
     expect(out).toContain("import GameTable from './ui/components/GameTable.vue'");
-    expect(out).toContain("Auto: devUI(() => import('boardsmith/ui/auto-ui'))");
+    expect(out).not.toContain('auto-ui');
+    expect(out).not.toMatch(/\bAuto\b:/);
   });
 
   // AutoUI must come from the `boardsmith/ui/auto-ui` subpath, never the main
@@ -93,10 +96,9 @@ describe('generateUisTs — the single source of truth for a game\'s UIs', () =>
   // survives JS tree-shaking — which shipped the auto-UI stylesheet to every
   // custom-UI game (SHIP-02).
   it('reaches AutoUI through the auto-ui subpath, never the main barrel', () => {
-    for (const out of [generateUisTs(config), generateUisTs({ ...config, ui: './x/Y.vue' })]) {
-      expect(out).toContain("'boardsmith/ui/auto-ui'");
-      expect(out).not.toMatch(/AutoUI[^']*from 'boardsmith\/ui'/);
-    }
+    const out = generateUisTs(config);
+    expect(out).toContain("'boardsmith/ui/auto-ui'");
+    expect(out).not.toMatch(/AutoUI[^']*from 'boardsmith\/ui'/);
   });
 
   it('marks exactly one UI as defaultUI in every generated variant', () => {

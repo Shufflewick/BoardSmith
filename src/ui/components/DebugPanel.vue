@@ -4,10 +4,6 @@ export interface DebugPanelProps {
   state: any;
   /** Current player seat */
   playerSeat: number;
-  /** Total number of players */
-  playerCount: number;
-  /** Game ID (null in the dev host — kept for state-download filenames) */
-  gameId: string | null;
   /** Whether panel is expanded */
   expanded?: boolean;
   /**
@@ -79,6 +75,15 @@ import { useStateTree } from '../composables/useStateTree.js';
 const props = withDefaults(defineProps<DebugPanelProps>(), {
   expanded: false,
   historyHasMessages: false,
+});
+
+/**
+ * The seats of the running game: the players in the state the host sent
+ * (#525). The Controls tab draws one "switch player" button per seat from it.
+ */
+const seats = computed<number[]>(() => {
+  const players = props.state?.state?.players;
+  return Array.isArray(players) ? players.map((player: { seat: number }) => player.seat) : [];
 });
 
 const emit = defineEmits<{
@@ -289,7 +294,7 @@ function downloadState() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `game-state-${props.gameId || 'unknown'}.json`;
+  a.download = 'game-state.json';
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -391,7 +396,6 @@ async function fetchLogs() {
 // reloads whichever tab is showing, because that state is what it describes.
 
 watch(activeTab, (tab) => {
-  if (!props.gameId) return;
   if (tab === 'actions' && Date.now() - tracesLastFetched.value > TAB_REFRESH_MAX_AGE_MS) {
     fetchActionTraces();
     fetchFlowState();
@@ -510,7 +514,6 @@ function handleRestartClick() {
           :selected-action-index="selectedActionIndex"
           :historical-state-loading="historicalStateLoading"
           :historical-state-error="historicalStateError"
-          :game-id="props.gameId ?? null"
           @back-to-live="clearHistoricalState"
           @copy="copyState"
           @download="downloadState"
@@ -588,7 +591,7 @@ function handleRestartClick() {
         <ControlsTab
           v-show="activeTab === 'controls'"
           :player-seat="props.playerSeat"
-          :player-count="props.playerCount"
+          :seats="seats"
           :restart-confirming="restartConfirming"
           :history-has-messages="props.historyHasMessages"
           v-model:show-raw-state="showRawState"

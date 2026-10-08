@@ -343,13 +343,11 @@ describe('the truce game', () => {
 }
 
 /** The scaffold's UI registry with its own board made the one players get, as a finished game has it. */
-export const PLAYERS_GET_THE_TABLE = `import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui';
-import AutoUI from 'boardsmith/ui/auto-ui';
+export const PLAYERS_GET_THE_TABLE = `import { defineGameUIs, defaultUI } from 'boardsmith/ui';
 import GameTable from './components/GameTable.vue';
 
 export default defineGameUIs({
   Table: defaultUI(GameTable),
-  Auto: devUI(AutoUI),
 });
 `;
 

@@ -1,9 +1,8 @@
 /**
- * Shared WebSocket-constructor resolution for Node-capable client SDKs.
+ * WebSocket-constructor resolution for the Node-capable dev-host client.
  *
- * Both GameConnection (production `/games/:gameId` protocol) and the dev-host
- * client (127-03) need to run in a Node process without a browser `WebSocket`
- * global, while still working unmodified in browsers. This resolves an
+ * The dev-host client (127-03) needs to run in a Node process without a
+ * browser `WebSocket` global, while still working unmodified in browsers. This resolves an
  * injected override first, falling back to the runtime global, and fails
  * loud with an actionable message when neither is available.
  */

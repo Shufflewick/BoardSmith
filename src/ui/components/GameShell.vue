@@ -1,34 +1,22 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, toRef, nextTick } from 'vue';
+import { ref, shallowRef, computed, watch, onMounted, onUnmounted, toRef, nextTick } from 'vue';
 import { applyTheme, BREAKPOINTS } from '../theme.js';
 import { consumeInitMessage, isOriginAllowed } from './GameShellInit.js';
 import type { PresentationOverlay } from './auto-ui/presentation.js';
-import { devUiNames, resolveUiComponent, type GameUIRegistry } from '../game-uis.js';
+import { devUiNames, resolveUiComponent, withDevAutoUI, type GameUIRegistry } from '../game-uis.js';
 import { selectArchetype } from './auto-ui/archetype-selector.js';
 import {
   announceTurnChange,
-  announceConnectionChange,
   announceGameOver,
-  deriveWinnerState,
   describePlaying,
 } from '../composables/liveRegionAnnouncer.js';
 import { turnSequence, orderSeatsByTurn, type SeatActivityState } from '../../engine/flow/seat-activity.js';
-import { flowBoundaryKey, type BoundaryKeyState } from '../../engine/flow/boundary-key.js';
-import { MeepleClient, MeepleClientError, GameConnection, audioService, generatePlayerId, type LobbyInfo } from '../../client/index.js';
-import { useGame } from '../../client/vue.js';
-
-// HMR Debug logging (disabled in production)
-const DEBUG_HMR = false;
-function hmrLog(...args: unknown[]) {
-  if (DEBUG_HMR) console.log('[HMR-DEBUG]', ...args);
-}
+import type { BoundaryKeyState } from '../../engine/flow/boundary-key.js';
+import { audioService } from '../../client/audio.js';
 import ActionPanel from './auto-ui/ActionPanel.vue';
 import ControlsMenu from './ControlsMenu.vue';
 import DebugPanel from './DebugPanel.vue';
-import GameHeader from './GameHeader.vue';
-import GameLobby from './GameLobby.vue';
 import PlayShell, { type PlayConnection } from './PlayShell.vue';
-import WaitingRoom from './WaitingRoom.vue';
 import { readTurnDeadlineFrame, useTurnDeadline, type TurnDeadlineFrame } from '../composables/useTurnDeadline.js';
 import { useTeachingActions } from '../composables/useTeachingActions.js';
 import { useDevDebugGate } from '../composables/useDevDebugGate.js';
@@ -49,58 +37,10 @@ import { useZoomPreview } from '../composables/useZoomPreview';
 import { useAutoZoom, SETTLE_MS } from '../composables/useAutoZoom';
 import { useToast } from '../composables/useToast';
 import type { ControllerActionResult } from '../composables/useActionController';
+import type { PickChoicesResult, PickStepResponse } from '../composables/useActionControllerTypes.js';
 import type { GameState, PublicFlowState } from '../../client/types.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 import { usePlatformTransport } from '../composables/usePlatformTransport.js';
-import { useLobby } from '../composables/useLobby.js';
-
-// Generate or retrieve persistent player ID
-// Session-specific IDs (for same-browser scenarios) are stored in sessionStorage
-// and take precedence over localStorage
-function getPlayerId(): string {
-  const SESSION_KEY = 'boardsmith_session_player_id';
-  const LOCAL_KEY = 'boardsmith_player_id';
-
-  // Check sessionStorage first (for same-browser joiner scenarios)
-  const sessionId = sessionStorage.getItem(SESSION_KEY);
-  if (sessionId) {
-    return sessionId;
-  }
-
-  // Fall back to localStorage. The playerId is a per-seat capability token
-  // (identity proof on WS connect + host-authorization checks), so it must
-  // be minted by the SDK's single cryptographically-secure minting path —
-  // never Math.random().
-  let id = localStorage.getItem(LOCAL_KEY);
-  if (!id) {
-    id = generatePlayerId();
-    localStorage.setItem(LOCAL_KEY, id);
-  }
-  return id;
-}
-
-// Save a session-specific player ID (survives refresh but not browser close)
-function setSessionPlayerId(id: string): void {
-  const SESSION_KEY = 'boardsmith_session_player_id';
-  sessionStorage.setItem(SESSION_KEY, id);
-}
-
-// Clear session-specific player ID (when leaving lobby)
-function clearSessionPlayerId(): void {
-  const SESSION_KEY = 'boardsmith_session_player_id';
-  sessionStorage.removeItem(SESSION_KEY);
-}
-
-// Get or set persistent player name
-function getPlayerName(): string | null {
-  const KEY = 'boardsmith_player_name';
-  return localStorage.getItem(KEY);
-}
-
-function setPlayerName(name: string): void {
-  const KEY = 'boardsmith_player_name';
-  localStorage.setItem(KEY, name);
-}
 
 // Get or set the global "Show action help" preference.
 // Key: boardsmith_action_help; default ON (true) when absent.
@@ -121,18 +61,8 @@ function setActionHelpEnabled(value: boolean): void {
 }
 
 interface GameShellProps {
-  /** Game type identifier (e.g., 'go-fish', 'cribbage') */
-  gameType: string;
-  /** Display name for the game */
-  displayName?: string;
-  /** API base URL (default: http://localhost:8787) */
-  apiUrl?: string;
-  /** Number of players (default: 2) */
-  playerCount?: number;
   /** Enable debug panel (default: true in dev) */
   debugMode?: boolean;
-  /** Player positions that should be bot by default (1-indexed). E.g., [2] makes player 2 bot */
-  defaultBotPlayers?: number[];
   /**
    * Platform-only escape hatch that suppresses the entire Action Panel
    * (D-02 escape hatch, LIBX-01). Do NOT use from a game's own
@@ -209,9 +139,6 @@ interface GameShellProps {
 }
 
 const props = withDefaults(defineProps<GameShellProps>(), {
-  // Use injected API URL from boardsmith dev (set via window global), fall back to default
-  apiUrl: (typeof window !== 'undefined' && (window as any).__BOARDSMITH_API_URL__) || 'http://localhost:8787',
-  playerCount: 2,
   debugMode: true,
   platformActionPanelEscapeHatch: false,
   providesOwnGameOverUi: false,
@@ -219,10 +146,13 @@ const props = withDefaults(defineProps<GameShellProps>(), {
   showTurnStatus: true,
 });
 
-// Platform mode: embedded inside a host platform's iframe (e.g., ShufflewickPub
-// in prod, or the boardsmith dev host locally — both run GameShell in an iframe).
-// Synchronous detection: if we're in an iframe, we're in platform mode.
-const platformMode = ref(typeof window !== 'undefined' && window.parent !== window);
+// A game runs only inside a host: ShufflewickPub in production, or the
+// `boardsmith dev` host locally. Both mount GameShell in an iframe, and the host
+// owns the session -- state arrives and every server operation leaves by
+// postMessage. Opened directly (a top-level page) there is no host to talk to,
+// so the shell says how to run the game and does nothing else (#515).
+// Read synchronously at setup, so the first render is already the right one.
+const inHost = typeof window !== 'undefined' && window.parent !== window;
 
 // Dev build (Vite serves `boardsmith dev`); false in production embeds. Gates the
 // debug panel so it appears under `boardsmith dev` but never in a deployed game.
@@ -231,11 +161,9 @@ const isDevBuild = import.meta.env.DEV;
 // Dev-only UI switcher. `boardsmith dev` shows a dropdown of every UI the game's
 // registry declares and renders the selected one without a permanent split-screen.
 //
-// The auto-UI is NOT injected here any more. A game that wants it lists it like
-// any other board — `Auto: devUI(() => import('boardsmith/ui/auto-ui'))` — so the
-// registry really is the complete list of a game's UIs rather than the list plus
-// one the shell adds behind its back. That also stops offering an auto-UI peek to
-// games where it means nothing.
+// The shell adds the auto-UI to every table game's switcher itself, as a dev-only
+// `Auto` entry (`withDevAutoUI`, #525), so a game's `src/ui/uis.ts` lists only
+// its own boards. A game whose own registry already has an `Auto` keeps it.
 //
 // Elimination note, because this is the part that is easy to get wrong: a devUI
 // entry's component is null in production (see src/ui/game-uis.ts), and its
@@ -246,7 +174,7 @@ const isDevBuild = import.meta.env.DEV;
 // barrel's re-export rather than through any import anyone was looking at.
 // Elimination is a property of the WHOLE graph. Only the built artifact proves
 // it, which is what treeshake-bundle.test.ts asserts, for CSS as well as JS.
-const registry = computed(() => props.uis);
+const registry = computed(() => withDevAutoUI(props.uis));
 // Both shells resolve a registry the same way since #170, so the two lines that
 // do it live in `game-uis.ts` beside the registry itself.
 const uiNames = computed(() => devUiNames(registry.value));
@@ -257,28 +185,19 @@ const selectedUiComponent = computed(() =>
 );
 // Tell the dev host which UIs are available so it can populate the dropdown.
 function postDevUiList(): void {
-  if (!isDevBuild || !platformMode.value || typeof window === 'undefined') return;
+  if (!isDevBuild || !inHost) return;
   window.parent.postMessage(
-    // gameType lets the dev host detect when its outer page is stale relative to
-    // the game now running in the iframe (e.g. the dev server was restarted with a
-    // different game on the same port) and force a full reload.
-    { source: 'shufflewick-game', type: 'dev-ui-list', uis: uiNames.value, gameType: props.gameType },
+    { source: 'shufflewick-game', type: 'dev-ui-list', uis: uiNames.value },
     '*'
   );
 }
 
-// Screen state — start on 'game' in platform mode (skip lobby)
-type Screen = 'lobby' | 'waiting' | 'game';
-const currentScreen = ref<Screen>(platformMode.value ? 'game' : 'lobby');
+// This seat's view of the game, exactly as the host's `game_state` message
+// carries it. The message handler below is its only writer.
+const state = shallowRef<GameState | null>(null);
+const isMyTurn = computed(() => state.value?.state.isMyTurn ?? false);
 
-// Player identity (persistent across sessions, but can change for joiners in same-browser scenarios)
-const playerId = ref(getPlayerId());
-
-// Color selection state (persists through lobby->game transition)
-const colorSelectionEnabled = ref(false);
-
-// Game state
-const gameId = ref<string | null>(null);
+// The seat this page renders, from the host's `init` message.
 const playerSeat = ref<number>(-1); // -1 means no seat assigned yet (spectator)
 // Host anti-cheat: teaching features disabled for this session.
 // Set from the platform init postMessage (data.teachingDisabled) for first-render
@@ -351,10 +270,9 @@ const { zoomLevel, setZoom, fitZoom } = useAutoZoom({
   regionEl: boardregionEl,
 });
 
-// Connection health (IA-01): driven by postMessage heartbeat in platform mode.
+// Connection health (IA-01): driven by the host's postMessage heartbeat.
 // Starts 'connecting'; a valid heartbeat sets it to 'connected' and rearms a
-// staleness timer (~10s). Replaces the hardcoded 'connected' string that was
-// passed to the GameHeader badge.
+// staleness timer (~10s).
 const connectionHealth = ref<'connecting' | 'connected' | 'stale'>('connecting');
 
 /**
@@ -365,13 +283,12 @@ const connectionHealth = ref<'connecting' | 'connected' | 'stale'>('connecting')
  * attachment lifecycle with two states (`refused`, and the platform's fifth,
  * `ejected`) a table has no analogue for.
  *
- * `null` when there is nothing to say. It is surfaced only in platform mode,
- * because dev and standalone show the GameHeader connection badge instead, and
- * a healthy connection surfaces nothing at all: a persistent green dot over the
- * board reads as a mystery speck (IA-01).
+ * `null` when there is nothing to say: a healthy connection surfaces nothing
+ * at all, because a persistent green dot over the board reads as a mystery
+ * speck (IA-01).
  */
 const connectionIndicator = computed<PlayConnection | null>(() => {
-  if (!platformMode.value || connectionHealth.value === 'connected') return null;
+  if (connectionHealth.value === 'connected') return null;
   return {
     tone: connectionHealth.value,
     title: connectionHealth.value === 'stale'
@@ -382,13 +299,13 @@ const connectionIndicator = computed<PlayConnection | null>(() => {
 let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Winner seats captured from the game_state postMessage (IA-07).
-// Validated as number[] on receipt; stays [] in dev-WS mode (graceful degrade).
+// Validated as number[] on receipt; stays [] when the frame carries none.
 const winnerSeats = ref<number[]>([]);
 
 // Explicit draw signal captured from the game_state postMessage (D10/ENDGAME-01).
 // Sourced from the session (isComplete && winners.length === 0), threaded via
 // snapshot-session-host meta -> multiplayer-host game_state frame. Absent on
-// the frame (or platformMode not used) -> stays false ("unknown", not a draw) —
+// the frame -> stays false ("unknown", not a draw) —
 // never inferred from a bare empty winnerSeats, which also occurs pre-completion.
 const isDraw = ref(false);
 
@@ -419,90 +336,21 @@ const isViewingHistory = computed(() => timeTravelState.value !== null);
 const debugHighlightedElementId = ref<number | null>(null);
 // (published with the rest of the game context below — see useTableSeat)
 
-// Create client with our persisted playerId so all API calls (claim
-// position, etc.) use the same ID. Passing it into the constructor (rather
-// than overwriting after construction via setPlayerId) means the client
-// never mints an ID that is immediately discarded.
-const client = new MeepleClient({
-  baseUrl: props.apiUrl,
-  playerId: playerId.value,
-});
-
 // Toast notifications
 const toast = useToast();
-
-// Create, join, seat claim, the waiting-room controls and leaving all live in
-// useLobby. It reaches back into the three refs the GAME half also reads --
-// playerSeat, gameId, currentScreen -- and owns everything that is only the
-// lobby's.
-const lobby = useLobby({
-  client,
-  apiUrl: props.apiUrl,
-  gameType: props.gameType,
-  playerCount: props.playerCount,
-  playerId,
-  playerSeat,
-  gameId,
-  currentScreen,
-  toast,
-  fetchPlayerOptions,
-  setSessionPlayerId,
-  clearSessionPlayerId,
-  getPlayerName,
-  setPlayerName,
-  log: hmrLog,
-});
-
-const {
-  joinGameId,
-  createdGameId,
-  lobbyInfo,
-  isCreator,
-  gamePlayerOptions,
-  createGame,
-  joinGame,
-  resumeGame,
-  handleJoinLobby,
-  handleUpdateLobbyName,
-  handleSetReady,
-  handleAddSlot,
-  handleRemoveSlot,
-  handleSetSlotBot,
-  handleKickPlayer,
-  handleUpdatePlayerOptions,
-  handleUpdateGameOptions,
-  handleUpdateSlotPlayerOptions,
-  handleLobbyCancel,
-  copyGameCode,
-  leaveGame,
-} = lobby;
-
-// Sync colorSelectionEnabled from lobbyInfo (persists through lobby->game transition)
-watch(lobbyInfo, (lobby) => {
-  if (lobby?.colorSelectionEnabled !== undefined) {
-    colorSelectionEnabled.value = lobby.colorSelectionEnabled;
-  }
-}, { immediate: true });
-
-
 
 // Initialize audio service with the turn notification sound
 audioService.init({
   turnSoundUrl: turnNotificationSound,
 });
 
-// Use game composable
-const { state, connectionStatus, isConnected, isMyTurn, error, action, refreshState, reconnect } = useGame(
-  client,
-  gameId,
-  { playerSeat }
-);
-
-// Sync colorSelectionEnabled from game state (for non-lobby mode like --bot where lobbyInfo is never set)
-watch(state, (s) => {
-  if (s?.state?.colorSelectionEnabled) {
-    colorSelectionEnabled.value = true;
-  }
+// Play the turn sound when the turn comes to this seat: a change from "not your
+// turn" to "your turn" between two states. The first state only says whose turn
+// it already is, so loading (or reloading) the page on your own turn is silent.
+// `null` until that first state arrives.
+const turnIsMine = computed<boolean | null>(() => (state.value ? state.value.state.isMyTurn : null));
+watch(turnIsMine, (now, before) => {
+  if (now === true && before === false) audioService.playTurnSound();
 });
 
 // Global "Show action help" preference — persisted to localStorage.
@@ -580,16 +428,14 @@ const displayedState = computed<DisplayedGameState | null>(() => {
   return state.value;
 });
 
-// Platform mode: generic request/response bridge to the host (which relays to
-// the games worker / executor). Every server operation the embedded game needs
-// — fetching choices, stepping selections, cancelling, undo — goes through this
-// ONE helper, so platform/dev branching lives in exactly one place. Adding a new
-// server op only requires calling platformRequest(op, ...) and implementing the
-// op in the executor; the host relay is generic and needs no per-op changes.
-// This prevents the recurring "works in dev, broken in the iframe" class of bug
-// where an individual server call forgot its platform branch.
+// The generic request/response bridge to the host (which relays to the games
+// worker / executor). Every server operation the embedded game needs —
+// fetching choices, stepping selections, cancelling, undo — goes through this
+// ONE helper. Adding a new server op only requires calling
+// platformRequest(op, ...) and implementing the op in the executor; the host
+// relay is generic and needs no per-op changes.
 /**
- * Narrow an untyped host response into a ControllerActionResult.
+ * Narrow an untyped host response into the result type its caller expects.
  *
  * `platformRequest` returns `Record<string, unknown>` because the host is
  * across a postMessage boundary — nothing guarantees its shape. Only `success`
@@ -598,8 +444,8 @@ const displayedState = computed<DisplayedGameState | null>(() => {
  * `followUp` — which chains the next action, e.g. explore -> take equipment —
  * survives.
  */
-function toControllerActionResult(raw: Record<string, unknown>): ControllerActionResult {
-  return { ...raw, success: raw.success === true } as ControllerActionResult;
+function hostResult<T extends { success: boolean }>(raw: Record<string, unknown>): T {
+  return { ...raw, success: raw.success === true } as T;
 }
 
 /** Read an error message off an untyped host response, with a fallback. */
@@ -662,92 +508,26 @@ const tableSeat = useTableSeat({
   debugHighlight: debugHighlightedElementId,
   turnDeadline,
   sendAction: async (actionName, args) => {
-    if (platformMode.value) {
-      // Request/response so the action RESULT (notably followUp, which chains the
-      // next action e.g. explore -> take equipment) comes back to the controller,
-      // matching the dev path. Fire-and-forget would drop followUp.
-      const result = await platformRequest('action', { actionName, args });
-      return toControllerActionResult(result);
-    }
-    const result = await action(actionName, args);
-    return result as ControllerActionResult;
+    // Request/response so the action RESULT (notably followUp, which chains the
+    // next action e.g. explore -> take equipment) comes back to the controller.
+    // Fire-and-forget would drop followUp.
+    const result = await platformRequest('action', { actionName, args });
+    return hostResult<ControllerActionResult>(result);
   },
   // Selection choices - fetched from server on-demand for each selection
-  fetchPickChoices: async (actionName, selectionName, player, currentArgs) => {
-    if (platformMode.value) {
-      return await platformRequest('resolve_choices', {
-        actionName, selectionName, player, args: currentArgs ?? {},
-      });
-    }
-    if (!gameId.value) {
-      return { success: false, error: 'No game ID' };
-    }
-    try {
-      const response = await fetch(`${props.apiUrl}/games/${gameId.value}/selection-choices`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: actionName,
-          selection: selectionName,
-          player,
-          currentArgs,
-        }),
-      });
-      return await response.json();
-    } catch (err) {
-      console.error('Fetch selection choices error:', err);
-      return { success: false, error: err instanceof Error ? err.message : 'Failed to fetch selection choices' };
-    }
-  },
+  fetchPickChoices: async (actionName, selectionName, player, currentArgs) =>
+    hostResult<PickChoicesResult>(await platformRequest('resolve_choices', {
+      actionName, selectionName, player, args: currentArgs ?? {},
+    })),
   // Cancel pending action on server (for onSelect-routed actions)
   cancelPendingAction: async (player) => {
-    if (platformMode.value) {
-      await platformRequest('cancel_action', { player });
-      return;
-    }
-    if (!gameId.value) return;
-    try {
-      await fetch(`${props.apiUrl}/games/${gameId.value}/cancel-action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ player }),
-      });
-    } catch (err) {
-      console.error('Cancel pending action error:', err);
-    }
+    await platformRequest('cancel_action', { player });
   },
   // Phase 3: Repeating selections - processed step by step on server
-  pickStep: async (player, selectionName, value, actionName, initialArgs) => {
-    if (platformMode.value) {
-      return await platformRequest('selection_step', {
-        player, selectionName, value, actionName, initialArgs,
-      });
-    }
-    if (!gameId.value) {
-      return { success: false, error: 'No game ID' };
-    }
-    try {
-      const response = await fetch(`${props.apiUrl}/games/${gameId.value}/selection-step`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          player,
-          selectionName,
-          value,
-          action: actionName,
-          initialArgs,
-          // Same rule as the platform path above: a selection is a SUBMISSION,
-          // so it names the boundary this shell rendered it against
-          // (docs/simultaneous-and-interrupt-semantics.md).
-          boundaryKey: flowBoundaryKey(state.value?.flowState as BoundaryKeyState | null | undefined),
-        }),
-      });
-      return await response.json();
-    } catch (err) {
-      console.error('Selection step error:', err);
-      return { success: false, error: err instanceof Error ? err.message : 'Selection step failed' };
-    }
-  },
+  pickStep: async (player, selectionName, value, actionName, initialArgs) =>
+    hostResult<PickStepResponse>(await platformRequest('selection_step', {
+      player, selectionName, value, actionName, initialArgs,
+    })),
 });
 provideTableSeat(tableSeat);
 const {
@@ -844,23 +624,6 @@ const gameOverWinners = computed(() =>
 );
 const opponentPlayers = computed(() => players.value.filter(p => p.seat !== playerSeat.value));
 
-// Per-seat live connection status for the players panel. The lobby slots are the
-// only source of truth for human presence (the host's lobby marks who is connected), kept
-// reactive in `lobbyInfo` for the life of the session. bot slots and modes with no
-// lobby (e.g. --bot) leave `connected` undefined so PlayersPanel renders no indicator
-// rather than fabricating presence we don't actually know.
-// Built on `panelPlayers`, so the panel's ordering and its presence indicators
-// are the same list — deriving this from seat-ordered `players` instead would
-// silently un-order the sidebar panel the moment a lobby exists.
-const playersWithConnection = computed(() => {
-  const slots = lobbyInfo.value?.slots;
-  if (!slots) return panelPlayers.value;
-  return panelPlayers.value.map((p) => {
-    const slot = slots.find((s) => s.seat === p.seat);
-    const connected = slot && slot.botLevel == null ? slot.connected : undefined;
-    return connected === undefined ? p : { ...p, connected };
-  });
-});
 // D27: never derive a single-player "It is X's turn" identity while a
 // simultaneous step is active — multiple seats are deciding independently,
 // so `currentPlayer` (which may still hold a stale/unrelated value) does
@@ -978,32 +741,12 @@ async function handleUndo(): Promise<void> {
     toast.error('Return to the current position before undoing.');
     return;
   }
-  if (platformMode.value) {
-    const result = await platformRequest('undo', { player: playerSeat.value });
-    if (!result.success) {
-      console.error('Undo failed:', result.error);
-      toast.error(hostErrorText(result, 'Undo failed.'));
-    }
-    // State update arrives via the game_state broadcast.
-    return;
+  const result = await platformRequest('undo', { player: playerSeat.value });
+  if (!result.success) {
+    console.error('Undo failed:', result.error);
+    toast.error(hostErrorText(result, 'Undo failed.'));
   }
-  if (!gameId.value) return;
-  try {
-    const response = await fetch(`${props.apiUrl}/games/${gameId.value}/undo`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ player: playerSeat.value }),
-    });
-    const result = await response.json();
-    if (!result.success) {
-      console.error('Undo failed:', result.error);
-      toast.error(hostErrorText(result, 'Undo failed.'));
-    }
-    // State update will come via WebSocket
-  } catch (error) {
-    console.error('Undo error:', error);
-    toast.error(error instanceof Error ? error.message : 'Undo failed.');
-  }
+  // State update arrives via the game_state broadcast.
 }
 
 // Drag-and-drop orchestration (audit F36): derive drop targets generically from
@@ -1023,7 +766,7 @@ setupDragDropOrchestration({
 useBoardFocusHandoff(boardInteraction, zoomContainerEl);
 
 // ── DEV-02: devtools postMessage bridge ──────────────────────────────────────
-// In platform mode + dev builds only: broadcast reactive state to window.parent
+// In a host, dev builds only: broadcast reactive state to window.parent
 // so the `boardsmith dev` host page can expose window.__BOARDSMITH_DEVTOOLS.
 // The entire watch registration is guarded by isDevBuild so production builds
 // dead-code-eliminate this block (import.meta.env.DEV is false in production).
@@ -1040,7 +783,7 @@ if (isDevBuild) {
     ],
     () => {
       maybePostDevtoolsUpdate(
-        { isDevBuild, platformMode: platformMode.value },
+        { isDevBuild, inHost },
         {
           seat: playerSeat.value,
           state: state.value?.state ?? null,
@@ -1103,17 +846,12 @@ function setDemoSpeed(delay: number): void {
   void sendDemoControl(demoControls.value?.paused ? 'pause' : 'play', delay);
 }
 
-// Show Teaching group when:
-//   (a) Production lobby path: at least one bot slot in lobbyInfo — unchanged.
-//   (b) Dev-host (platform mode) path: SnapshotSessionHost injects hasBotPlayers
-//       into broadcast state when botSeats are present.
-const showHintProp = computed<boolean | undefined>(() => {
-  // Production lobby path — unchanged
-  if (lobbyInfo.value?.slots?.some(s => s.botLevel != null)) return true;
-  // Dev-host path: SnapshotSessionHost injects hasBotPlayers into broadcast state
-  if ((state.value?.state as any)?.hasBotPlayers) return true;
-  return undefined;
-});
+// Show the Teaching group when the game has a bot seat. SnapshotSessionHost
+// injects hasBotPlayers into broadcast state only while it has bot seats
+// (RESEARCH Pitfall 5).
+const showHintProp = computed<boolean | undefined>(() =>
+  (state.value?.state as any)?.hasBotPlayers ? true : undefined
+);
 
 // The move-quality heatmap paints a per-move score chip onto a distinct board
 // cell. That is only meaningful when each candidate move maps to its own spatial
@@ -1188,38 +926,6 @@ const { handleTeachingAction } = useTeachingActions({
   toast,
 });
 
-/**
- * Fetch a game's declared playerOptions (colors, variants) for the lobby.
- *
- * A failure here used to be a console line and `undefined` (#40), which the
- * lobby rendered as "this game declares no options" — indistinguishable from
- * the real thing. Players got a lobby missing its option controls with nothing
- * on screen to say so, and games could start misconfigured. It now says so, in
- * the same toast style the rest of this file already uses for a failed request.
- */
-async function fetchPlayerOptions(gameType: string): Promise<Record<string, unknown> | undefined> {
-  try {
-    const response = await fetch(`${props.apiUrl}/games/definitions`);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText || 'Request failed'}`);
-    }
-    const data = await response.json();
-    if (data.success && data.definitions) {
-      const definition = data.definitions.find((d: { gameType: string }) => d.gameType === gameType);
-      // A game that genuinely declares none is not a failure — the lobby is
-      // correct to render without option controls.
-      return definition?.playerOptions;
-    }
-    throw new Error(typeof data.error === 'string' ? data.error : 'the server returned no game definitions');
-  } catch (err) {
-    console.error('Failed to fetch game definitions:', err);
-    toast.error(
-      'Could not load this game\'s setup options. The lobby is showing defaults — reload before starting if the game has variants to choose.'
-    );
-  }
-  return undefined;
-}
-
 // Gate for the game UI (the registry's board component): it must
 // not mount until GameShell's own DOM — including the `#bs-game-modal` teleport
 // host — is IN THE DOCUMENT. On a fresh page load the whole app tree is built
@@ -1251,7 +957,7 @@ onMounted(async () => {
   updateCompact(compactQuery);
   compactQuery.addEventListener('change', updateCompact);
 
-  if (platformMode.value) {
+  if (inHost) {
     // I AM MOUNTED (ShufflewickPub #486), and it is the table twin of
     // `world_ready`.
     //
@@ -1267,14 +973,6 @@ onMounted(async () => {
     // a hello a host has to wait for a game's own readiness to receive would
     // stop being a statement about the shell.
     window.parent.postMessage({ source: 'shufflewick-game', type: 'game_ready' }, '*');
-    return;
-  }
-
-  // A game ONLY runs through the production path: GameShell embedded in an
-  // <iframe> as platform mode. A top-level (non-iframe) load can't run a game,
-  // so send the visitor to the host page rather than the removed dev-server path.
-  if (window.location.pathname !== '/') {
-    window.location.replace('/');
   }
 });
 
@@ -1282,20 +980,18 @@ onMounted(async () => {
 onUnmounted(() => {
   compactQuery?.removeEventListener('change', updateCompact);
   if (heartbeatTimer !== null) clearTimeout(heartbeatTimer);
-  lobby.disconnect();
   if (platformMessageHandler) {
     window.removeEventListener('message', platformMessageHandler);
   }
   platformTransport.rejectAll('GameShell unmounted');
 });
 
-// Platform mode: postMessage bridge for iframe embedding
-// When hosted inside a platform like ShufflewickPub, the parent page manages
-// the session/lobby and sends game state via postMessage. The game UI just
+// The postMessage bridge to the host. The parent page manages the session and
+// sends game state via postMessage. The game UI just
 // renders the board and sends actions back.
 let platformMessageHandler: ((event: MessageEvent) => void) | null = null;
 
-if (typeof window !== 'undefined' && window.parent !== window) {
+if (inHost) {
   platformMessageHandler = (event: MessageEvent) => {
     // Origin check: event.origin is browser-enforced and cannot be spoofed by
     // the sender, unlike fields inside event.data. isOriginAllowed passes all
@@ -1311,7 +1007,6 @@ if (typeof window !== 'undefined' && window.parent !== window) {
 
     if (data.type === 'init') {
       playerSeat.value = data.seat;
-      currentScreen.value = 'game';
       // D-02 / LOCK-01 criterion 1: consume teachingDisabled for first-render gating
       // before any broadcast arrives. The broadcast-preferred computed (teachingDisabledProp)
       // will override this with the authoritative session value on first state update.
@@ -1344,22 +1039,18 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     // state back via the debugExpanded watcher so the header stays synced.
     if (isDevBuild && devDebugGate.handleMessage(data)) return;
 
-    if (data.type === 'game_state' && platformMode.value) {
+    if (data.type === 'game_state') {
       const view = data.view as { flowState?: unknown; state?: Record<string, unknown> } | undefined;
       if (!view?.state) return;
 
-      // The host now sends the SAME { flowState, state } shape the dev server's
-      // WebSocket sends, where `state` is the full PlayerGameState produced by
-      // buildPlayerState. Assign it directly -- exactly like the dev path -- so
-      // the auto-UI and custom UIs receive everything (currentPlayer,
+      // The host sends { flowState, state }, where `state` is the full
+      // PlayerGameState produced by buildPlayerState. Assign it directly so the
+      // auto-UI and custom UIs receive everything (currentPlayer,
       // awaitingPlayers via flowState, canUndo, animation events, full player
-      // attributes, action metadata, messages) with no field dropped. Hand-mapping
-      // individual fields here is what caused the recurring "works in dev, broken
-      // in the iframe" bugs, so there is deliberately no per-field reconstruction.
-      if (view.state.colorSelectionEnabled) {
-        colorSelectionEnabled.value = true;
-      }
-
+      // attributes, action metadata, messages) with no field dropped.
+      // Hand-mapping individual fields here is what caused the recurring
+      // "works in dev, broken in the iframe" bugs, so there is deliberately no
+      // per-field reconstruction.
       state.value = {
         flowState: view.flowState,
         state: view.state,
@@ -1369,7 +1060,6 @@ if (typeof window !== 'undefined' && window.parent !== window) {
 
       // Capture winners from the game_state message (IA-07, T-100-06-01).
       // Validated as number[] before assigning — protects against tampered payloads.
-      // In dev-WS mode the message does not include winners, so winnerSeats stays [].
       winnerSeats.value =
         Array.isArray(data.winners) &&
         (data.winners as unknown[]).every((n: unknown) => typeof n === 'number')
@@ -1424,44 +1114,16 @@ if (typeof window !== 'undefined' && window.parent !== window) {
   // works whether or not the footer ActionPanel is mounted.
 }
 
-// Update URL when entering a game. The lobby owns the other two URL shapes
-// (/lobby/:id and /), and this one is here because switching seats and
-// restarting rewrite it outside any lobby flow.
-function updateUrl(gid: string, position: number) {
-  window.history.pushState({ gameId: gid, position }, '', `/game/${gid}/${position}`);
-}
-
 // Debug panel handlers
 function handleSwitchPlayer(position: number) {
-  // In platform mode the host owns which seat the iframe renders; ask it to
-  // switch (the dev host reloads this iframe as that seat).
-  if (platformMode.value) {
-    void platformRequest('debug:switch-seat', { seat: position });
-    return;
-  }
-  playerSeat.value = position;
-  if (gameId.value) {
-    updateUrl(gameId.value, position);
-  }
+  // The host owns which seat the iframe renders; ask it to switch (the dev
+  // host reloads this iframe as that seat).
+  void platformRequest('debug:switch-seat', { seat: position });
 }
 
-async function handleRestartGame() {
-  // In platform mode the host owns the session; ask it to start a fresh game.
-  if (platformMode.value) {
-    void platformRequest('debug:restart', {});
-    return;
-  }
-  if (!gameId.value) return;
-
-  try {
-    await client.restartGame(gameId.value);
-    // The server broadcasts the restart to all clients via WebSocket,
-    // so the state will update automatically
-  } catch (err) {
-    console.error('Failed to restart game:', err);
-    toast.error(err instanceof Error ? err.message : 'Failed to restart game.');
-    error.value = err instanceof Error ? err : new Error('Failed to restart game');
-  }
+function handleRestartGame() {
+  // The host owns the session; ask it to start a fresh game.
+  void platformRequest('debug:restart', {});
 }
 
 // Time travel handler - updates the game view to show historical state
@@ -1482,37 +1144,21 @@ function handleHighlightElement(elementId: number | null) {
 
 // Menu handlers
 function handleMenuItemClick(id: string) {
-  if (id === 'leave') {
-    leaveGame();
-  } else if (id === 'new-game') {
+  if (id === 'new-game') {
     // D11 (ENDGAME-02): "New Game" restarts via the same real restart path as
-    // Rematch — it used to call leaveGame(), which goes to a lobby that doesn't
-    // exist in dev/platform mode and never restarts. In dev there is no lobby to
-    // land in, so "leave" was a dead end; restart is the only real forward exit.
-    void handleRestartGame();
+    // Rematch.
+    handleRestartGame();
   }
 }
 
 // Retry handler — wired from AutoUI → GameShell when the user clicks Retry
-// after the 8-second loading timeout (DEV-05).
-// In platform mode (iframe inside dev host or prod host): post a request-state
-// message to the parent so it re-sends the last game_state. This covers the
-// case where the iframe mounted before the host sent its first game_state.
-// In standalone/WebSocket mode: call refreshState() which sends a state request
-// on the existing GameConnection, and reconnect() to re-open the socket if it
-// dropped.
+// after the 8-second loading timeout (DEV-05). Asks the host to re-send the last
+// game_state, which covers the iframe mounting before the host sent its first.
 function handleRetry(): void {
-  if (platformMode.value) {
-    window.parent.postMessage(
-      { source: 'shufflewick-game', type: 'request-state' },
-      '*'
-    );
-    return;
-  }
-  // Non-platform: refresh state via WebSocket (requestState) and ensure the
-  // connection is live (reconnect is a no-op if already connected).
-  refreshState();
-  reconnect();
+  window.parent.postMessage(
+    { source: 'shufflewick-game', type: 'request-state' },
+    '*'
+  );
 }
 
 // ── Live-region watchers (immediate: false — never write to regions at mount) ─
@@ -1525,13 +1171,6 @@ function handleRetry(): void {
 
 watch(isMyTurn, (newVal) => {
   const text = announceTurnChange(newVal);
-  if (text) {
-    announcer.announce(text);
-  }
-}, { immediate: false });
-
-watch(connectionStatus, (newVal, oldVal) => {
-  const text = announceConnectionChange(newVal, oldVal ?? '');
   if (text) {
     announcer.announce(text);
   }
@@ -1556,19 +1195,6 @@ watch(
   () => (state.value?.flowState as any)?.complete,
   (newComplete, oldComplete) => {
     if (newComplete && !oldComplete) {
-      // ENDGAME-01 / F-13: the card and the announcement both read these refs.
-      // flowState.winners is a DEFINED array when complete (empty = a genuine
-      // draw) vs undefined when winner data could not be validated (dev-WS
-      // degrade) — see engine/utils/snapshot.ts; deriveWinnerState tells the two
-      // apart. Set here in NON-platform mode only. In platform mode the
-      // validated `data.winners`/`data.isDraw` frame (captured in the
-      // game_state handler) is authoritative, so don't overwrite it here.
-      if (!platformMode.value) {
-        const derived = deriveWinnerState((state.value?.flowState as any)?.winners);
-        winnerSeats.value = derived.winnerSeats;
-        isDraw.value = derived.isDraw;
-      }
-
       // Stop any running bot demo when the game completes. isDemoRunning is
       // now derived from broadcast state (WR-04), so we only fire the request;
       // the session broadcasts the updated state on its own.
@@ -1591,9 +1217,8 @@ watch(
   (revealed) => {
     if (!revealed || gameOverAnnounced) return;
     gameOverAnnounced = true;
-    // Said from the same `winnerSeats`/`isDraw` the card draws, so the two can
-    // never name different results: in platform mode those come from the host's
-    // validated frame, otherwise from flowState.winners when the flow completed.
+    // Said from the same `winnerSeats`/`isDraw` the card draws, both read off
+    // the host's validated frame, so the two can never name different results.
     const winnerNames = winnerSeats.value.map((seat) => {
       const p = players.value.find((pl) => pl.seat === seat);
       return (p as any)?.name || `Player ${seat}`;
@@ -1690,37 +1315,17 @@ defineExpose({
   playerSeat,
   isMyTurn,
   availableActions,
-  action,
   actionController,
-  connectionStatus,
-  error,
-  leaveGame,
 });
 
-// HMR detection - log state before and after hot reload
-if ((import.meta as any).hot) {
-  (import.meta as any).hot.on('vite:beforeUpdate', () => {
-    hmrLog('vite:beforeUpdate', {
-      screen: currentScreen.value,
-      hasLobbyInfo: !!lobbyInfo.value,
-      gameId: gameId.value,
-      createdGameId: createdGameId.value,
-    });
-  });
-
-  (import.meta as any).hot.on('vite:afterUpdate', () => {
-    hmrLog('vite:afterUpdate', {
-      screen: currentScreen.value,
-      hasLobbyInfo: !!lobbyInfo.value,
-      gameId: gameId.value,
-      createdGameId: createdGameId.value,
-    });
-  });
-}
 </script>
 
 <template>
-  <div class="game-shell" :class="{ 'game-shell--platform': platformMode }">
+  <!-- Opened directly, outside any host: say how to run the game (#515). -->
+  <div v-if="!inHost" class="game-shell game-shell--outside-host">
+    <p class="outside-host">This game runs inside a host. Start it with <code>boardsmith dev</code> or play it on Shufflewick.</p>
+  </div>
+  <div v-else class="game-shell">
     <!-- Skip link: visually hidden until focused; .sr-skip in global style block -->
     <a class="sr-skip" href="#main">Skip to game board</a>
 
@@ -1738,46 +1343,10 @@ if ((import.meta as any).hot) {
          for ATs to register it (Pitfall 2). -->
     <span class="vh" aria-live="polite">{{ (isMyTurn || awaitingPlayerNames.length) ? (boardPrompt ?? actionController.currentPick.value?.prompt) : '' }}</span>
 
-    <!-- LOBBY SCREEN -->
-    <GameLobby
-      v-if="currentScreen === 'lobby'"
-      :display-name="displayName || gameType"
-      :api-url="apiUrl"
-      :default-a-i-players="defaultBotPlayers"
-      v-model:join-game-id="joinGameId"
-      @create="createGame"
-      @join="joinGame"
-      @resume="resumeGame"
-    >
-      <slot name="lobby-extra"></slot>
-    </GameLobby>
-
-    <!-- WAITING SCREEN -->
-    <WaitingRoom
-      v-if="currentScreen === 'waiting' && lobbyInfo"
-      :game-id="createdGameId || ''"
-      :lobby="lobbyInfo"
-      :player-id="playerId"
-      :is-creator="isCreator"
-      :player-options="gamePlayerOptions"
-      @join="handleJoinLobby"
-      @update-name="handleUpdateLobbyName"
-      @set-ready="handleSetReady"
-      @add-slot="handleAddSlot"
-      @remove-slot="handleRemoveSlot"
-      @set-slot-bot="handleSetSlotBot"
-      @kick-player="handleKickPlayer"
-      @update-player-options="handleUpdatePlayerOptions"
-      @update-slot-player-options="handleUpdateSlotPlayerOptions"
-      @update-game-options="handleUpdateGameOptions"
-      @cancel="handleLobbyCancel"
-    />
-
     <!-- GAME SCREEN -->
     <PlayShell
-      v-if="currentScreen === 'game'"
       ref="playShell"
-      :players="playersWithConnection"
+      :players="panelPlayers"
       :player-seat="playerSeat"
       :due-seats="dueSeatsNow"
       :show-turn-status="props.showTurnStatus"
@@ -1805,21 +1374,6 @@ if ((import.meta as any).hot) {
       :is-compact="isCompact"
       @undo="handleUndo"
     >
-      <template #header>
-        <!-- Top Header Bar — dev/standalone only; absent in platform mode (IA-01) -->
-        <GameHeader
-          v-if="!platformMode"
-          :game-title="displayName || gameType"
-          :game-id="gameId"
-          :connection-status="connectionStatus"
-          :zoom="zoomLevel"
-          v-model:auto-end-turn="autoEndTurn"
-          @update:zoom="setZoom"
-          @fit-zoom="fitZoom"
-          @menu-item-click="handleMenuItemClick"
-        />
-      </template>
-
       <!-- The table's own overlays over the board region: the game-over card,
            the tutorial, the bot hint and heatmap, the demo narration and its
            playback bar. Every one of them reads a table fact -- `flowState`,
@@ -1835,8 +1389,7 @@ if ((import.meta as any).hot) {
              A filled #game-over slot replaces the default card entirely; providesOwnGameOverUi
              suppresses BOTH (the game renders its own end state on its own board). Dismissing
              (close button / Escape) reveals the board without restarting or leaving.
-             @new-game and @rematch both restart via the one real restart path (D11/ENDGAME-02);
-             @leave (menu-only) is the only forward exit that returns to the lobby. -->
+             @new-game and @rematch both restart via the one real restart path (D11/ENDGAME-02). -->
         <template v-if="gameOverRevealed && !props.providesOwnGameOverUi && !gameOverDismissed">
           <slot
             v-if="$slots['game-over']"
@@ -2026,7 +1579,7 @@ if ((import.meta as any).hot) {
 
       <template #controls>
         <!-- ⋯ controls menu: always available at the far-left of the bar (the sole
-             control surface in platform mode, where GameHeader is hidden). Opens
+             control surface). Opens
              upward since the bar is bottom-anchored. -->
         <ControlsMenu
           class="actionbar-controls"
@@ -2084,16 +1637,14 @@ if ((import.meta as any).hot) {
         </div>
       </template>
 
-      <template v-if="debugMode && platformMode && isDevBuild && devDebugAvailable" #debug>
-    <!-- Debug Panel: dev only. Renders inside the dev host iframe (platform
-         mode + dev build), and only while the dev host has debugging on
-         (#481); never in a deployed/production embed. -->
+      <template v-if="debugMode && isDevBuild && devDebugAvailable" #debug>
+    <!-- Debug Panel: dev only. Renders inside the dev host iframe (a dev
+         build), and only while the dev host has debugging on (#481); never in a
+         deployed/production embed. -->
     <DebugPanel
-      v-if="debugMode && platformMode && isDevBuild && devDebugAvailable"
+      v-if="debugMode && isDevBuild && devDebugAvailable"
       :state="state"
       :player-seat="playerSeat"
-      :player-count="playerCount"
-      :game-id="gameId"
       :history-has-messages="historyPanel?.hasMessages ?? false"
       v-model:expanded="debugExpanded"
       @switch-player="handleSwitchPlayer"
@@ -2107,16 +1658,10 @@ if ((import.meta as any).hot) {
 
     </PlayShell>
 
-    <!-- Error display: the adapter's, not the shell's -- it reports a
-         transport failure, which a world reports through its own phases. -->
-    <div v-if="error && currentScreen === 'game'" class="error-banner">
-      {{ error.message }}
-    </div>
     <ZoomPreviewOverlay :preview-state="previewState" />
 
-    <!-- The page's two singletons, mounted by the ROOT shell so they exist on
-         every screen: the lobby and the waiting room toast too, and neither is
-         inside PlayShell (#308). WorldShell mounts its own pair the same way.
+    <!-- The page's two singletons, mounted by the ROOT shell, never inside
+         PlayShell (#308). WorldShell mounts its own pair the same way.
          The tooltip is the one every dimmed control borrows to explain itself;
          the toast is where a refusal you only discover by trying is spoken. -->
     <DisabledReasonTooltip />
@@ -2190,44 +1735,36 @@ if ((import.meta as any).hot) {
 </style>
 
 <style scoped>
+/* Embedded in the host iframe. Paint the Slate ground (var(--bsg-bg)) rather
+   than `transparent` — an iframe's own document defaults to opaque white, so a
+   transparent shell reveals white, not the host. The host re-themes by
+   overriding --bsg-bg via applyTheme, so this stays host-controllable. */
 .game-shell {
-  min-height: 100vh; /* fallback: browsers without dvh support */
-  min-height: 100dvh;
+  min-height: 100%;
+  height: 100vh; /* fallback: browsers without dvh support */
+  height: 100dvh;
   font-family: var(--bsg-font);
   background: var(--bsg-bg);
   color: var(--bsg-ink);
 }
 
-/* Platform mode: embedded in host iframe. Paint the Slate ground (var(--bsg-bg))
-   rather than `transparent` — an iframe's own document defaults to opaque white, so a
-   transparent shell reveals white, not the host. The host re-themes by overriding
-   --bsg-bg via applyTheme, so this stays host-controllable. */
-.game-shell--platform {
-  min-height: 100%;
-  height: 100vh; /* fallback: browsers without dvh support */
-  height: 100dvh;
-  background: var(--bsg-bg);
-}
-
-.game-shell--platform .game-shell__game {
+.game-shell .game-shell__game {
   min-height: 100%;
   height: 100%;
 }
 
-/* Platform mode: the host renders a pull-down logo tab at the top-center.
-   Keep the header's centered controls (zoom / Auto / Undo) out of the middle
-   by packing them to the left and pushing the connection badge to the right,
-   leaving the horizontal center clear for the host tab. Do NOT add vertical
-   padding here — that only makes the bar taller. */
-.game-shell--platform :deep(.game-header) {
-  justify-content: flex-start;
+/* Outside a host: one centred sentence. */
+.game-shell--outside-host {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
 }
-.game-shell--platform :deep(.header-center) {
-  flex: 0 0 auto;
-  justify-content: flex-start;
-}
-.game-shell--platform :deep(.header-right) {
-  margin-left: auto;
+.outside-host {
+  max-width: 36rem;
+  font-size: 1.1rem;
+  line-height: 1.5;
+  text-align: center;
 }
 
 /* ── bot demo playback control bar ─────────────────────────────────────────── */
@@ -2319,19 +1856,6 @@ if ((import.meta as any).hot) {
   font-size: 1.1rem;
 }
 
-.error-banner {
-  position: fixed;
-  bottom: 100px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: color-mix(in srgb, var(--bsg-danger) 90%, transparent);
-  border: 1px solid var(--bsg-danger);
-  color: var(--bsg-ink);
-  padding: 12px 24px;
-  border-radius: 8px;
-  z-index: 150;
-}
-
 .empty-game-area {
   display: flex;
   align-items: center;
@@ -2341,10 +1865,5 @@ if ((import.meta as any).hot) {
   color: var(--bsg-ink-2);
   background: var(--bsg-field);
   border-radius: 12px;
-}
-
-/* Platform mode: drawer backdrop transparent so host shows through */
-.game-shell--platform :deep(.menu-drawer) {
-  background: transparent;
 }
 </style>

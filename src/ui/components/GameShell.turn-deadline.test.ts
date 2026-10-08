@@ -53,7 +53,7 @@ function gameState(extra: Record<string, unknown>): Record<string, unknown> {
 
 async function mountAtTable() {
   enterIframe();
-  const wrapper = mountPlatformShell({ gameType: 'deadline-test', board: CountdownBoard });
+  const wrapper = mountPlatformShell({ board: CountdownBoard });
   await nextTick();
   post({ type: 'init', seat: 0 });
   await nextTick();

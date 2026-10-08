@@ -202,35 +202,30 @@ describe('GameShell actionbar — IA-04 constant panel footprint (#13)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Suite 3: IA-01 — header gate in platform mode + heartbeat corner dot
+// Suite 3: IA-01 — heartbeat corner dot
 //
 // Behaviors under test:
-//   A. GameHeader is absent when platformMode=true.
-//   B. A corner .conn-dot element renders in platform mode.
+//   B. A corner .conn-dot element renders.
 //   C. A valid heartbeat postMessage (source:shufflewick, type:heartbeat)
 //      sets connectionHealth='connected' and the dot gains the class.
 //   D. A malformed heartbeat payload does NOT change connectionHealth.
 //
-// Implementation approach: isolate the heartbeat handler logic and the header
-// gate into a HeartbeatHarness that mirrors GameShell.vue's exact conditions,
-// so tests do not need to mount the full GameShell (which requires client setup).
+// Implementation approach: isolate the heartbeat handler logic into a
+// HeartbeatHarness that mirrors GameShell.vue's exact conditions. The real
+// shell's dot is asserted in GameShell.connection-indicator.test.ts.
 // ---------------------------------------------------------------------------
 
 /**
  * HeartbeatHarness — mirrors the IA-01 GameShell.vue additions:
- *   - platformMode prop gates rendering of a fake "GameHeader" sentinel
  *   - connectionHealth ref starts 'connecting'
  *   - a handleHeartbeat() method validates + applies the heartbeat
- *   - a .conn-dot renders in platform mode bound to connectionHealth class
+ *   - a .conn-dot renders bound to connectionHealth class
  *
  * RED: harness starts empty — template renders nothing, handleHeartbeat is a no-op.
  * GREEN (next commit): fill in template logic and heartbeat validation.
  */
 const HeartbeatHarness = defineComponent({
   name: 'HeartbeatHarness',
-  props: {
-    platformMode: { type: Boolean, default: false },
-  },
   setup() {
     const connectionHealth = ref<'connecting' | 'connected' | 'stale'>('connecting');
     let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
@@ -253,13 +248,11 @@ const HeartbeatHarness = defineComponent({
 
     return { connectionHealth, handleHeartbeat };
   },
-  // GREEN: mirrors GameShell.vue IA-01 additions in the platform-mode shell
+  // GREEN: mirrors GameShell.vue IA-01 additions
   template: `
     <div class="harness">
-      <!-- Fake GameHeader sentinel — absent in platform mode (IA-01) -->
-      <div v-if="!platformMode" class="game-header-sentinel">GameHeader</div>
       <!-- Corner dot: class bound to connectionHealth (IA-01) -->
-      <span v-if="platformMode" class="conn-dot" :class="connectionHealth"></span>
+      <span class="conn-dot" :class="connectionHealth"></span>
     </div>
   `,
 });
@@ -351,37 +344,21 @@ describe('GameShell IA-06 — sidebar rail state + phone scrim', () => {
   });
 });
 
-describe('GameShell IA-01 — header gate + heartbeat corner dot', () => {
-  // --- A. GameHeader absent in platform mode --------------------------------
-  it('GameHeader sentinel is present when platformMode=false', () => {
-    const wrapper = mount(HeartbeatHarness, { props: { platformMode: false } });
-    expect(wrapper.find('.game-header-sentinel').exists()).toBe(true);
-  });
-
-  it('GameHeader sentinel is absent when platformMode=true', () => {
-    const wrapper = mount(HeartbeatHarness, { props: { platformMode: true } });
-    expect(wrapper.find('.game-header-sentinel').exists()).toBe(false);
-  });
-
-  // --- B. Corner dot renders in platform mode --------------------------------
-  it('conn-dot renders when platformMode=true', () => {
-    const wrapper = mount(HeartbeatHarness, { props: { platformMode: true } });
+describe('GameShell IA-01 — heartbeat corner dot', () => {
+  // --- B. Corner dot renders --------------------------------------------------
+  it('conn-dot renders', () => {
+    const wrapper = mount(HeartbeatHarness);
     expect(wrapper.find('.conn-dot').exists()).toBe(true);
-  });
-
-  it('conn-dot is absent when platformMode=false', () => {
-    const wrapper = mount(HeartbeatHarness, { props: { platformMode: false } });
-    expect(wrapper.find('.conn-dot').exists()).toBe(false);
   });
 
   // --- C. Valid heartbeat → connectionHealth='connected' --------------------
   it('conn-dot starts with class connecting', () => {
-    const wrapper = mount(HeartbeatHarness, { props: { platformMode: true } });
+    const wrapper = mount(HeartbeatHarness);
     expect(wrapper.find('.conn-dot').classes()).toContain('connecting');
   });
 
   it('valid heartbeat sets connectionHealth to connected', async () => {
-    const wrapper = mount(HeartbeatHarness, { props: { platformMode: true } });
+    const wrapper = mount(HeartbeatHarness);
 
     wrapper.vm.handleHeartbeat({ source: 'shufflewick', type: 'heartbeat' });
     await nextTick();
@@ -392,7 +369,7 @@ describe('GameShell IA-01 — header gate + heartbeat corner dot', () => {
 
   // --- D. Malformed heartbeat → ignored ------------------------------------
   it('null payload does not change connectionHealth', async () => {
-    const wrapper = mount(HeartbeatHarness, { props: { platformMode: true } });
+    const wrapper = mount(HeartbeatHarness);
 
     wrapper.vm.handleHeartbeat(null);
     await nextTick();
@@ -401,7 +378,7 @@ describe('GameShell IA-01 — header gate + heartbeat corner dot', () => {
   });
 
   it('wrong source does not change connectionHealth', async () => {
-    const wrapper = mount(HeartbeatHarness, { props: { platformMode: true } });
+    const wrapper = mount(HeartbeatHarness);
 
     wrapper.vm.handleHeartbeat({ source: 'evil-host', type: 'heartbeat' });
     await nextTick();
@@ -410,7 +387,7 @@ describe('GameShell IA-01 — header gate + heartbeat corner dot', () => {
   });
 
   it('wrong type does not change connectionHealth', async () => {
-    const wrapper = mount(HeartbeatHarness, { props: { platformMode: true } });
+    const wrapper = mount(HeartbeatHarness);
 
     wrapper.vm.handleHeartbeat({ source: 'shufflewick', type: 'game_state' });
     await nextTick();
@@ -419,7 +396,7 @@ describe('GameShell IA-01 — header gate + heartbeat corner dot', () => {
   });
 
   it('non-object payload does not change connectionHealth', async () => {
-    const wrapper = mount(HeartbeatHarness, { props: { platformMode: true } });
+    const wrapper = mount(HeartbeatHarness);
 
     wrapper.vm.handleHeartbeat('heartbeat');
     await nextTick();

@@ -144,13 +144,6 @@
       ]
     },
     {
-      "content": "06ac0d1bfb0cc5fc",
-      "lines": 17,
-      "files": [
-        "src/client/vue.test.ts"
-      ]
-    },
-    {
       "content": "06b2630933a3967b",
       "lines": 19,
       "files": [
@@ -359,13 +352,6 @@
       ]
     },
     {
-      "content": "0e0286d981a472f1",
-      "lines": 9,
-      "files": [
-        "src/ui/components/HamburgerMenu.test.ts"
-      ]
-    },
-    {
       "content": "0e44b0dbaddc1526",
       "lines": 12,
       "files": [
@@ -406,13 +392,6 @@
       "lines": 11,
       "files": [
         "src/ui/components/auto-ui/ActionPanel.focus.test.ts"
-      ]
-    },
-    {
-      "content": "0f5fd28914dcb89e",
-      "lines": 12,
-      "files": [
-        "src/client/game-connection.test.ts"
       ]
     },
     {
@@ -1677,13 +1656,6 @@
       ]
     },
     {
-      "content": "41462f6d71643938",
-      "lines": 5,
-      "files": [
-        "src/ui/components/GameLobby.test.ts"
-      ]
-    },
-    {
       "content": "4161b90f26f600eb",
       "lines": 13,
       "files": [
@@ -1767,13 +1739,6 @@
       "lines": 12,
       "files": [
         "src/engine/flow/engine.test.ts"
-      ]
-    },
-    {
-      "content": "441c71ae14d1a8ac",
-      "lines": 9,
-      "files": [
-        "src/ui/components/HamburgerMenu.test.ts"
       ]
     },
     {
@@ -2485,13 +2450,6 @@
       ]
     },
     {
-      "content": "5fd10fd72c9712a8",
-      "lines": 8,
-      "files": [
-        "src/client/vue.test.ts"
-      ]
-    },
-    {
       "content": "604b12f3bc0441f9",
       "lines": 9,
       "files": [
@@ -3043,13 +3001,6 @@
       ]
     },
     {
-      "content": "728f81c8b0280c4a",
-      "lines": 10,
-      "files": [
-        "src/client/vue.test.ts"
-      ]
-    },
-    {
       "content": "729d6cb8e778b610",
       "lines": 13,
       "files": [
@@ -3172,13 +3123,6 @@
       ]
     },
     {
-      "content": "78c9beb2e8ef089e",
-      "lines": 7,
-      "files": [
-        "src/ui/components/WaitingRoom.test.ts"
-      ]
-    },
-    {
       "content": "791f1a2968390eab",
       "lines": 9,
       "files": [
@@ -3197,13 +3141,6 @@
       "lines": 9,
       "files": [
         "src/ui/components/auto-ui/useAutoRendererAnimations.test.ts"
-      ]
-    },
-    {
-      "content": "7a1d3c1decda3214",
-      "lines": 9,
-      "files": [
-        "src/client/client.ts"
       ]
     },
     {
@@ -3429,14 +3366,6 @@
       ]
     },
     {
-      "content": "812f56af737cf3a1",
-      "lines": 8,
-      "files": [
-        "src/client/game-connection.test.ts",
-        "src/client/vue.test.ts"
-      ]
-    },
-    {
       "content": "81f9a1b1d7da14fe",
       "lines": 43,
       "files": [
@@ -3557,13 +3486,6 @@
       "lines": 7,
       "files": [
         "src/cli/commands/trace-check.test.ts"
-      ]
-    },
-    {
-      "content": "85bac50fc88d3a6a",
-      "lines": 18,
-      "files": [
-        "src/client/client.test.ts"
       ]
     },
     {
@@ -3706,13 +3628,6 @@
       "lines": 21,
       "files": [
         "src/ui/composables/useAnimationEvents.test.ts"
-      ]
-    },
-    {
-      "content": "8aae67804df0e444",
-      "lines": 10,
-      "files": [
-        "src/client/client.ts"
       ]
     },
     {
@@ -5000,13 +4915,6 @@
       ]
     },
     {
-      "content": "b8589f1565e970b7",
-      "lines": 10,
-      "files": [
-        "src/client/client.ts"
-      ]
-    },
-    {
       "content": "b862e24a50f50cff",
       "lines": 41,
       "files": [
@@ -5111,14 +5019,6 @@
       "lines": 11,
       "files": [
         "src/ui/composables/useSelectable.test.ts"
-      ]
-    },
-    {
-      "content": "bb3778c1e6291cf3",
-      "lines": 11,
-      "files": [
-        "src/client/client.test.ts",
-        "src/client/game-connection.test.ts"
       ]
     },
     {
@@ -6248,13 +6148,6 @@
       ]
     },
     {
-      "content": "e7c26cf8e106cac8",
-      "lines": 5,
-      "files": [
-        "src/ui/components/GameLobby.test.ts"
-      ]
-    },
-    {
       "content": "e7c27cb31c3599e3",
       "lines": 15,
       "files": [
@@ -6574,13 +6467,6 @@
       "lines": 14,
       "files": [
         "src/engine/flow/engine.test.ts"
-      ]
-    },
-    {
-      "content": "f41264400b5bf8b5",
-      "lines": 12,
-      "files": [
-        "src/client/game-connection.test.ts"
       ]
     },
     {
