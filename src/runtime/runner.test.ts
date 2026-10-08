@@ -25,6 +25,7 @@ import {
   Equipment,
 } from '../session/testing/fixtures/collect-fixture.js';
 import type { Op } from '../session/stateless-ops.js';
+import { succeeded } from '../session/op-result.test-helper.js';
 
 // Test game classes
 class TestGame extends Game<TestGame, Player> {
@@ -554,25 +555,25 @@ describe('GameRunner', () => {
       const session = createHeadlessSession(collectFixtureDefinition, { playerCount: 1, seed: 't' });
       await session.start();
 
-      const explore = await session.send(1, {
+      const explore = succeeded(await session.send(1, {
         type: 'action', actionName: 'explore', player: 1, args: {},
-      });
+      }));
       const followUpArgs = (explore.followUp as { args: Record<string, unknown> }).args;
 
-      const before = await session.send(1, {
+      const before = succeeded(await session.send(1, {
         type: 'resolveChoices', actionName: 'collect', player: 1, selectionName: 'item', args: {},
-      } as Op);
+      }));
       const itemsBefore = (before.validElements as Array<{ id: number }>) ?? [];
       const firstId = itemsBefore[0].id;
 
-      const step = await session.send(1, {
+      const step = succeeded(await session.send(1, {
         type: 'selectionStep',
         player: 1,
         selectionName: 'item',
         value: firstId,
         actionName: 'collect',
         initialArgs: followUpArgs,
-      } as Op);
+      }));
       expect(step.success).toBe(true);
 
       const snapshot = step.snapshot as GameStateSnapshot;

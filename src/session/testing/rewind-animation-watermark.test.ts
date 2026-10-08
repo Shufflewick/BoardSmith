@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createHeadlessSession } from '../headless-session.js';
 import { GameSession } from '../game-session.js';
-import type { Op, GameDefinitionLike } from '../stateless-ops.js';
+import type { GameDefinitionLike, OpResult } from '../stateless-ops.js';
 import type { StorageAdapter, StoredGameState } from '../types.js';
 import {
   Game,
@@ -105,13 +105,9 @@ function clientDeliver(
   return newEvents.map((e) => e.id);
 }
 
-function animationEventsFor(
-  result: { playerViews?: unknown[] },
-  seat: number,
-): Array<{ id: number }> | undefined {
-  const view = (
-    result.playerViews as Array<{ state?: { animationEvents?: Array<{ id: number }> } }> | undefined
-  )?.[seat - 1];
+function animationEventsFor(result: OpResult, seat: number): Array<{ id: number }> | undefined {
+  if (!result.success || !('playerViews' in result)) return undefined;
+  const view = (result.playerViews as Array<{ state?: { animationEvents?: Array<{ id: number }> } }>)[seat - 1];
   return view?.state?.animationEvents;
 }
 
@@ -122,18 +118,18 @@ describe('UNDO-04: animation-event watermark survives undo/rewind', () => {
 
     const watermark: ClientWatermark = { lastQueuedId: 0 };
     const deliveredIds: number[] = [];
-    const record = (result: { playerViews?: unknown[] }, seat: number) => {
+    const record = (result: OpResult, seat: number) => {
       deliveredIds.push(...clientDeliver(watermark, animationEventsFor(result, seat)));
     };
 
     // Turn 1 -- player 1: two ticks (ids 1, 2).
-    record(await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} } as Op), 1);
-    record(await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} } as Op), 1);
+    record(await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} }), 1);
+    record(await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} }), 1);
     // Turn 2 -- player 2: two ticks (ids 3, 4).
-    record(await session.send(2, { type: 'action', actionName: 'tick', player: 2, args: {} } as Op), 2);
-    record(await session.send(2, { type: 'action', actionName: 'tick', player: 2, args: {} } as Op), 2);
+    record(await session.send(2, { type: 'action', actionName: 'tick', player: 2, args: {} }), 2);
+    record(await session.send(2, { type: 'action', actionName: 'tick', player: 2, args: {} }), 2);
     // Turn 3 -- player 1: first tick (id 5), then undo it.
-    const turn3tick1 = await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} } as Op);
+    const turn3tick1 = await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} });
     expect(turn3tick1.success).toBe(true);
     record(turn3tick1, 1);
 
@@ -147,7 +143,7 @@ describe('UNDO-04: animation-event watermark survives undo/rewind', () => {
 
     // Player 1 acts again after the undo -- the very beat a designer would
     // watch for on-screen and see missing.
-    const afterUndo = await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} } as Op);
+    const afterUndo = await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} });
     expect(afterUndo.success).toBe(true);
     record(afterUndo, 1);
 
@@ -166,20 +162,20 @@ describe('UNDO-04: animation-event watermark survives undo/rewind', () => {
 
     const watermark: ClientWatermark = { lastQueuedId: 0 };
     const deliveredIds: number[] = [];
-    const record = (result: { playerViews?: unknown[] }, seat: number) => {
+    const record = (result: OpResult, seat: number) => {
       deliveredIds.push(...clientDeliver(watermark, animationEventsFor(result, seat)));
     };
 
     // Turn 1 -- player 1: two ticks (ids 1, 2). The second tick ends the turn
     // and fires the fixture's turn-advance execute() node, setting the
     // durable execute()-barrier (UNDO-02, 155-02) at action index 2.
-    record(await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} } as Op), 1);
-    record(await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} } as Op), 1);
+    record(await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} }), 1);
+    record(await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} }), 1);
     // Turn 2 -- player 2: FIRST tick only (id 3). Deliberately stop here
     // (rather than completing player 2's turn too) so the barrier stays at 2
     // -- completing another turn would advance it to 4 and the rewind below
     // would then cross TWO barriers instead of landing exactly at one.
-    record(await session.send(2, { type: 'action', actionName: 'tick', player: 2, args: {} } as Op), 2);
+    record(await session.send(2, { type: 'action', actionName: 'tick', player: 2, args: {} }), 2);
 
     expect(deliveredIds).toEqual([1, 2, 3]);
 
@@ -187,11 +183,11 @@ describe('UNDO-04: animation-event watermark survives undo/rewind', () => {
     // player 1's second tick / the turn-advance execute(), i.e. AT the
     // barrier, not before it (turnStartActionIndex(2) < executeBarrierIndex(2)
     // is false -- this must NOT be refused).
-    const rewind = await session.send(1, { type: 'debugRewind', actionIndex: 2 } as Op);
+    const rewind = await session.send(1, { type: 'debugRewind', actionIndex: 2 });
     expect(rewind.success).toBe(true);
     record(rewind, 2);
 
-    const afterRewind = await session.send(2, { type: 'action', actionName: 'tick', player: 2, args: {} } as Op);
+    const afterRewind = await session.send(2, { type: 'action', actionName: 'tick', player: 2, args: {} });
     expect(afterRewind.success).toBe(true);
     record(afterRewind, 2);
 
@@ -266,7 +262,7 @@ describe('UNDO-04: full session restore is unaffected (the two loadSerializedSta
 
     const watermark: ClientWatermark = { lastQueuedId: 0 };
     const deliveredIds: number[] = [];
-    const record = (result: { playerViews?: unknown[] }, seat: number) => {
+    const record = (result: OpResult, seat: number) => {
       deliveredIds.push(...clientDeliver(watermark, animationEventsFor(result, seat)));
     };
 
@@ -275,7 +271,7 @@ describe('UNDO-04: full session restore is unaffected (the two loadSerializedSta
     // (tick, undo, tick, undo, tick, ... -- always the first action of the
     // turn, so undo stays offered every time).
     for (let i = 0; i < 5; i++) {
-      const tick = await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} } as Op);
+      const tick = await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} });
       expect(tick.success).toBe(true);
       record(tick, 1);
 
@@ -284,7 +280,7 @@ describe('UNDO-04: full session restore is unaffected (the two loadSerializedSta
       record(undo, 1);
     }
     // Final act after the last undo, so the run ends on a delivered beat.
-    const final = await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} } as Op);
+    const final = await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} });
     expect(final.success).toBe(true);
     record(final, 1);
 

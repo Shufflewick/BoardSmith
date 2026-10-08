@@ -353,7 +353,7 @@ describe('MCTSBot simultaneous-step soundness (bot-02 / T-159-07)', () => {
    * leak -- `backpropagateWithUndo`'s incremental undo never reverted the
    * flow engine's own `awaitingPlayers[].completed` bookkeeping across
    * sibling root branches, in a full tree search. That is now fixed
-   * (`restoreNodeBookkeeping` resyncs it to root every backpropagation); this
+   * (`restoreSearchGameToRoot` restores the root in full every iteration); this
    * fixture still drives the low-level primitives directly because that's
    * the narrowest way to reproduce T-159-07's specific pre-reveal-leak vector,
    * not because of the undo bug.)
@@ -377,7 +377,7 @@ describe('MCTSBot simultaneous-step soundness (bot-02 / T-159-07)', () => {
     bot.maybeCaptureSimultaneousBaseline?.(preRevealFlowState);
 
     const postPickFlowState = bot.searchGame.continueFlow('pick', { choice: pick }, 1);
-    const seat2Moves = bot.enumerateMovesForSimulation(bot.searchGame, postPickFlowState);
+    const seat2Moves = bot.movesFor(bot.searchGame, postPickFlowState, 2, { sample: true });
     return new Set((seat2Moves as Array<{ args: { choice: string } }>).map((m) => m.args.choice));
   }
 
@@ -428,22 +428,24 @@ describe('MCTSBot simultaneous-step soundness with 3 co-deciders (F-07)', () => 
     const rootFlow = bot.searchGame.getFlowState();
     const root = bot.createNode(rootFlow, null, null, [], 0);
 
-    // Descend seat 1's pick. applyMoveToSearchGame reads child.parent.flowState
-    // (root, fresh) to capture the pre-reveal baseline, then applies the move.
-    const child1 = bot.createNode(rootFlow, root, { action: 'pick', args: { choice: pick1 } }, [], 0);
-    bot.applyMoveToSearchGame(child1);
-    // child1's OWN state is post-seat1 (seat 1 completed) — mirror what
-    // expandIncremental stores (the continueFlow result), so child2's descent
-    // sees a mid-step (not fresh) parent and does NOT re-capture the baseline.
-    child1.flowState = bot.searchGame.getFlowState();
+    // Descend seat 1's pick. applyMoveToSearchGame captures the pre-reveal
+    // baseline from the world (fresh at the root), then applies the move.
+    // Each move is made first and its node created from the flow state it led
+    // to, as expandIncremental does: that state names the seat moving next,
+    // which is the seat the node's own moves are made as (#522).
+    const move1 = { action: 'pick', args: { choice: pick1 } };
+    bot.applyMoveToSearchGame({ parent: root, parentMove: move1 });
+    const child1 = bot.createNode(bot.searchGame.getFlowState(), root, move1, [], 0);
+    expect(child1.currentPlayer).toBe(2);
 
     // Descend seat 2's pick (step now mid; baseline must persist from root).
-    const child2 = bot.createNode(child1.flowState, child1, { action: 'pick', args: { choice: pick2 } }, [], 0);
-    bot.applyMoveToSearchGame(child2);
-    child2.flowState = bot.searchGame.getFlowState();
+    const move2 = { action: 'pick', args: { choice: pick2 } };
+    bot.applyMoveToSearchGame({ parent: child1, parentMove: move2 });
+    const child2 = bot.createNode(bot.searchGame.getFlowState(), child1, move2, [], 0);
+    expect(child2.currentPlayer).toBe(3);
 
     // Enumerate seat 3's moves — must be reveal-blind (pre-reveal baseline).
-    const seat3Moves = bot.enumerateMovesForSimulation(bot.searchGame, child2.flowState);
+    const seat3Moves = bot.movesFor(bot.searchGame, child2.flowState, 3, { sample: true });
     return new Set((seat3Moves as Array<{ args: { choice: string } }>).map((m) => m.args.choice));
   }
 

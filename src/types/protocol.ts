@@ -62,6 +62,11 @@ export enum ErrorCode {
   NO_ACTIONS_TO_UNDO = 'NO_ACTIONS_TO_UNDO',
   CANNOT_REWIND_FORWARD = 'CANNOT_REWIND_FORWARD',
   UNDO_NOT_ALLOWED = 'UNDO_NOT_ALLOWED',
+  /** A submission named a round that has since closed (#535). Normal, not a
+   *  fault: the round resolved without it, and the seat can act in the current
+   *  one. Hosts tell it apart from every other refusal by this code, never by
+   *  the message. */
+  STALE_SUBMISSION = 'STALE_SUBMISSION',
 
   // Lobby errors
   SEAT_ALREADY_CLAIMED = 'SEAT_ALREADY_CLAIMED',

@@ -4,6 +4,7 @@ import { simultaneousFixtureDefinition, CommitGame } from './fixtures/simultaneo
 import { GameSession } from '../game-session.js';
 import type { Op } from '../stateless-ops.js';
 import { ErrorCode } from '../../types/protocol.js';
+import { succeeded } from '../op-result.test-helper.js';
 
 /**
  * D4/SIM-02 regression + parity: a simultaneous-step undo is pinned to
@@ -54,12 +55,12 @@ describe('simultaneous undo (D4/SIM-02): non-currentPlayer seat can undo its own
 
     // Pre-fix this is REFUSED: the currentPlayer pin (`flowState.currentPlayer`
     // resolves to seat 1, never seat 2, during a simultaneous step).
-    const undo = await session.send(2, { type: 'undo', player: 2 } as Op);
+    const undo = succeeded(await session.send(2, { type: 'undo', player: 2 }));
     expect(undo.success).toBe(true);
 
     // Seat-2 is awaiting again (its own commit was reverted); seat-1's commit
     // is untouched.
-    const flowState = undo.flowState as { awaitingPlayers?: Array<{ playerIndex: number; completed: boolean }> };
+    const flowState = undo.snapshot.flowState as { awaitingPlayers?: Array<{ playerIndex: number; completed: boolean }> };
     const seat1Awaiting = flowState.awaitingPlayers?.find((p) => p.playerIndex === 1);
     const seat2Awaiting = flowState.awaitingPlayers?.find((p) => p.playerIndex === 2);
     expect(seat1Awaiting?.completed).toBe(true);
@@ -94,10 +95,10 @@ describe('simultaneous undo (D4/SIM-02): non-currentPlayer seat can undo its own
     const c1 = await session.send(1, { type: 'action', actionName: 'commit', player: 1, args: {} });
     expect(c1.success).toBe(true);
 
-    const undo = await session.send(1, { type: 'undo', player: 1 } as Op);
+    const undo = succeeded(await session.send(1, { type: 'undo', player: 1 }));
     expect(undo.success).toBe(true);
 
-    const flowState = undo.flowState as { awaitingPlayers?: Array<{ playerIndex: number; completed: boolean }> };
+    const flowState = undo.snapshot.flowState as { awaitingPlayers?: Array<{ playerIndex: number; completed: boolean }> };
     const seat1Awaiting = flowState.awaitingPlayers?.find((p) => p.playerIndex === 1);
     expect(seat1Awaiting?.completed).toBe(false);
   });
@@ -114,7 +115,7 @@ describe('simultaneous undo (D4/SIM-02): non-currentPlayer seat can undo its own
     const end = await session.send(1, { type: 'action', actionName: 'endGame', player: 1, args: {} });
     expect(end.success).toBe(true);
 
-    const undo = await session.send(1, { type: 'undo', player: 1 } as Op);
+    const undo = await session.send(1, { type: 'undo', player: 1 });
     expect(undo.success).toBe(false);
     expect(undo.errorCode).toBe(ErrorCode.UNDO_NOT_ALLOWED);
     expect(undo.error).toMatch(/finished/i);

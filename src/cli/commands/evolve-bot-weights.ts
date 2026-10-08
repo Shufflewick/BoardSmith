@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { cpus } from 'node:os';
 import chalk from 'chalk';
 import ora from 'ora';
-import type { LearnedObjective, TrainingProgress } from '../../bot-trainer/index.js';
+import type { ObjectiveWeight, TrainingProgress } from '../../bot-trainer/index.js';
+import type { BotStrategy } from '../../bot/index.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
@@ -71,29 +72,27 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
 
       const GameClass = gameDefinition.gameClass;
       const gameType = gameDefinition.gameType || config.name;
+      const bot = requireBotObjectives(gameDefinition.bot);
 
       spinner.succeed('Game rules bundled');
 
       // Import trainer
       spinner.start('Initializing weight optimizer...');
 
-      const trainerModule = await import('../../bot-trainer/index.js');
-      const { WeightEvolver, updateBotWeights } = trainerModule;
+      const { WeightEvolver, readObjectiveWeights, updateBotWeights } = await import('../../bot-trainer/index.js');
 
       spinner.succeed('Weight optimizer initialized');
 
       // Parse existing bot
       spinner.start('Parsing existing bot.ts...');
-      const { parseExistingBot, parsedToLearned } = trainerModule;
-      const existingBot = parseExistingBot(botPath);
+      const existingObjectives = readObjectiveWeights(readFileSync(botPath, 'utf-8'));
 
-      if (!existingBot || existingBot.objectives.length === 0) {
+      if (existingObjectives.length === 0) {
         throw new Error(
           `${botPath} has no objectives to optimize. Use /bs-build-bot to create a bot with objectives first.`,
         );
       }
 
-      const existingObjectives = parsedToLearned(existingBot.objectives);
       spinner.succeed(`Found ${existingObjectives.length} objectives to optimize`);
 
       if (options.verbose) printExistingObjectives(existingObjectives);
@@ -102,7 +101,7 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
       spinner.start(`Evolving weights (${generations} generations x ${population} population)...`);
       const startTime = Date.now();
 
-      const evolver = new WeightEvolver(GameClass, gameType, modulePath, {
+      const evolver = new WeightEvolver(GameClass, gameType, modulePath, bot, {
         workerCount,
         evolutionGenerations: generations,
         evolutionLambda: population,
@@ -152,6 +151,20 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
   });
 }
 
+/**
+ * The game's bot strategy, refused unless it wires up objectives: the weights
+ * tuned are those of the objectives the game's bot plays with (#523).
+ */
+function requireBotObjectives(bot: BotStrategy | undefined): BotStrategy {
+  if (!bot?.objectives) {
+    throw new Error(
+      "the game's gameDefinition has no bot.objectives, so there are no objectives to weigh. " +
+        'Set gameDefinition.bot.objectives to the objectives function bot.ts exports.',
+    );
+  }
+  return bot;
+}
+
 /** The run's settings, from the flags or their defaults. */
 function evolutionSettings(options: EvolveBotWeightsOptions) {
   return {
@@ -163,10 +176,10 @@ function evolutionSettings(options: EvolveBotWeightsOptions) {
 }
 
 /** `--verbose`: the first few objectives the evolution starts from. */
-function printExistingObjectives(objectives: readonly LearnedObjective[]): void {
+function printExistingObjectives(objectives: readonly ObjectiveWeight[]): void {
   console.log(chalk.dim('\nExisting objectives:'));
   for (const obj of objectives.slice(0, 5)) {
-    console.log(chalk.dim(`  ${obj.featureId}: weight=${obj.weight.toFixed(1)}`));
+    console.log(chalk.dim(`  ${obj.id}: weight=${obj.weight.toFixed(1)}`));
   }
   if (objectives.length > 5) {
     console.log(chalk.dim(`  ... and ${objectives.length - 5} more`));
@@ -176,7 +189,7 @@ function printExistingObjectives(objectives: readonly LearnedObjective[]): void 
 function printEvolutionResult(result: {
   initialFitness: number;
   bestFitness: number;
-  objectives: readonly LearnedObjective[];
+  objectives: readonly ObjectiveWeight[];
 }): void {
   console.log(chalk.green('\n=== Evolution Results ===\n'));
   console.log(`  Initial win rate: ${(result.initialFitness * 100).toFixed(1)}%`);
@@ -187,7 +200,7 @@ function printEvolutionResult(result: {
     console.log(chalk.cyan('\nOptimized weights:'));
     for (const obj of result.objectives.slice(0, 5)) {
       const sign = obj.weight > 0 ? '+' : '';
-      console.log(chalk.dim(`  ${obj.featureId}: ${sign}${obj.weight.toFixed(1)}`));
+      console.log(chalk.dim(`  ${obj.id}: ${sign}${obj.weight.toFixed(1)}`));
     }
   }
 }

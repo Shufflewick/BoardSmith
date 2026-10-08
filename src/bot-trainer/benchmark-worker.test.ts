@@ -39,6 +39,7 @@ const ENGINE = join(REPO_ROOT, 'src/engine/index.ts');
  */
 const RULES = `
 import { Game, Player, Action, defineFlow, eachPlayer, actionStep, type GameOptions } from ${JSON.stringify(ENGINE)};
+import { objectives } from './bot.js';
 
 class HighCardGame extends Game<HighCardGame, Player> {
   picks: number[] = [];
@@ -68,6 +69,7 @@ export const gameDefinition = {
   displayName: 'High Card',
   minPlayers: 2,
   maxPlayers: 2,
+  bot: { objectives },
 };
 `;
 

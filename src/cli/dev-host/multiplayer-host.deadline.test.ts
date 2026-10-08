@@ -23,11 +23,11 @@ import {
 } from '../../engine/index.js';
 import {
   executeOp,
-  STALE_SUBMISSION_MESSAGE,
   type GameDefinitionLike,
   type Op,
   type OpResult,
 } from '../../session/index.js';
+import { ErrorCode } from '../../types/protocol.js';
 import {
   fixedDeployDefinition,
   untimedDeployDefinition,
@@ -35,6 +35,7 @@ import {
 import type { WorldHostClock } from './node-world-clock.js';
 import { MultiplayerHost, type HostOutbound, type MultiplayerHostOptions } from './multiplayer-host.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
+import { succeeded } from '../../session/op-result.test-helper.js';
 
 const clients = createDevHostClientMemory();
 beforeEach(() => clients.reset());
@@ -156,7 +157,7 @@ function makeHost(
     executeOp: async (gameOptions, snap, pend, op, hostOptions) => {
       // A bot that never moves: the pump asks with no seats, so it is told
       // `botMoved: false` by the real engine rather than by a hand-built result.
-      const asked = stallBots && op.type === 'botTurn' ? { ...op, seats: [] } : op;
+      const asked = stallBots && op.type === 'botTurn' ? { ...op, seats: [] } as typeof op : op;
       const result = await executeOp(def, gameOptions, snap, pend, asked, hostOptions);
       executed.push({ op, result });
       return result;
@@ -311,7 +312,7 @@ describe('MultiplayerHost step deadlines (#302)', () => {
     expect(humanCommit.op.type).toBe('action');
     expect(humanCommit.result.success).toBe(true);
     expect(timerCommit.op).toMatchObject({ type: 'expireSeat', boundaryKey: armedKey });
-    expect(timerCommit.result).toMatchObject({ success: false, error: STALE_SUBMISSION_MESSAGE });
+    expect(timerCommit.result).toMatchObject({ success: false, errorCode: ErrorCode.STALE_SUBMISSION });
     // Seat 1 still owes a move in the new round: nothing was spent on its behalf.
     expect(clients.key('A')).not.toBe(armedKey);
     expect(h.due('A')).toContain(1);
@@ -422,7 +423,7 @@ describe('MultiplayerHost step deadlines (#302)', () => {
   });
 
   it('a session restored mid-window arms that window', async () => {
-    const opened = await executeOp(fixedDeployDefinition, { playerCount: 2, seed: 'seed' }, null, null, { type: 'start' });
+    const opened = succeeded(await executeOp(fixedDeployDefinition, { playerCount: 2, seed: 'seed' }, null, null, { type: 'start' }));
     const h = makeHost(fixedDeployDefinition, {
       seedSnapshot: opened.snapshot as NonNullable<MultiplayerHostOptions['seedSnapshot']>,
     });

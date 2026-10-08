@@ -13,52 +13,12 @@
         "count": 4
       }
     },
-    "src/bot-trainer/analyzer.ts": {
-      "complexity_high": {
-        "count": 1
-      },
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/bot-trainer/benchmark.ts": {
       "complexity_critical": {
         "count": 1
       },
-      "complexity_high": {
-        "count": 1
-      }
-    },
-    "src/bot-trainer/code-generator.ts": {
-      "complexity_high": {
-        "count": 1
-      },
       "complexity_moderate": {
-        "count": 2
-      }
-    },
-    "src/bot-trainer/feature-generator.ts": {
-      "complexity_high": {
         "count": 1
-      }
-    },
-    "src/bot-trainer/feature-templates.ts": {
-      "complexity_high": {
-        "count": 4
-      },
-      "complexity_moderate": {
-        "count": 4
-      }
-    },
-    "src/bot-trainer/introspector.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "complexity_high": {
-        "count": 1
-      },
-      "complexity_moderate": {
-        "count": 4
       }
     },
     "src/bot-trainer/weight-evolver.ts": {
@@ -75,11 +35,6 @@
       "complexity_critical": {
         "count": 1
       },
-      "complexity_moderate": {
-        "count": 5
-      }
-    },
-    "src/cli/commands/analyze.ts": {
       "complexity_moderate": {
         "count": 5
       }
@@ -801,14 +756,11 @@
     "src/ui/composables/useFlyingElements.ts:complexity",
     "src/cli/commands/drift-check.ts:complexity",
     "src/cli/commands/verify-classify.ts:complexity",
-    "src/bot-trainer/feature-generator.ts:complexity",
-    "src/bot-trainer/feature-templates.ts:complexity",
     "src/session/pending-action-manager.ts:complexity",
     "src/engine/action/choice-matching.ts:high impact",
     "src/testing/dom-leak.ts:complexity",
     "src/testing/random-simulation.ts:complexity",
     "src/cli/commands/lint.ts:complexity",
-    "src/bot-trainer/introspector.ts:complexity",
     "src/testing/debug.ts:complexity",
     "src/cli/commands/test-step-ast.ts:high impact",
     "src/testing/simulate-action.ts:complexity",
@@ -817,7 +769,6 @@
     "src/cli/commands/trace-check.ts:complexity",
     "src/cli/lib/asset-scan.ts:complexity",
     "src/session/lobby-manager.ts:complexity",
-    "src/ui/components/dice/Die3D.vue:complexity",
-    "src/bot-trainer/code-generator.ts:complexity"
+    "src/ui/components/dice/Die3D.vue:complexity"
   ]
 }

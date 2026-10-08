@@ -29,6 +29,7 @@ import {
 } from '../index.js';
 import { GameSession, executeOp, type GameDefinitionLike } from '../../session/index.js';
 import { GameRunner } from '../../runtime/index.js';
+import { succeeded, refused } from '../../session/op-result.test-helper.js';
 
 class Item extends Piece<ShopGame> {}
 class Zone extends Space<ShopGame> {}
@@ -214,29 +215,27 @@ describe('the id key does not rest on the seed (#447 review)', () => {
   });
 
   it('the stateless executor sends the key only in the snapshot the host keeps, never in a seat or spectator view', async () => {
-    const started = await executeOp(shopDefinition, { playerCount: 2, seed: 'k' }, null, null, { type: 'start' });
+    const started = succeeded(await executeOp(shopDefinition, { playerCount: 2, seed: 'k' }, null, null, { type: 'start' }));
     expect(started.success, started.error).toBe(true);
     const key = (started.snapshot as { gameOptions?: { elementIdKey?: string } }).gameOptions?.elementIdKey as string;
     expect(key).toMatch(/^[0-9a-f]{16}$/);
 
-    const bought = await executeOp(shopDefinition, { playerCount: 2, seed: 'k' }, started.snapshot, null, {
+    const bought = succeeded(await executeOp(shopDefinition, { playerCount: 2, seed: 'k' }, started.snapshot, null, {
       type: 'action',
       actionName: 'buySecretly',
       player: 1,
       args: { count: 1 },
-      boundaryKey: flowBoundaryKey(started.flowState as BoundaryKeyState),
-    });
-    expect(bought.success, bought.error).toBe(true);
+      boundaryKey: flowBoundaryKey(started.snapshot.flowState as BoundaryKeyState),
+    }));
 
     for (const result of [started, bought]) {
       expect(JSON.stringify(result.playerViews)).not.toContain(key);
       expect(JSON.stringify(result.spectatorView)).not.toContain(key);
-      expect(JSON.stringify(result.flowState)).not.toContain(key);
     }
   });
 
   it('a start op refuses a key supplied from outside: a new game mints its own', async () => {
-    const result = await executeOp(shopDefinition, { playerCount: 2, seed: 'k', elementIdKey: '0123456789abcdef' }, null, null, { type: 'start' });
+    const result = refused(await executeOp(shopDefinition, { playerCount: 2, seed: 'k', elementIdKey: '0123456789abcdef' }, null, null, { type: 'start' }));
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/elementIdKey/);

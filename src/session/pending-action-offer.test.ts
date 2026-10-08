@@ -31,9 +31,10 @@ import {
 } from '../engine/index.js';
 import { GameRunner } from '../runtime/runner.js';
 import { GameSession } from './game-session.js';
-import { executeOp, type GameDefinitionLike, type OpResult } from './stateless-ops.js';
+import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { historyLabels } from './testing/history-labels.js';
+import { succeeded } from './op-result.test-helper.js';
 
 class BuildGame extends Game<BuildGame, Player> {
   /** Every build that actually ran, so a test can see a refused one did not. */
@@ -177,23 +178,23 @@ describe('GameSession', () => {
 });
 
 describe('stateless selectionStep op', () => {
-  async function start(GameClass: typeof BuildGame): Promise<OpResult> {
+  async function start(GameClass: typeof BuildGame) {
     return executeOp(def(GameClass), gameOptions, null, {}, { type: 'start' });
   }
 
   it('refuses to complete a pending action once another seat has finished the game', async () => {
     const gameDef = def(SimultaneousBuildGame);
-    const started = await start(SimultaneousBuildGame);
-    const step1 = await executeOp(gameDef, gameOptions, started.snapshot, null, {
+    const started = succeeded(await start(SimultaneousBuildGame));
+    const step1 = succeeded(await executeOp(gameDef, gameOptions, started.snapshot, null, {
       type: 'selectionStep', player: 2, selectionName: 'where', value: 'north', actionName: 'build',
       boundaryKey: boundaryKeyOf(started.snapshot),
-    });
+    }));
     expect(step1.success).toBe(true);
 
-    const won = await executeOp(gameDef, gameOptions, step1.snapshot, null, {
+    const won = succeeded(await executeOp(gameDef, gameOptions, step1.snapshot, null, {
       type: 'action', actionName: 'win', player: 1, args: {}, boundaryKey: boundaryKeyOf(step1.snapshot),
-    });
-    expect(won.isComplete).toBe(true);
+    }));
+    expect(won.snapshot.flowState?.complete).toBe(true);
 
     const step2 = await executeOp(gameDef, gameOptions, won.snapshot, step1.pendingState, {
       type: 'selectionStep', player: 2, selectionName: 'what', value: 'farm', actionName: 'build',
@@ -206,7 +207,7 @@ describe('stateless selectionStep op', () => {
 
   it('refuses a pending action from a seat whose turn it is not', async () => {
     const gameDef = def(TurnBuildGame);
-    const started = await start(TurnBuildGame);
+    const started = succeeded(await start(TurnBuildGame));
 
     const step = await executeOp(gameDef, gameOptions, started.snapshot, null, {
       type: 'selectionStep', player: 3, selectionName: 'where', value: 'north', actionName: 'build',
@@ -298,10 +299,10 @@ describe('a follow-up belongs to the seat that published it', () => {
 
   it('stateless selectionStep op: another seat is refused it; the publishing seat takes it', async () => {
     const gameDef: GameDefinitionLike = { gameClass: ScoutGame, gameType: 'scout', minPlayers: 2, maxPlayers: 3 };
-    const started = await executeOp(gameDef, gameOptions, null, {}, { type: 'start' });
-    const scouted = await executeOp(gameDef, gameOptions, started.snapshot, null, {
+    const started = succeeded(await executeOp(gameDef, gameOptions, null, {}, { type: 'start' }));
+    const scouted = succeeded(await executeOp(gameDef, gameOptions, started.snapshot, null, {
       type: 'action', actionName: 'scout', player: 1, args: {}, boundaryKey: boundaryKeyOf(started.snapshot),
-    });
+    }));
     expect(scouted.followUp?.action).toBe('loot');
 
     const stolen = await executeOp(gameDef, gameOptions, scouted.snapshot, null, {
@@ -310,10 +311,10 @@ describe('a follow-up belongs to the seat that published it', () => {
     });
     expect(stolen).toMatchObject({ success: false, error: NOT_YOURS, errorCode: 'ACTION_NOT_AVAILABLE' });
 
-    const first = await executeOp(gameDef, gameOptions, scouted.snapshot, null, {
+    const first = succeeded(await executeOp(gameDef, gameOptions, scouted.snapshot, null, {
       type: 'selectionStep', player: 1, selectionName: 'where', value: 'north', actionName: 'loot',
       boundaryKey: boundaryKeyOf(scouted.snapshot),
-    });
+    }));
     expect(first.success).toBe(true);
     const done = await executeOp(gameDef, gameOptions, first.snapshot, first.pendingState, {
       type: 'selectionStep', player: 1, selectionName: 'what', value: 'gold', actionName: 'loot',

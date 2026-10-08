@@ -30,6 +30,7 @@ import {
   type GameOptions,
   type GameStateSnapshot,
 } from '../engine/index.js';
+import { succeeded } from './op-result.test-helper.js';
 
 class Rune extends Piece<RuneGame> {}
 class Bag extends Space<RuneGame> {}
@@ -202,7 +203,7 @@ describe("a repeating selection's validate runs per pick, on every path (#352)",
     for (const seed of ['a', 'b', 'c', 'd', 'e', 'f']) {
       const host = makeHost(strictDef, seed);
       await host.start();
-      const turn = await host.handleOp(1, { type: 'botTurn', seats: [{ seat: 1, level: 'easy' }] });
+      const turn = succeeded(await host.handleOp(1, { type: 'botTurn', seats: [{ seat: 1, level: 'easy' }] }));
       expect({ error: turn.error, botMoved: turn.botMoved }).toEqual({ error: undefined, botMoved: true });
       const played = GameRunner.fromSnapshot(host.snapshot as GameStateSnapshot, StrictRuneGame).game;
       expect(played.cast).toEqual(['fire', 'ice', 'stop']);

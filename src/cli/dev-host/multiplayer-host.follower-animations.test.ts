@@ -42,7 +42,7 @@ describe('a page that changes seat plays the new seat its animations (#489)', ()
       makeSeed: () => 'bs489',
       executeOp: (gameOptions, snap, pend, op, hostOptions) =>
         // The bot covering seat 2 until the follower takes it over never moves.
-        executeOp(secretDeploymentDefinition, gameOptions, snap, pend, op.type === 'botTurn' ? { ...op, seats: [] } : op, hostOptions),
+        executeOp(secretDeploymentDefinition, gameOptions, snap, pend, op.type === 'botTurn' ? { ...op, seats: [] } as typeof op : op, hostOptions),
       send: (clientId, msg: HostOutbound) => {
         clients.remember(clientId, msg);
         if (clientId !== 'A') return;

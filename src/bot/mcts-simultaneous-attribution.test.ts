@@ -22,7 +22,7 @@ import { MCTSBot } from './mcts-bot.js';
 // simultaneous decision as the bot's own. The search became max-max optimistic:
 // it assumed the opponent would pick whatever suited the bot, and never
 // explored the refutation. The fix resolves the awaiting seat via
-// `getCurrentPlayerFromFlowState`.
+// `seatToMove` (#522).
 //
 // Drives MCTSBot directly against an in-file Game subclass (per
 // mcts-restore.test.ts / mcts-redaction.test.ts) -- never the excluded,

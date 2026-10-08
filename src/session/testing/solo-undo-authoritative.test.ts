@@ -11,6 +11,7 @@ import {
   type GameOptions,
 } from '../../engine/index.js';
 import type { GameDefinitionLike, Op } from '../stateless-ops.js';
+import { succeeded } from '../op-result.test-helper.js';
 
 /**
  * UNDO-03 regression: the solo-game "wipe" defect.
@@ -96,15 +97,15 @@ describe('UNDO-03 solo-wipe regression (stateless)', () => {
     await session.start();
 
     // Two closed turns: history = [pass, pass], score = 2.
-    expect((await session.send(1, { type: 'action', actionName: 'pass', player: 1, args: {} } as Op)).success).toBe(true);
-    expect((await session.send(1, { type: 'action', actionName: 'pass', player: 1, args: {} } as Op)).success).toBe(true);
+    expect((await session.send(1, { type: 'action', actionName: 'pass', player: 1, args: {} })).success).toBe(true);
+    expect((await session.send(1, { type: 'action', actionName: 'pass', player: 1, args: {} })).success).toBe(true);
 
     // One move into the open `act` step: history = [pass, pass, act], score = 12.
-    const act = await session.send(1, { type: 'action', actionName: 'act', player: 1, args: {} } as Op);
+    const act = succeeded(await session.send(1, { type: 'action', actionName: 'act', player: 1, args: {} }));
     expect(act.success).toBe(true);
     expect(scoreOf(act.snapshot)).toBe(12);
 
-    const undo = await session.send(1, { type: 'undo', player: 1 } as Op);
+    const undo = succeeded(await session.send(1, { type: 'undo', player: 1 }));
     expect(undo.success).toBe(true);
 
     // OBSERVABLE outcome: exactly the pending `act` move was undone. The two
@@ -113,7 +114,7 @@ describe('UNDO-03 solo-wipe regression (stateless)', () => {
     // wipes ALL THREE actions and returns score 0.
     expect(scoreOf(undo.snapshot)).toBe(2);
 
-    const debugState = (await session.send(1, { type: 'debugFlowState', player: 1 } as Op)) as unknown as {
+    const debugState = (await session.send(1, { type: 'debugFlowState', player: 1 })) as unknown as {
       success: boolean;
       snapshot: { actionHistory?: unknown[] };
     };
@@ -124,20 +125,20 @@ describe('UNDO-03 solo-wipe regression (stateless)', () => {
     const session = createHeadlessSession(soloWipeFixtureDefinition, gameOptions);
     await session.start();
 
-    await session.send(1, { type: 'action', actionName: 'pass', player: 1, args: {} } as Op);
-    await session.send(1, { type: 'action', actionName: 'pass', player: 1, args: {} } as Op);
+    await session.send(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+    await session.send(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
 
     // First act-then-undo cycle.
-    await session.send(1, { type: 'action', actionName: 'act', player: 1, args: {} } as Op);
-    const undo1 = await session.send(1, { type: 'undo', player: 1 } as Op);
+    await session.send(1, { type: 'action', actionName: 'act', player: 1, args: {} });
+    const undo1 = succeeded(await session.send(1, { type: 'undo', player: 1 }));
     expect(undo1.success).toBe(true);
     expect(scoreOf(undo1.snapshot)).toBe(2);
 
     // A second, independent act-then-undo cycle proves the fix is not a
     // one-shot fluke: it behaves the SAME way every time, never cascading
     // further back into the two `pass` turns and never wiping the game.
-    await session.send(1, { type: 'action', actionName: 'act', player: 1, args: {} } as Op);
-    const undo2 = await session.send(1, { type: 'undo', player: 1 } as Op);
+    await session.send(1, { type: 'action', actionName: 'act', player: 1, args: {} });
+    const undo2 = succeeded(await session.send(1, { type: 'undo', player: 1 }));
     expect(undo2.success).toBe(true);
     expect(scoreOf(undo2.snapshot)).toBe(2);
   });
@@ -146,11 +147,11 @@ describe('UNDO-03 solo-wipe regression (stateless)', () => {
     const session = createHeadlessSession(soloWipeFixtureDefinition, gameOptions);
     await session.start();
 
-    await session.send(1, { type: 'action', actionName: 'pass', player: 1, args: {} } as Op);
-    await session.send(1, { type: 'action', actionName: 'pass', player: 1, args: {} } as Op);
-    await session.send(1, { type: 'action', actionName: 'act', player: 1, args: {} } as Op);
+    await session.send(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+    await session.send(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+    await session.send(1, { type: 'action', actionName: 'act', player: 1, args: {} });
 
-    const undo1 = await session.send(1, { type: 'undo', player: 1 } as Op);
+    const undo1 = succeeded(await session.send(1, { type: 'undo', player: 1 }));
     expect(undo1.success).toBe(true);
     expect(scoreOf(undo1.snapshot)).toBe(2);
 
@@ -158,7 +159,7 @@ describe('UNDO-03 solo-wipe regression (stateless)', () => {
     // cascading rewind into the two `pass` turns. This is the direct proof
     // that the fix bounds undo to the CURRENTLY open action-step frame and
     // never falls back to scanning arbitrarily far into history.
-    const undo2 = await session.send(1, { type: 'undo', player: 1 } as Op);
+    const undo2 = await session.send(1, { type: 'undo', player: 1 });
     expect(undo2.success).toBe(false);
   });
 });

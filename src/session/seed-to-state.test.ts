@@ -45,6 +45,7 @@ import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import type { GameStateSnapshot } from '../engine/utils/snapshot.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { TestGame } from '../testing/test-game.js';
+import { succeeded } from './op-result.test-helper.js';
 
 // ---------------------------------------------------------------------------
 // CounterGame: player 1 repeatedly takes a 'draw' action that moves the top
@@ -136,14 +137,14 @@ describe('FEAT-01: seed-to-state PoC — deterministic load via executeOp start'
   });
 
   it('PASS-WITH seed: the loaded state matches the recorded element tree, flowState, and current player', async () => {
-    const result = await executeOp(
+    const result = succeeded(await executeOp(
       counterGameDef,
       gameOptions,
       null,
       null,
       { type: 'start' },
       { seedSnapshot: recordedSnapshot },
-    );
+    ));
 
     expect(result.success).toBe(true);
     const loadedSnapshot = result.snapshot as typeof recordedSnapshot;
@@ -173,7 +174,7 @@ describe('FEAT-01: seed-to-state PoC — deterministic load via executeOp start'
     expect(loadedFlow.position?.path).toEqual(recordedFlow.position?.path);
     expect(loadedFlow.position?.playerIndex).toBe(recordedFlow.position?.playerIndex);
 
-    expect((result.flowState as { currentPlayer?: number })?.currentPlayer).toBe(1);
+    expect((result.snapshot.flowState as { currentPlayer?: number })?.currentPlayer).toBe(1);
 
     // Deck/hand split proves this ISN'T a fresh start under the hood, not just
     // a structurally-matching coincidence.
@@ -182,23 +183,23 @@ describe('FEAT-01: seed-to-state PoC — deterministic load via executeOp start'
   });
 
   it('PASS-WITH seed: the seeded game can take the next legal action from the recorded state', async () => {
-    const started = await executeOp(
+    const started = succeeded(await executeOp(
       counterGameDef,
       gameOptions,
       null,
       null,
       { type: 'start' },
       { seedSnapshot: recordedSnapshot },
-    );
+    ));
     expect(started.success).toBe(true);
 
-    const drawn = await executeOp(
+    const drawn = succeeded(await executeOp(
       counterGameDef,
       gameOptions,
       started.snapshot,
       null,
       { type: 'action', actionName: 'draw', player: 1, args: {}, boundaryKey: boundaryKeyOf(started.snapshot) },
-    );
+    ));
 
     expect(drawn.success).toBe(true);
     const nextState = (drawn.snapshot as { state: unknown }).state;
@@ -207,7 +208,7 @@ describe('FEAT-01: seed-to-state PoC — deterministic load via executeOp start'
   });
 
   it('FAIL-WITHOUT seed: a fresh start (no seed threaded) does NOT match the recorded mid-game state', async () => {
-    const result = await executeOp(
+    const result = succeeded(await executeOp(
       counterGameDef,
       gameOptions,
       null,
@@ -216,7 +217,7 @@ describe('FEAT-01: seed-to-state PoC — deterministic load via executeOp start'
       // No hostOptions at all — the pre-wiring behavior this test must catch
       // if handleStart ever regresses to ignoring a threaded seed.
       null,
-    );
+    ));
 
     expect(result.success).toBe(true);
     const freshSnapshot = result.snapshot as typeof recordedSnapshot;
@@ -227,22 +228,22 @@ describe('FEAT-01: seed-to-state PoC — deterministic load via executeOp start'
   });
 
   it('LOAD-TWICE-IDENTICAL: loading the same seed twice yields byte-identical state (RNG randomState pinned)', async () => {
-    const first = await executeOp(
+    const first = succeeded(await executeOp(
       counterGameDef,
       gameOptions,
       null,
       null,
       { type: 'start' },
       { seedSnapshot: recordedSnapshot },
-    );
-    const second = await executeOp(
+    ));
+    const second = succeeded(await executeOp(
       counterGameDef,
       gameOptions,
       null,
       null,
       { type: 'start' },
       { seedSnapshot: recordedSnapshot },
-    );
+    ));
 
     expect(first.success).toBe(true);
     expect(second.success).toBe(true);

@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { executeOp, type Op, type OpResult } from './stateless-ops.js';
+import { executeOp, type OpResult, type StateEnvelope } from './stateless-ops.js';
 import { flowBoundaryKey, type BoundaryKeyState, type GameStateSnapshot } from '../engine/index.js';
 import type { SessionInfo } from './types.js';
 import {
   secretDeploymentDefinition,
   createSecretDeploymentSession,
 } from './testing/fixtures/secret-deployment-fixture.js';
+import { succeeded } from './op-result.test-helper.js';
 
 // #449: what a seat or a spectator receives must not let it count another
 // seat's SECRET actions. In the fixture's deployment step a seat's `placePack`
@@ -28,27 +29,25 @@ let dealtPosition: GameStateSnapshot | undefined;
 /** The stateless executor, op after op, as a platform host drives it. */
 async function statelessGame() {
   if (dealtPosition === undefined) {
-    const dealt = await executeOp(secretDeploymentDefinition, statelessOptions, null, null, { type: 'start' });
+    const dealt = succeeded(await executeOp(secretDeploymentDefinition, statelessOptions, null, null, { type: 'start' }));
     expect(dealt.success).toBe(true);
     dealtPosition = dealt.snapshot as GameStateSnapshot;
   }
-  let last = await executeOp(secretDeploymentDefinition, statelessOptions, null, null, { type: 'start' }, {
+  let last: StateEnvelope = succeeded(await executeOp(secretDeploymentDefinition, statelessOptions, null, null, { type: 'start' }, {
     seedSnapshot: dealtPosition,
-  });
-  expect(last.success).toBe(true);
+  }));
   return {
-    get last(): OpResult {
+    get last(): StateEnvelope {
       return last;
     },
     async act(seat: number, actionName: string): Promise<OpResult> {
-      const op = {
+      const res = await executeOp(secretDeploymentDefinition, options, last.snapshot, null, {
         type: 'action',
         actionName,
         player: seat,
         args: {},
-        boundaryKey: flowBoundaryKey(last.flowState as BoundaryKeyState),
-      } as Op;
-      const res = await executeOp(secretDeploymentDefinition, options, last.snapshot, null, op);
+        boundaryKey: flowBoundaryKey(last.snapshot.flowState as BoundaryKeyState),
+      });
       if (res.success) last = res;
       return res;
     },
@@ -96,7 +95,7 @@ async function statelessSeenBySeat2AndSpectator(packs: number) {
   return {
     seat2: game.last.playerViews[1],
     spectator: game.last.spectatorView,
-    meta: { isComplete: game.last.isComplete, winners: game.last.winners },
+    meta: { isComplete: game.last.snapshot.flowState?.complete, winners: game.last.snapshot.winners },
   };
 }
 

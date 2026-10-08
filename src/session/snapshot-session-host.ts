@@ -1,5 +1,15 @@
-import type { Op, OpResult } from './stateless-ops.js';
-import { READ_ONLY_OP_TYPES, closesSeat, debugOpRefusal } from './stateless-ops.js';
+import type {
+  ExecutableOp,
+  Op,
+  OpFailure,
+  OpOfType,
+  OpResult,
+  OpResultFor,
+  OpSuccess,
+  ReadOnlyOpType,
+  StateEnvelope,
+} from './stateless-ops.js';
+import { closesSeat, debugOpRefusal, isReadOnlyOp } from './stateless-ops.js';
 import type { Annotation, FlowState, GameStateSnapshot } from '../engine/index.js';
 import { dueSeats, type SeatActivityState } from '../engine/flow/seat-activity.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
@@ -14,6 +24,13 @@ export type { Op, OpResult } from './stateless-ops.js';
 export { StatePushGate, type StatePushGateOptions } from './state-push-gate.js';
 
 const MAX_BOT_MOVES = 500;
+
+/**
+ * The ops that change the game and run through `executeOp`: every executable
+ * op except the read-only ones and the teaching ops, which the host keeps as
+ * its own state rather than as a move.
+ */
+type MutatingOp = Exclude<ExecutableOp, { type: ReadOnlyOpType | 'hint' | 'heatmapToggle' }>;
 
 /**
  * Consecutive persist() failures before `persistenceHealthy` flips false
@@ -152,9 +169,20 @@ const SNAPSHOT_SOURCE = {
  *   game cannot go on under these rules.
  */
 export type RulesReload =
-  | { kind: 'restored'; result: OpResult }
-  | { kind: 'replayed'; restoreError: string; moves: number; result: OpResult }
+  | { kind: 'restored'; result: OpSuccess<'start'> }
+  | { kind: 'replayed'; restoreError: string; moves: number; result: OpSuccess<'start'> }
   | { kind: 'failed'; reason: string };
+
+/**
+ * How a host runs one op: `executeOp` with the game definition and options
+ * bound, in process or over a wire. It answers each op with that op's own
+ * result ({@link OpResultFor}).
+ */
+export type ExecuteOpAdapter = <T extends ExecutableOp['type']>(
+  snapshot: unknown,
+  pendingState: Record<string, unknown> | null,
+  op: OpOfType<T>,
+) => Promise<OpResultFor<T>>;
 
 /** Every seat's view, and the spectator's, as {@link SnapshotSessionAdapters.record} receives them. */
 export interface PublishedViews {
@@ -214,7 +242,7 @@ export interface PublishMeta {
 
 export interface SnapshotSessionAdapters {
   playerCount: number;
-  executeOp: (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) => Promise<OpResult>;
+  executeOp: ExecuteOpAdapter;
   /**
    * THE STATE OF RECORD, after every publish: every seat's view, indexed by
    * seat - 1 (`players[0]` is seat 1), and the spectator's, with the turn
@@ -823,20 +851,24 @@ export class SnapshotSessionHost {
     };
   }
 
-  private async apply(res: OpResult, seat?: number): Promise<void> {
+  /**
+   * Hold the game `res` returned, publish it, and persist it. `pending` is the
+   * acting `seat`'s half-made selection after the op: `null` drops it.
+   */
+  private async apply(res: StateEnvelope, seat?: number, pending: Record<string, unknown> | null = null): Promise<void> {
     this._snapshot = this.checkedSnapshot(res.snapshot, 'op');
     // FLOW-01/03: every state-mutating op's stateEnvelope() carries a fresh
     // flowDebugInfo (shared serializeFlowDebugInfo — same shape as
     // GameSession.broadcast() and the debug:flow-state op). Carry it forward
     // so demo/control re-broadcasts (broadcastCurrent(), no fresh op result)
     // still show the last known flow position.
-    if (res.flowDebugInfo) this.lastFlowDebugInfo = res.flowDebugInfo;
+    this.lastFlowDebugInfo = res.flowDebugInfo;
     if (seat !== undefined) {
-      if (res.pendingState) this.pendingStates.set(seat, res.pendingState);
+      if (pending) this.pendingStates.set(seat, pending);
       else this.pendingStates.delete(seat);
     }
     this.lastPlayerViews = res.playerViews;
-    if (res.spectatorView !== undefined) this.lastSpectatorView = res.spectatorView;
+    this.lastSpectatorView = res.spectatorView;
     if (this.disposed) return; // F-12: a dead session never broadcasts.
     this.publish('change');
     await this.persistDurableState();
@@ -858,13 +890,23 @@ export class SnapshotSessionHost {
 
   async start(): Promise<void> {
     const res = await this.adapters.executeOp(null, null, { type: 'start' });
-    if (!res.success) throw new Error(res.error ?? 'start op failed');
+    if (!res.success) throw new Error(res.error);
     await this.apply(res);
   }
 
-  /** Read-only ops (resolveChoices) do NOT mutate or broadcast. State-mutating
-   *  ops broadcast the new state, THEN the caller returns the op response. */
-  async handleOp(seat: number, op: Op): Promise<OpResult> {
+  /**
+   * Run `op` for `seat` and answer with that op's own result. Read-only ops
+   * (a choices query, the read-only debug ops) do NOT mutate or broadcast.
+   * State-mutating ops broadcast the new state, THEN resolve.
+   */
+  async handleOp<T extends Op['type']>(seat: number, op: OpOfType<T>): Promise<OpResultFor<T>> {
+    // `handle` answers each op from the branch that matched its type. TypeScript
+    // narrows `op` there but cannot carry that back to a generic return type,
+    // so it is stated here, once.
+    return (await this.handle(seat, op)) as OpResultFor<T>;
+  }
+
+  private async handle(seat: number, op: Op): Promise<OpResult> {
     // #481: debug ops need debugging on, and a seat-view one must be for `seat`.
     const debugRefused = debugOpRefusal(op, this.adapters.debug === true, seat);
     if (debugRefused) return debugRefused;
@@ -892,30 +934,15 @@ export class SnapshotSessionHost {
         this.demoHistory = [];
         void this.runDemoLoop(allSeats); // fire-and-forget
       }
-      return {
-        success: true,
-        snapshot: this.snapshot,
-        flowState: this.flowState,
-        playerViews: [], // clients read demo state from game_state broadcasts (RESEARCH Pitfall 7)
-        isComplete: this.isComplete,
-        winners: this.winners,
-        pendingState: null,
-      };
+      // Clients read demo state from the broadcasts (RESEARCH Pitfall 7).
+      return { success: true };
     }
     if (op.type === 'demoStop') {
       this.stopDemo();
       // Broadcast the clean state (narration cleared, still shows isDemoRunning=true
       // until the finally block fires in the next microtask drain).
       this.broadcastCurrent();
-      return {
-        success: true,
-        snapshot: this.snapshot,
-        flowState: this.flowState,
-        playerViews: [],
-        isComplete: this.isComplete,
-        winners: this.winners,
-        pendingState: null,
-      };
+      return { success: true };
     }
     if (op.type === 'demoControl') {
       // No-op if no demo is running (the control bar only renders while running).
@@ -946,15 +973,7 @@ export class SnapshotSessionHost {
         this.wakeDemo();
         this.broadcastCurrent();
       }
-      return {
-        success: true,
-        snapshot: this.snapshot,
-        flowState: this.flowState,
-        playerViews: [],
-        isComplete: this.isComplete,
-        winners: this.winners,
-        pendingState: null,
-      };
+      return { success: true };
     }
 
     // convertSeatToBot: also a host lifecycle op — it needs the pump, which the
@@ -976,17 +995,11 @@ export class SnapshotSessionHost {
           success: false,
           error: 'Cannot request hint while a demo is running — stop the demo first.',
           category: 'protocol',
-          snapshot: this.snapshot,
-          pendingState: null,
-          flowState: this.flowState,
-          playerViews: [],
-          isComplete: this.isComplete,
-          winners: this.winners,
         };
       }
       const res = await this.adapters.executeOp(this.snapshot, null, op);
       if (res.success) {
-        if (res.hintAnnotation) {
+        if ('hintAnnotation' in res) {
           // Merge with existing seat entry so hint + heatmap coexist (RESEARCH Pitfall 6).
           const existing = this.transientTeachingState.get(res.hintAnnotation.seat) ?? {};
           this.transientTeachingState.set(res.hintAnnotation.seat, {
@@ -994,7 +1007,7 @@ export class SnapshotSessionHost {
             hint: { annotation: res.hintAnnotation.annotation },
           });
         }
-        if (res.heatmapUpdate) {
+        if ('heatmapUpdate' in res) {
           const existing = this.transientTeachingState.get(res.heatmapUpdate.seat) ?? {};
           this.transientTeachingState.set(res.heatmapUpdate.seat, {
             ...existing,
@@ -1009,7 +1022,7 @@ export class SnapshotSessionHost {
     // Read-only ops (resolveChoices + debug queries) report state without
     // mutating or broadcasting — just return the executor's result. They never
     // write the game snapshot, so they stay OFF the serialization chain.
-    if (READ_ONLY_OP_TYPES.has(op.type)) {
+    if (isReadOnlyOp(op)) {
       return this.adapters.executeOp(this.snapshot, this.pendingStates.get(seat) ?? null, op);
     }
 
@@ -1027,7 +1040,7 @@ export class SnapshotSessionHost {
    * drives any bot turns the move handed off to — all before the next enqueued
    * mutation can begin.
    */
-  private async applyMutatingOp(seat: number, op: Op): Promise<OpResult> {
+  private async applyMutatingOp(seat: number, op: MutatingOp): Promise<OpResult> {
     // An op that closes the seat (the seat's own action, or the host closing a
     // seat at a deadline) runs without the seat's in-progress selection: it does not
     // continue those picks. They are dropped only once the close SUCCEEDS. A
@@ -1038,10 +1051,13 @@ export class SnapshotSessionHost {
     const res = await this.adapters.executeOp(this.snapshot, closing ? null : this.pendingStates.get(seat) ?? null, op);
     if (!res.success) return res;
     if (closing) this.pendingStates.delete(seat);
+    // Only a selection step leaves the seat mid-action; every other op ends it.
+    const pending = 'pendingState' in res ? res.pendingState : null;
+    const actionCompleted = closing || ('actionComplete' in res && res.actionComplete === true);
 
     // Clear hint for the acting seat on successful action/selectionStep (completion).
     // Mirrors GameSession.performAction: this.#hint.delete(player).
-    if (closesSeat(op) || (op.type === 'selectionStep' && res.actionComplete)) {
+    if (actionCompleted) {
       const seatTransient = this.transientTeachingState.get(seat);
       if (seatTransient?.hint) {
         const { hint: _h, ...rest } = seatTransient;
@@ -1066,8 +1082,7 @@ export class SnapshotSessionHost {
       this.pendingStates.clear();
     }
 
-    await this.apply(res, seat);
-    const actionCompleted = closesSeat(op) || (op.type === 'selectionStep' && res.actionComplete);
+    await this.apply(res, seat, pending);
     // A restore can land the game on a bot seat's turn, and nothing else will
     // ever wake it: the pump is driven by ops, and the only op that would
     // arrive is a human action the bot seat is not going to take. The table
@@ -1122,18 +1137,9 @@ export class SnapshotSessionHost {
    * already-converted seat is just another wake, and `botPumpRunning` plus the
    * opChain keep that from doubling any work.
    */
-  private async applyConvertSeatToBot(seat: number): Promise<OpResult> {
-    const envelope = {
-      snapshot: this.snapshot,
-      pendingState: null,
-      flowState: this.flowState,
-      playerViews: [],
-      isComplete: this.isComplete,
-      winners: this.winners,
-    };
+  private async applyConvertSeatToBot(seat: number): Promise<OpResultFor<'convertSeatToBot'>> {
     if (this.isComplete) {
       return {
-        ...envelope,
         success: false,
         category: 'protocol',
         error:
@@ -1143,7 +1149,6 @@ export class SnapshotSessionHost {
     }
     if (!this.botSeats.some((s) => s.seat === seat)) {
       return {
-        ...envelope,
         success: false,
         category: 'protocol',
         error:
@@ -1156,19 +1161,9 @@ export class SnapshotSessionHost {
     // our own opChain link, and `runBotTurns()` enqueues onto that same chain, so
     // it would wait for a link that cannot settle until it returns — a deadlock.
     // `applyMutatingOp`'s trailing pump calls the inner one for the same reason.
+    // The bot's moves are published and persisted as they are made, like any move.
     await this.runBotTurnsInner();
-    return {
-      // Re-read AFTER the pump: the bot's moves are the whole point, so the
-      // caller must not be handed the pre-pump state as this op's answer.
-      snapshot: this.snapshot,
-      pendingState: null,
-      flowState: this.flowState,
-      playerViews: this.lastPlayerViews,
-      isComplete: this.isComplete,
-      winners: this.winners,
-      success: true,
-      convertedSeat: seat,
-    };
+    return { success: true, convertedSeat: seat };
   }
 
   /**
@@ -1292,12 +1287,12 @@ export class SnapshotSessionHost {
    * hooks, or move enumeration, and the developer needs to see it the moment
    * it happens.
    */
-  private holdBackRefusedSeat(res: OpResult, seats: Array<{ seat: number }>): boolean {
+  private holdBackRefusedSeat(res: OpFailure, seats: Array<{ seat: number }>): boolean {
     const seat = res.botPlayer;
     const who = seat === undefined ? `seat(s) ${seats.map((s) => s.seat).join(', ')}` : `seat ${seat}`;
     const until = seat === undefined ? '' : ', and the bot will not try again until the game changes';
     console.error(
-      `[SnapshotSessionHost] bot turn REJECTED for ${who}: ${res.error ?? 'unknown error'}` +
+      `[SnapshotSessionHost] bot turn REJECTED for ${who}: ${res.error}` +
         `${res.errorCode ? ` (${res.errorCode})` : ''}. The bot cannot act, so the game will ` +
         `not advance past this step${until}. Check the action's selections and the bot's move ` +
         `enumeration for this seat.`,
@@ -1412,13 +1407,12 @@ export class SnapshotSessionHost {
           type: 'botSuggest',
           seats: allSeats,
         });
-        if (!suggestRes.success || !suggestRes.suggestedAction) break;
+        if (!suggestRes.success) break;
 
         // Check abort AFTER the async botSuggest (Pitfall 1 — second check).
         if (this.demoAbort) break;
 
-        const { botPlayer, suggestedAction, suggestedArgs = {} } = suggestRes;
-        if (!botPlayer) break;
+        const { botPlayer, suggestedAction, suggestedArgs } = suggestRes;
 
         // Phase 2: Narrate BEFORE executing (mirrors onBeforeMove semantics).
         // The announcement broadcast fires so clients see the move description
@@ -1608,7 +1602,7 @@ export class SnapshotSessionHost {
     const res = await this.adapters.executeOp(this._snapshot, null, { type: 'restoreEarlier', snapshot: prev });
     if (!res.success) {
       this.demoHistory.push(prev);
-      throw new Error(`The demo could not step back a move: ${res.error ?? 'the restore failed'}`);
+      throw new Error(`The demo could not step back a move: ${res.error}`);
     }
     this.narrationText = null;
     this.demoPaused = true;

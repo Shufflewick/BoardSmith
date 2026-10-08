@@ -22,7 +22,7 @@
  */
 import { GameRunner } from '../../runtime/index.js';
 import type { GameStateSnapshot } from '../../engine/index.js';
-import { executeOp, type GameDefinitionLike, type OpResult, type RulesReload } from '../../session/index.js';
+import { executeOp, type GameDefinitionLike, type OpResultFor, type RulesReload } from '../../session/index.js';
 
 type HostOptions = { teachingDisabled?: boolean };
 
@@ -35,13 +35,13 @@ export async function reloadTableRules(
 ): Promise<RulesReload> {
   // The `start` op given a seed snapshot IS "this state, restored under these
   // rules, as a table's envelope" -- the same restore every op makes.
-  const restore = (state: GameStateSnapshot): Promise<OpResult> =>
+  const restore = (state: GameStateSnapshot): Promise<OpResultFor<'start'>> =>
     executeOp(definition, gameOptions, null, null, { type: 'start' }, { ...hostOptions, seedSnapshot: state });
 
   const restored = await restore(snapshot);
   if (restored.success) return { kind: 'restored', result: restored };
 
-  const restoreError = restored.error ?? 'the saved state could not be restored';
+  const restoreError = restored.error;
   const moves = snapshot.actionHistory.length;
   const failed = (replayError: string): RulesReload => ({
     kind: 'failed',
@@ -69,6 +69,6 @@ export async function reloadTableRules(
     return failed(error instanceof Error ? error.message : String(error));
   }
   const result = await restore(replayed);
-  if (!result.success) return failed(result.error ?? 'the replayed state could not be restored');
+  if (!result.success) return failed(result.error);
   return { kind: 'replayed', restoreError, moves, result };
 }

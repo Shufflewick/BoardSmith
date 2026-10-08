@@ -55,7 +55,7 @@ describe('UNDO-02 execute-barrier (stateless)', () => {
     // throughout) would rewind all the way to action index 0 -- crossing the
     // execute() barrier at index 1 and discarding both `act1` AND the
     // execute()'s committed `score` increment.
-    const undo = await session.send(1, { type: 'undo', player: 1 } as Op);
+    const undo = await session.send(1, { type: 'undo', player: 1 });
 
     expect(undo.success).toBe(false);
   });
@@ -65,13 +65,13 @@ describe('UNDO-02 execute-barrier (stateless)', () => {
     await session.start();
 
     await playThroughToBarrierCrossingPoint((op) => session.send(1, op));
-    const undo = await session.send(1, { type: 'undo', player: 1 } as Op);
+    const undo = await session.send(1, { type: 'undo', player: 1 });
     expect(undo.success).toBe(false);
 
     // Read the score straight off a fresh snapshot-reconstructed view --
     // exactly what a client would see next -- proving the refusal didn't
     // roll the execute()'s committed side effect back anyway.
-    const debugState = (await session.send(1, { type: 'debugFlowState', player: 1 } as Op)) as unknown as {
+    const debugState = (await session.send(1, { type: 'debugFlowState', player: 1 })) as unknown as {
       success: boolean;
       snapshot: { state: { attributes?: { score?: number } } };
     };
@@ -92,7 +92,7 @@ describe('UNDO-02 execute-barrier (stateless)', () => {
     // config still declares maxMoves, so moveCount is defined and bounds the
     // undo to no earlier than the barrier (turnStartActionIndex === barrier).
     // This must succeed -- the guard must not refuse a legitimate undo.
-    const undo = await session.send(1, { type: 'undo', player: 1 } as Op);
+    const undo = await session.send(1, { type: 'undo', player: 1 });
     expect(undo.success).toBe(true);
   });
 
@@ -104,7 +104,7 @@ describe('UNDO-02 execute-barrier (stateless)', () => {
 
     // Explicitly target action index 0 -- before act1, before the execute()
     // barrier at index 1.
-    const rewind = await session.send(1, { type: 'debugRewind', actionIndex: 0 } as Op);
+    const rewind = await session.send(1, { type: 'debugRewind', actionIndex: 0 });
     expect(rewind.success).toBe(false);
   });
 });
@@ -192,7 +192,7 @@ describe('UNDO-02: a bookkeeping (unmarked) execute() does not fence undo', () =
     // stops being reported, which UNDO-03 treats as "no action step is active,
     // so there is nothing in scope to undo". What must NEVER appear is the
     // commitment refusal — an unmarked execute() commits nothing.
-    const undo = await session.send(1, { type: 'undo', player: 1 } as Op);
+    const undo = await session.send(1, { type: 'undo', player: 1 });
     expect(undo.error ?? '').not.toMatch(/irreversible/i);
     expect(undo.errorCode).not.toBe(ErrorCode.UNDO_NOT_ALLOWED);
   });
@@ -203,7 +203,7 @@ describe('UNDO-02: a bookkeeping (unmarked) execute() does not fence undo', () =
 
     await playThroughToBarrierCrossingPoint((op) => session.send(1, op));
 
-    const rewind = await session.send(1, { type: 'debugRewind', actionIndex: 0 } as Op);
+    const rewind = await session.send(1, { type: 'debugRewind', actionIndex: 0 });
     expect(rewind.success).toBe(true);
   });
 

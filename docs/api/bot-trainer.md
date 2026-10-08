@@ -1,221 +1,88 @@
 # boardsmith/bot-trainer
 
-> Tools for training and improving bot weights.
+> Evolve the weights of a game's own bot objectives.
 
 ## When to Use
 
-Import from `boardsmith/bot-trainer` when you want to train bot weights for your game, analyze game features, or generate bot code. The primary training entry point is `WeightEvolver`, which evolves optimal weights using parallel benchmarking under the hood. The `evolve-bot-weights` CLI command wraps it.
+Most games never import this package: run the `evolve-bot-weights` CLI command
+instead (see below). Import from `boardsmith/bot-trainer` only to drive weight
+evolution from your own script.
+
+What is tuned is the objectives function the game's bot already plays with,
+`gameDefinition.bot.objectives`. Each candidate set of weights is benchmarked
+by playing the game with that function, its checkers unchanged and only the
+weights replaced by id. A weight whose id the objectives function does not
+return is refused with an error that names it, before any game is played.
 
 ## Usage
 
 ```typescript
 import {
   WeightEvolver,
-  introspectGame,
-  generateCandidateFeatures,
-  generateBotCode,
+  readObjectiveWeights,
+  updateBotWeights,
 } from 'boardsmith/bot-trainer';
 ```
 
 ## Exports
 
-### Training
+- `WeightEvolver` - Evolves weights with a µ+λ strategy, benchmarking each
+  candidate in worker threads
+- `readObjectiveWeights(source)` - The `{ id, weight }` of every objective in a
+  bot.ts source. Refuses a weight that is not written as a number, and an id
+  two objectives share
+- `updateBotWeights(source, weights, options?)` - The bot.ts source with those
+  weights written back, every other byte unchanged. Refuses an id the source
+  has no objective for
 
-- `WeightEvolver` - Evolve optimal bot weights (primary training API)
-- `DEFAULT_TRAINING_CONFIG` - Default training configuration
-
-### Introspection
-
-- `introspectGame()` - Analyze game structure
-- `createIntrospectionGame()` - Create game for analysis
-- `printGameStructure()` - Print game structure
-- `estimateComplexity()` - Estimate game complexity
-
-### Feature Generation
-
-- `generateCandidateFeatures()` - Generate potential bot features
-- `filterFeaturesByCategory()` - Filter features by category
-- `getFeatureSummary()` - Get feature summary
-- `printFeatures()` - Print features
-
-### Feature Templates
-
-- `FEATURE_TEMPLATES` - Built-in feature templates
-
-### Game-Structure Serialization
-
-- `serializeGameStructure()` - Serialize a game structure for worker threads
-- `deserializeGameStructure()` - Deserialize a game structure from worker threads
-
-### Benchmarking
-
-- `runParallelBenchmarks()` - Benchmark bot performance
-- `benchmarkBot()` - Run bot benchmark
-
-### Analysis
-
-- `analyzeFeatures()` - Analyze feature effectiveness
-- `analyzeActions()` - Analyze action patterns
-- `selectTopFeatures()` - Select best features
-- `correlationToWeight()` - Convert correlation to weight
-- `printAnalysisSummary()` - Print analysis results
-
-### Code Generation
-
-- `generateBotCode()` - Generate bot TypeScript code
-- `updateBotWeights()` - Update weights in existing bot file
-
-### Bot File Parsing
-
-- `parseExistingBot()` - Parse existing bot file
-- `parsedToLearned()` - Convert parsed to learned format
-- `mergeObjectives()` - Merge objective sets
-- `getCumulativeStats()` - Get cumulative statistics
-
-### Evolution Utilities
-
-- `createSeededRandom()` - Create seeded random
-- `mutateWeights()` - Mutate weight values
-- `crossoverWeights()` - Crossover two weight sets
-- `selectBest()` - Select best individuals
-- `generateOffspring()` - Generate offspring
+`readObjectiveWeights` and `updateBotWeights` share one parser: an objective is
+a property whose value is an object literal with both a `checker` and a
+`weight`, and its id is the property's name, quoted or not.
 
 ### Types
 
-- `GameClass` - Game class constructor
-- `GameStructure` - Analyzed game structure
-- `ElementTypeInfo` - Element type information
-- `PlayerTypeInfo` - Player type information
-- `SpatialInfo` - Spatial relationship info
-- `CandidateFeature` - Candidate feature
-- `StateSnapshot` - State snapshot
-- `GameData` - Game data for analysis
-- `FeatureStats` - Feature statistics
-- `ActionStats` - Action statistics
-- `LearnedObjective` - Learned bot objective
-- `LearnedActionPreference` - Action preference
-- `TrainingResult` - Training result
-- `TrainingConfig` - Training configuration
-- `TrainingProgress` - Training progress
+- `ObjectiveWeight` - `{ id, weight }` for one objective
+- `TrainingProgress` - What `onProgress` receives
 - `WeightEvolverConfig` - Weight evolver config
-- `WeightEvolutionResult` - Evolution result
-- `BenchmarkConfig` - Benchmark configuration
-- `BenchmarkResult` - Benchmark result
-- `ParallelBenchmarkOptions` - Parallel benchmark options
-- `IndividualFitness` - Individual fitness score
-- `CodeGeneratorOptions` - Code generator options
-- `UpdateWeightsOptions` - Update weights options
-- `ParsedAIFile` - Parsed bot file
-- `ParsedObjective` - Parsed objective
-- `FeatureTemplate` - Feature template
+- `WeightEvolutionResult` - The evolved weights and the starting and best win rates
+- `UpdateWeightsOptions` - Options for `updateBotWeights`
 
-## Examples
+## Training from the CLI
 
-### Quick Weight Evolution
-
-```typescript
-import { WeightEvolver } from 'boardsmith/bot-trainer';
-import { MyGame } from './game';
-
-const evolver = new WeightEvolver({
-  GameClass: MyGame,
-  gameType: 'my-game',
-  populationSize: 20,
-  generations: 50,
-  gamesPerEvaluation: 10,
-});
-
-const result = await evolver.evolve((progress) => {
-  console.log(`Gen ${progress.generation}: best fitness ${progress.bestFitness}`);
-});
-
-console.log('Best weights:', result.bestWeights);
-console.log('Final fitness:', result.fitness);
-```
-
-### Training from the CLI
-
-`WeightEvolver` is the live training engine, but the supported end-to-end entry
-point is the `evolve-bot-weights` CLI command. Run it from the game project. It
-bundles the rules from source into a fresh `.boardsmith/evolve-bot-weights-tmp-<run>/` (removed
-when it ends), loads the existing objectives `/bs-build-bot` wrote to the rules
-directory's `bot.ts`, evolves their weights via parallel benchmarking, and writes
-the new weights back into that `bot.ts`:
+Run `evolve-bot-weights` from the game project. It bundles the rules from source
+into a fresh `.boardsmith/evolve-bot-weights-tmp-<run>/` (removed when it ends), reads the
+weights of the objectives in the rules directory's `bot.ts`, evolves them by
+benchmarking the game's own bot in parallel, and writes the new weights back into
+that `bot.ts`:
 
 ```bash
 npx boardsmith evolve-bot-weights --generations 5 --population 20
 ```
 
-Under the hood the command drives `WeightEvolver.evolve(objectives)`, which returns
-the optimized objectives plus the initial and best win rates. See `boardsmith/bot`
-for consuming the generated bot in a game.
+The game's `gameDefinition` must set `bot.objectives` to the objectives function
+`bot.ts` exports; the command refuses a game without one.
 
-### Updating Existing Bot
-
-```typescript
-import { parseExistingBot, updateBotWeights } from 'boardsmith/bot-trainer';
-import { readFileSync, writeFileSync } from 'fs';
-
-// Parse existing bot file
-const content = readFileSync('./src/bot.ts', 'utf-8');
-const parsed = parseExistingBot(content);
-
-console.log(`Found ${parsed.objectives.length} objectives`);
-
-// Update weights based on new training
-const newWeights = { 'piece-count': 0.15, 'board-control': 0.25 };
-
-const updated = updateBotWeights({
-  content,
-  weights: newWeights,
-});
-
-writeFileSync('./src/bot.ts', updated);
-```
-
-### Benchmarking Bot Versions
+## From a Script
 
 ```typescript
-import { benchmarkBot } from 'boardsmith/bot-trainer';
-import { MyGame } from './game';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { WeightEvolver, readObjectiveWeights, updateBotWeights } from 'boardsmith/bot-trainer';
+import { gameDefinition } from './dist/rules.js';
 
-const results = await benchmarkBot({
-  GameClass: MyGame,
-  gameType: 'my-game',
-  players: [
-    { type: 'bot', config: oldBot, name: 'Old bot' },
-    { type: 'bot', config: newBot, name: 'New bot' },
-  ],
-  games: 100,
-});
+const botPath = './src/rules/bot.ts';
+const source = readFileSync(botPath, 'utf-8');
 
-console.log('Results:');
-console.log(`  Old bot wins: ${results.winRates[0] * 100}%`);
-console.log(`  New bot wins: ${results.winRates[1] * 100}%`);
-console.log(`  Average game length: ${results.averageLength} moves`);
-```
+// The workers load the game from the compiled module at this path.
+const evolver = new WeightEvolver(
+  gameDefinition.gameClass,
+  gameDefinition.gameType,
+  new URL('./dist/rules.js', import.meta.url).pathname,
+  gameDefinition.bot,
+  { evolutionGenerations: 5, evolutionLambda: 20 },
+);
 
-### Game Introspection
-
-```typescript
-import { introspectGame, printGameStructure, estimateComplexity } from 'boardsmith/bot-trainer';
-import { ChessGame } from './game';
-
-const structure = introspectGame(ChessGame);
-
-printGameStructure(structure);
-// Game: ChessGame
-// Elements:
-//   - Board (Grid 8x8)
-//   - Piece (King, Queen, Rook, Bishop, Knight, Pawn)
-// Actions:
-//   - move: Select piece, select destination
-//   - castle: Select side
-// ...
-
-const complexity = estimateComplexity(structure);
-console.log(`Branching factor: ~${complexity.branchingFactor}`);
-console.log(`State space: ~10^${complexity.stateSpaceExponent}`);
+const result = await evolver.evolve(readObjectiveWeights(source));
+writeFileSync(botPath, updateBotWeights(source, result.objectives));
 ```
 
 ## See Also
