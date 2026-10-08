@@ -12,13 +12,12 @@
  * `boundaryKey` is required on every submission, and each refusal names the
  * field and what to do about it.
  */
-import type { ExecutorOp } from './stateless-ops.js';
+import type { ExecutorOp, OpOfType } from './stateless-ops.js';
 
 /** The result of {@link parseExecutorOp}. */
 export type ParsedExecutorOp = { ok: true; op: ExecutorOp } | { ok: false; error: string };
 
 type ExecutorOpType = ExecutorOp['type'];
-type OpOfType<T extends ExecutorOpType> = Extract<ExecutorOp, { type: T }>;
 
 /**
  * How one field is checked. `optional` is computed from the op's own type, so a
@@ -149,35 +148,44 @@ export function parseExecutorOp(value: unknown): ParsedExecutorOp {
     };
   }
   const rules: Record<string, FieldRule<boolean>> = RULES[type];
-  const declared = ['type', ...Object.keys(rules)];
-  for (const key of Object.keys(value)) {
-    if (!declared.includes(key)) {
-      return {
-        ok: false,
-        error:
-          `The "${type}" op has a field "${key}" it does not declare. An "${type}" op carries ` +
-          `${declared.join(', ')}; remove "${key}".`,
-      };
-    }
-  }
-  for (const [field, rule] of Object.entries(rules)) {
-    if (!(field in value)) {
-      if (rule.optional) continue;
-      return {
-        ok: false,
-        error: `The "${type}" op has no "${field}"${rule.why ? `: ${rule.why}` : `. It must be ${rule.must}`}.`,
-      };
-    }
-    if (!rule.accepts(value[field])) {
-      return {
-        ok: false,
-        error: `The "${type}" op's "${field}" must be ${rule.must}, but it is ${describe(value[field])}.`,
-      };
-    }
-  }
+  const error = undeclaredKeyError(type, value, rules) ?? fieldError(type, value, rules);
+  if (error !== null) return { ok: false, error };
   // Every key is declared and every declared field has passed its rule, which
   // is what `ExecutorOp` says this type of op is.
   return { ok: true, op: value as ExecutorOp };
+}
+
+/** The refusal for the first key `value` carries that its op does not declare, or `null`. */
+function undeclaredKeyError(
+  type: ExecutorOpType,
+  value: Record<string, unknown>,
+  rules: Record<string, FieldRule<boolean>>,
+): string | null {
+  const declared = ['type', ...Object.keys(rules)];
+  const extra = Object.keys(value).find((key) => !declared.includes(key));
+  if (extra === undefined) return null;
+  return (
+    `The "${type}" op has a field "${extra}" it does not declare. An "${type}" op carries ` +
+    `${declared.join(', ')}; remove "${extra}".`
+  );
+}
+
+/** The refusal for the first declared field `value` lacks or holds a wrong value for, or `null`. */
+function fieldError(
+  type: ExecutorOpType,
+  value: Record<string, unknown>,
+  rules: Record<string, FieldRule<boolean>>,
+): string | null {
+  for (const [field, rule] of Object.entries(rules)) {
+    if (!(field in value)) {
+      if (rule.optional) continue;
+      return `The "${type}" op has no "${field}"${rule.why ? `: ${rule.why}` : `. It must be ${rule.must}`}.`;
+    }
+    if (!rule.accepts(value[field])) {
+      return `The "${type}" op's "${field}" must be ${rule.must}, but it is ${describe(value[field])}.`;
+    }
+  }
+  return null;
 }
 
 function describe(value: unknown): string {
