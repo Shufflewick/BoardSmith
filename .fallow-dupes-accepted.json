@@ -228,6 +228,14 @@
       ]
     },
     {
+      "content": "64c9b55ecd6a877d",
+      "lines": 21,
+      "files": [
+        "src/session/testing/fixtures/bookkeeping-execute-fixture.ts",
+        "src/session/testing/fixtures/execute-barrier-fixture.ts"
+      ]
+    },
+    {
       "content": "68d34a55e2e18ad1",
       "lines": 25,
       "files": [
@@ -269,14 +277,6 @@
       "lines": 13,
       "files": [
         "src/cli/commands/verify-impact.ts"
-      ]
-    },
-    {
-      "content": "7afa6e65784ca3f4",
-      "lines": 22,
-      "files": [
-        "src/session/testing/fixtures/bookkeeping-execute-fixture.ts",
-        "src/session/testing/fixtures/execute-barrier-fixture.ts"
       ]
     },
     {
