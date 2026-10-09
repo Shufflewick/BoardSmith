@@ -223,8 +223,6 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   let autoEndArmed = false;
 
   function tryAutoStartSingleAction(skipNoSelections = false): void {
-    // Nothing starts while history is on screen; leaving it schedules this again.
-    if (isViewingHistory.value) return;
     if (autoEndTurn.value === false) return;
     if (!isMyTurn.value) return;
     if (currentAction.value) return;
