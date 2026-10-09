@@ -10,7 +10,7 @@
  *     continuously; while the dialog is up the whole tab is frozen — including
  *     the debug panel that raised it. Reproduced: clicking "Rewind Here" in
  *     `boardsmith dev` wedged the page until the dialog was dismissed by hand.
- *  2. The game runs INSIDE AN IFRAME in platform mode, and Chrome blocks modal
+ *  2. The game runs INSIDE AN IFRAME, and Chrome blocks modal
  *     dialogs from cross-origin iframes outright — `confirm()` returns false
  *     without showing anything, so the button silently did nothing at all.
  *  3. Chrome's "prevent this page from creating additional dialogs" box makes

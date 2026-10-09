@@ -2,7 +2,7 @@
  * The debug panel's transport (#41).
  *
  * Every piece of debug data and every debug edit travels over one channel: the
- * `platformRequest` host bridge that GameShell provides in platform mode. There
+ * `platformRequest` host bridge that GameShell provides. There
  * is no debug HTTP server, so this is the only way in or out.
  *
  * `DebugPanel.vue` spelled that channel out eleven times: eleven `debug:*` op
@@ -23,7 +23,7 @@ import { inject } from 'vue';
 import { GAME_CONTEXT_KEYS } from './useGameContext.js';
 import type { ElementDiff } from '../../session/stateless-ops.js';
 
-/** The host bridge GameShell provides in platform mode. */
+/** The host bridge GameShell provides. */
 export type PlatformRequest = (op: string, payload: Record<string, unknown>) => Promise<Record<string, unknown>>;
 
 /** One action, as the host recorded it in the game's history. */
@@ -158,7 +158,7 @@ export function createDebugBridge(platformRequest: PlatformRequest | null): Debu
   /** Send an op. Throws when there is no host or the request itself fails. */
   async function sendRaw(op: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
     if (!platformRequest) {
-      throw new Error('DebugPanel requires a host bridge (mount it inside GameShell in platform mode).');
+      throw new Error('DebugPanel requires a host bridge (mount it inside GameShell).');
     }
     return platformRequest(op, payload);
   }

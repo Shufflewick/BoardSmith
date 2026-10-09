@@ -13,7 +13,7 @@ describe('createDebugBridge without a host', () => {
 
   it('says how to get one rather than failing obscurely', async () => {
     await expect(bridge.history()).rejects.toThrow(
-      'DebugPanel requires a host bridge (mount it inside GameShell in platform mode).'
+      'DebugPanel requires a host bridge (mount it inside GameShell).'
     );
   });
 

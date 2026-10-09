@@ -97,7 +97,7 @@ const emit = defineEmits<{
 }>();
 
 // All debug data/edits flow through the host bridge that GameShell provides in
-// platform mode (the dev host answers from its in-process session). There is no
+// the shell (the dev host answers from its in-process session). There is no
 // debug HTTP server, so this is the only transport.
 const bridge = useDebugBridge();
 

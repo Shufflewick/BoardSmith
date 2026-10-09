@@ -6,7 +6,7 @@ import { defineGameUIs, defaultUI } from '../game-uis.js';
 /**
  * MOUNTING THE REAL `GameShell` THE WAY A PLATFORM HOST DOES.
  *
- * Platform mode is "am I in an iframe", read synchronously at setup as
+ * The shell talks to a host only when it is in an iframe, read synchronously at setup as
  * `window.parent !== window`, so a test has to redefine `window.parent` BEFORE
  * mounting. That, a `ResizeObserver` jsdom does not ship, and a `matchMedia`
  * jsdom does not ship either are the whole of the arrangement -- and they were
@@ -44,7 +44,7 @@ const realParent = Object.getOwnPropertyDescriptor(window, 'parent');
  * Put the shell in an iframe whose parent RECORDS what is posted to it.
  *
  * Returns the recording, because a boot announcement is only observable there.
- * Callers that only need platform mode can ignore it.
+ * Callers that only need the iframe can ignore it.
  */
 export function enterIframe(): unknown[] {
   const posted: unknown[] = [];

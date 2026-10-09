@@ -61,7 +61,8 @@
  *   ],
  * });
  *
- * // Call this once when you get actionController from slot props
+ * // Call this once when the board mounts; GameShell passes `actionController`
+ * // and `gameView` to the board component as props
  * function setupAnimations(actionController, gameView) {
  *   gameViewRef.value = gameView;
  *   actionController.setBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
@@ -69,16 +70,10 @@
  * </script>
  *
  * <template>
- *   <GameShell :uis="uis">
- *     <template #game-board="{ actionController, gameView }">
- *       <MyGameBoard
- *         :game-view="gameView"
- *         :action-controller="actionController"
- *         @vue:mounted="setupAnimations(actionController, gameView)"
- *       />
- *       <FlyingCardsOverlay :flying-cards="actionAnimations.flyingElements" />
- *     </template>
- *   </GameShell>
+ *   <div @vue:mounted="setupAnimations(actionController, gameView)">
+ *     <!-- the board's own markup -->
+ *     <FlyingCardsOverlay :flying-cards="actionAnimations.flyingElements" />
+ *   </div>
  * </template>
  * ```
  *

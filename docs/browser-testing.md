@@ -26,8 +26,7 @@ dispatches.
 
 `npx boardsmith dev` serves an outer "Dev" chrome page
 (`src/cli/dev-host/DevHost.vue`) with a seat selector, UI switcher, and
-debug tools. Each connected seat renders inside a `GameShell` **iframe running
-in platform mode** — the exact code that runs in production. This matters for
+debug tools. Each connected seat renders inside a `GameShell` **iframe** — the exact code that runs in production. This matters for
 the bridge:
 
 - `window.__BOARDSMITH_DEVTOOLS` lives on the **outer page's `window`**, not

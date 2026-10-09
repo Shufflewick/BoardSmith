@@ -9,7 +9,7 @@
  *   getActionHelpEnabled() / setActionHelpEnabled(value) → boardsmith_action_help
  *   const isActionHelpVisible = ref(getActionHelpEnabled())
  *   handleTeachingAction('help-toggle') → flip + persist
- *   isActionHelpVisible threaded into ControlsMenu, ActionPanel, #game-board slot
+ *   isActionHelpVisible threaded into ControlsMenu, ActionPanel, board
  *
  * Each harness mirrors the exact production code under test — if the GameShell wiring
  * is broken, the harness must receive the same fix, making it a canary for the pattern.
@@ -25,7 +25,7 @@
  *   TOG-1: help-toggle handler flips isActionHelpVisible ref
  *   TOG-2: help-toggle handler calls setActionHelpEnabled with new value (persists)
  *   PAR-1: isActionHelpVisible is threaded into ActionPanel (AutoUI path)
- *   PAR-2: isActionHelpVisible is exposed in #game-board slot props (custom-UI path)
+ *   PAR-2: isActionHelpVisible is exposed in board props (custom-UI path)
  *   DIS-1: disabledActions computed reflects broadcast state.disabledActions
  */
 
@@ -187,10 +187,11 @@ describe('help-toggle handler (GameShell.handleTeachingAction)', () => {
 // ── Dual-path threading parity harness ────────────────────────────────────────
 //
 // Mirrors the production wiring from GameShell.vue where isActionHelpVisible
-// is passed to BOTH ActionPanel (AutoUI) AND the #game-board slot props:
+// is passed to BOTH ActionPanel (AutoUI) AND the board props:
 //
 //   <ActionPanel :is-action-help-visible="isActionHelpVisible" .../>
-//   <slot name="game-board" :is-action-help-visible="isActionHelpVisible" ...>
+//   <component :is="selectedUiComponent" :is-action-help-visible="isActionHelpVisible" ...>
+// (the harness uses a slot named "board" to capture the props the board receives)
 //
 // Also verifies disabledActions computed from broadcast state:
 //   const disabledActions = computed(() => state.value?.state?.disabledActions);
@@ -223,9 +224,9 @@ const ParityHarness = defineComponent({
         :data-is-action-help-visible="isActionHelpVisible"
         :data-has-disabled-actions="disabledActions !== undefined"
       />
-      <!-- #game-board slot path (PAR-2) -->
+      <!-- board path (PAR-2) -->
       <slot
-        name="game-board"
+        name="board"
         :is-action-help-visible="isActionHelpVisible"
         :disabled-actions="disabledActions"
       >
@@ -235,7 +236,7 @@ const ParityHarness = defineComponent({
   `,
 });
 
-describe('isActionHelpVisible dual-path threading (ActionPanel + #game-board slot)', () => {
+describe('isActionHelpVisible dual-path threading (ActionPanel + board)', () => {
   beforeEach(() => {
     localStorage.clear();
   });
@@ -258,12 +259,12 @@ describe('isActionHelpVisible dual-path threading (ActionPanel + #game-board slo
     wrapper.unmount();
   });
 
-  it('PAR-2: isActionHelpVisible is exposed in #game-board slot props', async () => {
+  it('PAR-2: isActionHelpVisible is exposed in board props', async () => {
     let capturedSlotProps: Record<string, unknown> | null = null;
     const wrapper = mount(ParityHarness, {
       props: { initialHelpVisible: true },
       slots: {
-        'game-board': (slotProps: Record<string, unknown>) => {
+        board: (slotProps: Record<string, unknown>) => {
           capturedSlotProps = slotProps;
           return '<div class="custom-ui-stub" />';
         },
@@ -275,12 +276,12 @@ describe('isActionHelpVisible dual-path threading (ActionPanel + #game-board slo
     wrapper.unmount();
   });
 
-  it('PAR-2b: #game-board slot receives false when isActionHelpVisible is false', async () => {
+  it('PAR-2b: board receives false when isActionHelpVisible is false', async () => {
     let capturedSlotProps: Record<string, unknown> | null = null;
     const wrapper = mount(ParityHarness, {
       props: { initialHelpVisible: false },
       slots: {
-        'game-board': (slotProps: Record<string, unknown>) => {
+        board: (slotProps: Record<string, unknown>) => {
           capturedSlotProps = slotProps;
           return '<div class="custom-ui-stub" />';
         },
@@ -297,7 +298,7 @@ describe('isActionHelpVisible dual-path threading (ActionPanel + #game-board slo
     const wrapper = mount(ParityHarness, {
       props: { initialHelpVisible: true },
       slots: {
-        'game-board': (slotProps: Record<string, unknown>) => {
+        board: (slotProps: Record<string, unknown>) => {
           slotHelpVisible = slotProps.isActionHelpVisible;
           return '<div />';
         },
@@ -364,7 +365,7 @@ describe('disabledActions computed from broadcast state', () => {
     wrapper.unmount();
   });
 
-  it('DIS-5: #game-board slot receives disabledActions as a named prop', async () => {
+  it('DIS-5: board receives disabledActions as a named prop', async () => {
     // Verifies GameShell threads disabledActions to the custom-UI slot path (parity gap fix).
     // Custom UI authors must be able to consume :disabled-actions without casting through state.
     let capturedSlotProps: Record<string, unknown> | null = null;
@@ -376,7 +377,7 @@ describe('disabledActions computed from broadcast state', () => {
         },
       },
       slots: {
-        'game-board': (slotProps: Record<string, unknown>) => {
+        board: (slotProps: Record<string, unknown>) => {
           capturedSlotProps = slotProps;
           return '<div class="custom-ui-stub" />';
         },
@@ -388,7 +389,7 @@ describe('disabledActions computed from broadcast state', () => {
     wrapper.unmount();
   });
 
-  it('DIS-6: ActionPanel and #game-board slot both receive the SAME disabledActions object', async () => {
+  it('DIS-6: ActionPanel and board both receive the SAME disabledActions object', async () => {
     // Verifies parity: both paths (AutoUI ActionPanel and custom-UI slot) see identical
     // disabledActions data so ActionHelpPopover renders the same popover in either context.
     let slotDisabledActions: unknown;
@@ -400,7 +401,7 @@ describe('disabledActions computed from broadcast state', () => {
         },
       },
       slots: {
-        'game-board': (slotProps: Record<string, unknown>) => {
+        board: (slotProps: Record<string, unknown>) => {
           slotDisabledActions = slotProps.disabledActions;
           return '<div />';
         },

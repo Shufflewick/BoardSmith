@@ -45,7 +45,7 @@ export interface DevHostConfig {
   presets: GamePreset[];
   /** Color palette as {value,label} entries. */
   colorPalette: Array<{ value: string; label: string }>;
-  /** URL the iframe loads to render the game UI (GameShell, platform mode). */
+  /** URL the iframe loads to render the game UI (GameShell). */
   gameUrl: string;
   /**
    * When true, teaching/assist features (hint, heatmap, demo, tutorial) are disabled

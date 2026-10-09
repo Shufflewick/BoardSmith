@@ -7,7 +7,7 @@
  *
  * Every browser that opens this page is a real player: it connects over WS,
  * claims a seat in the seat-picker lobby, then renders its seat via the embedded
- * GameShell <iframe> in PLATFORM mode (the EXACT code production runs). This page
+ * GameShell <iframe> (the EXACT code production runs). This page
  * just bridges the WS transport to the iframe's postMessage protocol — so dev is
  * inherently multiplayer (open another browser / another computer to join).
  */

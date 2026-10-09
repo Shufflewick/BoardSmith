@@ -458,7 +458,7 @@ const UNSAFE_PORTS = new Set([
 ]);
 
 /**
- * The URL the host iframe loads to render the game UI (GameShell, platform mode).
+ * The URL the host iframe loads to render the game UI (GameShell).
  *
  * ONE path segment, deliberately. A game references its art the way the built
  * dist resolves it — relatively, `cards/x.png` — and a relative reference is
@@ -526,7 +526,7 @@ export function boardsmithDevHostPlugin(args: {
     configureServer(server) {
       // The dev host serves exactly two HTML documents: the Dev chrome in the
       // main window, and the game UI in the board iframe (GAME_IFRAME_PATH) in
-      // platform mode.
+      // the game iframe.
       serveDevDocuments(server, (url) => {
         const isHostPage = url === '/' || url === '/index.html';
         if (!isHostPage && url !== GAME_IFRAME_PATH) return null;

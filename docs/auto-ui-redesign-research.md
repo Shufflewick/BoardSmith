@@ -83,7 +83,7 @@ The verdict that AutoUI is "almost never useful" is **not** about a missing acti
 
 These three are settled direction — everything below must conform.
 
-**P1 — Auto-UI and custom UIs are PEERS, not layers.** Boardzilla's worst trait is that a custom UI is expressed as *overrides hacked into the auto-UI's positioning model*: your JSX renders inside their layout div, layouts are tuned through their cascade, and anything unanticipated goes through string-keyed escape hatches. The "slow migration" benefit is real but the cost is you never fully escape their model. BoardSmith already avoids this (MERC uses zero AutoUI yet keeps full action parity) and we make it a rule: **the shared contract is the data + interaction layer only** (`gameView`, `useActionController`, `useBoardInteraction`, animation composables) — *never* the auto-UI's rendering/layout. A custom UI is just a Vue component in the `#game-board` slot talking to the controllers directly. Migration = swap the whole board component, not progressively override the auto-UI. (Consequence: the ranked renderer registry in S4 is for extending the auto-UI *internally*; it is **not** the custom-UI path.)
+**P1 — Auto-UI and custom UIs are PEERS, not layers.** Boardzilla's worst trait is that a custom UI is expressed as *overrides hacked into the auto-UI's positioning model*: your JSX renders inside their layout div, layouts are tuned through their cascade, and anything unanticipated goes through string-keyed escape hatches. The "slow migration" benefit is real but the cost is you never fully escape their model. BoardSmith already avoids this (MERC uses zero AutoUI yet keeps full action parity) and we make it a rule: **the shared contract is the data + interaction layer only** (`gameView`, `useActionController`, `useBoardInteraction`, animation composables) — *never* the auto-UI's rendering/layout. A custom UI is just a Vue component, supplied through the game's UI registry, talking to the controllers directly. Migration = swap the whole board component, not progressively override the auto-UI. (Consequence: the ranked renderer registry in S4 is for extending the auto-UI *internally*; it is **not** the custom-UI path.)
 
 **The auto-UI is itself a legitimate, shippable production UI** — not merely a scaffold. For some games (simple abstracts, basic card games) it will be good enough to *ship*, and that's an explicitly supported choice. The point of P1 is that you are never *forced* to build on top of it: writing against the auto-UI is fine when it suffices, and swapping in a peer custom UI is fine when it doesn't. Both are first-class.
 
@@ -231,7 +231,7 @@ This replaces the split-screen scaffold and the "auto-UI is a debug panel" frami
      }
    }
    ```
-   Each non-auto UI is a peer component (P1) that fills `#game-board` and talks to the controllers — **not** an override of the auto-UI. `auto` is one option among peers, never the substrate.
+   Each non-auto UI is a peer component (P1) that GameShell renders as the board and that talks to the controllers — **not** an override of the auto-UI. `auto` is one option among peers, never the substrate.
 2. **Dev switcher** — add a host-chrome control modeled on the existing **follow-active-seat** toggle (`DevHost.vue:175-177, 283-291` + `multiplayer-host.ts:233-260`). Difference: follow is pure host state, but switching UI must change *which UI module the iframe renders*. Two viable hooks, both already precedented:
    - change the iframe `src`/query param (e.g. `/__boardsmith/play?ui=webgl-3d`) and let the game entry pick the UI from the registry — same "reload the iframe" pattern as `handleSwitchPlayer` (`GameShell.vue:1070-1081`); or
    - postMessage a `use-ui` instruction over the existing `shufflewick`/`shufflewick-game` bridge that the game entry honors without a reload.
@@ -277,7 +277,7 @@ This is not optional polish — it is the definition of "done." Because games li
 **Reuse unchanged (the plumbing):**
 - `src/ui/composables/useActionController.ts` — action state machine
 - `src/ui/composables/useBoardInteraction.ts` — board↔panel bridge (ref match id→notation→name, `:207-217`)
-- `src/ui/components/GameShell.vue` — host, context, `#game-board` slot (`:1256`), always-mounted ActionPanel (`:1281`)
+- `src/ui/components/GameShell.vue` — host, context, the board (registry-resolved component), always-mounted ActionPanel (`:1281`)
 - `src/ui/composables/useGameViewHelpers.ts`, `useGameGrid.ts`, `useHexGrid.ts`; animation composables; `Die3D`
 
 **Engine metadata contract:**

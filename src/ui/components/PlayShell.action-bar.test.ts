@@ -30,7 +30,7 @@
  *      again mid-action, and the NEXT action start brings it back. There is no
  *      state in which the control is dead and no state in which the bar is
  *      stuck down while the game needs something.
- *   4. Collapsed is not empty. It keeps the controls menu (in platform mode that
+ *   4. Collapsed is not empty. It keeps the controls menu (in the hosted shell that
  *      is the player's ONLY control surface), the seat token, and the sentence
  *      saying what is wanted -- plus an attention mark on the toggle when it is
  *      this seat's move.
@@ -204,7 +204,7 @@ describe('the bar carries the sidebar rail\'s own gesture', () => {
   it('keeps the controls menu, the seat token and what is wanted', async () => {
     const { wrapper } = mountDock({ actionBarMinimized: true, prompt: 'Walk one sector' });
     await flush();
-    // In platform mode the controls menu is the player's ONLY control surface, so
+    // In the hosted shell the controls menu is the player's ONLY control surface, so
     // minimizing the bar must never take it away.
     expect(wrapper.find('.my-controls').exists()).toBe(true);
     expect(wrapper.find('[data-testid="bs-actionbar"] .turn-token').exists()).toBe(true);

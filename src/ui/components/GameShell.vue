@@ -88,7 +88,7 @@ interface GameShellProps {
    * this is declared (see src/ui/game-uis.ts).
    *
    * Required, and the ONLY way to supply a board. There is deliberately no
-   * `#game-board` slot: two ways to name the default UI is two things that can
+   * board slot: two ways to name the default UI is two things that can
    * disagree, and the manifest's old `"ui"` key already proved how that ends.
    * A production build renders `registry.defaultName`; every other entry exists
    * only under `boardsmith dev` and is stripped from the bundle entirely.
@@ -942,7 +942,7 @@ onMounted(() => {
   shellMounted.value = true;
 });
 
-// Mount: in platform mode the host (ShufflewickPub in prod, the boardsmith dev
+// Mount: the host (ShufflewickPub in prod, the boardsmith dev
 // host locally) manages the session and drives everything via postMessage.
 onMounted(async () => {
   // TOKEN-05: Install the Slate token base stylesheet once on mount. This is the
@@ -1497,7 +1497,7 @@ defineExpose({
           - Other props: game state for rendering
         -->
         <!-- ONE render path for the board: the registry's default UI, or the
-             dev switcher's selection. There is no #game-board slot — a second
+             dev switcher's selection. There is no board slot — a second
              way to name the default UI would be a second thing to disagree
              with `src/ui/uis.ts`, and props drifted between the two paths for
              real while both existed (the slot never received flow-state or

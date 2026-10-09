@@ -31,9 +31,9 @@ export interface PlatformTransport {
 }
 
 /**
- * THE ONE OUTBOUND CHOKEPOINT for platform mode (#41).
+ * THE ONE OUTBOUND CHOKEPOINT for the hosted shell (#41).
  *
- * Every server call in platform mode -- an action, a choices fetch, a selection
+ * Every server call the shell makes -- an action, a choices fetch, a selection
  * step, a cancel, an undo, demo control, and all eleven `debug:*` ops -- goes
  * through here, so the platform/dev branching lives in exactly one place. Adding
  * a server op means calling `request(op, ...)` and implementing it in the

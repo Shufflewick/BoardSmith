@@ -382,7 +382,7 @@ Terms for the user interface layer.
 
 **Definition:** The custom game visualization component that renders the game board and interactive elements. Receives game state and action controller via props.
 
-**In Code:** Custom Vue component in `#game-board` slot
+**In Code:** Custom Vue component registered in the game's `src/ui/uis.ts` (`defineGameUIs`)
 **Related Terms:** GameShell, Table, Board, AutoUI
 **Usage:**
 - "Implement GameTable for custom game visuals"

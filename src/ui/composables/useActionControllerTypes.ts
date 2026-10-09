@@ -652,7 +652,7 @@ export interface UseActionControllerReturn {
    *
    * @example
    * ```typescript
-   * // In game-board slot
+   * // In the board component
    * const { flyingElements, onBeforeAutoExecute } = useActionAnimations({
    *   gameView,
    *   animations: [...]

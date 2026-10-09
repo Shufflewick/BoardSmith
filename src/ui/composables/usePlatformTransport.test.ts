@@ -2,7 +2,7 @@
 /**
  * THE ONE OUTBOUND CHOKEPOINT (#41).
  *
- * Every server call GameShell makes in platform mode -- actions, choices,
+ * Every server call GameShell makes in the hosted shell -- actions, choices,
  * selection steps, cancel, undo, demo control, and all eleven `debug:*` ops --
  * goes through one request/response bridge over postMessage. It lived inside
  * GameShell.vue as a closure over a module-level counter and a pending map, so

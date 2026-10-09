@@ -303,7 +303,7 @@ describe('GameShell — dev-mode board sizing 0×0 console.error (UIX-03)', () =
         if (rect.width < 1 || rect.height < 1) {
           warned0x0 = true;
           consoleError(
-            "Custom board failed to render: the #game-board slot measured 0×0 after game state arrived. " +
+            "Custom board failed to render: the board measured 0×0 after game state arrived. " +
             "This usually means a percentage-width or container-type board is collapsing inside GameShell's " +
             "zoom container ('.game-shell__zoom-container { width: max-content }'). Give your board's root " +
             'element a definite width (not 100%) or see the "Board Sizing" section of docs/custom-ui-guide.md.'

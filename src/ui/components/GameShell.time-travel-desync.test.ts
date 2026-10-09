@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * GameShell — LIBX-04 (D31): time-travel debug view `#game-board` desync (164-04).
+ * GameShell — LIBX-04 (D31): time-travel debug view board desync (164-04).
  *
  * Bug: the board `:state` slot/prop was ALWAYS live (`:state="state"`) while
  * `:game-view` was already historical-aware (`gameView` reads `timeTravelState`
@@ -11,7 +11,7 @@
  *   (a) `displayedState` computed (mirrors `gameView`'s existing pattern) re-wraps
  *       the historical `PlayerGameState` into a `GameState`-shaped object, used at
  *       ALL THREE `:state` sites: #sidebar-extra, the dynamic-component board
- *       branch, and the `#game-board` slot fallback branch.
+ *       branch (the old board-slot fallback is gone).
  *   (b) `useBoardActionBridge`'s four mutating functions (startAction,
  *       executeAction, setSelectionValue, toggleMultiSelectValue) early-return
  *       when `isViewingHistory` is true — an inert no-op, no live-engine mutation,
@@ -215,7 +215,7 @@ describe('GameShell.vue source: displayedState wired at every board/sidebar site
     expect(gameShellSource).toContain('const displayedState = computed');
   });
 
-  // Was 3 while the #game-board slot existed and duplicated the board's props.
+  // Was 3 while a board slot existed and duplicated the board's props.
   // The slot is gone (the UI registry is the only board path), so the board is
   // wired once, not twice: board <component :is> + sidebar-extra.
   it('board + sidebar-extra sites read displayedState (count == 2)', () => {
