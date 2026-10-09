@@ -53,7 +53,7 @@ vi.mock('../../utils/dev.js', async (importOriginal) => {
 });
 
 // Dynamic (not static) import: useActionAnimations.js transitively imports
-// useFlyingElements.js -> useElementAnimation.js, which reads
+// useFlyingElements.js -> reducedMotion.js, which reads
 // window.matchMedia() at module load time. A static `import` here would be
 // hoisted ahead of the vi.stubGlobal() calls above (128-03/128-05 precedent).
 const { useActionAnimations } = await import('./useActionAnimations.js');
