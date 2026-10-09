@@ -1,5 +1,5 @@
 {
-  "revision": 140,
+  "revision": 141,
   "bundleProtocol": 2,
   "surfaceHash": "a0b49707971a4b63",
   "payloadHash": "3f10d70c457a15ba",
@@ -1204,6 +1204,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "Game.restoreFlow is removed; restoreFlowState is the one flow restore and still ends setup (#500). Also internal only, with no surface or payload effect: the flow step result type FlowStepResult is no longer exported, snapshot restore no longer carries the unreachable ambiguous handler-key warnings, and message templates write every value with String(), which is the output they already had."
+    },
+    {
+      "revision": 141,
+      "date": "2026-10-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "a0b49707971a4b63",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A chooseFrom choice is a value or { value, label } (#509). The engine reads value out of exactly that shape (a plain object whose only keys are value and an optional string label) where the choices are built, so disabled, display, boardRefs, validate, onSelect and execute all receive the value, the wire carries the value with the label as its display, and a custom UI fill()s the value. Any other object, including { value, display } and { value, cost }, is a value in its own right and arrives whole: the resolve-time unwrap (extractChoiceValue) and the fill() unwrap are gone. Game.playerChoices() returns { value: seat, label: name }. A function-valued multiSelect or orderedList must return a count; returning undefined is refused with an error naming the selection instead of silently becoming a single pick. A game whose choices use { value, display } must rename display to label. A repeating choice pick's nextChoices from a selection step are wire choices ({ value, display, refs?, disabled? }) labelled as the first pass's were, not bare values."
     }
   ]
 }
