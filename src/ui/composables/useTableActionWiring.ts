@@ -123,6 +123,8 @@ export function useTableActionWiring(opts: TableActionWiringOptions): TableActio
     availableActions,
     disabledActions,
     isViewingHistory,
+    // The controller's commit gate, handed to the board's mutators too.
+    completed: transport.completed,
     runnerIdentity,
   });
 

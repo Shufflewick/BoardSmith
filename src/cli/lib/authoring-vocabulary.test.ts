@@ -324,7 +324,7 @@ const BOARD_INTERACTION_MEMBERS: ReadonlySet<string> = (() => {
 
 /**
  * Check 2 runs over the SCAFFOLD ONLY. A prose page discusses the composable's
- * neighbours -- `tryUseBoardInteraction`, `injectActionController` -- within a
+ * neighbours -- `tryUseBoardInteraction`, `usePlayContext` -- within a
  * paragraph of it, and a proximity rule cannot tell "here is a related helper"
  * from "call this on the composable". The scaffold has no such paragraphs: it
  * names exactly what a new project should call, so proximity is enough there

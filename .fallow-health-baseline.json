@@ -499,7 +499,7 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 3
+        "count": 1
       }
     },
     "src/ui/components/auto-ui/AutoRenderer.vue": {
@@ -660,7 +660,7 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 5
+        "count": 3
       }
     },
     "src/ui/composables/useDragDropTargets.ts": {
