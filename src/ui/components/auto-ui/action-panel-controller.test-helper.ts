@@ -69,7 +69,6 @@ export function stubActionController(overrides: Record<string, unknown> = {}) {
     confirm: vi.fn(async () => ({ success: true })),
 
     // Called from computed getters and template handlers, so on first render.
-    getCurrentChoices: vi.fn(() => [] as unknown[]),
     getValidElements: vi.fn(() => [] as unknown[]),
     getCollectedPick: vi.fn(() => null),
     isMultiSelectSelected: vi.fn(() => false),

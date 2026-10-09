@@ -376,8 +376,7 @@ export interface UseActionControllerReturn {
   validElements: ComputedRef<EnrichedValidElement[]>;
   /**
    * Reactive choices for the current pick (re-runs when async-fetched choices arrive).
-   * Prefer this over getCurrentChoices() in reactive contexts — the latter does not
-   * track the snapshot fetch version, so it can return stale (empty) choices.
+   * Re-runs when async-fetched choices arrive; use getChoices(pick) for an arbitrary pick.
    */
   currentChoices: ComputedRef<ChoiceWithRefs[]>;
   /** Whether all selections are filled and action is ready */
@@ -625,24 +624,16 @@ export interface UseActionControllerReturn {
   // === Utility ===
   /** Get available choices for a pick (handles filterBy, dependsOn) */
   getChoices: (pick: EnrichedPickMetadata) => Array<{ value: unknown; display: string; disabled?: string }>;
-  /** Get filtered choices for current pick (convenience method) */
-  getCurrentChoices: () => Array<{ value: unknown; display: string; disabled?: string }>;
   /** Get valid elements for an element/elements pick from cache */
   getValidElements: (pick: EnrichedPickMetadata) => EnrichedValidElement[];
   /** Get metadata for an action */
   getActionMetadata: (actionName: string) => EnrichedActionMetadata | undefined;
-  /** Clear all args (preserves reactivity for external args) */
-  clearArgs: () => void;
-  /** Fetch choices for a pick from server (called automatically by start/fill) */
-  fetchChoicesForPick: (selectionName: string) => Promise<void>;
 
   // === Snapshot API (Pit of Success) ===
   /** Frozen action state - contains metadata for followUp actions not in availableActions */
   actionSnapshot: Ref<ActionStateSnapshot | null>;
   /** Get a collected pick by name (value + display) */
   getCollectedPick: (name: string) => CollectedPick | undefined;
-  /** Get all collected picks with their names */
-  getCollectedPicks: () => Array<CollectedPick & { name: string }>;
 
   // === Hook Registration (for GameShell users) ===
   /**
