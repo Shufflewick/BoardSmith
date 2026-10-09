@@ -386,6 +386,23 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     scheduleAutoStart(/* skipNoSelections */ true);
   }, { immediate: true });
 
+  // Browsing history (#553): the board and the Action Panel are handed no
+  // actions and no turn then, and every commit is refused, so a pick left open
+  // would ask for a move beside a past board. Entering history cancels it, as
+  // the panel's Cancel button does, so the panel and every custom UI reading
+  // this controller and board show no pick. Returning re-offers from the live
+  // position the way the runner watcher above does, a no-selection action
+  // staying a deliberate press.
+  watch(() => isViewingHistory.value, (browsing) => {
+    if (!browsing) {
+      scheduleAutoStart(/* skipNoSelections */ true);
+      return;
+    }
+    if (!currentAction.value) return;
+    controller.cancel();
+    board.clear();
+  });
+
   // Retry auto-start when an execution completes (next action may auto-start).
   watch(isExecuting, (executing, wasExecuting) => {
     if (wasExecuting && !executing) scheduleAutoStart(false);
