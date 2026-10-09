@@ -46,6 +46,7 @@ import {
 // (#229 for text, #237 for number).
 import { numberRuleErrors } from '../../../engine/action/number-rules.js';
 import { textRuleErrors } from '../../../engine/action/text-rules.js';
+import { choiceValueKey } from '../../../engine/action/choice-matching.js';
 import ActionHelpPopover from '../helpers/ActionHelpPopover.vue';
 // Type-only, so the log component's module (and its stylesheet) never enters
 // this graph -- `verbatimModuleSyntax` erases the import outright.
@@ -1868,7 +1869,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
                  a row of buttons all reading "Add University" is unreadable. -->
             <button
               v-for="choice in filteredChoices"
-              :key="String(choice.value)"
+              :key="choiceValueKey(choice.value)"
               class="choice-btn ordered-list-add"
               :aria-label="`Add ${choice.display}`"
               v-disabled-reason="orderedListAddDisabledReason(choice.disabled)"
@@ -1905,7 +1906,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
                  elements variant above for why they are split. -->
             <label
               v-for="choice in filteredChoices"
-              :key="String(choice.value)"
+              :key="choiceValueKey(choice.value)"
               class="multi-select-choice"
               :class="{ selected: isMultiSelectValueSelected(choice.value) }"
               v-disabled-reason="multiSelectDisabledReason(choice.disabled, choice.value)"
@@ -1948,7 +1949,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           <div class="choice-buttons">
             <button
               v-for="choice in filteredChoices"
-              :key="String(choice.value)"
+              :key="choiceValueKey(choice.value)"
               class="choice-btn filtered-choice-btn"
               v-disabled-reason="choice.disabled"
               @click="executeChoice(currentPick.name, choice)"
@@ -1991,7 +1992,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           <div class="choice-buttons">
             <button
               v-for="choice in filteredChoices"
-              :key="String(choice.value)"
+              :key="choiceValueKey(choice.value)"
               class="choice-btn"
               v-disabled-reason="choice.disabled"
               @click="setSelectionValue(currentPick.name, choice.value, choice.display)"
@@ -2152,7 +2153,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
         <template v-if="anchoredChoices.length && !deferPickToBoard">
           <button
             v-for="choice in anchoredChoices"
-            :key="String(choice.value)"
+            :key="choiceValueKey(choice.value)"
             class="choice-btn anchored-choice-btn"
             v-disabled-reason="choice.disabled"
             :aria-label="`${choice.display}${choice.refs?.find(r => r.ref.notation)?.ref.notation ? ' (' + choice.refs.find(r => r.ref.notation)!.ref.notation + ')' : ''}`"
