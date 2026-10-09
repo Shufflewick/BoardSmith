@@ -433,13 +433,6 @@
       ]
     },
     {
-      "content": "b2de687b603095c5",
-      "lines": 10,
-      "files": [
-        "src/ui/components/auto-ui/ActionPanel.vue"
-      ]
-    },
-    {
       "content": "b4e62e419abed712",
       "lines": 22,
       "files": [
@@ -545,6 +538,13 @@
       "lines": 5,
       "files": [
         "src/engine/element/game.ts"
+      ]
+    },
+    {
+      "content": "e8de4e7356cacb09",
+      "lines": 10,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.vue"
       ]
     },
     {
