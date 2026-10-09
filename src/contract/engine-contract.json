@@ -1,7 +1,7 @@
 {
-  "revision": 140,
+  "revision": 141,
   "bundleProtocol": 2,
-  "surfaceHash": "a0b49707971a4b63",
+  "surfaceHash": "c89b5911c71dfb48",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1204,6 +1204,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "Game.restoreFlow is removed; restoreFlowState is the one flow restore and still ends setup (#500). Also internal only, with no surface or payload effect: the flow step result type FlowStepResult is no longer exported, snapshot restore no longer carries the unreachable ambiguous handler-key warnings, and message templates write every value with String(), which is the output they already had."
+    },
+    {
+      "revision": 141,
+      "date": "2026-10-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "c89b5911c71dfb48",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "boardsmith/persistence no longer exports SESSION_KINDS, SessionKind, isSessionKind, resolveSessionKind or countsAsPlay (#521). The engine never read them; whether a session counts as a play is a platform rule that lives in ShufflewickPub's own convex/sessionKind.ts. A platform that still imports them from boardsmith/persistence must delete those imports before it vendors this revision. Bundles already built are not affected."
     }
   ]
 }
