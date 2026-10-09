@@ -584,6 +584,8 @@ export function worldShellContext(world: TestWorld, seat: number, options: Shell
 interface MountedForSeat<C extends Component> {
   readonly wrapper: VueWrapper<RenderedInstance<C>>;
   readonly raised: unknown[];
+  /** The last prompt the board set with `setBoardPrompt`, which the seat is shown; null when none is set. */
+  readonly boardPrompt: () => string | null;
 }
 
 /**
@@ -692,7 +694,7 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
     wrapper.unmount();
     throw failure;
   }
-  return { wrapper, raised };
+  return { wrapper, raised, boardPrompt: seatContext.boardPrompt };
 }
 
 /** What a seat's board is mounted with, and how to let go of it afterwards. */
@@ -707,6 +709,8 @@ interface SeatContext {
   readonly provide: Record<string | symbol, unknown>;
   /** Opens an action on the seat's controller, for `startAction`; throws, saying why, when it cannot. */
   readonly openAction: (request: NonNullable<RenderAsSeatOptions['startAction']>) => Promise<void>;
+  /** The last prompt the board set with `setBoardPrompt`, or null. A world board has no setter, so always null. */
+  readonly boardPrompt: () => string | null;
   /** Stops whatever was wired for this mount. */
   readonly stop: () => void;
 }
@@ -829,6 +833,9 @@ async function wireTableSeat(
     playerSeat: seat,
     isSpectator: false,
   } as GameState;
+  // GameShell shows the board's prompt in the action bar in place of the pick's,
+  // so it is text the seat reads and the leak scan checks it (#564).
+  let boardPrompt: string | null = null;
   const scope = effectScope(true);
   let tableSeat!: TableSeat;
   scope.run(() => {
@@ -863,7 +870,7 @@ async function wireTableSeat(
   return {
     gameView,
     // What GameShell binds, built by the same function (#516). A test mount has
-    // no action bar, so a prompt the board sets has nowhere to be drawn.
+    // no action bar, so the prompt the board sets is recorded instead of drawn.
     contract: tableBoardProps(tableSeat, {
       state: frame,
       gameView,
@@ -875,11 +882,14 @@ async function wireTableSeat(
             'to undo against. Test undo through a session (createHeadlessSession), not a rendered board.',
         );
       },
-      setBoardPrompt: () => {},
+      setBoardPrompt: (prompt) => {
+        boardPrompt = prompt;
+      },
     }),
     controller: tableSeat.controller,
     provide: Object.fromEntries(tableSeat.provisions),
     openAction: (request) => openSeatAction(tableSeat.controller, request, seat, seatState.availableActions ?? []),
+    boardPrompt: () => boardPrompt,
     stop: () => scope.stop(),
   };
 }
@@ -953,6 +963,7 @@ async function wireWorldSeat(
     provide: Object.fromEntries(worldSeat.provisions),
     openAction: (request) =>
       openSeatAction(worldSeat.controller, request, seat, worldSeat.play.availableActions.value),
+    boardPrompt: () => null,
     stop: () => scope.stop(),
   };
 }
@@ -1369,6 +1380,8 @@ const IDENTITY_BEARING_ATTRS = ['aria-label', 'alt', 'title', 'aria-description'
 interface SurfaceString {
   value: string;
   ownerId?: number;
+  /** Where the value is shown, when it is not the rendered markup. */
+  source?: string;
 }
 
 /**
@@ -1487,7 +1500,8 @@ function collectScopedSurfaceStrings(wrapper: VueWrapper<unknown>): SurfaceStrin
  * @throws If a forbidden marker appears in a scoped DOM surface (data-*
  *   attribute value, img[src], inline background-image style, or a
  *   text-bearing accessibility/metadata attribute — aria-label, alt, title,
- *   aria-description, aria-roledescription), naming the leaked marker, the
+ *   aria-description, aria-roledescription) or in the last prompt the board
+ *   set with `setBoardPrompt`, naming the leaked marker, the
  *   owning element, the seat, and the DOM surface.
  * @throws If called outside a jsdom test environment (WR-03) — add
  *   `// @vitest-environment jsdom` as the first line of your test file.
@@ -1546,9 +1560,13 @@ export async function assertNoHiddenInfoLeak(
 
   // Every render option reaches the mount. Picking them out one by one is how
   // `provide` was accepted here and silently dropped (#405).
-  const { wrapper, raised } = await mountForSeat(subject, seat, options);
+  const { wrapper, raised, boardPrompt } = await mountForSeat(subject, seat, options);
   try {
     const surfaces = collectScopedSurfaceStrings(wrapper);
+    // The action bar shows the board's prompt to the seat, so it is checked
+    // against every marker, as an unattributed surface is (#564).
+    const prompt = boardPrompt();
+    if (prompt !== null) surfaces.push({ value: prompt, source: 'the board prompt (setBoardPrompt)' });
 
     for (const marker of activeMarkers) {
       for (const surface of surfaces) {
@@ -1576,7 +1594,7 @@ export async function assertNoHiddenInfoLeak(
             `Hidden-info leak: "${marker.value}"` +
               `${marker.attribute ? ` (attribute "${marker.attribute}")` : ''} ` +
               `from ${marker.elementLabel} is visible in the DOM rendered for seat ${seat}. ` +
-              `Leaked via surface: ${surface.value.slice(0, 200)}`,
+              `Leaked via ${surface.source ?? 'surface'}: ${surface.value.slice(0, 200)}`,
           );
         }
       }
