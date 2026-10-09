@@ -333,11 +333,7 @@ export {
 // Action controller (unified action handling for ActionPanel and custom UIs)
 export {
   useActionController,
-  injectActionController,
-  ACTION_CONTROLLER_KEY,
   // Advanced feature injection helpers
-  injectPickStepFn,
-  injectBoardInteraction,
   // Types
   type EnrichedPickMetadata,
   type EnrichedActionMetadata,
@@ -345,7 +341,6 @@ export {
   type PickChoicesResult,
   type PickSnapshot,
   type CollectedPick,
-  type PickStepFn,
   // Other types
   type ControllerActionResult,
   type PickValidationResult,

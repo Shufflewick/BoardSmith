@@ -16,10 +16,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ref, nextTick, effectScope, type Ref } from 'vue';
 import {
   useActionController,
-  injectActionController,
-  injectPickStepFn,
-  injectBoardInteraction,
-  ACTION_CONTROLLER_KEY,
   type EnrichedActionMetadata,
 } from './useActionController.js';
 import { createMockSendAction, createTestMetadata } from './useActionController.test-helper.js';
@@ -1165,36 +1161,6 @@ describe('useActionController', () => {
 
       // Error should be cleared
       expect(controller.lastError.value).toBe(null);
-    });
-  });
-
-  describe('injection helpers', () => {
-    it('should export ACTION_CONTROLLER_KEY constant', () => {
-      expect(ACTION_CONTROLLER_KEY).toBe('actionController');
-    });
-
-    it('should throw error when injectActionController called outside context', () => {
-      // Note: We can't properly test inject() without a Vue app context,
-      // but we can verify the function exists and throws when inject returns undefined
-      expect(() => injectActionController()).toThrow('must be called inside a GameShell context');
-    });
-
-    it('should return undefined for optional injections outside context', () => {
-      // These return undefined instead of throwing (optional)
-      expect(injectPickStepFn()).toBeUndefined();
-    });
-
-    it('should throw when injectBoardInteraction called outside context', () => {
-      // Mirrors injectActionController: the board-interaction channel fails
-      // loudly with an actionable message instead of silently returning
-      // undefined (regression for F21).
-      expect(() => injectBoardInteraction()).toThrow('must be called inside a <GameShell>');
-    });
-
-    it('should export injection helper functions', () => {
-      // Verify the functions are exported and callable
-      expect(typeof injectPickStepFn).toBe('function');
-      expect(typeof injectBoardInteraction).toBe('function');
     });
   });
 
