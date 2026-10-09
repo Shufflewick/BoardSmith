@@ -3244,17 +3244,25 @@ export class Game<
   }
 
   /**
+   * The engine a flow restore runs on. Restoring a flow ends setup just as
+   * `startFlow()` does: from here, creating an unregistered element class is
+   * refused (see `registerCreatedElementClass`).
+   */
+  #newRestoringFlowEngine(): FlowEngine<G> {
+    if (!this._flowDefinition) {
+      throw new Error('No flow definition set');
+    }
+    this._ctx._setupComplete = true;
+    this._flowEngine = new FlowEngine(this.game, this._flowDefinition);
+    return this._flowEngine;
+  }
+
+  /**
    * Restore flow from serialized position.
    * Throws if the position is invalid (e.g., flow structure changed).
    */
   restoreFlow(position: FlowPosition): void {
-    if (!this._flowDefinition) {
-      throw new Error('No flow definition set');
-    }
-
-    this._ctx._setupComplete = true;
-    this._flowEngine = new FlowEngine(this.game, this._flowDefinition);
-    const result = this._flowEngine.tryRestore(position);
+    const result = this.#newRestoringFlowEngine().tryRestore(position);
 
     if (!result.success) {
       throw new Error(
@@ -3277,13 +3285,7 @@ export class Game<
    *   behavior there is unchanged.
    */
   restoreFlowState(state: FlowState, idRemap?: Map<number, number>): void {
-    if (!this._flowDefinition) {
-      throw new Error('No flow definition set');
-    }
-
-    this._ctx._setupComplete = true;
-    this._flowEngine = new FlowEngine(this.game, this._flowDefinition);
-    const result = this._flowEngine.restoreFullState(state, idRemap);
+    const result = this.#newRestoringFlowEngine().restoreFullState(state, idRemap);
 
     if (!result.success) {
       throw new Error(
