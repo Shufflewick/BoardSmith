@@ -199,14 +199,6 @@
       ]
     },
     {
-      "content": "4dace8fa408e42d2",
-      "lines": 6,
-      "files": [
-        "src/ui/components/auto-ui/ActionPanel.vue",
-        "src/ui/composables/useBoardActionBridge.ts"
-      ]
-    },
-    {
       "content": "4f375ef9f1a0f0a1",
       "lines": 7,
       "files": [

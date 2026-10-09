@@ -20,9 +20,11 @@
  * definition instead). The ActionPanel is now purely presentational; the
  * board substrate is fed from here.
  *
- * Pit of Success: there is exactly ONE place that feeds board interaction. The
- * panel cannot fall out of sync with the board because the panel no longer feeds
- * the board at all.
+ * Pit of Success: there is exactly ONE place that feeds board interaction, and
+ * ONE set of mutators (`actionMutators.ts`) that starts, executes and answers
+ * actions, which this bridge and the panel both call (#513). The panel cannot
+ * fall out of sync with the board because it neither feeds the board nor holds
+ * its own copy of those operations.
  */
 import { computed, watch, nextTick, type Ref, type ComputedRef } from 'vue';
 import type { BoardInteraction, ElementRef } from './useBoardInteraction.js';
@@ -34,6 +36,7 @@ import type {
   EnrichedValidElement,
 } from './useActionControllerTypes.js';
 import { choiceBoardTarget, devWarn, resolvePickCounts } from './actionControllerHelpers.js';
+import { createActionMutators } from './actionMutators.js';
 
 interface BoardActionBridgeOptions {
   controller: UseActionControllerReturn;
@@ -61,12 +64,17 @@ interface BoardActionBridgeOptions {
   /**
    * Reactive: true while the debug panel shows historical state (time-travel).
    * Board clicks must never commit to the live engine while this is true —
-   * LIBX-04 (D31). Guarded independently in all four mutating functions
-   * (startAction, executeAction, setSelectionValue, toggleMultiSelectValue)
-   * rather than derived from isMyTurn, since a pick already in progress does
+   * LIBX-04 (D31). Guarded independently in every action mutator
+   * (`createActionMutators`) rather than derived from isMyTurn, since a pick already in progress does
    * not re-check isMyTurn mid-action.
    */
   isViewingHistory: Ref<boolean> | ComputedRef<boolean>;
+  /**
+   * Reactive: the seat has committed the current simultaneous step (D27), the
+   * same flag the controller's `completed` option takes. A committed seat never
+   * executes again from the board. Absent where there are no simultaneous steps.
+   */
+  completed?: Ref<boolean | undefined> | ComputedRef<boolean | undefined>;
   /**
    * Reactive: which game tree the server is running -- `PlayerGameState`'s
    * `gameInstanceId` and `restoreEpoch`, read off each broadcast.
@@ -112,42 +120,12 @@ function elementClickRef(ve: EnrichedValidElement): ElementRef {
 }
 
 /**
- * THE ONE ORDERING RULE FOR STARTING AN ACTION, IN THE ONE PLACE THAT STATES IT.
- *
- * Clear stale board state BEFORE starting, never after. `controller.start()`
- * awaits a choice/element fetch, and that fetch bumps `snapshotVersion` from
- * INSIDE the await -- which is what makes the bridge's watchers populate
- * `validElements` and install `onElementSelect` / `onChoiceSelect`. A
- * `board.clear()` after the await wipes all of that, and no watcher re-runs,
- * because from their point of view nothing changed: the board goes dead for the
- * whole action while `currentAction` still reads the action's name.
- *
- * This existed as a comment on the bridge's own `startAction` and as a second,
- * WRONG copy inside `ActionPanel.startAction` -- which is how sotf's compass
- * rose became read-only and example-rts's `tend` pick stopped opening (#185).
- * Both callers now go through here, so there is nothing left to disagree with.
- */
-export async function startActionWithBoardReset(
-  controller: Pick<UseActionControllerReturn, 'start'>,
-  board: Pick<BoardInteraction, 'clear'> | undefined,
-  actionName: string,
-  options?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> },
-): Promise<void> {
-  board?.clear();
-  await controller.start(actionName, options);
-  // `setCurrentAction` and `setValidElements` are NOT called here: the bridge's
-  // watchers do that reactively off `controller.currentAction` + `actionStartTick`
-  // and `snapshotVersion`.
-  // Re-setting them by hand is how a caller ends up restoring one field of four.
-}
-
-/**
  * Wire the action controller to the board-interaction substrate. Call ONCE from
  * GameShell setup; it sets up reactive watchers that live for the GameShell
  * lifetime. No-op when boardInteraction is undefined.
  */
 export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
-  const { controller, boardInteraction, isMyTurn, autoEndTurn, actionMetadata, availableActions, disabledActions, isViewingHistory, runnerIdentity } = opts;
+  const { controller, boardInteraction, isMyTurn, autoEndTurn, actionMetadata, availableActions, disabledActions, isViewingHistory, completed, runnerIdentity } = opts;
 
   // Without a board substrate there is nothing to feed. (Should not happen inside GameShell.)
   if (!boardInteraction) return;
@@ -157,8 +135,6 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   const currentPick = controller.currentPick;
   const currentArgs = controller.currentArgs;
   const isExecuting = controller.isExecuting;
-
-  const multiSelectValues = computed<unknown[]>(() => controller.multiSelectDraft.value?.values ?? []);
 
   // Metadata for available actions, with a basic fallback for actions lacking metadata.
   const actionsWithMetadata = computed<EnrichedActionMetadata[]>(() => {
@@ -218,100 +194,21 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   const offeredChoices = controller.currentChoices;
   const offeredElements = controller.validElements;
 
-  // ── Action lifecycle helpers (controller delegation) ─────────────────────────
-
-  async function startAction(actionName: string, options?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> }) {
-    if (isViewingHistory.value) return;
-    // A disabled action is offered (so the panel can explain it) but must never
-    // be started from the board. The Action Panel's own button is gated by the
-    // same reason; this is the board-side half of that one rule.
-    if (actionDisabledReason(actionName)) return;
-    const meta = actionsWithMetadata.value.find(a => a.name === actionName);
-    if (!meta || meta.selections.length === 0) {
-      await executeAction(actionName, {});
-      return;
-    }
-    await startActionWithBoardReset(controller, board, actionName, options);
-  }
-
-  async function executeAction(actionName: string, args: Record<string, unknown>) {
-    if (isViewingHistory.value) return;
-    if (isExecuting.value) return;
-    if (!isMyTurn.value) return;
-    // Same gate as startAction — reached directly for no-selection actions.
-    if (actionDisabledReason(actionName)) return;
-    const filteredArgs: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(args)) if (v !== null) filteredArgs[k] = v;
-    try {
-      const result = await controller.execute(actionName, filteredArgs);
-      if (!result.success && result.error) console.error('Action failed:', result.error);
-    } catch (err) {
-      console.error('Execute action error:', err);
-    } finally {
-      board.clear();
-    }
-  }
-
-  async function setSelectionValue(name: string, value: unknown) {
-    if (isViewingHistory.value) return;
-    const selection = currentPick.value;
-    // Capture choices BEFORE fill() — fill() advances the pick state so
-    // offeredChoices.value would return the NEXT pick's choices after the await.
-    // selection.choices only holds static metadata choices (never dynamic ones),
-    // so use offeredChoices.value to cover both static and dynamically-fetched choices.
-    const choicesSnapshot = selection?.type === 'choice' ? offeredChoices.value.slice() : [];
-    const result = await controller.fill(name, value);
-    if (!result.valid) {
-      console.error('Selection failed:', result.error);
-      return;
-    }
-    // Keep the chosen board element visually selected/highlighted.
-    if (selection?.type === 'choice' && choicesSnapshot.length > 0) {
-      const choice = choicesSnapshot.find((c: ChoiceWithRefs) => c.value === value);
-      const ref = choice && choiceBoardTarget(choice);
-      if (ref) board.selectElement(ref);
-    }
-  }
-
-  async function toggleMultiSelectValue(selectionName: string, value: unknown) {
-    if (isViewingHistory.value) return;
-    await controller.toggleMultiSelect(selectionName, value);
-    updateMultiSelectBoardHighlights();
-  }
-
-  /**
-   * A board click on an ORDERED-LIST pick APPENDS (#249).
-   *
-   * The board half of the panel's Add button, and the reason it cannot just reuse
-   * the toggle: clicking the same building twice on a board must mean the same
-   * thing as pressing Add twice, not "never mind".
-   */
-  async function appendListValue(selectionName: string, value: unknown) {
-    if (isViewingHistory.value) return;
-    await controller.appendListEntry(selectionName, value);
-    updateMultiSelectBoardHighlights();
-  }
-
-  function updateMultiSelectBoardHighlights() {
-    const selectedValues = multiSelectValues.value;
-    if (selectedValues.length === 0) {
-      board.setHoveredChoice(null);
-      return;
-    }
-    const sourceRefs: ElementRef[] = [];
-    const targetRefs: ElementRef[] = [];
-    for (const val of selectedValues) {
-      const choice = offeredChoices.value.find(c => c.value === val);
-      if (!choice) continue;
-      for (const r of choice.refs ?? []) {
-        if (r.role === 'source') sourceRefs.push(r.ref);
-        else targetRefs.push(r.ref);
-      }
-    }
-    if (sourceRefs.length > 0 || targetRefs.length > 0) {
-      board.setHoveredChoice({ value: selectedValues, display: `${selectedValues.length} selected`, sourceRefs, targetRefs });
-    }
-  }
+  // ── Action mutators ──────────────────────────────────────────────────────────
+  // The same module the Action Panel starts and executes through (#513), so a
+  // board-started action and a panel-started one change the controller and the
+  // board identically.
+  const { startAction, executeAction, setSelectionValue, toggleMultiSelectValue, appendListValue } = createActionMutators(
+    controller,
+    board,
+    {
+      isViewingHistory: () => isViewingHistory.value,
+      isMyTurn: () => !!isMyTurn.value,
+      isCompleted: () => !!completed?.value,
+      disabledReason: actionDisabledReason,
+      actionMetadata: (name) => actionsWithMetadata.value.find(a => a.name === name),
+    },
+  );
 
   // ── Auto-start single action ─────────────────────────────────────────────────
 
