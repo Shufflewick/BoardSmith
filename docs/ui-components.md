@@ -2047,12 +2047,12 @@ const selectedEquipment = { name: 'Laser Rifle', damage: 10 };
 // How do you find the ID?
 ```
 
-**The Solution:** Use `findElement` to search the merc's subtree by name:
+**The Solution:** Use `findElement` to search the merc's subtree. Its `name` criterion compares the element's own top-level `name` (the name the game gave the element when it created it), never anything in `attributes`. So this works only when the equipment element's `name` is the same string the UI is showing:
 
 ```typescript
 import { findElement, getElementId } from 'boardsmith/ui';
 
-// Find equipment element by its name
+// Only right when the element's own `name` equals the displayed name
 const equipment = findElement(merc, { name: selectedEquipment.name });
 const equipmentId = getElementId(equipment);
 
@@ -2075,6 +2075,8 @@ The `boardsmith/ui` package provides several helpers for finding elements:
 | `findPlayerHand(view, seat)` | The hand owned by a seat, wherever it sits in the tree | Finding a player's hand |
 | `getElementId(element)` | Get numeric ID from element | Extracting ID for action calls |
 
+`findElement` and `findElements` have no attribute criterion: `name` is the element's own `name`, and `type` is the `$type` attribute only. To match on any other attribute, take the candidates with `findElements` and filter on `attributes` yourself.
+
 **Example: Equipment Modal**
 
 ```typescript
@@ -2084,7 +2086,8 @@ const selectedEquipmentName = 'Plasma Cannon';
 // Find the merc that has this equipment
 const merc = findElement(gameView, { className: 'Merc' });
 
-// Find the equipment element by name within the merc
+// Find the equipment element by name within the merc.
+// This assumes each equipment element's own `name` is its display name.
 const equipment = findElement(merc, { name: selectedEquipmentName });
 
 if (equipment) {
@@ -2099,8 +2102,22 @@ if (equipment) {
 **Example: Finding Any Element by Name**
 
 ```typescript
-// Find a sector anywhere in the game by its unique name
+// Find a sector anywhere in the game by its unique name.
+// The game must have created the sector with the name 'alpha-3'.
 const sector = findElement(gameView, { name: 'alpha-3' });
+if (sector) {
+  await actionController.execute('moveTo', { destination: sector.id });
+}
+```
+
+**Example: Finding an Element by an Attribute**
+
+When the value you have is stored in an attribute rather than in the element's `name` (here a `sectorId` attribute), `{ name }` will not find it. Filter on the attribute instead:
+
+```typescript
+// Every sector, then the one whose sectorId attribute matches
+const sector = findElements(gameView, { className: 'Sector' })
+  .find(el => el.attributes?.sectorId === 'alpha-3');
 if (sector) {
   await actionController.execute('moveTo', { destination: sector.id });
 }
