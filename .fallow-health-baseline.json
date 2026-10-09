@@ -261,7 +261,7 @@
     },
     "src/engine/action/action.ts": {
       "complexity_critical": {
-        "count": 4
+        "count": 3
       },
       "complexity_high": {
         "count": 1
@@ -497,9 +497,6 @@
     "src/ui/components/auto-ui/ActionPanel.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "complexity_moderate": {
-        "count": 1
       }
     },
     "src/ui/components/auto-ui/AutoRenderer.vue": {
@@ -734,28 +731,29 @@
   },
   "runtime_coverage_findings": [],
   "target_keys": [
+    "src/ui/composables/useActionController.ts:complexity",
     "src/engine/element/game.ts:complexity",
     "src/ui/components/auto-ui/ActionPanel.vue:complexity",
-    "src/ui/composables/useActionController.ts:complexity",
     "src/engine/action/action.ts:circular dependency",
     "src/ui/components/debug/debug-format.ts:high impact",
-    "src/session/snapshot-session-host.ts:complexity",
     "src/engine/element/game-element.ts:complexity",
+    "src/session/snapshot-session-host.ts:complexity",
     "src/session/stateless-ops.ts:complexity",
     "src/session/utils.ts:complexity",
     "src/testing/dom-leak.ts:complexity",
+    "src/ui/components/GameShell.vue:complexity",
     "src/cli/commands/chunk-provenance.ts:complexity",
     "src/cli/commands/verify-example-replay.ts:complexity",
-    "src/ui/components/GameShell.vue:complexity",
+    "src/ui/composables/useBoardActionBridge.ts:complexity",
     "src/bot/mcts-bot.ts:complexity",
     "src/cli/commands/ingest-archive.ts:complexity",
-    "src/ui/composables/useBoardActionBridge.ts:high impact",
     "src/engine/tutorial/gate.ts:circular dependency",
     "src/cli/commands/dev.ts:complexity",
     "src/cli/commands/verify-run.ts:complexity",
     "src/engine/tutorial/progress.ts:complexity",
     "src/ui/composables/useFlyingElements.ts:complexity",
     "src/cli/commands/publish.ts:complexity",
+    "src/engine/action/choice-matching.ts:high impact",
     "src/cli/commands/drift-check.ts:complexity",
     "src/cli/commands/trace-check.ts:complexity",
     "src/cli/commands/verify-derive-check.ts:circular dependency",
@@ -763,7 +761,6 @@
     "src/cli/commands/verify-classify.ts:complexity",
     "src/cli/dev-host/DevHost.vue:complexity",
     "src/testing/debug.ts:complexity",
-    "src/engine/action/choice-matching.ts:high impact",
     "src/session/pending-action-manager.ts:complexity",
     "src/cli/commands/test-step-ast.ts:high impact",
     "src/testing/random-simulation.ts:complexity",
