@@ -109,15 +109,9 @@ export function createPlaceStoneAction(game: MyGame): ActionDefinition {
 ```vue
 <script setup lang="ts">
 import { computed } from 'vue';
-import { findElements, hexToPixel, getHexPolygonPoints, type UseActionControllerReturn } from 'boardsmith/ui';
+import { findElements, hexToPixel, getHexPolygonPoints, type TableBoardProps } from 'boardsmith/ui';
 
-const props = defineProps<{
-  gameView: any;
-  playerSeat: number;
-  isMyTurn: boolean;
-  availableActions: string[];
-  actionController: UseActionControllerReturn;
-}>();
+const props = defineProps<TableBoardProps>();
 
 const HEX_SIZE = 30;
 const BOARD_SIZE = 7;
@@ -136,14 +130,13 @@ const viewBox = computed(() => {
   return `-${padding} -${padding} ${width} ${height}`;
 });
 
-// Get pixel position for a hex cell
-function getCellPosition(q: number, r: number) {
-  return hexToPixel(q, r, HEX_SIZE, 'flat');
-}
+// One hex outline, centred on the origin; each cell's <g> moves it into place
+const HEX_POINTS = getHexPolygonPoints(HEX_SIZE, 'flat');
 
-// Get SVG polygon points for hex shape
-function getHexPoints(cx: number, cy: number) {
-  return getHexPolygonPoints(cx, cy, HEX_SIZE, 'flat');
+// SVG transform that centres a cell's shapes on its pixel position
+function cellTransform(q: number, r: number) {
+  const { x, y } = hexToPixel(q, r, HEX_SIZE, 'flat');
+  return `translate(${x} ${y})`;
 }
 
 // Get stone in a cell (if any)
@@ -167,47 +160,45 @@ function handleCellClick(cell: any) {
   props.actionController.fill('cell', cell.id);
 }
 
-// Game over
-const isGameOver = computed(() => props.gameView?.isFinished ?? false);
+// The game is over when the flow completes. GameShell then draws its game-over
+// card, with the winners, over this board; to draw your own ending instead, see
+// "The End of the Game" in docs/custom-ui-guide.md. During time travel
+// flowState is null, so this is false.
+const isGameOver = computed(() => props.state?.flowState?.complete === true);
 </script>
 
 <template>
   <div class="game-board">
-    <div v-if="isGameOver" class="game-over-panel">
-      <h2>Game Over!</h2>
-    </div>
+    <svg :viewBox="viewBox" class="hex-board">
+      <!-- Cells -->
+      <g
+        v-for="cell in cells"
+        :key="cell.id"
+        :transform="cellTransform(cell.attributes?.q ?? 0, cell.attributes?.r ?? 0)"
+      >
+        <polygon
+          :points="HEX_POINTS"
+          class="hex-cell"
+          :class="{
+            clickable: canPlace && isMyTurn && !getCellStone(cell),
+            occupied: !!getCellStone(cell),
+          }"
+          @click="handleCellClick(cell)"
+        />
 
-    <template v-else>
-      <svg :viewBox="viewBox" class="hex-board">
-        <!-- Cells -->
-        <g v-for="cell in cells" :key="cell.id">
-          <polygon
-            :points="getHexPoints(
-              getCellPosition(cell.attributes?.q ?? 0, cell.attributes?.r ?? 0).x,
-              getCellPosition(cell.attributes?.q ?? 0, cell.attributes?.r ?? 0).y
-            )"
-            class="hex-cell"
-            :class="{
-              clickable: canPlace && isMyTurn && !getCellStone(cell),
-              occupied: !!getCellStone(cell),
-            }"
-            @click="handleCellClick(cell)"
-          />
+        <!-- Stone if present -->
+        <circle
+          v-if="getCellStone(cell)"
+          cx="0"
+          cy="0"
+          :r="HEX_SIZE * 0.6"
+          :fill="getPlayerColor(getCellStone(cell).attributes?.player?.seat)"
+          class="stone"
+        />
+      </g>
+    </svg>
 
-          <!-- Stone if present -->
-          <circle
-            v-if="getCellStone(cell)"
-            :cx="getCellPosition(cell.attributes?.q ?? 0, cell.attributes?.r ?? 0).x"
-            :cy="getCellPosition(cell.attributes?.q ?? 0, cell.attributes?.r ?? 0).y"
-            :r="HEX_SIZE * 0.6"
-            :fill="getPlayerColor(getCellStone(cell).attributes?.player?.seat)"
-            class="stone"
-          />
-        </g>
-      </svg>
-
-      <p v-if="!isMyTurn" class="waiting">Waiting for other player...</p>
-    </template>
+    <p v-if="!isMyTurn && !isGameOver" class="waiting">Waiting for other player...</p>
   </div>
 </template>
 

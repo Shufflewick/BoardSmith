@@ -215,12 +215,13 @@ describe('GameShell.vue source: displayedState wired at every board/sidebar site
     expect(gameShellSource).toContain('const displayedState = computed');
   });
 
-  // Was 3 while a board slot existed and duplicated the board's props.
-  // The slot is gone (the UI registry is the only board path), so the board is
-  // wired once, not twice: board <component :is> + sidebar-extra.
-  it('board + sidebar-extra sites read displayedState (count == 2)', () => {
+  // Was 3 while a board slot existed and duplicated the board's props. The
+  // board's props are built by `tableBoardProps` now (#516), so the template
+  // binds displayedState once, for sidebar-extra. That the board gets the
+  // displayed state is proved on the real shell in ../board-props.shells.test.ts.
+  it('the sidebar-extra site reads displayedState', () => {
     const occurrences = (gameShellSource.match(/:state="displayedState"/g) ?? []).length;
-    expect(occurrences).toBe(2);
+    expect(occurrences).toBe(1);
   });
 
   it('exactly ONE :state="state" site remains — the DebugPanel control surface', () => {

@@ -148,15 +148,9 @@ export function createMoveAction(game: MyGame): ActionDefinition {
 ```vue
 <script setup lang="ts">
 import { computed } from 'vue';
-import { findElements, toAlgebraicNotation, type UseActionControllerReturn } from 'boardsmith/ui';
+import { findElements, toAlgebraicNotation, type TableBoardProps } from 'boardsmith/ui';
 
-const props = defineProps<{
-  gameView: any;
-  playerSeat: number;
-  isMyTurn: boolean;
-  availableActions: string[];
-  actionController: UseActionControllerReturn;
-}>();
+const props = defineProps<TableBoardProps>();
 
 const CELL_SIZE = 60;
 const GRID_SIZE = 8;
@@ -181,15 +175,6 @@ function getPlayerColor(playerSeat: number) {
 const canPlace = computed(() => props.availableActions.includes('placePiece'));
 const canMove = computed(() => props.availableActions.includes('move'));
 
-// Track selected piece for two-step move
-const selectedPiece = computed(() => {
-  const { currentPick } = props.actionController;
-  if (currentPick.value?.name === 'destination') {
-    return props.actionController.pendingAction === 'move';
-  }
-  return false;
-});
-
 function handleCellClick(cell: any) {
   if (!props.isMyTurn) return;
 
@@ -204,9 +189,9 @@ function handleCellClick(cell: any) {
 
   // If moving - click piece first, then destination
   if (canMove.value) {
-    const { pendingAction, currentPick } = props.actionController;
+    const { currentAction, currentPick } = props.actionController;
 
-    if (!pendingAction) {
+    if (currentAction.value !== 'move') {
       // Start move by selecting a piece
       if (piece && piece.attributes?.player?.seat === props.playerSeat) {
         props.actionController.start('move');
@@ -221,64 +206,61 @@ function handleCellClick(cell: any) {
   }
 }
 
-// Game over
-const isGameOver = computed(() => props.gameView?.isFinished ?? false);
+// The game is over when the flow completes. GameShell then draws its game-over
+// card, with the winners, over this board; to draw your own ending instead, see
+// "The End of the Game" in docs/custom-ui-guide.md. During time travel
+// flowState is null, so this is false.
+const isGameOver = computed(() => props.state?.flowState?.complete === true);
 </script>
 
 <template>
   <div class="game-board">
-    <div v-if="isGameOver" class="game-over-panel">
-      <h2>Game Over!</h2>
+    <div
+      class="grid"
+      :style="{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${GRID_SIZE}, ${CELL_SIZE}px)`,
+        gap: '0',
+      }"
+    >
+      <div
+        v-for="cell in cells"
+        :key="cell.id"
+        class="cell"
+        :class="{
+          light: cell.attributes?.isLight,
+          dark: !cell.attributes?.isLight,
+          clickable: isMyTurn && (canPlace || canMove),
+        }"
+        :style="{ width: `${CELL_SIZE}px`, height: `${CELL_SIZE}px` }"
+        @click="handleCellClick(cell)"
+      >
+        <!-- Piece if present -->
+        <div
+          v-if="getCellPiece(cell)"
+          class="piece"
+          :style="{
+            backgroundColor: getPlayerColor(getCellPiece(cell).attributes?.player?.seat),
+          }"
+        />
+
+        <!-- Notation label (corner cells) -->
+        <span
+          v-if="cell.attributes?.col === 0"
+          class="row-label"
+        >
+          {{ (cell.attributes?.row ?? 0) + 1 }}
+        </span>
+        <span
+          v-if="cell.attributes?.row === 0"
+          class="col-label"
+        >
+          {{ String.fromCharCode(97 + (cell.attributes?.col ?? 0)) }}
+        </span>
+      </div>
     </div>
 
-    <template v-else>
-      <div
-        class="grid"
-        :style="{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${GRID_SIZE}, ${CELL_SIZE}px)`,
-          gap: '0',
-        }"
-      >
-        <div
-          v-for="cell in cells"
-          :key="cell.id"
-          class="cell"
-          :class="{
-            light: cell.attributes?.isLight,
-            dark: !cell.attributes?.isLight,
-            clickable: isMyTurn && (canPlace || canMove),
-          }"
-          :style="{ width: `${CELL_SIZE}px`, height: `${CELL_SIZE}px` }"
-          @click="handleCellClick(cell)"
-        >
-          <!-- Piece if present -->
-          <div
-            v-if="getCellPiece(cell)"
-            class="piece"
-            :style="{
-              backgroundColor: getPlayerColor(getCellPiece(cell).attributes?.player?.seat),
-            }"
-          />
-
-          <!-- Notation label (corner cells) -->
-          <span
-            v-if="cell.attributes?.col === 0"
-            class="row-label"
-          >
-            {{ cell.attributes?.row + 1 }}
-          </span>
-          <span
-            v-if="cell.attributes?.row === 0"
-            class="col-label"
-          >
-            {{ String.fromCharCode(97 + (cell.attributes?.col ?? 0)) }}
-          </span>
-        </div>
-      </div>
-
-      <p v-if="!isMyTurn" class="waiting">Waiting for other player...</p>
-    </template>
+    <p v-if="!isMyTurn && !isGameOver" class="waiting">Waiting for other player...</p>
   </div>
 </template>
 
