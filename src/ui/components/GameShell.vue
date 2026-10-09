@@ -428,6 +428,11 @@ const displayedState = computed<DisplayedGameState | null>(() => {
   return state.value;
 });
 
+// The players of the state on screen: the viewed snapshot's while the debug
+// panel shows history, so a #player-stats slot reading a score off them shows
+// it as it was then, beside the historical gameView (#578).
+const displayedPlayers = computed(() => displayedState.value?.state.players ?? []);
+
 // The generic request/response bridge to the host (which relays to the games
 // worker / executor). Every server operation the embedded game needs —
 // fetching choices, stepping selections, cancelling, undo — goes through this
@@ -1563,13 +1568,14 @@ defineExpose({
       <!-- Expose interaction state so a game's player-stats can be actionable
            (e.g. tap your own special ability to use it), not just informational.
            `gameView` is the historical view while time-traveling, so turn and
-           actions are the same history-gated values the board gets (#554). -->
+           actions are the same history-gated values the board gets (#554), and
+           `players` are the viewed snapshot's (#578). -->
       <template #player-stats="{ player }">
         <slot
           name="player-stats"
           :player="player"
           :game-view="gameView"
-          :players="players"
+          :players="displayedPlayers"
           :player-seat="playerSeat"
           :is-my-turn="gatedIsMyTurn"
           :available-actions="gatedAvailableActions"
