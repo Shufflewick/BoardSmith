@@ -141,6 +141,22 @@ export function findMatchingChoice<C extends MatchableChoice>(
   return trySmartResolveChoice(value, choices);
 }
 
+/**
+ * The label a value reads as when nothing else names it: its own `name` or
+ * `label`, else the value itself. The server labels a choice with it and the
+ * client labels a pick it holds without a choice (a follow-up's or a prefill's
+ * arg) with it, so the button and the breadcrumb agree (#509). `label` is the
+ * one label key; a `display` field on a value is ordinary data.
+ */
+export function labelOfValue(value: unknown): string {
+  if (value === null || value === undefined) return String(value);
+  if (typeof value !== 'object') return String(value);
+  const obj = value as Record<string, unknown>;
+  if (typeof obj.name === 'string') return obj.name;
+  if (typeof obj.label === 'string') return obj.label;
+  try { return JSON.stringify(value); } catch { return '[Complex Object]'; }
+}
+
 /** A serialized game element, which is never a plain data object. */
 function isSerializedElement(value: unknown): boolean {
   if (typeof value !== 'object' || value === null) return false;

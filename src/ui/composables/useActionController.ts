@@ -1889,7 +1889,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return { valid: false, error };
     }
 
-
     // PIT OF SUCCESS: Reject a scalar for a multiSelect pick (UIX-02).
     // Mirrors toggleMultiSelect's reverse guard (useActionController.ts ~1729-1734):
     // that guard rejects a non-multiSelect selection from toggleMultiSelect; this one

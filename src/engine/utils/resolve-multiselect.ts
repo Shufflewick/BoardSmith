@@ -42,7 +42,7 @@ function boundsOf(resolved: unknown, selection: Selection, option: string): { mi
     );
   }
   if (typeof resolved === 'number') return { min: 1, max: resolved };
-  const config = (resolved ?? {}) as { min?: number; max?: number };
+  const config = resolved as { min?: number; max?: number };
   return config.max === undefined
     ? { min: config.min ?? 1 }
     : { min: config.min ?? 1, max: config.max };

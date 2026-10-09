@@ -1,5 +1,45 @@
 # Migration Guide
 
+## A `chooseFrom` callback receives the value, and `label` is the one label key
+
+A `chooseFrom` choice is a value, or `{ value, label }` to give the value its own
+label. Every callback after `choices` (`disabled`, `display`, `boardRefs`,
+`validate`, `onSelect`) and `execute` now receive the **value**, and the arg is
+typed as it (#509). Only an object whose keys are `value` and an optional string
+`label` is read that way; any other object arrives whole. A game written against
+the old rules changes in five places:
+
+- **`display` becomes `label` on a choice object.** `{ value, display }` is now an
+  ordinary object: it arrives whole and the panel shows it as JSON.
+
+  ```diff
+  -  choices: parts.map((p) => ({ value: p.id, display: p.title })),
+  +  choices: parts.map((p) => ({ value: p.id, label: p.title })),
+  ```
+
+- **Read the value, not `choice.value`, in a callback.** `disabled`, `boardRefs`
+  and `display` used to receive the whole choice object; they receive its value,
+  as `validate` and `execute` always did. Drop the casts that papered over it.
+
+  ```diff
+  -  boardRefs: (choice: { value: number; display: string }) => refsFor(choice.value),
+  +  boardRefs: (seat) => refsFor(seat),
+  -  const seat = args.target as unknown as number;
+  +  const seat = args.target;
+  ```
+
+- **`playerChoices()` returns `{ value: seat, label: name }`**, so its arg is the
+  seat number. A test or custom UI that submitted `{ value: seat, display: name }`
+  submits the seat.
+- **`fill()` no longer unwraps a choice object.** Pass `choice.value`; the whole
+  `{ value, display }` choice from `getChoices()` is refused like any value that is
+  not on offer.
+- **A function-valued `multiSelect` or `orderedList` returns a count.** It used to
+  be allowed to return `undefined` for "single after all", which made the arg an
+  array in some states and a bare value in others. It is now a type error and is
+  refused at run time, naming the selection. Return `{ min: 1, max: 1 }` and read
+  an array of one. Declaring either option types the arg as an array.
+
 ## The game context's turn signals follow time travel; `usePlayContext()` works in a world
 
 The game context now carries `isViewingHistory`, and while the debug panel shows

@@ -7,6 +7,7 @@
 
 import type { EnrichedActionMetadata, ChoiceWithRefs, ElementRef, EnrichedPickMetadata, PickSnapshot } from './useActionControllerTypes.js';
 import { isDevMode, devWarn } from '../../utils/dev.js';
+import { labelOfValue } from '../../engine/action/choice-matching.js';
 
 // Re-export for backwards compatibility during transition
 export { isDevMode, devWarn };
@@ -136,31 +137,13 @@ export function choiceBoardTarget(choice: ChoiceWithRefs): ElementRef | undefine
 // ============================================
 
 /**
- * Extract a display string from a value.
- * Handles objects with display/name properties (e.g., followUp context args).
- *
- * Priority:
- * 1. `display` property (explicit display text)
- * 2. `name` property (common for elements/entities)
- * 3. `value` property if primitive
- * 4. String conversion fallback
- *
- * @param value - Any value to extract display from
- * @returns Display string for the value
+ * The label for a pick value the client holds without its choice (a follow-up's
+ * or a prefill's arg): the server's own rule ({@link labelOfValue}), so the
+ * breadcrumb reads what the button did. A missing value reads as nothing.
  */
 export function getDisplayFromValue(value: unknown): string {
   if (value === null || value === undefined) return '';
-  if (typeof value !== 'object') return String(value);
-
-  const obj = value as Record<string, unknown>;
-  // Priority 1: display property
-  if (typeof obj.display === 'string') return obj.display;
-  // Priority 2: name property (common for elements/entities)
-  if (typeof obj.name === 'string') return obj.name;
-  // Priority 3: primitive value property
-  if (obj.value !== undefined && typeof obj.value !== 'object') return String(obj.value);
-  // Fallback
-  return String(value);
+  return labelOfValue(value);
 }
 
 // ============================================

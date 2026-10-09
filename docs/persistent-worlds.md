@@ -691,10 +691,10 @@ selections. There are five you may write:
   })
   ```
 
-  A world's `multiSelect` always resolves to an array -- the engine's own form
-  lets the function return `undefined` to mean "single after all", and this one
-  does not, so the argument's type is knowable from the call. Want exactly one?
-  `{ min: 1, max: 1 }`, and take an array of one.
+  A world's `multiSelect` always resolves to an array, as the engine's own form
+  does: the function returns a count and never `undefined`, so the argument's
+  type is knowable from the call. Want exactly one? `{ min: 1, max: 1 }`, and
+  take an array of one.
 
   `multiSelect` is a **set**: order is incidental and a repeated identity is
   refused. When the answer is a **sequence** -- do these, in this order, and the

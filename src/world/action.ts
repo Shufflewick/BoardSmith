@@ -382,13 +382,12 @@ export interface WorldClockFacilities extends WorldFacilities {
 /**
  * HOW MANY OF A THING A WORLD'S CHOICE TAKES (#376).
  *
- * The engine's own form also admits `undefined` from the function, meaning
- * "single-select after all". A world's does not, and that is the one place this
- * narrows what the engine can express: a `multiSelect` here ALWAYS resolves to
- * an array, so the argument's type is knowable from the call rather than from
- * whatever the function decided at render time. An author who wants exactly one
- * writes `{ min: 1, max: 1 }` and receives an array of one, which is a shape a
- * handler can write once instead of branching on.
+ * A `multiSelect` ALWAYS resolves to an array, as the engine's own form does
+ * (#509): the function returns a count and never `undefined`, so the
+ * argument's type is knowable from the call rather than from whatever the
+ * function decided at render time. An author who wants exactly one writes
+ * `{ min: 1, max: 1 }` and receives an array of one, which is a shape a handler
+ * can write once instead of branching on.
  */
 export type WorldMultiSelect<G extends Game = Game> =
   | number

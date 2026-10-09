@@ -1604,8 +1604,8 @@ export function createAskAction(game: GoFishGame): ActionDefinition {
     })
     .execute((args, ctx) => {
       const player = ctx.player;
-      const targetChoice = args.target as { value: number; display: string };
-      const target = game.getPlayer(targetChoice.value) as GoFishPlayer;
+      // playerChoices offers { value: seat, label: name }, so args.target is the seat
+      const target = game.getPlayer(args.target) as GoFishPlayer;
       const rank = args.rank as string;
 
       const matchingCards = game.getCardsOfRank(target, rank);

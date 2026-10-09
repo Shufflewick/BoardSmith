@@ -5,7 +5,9 @@
  * or an execute() that can never be satisfied.
  */
 import { describe, it, expect } from 'vitest';
-import { actionNeedsWizardMode } from './actionControllerHelpers.js';
+import { actionNeedsWizardMode, getDisplayFromValue } from './actionControllerHelpers.js';
+import { formatChoiceCandidates } from '../../engine/element/pick-candidates.js';
+import type { ChoiceSelection } from '../../engine/action/types.js';
 import type { EnrichedActionMetadata, ChoiceWithRefs, EnrichedPickMetadata } from './useActionControllerTypes.js';
 
 const selection = (overrides: Partial<EnrichedPickMetadata>): EnrichedPickMetadata => ({
@@ -149,5 +151,36 @@ describe('actionNeedsWizardMode', () => {
     actionNeedsWizardMode(metadata, args);
     expect(metadata.selections).toHaveLength(1);
     expect(args).toEqual({ other: 1 });
+  });
+});
+
+/**
+ * #509: a pick the client labels itself (a follow-up's or a prefill's arg in the
+ * breadcrumb) reads the same label the server gives that value on the button.
+ * `label` is the one label key; `display` on a value is ordinary data.
+ */
+describe('getDisplayFromValue agrees with the server label (#509)', () => {
+  const serverLabel = (value: unknown): string =>
+    formatChoiceCandidates(
+      [{ value, disabled: false }],
+      { type: 'choice', name: 'pick', choices: [] } as ChoiceSelection,
+      {} as never,
+      [],
+    )[0]!.display;
+
+  it.each([
+    ['a string', 'go'],
+    ['a number', 3],
+    ['an object with a name', { id: 7, name: 'Harbour' }],
+    ['an object with a label', { key: 'k', label: 'Keep' }],
+    ['an object whose display is data, not a label', { value: 'x', display: 'Shown' }],
+    ['an object with a primitive value and nothing to read', { value: 3, cost: 2 }],
+  ])('%s', (_what, value) => {
+    expect(getDisplayFromValue(value)).toBe(serverLabel(value));
+  });
+
+  it('labels a missing value as nothing', () => {
+    expect(getDisplayFromValue(undefined)).toBe('');
+    expect(getDisplayFromValue(null)).toBe('');
   });
 });

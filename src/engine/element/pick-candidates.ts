@@ -22,6 +22,7 @@
  */
 import { isDevThrowEnabled } from '../../utils/dev.js';
 import { isElement } from './game-element.js';
+import { labelOfValue } from '../action/choice-matching.js';
 import type { ElementRef } from '../../types/protocol.js';
 import type {
   ChoiceSelection,
@@ -72,16 +73,6 @@ function sanitizeCallbackError(error: unknown, source: string): string {
   return `${source} could not be evaluated for this choice.`;
 }
 
-/** The label a raw choice value carries, when it carries one of its own. */
-function defaultDisplay(value: unknown): string {
-  if (value === null || value === undefined) return String(value);
-  if (typeof value !== 'object') return String(value);
-  const obj = value as Record<string, unknown>;
-  if (typeof obj.name === 'string') return obj.name;
-  if (typeof obj.label === 'string') return obj.label;
-  try { return JSON.stringify(value); } catch { return '[Complex Object]'; }
-}
-
 /**
  * Format a `choice` selection's candidates.
  *
@@ -97,7 +88,7 @@ export function formatChoiceCandidates(
   warnings: WarningEntry[],
 ): ChoiceWithRefs[] {
   return candidates.map(({ value, label, disabled }) => {
-    const display = label ?? (selection.display ? selection.display(value) : defaultDisplay(value));
+    const display = label ?? (selection.display ? selection.display(value) : labelOfValue(value));
     const choice: ChoiceWithRefs = { value, display };
 
     if (selection.boardRefs) {
