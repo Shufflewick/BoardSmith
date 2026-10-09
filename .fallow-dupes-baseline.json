@@ -74,7 +74,7 @@
     "src/world/action.ts:1168-1173|src/world/action.ts:1205-1210",
     "src/engine/element/game.ts:3760-3764|src/engine/element/game.ts:3792-3796",
     "src/eslint-plugin/rules/no-filesystem.ts:64-81|src/eslint-plugin/rules/no-network.ts:99-113",
-    "src/cli/dev-host/DevHost.vue:907-914|src/cli/dev-host/DevHost.vue:918-925",
+    "src/cli/dev-host/DevHost.vue:908-915|src/cli/dev-host/DevHost.vue:919-926",
     "src/engine/element/game-element.ts:1011-1017|src/engine/element/game-element.ts:1077-1083",
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:56-72|src/ui/components/auto-ui/renderers/HandRenderer.vue:48-66",
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:605-615|src/ui/components/auto-ui/renderers/HandRenderer.vue:568-578",
