@@ -1,7 +1,7 @@
 {
-  "revision": 138,
+  "revision": 139,
   "bundleProtocol": 2,
-  "surfaceHash": "4fd5ab5e85ca0dd6",
+  "surfaceHash": "79d735d3b524457f",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1182,10 +1182,19 @@
       "revision": 138,
       "date": "2026-10-09",
       "bundleProtocol": 2,
-      "surfaceHash": "4fd5ab5e85ca0dd6",
+      "surfaceHash": "79d735d3b524457f",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "From startFlow() or a flow restore on, and in a world once createWorld has finished construction (reserveConstructionIdSpace), create() of an element class the game did not register is refused with: Element class 'X' is created after setup but was never registered. Call this.registerElements([X]) in your game's constructor. This includes a game class named like a built-in (a Hand subclass) that was not registered, which used to be swapped in live and come back as the built-in on restore. Before, it worked live and failed on the next restore, undo, bot search or world wake with Unknown element class (or silently restored the wrong class). A game that creates a class during play, in an action, a command or world genesis, must register it in its constructor; a class created only in the constructor still registers itself. Fingerprints are unchanged."
+      "summary": "A simultaneous step now decides a seat that has just acted the same way it decides every seat at entry and on refreshAwaitingActions (#501): a seat skipPlayer now excludes leaves awaitingPlayers at once (and the step completes if it was the last seat) instead of staying prompted, and a function-valued actions list that returns an unregistered name after a seat acts halts the flow with the 'references unknown action' error instead of silently dropping the name. FlowEngine gains the private helpers offeredActions, seatEligibility, offeredSequentialActions and offeredSimultaneousActions, which is the surface change; each seat's available actions are now read once per evaluation rather than once per declared name."
+    },
+    {
+      "revision": 139,
+      "date": "2026-10-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "79d735d3b524457f",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "From startFlow() or a flow restore on, and in a world once createWorld has finished construction, create() of an element class the game did not register is refused, in live games, restored games and worlds alike, with: Element class 'X' is created after setup but was never registered. Call this.registerElements([X]) in your game's constructor. This includes a game class named like a built-in (a Hand subclass) that was not registered, which used to be swapped in live and come back as the built-in on restore. Before, it worked live and failed on the next restore, undo, bot search or world wake with Unknown element class. A game that creates a class during play, in an action, a command or world genesis, must register it in its constructor; a class created only in the constructor still registers itself. Fingerprints are unchanged."
     }
   ]
 }

@@ -44,13 +44,8 @@
  * once all required selections are filled (via wizard mode).
  *
  * ## Accessing from Custom UIs
- * The controller is provided via slot props and inject:
- * ```vue
- * <template #game-board="{ actionController }">
- *   <MyBoard :controller="actionController" />
- * </template>
- * ```
- * Or via inject:
+ * GameShell passes it to the board component as the
+ * `actionController` prop. Anywhere below the board it is available via inject:
  * ```typescript
  * import { injectActionController } from 'boardsmith/ui';
  * const controller = injectActionController();
@@ -1434,13 +1429,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    *
    * @example
    * ```typescript
-   * // In game-board slot
+   * // In the board component
    * const { flyingElements, onBeforeAutoExecute } = useActionAnimations({
    *   gameView,
    *   animations: [...]
    * });
    *
-   * // Register the hook after getting actionController from slot props
+   * // Register the hook after receiving actionController as a board prop
    * actionController.setBeforeAutoExecute(onBeforeAutoExecute);
    * ```
    *

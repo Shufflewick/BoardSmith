@@ -87,8 +87,8 @@ interface GameShellProps {
    * `defineGameUIs()` in the game's `src/ui/uis.ts`, which is the single place
    * this is declared (see src/ui/game-uis.ts).
    *
-   * Required, and the ONLY way to supply a board. There is deliberately no
-   * `#game-board` slot: two ways to name the default UI is two things that can
+   * Required, and the ONLY way to supply a board. GameShell has no slot
+   * for the board: two ways to name the default UI is two things that can
    * disagree, and the manifest's old `"ui"` key already proved how that ends.
    * A production build renders `registry.defaultName`; every other entry exists
    * only under `boardsmith dev` and is stripped from the bundle entirely.
@@ -546,7 +546,7 @@ const {
   gameOverRevealed,
 } = tableSeat;
 
-// Read-only action args for display and slot props.
+// Read-only action args for display and board props.
 const actionArgs = computed(() => actionController.currentArgs.value);
 
 // The session's formatted, seat-scoped messages are the ONLY source. There used
@@ -944,7 +944,7 @@ onMounted(() => {
   shellMounted.value = true;
 });
 
-// Mount: in platform mode the host (ShufflewickPub in prod, the boardsmith dev
+// Mount: the host (ShufflewickPub in prod, the boardsmith dev
 // host locally) manages the session and drives everything via postMessage.
 onMounted(async () => {
   // TOKEN-05: Install the Slate token base stylesheet once on mount. This is the
@@ -1498,13 +1498,13 @@ defineExpose({
 
       <template #board>
         <!--
-          Game Board Slot Props:
+          Props the board component receives:
           - actionController: USE THIS for all action handling (start, fill, execute, cancel)
           - actionArgs: Read-only view of current selection args (for UI display)
           - Other props: game state for rendering
         -->
         <!-- ONE render path for the board: the registry's default UI, or the
-             dev switcher's selection. There is no #game-board slot — a second
+             dev switcher's selection. GameShell has no slot for the board — a second
              way to name the default UI would be a second thing to disagree
              with `src/ui/uis.ts`, and props drifted between the two paths for
              real while both existed (the slot never received flow-state or

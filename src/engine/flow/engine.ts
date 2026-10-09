@@ -338,6 +338,56 @@ export class FlowEngine<G extends Game = Game> {
       );
     }
   }
+
+  /**
+   * The names in `declared` that `player` can take right now: the one answer
+   * every step gives to "which of this step's actions does this seat get".
+   * Refuses an unregistered name first (see requireRegisteredActions), and
+   * reads the seat's available actions once, not once per declared name.
+   */
+  private offeredActions(declared: string[], player: Player, stepName: string): string[] {
+    this.requireRegisteredActions(declared, stepName);
+    const available = new Set(this.game.getAvailableActions(player).map((a) => a.name));
+    return declared.filter((name) => available.has(name));
+  }
+
+  /**
+   * Where `player` stands in the open simultaneous step `frame`: excluded by
+   * `skipPlayer`, finished by `playerDone`, or still awaited. A seat holding a
+   * follow-up is awaited whatever the two callbacks say, because the follow-up
+   * is what it has left to take. Entry, refresh and the re-evaluation after a
+   * seat acts all ask this, and differ only in what they do with the answer.
+   */
+  private seatEligibility(
+    config: SimultaneousActionStepConfig<G>,
+    context: FlowContext<G>,
+    player: Player,
+    frame: ExecutionFrame<G>,
+  ): 'skipped' | 'done' | 'awaited' {
+    if (this.heldFollowUp(frame, player.seat) !== undefined) return 'awaited';
+    if (config.skipPlayer?.(context, player as never)) return 'skipped';
+    if (config.playerDone?.(context, player as never)) return 'done';
+    return 'awaited';
+  }
+
+  /** The names a sequential action step offers `player`, from its declared list. */
+  private offeredSequentialActions(config: ActionStepConfig<G>, context: FlowContext<G>, player: Player): string[] {
+    const declared = typeof config.actions === 'function' ? config.actions(context) : config.actions;
+    return this.offeredActions(declared, player, config.name ?? 'action-step');
+  }
+
+  /** The names a simultaneous step offers `player`, from its declared list. */
+  private offeredSimultaneousActions(
+    config: SimultaneousActionStepConfig<G>,
+    context: FlowContext<G>,
+    player: Player,
+  ): string[] {
+    const declared = typeof config.actions === 'function'
+      ? config.actions(context, player as never)
+      : config.actions;
+    return this.offeredActions(declared, player, config.name ?? 'simultaneous-action-step');
+  }
+
   /** Move count for current action step with move limits */
   private moveCount = 0;
   /**
@@ -886,27 +936,15 @@ export class FlowEngine<G extends Game = Game> {
       // A seat that already committed this step stays committed. Re-deriving
       // its list would be the one change a refresh must never make.
       if (existing?.completed) continue;
-      // A seat holding a follow-up stays awaited whatever else is true of it.
-      const holdsFollowUp = this.heldFollowUp(frame, player.seat) !== undefined;
 
-      if (
-        !holdsFollowUp
-        && (config.skipPlayer?.(context, player as never) || config.playerDone?.(context, player as never))
-      ) {
+      if (this.seatEligibility(config, context, player, frame) !== 'awaited') {
         if (existing) this.awaitingPlayers = this.awaitingPlayers.filter((p) => p !== existing);
         continue;
       }
 
-      const declared = typeof config.actions === 'function'
-        ? config.actions(context, player as never)
-        : config.actions;
-      this.requireRegisteredActions(declared, config.name ?? 'simultaneous-action-step');
+      const available = this.offeredSimultaneousActions(config, context, player);
 
-      const available = declared.filter((actionName) =>
-        this.game.getAvailableActions(player).some((a) => a.name === actionName),
-      );
-
-      if (available.length === 0 && !holdsFollowUp) {
+      if (available.length === 0 && this.heldFollowUp(frame, player.seat) === undefined) {
         if (existing) this.awaitingPlayers = this.awaitingPlayers.filter((p) => p !== existing);
         continue;
       }
@@ -936,20 +974,18 @@ export class FlowEngine<G extends Game = Game> {
     player: Player,
     context: FlowContext<G>,
   ): void {
-    const followUp = this.heldFollowUp(frame, player.seat);
-    if (config.playerDone && !followUp) {
-      playerState.completed = config.playerDone(context, player);
+    const eligibility = this.seatEligibility(config, context, player, frame);
+    if (eligibility === 'skipped') {
+      this.awaitingPlayers = this.awaitingPlayers.filter((p) => p !== playerState);
+      return;
     }
-    if (playerState.completed) return;
+    if (eligibility === 'done') {
+      playerState.completed = true;
+      return;
+    }
 
-    const actions = typeof config.actions === 'function'
-      ? config.actions(context, player)
-      : config.actions;
-    playerState.availableActions = actions.filter((availableActionName) => {
-      const action = this.game.getAction(availableActionName);
-      if (!action) return false;
-      return this.game.getAvailableActions(player).some((a) => a.name === availableActionName);
-    });
+    playerState.availableActions = this.offeredSimultaneousActions(config, context, player);
+    const followUp = this.heldFollowUp(frame, player.seat);
     if (followUp) {
       this.warnIfFollowUpStalls(config.name ?? 'simultaneous-action-step', player.seat, followUp);
     } else if (playerState.availableActions.length === 0) {
@@ -2041,19 +2077,7 @@ export class FlowEngine<G extends Game = Game> {
       throw new Error('ActionStep requires a player');
     }
 
-    // Get available actions
-    const actions = typeof config.actions === 'function'
-      ? config.actions(context)
-      : config.actions;
-
-    // A name with no registered action is a structural authoring error, not a
-    // condition that happens to be false — see requireRegisteredActions.
-    this.requireRegisteredActions(actions, config.name ?? 'action-step');
-
-    const allAvailable = this.game.getAvailableActions(player);
-    const available = actions.filter((actionName) =>
-      allAvailable.some((a) => a.name === actionName)
-    );
+    const available = this.offeredSequentialActions(config, context, player);
 
     // If no available actions and minMoves met, complete
     if (available.length === 0 && minMovesMet) {
@@ -2103,10 +2127,7 @@ export class FlowEngine<G extends Game = Game> {
     if (!player) {
       throw new Error(`Action step holds a follow-up for seat ${seat}, but this game has no seat ${seat}.`);
     }
-    const actions = typeof config.actions === 'function' ? config.actions(context) : config.actions;
-    this.requireRegisteredActions(actions, config.name ?? 'action-step');
-    const allAvailable = this.game.getAvailableActions(player);
-    const available = actions.filter((actionName) => allAvailable.some((a) => a.name === actionName));
+    const available = this.offeredSequentialActions(config, context, player);
 
     this.warnIfFollowUpStalls(config.name ?? 'action-step', seat, this.heldFollowUp(frame, seat)!);
     this.openStepWindow(frame, config, context, 'action-step');
@@ -2148,26 +2169,9 @@ export class FlowEngine<G extends Game = Game> {
     this.turnRun = undefined;
 
     for (const player of players) {
-      // Check if player should be skipped
-      if (config.skipPlayer?.(context, player)) {
-        continue;
-      }
+      if (this.seatEligibility(config, context, player, frame) !== 'awaited') continue;
 
-      // Check if player is already done
-      if (config.playerDone?.(context, player)) {
-        continue;
-      }
-
-      // Get available actions for this player
-      const actions = typeof config.actions === 'function'
-        ? config.actions(context, player)
-        : config.actions;
-
-      this.requireRegisteredActions(actions, config.name ?? 'simultaneous-action-step');
-
-      const available = actions.filter((actionName) =>
-        this.game.getAvailableActions(player).some((a) => a.name === actionName)
-      );
+      const available = this.offeredSimultaneousActions(config, context, player);
 
       // Only add player if they have available actions
       if (available.length > 0) {

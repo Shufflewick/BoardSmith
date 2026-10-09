@@ -997,7 +997,7 @@ card in a hand. Work every choice's rule needs goes in the selection's
 The reason is not a `title` tooltip. It renders in a shared popover on hover, on
 focus, and **on tap** — the native `title` this replaced showed nothing at all on
 touch, so on a phone the reason did not exist. Custom UIs get the map as a
-`disabledActions` slot prop on `#game-board` and bind the same
+`disabledActions` prop the board component receives and bind the same
 `v-disabled-reason` directive the panel uses, so board and panel dim, explain,
 and go inert identically. See the
 [Custom UI Guide](./custom-ui-guide.md#understanding-getchoices-return-values).

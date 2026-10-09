@@ -13,7 +13,7 @@
  * copy: the Vite server, `importRuntimeBundle`'s one-engine rules bundle, the
  * "no SPA fallback, a missing asset is a 404" rule (issue 134), the
  * `noServer` WebSocket upgrade that leaves Vite's HMR socket alone, and the
- * iframe-in-platform-mode shape -- the outer page is dev chrome and the game's
+ * iframe shape -- the outer page is dev chrome and the game's
  * own surface renders inside a frame over the exact protocol production uses.
  *
  * ## WHAT IT SERVES

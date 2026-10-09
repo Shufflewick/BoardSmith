@@ -21,8 +21,7 @@
  *       removal, not display:none) and renders the slot content instead.
  *   (c) `providesOwnGameOverUi=true` suppresses BOTH the default card and any
  *       slot content.
- *   (b)/(c) are asserted under both the default board and a custom `#game-board`
- *   slot, to prove UI parity (CLAUDE.md hard rule).
+ *   (b)/(c) are asserted under both the default board and a custom board, to prove UI parity (CLAUDE.md hard rule).
  */
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
@@ -68,7 +67,7 @@ const GameOverHarness = defineComponent({
   template: `
     <div class="boardregion" ref="boardregion" tabindex="-1">
       <div v-if="useCustomBoard" class="custom-board">Custom board UI</div>
-      <div v-else class="empty-game-area">Add your game board in the #game-board slot</div>
+      <div v-else class="empty-game-area">Add your game board</div>
 
       <template v-if="complete && !providesOwnGameOverUi && !dismissed">
         <slot
@@ -113,7 +112,7 @@ describe('GameShell game-over — default card (no slot / no flag)', () => {
 
 describe.each([
   ['default board', false],
-  ['custom #game-board UI', true],
+  ['custom board UI', true],
 ] as const)('GameShell game-over — #game-over slot suppression (%s)', (_label, useCustomBoard) => {
   it('removes the default card from the DOM and renders slot content when #game-over is filled', () => {
     const wrapper = mountHarness(
@@ -130,7 +129,7 @@ describe.each([
 
 describe.each([
   ['default board', false],
-  ['custom #game-board UI', true],
+  ['custom board UI', true],
 ] as const)('GameShell game-over — providesOwnGameOverUi suppression (%s)', (_label, useCustomBoard) => {
   it('suppresses BOTH the default card and slot content when providesOwnGameOverUi=true', () => {
     const wrapper = mountHarness(
@@ -155,7 +154,7 @@ describe.each([
 // ---------------------------------------------------------------------------
 describe.each([
   ['default board', false],
-  ['custom #game-board UI', true],
+  ['custom board UI', true],
 ] as const)('GameShell game-over — adversarial: suppression is real DOM removal (%s)', (_label, useCustomBoard) => {
   it('the default card markup is entirely absent from wrapper.html() when #game-over slot is filled', () => {
     const wrapper = mountHarness(

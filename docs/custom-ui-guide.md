@@ -433,7 +433,7 @@ In `<script setup>`, importing it as `vDisabledReason` is all the registration
 it needs. Elsewhere: `app.directive('disabled-reason', vDisabledReason)`.
 
 The same binding works for a whole action's button: `disabledActions[name]` is a
-`#game-board` slot prop carrying the reason from the action's `.disabled()`
+prop your board receives, carrying the reason from the action's `.disabled()`
 rule or the tutorial gate.
 
 You are not required to use it — a board can render its dimmed state however it
@@ -1034,7 +1034,7 @@ a game over to hold back.
 GameShell fits the board to the available screen space at startup by
 measuring the board's **intrinsic** (natural) size and then zooming it to
 fit. To measure an intrinsic size at all, the element that wraps your
-`#game-board` slot — `.game-shell__zoom-container` — is styled
+board — `.game-shell__zoom-container` — is styled
 `width: max-content`. This is deliberate and load-bearing: it's what lets
 `useAutoZoom` ask "how big does this board *want* to be?" for boards of any
 shape (square grids, wide card rows, tall hex boards) without you declaring a
@@ -1052,7 +1052,7 @@ parent for its containment context), there is nothing for it to resolve
 against inside a `max-content` ancestor, and it collapses to `0×0`. Because
 this can happen silently (no visible error, no crash — the board region is
 simply empty), a dev-mode `console.error` fires once a real game state has
-arrived and the `#game-board` slot still measures `0×0` after mounting.
+arrived and the board still measures `0×0` after mounting.
 That's the error that points here.
 
 ### The fix

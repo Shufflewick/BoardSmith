@@ -10,7 +10,7 @@
  * throughout, which is why this mounts the shell itself: the shell is the thing
  * that was broken.
  *
- * Platform mode is "am I in an iframe", detected synchronously at setup as
+ * The shell talks to a host only when it is in an iframe, detected synchronously at setup as
  * `window.parent !== window`, so the test redefines `window.parent` before mount.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';

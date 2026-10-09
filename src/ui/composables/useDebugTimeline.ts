@@ -63,7 +63,7 @@ export interface DebugTimeline {
    *    the tab (including the debug panel that opened it) responds until it is
    *    dismissed. That is also what it looks like to any browser automation
    *    driving the shell — an unresponsive page, not a prompt.
-   *  - The game runs INSIDE AN IFRAME in platform mode. Chrome blocks modal
+   *  - The game runs INSIDE AN IFRAME. Chrome blocks modal
    *    dialogs from cross-origin iframes outright: `confirm()` returns false
    *    without ever showing anything, so "Rewind Here" silently did nothing —
    *    no rewind, no error, no explanation.

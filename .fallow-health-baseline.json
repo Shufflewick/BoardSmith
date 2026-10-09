@@ -332,7 +332,7 @@
         "count": 2
       },
       "complexity_moderate": {
-        "count": 13
+        "count": 12
       }
     },
     "src/engine/flow/walk-flow-nodes.ts": {
@@ -743,9 +743,9 @@
     "src/engine/element/game-element.ts:complexity",
     "src/session/stateless-ops.ts:complexity",
     "src/session/utils.ts:complexity",
+    "src/testing/dom-leak.ts:complexity",
     "src/cli/commands/chunk-provenance.ts:complexity",
     "src/cli/commands/verify-example-replay.ts:complexity",
-    "src/testing/dom-leak.ts:complexity",
     "src/ui/components/GameShell.vue:complexity",
     "src/bot/mcts-bot.ts:complexity",
     "src/cli/commands/ingest-archive.ts:complexity",
@@ -761,7 +761,6 @@
     "src/cli/commands/verify-derive-check.ts:circular dependency",
     "src/bot-trainer/benchmark.ts:complexity",
     "src/cli/commands/verify-classify.ts:complexity",
-    "src/engine/flow/engine.ts:complexity",
     "src/cli/dev-host/DevHost.vue:complexity",
     "src/testing/debug.ts:complexity",
     "src/engine/action/choice-matching.ts:high impact",
