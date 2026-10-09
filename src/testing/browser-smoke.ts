@@ -39,6 +39,7 @@
  */
 import { test, type Browser, type BrowserContext, type Frame, type Locator, type Page } from '@playwright/test';
 import {
+  clickArrived,
   clickReached,
   guardClicks,
   MODAL_DIALOGS,
@@ -896,26 +897,26 @@ const OVER_THE_FRAME = "the click reached nothing in the game, so something over
  */
 async function landsOnlyOn(control: Control, click: () => Promise<void>): Promise<boolean> {
   const around = pagesAround(control.frame);
-  await control.target.evaluate(guardClicks, undefined, { timeout: PRESS_MS });
+  await control.target.evaluate(guardClicks, undefined, { timeout: LOOK_MS });
   for (const outer of around) await outer.evaluate(guardClicks, null);
   const reached: Reached[] = [];
   let failed: { error: unknown } | undefined;
-  try {
-    await click();
-  } catch (error) {
+  await click().catch((error: unknown) => {
     failed = { error };
-  } finally {
-    // The page around the game is read first: it stays when the click replaced the game's frame,
-    // and must be left unguarded whatever the frame's read finds.
-    for (const outer of around) reached.push(await outer.evaluate(clickReached));
-    reached.push(await control.frame.evaluate(clickReached));
-  }
+  });
+  // The page around the game is read first: it stays when the click replaced the game's frame,
+  // and must be left unguarded whatever the frame's read finds.
+  for (const outer of around) reached.push(await outer.evaluate(clickReached));
+  const arrived = failed !== undefined && (await control.frame.evaluate(clickArrived));
+  reached.push(await control.frame.evaluate(clickReached));
   if (reached.includes('toast')) throw new UnderAToast(COVERED);
   const inTheGame = reached[reached.length - 1];
-  if (inTheGame === 'it') return true;
-  if (failed !== undefined) throw failed.error;
+  if (failed !== undefined) {
+    if (inTheGame === 'it' && arrived) return true;
+    throw failed.error;
+  }
   if (inTheGame === 'nothing') throw new Error(OVER_THE_FRAME);
-  return false;
+  return inTheGame === 'it';
 }
 
 /**

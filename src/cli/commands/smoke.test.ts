@@ -26,6 +26,7 @@ import {
   boardWithATimidControl,
   boardWithAVanishingControl,
   boardThatHidesThePanelForAMoment,
+  boardThatRedrawsThePanel,
   boardThatReplacesItsFrame,
   boardThatKeepsReordering,
   boardUnderTheHostsCover,
@@ -498,6 +499,18 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.passed).toBe(false);
     expect(outcome.summary).toContain('- The panel showed its "draw", and it was still gone 5s later, when the walk went to press it.');
     expect(outcome.summary).toContain('- The panel offered "draw", but the walk never took it in 4 steps.');
+  });
+
+  it('#562: presses a panel button the panel redrew as a new element just as the walk went to press it', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      ...aceGame(),
+      ...boardThatRedrawsThePanel(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 12 }),
+    });
+
+    expect(outcome.summary).not.toContain('did not work');
+    expect(steps.slice(1, 3)).toEqual(['smoke step 1: taking "draw"', 'smoke step 2: taking "play"']);
+    expect(outcome.passed).toBe(true);
   });
 
   it('presses the board control it found, though the board moved another into its place before the press', async () => {

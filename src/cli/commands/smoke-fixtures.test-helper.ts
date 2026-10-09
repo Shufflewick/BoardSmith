@@ -3,6 +3,7 @@
  * `smokeProject` makes (its game is `dev-game`, so its classes are `DevGameGame` and
  * `DevGamePlayer`).
  */
+import { PRESS_MARK } from '../../testing/browser-smoke-page.js';
 
 /** A smoke spec listing `actions`, with `unreachable`, `seed` and `steps` given when they are. */
 export function smokeSpec(
@@ -1046,6 +1047,49 @@ function lookAway() {
   <div class="board">
     <button type="button" @click="lookAway">Look away</button>
   </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * A PANEL THAT REDRAWS A BUTTON AS IT IS PRESSED (#562 review): the first time the walk marks one
+ * of the panel's action buttons to press it, the page puts a new element in its place, as a panel
+ * that redraws its buttons as new elements does, so the element the walk marked is gone. The new
+ * button puts the panel's own back and presses it, so a press that reaches it takes the action.
+ */
+export function boardThatRedrawsThePanel(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue';
+
+const redrawn = new Set<string>();
+const watcher = new MutationObserver((changes) => {
+  for (const change of changes) {
+    const button = change.target as HTMLElement;
+    const action = button.getAttribute('data-bs-action');
+    if (action === null || redrawn.has(action) || !button.hasAttribute('${PRESS_MARK}')) continue;
+    redrawn.add(action);
+    const copy = button.cloneNode(true) as HTMLElement;
+    copy.removeAttribute('${PRESS_MARK}');
+    copy.addEventListener('click', () => {
+      copy.replaceWith(button);
+      button.click();
+    });
+    button.replaceWith(copy);
+  }
+});
+onMounted(() => watcher.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['${PRESS_MARK}'] }));
+onUnmounted(() => watcher.disconnect());
+</script>
+
+<template>
+  <div class="board">A board</div>
 </template>
 
 <style scoped>
