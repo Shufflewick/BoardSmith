@@ -11,7 +11,6 @@ import type {
   TurnRun,
   FlowState,
   PublishedFollowUp,
-  FlowStepResult,
   FlowDefinition,
   SequenceConfig,
   LoopConfig,
@@ -28,6 +27,13 @@ import type {
 } from './types.js';
 import { resolveTimeLimit } from './step-time-limit.js';
 import { flowChildCount, resolveFlowChild } from './flow-navigation.js';
+
+/**
+ * What running one flow node reports: whether the flow now waits for input.
+ */
+interface StepResult {
+  awaitingInput: boolean;
+}
 
 /**
  * Maximum iterations for safety (prevent infinite loops)
@@ -1634,7 +1640,7 @@ export class FlowEngine<G extends Game = Game> {
   /**
    * Execute a single flow node
    */
-  private executeNode(frame: ExecutionFrame<G>): FlowStepResult {
+  private executeNode(frame: ExecutionFrame<G>): StepResult {
     const context = this.createContext();
 
     switch (frame.node.type) {
@@ -1662,7 +1668,7 @@ export class FlowEngine<G extends Game = Game> {
         return this.executePhase(frame, frame.node.config, context);
       default:
         frame.completed = true;
-        return { continue: true, awaitingInput: false };
+        return { awaitingInput: false };
     }
   }
 
@@ -1675,10 +1681,10 @@ export class FlowEngine<G extends Game = Game> {
     frame: ExecutionFrame<G>,
     config: SequenceConfig<G>,
     context: FlowContext<G>
-  ): FlowStepResult {
+  ): StepResult {
     if (frame.index >= config.steps.length) {
       frame.completed = true;
-      return { continue: true, awaitingInput: false };
+      return { awaitingInput: false };
     }
 
     // Push next step onto stack
@@ -1686,14 +1692,14 @@ export class FlowEngine<G extends Game = Game> {
     this.stack.push({ node: nextStep, index: 0, completed: false });
     frame.index++;
 
-    return { continue: true, awaitingInput: false };
+    return { awaitingInput: false };
   }
 
   private executeLoop(
     frame: ExecutionFrame<G>,
     config: LoopConfig<G>,
     context: FlowContext<G>
-  ): FlowStepResult {
+  ): StepResult {
     const iteration = (frame.data?.iteration as number) ?? 0;
     const maxIterations = config.maxIterations ?? (config.unbounded ? Infinity : DEFAULT_MAX_ITERATIONS);
     const loopName = config.name ?? 'unnamed';
@@ -1702,7 +1708,7 @@ export class FlowEngine<G extends Game = Game> {
     // way for a loop to terminate.
     if (config.while && !config.while(context)) {
       frame.completed = true;
-      return { continue: true, awaitingInput: false };
+      return { awaitingInput: false };
     }
 
     // Safety assertion: hitting maxIterations means the loop did NOT terminate
@@ -1731,34 +1737,34 @@ export class FlowEngine<G extends Game = Game> {
     frame.data = { ...frame.data, iteration: iteration + 1 };
     frame.index++;
 
-    return { continue: true, awaitingInput: false };
+    return { awaitingInput: false };
   }
 
   private executeRepeat(
     frame: ExecutionFrame<G>,
     config: RepeatNodeConfig<G>,
     context: FlowContext<G>
-  ): FlowStepResult {
+  ): StepResult {
     const iteration = (frame.data?.iteration as number) ?? 0;
     const times = Math.max(0, config.times);
 
     if (iteration >= times) {
       frame.completed = true;
-      return { continue: true, awaitingInput: false };
+      return { awaitingInput: false };
     }
 
     this.stack.push({ node: config.do, index: 0, completed: false });
     frame.data = { ...frame.data, iteration: iteration + 1 };
     frame.index++;
 
-    return { continue: true, awaitingInput: false };
+    return { awaitingInput: false };
   }
 
   private executeEachPlayer(
     frame: ExecutionFrame<G>,
     config: EachPlayerConfig<G>,
     context: FlowContext<G>
-  ): FlowStepResult {
+  ): StepResult {
     // Build eligible seat list once so turn order is deterministic, then re-check
     // filter dynamically each iteration so mid-round state changes are respected.
     if (frame.data?.eligibleSeats === undefined) {
@@ -1816,18 +1822,18 @@ export class FlowEngine<G extends Game = Game> {
       frame.data = { ...frame.data, nextIndex };
       frame.index++;
 
-      return { continue: true, awaitingInput: false };
+      return { awaitingInput: false };
     }
 
     frame.completed = true;
-    return { continue: true, awaitingInput: false };
+    return { awaitingInput: false };
   }
 
   private executeForEach(
     frame: ExecutionFrame<G>,
     config: ForEachConfig<GameElement | string | number | boolean | null, G>,
     context: FlowContext<G>
-  ): FlowStepResult {
+  ): StepResult {
     // Snapshot the collection exactly once on first entry (mirrors executeEachPlayer's
     // eligibleSeats pattern) so a loop body that mutates the source collection (removes
     // or moves items) still visits every original item. GameElements are stored tagged
@@ -1870,7 +1876,7 @@ export class FlowEngine<G extends Game = Game> {
 
     if (itemIndex >= items.length) {
       frame.completed = true;
-      return { continue: true, awaitingInput: false };
+      return { awaitingInput: false };
     }
 
     const rawItem = items[itemIndex];
@@ -1911,7 +1917,7 @@ export class FlowEngine<G extends Game = Game> {
     frame.data = { ...frame.data, itemIndex: itemIndex + 1 };
     frame.index++;
 
-    return { continue: true, awaitingInput: false };
+    return { awaitingInput: false };
   }
 
   // ============================================================================
@@ -2024,7 +2030,7 @@ export class FlowEngine<G extends Game = Game> {
     frame: ExecutionFrame<G>,
     config: ActionStepConfig<G>,
     context: FlowContext<G>
-  ): FlowStepResult {
+  ): StepResult {
     // A seat holding a follow-up keeps the turn until it takes it, or takes
     // another action this step offers it. Nothing else ends the step.
     const [heldSeat] = Object.keys(this.heldFollowUps(frame)).map(Number);
@@ -2035,7 +2041,7 @@ export class FlowEngine<G extends Game = Game> {
       this.currentActionConfig = undefined;
       this.moveCount = 0;
       frame.completed = true;
-      return { continue: true, awaitingInput: false };
+      return { awaitingInput: false };
     }
 
     // Initialize move count on first entry. A fresh frame does not always start
@@ -2066,7 +2072,7 @@ export class FlowEngine<G extends Game = Game> {
       this.currentActionConfig = undefined;
       this.moveCount = 0;
       frame.completed = true;
-      return { continue: true, awaitingInput: false };
+      return { awaitingInput: false };
     }
 
     const minMovesMet = !config.minMoves || moveCount >= config.minMoves;
@@ -2085,7 +2091,7 @@ export class FlowEngine<G extends Game = Game> {
       this.currentActionConfig = undefined;
       this.moveCount = 0;
       frame.completed = true;
-      return { continue: true, awaitingInput: false };
+      return { awaitingInput: false };
     }
 
     // If no available actions but minMoves not met, this is an error state
@@ -2104,12 +2110,7 @@ export class FlowEngine<G extends Game = Game> {
     this.availableActions = available;
 
     // Don't mark completed yet - we'll continue after input
-    return {
-      continue: false,
-      awaitingInput: true,
-      availableActions: available,
-      currentPlayer: player,
-    };
+    return { awaitingInput: true };
   }
 
   /**
@@ -2122,7 +2123,7 @@ export class FlowEngine<G extends Game = Game> {
     config: ActionStepConfig<G>,
     context: FlowContext<G>,
     seat: number,
-  ): FlowStepResult {
+  ): StepResult {
     const player = this.game.getPlayer(seat) as PlayerOf<G> | undefined;
     if (!player) {
       throw new Error(`Action step holds a follow-up for seat ${seat}, but this game has no seat ${seat}.`);
@@ -2135,14 +2136,14 @@ export class FlowEngine<G extends Game = Game> {
     this.moveCount = frame.data?.moveCount as number;
     this.currentPlayer = player;
     this.availableActions = available;
-    return { continue: false, awaitingInput: true, availableActions: available, currentPlayer: player };
+    return { awaitingInput: true };
   }
 
   private executeSimultaneousActionStep(
     frame: ExecutionFrame<G>,
     config: SimultaneousActionStepConfig<G>,
     context: FlowContext<G>
-  ): FlowStepResult {
+  ): StepResult {
     // Get players who should participate
     const players: PlayerOf<G>[] = config.players
       ? config.players(context)
@@ -2189,7 +2190,7 @@ export class FlowEngine<G extends Game = Game> {
     if (config.allDone?.(context)) {
       this.awaitingPlayers = [];
       frame.completed = true;
-      return { continue: true, awaitingInput: false };
+      return { awaitingInput: false };
     }
 
     // If no players need to act, the step is over -- but only when the game has
@@ -2206,19 +2207,16 @@ export class FlowEngine<G extends Game = Game> {
       if (config.allDone) {
         this.warnIfDeadlockedSimultaneousStep(config);
         this.openStepWindow(frame, config, context, 'simultaneous-action-step');
-        return { continue: false, awaitingInput: true };
+        return { awaitingInput: true };
       }
       frame.completed = true;
-      return { continue: true, awaitingInput: false };
+      return { awaitingInput: false };
     }
 
     this.openStepWindow(frame, config, context, 'simultaneous-action-step');
 
     // Don't mark completed - waiting for all players
-    return {
-      continue: false,
-      awaitingInput: true,
-    };
+    return { awaitingInput: true };
   }
 
   // ============================================================================
@@ -2230,11 +2228,11 @@ export class FlowEngine<G extends Game = Game> {
     frame: ExecutionFrame<G>,
     config: SwitchConfig<G>,
     context: FlowContext<G>
-  ): FlowStepResult {
+  ): StepResult {
     // If we've already pushed a branch, we're done (child has completed)
     if (frame.data?.branchPushed) {
       frame.completed = true;
-      return { continue: true, awaitingInput: false };
+      return { awaitingInput: false };
     }
 
     const value = config.on(context);
@@ -2259,18 +2257,18 @@ export class FlowEngine<G extends Game = Game> {
       branchIndex: hasCase ? Object.keys(config.cases).indexOf(stringValue) : Object.keys(config.cases).length,
     };
 
-    return { continue: true, awaitingInput: false };
+    return { awaitingInput: false };
   }
 
   private executeIf(
     frame: ExecutionFrame<G>,
     config: IfConfig<G>,
     context: FlowContext<G>
-  ): FlowStepResult {
+  ): StepResult {
     // If we've already pushed a branch, we're done (child has completed)
     if (frame.data?.branchPushed) {
       frame.completed = true;
-      return { continue: true, awaitingInput: false };
+      return { awaitingInput: false };
     }
 
     const condition = config.condition(context);
@@ -2286,17 +2284,17 @@ export class FlowEngine<G extends Game = Game> {
       frame.completed = true;
     }
 
-    return { continue: true, awaitingInput: false };
+    return { awaitingInput: false };
   }
 
   private executeExecute(
     frame: ExecutionFrame<G>,
     config: ExecuteConfig<G>,
     context: FlowContext<G>
-  ): FlowStepResult {
+  ): StepResult {
     if (this.skipOpeningExecutes) {
       frame.completed = true;
-      return { continue: true, awaitingInput: false };
+      return { awaitingInput: false };
     }
     // Run the side effect function
     config.fn(context);
@@ -2312,14 +2310,14 @@ export class FlowEngine<G extends Game = Game> {
     // own -- this counter exists only to be observed by the runner before that
     // engine is discarded.
     if (config.irreversible) this.irreversibleCommitCount++;
-    return { continue: true, awaitingInput: false };
+    return { awaitingInput: false };
   }
 
   private executePhase(
     frame: ExecutionFrame<G>,
     config: PhaseConfig<G>,
     context: FlowContext<G>
-  ): FlowStepResult {
+  ): StepResult {
     // If we haven't entered this phase yet
     if (!frame.data?.entered) {
       // Set current phase
@@ -2335,7 +2333,7 @@ export class FlowEngine<G extends Game = Game> {
       this.stack.push({ node: config.do, index: 0, completed: false });
       frame.data = { entered: true, previousPhase };
 
-      return { continue: true, awaitingInput: false };
+      return { awaitingInput: false };
     }
 
     // Phase body has completed - call onExitPhase hook
@@ -2347,6 +2345,6 @@ export class FlowEngine<G extends Game = Game> {
     this.currentPhase = frame.data.previousPhase as string | undefined;
     frame.completed = true;
 
-    return { continue: true, awaitingInput: false };
+    return { awaitingInput: false };
   }
 }

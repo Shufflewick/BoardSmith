@@ -141,7 +141,6 @@ import {
 - `FollowUpAction` - A follow-up action an `execute()` chains to
 - `FollowUpOffer` - A follow-up as a client receives it: the `FollowUpAction` plus its action's metadata
 - `FlowNodeType` - Flow node type enum
-- `FlowStepResult` - Flow step result
 - `FlowPosition` - Flow position
 - `FlowContext` - Flow context
 - `FlowNode` - Flow node

@@ -458,42 +458,46 @@ describe('WR-05: per-player same-name Spaces keep their OWN handlers after resto
 });
 
 // ---------------------------------------------------------------------------
-// WR-05 guard: if two handler-bearing Spaces STILL produce the same identity
-// key (same class, same name, indistinguishable ancestors), the restore must
-// devWarn about the ambiguity and refuse to re-bind that key, never silently
-// wire both Spaces to one handler set. Pieces cannot contain Spaces (engine
-// invariant, piece.ts), so the ambiguous ancestors here are two same-class,
-// same-NAME direct GameElement subclass instances.
+// Two handler-bearing Spaces that nothing but their element id tells apart:
+// same class, same name, each under a same-class, same-name non-Space parent.
+// Pieces cannot contain Spaces (engine invariant, piece.ts), so the parents are
+// direct GameElement subclass instances. Handlers are re-bound by element id,
+// which is unique, so each slot keeps its own handler across a restore.
 // ---------------------------------------------------------------------------
 
-class Gem extends Piece<AmbiguousGame> {}
-class Box extends GameElement<AmbiguousGame> {}
-class Slot extends Space<AmbiguousGame> {}
+class Gem extends Piece<SameNameGame> {}
+class Box extends GameElement<SameNameGame> {}
+class Slot extends Space<SameNameGame> {}
 
-class AmbiguousGame extends Game<AmbiguousGame, Player> {
-  slotEnter = 0;
+class SameNameGame extends Game<SameNameGame, Player> {
+  slotAEnter = 0;
+  slotBEnter = 0;
 
   constructor(options: GameOptions) {
     super(options);
 
-    // Two non-Space elements with the SAME class and SAME name, each holding
-    // a same-named handler-bearing Space: no stable identity component can
-    // tell the two slots apart, so their keys collide by construction.
     const boxA = this.create(Box, 'box');
     const boxB = this.create(Box, 'box');
     boxA.create(Slot, 'slot').onEnter(() => {
-      this.slotEnter++;
+      this.slotAEnter++;
     }, Gem);
     boxB.create(Slot, 'slot').onEnter(() => {
-      this.slotEnter++;
+      this.slotBEnter++;
     }, Gem);
 
     this.create(Gem, 'gem');
 
     this.registerAction(
-      Action.create('stash').execute((_args, ctx) => {
-        const game = ctx.game as AmbiguousGame;
-        game.first(Gem)?.putInto(game.first(Box)!.first(Slot)!);
+      Action.create('stashA').execute((_args, ctx) => {
+        const game = ctx.game as SameNameGame;
+        game.first(Gem)?.putInto(game.all(Box)[0].first(Slot)!);
+        return { success: true };
+      })
+    );
+    this.registerAction(
+      Action.create('stashB').execute((_args, ctx) => {
+        const game = ctx.game as SameNameGame;
+        game.first(Gem)?.putInto(game.all(Box)[1].first(Slot)!);
         return { success: true };
       })
     );
@@ -501,7 +505,7 @@ class AmbiguousGame extends Game<AmbiguousGame, Player> {
     this.setFlow(
       defineFlow({
         root: actionStep({
-          actions: ['stash'],
+          actions: ['stashA', 'stashB'],
           player: (ctx) => ctx.game.getPlayer(1)!,
           repeatUntil: () => false,
           maxMoves: 10,
@@ -511,32 +515,52 @@ class AmbiguousGame extends Game<AmbiguousGame, Player> {
   }
 }
 
-describe('handler re-bind: same-name Spaces are disambiguated by stable id (F-03)', () => {
-  it('re-binds BOTH same-name slots correctly with no ambiguity warning', () => {
-    // F-03 (v4.8): handler re-binding now keys on the Space's stable element id
-    // instead of tree position. Two same-class/same-name slots under two
-    // same-class/same-name boxes -- which the old positional key could not tell
-    // apart (it dropped both handlers) -- have DISTINCT ids, so both handlers
-    // survive restore and fire on their own slot. No ambiguity is possible.
-    const runner = new GameRunner<AmbiguousGame>({
-      GameClass: AmbiguousGame,
-      gameType: 'ambiguous-key-test',
-      gameOptions: { playerCount: 1, seed: 'ambiguous-seed' },
-    });
-    runner.start();
+function startSameNameRunner(): GameRunner<SameNameGame> {
+  const runner = new GameRunner<SameNameGame>({
+    GameClass: SameNameGame,
+    gameType: 'same-name-slots-test',
+    gameOptions: { playerCount: 1, seed: 'same-name-seed' },
+  });
+  runner.start();
+  return runner;
+}
 
-    const snapshot = roundTripJson(runner.getSnapshot());
+describe('handler re-bind: same-name Spaces are told apart by element id (F-03)', () => {
+  it('re-binds BOTH same-name slots to their own handlers, with no warning', () => {
+    const snapshot = roundTripJson(startSameNameRunner().getSnapshot());
 
     _clearShownWarnings();
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const restored = GameRunner.fromSnapshot<AmbiguousGame>(snapshot, AmbiguousGame);
-
-    // No ambiguity is reported — ids are unique.
-    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('ambiguous'));
+    const restored = GameRunner.fromSnapshot<SameNameGame>(snapshot, SameNameGame);
+    expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
 
-    // The first box's slot fired its own onEnter after restore.
-    expect(restored.performAction('stash', 1, {}).success).toBe(true);
-    expect(restored.game.slotEnter).toBe(1);
+    expect(restored.performAction('stashA', 1, {}).success).toBe(true);
+    expect([restored.game.slotAEnter, restored.game.slotBEnter]).toEqual([1, 0]);
+    expect(restored.performAction('stashB', 1, {}).success).toBe(true);
+    expect([restored.game.slotAEnter, restored.game.slotBEnter]).toEqual([1, 1]);
+  });
+
+  it('warns that a handler was dropped when its Space is missing from the restored tree', () => {
+    const snapshot = roundTripJson(startSameNameRunner().getSnapshot());
+    // The saved tree no longer holds the second box's slot, as when the rules
+    // changed between save and restore.
+    const boxes = snapshot.state.children!.filter((child) => child.className === 'Box');
+    const droppedSlotId = boxes[1].children![0].id;
+    boxes[1].children = [];
+
+    _clearShownWarnings();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const restored = GameRunner.fromSnapshot<SameNameGame>(snapshot, SameNameGame);
+    const warnings = warnSpy.mock.calls.map((call) => String(call[0]));
+    warnSpy.mockRestore();
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(`Space "${droppedSlotId}"`);
+    expect(warnings[0]).toContain('dropped');
+
+    // The slot that is still there keeps its handler.
+    expect(restored.performAction('stashA', 1, {}).success).toBe(true);
+    expect(restored.game.slotAEnter).toBe(1);
   });
 });
