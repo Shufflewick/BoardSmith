@@ -17,7 +17,7 @@ import { ref, computed, watch, inject, nextTick, useId } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
 import { resolvePickCounts } from '../../composables/actionControllerHelpers.js';
-import { startActionWithBoardReset } from '../../composables/useBoardActionBridge.js';
+import { createActionMutators } from '../../composables/actionMutators.js';
 import type {
   UseActionControllerReturn,
   EnrichedPickMetadata,
@@ -111,7 +111,7 @@ const props = defineProps<{
    * (from `flowState.awaitingPlayers[playerSeat].completed`; `false`/
    * `undefined` outside a simultaneous step). D27 (T-160-27): a seat that
    * already committed this step must never be able to re-submit — gated
-   * in `executeAction` in addition to `isMyTurn`, since `isMyTurn` alone
+   * in the shared action mutators in addition to `isMyTurn`, since `isMyTurn` alone
    * is not a contractual guarantee against a stale/optimistic prop value.
    */
   completed?: boolean;
@@ -1183,10 +1183,7 @@ function isMultiSelectValueSelected(value: unknown): boolean {
  * auto-confirm (which runs fill → auto-execute).
  */
 async function toggleMultiSelectValue(selectionName: string, value: unknown, _display?: string) {
-  await actionController.toggleMultiSelect(selectionName, value);
-
-  // Update AutoUI board highlighting for selected items
-  updateMultiSelectBoardHighlights();
+  await mutators.toggleMultiSelectValue(selectionName, value);
 }
 
 /**
@@ -1197,14 +1194,13 @@ async function toggleMultiSelectValue(selectionName: string, value: unknown, _di
  * the option, a list repeats it.
  */
 async function addListEntry(selectionName: string, value: unknown) {
-  await actionController.appendListEntry(selectionName, value);
-  updateMultiSelectBoardHighlights();
+  await mutators.appendListValue(selectionName, value);
 }
 
 /** Drop the entry the player pointed at, BY INDEX (#249). */
 async function dropListEntry(selectionName: string, index: number) {
   actionController.removeListEntry(selectionName, index);
-  updateMultiSelectBoardHighlights();
+  mutators.updateMultiSelectBoardHighlights();
   await nextTick();
   restoreFocusAfterRemoval(index);
 }
@@ -1276,41 +1272,6 @@ const orderedListDoneDisabledReason = computed<DisabledReason>(() => {
 });
 
 /**
- * Update board highlighting to show all selected multiSelect items
- * This makes the AutoUI highlight the selected elements
- */
-function updateMultiSelectBoardHighlights() {
-  const selectedValues = multiSelectValues.value;
-  if (!boardInteraction || selectedValues.length === 0) {
-    boardInteraction?.setHoveredChoice(null);
-    return;
-  }
-
-  // Collect all boardRefs for selected values from filteredChoices
-  const sourceRefs: ElementRef[] = [];
-  const targetRefs: ElementRef[] = [];
-
-  for (const val of selectedValues) {
-    const choice = filteredChoices.value.find(c => c.value === val);
-    if (choice) {
-      for (const r of choice.refs ?? []) {
-        if (r.role === 'source') sourceRefs.push(r.ref);
-        else targetRefs.push(r.ref); // 'target' and 'highlight' both highlight as target-side
-      }
-    }
-  }
-
-  if (sourceRefs.length > 0 || targetRefs.length > 0) {
-    boardInteraction.setHoveredChoice({
-      value: selectedValues,
-      display: `${selectedValues.length} selected`,
-      sourceRefs,
-      targetRefs,
-    });
-  }
-}
-
-/**
  * Confirm multi-select and move to next selection or execute action.
  * Delegates to the controller, which runs the fill() path (currentArgs → readiness →
  * auto-execute) with the complete array.
@@ -1356,34 +1317,31 @@ const multiSelectCountDisplay = computed(() => {
   return `Selected: ${count}`;
 });
 
+/**
+ * The panel starts, executes and answers actions through the SAME mutators as
+ * the board bridge (#513), handed the panel's view of the guards. What stays
+ * here is the panel's own: its emits and the hover text it shows on the board.
+ */
+const isViewingHistory = inject(GAME_CONTEXT_KEYS.isViewingHistory, undefined);
+const mutators = createActionMutators(actionController, boardInteraction, {
+  isViewingHistory: () => isViewingHistory?.value ?? false,
+  isMyTurn: () => props.isMyTurn,
+  isCompleted: () => !!props.completed,
+  disabledReason: (name) => props.disabledActions?.[name],
+  actionMetadata: (name) => actionsWithMetadata.value.find(a => a.name === name),
+});
+
 async function startAction(
   actionName: string,
   options?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> }
 ) {
-  // The seat's held follow-up names this action: the server takes it as the
-  // follow-up, with its pre-filled args, so start it as one.
-  if (heldFollowUp.value?.action === actionName) {
-    await actionController.resumeFollowUp();
+  const outcome = await mutators.startAction(actionName, options);
+  if (outcome === 'executed') {
+    emit('cancelSelection');
     return;
   }
-  const meta = actionsWithMetadata.value.find(a => a.name === actionName);
-
-  if (!meta || meta.selections.length === 0) {
-    await executeAction(actionName, {});
-    return;
-  }
-
-  const firstSel = meta.selections[0];
-
-  // The board half of the start is NOT the panel's to sequence (#185). It used
-  // to clear the board AFTER the await and then restore the action name alone,
-  // which wiped the valid elements and both selection callbacks the bridge had
-  // just installed from inside that await -- leaving a board that named an
-  // action it could not answer. `startActionWithBoardReset` is the single
-  // statement of the order; the bridge's watchers do the wiring.
-  await startActionWithBoardReset(actionController, boardInteraction, actionName, options);
-
-  if (firstSel.type === 'element' || firstSel.type === 'elements') {
+  const firstSel = actionsWithMetadata.value.find(a => a.name === actionName)?.selections[0];
+  if (outcome === 'started' && (firstSel?.type === 'element' || firstSel?.type === 'elements')) {
     emit('selectingElement', firstSel.name, firstSel.elementClassName);
   }
 }
@@ -1398,113 +1356,23 @@ function cancelAction() {
 }
 
 /**
- * Handle a selection choice - delegates to controller.fill() for core logic.
- * This is a thin wrapper that handles UI concerns (display caching, board interaction).
- *
- * The controller handles:
- * - Validation
- * - Repeating selections (via selectionStep)
- * - Deferred choices
- * - Auto-execute when ready
- *
- * ActionPanel handles:
- * - Display caching
- * - Board interaction (highlighting, selecting)
- * - Element selection emits
+ * Answer the open pick through the shared mutator, then do the panel's own part:
+ * keep the chosen move's text on the board, and emit for an element pick.
  */
 async function setSelectionValue(name: string, value: unknown, display?: string) {
   const selection = currentPick.value;
+  // A refusal is in actionController.lastError, which GameShell surfaces as the
+  // single failure toast (UIX-01).
+  if (!(await mutators.setSelectionValue(name, value))) return;
 
-  // Delegate to controller for core fill logic
-  // Controller stores display in collectedSelections automatically
-  // Controller handles: validation, repeating selections, auto-execute
-  const result = await actionController.fill(name, value);
-  if (!result.valid) {
-    // UIX-01: no direct toast here — fill() sets actionController.lastError
-    // on every failure path, which GameShell's central watch surfaces as the
-    // single failure toast (parity with custom UIs, no double-toast).
-    return;
-  }
-
-  // UI-only concerns below (controller doesn't handle these)
-
-  // For choice selections with board refs, mark the selected element
-  if (selection?.type === 'choice' && selection.choices) {
-    const choice = selection.choices.find((c: ChoiceWithRefs) => c.value === value);
-    if (choice?.refs?.length) {
-      const ref = (choice.refs ?? []).find(r => r.role === 'target')?.ref ?? choice.refs[0]?.ref;
-      if (ref && boardInteraction) {
-        boardInteraction.selectElement(ref);
-      }
-    }
-  }
-
-  // Keep the selected move highlighted on the board
   if (boardInteraction && display) {
-    boardInteraction.setHoveredChoice({
-      value,
-      display,
-    });
+    boardInteraction.setHoveredChoice({ value, display });
   }
 
   if (selection?.type === 'element' || selection?.type === 'elements') {
     emit('selectingElement', selection.name, selection.elementClassName);
   }
 }
-
-async function executeAction(actionName: string, args: Record<string, unknown>) {
-  // CRITICAL: Atomic check-and-set MUST happen first, before any other code
-  // This prevents race conditions when multiple reactive paths trigger in the same tick
-  if (isExecuting.value) {
-    return;
-  }
-
-  // Extra safeguard: don't execute if it's not our turn
-  if (!props.isMyTurn) {
-    return;
-  }
-
-  // D27 commit-leak gate (T-160-27): a seat that already committed this
-  // simultaneous step can never re-submit, even if `isMyTurn` is (still,
-  // or again) true. Checked in addition to — not instead of — isMyTurn:
-  // this is the honest guard for the case `isMyTurn` was designed to
-  // cover but a stale/optimistic prop value defeats.
-  if (props.completed) {
-    return;
-  }
-
-  // Filter out null values (explicitly skipped optional selections)
-  // Server expects undefined for missing optional args, not null
-  const filteredArgs: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(args)) {
-    if (value !== null) {
-      filteredArgs[key] = value;
-    }
-  }
-
-  // The board belongs to this execution only until another action starts. The
-  // controller drops `isExecuting` before this function's `finally` runs, and a
-  // custom board may start its next pick at exactly that moment (#445); clearing
-  // then would wipe that pick and the bridge would cancel it. Same guard as the
-  // controller's own post-send clear in `sendAndResolve`.
-  const startTick = actionController.actionStartTick.value;
-
-  try {
-    // Delegate to controller for execution. execute() never re-throws — on
-    // failure it sets actionController.lastError internally, which GameShell's
-    // central watch surfaces as the single failure toast (UIX-01 chokepoint).
-    // The catch below is defensive only (kept so `finally` always runs).
-    await actionController.execute(actionName, filteredArgs);
-  } catch {
-    // Defensive only — execute() does not throw; lastError already covers it.
-  } finally {
-    if (actionController.actionStartTick.value === startTick) {
-      boardInteraction?.clear();
-    }
-    emit('cancelSelection');
-  }
-}
-
 
 // Hover handlers for choice buttons
 function handleChoiceHover(choice: ChoiceWithRefs) {
@@ -1520,7 +1388,7 @@ function handleChoiceLeave() {
   // Don't clear hover if we have multiSelect items selected - keep them highlighted
   if (multiSelectValues.value.length > 0) {
     // Re-apply the multiSelect highlights instead of clearing
-    updateMultiSelectBoardHighlights();
+    mutators.updateMultiSelectBoardHighlights();
     return;
   }
   boardInteraction?.setHoveredChoice(null);
@@ -1660,7 +1528,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           class="action-btn"
           data-bs-follow-up
           :data-bs-action="heldFollowUpButton.action"
-          @click="actionController.resumeFollowUp()"
+          @click="startAction(heldFollowUpButton.action)"
         >
           {{ heldFollowUpButton.prompt }}
         </button>
