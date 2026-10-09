@@ -77,7 +77,7 @@ describe('Action Builder', () => {
     const action = Action.create('test')
       .chooseFrom('target', {
         prompt: 'Choose a player',
-        choices: [{ value: 0, display: 'Player 1' }, { value: 1, display: 'Player 2' }],
+        choices: [{ value: 0, label: 'Player 1' }, { value: 1, label: 'Player 2' }],
       })
       .execute(() => {});
 
@@ -129,7 +129,7 @@ describe('Action Builder', () => {
       .prompt('Ask for cards')
       .chooseFrom('target', {
         prompt: 'Who?',
-        choices: [{ value: 0, display: 'Player 1' }, { value: 1, display: 'Player 2' }],
+        choices: [{ value: 0, label: 'Player 1' }, { value: 1, label: 'Player 2' }],
       })
       .chooseFrom('rank', {
         choices: ['A', 'K', 'Q', 'J'],
@@ -793,7 +793,7 @@ describe('Action Executor', () => {
             { value: 'skip', label: 'Skip' },
             { value: 'go', label: 'Go' },
           ],
-          disabled: (c) => (c.value === 'skip' ? 'Not now' : false),
+          disabled: (c) => (c === 'skip' ? 'Not now' : false),
         })
         .execute(() => {});
 
@@ -820,7 +820,7 @@ describe('Action Executor', () => {
         .execute(() => {});
 
       const result = executor.validateAction(action, game.getPlayer(1)!, {
-        target: playerChoices[0], // First player choice (position 1)
+        target: playerChoices[0].value, // The first choice's seat
         rank: 'A',
       });
 
@@ -1072,22 +1072,20 @@ describe('Action Executor', () => {
       expect(receivedArgs.option).toBe('skip');
     });
 
-    it('should extract value from {value, display} choice objects', () => {
+    it('delivers a {value, display} object whole: `label` is the one label key (#509)', () => {
       let receivedArgs: Record<string, unknown> = {};
+      const attack = { value: 'attack', display: 'Attack the enemy' };
       const action = Action.create('test')
         .chooseFrom('action', {
-          choices: [
-            { value: 'attack', display: 'Attack the enemy' },
-            { value: 'defend', display: 'Defend position' },
-          ],
+          choices: [attack, { value: 'defend', display: 'Defend position' }],
         })
         .execute((args) => {
           receivedArgs = args;
         });
 
-      executor.executeAction(action, game.getPlayer(1)!, { action: 'attack' });
+      executor.executeAction(action, game.getPlayer(1)!, { action: attack });
 
-      expect(receivedArgs.action).toBe('attack');
+      expect(receivedArgs.action).toEqual(attack);
     });
 
     it('should NOT extract value from element-like objects (preserve element)', () => {

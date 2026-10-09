@@ -53,6 +53,24 @@ Action.create('selectRank')
   })
 ```
 
+A choice is a value, or `{ value, label }` to give the value its own label.
+Either way every callback (`disabled`, `display`, `boardRefs`, `validate`,
+`onSelect`) and `execute` receive the **value**, and the arg is typed as it:
+
+```typescript
+.chooseFrom('stance', {
+  choices: [{ value: 'attack', label: 'Charge the line' }, { value: 'hold', label: 'Hold position' }],
+})
+.execute((args) => {
+  const stance: 'attack' | 'hold' = args.stance; // the value, never the object
+});
+```
+
+Only an object whose keys are `value` and an optional string `label` is read
+that way. Any other object, such as `{ value: 'go', cost: 3 }`, is a value in
+its own right and arrives whole, so data you put on a choice is never lost.
+`label` is the one label key: `{ value, display }` is an ordinary object.
+
 #### Many from a list: a SET (`multiSelect`) or a LIST (`orderedList`)
 
 `chooseFrom` resolves to a single value unless you say otherwise. There are two
@@ -69,7 +87,9 @@ is a set or a sequence:
 
 Both take a number (`3` means "up to 3"), a `{ min, max }` config, or a function
 of the context when the bound is itself a fact about an earlier answer. Declaring
-both on one selection is refused by the builder.
+both on one selection is refused by the builder. Either one makes the arg an
+array (`T[]`) in every state, so a function always returns a count: return
+`{ min: 1, max: 1 }` for a single pick, never `undefined`.
 
 ```typescript
 // A SET: discard any two cards. Naming one card twice is a mistake.
@@ -468,10 +488,9 @@ Action.create('askPlayer')
     choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
   })
   .execute((args, ctx) => {
-    // playerChoices returns { value: seat; display: string } objects
-    // Seat values are 1-indexed
-    const choice = args.target as { value: number; display: string };
-    const targetPlayer = game.getPlayer(choice.value)!;
+    // playerChoices returns { value: seat, label: name } choices, so the arg
+    // is the seat number (1-indexed).
+    const targetPlayer = game.getPlayerOrThrow(args.target);
     // ...
   });
 ```
@@ -1566,8 +1585,8 @@ export function createAskAction(game: GoFishGame): ActionDefinition {
     .chooseFrom('target', {
       prompt: 'Who do you want to ask?',
       choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
-      boardRefs: (choice: { value: number; display: string }, ctx) => {
-        const targetPlayer = game.getPlayer(choice.value) as GoFishPlayer;
+      boardRefs: (seat, ctx) => {
+        const targetPlayer = game.getPlayer(seat) as GoFishPlayer;
         return { refs: [{ ref: { id: game.getPlayerHand(targetPlayer).id }, role: 'target' as const }] };
       },
     })

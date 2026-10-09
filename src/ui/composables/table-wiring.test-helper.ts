@@ -18,6 +18,7 @@ import { createHeadlessSession, type HeadlessSession } from '../../session/headl
 import type { PlayerGameState } from '../../session/types.js';
 import { createBoardInteraction, type BoardInteraction } from './useBoardInteraction.js';
 import { useTableActionWiring, type TableActionWiring } from './useTableActionWiring.js';
+import { withoutReactivity } from '../components/platformRequestClone.js';
 
 /** Let the controller's awaited fetches, sends and watchers run to rest. */
 export async function settle(): Promise<void> {
@@ -58,6 +59,9 @@ export function mountTableWiring<G extends Game>(
   options: TableWiringOptions<G>,
 ): { wiring: TableActionWiring; wrapper: VueWrapper } {
   const { session, seat, seatState, boardInteraction, afterPerform } = options;
+  // Every op's fields lose their Vue reactivity, as the shell's outbound step
+  // (usePlatformTransport) strips it: the controller holds an object-valued
+  // choice reactively, and the session refuses what postMessage could not clone.
   let wiring: TableActionWiring | undefined;
   const Host = defineComponent({
     setup() {
@@ -70,16 +74,19 @@ export function mountTableWiring<G extends Game>(
         autoEndTurn: ref(options.autoEndTurn),
         isViewingHistory: ref(false),
         sendAction: async (actionName, args) => {
-          const result = await session().send(seat, { type: 'action', actionName, player: seat, args });
+          const result = await session().send(seat, { type: 'action', actionName, player: seat, args: withoutReactivity(args) });
           afterPerform?.();
           return result;
         },
         fetchPickChoices: async (actionName, selectionName, player, args) =>
-          session().send(player, { type: 'resolveChoices', actionName, selectionName, player, args }),
+          session().send(player, { type: 'resolveChoices', actionName, selectionName, player, args: withoutReactivity(args) }),
         ...(options.withPickStep
           ? {
               pickStep: async (player: number, selectionName: string, value: unknown, actionName: string, initialArgs?: Record<string, unknown>) =>
-                session().send(player, { type: 'selectionStep', player, selectionName, value, actionName, initialArgs }),
+                session().send(player, {
+                  type: 'selectionStep', player, selectionName, actionName,
+                  value: withoutReactivity(value), initialArgs: withoutReactivity(initialArgs),
+                }),
               cancelPendingAction: async (player: number) => {
                 await session().send(player, { type: 'cancelAction', player });
               },

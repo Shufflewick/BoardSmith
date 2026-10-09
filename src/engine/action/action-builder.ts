@@ -7,6 +7,7 @@ import type {
   ActionResult,
   Selection,
   ChoiceSelection,
+  ChoiceValue,
   ElementSelection,
   ElementsSelection,
   TextSelection,
@@ -127,15 +128,28 @@ function assertReadsEarlierPick(
   );
 }
 
-/** Every `chooseFrom` option except the repeat options ({@link RepeatingOptions}) and the disabled rule ({@link DisabledOptions}). */
+/**
+ * Every `chooseFrom` option except the repeat options ({@link RepeatingOptions})
+ * and the disabled rule ({@link DisabledOptions}).
+ *
+ * `T` is the type of one entry in `choices`; every callback after `choices`
+ * receives `ChoiceValue<T>`, the value the engine delivers: a `{ value, label? }`
+ * choice's `value`, and any other choice itself (#509).
+ */
 type ChooseFromOptions<G extends Game, T> = {
   prompt?: string | ((context: ActionContext<G>) => string);
+  /**
+   * The choices: each a value, or `{ value, label }` to give a value its own
+   * label. Only an object with `value` and nothing but an optional string
+   * `label` is read that way; any other object is a value and arrives whole.
+   */
   choices: T[] | ((context: ActionContext<G>) => T[]);
-  display?: (choice: T) => string;
+  /** The label for a choice that did not bring its own. */
+  display?: (choice: ChoiceValue<T>) => string;
   optional?: boolean | string;
-  validate?: (value: T, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
+  validate?: (value: ChoiceValue<T>, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
   /** Get board element references for highlighting (source/target) */
-  boardRefs?: (choice: T, context: ActionContext<G>) => ChoiceBoardRefs;
+  boardRefs?: (choice: ChoiceValue<T>, context: ActionContext<G>) => ChoiceBoardRefs;
   /** Filter choices based on a previous selection value */
   filterBy?: DependentFilter;
   /**
@@ -145,22 +159,35 @@ type ChooseFromOptions<G extends Game, T> = {
    */
   dependsOn?: string;
   /**
-   * Enable multi-select mode with checkboxes instead of radio buttons.
-   * Can be a static config or dynamic function evaluated per context.
+   * Enable multi-select mode with checkboxes instead of radio buttons. The
+   * value is then an array. A function is evaluated per context and always
+   * returns a count, so the value is an array in every state; it returns
+   * `{ min: 1, max: 1 }` for a single pick.
    */
-  multiSelect?: number | MultiSelectConfig | ((context: ActionContext<G>) => number | MultiSelectConfig | undefined);
+  multiSelect?: CountOption<G, MultiSelectConfig>;
   /**
    * Ask for an ORDERED, REPEATABLE list rather than a set (#249): the value
    * is an array in the order the player built it, one identity may appear
    * more than once, and `min`/`max` count ENTRIES. Mutually exclusive with
    * `multiSelect`.
    */
-  orderedList?: number | OrderedListConfig | ((context: ActionContext<G>) => number | OrderedListConfig | undefined);
+  orderedList?: CountOption<G, OrderedListConfig>;
   /** Called after this step is resolved. Receives the resolved value and a restricted context. */
-  onSelect?: (value: T, context: OnSelectContext) => void;
+  onSelect?: (value: ChoiceValue<T>, context: OnSelectContext) => void;
   /** Called if the action is cancelled after onSelect fired but before execute(). */
   onCancel?: (context: OnSelectContext) => void;
 };
+
+/** A count bound: "up to N", a `{ min, max }` config, or a function of the context returning either. */
+type CountOption<G extends Game, C> = number | C | ((context: ActionContext<G>) => number | C);
+
+/** A `chooseFrom` that asks for an array: a set (`multiSelect`) or a sequence (`orderedList`). */
+type ManyOptions<G extends Game> =
+  | { multiSelect: CountOption<G, MultiSelectConfig>; orderedList?: undefined }
+  | { orderedList: CountOption<G, OrderedListConfig>; multiSelect?: undefined };
+
+/** A `chooseFrom` that asks for one value. */
+type OneOptions = { multiSelect?: undefined; orderedList?: undefined };
 
 /** Every `chooseElement` option except the repeat options ({@link RepeatingOptions}) and the disabled rule ({@link DisabledOptions}). */
 type ChooseElementOptions<G extends Game, T extends GameElement> = {
@@ -596,8 +623,10 @@ export class Action<
    * @param options - Configuration for the choice selection
    * @param options.prompt - User-facing prompt text, or a function evaluated
    *   against the current game state each time the pick is rendered
-   * @param options.choices - Static array or function returning available choices
-   * @param options.display - Custom display function for each choice
+   * @param options.choices - Static array or function returning available choices.
+   *   A choice is a value, or `{ value, label }` to give the value its own label;
+   *   every callback, and `execute`, receives the value either way
+   * @param options.display - Label for each choice that brings no label of its own
    * @param options.optional - If true, player can skip this selection. A string skips
    *   too, and is used as the Skip button's label.
    * @param options.validate - Custom validation function
@@ -606,7 +635,8 @@ export class Action<
    * @param options.dependsOn - Name of previous selection this depends on
    * @param options.repeat - Configuration for repeating this selection
    * @param options.repeatUntil - Value that terminates a repeat loop
-   * @param options.multiSelect - Enable multi-select with checkboxes
+   * @param options.multiSelect - Enable multi-select with checkboxes; the value is an array
+   * @param options.orderedList - Ask for an ordered, repeatable list; the value is an array
    * @returns The builder for chaining
    *
    * @example
@@ -632,16 +662,27 @@ export class Action<
    */
   chooseFrom<K extends string, T, P = undefined>(
     name: K,
-    options: ChooseFromOptions<G, T> & DisabledOptions<G, T, P> & RepeatingOptions<T>
-  ): Action<G, AddArg<A, K, T[]>>;
+    options: ChooseFromOptions<G, T> & DisabledOptions<G, ChoiceValue<T>, P> & RepeatingOptions<ChoiceValue<T>>
+  ): Action<G, AddArg<A, K, ChoiceValue<T>[]>>;
   chooseFrom<K extends string, T, P = undefined>(
     name: K,
-    options: ChooseFromOptions<G, T> & DisabledOptions<G, T, P> & NonRepeatingOptions
-  ): Action<G, AddArg<A, K, T>>;
+    options: ChooseFromOptions<G, T> & DisabledOptions<G, ChoiceValue<T>, P> & NonRepeatingOptions & ManyOptions<G>
+  ): Action<G, AddArg<A, K, ChoiceValue<T>[]>>;
   chooseFrom<K extends string, T, P = undefined>(
     name: K,
-    options: ChooseFromOptions<G, T> & DisabledOptions<G, T, P> & Partial<RepeatingOptions<T>>
-  ): Action<G, AddArg<A, K, T>> | Action<G, AddArg<A, K, T[]>> {
+    options: ChooseFromOptions<G, T> & DisabledOptions<G, ChoiceValue<T>, P> & NonRepeatingOptions & OneOptions
+  ): Action<G, AddArg<A, K, ChoiceValue<T>>>;
+  // Whether it asks for one value or many is known only at run time (a caller
+  // forwarding an optional count, as the world builder does), so the arg is
+  // typed as either.
+  chooseFrom<K extends string, T, P = undefined>(
+    name: K,
+    options: ChooseFromOptions<G, T> & DisabledOptions<G, ChoiceValue<T>, P> & NonRepeatingOptions
+  ): Action<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[]>>;
+  chooseFrom<K extends string, T, P = undefined>(
+    name: K,
+    options: ChooseFromOptions<G, T> & DisabledOptions<G, ChoiceValue<T>, P> & Partial<RepeatingOptions<ChoiceValue<T>>>
+  ): Action<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[]>> {
     assertPrepareHasDisabled('chooseFrom', name, options);
     assertReadsEarlierPick('chooseFrom', name, this.definition.selections, options.dependsOn, 'depends on');
     assertReadsEarlierPick('chooseFrom', name, this.definition.selections, options.filterBy?.selectionName, 'filters by');
@@ -677,9 +718,9 @@ export class Action<
       unavailable: options.unavailable,
       onSelect: options.onSelect,
       onCancel: options.onCancel,
-    } as ChoiceSelection<T>;
+    } as ChoiceSelection<ChoiceValue<T>>;
     this.definition.selections.push(selection as Selection);
-    return this as Action<G, AddArg<A, K, T>>;
+    return this as Action<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[]>>;
   }
 
   /**
@@ -832,7 +873,7 @@ export class Action<
        * Bound the number of elements the player may pick. A number means
        * "up to N"; `{ min, max }` gives full control. Defaults to one or more.
        */
-      multiSelect?: number | MultiSelectConfig | ((context: ActionContext<G>) => number | MultiSelectConfig | undefined);
+      multiSelect?: CountOption<G, MultiSelectConfig>;
       /**
        * Custom display function. If not provided, uses element.name with
        * automatic disambiguation when multiple elements have the same name.

@@ -437,7 +437,7 @@ likes — but if you roll your own, carry the reason across yourself. The engine
 hands you a sentence written for the player; dropping it on the floor is the
 one thing to avoid.
 
-**Note:** If you do accidentally pass a choice object to `fill()`, BoardSmith will auto-unwrap it in development mode and show a warning. However, passing `choice.value` directly is clearer and recommended.
+**Note:** `fill()` takes `choice.value`, never the `{ value, display }` choice object. A choice object is refused like any other value that is not on offer.
 
 ### multiSelect Selections: `fill()` Requires an Array
 

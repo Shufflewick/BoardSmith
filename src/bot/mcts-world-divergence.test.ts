@@ -60,12 +60,11 @@ class HiddenGuessGame extends Game<HiddenGuessGame, Guesser> {
           choices: (ctx) =>
             this.all(Guesser)
               .filter((p) => p.seat !== ctx.player.seat)
-              .map((p) => ({ value: p.seat, display: p.name })),
+              .map((p) => ({ value: p.seat, label: p.name })),
         })
         .chooseFrom('guess', { choices: () => NUMBERS })
         .execute((args, ctx) => {
-          // The engine unwraps a `{ value, display }` choice to its value.
-          const target = this.getPlayer(args.target as unknown as number)!;
+          const target = this.getPlayer(args.target)!;
           const hit = target.secret === args.guess;
           if (hit) {
             (ctx.player as Guesser).score++;

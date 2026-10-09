@@ -1858,7 +1858,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return { success: true };
   }
 
-  async function fill(selectionName: string, rawValue: unknown): Promise<PickValidationResult> {
+  async function fill(selectionName: string, value: unknown): Promise<PickValidationResult> {
     // CR-02: EVERY fill() failure path must setError() — GameShell's UIX-01
     // watch is the only place a failed action surfaces (ActionPanel's direct
     // toasts were removed), so a silent return here means the user's click
@@ -1889,18 +1889,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return { valid: false, error };
     }
 
-    // PIT OF SUCCESS: Auto-unwrap choice objects from getChoices()
-    // Developers often pass the whole { value, display } object instead of just the value
-    let value = rawValue;
-    if (typeof rawValue === 'object' && rawValue !== null && 'value' in rawValue && 'display' in rawValue) {
-      devWarn(
-        `fill-choice-object-${selectionName}`,
-        `fill('${selectionName}', ...) received a choice object { value, display }. ` +
-        `Automatically unwrapping to use choice.value. ` +
-        `Consider passing choice.value directly for clarity.`
-      );
-      value = (rawValue as { value: unknown }).value;
-    }
 
     // PIT OF SUCCESS: Reject a scalar for a multiSelect pick (UIX-02).
     // Mirrors toggleMultiSelect's reverse guard (useActionController.ts ~1729-1734):

@@ -36,6 +36,8 @@ import type { ChoiceWithRefs, ValidElement, WarningEntry } from '../../types/pro
  *  taken if it cannot. */
 export interface AnnotatedCandidate {
   value: unknown;
+  /** The label a `{ value, label }` choice brought; the executor read it where the choices were built (#509). */
+  label?: string;
   disabled: string | false;
 }
 
@@ -75,7 +77,6 @@ function defaultDisplay(value: unknown): string {
   if (value === null || value === undefined) return String(value);
   if (typeof value !== 'object') return String(value);
   const obj = value as Record<string, unknown>;
-  if (typeof obj.display === 'string') return obj.display;
   if (typeof obj.name === 'string') return obj.name;
   if (typeof obj.label === 'string') return obj.label;
   try { return JSON.stringify(value); } catch { return '[Complex Object]'; }
@@ -84,9 +85,10 @@ function defaultDisplay(value: unknown): string {
 /**
  * Format a `choice` selection's candidates.
  *
- * A choice that already carries `{ value, display }` — everything
- * `playerChoices()` produces — is passed through rather than wrapped again, so
- * a player choice does not arrive as a label wrapped around a label.
+ * Each candidate is already the value it delivers: the executor read any
+ * `{ value, label }` choice where the choices were built (#509). Its label is
+ * the one it brought, else the selection's `display()`, else one read off the
+ * value.
  */
 export function formatChoiceCandidates(
   candidates: readonly AnnotatedCandidate[],
@@ -94,26 +96,13 @@ export function formatChoiceCandidates(
   ctx: CandidateContext,
   warnings: WarningEntry[],
 ): ChoiceWithRefs[] {
-  return candidates.map(({ value: rawValue, disabled }) => {
-    let value: unknown;
-    let display: string;
-
-    if (rawValue && typeof rawValue === 'object' && 'value' in rawValue && 'display' in rawValue) {
-      const formatted = rawValue as { value: unknown; display: string };
-      value = formatted.value;
-      display = formatted.display;
-    } else {
-      value = rawValue;
-      display = selection.display ? selection.display(rawValue) : defaultDisplay(rawValue);
-    }
-
+  return candidates.map(({ value, label, disabled }) => {
+    const display = label ?? (selection.display ? selection.display(value) : defaultDisplay(value));
     const choice: ChoiceWithRefs = { value, display };
 
-    // Board refs are computed from the ORIGINAL raw value: a game that returns
-    // `{value, display}` pairs writes its boardRefs against the pair.
     if (selection.boardRefs) {
       try {
-        choice.refs = selection.boardRefs(rawValue, ctx).refs;
+        choice.refs = selection.boardRefs(value, ctx).refs;
       } catch (e) {
         warnings.push({
           code: 'BOARD_REFS_ERROR',

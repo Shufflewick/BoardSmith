@@ -15,6 +15,8 @@
 /** A choice as either side holds it: a value, and whatever else it carries. */
 interface MatchableChoice {
   value: unknown;
+  /** The label a `{ value, label }` choice brought (#509), matched as display text. */
+  label?: string;
 }
 
 /**
@@ -51,7 +53,7 @@ export function trySmartResolveChoice<C extends MatchableChoice>(
     ?? byIdentifyingSubset(value, choices);
 }
 
-/** An element id, or the `value` half of a `{value, display}` choice. */
+/** An element id, or the `value` field of an object choice. */
 function byNumericKey<C extends MatchableChoice>(
   value: unknown,
   choices: readonly C[],
@@ -96,6 +98,7 @@ function byDisplayText<C extends MatchableChoice>(
     || (typeof candidate === 'string' && candidate.toLowerCase() === lowerValue);
 
   return choices.find((choice) => {
+    if (choice.label !== undefined && textMatches(choice.label)) return true;
     const actual = choice.value;
     if (typeof actual === 'string') return textMatches(actual);
     if (!actual || typeof actual !== 'object') return false;
