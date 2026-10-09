@@ -39,7 +39,7 @@ const config: ProjectConfig = {
 };
 
 describe('generateAppVue', () => {
-  it('renders the board from the UI registry, never a slot template', () => {
+  it('renders the board from the UI registry, never a board slot', () => {
     const out = generateAppVue(config);
     expect(out).toContain("import { GameShell } from 'boardsmith/ui'");
     expect(out).toContain("import uis from './uis.js'");
@@ -48,7 +48,7 @@ describe('generateAppVue', () => {
     expect(out).not.toMatch(/game-type|display-name|player-count/);
     // The slot is gone on purpose: a second way to name the default UI is a
     // second thing that can disagree with src/ui/uis.ts.
-    expect(out).not.toMatch(/<template #game-/);
+    expect(out).not.toMatch(/<template #(game-)?board\b/);
   });
 
   it('does not import any board component directly — the registry owns that', () => {

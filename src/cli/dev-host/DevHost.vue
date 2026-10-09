@@ -501,7 +501,7 @@ function switchSeat(target: number): void {
 
 onMounted(() => {
   // Install the Slate --bsg-* token stylesheet on THIS (dev-host) document.
-  // The game runs in a platform-mode iframe that calls applyTheme itself, but the
+  // The game runs in a hosted iframe that calls applyTheme itself, but the
   // outer dev page needs the tokens too — otherwise every var(--bsg-*) resolves to
   // nothing and the dev chrome falls back to an unstyled white page.
   applyTheme();

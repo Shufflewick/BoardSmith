@@ -1435,7 +1435,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    *   animations: [...]
    * });
    *
-   * // Register the hook after getting actionController from slot props
+   * // Register the hook after receiving actionController as a board prop
    * actionController.setBeforeAutoExecute(onBeforeAutoExecute);
    * ```
    *

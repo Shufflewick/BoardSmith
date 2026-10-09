@@ -35,7 +35,7 @@
  * import { ref, toRef, watchEffect } from 'vue';
  * import { useActionAnimations, FlyingCardsOverlay } from 'boardsmith/ui';
  *
- * // Create a ref that we'll sync with gameView from slot props
+ * // Create a ref that we'll sync with the gameView prop
  * const gameViewRef = ref(null);
  *
  * const actionAnimations = useActionAnimations({
@@ -61,16 +61,15 @@
  *   ],
  * });
  *
- * // Call this once when the board mounts; GameShell passes `actionController`
- * // and `gameView` to the board component as props
- * function setupAnimations(actionController, gameView) {
- *   gameViewRef.value = gameView;
- *   actionController.setBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
- * }
+ * // GameShell passes `actionController` and `gameView` to the board component
+ * // as props; register the hook once, here in the board's own setup.
+ * const props = defineProps<{ actionController: any; gameView: any }>();
+ * watchEffect(() => { gameViewRef.value = props.gameView; });
+ * props.actionController.setBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
  * </script>
  *
  * <template>
- *   <div @vue:mounted="setupAnimations(actionController, gameView)">
+ *   <div>
  *     <!-- the board's own markup -->
  *     <FlyingCardsOverlay :flying-cards="actionAnimations.flyingElements" />
  *   </div>
