@@ -20,7 +20,7 @@ import type { BotConfig } from './types.js';
 
 const PICKS = ['b1', 'b2', 'b3', 'win'] as const;
 
-export class DeclaredResultGame extends Game<DeclaredResultGame, Player> {
+class DeclaredResultGame extends Game<DeclaredResultGame, Player> {
   pick: string | null = null;
 
   constructor(options: GameOptions) {
