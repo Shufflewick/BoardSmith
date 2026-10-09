@@ -6,7 +6,7 @@
  *
  * Usage:
  * ```typescript
- * const { findElement, findPlayerHand, getElementCount } = useGameViewHelpers();
+ * import { findElement, findPlayerHand, getElementCount } from 'boardsmith/ui';
  *
  * const deck = findElement(gameView, { type: 'deck' });
  * const myHand = findPlayerHand(gameView, playerSeat);
@@ -24,62 +24,44 @@ function getAttrs(element: GameViewElement): BaseElementAttributes & Record<stri
 }
 
 /**
- * Find an element anywhere in the game view tree by its numeric ID.
- * Performs a recursive depth-first search.
+ * Whether an element satisfies every criterion given (AND). Criteria left
+ * undefined are not checked; an options object with no criteria matches nothing.
  */
-export function findElementById(
-  gameView: GameViewElement | null | undefined,
-  id: number
-): GameViewElement | undefined {
-  if (!gameView) return undefined;
-
-  // Check if this element matches
-  if (gameView.id === id) return gameView;
-
-  // Recursively search children
-  if (gameView.children) {
-    for (const child of gameView.children) {
-      const found = findElementById(child, id);
-      if (found) return found;
-    }
+function matches(element: GameViewElement, options: ElementMatchOptions): boolean {
+  const { id, type, name, className } = options;
+  if (id === undefined && type === undefined && name === undefined && className === undefined) {
+    return false;
   }
-
-  return undefined;
+  if (id !== undefined && element.id !== id) return false;
+  if (type !== undefined && getAttrs(element).$type !== type) return false;
+  if (name !== undefined && element.name !== name) return false;
+  if (className !== undefined && element.className !== className) return false;
+  return true;
 }
 
 /**
- * Find an element anywhere in the game view tree by type, name, or className.
- * Performs a recursive depth-first search.
- * Prefers $type and name over className since className can be mangled by bundlers.
+ * Find the first element anywhere in the game view tree (depth-first) that
+ * satisfies every criterion in `options`: `id`, `type` (the `$type` attribute),
+ * `name` and `className`. Prefer `id`, `type` and `name` over `className`,
+ * which bundlers can mangle. With no criteria nothing matches.
  */
 export function findElement(
   gameView: GameViewElement | null | undefined,
   options: ElementMatchOptions
 ): GameViewElement | undefined {
   if (!gameView) return undefined;
+  if (matches(gameView, options)) return gameView;
 
-  const { type, name, className } = options;
-
-  // Check if this element matches
-  const attrs = getAttrs(gameView);
-  if (type && attrs.$type === type) return gameView;
-  if (name && gameView.name === name) return gameView;
-  if (className && gameView.className === className) return gameView;
-
-  // Recursively search children
-  if (gameView.children) {
-    for (const child of gameView.children) {
-      const found = findElement(child, options);
-      if (found) return found;
-    }
+  for (const child of gameView.children ?? []) {
+    const found = findElement(child, options);
+    if (found) return found;
   }
-
   return undefined;
 }
 
 /**
- * Find all elements anywhere in the game view tree matching the criteria.
- * Performs a recursive depth-first search.
+ * Find every element anywhere in the game view tree (depth-first) that
+ * satisfies every criterion in `options`. See `findElement`.
  */
 export function findElements(
   gameView: GameViewElement | null | undefined,
@@ -89,21 +71,8 @@ export function findElements(
 
   function search(element: GameViewElement | null | undefined): void {
     if (!element) return;
-
-    const { type, name, className } = options;
-    const attrs = getAttrs(element);
-
-    // Check if this element matches
-    if (type && attrs.$type === type) results.push(element);
-    else if (name && element.name === name) results.push(element);
-    else if (className && element.className === className) results.push(element);
-
-    // Recursively search children
-    if (element.children) {
-      for (const child of element.children) {
-        search(child);
-      }
-    }
+    if (matches(element, options)) results.push(element);
+    for (const child of element.children ?? []) search(child);
   }
 
   search(gameView);
@@ -111,18 +80,16 @@ export function findElements(
 }
 
 /**
- * Find a player's hand element by seat.
+ * Find a player's hand anywhere in the game view tree: the first element with
+ * `$type` 'hand' owned by that seat.
  */
 export function findPlayerHand(
   gameView: GameViewElement | null | undefined,
   playerSeat: number
 ): GameViewElement | undefined {
-  if (!gameView?.children) return undefined;
-
-  return gameView.children.find((c) => {
-    const attrs = getAttrs(c);
-    return attrs.$type === 'hand' && attrs.player?.seat === playerSeat;
-  });
+  return findElements(gameView, { type: 'hand' }).find(
+    (hand) => getAttrs(hand).player?.seat === playerSeat
+  );
 }
 
 /**
@@ -243,22 +210,6 @@ export function getFirstCard(element: GameViewElement | null | undefined): GameV
 }
 
 /**
- * Extract card data (rank, suit) from a game element.
- * Returns undefined if the element has no rank attribute.
- */
-export function getCardData(element: GameViewElement | null | undefined): { rank: string; suit: string } | undefined {
-  if (!element) return undefined;
-
-  const attrs = getAttrs(element);
-  if (attrs.rank === undefined) return undefined;
-
-  return {
-    rank: attrs.rank,
-    suit: attrs.suit ?? '',
-  };
-}
-
-/**
  * Get the player seat that owns an element.
  * Returns undefined if the element has no player owner.
  */
@@ -299,103 +250,12 @@ export function isOpponentElement(
 }
 
 /**
- * Find a child element by matching an attribute value.
- * Searches only direct children of the element.
- *
- * This is useful when you have element data (like equipment stats) but need the
- * element's numeric ID for API calls.
- *
- * @example
- * ```typescript
- * // Find equipment by name
- * const weapon = findChildByAttribute(merc, 'equipmentName', 'Laser Rifle');
- * if (weapon) {
- *   await actionController.execute('dropEquipment', { equipment: weapon.id });
- * }
- * ```
- */
-export function findChildByAttribute(
-  parent: GameViewElement | null | undefined,
-  attributeName: string,
-  attributeValue: unknown
-): GameViewElement | undefined {
-  if (!parent?.children) return undefined;
-
-  return parent.children.find((child) => {
-    const attrs = getAttrs(child);
-    return attrs[attributeName] === attributeValue;
-  });
-}
-
-/**
- * Find an element anywhere in the tree by matching an attribute value.
- * Performs a recursive depth-first search.
- *
- * @example
- * ```typescript
- * // Find any element with a specific unique attribute
- * const sector = findElementByAttribute(gameView, 'sectorId', 'alpha-3');
- * ```
- */
-export function findElementByAttribute(
-  root: GameViewElement | null | undefined,
-  attributeName: string,
-  attributeValue: unknown
-): GameViewElement | undefined {
-  if (!root) return undefined;
-
-  // Check this element
-  const attrs = getAttrs(root);
-  if (attrs[attributeName] === attributeValue) return root;
-
-  // Recursively search children
-  if (root.children) {
-    for (const child of root.children) {
-      const found = findElementByAttribute(child, attributeName, attributeValue);
-      if (found) return found;
-    }
-  }
-
-  return undefined;
-}
-
-/**
- * Find all elements in the tree matching an attribute value.
- * Performs a recursive depth-first search.
- */
-export function findAllByAttribute(
-  root: GameViewElement | null | undefined,
-  attributeName: string,
-  attributeValue: unknown
-): GameViewElement[] {
-  const results: GameViewElement[] = [];
-
-  function search(element: GameViewElement | null | undefined): void {
-    if (!element) return;
-
-    const attrs = getAttrs(element);
-    if (attrs[attributeName] === attributeValue) {
-      results.push(element);
-    }
-
-    if (element.children) {
-      for (const child of element.children) {
-        search(child);
-      }
-    }
-  }
-
-  search(root);
-  return results;
-}
-
-/**
  * Get the numeric element ID from an element.
  * This is the ID needed for all action API calls (execute, fill, etc.).
  *
  * @example
  * ```typescript
- * const equipment = findChildByAttribute(merc, 'equipmentName', selectedName);
+ * const equipment = findElement(gameView, { name: selectedName });
  * const equipmentId = getElementId(equipment);  // number | undefined
  * if (equipmentId) {
  *   await actionController.execute('dropEquipment', { equipment: equipmentId });
@@ -404,32 +264,4 @@ export function findAllByAttribute(
  */
 export function getElementId(element: GameViewElement | null | undefined): number | undefined {
   return element?.id;
-}
-
-/**
- * Composable that returns all helper functions.
- * Can be used in Vue components for convenience.
- */
-export function useGameViewHelpers() {
-  return {
-    findElementById,
-    findElement,
-    findElements,
-    findChildByAttribute,
-    findElementByAttribute,
-    findAllByAttribute,
-    getElementId,
-    findPlayerHand,
-    findPlayerElement,
-    getPlayerAttribute,
-    findAllHands,
-    getElementCount,
-    getCards,
-    getFirstCard,
-    getCardData,
-    getElementOwner,
-    isOwnedByPlayer,
-    isMyElement,
-    isOpponentElement,
-  };
 }

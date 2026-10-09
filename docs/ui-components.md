@@ -752,7 +752,7 @@ const drawnMercs = computed(() => {
   if (!ids?.length) return [];
 
   // Find the elements by ID in the game view
-  return ids.map(id => findElementById(props.gameView, id)).filter(Boolean);
+  return ids.map(id => findElement(props.gameView, { id })).filter(Boolean);
 });
 
 // React to action changes
@@ -1241,7 +1241,6 @@ Utilities for querying game state.
 
 ```typescript
 import {
-  useGameViewHelpers,
   findElement,
   findElements,
   findPlayerHand,
@@ -2089,13 +2088,13 @@ const selectedEquipment = { name: 'Laser Rifle', damage: 10 };
 // How do you find the ID?
 ```
 
-**The Solution:** Use `findChildByAttribute` to search children:
+**The Solution:** Use `findElement` to search the merc's subtree by name:
 
 ```typescript
-import { findChildByAttribute, getElementId } from 'boardsmith/ui';
+import { findElement, getElementId } from 'boardsmith/ui';
 
-// Find equipment element by its name attribute
-const equipment = findChildByAttribute(merc, 'equipmentName', selectedEquipment.name);
+// Find equipment element by its name
+const equipment = findElement(merc, { name: selectedEquipment.name });
 const equipmentId = getElementId(equipment);
 
 if (equipmentId) {
@@ -2112,10 +2111,9 @@ The `boardsmith/ui` package provides several helpers for finding elements:
 
 | Function | Description | Use When |
 |----------|-------------|----------|
-| `findElement(view, { type, name, className })` | Find direct child by type/name/class | Finding top-level containers |
-| `findChildByAttribute(parent, attrName, value)` | Find direct child by attribute | Finding element when you have attribute data |
-| `findElementByAttribute(root, attrName, value)` | Recursive search by attribute | Finding element anywhere in tree |
-| `findElementById(root, id)` | Recursive search by numeric ID | Finding element when you have its ID |
+| `findElement(view, { id, type, name, className })` | First element anywhere in the tree matching every criterion given | Finding one container, or the element for a known ID |
+| `findElements(view, { id, type, name, className })` | Every element anywhere in the tree matching every criterion given | Finding all cards, squares, etc. |
+| `findPlayerHand(view, seat)` | The hand owned by a seat, wherever it sits in the tree | Finding a player's hand |
 | `getElementId(element)` | Get numeric ID from element | Extracting ID for action calls |
 
 **Example: Equipment Modal**
@@ -2127,8 +2125,8 @@ const selectedEquipmentName = 'Plasma Cannon';
 // Find the merc that has this equipment
 const merc = findElement(gameView, { className: 'Merc' });
 
-// Find the equipment element by searching merc's children
-const equipment = findChildByAttribute(merc, 'equipmentName', selectedEquipmentName);
+// Find the equipment element by name within the merc
+const equipment = findElement(merc, { name: selectedEquipmentName });
 
 if (equipment) {
   console.log('Found equipment ID:', equipment.id);  // e.g., 42
@@ -2139,11 +2137,11 @@ if (equipment) {
 }
 ```
 
-**Example: Finding Any Element by Unique Attribute**
+**Example: Finding Any Element by Name**
 
 ```typescript
-// Find a sector anywhere in the game by its unique sector ID
-const sector = findElementByAttribute(gameView, 'sectorId', 'alpha-3');
+// Find a sector anywhere in the game by its unique name
+const sector = findElement(gameView, { name: 'alpha-3' });
 if (sector) {
   await actionController.execute('moveTo', { destination: sector.id });
 }
