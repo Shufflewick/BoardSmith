@@ -1418,7 +1418,7 @@ describe('useActionController', () => {
     });
   });
 
-  describe('getCurrentChoices()', () => {
+  describe('currentChoices', () => {
     it('should return choices for current selection', async () => {
       const controller = useActionController({
         sendAction,
@@ -1431,7 +1431,7 @@ describe('useActionController', () => {
 
       await controller.start('playCard');
 
-      const choices = controller.getCurrentChoices();
+      const choices = controller.currentChoices.value;
 
       expect(choices).toHaveLength(3);
       expect(choices[0].display).toBe('Ace of Spades');
@@ -1446,7 +1446,7 @@ describe('useActionController', () => {
         autoExecute: false,
       });
 
-      const choices = controller.getCurrentChoices();
+      const choices = controller.currentChoices.value;
 
       expect(choices).toEqual([]);
     });
@@ -1494,8 +1494,8 @@ describe('useActionController', () => {
     });
   });
 
-  describe('fetchChoicesForPick()', () => {
-    it('should do nothing without fetchPickChoices callback', async () => {
+  describe('fetching choices', () => {
+    it('should not throw filling without a fetchPickChoices callback', async () => {
       const controller = useActionController({
         sendAction,
         availableActions,
@@ -1508,10 +1508,10 @@ describe('useActionController', () => {
       await controller.start('playCard');
 
       // Should not throw
-      await controller.fetchChoicesForPick('card');
+      await controller.fill('card', 1);
     });
 
-    it('should do nothing when no action is active', async () => {
+    it('should not fetch choices when no action is active', async () => {
       const fetchPickChoices = vi.fn();
 
       const controller = useActionController({
@@ -1523,7 +1523,7 @@ describe('useActionController', () => {
         fetchPickChoices,
       });
 
-      await controller.fetchChoicesForPick('card');
+      await controller.fill('card', 1);
 
       expect(fetchPickChoices).not.toHaveBeenCalled();
     });
@@ -1721,7 +1721,7 @@ describe('useActionController', () => {
 
       await controller.start('withDisabled');
 
-      const choices = controller.getCurrentChoices();
+      const choices = controller.currentChoices.value;
 
       expect(choices).toHaveLength(2);
       expect(choices[0].disabled).toBeUndefined();
@@ -1844,8 +1844,8 @@ describe('useActionController', () => {
         expect(choices[0].disabled).toBeUndefined();
         expect(choices[1].disabled).toBe('Pinned');
 
-        // getCurrentChoices() should return the same disabled values
-        const currentChoices = controller.getCurrentChoices();
+        // currentChoices should return the same disabled values
+        const currentChoices = controller.currentChoices.value;
         expect(currentChoices).toHaveLength(2);
         expect(currentChoices[0].disabled).toBeUndefined();
         expect(currentChoices[1].disabled).toBe('Pinned');
