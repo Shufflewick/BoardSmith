@@ -1,7 +1,7 @@
 {
-  "revision": 137,
+  "revision": 138,
   "bundleProtocol": 2,
-  "surfaceHash": "4fd5ab5e85ca0dd6",
+  "surfaceHash": "79d735d3b524457f",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1177,6 +1177,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A game starts once: a second Game.startFlow() (or GameRunner.start / TestGame.start) is refused with a readable error instead of re-running the flow's setup and opening execute nodes (#502); the startTutorial op now hands the turn back to the flow's first seat through the new Game.restartFlowForTutorial(), which re-runs neither the flow's setup nor its opening execute nodes, so a tutorial opened during the opponent's turn no longer leaves the learner with no action, and the op is refused when the restarted flow would not prompt the requesting seat (#546)."
+    },
+    {
+      "revision": 138,
+      "date": "2026-10-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "79d735d3b524457f",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A simultaneous step now decides a seat that has just acted the same way it decides every seat at entry and on refreshAwaitingActions (#501): a seat skipPlayer now excludes leaves awaitingPlayers at once (and the step completes if it was the last seat) instead of staying prompted, and a function-valued actions list that returns an unregistered name after a seat acts halts the flow with the 'references unknown action' error instead of silently dropping the name. FlowEngine gains the private helpers offeredActions, seatEligibility, offeredSequentialActions and offeredSimultaneousActions, which is the surface change; each seat's available actions are now read once per evaluation rather than once per declared name."
     }
   ]
 }
