@@ -223,6 +223,8 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   let autoEndArmed = false;
 
   function tryAutoStartSingleAction(skipNoSelections = false): void {
+    // Nothing starts while history is on screen; leaving it schedules this again.
+    if (isViewingHistory.value) return;
     if (autoEndTurn.value === false) return;
     if (!isMyTurn.value) return;
     if (currentAction.value) return;
@@ -393,12 +395,18 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   // this controller and board show no pick. Returning re-offers from the live
   // position the way the runner watcher above does, a no-selection action
   // staying a deliberate press.
+  //
+  // Except an action the server already holds (a follow-up, a repeating pick
+  // after its first step, an onSelect pick): cancelling it sends cancel_action
+  // to the LIVE game and throws the chain away for good, so it stays open, as
+  // the availableActions teardown above spares it. The controller still refuses
+  // every commit to it while history is on screen.
   watch(() => isViewingHistory.value, (browsing) => {
     if (!browsing) {
       scheduleAutoStart(/* skipNoSelections */ true);
       return;
     }
-    if (!currentAction.value) return;
+    if (!currentAction.value || controller.pendingOnServer?.value) return;
     controller.cancel();
     board.clear();
   });
