@@ -11,7 +11,7 @@
  * cross-origin frame, and a host that guessed from a timeout alone would
  * accuse every healthy table in the catalogue.
  *
- * So platform mode now posts `game_ready`, and it is the table twin of
+ * So the shell now posts `game_ready` when hosted, and it is the table twin of
  * `world_ready` in name, shape and timing. What the host does with it is the
  * host's business; what this file holds is that the shell sends it, exactly
  * once, and only when there is a host to send it to.
@@ -59,7 +59,7 @@ describe('GameShell platform boot announcement (#486)', () => {
       posted.push(m);
     });
     // `window.parent === window` here: `enterIframe` was not called, so the
-    // shell is not in platform mode at all.
+    // shell has no host at all.
     const wrapper = mountShell();
     await nextTick();
 

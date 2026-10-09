@@ -7,7 +7,7 @@
  *
  * Every browser that opens this page is a real player: it connects over WS,
  * claims a seat in the seat-picker lobby, then renders its seat via the embedded
- * GameShell <iframe> in PLATFORM mode (the EXACT code production runs). This page
+ * GameShell <iframe> (the EXACT code production runs). This page
  * just bridges the WS transport to the iframe's postMessage protocol — so dev is
  * inherently multiplayer (open another browser / another computer to join).
  */
@@ -501,7 +501,7 @@ function switchSeat(target: number): void {
 
 onMounted(() => {
   // Install the Slate --bsg-* token stylesheet on THIS (dev-host) document.
-  // The game runs in a platform-mode iframe that calls applyTheme itself, but the
+  // The game runs in a hosted iframe that calls applyTheme itself, but the
   // outer dev page needs the tokens too — otherwise every var(--bsg-*) resolves to
   // nothing and the dev chrome falls back to an unstyled white page.
   applyTheme();

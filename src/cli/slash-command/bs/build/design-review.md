@@ -126,7 +126,7 @@ design-review pass.
 **Theme injection — no toggle UI exists.** There is no button to click. Set the theme by
 injecting it onto the **GameShell iframe's own document**, not by clicking anything:
 `iframe.contentDocument.documentElement.dataset.theme = 'dark'` (or `'light'`). The iframe
-renders the seat view in platform mode, so its *own* document — NOT the outer page's
+renders the seat view, so its *own* document — NOT the outer page's
 `document.documentElement` — is where `applyTheme` reads `html[data-theme]`
 (`src/ui/theme.ts:204,209,239-244`). Setting `data-theme` on the outer page does NOT re-theme
 the iframe content and silently yields same-theme screenshots for both the light and dark

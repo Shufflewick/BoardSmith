@@ -287,7 +287,7 @@ describe('GameShell teachingDisabledProp wiring (LOCK-01 broadcast → ControlsM
 
   it('TD-06 (parity): GameShell passes teachingDisabledProp to a single shared ControlsMenu covering both AutoUI and custom UI', () => {
     // Parity is structural: ControlsMenu is the shared gating component for both
-    // the ActionPanel (AutoUI) and any custom #game-board slot. There is only ONE
+    // the ActionPanel (AutoUI) and any custom board. There is only ONE
     // ControlsMenu instance in GameShell (confirmed: grep finds exactly one binding).
     // This test documents the parity guarantee — one prop wire, both UI modes gated.
     //

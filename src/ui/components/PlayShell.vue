@@ -696,7 +696,7 @@ const mobileToggleLabel = computed(() => {
   --bsg-panel-editor-max: min(calc(var(--bsg-editor-chrome) + var(--bsg-editor-text-rest)), 60dvh);
 
   /* The bar put down (#230): ONE control row, because the row it keeps carries
-     the ⋯ menu, and in platform mode that menu is the player's only control
+     the ⋯ menu, and that menu is the player's only control
      surface. Derived from the same row and padding tokens as everything above,
      so the stylesheet still has one definition of a control row. */
   --bsg-action-bar-collapsed: calc(var(--bsg-panel-row) + 2 * var(--bsg-panel-pad)
@@ -808,7 +808,7 @@ const mobileToggleLabel = computed(() => {
   padding: var(--bsg-s3);
 }
 
-/* Connection health dot: absolute corner of boardregion; platform mode only (IA-01).
+/* Connection health dot: absolute corner of boardregion; drawn only while `connection` is set (IA-01).
    Class bound to connectionHealth ref: connected / stale / connecting. */
 .conn-dot {
   position: absolute;

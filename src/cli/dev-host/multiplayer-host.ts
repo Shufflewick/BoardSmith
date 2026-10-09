@@ -5,7 +5,7 @@
  * `SnapshotSessionHost` (via `createDevSession`) in the `boardsmith dev` CLI
  * process and fans it out to MANY WebSocket clients — so several browsers (or
  * computers on the LAN) can play one local game through the EXACT production
- * path (stateless executor + host-owned snapshot + platform-mode GameShell).
+ * path (stateless executor + host-owned snapshot + iframe-hosted GameShell).
  *
  * It is deliberately transport-free: the WebSocket server (in dev.ts) feeds it
  * `handleMessage(clientId, msg)` / `disconnect(clientId)` and supplies `send`,

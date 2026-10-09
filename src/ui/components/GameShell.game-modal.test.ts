@@ -13,7 +13,7 @@
  *   <div class="game-shell__game-modal-host" id="bs-game-modal"></div>
  *   <div class="game-shell__zoom-container">
  *     <template v-if="shellMounted">   ← the gate
- *       <slot name="game-board" ... />
+ *       <component :is="selectedUiComponent" ... />
  *     </template>
  *   </div>
  *

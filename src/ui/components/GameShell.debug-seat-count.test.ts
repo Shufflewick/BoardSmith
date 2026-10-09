@@ -12,10 +12,17 @@
  * them. The buttons used to number from 0, so "Player 1" asked for seat 0 and
  * the last seat had no button; and the dev host forwarded the request to a
  * game server that has no such op, so no button switched anything.
+ *
+ * The `game_state` frame is built by the real `buildPlayerState` from a running
+ * 5-seat game, so the seat list follows the shape production sends rather than
+ * one this file wrote by hand.
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { nextTick } from 'vue';
 import ControlsTab from './debug/ControlsTab.vue';
+import { Game, Player, Action, defineFlow, loop, eachPlayer, actionStep } from '../../engine/index.js';
+import { GameRunner } from '../../runtime/runner.js';
+import { buildPlayerState } from '../../session/utils.js';
 import {
   enterIframe,
   leaveIframe,
@@ -26,8 +33,33 @@ function post(data: Record<string, unknown>): void {
   window.dispatchEvent(new MessageEvent('message', { data: { source: 'shufflewick', ...data } }));
 }
 
-const players = (n: number) =>
-  Array.from({ length: n }, (_, i) => ({ name: `P${i + 1}`, seat: i + 1 }));
+class FiveSeatGame extends Game<FiveSeatGame, Player> {
+  constructor(options: { playerCount: number; playerNames?: string[]; seed?: string }) {
+    super(options);
+    this.registerActions(Action.create('pass').prompt('Pass').execute(() => {}));
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          while: () => true,
+          maxIterations: 20,
+          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
+        }),
+      }),
+    );
+  }
+}
+
+/** The `game_state` view the host sends seat 1 of a running 5-seat game. */
+function fiveSeatView() {
+  const names = ['P1', 'P2', 'P3', 'P4', 'P5'];
+  const runner = new GameRunner({
+    GameClass: FiveSeatGame,
+    gameType: 'five-seat',
+    gameOptions: { playerCount: 5, playerNames: names, seed: 'seats' },
+  });
+  runner.start();
+  return { flowState: runner.getFlowState(), state: buildPlayerState(runner, names, 1) };
+}
 
 afterEach(() => {
   leaveIframe();
@@ -44,10 +76,7 @@ async function openControlsWithFiveSeats() {
   post({ type: 'dev-debug-toggle' });
   post({
     type: 'game_state',
-    view: {
-      flowState: { currentPlayer: 1, awaitingInput: true, availableActions: [] },
-      state: { view: {}, players: players(5), currentPlayer: 1, isMyTurn: true },
-    },
+    view: fiveSeatView(),
     winners: [],
   });
   await nextTick();

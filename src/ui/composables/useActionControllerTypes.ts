@@ -652,13 +652,13 @@ export interface UseActionControllerReturn {
    *
    * @example
    * ```typescript
-   * // In game-board slot
+   * // In the board component
    * const { flyingElements, onBeforeAutoExecute } = useActionAnimations({
    *   gameView,
    *   animations: [...]
    * });
    *
-   * // Register the hook after getting actionController from slot props
+   * // Register the hook after receiving actionController as a board prop
    * actionController.setBeforeAutoExecute(onBeforeAutoExecute);
    * ```
    *
