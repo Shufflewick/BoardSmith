@@ -734,7 +734,17 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
 function pressOnce(control: Control): Promise<void> {
   if (control.keyboardOnly) return control.target.press('Enter', { timeout: PRESS_MS });
   if (control.candidate) return aimAndClick(control);
-  return control.onBoard ? clickWhereReachable(control) : control.target.click({ timeout: LOOK_MS });
+  return control.onBoard ? clickWhereReachable(control) : clickInThePanel(control);
+}
+
+/**
+ * Clicks a panel `control` with Playwright, for one look ({@link LOOK_MS}), and records whether the
+ * click reached it (`landsOnlyOn`). A page too busy to answer the click within the look still
+ * received it, so a click that reached the control landed, and pressing it again would press an
+ * action that is already taken (#562).
+ */
+async function clickInThePanel(control: Control): Promise<void> {
+  if (!(await landsOnlyOn(control, () => control.target.click({ timeout: LOOK_MS })))) throw new Error(COVERED);
 }
 
 /** The longest a toast stays: an error toast goes after 4 seconds. */
@@ -881,15 +891,19 @@ const OVER_THE_FRAME = "the click reached nothing in the game, so something over
  * once more. One that reached a toast, in the game or in the page around it, is an
  * {@link UnderAToast}, which `press` waits out. One that reached anything else in the page around
  * the game landed on what that page has over the frame, where no look inside the frame can see it,
- * so the control is not pressable.
+ * so the control is not pressable. A `click` that failed, as one that ran out of time waiting for a
+ * busy page to answer, still landed if it reached `control`; one that did not fails as `click` did.
  */
 async function landsOnlyOn(control: Control, click: () => Promise<void>): Promise<boolean> {
   const around = pagesAround(control.frame);
   await control.target.evaluate(guardClicks, undefined, { timeout: PRESS_MS });
   for (const outer of around) await outer.evaluate(guardClicks, null);
   const reached: Reached[] = [];
+  let failed: { error: unknown } | undefined;
   try {
     await click();
+  } catch (error) {
+    failed = { error };
   } finally {
     // The page around the game is read first: it stays when the click replaced the game's frame,
     // and must be left unguarded whatever the frame's read finds.
@@ -898,8 +912,10 @@ async function landsOnlyOn(control: Control, click: () => Promise<void>): Promis
   }
   if (reached.includes('toast')) throw new UnderAToast(COVERED);
   const inTheGame = reached[reached.length - 1];
+  if (inTheGame === 'it') return true;
+  if (failed !== undefined) throw failed.error;
   if (inTheGame === 'nothing') throw new Error(OVER_THE_FRAME);
-  return inTheGame === 'it';
+  return false;
 }
 
 /**

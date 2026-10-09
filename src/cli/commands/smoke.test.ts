@@ -630,6 +630,14 @@ describe('boardsmith verify: the smoke check', () => {
     },
   );
 
+  it('#562: counts a panel press that reached its button as landed, though the page was too busy to answer within one look, and does not press it again', async () => {
+    const { outcome, steps } = await smokeOf(true, { ...gladeWorld({ busy: true }), 'tests/browser/smoke.spec.ts': gladeSpec({ steps: 8 }) });
+
+    expect(outcome.summary).not.toContain('did not work');
+    expect(steps.filter((line) => line.endsWith('taking "arrive"'))).toHaveLength(1);
+    expect(steps.some((line) => line.endsWith('taking "rest"'))).toBe(true);
+  });
+
   it(
     '#471: plays the seats a world spec names, each in a browser of its own, the second following the first, and takes ' +
       'an action that needs another player there as soon as the page shows one, naming that player from `inputs`',

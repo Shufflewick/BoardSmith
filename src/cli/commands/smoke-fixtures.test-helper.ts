@@ -1329,8 +1329,10 @@ export const ALONE_REASON = 'There is nobody else in this glade to greet.';
  *
  * With `stumbles`, seat 4's arrival fails in its rules, so only seat 4's browser sees a failure.
  * With `manners`, seat 4 alone may also `bow`, an action the panel offers inside its "Manners" group.
+ * With `busy`, the page is kept busy for 1.5s by every click it takes, longer than the walk gives one
+ * look at a panel button, as a loaded machine keeps it (#562).
  */
-export function gladeWorld(options: { stumbles?: boolean; manners?: boolean } = {}): Record<string, string> {
+export function gladeWorld(options: { stumbles?: boolean; manners?: boolean; busy?: boolean } = {}): Record<string, string> {
   const stumble = options.stumbles ? "\n    if (ctx.player.seat === 4) throw new Error('seat four tripped on a root');" : '';
   const bow = options.manners
     ? `
@@ -1504,7 +1506,11 @@ function seenIn(node: ViewNode | null | undefined): number[] {
   return [];
 }
 
-const seen = computed(() => seenIn(props.gameView as ViewNode));
+${
+      options.busy
+        ? "document.addEventListener('click', () => { const until = Date.now() + 1500; while (Date.now() < until) { /* busy */ } }, true);\n"
+        : ''
+    }const seen = computed(() => seenIn(props.gameView as ViewNode));
 </script>
 
 <template>
