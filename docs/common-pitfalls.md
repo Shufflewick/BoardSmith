@@ -631,6 +631,11 @@ Error: Element class 'MyCard' is created after setup but was never registered.
 Call this.registerElements([MyCard]) in your game's constructor.
 ```
 
+In a world game the same rule applies once the constructor is done: a class
+first created by `genesis` or a command must be registered in the constructor.
+A class of your own that shares a built-in's name (your own `Hand`) must be
+registered too.
+
 Before this check, the live game worked and only the next restart, undo or bot
 search failed with `Unknown element class`, far from the cause. Built-in
 classes (`Card`, `Die`, `Hand`, ...) are already registered and need nothing.

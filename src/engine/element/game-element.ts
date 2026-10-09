@@ -109,7 +109,7 @@ export function registerElementClass(
  *
  * While the game is being constructed this registers the class itself: the
  * constructor runs again on every restore, so the class is known again. Once
- * setup is over (`startFlow()` or a flow restore has run) a restore would NOT
+ * setup is over (`startFlow()`, a flow restore or a world's `reserveConstructionIdSpace()` has run) a restore would NOT
  * see the class, so a class that is not already registered is refused here,
  * where the author can fix it, instead of failing on the next undo or restart
  * with "Unknown element class".
@@ -118,7 +118,12 @@ export function registerCreatedElementClass(
   ctx: ElementContext,
   cls: ElementClass,
 ): void {
-  if (ctx._setupComplete && !ctx.classRegistry.has(cls.name)) {
+  // A name held only by the built-in seed is not registered by the game: a
+  // subclass named like a built-in would be swapped in live and come back as
+  // the built-in on restore.
+  const registered = ctx.classRegistry.get(cls.name);
+  const heldByBuiltInSeed = registered !== cls && ctx._builtinSeededNames?.has(cls.name);
+  if (ctx._setupComplete && (!registered || heldByBuiltInSeed)) {
     throw new Error(
       `Element class '${cls.name}' is created after setup but was never registered. ` +
       `Call this.registerElements([${cls.name}]) in your game's constructor.`

@@ -1543,6 +1543,9 @@ export class Game<
       );
     }
     this._ctx.sequence = WORLD_PARTITION_ID_FLOOR;
+    // Construction is over (a world has no flow to start): from here, creating
+    // an unregistered class is refused (see `registerCreatedElementClass`).
+    this._ctx._setupComplete = true;
   }
 
   /**
