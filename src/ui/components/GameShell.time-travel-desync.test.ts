@@ -436,3 +436,30 @@ describe('actionMutators.ts source: isViewingHistory guard wired at every mutati
     expect(occurrences).toBe(5);
   });
 });
+
+describe('GameShell.vue source: isViewingHistory reaches both the controller and the bridge', () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const gameShellSource = fs.readFileSync(path.join(here, 'GameShell.vue'), 'utf-8');
+  const seatSource = fs.readFileSync(path.join(here, '../composables/useTableSeat.ts'), 'utf-8');
+  const wiringSource = fs.readFileSync(path.join(here, '../composables/useTableActionWiring.ts'), 'utf-8');
+
+  it('passes isViewingHistory into useTableSeat({...}), which hands it to useTableActionWiring (#406)', () => {
+    const callSiteIdx = gameShellSource.indexOf('useTableSeat({');
+    expect(callSiteIdx).toBeGreaterThan(-1);
+    const callSiteBlock = gameShellSource.slice(callSiteIdx, callSiteIdx + 400);
+    expect(callSiteBlock).toContain('isViewingHistory');
+
+    const wiringIdx = seatSource.indexOf('useTableActionWiring({');
+    expect(wiringIdx).toBeGreaterThan(-1);
+    expect(seatSource.slice(wiringIdx, seatSource.indexOf('});', wiringIdx))).toContain('isViewingHistory');
+  });
+
+  it('useTableActionWiring hands it to useActionController and useBoardActionBridge (#378)', () => {
+    for (const call of ['useActionController({', 'useBoardActionBridge({']) {
+      const idx = wiringSource.indexOf(call);
+      expect(idx, call).toBeGreaterThan(-1);
+      const block = wiringSource.slice(idx, wiringSource.indexOf('});', idx));
+      expect(block, call).toContain('isViewingHistory');
+    }
+  });
+});

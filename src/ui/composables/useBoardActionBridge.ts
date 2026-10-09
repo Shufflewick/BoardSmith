@@ -511,7 +511,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   // Keyed on the START, not only the name (#384). When the new state lands
   // before the action's reply, the reply clears `move` and the auto-start opens
   // `move` again in the same flush. A watch on the name sees `move` both times
-  // and never runs, so the board stays cleared by startActionWithBoardReset, and
+  // and never runs, so the board stays cleared by createActionMutators().startAction, and
   // the external-cancel watcher below reads that empty board as the player
   // cancelling.
   watch([currentAction, controller.actionStartTick], ([action]) => {
