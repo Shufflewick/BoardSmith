@@ -1,5 +1,5 @@
 {
-  "revision": 137,
+  "revision": 138,
   "bundleProtocol": 2,
   "surfaceHash": "4fd5ab5e85ca0dd6",
   "payloadHash": "3f10d70c457a15ba",
@@ -1177,6 +1177,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A game starts once: a second Game.startFlow() (or GameRunner.start / TestGame.start) is refused with a readable error instead of re-running the flow's setup and opening execute nodes (#502); the startTutorial op now hands the turn back to the flow's first seat through the new Game.restartFlowForTutorial(), which re-runs neither the flow's setup nor its opening execute nodes, so a tutorial opened during the opponent's turn no longer leaves the learner with no action, and the op is refused when the restarted flow would not prompt the requesting seat (#546)."
+    },
+    {
+      "revision": 138,
+      "date": "2026-10-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "4fd5ab5e85ca0dd6",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "From startFlow() or a flow restore on, create() of an element class that the game did not register is refused with: Element class 'X' is created after setup but was never registered. Call this.registerElements([X]) in your game's constructor. Before, it worked live and failed on the next restore, undo or bot search with Unknown element class. A game that creates a class during play must register it in its constructor; a class created only in the constructor still registers itself. Fingerprints are unchanged."
     }
   ]
 }
