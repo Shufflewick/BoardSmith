@@ -1,7 +1,7 @@
 {
   "revision": 141,
   "bundleProtocol": 2,
-  "surfaceHash": "795d03daab290fbe",
+  "surfaceHash": "c89b5911c71dfb48",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1209,10 +1209,10 @@
       "revision": 141,
       "date": "2026-10-09",
       "bundleProtocol": 2,
-      "surfaceHash": "795d03daab290fbe",
+      "surfaceHash": "c89b5911c71dfb48",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "A game's end and winners are declared on Game only (#503): finish(winners), or overrides of isFinished() and getWinners(). FlowDefinition loses isComplete and getWinners, FlowEngine.getWinners is removed, and a completed flow no longer writes settings.winners; the flow ends when game.isFinished() is true. defineFlow is removed: a flow definition is a plain object passed to setFlow. The MCTS bot and the benchmark now read game.getWinners(), the same result hosts show players, so a game that overrides getWinners() is no longer scored as a draw by bots. Games built on an earlier engine that declared their end on the flow (Seven, WindupWarfare) or import defineFlow must be rebuilt on this revision and republished; the catalogue games are migrated."
+      "summary": "boardsmith/persistence no longer exports SESSION_KINDS, SessionKind, isSessionKind, resolveSessionKind or countsAsPlay (#521). The engine never read them; whether a session counts as a play is a platform rule that lives in ShufflewickPub's own convex/sessionKind.ts. A platform that still imports them from boardsmith/persistence must delete those imports before it vendors this revision. Bundles already built are not affected."
     }
   ]
 }
