@@ -54,7 +54,7 @@
  */
 
 import { ref, watch, computed, type Ref, onUnmounted, getCurrentInstance } from 'vue';
-import { prefersReducedMotion } from './useElementAnimation.js';
+import { prefersReducedMotion } from './reducedMotion.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
 import { isDevThrowEnabled } from '../../utils/dev.js';
 

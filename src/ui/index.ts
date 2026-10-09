@@ -173,12 +173,8 @@ export {
   type DropResult,
 } from './composables/useDragDrop.js';
 
-// Animation composables
-export {
-  useElementAnimation,
-  prefersReducedMotion,
-  type AnimationOptions,
-} from './composables/useElementAnimation.js';
+// Reduced-motion preference (read by useFLIP and useFlyingElements; games read it too)
+export { prefersReducedMotion } from './composables/reducedMotion.js';
 
 // Focus management for game-authored dialogs and overlays. Games that cover the
 // board with a modal reach for this instead of hand-rolling a trap: it saves and
@@ -340,15 +336,6 @@ export {
   type RankAbbreviation,
 } from './composables/useCardDisplay.js';
 
-// Element change tracking utilities
-export {
-  useElementChangeTracker,
-  useCountTracker,
-  type ElementPositionData,
-  type ElementChangeTrackerOptions,
-  type ElementChangeTrackerReturn,
-  type CountTrackerReturn,
-} from './composables/useElementChangeTracker.js';
 
 // Action controller (unified action handling for ActionPanel and custom UIs)
 export {

@@ -215,7 +215,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     );
   }
 
-  // Before-auto-execute hooks (accumulated, via setBeforeAutoExecute). Multiple
+  // Before-auto-execute hooks (accumulated, via onBeforeAutoExecute). Multiple
   // independently-registered consumers (e.g. a board component and a player-stats
   // panel) can each register a hook without clobbering the others; the watcher
   // awaits them sequentially in registration order.
@@ -1423,33 +1423,34 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
-   * Register a hook to be called before auto-execute.
-   * Use this when using GameShell (which creates the controller internally)
-   * and you need to capture element positions for animations.
+   * Add a hook that runs just before an action is auto-executed.
+   * Use this to capture element positions for animations: GameShell creates
+   * the controller, so a board registers its hook from its own setup().
    *
    * @example
    * ```typescript
-   * // In the board component
-   * const { flyingElements, onBeforeAutoExecute } = useActionAnimations({
-   *   gameView,
-   *   animations: [...]
-   * });
+   * // In the board component's <script setup>
+   * const props = defineProps<{ actionController: UseActionControllerReturn; gameView: GameViewElement | null }>();
+   * const { onBeforeAutoExecute } = useActionAnimations({ gameView, animations: [...] });
    *
-   * // Register the hook after receiving actionController as a board prop
-   * actionController.setBeforeAutoExecute(onBeforeAutoExecute);
+   * props.actionController.onBeforeAutoExecute(onBeforeAutoExecute);
    * ```
    *
-   * Registers an additional hook; hooks run in registration order. Call the
-   * returned function to unregister this hook.
+   * Each call adds a hook; it never replaces an earlier one. Hooks run in
+   * registration order, and an awaited hook finishes before the next starts.
+   * Call the returned function to unregister this hook.
    *
-   * Pit of Success (WR-04): when called inside a component/effect scope (the
-   * normal case — a board component registering in setup()), the hook is
-   * automatically unregistered when that scope disposes. Without this, every
-   * remount (dev UI switcher, seat switch, HMR) would accumulate a stale hook
-   * closing over the unmounted component's dead DOM. Registrations made
-   * outside any scope persist until the returned unregister fn is called.
+   * The hooks run only when a pick completes an action under auto-execute
+   * (the last selection fills in). An explicit `execute()` call does not run
+   * them.
+   *
+   * When called inside a component/effect scope (the normal case, a board
+   * component registering in setup()), the hook is removed automatically when
+   * that scope disposes, so remounts (dev UI switcher, HMR) never accumulate
+   * stale hooks. A registration made outside any scope stays until the
+   * returned function is called.
    */
-  function setBeforeAutoExecute(hook: BeforeAutoExecuteHook): () => void {
+  function onBeforeAutoExecute(hook: BeforeAutoExecuteHook): () => void {
     beforeAutoExecuteHooks.value.push(hook);
     const unregister = (): void => {
       const idx = beforeAutoExecuteHooks.value.indexOf(hook);
@@ -2667,7 +2668,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     getCollectedPicks,
 
     // Hook registration (for GameShell users who can't pass options at creation)
-    setBeforeAutoExecute,
+    onBeforeAutoExecute,
 
     // Animation gating (soft continuation pattern)
     animationsPending,       // True when animations are playing

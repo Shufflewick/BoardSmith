@@ -92,7 +92,7 @@
  */
 
 import { ref, computed, watch, onUnmounted, isRef, type Ref, type ComputedRef } from 'vue';
-import { prefersReducedMotion } from './useElementAnimation.js';
+import { prefersReducedMotion } from './reducedMotion.js';
 import { easeOutCubic } from '../../utils/easing.js';
 import { tryUseBoardInteraction } from './useBoardInteraction.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';

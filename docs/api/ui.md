@@ -147,7 +147,6 @@ const { flyingElements } = useFlyingElements({
 
 ##### Other Animation Utilities
 
-- `useElementAnimation()` - Low-level element animation utilities
 - `useActionAnimations()` - Action-triggered animations
 - `useZoomPreview()` - Card/die zoom preview
 - `usePlayerStatAnimation()` - Player stat animations
@@ -198,11 +197,6 @@ const { flyingElements } = useFlyingElements({
 - `isRedSuit()` - Check if red suit
 - `isBlackSuit()` - Check if black suit
 
-#### Change Tracking
-
-- `useElementChangeTracker()` - Track element changes
-- `useCountTracker()` - Track count changes
-
 #### Action Controller
 
 - `useActionController()` - Action handling for custom UIs
@@ -232,7 +226,6 @@ const { flyingElements } = useFlyingElements({
 - `DragProps` - Drag properties
 - `DropProps` - Drop properties
 - `UseDragDropReturn` - Drag-drop return type
-- `AnimationOptions` - Animation options
 - `FlyingCard` - Flying card data
 - `FlyConfig` - Flying element configuration
 - `FLIPContainer` - FLIP container configuration

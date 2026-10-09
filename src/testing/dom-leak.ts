@@ -100,8 +100,8 @@ export type HiddenInfoGameView = UIGameElement;
 // THE BROWSER APIS JSDOM OMITS, supplied as a browser would answer them here.
 // They do not stub or alter any BoardSmith behavior.
 //
-// `window.matchMedia`: `useElementAnimation.ts` reads it at MODULE LOAD time
-// (`prefersReducedMotion` top-level ref), and it is pulled in transitively by
+// `window.matchMedia`: `reducedMotion.ts` reads it (`prefersReducedMotion`
+// top-level ref), and it is pulled in transitively by
 // AutoRenderer's `useFlyingElements()` call — so mounting `AutoUI` for real (no
 // stubs; we need the actual renderers to exercise the real leak surface) throws
 // before this utility can render anything. It MUST be installed before
@@ -1358,7 +1358,7 @@ const IDENTITY_BEARING_ATTRS = ['aria-label', 'alt', 'title', 'aria-description'
 /**
  * A DOM surface string plus the id of the element it is ATTRIBUTED to (the
  * nearest ancestor, inclusive, carrying `data-element-id` — the same anchor
- * `useElementAnimation` reads). `undefined` means the surface could not be
+ * `useFLIP` reads). `undefined` means the surface could not be
  * attributed to any specific element (no `data-element-id` ancestor at all)
  * and must be checked conservatively against every marker (D20).
  */

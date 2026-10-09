@@ -646,32 +646,34 @@ export interface UseActionControllerReturn {
 
   // === Hook Registration (for GameShell users) ===
   /**
-   * Register a hook to be called before auto-execute.
-   * Use this when using GameShell (which creates the controller internally)
-   * and you need to capture element positions for animations.
+   * Add a hook that runs just before an action is auto-executed.
+   * Use this to capture element positions for animations: GameShell creates
+   * the controller, so a board registers its hook from its own setup().
    *
    * @example
    * ```typescript
-   * // In the board component
-   * const { flyingElements, onBeforeAutoExecute } = useActionAnimations({
-   *   gameView,
-   *   animations: [...]
-   * });
+   * // In the board component's <script setup>
+   * const props = defineProps<{ actionController: UseActionControllerReturn; gameView: GameViewElement | null }>();
+   * const { onBeforeAutoExecute } = useActionAnimations({ gameView, animations: [...] });
    *
-   * // Register the hook after receiving actionController as a board prop
-   * actionController.setBeforeAutoExecute(onBeforeAutoExecute);
+   * props.actionController.onBeforeAutoExecute(onBeforeAutoExecute);
    * ```
    *
-   * Registers an additional hook; hooks run in registration order. Call the
-   * returned function to unregister this hook.
+   * Each call adds a hook; it never replaces an earlier one. Hooks run in
+   * registration order, and an awaited hook finishes before the next starts.
+   * Call the returned function to unregister this hook.
    *
-   * When called inside a component/effect scope (the normal case — a board
-   * component registering in setup()), the hook is automatically unregistered
-   * when that scope disposes, so remounts (dev UI switcher, HMR) never
-   * accumulate stale hooks. Registrations made outside any scope persist
-   * until the returned unregister fn is called.
+   * The hooks run only when a pick completes an action under auto-execute
+   * (the last selection fills in). An explicit `execute()` call does not run
+   * them.
+   *
+   * When called inside a component/effect scope (the normal case, a board
+   * component registering in setup()), the hook is removed automatically when
+   * that scope disposes, so remounts (dev UI switcher, HMR) never accumulate
+   * stale hooks. A registration made outside any scope stays until the
+   * returned function is called.
    */
-  setBeforeAutoExecute: (
+  onBeforeAutoExecute: (
     hook: (actionName: string, args: Record<string, unknown>) => void | Promise<void>
   ) => () => void;
 

@@ -1031,27 +1031,6 @@ const canDrag = () => true;
    - Display which selection step they're on (choosing player vs choosing rank)
    - Only highlight selectable elements after the action button is clicked (not just when available)
 
-### useElementAnimation
-
-FLIP animations for smooth element movement.
-
-```typescript
-import { useElementAnimation } from 'boardsmith/ui';
-
-const { capturePositions, animateToCurrentPositions, cancelAll } = useElementAnimation();
-
-// Before state changes
-capturePositions(containerRef.value);
-
-// After state changes (in nextTick or watch)
-animateToCurrentPositions(containerRef.value, {
-  duration: 300,
-  selector: '[data-animatable="true"]',
-});
-```
-
-Elements must have `data-animatable="true"` and `data-element-id="..."` attributes.
-
 ### useFlyingElements
 
 Unified composable for flying element animations (cards, pieces, tokens).
@@ -1093,7 +1072,7 @@ const { isFlying } = flyOnAppear({
 
 ### useActionAnimations
 
-Declarative animations triggered by action execution. Captures element positions before actions execute and animates to the new position after the DOM updates. Integrates with `actionController.setBeforeAutoExecute()`, which returns an unregister function.
+Declarative animations triggered by action execution. Captures element positions before actions execute and animates to the new position after the DOM updates. Integrates with `actionController.onBeforeAutoExecute()`, which returns an unregister function.
 
 **Key Feature: Flip-in-Place Auto-Detection**
 
@@ -1131,7 +1110,7 @@ function setupAnimations(actionController, gameView) {
   gameViewRef.value = gameView;
   // Returns an unregister function. Called inside setup(), the hook is also
   // unregistered automatically when the component's effect scope disposes.
-  return actionController.setBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
+  return actionController.onBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
 }
 ```
 
@@ -1337,26 +1316,6 @@ getSuitColor('S');   // "#2c3e50" (black)
 
 getRankName('K');    // "King"
 isRedSuit('D');      // true
-```
-
-### useElementChangeTracker
-
-Track element position and count changes for animations.
-
-```typescript
-import { useElementChangeTracker, useCountTracker } from 'boardsmith/ui';
-
-const { trackElements, getChanges } = useElementChangeTracker();
-
-// Track element movements
-trackElements(gameView);
-// ... state changes ...
-const changes = getChanges(gameView);  // { added, removed, moved }
-
-// Track count changes
-const { track, getChange } = useCountTracker();
-track('deckCount', deck.children.length);
-const delta = getChange('deckCount');  // e.g., -3 (deck lost 3 cards)
 ```
 
 ### createFLIPSnapshot
@@ -2275,7 +2234,7 @@ Or check the Network tab in browser dev tools - look for WebSocket messages or `
 import { computed, ref, watch, nextTick } from 'vue';
 import {
   useBoardInteraction,
-  useElementAnimation,
+  useFLIP,
   findPlayerHand,
   getCards,
   type GameViewElement,
@@ -2291,8 +2250,11 @@ const props = defineProps<{
 }>();
 
 const boardInteraction = useBoardInteraction();
-const { capturePositions, animateToCurrentPositions } = useElementAnimation();
 const containerRef = ref<HTMLElement>();
+const { capture, animate } = useFLIP({
+  containerRef,
+  selector: '[data-element-id]',
+});
 
 // Extract data from game view
 const myHand = computed(() => {
@@ -2317,9 +2279,9 @@ async function onCardClick(card: any) {
 // Animate state changes
 watch(() => props.gameView, (newView, oldView) => {
   if (containerRef.value && oldView) {
-    capturePositions(containerRef.value);
+    capture();
     nextTick(() => {
-      animateToCurrentPositions(containerRef.value!);
+      animate();
     });
   }
 });
@@ -2337,7 +2299,6 @@ watch(() => props.gameView, (newView, oldView) => {
           'selected': boardInteraction?.isSelected(card),
           'selectable': boardInteraction?.isSelectableElement(card),
         }"
-        data-animatable="true"
         :data-element-id="card.id"
         @click="onCardClick(card)"
       >

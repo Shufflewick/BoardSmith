@@ -14,7 +14,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { ref } from 'vue';
 
 // ---------------------------------------------------------------------------
-// useElementAnimation reads window.matchMedia at module-load time. Mock the
+// reducedMotion reads window.matchMedia at module-load time. Mock the
 // composables that pull it in before AutoRenderer.vue is imported.
 // vi.mock() calls are hoisted before imports by vitest.
 // ---------------------------------------------------------------------------
