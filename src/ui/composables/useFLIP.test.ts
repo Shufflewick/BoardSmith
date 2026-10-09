@@ -53,7 +53,7 @@ vi.mock('../../utils/dev.js', async (importOriginal) => {
 });
 
 // Dynamic (not static) import: useFLIP.js transitively imports
-// useElementAnimation.js, which reads window.matchMedia() at module load
+// reducedMotion.js, which reads window.matchMedia() at module load
 // time. A static `import` here would be hoisted ahead of the vi.stubGlobal()
 // calls above (unlike useDragDrop.ts's siblings, which never touch
 // matchMedia and so tolerate either ordering) — dynamic import guarantees
@@ -61,7 +61,7 @@ vi.mock('../../utils/dev.js', async (importOriginal) => {
 const { useFLIP } = await import('./useFLIP.js');
 const { enableAnimationTestMode, disableAnimationTestMode, getAnimationTrace, clearAnimationTrace } =
   await import('./useAnimationTestMode.js');
-const { prefersReducedMotion } = await import('./useElementAnimation.js');
+const { prefersReducedMotion } = await import('./reducedMotion.js');
 
 function makeContainer(): HTMLElement {
   const container = document.createElement('div');

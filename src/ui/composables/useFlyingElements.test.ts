@@ -53,14 +53,14 @@ vi.mock('../../utils/dev.js', async (importOriginal) => {
 });
 
 // Dynamic (not static) import: useFlyingElements.js transitively imports
-// useElementAnimation.js, which reads window.matchMedia() at module load
+// reducedMotion.js, which reads window.matchMedia() at module load
 // time. A static `import` here would be hoisted ahead of the vi.stubGlobal()
 // calls above — dynamic import guarantees the stubs are installed first
 // (matches the 128-03 useFLIP.test.ts precedent).
 const { useFlyingElements } = await import('./useFlyingElements.js');
 const { enableAnimationTestMode, disableAnimationTestMode, getAnimationTrace, clearAnimationTrace } =
   await import('./useAnimationTestMode.js');
-const { prefersReducedMotion } = await import('./useElementAnimation.js');
+const { prefersReducedMotion } = await import('./reducedMotion.js');
 type AutoWatchGameElement = import('./useFlyingElements.js').AutoWatchGameElement;
 
 function makeContainer(): HTMLElement {

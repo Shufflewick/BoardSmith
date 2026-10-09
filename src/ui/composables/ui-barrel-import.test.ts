@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
- * TOOL-03 (D19, Blocking) regression: `boardsmith/ui` reads
- * `window.matchMedia(...)` at MODULE SCOPE (`useElementAnimation.ts:36-48`).
+ * TOOL-03 (D19, Blocking) regression: `boardsmith/ui` used to read
+ * `window.matchMedia(...)` at MODULE SCOPE (it is now deferred to the first
+ * read of `prefersReducedMotion`, in `reducedMotion.ts`).
  * jsdom implements `window` but NOT `matchMedia`, so importing the
  * `boardsmith/ui` barrel under jsdom throws unless the caller manually
  * stubs `matchMedia` first — games can't test UI under jsdom without that
@@ -28,5 +29,19 @@ describe('boardsmith/ui barrel import — TOOL-03 (D19): side-effect-free under 
 
   it('prefersReducedMotion is defined on the barrel after a no-stub import', () => {
     expect(barrel.module?.prefersReducedMotion).toBeDefined();
+  });
+
+  it('no longer exports the removed animation composables (#505)', () => {
+    const exported = Object.keys(barrel.module ?? {});
+    expect(exported).toContain('prefersReducedMotion');
+    for (const removed of ['useElementAnimation', 'useElementChangeTracker', 'useCountTracker']) {
+      expect(exported).not.toContain(removed);
+    }
+  });
+
+  it('prefersReducedMotion lives in its own module and the barrel re-exports that same ref (#505)', async () => {
+    // Dynamic import: the module under test is the new home, checked for identity with the barrel's export.
+    const home = await import('./reducedMotion.js');
+    expect(barrel.module?.prefersReducedMotion).toBe(home.prefersReducedMotion);
   });
 });

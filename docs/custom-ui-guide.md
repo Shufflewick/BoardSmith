@@ -575,7 +575,7 @@ render). This means an animation/drag-drop gap on a custom board surfaces
 immediately in the console during development instead of silently no-oping.
 
 **Fail-loud in dev, safe in production:** if an animation composable
-(`useElementAnimation`, `useFLIP`, `useFlyingElements`) is asked to animate
+(`useFLIP`, `useFlyingElements`) is asked to animate
 an element it can't find an anchor attribute for at all, it throws an
 actionable error **in development** (naming the composable, the attribute it
 searched for, and the fix — spread `anchorAttrs(ref)` or bind

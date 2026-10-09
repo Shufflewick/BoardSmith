@@ -557,7 +557,7 @@ describe('useActionController', () => {
       expect(controller.isReady.value).toBe(true);
     });
 
-    it('should run setBeforeAutoExecute hook before auto-execute', async () => {
+    it('should run onBeforeAutoExecute hook before auto-execute', async () => {
       const calls: string[] = [];
       const controller = useActionController({
         sendAction,
@@ -568,7 +568,7 @@ describe('useActionController', () => {
         autoExecute: true,
       });
 
-      controller.setBeforeAutoExecute((actionName) => {
+      controller.onBeforeAutoExecute((actionName) => {
         calls.push(`hook:${actionName}`);
       });
       // sendAction records execution order via the calls array too
@@ -585,7 +585,7 @@ describe('useActionController', () => {
       expect(calls).toEqual(['hook:forcedPlay', 'send:forcedPlay']);
     });
 
-    it('setBeforeAutoExecute accumulates hooks and runs them in registration order (UIX-05, PROC-02 regression)', async () => {
+    it('onBeforeAutoExecute accumulates hooks and runs them in registration order (UIX-05, PROC-02 regression)', async () => {
       const calls: string[] = [];
       const controller = useActionController({
         sendAction,
@@ -596,8 +596,8 @@ describe('useActionController', () => {
         autoExecute: true,
       });
 
-      controller.setBeforeAutoExecute(() => { calls.push('first'); });
-      controller.setBeforeAutoExecute(() => { calls.push('second'); });
+      controller.onBeforeAutoExecute(() => { calls.push('first'); });
+      controller.onBeforeAutoExecute(() => { calls.push('second'); });
 
       await controller.start('forcedPlay');
       await nextTick();
@@ -605,6 +605,36 @@ describe('useActionController', () => {
 
       // Both hooks fire, in registration order (not replace-semantics)
       expect(calls).toEqual(['first', 'second']);
+    });
+
+    it('onBeforeAutoExecute hooks do not run on an explicit execute() (#505)', async () => {
+      const calls: string[] = [];
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: true,
+        autoExecute: true,
+      });
+
+      controller.onBeforeAutoExecute(() => { calls.push('hook'); });
+      const result = await controller.execute('endTurn');
+
+      expect(result.success).toBe(true);
+      expect(calls).toEqual([]);
+    });
+
+    it('the old setBeforeAutoExecute name is gone from the controller (#505)', () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      expect('setBeforeAutoExecute' in controller).toBe(false);
+      expect(typeof controller.onBeforeAutoExecute).toBe('function');
     });
 
     it('a throwing beforeAutoExecute hook does not block later hooks or execution (WR-02)', async () => {
@@ -620,10 +650,10 @@ describe('useActionController', () => {
           autoExecute: true,
         });
 
-        controller.setBeforeAutoExecute(() => {
+        controller.onBeforeAutoExecute(() => {
           throw new Error('buggy animation hook');
         });
-        controller.setBeforeAutoExecute(() => { calls.push('second'); });
+        controller.onBeforeAutoExecute(() => { calls.push('second'); });
         sendAction.mockImplementation(async (name: string) => {
           calls.push(`send:${name}`);
           return { success: true };
@@ -660,11 +690,11 @@ describe('useActionController', () => {
       // Natural one-shot pattern: "capture positions for this action only,
       // then remove". Splicing the live array during for...of shifted the
       // iterator, silently skipping the hook registered right after it.
-      const unregisterOneShot = controller.setBeforeAutoExecute(() => {
+      const unregisterOneShot = controller.onBeforeAutoExecute(() => {
         calls.push('one-shot');
         unregisterOneShot();
       });
-      controller.setBeforeAutoExecute(() => { calls.push('after'); });
+      controller.onBeforeAutoExecute(() => { calls.push('after'); });
 
       await controller.start('forcedPlay');
       await nextTick();
@@ -690,9 +720,9 @@ describe('useActionController', () => {
       // semantics this self-healed; under accumulation it must auto-unregister.
       const scope = effectScope();
       scope.run(() => {
-        controller.setBeforeAutoExecute(() => { calls.push('scoped'); });
+        controller.onBeforeAutoExecute(() => { calls.push('scoped'); });
       });
-      controller.setBeforeAutoExecute(() => { calls.push('outside-scope'); });
+      controller.onBeforeAutoExecute(() => { calls.push('outside-scope'); });
 
       scope.stop(); // the component unmounted
 
@@ -704,7 +734,7 @@ describe('useActionController', () => {
       expect(calls).toEqual(['outside-scope']);
     });
 
-    it('setBeforeAutoExecute returns an unregister function that removes only that hook', async () => {
+    it('onBeforeAutoExecute returns an unregister function that removes only that hook', async () => {
       const calls: string[] = [];
       const controller = useActionController({
         sendAction,
@@ -715,8 +745,8 @@ describe('useActionController', () => {
         autoExecute: true,
       });
 
-      const unregisterFirst = controller.setBeforeAutoExecute(() => { calls.push('first'); });
-      controller.setBeforeAutoExecute(() => { calls.push('second'); });
+      const unregisterFirst = controller.onBeforeAutoExecute(() => { calls.push('first'); });
+      controller.onBeforeAutoExecute(() => { calls.push('second'); });
 
       unregisterFirst();
 

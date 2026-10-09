@@ -28,7 +28,7 @@
  * ## Usage with GameShell (Recommended)
  *
  * When using GameShell, the action controller is created internally. Use the
- * `setBeforeAutoExecute` method to set the hook after creation:
+ * `onBeforeAutoExecute` method to add the hook after creation:
  *
  * ```vue
  * <script setup lang="ts">
@@ -65,7 +65,7 @@
  * // as props; register the hook once, here in the board's own setup.
  * const props = defineProps<{ actionController: any; gameView: any }>();
  * watchEffect(() => { gameViewRef.value = props.gameView; });
- * props.actionController.setBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
+ * props.actionController.onBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
  * </script>
  *
  * <template>

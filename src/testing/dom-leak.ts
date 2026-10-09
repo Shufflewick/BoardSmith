@@ -100,11 +100,11 @@ export type HiddenInfoGameView = UIGameElement;
 // THE BROWSER APIS JSDOM OMITS, supplied as a browser would answer them here.
 // They do not stub or alter any BoardSmith behavior.
 //
-// `window.matchMedia`: `useElementAnimation.ts` reads it at MODULE LOAD time
-// (`prefersReducedMotion` top-level ref), and it is pulled in transitively by
-// AutoRenderer's `useFlyingElements()` call — so mounting `AutoUI` for real (no
-// stubs; we need the actual renderers to exercise the real leak surface) throws
-// before this utility can render anything. It MUST be installed before
+// `window.matchMedia`: `reducedMotion.ts` reads it (`prefersReducedMotion`
+// top-level ref) on first read, and it is pulled in transitively by
+// AutoRenderer's `useFlyingElements()` call. Importing no longer throws without
+// it, but a real mount of `AutoUI` (no stubs; we need the actual renderers to
+// exercise the real leak surface) still reads it, so it is installed before
 // `AutoUI.vue`'s module graph is evaluated. A static `import AutoUI from '...'`
 // at the top of this file would be hoisted and evaluated before ANY of this
 // file's own code runs (ESM import ordering), which is too late. So `AutoUI` is
@@ -1358,7 +1358,7 @@ const IDENTITY_BEARING_ATTRS = ['aria-label', 'alt', 'title', 'aria-description'
 /**
  * A DOM surface string plus the id of the element it is ATTRIBUTED to (the
  * nearest ancestor, inclusive, carrying `data-element-id` — the same anchor
- * `useElementAnimation` reads). `undefined` means the surface could not be
+ * `useFLIP` reads). `undefined` means the surface could not be
  * attributed to any specific element (no `data-element-id` ancestor at all)
  * and must be checked conservatively against every marker (D20).
  */
