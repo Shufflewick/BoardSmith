@@ -1060,8 +1060,10 @@ function lookAway() {
 /**
  * A PANEL THAT REDRAWS A BUTTON AS IT IS PRESSED (#562 review): the first time the walk marks one
  * of the panel's action buttons to press it, the page puts a new element in its place, as a panel
- * that redraws its buttons as new elements does, so the element the walk marked is gone. The new
- * button puts the panel's own back and presses it, so a press that reaches it takes the action.
+ * that redraws its buttons as new elements does, so the element the walk marked is gone. Clicking
+ * the new button puts the panel's own back; the inner press it then sends lands outside the guarded
+ * copy, so the walk's click guard stops it and the walk finds the panel's own button again and
+ * presses that, which takes the action.
  */
 export function boardThatRedrawsThePanel(): Record<string, string> {
   return {
