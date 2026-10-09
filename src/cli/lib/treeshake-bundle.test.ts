@@ -12,7 +12,11 @@
  * Infrastructure deviations from the real `boardsmith build` pipeline (none affect
  * tree-shaking behavior, which is a Rollup analysis-time property):
  *   - configFile: false   – avoids loading fixture's vite.config.ts (deps not installed there)
- *   - resolve.alias       – maps boardsmith/ui → real repo source (equivalent to npm install)
+ *   - node_modules/boardsmith – a symlink to this repo, which is what `npm install`
+ *                               of the `file:` dependency makes. Vite resolves the
+ *                               package's `exports` through it, and Vue's compiler
+ *                               resolves an imported prop type such as
+ *                               `defineProps<TableBoardProps>()` the same way.
  *   - plugins: [vue()]    – same as what fixture's vite.config.ts provides
  *
  * Minification is left at the Vite default (esbuild). Comments are stripped during
@@ -31,6 +35,7 @@ import { describe, it, expect, afterEach, afterAll } from 'vitest';
 import {
   mkdirSync,
   writeFileSync,
+  symlinkSync,
   rmSync,
   readdirSync,
   readFileSync,
@@ -115,6 +120,9 @@ function writeFixtureFiles(dir: string, ui?: string): void {
     mkdirSync(dirname(fullPath), { recursive: true });
     writeFileSync(fullPath, content, 'utf-8');
   }
+  // What `npm install` makes of the scaffold's `"boardsmith": "file:..."` dependency.
+  mkdirSync(join(dir, 'node_modules'), { recursive: true });
+  symlinkSync(BOARDSMITH_ROOT, join(dir, 'node_modules', 'boardsmith'), 'dir');
 }
 
 /**
@@ -157,38 +165,6 @@ async function buildFixtureUi(fixtureDir: string): Promise<string> {
     root: fixtureDir,
     base: './',
     plugins: [vue()],
-    resolve: {
-      alias: [
-        // Map boardsmith/ui to the real source — equivalent to having the package
-        // installed in node_modules. Tree-shaking is unaffected.
-        //
-        // The auto-ui subpath is a SEPARATE entry, mirroring the `exports` map in
-        // package.json. AutoUI deliberately does not live on the `boardsmith/ui`
-        // barrel: pulling it through the barrel put AutoUI.vue in every game's
-        // module graph, and its side-effectful `<style>` import shipped the auto-UI
-        // stylesheet even where the JS was tree-shaken (SHIP-02). Both aliases are
-        // `$`-anchored, so the subpath never falls through to the barrel.
-        {
-          find: /^boardsmith\/ui\/auto-ui$/,
-          replacement: join(BOARDSMITH_ROOT, 'src/ui/components/auto-ui/index.ts'),
-        },
-        // Dice are a subpath for the same reason auto-UI is: importing them is
-        // what opts a game into three.js (SHIP-03).
-        {
-          find: /^boardsmith\/ui\/dice$/,
-          replacement: join(BOARDSMITH_ROOT, 'src/ui/components/dice/index.ts'),
-        },
-        {
-          find: /^boardsmith\/ui$/,
-          replacement: join(BOARDSMITH_ROOT, 'src/ui/index.ts'),
-        },
-        // Map boardsmith (engine) for any transitive imports.
-        {
-          find: /^boardsmith$/,
-          replacement: join(BOARDSMITH_ROOT, 'src/engine/index.ts'),
-        },
-      ],
-    },
     build: {
       outDir,
       copyPublicDir: false,

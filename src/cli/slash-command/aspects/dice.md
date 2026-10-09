@@ -73,20 +73,30 @@ export function createRollAction(game: MyGame): ActionDefinition {
 ```vue
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Die3D, findElements, getPlayerAttribute, type UseActionControllerReturn } from 'boardsmith/ui';
+import type { DieSides } from 'boardsmith';
+import {
+  findElements,
+  getPlayerAttribute,
+  type BaseElementAttributes,
+  type GameViewElement,
+  type TableBoardProps,
+} from 'boardsmith/ui';
+// Die3D has its own entry point, so only a game that rolls dice installs `three`
+import { Die3D } from 'boardsmith/ui/dice';
 
-const props = defineProps<{
-  gameView: any;
-  playerSeat: number;
-  isMyTurn: boolean;
-  availableActions: string[];
-  actionController: UseActionControllerReturn;
-}>();
+const props = defineProps<TableBoardProps>();
+
+// The attributes a Die element carries in the game view
+interface DieAttributes extends BaseElementAttributes {
+  sides?: DieSides;
+  value?: number;
+  rollCount?: number;
+}
 
 // findElements searches the entire tree recursively
 const dice = computed(() => {
   if (!props.gameView) return [];
-  return findElements(props.gameView, { className: 'Die' });
+  return findElements(props.gameView, { className: 'Die' }) as GameViewElement<DieAttributes>[];
 });
 
 // Access custom player attributes from the element tree
@@ -94,10 +104,11 @@ const dice = computed(() => {
 // For custom attributes, use getPlayerAttribute() which searches the element tree
 const myScore = computed(() => getPlayerAttribute(props.gameView, props.playerSeat, 'score', 0));
 
-// Game over detection - check isFinished property (NOT a method call)
-const isGameOver = computed(() => props.gameView?.isFinished ?? false);
-const winners = computed(() => props.gameView?.settings?.winners ?? []);
-const didIWin = computed(() => winners.value.includes(props.playerSeat));
+// The game is over when the flow completes. GameShell then draws its game-over
+// card, with the winners, over this board; to draw your own ending instead, see
+// "The End of the Game" in docs/custom-ui-guide.md. During time travel
+// flowState is null, so this is false.
+const isGameOver = computed(() => props.state?.flowState?.complete === true);
 
 // Check if roll action is available
 const canRoll = computed(() => props.availableActions.includes('roll'));
@@ -110,45 +121,38 @@ function handleRoll() {
 
 <template>
   <div class="game-board">
-    <!-- Game Over Panel -->
-    <div v-if="isGameOver" class="game-over-panel">
-      <h2 class="game-over-title">{{ didIWin ? 'You Win!' : 'Game Over' }}</h2>
+    <div class="dice-area">
+      <!-- CORRECT: Die3D always renders, with safe defaults via ?? -->
+      <!-- WRONG: <Die3D v-if="die" ... /> hides die when not found -->
+      <Die3D
+        v-for="(die, index) in dice"
+        :key="die?.id ?? `die-${index}`"
+        :sides="die?.attributes?.sides ?? 6"
+        :value="die?.attributes?.value ?? 1"
+        :roll-count="die?.attributes?.rollCount ?? 0"
+        :die-id="die?.id ?? `die-${index}`"
+        :size="80"
+      />
+      <!-- Fallback if no dice found (still shows something) -->
+      <Die3D
+        v-if="dice.length === 0"
+        :sides="6"
+        :value="1"
+        :roll-count="0"
+        die-id="placeholder"
+        :size="80"
+      />
     </div>
 
-    <template v-else>
-      <div class="dice-area">
-        <!-- CORRECT: Die3D always renders, with safe defaults via ?? -->
-        <!-- WRONG: <Die3D v-if="die" ... /> hides die when not found -->
-        <Die3D
-          v-for="(die, index) in dice"
-          :key="die?.id ?? `die-${index}`"
-          :sides="die?.attributes?.sides ?? 6"
-          :value="die?.attributes?.value ?? 1"
-          :roll-count="die?.attributes?.rollCount ?? 0"
-          :die-id="die?.id ?? `die-${index}`"
-          :size="80"
-        />
-        <!-- Fallback if no dice found (still shows something) -->
-        <Die3D
-          v-if="dice.length === 0"
-          :sides="6"
-          :value="1"
-          :roll-count="0"
-          die-id="placeholder"
-          :size="80"
-        />
-      </div>
+    <button
+      v-if="canRoll && isMyTurn"
+      @click="handleRoll"
+      class="roll-button"
+    >
+      Roll Dice
+    </button>
 
-      <button
-        v-if="canRoll && isMyTurn"
-        @click="handleRoll"
-        class="roll-button"
-      >
-        Roll Dice
-      </button>
-
-      <p v-if="!isMyTurn" class="waiting">Waiting for other player...</p>
-    </template>
+    <p v-if="!isMyTurn && !isGameOver" class="waiting">Waiting for other player...</p>
   </div>
 </template>
 
@@ -159,16 +163,6 @@ function handleRoll() {
   align-items: center;
   padding: 20px;
   gap: 20px;
-}
-
-.game-over-panel {
-  text-align: center;
-  padding: 40px;
-}
-
-.game-over-title {
-  font-size: 2.5rem;
-  color: var(--bsg-accent);
 }
 
 .dice-area {

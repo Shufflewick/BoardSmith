@@ -3,8 +3,9 @@
  *
  * `dev-host-typecheck.test.ts` compiles the development host,
  * `dice-typecheck.test.ts` the dice entry point, `testing-typecheck.test.ts`
- * a game test importing `boardsmith/testing` and `workers-typecheck.test.ts`
- * the platform-reachable engine under Workers globals, each in a sandbox. They differ in
+ * a game test importing `boardsmith/testing`, `aspect-boards-typecheck.test.ts`
+ * the boards the aspect templates teach and `workers-typecheck.test.ts` the
+ * platform-reachable engine under Workers globals, each in a sandbox. They differ in
  * WHAT they compile and WHAT they blame a failure on, and in nothing else -- so
  * the run, the rule for what counts as an error line, and the assertion that
  * there are none live here rather than once per gate.

@@ -514,15 +514,11 @@ export function generateGameTableVue(): string {
  * switch here only when you're ready to invest in a custom interface.
  */
 import { computed } from 'vue';
-import type { UseActionControllerReturn } from 'boardsmith/ui';
+import type { TableBoardProps } from 'boardsmith/ui';
 
-const props = defineProps<{
-  gameView: any;
-  playerSeat: number;
-  isMyTurn: boolean;
-  availableActions: string[];
-  actionController: UseActionControllerReturn;
-}>();
+// Everything GameShell gives a board: the view, the seat, the turn signals and
+// the action controller. See docs/ui-components.md#board-props.
+const props = defineProps<TableBoardProps>();
 
 const canTakeAction = computed(() => props.availableActions.length > 0);
 const firstAction = computed(() => props.availableActions[0]);

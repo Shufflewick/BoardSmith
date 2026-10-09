@@ -210,6 +210,10 @@ const { flyingElements } = useFlyingElements({
 
 ### Types
 
+- `TableBoardProps` - What `GameShell` gives a table's board; declare `defineProps<TableBoardProps>()`
+- `WorldBoardProps` - What `WorldShell` gives a world's board
+- `BoardBaseProps` - What both shells give, for a board that renders in either
+- `DisplayedGameState` - A table board's `state` prop: the seat's frame for the position shown
 - `BoardInteraction` - Board interaction interface
 - `BoardInteractionState` - Interaction state
 - `BoardInteractionActions` - Interaction actions
@@ -250,8 +254,8 @@ import uis from './uis.js';
 </template>
 ```
 
-`GameShell` mounts `MyBoard` and passes it the game state as props
-(`gameView`, `actionController`, `isMyTurn`, ...); see
+`GameShell` mounts `MyBoard` and passes it `TableBoardProps`, which `MyBoard`
+declares with `defineProps<TableBoardProps>()`; see
 [UI Components](../ui-components.md#board-props).
 
 ### Drag and Drop

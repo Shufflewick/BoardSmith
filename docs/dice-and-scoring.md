@@ -162,7 +162,7 @@ The `boardsmith/ui` package includes a WebGL-based 3D dice renderer that display
 
 ```vue
 <script setup lang="ts">
-import { Die3D } from 'boardsmith/ui';
+import { Die3D } from 'boardsmith/ui/dice';
 
 const props = defineProps<{
   die: {
