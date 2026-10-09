@@ -1441,8 +1441,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * Call the returned function to unregister this hook.
    *
    * The hooks run only when a pick completes an action under auto-execute
-   * (the last selection fills in). An explicit `execute()` call does not run
-   * them.
+   * (the last selection fills in). They do not run for an explicit
+   * `execute()` call, for actions the server completes step by step
+   * (follow-up actions, repeating selections, selections with
+   * `onSelect: pendingOnServer`), or while viewing history.
    *
    * When called inside a component/effect scope (the normal case, a board
    * component registering in setup()), the hook is removed automatically when

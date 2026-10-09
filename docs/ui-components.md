@@ -2250,7 +2250,7 @@ const props = defineProps<{
 }>();
 
 const boardInteraction = useBoardInteraction();
-const containerRef = ref<HTMLElement>();
+const containerRef = ref<HTMLElement | null>(null);
 const { capture, animate } = useFLIP({
   containerRef,
   selector: '[data-element-id]',

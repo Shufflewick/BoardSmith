@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
- * TOOL-03 (D19, Blocking) regression: `boardsmith/ui` reads
- * `window.matchMedia(...)` at MODULE SCOPE (`reducedMotion.ts`).
+ * TOOL-03 (D19, Blocking) regression: `boardsmith/ui` used to read
+ * `window.matchMedia(...)` at MODULE SCOPE (it is now deferred to the first
+ * read of `prefersReducedMotion`, in `reducedMotion.ts`).
  * jsdom implements `window` but NOT `matchMedia`, so importing the
  * `boardsmith/ui` barrel under jsdom throws unless the caller manually
  * stubs `matchMedia` first — games can't test UI under jsdom without that

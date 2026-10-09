@@ -294,6 +294,9 @@ export interface UseActionControllerOptions {
   ) => Promise<PickStepResponse>;
   /**
    * Called before auto-execute fires (when all selections are filled).
+   * Not called for actions the server completes step by step (follow-up
+   * actions, repeating selections, `onSelect: pendingOnServer`), for an
+   * explicit `execute()`, or while viewing history.
    * Use this to capture element positions for animations before the DOM updates.
    * Return a Promise to delay execution until animation prep is complete.
    *
@@ -664,8 +667,10 @@ export interface UseActionControllerReturn {
    * Call the returned function to unregister this hook.
    *
    * The hooks run only when a pick completes an action under auto-execute
-   * (the last selection fills in). An explicit `execute()` call does not run
-   * them.
+   * (the last selection fills in). They do not run for an explicit
+   * `execute()` call, for actions the server completes step by step
+   * (follow-up actions, repeating selections, selections with
+   * `onSelect: pendingOnServer`), or while viewing history.
    *
    * When called inside a component/effect scope (the normal case, a board
    * component registering in setup()), the hook is removed automatically when

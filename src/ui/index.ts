@@ -336,7 +336,6 @@ export {
   type RankAbbreviation,
 } from './composables/useCardDisplay.js';
 
-
 // Action controller (unified action handling for ActionPanel and custom UIs)
 export {
   useActionController,

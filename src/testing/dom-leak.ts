@@ -101,10 +101,10 @@ export type HiddenInfoGameView = UIGameElement;
 // They do not stub or alter any BoardSmith behavior.
 //
 // `window.matchMedia`: `reducedMotion.ts` reads it (`prefersReducedMotion`
-// top-level ref), and it is pulled in transitively by
-// AutoRenderer's `useFlyingElements()` call — so mounting `AutoUI` for real (no
-// stubs; we need the actual renderers to exercise the real leak surface) throws
-// before this utility can render anything. It MUST be installed before
+// top-level ref) on first read, and it is pulled in transitively by
+// AutoRenderer's `useFlyingElements()` call. Importing no longer throws without
+// it, but a real mount of `AutoUI` (no stubs; we need the actual renderers to
+// exercise the real leak surface) still reads it, so it is installed before
 // `AutoUI.vue`'s module graph is evaluated. A static `import AutoUI from '...'`
 // at the top of this file would be hoisted and evaluated before ANY of this
 // file's own code runs (ESM import ordering), which is too late. So `AutoUI` is
