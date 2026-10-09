@@ -1249,6 +1249,63 @@ async function handleHeatmapToggle(
 // ---------------------------------------------------------------------------
 
 /**
+ * Start a tutorial for `op.player`: apply the tutorial's setup, put the flow
+ * back at its beginning (#546), activate the first step and run the
+ * auto-advance pump. Refused, with the game left as it was, when the restarted
+ * flow would not prompt the learner: a tutorial the learner cannot act in is a
+ * dead table.
+ */
+function handleStartTutorial(
+  def: RunnerDef,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+  op: Extract<Op, { type: 'startTutorial' }>,
+  teachingDisabled: boolean,
+): OpResultFor<'startTutorial'> {
+  // Fail-loud: teaching features locked out by the host (via hostOptions,
+  // deliberately NOT gameOptions, see WR-04/D-01 on executeOp).
+  if (teachingDisabled) {
+    return errorResult('Teaching features are disabled for this session.', 'protocol');
+  }
+  if (!def.tutorial) {
+    return errorResult('No tutorial definition on this game.', 'protocol');
+  }
+  // WR-01: validate seat range before touching any state, as handleDebugActionTraces does.
+  if (op.player < 1 || op.player > gameOptions.playerCount) {
+    return errorResult(
+      `Invalid player seat ${op.player}: must be between 1 and ${gameOptions.playerCount}.`,
+      'protocol',
+    );
+  }
+  // IN-01: validate definition BEFORE constructing the runner (fail-loud before expensive work).
+  validateTutorialDefinition(def.tutorial);
+  const runner = runnerFromSnapshot(snapshot, def);
+  // R-01: apply the tutorial's setup callback before setting initial progress so
+  // the board is in the deterministic tutorial position before any advanceWhen
+  // predicates fire. setup is optional; games without a preset omit it.
+  def.tutorial.setup?.(runner.game as Game);
+  // #546: a tutorial begins on the learner's turn, so hand the turn back
+  // to the flow's first seat. This runs none of the game's opening again.
+  runner.game.restartFlowForTutorial();
+  // A refusal discards this runner, so the caller's snapshot is untouched.
+  const due = dueSeats(runner.getFlowState());
+  if (!due.includes(op.player)) {
+    const toMove = due.length > 0 ? `seat ${due.join(', ')} is` : 'no seat is';
+    return errorResult(
+      `The tutorial cannot start for seat ${op.player}: it opens at the start of the game, where ` +
+        `${toMove} to move, not seat ${op.player}. Start the tutorial from the seat that moves first.`,
+      'protocol',
+    );
+  }
+  runner.game.tutorialProgress.set(op.player, initialProgress(def.tutorial));
+  // CR-01: pump auto-advance immediately after setting initial progress so steps
+  // with always-true advanceWhen predicates (e.g. capture-tip) advance before
+  // the learner's first action, matching the simulate-tutorial parity invariant.
+  autoAdvanceTutorial(runner.game as Game, op.player);
+  return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
+}
+
+/**
  * Run MCTS to preview the move a bot seat would make WITHOUT mutating the
  * snapshot. The demo loop calls this to narrate the move before executing it
  * via the existing `action` op — never re-running MCTS for the execute step
@@ -1733,36 +1790,8 @@ async function runOp(
         return handleHeatmapToggle(def, gameOptions, snap, op, teachingDisabled);
       case 'botSuggest':
         return handleBotSuggest(def, gameOptions, snap, op);
-      case 'startTutorial': {
-        // Fail-loud: teaching features locked out by the host (via
-        // hostOptions — deliberately NOT gameOptions, see WR-04/D-01 above).
-        if (teachingDisabled) {
-          return errorResult('Teaching features are disabled for this session.', 'protocol');
-        }
-        if (!def.tutorial) {
-          return errorResult('No tutorial definition on this game.', 'protocol');
-        }
-        // WR-01: validate seat range before touching any state — mirrors handleDebugActionTraces.
-        if (op.player < 1 || op.player > gameOptions.playerCount) {
-          return errorResult(
-            `Invalid player seat ${op.player}: must be between 1 and ${gameOptions.playerCount}.`,
-            'protocol',
-          );
-        }
-        // IN-01: validate definition BEFORE constructing the runner (fail-loud before expensive work).
-        validateTutorialDefinition(def.tutorial);
-        const runner = runnerFromSnapshot(snap, def);
-        // R-01: apply the tutorial's setup callback before setting initial progress so
-        // the board is in the deterministic tutorial position before any advanceWhen
-        // predicates fire. setup is optional; games without a preset omit it.
-        def.tutorial.setup?.(runner.game as Game);
-        runner.game.tutorialProgress.set(op.player, initialProgress(def.tutorial));
-        // CR-01: pump auto-advance immediately after setting initial progress so steps
-        // with always-true advanceWhen predicates (e.g. capture-tip) advance before
-        // the learner's first action, matching the simulate-tutorial parity invariant.
-        autoAdvanceTutorial(runner.game as Game, op.player);
-        return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
-      }
+      case 'startTutorial':
+        return handleStartTutorial(def, gameOptions, snap, op, teachingDisabled);
       case 'exitTutorial': {
         if (!def.tutorial) {
           return errorResult('No tutorial definition on this game.', 'protocol');
