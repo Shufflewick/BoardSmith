@@ -73,15 +73,9 @@ export function createRollAction(game: MyGame): ActionDefinition {
 ```vue
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Die3D, findElements, getPlayerAttribute, type UseActionControllerReturn } from 'boardsmith/ui';
+import { Die3D, findElements, getPlayerAttribute, type TableBoardProps } from 'boardsmith/ui';
 
-const props = defineProps<{
-  gameView: any;
-  playerSeat: number;
-  isMyTurn: boolean;
-  availableActions: string[];
-  actionController: UseActionControllerReturn;
-}>();
+const props = defineProps<TableBoardProps>();
 
 // findElements searches the entire tree recursively
 const dice = computed(() => {

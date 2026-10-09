@@ -148,15 +148,9 @@ export function createMoveAction(game: MyGame): ActionDefinition {
 ```vue
 <script setup lang="ts">
 import { computed } from 'vue';
-import { findElements, toAlgebraicNotation, type UseActionControllerReturn } from 'boardsmith/ui';
+import { findElements, toAlgebraicNotation, type TableBoardProps } from 'boardsmith/ui';
 
-const props = defineProps<{
-  gameView: any;
-  playerSeat: number;
-  isMyTurn: boolean;
-  availableActions: string[];
-  actionController: UseActionControllerReturn;
-}>();
+const props = defineProps<TableBoardProps>();
 
 const CELL_SIZE = 60;
 const GRID_SIZE = 8;

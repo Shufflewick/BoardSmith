@@ -124,15 +124,9 @@ export function createPlayAction(game: MyGame): ActionDefinition {
 ```vue
 <script setup lang="ts">
 import { computed } from 'vue';
-import { findElements, getSuitSymbol, getSuitColor, type UseActionControllerReturn } from 'boardsmith/ui';
+import { findElements, getSuitSymbol, getSuitColor, type TableBoardProps } from 'boardsmith/ui';
 
-const props = defineProps<{
-  gameView: any;
-  playerSeat: number;
-  isMyTurn: boolean;
-  availableActions: string[];
-  actionController: UseActionControllerReturn;
-}>();
+const props = defineProps<TableBoardProps>();
 
 // Find my hand - search for Hand element owned by this player
 const myHand = computed(() => {

@@ -109,15 +109,9 @@ export function createPlaceStoneAction(game: MyGame): ActionDefinition {
 ```vue
 <script setup lang="ts">
 import { computed } from 'vue';
-import { findElements, hexToPixel, getHexPolygonPoints, type UseActionControllerReturn } from 'boardsmith/ui';
+import { findElements, hexToPixel, getHexPolygonPoints, type TableBoardProps } from 'boardsmith/ui';
 
-const props = defineProps<{
-  gameView: any;
-  playerSeat: number;
-  isMyTurn: boolean;
-  availableActions: string[];
-  actionController: UseActionControllerReturn;
-}>();
+const props = defineProps<TableBoardProps>();
 
 const HEX_SIZE = 30;
 const BOARD_SIZE = 7;
