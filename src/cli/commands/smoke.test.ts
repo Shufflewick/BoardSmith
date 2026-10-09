@@ -26,6 +26,7 @@ import {
   boardWithATimidControl,
   boardWithAVanishingControl,
   boardThatHidesThePanelForAMoment,
+  boardThatRedrawsThePanel,
   boardThatReplacesItsFrame,
   boardThatKeepsReordering,
   boardUnderTheHostsCover,
@@ -500,6 +501,18 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.summary).toContain('- The panel offered "draw", but the walk never took it in 4 steps.');
   });
 
+  it('#562: presses a panel button the panel redrew as a new element just as the walk went to press it', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      ...aceGame(),
+      ...boardThatRedrawsThePanel(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 12 }),
+    });
+
+    expect(outcome.summary).not.toContain('did not work');
+    expect(steps.slice(1, 3)).toEqual(['smoke step 1: taking "draw"', 'smoke step 2: taking "play"']);
+    expect(outcome.passed).toBe(true);
+  });
+
   it('presses the board control it found, though the board moved another into its place before the press', async () => {
     const { outcome, steps } = await smokeOf(false, boardThatKeepsReordering());
 
@@ -629,6 +642,14 @@ describe('boardsmith verify: the smoke check', () => {
       expect(steps.filter((line) => line.includes('waiting for a turn'))).toEqual([]);
     },
   );
+
+  it('#562: counts a panel press that reached its button as landed, though the page was too busy to answer within one look, and does not press it again', async () => {
+    const { outcome, steps } = await smokeOf(true, { ...gladeWorld({ busy: true }), 'tests/browser/smoke.spec.ts': gladeSpec({ steps: 8 }) });
+
+    expect(outcome.summary).not.toContain('did not work');
+    expect(steps.filter((line) => line.endsWith('taking "arrive"'))).toHaveLength(1);
+    expect(steps.some((line) => line.endsWith('taking "rest"'))).toBe(true);
+  });
 
   it(
     '#471: plays the seats a world spec names, each in a browser of its own, the second following the first, and takes ' +

@@ -3,6 +3,7 @@
  * `smokeProject` makes (its game is `dev-game`, so its classes are `DevGameGame` and
  * `DevGamePlayer`).
  */
+import { PRESS_MARK } from '../../testing/browser-smoke-page.js';
 
 /** A smoke spec listing `actions`, with `unreachable`, `seed` and `steps` given when they are. */
 export function smokeSpec(
@@ -1057,6 +1058,51 @@ function lookAway() {
 }
 
 /**
+ * A PANEL THAT REDRAWS A BUTTON AS IT IS PRESSED (#562 review): the first time the walk marks one
+ * of the panel's action buttons to press it, the page puts a new element in its place, as a panel
+ * that redraws its buttons as new elements does, so the element the walk marked is gone. Clicking
+ * the new button puts the panel's own back; the inner press it then sends lands outside the guarded
+ * copy, so the walk's click guard stops it and the walk finds the panel's own button again and
+ * presses that, which takes the action.
+ */
+export function boardThatRedrawsThePanel(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue';
+
+const redrawn = new Set<string>();
+const watcher = new MutationObserver((changes) => {
+  for (const change of changes) {
+    const button = change.target as HTMLElement;
+    const action = button.getAttribute('data-bs-action');
+    if (action === null || redrawn.has(action) || !button.hasAttribute('${PRESS_MARK}')) continue;
+    redrawn.add(action);
+    const copy = button.cloneNode(true) as HTMLElement;
+    copy.removeAttribute('${PRESS_MARK}');
+    copy.addEventListener('click', () => {
+      copy.replaceWith(button);
+      button.click();
+    });
+    button.replaceWith(copy);
+  }
+});
+onMounted(() => watcher.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['${PRESS_MARK}'] }));
+onUnmounted(() => watcher.disconnect());
+</script>
+
+<template>
+  <div class="board">A board</div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
  * A BOARD THAT KEEPS REORDERING ITS CONTROLS (#464 review): "North", "South" and "East" trade
  * places every 60 milliseconds (a keyed list, so each button moves rather than being redrawn), so
  * whichever button sat at a place when the walk looked has often moved by the time it presses. A
@@ -1329,8 +1375,10 @@ export const ALONE_REASON = 'There is nobody else in this glade to greet.';
  *
  * With `stumbles`, seat 4's arrival fails in its rules, so only seat 4's browser sees a failure.
  * With `manners`, seat 4 alone may also `bow`, an action the panel offers inside its "Manners" group.
+ * With `busy`, the page is kept busy for 1.5s by every click it takes, longer than the walk gives one
+ * look at a panel button, as a loaded machine keeps it (#562).
  */
-export function gladeWorld(options: { stumbles?: boolean; manners?: boolean } = {}): Record<string, string> {
+export function gladeWorld(options: { stumbles?: boolean; manners?: boolean; busy?: boolean } = {}): Record<string, string> {
   const stumble = options.stumbles ? "\n    if (ctx.player.seat === 4) throw new Error('seat four tripped on a root');" : '';
   const bow = options.manners
     ? `
@@ -1504,7 +1552,11 @@ function seenIn(node: ViewNode | null | undefined): number[] {
   return [];
 }
 
-const seen = computed(() => seenIn(props.gameView as ViewNode));
+${
+      options.busy
+        ? "document.addEventListener('click', () => { const until = Date.now() + 1500; while (Date.now() < until) { /* busy */ } }, true);\n"
+        : ''
+    }const seen = computed(() => seenIn(props.gameView as ViewNode));
 </script>
 
 <template>
