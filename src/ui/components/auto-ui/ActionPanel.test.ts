@@ -934,3 +934,54 @@ describe('ActionPanel large element-id-anchored choice picks (#341)', () => {
     expect(wrapper.text()).toContain('Recruit nobody');
   });
 });
+
+// ---------------------------------------------------------------------------
+// #569 — a dependent choice pick (filterBy / dependsOn) and a plain one share
+// one button list, and differ only in what a click does: a dependent pick
+// shows the choice on the board (with its refs) before answering the pick.
+// ---------------------------------------------------------------------------
+
+describe('ActionPanel choice buttons: dependent and plain picks (#569)', () => {
+  const choices: ChoiceWithRefs[] = [
+    { value: 'north', display: 'North' },
+    { value: 'south', display: 'South' },
+  ];
+
+  function mountPick(pick: Record<string, unknown>) {
+    const bi = createBoardInteraction();
+    const setHoveredChoice = vi.spyOn(bi, 'setHoveredChoice');
+    const controller = stubActionController({
+      currentAction: ref('move'),
+      currentPick: ref({ name: 'direction', type: 'choice', prompt: 'Pick a direction', ...pick }),
+      currentChoices: ref(choices),
+    });
+    return { wrapper: mountWithBoard(controller, bi), controller, setHoveredChoice };
+  }
+
+  it('a dependent pick shows the clicked choice on the board, then answers the pick with it', async () => {
+    const { wrapper, controller, setHoveredChoice } = mountPick({ dependsOn: 'unit' });
+    const buttons = wrapper.findAll('.choice-btn.filtered-choice-btn');
+    expect(buttons.map((b) => b.text())).toEqual(['North', 'South']);
+
+    await buttons[1].trigger('click');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(setHoveredChoice.mock.calls[0]).toEqual([
+      { value: 'south', display: 'South', sourceRefs: [], targetRefs: [] },
+    ]);
+    expect(controller.fill).toHaveBeenCalledWith('direction', 'south');
+  });
+
+  it('a plain pick answers the pick with the clicked choice, and shows it on the board only once answered', async () => {
+    const { wrapper, controller, setHoveredChoice } = mountPick({});
+    expect(wrapper.findAll('.filtered-choice-btn')).toHaveLength(0);
+    const buttons = wrapper.findAll('.choice-btn');
+    expect(buttons.map((b) => b.text())).toEqual(['North', 'South']);
+
+    await buttons[1].trigger('click');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(setHoveredChoice.mock.calls).toEqual([[{ value: 'south', display: 'South' }]]);
+    expect(controller.fill).toHaveBeenCalledWith('direction', 'south');
+  });
+});
