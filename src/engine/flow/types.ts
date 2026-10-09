@@ -20,20 +20,6 @@ export type FlowNodeType =
   | 'phase';
 
 /**
- * Result of a flow step execution
- */
-export interface FlowStepResult {
-  /** Whether the flow should continue */
-  continue: boolean;
-  /** Whether the flow needs player input */
-  awaitingInput: boolean;
-  /** Available actions if awaiting input */
-  availableActions?: string[];
-  /** Current player if awaiting input */
-  currentPlayer?: Player;
-}
-
-/**
  * Serialized flow position for pause/resume
  */
 export interface FlowPosition {
