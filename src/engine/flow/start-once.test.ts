@@ -12,6 +12,7 @@ import { createTestGame } from '../../testing/test-game.js';
 class OpeningGame extends Game<OpeningGame, Player> {
   setups = 0;
   openings = 0;
+  turns = 0;
 
   constructor(options: GameOptions) {
     super(options);
@@ -25,7 +26,17 @@ class OpeningGame extends Game<OpeningGame, Player> {
           execute((ctx) => {
             ctx.game.openings++;
           }),
-          loop({ maxIterations: 20, do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }) }),
+          loop({
+            maxIterations: 20,
+            do: eachPlayer({
+              do: sequence(
+                actionStep({ actions: ['pass'] }),
+                execute((ctx) => {
+                  ctx.game.turns++;
+                }),
+              ),
+            }),
+          }),
         ),
       }),
     );
@@ -73,6 +84,18 @@ describe('restartFlowForTutorial (#546)', () => {
     expect(state.availableActions).toEqual(['pass']);
     expect(tg.game.setups).toBe(1);
     expect(tg.game.openings).toBe(1);
+    expect(tg.game.turns).toBe(1);
+  });
+
+  it('stops passing over execute nodes at the first step that needs input', () => {
+    const tg = createTestGame(OpeningGame, { playerCount: 2, seed: 'tutorial' });
+    tg.doAction(1, 'pass', {});
+    tg.game.restartFlowForTutorial();
+
+    tg.doAction(1, 'pass', {});
+
+    expect(tg.game.turns).toBe(2);
+    expect(tg.game.getFlowState()?.currentPlayer).toBe(2);
   });
 
   it('refuses a game whose flow never started', () => {

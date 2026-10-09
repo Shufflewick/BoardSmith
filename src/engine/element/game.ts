@@ -3051,7 +3051,8 @@ export class Game<
     if (this._flowEngine) {
       throw new Error(
         'This game has already started, and starting it again would run its opening a second time. ' +
-        'createTestGame starts the game for you: remove the extra .start() call, or pass autoStart: false.'
+        'Start a game once: call startFlow() or GameRunner.start() a single time per game. ' +
+        'In a test, createTestGame starts the game for you: remove the extra .start() call, or pass autoStart: false.'
       );
     }
 
@@ -3114,8 +3115,14 @@ export class Game<
    * Put the flow back at its beginning so a tutorial opens on its learner's
    * turn, whatever turn the live game was on. Runs none of the game's opening:
    * not the flow's `setup`, and not the `execute` nodes before the first step
-   * that needs input. The flow's variables are kept. The `startTutorial` op
-   * calls this after the tutorial's own `setup` has set the board (#546).
+   * that needs input. The flow's variables are kept.
+   * Phase hooks are not skipped: `onEnterPhase` runs again for each phase
+   * entered before the first step that needs input, and the phase the game
+   * was in when it restarted is abandoned without its `onExitPhase`.
+   *
+   * The `startTutorial` op calls this after the tutorial's own `setup` has set
+   * the board (#546), and refuses the tutorial, keeping the game as it was,
+   * when the restarted flow does not prompt the learner's seat.
    */
   restartFlowForTutorial(): FlowState {
     if (!this._flowEngine) {

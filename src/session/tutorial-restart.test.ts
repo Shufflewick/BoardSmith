@@ -10,6 +10,7 @@ import type { TutorialDefinition } from '../engine/index.js';
  */
 class TwoSeatTutorialGame extends Game<TwoSeatTutorialGame, Player> {
   openings = 0;
+  turns = 0;
 
   constructor(options: GameOptions) {
     super(options);
@@ -20,7 +21,17 @@ class TwoSeatTutorialGame extends Game<TwoSeatTutorialGame, Player> {
           execute((ctx) => {
             ctx.game.openings++;
           }),
-          loop({ maxIterations: 20, do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }) }),
+          loop({
+            maxIterations: 20,
+            do: eachPlayer({
+              do: sequence(
+                actionStep({ actions: ['pass'] }),
+                execute((ctx) => {
+                  ctx.game.turns++;
+                }),
+              ),
+            }),
+          }),
         ),
       }),
     );
@@ -48,5 +59,27 @@ describe('startTutorial mid-game (#546)', () => {
     expect(learner.isMyTurn).toBe(true);
     expect(learner.availableActions).toEqual(['pass']);
     expect(session.readGame().openings).toBe(1);
+    expect(session.readGame().turns).toBe(1);
+
+    // The restarted position is what the snapshot holds: the next move runs
+    // from it, and execute nodes run again once the learner has acted.
+    expect((await session.send(1, { type: 'action', actionName: 'pass', player: 1, args: {} })).success).toBe(true);
+    expect(session.readGame().turns).toBe(2);
+    expect(session.host.flowState?.currentPlayer).toBe(2);
+  });
+
+  it('refuses a seat the restarted flow would not prompt, and leaves the game as it was', async () => {
+    const session = createHeadlessSession(def, { playerCount: 2, seed: 'tutorial-restart' });
+    await session.start();
+    expect((await session.send(1, { type: 'action', actionName: 'pass', player: 1, args: {} })).success).toBe(true);
+    const before = structuredClone(session.host.snapshot);
+
+    const result = await session.send(2, { type: 'startTutorial', player: 2 });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/cannot start for seat 2.*seat 1 is to move/s);
+    expect(session.host.snapshot).toEqual(before);
+    expect(session.host.flowState?.currentPlayer).toBe(2);
+    expect(session.playerState(2).isMyTurn).toBe(true);
   });
 });

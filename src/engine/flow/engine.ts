@@ -400,6 +400,9 @@ export class FlowEngine<G extends Game = Game> {
    * node met before the flow next needs input is passed over. The flow's
    * variables are kept as they are, because the setup and executes that set
    * them already ran once in this game.
+   * Phase hooks are not skipped: `onEnterPhase` runs again for each phase
+   * entered before the first step that needs input, and the phase the game
+   * was in when it restarted is abandoned without its `onExitPhase`.
    *
    * Used by a tutorial start (`Game.restartFlowForTutorial`) to hand the turn
    * back to the first seat the flow prompts.
