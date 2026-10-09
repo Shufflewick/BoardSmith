@@ -9,7 +9,7 @@
  * threshold, recovery) live in snapshot-session-host.test.ts.
  */
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../engine/index.js';
+import { Game, Player, Action, actionStep, loop, type GameOptions } from '../engine/index.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
@@ -23,9 +23,9 @@ class BotActsFirstGame extends Game<BotActsFirstGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     this.registerAction(Action.create('move').execute(() => ({ success: true })));
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: actionStep({ actions: ['move'], player: (ctx) => ctx.game.getPlayer(2)! }),
-    }));
+    });
   }
 }
 
@@ -34,12 +34,12 @@ class RepeatMoveGame extends Game<RepeatMoveGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     this.registerAction(Action.create('move').execute(() => ({ success: true })));
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({
         maxIterations: 100,
         do: actionStep({ actions: ['move'], player: (ctx) => ctx.game.getPlayer(1)!, turnScope: 'restart' }),
       }),
-    }));
+    });
   }
 }
 

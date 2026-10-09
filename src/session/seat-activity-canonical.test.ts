@@ -3,7 +3,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   actionStep,
   loop,
   dueSeats,
@@ -115,14 +114,12 @@ class PassGame extends Game<PassGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 1000,
-          do: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! }),
-        }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 1000,
+        do: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! }),
       }),
-    );
+    });
   }
 }
 

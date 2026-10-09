@@ -11,7 +11,6 @@ import type {
   SimultaneousActionStepConfig,
   SwitchConfig,
   IfConfig,
-  FlowDefinition,
   PhaseConfig,
   TurnScope,
 } from './types.js';
@@ -40,7 +39,7 @@ export function sequence<G extends Game = Game>(...steps: FlowNode<G>[]): FlowNo
  *
  * Phases are named sections of the flow that can be displayed in the UI
  * (e.g., "Combat Phase", "Income Phase"). The onEnterPhase/onExitPhase
- * hooks in defineFlow will be called when entering/exiting phases.
+ * hooks of the flow definition are called when entering/exiting phases.
  *
  * @example
  * ```typescript
@@ -425,60 +424,6 @@ export function ifThen<G extends Game = Game>(config: {
       then: config.then,
       else: config.else,
     },
-  };
-}
-
-/**
- * Create a complete flow definition
- *
- * @example
- * ```typescript
- * defineFlow({
- *   setup: (ctx) => {
- *     ctx.game.create(Deck, 'deck');
- *     // ... deal cards
- *   },
- *   root: loop({
- *     while: (ctx) => !ctx.game.isFinished(),
- *     do: eachPlayer({ do: playerTurn })
- *   }),
- *   isComplete: (ctx) => allBooksCollected(ctx),
- *   getWinners: (ctx) => findPlayersWithMostBooks(ctx)
- * })
- * ```
- *
- * @example
- * ```typescript
- * // With phase hooks
- * defineFlow({
- *   root: sequence(
- *     phase('setup', { do: ... }),
- *     phase('main', { do: ... })
- *   ),
- *   onEnterPhase: (phaseName, ctx) => {
- *     ctx.game.message(`Entering ${phaseName} phase`);
- *   },
- *   onExitPhase: (phaseName, ctx) => {
- *     ctx.game.message(`Exiting ${phaseName} phase`);
- *   }
- * })
- * ```
- */
-export function defineFlow<G extends Game = Game>(config: {
-  setup?: (context: FlowContext<G>) => void;
-  root: FlowNode<G>;
-  isComplete?: (context: FlowContext<G>) => boolean;
-  getWinners?: (context: FlowContext<G>) => PlayerOf<G>[];
-  onEnterPhase?: (phaseName: string, context: FlowContext<G>) => void;
-  onExitPhase?: (phaseName: string, context: FlowContext<G>) => void;
-}): FlowDefinition<G> {
-  return {
-    setup: config.setup,
-    root: config.root,
-    isComplete: config.isComplete,
-    getWinners: config.getWinners,
-    onEnterPhase: config.onEnterPhase,
-    onExitPhase: config.onExitPhase,
   };
 }
 

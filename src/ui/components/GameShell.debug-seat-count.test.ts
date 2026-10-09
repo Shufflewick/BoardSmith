@@ -20,7 +20,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { nextTick } from 'vue';
 import ControlsTab from './debug/ControlsTab.vue';
-import { Game, Player, Action, defineFlow, loop, eachPlayer, actionStep } from '../../engine/index.js';
+import { Game, Player, Action, loop, eachPlayer, actionStep } from '../../engine/index.js';
 import { GameRunner } from '../../runtime/runner.js';
 import { buildPlayerState } from '../../session/utils.js';
 import {
@@ -37,15 +37,13 @@ class FiveSeatGame extends Game<FiveSeatGame, Player> {
   constructor(options: { playerCount: number; playerNames?: string[]; seed?: string }) {
     super(options);
     this.registerActions(Action.create('pass').prompt('Pass').execute(() => {}));
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => true,
-          maxIterations: 20,
-          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: () => true,
+        maxIterations: 20,
+        do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
       }),
-    );
+    });
   }
 }
 

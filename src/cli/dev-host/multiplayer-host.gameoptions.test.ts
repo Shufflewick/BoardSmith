@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../../engine/index.js';
+import { Game, Player, Action, actionStep, loop, type GameOptions } from '../../engine/index.js';
 import { executeOp, selectGameOptions, type GameDefinitionLike, type GameOptionSelection } from '../../session/index.js';
 import type { GameOptionDefinition } from '../../session/types.js';
 import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
@@ -18,14 +18,12 @@ class DifficultyGame extends Game<DifficultyGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 1000,
-          do: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! }),
-        }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 1000,
+        do: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! }),
       }),
-    );
+    });
   }
 }
 

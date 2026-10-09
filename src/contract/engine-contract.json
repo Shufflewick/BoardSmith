@@ -1,7 +1,7 @@
 {
-  "revision": 140,
+  "revision": 141,
   "bundleProtocol": 2,
-  "surfaceHash": "a0b49707971a4b63",
+  "surfaceHash": "795d03daab290fbe",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1204,6 +1204,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "Game.restoreFlow is removed; restoreFlowState is the one flow restore and still ends setup (#500). Also internal only, with no surface or payload effect: the flow step result type FlowStepResult is no longer exported, snapshot restore no longer carries the unreachable ambiguous handler-key warnings, and message templates write every value with String(), which is the output they already had."
+    },
+    {
+      "revision": 141,
+      "date": "2026-10-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "795d03daab290fbe",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A game's end and winners are declared on Game only (#503): finish(winners), or overrides of isFinished() and getWinners(). FlowDefinition loses isComplete and getWinners, FlowEngine.getWinners is removed, and a completed flow no longer writes settings.winners; the flow ends when game.isFinished() is true. defineFlow is removed: a flow definition is a plain object passed to setFlow. The MCTS bot and the benchmark now read game.getWinners(), the same result hosts show players, so a game that overrides getWinners() is no longer scored as a draw by bots. Games built on an earlier engine that declared their end on the flow (Seven, WindupWarfare) or import defineFlow must be rebuilt on this revision and republished; the catalogue games are migrated."
     }
   ]
 }

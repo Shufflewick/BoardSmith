@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Piece, Space, Action, defineFlow, actionStep, deserializeAction, type GameOptions } from '../engine/index.js';
+import { Game, Player, Piece, Space, Action, actionStep, deserializeAction, type GameOptions } from '../engine/index.js';
 import { recordedAction } from './testing/history-labels.js';
 import { GameRunner } from '../runtime/index.js';
 import { PendingActionManager } from './pending-action-manager.js';
@@ -27,12 +27,12 @@ class TwoStepGame extends Game<TwoStepGame, Player> {
         .execute(() => {})
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: actionStep({
         actions: ['pick'],
         player: (ctx) => ctx.game.getPlayer(1)!,
       }),
-    }));
+    });
   }
 }
 
@@ -73,12 +73,12 @@ class EquipGame extends Game<EquipGame, Player> {
         .execute(() => {})
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: actionStep({
         actions: ['reEquip', 'reEquipContinue'],
         player: (ctx) => ctx.game.getPlayer(1)!,
       }),
-    }));
+    });
   }
 }
 
@@ -100,12 +100,12 @@ class OptionalGame extends Game<OptionalGame, Player> {
         .execute(() => {})
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: actionStep({
         actions: ['collect'],
         player: (ctx) => ctx.game.getPlayer(1)!,
       }),
-    }));
+    });
   }
 }
 

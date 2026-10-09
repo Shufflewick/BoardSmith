@@ -1614,7 +1614,7 @@ export async function computePayloadHash(): Promise<string> {
   const { buildPlayerState } = await import('../session/utils.js');
   const {
     Game, Space, Piece, Player, Deck, Hand, Action,
-    defineFlow, actionStep, simultaneousActionStep, sequence, eachPlayer,
+    actionStep, simultaneousActionStep, sequence, eachPlayer,
   } = engine;
 
   // A player that keeps one game field to itself (#448). The other seat's view
@@ -1667,27 +1667,25 @@ export async function computePayloadHash(): Promise<string> {
       // point of fingerprinting the position at all. The override deliberately
       // names a seat OTHER than eachPlayer's first, so the saved previous
       // player is a genuinely different element from the acting one.
-      this.setFlow(
-        defineFlow({
-          root: sequence(
-            simultaneousActionStep({
-              actions: ['bid'],
-              playerDone: (_ctx: unknown, p: any) => p.hasBid,
+      this.setFlow({
+        root: sequence(
+          simultaneousActionStep({
+            actions: ['bid'],
+            playerDone: (_ctx: unknown, p: any) => p.hasBid,
+          }),
+          eachPlayer({
+            do: actionStep({
+              actions: ['draw'],
+              player: (ctx: any) => ctx.game.getPlayer(2),
+              // A declared window (#300) is resolved at entry and kept on the
+              // step's frame, so it lands in the fingerprinted
+              // `position.frameData` the platform stores and restores. A
+              // change to how it is carried there moves `payloadHash`.
+              timeLimitMs: 90_000,
             }),
-            eachPlayer({
-              do: actionStep({
-                actions: ['draw'],
-                player: (ctx: any) => ctx.game.getPlayer(2),
-                // A declared window (#300) is resolved at entry and kept on the
-                // step's frame, so it lands in the fingerprinted
-                // `position.frameData` the platform stores and restores. A
-                // change to how it is carried there moves `payloadHash`.
-                timeLimitMs: 90_000,
-              }),
-            }),
-          ),
-        }),
-      );
+          }),
+        ),
+      });
     }
   }
 

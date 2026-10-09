@@ -19,7 +19,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { Game, Card, Deck, Hand, Space, Player, Action, defineFlow, loop, eachPlayer, actionStep, type ElementJSON, type GameOptions } from '../index.js';
+import { Game, Card, Deck, Hand, Space, Player, Action, loop, eachPlayer, actionStep, type ElementJSON, type GameOptions } from '../index.js';
 
 // ---------------------------------------------------------------------------
 // Test fixture types
@@ -551,16 +551,14 @@ describe('T-117-01 / INTRO-05: getActionSpace must not leak hidden-element IDs a
           .execute(() => {}),
       );
 
-      this.setFlow(
-        defineFlow({
-          root: loop({
-            maxIterations: 10,
-            do: eachPlayer({
-              do: actionStep({ actions: ['play'] }),
-            }),
+      this.setFlow({
+        root: loop({
+          maxIterations: 10,
+          do: eachPlayer({
+            do: actionStep({ actions: ['play'] }),
           }),
         }),
-      );
+      });
     }
   }
 

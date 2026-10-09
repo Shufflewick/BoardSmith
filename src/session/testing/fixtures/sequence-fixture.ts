@@ -23,7 +23,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   simultaneousActionStep,
   sequence,
   execute,
@@ -100,33 +99,31 @@ class SequenceGame extends Game<SequenceGame, RebelPlayer> {
     // shape that exercises the flow-position restore() off-by-one. (A flow whose
     // awaiting node is the LAST child of every enclosing sequence accidentally
     // round-trips fine and would NOT reproduce the bug.)
-    this.setFlow(
-      defineFlow({
-        root: sequence(
-          // step 0: a setup execute (so the loop is not steps[0]).
-          execute(() => {
-            this.message('setup');
+    this.setFlow({
+      root: sequence(
+        // step 0: a setup execute (so the loop is not steps[0]).
+        execute(() => {
+          this.message('setup');
+        }),
+        // step 1 (NON-LAST): the landing loop.
+        loop({
+          name: 'rebel-landing',
+          while: () => this.players.some((p) => !(p.landed && p.hired)),
+          maxIterations: 50,
+          do: simultaneousActionStep({
+            name: 'rebel-landing-actions',
+            players: () => this.players,
+            actions: ['placeLanding', 'hireFirstMerc'],
+            playerDone: (_ctx, p) => (p as RebelPlayer).landed && (p as RebelPlayer).hired,
+            skipPlayer: (_ctx, p) => (p as RebelPlayer).landed && (p as RebelPlayer).hired,
           }),
-          // step 1 (NON-LAST): the landing loop.
-          loop({
-            name: 'rebel-landing',
-            while: () => this.players.some((p) => !(p.landed && p.hired)),
-            maxIterations: 50,
-            do: simultaneousActionStep({
-              name: 'rebel-landing-actions',
-              players: () => this.players,
-              actions: ['placeLanding', 'hireFirstMerc'],
-              playerDone: (_ctx, p) => (p as RebelPlayer).landed && (p as RebelPlayer).hired,
-              skipPlayer: (_ctx, p) => (p as RebelPlayer).landed && (p as RebelPlayer).hired,
-            }),
-          }),
-          // step 2: a trailing execute so the loop is a non-last sibling.
-          execute(() => {
-            this.message('cleanup');
-          }),
-        ),
-      }),
-    );
+        }),
+        // step 2: a trailing execute so the loop is a non-last sibling.
+        execute(() => {
+          this.message('cleanup');
+        }),
+      ),
+    });
   }
 }
 

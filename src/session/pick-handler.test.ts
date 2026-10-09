@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, vi } from 'vitest';
-import { Game, Player, Space, Piece, Action, defineFlow, actionStep, type GameOptions, type GameClass } from '../engine/index.js';
+import { Game, Player, Space, Piece, Action, actionStep, type GameOptions, type GameClass } from '../engine/index.js';
 import { createHeadlessSession, type HeadlessSession } from './headless-session.js';
 import { succeeded } from './op-result.test-helper.js';
 import { ErrorCode } from '../types/protocol.js';
@@ -109,9 +109,9 @@ class TestPickGame extends Game<TestPickGame, Player> {
     );
 
     // Set up flow making all actions available
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: actionStep({ actions: ['pickFruit', 'pickItem', 'pickColor', 'pickItems', 'pickByType'] }),
-    }));
+    });
   }
 }
 
@@ -344,7 +344,7 @@ class BoardRefsGame extends Game<BoardRefsGame, Player> {
         .execute(() => ({ success: true }))
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: actionStep({
         actions: [
           'move',
@@ -356,7 +356,7 @@ class BoardRefsGame extends Game<BoardRefsGame, Player> {
           'pickThrowChoices',
         ],
       }),
-    }));
+    });
   }
 }
 

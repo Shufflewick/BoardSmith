@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, defineFlow, actionStep, type GameOptions } from '../engine/index.js';
+import { Game, Player, Action, actionStep, type GameOptions } from '../engine/index.js';
 import { createHeadlessSession } from './headless-session.js';
 
 // An onSelect callback on the first selection, so `onSelectFired` is populated.
@@ -27,14 +27,12 @@ class OnSelectGame extends Game<OnSelectGame, Player> {
         .execute(() => {}),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: actionStep({
-          actions: ['pick'],
-          player: (ctx) => ctx.game.getPlayer(1)!,
-        }),
+    this.setFlow({
+      root: actionStep({
+        actions: ['pick'],
+        player: (ctx) => ctx.game.getPlayer(1)!,
       }),
-    );
+    });
   }
 }
 

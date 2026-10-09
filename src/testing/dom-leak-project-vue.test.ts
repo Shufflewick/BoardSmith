@@ -47,16 +47,16 @@ export default defineConfig({ plugins: [vue()], resolve: { dedupe: ['vue'] } });
 const BOARD_TEST = `// @vitest-environment jsdom
 import { it, expect } from 'vitest';
 import { computed, defineComponent, h } from 'vue';
-import { Game, Action, defineFlow, actionStep } from 'boardsmith';
+import { Game, Action, actionStep } from 'boardsmith';
 import { createTestGame, renderAsSeat, preloadSeatRenderer } from 'boardsmith/testing';
 
 class TurnGame extends Game {
   constructor(options) {
     super(options);
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1), repeatUntil: () => false, maxMoves: 5 }),
-    }));
+    });
   }
 }
 

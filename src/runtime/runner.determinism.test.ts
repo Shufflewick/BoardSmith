@@ -13,7 +13,7 @@
  * outside the engine's state.
  */
 import { describe, it, expect } from 'vitest';
-import { Game, Space, Piece, Player, Action, defineFlow, loop, eachPlayer, actionStep, type FlowContext } from '../engine/index.js';
+import { Game, Space, Piece, Player, Action, loop, eachPlayer, actionStep, type FlowContext } from '../engine/index.js';
 import { GameRunner } from './runner.js';
 
 class Token extends Piece<ClockGame, Player> {}
@@ -37,14 +37,14 @@ class ClockGame extends Game<ClockGame, Player> {
       });
     this.registerActions(nudge);
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({
         while: (ctx) => (ctx.get<number>('round') ?? 1) <= 2,
         maxIterations: 10,
         do: eachPlayer({ do: actionStep({ actions: ['nudge'] }) }),
       }),
       setup: (ctx) => ctx.set('round', 1),
-    }));
+    });
   }
 }
 

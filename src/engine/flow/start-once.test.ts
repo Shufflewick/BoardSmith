@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, defineFlow, actionStep, eachPlayer, loop, sequence, execute, type GameOptions } from '../index.js';
+import { Game, Player, Action, actionStep, eachPlayer, loop, sequence, execute, type GameOptions } from '../index.js';
 import { createTestGame } from '../../testing/test-game.js';
 
 /**
@@ -17,29 +17,27 @@ class OpeningGame extends Game<OpeningGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
-    this.setFlow(
-      defineFlow({
-        setup: (ctx) => {
-          ctx.game.setups++;
-        },
-        root: sequence(
-          execute((ctx) => {
-            ctx.game.openings++;
+    this.setFlow({
+      setup: (ctx) => {
+        ctx.game.setups++;
+      },
+      root: sequence(
+        execute((ctx) => {
+          ctx.game.openings++;
+        }),
+        loop({
+          maxIterations: 20,
+          do: eachPlayer({
+            do: sequence(
+              actionStep({ actions: ['pass'] }),
+              execute((ctx) => {
+                ctx.game.turns++;
+              }),
+            ),
           }),
-          loop({
-            maxIterations: 20,
-            do: eachPlayer({
-              do: sequence(
-                actionStep({ actions: ['pass'] }),
-                execute((ctx) => {
-                  ctx.game.turns++;
-                }),
-              ),
-            }),
-          }),
-        ),
-      }),
-    );
+        }),
+      ),
+    });
   }
 }
 

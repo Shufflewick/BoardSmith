@@ -22,7 +22,7 @@
  * which is why `move` offers `chooseFrom('direction', ['left', 'right'])`.
  */
 
-import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../../../engine/index.js';
+import { Game, Player, Action, actionStep, loop, type GameOptions } from '../../../engine/index.js';
 import type { BotStrategy } from '../../../bot/types.js';
 import type { GameDefinitionLike } from '../../stateless-ops.js';
 
@@ -42,28 +42,26 @@ export class BotGame extends Game<BotGame, Player> {
           return { success: true };
         }),
     );
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 100,
-          // 155-03: repeatUntil (never true within these tests) keeps the
-          // SAME action-step frame -- and its moveCount -- open across
-          // repeated 'move' actions. Without it, a plain single-move
-          // actionStep auto-completes and reopens a FRESH frame
-          // (moveCount === 0) after every move, and undo (now frame-scoped,
-          // UNDO-03) would always report "No actions to undo" -- this
-          // fixture's undo test needs undo to actually succeed.
-          do: actionStep({
-            actions: ['move'],
-            player: (ctx) => ctx.game.getPlayer(1)!,
-            repeatUntil: () => false,
-            // Only consulted if `repeatUntil` ever closes the frame and the
-            // loop re-enters: that would be a new turn, not a continuation.
-            turnScope: 'restart',
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 100,
+        // 155-03: repeatUntil (never true within these tests) keeps the
+        // SAME action-step frame -- and its moveCount -- open across
+        // repeated 'move' actions. Without it, a plain single-move
+        // actionStep auto-completes and reopens a FRESH frame
+        // (moveCount === 0) after every move, and undo (now frame-scoped,
+        // UNDO-03) would always report "No actions to undo" -- this
+        // fixture's undo test needs undo to actually succeed.
+        do: actionStep({
+          actions: ['move'],
+          player: (ctx) => ctx.game.getPlayer(1)!,
+          repeatUntil: () => false,
+          // Only consulted if `repeatUntil` ever closes the frame and the
+          // loop re-enters: that would be a new turn, not a continuation.
+          turnScope: 'restart',
         }),
       }),
-    );
+    });
   }
 }
 

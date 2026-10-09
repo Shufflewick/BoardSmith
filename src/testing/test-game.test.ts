@@ -20,7 +20,6 @@ import {
   Space,
   Piece,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -71,11 +70,9 @@ class FixtureGame extends Game<FixtureGame, Player> {
       Action.create<FixtureGame>('pass').execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
-      }),
-    );
+    this.setFlow({
+      root: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
+    });
   }
 }
 
@@ -282,7 +279,7 @@ class TST01Game extends Game<TST01Game, Player> {
     this.registerAction(
       Action.create<TST01Game>('pass').execute(() => ({ success: true })),
     );
-    this.setFlow(defineFlow({ root: actionStep({ actions: ['pass'] }) }));
+    this.setFlow({ root: actionStep({ actions: ['pass'] }) });
   }
 }
 
@@ -350,15 +347,13 @@ class MultiStepGame extends Game<MultiStepGame, Player> {
         }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => true,
-          maxIterations: 1, // one pass over all players, then complete
-          do: eachPlayer({ do: actionStep({ actions: ['pick'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: () => true,
+        maxIterations: 1, // one pass over all players, then complete
+        do: eachPlayer({ do: actionStep({ actions: ['pick'] }) }),
       }),
-    );
+    });
   }
 }
 
@@ -457,7 +452,7 @@ class DisabledChoiceGame extends Game<DisabledChoiceGame, Player> {
         .execute(() => ({ success: true })),
     );
 
-    this.setFlow(defineFlow({ root: actionStep({ actions: ['pickFruit'] }) }));
+    this.setFlow({ root: actionStep({ actions: ['pickFruit'] }) });
   }
 }
 
@@ -524,7 +519,7 @@ class SeedFixtureGame extends Game<SeedFixtureGame, Player> {
       Action.create<SeedFixtureGame>('pass').execute(() => ({ success: true })),
     );
 
-    this.setFlow(defineFlow({ root: actionStep({ actions: ['pass'] }) }));
+    this.setFlow({ root: actionStep({ actions: ['pass'] }) });
   }
 }
 

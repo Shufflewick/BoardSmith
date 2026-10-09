@@ -31,7 +31,6 @@ import type { HeadlessSession } from '../../session/headless-session.js';
 import {
   Game,
   Player,
-  defineFlow,
   actionStep,
   type GameOptions,
 } from '../../engine/index.js';
@@ -149,14 +148,14 @@ class MailGame extends Game<MailGame, Player> {
         })
     );
     this.setFlow(
-      defineFlow({
+      {
         root: actionStep({
           actions: ['sendMail'],
           player: (ctx) => ctx.game.getPlayer(1)!,
           repeatUntil: () => false,
           maxMoves: 20,
         }),
-      })
+      }
     );
   }
 }

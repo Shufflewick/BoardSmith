@@ -14,7 +14,7 @@
  * the field is typed so a real game class is assignable.
  */
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../engine/index.js';
+import { Game, Player, Action, actionStep, loop, type GameOptions } from '../engine/index.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import type { GameDefinition } from './types.js';
 
@@ -22,18 +22,16 @@ class PlainGame extends Game<PlainGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 100,
-          do: actionStep({
-            actions: ['pass'],
-            player: (ctx) => ctx.game.getPlayer(1)!,
-            repeatUntil: () => false,
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 100,
+        do: actionStep({
+          actions: ['pass'],
+          player: (ctx) => ctx.game.getPlayer(1)!,
+          repeatUntil: () => false,
         }),
       }),
-    );
+    });
   }
 }
 
@@ -42,18 +40,16 @@ class NarrowOptionsGame extends Game<NarrowOptionsGame, Player> {
   constructor(options: { playerCount: number; playerNames?: string[]; seed?: string }) {
     super(options);
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 100,
-          do: actionStep({
-            actions: ['pass'],
-            player: (ctx) => ctx.game.getPlayer(1)!,
-            repeatUntil: () => false,
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 100,
+        do: actionStep({
+          actions: ['pass'],
+          player: (ctx) => ctx.game.getPlayer(1)!,
+          repeatUntil: () => false,
         }),
       }),
-    );
+    });
   }
 }
 

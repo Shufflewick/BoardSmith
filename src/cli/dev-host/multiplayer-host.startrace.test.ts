@@ -18,7 +18,7 @@
  * manual microtask-flushing required.
  */
 import { beforeEach, describe, it, expect } from 'vitest';
-import { Game, Player, Action, defineFlow, actionStep, loop, eachPlayer, type GameOptions } from '../../engine/index.js';
+import { Game, Player, Action, actionStep, loop, eachPlayer, type GameOptions } from '../../engine/index.js';
 import { executeOp, type GameDefinitionLike } from '../../session/index.js';
 import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
 import { manualGraceTimer } from './reconnect-grace.test-helper.js';
@@ -40,11 +40,9 @@ class RaceGame extends Game<RaceGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
-    this.setFlow(
-      defineFlow({
-        root: loop({ maxIterations: 5, do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }) }),
-      }),
-    );
+    this.setFlow({
+      root: loop({ maxIterations: 5, do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }) }),
+    });
   }
 }
 

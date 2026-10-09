@@ -14,7 +14,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   eachPlayer,
   actionStep,
   loop,
@@ -38,11 +37,9 @@ class FixedWinnerGame extends Game<FixedWinnerGame, Player> {
         .execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: eachPlayer({ do: actionStep({ actions: ['move'] }) }),
-      }),
-    );
+    this.setFlow({
+      root: eachPlayer({ do: actionStep({ actions: ['move'] }) }),
+    });
   }
 
   override finish(winners?: Player[]): void {
@@ -75,11 +72,43 @@ class DecisiveGame extends Game<DecisiveGame, Player> {
         }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: eachPlayer({ do: actionStep({ actions: ['move'] }) }),
-      }),
+    this.setFlow({
+      root: eachPlayer({ do: actionStep({ actions: ['move'] }) }),
+    });
+  }
+}
+
+/**
+ * Ends after every seat has acted once, with seat 1 the winner, declared ONLY
+ * by overriding `isFinished()` and `getWinners()` (#503). It never calls
+ * `finish()`, so the benchmark has to read the result the game declares.
+ */
+class OverrideDeclaredGame extends Game<OverrideDeclaredGame, Player> {
+  acted = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.registerAction(
+      Action.create<OverrideDeclaredGame>('move')
+        .chooseFrom('value', { choices: [1, 2] })
+        .execute((_args, ctx) => {
+          (ctx.game as OverrideDeclaredGame).acted++;
+          return { success: true };
+        }),
     );
+
+    this.setFlow({
+      root: eachPlayer({ do: actionStep({ actions: ['move'] }) }),
+    });
+  }
+
+  override isFinished(): boolean {
+    return this.acted >= this.players.length;
+  }
+
+  override getWinners(): Player[] {
+    return this.isFinished() ? [this.getPlayer(1)!] : [];
   }
 }
 
@@ -115,17 +144,15 @@ class ActThenAcknowledgeGame extends Game<ActThenAcknowledgeGame, AcknowledgingP
         }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: sequence(
-          eachPlayer({ do: actionStep({ actions: ['move'] }) }),
-          simultaneousActionStep({
-            actions: ['acknowledge'],
-            playerDone: (_ctx, player) => (player as AcknowledgingPlayer).acknowledged,
-          }),
-        ),
-      }),
-    );
+    this.setFlow({
+      root: sequence(
+        eachPlayer({ do: actionStep({ actions: ['move'] }) }),
+        simultaneousActionStep({
+          actions: ['acknowledge'],
+          playerDone: (_ctx, player) => (player as AcknowledgingPlayer).acknowledged,
+        }),
+      ),
+    });
   }
 }
 
@@ -241,6 +268,20 @@ describe('benchmarkBot', () => {
     expect(result.incomplete).toBe(0);
   });
 
+  it('scores the winner a game declares by overriding getWinners(), as players are shown it', async () => {
+    const result = await benchmarkBot(OverrideDeclaredGame, 'override-declared', undefined, noWeights, {
+      gameCount: 4,
+      mctsIterations: 1,
+      maxActions: 4,
+      timeout: 5000,
+      seed: 'override-declared',
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.draws).toBe(0);
+    expect(result.winRateAsPlayer0).toBe(1);
+    expect(result.winRateAsPlayer1).toBe(0);
+  });
+
   it('plays through a simultaneous step, acting for each seat that is due', async () => {
     const result = await benchmarkBot(ActThenAcknowledgeGame, 'act-then-acknowledge', undefined, noWeights, {
       gameCount: 2,
@@ -285,11 +326,9 @@ class ExplodingGame extends Game<ExplodingGame, Player> {
         }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: eachPlayer({ do: actionStep({ actions: ['move'] }) }),
-      }),
-    );
+    this.setFlow({
+      root: eachPlayer({ do: actionStep({ actions: ['move'] }) }),
+    });
   }
 }
 
@@ -364,7 +403,7 @@ class RaceGame extends Game<RaceGame, Player> {
           if (game.totals[ctx.player.seat] >= 12) game.finish([ctx.player]);
         }),
     );
-    this.setFlow(defineFlow({ root: loop({ maxIterations: 20, do: eachPlayer({ do: actionStep({ actions: ['step'] }) }) }) }));
+    this.setFlow({ root: loop({ maxIterations: 20, do: eachPlayer({ do: actionStep({ actions: ['step'] }) }) }) });
   }
 }
 

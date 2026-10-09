@@ -6,7 +6,7 @@ import {
   Piece,
   Player,
   Action,
-  defineFlow,
+  type FlowDefinition,
   loop,
   eachPlayer,
   actionStep,
@@ -73,7 +73,7 @@ class TestGame extends Game<TestGame, Player> {
     this.registerActions(animateAction, multiAnimateAction, passAction);
 
     // Set up flow
-    const gameFlow = defineFlow({
+    const gameFlow: FlowDefinition = {
       root: loop({
         while: (ctx: FlowContext) => (ctx.get<number>('round') ?? 1) <= 3,
         maxIterations: 10,
@@ -84,7 +84,7 @@ class TestGame extends Game<TestGame, Player> {
         }),
       }),
       setup: (ctx) => ctx.set('round', 1),
-    });
+    };
     this.setFlow(gameFlow);
   }
 }
@@ -236,7 +236,7 @@ class TutorialParityGame extends Game<TutorialParityGame, Player> {
 
     this.registerActions(moveAction, passAction);
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: loop({
         while: () => true,
         maxIterations: 20,
@@ -244,7 +244,7 @@ class TutorialParityGame extends Game<TutorialParityGame, Player> {
           do: actionStep({ actions: ['move', 'pass'] }),
         }),
       }),
-    });
+    };
     this.setFlow(flow);
   }
 }

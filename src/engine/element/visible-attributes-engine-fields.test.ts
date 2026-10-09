@@ -20,7 +20,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   actionStep,
   type GameOptions,
 } from '../index.js';
@@ -38,11 +37,9 @@ class PlanGame extends Game<PlanGame, PlanPlayer> {
   constructor(options: GameOptions) {
     super(options);
     this.registerAction(Action.create('noop').execute(() => ({ success: true })));
-    this.setFlow(
-      defineFlow({
-        root: actionStep({ actions: ['noop'], player: (ctx) => ctx.game.getPlayer(1)!, repeatUntil: () => false }),
-      }),
-    );
+    this.setFlow({
+      root: actionStep({ actions: ['noop'], player: (ctx) => ctx.game.getPlayer(1)!, repeatUntil: () => false }),
+    });
   }
 }
 

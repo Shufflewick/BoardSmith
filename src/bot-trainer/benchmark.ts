@@ -302,8 +302,8 @@ async function runBenchmarkGame<G extends Game>(
       return incomplete(`A game hit the ${maxActions}-action cap without finishing.`);
     }
 
-    // winners contains player POSITIONS (1-indexed), not indices (0-indexed)
-    const winners = (runner.game.settings.winners as number[]) ?? [];
+    // The seats the game declares as winners (#503): seats are 1-indexed
+    const winners = runner.game.getWinners().map(p => p.seat);
 
     // A game the GAME decided as a tie. This is the only thing that is a draw.
     if (winners.length === 0) {

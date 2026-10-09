@@ -23,7 +23,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   actionStep,
   type GameOptions,
 } from '../index.js';
@@ -55,14 +54,14 @@ class GrantLeakGame extends Game<GrantLeakGame, Player> {
     );
 
     this.setFlow(
-      defineFlow({
+      {
         root: actionStep({
           actions: ['noop', 'grantSeat2'],
           player: (ctx) => ctx.game.getPlayer(1)!,
           repeatUntil: () => false,
           maxMoves: 10,
         }),
-      })
+      }
     );
   }
 }

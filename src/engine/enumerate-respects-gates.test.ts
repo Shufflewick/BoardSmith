@@ -21,7 +21,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   simultaneousActionStep,
   enumerateLegalMoves,
   type GameOptions,
@@ -73,9 +72,9 @@ class FieldGame extends Game<FieldGame, Scout> {
     );
 
     this.setFlow(
-      defineFlow({
+      {
         root: simultaneousActionStep({ name: 'field', actions: ['travel', 'sprint', 'rest'] }),
-      })
+      }
     );
   }
 }

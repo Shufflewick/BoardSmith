@@ -19,7 +19,7 @@
  *     reason, which is more than this message could say.
  */
 import { describe, test, expect, beforeEach } from 'vitest';
-import { Game, Player, Piece, Space, Action, defineFlow, actionStep, type GameOptions } from '../engine/index.js';
+import { Game, Player, Piece, Space, Action, actionStep, type GameOptions } from '../engine/index.js';
 import { createHeadlessSession, type HeadlessSession } from './headless-session.js';
 import { succeeded } from './op-result.test-helper.js';
 import { ErrorCode } from '../types/protocol.js';
@@ -83,9 +83,9 @@ class EquipGame extends Game<EquipGame, Player> {
         .execute(() => ({ success: true }))
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: actionStep({ actions: ['equip', 'equipMaybe', 'equipGreyed'] }),
-    }));
+    });
   }
 }
 

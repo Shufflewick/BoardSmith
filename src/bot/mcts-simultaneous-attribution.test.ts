@@ -5,7 +5,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   simultaneousActionStep,
   type GameOptions,
 } from '../engine/index.js';
@@ -74,23 +73,28 @@ class PayoffMatrixGame extends Game<PayoffMatrixGame, Player> {
     );
 
     this.setFlow(
-      defineFlow({
+      {
         root: simultaneousActionStep({
           actions: ['commit'],
           playerDone: (ctx, player) =>
             (ctx.game as PayoffMatrixGame).board.all(Mark).some((m) => m.owner === player.seat),
         }),
-        isComplete: (ctx) => (ctx.game as PayoffMatrixGame).board.all(Mark).length >= 2,
-        getWinners: (ctx) => {
-          const game = ctx.game as PayoffMatrixGame;
-          const bot = game.board.all(Mark).find((m) => m.owner === 1)?.pick;
-          const opp = game.board.all(Mark).find((m) => m.owner === 2)?.pick;
-          if (bot === 'gamble' && opp !== 'z') return [game.getPlayer(1)!];
-          if (bot === 'safe') return []; // draw
-          return [game.getPlayer(2)!]; // 'dud', or 'gamble' refuted by 'z'
-        },
-      })
+      }
     );
+  }
+
+  /** Over once both seats have committed. */
+  override isFinished(): boolean {
+    return super.isFinished() || this.board.all(Mark).length >= 2;
+  }
+
+  override getWinners(): Player[] {
+    if (!this.isFinished()) return [];
+    const bot = this.board.all(Mark).find((m) => m.owner === 1)?.pick;
+    const opp = this.board.all(Mark).find((m) => m.owner === 2)?.pick;
+    if (bot === 'gamble' && opp !== 'z') return [this.getPlayer(1)!];
+    if (bot === 'safe') return []; // draw
+    return [this.getPlayer(2)!]; // 'dud', or 'gamble' refuted by 'z'
   }
 }
 

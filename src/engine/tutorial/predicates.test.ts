@@ -18,7 +18,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -69,17 +68,15 @@ class PredicateTestGame extends Game<PredicateTestGame, Player> {
 
     this.registerActions(moveAction, passAction);
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => true,
-          maxIterations: 20,
-          do: eachPlayer({
-            do: actionStep({ actions: ['move', 'pass'] }),
-          }),
+    this.setFlow({
+      root: loop({
+        while: () => true,
+        maxIterations: 20,
+        do: eachPlayer({
+          do: actionStep({ actions: ['move', 'pass'] }),
         }),
       }),
-    );
+    });
   }
 }
 

@@ -506,8 +506,6 @@ export function createGameFlow(game: MyGame): FlowDefinition {
         ),
       }),
     }),
-    isComplete: () => game.isFinished(),
-    getWinners: () => game.getWinners(),
   };
 }
 ```

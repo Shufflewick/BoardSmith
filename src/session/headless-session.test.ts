@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createHeadlessSession } from './headless-session.js';
 import { eachPlayerFixtureDefinition } from './testing/fixtures/each-player-fixture.js';
-import { Game, Player, Action, defineFlow, actionStep, eachPlayer, loop, type GameOptions } from '../engine/index.js';
+import { Game, Player, Action, actionStep, eachPlayer, loop, type GameOptions } from '../engine/index.js';
 import type { GameDefinitionLike } from './stateless-ops.js';
 import { selectGameOptions } from './game-option-selection.js';
 
@@ -28,14 +28,12 @@ class RollGame extends Game<RollGame, Player> {
         return { success: true };
       }),
     );
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 10,
-          do: actionStep({ actions: ['roll'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
-        }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 10,
+        do: actionStep({ actions: ['roll'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
       }),
-    );
+    });
   }
 }
 
@@ -132,11 +130,9 @@ class TallyGame extends Game<TallyGame, Player> {
         return { success: true };
       }),
     );
-    this.setFlow(
-      defineFlow({
-        root: loop({ maxIterations: 20, do: eachPlayer({ do: actionStep({ actions: ['add'] }) }) }),
-      }),
-    );
+    this.setFlow({
+      root: loop({ maxIterations: 20, do: eachPlayer({ do: actionStep({ actions: ['add'] }) }) }),
+    });
   }
 }
 

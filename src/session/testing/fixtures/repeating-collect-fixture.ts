@@ -20,7 +20,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   actionStep,
   type GameOptions,
 } from '../../../engine/index.js';
@@ -71,16 +70,14 @@ export class RepeatingCollectGame extends Game<RepeatingCollectGame, Player> {
         }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: actionStep({
-          actions: ['collect'],
-          player: (ctx) => ctx.game.getPlayer(1)!,
-          repeatUntil: () => false,
-          maxMoves: 10,
-        }),
+    this.setFlow({
+      root: actionStep({
+        actions: ['collect'],
+        player: (ctx) => ctx.game.getPlayer(1)!,
+        repeatUntil: () => false,
+        maxMoves: 10,
       }),
-    );
+    });
   }
 }
 

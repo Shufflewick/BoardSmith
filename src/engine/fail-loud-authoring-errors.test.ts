@@ -14,7 +14,6 @@ import {
   Piece,
   Player,
   Action,
-  defineFlow,
   actionStep,
   simultaneousActionStep,
   type GameOptions,
@@ -77,7 +76,7 @@ describe('a flow step naming an action that does not exist (#51)', () => {
   it('throws from actionStep rather than filtering the name out forever', () => {
     const G = makeGame((game) => {
       game.registerAction(Action.create('real').prompt('Real').execute(() => {}));
-      game.setFlow(defineFlow({ root: actionStep({ name: 'turn', actions: ['real', 'tpyo'] }) }));
+      game.setFlow({ root: actionStep({ name: 'turn', actions: ['real', 'tpyo'] }) });
     });
     expect(() => start(G)).toThrow(/tpyo/);
     expect(() => start(G)).toThrow(/turn/);
@@ -87,7 +86,7 @@ describe('a flow step naming an action that does not exist (#51)', () => {
     const G = makeGame((game) => {
       game.registerAction(Action.create('real').prompt('Real').execute(() => {}));
       game.setFlow(
-        defineFlow({ root: simultaneousActionStep({ name: 'bid', actions: ['real', 'tpyo'] }) })
+        { root: simultaneousActionStep({ name: 'bid', actions: ['real', 'tpyo'] }) }
       );
     });
     expect(() => start(G)).toThrow(/tpyo/);
@@ -97,7 +96,7 @@ describe('a flow step naming an action that does not exist (#51)', () => {
   it('says how to register the missing action', () => {
     const G = makeGame((game) => {
       game.registerAction(Action.create('real').prompt('Real').execute(() => {}));
-      game.setFlow(defineFlow({ root: actionStep({ actions: ['tpyo'] }) }));
+      game.setFlow({ root: actionStep({ actions: ['tpyo'] }) });
     });
     expect(() => start(G)).toThrow(/registerActions/);
   });
@@ -109,7 +108,7 @@ describe('a flow step naming an action that does not exist (#51)', () => {
     const G = makeGame((game) => {
       game.registerAction(Action.create('real').prompt('Real').execute(() => {}));
       game.setFlow(
-        defineFlow({ root: actionStep({ name: 'dynamic-turn', actions: () => ['real', 'tpyo'] }) })
+        { root: actionStep({ name: 'dynamic-turn', actions: () => ['real', 'tpyo'] }) }
       );
     });
     expect(() => start(G)).toThrow(/tpyo/);
@@ -120,7 +119,7 @@ describe('a flow step naming an action that does not exist (#51)', () => {
   it('does not throw when every named action is registered', () => {
     const G = makeGame((game) => {
       game.registerAction(Action.create('real').prompt('Real').execute(() => {}));
-      game.setFlow(defineFlow({ root: actionStep({ actions: ['real'] }) }));
+      game.setFlow({ root: actionStep({ actions: ['real'] }) });
     });
     expect(() => start(G)).not.toThrow();
   });
@@ -137,7 +136,7 @@ describe('an action condition that crashes (#46)', () => {
           })
           .execute(() => {})
       );
-      game.setFlow(defineFlow({ root: actionStep({ actions: ['fragile'] }) }));
+      game.setFlow({ root: actionStep({ actions: ['fragile'] }) });
     });
     expect(() => start(G)).toThrow(/fragile/);
     expect(() => start(G)).toThrow(/deck is stocked/);
@@ -152,7 +151,7 @@ describe('an action condition that crashes (#46)', () => {
           .execute(() => {})
       );
       game.registerAction(Action.create('open').prompt('Open').execute(() => {}));
-      game.setFlow(defineFlow({ root: actionStep({ actions: ['gated', 'open'] }) }));
+      game.setFlow({ root: actionStep({ actions: ['gated', 'open'] }) });
     });
     const game = start(G);
     const names = game.getAvailableActions(game.getPlayer(1)!).map((a) => a.name);

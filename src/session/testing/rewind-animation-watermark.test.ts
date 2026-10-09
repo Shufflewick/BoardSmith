@@ -7,7 +7,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   sequence,
   actionStep,
   execute,
@@ -56,25 +55,23 @@ class TickGame extends Game<TickGame, Player> {
     const activePlayer = (ctx: { game: Game }) =>
       ctx.game.getPlayer((ctx.game as TickGame).activeSeat)!;
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 1000,
-          do: sequence(
-            actionStep({
-              actions: ['tick'],
-              player: activePlayer,
-              repeatUntil: (ctx) => (ctx.game as TickGame).ticksThisTurn >= 2,
-            }),
-            execute((ctx) => {
-              const game = ctx.game as TickGame;
-              game.ticksThisTurn = 0;
-              game.activeSeat = game.activeSeat >= game.players.length ? 1 : game.activeSeat + 1;
-            }),
-          ),
-        }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 1000,
+        do: sequence(
+          actionStep({
+            actions: ['tick'],
+            player: activePlayer,
+            repeatUntil: (ctx) => (ctx.game as TickGame).ticksThisTurn >= 2,
+          }),
+          execute((ctx) => {
+            const game = ctx.game as TickGame;
+            game.ticksThisTurn = 0;
+            game.activeSeat = game.activeSeat >= game.players.length ? 1 : game.activeSeat + 1;
+          }),
+        ),
       }),
-    );
+    });
   }
 }
 

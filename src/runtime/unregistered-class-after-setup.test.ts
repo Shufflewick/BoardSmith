@@ -4,7 +4,6 @@ import {
   GameElement,
   Player,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -48,17 +47,15 @@ function makeGame(setup: Setup) {
         }),
       );
       const turn = eachPlayer({ do: actionStep({ actions: ['spawn'], turnScope: 'restart' }) });
-      this.setFlow(
-        defineFlow({
-          root:
-            setup === 'opening-execute'
-              ? sequence<Game>(
-                  execute<Game>((ctx) => { (ctx.game as TokenGame).tray.create(Token, 'opening'); }),
-                  loop({ maxIterations: 5, do: turn }),
-                )
-              : loop({ maxIterations: 5, do: turn }),
-        }),
-      );
+      this.setFlow({
+        root:
+          setup === 'opening-execute'
+            ? sequence<Game>(
+                execute<Game>((ctx) => { (ctx.game as TokenGame).tray.create(Token, 'opening'); }),
+                loop({ maxIterations: 5, do: turn }),
+              )
+            : loop({ maxIterations: 5, do: turn }),
+      });
     }
   };
 }

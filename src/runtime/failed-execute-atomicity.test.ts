@@ -20,7 +20,6 @@ import {
   Piece,
   Player,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -69,14 +68,14 @@ class HalfwayGame extends Game<HalfwayGame, Player> {
     );
 
     this.setFlow(
-      defineFlow({
+      {
         root: loop({
           while: (ctx) => (ctx.get<number>('round') ?? 1) <= 20,
           maxIterations: 50,
           do: eachPlayer({ do: actionStep({ actions: ['halfMove', 'cleanMove', 'refuse'] }) }),
         }),
         setup: (ctx) => ctx.set('round', 1),
-      })
+      }
     );
   }
 }

@@ -19,7 +19,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   sequence,
   eachPlayer,
   actionStep,
@@ -58,19 +57,16 @@ class PlayThenAcknowledgeGame extends Game<PlayThenAcknowledgeGame, HandPlayer> 
         }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: sequence(
-          eachPlayer({ do: actionStep({ actions: ['playCard'] }) }),
-          simultaneousActionStep({
-            name: 'scoring',
-            actions: ['acknowledgeScore'],
-            playerDone: (_ctx, player) => (player as HandPlayer).acknowledged,
-          }),
-        ),
-        isComplete: (ctx) => ctx.game.players.every((p) => (p as HandPlayer).acknowledged),
-      }),
-    );
+    this.setFlow({
+      root: sequence(
+        eachPlayer({ do: actionStep({ actions: ['playCard'] }) }),
+        simultaneousActionStep({
+          name: 'scoring',
+          actions: ['acknowledgeScore'],
+          playerDone: (_ctx, player) => (player as HandPlayer).acknowledged,
+        }),
+      ),
+    });
   }
 }
 
