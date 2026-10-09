@@ -31,6 +31,8 @@ class CheckGame extends Game<CheckGame, Player> {
 
   constructor(options: GameOptions) {
     super(options);
+    // Token is created inside an action, so it must be registered (#496).
+    this.registerElements([Token]);
     this.tray = this.create(Tray, 'tray');
 
     this.registerAction(

@@ -7,6 +7,7 @@ import {
   isPlayerIdentityAttribute,
   readDynamicAttribute,
   registerElementClass,
+  registerCreatedElementClass,
 } from './game-element.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE } from './hidden-placeholder.js';
 import { Piece } from './piece.js';
@@ -1458,9 +1459,10 @@ export class Game<
     element.name = name;
     element.game = this;
 
-    // Routed through the shared SPACE-04/D25 collision guard — see
-    // `registerElementClass` (game-element.ts).
-    registerElementClass(this._ctx, elementClass.name, elementClass as ElementClass);
+    // Registered while constructing, refused after setup if unregistered, and
+    // routed through the SPACE-04/D25 collision guard — see
+    // `registerCreatedElementClass` (game-element.ts).
+    registerCreatedElementClass(this._ctx, elementClass as ElementClass);
 
     return element;
   }
@@ -1541,6 +1543,9 @@ export class Game<
       );
     }
     this._ctx.sequence = WORLD_PARTITION_ID_FLOOR;
+    // Construction is over (a world has no flow to start): from here, creating
+    // an unregistered class is refused (see `registerCreatedElementClass`).
+    this._ctx._setupComplete = true;
   }
 
   /**
@@ -3058,6 +3063,10 @@ export class Game<
 
     this.#validateActionReachability();
 
+    // Setup is over: from here, creating an unregistered class is refused
+    // (see `registerCreatedElementClass`).
+    this._ctx._setupComplete = true;
+
     // `this.game` rather than `this`: the engine is generic over the game type
     // the flow was WRITTEN against (`FlowDefinition<G>`), and inside the base
     // class `this` is the polymorphic `this` type, which TypeScript cannot
@@ -3270,16 +3279,25 @@ export class Game<
   }
 
   /**
+   * The engine a flow restore runs on. Restoring a flow ends setup just as
+   * `startFlow()` does: from here, creating an unregistered element class is
+   * refused (see `registerCreatedElementClass`).
+   */
+  #newRestoringFlowEngine(): FlowEngine<G> {
+    if (!this._flowDefinition) {
+      throw new Error('No flow definition set');
+    }
+    this._ctx._setupComplete = true;
+    this._flowEngine = new FlowEngine(this.game, this._flowDefinition);
+    return this._flowEngine;
+  }
+
+  /**
    * Restore flow from serialized position.
    * Throws if the position is invalid (e.g., flow structure changed).
    */
   restoreFlow(position: FlowPosition): void {
-    if (!this._flowDefinition) {
-      throw new Error('No flow definition set');
-    }
-
-    this._flowEngine = new FlowEngine(this.game, this._flowDefinition);
-    const result = this._flowEngine.tryRestore(position);
+    const result = this.#newRestoringFlowEngine().tryRestore(position);
 
     if (!result.success) {
       throw new Error(
@@ -3302,12 +3320,7 @@ export class Game<
    *   behavior there is unchanged.
    */
   restoreFlowState(state: FlowState, idRemap?: Map<number, number>): void {
-    if (!this._flowDefinition) {
-      throw new Error('No flow definition set');
-    }
-
-    this._flowEngine = new FlowEngine(this.game, this._flowDefinition);
-    const result = this._flowEngine.restoreFullState(state, idRemap);
+    const result = this.#newRestoringFlowEngine().restoreFullState(state, idRemap);
 
     if (!result.success) {
       throw new Error(
