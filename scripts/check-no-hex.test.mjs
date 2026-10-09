@@ -38,8 +38,11 @@ async function hexWarningsFor(cssDeclaration) {
     codeFilename: PROBE_FILE,
     configFile: CONFIG_FILE,
   });
-  // An ignored name yields no results at all, which would make the token case pass vacuously.
+  // A name ignored by .stylelintignore yields no result, and one ignored by the config's
+  // ignoreFiles yields a result marked ignored with no warnings; either would make the token
+  // case pass vacuously, so the probe must come back as exactly one linted result.
   expect(result.results).toHaveLength(1);
+  expect(result.results[0].ignored).toBeFalsy();
   return result.results.flatMap((r) => r.warnings).filter((w) => w.rule === 'color-no-hex');
 }
 
