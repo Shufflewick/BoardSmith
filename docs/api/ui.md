@@ -155,20 +155,14 @@ const { flyingElements } = useFlyingElements({
 
 #### Game View Helpers
 
-- `useGameViewHelpers()` - Common view helpers
-- `findElementById()` - Find element by ID
-- `findElement()` - Find single element
-- `findElements()` - Find multiple elements
-- `findChildByAttribute()` - Find child by attribute
-- `findElementByAttribute()` - Find by attribute
-- `findAllByAttribute()` - Find all by attribute
+- `findElement()` - Find the first element matching every criterion (`id`, `type`, `name`, `className`)
+- `findElements()` - Find every element matching every criterion
 - `getElementId()` - Get element ID
 - `findPlayerHand()` - Find player's hand
 - `findAllHands()` - Find all hands
 - `getElementCount()` - Get element count
 - `getCards()` - Get cards from container
 - `getFirstCard()` - Get first card
-- `getCardData()` - Get card display data
 - `getElementOwner()` - Get element owner
 - `isOwnedByPlayer()` - Check ownership
 - `isMyElement()` - Check if current player's

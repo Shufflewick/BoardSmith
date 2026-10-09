@@ -652,13 +652,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return choices;
   }
 
-  /** Get choices for the current pick (convenience method) */
-  function getCurrentChoices(): Array<{ value: unknown; display: string; disabled?: string }> {
-    const sel = currentPick.value;
-    if (!sel) return [];
-    return getChoices(sel);
-  }
-
   /** Get valid elements for an element/elements pick from snapshot */
   function getValidElements(selection: EnrichedPickMetadata): EnrichedValidElement[] {
     if (!actionSnapshot.value) return [];
@@ -1268,17 +1261,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }, { immediate: true });
 
   /**
-   * Reactive choices for the current pick. Unlike the bare getCurrentChoices()
-   * function, this reads snapshotVersion so it RE-RUNS when choices arrive from an
-   * async server fetch (the pickSnapshots Map is not reactive on its own — F: the
+   * Reactive choices for the current pick. This reads snapshotVersion so it RE-RUNS
+   * when choices arrive from an async server fetch (the pickSnapshots Map is not reactive on its own — F: the
    * Checkers destination step landed choices after the watcher had already run, so
    * the board never registered the destination squares). Custom UIs and the board
-   * bridge should depend on this, not call getCurrentChoices() directly.
+   * bridge depend on this.
    */
   const currentChoices = computed((): ChoiceWithRefs[] => {
     const _version = snapshotVersion.value; // reactive dependency (Maps aren't reactive)
-    if (!currentPick.value) return [];
-    return getCurrentChoices() as ChoiceWithRefs[];
+    const pick = currentPick.value;
+    if (!pick) return [];
+    return getChoices(pick) as ChoiceWithRefs[];
   });
 
   /**
@@ -2544,30 +2537,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return actionSnapshot.value?.collectedPicks.get(name);
   }
 
-  /**
-   * Get all collected selections with their names.
-   * Useful for displaying what's been selected so far.
-   *
-   * @example
-   * ```typescript
-   * // Build a summary of selections
-   * const picks = actionController.getCollectedPicks();
-   * const summary = picks
-   *   .filter(s => !s.skipped)
-   *   .map(s => `${s.name}: ${s.display}`)
-   *   .join(', ');
-   * ```
-   */
-  function getCollectedPicks(): Array<CollectedPick & { name: string }> {
-    if (!actionSnapshot.value) return [];
-
-    const result: Array<CollectedPick & { name: string }> = [];
-    for (const [name, collected] of actionSnapshot.value.collectedPicks) {
-      result.push({ name, ...collected });
-    }
-    return result;
-  }
-
   // === Animation Gating ===
   // Gates action panel on animation completion (soft continuation pattern)
 
@@ -2658,16 +2627,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     // Utility
     getChoices,
-    getCurrentChoices,
     getValidElements,        // Non-reactive, prefer validElements computed
     getActionMetadata,
-    clearArgs,
-    fetchChoicesForPick,
 
     // Snapshot API (Pit of Success)
     actionSnapshot,          // Readonly access to frozen action state (for followUp metadata)
     getCollectedPick,
-    getCollectedPicks,
 
     // Hook registration (for GameShell users who can't pass options at creation)
     onBeforeAutoExecute,

@@ -45,7 +45,6 @@ export function makeController(opts: {
     pendingOnServer,
     currentChoices,
     validElements,
-    getCurrentChoices: () => currentChoices.value,
     getValidElements: () => opts.validElements ?? [],
     fill,
     start,

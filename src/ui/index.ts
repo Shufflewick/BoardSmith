@@ -276,13 +276,8 @@ export {
 
 // Game view helpers (for custom UIs)
 export {
-  useGameViewHelpers,
-  findElementById,
   findElement,
   findElements,
-  findChildByAttribute,
-  findElementByAttribute,
-  findAllByAttribute,
   getElementId,
   findPlayerHand,
   findPlayerElement,
@@ -291,7 +286,6 @@ export {
   getElementCount,
   getCards,
   getFirstCard,
-  getCardData,
   getElementOwner,
   isOwnedByPlayer,
   isMyElement,

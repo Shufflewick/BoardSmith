@@ -92,10 +92,7 @@ Use the helper functions from `boardsmith/ui`:
 import {
   findElement,
   findElements,
-  findElementById,
   findPlayerHand,
-  findChildByAttribute,
-  findElementByAttribute,
   getElementId,
 } from 'boardsmith/ui';
 
@@ -109,11 +106,10 @@ const board = findElement(gameView, { name: 'mainBoard' });
 const myHand = findPlayerHand(gameView, playerSeat);
 
 // Find by ID (recursive search)
-const card = findElementById(gameView, cardId);
+const card = findElement(gameView, { id: cardId });
 
-// Find by attribute value
-const merc = findChildByAttribute(squad, 'mercName', 'Jake');
-const sector = findElementByAttribute(gameView, 'sectorId', 'alpha-3');
+// Several criteria must all match
+const aceInHand = findElements(gameView, { className: 'Card', name: 'ace' });
 ```
 
 ### Common Pattern: Extracting Data for Display
@@ -1197,7 +1193,7 @@ for (const sel of debug.details.selections) {
 |---------|-------|-----|
 | Action not in availableActions | Condition failed or no valid selections | Use `debugActionAvailability()` |
 | "That choice is no longer available" from the server | The value is not among the current choices: it went stale, or the UI passed the wrong value type | Read the dev log line starting `[BoardSmith] Invalid selection` for the value sent and the valid choices; pass an element ID (number), not an object |
-| Element not found in gameView | ID mismatch or element moved | Use `findElementById()` to verify |
+| Element not found in gameView | ID mismatch or element moved | Use `findElement(gameView, { id })` to verify |
 | validElements is empty | Choices not fetched yet | Check `isLoadingChoices`, wait for fetch |
 | Selection not applying | Wrote to actionArgs directly | Use `actionController.fill()` instead |
 | Spurious values in followUp args | Custom UI writing to actionArgs | See warning in console, use `fill()` |

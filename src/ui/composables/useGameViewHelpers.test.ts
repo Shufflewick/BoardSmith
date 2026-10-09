@@ -6,12 +6,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  findElementById,
   findElement,
   findElements,
-  findChildByAttribute,
-  findElementByAttribute,
-  findAllByAttribute,
   getElementId,
   findPlayerHand,
   findPlayerElement,
@@ -20,12 +16,10 @@ import {
   getElementCount,
   getCards,
   getFirstCard,
-  getCardData,
   getElementOwner,
   isOwnedByPlayer,
   isMyElement,
   isOpponentElement,
-  useGameViewHelpers,
 } from './useGameViewHelpers.js';
 import type { GameViewElement } from '../types.js';
 
@@ -63,29 +57,6 @@ const BOARD = element(50, 'Board', {}, [SQUARE]);
 
 const GAME: GameViewElement = element(1, 'Game', {}, [HAND_ONE, HAND_TWO, DECK, PLAYER_ONE, BOARD], 'game');
 
-describe('findElementById', () => {
-  it('finds the root itself', () => {
-    expect(findElementById(GAME, 1)).toBe(GAME);
-  });
-
-  it('finds a direct child', () => {
-    expect(findElementById(GAME, 30)).toBe(DECK);
-  });
-
-  it('finds a deeply nested element', () => {
-    expect(findElementById(GAME, 52)).toBe(PAWN);
-  });
-
-  it('returns undefined for an id that is not in the tree', () => {
-    expect(findElementById(GAME, 9999)).toBeUndefined();
-  });
-
-  it('returns undefined for a missing tree', () => {
-    expect(findElementById(null, 1)).toBeUndefined();
-    expect(findElementById(undefined, 1)).toBeUndefined();
-  });
-});
-
 describe('findElement', () => {
   it('finds by className', () => {
     expect(findElement(GAME, { className: 'Board' })).toBe(BOARD);
@@ -115,12 +86,38 @@ describe('findElement', () => {
     expect(findElement(null, { className: 'Board' })).toBeUndefined();
   });
 
-  it('matches on any one of the supplied criteria', () => {
-    expect(findElement(GAME, { type: 'nope', className: 'Board' })).toBe(BOARD);
+  it('requires every supplied criterion to match', () => {
+    expect(findElement(GAME, { type: 'nope', className: 'Board' })).toBeUndefined();
+    expect(findElement(GAME, { type: 'deck', className: 'Card' })).toBeUndefined();
+    expect(findElement(GAME, { type: 'deck', className: 'Deck' })).toBe(DECK);
+  });
+
+  it('finds an element anywhere in the tree by id', () => {
+    expect(findElement(GAME, { id: 1 })).toBe(GAME);
+    expect(findElement(GAME, { id: 30 })).toBe(DECK);
+    expect(findElement(GAME, { id: 52 })).toBe(PAWN);
+  });
+
+  it('returns undefined for an id that is not in the tree', () => {
+    expect(findElement(GAME, { id: 9999 })).toBeUndefined();
+  });
+
+  it('combines id with the other criteria', () => {
+    expect(findElement(GAME, { id: 52, className: 'Pawn' })).toBe(PAWN);
+    expect(findElement(GAME, { id: 52, className: 'Card' })).toBeUndefined();
+  });
+
+  it('treats id 0 as a criterion, not as absent', () => {
+    const zero = element(0, 'Root', {}, [element(5, 'Child')]);
+    expect(findElement(zero, { id: 0 })).toBe(zero);
   });
 
   it('returns undefined when no criteria are given', () => {
     expect(findElement(GAME, {})).toBeUndefined();
+  });
+
+  it('returns undefined when every criterion given is undefined', () => {
+    expect(findElement(GAME, { id: undefined, className: undefined })).toBeUndefined();
   });
 });
 
@@ -148,69 +145,23 @@ describe('findElements', () => {
   it('counts a matching element once even if several criteria fit it', () => {
     expect(findElements(GAME, { type: 'hand', className: 'Hand' })).toHaveLength(2);
   });
-});
 
-describe('findChildByAttribute', () => {
-  it('finds a direct child by attribute value', () => {
-    expect(findChildByAttribute(HAND_ONE, 'rank', 'K')?.id).toBe(12);
+  it('returns exactly the element with the given id', () => {
+    expect(findElements(GAME, { id: 30 })).toEqual([DECK]);
+    expect(findElements(GAME, { id: 9999 })).toEqual([]);
   });
 
-  it('does not search below the direct children', () => {
-    expect(findChildByAttribute(GAME, 'rank', 'K')).toBeUndefined();
+  it('narrows the result when a second criterion is added (AND, not OR)', () => {
+    const deck = element(2, 'Space', {}, [], 'deck');
+    const ace = element(3, 'Card', {}, [], 'ace');
+    const view = element(1, 'Game', {}, [deck, ace, element(4, 'Card', {}, [], 'king')], 'game');
+    expect(findElements(view, { className: 'Card', name: 'deck' })).toEqual([]);
+    expect(findElements(view, { className: 'Card', name: 'ace' })).toEqual([ace]);
   });
 
-  it('returns the first of several matches', () => {
-    expect(findChildByAttribute(HAND_ONE, 'player', HAND_ONE.children![0].attributes!.player)?.id)
-      .toBe(11);
-  });
-
-  it('returns undefined when no child matches', () => {
-    expect(findChildByAttribute(HAND_ONE, 'rank', 'Q')).toBeUndefined();
-  });
-
-  it('returns undefined for a missing or childless parent', () => {
-    expect(findChildByAttribute(null, 'rank', 'K')).toBeUndefined();
-    expect(findChildByAttribute(DECK, 'rank', 'K')).toBeUndefined();
-  });
-});
-
-describe('findElementByAttribute', () => {
-  it('finds a nested element by attribute value', () => {
-    expect(findElementByAttribute(GAME, 'notation', 'a1')?.id).toBe(51);
-  });
-
-  it('matches the root itself', () => {
-    expect(findElementByAttribute(PLAYER_ONE, 'seat', 1)).toBe(PLAYER_ONE);
-  });
-
-  it('returns undefined when nothing matches', () => {
-    expect(findElementByAttribute(GAME, 'notation', 'z9')).toBeUndefined();
-  });
-
-  it('returns undefined for a missing tree', () => {
-    expect(findElementByAttribute(null, 'notation', 'a1')).toBeUndefined();
-  });
-
-  it('compares by identity, so an equal-looking object does not match', () => {
-    expect(findElementByAttribute(GAME, 'player', { __playerRef: 1, seat: 1 })).toBeUndefined();
-  });
-});
-
-describe('findAllByAttribute', () => {
-  it('collects every element with the attribute value', () => {
-    expect(findAllByAttribute(GAME, 'rank', 'A').map((c) => c.id)).toEqual([11]);
-  });
-
-  it('searches the whole tree, including the root', () => {
-    expect(findAllByAttribute(GAME, '$type', 'hand').map((h) => h.id)).toEqual([10, 20]);
-  });
-
-  it('returns an empty array when nothing matches', () => {
-    expect(findAllByAttribute(GAME, 'rank', 'Q')).toEqual([]);
-  });
-
-  it('returns an empty array for a missing tree', () => {
-    expect(findAllByAttribute(null, 'rank', 'A')).toEqual([]);
+  it('returns an empty array when no criteria are given', () => {
+    expect(findElements(GAME, {})).toEqual([]);
+    expect(findElements(GAME, { name: undefined })).toEqual([]);
   });
 });
 
@@ -235,9 +186,21 @@ describe('findPlayerHand', () => {
     expect(findPlayerHand(GAME, 3)).toBeUndefined();
   });
 
-  it('looks only at direct children of the view', () => {
+  it('finds a hand nested under a zone', () => {
     const nested = element(1, 'Game', {}, [element(2, 'Table', {}, [HAND_ONE])]);
-    expect(findPlayerHand(nested, 1)).toBeUndefined();
+    expect(findPlayerHand(nested, 1)).toBe(HAND_ONE);
+  });
+
+  it('finds a hand nested under a Player element', () => {
+    const player = element(4, 'Player', { $type: 'player', seat: 1 }, [HAND_ONE]);
+    const view = element(1, 'Game', {}, [DECK, player]);
+    expect(findPlayerHand(view, 1)).toBe(HAND_ONE);
+    expect(findPlayerHand(view, 2)).toBeUndefined();
+  });
+
+  it('ignores a non-hand element owned by the seat', () => {
+    const view = element(1, 'Game', {}, [PAWN]);
+    expect(findPlayerHand(view, 1)).toBeUndefined();
   });
 
   it('returns undefined for a missing view', () => {
@@ -332,7 +295,7 @@ describe('getElementCount', () => {
   });
 });
 
-describe('getCards / getFirstCard / getCardData', () => {
+describe('getCards / getFirstCard', () => {
   it('returns the children that carry a rank', () => {
     expect(getCards(HAND_ONE).map((c) => c.id)).toEqual([11, 12]);
   });
@@ -356,18 +319,6 @@ describe('getCards / getFirstCard / getCardData', () => {
     expect(getFirstCard(null)).toBeUndefined();
   });
 
-  it('extracts rank and suit from a card', () => {
-    expect(getCardData(HAND_ONE.children![0])).toEqual({ rank: 'A', suit: 'H' });
-  });
-
-  it('defaults a missing suit to an empty string', () => {
-    expect(getCardData(element(9, 'Card', { rank: 'A' }))).toEqual({ rank: 'A', suit: '' });
-  });
-
-  it('returns undefined for an element that is not a card', () => {
-    expect(getCardData(DECK)).toBeUndefined();
-    expect(getCardData(null)).toBeUndefined();
-  });
 });
 
 describe('ownership helpers', () => {
@@ -415,40 +366,11 @@ describe('ownership helpers', () => {
   });
 });
 
-describe('useGameViewHelpers', () => {
-  it('exposes the module functions themselves', () => {
-    const helpers = useGameViewHelpers();
-    expect(helpers.findElementById).toBe(findElementById);
-    expect(helpers.getElementId).toBe(getElementId);
-    expect(helpers.isOpponentElement).toBe(isOpponentElement);
-  });
-
-  it('exposes the whole documented helper set', () => {
-    expect(Object.keys(useGameViewHelpers()).sort()).toEqual([
-      'findAllByAttribute', 'findAllHands', 'findChildByAttribute', 'findElement',
-      'findElementByAttribute', 'findElementById', 'findElements', 'findPlayerElement',
-      'findPlayerHand', 'getCardData', 'getCards', 'getElementCount', 'getElementId',
-      'getElementOwner', 'getFirstCard', 'getPlayerAttribute', 'isMyElement',
-      'isOpponentElement', 'isOwnedByPlayer',
-    ]);
-  });
-
-  it('is callable outside a component setup', () => {
-    expect(() => useGameViewHelpers()).not.toThrow();
-  });
-
-  it('works destructured', () => {
-    const { findElementById: byId } = useGameViewHelpers();
-    expect(byId(GAME, 52)).toBe(PAWN);
-  });
-});
-
 describe('the helpers as a whole', () => {
   it('never mutate the view they read', () => {
     const before = JSON.stringify(GAME);
-    findElementById(GAME, 52);
+    findElement(GAME, { id: 52 });
     findElements(GAME, { className: 'Card' });
-    findAllByAttribute(GAME, 'rank', 'A');
     getCards(HAND_ONE);
     getPlayerAttribute(GAME, 1, 'score', 0);
     expect(JSON.stringify(GAME)).toBe(before);
@@ -456,12 +378,8 @@ describe('the helpers as a whole', () => {
 
   it('all tolerate a null element', () => {
     expect(() => {
-      findElementById(null, 1);
       findElement(null, { className: 'x' });
       findElements(null, { className: 'x' });
-      findChildByAttribute(null, 'a', 1);
-      findElementByAttribute(null, 'a', 1);
-      findAllByAttribute(null, 'a', 1);
       getElementId(null);
       findPlayerHand(null, 1);
       findPlayerElement(null, 1);
@@ -470,7 +388,6 @@ describe('the helpers as a whole', () => {
       getElementCount(null);
       getCards(null);
       getFirstCard(null);
-      getCardData(null);
       getElementOwner(null);
       isOwnedByPlayer(null, 1);
       isMyElement(null, 1);
@@ -481,7 +398,6 @@ describe('the helpers as a whole', () => {
   it('tolerate an element with no attributes object at all', () => {
     const bare = { id: 5, className: 'Bare', name: 'bare' } as unknown as GameViewElement;
     expect(getElementOwner(bare)).toBeUndefined();
-    expect(getCardData(bare)).toBeUndefined();
     expect(findElement(bare, { type: 'anything' })).toBeUndefined();
     expect(getElementCount(bare)).toBe(0);
   });
