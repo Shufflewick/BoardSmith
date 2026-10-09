@@ -132,6 +132,25 @@ describe('GameShell gates the #player-stats slot like the board (#554)', () => {
   });
 });
 
+describe('GameShell exposes the board\'s gated turn and actions (#576)', () => {
+  it('hands a parent the gated isMyTurn and availableActions, live and in history', async () => {
+    const { wrapper, debugPanel } = await tableWithDebugPanel();
+    const exposed = wrapper.vm as unknown as { isMyTurn: boolean; availableActions: string[] };
+    expect(exposed.isMyTurn).toBe(true);
+    expect(exposed.availableActions).toEqual(['move']);
+
+    debugPanel.vm.$emit('time-travel', { view: {}, players: DEBUG_TABLE_PLAYERS }, 3, null);
+    await nextTick();
+    expect(received.isViewingHistory).toBe(true);
+    // The exposed gameView is the historical one, so a live turn or action list
+    // beside it would describe a game the parent is not showing.
+    expect(exposed.isMyTurn).toBe(false);
+    expect(exposed.availableActions).toEqual([]);
+    expect(exposed.availableActions).toBe(received.availableActions);
+    wrapper.unmount();
+  });
+});
+
 describe('WorldShell binds WorldBoardProps onto a world board (#516)', () => {
   it('hands exactly the contract\'s props, with no prompt setter, since WorldShell does not let a board replace its prompt', async () => {
     const wrapper = mount(WorldShell, {
