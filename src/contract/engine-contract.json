@@ -1,7 +1,7 @@
 {
   "revision": 142,
   "bundleProtocol": 2,
-  "surfaceHash": "deeed31ed18d546b",
+  "surfaceHash": "bbb639d4800619db",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1218,10 +1218,10 @@
       "revision": 142,
       "date": "2026-10-09",
       "bundleProtocol": 2,
-      "surfaceHash": "deeed31ed18d546b",
+      "surfaceHash": "bbb639d4800619db",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "A game's end and winners are declared on Game only (#503): finish(winners), or overrides of isFinished() and getWinners(). FlowDefinition loses isComplete and getWinners, FlowEngine.getWinners is removed, and a completed flow no longer writes settings.winners; the flow ends when game.isFinished() is true. defineFlow is removed: a flow definition is a plain object passed to setFlow. The MCTS bot and the benchmark now read game.getWinners(), the same result hosts show players, so a game that overrides getWinners() is no longer scored as a draw by bots. Bundles built on an earlier revision keep running on their own revision; to move to r142 they must be rebuilt from migrated source (Seven and WindupWarfare declared their end on the flow; any bundle importing defineFlow)."
+      "summary": "Adds the infrastructure-owned world refusal world-storage-unavailable and its raiser worldStorageUnavailable({ operation }) for the host's own durable storage failing (#580); unlike bundle-store-unavailable it can arrive after the bundle applied, so a host must roll the batch or command back rather than hold the event (ShufflewickPub #610)."
     }
   ]
 }

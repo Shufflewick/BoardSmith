@@ -72,6 +72,7 @@ export {
   ownerOf,
   worldRefusal,
   worldStateUnreadable,
+  worldStorageUnavailable,
 } from './refusals.js';
 export type {
   WorldRefusalCode,

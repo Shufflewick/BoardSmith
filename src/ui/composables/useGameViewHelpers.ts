@@ -255,6 +255,7 @@ export function isOpponentElement(
  *
  * @example
  * ```typescript
+ * // selectedName is the element's own name, not a value in its attributes
  * const equipment = findElement(gameView, { name: selectedName });
  * const equipmentId = getElementId(equipment);  // number | undefined
  * if (equipmentId) {

@@ -535,9 +535,9 @@ import uis from './uis.js';
 </template>
 ```
 
-`GameShell` mounts `GameTable` and passes it `gameView`, `playerSeat`,
-`isMyTurn`, `availableActions`, `actionArgs`, `actionController` and
-`setBoardPrompt` as props. The `actionController` is the recommended way to handle actions from custom UIs. See [UI Components](./ui-components.md#action-controller-api) for the full API.
+`GameShell` mounts `GameTable` and passes it `TableBoardProps` (declare them
+with `defineProps<TableBoardProps>()`, importing the type from `boardsmith/ui`;
+see [Board props](./ui-components.md#board-props)). The `actionController` is the recommended way to handle actions from custom UIs. See [UI Components](./ui-components.md#action-controller-api) for the full API.
 
 ## Important: Read Before You Start
 

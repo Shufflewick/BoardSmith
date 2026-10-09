@@ -124,15 +124,9 @@ export function createPlayAction(game: MyGame): ActionDefinition {
 ```vue
 <script setup lang="ts">
 import { computed } from 'vue';
-import { findElements, getSuitSymbol, getSuitColor, type UseActionControllerReturn } from 'boardsmith/ui';
+import { findElements, getSuitSymbol, getSuitColor, type TableBoardProps } from 'boardsmith/ui';
 
-const props = defineProps<{
-  gameView: any;
-  playerSeat: number;
-  isMyTurn: boolean;
-  availableActions: string[];
-  actionController: UseActionControllerReturn;
-}>();
+const props = defineProps<TableBoardProps>();
 
 // Find my hand - search for Hand element owned by this player
 const myHand = computed(() => {
@@ -151,8 +145,11 @@ const deck = computed(() => {
 
 const deckCount = computed(() => deck.value?.children?.length ?? 0);
 
-// Game over detection
-const isGameOver = computed(() => props.gameView?.isFinished ?? false);
+// The game is over when the flow completes. GameShell then draws its game-over
+// card, with the winners, over this board; to draw your own ending instead, see
+// "The End of the Game" in docs/custom-ui-guide.md. During time travel
+// flowState is null, so this is false.
+const isGameOver = computed(() => props.state?.flowState?.complete === true);
 
 // Action availability
 const canDraw = computed(() => props.availableActions.includes('draw'));
@@ -171,47 +168,44 @@ function handlePlayCard(cardId: number) {
 
 <template>
   <div class="game-board">
-    <div v-if="isGameOver" class="game-over-panel">
-      <h2>Game Over!</h2>
+    <!-- Deck area -->
+    <div class="deck-area">
+      <div class="deck-pile" @click="canDraw && isMyTurn && handleDraw()">
+        <div class="card-back">
+          <span class="deck-count">{{ deckCount }}</span>
+        </div>
+      </div>
+      <button
+        v-if="canDraw && isMyTurn"
+        @click="handleDraw"
+        class="action-button"
+      >
+        Draw Card
+      </button>
     </div>
 
-    <template v-else>
-      <!-- Deck area -->
-      <div class="deck-area">
-        <div class="deck-pile" @click="canDraw && isMyTurn && handleDraw()">
-          <div class="card-back">
-            <span class="deck-count">{{ deckCount }}</span>
-          </div>
-        </div>
-        <button
-          v-if="canDraw && isMyTurn"
-          @click="handleDraw"
-          class="action-button"
+    <!-- My hand -->
+    <div class="hand-area">
+      <h3>Your Hand</h3>
+      <div class="hand">
+        <div
+          v-for="card in myHand"
+          :key="card.id"
+          class="card"
+          :class="{ playable: canPlay && isMyTurn }"
+          @click="canPlay && isMyTurn && handlePlayCard(card.id)"
         >
-          Draw Card
-        </button>
-      </div>
-
-      <!-- My hand -->
-      <div class="hand-area">
-        <h3>Your Hand</h3>
-        <div class="hand">
-          <div
-            v-for="card in myHand"
-            :key="card.id"
-            class="card"
-            :class="{ playable: canPlay && isMyTurn }"
-            :style="{ color: getSuitColor(card.attributes?.suit) }"
-            @click="canPlay && isMyTurn && handlePlayCard(card.id)"
-          >
-            <span class="rank">{{ card.attributes?.rank }}</span>
-            <span class="suit">{{ getSuitSymbol(card.attributes?.suit) }}</span>
-          </div>
+          <!-- A card whose face this player may not see arrives without its suit -->
+          <template v-if="card.attributes?.suit">
+            <span class="rank" :style="{ color: getSuitColor(card.attributes.suit) }">{{ card.attributes.rank }}</span>
+            <span class="suit" :style="{ color: getSuitColor(card.attributes.suit) }">{{ getSuitSymbol(card.attributes.suit) }}</span>
+          </template>
+          <div v-else class="card-back" />
         </div>
       </div>
+    </div>
 
-      <p v-if="!isMyTurn" class="waiting">Waiting for other player...</p>
-    </template>
+    <p v-if="!isMyTurn && !isGameOver" class="waiting">Waiting for other player...</p>
   </div>
 </template>
 

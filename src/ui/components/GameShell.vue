@@ -31,6 +31,7 @@ import Toast from './Toast.vue';
 import { createBoardInteraction } from '../composables/useBoardInteraction';
 import { setupDragDropOrchestration } from '../composables/useDragDropTargets';
 import { useTableSeat, provideTableSeat } from '../composables/useTableSeat.js';
+import { tableBoardProps, type DisplayedGameState } from '../board-props.js';
 import { useBoardFocusHandoff } from '../composables/useBoardFocusHandoff';
 import { maybePostDevtoolsUpdate } from './GameShell.devtools.js';
 import { useZoomPreview } from '../composables/useZoomPreview';
@@ -38,7 +39,7 @@ import { useAutoZoom, SETTLE_MS } from '../composables/useAutoZoom';
 import { useToast } from '../composables/useToast';
 import type { ControllerActionResult } from '../composables/useActionController';
 import type { PickChoicesResult, PickStepResponse } from '../composables/useActionControllerTypes.js';
-import type { GameState, PublicFlowState } from '../../client/types.js';
+import type { GameState } from '../../client/types.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 import { usePlatformTransport } from '../composables/usePlatformTransport.js';
 
@@ -420,7 +421,6 @@ const gameView = computed(() => {
 // passed, correctly isViewingHistory-gated `availableActions`/`isMyTurn`
 // props GameShell already computes for the auto-UI ActionPanel) now sees the
 // gap loudly (null) instead of silently-wrong live data.
-type DisplayedGameState = Omit<GameState, 'flowState'> & { flowState: PublicFlowState | null };
 const displayedState = computed<DisplayedGameState | null>(() => {
   if (timeTravelState.value) {
     return state.value ? { ...state.value, state: timeTravelState.value, flowState: null } : null;
@@ -537,6 +537,9 @@ const {
   availableActions,
   gatedIsMyTurn,
   gatedAvailableActions,
+  gatedActionMetadata,
+  gatedDisabledActions,
+  gatedCanUndo,
   completed: myCompleted,
   dueSeats: dueSeatsNow,
   players,
@@ -545,9 +548,6 @@ const {
   liveRegion: { polite: politeMessage, assertive: assertiveMessage },
   gameOverRevealed,
 } = tableSeat;
-
-// Read-only action args for display and board props.
-const actionArgs = computed(() => actionController.currentArgs.value);
 
 // The session's formatted, seat-scoped messages are the ONLY source. There used
 // to be a `state.view.messages` fallback here, reading the raw log off the game
@@ -719,11 +719,6 @@ const currentPlayerColor = computed((): string | undefined => {
   return typeof player.color === 'string' ? player.color : undefined;
 });
 
-// Can undo - from PlayerGameState.canUndo
-const canUndo = computed(() => {
-  return state.value?.state?.canUndo ?? false;
-});
-
 // Board-provided prompt (for dynamic prompts based on UI state)
 const boardPrompt = ref<string | null>(null);
 
@@ -731,7 +726,7 @@ function setBoardPrompt(prompt: string | null): void {
   boardPrompt.value = prompt;
 }
 
-// Undo actions back to turn start (called by ActionPanel)
+// Undo actions back to turn start (called by ActionPanel and the board's `undo`)
 async function handleUndo(): Promise<void> {
   // LIBX-04 / F-15: undo is a state-committing operation and MUST honor the
   // time-travel guard, exactly like every action path (guarded at the
@@ -750,6 +745,20 @@ async function handleUndo(): Promise<void> {
   }
   // State update arrives via the game_state broadcast.
 }
+
+// The board's props, built by the one function whose return type a board
+// declares (#516), so this template cannot hand a board anything the type does
+// not name.
+const boardProps = computed(() =>
+  tableBoardProps(tableSeat, {
+    state: displayedState.value,
+    gameView: gameView.value ?? null,
+    playerSeat: playerSeat.value,
+    isViewingHistory: isViewingHistory.value,
+    undo: handleUndo,
+    setBoardPrompt,
+  }),
+);
 
 // Drag-and-drop orchestration (audit F36): derive drop targets generically from
 // the action controller's current pick for ANY action shape, wired once here so
@@ -1308,15 +1317,17 @@ if (isDevBuild) {
   }, { immediate: false });
 }
 
-// Expose to parent/slots
+// Expose to parent/slots. `gameView` is the historical view while the debug
+// panel shows history, so turn and actions are the same history-gated values
+// the board gets (#576).
 defineExpose({
   state,
   gameView,
   players,
   myPlayer,
   playerSeat,
-  isMyTurn,
-  availableActions,
+  isMyTurn: gatedIsMyTurn,
+  availableActions: gatedAvailableActions,
   actionController,
 });
 
@@ -1361,8 +1372,8 @@ defineExpose({
       :unread-log-count="unreadLogCount"
       :may-act="isMyTurn"
       :available-actions="gatedAvailableActions"
-      :action-metadata="isViewingHistory ? {} : actionMetadata"
-      :disabled-actions="isViewingHistory ? undefined : disabledActions"
+      :action-metadata="gatedActionMetadata"
+      :disabled-actions="gatedDisabledActions"
       :is-action-help-visible="isActionHelpVisible"
       :panel-token="panelToken"
       :prompt="boardPrompt ?? actionController.currentPick.value?.prompt"
@@ -1370,7 +1381,7 @@ defineExpose({
       :current-player-name="currentPlayerName"
       :current-player-color="currentPlayerColor"
       :completed="myCompleted"
-      :can-undo="canUndo && !isViewingHistory"
+      :can-undo="gatedCanUndo"
       :auto-end-turn="autoEndTurn"
       :platform-action-panel-escape-hatch="props.platformActionPanelEscapeHatch"
       :connection="connectionIndicator"
@@ -1497,12 +1508,8 @@ defineExpose({
       </template>
 
       <template #board>
-        <!--
-          Props the board component receives:
-          - actionController: USE THIS for all action handling (start, fill, execute, cancel)
-          - actionArgs: Read-only view of current selection args (for UI display)
-          - Other props: game state for rendering
-        -->
+        <!-- The board receives exactly `TableBoardProps` (#516), built by
+             `tableBoardProps()` below; `actionController` is its one write path. -->
         <!-- ONE render path for the board: the registry's default UI, or the
              dev switcher's selection. GameShell has no slot for the board — a second
              way to name the default UI would be a second thing to disagree
@@ -1519,31 +1526,15 @@ defineExpose({
              undocumented: what the board DRAWS comes from the historical
              `gameView`, so an ungated `is-my-turn`/`available-actions` lets it
              offer a real, clickable control positioned from a state that is no
-             longer true, and the click commits against the LIVE game. The gated
-             `is-my-turn`/`available-actions` are `useTableSeat`'s
-             `gatedIsMyTurn`/`gatedAvailableActions`, the same values the game
-             context publishes, so the board, the Action Panel and a component
-             reading the context cannot disagree (#520). -->
+             longer true, and the click commits against the LIVE game. Every
+             gated value is `useTableSeat`'s, the same instance the chrome, the
+             Action Panel and the game context are handed, so none of them can
+             disagree (#520, #516). -->
         <template v-if="shellMounted">
         <component
           v-if="selectedUiComponent"
           :is="selectedUiComponent"
-          :state="displayedState"
-          :game-view="gameView || null"
-          :players="players"
-          :my-player="myPlayer"
-          :player-seat="playerSeat"
-          :is-my-turn="gatedIsMyTurn"
-          :available-actions="gatedAvailableActions"
-          :action-args="actionArgs"
-          :set-board-prompt="setBoardPrompt"
-          :can-undo="canUndo && !isViewingHistory"
-          :is-viewing-history="isViewingHistory"
-          :undo="handleUndo"
-          :action-controller="actionController"
-          :is-action-help-visible="isActionHelpVisible"
-          :disabled-actions="isViewingHistory ? undefined : disabledActions"
-          :flow-state="displayedState?.flowState"
+          v-bind="boardProps"
           @retry="handleRetry"
         />
         <!-- Only reachable if the registry's default entry resolved to no
@@ -1572,7 +1563,9 @@ defineExpose({
       </template>
 
       <!-- Expose interaction state so a game's player-stats can be actionable
-           (e.g. tap your own special ability to use it), not just informational. -->
+           (e.g. tap your own special ability to use it), not just informational.
+           `gameView` is the historical view while time-traveling, so turn and
+           actions are the same history-gated values the board gets (#554). -->
       <template #player-stats="{ player }">
         <slot
           name="player-stats"
@@ -1580,8 +1573,8 @@ defineExpose({
           :game-view="gameView"
           :players="players"
           :player-seat="playerSeat"
-          :is-my-turn="isMyTurn"
-          :available-actions="availableActions"
+          :is-my-turn="gatedIsMyTurn"
+          :available-actions="gatedAvailableActions"
           :action-controller="actionController"
         ></slot>
       </template>
@@ -1598,7 +1591,7 @@ defineExpose({
           :zoom="zoomLevel"
           @update:zoom="setZoom"
           @fit-zoom="fitZoom"
-          :can-undo="canUndo && !isViewingHistory"
+          :can-undo="gatedCanUndo"
           :show-hint="showHintProp"
           :hint-disabled="hintDisabledProp"
           :is-demo-running="isDemoRunning"
@@ -1619,14 +1612,14 @@ defineExpose({
         <slot name="action-panel">
           <ActionPanel
             :available-actions="gatedAvailableActions"
-            :action-metadata="isViewingHistory ? {} : actionMetadata"
+            :action-metadata="gatedActionMetadata"
             :is-action-help-visible="isActionHelpVisible"
-            :disabled-actions="isViewingHistory ? undefined : disabledActions"
+            :disabled-actions="gatedDisabledActions"
             :players="players"
             :player-seat="playerSeat"
             :is-my-turn="gatedIsMyTurn"
             :completed="myCompleted"
-            :can-undo="canUndo && !isViewingHistory"
+            :can-undo="gatedCanUndo"
             :auto-end-turn="autoEndTurn"
             :messages="gameMessages"
             :current-player-name="currentPlayerName"

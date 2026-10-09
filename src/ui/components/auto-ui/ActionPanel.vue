@@ -16,7 +16,7 @@
 import { ref, computed, watch, inject, nextTick, useId } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
-import { resolvePickCounts } from '../../composables/actionControllerHelpers.js';
+import { getDisplayFromValue, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
 import type {
   UseActionControllerReturn,
@@ -46,6 +46,7 @@ import {
 // (#229 for text, #237 for number).
 import { numberRuleErrors } from '../../../engine/action/number-rules.js';
 import { textRuleErrors } from '../../../engine/action/text-rules.js';
+import { choiceValueKey } from '../../../engine/action/choice-matching.js';
 import ActionHelpPopover from '../helpers/ActionHelpPopover.vue';
 // Type-only, so the log component's module (and its stylesheet) never enters
 // this graph -- `verbatimModuleSyntax` erases the import outright.
@@ -854,6 +855,9 @@ const _splitChoices = computed(() => splitAnchoredChoices(offeredChoices.value, 
 
 // Primary (unanchored) choices: rendered as the main choice buttons in the panel.
 const filteredChoices = computed(() => _splitChoices.value.primary);
+/** A choice pick whose choices depend on an earlier pick (filterBy or dependsOn). */
+const isDependentChoicePick = computed(() =>
+  !!(currentPick.value?.filterBy || currentPick.value?.dependsOn));
 
 // Notation-anchored choices: rendered as a secondary focusable list of buttons
 // whose activation calls triggerElementSelect — parity with clicking the board element.
@@ -1063,7 +1067,7 @@ function getSelectionDisplay(selectionName: string, value: unknown): string {
   }
 
   // Fallback for edge cases (shouldn't normally be needed)
-  return getDisplayLabel(value);
+  return getDisplayFromValue(value);
 }
 
 /**
@@ -1079,7 +1083,7 @@ function getAccumulatedDisplay(accumulated: unknown): string {
 
   // Legacy fallback: accumulated item is just a value
   const value = accumulated;
-  if (!currentPick.value) return getDisplayLabel(value);
+  if (!currentPick.value) return getDisplayFromValue(value);
 
   // For choice selections, look up display in choices
   if (currentPick.value.type === 'choice') {
@@ -1088,7 +1092,7 @@ function getAccumulatedDisplay(accumulated: unknown): string {
     if (choice) return choice.display;
   }
 
-  return getDisplayLabel(value);
+  return getDisplayFromValue(value);
 }
 
 // Clear a specific selection (and all subsequent selections)
@@ -1119,47 +1123,6 @@ function formatActionName(name: string): string {
     .replace(/([A-Z])/g, ' $1')
     .replace(/^./, str => str.toUpperCase())
     .trim();
-}
-
-/**
- * Get a human-readable display label for any value.
- * Priority: display property > name property > stringified primitive
- * Never returns [object Object]
- */
-function getDisplayLabel(value: unknown): string {
-  if (value === null || value === undefined) {
-    return '';
-  }
-
-  // Handle primitives directly
-  if (typeof value !== 'object') {
-    return String(value);
-  }
-
-  // For objects, look for common display properties
-  const obj = value as Record<string, unknown>;
-
-  // Priority 1: display property (most explicit)
-  if (typeof obj.display === 'string') {
-    return obj.display;
-  }
-
-  // Priority 2: name property (common for elements/entities)
-  if (typeof obj.name === 'string') {
-    return obj.name;
-  }
-
-  // Priority 3: value property that's a primitive (like playerChoices returns)
-  if (obj.value !== undefined && typeof obj.value !== 'object') {
-    return String(obj.value);
-  }
-
-  // Fallback: JSON for debugging (better than [object Object])
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return '[Complex Object]';
-  }
 }
 
 /**
@@ -1236,7 +1199,7 @@ function restoreFocusAfterRemoval(index: number): void {
 /** What one built entry reads as: the choice's own label, by preference. */
 function orderedEntryDisplay(value: unknown): string {
   const choice = filteredChoices.value.find(c => c.value === value);
-  return choice?.display ?? getDisplayLabel(value);
+  return choice?.display ?? getDisplayFromValue(value);
 }
 
 /** "Added: 2/3", or "Added: 2" when the list has no upper bound. */
@@ -1868,7 +1831,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
                  a row of buttons all reading "Add University" is unreadable. -->
             <button
               v-for="choice in filteredChoices"
-              :key="String(choice.value)"
+              :key="choiceValueKey(choice.value)"
               class="choice-btn ordered-list-add"
               :aria-label="`Add ${choice.display}`"
               v-disabled-reason="orderedListAddDisabledReason(choice.disabled)"
@@ -1905,7 +1868,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
                  elements variant above for why they are split. -->
             <label
               v-for="choice in filteredChoices"
-              :key="String(choice.value)"
+              :key="choiceValueKey(choice.value)"
               class="multi-select-choice"
               :class="{ selected: isMultiSelectValueSelected(choice.value) }"
               v-disabled-reason="multiSelectDisabledReason(choice.disabled, choice.value)"
@@ -1938,9 +1901,11 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           </div>
         </template>
 
-        <!-- Choice selection with filterBy or dependsOn (shows filtered choices, executes immediately) -->
-        <!-- This comes AFTER multi-select so multiSelect+dependsOn uses multi-select template above -->
-        <template v-else-if="currentPick.type === 'choice' && (currentPick.filterBy || currentPick.dependsOn)">
+        <!-- Choice selection. This comes AFTER multi-select so multiSelect+dependsOn uses the
+             multi-select template above. A dependent pick (filterBy or dependsOn) is shown even
+             before its choices arrive, and a click on one of its choices shows that choice on
+             the board before answering the pick (executeChoice). -->
+        <template v-else-if="currentPick.type === 'choice' && (isDependentChoicePick || filteredChoices.length)">
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.name}` }}
             <span v-if="currentPick.optional" class="optional-label">(optional)</span>
@@ -1948,10 +1913,11 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           <div class="choice-buttons">
             <button
               v-for="choice in filteredChoices"
-              :key="String(choice.value)"
-              class="choice-btn filtered-choice-btn"
+              :key="choiceValueKey(choice.value)"
+              class="choice-btn"
+              :class="{ 'filtered-choice-btn': isDependentChoicePick }"
               v-disabled-reason="choice.disabled"
-              @click="executeChoice(currentPick.name, choice)"
+              @click="isDependentChoicePick ? executeChoice(currentPick.name, choice) : setSelectionValue(currentPick.name, choice.value, choice.display)"
               @mouseenter="handleChoiceHover(choice)"
               @mouseleave="handleChoiceLeave"
             >
@@ -1979,37 +1945,6 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             >
               {{ skipLabel }}
             </button>
-          </div>
-        </template>
-
-        <!-- Regular choice selection -->
-        <template v-else-if="currentPick.type === 'choice' && filteredChoices.length">
-          <div class="selection-prompt">
-            {{ currentPick.prompt || `Select ${currentPick.name}` }}
-            <span v-if="currentPick.optional" class="optional-label">(optional)</span>
-          </div>
-          <div class="choice-buttons">
-            <button
-              v-for="choice in filteredChoices"
-              :key="String(choice.value)"
-              class="choice-btn"
-              v-disabled-reason="choice.disabled"
-              @click="setSelectionValue(currentPick.name, choice.value, choice.display)"
-              @mouseenter="handleChoiceHover(choice)"
-              @mouseleave="handleChoiceLeave"
-            >
-              {{ choice.display }}
-            </button>
-            <button
-              v-if="currentPick.optional"
-              class="choice-btn skip-btn"
-              @click="skipOptionalSelection"
-            >
-              {{ skipLabel }}
-            </button>
-            <span v-if="filteredChoices.length === 0 && !currentPick.optional" class="no-choices">
-              No options available
-            </span>
           </div>
         </template>
 
@@ -2152,7 +2087,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
         <template v-if="anchoredChoices.length && !deferPickToBoard">
           <button
             v-for="choice in anchoredChoices"
-            :key="String(choice.value)"
+            :key="choiceValueKey(choice.value)"
             class="choice-btn anchored-choice-btn"
             v-disabled-reason="choice.disabled"
             :aria-label="`${choice.display}${choice.refs?.find(r => r.ref.notation)?.ref.notation ? ' (' + choice.refs.find(r => r.ref.notation)!.ref.notation + ')' : ''}`"

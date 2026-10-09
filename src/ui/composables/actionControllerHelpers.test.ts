@@ -5,7 +5,7 @@
  * or an execute() that can never be satisfied.
  */
 import { describe, it, expect } from 'vitest';
-import { actionNeedsWizardMode } from './actionControllerHelpers.js';
+import { actionNeedsWizardMode, getDisplayFromValue } from './actionControllerHelpers.js';
 import type { EnrichedActionMetadata, ChoiceWithRefs, EnrichedPickMetadata } from './useActionControllerTypes.js';
 
 const selection = (overrides: Partial<EnrichedPickMetadata>): EnrichedPickMetadata => ({
@@ -149,5 +149,19 @@ describe('actionNeedsWizardMode', () => {
     actionNeedsWizardMode(metadata, args);
     expect(metadata.selections).toHaveLength(1);
     expect(args).toEqual({ other: 1 });
+  });
+});
+
+describe('getDisplayFromValue', () => {
+  it('prefers display, then name, then a primitive value property', () => {
+    expect(getDisplayFromValue({ display: 'Shown', name: 'n' })).toBe('Shown');
+    expect(getDisplayFromValue({ name: 'Forest' })).toBe('Forest');
+    expect(getDisplayFromValue({ value: 3 })).toBe('3');
+    expect(getDisplayFromValue(7)).toBe('7');
+    expect(getDisplayFromValue(undefined)).toBe('');
+  });
+
+  it('shows an object with none of those properties as its JSON, never [object Object] (#572)', () => {
+    expect(getDisplayFromValue({ size: 3 })).toBe('{"size":3}');
   });
 });

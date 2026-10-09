@@ -59,12 +59,13 @@ import type {
 } from '../composables/useActionControllerTypes.js';
 import type { GameContextPlayer } from '../composables/useGameContext.js';
 import type { HistoryMessage } from '../components/GameHistory.vue';
+import type { GameViewElement } from '../types.js';
 
 /** Everything a world hands the shared shell and the shared controller. */
 export interface WorldPlay {
   /** The serialized element tree for this seat -- the same call's output a
    *  table's `PlayerState.view` carries, which is why AutoUI renders both. */
-  gameView: ComputedRef<unknown>;
+  gameView: ComputedRef<GameViewElement | null>;
   /** The seat rows the chrome draws. */
   players: ComputedRef<GameContextPlayer[]>;
   /** The viewer's own row, or undefined while unseated. */
@@ -113,7 +114,7 @@ export interface WorldPlay {
 /** The world's projection, as `viewFor` composes it. `state` is the pruned
  *  serialized tree; the other two the shell already knows from the frame. */
 interface WorldView {
-  readonly state?: unknown;
+  readonly state?: GameViewElement | null;
 }
 
 export function useWorldPlay(host: WorldSeatHost): WorldPlay {
@@ -148,7 +149,7 @@ export function useWorldPlay(host: WorldSeatHost): WorldPlay {
    * frame that seats you -- and both made every body in a 500-seat fan-out
    * different, so the host encoded one answer five hundred times.
    */
-  const gameView = computed<unknown>(() => (host.view.value as WorldView | null)?.state ?? null);
+  const gameView = computed<GameViewElement | null>(() => (host.view.value as WorldView | null)?.state ?? null);
 
   /**
    * WHO THE SEATS ARE.
