@@ -140,6 +140,7 @@ export {
 export {
   useGameContext,
   tryUseGameContext,
+  usePlayContext,
   GAME_CONTEXT_KEYS,
   injectPlayerSeat,
   type GameContext,

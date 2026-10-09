@@ -13,11 +13,14 @@ import { mount } from '@vue/test-utils';
 import * as ui from '../index.js';
 import {
   useGameContext,
+  usePlayContext,
   tryUseGameContext,
   gameContextProvisions,
   playContextProvisions,
   GAME_CONTEXT_KEYS,
+  PLAY_CONTEXT_KEY_NAMES,
   type GameContext,
+  type PlayContext,
 } from './useGameContext.js';
 
 function fakeContext(): GameContext {
@@ -29,6 +32,7 @@ function fakeContext(): GameContext {
     myPlayer: computed(() => ({ name: 'A', seat: 1 })),
     playerSeat: ref(1),
     isMyTurn: ref(true),
+    isViewingHistory: ref(false),
     availableActions: computed(() => ['move']),
     actionController: { marker: 'controller' } as never,
     timeTravelDiff: ref(null),
@@ -117,8 +121,47 @@ describe("useGameContext inside a world's shell (#453)", () => {
 
   it('says the component is in a world, which has no table context, and what to read instead', () => {
     expect(() => mount(WorldProvider, { slots: { default: () => h(ReadsTheContext) } })).toThrow(
-      /inside a world's shell.*gameState, dueSeats, timeTravelDiff, turnDeadline.*inject\(GAME_CONTEXT_KEYS\.<field>\).*useWorld\(\)/s,
+      /inside a world's shell.*gameState, dueSeats, timeTravelDiff, turnDeadline.*usePlayContext\(\).*useWorld\(\)/s,
     );
+  });
+});
+
+/** Mount `read` as a child of `parent` (or alone) and hand back what its setup returned. */
+function readInside<T>(read: () => T, parent?: ReturnType<typeof providerOf>): T {
+  let seen = { ran: false, value: undefined as T };
+  const Child = defineComponent({
+    setup() {
+      seen = { ran: true, value: read() };
+      return () => h('span');
+    },
+  });
+  if (parent) mount(parent, { slots: { default: () => h(Child) } });
+  else mount(Child);
+  if (!seen.ran) throw new Error('the child never ran setup()');
+  return seen.value;
+}
+
+describe('usePlayContext (#520)', () => {
+  const WorldProvider = providerOf(() => playContextProvisions(fakeContext()));
+
+  it("hands a component inside a world's shell every shared field, and nothing table-only", () => {
+    const seen = readInside(usePlayContext, WorldProvider);
+
+    expect(Object.keys(seen).sort()).toEqual([...PLAY_CONTEXT_KEY_NAMES].sort());
+    expect(seen.playerSeat.value).toBe(1);
+    expect(seen.isViewingHistory.value).toBe(false);
+    expect(seen.actionController).toEqual({ marker: 'controller' });
+  });
+
+  it("hands a component inside a table's shell the same shared fields", () => {
+    const seen: PlayContext = readInside(usePlayContext, Provider);
+
+    expect(Object.keys(seen).sort()).toEqual([...PLAY_CONTEXT_KEY_NAMES].sort());
+    expect(seen.availableActions.value).toEqual(['move']);
+  });
+
+  it('throws outside any shell, naming what was missing', () => {
+    expect(() => readInside(usePlayContext)).toThrow(/usePlayContext\(\) found no shell above this component.*actionController/s);
   });
 });
 
@@ -133,6 +176,11 @@ describe('tryUseGameContext', () => {
     });
     mount(Provider, { slots: { default: () => h(Child) } });
     expect(seen).toBeDefined();
+  });
+
+  it("returns undefined inside a world's shell, rather than throwing (#520)", () => {
+    const WorldProvider = providerOf(() => playContextProvisions(fakeContext()));
+    expect(readInside(tryUseGameContext, WorldProvider)).toBeUndefined();
   });
 
   it('returns undefined outside one, for a component that renders both ways', () => {
@@ -160,6 +208,7 @@ describe('the keys themselves', () => {
     // (ShufflewickPub #385). The barrel's transform is not this test's cost.
     expect(ui.useGameContext).toBeTypeOf('function');
     expect(ui.tryUseGameContext).toBeTypeOf('function');
+    expect(ui.usePlayContext).toBeTypeOf('function');
     expect(ui.GAME_CONTEXT_KEYS).toBeDefined();
   });
 });
