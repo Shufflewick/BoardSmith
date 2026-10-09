@@ -113,18 +113,18 @@ When this happens, a console warning is logged (once per element):
 This can happen if the element was removed after selection metadata was built.
 ```
 
-## When You Still Need `findElementById`
+## When You Still Need `findElement`
 
-The `findElementById` utility is still available for cases outside the action flow:
+`findElement(gameView, { id })` is still available for cases outside the action flow:
 
 ```typescript
-import { findElementById } from 'boardsmith/ui';
+import { findElement } from 'boardsmith/ui';
 
 // Finding container elements for animations
-const deck = findElementById(gameView, deckId);
+const deck = findElement(gameView, { id: deckId });
 
 // Finding related elements not in a selection
-const parentContainer = findElementById(gameView, parentId);
+const parentContainer = findElement(gameView, { id: parentId });
 ```
 
 ## Type Imports

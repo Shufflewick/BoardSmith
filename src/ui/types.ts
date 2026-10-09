@@ -66,10 +66,10 @@ export interface BaseElementAttributes {
  *
  * @example Finding element IDs for action calls
  * ```typescript
- * import { findChildByAttribute } from 'boardsmith/ui';
+ * import { findElement } from 'boardsmith/ui';
  *
- * // When you have attribute data but need the element ID:
- * const equipment = findChildByAttribute(merc, 'equipmentName', 'Laser Rifle');
+ * // When you have a name but need the element ID:
+ * const equipment = findElement(merc, { name: 'Laser Rifle' });
  * await actionController.execute('drop', { equipment: equipment.id });  // Pass ID
  * ```
  */
@@ -104,8 +104,8 @@ export interface GameViewElement<TAttributes extends BaseElementAttributes = Bas
   /**
    * Child elements (visible to this player).
    *
-   * Use helpers like `findChildByAttribute()` to search children
-   * when you need to find an element by its attribute values.
+   * Use `findElement()` / `findElements()` to search children
+   * when you need to find an element by id, type, name or className.
    */
   children?: GameViewElement<TAttributes>[];
   /** Count of children (used when contents are hidden from player) */
@@ -113,7 +113,8 @@ export interface GameViewElement<TAttributes extends BaseElementAttributes = Bas
 }
 
 /**
- * Options for matching/finding elements by various criteria.
+ * Options for matching/finding elements. An element matches only when it
+ * satisfies every criterion given; with no criteria nothing matches.
  */
 export interface ElementMatchOptions {
   /** Match by element ID */

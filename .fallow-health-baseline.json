@@ -688,7 +688,7 @@
     },
     "src/ui/composables/useGameViewHelpers.ts": {
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/ui/composables/useZoomPreview.ts": {
