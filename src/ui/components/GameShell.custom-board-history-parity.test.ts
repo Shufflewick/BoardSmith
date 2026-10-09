@@ -57,14 +57,13 @@ describe('B18: GameShell.vue states isViewingHistory to the custom board', () =>
   });
 
   it('gates is-my-turn exactly like the auto ActionPanel', () => {
-    expect(customBoardBlock()).toContain(':is-my-turn="isMyTurn && !isViewingHistory"');
-    // Same expression on the auto-UI branch -- the two cannot drift apart
-    // without this assertion failing.
-    expect(gameShellSource).toContain(':is-my-turn="isMyTurn && !isViewingHistory"');
+    // useTableSeat's one gated value (#520), which the auto ActionPanel and the
+    // game context read too; GameShell.context-history.test.ts holds them equal.
+    expect(customBoardBlock()).toContain(':is-my-turn="gatedIsMyTurn"');
   });
 
   it('gates available-actions exactly like the auto ActionPanel', () => {
-    expect(customBoardBlock()).toContain(':available-actions="isViewingHistory ? [] : availableActions"');
+    expect(customBoardBlock()).toContain(':available-actions="gatedAvailableActions"');
   });
 
   it('gates disabled-actions exactly like the auto ActionPanel', () => {

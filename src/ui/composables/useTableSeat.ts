@@ -76,8 +76,16 @@ interface TableSeatOptions extends SeatTransport {
 }
 
 export interface TableSeat extends TableActionWiring {
-  /** The action names this seat may take now, as the session published them for it. */
+  /** The action names this seat may take now, as the session published them for it. Live: not gated on time travel. */
   availableActions: ComputedRef<string[]>;
+  /**
+   * Whether this seat may act, gated on time travel: false while a debug view
+   * shows history. The ONE gated value: the game context publishes it, and the
+   * shell hands this same value to the board and the Action Panel.
+   */
+  gatedIsMyTurn: ComputedRef<boolean>;
+  /** {@link availableActions}, but empty while a debug view shows history. Published and handed on like {@link gatedIsMyTurn}. */
+  gatedAvailableActions: ComputedRef<string[]>;
   /** Whether this seat has already committed the current simultaneous step. False outside one. */
   completed: ComputedRef<boolean>;
   /** Every seat that has to act now, this one included. */
@@ -179,12 +187,13 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
     animationEvents,
   });
 
-  // What the context publishes is gated on history exactly as the board's props
-  // are, so a board and a component under it agree that a seat browsing history
-  // cannot act. The wiring above takes the live values and `isViewingHistory`
-  // itself, which is how it refuses commits during a browse.
-  const shownIsMyTurn = computed(() => isMyTurn.value && !isViewingHistory.value);
-  const shownAvailableActions = computed(() => (isViewingHistory.value ? [] : availableActions.value));
+  // The one place the turn signals are gated on history. The context publishes
+  // these and the shell hands the same values to the board and the Action Panel,
+  // so none of them can disagree about whether a seat browsing history can act.
+  // The wiring above takes the live values and `isViewingHistory` itself, which
+  // is how it refuses commits during a browse.
+  const gatedIsMyTurn = computed(() => isMyTurn.value && !isViewingHistory.value);
+  const gatedAvailableActions = computed<string[]>(() => (isViewingHistory.value ? [] : availableActions.value));
 
   const provisions: Provision[] = [
     [BOARD_INTERACTION_KEY, boardInteraction],
@@ -197,10 +206,10 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
       players,
       myPlayer,
       playerSeat,
-      isMyTurn: shownIsMyTurn,
+      isMyTurn: gatedIsMyTurn,
       isViewingHistory,
       dueSeats,
-      availableActions: shownAvailableActions,
+      availableActions: gatedAvailableActions,
       actionController: wiring.controller,
       timeTravelDiff,
       platformRequest,
@@ -213,6 +222,8 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
   return {
     ...wiring,
     availableActions,
+    gatedIsMyTurn,
+    gatedAvailableActions,
     completed,
     dueSeats,
     players,

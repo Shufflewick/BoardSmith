@@ -535,6 +535,8 @@ const {
   actionMetadata,
   disabledActions,
   availableActions,
+  gatedIsMyTurn,
+  gatedAvailableActions,
   completed: myCompleted,
   dueSeats: dueSeatsNow,
   players,
@@ -1344,6 +1346,11 @@ defineExpose({
     <span class="vh" aria-live="polite">{{ (isMyTurn || awaitingPlayerNames.length) ? (boardPrompt ?? actionController.currentPick.value?.prompt) : '' }}</span>
 
     <!-- GAME SCREEN -->
+    <!-- `may-act` is the LIVE `isMyTurn` on purpose: it decides whether the
+         action bar is up, and the bar carries the time-travel banner
+         (#actionbar-extra below), which a browse must not hide. Nothing in the
+         bar can act on it: the Action Panel there is this shell's own, handed
+         `gatedIsMyTurn`. -->
     <PlayShell
       ref="playShell"
       :players="panelPlayers"
@@ -1353,7 +1360,7 @@ defineExpose({
       :messages="gameMessages"
       :unread-log-count="unreadLogCount"
       :may-act="isMyTurn"
-      :available-actions="isViewingHistory ? [] : availableActions"
+      :available-actions="gatedAvailableActions"
       :action-metadata="isViewingHistory ? {} : actionMetadata"
       :disabled-actions="isViewingHistory ? undefined : disabledActions"
       :is-action-help-visible="isActionHelpVisible"
@@ -1512,9 +1519,11 @@ defineExpose({
              undocumented: what the board DRAWS comes from the historical
              `gameView`, so an ungated `is-my-turn`/`available-actions` lets it
              offer a real, clickable control positioned from a state that is no
-             longer true, and the click commits against the LIVE game. Gate here,
-             once, rather than leaving every game to re-derive it from the nulled
-             `flowState`. -->
+             longer true, and the click commits against the LIVE game. The gated
+             `is-my-turn`/`available-actions` are `useTableSeat`'s
+             `gatedIsMyTurn`/`gatedAvailableActions`, the same values the game
+             context publishes, so the board, the Action Panel and a component
+             reading the context cannot disagree (#520). -->
         <template v-if="shellMounted">
         <component
           v-if="selectedUiComponent"
@@ -1524,8 +1533,8 @@ defineExpose({
           :players="players"
           :my-player="myPlayer"
           :player-seat="playerSeat"
-          :is-my-turn="isMyTurn && !isViewingHistory"
-          :available-actions="isViewingHistory ? [] : availableActions"
+          :is-my-turn="gatedIsMyTurn"
+          :available-actions="gatedAvailableActions"
           :action-args="actionArgs"
           :set-board-prompt="setBoardPrompt"
           :can-undo="canUndo && !isViewingHistory"
@@ -1609,13 +1618,13 @@ defineExpose({
       <template #action-panel>
         <slot name="action-panel">
           <ActionPanel
-            :available-actions="isViewingHistory ? [] : availableActions"
+            :available-actions="gatedAvailableActions"
             :action-metadata="isViewingHistory ? {} : actionMetadata"
             :is-action-help-visible="isActionHelpVisible"
             :disabled-actions="isViewingHistory ? undefined : disabledActions"
             :players="players"
             :player-seat="playerSeat"
-            :is-my-turn="isMyTurn && !isViewingHistory"
+            :is-my-turn="gatedIsMyTurn"
             :completed="myCompleted"
             :can-undo="canUndo && !isViewingHistory"
             :auto-end-turn="autoEndTurn"
