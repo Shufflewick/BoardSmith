@@ -169,8 +169,8 @@ attribute.
 | `setBoardPrompt` | `(text: string \| null) => void` | Replace the action bar's prompt with the board's own text; `null` gives it back |
 
 `WorldBoardProps` adds `presence` (the seats awake, or null), `events` (the
-narration since the page mounted), `worldName` and `phase`. A world has no
-action bar prompt for a board to set, so it has no `setBoardPrompt`.
+narration since the page mounted), `worldName` and `phase`. WorldShell does not
+let a board replace its prompt, so a world board is not given `setBoardPrompt`.
 
 #### Time travel: browsing a past position
 

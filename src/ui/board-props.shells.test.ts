@@ -108,7 +108,7 @@ describe('GameShell binds TableBoardProps onto a table board (#516)', () => {
 });
 
 describe('WorldShell binds WorldBoardProps onto a world board (#516)', () => {
-  it('hands exactly the contract\'s props, with no prompt setter it cannot show', async () => {
+  it('hands exactly the contract\'s props, with no prompt setter, since WorldShell does not let a board replace its prompt', async () => {
     const wrapper = mount(WorldShell, {
       props: { uis: defineGameUIs({ Board: defaultUI(AttrsBoard) }), displayName: 'Gloamhall' },
     });

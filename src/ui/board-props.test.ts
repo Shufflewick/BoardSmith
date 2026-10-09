@@ -27,7 +27,7 @@ describe('the board prop contract (#516)', () => {
     >();
   });
 
-  it('adds the world-only fields to a world board, and no prompt setter a world cannot show', () => {
+  it('adds the world-only fields to a world board, and no prompt setter, since WorldShell does not let a board replace its prompt', () => {
     expectTypeOf<Exclude<keyof WorldBoardProps, keyof BoardBaseProps>>().toEqualTypeOf<
       'presence' | 'events' | 'worldName' | 'phase'
     >();

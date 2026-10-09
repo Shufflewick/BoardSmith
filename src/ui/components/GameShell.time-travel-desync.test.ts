@@ -217,11 +217,11 @@ describe('GameShell.vue source: displayedState wired at every board/sidebar site
 
   // Was 3 while a board slot existed and duplicated the board's props. The
   // board's props are built by `tableBoardProps` now (#516), so the template
-  // binds displayedState once (sidebar-extra) and the board reads it there.
-  it('board + sidebar-extra sites read displayedState', () => {
+  // binds displayedState once, for sidebar-extra. That the board gets the
+  // displayed state is proved on the real shell in ../board-props.shells.test.ts.
+  it('the sidebar-extra site reads displayedState', () => {
     const occurrences = (gameShellSource.match(/:state="displayedState"/g) ?? []).length;
     expect(occurrences).toBe(1);
-    expect(gameShellSource).toContain('state: displayedState.value');
   });
 
   it('exactly ONE :state="state" site remains — the DebugPanel control surface', () => {

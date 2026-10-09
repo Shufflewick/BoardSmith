@@ -67,8 +67,8 @@ export interface TableBoardProps extends BoardBaseProps {
   undo: () => Promise<void>;
   /**
    * Replace the action bar's prompt with the board's own text, or pass null to
-   * give it back. A world has no prompt line to set, so a world board is not
-   * given this.
+   * give it back. WorldShell does not let a board replace its prompt, so a
+   * world board is not given a setter.
    */
   setBoardPrompt: (prompt: string | null) => void;
 }
