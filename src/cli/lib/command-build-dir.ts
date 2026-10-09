@@ -1,10 +1,12 @@
 /**
- * WHERE A CLI COMMAND BUNDLES A PROJECT'S RULES, ONE DIRECTORY PER RUN (#543).
+ * WHERE A CLI COMMAND BUNDLES A PROJECT'S RULES OR KEEPS A RUN'S WORK FILES, ONE DIRECTORY PER RUN
+ * (#543, #544).
  *
  * A fixed `.boardsmith/<command>-tmp/` was shared by every run of that command in the project, so
  * two validates of one game at once (two worktrees' suites on one machine) wrote into one folder,
- * and the first to finish deleted the bundle the other was about to import. Now each run makes a
- * fresh directory and removes only that one.
+ * and the first to finish deleted the bundle the other was about to import. verify's suite report
+ * and the mutation checks' generated files had the same fault in fixed `.boardsmith/scratch/`
+ * folders (#544). Now each run makes a fresh directory and removes only that one.
  *
  * It sits inside the project, not the OS temp directory, so the bundle resolves the project's own
  * `node_modules`. `.boardsmith/` itself is never a command's to remove: it also holds the scratch
@@ -18,8 +20,20 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** The CLI commands that bundle a project's rules into a build directory of their own. */
-type BuildingCommand = 'dev' | 'simulate' | 'build' | 'validate' | 'evolve-bot-weights';
+/**
+ * The CLI commands that bundle a project's rules into a build directory of their own, and the runs
+ * that keep work files in one: `verify` for its suite's report, `verify-mutation` and
+ * `test-step-check` for the mutation checks' generated vitest config, mutants and reports.
+ */
+type BuildingCommand =
+  | 'dev'
+  | 'simulate'
+  | 'build'
+  | 'validate'
+  | 'evolve-bot-weights'
+  | 'verify'
+  | 'verify-mutation'
+  | 'test-step-check';
 
 /**
  * The name every build directory of `command` starts with, inside `.boardsmith/`. Each run's

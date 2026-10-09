@@ -47,7 +47,7 @@ import chalk from 'chalk';
 import { chunkVerifyBase } from '../lib/chunk-commits.js';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { type MutantCache, openMutantCache } from '../lib/mutant-cache.js';
-import { scratchDir } from '../lib/project-paths.js';
+import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { testRunScopeProblem } from '../lib/test-run-scope.js';
 import { discardRecord, runVitestRecorded, testRunVerdict } from '../lib/vitest-run.js';
 import {
@@ -272,16 +272,13 @@ function failedSuite(report: VitestJsonReport, failing: string[], changed: Reado
 }
 
 /** The full suite as `boardsmith test` runs it, plus a JSON report for the counts. */
-async function runSuite(dir: string) {
-  const workDir = join(scratchDir(dir), 'verify');
-  const reportPath = join(workDir, 'test-report.json');
-  await fs.mkdir(workDir, { recursive: true });
-  await fs.rm(reportPath, { force: true });
-  const run = await runVitestRecorded(['--reporter=json', `--outputFile.json=${reportPath}`], dir);
-  const verdict = testRunVerdict(run, run.progress, { cwd: dir, logPath: run.logPath });
-  const report = await readJsonReport(reportPath);
-  await fs.rm(workDir, { recursive: true, force: true });
-  return { run, verdict, report };
+function runSuite(dir: string) {
+  return withCommandBuildDir(dir, 'verify', async (workDir) => {
+    const reportPath = join(workDir, 'test-report.json');
+    const run = await runVitestRecorded(['--reporter=json', `--outputFile.json=${reportPath}`], dir);
+    const verdict = testRunVerdict(run, run.progress, { cwd: dir, logPath: run.logPath });
+    return { run, verdict, report: await readJsonReport(reportPath) };
+  });
 }
 
 /** A suite that did not pass: by failing file when the report names them, else by vitest's verdict. */
