@@ -1528,7 +1528,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           class="action-btn"
           data-bs-follow-up
           :data-bs-action="heldFollowUpButton.action"
-          @click="actionController.resumeFollowUp()"
+          @click="startAction(heldFollowUpButton.action)"
         >
           {{ heldFollowUpButton.prompt }}
         </button>

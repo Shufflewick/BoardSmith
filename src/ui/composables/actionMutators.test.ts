@@ -108,7 +108,7 @@ const scoutAction: EnrichedActionMetadata = {
   name: 'scout',
   prompt: 'Scout',
   selections: [
-    { name: 'unit', type: 'element', prompt: 'Which unit?', validElements: [{ id: 5 }] },
+    { name: 'unit', type: 'element', prompt: 'Which unit?', validElements: [{ id: 5 }, { id: 6 }] },
     { name: 'dir', type: 'choice', prompt: 'Which way?', choices: DIRECTIONS },
   ],
 };
@@ -284,6 +284,28 @@ describe.each<Surface>(['panel', 'board'])('the same gesture through the %s', (s
       boardAction: null,
       boardSelected: null,
     });
+    t.wrapper.unmount();
+  });
+});
+
+describe('a board click on a held follow-up action', () => {
+  // The issue's recommended option (#513): the action the server holds as a
+  // follow-up is started AS the follow-up, with the server's pre-filled args. A
+  // board click that names a different element than those args is a request to
+  // start that action, and the clicked element is not carried into it.
+  it('resumes the follow-up with its own args and drops the clicked element', async () => {
+    const t = mountTable({
+      availableActions: ['scout', 'wait'],
+      heldFollowUp: { action: 'scout', args: { unit: 5 }, metadata: scoutAction },
+    });
+    await flush();
+    t.controller.cancel();
+    await flush();
+
+    t.board.selectElement({ id: 6 });
+    await flush();
+
+    expect(stateOf(t)).toMatchObject({ action: 'scout', args: { unit: 5 }, pendingOnServer: true, sent: 0 });
     t.wrapper.unmount();
   });
 });
