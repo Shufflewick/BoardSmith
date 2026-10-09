@@ -16,7 +16,7 @@
 import { ref, computed, watch, inject, nextTick, useId } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
-import { resolvePickCounts } from '../../composables/actionControllerHelpers.js';
+import { getDisplayFromValue, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
 import type {
   UseActionControllerReturn,
@@ -1064,7 +1064,7 @@ function getSelectionDisplay(selectionName: string, value: unknown): string {
   }
 
   // Fallback for edge cases (shouldn't normally be needed)
-  return getDisplayLabel(value);
+  return getDisplayFromValue(value);
 }
 
 /**
@@ -1080,7 +1080,7 @@ function getAccumulatedDisplay(accumulated: unknown): string {
 
   // Legacy fallback: accumulated item is just a value
   const value = accumulated;
-  if (!currentPick.value) return getDisplayLabel(value);
+  if (!currentPick.value) return getDisplayFromValue(value);
 
   // For choice selections, look up display in choices
   if (currentPick.value.type === 'choice') {
@@ -1089,7 +1089,7 @@ function getAccumulatedDisplay(accumulated: unknown): string {
     if (choice) return choice.display;
   }
 
-  return getDisplayLabel(value);
+  return getDisplayFromValue(value);
 }
 
 // Clear a specific selection (and all subsequent selections)
@@ -1120,47 +1120,6 @@ function formatActionName(name: string): string {
     .replace(/([A-Z])/g, ' $1')
     .replace(/^./, str => str.toUpperCase())
     .trim();
-}
-
-/**
- * Get a human-readable display label for any value.
- * Priority: display property > name property > stringified primitive
- * Never returns [object Object]
- */
-function getDisplayLabel(value: unknown): string {
-  if (value === null || value === undefined) {
-    return '';
-  }
-
-  // Handle primitives directly
-  if (typeof value !== 'object') {
-    return String(value);
-  }
-
-  // For objects, look for common display properties
-  const obj = value as Record<string, unknown>;
-
-  // Priority 1: display property (most explicit)
-  if (typeof obj.display === 'string') {
-    return obj.display;
-  }
-
-  // Priority 2: name property (common for elements/entities)
-  if (typeof obj.name === 'string') {
-    return obj.name;
-  }
-
-  // Priority 3: value property that's a primitive (like playerChoices returns)
-  if (obj.value !== undefined && typeof obj.value !== 'object') {
-    return String(obj.value);
-  }
-
-  // Fallback: JSON for debugging (better than [object Object])
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return '[Complex Object]';
-  }
 }
 
 /**
@@ -1237,7 +1196,7 @@ function restoreFocusAfterRemoval(index: number): void {
 /** What one built entry reads as: the choice's own label, by preference. */
 function orderedEntryDisplay(value: unknown): string {
   const choice = filteredChoices.value.find(c => c.value === value);
-  return choice?.display ?? getDisplayLabel(value);
+  return choice?.display ?? getDisplayFromValue(value);
 }
 
 /** "Added: 2/3", or "Added: 2" when the list has no upper bound. */

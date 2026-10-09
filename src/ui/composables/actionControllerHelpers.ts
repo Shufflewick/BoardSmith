@@ -143,7 +143,7 @@ export function choiceBoardTarget(choice: ChoiceWithRefs): ElementRef | undefine
  * 1. `display` property (explicit display text)
  * 2. `name` property (common for elements/entities)
  * 3. `value` property if primitive
- * 4. String conversion fallback
+ * 4. JSON for any other object, so an object never shows as "[object Object]"
  *
  * @param value - Any value to extract display from
  * @returns Display string for the value
@@ -159,8 +159,11 @@ export function getDisplayFromValue(value: unknown): string {
   if (typeof obj.name === 'string') return obj.name;
   // Priority 3: primitive value property
   if (obj.value !== undefined && typeof obj.value !== 'object') return String(obj.value);
-  // Fallback
-  return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '[Complex Object]';
+  }
 }
 
 // ============================================

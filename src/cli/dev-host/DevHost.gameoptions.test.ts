@@ -201,3 +201,68 @@ describe('DevHost — lobby gameOption/preset selector (D13)', () => {
     expect(configureFrame.preset).toBe('Quick Match');
   });
 });
+
+// ── Object-valued options (#572) ──────────────────────────────────────────────
+//
+// An option's choice values may be objects. The default is then a different
+// object from the matching choice, so it must be matched structurally (the
+// `valuesEqual` rule the engine keys choices by), and an object choice with no
+// label must be shown by the same label derivation the Action Panel uses, never
+// as "[object Object]".
+const OBJECT_CONFIG: DevHostConfig = {
+  ...TEST_CONFIG,
+  gameOptions: [
+    {
+      id: 'board',
+      type: 'select',
+      label: 'Board',
+      default: { width: 9, height: 9 },
+      choices: [
+        { value: { width: 9, height: 9 }, label: 'Small' },
+        { value: { width: 19, height: 19 }, label: 'Large' },
+      ],
+    },
+    {
+      id: 'terrain',
+      type: 'select',
+      label: 'Terrain',
+      default: { name: 'Forest' },
+      choices: [{ value: { name: 'Forest' } }, { value: { size: 3 } }],
+    },
+  ],
+  presets: [],
+};
+
+describe('DevHost: object-valued game options (#572)', () => {
+  async function mountActive(): Promise<VueWrapper> {
+    const wrapper = mount(DevHost, { props: { config: OBJECT_CONFIG }, attachTo: document.body });
+    await wrapper.vm.$nextTick();
+    const ws = mockWsInstance!;
+    ws.simulateOpen();
+    await wrapper.vm.$nextTick();
+    ws.simulateMessage(SEAT_LOBBY);
+    await wrapper.vm.$nextTick();
+    return wrapper;
+  }
+
+  async function tableSetupDefaults(wrapper: VueWrapper): Promise<string[]> {
+    mockWsInstance!.simulateMessage({ type: 'init', seat: 1 });
+    await wrapper.vm.$nextTick();
+    await wrapper.findAll('[data-testid="table-setup-toggle"]')[0].trigger('click');
+    await wrapper.vm.$nextTick();
+    return wrapper.findAll('.table-setup__row')
+      .filter((row) => ['Board', 'Terrain'].includes(row.find('dt').text()))
+      .map((row) => row.find('dd').text());
+  }
+
+  it('Table setup names an object-valued default by its choice label', async () => {
+    const wrapper = await mountActive();
+    expect(await tableSetupDefaults(wrapper)).toEqual(['Small', 'Forest']);
+  });
+
+  it('the lobby lists an object choice with no label by its derived label, never [object Object]', async () => {
+    const wrapper = await mountActive();
+    const options = wrapper.find('[data-testid="lobby-option-terrain"]').findAll('option');
+    expect(options.map((o) => o.text())).toEqual(['Forest', '{"size":3}']);
+  });
+});
