@@ -13,7 +13,7 @@
  * recorded as rules rather than decoration.
  */
 import { describe, it, expect } from 'vitest';
-import { Game, Player, createPlayerView, type GameOptions } from './index.js';
+import { Game, Piece, Player, createPlayerView, type GameOptions } from './index.js';
 
 class LogGame extends Game<LogGame, Player> {
   constructor(options: GameOptions) {
@@ -96,5 +96,26 @@ describe('getFormattedMessages stays the plain-text reading', () => {
     const game = makeGame();
     game.message('Round 4.', undefined, { type: 'notice' });
     expect(game.getFormattedMessages(1)).toEqual(['Round 4.']);
+  });
+});
+
+describe('template data is written as the text of each value', () => {
+  class Marker extends Piece<LogGame> {}
+
+  it('writes a player as its name, whether given or the default', () => {
+    const named = makeGame();
+    named.message('{{who}} wins.', { who: named.getPlayer(2)! });
+    expect(named.getFormattedMessages(1)).toEqual(['B wins.']);
+
+    const unnamed = new LogGame({ playerCount: 2, seed: 'log' });
+    unnamed.message('{{who}} wins.', { who: unnamed.getPlayer(2)! });
+    expect(unnamed.getFormattedMessages(1)).toEqual(['Player 2 wins.']);
+  });
+
+  it('writes any other element by its name, and plain values as strings', () => {
+    const game = makeGame();
+    const marker = game.create(Marker, 'flag');
+    game.message('{{what}} moved {{n}} spaces ({{done}}).', { what: marker, n: 3, done: true });
+    expect(game.getFormattedMessages(1)).toEqual(['flag moved 3 spaces (true).']);
   });
 });
