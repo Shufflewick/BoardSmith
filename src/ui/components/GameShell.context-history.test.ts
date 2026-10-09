@@ -14,13 +14,12 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { defineComponent, h, nextTick, type PropType } from 'vue';
 import { usePlayContext, type PlayContext } from '../composables/useGameContext.js';
-import DebugPanel from './DebugPanel.vue';
 import ActionPanel from './auto-ui/ActionPanel.vue';
 import PlayShell from './PlayShell.vue';
 import {
-  enterIframe,
+  DEBUG_TABLE_PLAYERS,
   leaveIframe,
-  mountPlatformShell,
+  mountTableWithDebugPanel,
 } from './GameShell.platform-mount.test-helper.js';
 
 /** The board's context and props, as last rendered, for comparing with what the Action Panel is handed. */
@@ -44,33 +43,8 @@ const ContextBoard = defineComponent({
   },
 });
 
-function post(data: Record<string, unknown>): void {
-  window.dispatchEvent(new MessageEvent('message', { data: { source: 'shufflewick', ...data } }));
-}
-
-const players = [{ name: 'P1', seat: 1 }, { name: 'P2', seat: 2 }];
-
-async function mountWithDebugPanel() {
-  enterIframe();
-  const wrapper = mountPlatformShell({ board: ContextBoard });
-  await nextTick();
-  post({ type: 'init', seat: 1 });
-  post({ type: 'dev-debug-available', available: true });
-  post({ type: 'dev-debug-toggle' });
-  post({
-    type: 'game_state',
-    view: {
-      flowState: { currentPlayer: 1, awaitingInput: true, availableActions: ['move'] },
-      state: { view: {}, players, currentPlayer: 1, isMyTurn: true, availableActions: ['move'] },
-    },
-    winners: [],
-  });
-  await nextTick();
-  await nextTick();
-  const debugPanel = wrapper.findComponent(DebugPanel);
-  expect(debugPanel.exists()).toBe(true);
-  return { wrapper, debugPanel };
-}
+const players = DEBUG_TABLE_PLAYERS;
+const mountWithDebugPanel = () => mountTableWithDebugPanel(ContextBoard);
 
 const signals = (wrapper: Awaited<ReturnType<typeof mountWithDebugPanel>>['wrapper']) =>
   wrapper.find('[data-testid="context-signals"]').text();

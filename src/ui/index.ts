@@ -151,6 +151,10 @@ export {
   type GameContextPlayer,
   type TimeTravelDiff,
 } from './composables/useGameContext.js';
+// What a board component receives, one type per shell over a shared base
+// (#516). A board declares `defineProps<TableBoardProps>()` (or the world's)
+// instead of restating the list; both shells bind exactly these.
+export type { BoardBaseProps, TableBoardProps, WorldBoardProps, DisplayedGameState } from './board-props.js';
 // The shape of the context's `turnDeadline` (#301), for a board that types it.
 export type { TurnDeadline } from './composables/useTurnDeadline.js';
 

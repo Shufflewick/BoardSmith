@@ -15,15 +15,9 @@ import AutoRenderer from './AutoRenderer.vue';
 import type { GameViewElement } from './index';
 import type { PresentationOverlay } from './presentation.js';
 
-interface FlowState {
-  complete?: boolean;
-}
-
 defineProps<{
   /** The game view tree */
   gameView: GameViewElement | null | undefined;
-  /** Flow state (for game complete detection) */
-  flowState?: FlowState;
   /** Current player's seat */
   playerSeat: number;
   /** Per-UI presentation overlay — keyed by element class/name/attribute → visuals (D-04). */

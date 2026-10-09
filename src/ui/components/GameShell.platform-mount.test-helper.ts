@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils';
-import { defineComponent, h, type Component } from 'vue';
+import { defineComponent, h, nextTick, type Component } from 'vue';
 import GameShell from './GameShell.vue';
+import DebugPanel from './DebugPanel.vue';
 import { defineGameUIs, defaultUI } from '../game-uis.js';
 
 /**
@@ -81,4 +82,44 @@ export function mountPlatformShell(options: PlatformShellOptions = {}) {
       ...options.props,
     },
   });
+}
+
+/** The two seats {@link mountTableWithDebugPanel} seats; seat 1 is the viewer. */
+export const DEBUG_TABLE_PLAYERS = [{ name: 'P1', seat: 1 }, { name: 'P2', seat: 2 }];
+
+function postFromHost(data: Record<string, unknown>): void {
+  window.dispatchEvent(new MessageEvent('message', { data: { source: 'shufflewick', ...data } }));
+}
+
+/**
+ * The REAL GameShell in an iframe, seat 1 on move with `move` available, and the
+ * debug panel open, so a test can enter history with the panel's own
+ * `time-travel` event. `seatState` is merged over seat 1's state, for a test
+ * that needs undo, disabled reasons or metadata in the frame.
+ *
+ * Call {@link leaveIframe} in `afterEach`.
+ */
+export async function mountTableWithDebugPanel(board: Component, seatState: Record<string, unknown> = {}) {
+  enterIframe();
+  const wrapper = mountPlatformShell({ board });
+  await nextTick();
+  postFromHost({ type: 'init', seat: 1 });
+  postFromHost({ type: 'dev-debug-available', available: true });
+  postFromHost({ type: 'dev-debug-toggle' });
+  postFromHost({
+    type: 'game_state',
+    view: {
+      flowState: { currentPlayer: 1, awaitingInput: true, availableActions: ['move'] },
+      state: {
+        view: {}, players: DEBUG_TABLE_PLAYERS, currentPlayer: 1, isMyTurn: true, availableActions: ['move'],
+        ...seatState,
+      },
+    },
+    winners: [],
+  });
+  await nextTick();
+  await nextTick();
+  const debugPanel = wrapper.findComponent(DebugPanel);
+  if (!debugPanel.exists()) throw new Error('the debug panel did not open; the shell never saw dev-debug-toggle');
+  return { wrapper, debugPanel };
 }

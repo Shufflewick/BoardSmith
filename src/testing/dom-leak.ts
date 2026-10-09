@@ -33,6 +33,7 @@ import type { TableSeat } from '../ui/composables/useTableSeat.js';
 import type { WorldSeatHost } from '../ui/world/useWorldHost.js';
 import type { WorldSeat } from '../ui/world/useWorldSeat.js';
 import type { UseActionControllerReturn } from '../ui/composables/useActionControllerTypes.js';
+import { tableBoardProps, worldBoardProps, type TableBoardProps, type WorldBoardProps } from '../ui/board-props.js';
 import type { GameState } from '../client/types.js';
 import type { PlayerGameState } from '../session/types.js';
 import { buildPlayerState } from '../session/utils.js';
@@ -416,9 +417,9 @@ export interface RenderAsSeatOptions<C extends Component = Component> {
    */
   component?: C;
   /**
-   * Props merged OVER the standard contract props this function supplies
-   * (`gameView`, `playerSeat`, `isMyTurn`, `availableActions`,
-   * `disabledActions`, `actionController`). Use it for props specific to your
+   * Props merged OVER the standard contract props this function supplies:
+   * `TableBoardProps` for a table seat and `WorldBoardProps` for a world seat,
+   * exactly as the shell binds them. Use it for props specific to your
    * component.
    *
    * `gameView` is deliberately re-applied after this merge and cannot be
@@ -637,8 +638,8 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
   const seatContext = await stubbedSeat(subject, seat, options, 'renderAsSeat');
   const { gameView, provide } = seatContext;
 
-  // AutoUI takes only (gameView, playerSeat); a scaffolded custom board also
-  // takes (isMyTurn, availableActions, actionController, disabledActions).
+  // AutoUI takes only (gameView, playerSeat); a custom board declares the
+  // shell's board contract (TableBoardProps or WorldBoardProps) or part of it.
   // Supplying the whole contract means the common custom-UI case needs no
   // `componentProps` at all — but it is then FILTERED to what the component
   // actually declares. An undeclared prop would otherwise fall through to the
@@ -698,8 +699,8 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
 interface SeatContext {
   /** The per-seat tree the board draws. */
   readonly gameView: UIGameElement | null;
-  /** The scaffold's contract props, before they are filtered to what the board declares. */
-  readonly contract: Record<string, unknown>;
+  /** The shell's board contract, before it is filtered to what the board declares. */
+  readonly contract: TableBoardProps | WorldBoardProps;
   /** The seat's action controller, as its shell wires it. */
   readonly controller: UseActionControllerReturn;
   /** What the board can inject, as GameShell provides it; the caller's `provide` is merged over it. */
@@ -861,13 +862,21 @@ async function wireTableSeat(
   });
   return {
     gameView,
-    contract: {
+    // What GameShell binds, built by the same function (#516). A test mount has
+    // no action bar, so a prompt the board sets has nowhere to be drawn.
+    contract: tableBoardProps(tableSeat, {
+      state: frame,
+      gameView,
       playerSeat: seat,
-      isMyTurn: seatState.isMyTurn,
-      availableActions: tableSeat.availableActions.value,
-      disabledActions: tableSeat.disabledActions.value,
-      actionController: tableSeat.controller,
-    },
+      isViewingHistory: false,
+      undo: async () => {
+        throw new Error(
+          `renderAsSeat mounted seat ${seat}'s board to render it, and a rendered seat has no session ` +
+            'to undo against. Test undo through a session (createHeadlessSession), not a rendered board.',
+        );
+      },
+      setBoardPrompt: () => {},
+    }),
     controller: tableSeat.controller,
     provide: Object.fromEntries(tableSeat.provisions),
     openAction: (request) => openSeatAction(tableSeat.controller, request, seat, seatState.availableActions ?? []),
@@ -938,13 +947,8 @@ async function wireWorldSeat(
   });
   return {
     gameView,
-    contract: {
-      playerSeat: seat,
-      isMyTurn: worldSeat.play.mayAct.value,
-      availableActions: worldSeat.play.availableActions.value,
-      disabledActions: worldSeat.play.disabledActions.value,
-      actionController: worldSeat.controller,
-    },
+    // What WorldShell binds, built by the same function (#516).
+    contract: worldBoardProps(worldSeat, host),
     controller: worldSeat.controller,
     provide: Object.fromEntries(worldSeat.provisions),
     openAction: (request) =>
@@ -1457,10 +1461,9 @@ function collectScopedSurfaceStrings(wrapper: VueWrapper<unknown>): SurfaceStrin
  * await assertNoHiddenInfoLeak(testGame, 1, { component: GameTable });
  * ```
  *
- * The standard scaffold props (`playerSeat`, `isMyTurn`, `availableActions`,
- * `actionController`) are supplied automatically from the real game state, so
- * most games need nothing else; add `options.componentProps` for props your
- * component declares beyond that contract.
+ * The board contract (`TableBoardProps`, as GameShell binds it) is supplied
+ * automatically from the real game state, so most games need nothing else; add
+ * `options.componentProps` for props your component declares beyond it.
  *
  * Forbidden markers are auto-derived from the difference between each
  * element's FULL unfiltered `toJSON()` identity and what survives into
