@@ -59,7 +59,7 @@ export interface BaseElementAttributes {
  *     equipmentName: 'Laser Rifle'
  *   },
  *   children: [
- *     { id: 17, className: 'Equipment', attributes: { equipmentName: 'Laser Rifle' } }
+ *     { id: 17, className: 'Equipment', name: 'Laser Rifle', attributes: { damage: 3 } }
  *   ]
  * }
  * ```
@@ -68,7 +68,8 @@ export interface BaseElementAttributes {
  * ```typescript
  * import { findElement } from 'boardsmith/ui';
  *
- * // When you have a name but need the element ID:
+ * // When you have the element's own name but need its ID.
+ * // `name` matches the element's top-level name, never a value in `attributes`.
  * const equipment = findElement(merc, { name: 'Laser Rifle' });
  * await actionController.execute('drop', { equipment: equipment.id });  // Pass ID
  * ```
