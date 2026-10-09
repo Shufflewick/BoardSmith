@@ -46,7 +46,7 @@ import { codeRegions } from './test-step-sfc.js';
 import type { ChunkTestFile, TestStepFinding } from './test-step-check.js';
 import { COVERAGE_SETUP, coverageEnv, readCoverage, testKeyOf, type FileCoverage } from './test-step-coverage.js';
 import type { MutantCache } from '../lib/mutant-cache.js';
-import { scratchDir } from '../lib/project-paths.js';
+import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { VITEST_CONFIG_NAMES } from '../lib/test-run-scope.js';
 
 // -------------------------------------------------------------------------------------------
@@ -401,6 +401,8 @@ type RunResult =
 type RunScope = ChunkTestFile[] | 'whole-suite';
 
 interface Runner {
+  /** The run's own directory (`withCommandBuildDir`), which holds its generated files. */
+  workDir: string;
   /**
    * With `bail`, vitest stops at the first failing test: enough to know a mutant was caught. With
    * `coverage`, each test file writes which game code it ran into that directory (`readCoverage`).
@@ -411,7 +413,6 @@ interface Runner {
     timeoutMs: number,
     options?: { bail?: boolean; coverage?: string },
   ): Promise<RunResult>;
-  dispose(): Promise<void>;
 }
 
 /**
@@ -487,10 +488,10 @@ async function readReport(
 
 /**
  * `testFiles` names the chunk's test files by their manifest paths; a file outside them is named by
- * its path in the project. `workName` is the scratch directory the run's generated files live in,
- * one per kind of check, so two checks in one project never share one.
+ * its path in the project. `workDir` is the directory this run of the check made for its generated
+ * files (`withCommandBuildDir`), so two checks in one project never share one, and it removes it.
  */
-async function createRunner(projectDir: string, testFiles: ChunkTestFile[], workName: string): Promise<Runner> {
+async function createRunner(projectDir: string, testFiles: ChunkTestFile[], workDir: string): Promise<Runner> {
   const vitestBin = join(projectDir, 'node_modules', '.bin', 'vitest');
   if (!existsSync(vitestBin)) {
     throw new Error(
@@ -498,8 +499,6 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
         'Run `npm install` in the project (vitest is one of its devDependencies), then run this check again.',
     );
   }
-  const workDir = join(scratchDir(projectDir), workName);
-  await fs.mkdir(workDir, { recursive: true });
   const configPath = join(workDir, 'vitest.config.mts');
   const mutantPath = join(workDir, 'mutant.json');
   const reportPath = join(workDir, REPORT_NAME);
@@ -510,6 +509,7 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
   const byRealPath = new Map(testFiles.map((f) => [realpathSync(f.absPath), f.path]));
 
   return {
+    workDir,
     async run(scope, mutant, timeoutMs, options = {}) {
       await fs.rm(reportPath, { force: true });
       const env = { ...process.env };
@@ -538,9 +538,6 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
         (scope === 'whole-suite' ? relative(projectDir, realPath).split(sep).join('/') : undefined),
       );
       return { kind: 'ran', ...read, exitCode: finished.exitCode, ms: Date.now() - started };
-    },
-    async dispose() {
-      await fs.rm(workDir, { recursive: true, force: true });
     },
   };
 }
@@ -877,15 +874,12 @@ const CHUNK_SURVIVOR_DETAIL =
 async function pinCoverage(runner: Runner, projectDir: string, pins: ChunkTestFile[]): Promise<Map<string, FileCoverage>> {
   const coverage = new Map<string, FileCoverage>();
   if (pins.length === 0) return coverage;
-  const dir = await fs.mkdtemp(join(scratchDir(projectDir), 'coverage-'));
-  try {
-    const run = await runner.run(pins, null, 10 * 60_000, { coverage: dir });
-    if (run.kind !== 'ran') throw new Error('The run that records which game code the pinning tests run did not finish within 10 minutes.');
-    for (const pin of pins) coverage.set(pin.path, await readCoverage(dir, projectDir, pin.absPath, pin.path));
-    return coverage;
-  } finally {
-    await fs.rm(dir, { recursive: true, force: true });
-  }
+  const dir = join(runner.workDir, 'coverage');
+  await fs.mkdir(dir);
+  const run = await runner.run(pins, null, 10 * 60_000, { coverage: dir });
+  if (run.kind !== 'ran') throw new Error('The run that records which game code the pinning tests run did not finish within 10 minutes.');
+  for (const pin of pins) coverage.set(pin.path, await readCoverage(dir, projectDir, pin.absPath, pin.path));
+  return coverage;
 }
 
 /**
@@ -898,8 +892,8 @@ export async function runMutationCheck(
 ): Promise<{ findings: TestStepFinding[]; summary: MutationSummary }> {
   const projectDir = realpathSync(input.projectDir);
   const summary: MutationSummary = { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0 };
-  const runner = await createRunner(projectDir, input.testFiles, 'test-step-check');
-  try {
+  return withCommandBuildDir(projectDir, 'test-step-check', async (workDir) => {
+    const runner = await createRunner(projectDir, input.testFiles, workDir);
     const baseline = await runner.run(input.testFiles, null, 10 * 60_000);
     if (baseline.kind !== 'ran') throw new Error('The unmutated test run did not finish within 10 minutes.');
     const notGreen = baselineFindings(input.testFiles, baseline);
@@ -921,9 +915,7 @@ export async function runMutationCheck(
     }
     summary.files = files.size;
     return { findings: survivorFindings(input, tracked, killed, mutants.length, plans), summary };
-  } finally {
-    await runner.dispose();
-  }
+  });
 }
 
 // -------------------------------------------------------------------------------------------
@@ -976,21 +968,15 @@ interface GreenRunner {
 }
 
 /**
- * Runs the whole suite once unmutated. Returns the runner when it passed; otherwise disposes of it
- * and names what failed, since a mutant proves nothing on a red suite.
+ * Runs the whole suite once unmutated. Returns the runner when it passed; otherwise names what
+ * failed, since a mutant proves nothing on a red suite.
  */
-async function greenRunner(projectDir: string): Promise<GreenRunner | { notGreen: string[] }> {
-  const runner = await createRunner(projectDir, [], 'verify-mutation');
-  try {
-    const baseline = await runner.run('whole-suite', null, 10 * 60_000);
-    if (baseline.kind !== 'ran') throw new Error('The unmutated test run did not finish within 10 minutes.');
-    if (!suiteNoticed(baseline)) return { runner, timeoutMs: Math.max(30_000, baseline.ms * 10) };
-    await runner.dispose();
-    return { notGreen: redParts(baseline) };
-  } catch (error) {
-    await runner.dispose();
-    throw error;
-  }
+async function greenRunner(projectDir: string, workDir: string): Promise<GreenRunner | { notGreen: string[] }> {
+  const runner = await createRunner(projectDir, [], workDir);
+  const baseline = await runner.run('whole-suite', null, 10 * 60_000);
+  if (baseline.kind !== 'ran') throw new Error('The unmutated test run did not finish within 10 minutes.');
+  if (!suiteNoticed(baseline)) return { runner, timeoutMs: Math.max(30_000, baseline.ms * 10) };
+  return { notGreen: redParts(baseline) };
 }
 
 async function runMutant({ runner, timeoutMs }: GreenRunner, mutant: LocatedMutant): Promise<DiffOutcome> {
@@ -1017,27 +1003,36 @@ export async function runDiffMutationCheck(
   const summary: MutationSummary = { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0 };
   const mutants = await collectMutants(projectDir, input.added, summary);
   const known = mutants.map((m) => input.cache.get(m));
+  if (!known.includes(undefined)) return tallyMutants(input, mutants, known, undefined, summary);
 
-  let run: GreenRunner | undefined;
-  if (known.includes(undefined)) {
-    const started = await greenRunner(projectDir);
+  return withCommandBuildDir(projectDir, 'verify-mutation', async (workDir) => {
+    const started = await greenRunner(projectDir, workDir);
     if ('notGreen' in started) return { summary, reused: 0, survivors: [], notGreen: started.notGreen };
-    run = started;
+    return tallyMutants(input, mutants, known, started, summary);
+  });
+}
+
+/**
+ * Counts each mutant's outcome into `summary`: the one `known` holds for it, or else the outcome of
+ * running it on `run`, which every mutant `known` does not hold needs. Returns the survivors.
+ */
+async function tallyMutants(
+  input: DiffMutationInput,
+  mutants: LocatedMutant[],
+  known: (DiffOutcome | undefined)[],
+  run: GreenRunner | undefined,
+  summary: MutationSummary,
+): Promise<{ summary: MutationSummary; reused: number; survivors: SurvivingMutant[] }> {
+  const survivors: SurvivingMutant[] = [];
+  for (const [i, mutant] of mutants.entries()) {
+    const stored = known[i];
+    const label = `mutant ${i + 1}/${mutants.length}: ${mutant.file}:${mutant.line} ${mutant.description}`;
+    input.log(stored === undefined ? label : `${label} (reused: ${stored})`);
+    const outcome = stored ?? (await runMutant(run!, mutant));
+    if (stored === undefined && outcome !== 'timed-out') input.cache.set(mutant, outcome);
+    summary.mutants++;
+    summary[COUNTED[outcome]]++;
+    if (outcome === 'survived') survivors.push({ file: mutant.file, line: mutant.line, description: mutant.description });
   }
-  try {
-    const survivors: SurvivingMutant[] = [];
-    for (const [i, mutant] of mutants.entries()) {
-      const stored = known[i];
-      const label = `mutant ${i + 1}/${mutants.length}: ${mutant.file}:${mutant.line} ${mutant.description}`;
-      input.log(stored === undefined ? label : `${label} (reused: ${stored})`);
-      const outcome = stored ?? (await runMutant(run!, mutant));
-      if (stored === undefined && outcome !== 'timed-out') input.cache.set(mutant, outcome);
-      summary.mutants++;
-      summary[COUNTED[outcome]]++;
-      if (outcome === 'survived') survivors.push({ file: mutant.file, line: mutant.line, description: mutant.description });
-    }
-    return { summary, reused: known.filter((k) => k !== undefined).length, survivors };
-  } finally {
-    await run?.runner.dispose();
-  }
+  return { summary, reused: known.filter((k) => k !== undefined).length, survivors };
 }

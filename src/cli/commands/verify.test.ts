@@ -7,6 +7,7 @@ import { spawnCli } from '../spawn-cli.test-helper.js';
 import { generateVitestConfig } from '../lib/test-run-scope.js';
 import { readVerifyResult, verifiedProblem } from '../lib/verify-result.js';
 import { commitAll, git, initRepo, writeFiles as write } from '../lib/verify-result.test-helper.js';
+import { plantOtherRuns } from '../lib/command-build-dirs.test-helper.js';
 import { makeChunkProject } from './chunk-project.test-helper.js';
 import { recordSignoff } from './chunk-signoff.js';
 import { check, verifyAsAUser } from './verify-cli.test-helper.js';
@@ -208,9 +209,12 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
 
   it('passes once the whole suite is green and every changed line is caught, and the claim is accepted', async () => {
     const dir = await gameOnBranch(false);
+    const expectOtherRunsKept = plantOtherRuns(dir);
 
     const { result } = await runVerify({ projectDir: dir, checks: CHECKS, log: () => {} });
 
+    // Its suite and mutation runs each worked in a directory of their own, and removed only that (#544).
+    expectOtherRunsKept();
     expect(result.checks.filter((c) => !c.passed)).toEqual([]);
     expect(result.passed).toBe(true);
     expect(check(result, 'test').counts).toEqual({ files: 2, tests: 3, passed: 3, failed: 0, skipped: 0 });

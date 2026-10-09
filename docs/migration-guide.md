@@ -1,5 +1,17 @@
 # Migration Guide
 
+## The game context's turn signals follow time travel; `usePlayContext()` works in a world
+
+The game context now carries `isViewingHistory`, and while the debug panel shows
+history its `isMyTurn` is false and its `availableActions` empty, matching the
+board's props (#520). A component that read the live values from the context to
+offer controls during a browse now withdraws them, which is the point: those
+controls could not commit.
+
+A component shared between a table and a world reads `usePlayContext()` instead of
+raw `inject(GAME_CONTEXT_KEYS.<field>)` calls. `tryUseGameContext()` returns
+`undefined` in a world instead of throwing.
+
 ## `boardsmith/testing` has one way to do each thing
 
 `boardsmith/testing` dropped the exports that duplicated another one or that

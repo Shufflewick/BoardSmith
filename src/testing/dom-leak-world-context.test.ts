@@ -13,12 +13,12 @@
  * mounted by `renderAsSeat` is not given.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { defineComponent, h, inject, ref, type PropType } from 'vue';
+import { defineComponent, h, ref, type PropType } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 
 import type { ElementJSON } from '../engine/index.js';
 import type { UseActionControllerReturn } from '../ui/composables/useActionControllerTypes.js';
-import { GAME_CONTEXT_KEYS } from '../ui/composables/useGameContext.js';
+import { GAME_CONTEXT_KEYS, tryUseGameContext, usePlayContext } from '../ui/composables/useGameContext.js';
 import { useWorld } from '../ui/world/useWorld.js';
 import WorldShell from '../ui/world/WorldShell.vue';
 import { WORLD_HOST_SOURCE } from '../ui/world/worldProtocol.js';
@@ -112,21 +112,20 @@ const PlayContextBoard = defineComponent({
     actionController: { type: Object as PropType<UseActionControllerReturn>, required: true },
   },
   setup(props) {
-    const seat = inject(GAME_CONTEXT_KEYS.playerSeat);
-    const mayAct = inject(GAME_CONTEXT_KEYS.isMyTurn);
-    const actions = inject(GAME_CONTEXT_KEYS.availableActions);
-    const me = inject(GAME_CONTEXT_KEYS.myPlayer);
-    const view = inject(GAME_CONTEXT_KEYS.gameView);
-    const controller = inject(GAME_CONTEXT_KEYS.actionController);
+    // The typed read a component shared between a table and a world makes (#520).
+    const context = usePlayContext();
+    const tableContext = tryUseGameContext();
     return () =>
       h('div', {
         class: 'board',
-        'data-seat': String(seat?.value),
-        'data-may-act': String(mayAct?.value),
-        'data-actions': actions?.value.join(','),
-        'data-me': me?.value?.name ?? '',
-        'data-view': (view?.value as ElementJSON | null)?.className ?? '',
-        'data-same-controller': String(controller === props.actionController),
+        'data-seat': String(context.playerSeat.value),
+        'data-may-act': String(context.isMyTurn.value),
+        'data-history': String(context.isViewingHistory.value),
+        'data-actions': context.availableActions.value.join(','),
+        'data-me': context.myPlayer.value?.name ?? '',
+        'data-view': (context.gameView.value as ElementJSON | null)?.className ?? '',
+        'data-same-controller': String(context.actionController === props.actionController),
+        'data-table-context': String(tableContext !== undefined),
       });
   },
 });
@@ -138,6 +137,9 @@ describe('renderAsSeat provides the play context WorldShell provides (#413)', ()
 
     expect(board.attributes('data-seat')).toBe(String(SEAT));
     expect(board.attributes('data-may-act')).toBe('true');
+    // A world has no history to browse, and no table fields to read.
+    expect(board.attributes('data-history')).toBe('false');
+    expect(board.attributes('data-table-context')).toBe('false');
     expect(board.attributes('data-actions')).toBe('inspect,post,stash');
     // The host names nobody, so the shell says the seat rather than inventing a person.
     expect(board.attributes('data-me')).toBe(`Seat ${SEAT}`);
@@ -275,7 +277,7 @@ describe('worldShellContext: the world stub is what WorldShell provides, built t
 
     for (const key of [GAME_CONTEXT_KEYS.gameState, GAME_CONTEXT_KEYS.dueSeats, GAME_CONTEXT_KEYS.timeTravelDiff, GAME_CONTEXT_KEYS.turnDeadline]) {
       expect(await refusal(worldShellContext(world, SEAT, { provide: { [key as symbol]: ref(null) } }))).toMatch(
-        /worldShellContext was asked to provide bs:\w+, which WorldShell never provides.*useWorld\(\)/s,
+        /worldShellContext was asked to provide bs:\w+, which WorldShell never provides.*useWorld\(\).*usePlayContext\(\)/s,
       );
     }
   });

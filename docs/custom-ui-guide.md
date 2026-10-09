@@ -748,6 +748,30 @@ Never cache `actionQuote` into your own ref. A quote is stamped with the draft i
 was computed for and withdrawn the instant the draft moves, which is what makes a
 stale price unreachable — a copy of your own is exactly how one comes back.
 
+### Reading the context from a component under the board: `usePlayContext()`
+
+A component the board renders (a hand, a panel, a button row) does not receive the
+board's props. It reads the same values from the game context instead.
+
+```typescript
+import { usePlayContext } from 'boardsmith/ui';
+
+const { playerSeat, isMyTurn, isViewingHistory, availableActions, actionController } = usePlayContext();
+```
+
+`usePlayContext()` returns the fields both shells publish, so it works the same at
+a table and in a persistent world. Use it in any component a game shares between
+the two. `useGameContext()` returns the whole table context, adding `gameState`,
+`dueSeats`, `timeTravelDiff` and `turnDeadline`. It throws in a world, which has
+none of those. `tryUseGameContext()` returns the table context or `undefined`, and
+never throws.
+
+While the debug panel shows a historical position, `isViewingHistory` is true,
+`isMyTurn` is false and `availableActions` is empty, exactly as the board's own
+props are. So a component under the board withdraws its controls during a browse,
+just as the board does, and can say why. In a world `isViewingHistory` is always
+false.
+
 ### Showing who has to act: `dueSeats`
 
 The game context carries `dueSeats`: every seat that has to act right now, the
@@ -763,7 +787,8 @@ import { useGameContext } from 'boardsmith/ui';
 
 const { dueSeats, playerSeat } = useGameContext();
 
-// True exactly when isMyTurn is.
+// True exactly when isMyTurn is, except while the debug panel shows history:
+// dueSeats stays live then, and isMyTurn is false.
 const myMove = computed(() => dueSeats.value.includes(playerSeat.value));
 // Everyone else still deciding, for a "waiting on Bob and Carol" line.
 const others = computed(() => dueSeats.value.filter((seat) => seat !== playerSeat.value));
