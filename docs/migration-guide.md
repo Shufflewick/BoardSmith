@@ -211,7 +211,7 @@ removed/changed API.
 - The headless test-harness module moved and lost its old import path.
 - `ElementCollection.shuffle()` now requires an explicit RNG argument — no
   silent `Math.random()` fallback.
-- Animation helpers (`useElementAnimation`, `useFLIP`, `useFlyingElements`)
+- Animation helpers (`useFLIP`, `useFlyingElements`)
   now fail loud in development when a target element has no anchor
   attribute, instead of silently no-oping.
 - `onPersistenceError` gained two additional arguments.

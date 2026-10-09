@@ -19,7 +19,7 @@ vi.stubGlobal('ResizeObserver', vi.fn(() => ({
 })));
 
 const { createFLIPSnapshot } = await import('./useFLIP.js');
-const { prefersReducedMotion } = await import('./useElementAnimation.js');
+const { prefersReducedMotion } = await import('./reducedMotion.js');
 
 const rect = (left: number, top: number): DOMRect => ({
   left, top, right: left, bottom: top, width: 0, height: 0, x: left, y: top,

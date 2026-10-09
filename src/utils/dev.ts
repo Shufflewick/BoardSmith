@@ -52,8 +52,8 @@ export function isDevMode(): boolean {
  * per CONTEXT.md's ANIM-03 requirement that animation failures are cosmetic
  * and must never crash a live game.
  *
- * Used ONLY by the four animation composables' fail-loud throw sites
- * (`useFLIP`, `useFlyingElements`, `useElementAnimation`, `useActionAnimations`).
+ * Used ONLY by the animation composables' fail-loud throw sites
+ * (`useFLIP`, `useFlyingElements`, `useActionAnimations`).
  * Do NOT use this for `devWarn`/non-fatal diagnostics — those should keep
  * using {@link isDevMode}'s broader "not positively production" semantics.
  *
