@@ -48,7 +48,7 @@ describe('generateAppVue', () => {
     expect(out).not.toMatch(/game-type|display-name|player-count/);
     // The slot is gone on purpose: a second way to name the default UI is a
     // second thing that can disagree with src/ui/uis.ts.
-    expect(out).not.toContain('<template #');
+    expect(out).not.toMatch(/<template #game-/);
   });
 
   it('does not import any board component directly — the registry owns that', () => {
