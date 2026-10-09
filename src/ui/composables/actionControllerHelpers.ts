@@ -7,7 +7,7 @@
 
 import type { EnrichedActionMetadata, ChoiceWithRefs, ElementRef, EnrichedPickMetadata, PickSnapshot } from './useActionControllerTypes.js';
 import { isDevMode, devWarn } from '../../utils/dev.js';
-import { labelOfValue } from '../../engine/action/choice-matching.js';
+import { labelOfValue, valuesEqual } from '../../engine/action/choice-matching.js';
 
 // Re-export for backwards compatibility during transition
 export { isDevMode, devWarn };
@@ -144,6 +144,22 @@ export function choiceBoardTarget(choice: ChoiceWithRefs): ElementRef | undefine
 export function getDisplayFromValue(value: unknown): string {
   if (value === null || value === undefined) return '';
   return labelOfValue(value);
+}
+
+/**
+ * The label a pick the client holds reads as: the label of the offered choice
+ * it equals, else {@link getDisplayFromValue}. The controller and the Action
+ * Panel both label held picks with it, so a breadcrumb, a repeated pick's
+ * entry and an ordered list's entry read as the button that made them (#509).
+ * Equality is structural, because a custom UI's copy of an object value is
+ * never the offered object itself.
+ */
+export function labelOfPick(
+  value: unknown,
+  choices: readonly { value: unknown; display: string }[],
+): string {
+  const choice = choices.find((c) => valuesEqual(c.value, value));
+  return choice ? choice.display : getDisplayFromValue(value);
 }
 
 // ============================================

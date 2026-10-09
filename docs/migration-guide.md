@@ -39,6 +39,11 @@ the old rules changes in five places:
   array in some states and a bare value in others. It is now a type error and is
   refused at run time, naming the selection. Return `{ min: 1, max: 1 }` and read
   an array of one. Declaring either option types the arg as an array.
+- **A repeating pick's `nextChoices` are labelled choices.** A selection step
+  on a repeating `chooseFrom` used to return the next pass's choices as bare
+  values, so every pass after the first lost its labels. It now returns
+  `{ value, display }` choices, labelled as the first pass's were. A custom UI
+  that read `pickStep`'s `nextChoices` reads `choice.value` and `choice.display`.
 
 ## The game context's turn signals follow time travel; `usePlayContext()` works in a world
 

@@ -33,6 +33,8 @@ import { PlayerFacingError, NotSimulableError } from '../errors.js';
 import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
 import { findMatchingChoice, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
 import { numberRuleErrors } from './number-rules.js';
+import { formatChoiceCandidates } from '../element/pick-candidates.js';
+import type { ChoiceWithRefs } from '../../types/protocol.js';
 import { textRuleErrors } from './text-rules.js';
 import { resolveMultiSelect, resolveOrderedList } from '../utils/resolve-multiselect.js';
 
@@ -1951,7 +1953,8 @@ export class ActionExecutor {
    *
    * @returns Object with:
    *   - done: true if the repeating selection is complete
-   *   - nextChoices: available choices for the next iteration (if not done)
+   *   - nextChoices: the next iteration's choices (if not done), labelled for
+   *     a surface exactly as the first iteration's were
    *   - error: error message if something went wrong
    */
   processRepeatingStep(
@@ -1959,7 +1962,7 @@ export class ActionExecutor {
     player: Player,
     pendingState: PendingActionState,
     value: unknown
-  ): { done: boolean; nextChoices?: unknown[]; error?: string } {
+  ): { done: boolean; nextChoices?: ChoiceWithRefs[]; error?: string } {
     const selection = action.selections[pendingState.currentSelectionIndex];
     if (!selection) {
       return { done: true, error: `Selection at index ${pendingState.currentSelectionIndex} not found` };
@@ -2035,7 +2038,11 @@ export class ActionExecutor {
         return { done: false, error: `Selection disabled: ${disabledMatch.disabled}` };
       }
     } else if (!this.annotatedChoicesContain(currentChoices, value)) {
-      return { done: false, error: `Invalid choice: ${JSON.stringify(value)}`, nextChoices: currentChoices.map(c => c.value) };
+      return {
+        done: false,
+        error: `Invalid choice: ${JSON.stringify(value)}`,
+        nextChoices: formatChoiceCandidates(currentChoices, selection as ChoiceSelection, context, []),
+      };
     } else {
       // Check disabled for non-element choices
       const disabledMatch = currentChoices.find(c => this.valuesEqual(c.value, value) && c.disabled !== false);
@@ -2148,10 +2155,9 @@ export class ActionExecutor {
     }
 
     // Format choices for UI - element selections need {value: id, display: name}
-    const nextChoicesRaw = nextAnnotated.map(c => c.value);
     const formattedChoices = isElementSelection
-      ? this.formatElementChoices(nextChoicesRaw.filter(isElement), selection, nextContext)
-      : nextChoicesRaw;
+      ? this.formatElementChoices(nextAnnotated.map(c => c.value).filter(isElement), selection, nextContext)
+      : formatChoiceCandidates(nextAnnotated, selection as ChoiceSelection, nextContext, []);
 
     return { done: false, nextChoices: formattedChoices };
   }

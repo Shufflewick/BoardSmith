@@ -1496,7 +1496,7 @@ Don't use `followUp` when:
 
 When followUp args are displayed in the action panel (as chips showing context), plain IDs like `mercId: 51` display as "51" which isn't user-friendly.
 
-**Option 1: Pass objects with name/display properties**
+**Option 1: Pass objects with a `name` or `label` property**
 
 ```typescript
 return {
@@ -1515,7 +1515,11 @@ return {
 };
 ```
 
-The UI extracts the `name` (or `display`) property automatically. Your follow-up action's helpers should handle both formats:
+A chip reads an object arg by one rule, the same one the server labels a
+choice with: its `name`, else its `label`, else the object as JSON. A `display`
+field is ordinary data and is not read, and neither is a `value` field, so
+`{ value: 3 }` shows as `{"value":3}`. Your follow-up action's helpers should
+handle both formats:
 
 ```typescript
 function getMerc(ctx: ActionContext): Merc {

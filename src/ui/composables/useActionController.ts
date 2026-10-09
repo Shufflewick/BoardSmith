@@ -89,7 +89,7 @@
  */
 
 import { ref, readonly, computed, watch, inject, nextTick, getCurrentScope, onScopeDispose } from 'vue';
-import { isDevMode, devWarn, getDisplayFromValue, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList } from './actionControllerHelpers.js';
+import { isDevMode, devWarn, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 import { useBoardInteraction, type BoardInteraction } from './useBoardInteraction.js';
 import { findMatchingChoice } from '../../engine/action/choice-matching.js';
@@ -514,12 +514,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Get from snapshot - single source of truth
     const snapshot = actionSnapshot.value?.pickSnapshots.get(selectionName);
 
-    if (snapshot?.choices) {
-      const match = snapshot.choices.find(c =>
-        c.value === value || JSON.stringify(c.value) === JSON.stringify(value)
-      );
-      if (match) return match.display;
-    }
+    if (snapshot?.choices) return labelOfPick(value, snapshot.choices);
 
     if (snapshot?.validElements) {
       const match = snapshot.validElements.find(e =>
@@ -528,8 +523,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       if (match && match.display) return match.display;
     }
 
-    // Fallback
-    return String(value);
+    return getDisplayFromValue(value);
   }
 
   /**
@@ -1974,22 +1968,19 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     const player = playerSeat?.value ?? 0;
 
-    // Initialize repeating state if needed
+    // Initialize repeating state if needed, from the choices the first pass offered
     if (!repeatingState.value || repeatingState.value.selectionName !== selection.name) {
+      const offered = getChoices(selection);
       repeatingState.value = {
         selectionName: selection.name,
         accumulated: [],
         awaitingServer: false,
-        currentChoices: selection.choices,
+        currentChoices: offered,
       };
     }
 
-    // Find display value from current choices
-    const choices = repeatingState.value.currentChoices || selection.choices || [];
-    const matchedChoice = choices.find(c => c.value === value || JSON.stringify(c.value) === JSON.stringify(value));
-    const display = matchedChoice?.display || String(value);
-
-    // Add to accumulated with display
+    // Add to accumulated with the label its button carried
+    const display = labelOfPick(value, repeatingState.value.currentChoices ?? []);
     repeatingState.value.accumulated.push({ value, display });
     repeatingState.value.awaitingServer = true;
 
@@ -2065,12 +2056,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       // More iterations needed - update choices if provided
       if (result.nextChoices) {
-        repeatingState.value.currentChoices = result.nextChoices.map((choice: unknown) => {
-          if (typeof choice === 'object' && choice !== null && 'value' in choice && 'display' in choice) {
-            return choice as { value: unknown; display: string };
-          }
-          return { value: choice, display: String(choice) };
-        });
+        repeatingState.value.currentChoices = result.nextChoices;
       }
 
       return { valid: true };
@@ -2673,7 +2659,7 @@ export type PickStepFn = (
   success: boolean;
   error?: string;
   done?: boolean;
-  nextChoices?: unknown[];
+  nextChoices?: ChoiceWithRefs[];
   actionComplete?: boolean;
 }>;
 

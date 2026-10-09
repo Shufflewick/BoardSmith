@@ -387,7 +387,7 @@ export interface OpSuccessFields {
     /** The acting seat's half-made selection, or `null` once the action completed or was dropped. */
     pendingState: Record<string, unknown> | null;
     done?: boolean;
-    nextChoices?: unknown[];
+    nextChoices?: ChoiceWithRefs[];
     actionComplete?: boolean;
     /**
      * Structured, inspectable warnings carried up from the pick (e.g.

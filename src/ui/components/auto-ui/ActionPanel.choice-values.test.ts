@@ -15,13 +15,15 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { mount, type VueWrapper } from '@vue/test-utils';
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, ref, type Ref } from 'vue';
 
 import ActionPanel from './ActionPanel.vue';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 import { BOARD_INTERACTION_KEY } from '../../composables/useBoardInteraction.js';
 import type { TableActionWiring } from '../../composables/useTableActionWiring.js';
-import { mountLiveSeat, settle } from '../../composables/table-wiring.test-helper.js';
+import { createBoardInteraction } from '../../composables/useBoardInteraction.js';
+import { mountLiveSeat, mountTableWiring, settle, startTable } from '../../composables/table-wiring.test-helper.js';
+import type { PlayerGameState } from '../../../session/types.js';
 import type { HeadlessSession } from '../../../session/headless-session.js';
 import { Game, Player, Action, defineFlow, actionStep, type GameOptions } from '../../../engine/index.js';
 
@@ -208,5 +210,164 @@ describe('a chooseFrom value is the same on every path (#509)', () => {
     await settle();
 
     expect(t.session.readGame().seen).toEqual([{ where: 'execute', value: ['x', 'z'] }]);
+  });
+});
+
+/**
+ * #509: THE PANEL LABELS A VALUE THE WAY ITS OWN BUTTONS DO.
+ *
+ * A pick's label is the choice's own display (its `label`, else the
+ * selection's `display()`, else `labelOfValue`), and a value held without its
+ * choice reads by `labelOfValue` too. Everywhere the panel shows a pick it
+ * already holds -- a made pick, a repeated pick's entries, an ordered list's
+ * entries -- reads the same, so the breadcrumb never names a pick differently
+ * from the button that made it.
+ *
+ * `{ id, name, display }` is the shape that tells the rules apart: `display` on
+ * a value is ordinary data (#509), so it reads by its `name`.
+ */
+const SHAPES: unknown[] = [
+  { value: 'skip', label: 'Skip it' },
+  { id: 7, name: 'Bronson' },
+  'plain',
+  { id: 9, name: 'Ada', display: 'Lovelace' },
+];
+const STOP = 'stop';
+
+class LabelsGame extends Game<LabelsGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(
+      Action.create<LabelsGame>('made')
+        .chooseFrom('pick', { choices: SHAPES })
+        .chooseFrom('then', { choices: ['ok'] })
+        .execute(() => ({ success: true })),
+    );
+    this.registerAction(
+      Action.create<LabelsGame>('repeated')
+        .chooseFrom('picks', { choices: [...SHAPES, STOP], repeatUntil: STOP })
+        .execute(() => ({ success: true })),
+    );
+    this.registerAction(
+      Action.create<LabelsGame>('ordered')
+        .chooseFrom('list', { choices: SHAPES, orderedList: { min: 1, max: 8 } })
+        .execute(() => ({ success: true })),
+    );
+    this.setFlow(
+      defineFlow({
+        root: actionStep({
+          actions: ['made', 'repeated', 'ordered'],
+          player: (ctx) => ctx.game.getPlayer(1)!,
+          repeatUntil: () => false,
+          maxMoves: 20,
+        }),
+      }),
+    );
+  }
+}
+
+/** A live seat with the selection-step transport, which a repeating pick needs. */
+async function labelsTable(): Promise<Table> {
+  const board = createBoardInteraction();
+  const session = await startTable(LabelsGame, 'bs509-labels');
+  const seatState = ref(session.playerState(SEAT)) as Ref<PlayerGameState>;
+  const { wiring, wrapper } = mountTableWiring({
+    seat: SEAT,
+    session: () => session,
+    boardInteraction: board,
+    seatState,
+    autoEndTurn: false,
+    withPickStep: true,
+    afterPerform: () => { seatState.value = session.playerState(SEAT); },
+  });
+  mounted.push(wrapper);
+  const Host = defineComponent({
+    setup: () => () =>
+      h(ActionPanel, {
+        availableActions: seatState.value.availableActions ?? [],
+        actionMetadata: wiring.actionMetadata.value,
+        playerSeat: SEAT,
+        isMyTurn: true,
+      }),
+  });
+  const panel = mount(Host, {
+    global: {
+      provide: {
+        [GAME_CONTEXT_KEYS.actionController as symbol]: wiring.controller,
+        [BOARD_INTERACTION_KEY as symbol]: board,
+      },
+    },
+    attachTo: document.body,
+  });
+  mounted.push(panel);
+  await settle();
+  return { session: session as unknown as HeadlessSession<ValuesGame>, controller: wiring.controller, panel };
+}
+
+/** The label each offered value's button carries, in offer order. */
+function buttonLabels(t: Table, selector: string): Array<{ value: unknown; label: string }> {
+  const buttons = t.panel.findAll(selector).map((b) => b.text());
+  const values = offered(t).map((c) => c.value);
+  expect(buttons).toHaveLength(values.length);
+  return values.map((value, i) => ({ value, label: buttons[i]! }));
+}
+
+/** A copy of a value as a custom UI holds it: rebuilt from JSON, never the same object. */
+const asCustomUiHoldsIt = (value: unknown): unknown => JSON.parse(JSON.stringify(value));
+
+describe('the panel labels a pick it holds the way its button did (#509)', () => {
+  it('labels each button by the one rule', async () => {
+    const t = await labelsTable();
+    await t.controller.start('made');
+    await settle();
+
+    expect(buttonLabels(t, '.choice-buttons .choice-btn:not(.skip-btn)').map((b) => b.label))
+      .toEqual(['Skip it', 'Bronson', 'plain', 'Ada']);
+  });
+
+  it('shows a made pick as its button read', async () => {
+    for (const index of SHAPES.keys()) {
+      const t = await labelsTable();
+      await t.controller.start('made');
+      await settle();
+      const button = buttonLabels(t, '.choice-buttons .choice-btn:not(.skip-btn)')[index]!;
+
+      await t.controller.fill('pick', asCustomUiHoldsIt(button.value));
+      await settle();
+
+      expect(t.panel.findAll('.selected-value .value-display').map((c) => c.text())).toEqual([button.label]);
+      for (const w of mounted.splice(0)) w.unmount();
+    }
+  });
+
+  it('shows each repeated pick entry as its button read, on every pass', async () => {
+    const t = await labelsTable();
+    await t.controller.start('repeated');
+    await settle();
+
+    const pressed: string[] = [];
+    for (const index of SHAPES.keys()) {
+      const buttons = buttonLabels(t, '.choice-buttons .choice-btn:not(.skip-btn)');
+      expect(buttons.map((b) => b.label)).toEqual(['Skip it', 'Bronson', 'plain', 'Ada', STOP]);
+      await t.controller.fill('picks', asCustomUiHoldsIt(buttons[index]!.value));
+      await settle();
+      pressed.push(buttons[index]!.label);
+
+      expect(t.panel.findAll('.accumulated-chip').map((c) => c.text())).toEqual(pressed);
+    }
+  });
+
+  it('shows each ordered-list entry as its button read', async () => {
+    const t = await labelsTable();
+    await t.controller.start('ordered');
+    await settle();
+    const buttons = buttonLabels(t, '.ordered-list-add');
+
+    for (const { value } of buttons) {
+      await t.controller.appendListEntry('list', asCustomUiHoldsIt(value));
+    }
+    await settle();
+
+    expect(t.panel.findAll('.ordered-list-label').map((e) => e.text())).toEqual(buttons.map((b) => b.label));
   });
 });

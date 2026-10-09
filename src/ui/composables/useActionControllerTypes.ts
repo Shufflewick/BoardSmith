@@ -81,7 +81,7 @@ export interface PickStepResponse {
   success: boolean;
   error?: string;
   done?: boolean;
-  nextChoices?: unknown[];
+  nextChoices?: ChoiceWithRefs[];
   actionComplete?: boolean;
   /**
    * `ActionResult.data` from the action this step completed (BUG-017). Present
