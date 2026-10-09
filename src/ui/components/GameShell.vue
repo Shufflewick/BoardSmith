@@ -1317,15 +1317,17 @@ if (isDevBuild) {
   }, { immediate: false });
 }
 
-// Expose to parent/slots
+// Expose to parent/slots. `gameView` is the historical view while the debug
+// panel shows history, so turn and actions are the same history-gated values
+// the board gets (#576).
 defineExpose({
   state,
   gameView,
   players,
   myPlayer,
   playerSeat,
-  isMyTurn,
-  availableActions,
+  isMyTurn: gatedIsMyTurn,
+  availableActions: gatedAvailableActions,
   actionController,
 });
 
