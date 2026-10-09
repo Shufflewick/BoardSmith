@@ -408,56 +408,31 @@ describe('useBoardActionBridge isViewingHistory guard (LIBX-04, 164-04)', () => 
   });
 });
 
-// ── Direct source assertions: confirm useBoardActionBridge.ts carries the fix ─
+// ── Direct source assertions: confirm the shared action mutators carry the fix ─
+// Since #513 the bridge and the Action Panel both start, execute and answer
+// actions through actionMutators.ts, so that is where the guard lives.
 
-describe('useBoardActionBridge.ts source: isViewingHistory guard wired at every mutating function', () => {
-  const bridgeSource = fs.readFileSync(
+describe('actionMutators.ts source: isViewingHistory guard wired at every mutating function', () => {
+  const mutatorsSource = fs.readFileSync(
     path.join(
       path.dirname(fileURLToPath(import.meta.url)),
       '..',
       'composables',
-      'useBoardActionBridge.ts'
+      'actionMutators.ts'
     ),
     'utf-8'
   );
 
-  it('declares isViewingHistory on BoardActionBridgeOptions', () => {
-    expect(bridgeSource).toContain('isViewingHistory');
+  it('declares isViewingHistory on ActionMutatorGuards', () => {
+    expect(mutatorsSource).toContain('isViewingHistory: () => boolean;');
   });
 
-  // FIVE since #249 added appendListValue, the board's half of building an
-  // ordered, repeatable list. The count is the point of the assertion: a new
+  // FIVE: start, execute, set-selection, the multi-select toggle and the
+  // ordered-list append (#249). The count is the point of the assertion: a new
   // mutating function added without the guard is exactly the regression this
   // catches, so the number moves only alongside a function that carries one.
-  it('every mutating function guards with `if (isViewingHistory.value) return;` (count == 5)', () => {
-    const occurrences = (bridgeSource.match(/if \(isViewingHistory\.value\) return;/g) ?? []).length;
+  it('every mutating function guards with `if (guards.isViewingHistory())` (count == 5)', () => {
+    const occurrences = (mutatorsSource.match(/if \(guards\.isViewingHistory\(\)\) return/g) ?? []).length;
     expect(occurrences).toBe(5);
-  });
-});
-
-describe('GameShell.vue source: isViewingHistory reaches both the controller and the bridge', () => {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const gameShellSource = fs.readFileSync(path.join(here, 'GameShell.vue'), 'utf-8');
-  const seatSource = fs.readFileSync(path.join(here, '../composables/useTableSeat.ts'), 'utf-8');
-  const wiringSource = fs.readFileSync(path.join(here, '../composables/useTableActionWiring.ts'), 'utf-8');
-
-  it('passes isViewingHistory into useTableSeat({...}), which hands it to useTableActionWiring (#406)', () => {
-    const callSiteIdx = gameShellSource.indexOf('useTableSeat({');
-    expect(callSiteIdx).toBeGreaterThan(-1);
-    const callSiteBlock = gameShellSource.slice(callSiteIdx, callSiteIdx + 400);
-    expect(callSiteBlock).toContain('isViewingHistory');
-
-    const wiringIdx = seatSource.indexOf('useTableActionWiring({');
-    expect(wiringIdx).toBeGreaterThan(-1);
-    expect(seatSource.slice(wiringIdx, seatSource.indexOf('});', wiringIdx))).toContain('isViewingHistory');
-  });
-
-  it('useTableActionWiring hands it to useActionController and useBoardActionBridge (#378)', () => {
-    for (const call of ['useActionController({', 'useBoardActionBridge({']) {
-      const idx = wiringSource.indexOf(call);
-      expect(idx, call).toBeGreaterThan(-1);
-      const block = wiringSource.slice(idx, wiringSource.indexOf('});', idx));
-      expect(block, call).toContain('isViewingHistory');
-    }
   });
 });
