@@ -598,9 +598,7 @@ export function provideBoardInteraction(interaction: BoardInteraction): void {
  * Use board interaction (call in ActionPanel or game board).
  *
  * Throws if called outside a `<GameShell>` (which always provides board
- * interaction). This mirrors `injectActionController()` so the two sibling
- * injection APIs fail the same way instead of one silently returning
- * undefined. If board interaction is genuinely optional for a component,
+ * interaction) instead of silently returning undefined. If board interaction is genuinely optional for a component,
  * use {@link tryUseBoardInteraction} instead.
  */
 export function useBoardInteraction(): BoardInteraction {

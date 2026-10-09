@@ -194,10 +194,8 @@ const { flyingElements } = useFlyingElements({
 #### Action Controller
 
 - `useActionController()` - Action handling for custom UIs
-- `injectActionController()` - Inject action controller
-- `ACTION_CONTROLLER_KEY` - Injection key
-- `injectPickStepFn()` - Inject pick step function
-- `injectBoardInteraction()` - Inject board interaction (throws if outside a `<GameShell>`, mirroring `injectActionController()`; use `tryUseBoardInteraction()` for the optional case)
+- `usePlayContext()` - Reach the action controller (`usePlayContext().actionController`) from a table's `GameShell` or a world's shell
+- `useBoardInteraction()` - Board interaction (throws if outside a `<GameShell>`; use `tryUseBoardInteraction()` for the optional case)
 - `actionNeedsWizardMode()` - Check if action needs wizard
 
 ### Theming

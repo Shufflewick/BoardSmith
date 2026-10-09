@@ -43,7 +43,6 @@ export { MIN_STEP_TIME_LIMIT_MS } from './step-time-limit.js';
 // Types
 export type {
   FlowNodeType,
-  FlowStepResult,
   FlowPosition,
   FlowContext,
   FlowNode,
