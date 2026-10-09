@@ -73,6 +73,8 @@ interface PlatformShellOptions {
    * form a template writes them (#433).
    */
   props?: { providesOwnGameOverUi?: boolean; 'provides-own-game-over-ui'?: boolean };
+  /** GameShell slots, for a test about what a slot is handed. */
+  slots?: Record<string, (slotProps: Record<string, unknown>) => unknown>;
 }
 
 export function mountPlatformShell(options: PlatformShellOptions = {}) {
@@ -81,6 +83,7 @@ export function mountPlatformShell(options: PlatformShellOptions = {}) {
       uis: defineGameUIs({ Stub: defaultUI(options.board ?? StubBoard) }),
       ...options.props,
     },
+    slots: options.slots,
   });
 }
 
@@ -97,11 +100,17 @@ function postFromHost(data: Record<string, unknown>): void {
  * `time-travel` event. `seatState` is merged over seat 1's state, for a test
  * that needs undo, disabled reasons or metadata in the frame.
  *
+ * `slots` are GameShell slots, for a test about what a slot is handed.
+ *
  * Call {@link leaveIframe} in `afterEach`.
  */
-export async function mountTableWithDebugPanel(board: Component, seatState: Record<string, unknown> = {}) {
+export async function mountTableWithDebugPanel(
+  board: Component,
+  seatState: Record<string, unknown> = {},
+  slots?: PlatformShellOptions['slots'],
+) {
   enterIframe();
-  const wrapper = mountPlatformShell({ board });
+  const wrapper = mountPlatformShell({ board, slots });
   await nextTick();
   postFromHost({ type: 'init', seat: 1 });
   postFromHost({ type: 'dev-debug-available', available: true });

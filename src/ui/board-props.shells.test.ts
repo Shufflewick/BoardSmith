@@ -107,6 +107,31 @@ describe('GameShell binds TableBoardProps onto a table board (#516)', () => {
   });
 });
 
+describe('GameShell gates the #player-stats slot like the board (#554)', () => {
+  /** What the slot was last handed, for the viewer's own seat. */
+  let statsProps: Record<string, unknown> = {};
+  const playerStats = (slotProps: Record<string, unknown>) => {
+    if ((slotProps.player as { seat: number }).seat === 1) statsProps = slotProps;
+    return h('span', { class: 'stats' });
+  };
+
+  it('hands the slot the board\'s gated isMyTurn and availableActions, live and in history', async () => {
+    const { wrapper, debugPanel } = await mountTableWithDebugPanel(AttrsBoard, {}, { 'player-stats': playerStats });
+    expect(statsProps.isMyTurn).toBe(true);
+    expect(statsProps.availableActions).toEqual(['move']);
+
+    debugPanel.vm.$emit('time-travel', { view: {}, players: DEBUG_TABLE_PLAYERS }, 3, null);
+    await nextTick();
+    expect(received.isViewingHistory).toBe(true);
+    // The slot draws from the historical gameView beside these, so a live
+    // isMyTurn or action list would offer a control that commits against the live game.
+    expect(statsProps.isMyTurn).toBe(false);
+    expect(statsProps.availableActions).toEqual([]);
+    expect(statsProps.availableActions).toBe(received.availableActions);
+    wrapper.unmount();
+  });
+});
+
 describe('WorldShell binds WorldBoardProps onto a world board (#516)', () => {
   it('hands exactly the contract\'s props, with no prompt setter, since WorldShell does not let a board replace its prompt', async () => {
     const wrapper = mount(WorldShell, {
