@@ -1561,7 +1561,9 @@ defineExpose({
       </template>
 
       <!-- Expose interaction state so a game's player-stats can be actionable
-           (e.g. tap your own special ability to use it), not just informational. -->
+           (e.g. tap your own special ability to use it), not just informational.
+           `gameView` is the historical view while time-traveling, so turn and
+           actions are the same history-gated values the board gets (#554). -->
       <template #player-stats="{ player }">
         <slot
           name="player-stats"
@@ -1569,8 +1571,8 @@ defineExpose({
           :game-view="gameView"
           :players="players"
           :player-seat="playerSeat"
-          :is-my-turn="isMyTurn"
-          :available-actions="availableActions"
+          :is-my-turn="gatedIsMyTurn"
+          :available-actions="gatedAvailableActions"
           :action-controller="actionController"
         ></slot>
       </template>
