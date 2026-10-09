@@ -16,7 +16,8 @@
  * goes to the dev log, where the author reads it.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Game, Player, Piece, Space, Action, ActionExecutor } from '../index.js';
+import { Game, Player, Piece, Space, Action } from '../index.js';
+import { ActionExecutor } from './action.js';
 import type { ActionContext } from '../index.js';
 import { withDevLog } from './dev-log.test-helper.js';
 

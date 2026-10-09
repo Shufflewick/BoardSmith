@@ -20,7 +20,8 @@
  * enumerates with the earlier value bound. Both now say so out loud.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { Game, Player, Action, ActionExecutor } from '../index.js';
+import { Game, Player, Action } from '../index.js';
+import { ActionExecutor } from './action.js';
 import type { ActionDefinition } from '../index.js';
 import { _clearShownWarnings } from '../../utils/dev.js';
 

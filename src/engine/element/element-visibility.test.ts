@@ -3,8 +3,8 @@
  *
  * A Space could declare who may see its CONTENTS (`contentsHidden`,
  * `addZoneVisibleTo`) but not who may see the SPACE ITSELF. The only route was
- * `setVisibilityInternal` — a method whose own doc says the command executor
- * calls it — with a hand-written `VisibilityState` literal.
+ * an internal setter meant for the command executor, with a hand-written
+ * `VisibilityState` literal.
  *
  * Contract asserted here: the element-level API lives on `GameElement`, so a
  * Space, a Piece and the Game all carry it, and the two halves on a Space read

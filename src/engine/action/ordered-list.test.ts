@@ -17,7 +17,8 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { withDevLog } from './dev-log.test-helper.js';
-import { Game, Player, Action, ActionExecutor } from '../index.js';
+import { Game, Player, Action } from '../index.js';
+import { ActionExecutor } from './action.js';
 import type { Selection } from '../index.js';
 import { buildPickMetadata } from '../element/action-metadata.js';
 

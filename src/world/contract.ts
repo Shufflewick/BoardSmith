@@ -122,12 +122,9 @@
  *
  * ### Why there is no hidden primitive to use instead
  *
- * Checked, because the command system looks like one. `command/types.ts`
- * describes an event-sourced log with a `SET_ATTRIBUTE` command, and
- * `Game.execute()` records each command with a pre-computed inverse. It is not
- * the mutation path: `game.ts:3532` states that direct tree mutations "are
- * recorded in neither commandHistory nor actionHistory", and the games mutate
- * by direct assignment throughout.
+ * Checked. The engine has no command log or per-write record (the command
+ * undo system was deleted in BoardSmith #499): element methods splice the tree
+ * directly, and the games mutate by direct assignment throughout.
  *
  * Undo is not one either. `snapshot.ts`: "Each checkpoint is a full copy of the
  * element tree." An `ActionCheckpoint` carries a whole tree, the flow position,

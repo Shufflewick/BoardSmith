@@ -9,12 +9,13 @@
  * no memory between calls.
  */
 
-import type { Game, GameClass, GameCommand, TutorialDefinition, Annotation, FlowState, FollowUpOffer, HistoryEntry } from '../engine/index.js';
+import type { Game, GameClass, TutorialDefinition, Annotation, FlowState, FollowUpOffer, HistoryEntry } from '../engine/index.js';
 import { ErrorCode, type ChoiceWithRefs, type ValidElement } from '../types/protocol.js';
-import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState } from '../engine/index.js';
+import { dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState } from '../engine/index.js';
 import type { BoundaryKeyState } from '../engine/index.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
 import { validateTutorialDefinition, initialProgress, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
+import { executeDebugCommand, type GameCommand } from './debug-command.js';
 import {
   GameRunner,
   restoreEarlierSnapshot,
@@ -1544,7 +1545,7 @@ function handleDebugCommand(
   command: GameCommand,
 ): OpResultFor<'debugReorder' | 'debugTransfer' | 'debugShuffle'> {
   const runner = runnerFromSnapshot(snapshot, def);
-  const result = executeCommand(runner.game as Game, command);
+  const result = executeDebugCommand(runner.game as Game, command);
   if (!result.success) {
     return errorResult(result.error ?? 'Debug command failed');
   }

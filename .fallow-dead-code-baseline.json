@@ -51,7 +51,6 @@
     "src/cli/commands/game-runtime.ts:ProjectContext",
     "src/cli/commands/verify-classify.ts:ChunkAttributionWarningKind",
     "src/cli/dev-host/bridge.ts:WireOp",
-    "src/engine/command/index.ts:ReorderChildCommand",
     "src/engine/element/game.ts:EngineOwnedGameOptionKeysAreComplete",
     "src/engine/element/index.ts:ImageRef",
     "src/session/types.ts:ConditionDetail",
@@ -81,8 +80,7 @@
   "unused_dev_dependencies": [],
   "circular_dependencies": [
     "src/cli/commands/verify-derive-check.ts->src/cli/commands/verify-enumerate.ts",
-    "src/engine/action/action.ts->src/engine/tutorial/gate.ts",
-    "src/engine/command/executor.ts->src/engine/command/inverse.ts"
+    "src/engine/action/action.ts->src/engine/tutorial/gate.ts"
   ],
   "re_export_cycles": [],
   "unused_optional_dependencies": [],

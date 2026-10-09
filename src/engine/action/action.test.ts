@@ -6,12 +6,12 @@ import {
   Piece,
   Player,
   Action,
-  ActionExecutor,
   actionTempState,
   DEFAULT_TEXT_MAX_LENGTH,
   PlayerFacingError,
 } from '../index.js';
 import type { ActionContext, ActionDefinition } from '../index.js';
+import { ActionExecutor } from './action.js';
 
 // Test classes
 class TestGame extends Game<TestGame, Player> {}

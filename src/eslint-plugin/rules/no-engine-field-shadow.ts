@@ -3,7 +3,7 @@ import { describeEngineFieldShadow, isEngineOwnedGameField } from '../../engine/
 
 /**
  * Disallows a Game subclass from using the name of a field the engine owns on
- * every Game (#346): `pile`, `random`, `phase`, `settings`, `commandHistory`,
+ * every Game (#346): `pile`, `random`, `phase`, `settings`, `messages`,
  * and the rest of `ENGINE_OWNED_GAME_FIELDS`.
  *
  * A zone called `pile` type-checks (it narrows `Game.pile`) and works in a

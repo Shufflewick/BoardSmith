@@ -5,8 +5,8 @@ import { MCTSBot } from './mcts-bot.js';
 // ============================================================================
 // F-01 (v4.8 CRITICAL, bot-02): MCTS must roll back element-tree mutations
 // between iterations. `Piece.putInto` -> `moveToInternal` splices the tree
-// directly and records NO command, so the incremental `undoCommands` rollback
-// is a no-op for any real game that moves elements. The search game therefore
+// directly and records NO command, so the old incremental command-undo rollback
+// was a no-op for any real game that moves elements. The search game therefore
 // accumulates permanent mutations across iterations and evaluates fictional
 // states.
 //
@@ -72,13 +72,12 @@ describe('MCTS element-tree rollback (F-01)', () => {
     const b = bot as any;
     b.rootSnapshot = b.captureSnapshot();
     b.searchGame = b.restoreGame(b.rootSnapshot);
-    b.rootCommandCount = b.searchGame.commandHistory.length;
 
     const flowState = b.searchGame.getFlowState();
     const moves = b.movesFor(b.searchGame, flowState, b.playerIndex, { sample: false });
     expect(moves.length).toBe(3); // three cards to draw -> real expansion
 
-    const root = b.createNode(flowState, null, null, moves, 0);
+    const root = b.createNode(flowState, null, null, moves);
 
     // One iteration: descend (root is leaf), expand one draw, backprop.
     const { leaf } = b.selectWithPath(root);
@@ -91,7 +90,7 @@ describe('MCTS element-tree rollback (F-01)', () => {
 
     // After BACKPROPAGATE the searchGame MUST be back at ROOT state:
     // the drawn card is returned to the deck. Pre-fix this failed because
-    // `putInto` records no command, so `undoCommands` never rolled it back.
+    // `putInto` records no command, so the old command undo never rolled it back.
     const restored = b.searchGame as DrawGame;
     expect(restored.handA.all(Piece).length).toBe(0);
     expect(restored.deck.all(Piece).length).toBe(3);

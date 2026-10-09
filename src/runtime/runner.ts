@@ -1,5 +1,5 @@
 import { rulesErrorSentence } from '../engine/action/rules-error.js';
-import { evaluateConditionWithTrace } from '../engine/action/action.js';
+import { ActionExecutor, evaluateConditionWithTrace } from '../engine/action/action.js';
 import {
   serializeAction,
   deserializeAction,
@@ -9,7 +9,6 @@ import {
   checkpointCount,
   createPlayerView,
   createAllPlayerViews,
-  ActionExecutor,
   FlowHaltedError,
   canSeatAct,
   availableActionsForSeat,
@@ -1124,14 +1123,14 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * (`snapshot.flowState`), the element sequence counter (`snapshot.sequence`),
    * and — since RNG-state capture was added — the seeded RNG position
    * (`snapshot.randomState`). We reconstruct the game directly from those rather
-   * than replaying command/action history.
+   * than replaying action history.
    *
-   * This deliberately does NOT call `replayCommands`, `start()`, or re-run the
+   * This deliberately does NOT call `start()` or re-run the
    * actionHistory through `continueFlow`. The previous replay-based restore was
    * only ever a way to re-derive the tree, flow position, and RNG advance — all
    * three of which are now restored authoritatively below. Crucially, replay was
-   * also unsound: selection-step / pending-completed actions are recorded in
-   * NEITHER command nor action history, so replaying an incomplete actionHistory
+   * also unsound: selection-step / pending-completed actions are not recorded
+   * in action history, so replaying an incomplete actionHistory
    * mis-positioned the flow and crashed real games (e.g. MERC's bot dictator
    * Day-1 turn: "Player N is not awaiting action"). Restoring state directly
    * sidesteps that entire class of bug.

@@ -102,8 +102,8 @@ ruleTester.run('no-engine-field-shadow', rule, {
     },
     // Methods and accessors collide with the field just the same.
     {
-      code: `class MyGame extends Game { get commandHistory() { return []; } random() { return 4; } }`,
-      errors: [shadow('MyGame', 'commandHistory'), shadow('MyGame', 'random')],
+      code: `class MyGame extends Game { get messages() { return []; } random() { return 4; } }`,
+      errors: [shadow('MyGame', 'messages'), shadow('MyGame', 'random')],
     },
     // An assignment inside an arrow function still targets the game.
     {

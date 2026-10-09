@@ -323,12 +323,6 @@ record nothing. There is no per-operation generated-object layer behind them,
 and elements have no generic attribute-setter method — assign properties
 directly instead (e.g. `card.faceUp = true`).
 
-`Game#commandHistory` exists, but it is populated ONLY through
-`Game#execute()`, an internal mechanism the engine uses for its own ANIMATE
-event stream (see `game.ts`'s `execute()`/`replayCommands()`). Game rule code
-never calls it and should not rely on it — it is not a general-purpose audit
-log or replay mechanism for game state.
-
 ### How State Actually Travels: Snapshots, Not Replay
 
 BoardSmith is **state-authoritative**: the source of truth is the current
@@ -357,7 +351,6 @@ element tree, not a log of operations that produced it.
 });
 
 // DON'T: Bypass actions for player-driven operations
-// DON'T: Rely on commandHistory as a game-logic audit trail
 ```
 
 ## Player System

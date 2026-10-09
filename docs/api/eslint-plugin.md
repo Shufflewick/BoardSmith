@@ -138,7 +138,7 @@ function doSomething() {
 
 Disallows a Game subclass from using the name of a field the engine owns on
 every Game: `pile`, `random`, `phase`, `settings`, `messages`,
-`commandHistory`, `tutorialProgress`, `tutorialDefinition`, and the internal
+`tutorialProgress`, `tutorialDefinition`, and the internal
 `_`-prefixed fields. The full list is `ENGINE_OWNED_GAME_FIELDS` in
 `src/engine/element/engine-owned-fields.ts`.
 
