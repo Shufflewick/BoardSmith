@@ -261,7 +261,7 @@
     },
     "src/engine/action/action.ts": {
       "complexity_critical": {
-        "count": 4
+        "count": 3
       },
       "complexity_high": {
         "count": 1

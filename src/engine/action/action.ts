@@ -21,6 +21,7 @@ import type {
   ConditionConfig,
   ConditionDetail,
   AnnotatedChoice,
+  LabelledChoice,
   DisabledRule,
   UnavailableRule,
   OnSelectContext,
@@ -296,15 +297,19 @@ interface Candidate {
  * what it receives.
  */
 function asCandidate(choice: unknown): Candidate {
-  if (choice === null || typeof choice !== 'object' || Array.isArray(choice)) return { value: choice };
+  if (!isLabelledChoice(choice)) return { value: choice };
+  return choice.label === undefined ? { value: choice.value } : { value: choice.value, label: choice.label };
+}
+
+/** A plain object (not an array, element or other class instance) whose only keys are `value` and a string `label`. */
+function isLabelledChoice(choice: unknown): choice is LabelledChoice<unknown> {
+  if (choice === null || typeof choice !== 'object') return false;
   const proto = Object.getPrototypeOf(choice);
-  if (proto !== Object.prototype && proto !== null) return { value: choice };
+  if (proto !== Object.prototype && proto !== null) return false;
   const obj = choice as Record<string, unknown>;
-  const labelled = 'value' in obj
+  return 'value' in obj
     && Object.keys(obj).every((key) => key === 'value' || key === 'label')
     && (obj.label === undefined || typeof obj.label === 'string');
-  if (!labelled) return { value: choice };
-  return obj.label === undefined ? { value: obj.value } : { value: obj.value, label: obj.label as string };
 }
 
 /**
@@ -705,69 +710,46 @@ export class ActionExecutor {
     return choices;
   }
 
-  /** An element selection's candidates, or none for a selection without a list. */
-  private elementCandidatesOf(selection: Selection, context: ActionContext): unknown[] {
-    switch (selection.type) {
-      case 'element': {
-        const elementSel = selection as ElementSelection;
-
-        let elements: GameElement[];
-
-        // Check if elements array is provided directly (chooseElement precomputed candidates)
-        if (elementSel.elements) {
-          elements = typeof elementSel.elements === 'function'
-            ? elementSel.elements(context)
-            : [...elementSel.elements];
-        } else {
-          // Original from/filter/elementClass pattern (for chooseElement)
-          const from =
-            typeof elementSel.from === 'function'
-              ? elementSel.from(context)
-              : elementSel.from ?? this.game;
-
-          // DEV: Check if 'from' is an ElementCollection (likely a bug in action definition)
-          if (isDevMode() && Array.isArray(from) && from.length > 0 && 'all' in from) {
-            console.warn(
-              `[BoardSmith] ⚠️ Selection "${selection.name}" 'from' returned an ElementCollection!\n` +
-              `  This is likely a bug - 'from' should return a container (Space/Game), not elements.\n` +
-              `  Example fix: from: () => game.stash  (not game.stash.all(Equipment))\n` +
-              `  The 'from' collection has ${from.length} elements. Calling .all() on it will search WITHIN these.`
-            );
-          }
-
-          if (elementSel.elementClass) {
-            elements = [...from.all(elementSel.elementClass)];
-          } else {
-            elements = [...from.all()];
-          }
-
-          if (elementSel.filter) {
-            const wrappedFilter = wrapFilterWithHelpfulErrors(elementSel.filter, selection.name);
-            elements = elements.filter((e) => wrappedFilter(e, context));
-          }
-        }
-
-        return elements;
-      }
-
-      case 'elements': {
-        // New "pit of success" selection type - elements array
-        const elementsSel = selection as ElementsSelection;
-        const elements = typeof elementsSel.elements === 'function'
-          ? elementsSel.elements(context)
-          : [...elementsSel.elements];
-
-        return elements;
-      }
-
-      case 'text':
-      case 'number':
-        // These don't have predefined choices
-        return [];
-
-      default:
-        return [];
+  /** An element selection's candidates, or none for a selection without a list (text, number). */
+  private elementCandidatesOf(selection: Selection, context: ActionContext): GameElement[] {
+    if (selection.type === 'elements') {
+      const elementsSel = selection as ElementsSelection;
+      return typeof elementsSel.elements === 'function'
+        ? elementsSel.elements(context)
+        : [...elementsSel.elements];
     }
+    if (selection.type !== 'element') return [];
+    const elementSel = selection as ElementSelection;
+    // Precomputed candidates (chooseElement's `elements`)
+    if (elementSel.elements) {
+      return typeof elementSel.elements === 'function'
+        ? elementSel.elements(context)
+        : [...elementSel.elements];
+    }
+    return this.boardElementsOf(elementSel, context);
+  }
+
+  /** A chooseElement's candidates from its `from`/`elementClass`/`filter` search of the board. */
+  private boardElementsOf(elementSel: ElementSelection, context: ActionContext): GameElement[] {
+    const from =
+      typeof elementSel.from === 'function'
+        ? elementSel.from(context)
+        : elementSel.from ?? this.game;
+
+    // DEV: Check if 'from' is an ElementCollection (likely a bug in action definition)
+    if (isDevMode() && Array.isArray(from) && from.length > 0 && 'all' in from) {
+      console.warn(
+        `[BoardSmith] ⚠️ Selection "${elementSel.name}" 'from' returned an ElementCollection!\n` +
+        `  This is likely a bug - 'from' should return a container (Space/Game), not elements.\n` +
+        `  Example fix: from: () => game.stash  (not game.stash.all(Equipment))\n` +
+        `  The 'from' collection has ${from.length} elements. Calling .all() on it will search WITHIN these.`
+      );
+    }
+
+    const elements = elementSel.elementClass ? [...from.all(elementSel.elementClass)] : [...from.all()];
+    if (!elementSel.filter) return elements;
+    const wrappedFilter = wrapFilterWithHelpfulErrors(elementSel.filter, elementSel.name);
+    return elements.filter((e) => wrappedFilter(e, context));
   }
 
   /**
