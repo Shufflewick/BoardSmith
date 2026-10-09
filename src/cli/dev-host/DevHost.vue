@@ -18,6 +18,7 @@ import { useToast } from '../../ui/composables/useToast.js';
 import { applyTheme } from '../../ui/theme.js';
 import { loadDevClientId, TABLE_CLIENT_KEY } from './dev-client-id.js';
 import { DEV_HOST_WS_PATH } from './socket-path.js';
+import { choiceValueKey } from '../../engine/action/choice-matching.js';
 
 const props = defineProps<{ config: DevHostConfig }>();
 const cfg = props.config;
@@ -659,7 +660,7 @@ onUnmounted(() => {
                 class="dev-chrome__select"
                 :data-testid="`lobby-option-${opt.id}`"
               >
-                <option v-for="c in opt.choices" :key="String(c.value)" :value="c.value">
+                <option v-for="c in opt.choices" :key="choiceValueKey(c.value)" :value="c.value">
                   {{ c.label ?? String(c.value) }}
                 </option>
               </select>
