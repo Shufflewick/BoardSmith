@@ -855,6 +855,9 @@ const _splitChoices = computed(() => splitAnchoredChoices(offeredChoices.value, 
 
 // Primary (unanchored) choices: rendered as the main choice buttons in the panel.
 const filteredChoices = computed(() => _splitChoices.value.primary);
+/** A choice pick whose choices depend on an earlier pick (filterBy or dependsOn). */
+const isDependentChoicePick = computed(() =>
+  !!(currentPick.value?.filterBy || currentPick.value?.dependsOn));
 
 // Notation-anchored choices: rendered as a secondary focusable list of buttons
 // whose activation calls triggerElementSelect — parity with clicking the board element.
@@ -1939,9 +1942,11 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           </div>
         </template>
 
-        <!-- Choice selection with filterBy or dependsOn (shows filtered choices, executes immediately) -->
-        <!-- This comes AFTER multi-select so multiSelect+dependsOn uses multi-select template above -->
-        <template v-else-if="currentPick.type === 'choice' && (currentPick.filterBy || currentPick.dependsOn)">
+        <!-- Choice selection. This comes AFTER multi-select so multiSelect+dependsOn uses the
+             multi-select template above. A dependent pick (filterBy or dependsOn) is shown even
+             before its choices arrive, and a click on one of its choices shows that choice on
+             the board before answering the pick (executeChoice). -->
+        <template v-else-if="currentPick.type === 'choice' && (isDependentChoicePick || filteredChoices.length)">
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.name}` }}
             <span v-if="currentPick.optional" class="optional-label">(optional)</span>
@@ -1950,9 +1955,10 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             <button
               v-for="choice in filteredChoices"
               :key="choiceValueKey(choice.value)"
-              class="choice-btn filtered-choice-btn"
+              class="choice-btn"
+              :class="{ 'filtered-choice-btn': isDependentChoicePick }"
               v-disabled-reason="choice.disabled"
-              @click="executeChoice(currentPick.name, choice)"
+              @click="isDependentChoicePick ? executeChoice(currentPick.name, choice) : setSelectionValue(currentPick.name, choice.value, choice.display)"
               @mouseenter="handleChoiceHover(choice)"
               @mouseleave="handleChoiceLeave"
             >
@@ -1980,37 +1986,6 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             >
               {{ skipLabel }}
             </button>
-          </div>
-        </template>
-
-        <!-- Regular choice selection -->
-        <template v-else-if="currentPick.type === 'choice' && filteredChoices.length">
-          <div class="selection-prompt">
-            {{ currentPick.prompt || `Select ${currentPick.name}` }}
-            <span v-if="currentPick.optional" class="optional-label">(optional)</span>
-          </div>
-          <div class="choice-buttons">
-            <button
-              v-for="choice in filteredChoices"
-              :key="choiceValueKey(choice.value)"
-              class="choice-btn"
-              v-disabled-reason="choice.disabled"
-              @click="setSelectionValue(currentPick.name, choice.value, choice.display)"
-              @mouseenter="handleChoiceHover(choice)"
-              @mouseleave="handleChoiceLeave"
-            >
-              {{ choice.display }}
-            </button>
-            <button
-              v-if="currentPick.optional"
-              class="choice-btn skip-btn"
-              @click="skipOptionalSelection"
-            >
-              {{ skipLabel }}
-            </button>
-            <span v-if="filteredChoices.length === 0 && !currentPick.optional" class="no-choices">
-              No options available
-            </span>
           </div>
         </template>
 
