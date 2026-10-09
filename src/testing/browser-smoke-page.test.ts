@@ -4,7 +4,7 @@
  * Chromium over a locator's matches; here they run over the same markup in jsdom.
  */
 import { beforeAll, describe, expect, it } from 'vitest';
-import { clickReached, guardClicks, numberToEnter, pageControls, pageDialogs } from './browser-smoke-page.js';
+import { clickArrived, clickReached, guardClicks, numberToEnter, pageControls, pageDialogs } from './browser-smoke-page.js';
 
 // jsdom lays nothing out, so it has no `checkVisibility` and no `innerText`: here every element
 // is visible, and its text as laid out is its text.
@@ -160,6 +160,17 @@ describe('guardClicks and clickReached: what a pointed click reached (#468)', ()
     document.body.innerHTML = `<button id="card"><span id="rank">7</span></button>`;
     guardClicks(document.getElementById('card')!);
     dispatchClick(document.getElementById('rank')!);
+    expect(clickReached()).toBe('it');
+  });
+
+  it('#562: says whether the click itself arrived at the control, not only the pointer pressing on it', () => {
+    document.body.innerHTML = `<button id="card"><span id="rank">7</span></button>`;
+    guardClicks(document.getElementById('card')!);
+    const rank = document.getElementById('rank')!;
+    for (const type of ['pointerdown', 'mousedown']) rank.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true }));
+    expect(clickArrived()).toBe(false);
+    rank.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(clickArrived()).toBe(true);
     expect(clickReached()).toBe('it');
   });
 
