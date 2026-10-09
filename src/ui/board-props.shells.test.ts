@@ -130,6 +130,25 @@ describe('GameShell gates the #player-stats slot like the board (#554)', () => {
     expect(statsProps.availableActions).toBe(received.availableActions);
     wrapper.unmount();
   });
+
+  it('hands the slot the players of the state on screen, live and in history (#578)', async () => {
+    const { wrapper, debugPanel } = await mountTableWithDebugPanel(AttrsBoard, {}, { 'player-stats': playerStats });
+    expect(statsProps.players).toEqual(DEBUG_TABLE_PLAYERS);
+
+    // The snapshot the debug panel is showing carries its own players: a game
+    // that reads a score off them must read the score as it was then.
+    const historicalPlayers = DEBUG_TABLE_PLAYERS.map((player) => ({ ...player, score: player.seat * 10 }));
+    debugPanel.vm.$emit('time-travel', { view: {}, players: historicalPlayers }, 3, null);
+    await nextTick();
+    expect(received.isViewingHistory).toBe(true);
+    expect(statsProps.players).toEqual(historicalPlayers);
+    expect(statsProps.players).toBe((received.state as { state: { players: unknown } }).state.players);
+
+    debugPanel.vm.$emit('time-travel', null, null, null);
+    await nextTick();
+    expect(statsProps.players).toEqual(DEBUG_TABLE_PLAYERS);
+    wrapper.unmount();
+  });
 });
 
 describe('GameShell exposes the board\'s gated turn and actions (#576)', () => {

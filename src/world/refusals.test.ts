@@ -20,6 +20,7 @@ import {
   ownerOf,
   worldRefusal,
   worldStateUnreadable,
+  worldStorageUnavailable,
   type WorldRefusalCode,
 } from "./refusals.js";
 import { createInlinedPartitionStore, createWorldRunner } from "./runner.js";
@@ -456,5 +457,55 @@ describe("#257: a world whose stored state this worker cannot read", () => {
 
     expect(refusal.message).toMatch(/no version/i);
     expect(refusal.message).not.toContain("null");
+  });
+});
+
+/**
+ * #580: THE HOST'S OWN DURABLE STORAGE DID NOT ANSWER.
+ *
+ * Found downstream (ShufflewickPub #610): a Durable Object storage throw inside
+ * a world command, after the child had applied, arrived at `ownerOf` uncoded
+ * and was called the game's. The host quarantined the occurrence and re-ran it
+ * on a tree that already held its effect -- a double application and an
+ * attempt charged to a bundle that did nothing wrong. `bundle-store-unavailable`
+ * could not be borrowed for it: that code means the R2 bundle store, and is
+ * raised before any of the bundle's code runs.
+ */
+describe("#580: a host whose own durable storage did not answer", () => {
+  it("is INFRASTRUCTURE-owned, so it is never charged to the game", () => {
+    expect(WORLD_REFUSALS["world-storage-unavailable"].owner).toBe("infrastructure");
+    expect(ownerOf(worldStorageUnavailable({ operation: "write" }))).toBe("infrastructure");
+  });
+
+  it("tells a host to roll the work back rather than hold it, because the bundle may have applied", () => {
+    // The difference from `bundle-store-unavailable` that a host routes on:
+    // that one is raised before the bundle ran, so holding the event is safe;
+    // this one can arrive after the child applied, so only a rollback is.
+    const why = WORLD_REFUSALS["world-storage-unavailable"].why;
+    expect(why).toMatch(/roll(ed|s)? back|rollback/i);
+    expect(why).toContain("bundle-store-unavailable");
+  });
+
+  it("raises a fixed sentence that names the operation and carries nothing else", () => {
+    const refusal = worldStorageUnavailable({ operation: "read" });
+
+    expect(refusal).toBeInstanceOf(WorldRefusal);
+    expect(refusal.code).toBe("world-storage-unavailable");
+    expect(refusal.message).toMatch(/\bread\b/);
+    // Safe to send again, because the work was rolled back and an outage is
+    // repaired by the storage coming back.
+    expect(refusal.message).toMatch(/again/i);
+    // The raiser takes no free-form text, so a storage error's own words --
+    // internal keys, hostnames, stored values -- have no way into a sentence
+    // that travels to a player's screen and an operator's log. Every operation
+    // yields the same sentence apart from the operation's name.
+    const sentences = (["read", "write", "delete", "list"] as const).map(
+      (operation) => worldStorageUnavailable({ operation }).message.replace(
+          new RegExp(`\\b${operation}\\b`, "g"),
+          "<op>",
+        ),
+    );
+    expect(new Set(sentences).size).toBe(1);
+    expect(refusal.message).not.toMatch(/undefined|null|\[object/);
   });
 });
