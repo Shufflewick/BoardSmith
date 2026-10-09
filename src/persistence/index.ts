@@ -8,5 +8,4 @@
  * deliberately not re-exported here.
  */
 export * from './persistence.js';
-export * from './session-kind.js';
 export * from './store.js';
