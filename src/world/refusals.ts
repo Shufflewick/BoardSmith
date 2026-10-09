@@ -485,7 +485,7 @@ export const WORLD_REFUSALS = {
     why: "a checkpoint named a partition the store never read or created, so it does not know where the subtree hangs and would graft it wrongly on the next wake",
   },
 
-  // ---- INFRASTRUCTURE: costs nothing until it has lasted `WORLD_BUNDLE_OUTAGE_PARK_MS` ----
+  // ---- INFRASTRUCTURE: costs nothing while it lasts; the host's own ladder decides when it has lasted too long ----
   "bundle-store-unavailable": {
     owner: "infrastructure",
     why:
@@ -500,6 +500,24 @@ export const WORLD_REFUSALS = {
       "cannot advance, while this one repairs itself when somebody else's service comes back. " +
       "So it charges the event nothing, holds its place, and re-arms on the ordinary floor -- " +
       "and `outageParks` is the ceiling that still stops a world whose store never returns",
+  },
+  "world-storage-unavailable": {
+    owner: "infrastructure",
+    why:
+      "#580 (ShufflewickPub #610): the host's OWN durable storage -- the store a world's " +
+      "partitions, queue and bookkeeping live in -- threw or did not answer. Uncoded, a storage " +
+      "throw inside a command after the child had applied reached `ownerOf` and was called the " +
+      "GAME's, so the host quarantined the occurrence and re-ran it on a tree that already held " +
+      "its effect: a double application, and an attempt charged to a bundle that did nothing " +
+      "wrong. INFRASTRUCTURE-owned because an outage nobody's state caused is repaired by time, " +
+      "and nothing the bundle or the world's state could do would change the answer. It differs " +
+      "from `bundle-store-unavailable` in the one way a host must route on: that code is raised " +
+      "BEFORE any of the bundle's code runs, so holding the event in place is safe, while this " +
+      "one can arrive AFTER the child applied, so the only safe response is to roll back the whole " +
+      "batch or command to its last checkpoint and let the next wake run it from there. " +
+      "`worldStorageUnavailable` raises it, and takes the operation and nothing else -- a " +
+      "storage error's own words can name internal keys or stored values, and a refusal's words " +
+      "travel to a player's screen and into logs",
   },
 } as const satisfies Record<string, { owner: WorldRefusalOwner; why: string }>;
 
@@ -566,6 +584,30 @@ export function worldStateUnreadable(found: {
 }
 
 /**
+ * Raise `world-storage-unavailable` about one call to the host's own durable
+ * storage.
+ *
+ * A dedicated raiser rather than a `worldRefusal` call, for the same reason as
+ * `worldStateUnreadable`: a host reaches it holding the storage error it just
+ * caught, and a free-form message is an invitation to pass that error's text
+ * through -- internal key names, hostnames, sometimes the value being written
+ * -- into a sentence a player can see. The one parameter is which kind of call
+ * failed, so there is nothing else to pass. A host that wants the underlying
+ * error in its own logs logs it where it caught it.
+ */
+export function worldStorageUnavailable(failed: {
+  readonly operation: "read" | "write" | "delete" | "list";
+}): WorldRefusal {
+  return new WorldRefusal(
+    "world-storage-unavailable",
+    `This world's storage did not answer a ${failed.operation}, so the work in progress was ` +
+      "rolled back and nothing it changed was kept. This is an outage on the host's side, not " +
+      "a fault in the game. Sending the command again once storage is answering is safe. If it " +
+      "keeps happening, the host's storage service is down and needs its operator's attention.",
+  );
+}
+
+/**
  * Who owns this failure, for a caller that has caught something.
  *
  * An UNCLASSIFIED throw is `"game"`, and that default is the safe one rather
@@ -581,7 +623,10 @@ export function worldStateUnreadable(found: {
  * touched spent its whole attempt budget on an outage. That site classifies its
  * own throw now (`bundle-store-unavailable`), which is the general remedy: a
  * failure raised where no bundle code is on the stack must name itself, because
- * this default cannot tell.
+ * this default cannot tell. The host's own durable storage is the other case
+ * (#580): a storage throw can arrive inside a command, after the bundle ran, and
+ * still be nobody's code -- so a host wraps its storage and raises
+ * `world-storage-unavailable` rather than letting the throw reach this default.
  */
 export function ownerOf(error: unknown): WorldRefusalOwner {
   return error instanceof WorldRefusal ? error.owner : "game";
