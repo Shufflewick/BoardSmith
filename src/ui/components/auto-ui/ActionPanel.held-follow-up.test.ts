@@ -10,6 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import { ref } from 'vue';
 import { stubActionController, mountPanel } from './action-panel-controller.test-helper.js';
+import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 const held = {
   action: 'loot',
@@ -55,5 +56,20 @@ describe('a held follow-up in the Action Panel', () => {
 
     const none = stubActionController();
     expect(mountPanel(none).find('[data-bs-follow-up]').exists()).toBe(false);
+  });
+
+  // The button starts through the shared action mutators (#513), so it is
+  // refused by the same guards as every other start.
+  it('does not resume the follow-up while the seat is viewing history', async () => {
+    const controller = stubActionController({ heldFollowUp: ref(held) });
+    const wrapper = mountPanel(
+      controller,
+      { availableActions: [], playerSeat: 1, isMyTurn: true },
+      { provide: { [GAME_CONTEXT_KEYS.isViewingHistory as symbol]: ref(true) } },
+    );
+
+    await wrapper.find('[data-bs-follow-up]').trigger('click');
+
+    expect(controller.resumeFollowUp).not.toHaveBeenCalled();
   });
 });

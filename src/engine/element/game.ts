@@ -43,7 +43,7 @@ import {
 } from './visibility.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor, type PerformOptions } from '../action/action.js';
-import type { FlowDefinition, FlowState, FlowPosition, FlowDebugInfo } from '../flow/types.js';
+import type { FlowDefinition, FlowState, FlowDebugInfo } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
 import { getActionLevelDisabledReasons } from '../tutorial/gate.js';
 import { availableActionsForSeat } from '../flow/index.js';
@@ -3279,35 +3279,6 @@ export class Game<
   }
 
   /**
-   * The engine a flow restore runs on. Restoring a flow ends setup just as
-   * `startFlow()` does: from here, creating an unregistered element class is
-   * refused (see `registerCreatedElementClass`).
-   */
-  #newRestoringFlowEngine(): FlowEngine<G> {
-    if (!this._flowDefinition) {
-      throw new Error('No flow definition set');
-    }
-    this._ctx._setupComplete = true;
-    this._flowEngine = new FlowEngine(this.game, this._flowDefinition);
-    return this._flowEngine;
-  }
-
-  /**
-   * Restore flow from serialized position.
-   * Throws if the position is invalid (e.g., flow structure changed).
-   */
-  restoreFlow(position: FlowPosition): void {
-    const result = this.#newRestoringFlowEngine().tryRestore(position);
-
-    if (!result.success) {
-      throw new Error(
-        `Flow position invalid: ${result.error}. ` +
-        `Valid path prefix: [${result.validPath.join(', ')}]`
-      );
-    }
-  }
-
-  /**
    * Restore full flow state including awaiting state.
    * Used for HMR where we want to restore exactly where we were.
    * Throws if the position is invalid (e.g., flow structure changed).
@@ -3320,7 +3291,15 @@ export class Game<
    *   behavior there is unchanged.
    */
   restoreFlowState(state: FlowState, idRemap?: Map<number, number>): void {
-    const result = this.#newRestoringFlowEngine().restoreFullState(state, idRemap);
+    if (!this._flowDefinition) {
+      throw new Error('No flow definition set');
+    }
+    // Restoring a flow ends setup just as `startFlow()` does: from here,
+    // creating an unregistered element class is refused (see
+    // `registerCreatedElementClass`).
+    this._ctx._setupComplete = true;
+    this._flowEngine = new FlowEngine(this.game, this._flowDefinition);
+    const result = this._flowEngine.restoreFullState(state, idRemap);
 
     if (!result.success) {
       throw new Error(
@@ -4275,12 +4254,8 @@ export class Game<
         let processed = text;
         if (data) {
           for (const [key, value] of Object.entries(data)) {
-            const replacement = value instanceof GameElement
-              ? value.toString()
-              : value instanceof Player
-                ? (value.name ?? `Player ${value.seat}`)
-                : String(value);
-            processed = processed.replace(new RegExp(`{{${key}}}`, 'g'), replacement);
+            // An element (a Player is one) is written by its own toString().
+            processed = processed.replace(new RegExp(`{{${key}}}`, 'g'), String(value));
           }
         }
         return type === undefined ? { text: processed } : { text: processed, type };
@@ -5257,38 +5232,20 @@ export class Game<
     // The element `id` is assigned deterministically in constructor order and is
     // PRESERVED verbatim across serialize/restore, so a constructor-created
     // Space has the same id on the constructor tree and the rebuilt tree
-    // regardless of any mobility that happened in between. Ids are globally
-    // unique, so this also makes the WR-05 ambiguous-key case impossible.
+    // regardless of any mobility that happened in between. Ids are unique, so
+    // each key names exactly one Space on each tree.
     // (Handlers are constructor-registered closures; only constructor-created
     // Spaces ever have handlers to capture, and those are exactly the Spaces
     // whose ids round-trip.)
     const spaceHandlerKey = (space: Space): string => String(space.id);
     type CapturedHandlers = { enter: ElementEventHandler<GameElement>[]; exit: ElementEventHandler<GameElement>[] };
     const capturedHandlers = new Map<string, CapturedHandlers>();
-    // WR-05: if two handler-bearing Spaces produce the SAME key, re-binding
-    // is ambiguous. Fail loud and refuse to re-bind that key — never
-    // silently wire both Spaces to one (last-captured) handler set.
-    const ambiguousKeys = new Set<string>();
     for (const space of this.all(Space)) {
       const handlers = space._captureEventHandlers();
       if (handlers.enter.length > 0 || handlers.exit.length > 0) {
-        const key = spaceHandlerKey(space);
-        if (capturedHandlers.has(key)) {
-          ambiguousKeys.add(key);
-          devWarn(
-            `ambiguous-event-handler-key:${key}`,
-            `Two or more Spaces with onEnter/onExit handlers share the ambiguous ` +
-            `identity "${key}" (same class, same name, indistinguishable ancestors). ` +
-            `Handler re-binding across a snapshot restore cannot tell them apart, so ` +
-            `their handlers were DROPPED rather than cross-wired — these Spaces will ` +
-            `not fire onEnter/onExit after restore. Give each Space (or its non-Space ` +
-            `ancestor) a unique name so its identity is unambiguous.`
-          );
-        }
-        capturedHandlers.set(key, handlers);
+        capturedHandlers.set(spaceHandlerKey(space), handlers);
       }
     }
-    for (const key of ambiguousKeys) capturedHandlers.delete(key);
 
     // Clear existing children and rebuild the tree from JSON
     this._t.children = [];
@@ -5301,48 +5258,29 @@ export class Game<
       }
     }
 
-    // Re-attach captured handlers to the rebuilt tree by matching identity
-    // key (RST-01/F10). Any handler that cannot be matched is dropped LOUDLY
+    // Re-attach captured handlers to the rebuilt tree by element id
+    // (RST-01/F10). Any handler that cannot be matched is dropped LOUDLY
     // via devWarn — never silently, since a dropped handler is silent
     // game-logic loss (e.g. a scoring trigger that stops firing).
     if (capturedHandlers.size > 0) {
-      const matchedKeys = new Set<string>();
       for (const space of this.all(Space)) {
         const key = spaceHandlerKey(space);
         const handlers = capturedHandlers.get(key);
         if (handlers) {
-          // WR-05: if a SECOND restored Space matches an already-bound key
-          // (structure changed between save and restore), re-binding it too
-          // would cross-wire — warn and leave this one unbound.
-          if (matchedKeys.has(key)) {
-            devWarn(
-              `ambiguous-event-handler-rebind:${key}`,
-              `More than one restored Space matches the handler identity "${key}" — ` +
-              `re-binding is ambiguous, so only the first match received the captured ` +
-              `onEnter/onExit handlers. Give each Space (or its non-Space ancestor) a ` +
-              `unique name so its identity is unambiguous.`
-            );
-            continue;
-          }
           space._restoreEventHandlers(handlers);
-          matchedKeys.add(key);
+          capturedHandlers.delete(key);
         }
       }
       for (const key of capturedHandlers.keys()) {
-        if (!matchedKeys.has(key)) {
-          devWarn(
-            `unbound-event-handlers:${key}`,
-            `Space "${key}" had onEnter/onExit handlers registered before a snapshot ` +
-            `restore, but no matching Space was found in the restored tree (matched by ` +
-            `class name + element name + Space-only tree position). These handlers were ` +
-            `dropped, not silently carried over — AND if another Space of the same class ` +
-            `and name now occupies this tree position, it may have absorbed these handlers ` +
-            `instead of its own. This usually means the Space structure changed between ` +
-            `save and restore (e.g. conditional Space creation in the constructor) — make ` +
-            `sure Spaces with onEnter/onExit handlers are always created with stable names ` +
-            `at the same structural position.`
-          );
-        }
+        devWarn(
+          `unbound-event-handlers:${key}`,
+          `Space "${key}" had onEnter/onExit handlers registered before a snapshot ` +
+          `restore, but the restored tree has no Space with that element id. These ` +
+          `handlers were dropped, not silently carried over. This usually means the ` +
+          `Space structure changed between save and restore (e.g. conditional Space ` +
+          `creation in the constructor) — make sure Spaces with onEnter/onExit ` +
+          `handlers are always created, in the same order, in the constructor.`
+        );
       }
     }
 

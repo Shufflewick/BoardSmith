@@ -199,7 +199,6 @@ export {
 
 export type {
   FlowNodeType,
-  FlowStepResult,
   FlowPosition,
   FlowContext,
   FlowNode,

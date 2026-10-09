@@ -45,10 +45,11 @@
  *
  * ## Accessing from Custom UIs
  * GameShell passes it to the board component as the
- * `actionController` prop. Anywhere below the board it is available via inject:
+ * `actionController` prop. Anywhere below the board it is available from the
+ * play context, which both a table's GameShell and a world's shell publish:
  * ```typescript
- * import { injectActionController } from 'boardsmith/ui';
- * const controller = injectActionController();
+ * import { usePlayContext } from 'boardsmith/ui';
+ * const { actionController } = usePlayContext();
  * ```
  *
  * ## Supported Features
@@ -64,7 +65,7 @@
  * ✅ Repeating selections - Selections that repeat until terminator
  *
  * ## Board Interaction
- * For highlighting elements on hover, use `injectBoardInteraction()` or `useBoardInteraction()`.
+ * For highlighting elements on hover, use `useBoardInteraction()` (or `tryUseBoardInteraction()` when there may be no shell).
  * This is a separate concern from action handling and works independently.
  *
  * @example
@@ -88,10 +89,9 @@
  * ```
  */
 
-import { ref, readonly, computed, watch, inject, nextTick, getCurrentScope, onScopeDispose } from 'vue';
+import { ref, readonly, computed, watch, nextTick, getCurrentScope, onScopeDispose } from 'vue';
 import { isDevMode, devWarn, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
-import { useBoardInteraction, type BoardInteraction } from './useBoardInteraction.js';
 import { findMatchingChoice } from '../../engine/action/choice-matching.js';
 
 // Re-export all types from the types module for consumers
@@ -2614,96 +2614,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     animationsPending,       // True when animations are playing
     showActionPanel,         // True when safe to show action UI (turn + no animations + no followUp)
   };
-}
-
-/**
- * Injection key for action controller.
- * Use with Vue's inject() to access the controller from deeply nested components.
- */
-export const ACTION_CONTROLLER_KEY = 'actionController';
-
-/**
- * Convenience function to inject the action controller from a parent GameShell.
- * Throws an error if not inside a GameShell context.
- *
- * @example
- * ```typescript
- * // In a deeply nested component inside GameShell
- * const controller = injectActionController();
- * await controller.execute('playCard', { card: 42 });
- * ```
- */
-export function injectActionController(): UseActionControllerReturn {
-  const controller = inject<UseActionControllerReturn>(ACTION_CONTROLLER_KEY);
-  if (!controller) {
-    throw new Error('injectActionController() must be called inside a GameShell context');
-  }
-  return controller;
-}
-
-// ============================================
-// Advanced Feature Injection Helpers
-// ============================================
-
-/**
- * Type for the pick step function (repeating picks).
- * Used when a pick can repeat multiple times (e.g., discard until done).
- */
-export type PickStepFn = (
-  player: number,
-  selectionName: string,
-  value: unknown,
-  actionName: string,
-  initialArgs?: Record<string, unknown>
-) => Promise<{
-  success: boolean;
-  error?: string;
-  done?: boolean;
-  nextChoices?: ChoiceWithRefs[];
-  actionComplete?: boolean;
-}>;
-
-/**
- * Inject the pick step function for repeating picks.
- * Returns undefined if not in a GameShell context (function is optional).
- *
- * @example
- * ```typescript
- * const stepFn = injectPickStepFn();
- * if (stepFn && selection.repeat) {
- *   const result = await stepFn(playerSeat, 'card', selectedValue, 'discard');
- *   if (result.done) {
- *     // Repeating pick complete
- *   } else {
- *     // result.nextChoices has the next available choices
- *   }
- * }
- * ```
- */
-export function injectPickStepFn(): PickStepFn | undefined {
-  return inject<PickStepFn | undefined>('pickStepFn', undefined);
-}
-
-/**
- * Inject the board interaction controller for element highlighting.
- * Throws if not inside a GameShell context, mirroring
- * {@link injectActionController}. For the optional case use
- * `tryUseBoardInteraction()`.
- *
- * @example
- * ```typescript
- * const boardInteraction = injectBoardInteraction();
- * // Highlight an element on the board
- * boardInteraction.setHoveredChoice({
- *   value: choice.value,
- *   display: choice.display,
- *   sourceRefs: [{ id: 42 }],
- *   targetRefs: [],
- * });
- * ```
- */
-export function injectBoardInteraction(): BoardInteraction {
-  return useBoardInteraction();
 }
 
 export default useActionController;

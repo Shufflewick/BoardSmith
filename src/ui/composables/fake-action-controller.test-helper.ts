@@ -21,12 +21,15 @@ export function makeController(opts: {
   const actionSnapshot = ref(null);
   const pendingFollowUp = ref(false);
   const pendingOnServer = ref(false);
+  const actionStartTick = ref(0);
+  const heldFollowUp = computed(() => undefined);
 
   const fill = vi.fn(async () => ({ valid: true }));
   const start = vi.fn<UseActionControllerReturn['start']>(async () => ({ success: true }));
   const execute = vi.fn(async () => ({ success: true }));
   const cancel = vi.fn(() => {});
   const toggleMultiSelect = vi.fn(async () => {});
+  const resumeFollowUp = vi.fn(async () => {});
 
   // Reactive sources the bridge depends on (mirror the real controller, which
   // reads snapshotVersion so async-fetched choices/elements surface reactively).
@@ -43,6 +46,8 @@ export function makeController(opts: {
     actionSnapshot,
     pendingFollowUp,
     pendingOnServer,
+    actionStartTick,
+    heldFollowUp,
     currentChoices,
     validElements,
     getValidElements: () => opts.validElements ?? [],
@@ -51,6 +56,7 @@ export function makeController(opts: {
     execute,
     cancel,
     toggleMultiSelect,
+    resumeFollowUp,
   } as unknown as UseActionControllerReturn;
 
   return { controller, fill, start, execute, toggleMultiSelect, currentAction, currentPick };
