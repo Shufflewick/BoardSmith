@@ -52,6 +52,12 @@ export type ElementContext = {
   /** Random number generator (seeded for replay) */
   random: () => number;
   /**
+   * Internal (#496): true once the game's constructor is done and its flow has
+   * started or been restored. From then on `create()` refuses a class that is
+   * not in `classRegistry`. Not part of the public API.
+   */
+  _setupComplete?: boolean;
+  /**
    * Internal (PIT-02): true while `startFlow()`'s first traversal is
    * recording element-class queries made through the `GameElement` finder
    * methods (all/first/firstN/last/lastN). Not part of the public API.

@@ -600,40 +600,40 @@ and any undo attempted there is refused with that reason rather than with
 
 ## 7. Element Class Registration
 
-### The Problem
+### The Rule
 
-Forgetting to register custom element classes causes deserialization failures:
-
-```typescript
-// WRONG - MyCard not registered
-class MyGame extends Game {
-  constructor() {
-    this.deck = this.create(Deck, 'deck');
-    this.deck.create(MyCard, 'card', { value: 1 });  // Works initially...
-    // But fails on reload/restore!
-  }
-}
-```
-
-### The Solution
-
-Always register custom element classes in your Game constructor:
+Register every custom element class you create **during play** (in an action,
+a flow `execute` node or an `onEnter` hook) with `registerElements([...])` in
+your Game constructor. A class you create in the constructor registers itself,
+because the constructor runs again on every restore.
 
 ```typescript
-// CORRECT - register all custom classes
 class MyGame extends Game {
-  constructor() {
+  constructor(options: GameOptions) {
     super(options);
 
-    // Register ALL custom element classes
-    this.registerElements([MyCard, MyDeck, MyPiece, MyBoard]);
+    // Needed: MyCard is created later, inside an action.
+    this.registerElements([MyCard, MyPiece]);
 
-    // Now create elements
-    this.deck = this.create(Deck, 'deck');
-    // ...
+    // MyBoard is only created here, so it registers itself.
+    this.board = this.create(MyBoard, 'board');
   }
 }
 ```
+
+### What happens if you forget
+
+From `startFlow()` on, `create()` of a class that was not registered throws at
+once:
+
+```
+Error: Element class 'MyCard' is created after setup but was never registered.
+Call this.registerElements([MyCard]) in your game's constructor.
+```
+
+Before this check, the live game worked and only the next restart, undo or bot
+search failed with `Unknown element class`, far from the cause. Built-in
+classes (`Card`, `Die`, `Hand`, ...) are already registered and need nothing.
 
 ### `startFlow()` now catches this for you (PIT-02 guard)
 

@@ -7,6 +7,7 @@ import {
   isPlayerIdentityAttribute,
   readDynamicAttribute,
   registerElementClass,
+  registerCreatedElementClass,
 } from './game-element.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE } from './hidden-placeholder.js';
 import { Piece } from './piece.js';
@@ -1458,9 +1459,10 @@ export class Game<
     element.name = name;
     element.game = this;
 
-    // Routed through the shared SPACE-04/D25 collision guard — see
-    // `registerElementClass` (game-element.ts).
-    registerElementClass(this._ctx, elementClass.name, elementClass as ElementClass);
+    // Registered while constructing, refused after setup if unregistered, and
+    // routed through the SPACE-04/D25 collision guard — see
+    // `registerCreatedElementClass` (game-element.ts).
+    registerCreatedElementClass(this._ctx, elementClass as ElementClass);
 
     return element;
   }
@@ -3048,6 +3050,10 @@ export class Game<
 
     this.#validateActionReachability();
 
+    // Setup is over: from here, creating an unregistered class is refused
+    // (see `registerCreatedElementClass`).
+    this._ctx._setupComplete = true;
+
     // `this.game` rather than `this`: the engine is generic over the game type
     // the flow was WRITTEN against (`FlowDefinition<G>`), and inside the base
     // class `this` is the polymorphic `this` type, which TypeScript cannot
@@ -3246,6 +3252,7 @@ export class Game<
       throw new Error('No flow definition set');
     }
 
+    this._ctx._setupComplete = true;
     this._flowEngine = new FlowEngine(this.game, this._flowDefinition);
     const result = this._flowEngine.tryRestore(position);
 
@@ -3274,6 +3281,7 @@ export class Game<
       throw new Error('No flow definition set');
     }
 
+    this._ctx._setupComplete = true;
     this._flowEngine = new FlowEngine(this.game, this._flowDefinition);
     const result = this._flowEngine.restoreFullState(state, idRemap);
 

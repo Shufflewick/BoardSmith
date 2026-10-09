@@ -105,6 +105,29 @@ export function registerElementClass(
 }
 
 /**
+ * Registers the class an element is being created from, for deserialization.
+ *
+ * While the game is being constructed this registers the class itself: the
+ * constructor runs again on every restore, so the class is known again. Once
+ * setup is over (`startFlow()` or a flow restore has run) a restore would NOT
+ * see the class, so a class that is not already registered is refused here,
+ * where the author can fix it, instead of failing on the next undo or restart
+ * with "Unknown element class".
+ */
+export function registerCreatedElementClass(
+  ctx: ElementContext,
+  cls: ElementClass,
+): void {
+  if (ctx._setupComplete && !ctx.classRegistry.has(cls.name)) {
+    throw new Error(
+      `Element class '${cls.name}' is created after setup but was never registered. ` +
+      `Call this.registerElements([${cls.name}]) in your game's constructor.`
+    );
+  }
+  registerElementClass(ctx, cls.name, cls);
+}
+
+/**
  * PIT-02: record a class-typed finder arg into the per-game `_ctx` recorded
  * set, but only while recording is active (first `startFlow()` traversal).
  * No-op (single boolean check, no allocation) when recording is inactive —
@@ -706,12 +729,13 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // Add to tree
     this.addChild(element);
 
-    // Register class for deserialization. Routed through the shared
+    // Register class for deserialization (refused after setup if unregistered,
+    // see `registerCreatedElementClass`). Routed through the shared
     // SPACE-04/D25 collision guard (see `registerElementClass` above) — a
     // built-in default seed is still overridden by the class actually
     // instantiated, but a DIFFERENT custom class colliding with an
     // already-registered custom name now throws instead of clobbering.
-    registerElementClass(this._ctx, elementClass.name, elementClass as ElementClass);
+    registerCreatedElementClass(this._ctx, elementClass as ElementClass);
 
     return element;
   }
