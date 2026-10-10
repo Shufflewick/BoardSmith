@@ -168,6 +168,7 @@ describe('game.refreshAwaitingActions() admits a seat that became eligible', () 
  */
 class FilteredGame extends Game<FilteredGame, Player> {
   participants: number[] = [1];
+  skipped: number[] = [];
   acted: number[] = [];
 
   constructor(options: GameOptions) {
@@ -189,6 +190,7 @@ class FilteredGame extends Game<FilteredGame, Player> {
           const game = ctx.game as FilteredGame;
           return game.players.filter((p) => game.participants.includes(p.seat));
         },
+        skipPlayer: (ctx, player) => (ctx.game as FilteredGame).skipped.includes(player.seat),
         allDone: (ctx) => (ctx.game as FilteredGame).acted.length >= 5,
       }),
     });
@@ -237,5 +239,18 @@ describe('game.refreshAwaitingActions() honours the step\'s players filter', () 
     const state = game.continueFlow('a', {}, 1);
     expect(state.actionError).toBeUndefined();
     expect(game.acted).toEqual([1, 1]);
+  });
+
+  it('still re-checks a kept seat the filter has dropped', () => {
+    const game = startedFiltered();
+    game.continueFlow('a', {}, 1);
+    game.participants = [2];
+    game.refreshAwaitingActions();
+    expect(awaitingSeats(game)).toEqual([1, 2]);
+
+    game.skipped = [1];
+    game.refreshAwaitingActions();
+
+    expect(awaitingSeats(game)).toEqual([2]);
   });
 });
