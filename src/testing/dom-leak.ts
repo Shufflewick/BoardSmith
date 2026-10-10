@@ -25,7 +25,7 @@
 import type { Component } from 'vue';
 import type { VueWrapper } from '@vue/test-utils';
 import type { default as AutoUIComponent } from '../ui/components/auto-ui/AutoUI.vue';
-import type { GameViewElement as UIGameElement } from '../ui/components/auto-ui/index.js';
+import type { GameRootView } from '../ui/types.js';
 import type { ElementJSON } from '../engine/index.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE, isHiddenPlaceholder } from '../engine/element/hidden-placeholder.js';
 import type { BoardInteraction } from '../ui/composables/useBoardInteraction.js';
@@ -87,15 +87,15 @@ export interface SeatProjection {
 
 /**
  * The shape `renderAsSeat`/`assertNoHiddenInfoLeak`'s `gameViewOverride` (and
- * the AutoUI `gameView` prop) accept — structurally identical to
- * `ElementJSON` (id/className/attributes/children/childCount/name; a hidden
- * placeholder is marked by `attributes.__hidden`, read with
- * isHiddenPlaceholder). Exported so callers constructing a
+ * a board's `gameView` prop) accept: a game root as `Game.toJSON()` writes it,
+ * an `ElementJSON` tree (id/className/attributes/children/childCount/name; a
+ * hidden placeholder is marked by `attributes.__hidden`, read with
+ * isHiddenPlaceholder) whose root also carries phase, isFinished and settings. Exported so callers constructing a
  * deliberately-leaky override (e.g. `game.toJSON()`, or a mutated
  * `getPlayerView(seat).state`) have a name for the cast instead of reaching
  * for `any`.
  */
-export type HiddenInfoGameView = UIGameElement;
+export type HiddenInfoGameView = GameRootView;
 
 // ---------------------------------------------------------------------------
 // THE BROWSER APIS JSDOM OMITS, supplied as a browser would answer them here.
@@ -405,7 +405,7 @@ export interface RenderAsSeatOptions<C extends Component = Component> {
    * case is unproven) — real callers should never pass it, since it renders
    * something other than what a real client would receive.
    */
-  gameViewOverride?: UIGameElement | null;
+  gameViewOverride?: GameRootView | null;
   /**
    * The game's own root UI component. When omitted, AutoUI is rendered.
    *
@@ -700,7 +700,7 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
 /** What a seat's board is mounted with, and how to let go of it afterwards. */
 interface SeatContext {
   /** The per-seat tree the board draws. */
-  readonly gameView: UIGameElement | null;
+  readonly gameView: GameRootView | null;
   /** The shell's board contract, before it is filtered to what the board declares. */
   readonly contract: TableBoardProps | WorldBoardProps;
   /** The seat's action controller, as its shell wires it. */
@@ -791,14 +791,14 @@ async function seatContextFor(
       { includeActionMetadata: true },
     );
     const gameView =
-      options.gameViewOverride !== undefined ? options.gameViewOverride : (seatState.view as UIGameElement);
+      options.gameViewOverride !== undefined ? options.gameViewOverride : (seatState.view as GameRootView);
     return wireTableSeat(table, seat, seatState, gameView, boardInteraction);
   }
   // AWAITED, because a world's projection is a read of its store: `viewsFor`
   // settles the bundle's own `world.view` declaration and hydrates whatever it
   // names before it can answer.
   const frame = await shell.world.getPlayerView(seat);
-  const gameView = options.gameViewOverride !== undefined ? options.gameViewOverride : (frame.state as UIGameElement);
+  const gameView = options.gameViewOverride !== undefined ? options.gameViewOverride : (frame.state as GameRootView);
   return wireWorldSeat(shell.world, seat, frame, gameView, boardInteraction);
 }
 
@@ -818,7 +818,7 @@ async function wireTableSeat(
   table: TestGame,
   seat: number,
   seatState: PlayerGameState,
-  gameView: UIGameElement | null,
+  gameView: GameRootView | null,
   boardInteraction: BoardInteraction,
 ): Promise<SeatContext> {
   const [{ computed, effectScope, ref }, [{ useTableSeat }, { useTurnDeadline }]] = await Promise.all([
@@ -911,7 +911,7 @@ async function wireWorldSeat(
   world: TestWorld,
   seat: number,
   frame: WorldSeatView,
-  gameView: UIGameElement | null,
+  gameView: GameRootView | null,
   boardInteraction: BoardInteraction,
 ): Promise<SeatContext> {
   const [{ effectScope, ref, shallowRef }, { useWorldSeat }] = await Promise.all([

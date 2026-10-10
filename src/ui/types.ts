@@ -5,6 +5,8 @@
  * All other type definitions should import from here to ensure consistency.
  */
 
+import type { GamePhase } from '../engine/element/game.js';
+
 /**
  * Player reference commonly found in element attributes.
  */
@@ -111,6 +113,34 @@ export interface GameViewElement<TAttributes extends BaseElementAttributes = Bas
   children?: GameViewElement<TAttributes>[];
   /** Count of children (used when contents are hidden from player) */
   childCount?: number;
+}
+
+/**
+ * The root of a seat's view: the game element itself.
+ *
+ * `Game.toJSONForPlayer()` writes three fields on the root that no other
+ * element carries, and both shells hand a board this root as `gameView`:
+ *
+ * - `phase`: `'setup'`, `'started'` or `'finished'`.
+ * - `isFinished`: whether the game has ended.
+ * - `settings`: the game's `settings` bag, redacted for this seat. Values the
+ *   game stores there (including `persistentMap` fields) are read from here.
+ *
+ * @example
+ * ```typescript
+ * const props = defineProps<TableBoardProps>();
+ * const over = computed(() => props.gameView?.isFinished ?? false);
+ * const drawn = computed(() => props.gameView?.settings.drawnIds as number[] | undefined);
+ * ```
+ */
+export interface GameRootView<TAttributes extends BaseElementAttributes = BaseElementAttributes>
+  extends GameViewElement<TAttributes> {
+  /** Where the game is in its life: `'setup'`, `'started'` or `'finished'`. */
+  phase: GamePhase;
+  /** Whether the game has ended. */
+  isFinished: boolean;
+  /** The game's settings bag as this seat may see it. */
+  settings: Record<string, unknown>;
 }
 
 /**
