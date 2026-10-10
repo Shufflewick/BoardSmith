@@ -151,14 +151,13 @@ const rule: Rule.RuleModule = {
 
     /**
      * Resolve a used Identifier node to its declaration node(s) via the
-     * ESLint scope manager. Falls back to `null` (no match) if scope
-     * information is unavailable or the identifier cannot be resolved --
+     * ESLint scope manager. Returns no declarations (no match) if the
+     * identifier cannot be resolved --
      * NOT to name-based matching, since that would reintroduce the exact
      * cross-scope false positive this fix removes.
      */
     function resolveDeclNodes(identifierNode: Record<string, unknown>): object[] {
-      const sourceCode = context.sourceCode ?? context.getSourceCode();
-      if (typeof sourceCode.getScope !== 'function') return [];
+      const sourceCode = context.sourceCode;
       const scope = sourceCode.getScope(identifierNode as unknown as Rule.Node);
       const ref = scope.references.find((r) => (r.identifier as unknown) === identifierNode);
       const variable = ref?.resolved;
@@ -246,7 +245,7 @@ const rule: Rule.RuleModule = {
 
         if (!isElementLike(left) || !isElementLike(right)) return;
 
-        const sourceCode = context.sourceCode ?? context.getSourceCode();
+        const sourceCode = context.sourceCode;
         const leftText = sourceCode.getText(left);
         const rightText = sourceCode.getText(right);
         const canAutoFix = isSimpleOperand(left as unknown as Record<string, unknown>) && isSimpleOperand(right as unknown as Record<string, unknown>);
@@ -275,7 +274,7 @@ const rule: Rule.RuleModule = {
           isElementArrayDecl(callee.object as unknown as Record<string, unknown>) &&
           node.arguments.length === 1
         ) {
-          const sourceCode = context.sourceCode ?? context.getSourceCode();
+          const sourceCode = context.sourceCode;
           context.report({
             node,
             messageId: 'identityIncludes',
