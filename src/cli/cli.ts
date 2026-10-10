@@ -72,6 +72,7 @@ import { verifyExampleRunCommand } from './commands/example-test-run.js';
 import { evolveBotWeightsCommand } from './commands/evolve-bot-weights.js';
 import { packCommand } from './commands/pack.js';
 import { doctorCommand } from './commands/doctor.js';
+import { catalogueCommand } from './commands/catalogue.js';
 
 /**
  * Wraps a command that returns its result (so its tests can read it) for
@@ -277,6 +278,15 @@ export function createProgram(): Command {
       'Rewrite the committed world-format corpus — a deliberate format break that ends every live world holding the old bytes',
     )
     .action(contractCommand);
+
+  // Whether this BoardSmith tree breaks a catalogue game. See src/cli/lib/catalogue-check.ts.
+  program
+    .command('catalogue')
+    .description("Validate each catalogue game's main against this BoardSmith checkout (a step of verify)")
+    .option('--catalogue <folder>', 'The folder holding the game checkouts (default: ~/BoardSmithGames)')
+    .option('--skip <game=reason...>', 'Leave a game out, with the reason (an issue) the report lists')
+    .option('--time-limit <minutes>', "Stop and fail a game whose validate runs longer than this (default: 5)")
+    .action(catalogueCommand);
 
   // Headless simulation
   program

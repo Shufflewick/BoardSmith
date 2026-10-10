@@ -20,7 +20,7 @@ let warnedNoDiceSupport = false;
  */
 
 import { computed } from 'vue';
-import { getDiePreviewComponent } from '../../dice/die-preview-registry.js';
+import { ADD_DICE_SUPPORT_ADVICE, getDiePreviewComponent } from '../../dice/die-preview-registry.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 
@@ -49,10 +49,7 @@ if (import.meta.env.DEV && !Die3D && !warnedNoDiceSupport) {
   warnedNoDiceSupport = true;
   console.warn(
     `The auto-UI found a die (${props.element.name || props.element.className}) but this bundle has no ` +
-      'dice support, so only its label is drawn. If the auto-UI draws your dice in play, add ' +
-      "`import 'boardsmith/ui/dice';` to src/ui/uis.ts and " +
-      'run `npm install three @types/three`: that import registers the 3D die (and opts this game into ' +
-      'shipping three.js).',
+      `dice support, so only its label is drawn. If the auto-UI draws your dice in play, ${ADD_DICE_SUPPORT_ADVICE}`,
   );
 }
 

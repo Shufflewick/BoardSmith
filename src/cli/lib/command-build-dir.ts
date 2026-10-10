@@ -65,19 +65,29 @@ export async function withCommandBuildDir<T>(
   command: BuildingCommand,
   use: (buildDir: string) => Promise<T>,
 ): Promise<T> {
-  const buildDir = makeCommandBuildDir(projectDir, command);
-  const remove = (): void => rmSync(buildDir, { recursive: true, force: true });
+  return withDirRemovedAfter(makeCommandBuildDir(projectDir, command), use);
+}
+
+/**
+ * Runs `use` with `dir`, a directory this run made, and removes `dir` when `use` settles or when
+ * SIGINT or SIGTERM stops the run, the same way {@link withCommandBuildDir} removes a build directory.
+ * On a signal, `onStop` runs first, so whatever `use` started that writes into `dir` (a child
+ * process) can be ended before the directory goes.
+ */
+export async function withDirRemovedAfter<T>(dir: string, use: (dir: string) => Promise<T>, onStop?: () => void): Promise<T> {
+  const remove = (): void => rmSync(dir, { recursive: true, force: true });
   const release = (): void => {
     for (const signal of STOP_SIGNALS) process.off(signal, onSignal);
   };
   function onSignal(signal: NodeJS.Signals): void {
     release();
+    onStop?.();
     remove();
     process.kill(process.pid, signal);
   }
   for (const signal of STOP_SIGNALS) process.on(signal, onSignal);
   try {
-    return await use(buildDir);
+    return await use(dir);
   } finally {
     release();
     remove();
