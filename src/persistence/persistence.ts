@@ -94,8 +94,9 @@ export const PERSIST_PRIVATE_KEY = "persistPrivate";
 
 /**
  * The key prefix that makes a campaign-store entry SEALED to one player
- * (epic #24): `player:<userId>/<key>`. Convex owns the rule's substance --
- * which sessions such a row reaches, and which commits may write one
+ * (epic #24): `player:<playerKey>/<key>`, where `<playerKey>` is the opaque
+ * per-game player key the host chose (see {@link PersistPlayer}). Convex owns
+ * the rule's substance -- which sessions such a row reaches, and which commits may write one
  * (`convex/persistenceQuotas.ts:PLAYER_KEY_PREFIX` is the authoritative
  * declaration). This copy exists for the single clause only this worker can
  * enforce: a sealed key arriving on the PUBLIC `persist` attribute is a
@@ -239,7 +240,7 @@ export interface PersistStartPayload {
 /**
  * ONE SEAT, AND THE TOKEN ITS SEALED ROWS ARE NAMED AFTER.
  *
- * WHY THIS IS HERE AT ALL. A sealed row is `player:<userId>/<key>`, readable
+ * WHY THIS IS HERE AT ALL. A sealed row is `player:<playerKey>/<key>`, readable
  * only by a session that player is seated at. Without this array a mission
  * could not spell one: the store is the only other thing it is handed, so the
  * only way to name a sealed key would be to already hold a sealed key. A
@@ -249,7 +250,9 @@ export interface PersistStartPayload {
  *
  * `playerId` is the same opaque token every other per-player handle carries:
  * one vocabulary across every mode, so a bundle that learns a token in one
- * place may use it in another.
+ * place may use it in another. It is an opaque, stable, per-game player key
+ * chosen by the host. A game must not assume it is an account id, and must not
+ * parse it.
  *
  * IT IS NULL FOR A SEAT WITH NO ACCOUNT BEHIND IT -- a bot, or a guest. Null
  * rather than an absent entry, so a game indexing seats gets an honest "this
