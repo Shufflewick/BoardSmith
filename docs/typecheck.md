@@ -89,6 +89,14 @@ in every game.
   `boardsmith/persistence` and `boardsmith/runtime`) with only ES2022 and
   Workers-shaped declarations (#488). Read a runtime
   global by its bare name, never as a property of `globalThis`.
+- **The code blocks in `docs/*.md`.** A Markdown file is not compiled. A
+  block an author copies into a game is marked with a
+  `<!-- typecheck: game <path> -->` line directly above its fence, and
+  `src/contract/docs-game-typecheck.test.ts` writes each marked block to
+  `<path>` in a sandbox game, one game per doc, and compiles them under the
+  tsconfig `boardsmith init` writes (#511). It also builds the getting-started
+  game and plays a turn, because a type check cannot see a `loop()` that throws
+  when it is built. Leave a block unmarked only when it is deliberately partial.
 - **Anything at runtime.** Types say nothing about a shape crossing a boundary
   the types do not describe.
 

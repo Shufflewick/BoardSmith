@@ -14,8 +14,8 @@ import { describe, it } from 'vitest';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { generateTsConfig } from '../cli/lib/project-scaffold.js';
 import { consumerInstall, declaredPeers } from './consumer-install.test-helper.js';
+import { gameTsConfig } from './doc-typecheck-blocks.test-helper.js';
 import { REPO_ROOT, expectCleanCompile } from './vue-tsc-run.test-helper.js';
 
 const ASPECTS = ['dice', 'hex-grid', 'playing-cards', 'square-grid'] as const;
@@ -33,25 +33,6 @@ function aspectBoard(aspect: string): string {
   return blocks[0];
 }
 
-/** The game's tsconfig as `boardsmith init` writes it, compiling the boards under `src/`. */
-function gameTsConfig(): string {
-  const scaffolded = JSON.parse(generateTsConfig()) as { compilerOptions: Record<string, unknown> };
-  return JSON.stringify(
-    {
-      ...scaffolded,
-      compilerOptions: {
-        ...scaffolded.compilerOptions,
-        noEmit: true,
-        // Resolve from where the file SITS, not from where it really lives (see consumerInstall).
-        preserveSymlinks: true,
-      },
-      include: ['src/**/*.vue'],
-    },
-    null,
-    2,
-  );
-}
-
 describe('the aspect templates\' boards type-check against boardsmith\'s own types (#516, #565)', () => {
   it('reports zero vue-tsc errors for every aspect\'s GameTable.vue', () => {
     const root = consumerInstall({ entryPoints: [], alsoInstalled: declaredPeers() });
@@ -60,7 +41,7 @@ describe('the aspect templates\' boards type-check against boardsmith\'s own typ
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, 'GameTable.vue'), aspectBoard(aspect));
     }
-    writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig());
+    writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig(['src/**/*.vue']));
 
     expectCleanCompile(
       root,
