@@ -244,11 +244,6 @@
         "count": 1
       }
     },
-    "src/cli/lib/mutant-cache.ts": {
-      "complexity_high": {
-        "count": 2
-      }
-    },
     "src/cli/slash-command/bs/build-chunk.test.ts": {
       "complexity_moderate": {
         "count": 1
