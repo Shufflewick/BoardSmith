@@ -483,13 +483,11 @@ describe('executeOp', () => {
 
   // ── selectionStep warnings threading (ERR-01) ────────────────────────────
   //
-  // PendingActionManager's own step-processing path never invokes
-  // boardRefs()/display()/boardRef() today (only PickHandler.getPickChoices
-  // does, via resolveChoices), so there's no live gameplay path that produces
-  // a non-empty warnings array through selectionStep yet. This test proves
-  // the WIRING is correct — that handleSelectionStep forwards
-  // step.warnings onto OpResult.warnings whenever the underlying pick
-  // response happens to carry one — by spying on PickHandler.processSelectionStep.
+  // A repeating pick's later passes carry warnings from labelling their
+  // nextChoices (#605, held in repeating-pick-format.test.ts). This test proves
+  // the WIRING: handleSelectionStep forwards step.warnings onto
+  // OpResult.warnings whenever the pick response carries them, by spying on
+  // PickHandler.processSelectionStep.
 
   describe('selectionStep warnings threading', () => {
     it('forwards warnings from the pick response onto OpResult', async () => {

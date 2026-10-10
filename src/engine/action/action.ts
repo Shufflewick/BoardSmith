@@ -33,8 +33,8 @@ import { PlayerFacingError, NotSimulableError } from '../errors.js';
 import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
 import { findMatchingChoice, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
 import { numberRuleErrors } from './number-rules.js';
-import { formatChoiceCandidates } from '../element/pick-candidates.js';
-import type { ChoiceWithRefs } from '../../types/protocol.js';
+import { formatRepeatCandidates } from '../element/pick-candidates.js';
+import type { ChoiceWithRefs, WarningEntry } from '../../types/protocol.js';
 import { textRuleErrors } from './text-rules.js';
 import { resolveMultiSelect, resolveOrderedList } from '../utils/resolve-multiselect.js';
 
@@ -1956,13 +1956,15 @@ export class ActionExecutor {
    *   - nextChoices: the next iteration's choices (if not done), labelled for
    *     a surface exactly as the first iteration's were
    *   - error: error message if something went wrong
+   *   - warnings: soft failures (a throwing `display()` or `boardRefs()`) met
+   *     while labelling nextChoices, reported as the first pass reports them
    */
   processRepeatingStep(
     action: ActionDefinition,
     player: Player,
     pendingState: PendingActionState,
     value: unknown
-  ): { done: boolean; nextChoices?: ChoiceWithRefs[]; error?: string } {
+  ): { done: boolean; nextChoices?: ChoiceWithRefs[]; error?: string; warnings?: WarningEntry[] } {
     const selection = action.selections[pendingState.currentSelectionIndex];
     if (!selection) {
       return { done: true, error: `Selection at index ${pendingState.currentSelectionIndex} not found` };
@@ -1992,6 +1994,9 @@ export class ActionExecutor {
     if (!repeatConfig && repeatUntil === undefined) {
       return { done: true, error: `Selection ${selection.name} is not repeating` };
     }
+    const repeatSelection = selection as ChoiceSelection | ElementSelection | ElementsSelection;
+    const warnings: WarningEntry[] = [];
+    const said = () => (warnings.length > 0 ? warnings : undefined);
 
     // Initialize repeating state if needed
     if (!pendingState.repeating) {
@@ -2026,9 +2031,8 @@ export class ActionExecutor {
         isElement(c.value) ? [{ element: c.value, disabled: c.disabled }] : []
       );
       if (!elementChoices.some((c) => c.element.id === elementId)) {
-        // Format choices as {value, display} for UI
-        const formattedChoices = this.formatElementChoices(elementChoices.map((c) => c.element));
-        return { done: false, error: `Invalid element ID: ${elementId}`, nextChoices: formattedChoices };
+        const nextChoices = formatRepeatCandidates(currentChoices, repeatSelection, context, warnings);
+        return { done: false, error: `Invalid element ID: ${elementId}`, nextChoices, warnings: said() };
       }
       // Check if the selected element is disabled
       const disabledMatch = elementChoices.find(
@@ -2041,7 +2045,8 @@ export class ActionExecutor {
       return {
         done: false,
         error: `Invalid choice: ${JSON.stringify(value)}`,
-        nextChoices: formatChoiceCandidates(currentChoices, selection as ChoiceSelection, context, []),
+        nextChoices: formatRepeatCandidates(currentChoices, repeatSelection, context, warnings),
+        warnings: said(),
       };
     } else {
       // Check disabled for non-element choices
@@ -2154,78 +2159,8 @@ export class ActionExecutor {
       return { done: true };
     }
 
-    // Format choices for UI - element selections need {value: id, display: name}
-    const formattedChoices = isElementSelection
-      ? this.formatElementChoices(nextAnnotated.map(c => c.value).filter(isElement), selection, nextContext)
-      : formatChoiceCandidates(nextAnnotated, selection as ChoiceSelection, nextContext, []);
-
-    return { done: false, nextChoices: formattedChoices };
-  }
-
-  /**
-   * Format element array as choices for UI (with value/display format)
-   * Uses the selection's display function if available, otherwise falls back to element.name
-   */
-  private formatElementChoices(
-    elements: GameElement[],
-    selection?: Selection,
-    context?: ActionContext
-  ): Array<{ value: number; display: string }> {
-    // Only the two element selections reach here, and only they carry an
-    // element-shaped `display`. Narrowing on the discriminant gives the real
-    // signature, so a wrong arity or a renamed variant fails to compile rather
-    // than at render time.
-    const customDisplay =
-      selection && (selection.type === 'element' || selection.type === 'elements')
-        ? selection.display
-        : undefined;
-
-    // Auto-disambiguate names (for fallback when no custom display)
-    const nameCounts = new Map<string, number>();
-    for (const el of elements) {
-      const name = el.name || 'Element';
-      nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
-    }
-    const nameIndices = new Map<string, number>();
-
-    return elements.map(el => {
-      let display: string;
-
-      // Use custom display function if available
-      if (customDisplay && context) {
-        try {
-          display = customDisplay(el, context, elements);
-        } catch (error) {
-          // #50: this used to swallow the throw with no log at all, so the
-          // author saw a plausible but wrong label and had nothing to go on.
-          // In dev/test the bug stops the run; in a live game a label is
-          // cosmetic and is not worth crashing over, so it degrades VISIBLY.
-          const detail = `A custom display() for element "${el.name ?? el.id}" threw`;
-          console.error(`[BoardSmith] ${detail}:`, error);
-          if (isDevThrowEnabled()) {
-            throw new Error(
-              `${detail}. Fix the display callback -- a label it cannot produce would otherwise ` +
-              `be silently replaced by the element's name, which reads as correct output.`
-            );
-          }
-          display = el.name || 'Element';
-        }
-      } else {
-        // Default: use element name with disambiguation
-        const baseName = el.name || 'Element';
-        const count = nameCounts.get(baseName) || 1;
-
-        if (count > 1) {
-          const idx = (nameIndices.get(baseName) || 0) + 1;
-          nameIndices.set(baseName, idx);
-          display = `${baseName} #${idx}`;
-        } else {
-          display = baseName;
-        }
-      }
-
-      return { value: el.id, display };
-    });
+    const nextChoices = formatRepeatCandidates(nextAnnotated, repeatSelection, nextContext, warnings);
+    return { done: false, nextChoices, warnings: said() };
   }
 
   /**

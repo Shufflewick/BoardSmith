@@ -206,6 +206,7 @@ export class PendingActionManager<G extends Game = Game> {
         success: true,
         done: result.done,
         nextChoices: result.nextChoices,
+        warnings: result.warnings,
         actionComplete: false,
         state: this.#seatState(playerPosition),
       };
