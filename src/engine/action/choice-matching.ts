@@ -95,7 +95,9 @@ function byStringId<C extends MatchableChoice>(
 
 /**
  * Display text, where a case difference is a typo rather than a different
- * thing -- so exact first, then case-insensitively.
+ * thing -- so an exact match on ANY choice first, and only then a
+ * case-insensitive one: 'go' names the choice labelled 'go', not an earlier
+ * choice 'Go'.
  */
 function byDisplayText<C extends MatchableChoice>(
   value: unknown,
@@ -103,18 +105,21 @@ function byDisplayText<C extends MatchableChoice>(
 ): C | undefined {
   if (typeof value !== 'string') return undefined;
   const lowerValue = value.toLowerCase();
-  const textMatches = (candidate: unknown): boolean =>
-    candidate === value
-    || (typeof candidate === 'string' && candidate.toLowerCase() === lowerValue);
+  return choices.find((choice) => displayTexts(choice).some((text) => text === value))
+    ?? choices.find((choice) => displayTexts(choice).some((text) => text.toLowerCase() === lowerValue));
+}
 
-  return choices.find((choice) => {
-    if (choice.label !== undefined && textMatches(choice.label)) return true;
-    const actual = choice.value;
-    if (typeof actual === 'string') return textMatches(actual);
-    if (!actual || typeof actual !== 'object') return false;
-    const obj = actual as Record<string, unknown>;
-    return DISPLAY_PROPS.some((prop) => obj[prop] !== undefined && textMatches(obj[prop]));
-  });
+/** The strings a choice can be named by: its label, its value when a string, and a value object's display fields. */
+function displayTexts(choice: MatchableChoice): string[] {
+  const texts: string[] = choice.label !== undefined ? [choice.label] : [];
+  const actual = choice.value;
+  if (typeof actual === 'string') return [...texts, actual];
+  if (!actual || typeof actual !== 'object') return texts;
+  const obj = actual as Record<string, unknown>;
+  for (const prop of DISPLAY_PROPS) {
+    if (typeof obj[prop] === 'string') texts.push(obj[prop]);
+  }
+  return texts;
 }
 
 const DISPLAY_PROPS = ['value', 'display', 'name', 'label'] as const;
@@ -167,8 +172,8 @@ export function labelOfValue(value: unknown): string {
   try { return JSON.stringify(value); } catch { return '[Complex Object]'; }
 }
 
-/** A serialized game element, which is never a plain data object. */
-function isSerializedElement(value: unknown): boolean {
+/** A serialized game element (`{ id, className }`), which is never a plain data object. */
+export function isSerializedElement(value: unknown): boolean {
   if (typeof value !== 'object' || value === null) return false;
   const obj = value as Record<string, unknown>;
   return typeof obj.id === 'number' && typeof obj.className === 'string';

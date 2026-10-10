@@ -191,14 +191,13 @@ describe('prepare: per-evaluation shared work for a per-choice disabled rule (#3
 });
 
 describe('mapping a submitted value does not judge the candidates (#364)', () => {
-  it('resolveArgs and resolveSelectionValue run no disabled rule and no prepare', () => {
+  it('resolveArgs runs no disabled rule and no prepare', () => {
     const { game } = countedGame();
     const executor = game.getActionExecutor();
     const action = game.getAction('place')!;
     const player = game.getPlayer(1)!;
 
     expect(executor.resolveArgs(action, { space: 's7' }, player)).toEqual({ space: 's7' });
-    expect(executor.resolveSelectionValue(action.selections[0], 's7', player)).toBe('s7');
 
     expect({ prepareCalls: game.prepareCalls, disabledCalls: game.disabledCalls }).toEqual({
       prepareCalls: 0,

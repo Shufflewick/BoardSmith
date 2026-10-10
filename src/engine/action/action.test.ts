@@ -3081,6 +3081,7 @@ describe('repeating element selection with an unresolvable choice', () => {
 
     const result = executor.processRepeatingStep(action, player, pendingState, 999999);
     expect(result.done).toBe(false);
-    expect(result.error).toContain('999999');
+    // The same refusal any pick of a value not on offer gets (#393, #507).
+    expect(result.error).toMatch(/no longer available/);
   });
 });

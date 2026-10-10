@@ -261,13 +261,13 @@
     },
     "src/engine/action/action.ts": {
       "complexity_critical": {
-        "count": 3
+        "count": 2
       },
       "complexity_high": {
         "count": 1
       },
       "complexity_moderate": {
-        "count": 7
+        "count": 6
       }
     },
     "src/engine/action/helpers.ts": {
