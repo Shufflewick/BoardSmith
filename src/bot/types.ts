@@ -64,7 +64,7 @@ export interface BotConfig {
    * `Infinity` to disable it and make the search depend only on `iterations`.
    */
   timeout?: number;
-  /** Number of parallel ensemble searches. Default: 1 */
+  /** Number of ensemble searches, run one after another and sharing `timeout`. Default: 1 */
   parallel?: number;
   /** Enable RAVE (Rapid Action Value Estimation) for faster move learning. Default: true */
   useRAVE?: boolean;
