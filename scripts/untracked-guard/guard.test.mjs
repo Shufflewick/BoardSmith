@@ -114,28 +114,55 @@ describe('the guard in a real vitest run', () => {
     expect(output).toContain('probe/left.vue (first seen when strays.test.mjs finished)');
   }, 120_000);
 
-  it('passes a run whose tests write only to ignored paths, or clean up what they wrote', () => {
+  it('passes a run whose test writes only to ignored paths, or cleans up what it wrote', () => {
+    // One test file only: with a second file running beside it, that file's guard could see
+    // scratch.txt before this file's afterAll removes it, and the run rightly fails (#611).
     const root = gitRepo();
     const run = runGuardedVitest(root, {
-      'ignored.test.mjs': [
-        "import { it } from 'vitest';",
-        "import { mkdirSync, writeFileSync } from 'node:fs';",
+      'tidy.test.mjs': [
+        "import { afterAll, it } from 'vitest';",
+        "import { mkdirSync, rmSync, writeFileSync } from 'node:fs';",
+        "afterAll(() => rmSync('scratch.txt'));",
         "it('writes build output', () => {",
         "  mkdirSync('out', { recursive: true });",
         "  writeFileSync('out/bundle.js', 'x');",
         "  writeFileSync('debug.log', 'x');",
         '});',
-      ].join('\n'),
-      'cleans.test.mjs': [
-        "import { afterAll, it } from 'vitest';",
-        "import { rmSync, writeFileSync } from 'node:fs';",
-        "afterAll(() => rmSync('scratch.txt'));",
         "it('writes a file its own afterAll removes', () => writeFileSync('scratch.txt', 'x'));",
       ].join('\n'),
     });
 
     expect(run.stdout + run.stderr).not.toContain('git neither tracks nor ignores');
     expect(run.status, run.stdout + run.stderr).toBe(0);
+  }, 120_000);
+
+  it('fails a run when a file another test file later removes was seen by a test file running beside it', () => {
+    // Forces the interleaving: lingers.test.mjs keeps scratch.txt until the guard has logged it
+    // after brief.test.mjs, so the sighting is certain rather than down to timing.
+    const root = gitRepo();
+    const run = runGuardedVitest(root, {
+      'brief.test.mjs': [
+        "import { it } from 'vitest';",
+        "import { existsSync } from 'node:fs';",
+        "it('finishes once scratch.txt exists', async () => {",
+        "  while (!existsSync('scratch.txt')) await new Promise((r) => setTimeout(r, 10));",
+        '});',
+      ].join('\n'),
+      'lingers.test.mjs': [
+        "import { afterAll, inject, it } from 'vitest';",
+        "import { readFileSync, rmSync, writeFileSync } from 'node:fs';",
+        "afterAll(() => rmSync('scratch.txt'));",
+        "it('keeps scratch.txt until the guard has seen it', async () => {",
+        "  writeFileSync('scratch.txt', 'x');",
+        "  const { log } = inject('untrackedGuard');",
+        "  while (!readFileSync(log, 'utf8').includes('scratch.txt')) await new Promise((r) => setTimeout(r, 10));",
+        '});',
+      ].join('\n'),
+    });
+    const output = run.stdout + run.stderr;
+
+    expect(run.status, output).not.toBe(0);
+    expect(output).toContain('scratch.txt (first seen when brief.test.mjs finished)');
   }, 120_000);
 
   it('passes a run in a checkout that already had untracked files before it started', () => {
