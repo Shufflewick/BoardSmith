@@ -49,4 +49,25 @@ describe('the debug panel on a new game (#587)', () => {
     expect(wrapper.emitted('time-travel')?.at(-1)).toEqual([null, null, null]);
     wrapper.unmount();
   });
+
+  it('drops an old game\'s snapshot that arrives after the new game, rather than re-entering history (#589)', async () => {
+    let answer!: (reply: Record<string, unknown>) => void;
+    const slowStateAt: Op = (op, payload) =>
+      op === 'debug:state-at' ? new Promise((resolve) => { answer = resolve; }) : host(op, payload);
+    const wrapper = mount(DebugPanel, {
+      props: { state: stateOf('game-1'), playerSeat: 1, expanded: true },
+      global: { provide: { [GAME_CONTEXT_KEYS.platformRequest as symbol]: vi.fn<Op>(slowStateAt) } },
+      attachTo: document.body,
+    });
+    const vm = wrapper.vm as unknown as { isViewingHistory: boolean; selectAction: (i: number) => Promise<void> };
+    const selecting = vm.selectAction(1);
+
+    await wrapper.setProps({ state: stateOf('game-2') });
+    answer({ success: true, state: SNAPSHOT });
+    await selecting;
+
+    expect(vm.isViewingHistory).toBe(false);
+    expect(wrapper.emitted('time-travel')?.at(-1)).toEqual([null, null, null]);
+    wrapper.unmount();
+  });
 });
