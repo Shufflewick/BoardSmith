@@ -16,7 +16,7 @@
  * in what Vite does to itself.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { createServer as createViteServer, type ViteDevServer } from 'vite';
@@ -188,10 +188,28 @@ describe('a rules edit reloads the rules on the server (#201, #343)', () => {
     return { root: dir, rulesDir, server: vite };
   }
 
-  /** Wait until the watcher is looking at the rules, as it is long before an author's first save. */
-  async function watching(server: ViteDevServer, rulesDir: string): Promise<void> {
-    await vi.waitFor(() => expect(server.watcher.getWatched()[rulesDir]).toContain('index.ts'), {
-      timeout: 10000,
+  /**
+   * Resolve once the watcher has compared `file` against a first look at it (#625).
+   *
+   * The polling watcher lists a file at once but takes its first stat later, on
+   * Node's thread pool. A write that lands before that stat becomes the file's
+   * starting state and is never reported, so a test that made it waits forever;
+   * a starved machine holds that stat back long enough to lose the write. So
+   * touch the file until the watcher reports a touch. Each touch sets the
+   * modified time to the same past instant, which the watcher reports only as
+   * `raw`, never as a `change`, so nothing reloads.
+   */
+  function polled(server: ViteDevServer, file: string): Promise<void> {
+    const past = new Date(2000, 0, 1);
+    return new Promise((resolve) => {
+      const touch = setInterval(() => utimesSync(file, new Date(), past), 50);
+      const heard = (_event: string, path: string) => {
+        if (path !== file) return;
+        clearInterval(touch);
+        server.watcher.off('raw', heard);
+        resolve();
+      };
+      server.watcher.on('raw', heard);
     });
   }
 
@@ -223,7 +241,7 @@ describe('a rules edit reloads the rules on the server (#201, #343)', () => {
       adopt: async (rules) => adopted.fn(rules),
     });
 
-    await watching(server, rulesDir);
+    await polled(server, join(rulesDir, 'index.ts'));
     writeFileSync(join(rulesDir, 'index.ts'), 'export const version = 2;');
 
     expect(await adopted.called).toBe(1);
@@ -245,7 +263,7 @@ describe('a rules edit reloads the rules on the server (#201, #343)', () => {
       adopt,
     });
 
-    await watching(server, rulesDir);
+    await polled(server, join(rulesDir, 'index.ts'));
     writeFileSync(join(rulesDir, 'index.ts'), 'export const version = ;');
 
     const said = await printed.called;
@@ -260,6 +278,7 @@ describe('a rules edit reloads the rules on the server (#201, #343)', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     writeFileSync(join(rulesDir, 'other.ts'), 'export const other = 1;');
     const events: string[] = [];
+    const first = nextCall<void>();
     const second = nextCall<void>();
     let release: () => void = () => {};
     const firstHeld = new Promise<void>((resolve) => (release = resolve));
@@ -269,15 +288,19 @@ describe('a rules edit reloads the rules on the server (#201, #343)', () => {
       load: async () => ++loads,
       adopt: async (rules) => {
         events.push(`start ${rules}`);
-        if (rules === 1) await firstHeld;
+        if (rules === 1) {
+          first.fn();
+          await firstHeld;
+        }
         events.push(`end ${rules}`);
         if (rules === 2) second.fn();
       },
     });
 
-    await watching(server, rulesDir);
+    await polled(server, join(rulesDir, 'index.ts'));
+    await polled(server, join(rulesDir, 'other.ts'));
     writeFileSync(join(rulesDir, 'index.ts'), 'export const version = 2;');
-    await vi.waitFor(() => expect(events).toEqual(['start 1']), { timeout: 10000 });
+    await first.called;
     writeFileSync(join(rulesDir, 'other.ts'), 'export const other = 2;');
     // The second save waits for the first reload, however long it takes.
     await new Promise((resolve) => setTimeout(resolve, 300));
