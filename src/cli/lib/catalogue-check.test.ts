@@ -50,7 +50,8 @@ interface Fixture {
 
 /** A BoardSmith tree to check, a different BoardSmith the installs point at, and an empty catalogue. */
 function fixture(): Fixture {
-  const root = realpathSync(tempTree('bs-catalogue-'));
+  const made = tempTree('bs-catalogue-');
+  const root = realpathSync(made);
   const tree = join(root, 'BoardSmith');
   const elsewhere = join(root, 'RootBoardSmith');
   const catalogue = join(root, 'BoardSmithGames');

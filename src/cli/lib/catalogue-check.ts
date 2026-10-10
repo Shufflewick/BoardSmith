@@ -265,24 +265,16 @@ function run(command: string, args: string[], cwd: string): Promise<{ code: numb
   });
 }
 
-/** Writes the files of `repo` at its `main` commit into the empty folder `dest`. */
+/**
+ * Writes the files of `repo` at its `main` commit into the empty folder `dest`, by way of a tar
+ * file beside it: git writes the archive itself, so its bytes never pass through a string.
+ */
 async function exportMain(repo: CatalogueRepo, dest: string): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const archive = spawn('git', ['archive', '--format=tar', repo.commit], { cwd: repo.dir, stdio: ['ignore', 'pipe', 'pipe'] });
-    const tar = spawn('tar', ['-x', '-f', '-', '-C', dest], { stdio: ['pipe', 'ignore', 'pipe'] });
-    let errors = '';
-    archive.stderr.on('data', (chunk) => (errors += chunk));
-    tar.stderr.on('data', (chunk) => (errors += chunk));
-    archive.stdout.pipe(tar.stdin);
-    let archiveCode: number | null = null;
-    archive.on('error', reject);
-    tar.on('error', reject);
-    archive.on('close', (code) => (archiveCode = code));
-    tar.on('close', (code) => {
-      if (code === 0 && archiveCode === 0) resolve();
-      else reject(new Error(`could not export ${repo.slug} at ${repo.commit}: ${errors.trim()}`));
-    });
-  });
+  const archive = `${dest}.tar`;
+  await git(repo.dir, ['archive', '--format=tar', '-o', archive, repo.commit]);
+  const untar = await run('tar', ['-x', '-f', archive, '-C', dest], dest);
+  await fs.rm(archive);
+  if (untar.code !== 0) throw new Error(`could not unpack ${repo.slug} at ${repo.commit}: ${untar.output.trim()}`);
 }
 
 /**
