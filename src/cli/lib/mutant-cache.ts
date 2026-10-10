@@ -129,6 +129,15 @@ async function checkoutRevision(root: string): Promise<string | undefined> {
   if (realTop !== realRoot) return undefined;
 
   const commit = (await git(root, ['rev-parse', 'HEAD'])).trim();
+  return `${commit} ${await uncommittedContentHash(root)}`;
+}
+
+/**
+ * The content of the uncommitted and untracked changes in the checkout at `root` (its top), as one
+ * hash: equal for two checkouts of the same commit exactly when their working trees hold the same
+ * changes. Files git ignores are not in it.
+ */
+export async function uncommittedContentHash(root: string): Promise<string> {
   const hash = createHash('sha256');
   hash.update(await git(root, ['diff', '--binary', '--no-ext-diff', 'HEAD', '--']));
   const untracked = (await git(root, ['ls-files', '--others', '--exclude-standard', '-z'])).split('\0').filter(Boolean).sort();
@@ -140,7 +149,7 @@ async function checkoutRevision(root: string): Promise<string | undefined> {
       throw new Error(`could not read untracked ${path} in ${root}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  return `${commit} ${hash.digest('hex')}`;
+  return hash.digest('hex');
 }
 
 /** True when git ignores `path` (relative to `root`, the top of a checkout), whether or not it exists. */
