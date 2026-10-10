@@ -99,38 +99,40 @@ function linksToCheckout(spec: string): boolean {
   return /^(file|link):/.test(spec) && !/\.(tgz|tar\.gz|tar)$/.test(spec);
 }
 
+/** Why `repo`'s main is not a game to check, or undefined when its main links boardsmith to a checkout. */
+async function whyNotLinked(repo: CatalogueRepo): Promise<string | undefined> {
+  let pkg: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+  try {
+    pkg = JSON.parse(await git(repo.dir, ['show', 'main:package.json']));
+  } catch {
+    return 'main has no readable package.json';
+  }
+  const spec = pkg.dependencies?.boardsmith ?? pkg.devDependencies?.boardsmith;
+  if (spec === undefined) return 'does not depend on boardsmith';
+  return linksToCheckout(spec) ? undefined : `pins its own boardsmith (${spec})`;
+}
+
+/** One catalogue folder: the repository it is, if it has a main, and why it is not checked, if it is not. */
+async function readFolder(slug: string, dir: string): Promise<{ repo?: CatalogueRepo; notChecked?: string }> {
+  if (!existsSync(join(dir, '.git'))) return { notChecked: 'not a git repository' };
+  if (!(await gitSucceeds(dir, ['rev-parse', '--verify', '--quiet', 'main^{commit}']))) return { notChecked: 'has no main branch' };
+  const repo = { slug, dir, commit: (await git(dir, ['rev-parse', 'main^{commit}'])).trim() };
+  return { repo, notChecked: await whyNotLinked(repo) };
+}
+
 /** The catalogue's repositories, the games among them to check, and every other folder with the reason. */
 async function readCatalogue(root: string): Promise<{ repos: CatalogueRepo[]; games: CatalogueRepo[]; notChecked: CatalogueRun['notChecked'] }> {
   if (!existsSync(root)) throw catalogueMissing(root, `There is no catalogue folder at ${root}`);
   const repos: CatalogueRepo[] = [];
   const games: CatalogueRepo[] = [];
   const notChecked: CatalogueRun['notChecked'] = [];
-  // stat, not the directory entry: a game the catalogue holds as a link to a checkout is a game too.
-  const entries = (await fs.readdir(root)).sort();
-  for (const slug of entries) {
+  for (const slug of (await fs.readdir(root)).sort()) {
+    // stat, not the directory entry: a game the catalogue holds as a link to a checkout is a game too.
     if (!(await fs.stat(join(root, slug)).catch(() => undefined))?.isDirectory()) continue;
-    const dir = realpathSync(join(root, slug));
-    if (!existsSync(join(dir, '.git'))) {
-      notChecked.push({ slug, reason: 'not a git repository' });
-      continue;
-    }
-    if (!(await gitSucceeds(dir, ['rev-parse', '--verify', '--quiet', 'main^{commit}']))) {
-      notChecked.push({ slug, reason: 'has no main branch' });
-      continue;
-    }
-    const repo = { slug, dir, commit: (await git(dir, ['rev-parse', 'main^{commit}'])).trim() };
-    repos.push(repo);
-    let pkg: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
-    try {
-      pkg = JSON.parse(await git(dir, ['show', 'main:package.json']));
-    } catch {
-      notChecked.push({ slug, reason: 'main has no readable package.json' });
-      continue;
-    }
-    const spec = pkg.dependencies?.boardsmith ?? pkg.devDependencies?.boardsmith;
-    if (spec === undefined) notChecked.push({ slug, reason: 'does not depend on boardsmith' });
-    else if (!linksToCheckout(spec)) notChecked.push({ slug, reason: `pins its own boardsmith (${spec})` });
-    else games.push(repo);
+    const folder = await readFolder(slug, realpathSync(join(root, slug)));
+    if (folder.repo !== undefined) repos.push(folder.repo);
+    if (folder.notChecked !== undefined) notChecked.push({ slug, reason: folder.notChecked });
+    else if (folder.repo !== undefined) games.push(folder.repo);
   }
   if (games.length === 0) throw catalogueMissing(root, `The catalogue at ${root} holds no game whose main links boardsmith to a checkout`);
   return { repos, games, notChecked };
