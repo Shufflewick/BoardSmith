@@ -5,17 +5,32 @@
  */
 import { PRESS_MARK } from '../../testing/browser-smoke-page.js';
 
-/** A smoke spec listing `actions`, with `unreachable`, `seed` and `steps` given when they are. */
+/**
+ * A smoke spec listing `actions`, with `unreachable`, `seed` and `steps` given when they are. With
+ * `echo`, the spec also prints each page console line containing it to the walk's output, so a test
+ * can see what a fixture's page did.
+ */
 export function smokeSpec(
   actions: readonly string[],
   unreachable?: Record<string, string>,
-  more: { seed?: string | readonly string[]; steps?: number } = {},
+  more: { seed?: string | readonly string[]; steps?: number; echo?: string } = {},
 ): string {
   const declared = unreachable === undefined ? '' : `\n  unreachable: ${JSON.stringify(unreachable, null, 2).replace(/\n/g, '\n  ')},`;
   const seed = more.seed === undefined ? '' : `\n  seed: ${JSON.stringify(more.seed)},`;
   const steps = more.steps === undefined ? '' : `\n  steps: ${more.steps},`;
-  return `import { defineSmokeTest } from 'boardsmith/testing/browser';
+  const echo =
+    more.echo === undefined
+      ? ''
+      : `import { test } from '@playwright/test';
 
+test.beforeEach(({ page }) => {
+  page.on('console', (message) => {
+    if (message.text().includes(${JSON.stringify(more.echo)})) console.log(message.text());
+  });
+});
+`;
+  return `import { defineSmokeTest } from 'boardsmith/testing/browser';
+${echo}
 defineSmokeTest({
   actions: ${JSON.stringify(actions)},${declared}${seed}${steps}
 });
@@ -1094,13 +1109,17 @@ onUnmounted(() => watcher.disconnect());
   };
 }
 
+/** What {@link panelThatHangsOnThePointer}'s page logs, before the action's name, each time it hangs a press (#600). */
+export const HUNG = 'the fixture hung the first press of';
+
 /**
  * A PANEL THAT HANGS ON THE FIRST POINTER PRESS (#573): the first time the pointer presses one of
  * the panel's action buttons, the page disables the button and is kept busy for 1.5s, longer than
  * the walk gives one look at a panel button, then enables it again half a second later. The walk's
  * click runs out of time after its `pointerdown` reached the button, and its `click` never arrives,
  * since a disabled button takes none. That press did not press the button, so the walk must press it
- * again. A button whose `click` arrives twice says so on the console, which fails the walk.
+ * again. A button whose `click` arrives twice says so on the console, which fails the walk. Each
+ * hang is logged as {@link HUNG} and the action's name, so a test can see the press was hung.
  */
 export function panelThatHangsOnThePointer(): Record<string, string> {
   return {
@@ -1114,6 +1133,7 @@ function hang(event: Event) {
   const action = button?.getAttribute('data-bs-action');
   if (button == null || action == null || hung.has(action)) return;
   hung.add(action);
+  console.info(\`${HUNG} "\${action}"\`);
   button.disabled = true;
   const until = Date.now() + 1500;
   while (Date.now() < until) { /* busy */ }
