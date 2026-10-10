@@ -2,7 +2,8 @@
 /**
  * A die zoom-preview in a bundle with no dice support tells the author, in dev,
  * which import fixes it, once per page load however many previews are requested
- * (#597). Its own file so the warning has not fired yet when this test starts;
+ * (#597). The advice is DieRenderer's, word for word (#599): since #590 the fix
+ * is one import in src/ui/uis.ts plus the three.js peer, wherever the dice are drawn. Its own file so the warning has not fired yet when this test starts;
  * ZoomPreviewOverlay.test.ts mounts die previews too.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -38,8 +39,10 @@ describe('ZoomPreviewOverlay without dice support', () => {
       attachTo: document.body,
     });
     const message = warn.mock.calls.flat().join(' ');
-    expect(message).toContain('boardsmith/ui/dice');
-    expect(message).toContain('Die3D');
+    expect(message).toContain(
+      "add `import 'boardsmith/ui/dice';` to src/ui/uis.ts and run `npm install three @types/three`",
+    );
+    expect(message).not.toContain('Import Die3D');
 
     // A second preview and a remount must not repeat it: an author hovering over
     // dice would otherwise flood the console.
