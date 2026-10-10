@@ -858,7 +858,7 @@ export class ResidentWorld {
       // THE CATCH-UP CAN END THE WORLD, and then this command is refused like
       // any other that arrives after the ending (#395).
       this.#refuseIfEnded();
-      const events = await this.#dispatch({
+      const { events } = await this.#dispatch({
         player,
         command: { name: action, args },
         timing: null,
@@ -895,7 +895,7 @@ export class ResidentWorld {
     // owed an answer, so there is nothing to refuse.
     if (this.completed) return;
     try {
-      const events = await this.#dispatch({
+      const { events } = await this.#dispatch({
         player: null,
         command: { name, args },
         timing: { due: this.now(), missedCount: 0 },
@@ -925,10 +925,14 @@ export class ResidentWorld {
     command: WorldCommand;
     timing: WorldTiming;
     arrivedAt: number;
-    /** Event ids this dispatch settles, committed with its effects. */
-    settle?: readonly string[];
-    /** A recurrence's own re-arm, committed with the occurrence it follows. */
-    rearm?: readonly PlannedEvent[];
+    /**
+     * THE QUEUED EVENT THIS DISPATCH IS ONE OCCURRENCE OF, and where it is
+     * owed next (`runDueOccurrences`' `owedDue`). The event is settled and
+     * re-armed there in the same write as the occurrence's effects -- unless
+     * the occurrence's own plan displaced it (#583), when the handler's
+     * request is what stays queued under its key.
+     */
+    occurrence?: { readonly event: PlannedEvent; readonly owedDue: number | null };
     /** The receipt for the player order this dispatch is the effects of (#195),
      *  committed with them or not at all. */
     receipt?: WorldReceipt;
@@ -942,7 +946,7 @@ export class ResidentWorld {
      * instead of the person's.
      */
     about?: string;
-  }): Promise<readonly RoutedEvent[]> {
+  }): Promise<{ readonly events: readonly RoutedEvent[]; readonly displaced: boolean }> {
     const { player, command, timing, arrivedAt } = request;
     const runner = this.#world.runner;
 
@@ -997,6 +1001,16 @@ export class ResidentWorld {
       this.#budgets,
     );
 
+    // THE HANDLER'S OWN REQUEST WINS (#583). An occurrence whose plan displaced
+    // the event it ran upserted or cancelled that event's key, so the plan is
+    // what stays queued under it and the automatic re-arm is not written.
+    const { occurrence } = request;
+    const displaced = occurrence !== undefined && plan.replaced.includes(occurrence.event.id);
+    const rearm =
+      occurrence === undefined || displaced || occurrence.owedDue === null
+        ? undefined
+        : { ...occurrence.event, due: occurrence.owedDue, attempts: 0 };
+
     // RECORDED BEFORE THE CHECKPOINT, deliberately: a restart that finds a
     // non-empty dirty set is being told the truth about which partitions'
     // durable bytes are older than the last command that ran.
@@ -1007,8 +1021,8 @@ export class ResidentWorld {
         // SETTLED AND ARMED IN THE SAME WRITE AS THE EFFECTS. A crash between
         // them would replay a handler onto already-durable state, or leave a
         // rolled-back command's timers behind.
-        settle: [...(request.settle ?? []), ...plan.replaced],
-        schedule: [...(request.rearm ?? []), ...plan.events],
+        settle: [...new Set([...(occurrence === undefined ? [] : [occurrence.event.id]), ...plan.replaced])],
+        schedule: [...(rearm === undefined ? [] : [rearm]), ...plan.events],
         // THE ORDER'S RECEIPT LANDS WITH ITS EFFECTS (#195), or neither does.
         ...(request.receipt === undefined ? {} : { receipt: request.receipt }),
         // And the ledger is swept on the way past, so a world running for
@@ -1045,7 +1059,7 @@ export class ResidentWorld {
       this.#discardResident();
       throw rolledBack(error, command.name);
     }
-    return result.events;
+    return { events: result.events, displaced };
   }
 
   /** The boxes a dispatch's notice writes leave, for its checkpoint (#521). */
@@ -1145,7 +1159,7 @@ export class ResidentWorld {
    */
   async #runQueued(event: PlannedEvent, now: number): Promise<number> {
     const outcome = await runDueOccurrences(event, now, this.#budgets, async (timing, owedDue) => {
-      const events = await this.#dispatch({
+      const { events, displaced } = await this.#dispatch({
         player: null,
         command: { name: event.action, args: event.args },
         timing,
@@ -1159,13 +1173,15 @@ export class ResidentWorld {
         // still owed: each occurrence checkpoints on its own, so a later
         // refusal must find the event already past what ran, or the next wake
         // runs it again.
-        settle: [event.id],
-        rearm: owedDue === null ? [] : [{ ...event, due: owedDue, attempts: 0 }],
+        // ...UNLESS THE HANDLER UPSERTED OR CANCELLED ITS OWN KEY (#583): then
+        // its request is the event's future, and #dispatch writes no re-arm.
+        occurrence: { event, owedDue },
       });
       this.#onEvents(events);
       // A RECURRENCE CAN END THE WORLD on one of several occurrences due at
-      // once, and the rest belong to a world that no longer runs (#395).
-      return { ended: this.completed };
+      // once, and the rest belong to a world that no longer runs (#395). One
+      // that displaced its own event owes nothing more either (#583).
+      return { ended: this.completed, displaced };
     });
     if (outcome.kind === "refused") {
       // A DUE EVENT THAT REFUSED IS SAID OUT LOUD AND LEFT QUEUED, at the

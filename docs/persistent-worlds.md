@@ -2049,6 +2049,15 @@ queue, rather than failing a check on the way in.
   world that was away for a week from delivering a week of notifications at once.
   If one of those occurrences refuses, the event stays queued at the occurrence
   that refused: the ones before it are durable and are never run again (#538).
+  **The handler has the last word over its own key** (#583). An occurrence that
+  schedules under the recurrence's own key replaces it -- that is how a
+  recurrence changes its interval or turns into a one-shot -- and one that calls
+  `ctx.world.cancel(key)` on it stops it. Either way the host does not re-arm it,
+  and no occurrence the old recurrence still owed is run. Scheduling a
+  different key leaves the automatic re-arm alone. A host learns this from the
+  plan: `runDueOccurrences`' `call` answers `displaced: true` when the
+  occurrence's plan `replaced` holds the event's own id, and then writes no
+  re-arm at `owedDue`.
 
 **A scheduled event costs a wake, so do not buy one you do not need.** If the
 effect is only visible when somebody next looks, write a `completesAt` timestamp

@@ -313,13 +313,13 @@ describe("runDueOccurrences — the one occurrence loop every host runs (#538, #
 
   /** A host's `call`: records each occurrence and where the queue would stand
    *  once it is durable, refusing or ending where the case says. */
-  function host(options: { refuseAt?: number; endAt?: number } = {}) {
+  function host(options: { refuseAt?: number; endAt?: number; displaceAt?: number } = {}) {
     const calls: Array<{ due: number; missedCount: number; owedDue: number | null }> = [];
     const call = async (timing: { due: number; missedCount: number }, owedDue: number | null) => {
       const index = calls.length;
       calls.push({ ...timing, owedDue });
       if (index === options.refuseAt) throw new Error(`refused at ${index}`);
-      return { ended: index === options.endAt };
+      return { ended: index === options.endAt, displaced: index === options.displaceAt };
     };
     return { calls, call };
   }
@@ -379,6 +379,16 @@ describe("runDueOccurrences — the one occurrence loop every host runs (#538, #
     const outcome = await runDueOccurrences({ due: 0, seq: 1, everyMs: HOUR }, 4 * HOUR, FOLD_AFTER_TWO, call);
     expect(calls).toHaveLength(2);
     expect(outcome).toEqual({ kind: "ran", ran: 2, ended: true, nextDue: null });
+  });
+
+  test("an occurrence whose own plan DISPLACED the event is the last one run, and nothing is re-armed (#583)", async () => {
+    // The handler upserted or cancelled the recurrence's own key: its request
+    // is the event's future now, and the occurrences the old one still owed
+    // belong to a recurrence that no longer exists.
+    const { calls, call } = host({ displaceAt: 1 });
+    const outcome = await runDueOccurrences({ due: 0, seq: 1, everyMs: HOUR }, 4 * HOUR, FOLD_AFTER_TWO, call);
+    expect(calls).toHaveLength(2);
+    expect(outcome).toEqual({ kind: "ran", ran: 2, ended: false, nextDue: null });
   });
 });
 
