@@ -756,6 +756,23 @@ function describeExport(name: string, value: unknown, fields: readonly string[])
 }
 
 /**
+ * How the surface names one property of an instance type, or `undefined` when
+ * it is not an engine field: a method or accessor (the runtime prototype
+ * describes those), a field the standard library declares, or a `#private`
+ * one. A computed key (`[Symbol.iterator]`) is written as the source spells
+ * it, because the compiler's own name for it carries a per-program id.
+ */
+function fieldName(program: ts.Program, property: ts.Symbol): string | undefined {
+  if (!(property.flags & ts.SymbolFlags.Property)) return undefined;
+  const declaration = property.valueDeclaration ?? property.declarations?.[0];
+  if (declaration === undefined || program.isSourceFileDefaultLibrary(declaration.getSourceFile())) return undefined;
+  const declared = ts.getNameOfDeclaration(declaration);
+  if (declared === undefined) return property.name;
+  if (ts.isPrivateIdentifier(declared)) return undefined;
+  return ts.isComputedPropertyName(declared) ? `[${declared.expression.getText()}]` : property.name;
+}
+
+/**
  * The instance fields of every class `entrypoints` export, by entrypoint and
  * export name, read from the TypeScript source.
  *
@@ -798,16 +815,7 @@ function fieldsOf(entrypoints: readonly SurfaceEntrypoint[]): Map<string, Map<st
       const fields = construct
         ? checker
             .getPropertiesOfType(construct.getReturnType())
-            .flatMap((property) => {
-              if (!(property.flags & ts.SymbolFlags.Property)) return [];
-              const declaration = property.valueDeclaration ?? property.declarations?.[0];
-              if (declaration === undefined || program.isSourceFileDefaultLibrary(declaration.getSourceFile())) return [];
-              const declared = ts.getNameOfDeclaration(declaration);
-              if (declared !== undefined && ts.isPrivateIdentifier(declared)) return [];
-              // A computed key (`[Symbol.iterator]`) is written as the source
-              // spells it; the compiler's own name for it carries an id.
-              return [declared !== undefined && ts.isComputedPropertyName(declared) ? `[${declared.expression.getText()}]` : property.name];
-            })
+            .flatMap((property) => fieldName(program, property) ?? [])
         : [];
       exports.set(exported.name, fields);
     }
