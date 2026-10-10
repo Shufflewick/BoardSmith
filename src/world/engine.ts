@@ -2443,7 +2443,9 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // a cap's worth twice and the host would refuse the batch after the world
     // had already changed. The budget does that counting, so this side and the
     // host cannot count differently.
-    const budget = scheduleBudget(charge.owner, charge.allowance, this.budgets);
+    const budget = scheduleBudget(charge.owner, charge.allowance, this.budgets, (name) =>
+      this.unknownScheduledAction(name),
+    );
 
     // WHAT THE WORLD LOOKS LIKE BEFORE THIS ACTION (#68, #294).
     const before = this.snapshotResident();
@@ -2613,6 +2615,26 @@ export class BoardSmithWorldEngine implements WorldEngine {
       dirty.add(name);
     }
     return [...dirty];
+  }
+
+  /**
+   * A SCHEDULED ACTION THIS WORLD DOES NOT REGISTER, refused at the line (#603).
+   *
+   * Handed to `scheduleBudget`, which asks it after the shape checks and before
+   * the caps. Only the engine holds the bundle's actions; the parent re-plans
+   * without them and bounds the name's length instead.
+   */
+  private unknownScheduledAction(action: string): WorldRefusal | null {
+    if (this.actions.has(action)) return null;
+    const clock = [...this.actions.values()]
+      .filter((definition) => definition.world?.seatless === true)
+      .map((definition) => definition.name);
+    return worldRefusal(
+      "schedule-unknown-action",
+      `A schedule named the action ${JSON.stringify(action)}, and this world registers no action ` +
+        `by that name. The clock actions it can schedule are: ` +
+        `${clock.length > 0 ? clock.join(", ") : "none -- build one with `worldClockAction()`"}.`,
+    );
   }
 
   /**

@@ -26,6 +26,7 @@ import {
 import { worldAction, worldClockAction } from "./action.js";
 import { worldBudgets } from "./budgets.js";
 import {
+  WORLD_SCHEDULE_ACTION_MAX_BYTES,
   WORLD_SCHEDULE_ARGS_MAX_BYTES,
   WORLD_SCHEDULE_KEY_MAX_BYTES,
   type ScheduleArm,
@@ -586,6 +587,168 @@ describe("createWorld — one construction, every host", () => {
       expect(JSON.parse(checkpoint.partitions["yard:1"]!)).toMatchObject({
         attributes: { pokes: 0 },
       });
+    }
+  });
+
+  it("REFUSES an unregistered or too-long action name, or a key that is not well-formed Unicode, at the offending line, so the change unwinds (#603, #604)", async () => {
+    // A registered clock action whose name is over the bound: registering a
+    // name does not bound it, so the length is refused even for this one.
+    const longName = "s".repeat(WORLD_SCHEDULE_ACTION_MAX_BYTES + 1);
+    const longSweep = worldClockAction<TinyWorld>(longName)
+      .needs(() => [])
+      .execute(() => {});
+    const poke = (ctx: { world: { partition(name: string): unknown } }) => {
+      (ctx.world.partition("yard:1") as Yard).pokes += 1;
+    };
+    const arming = (request: ScheduleArm) =>
+      worldAction<TinyWorld>("pokeThenSchedule")
+        .needs(() => ["yard:1"])
+        .execute((_args, ctx) => {
+          poke(ctx);
+          ctx.world.schedule(request);
+        });
+    const cancelling = (key: string) =>
+      worldAction<TinyWorld>("pokeThenSchedule")
+        .needs(() => ["yard:1"])
+        .execute((_args, ctx) => {
+          poke(ctx);
+          ctx.world.cancel(key);
+        });
+    const cases = [
+      { action: arming({ delayMs: 1, action: "sweeep" }), code: "schedule-unknown-action" },
+      { action: arming({ delayMs: 1, action: longName }), code: "schedule-action-too-long" },
+      {
+        action: arming({ delayMs: 1, action: "sweep", key: "raid\uD83D" }),
+        code: "schedule-key-malformed",
+      },
+      {
+        action: arming({ delayMs: 1, action: "sweep", key: "\uDE00raid" }),
+        code: "schedule-key-malformed",
+      },
+      { action: cancelling("raid\uD83D"), code: "schedule-key-malformed" },
+    ] as const;
+
+    for (const { action, code } of cases) {
+      const { runner } = createWorld({
+        elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
+        definition: bundle({
+          world: {
+            maxPlayers: 2,
+            genesis: (game) => ({ "yard:1": game.create(Yard, "yard") as GameElement }),
+            view: () => ["yard:1"],
+            actions: [action, sweep, longSweep],
+          },
+        }),
+        seed: "s",
+        seats: new Map([["p1", 1]]),
+      });
+      await runner.genesis();
+
+      const refused = await runner
+        .apply({
+          player: "p1",
+          command: { name: "pokeThenSchedule", args: {} },
+          timing: null,
+          arrivedAt: 0,
+          allowance: { unkeyed: 0, keys: [], worldPending: 0 },
+          presence: [],
+          activity: null,
+          declaredActivity: [],
+          declaredNotices: [],
+        })
+        .then(
+          () => null,
+          (error: unknown) => error,
+        );
+      expect(refused).toBeInstanceOf(WorldRefusal);
+      expect((refused as WorldRefusal).code).toBe(code);
+
+      const checkpoint = await runner.serialize(["yard:1"]);
+      expect(JSON.parse(checkpoint.partitions["yard:1"]!)).toMatchObject({
+        attributes: { pokes: 0 },
+      });
+    }
+  });
+
+  it("names the actions a world CAN schedule when it refuses one it cannot (#603)", async () => {
+    const typo = worldAction<TinyWorld>("typo")
+      .needs(() => [])
+      .execute((_args, ctx) => {
+        ctx.world.schedule({ delayMs: 1, action: "sweeep" });
+      });
+    const { runner } = createWorld({
+      elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
+      definition: bundle({ world: { maxPlayers: 2, view: () => [], actions: [typo, sweep] } }),
+      seed: "s",
+      seats: new Map([["p1", 1]]),
+    });
+
+    await expect(
+      runner.apply({
+        player: "p1",
+        command: { name: "typo", args: {} },
+        timing: null,
+        arrivedAt: 0,
+        allowance: { unkeyed: 0, keys: [], worldPending: 0 },
+        presence: [],
+        activity: null,
+        declaredActivity: [],
+        declaredNotices: [],
+      }),
+    ).rejects.toThrow(/"sweeep".*sweep/s);
+  });
+
+  it("refuses a misspelled action as unknown, not as a full queue, and a malformed request by its shape first (#603)", async () => {
+    // The world and the player are both at their caps, so a request that got
+    // as far as the caps would be refused as a full queue -- which tells an
+    // author to cancel timers when the fix is to spell the action right.
+    const budgets = worldBudgets({ maxUnkeyedPendingPerPlayer: 1, maxPendingEvents: 1 });
+    const scheduling = (request: ScheduleArm) =>
+      worldAction<TinyWorld>("arm")
+        .needs(() => [])
+        .execute((_args, ctx) => {
+          ctx.world.schedule(request);
+        });
+    const cases = [
+      { request: { delayMs: 1, action: "sweeep" }, code: "schedule-unknown-action" },
+      { request: { delayMs: 1, action: "sweeep", key: "k" }, code: "schedule-unknown-action" },
+      // A request wrong in its own shape AND naming nothing registered is
+      // refused for its shape: that is the check both sides of the isolate
+      // share, so the engine and the host give the same answer.
+      { request: { delayMs: -1, action: "sweeep" }, code: "invalid-schedule-delay" },
+      { request: { delayMs: 1, action: "sweeep", key: "k\uD83D" }, code: "schedule-key-malformed" },
+      // And a registered action at the caps is still refused by them.
+      { request: { delayMs: 1, action: "sweep" }, code: "schedule-world-cap" },
+    ] as const;
+
+    for (const { request, code } of cases) {
+      const { runner } = createWorld({
+        elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
+        definition: bundle({
+          world: { maxPlayers: 2, view: () => [], actions: [scheduling(request), sweep] },
+        }),
+        seed: "s",
+        seats: new Map([["p1", 1]]),
+        budgets,
+      });
+      const refused = await runner
+        .apply({
+          player: "p1",
+          command: { name: "arm", args: {} },
+          timing: null,
+          arrivedAt: 0,
+          allowance: { unkeyed: 1, keys: [], worldPending: 1 },
+          presence: [],
+          activity: null,
+          declaredActivity: [],
+          declaredNotices: [],
+        })
+        .then(
+          () => null,
+          (error: unknown) => error,
+        );
+      expect(refused).toBeInstanceOf(WorldRefusal);
+      expect((refused as WorldRefusal).code).toBe(code);
     }
   });
 

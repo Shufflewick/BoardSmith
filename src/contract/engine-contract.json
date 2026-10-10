@@ -1,7 +1,7 @@
 {
-  "revision": 148,
+  "revision": 149,
   "bundleProtocol": 2,
-  "surfaceHash": "bc041041e4ac2e6d",
+  "surfaceHash": "b10378da0e3dad03",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1276,6 +1276,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "ctx.world.schedule() and ctx.world.cancel() refuse a key over 512 UTF-8 bytes (schedule-key-too-long) and args whose JSON is over 4096 UTF-8 bytes (schedule-args-too-large), both game-owned and raised at the offending line, and boardsmith/world exports the two bounds as WORLD_SCHEDULE_KEY_MAX_BYTES and WORLD_SCHEDULE_ARGS_MAX_BYTES."
+    },
+    {
+      "revision": 149,
+      "date": "2026-10-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "b10378da0e3dad03",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "ctx.world.schedule() refuses an action name the world does not register or one over 128 UTF-8 bytes, and a schedule or cancel key that is not well-formed Unicode, with the game-owned codes schedule-unknown-action, schedule-action-too-long and schedule-key-malformed (#603, #604)"
     }
   ]
 }
