@@ -23,12 +23,14 @@ interface ToolEnd {
  * each mapped to its entry script inside the package.
  *
  * These run from boardsmith's OWN install whatever the cwd, because their
- * output is a verdict boardsmith reasons about against committed baselines:
- * fallow's findings change between releases, so a game's own copy or a global
- * one on PATH would grade the same tree differently on every machine (#545).
+ * output is a verdict `boardsmith audit` gives: their findings change between
+ * releases, so a game's own copy, a global one on PATH or whatever `npx`
+ * fetches would grade the same tree differently on every machine. fallow was
+ * pinned in #545, jscpd in #551.
  */
 const BOARDSMITH_TOOLS: Readonly<Record<string, string>> = {
   fallow: 'fallow/bin/fallow',
+  jscpd: 'jscpd/run-jscpd.js',
 };
 
 /** The entry script of `bin` in boardsmith's own install, or a readable error. */
@@ -77,8 +79,8 @@ export function fallowCommandLine(args: string[], cwd: string): string {
  *
  * A tool boardsmith depends on (`BOARDSMITH_TOOLS`) runs from boardsmith's own
  * install. Any other tool prefers the workspace's own `node_modules/.bin/<bin>`
- * so a declared devDependency is always what runs, and falls back to `npx` only
- * for `jscpd`, which is deliberately not a dependency.
+ * so a declared devDependency is always what runs, and falls back to `npx` when
+ * the workspace has none.
  *
  * `output` decides where the child's output goes: inherited (the developer
  * reads it), stdout piped back to the caller (a command reasons about it), or
