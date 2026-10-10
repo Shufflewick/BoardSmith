@@ -363,14 +363,6 @@
       ]
     },
     {
-      "content": "94e18f077656ea6a",
-      "lines": 48,
-      "files": [
-        "src/ui/components/auto-ui/renderers/DieRenderer.vue",
-        "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
-      ]
-    },
-    {
       "content": "9aa734fbe4f4d143",
       "lines": 18,
       "files": [
@@ -391,6 +383,14 @@
       "files": [
         "src/engine/element/game-element.ts",
         "src/engine/utils/serializer.ts"
+      ]
+    },
+    {
+      "content": "a65a466bf25aee08",
+      "lines": 33,
+      "files": [
+        "src/ui/components/auto-ui/renderers/DieRenderer.vue",
+        "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
       ]
     },
     {

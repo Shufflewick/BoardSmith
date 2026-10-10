@@ -1610,8 +1610,8 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   /**
-   * Whether the game is over: it was finished (`game.finish()`, the END_GAME
-   * command, or a game's own `isFinished()`). The game is the one place that
+   * Whether the game is over: it was finished (`game.finish(winners)`, or a
+   * game's own `isFinished()` override). The game is the one place that
    * declares its end (#503).
    *
    * A finished game ends the flow whatever loop it is in (#492). Only

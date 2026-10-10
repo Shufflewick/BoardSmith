@@ -153,6 +153,15 @@ export interface ScheduleArm {
    * next occurrence's due. A world that was away for longer than the interval
    * is caught up in one wake -- `catchUpPlan` folds every occurrence that came
    * due, each still carrying its own `due`.
+   *
+   * ITS OWN HANDLER HAS THE LAST WORD (#583). An occurrence that schedules or
+   * cancels the recurrence's own key replaces the automatic re-arm: a schedule
+   * under the key is the recurrence's new timing (a new interval, or a
+   * one-shot), a cancel stops it, and no occurrence the old one still owed is
+   * run. Scheduling any OTHER key leaves the re-arm alone. Only a WORLD-OWNED
+   * recurrence is its handler's own key: a due handler runs as the clock, so a
+   * recurrence a seat armed keeps re-arming (docs/persistent-worlds.md,
+   * "Writing an occupied world's lifecycle with it").
    */
   readonly everyMs?: number;
 }

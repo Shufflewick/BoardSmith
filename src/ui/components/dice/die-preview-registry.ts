@@ -1,5 +1,6 @@
 /**
- * Where the zoom-preview overlay finds a component to draw a die.
+ * Where the zoom-preview overlay and the auto-UI's DieRenderer find a component
+ * to draw a die.
  *
  * This module exists to keep three.js out of games that have no dice, and the
  * ONLY thing that makes that work is that this file imports nothing. It must
@@ -19,6 +20,11 @@
  * that renders dice already imports it to get Die3D. Nothing extra to declare, and
  * nothing to forget — if you render dice, you imported the module; if you never
  * do, the module and three.js are simply absent.
+ *
+ * DieRenderer reads it for the same reason (#590): the auto-UI is reachable from
+ * GameShell, so a direct import put three.js in every game's type-check and
+ * build, and broke both for a game that never installed the optional peer. A
+ * game whose dice only the auto-UI draws imports `boardsmith/ui/dice` once.
  */
 import type { Component } from 'vue';
 

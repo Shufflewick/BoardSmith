@@ -69,8 +69,8 @@ export function phase<G extends Game = Game>(name: string, config: { do: FlowNod
 /**
  * Create a loop that repeats while a condition is true.
  *
- * A finished game (`game.finish()`, the END_GAME command, or the game's own
- * `isFinished()`) ends the flow wherever it is, so `while` only needs the
+ * A finished game (`game.finish(winners)`, or the game's own `isFinished()`)
+ * ends the flow wherever it is, so `while` only needs the
  * loop's own condition.
  *
  * @example

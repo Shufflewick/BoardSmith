@@ -2976,6 +2976,26 @@ describe('useActionController', () => {
       expect(cancelPendingAction).not.toHaveBeenCalled();
     });
 
+    it('drops a follow-up kept from history, so the new seat does not start the old seat\'s on return (#589)', async () => {
+      const playerSeat = ref(1);
+      const isViewingHistory = ref(false);
+      const controller = seatedAt(playerSeat, { isViewingHistory });
+      let reply!: (result: unknown) => void;
+      sendAction.mockReturnValueOnce(new Promise((resolve) => { reply = resolve; }));
+      const loot = { name: 'loot', prompt: 'Loot', selections: [{ name: 'where', type: 'choice', prompt: 'Where', choices: [{ value: 'north', display: 'North' }] }] };
+
+      const sent = controller.execute('endTurn');
+      isViewingHistory.value = true;
+      reply({ success: true, followUp: { action: 'loot', args: {}, metadata: loot } });
+      await sent;
+      playerSeat.value = 2;
+      await nextTick();
+
+      isViewingHistory.value = false;
+      for (let i = 0; i < 5; i++) await nextTick();
+      expect(controller.currentAction.value).toBeNull();
+    });
+
     it('leaves the draft alone when the seat is re-asserted unchanged', async () => {
       const playerSeat = ref(1);
       const controller = seatedAt(playerSeat);

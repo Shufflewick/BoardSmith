@@ -2367,9 +2367,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     watch(playerSeat, (seat, previous) => {
       if (seat === previous) return;
       abandonDraft();
-      // What this page started or cancelled was the last seat's: the new seat's
-      // held follow-up, if it has one, is new to it.
+      // What this page started, cancelled or kept from history was the last
+      // seat's: the new seat's held follow-up, if it has one, is new to it.
       lastFollowUpKey = undefined;
+      followUpFromHistory = undefined;
       autoStartHeldFollowUp();
     });
   }
