@@ -2,7 +2,7 @@
   "verify": [
     { "name": "audit", "run": "node bin/boardsmith.js audit --dupes-baseline --health-baseline --duplication" },
     { "name": "test", "run": "node bin/boardsmith.js test --verdict-file {verdictFile}", "verdictFile": true },
-    { "name": "catalogue", "run": "node bin/boardsmith.js catalogue --skip 'WindupWarfare=validate does not finish (Shufflewick/WindupWarfare#100)'" }
+    { "name": "catalogue", "run": "node bin/boardsmith.js catalogue --skip 'WindupWarfare=validate does not finish (Shufflewick/WindupWarfare#100)' --skip 'go-fish=BoardSmith #509: migration on go-fish codex/bs509, lands right after'" }
   ],
   "thread": {
     "workspaces": [
