@@ -139,6 +139,35 @@ describe('selectGameOptions coerces wire strings to the declared type', () => {
   });
 });
 
+describe('selectGameOptions matches a select value by the choice-matching rule (#574)', () => {
+  // `SelectOption` types a choice as a string or a number, but a game bundle's
+  // declarations are not type-checked when loaded, and the dev host already
+  // shows object-valued choices (#572).
+  const small = { width: 9, height: 9 };
+  const large = { width: 19, height: 19 };
+  const board = {
+    board: {
+      type: 'select',
+      label: 'Board',
+      choices: [
+        { value: small, label: 'Small' },
+        { value: large, label: 'Large' },
+      ],
+    },
+  } as unknown as Record<string, GameOptionDefinition>;
+
+  it('admits an object choice that crossed the wire as a different, equal object', () => {
+    const sent = JSON.parse(JSON.stringify({ board: large })) as Record<string, unknown>;
+    expect(sent.board).not.toBe(large);
+    expect(selectGameOptions(board, sent)).toEqual({ board: large });
+  });
+
+  it('still refuses an object that is not one of the choices', () => {
+    expect(() => selectGameOptions(board, { board: { width: 13, height: 13 } })).toThrow(GameOptionSelectionError);
+    expect(() => selectGameOptions(board, { board: { width: 13, height: 13 } })).toThrow(/"board".*one of:/);
+  });
+});
+
 describe('a game cannot declare an option named for a field the host owns', () => {
   const clashing = { seed: { type: 'number', label: 'Seed' } } as unknown as Record<string, GameOptionDefinition>;
 
