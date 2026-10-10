@@ -1,5 +1,5 @@
 {
-  "revision": 151,
+  "revision": 152,
   "bundleProtocol": 2,
   "surfaceHash": "dbd85fd9d4fcb20e",
   "payloadHash": "3f10d70c457a15ba",
@@ -1303,6 +1303,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "boardsmith/ui exports GameRootView, a game-root view with required phase, isFinished and settings; board gameView props are GameRootView | null; boardsmith/testing's HiddenInfoGameView equals it; games whose hand-built view fixtures omit those fields must add them (#570)"
+    },
+    {
+      "revision": 152,
+      "date": "2026-10-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "dbd85fd9d4fcb20e",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A submitted pick is resolved and checked by one rule on every path (#507): a selection step resolves its value with the earlier picks in view and item by item for a multiSelect or chooseElements, so onSelect and later picks get the value named rather than the label or id sent; a repeating pick accepts an element id, display text or label as any pick does, honours the tutorial gate (refused with 'Selection disabled: ...', and repeatingPickCandidates no longer offers gated values), and refuses a value not on offer with the selection's unavailable sentence or the standard 'no longer available' one instead of 'Invalid choice' / 'Invalid element ID'. A replayed log in which a repeating pick took a gated value now refuses it."
     }
   ]
 }
