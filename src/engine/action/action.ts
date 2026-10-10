@@ -459,9 +459,10 @@ export class ActionExecutor {
    * What one submitted value of a selection names, as the game's callbacks
    * receive it: an element id or `{ id }` becomes the element, and a
    * `chooseFrom` value sent as an element id, a display string or a label
-   * becomes the choice value it names -- item by item for a multiSelect, and
-   * judged against the choices `args` (the picks before it) produce. A value
-   * that names nothing is returned as sent, for `matchOffered` to refuse.
+   * becomes the choice value it names -- item by item for a multiSelect or an
+   * orderedList, and judged against the choices `args` (the picks before it)
+   * produce. A value that names nothing is returned as sent, for
+   * `matchOffered` to refuse.
    *
    * The one resolver: a whole submission (`resolveArgs`), a selection step and
    * a repeating pick all call it, so a pick means the same thing on every path
@@ -509,9 +510,9 @@ export class ActionExecutor {
   ): unknown {
     if (isSerializedElement(value)) return game.getElementById((value as { id: number }).id) ?? value;
     if (!player) return value;
-    // Only a multiSelect is resolved per item, so a single choice whose VALUE
-    // is itself an array is never taken apart.
-    if (Array.isArray(value) && selection.multiSelect === undefined) return value;
+    // Only a multiSelect or an orderedList is resolved per item, so a single
+    // choice whose VALUE is itself an array is never taken apart.
+    if (Array.isArray(value) && selection.multiSelect === undefined && selection.orderedList === undefined) return value;
     const candidates = known ?? this.candidatesOf(selection, { game, player, args });
     const resolveItem = (item: unknown): unknown => {
       if (isSerializedElement(item)) return game.getElementById((item as { id: number }).id) ?? item;

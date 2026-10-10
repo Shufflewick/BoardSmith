@@ -142,6 +142,18 @@ const multiCases: PickCase[] = [
     means: (game) => [game.stone('flint'), game.stone('slate')],
   },
   {
+    name: 'an orderedList submitted by labels, resolved item by item in order, repeats kept (#636)',
+    build: (_game, log) => chooseFromCase(log, { choices: labelled, orderedList: { min: 1, max: 3 } }),
+    picks: () => [['pick', ['Go', 'Skip', 'Go']]],
+    means: () => ['go', 'skip', 'go'],
+  },
+  {
+    name: 'an orderedList of element choices submitted by ids (#636)',
+    build: (game, log) => chooseFromCase(log, { choices: () => game.rocks.all(Stone), orderedList: { min: 1, max: 2 } }),
+    picks: (game) => [['pick', [game.stone('slate').id, game.stone('flint').id]]],
+    means: (game) => [game.stone('slate'), game.stone('flint')],
+  },
+  {
     name: 'a chooseElements submitted by ids',
     build: (game, log) =>
       Action.create('take')

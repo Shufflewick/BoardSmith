@@ -1,5 +1,5 @@
 {
-  "revision": 153,
+  "revision": 154,
   "bundleProtocol": 2,
   "surfaceHash": "89ccecd62d942a97",
   "payloadHash": "3f10d70c457a15ba",
@@ -1321,6 +1321,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A submitted pick is resolved and checked by one rule on every path (#507): a selection step resolves its value with the earlier picks resolved in view and item by item for a multiSelect or chooseElements, so onSelect, validate and later picks get the value named rather than the label or id sent; a repeating pick accepts an element id, display text or label as any pick does, honours the tutorial gate (refused with 'Selection disabled: ...', and repeatingPickCandidates no longer offers gated values), and refuses a value not on offer with the selection's unavailable sentence or the standard 'no longer available' one instead of 'Invalid choice' / 'Invalid element ID'. Display text matches exactly on every choice before it matches case-insensitively, and an { id } naming no element is refused with unavailable handed the id. A replayed log in which a repeating pick took a gated value now refuses it."
+    },
+    {
+      "revision": 154,
+      "date": "2026-10-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "89ccecd62d942a97",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "An orderedList chooseFrom is resolved item by item as a multiSelect is (#636): a submission naming its items by label, display text or element id now hands onSelect, validate, later picks and execute the values named, in the order sent with repeats kept, on the whole-submission and selection-step paths. Before this, such a submission passed validation and execute received the labels or raw ids."
     }
   ]
 }
