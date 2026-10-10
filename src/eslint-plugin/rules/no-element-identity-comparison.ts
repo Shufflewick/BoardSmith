@@ -151,10 +151,9 @@ const rule: Rule.RuleModule = {
 
     /**
      * Resolve a used Identifier node to its declaration node(s) via the
-     * ESLint scope manager. Returns no declarations (no match) if the
-     * identifier cannot be resolved --
-     * NOT to name-based matching, since that would reintroduce the exact
-     * cross-scope false positive this fix removes.
+     * ESLint scope manager. An identifier that cannot be resolved has no
+     * declarations, so it never matches. Matching by name instead would
+     * reintroduce the cross-scope false positive this rule exists to avoid.
      */
     function resolveDeclNodes(identifierNode: Record<string, unknown>): object[] {
       const sourceCode = context.sourceCode;
