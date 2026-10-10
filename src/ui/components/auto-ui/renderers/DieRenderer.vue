@@ -1,3 +1,9 @@
+<script lang="ts">
+// Module scope, not setup: the missing-dice warning fires once per page load,
+// not once per die drawn or per remount.
+let warnedNoDiceSupport = false;
+</script>
+
 <script setup lang="ts">
 /**
  * DieRenderer — Delegates die rendering entirely to the Die3D component.
@@ -38,11 +44,13 @@ const props = defineProps<{
 const Die3D = getDiePreviewComponent();
 
 // Without a registered die the box shows only its label. Say why and how to fix
-// it, in dev only: a player can do nothing with this.
-if (import.meta.env.DEV && !Die3D) {
+// it, once and in dev only: a player can do nothing with this.
+if (import.meta.env.DEV && !Die3D && !warnedNoDiceSupport) {
+  warnedNoDiceSupport = true;
   console.warn(
     `The auto-UI found a die (${props.element.name || props.element.className}) but this bundle has no ` +
-      "dice support, so only its label is drawn. Add `import 'boardsmith/ui/dice';` to src/ui/uis.ts and " +
+      'dice support, so only its label is drawn. If the auto-UI draws your dice in play, add ' +
+      "`import 'boardsmith/ui/dice';` to src/ui/uis.ts and " +
       'run `npm install three @types/three`: that import registers the 3D die (and opts this game into ' +
       'shipping three.js).',
   );
