@@ -103,8 +103,8 @@ export interface TutorialGateContext {
  *
  * For choice selections (type: 'choice') whose choices are objects: field equality
  * on the choice object — `{ toNotation: 'd4' }` matches any choice where
- * `choice.toNotation === 'd4'`. For player-choice objects like `{ value: 2, display: 'Bob' }`,
- * `{ value: 2 }` matches via field equality on the object.
+ * `choice.toNotation === 'd4'`. A `{ value, label }` choice (such as
+ * `playerChoices()`) delivers its value, so it is matched like the primitives below.
  *
  * For `chooseFrom()` selections whose choices are **primitive strings or numbers**
  * (e.g. `go-fish`'s rank selection returns strings like `'7'`, `'Q'`): use the

@@ -98,7 +98,11 @@ class VariableRangeGame extends Game<VariableRangeGame, Player> {
   }
 }
 
-/** multiSelect function legitimately returns undefined -> single-select. */
+/**
+ * multiSelect function returns undefined -> refused (#509). The value of a pick
+ * that declares a count is an array in every state; the type forbids this, so
+ * the fixture says so.
+ */
 class UndefinedResolutionGame extends Game<UndefinedResolutionGame, Player> {
   board!: Space<UndefinedResolutionGame>;
 
@@ -114,6 +118,7 @@ class UndefinedResolutionGame extends Game<UndefinedResolutionGame, Player> {
         .chooseElements('items', {
           prompt: 'Choose a token',
           elements: (ctx) => [...(ctx.game as UndefinedResolutionGame).board.all(Piece)],
+          // @ts-expect-error - a function-valued multiSelect must return a count (#509).
           multiSelect: () => undefined,
         })
         .execute(() => ({ success: true })),
@@ -188,17 +193,14 @@ describe('dynamic (function-valued) multiSelect enumeration', () => {
     expect((move.args.items as unknown[]).length).toBe(2);
   });
 
-  it('a function multiSelect returning undefined degrades to single-select without error', () => {
+  it('a function multiSelect returning undefined fails loud, naming the selection (#509)', () => {
     const game = startGame(UndefinedResolutionGame);
-    const moves = enumerateLegalMoves(game, 1);
 
-    // Single-select over 3 tokens -> one move per token, one element each
-    expect(moves).toHaveLength(3);
-    for (const move of moves) {
-      expect(move.action).toBe('pick');
-      // Single-select for an "elements" selection wraps the choice, not an array
-      expect(Array.isArray(move.args.items)).toBe(false);
-    }
+    // It used to degrade to single-select, handing execute a bare element where
+    // the type promised an array.
+    expect(() => enumerateLegalMoves(game, 1)).toThrow(
+      'Selection "items": its multiSelect function returned undefined',
+    );
   });
 
   it('a throwing function multiSelect fails loud instead of silently skipping to zero moves', async () => {

@@ -164,12 +164,8 @@ describe('orderedList — an ordered, repeatable list of choices (#249)', () => 
         choices: ['university', 'shipyard'],
         orderedList: { min: 1, max: 4 },
       })
-      // The engine builder's own arg type for a chooseFrom is `T` whether the
-      // option is multiSelect or orderedList -- a world's facade is where the
-      // array is knowable from the call. Read as one here, as every other engine
-      // multi-value test does.
       .execute((args) => {
-        seen.push([...(args.buildings as unknown as string[])]);
+        seen.push([...args.buildings]);
       });
     game.registerAction(action);
 

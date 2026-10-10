@@ -17,9 +17,12 @@
  *    and the action panel reads `null` as a cap of nothing (ShufflewickPub
  *    #378, BoardSmith #508). Enumeration, the one caller that does arithmetic
  *    with the bound, applies `?? Infinity` itself.
- *  - `undefined` (no multiSelect at all, or the function legitimately
- *    returns `undefined`) -> returned as `undefined`. This is NOT an error —
- *    it means "single-select in this state".
+ *  - `undefined` (no multiSelect at all) -> returned as `undefined`: the
+ *    selection asks for one value.
+ *  - the function returns `undefined` -> refused with an error naming the
+ *    selection. A declared count makes the value an array in every state, so
+ *    the arg's type is knowable when the action is written (#509); a single
+ *    pick is `{ min: 1, max: 1 }`.
  *  - the function THROWS -> the error propagates unchanged. Never caught,
  *    never swallowed into a silent skip. Callers that need a fail-loud
  *    boundary should let it surface.
@@ -30,9 +33,16 @@ import type { ActionContext, Selection } from '../index.js';
  * A resolved count config (`number | { min?, max? }`) as `{ min, max? }`, with
  * `max` absent when unbounded. The one place both resolvers decide that.
  */
-function boundsOf(resolved: unknown): { min: number; max?: number } {
+function boundsOf(resolved: unknown, selection: Selection, option: string): { min: number; max?: number } {
+  if (resolved === undefined) {
+    throw new Error(
+      `Selection "${selection.name}": its ${option} function returned undefined. A declared ${option} ` +
+      `makes the value an array in every state, so the function must return a count or { min, max }; ` +
+      `return { min: 1, max: 1 } for a single pick.`
+    );
+  }
   if (typeof resolved === 'number') return { min: 1, max: resolved };
-  const config = (resolved ?? {}) as { min?: number; max?: number };
+  const config = resolved as { min?: number; max?: number };
   return config.max === undefined
     ? { min: config.min ?? 1 }
     : { min: config.min ?? 1, max: config.max };
@@ -60,7 +70,7 @@ export function resolveOrderedList(
     ? (orderedList as (c: ActionContext) => unknown)(ctx)
     : orderedList;
 
-  return resolved === undefined ? undefined : boundsOf(resolved);
+  return boundsOf(resolved, selection, 'orderedList');
 }
 
 export function resolveMultiSelect(
@@ -77,5 +87,5 @@ export function resolveMultiSelect(
   // try/catch — a thrown error must propagate to the caller (fail loud).
   const resolved = typeof multiSelect === 'function' ? multiSelect(ctx) : multiSelect;
 
-  return resolved === undefined ? undefined : boundsOf(resolved);
+  return boundsOf(resolved, selection, 'multiSelect');
 }

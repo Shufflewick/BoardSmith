@@ -21,6 +21,7 @@ import type {
   ConditionConfig,
   ConditionDetail,
   AnnotatedChoice,
+  LabelledChoice,
   DisabledRule,
   UnavailableRule,
   OnSelectContext,
@@ -32,6 +33,8 @@ import { PlayerFacingError, NotSimulableError } from '../errors.js';
 import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
 import { findMatchingChoice, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
 import { numberRuleErrors } from './number-rules.js';
+import { formatChoiceCandidates } from '../element/pick-candidates.js';
+import type { ChoiceWithRefs } from '../../types/protocol.js';
 import { textRuleErrors } from './text-rules.js';
 import { resolveMultiSelect, resolveOrderedList } from '../utils/resolve-multiselect.js';
 
@@ -279,6 +282,38 @@ function describeValidateReturn(result: unknown): string {
   return `a ${typeof result}`;
 }
 
+/** One candidate of a selection: the value it delivers, and the label a `{ value, label }` choice brought. */
+interface Candidate {
+  value: unknown;
+  label?: string;
+}
+
+/**
+ * One `chooseFrom` choice as the candidate it offers (#509).
+ *
+ * A choice is a value, or the labelled shape `{ value, label? }`: a plain
+ * object whose only keys are `value` and an optional string `label`. Only that
+ * shape is read; any other object, such as `{ value: 'go', cost: 3 }`, is a
+ * value in its own right and is offered whole. `ChoiceValue` in types.ts is the
+ * same rule for the compiler, so what an author is told a callback receives is
+ * what it receives.
+ */
+function asCandidate(choice: unknown): Candidate {
+  if (!isLabelledChoice(choice)) return { value: choice };
+  return choice.label === undefined ? { value: choice.value } : { value: choice.value, label: choice.label };
+}
+
+/** A plain object (not an array, element or other class instance) whose only keys are `value` and a string `label`. */
+function isLabelledChoice(choice: unknown): choice is LabelledChoice<unknown> {
+  if (choice === null || typeof choice !== 'object') return false;
+  const proto = Object.getPrototypeOf(choice);
+  if (proto !== Object.prototype && proto !== null) return false;
+  const obj = choice as Record<string, unknown>;
+  return 'value' in obj
+    && Object.keys(obj).every((key) => key === 'value' || key === 'label')
+    && (obj.label === undefined || typeof obj.label === 'string');
+}
+
 /**
  * How a choice submission's COUNT is out of bounds, or nothing when it is not.
  *
@@ -374,9 +409,7 @@ export class ActionExecutor {
           return this.game.getElementById((value as { id: number }).id) ?? value;
         }
         const candidates = this.candidatesOf(selection, { game: this.game, player, args: {} });
-        let resolved = this.smartResolveChoiceValue(value, candidates);
-        resolved = this.extractChoiceValue(resolved);
-        return resolved !== value ? resolved : value;
+        return this.smartResolveChoiceValue(value, candidates);
       }
       default:
         return value;
@@ -474,21 +507,14 @@ export class ActionExecutor {
                   const element = game.getElementById((item as { id: number }).id);
                   return element ?? item;
                 }
-                const smartResolved = this.smartResolveChoiceValue(item, candidates);
-                return this.extractChoiceValue(smartResolved);
+                return this.smartResolveChoiceValue(item, candidates);
               });
             }
           } else if (player) {
             // Try smart resolution: element ID or display string → actual choice
             // This supports custom UIs sending element IDs for chooseFrom selections
             const candidates = this.candidatesOf(selection, { game, player, args: resolved });
-            let resolvedValue = this.smartResolveChoiceValue(value, candidates);
-
-            // Extract just the 'value' property from {value, label/display} pattern choices
-            // This makes chooseFrom with simple value objects work intuitively:
-            //   choices: [{ value: 'skip', label: 'Skip' }]
-            //   args.myChoice === 'skip' (not { value: 'skip', label: 'Skip' })
-            resolvedValue = this.extractChoiceValue(resolvedValue);
+            const resolvedValue = this.smartResolveChoiceValue(value, candidates);
 
             if (resolvedValue !== value) {
               resolved[selection.name] = resolvedValue;
@@ -570,44 +596,6 @@ export class ActionExecutor {
   }
 
   /**
-   * Extract the 'value' property from a {value, label/display} choice object.
-   * This enables the intuitive pattern where:
-   *   choices: [{ value: 'skip', label: 'Skip' }]
-   *   args.selection === 'skip'  // not the full object
-   *
-   * Only extracts if:
-   * - The choice is an object with a 'value' property
-   * - The choice is NOT a game element (no 'id' and 'className')
-   * - The choice is NOT an element-like object (has 'id' but looks like metadata)
-   */
-  private extractChoiceValue(choice: unknown): unknown {
-    if (typeof choice !== 'object' || choice === null) {
-      return choice;
-    }
-
-    const obj = choice as Record<string, unknown>;
-
-    // Don't extract from game elements
-    if (this.isSerializedElement(choice)) {
-      return choice;
-    }
-
-    // Don't extract from element-like objects (have numeric id but no className)
-    // These are likely actual game elements or element references
-    if (typeof obj.id === 'number') {
-      return choice;
-    }
-
-    // If it has a 'value' property, extract just the value
-    // This handles { value: 'skip', label: 'Skip' } → 'skip'
-    if ('value' in obj) {
-      return obj.value;
-    }
-
-    return choice;
-  }
-
-  /**
    * Get available choices for a selection given current args.
    * Returns AnnotatedChoice[] with each item annotated with disabled status.
    *
@@ -661,14 +649,14 @@ export class ActionExecutor {
         : {};
     const { disabled } = rule;
     const prepared = disabled && rule.prepare ? rule.prepare(context) : undefined;
-    return candidates.map(value => {
-      const gameDisabled = disabled ? disabled(value, context, prepared) : false;
+    return candidates.map((candidate) => {
+      const gameDisabled = disabled ? disabled(candidate.value, context, prepared) : false;
       // OR-in gate reason: only when no game-defined reason already applies.
       if (tutorialStep && gameDisabled === false) {
-        const gateReason = getGateReasonForValue(tutorialStep, actionName!, value, selection.name);
-        if (gateReason) return { value, disabled: gateReason };
+        const gateReason = getGateReasonForValue(tutorialStep, actionName!, candidate.value, selection.name);
+        if (gateReason) return { ...candidate, disabled: gateReason };
       }
-      return { value, disabled: gameDisabled };
+      return { ...candidate, disabled: gameDisabled };
     });
   }
 
@@ -678,105 +666,92 @@ export class ActionExecutor {
    * tutorial gate run. What `getChoices` annotates, and all that mapping a
    * submitted value onto a choice needs (#364): resolving an id or a display
    * string must not pay for a verdict on every candidate.
+   *
+   * A `{ value, label }` choice is read HERE and nowhere else (#509): its
+   * candidate is its value, carrying its label. Every later reader -- the
+   * `disabled` rule, the wire, validation, `execute` -- sees the value.
    */
-  private candidatesOf(selection: Selection, context: ActionContext): unknown[] {
-    switch (selection.type) {
-      case 'choice': {
-        const choiceSel = selection as ChoiceSelection;
-        let choices = typeof choiceSel.choices === 'function'
-          ? choiceSel.choices(context)
-          : [...choiceSel.choices];
+  private candidatesOf(selection: Selection, context: ActionContext): Candidate[] {
+    if (selection.type === 'choice') return this.choiceItemsOf(selection as ChoiceSelection, context).map(asCandidate);
+    return this.elementCandidatesOf(selection, context).map((value) => ({ value }));
+  }
 
-        // Apply filterBy if present and the dependent selection has a value
-        if (choiceSel.filterBy) {
-          const { key, selectionName } = choiceSel.filterBy;
-          const previousValue = context.args[selectionName];
+  /** A choice selection's `choices`, after `filterBy`, as the game wrote them. */
+  private choiceItemsOf(choiceSel: ChoiceSelection, context: ActionContext): unknown[] {
+    let choices = typeof choiceSel.choices === 'function'
+      ? choiceSel.choices(context)
+      : [...choiceSel.choices];
 
-          if (previousValue !== undefined) {
-            // Extract the filter value from the previous selection
-            // For elements, use .id as fallback if the key doesn't exist
-            let filterValue: unknown;
-            if (typeof previousValue === 'object' && previousValue !== null) {
-              const prevObj = previousValue as Record<string, unknown>;
-              // Try the key first, then fall back to 'id' (for element selections)
-              filterValue = prevObj[key] !== undefined ? prevObj[key] : prevObj['id'];
-            } else {
-              filterValue = previousValue;
-            }
+    // Apply filterBy if present and the dependent selection has a value
+    if (choiceSel.filterBy) {
+      const { key, selectionName } = choiceSel.filterBy;
+      const previousValue = context.args[selectionName];
 
-            // Filter choices where choice[key] matches the filter value
-            choices = choices.filter((choice) => {
-              if (typeof choice === 'object' && choice !== null) {
-                return (choice as Record<string, unknown>)[key] === filterValue;
-              }
-              return choice === filterValue;
-            });
-          }
-        }
-
-        return choices;
-      }
-
-      case 'element': {
-        const elementSel = selection as ElementSelection;
-
-        let elements: GameElement[];
-
-        // Check if elements array is provided directly (chooseElement precomputed candidates)
-        if (elementSel.elements) {
-          elements = typeof elementSel.elements === 'function'
-            ? elementSel.elements(context)
-            : [...elementSel.elements];
+      if (previousValue !== undefined) {
+        // Extract the filter value from the previous selection
+        // For elements, use .id as fallback if the key doesn't exist
+        let filterValue: unknown;
+        if (typeof previousValue === 'object' && previousValue !== null) {
+          const prevObj = previousValue as Record<string, unknown>;
+          // Try the key first, then fall back to 'id' (for element selections)
+          filterValue = prevObj[key] !== undefined ? prevObj[key] : prevObj['id'];
         } else {
-          // Original from/filter/elementClass pattern (for chooseElement)
-          const from =
-            typeof elementSel.from === 'function'
-              ? elementSel.from(context)
-              : elementSel.from ?? this.game;
-
-          // DEV: Check if 'from' is an ElementCollection (likely a bug in action definition)
-          if (isDevMode() && Array.isArray(from) && from.length > 0 && 'all' in from) {
-            console.warn(
-              `[BoardSmith] ⚠️ Selection "${selection.name}" 'from' returned an ElementCollection!\n` +
-              `  This is likely a bug - 'from' should return a container (Space/Game), not elements.\n` +
-              `  Example fix: from: () => game.stash  (not game.stash.all(Equipment))\n` +
-              `  The 'from' collection has ${from.length} elements. Calling .all() on it will search WITHIN these.`
-            );
-          }
-
-          if (elementSel.elementClass) {
-            elements = [...from.all(elementSel.elementClass)];
-          } else {
-            elements = [...from.all()];
-          }
-
-          if (elementSel.filter) {
-            const wrappedFilter = wrapFilterWithHelpfulErrors(elementSel.filter, selection.name);
-            elements = elements.filter((e) => wrappedFilter(e, context));
-          }
+          filterValue = previousValue;
         }
 
-        return elements;
+        // Filter choices where choice[key] matches the filter value
+        choices = choices.filter((choice) => {
+          if (typeof choice === 'object' && choice !== null) {
+            return (choice as Record<string, unknown>)[key] === filterValue;
+          }
+          return choice === filterValue;
+        });
       }
-
-      case 'elements': {
-        // New "pit of success" selection type - elements array
-        const elementsSel = selection as ElementsSelection;
-        const elements = typeof elementsSel.elements === 'function'
-          ? elementsSel.elements(context)
-          : [...elementsSel.elements];
-
-        return elements;
-      }
-
-      case 'text':
-      case 'number':
-        // These don't have predefined choices
-        return [];
-
-      default:
-        return [];
     }
+
+    return choices;
+  }
+
+  /** An element selection's candidates, or none for a selection without a list (text, number). */
+  private elementCandidatesOf(selection: Selection, context: ActionContext): GameElement[] {
+    if (selection.type === 'elements') {
+      const elementsSel = selection as ElementsSelection;
+      return typeof elementsSel.elements === 'function'
+        ? elementsSel.elements(context)
+        : [...elementsSel.elements];
+    }
+    if (selection.type !== 'element') return [];
+    const elementSel = selection as ElementSelection;
+    // Precomputed candidates (chooseElement's `elements`)
+    if (elementSel.elements) {
+      return typeof elementSel.elements === 'function'
+        ? elementSel.elements(context)
+        : [...elementSel.elements];
+    }
+    return this.boardElementsOf(elementSel, context);
+  }
+
+  /** A chooseElement's candidates from its `from`/`elementClass`/`filter` search of the board. */
+  private boardElementsOf(elementSel: ElementSelection, context: ActionContext): GameElement[] {
+    const from =
+      typeof elementSel.from === 'function'
+        ? elementSel.from(context)
+        : elementSel.from ?? this.game;
+
+    // DEV: Check if 'from' is an ElementCollection (likely a bug in action definition)
+    if (isDevMode() && Array.isArray(from) && from.length > 0 && 'all' in from) {
+      console.warn(
+        `[BoardSmith] ⚠️ Selection "${elementSel.name}" 'from' returned an ElementCollection!\n` +
+        `  This is likely a bug - 'from' should return a container (Space/Game), not elements.\n` +
+        `  Example fix: from: () => game.stash  (not game.stash.all(Equipment))\n` +
+        `  The 'from' collection has ${from.length} elements. Calling .all() on it will search WITHIN these.`
+      );
+    }
+
+    const elements = elementSel.elementClass ? [...from.all(elementSel.elementClass)] : [...from.all()];
+    if (!elementSel.filter) return elements;
+    const wrappedFilter = wrapFilterWithHelpfulErrors(elementSel.filter, elementSel.name);
+    return elements.filter((e) => wrappedFilter(e, context));
   }
 
   /**
@@ -893,8 +868,8 @@ export class ActionExecutor {
    *
    * @returns The resolved choice value, or the original value if no match found
    */
-  private smartResolveChoiceValue(value: unknown, candidates: unknown[]): unknown {
-    const match = findMatchingChoice(value, candidates.map(candidate => ({ value: candidate })));
+  private smartResolveChoiceValue(value: unknown, candidates: Candidate[]): unknown {
+    const match = findMatchingChoice(value, candidates);
     return match === undefined ? value : match.value;
   }
 
@@ -904,11 +879,11 @@ export class ActionExecutor {
   private formatValidChoices(choices: AnnotatedChoice<unknown>[]): string {
     const maxShow = 5;
     const formatted = choices.slice(0, maxShow).map(choice => {
+      if (choice.label !== undefined) return choice.label;
       const actual = choice.value;
       if (actual && typeof actual === 'object') {
         const obj = actual as Record<string, unknown>;
         // Try to get a readable representation
-        if (obj.display) return String(obj.display);
         if (obj.name) return String(obj.name);
         if (obj.label) return String(obj.label);
         if ('id' in obj) return `(id: ${obj.id})`;
@@ -1978,7 +1953,8 @@ export class ActionExecutor {
    *
    * @returns Object with:
    *   - done: true if the repeating selection is complete
-   *   - nextChoices: available choices for the next iteration (if not done)
+   *   - nextChoices: the next iteration's choices (if not done), labelled for
+   *     a surface exactly as the first iteration's were
    *   - error: error message if something went wrong
    */
   processRepeatingStep(
@@ -1986,7 +1962,7 @@ export class ActionExecutor {
     player: Player,
     pendingState: PendingActionState,
     value: unknown
-  ): { done: boolean; nextChoices?: unknown[]; error?: string } {
+  ): { done: boolean; nextChoices?: ChoiceWithRefs[]; error?: string } {
     const selection = action.selections[pendingState.currentSelectionIndex];
     if (!selection) {
       return { done: true, error: `Selection at index ${pendingState.currentSelectionIndex} not found` };
@@ -2062,7 +2038,11 @@ export class ActionExecutor {
         return { done: false, error: `Selection disabled: ${disabledMatch.disabled}` };
       }
     } else if (!this.annotatedChoicesContain(currentChoices, value)) {
-      return { done: false, error: `Invalid choice: ${JSON.stringify(value)}`, nextChoices: currentChoices.map(c => c.value) };
+      return {
+        done: false,
+        error: `Invalid choice: ${JSON.stringify(value)}`,
+        nextChoices: formatChoiceCandidates(currentChoices, selection as ChoiceSelection, context, []),
+      };
     } else {
       // Check disabled for non-element choices
       const disabledMatch = currentChoices.find(c => this.valuesEqual(c.value, value) && c.disabled !== false);
@@ -2175,10 +2155,9 @@ export class ActionExecutor {
     }
 
     // Format choices for UI - element selections need {value: id, display: name}
-    const nextChoicesRaw = nextAnnotated.map(c => c.value);
     const formattedChoices = isElementSelection
-      ? this.formatElementChoices(nextChoicesRaw.filter(isElement), selection, nextContext)
-      : nextChoicesRaw;
+      ? this.formatElementChoices(nextAnnotated.map(c => c.value).filter(isElement), selection, nextContext)
+      : formatChoiceCandidates(nextAnnotated, selection as ChoiceSelection, nextContext, []);
 
     return { done: false, nextChoices: formattedChoices };
   }

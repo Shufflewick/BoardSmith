@@ -23,6 +23,8 @@ export type SelectionType = 'element' | 'choice' | 'elements' | 'text' | 'number
 export type AnnotatedChoice<T> = {
   /** The actual choice value */
   value: T;
+  /** The label a `{ value, label }` choice carried, when it carried one. */
+  label?: string;
   /**
    * Disabled reason string, or false if selectable.
    * No bare `true` -- forces a reason string for good UX.
@@ -236,12 +238,33 @@ export interface UnavailableRule {
 }
 
 /**
- * Select from a list of choices
+ * A chooseFrom choice that carries its own label. Its value is `value`, and
+ * `label` is what the player reads.
+ *
+ * Only an object with `value` and nothing but an optional string `label` has
+ * this shape. Any other object, such as `{ value: 'go', cost: 3 }`, is a value
+ * in its own right and reaches every callback whole.
+ */
+export type LabelledChoice<V> = { value: V; label?: string };
+
+/**
+ * The value a chooseFrom choice `T` delivers: `V` for a {@link LabelledChoice},
+ * and `T` itself for anything else. Distributes over a union, so
+ * `'pass' | { value: 'go'; label: string }` delivers `'pass' | 'go'`.
+ */
+export type ChoiceValue<T> = T extends LabelledChoice<infer V>
+  ? [Exclude<keyof T, 'value' | 'label'>] extends [never] ? V : T
+  : T;
+
+/**
+ * Select from a list of choices. `T` is the value every callback receives; the
+ * choices themselves are values or {@link LabelledChoice}s, which the engine
+ * reads where the choices are built.
  */
 export interface ChoiceSelection<T = unknown> extends BaseSelection<T>, DisabledRule<T>, UnavailableRule {
   type: 'choice';
-  /** Choices - can be static array or function */
-  choices: T[] | ((context: ActionContext) => T[]);
+  /** Choices - can be static array or function. Each is a value or a {@link LabelledChoice}. */
+  choices: unknown[] | ((context: ActionContext) => unknown[]);
   /** Display function for choices */
   display?: (choice: T) => string;
   /** Get board element references for highlighting (source/target) */
@@ -273,7 +296,9 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T>, Disabled
    * Can be:
    * - A number: shorthand for { min: 1, max: N }
    * - A config object: { min?: number, max?: number }
-   * - A function: evaluated at render time, returns number | config | undefined
+   * - A function: evaluated against the current state, returns a number or a
+   *   config. It always returns one, so the value is always an array; return
+   *   `{ min: 1, max: 1 }` for a single pick.
    *
    * @example
    * // Select up to 2 targets
@@ -289,13 +314,9 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T>, Disabled
    *
    * @example
    * // Dynamic based on game state
-   * multiSelect: (ctx) => {
-   *   const max = ctx.game.activeCombat?.maxTargets;
-   *   if (!max || max <= 1) return undefined; // Single-select
-   *   return { min: 1, max };
-   * }
+   * multiSelect: (ctx) => ({ min: 1, max: ctx.game.activeCombat?.maxTargets ?? 1 })
    */
-  multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig | undefined);
+  multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig);
   /**
    * Ask for an ORDERED, REPEATABLE list of choices instead of a set (#249).
    *
@@ -315,7 +336,7 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T>, Disabled
    * // Up to N, where N is a fact about an earlier pick.
    * orderedList: (ctx) => ({ min: 1, max: Number(ctx.args.budget) })
    */
-  orderedList?: number | OrderedListConfig | ((context: ActionContext) => number | OrderedListConfig | undefined);
+  orderedList?: number | OrderedListConfig | ((context: ActionContext) => number | OrderedListConfig);
 }
 
 /**
@@ -400,7 +421,7 @@ export interface ElementsSelection<T extends GameElement = GameElement> extends 
    * Enable multi-select mode with checkboxes.
    * Result will be an array of elements.
    */
-  multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig | undefined);
+  multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig);
   /**
    * Name of a previous selection this element selection depends on.
    * When specified, elements are computed for each possible value of the

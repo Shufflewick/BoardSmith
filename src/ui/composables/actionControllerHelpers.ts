@@ -7,6 +7,7 @@
 
 import type { EnrichedActionMetadata, ChoiceWithRefs, ElementRef, EnrichedPickMetadata, PickSnapshot } from './useActionControllerTypes.js';
 import { isDevMode, devWarn } from '../../utils/dev.js';
+import { labelOfValue, valuesEqual } from '../../engine/action/choice-matching.js';
 
 // Re-export for backwards compatibility during transition
 export { isDevMode, devWarn };
@@ -136,34 +137,29 @@ export function choiceBoardTarget(choice: ChoiceWithRefs): ElementRef | undefine
 // ============================================
 
 /**
- * Extract a display string from a value.
- * Handles objects with display/name properties (e.g., followUp context args).
- *
- * Priority:
- * 1. `display` property (explicit display text)
- * 2. `name` property (common for elements/entities)
- * 3. `value` property if primitive
- * 4. JSON for any other object, so an object never shows as "[object Object]"
- *
- * @param value - Any value to extract display from
- * @returns Display string for the value
+ * The label for a pick value the client holds without its choice (a follow-up's
+ * or a prefill's arg): the server's own rule ({@link labelOfValue}), so the
+ * breadcrumb reads what the button did. A missing value reads as nothing.
  */
 export function getDisplayFromValue(value: unknown): string {
   if (value === null || value === undefined) return '';
-  if (typeof value !== 'object') return String(value);
+  return labelOfValue(value);
+}
 
-  const obj = value as Record<string, unknown>;
-  // Priority 1: display property
-  if (typeof obj.display === 'string') return obj.display;
-  // Priority 2: name property (common for elements/entities)
-  if (typeof obj.name === 'string') return obj.name;
-  // Priority 3: primitive value property
-  if (obj.value !== undefined && typeof obj.value !== 'object') return String(obj.value);
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return '[Complex Object]';
-  }
+/**
+ * The label a pick the client holds reads as: the label of the offered choice
+ * it equals, else {@link getDisplayFromValue}. The controller and the Action
+ * Panel both label held picks with it, so a breadcrumb, a repeated pick's
+ * entry and an ordered list's entry read as the button that made them (#509).
+ * Equality is structural, because a custom UI's copy of an object value is
+ * never the offered object itself.
+ */
+export function labelOfPick(
+  value: unknown,
+  choices: readonly { value: unknown; display: string }[],
+): string {
+  const choice = choices.find((c) => valuesEqual(c.value, value));
+  return choice ? choice.display : getDisplayFromValue(value);
 }
 
 // ============================================

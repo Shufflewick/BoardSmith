@@ -106,7 +106,7 @@ suppressAutoFill: true,
 gate: {
   action: 'ask',
   selections: {
-    target: { value: 2 },   // opponent at seat 2; { value, display } choice object
+    target: { value: 2 },   // opponent at seat 2 (playerChoices delivers the seat number)
     rank: { value: '7' },   // rank '7' as primitive string (v4.2 matcher fix)
   },
 },
@@ -560,7 +560,7 @@ Both games anchor tutorial annotations to game elements, but via different ref f
   gate: {
     action: 'ask',
     selections: {
-      target: { value: 2 },   // opponent at seat 2; { value, display } choice object — matched via field equality
+      target: { value: 2 },   // opponent at seat 2 — playerChoices delivers the seat, matched via the { value } primitive branch
       rank: { value: '7' },   // rank '7' as primitive string — matched via the { value } primitive branch
     },
   },

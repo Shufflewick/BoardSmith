@@ -3827,7 +3827,7 @@ export class Game<
    *     prompt: 'Choose target',
    *     choices: ctx => game.others(ctx.player).map(p => ({
    *       value: p.seat,
-   *       display: p.name
+   *       label: p.name
    *     }))
    *   })
    * ```
@@ -3841,8 +3841,9 @@ export class Game<
   /**
    * Get player choices formatted for use with `chooseFrom` selection.
    *
-   * Returns an array of choice objects with player seat as `value` (stable
-   * across serialization) and player name as `display`.
+   * Returns an array of `{ value, label }` choices with the player's seat as
+   * `value` (stable across serialization) and name as `label`. Every callback,
+   * and `execute`, receives the seat number.
    *
    * @param options - Configuration options
    * @param options.excludeSelf - If true, excludes the current player from choices
@@ -3890,7 +3891,7 @@ export class Game<
     excludeSelf?: boolean;
     filter?: (player: P) => boolean;
     currentPlayer?: Player;
-  } = {}): { value: number; display: string }[] {
+  } = {}): { value: number; label: string }[] {
     let players = this.players;
 
     if (options.excludeSelf && options.currentPlayer) {
@@ -3903,7 +3904,7 @@ export class Game<
 
     return players.map(p => ({
       value: p.seat,
-      display: p.name ?? `Player ${p.seat}`,
+      label: p.name ?? `Player ${p.seat}`,
     }));
   }
 

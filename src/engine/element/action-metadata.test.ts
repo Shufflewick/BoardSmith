@@ -62,12 +62,13 @@ class MultiSelectMetadataGame extends Game<MultiSelectMetadataGame, Player> {
         .execute(() => ({ success: true })),
     );
 
-    // choice: function multiSelect legitimately returning undefined -> single-select
+    // choice: function multiSelect returning undefined -> refused (#509)
     this.registerAction(
       Action.create<MultiSelectMetadataGame>('pickChoiceUndefined')
         .chooseFrom('flavor', {
           prompt: 'Choose a flavor',
           choices: ['vanilla', 'chocolate', 'mint'],
+          // @ts-expect-error - a function-valued multiSelect must return a count (#509).
           multiSelect: () => undefined,
         })
         .execute(() => ({ success: true })),
@@ -157,13 +158,13 @@ describe('buildPickMetadata: function-valued multiSelect (bot-01 / C.2)', () => 
     expect(meta.multiSelect).toEqual({ min: 1, max: 3 });
   });
 
-  it('omits multiSelect metadata when the function legitimately returns undefined (choice)', () => {
+  it('refuses a multiSelect function that returns undefined, naming the selection (#509)', () => {
     const { game, player } = makeGame();
     const selection = getSelection(game, 'pickChoiceUndefined');
 
-    const meta = buildPickMetadata(game, player, selection);
-
-    expect(meta.multiSelect).toBeUndefined();
+    expect(() => buildPickMetadata(game, player, selection)).toThrow(
+      'Selection "flavor": its multiSelect function returned undefined',
+    );
   });
 
   it('still emits a static number multiSelect on a choice selection (negative control)', () => {
