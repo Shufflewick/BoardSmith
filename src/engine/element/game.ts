@@ -4716,6 +4716,33 @@ export class Game<
     // is past the safe integers and neighbouring placeholders round to one.
     let nextPlaceholderId = -1;
 
+    // A CONCEALED ZONE'S CHILDREN AS ANONYMOUS PLACEHOLDERS, for the count-only
+    // and owner-only zone branches below. Each keeps its class and only the
+    // safe layout $-keys of its attributes (identity-bearing image refs are
+    // redacted), never its name, and takes a fresh negative id, so a non-owner
+    // cannot track a face-down card across zones by a real, stable id.
+    // __hidden is seeded here (not in redactHiddenElementAttrs) so the
+    // count-only CONTAINER branch keeps its distinct shape (no __hidden, has
+    // childCount). CR-02 (159): original -> placeholder id is recorded in
+    // `idRemap`, so an element-typed flow variable pointing at an anonymized
+    // child can still be relinked to its placeholder on restore.
+    const placeholderChildren = (json: ElementJSON, element: GameElement): ElementJSON[] => {
+      const placeholders: ElementJSON[] = [];
+      for (const [i, childJson] of (json.children ?? []).entries()) {
+        const syntheticId = nextPlaceholderId--;
+        const childElement = element._t.children[i];
+        if (idRemap && childElement) {
+          idRemap.set(childElement.id, syntheticId);
+        }
+        placeholders.push({
+          className: childJson.className,
+          id: syntheticId,
+          attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(childJson.attributes ?? {}) },
+        });
+      }
+      return placeholders;
+    };
+
     const filterElement = (json: ElementJSON, element: GameElement): ElementJSON | null => {
       const visibility = element.getEffectiveVisibility();
 
@@ -4923,30 +4950,7 @@ export class Game<
           // Count-only mode: create anonymized placeholders for children.
           // This allows the UI to render the correct number and type of elements
           // without revealing their identity (no real IDs or names that could be used to cheat)
-          const hiddenChildren: ElementJSON[] = [];
-          if (json.children) {
-            for (let i = 0; i < json.children.length; i++) {
-              const childJson = json.children[i];
-              // Redact identity-bearing image refs; keep only safe layout $-keys.
-              // __hidden is seeded here (not in the helper) so the count-only
-              // container branch keeps its distinct shape (no __hidden, has childCount).
-              const syntheticId = nextPlaceholderId--;
-              // CR-02 (159): record original -> synthetic id so an element-typed
-              // flow variable pointing at this now-anonymized child can still be
-              // relinked to its (redacted) placeholder on restore.
-              const childElement = element._t.children[i];
-              if (idRemap && childElement) {
-                idRemap.set(childElement.id, syntheticId);
-              }
-              hiddenChildren.push({
-                className: childJson.className,
-                // A negative, projection-scoped id: no correlation with a real id.
-                id: syntheticId,
-                attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(childJson.attributes ?? {}) },
-                // Don't include name - could reveal card identity
-              });
-            }
-          }
+          const hiddenChildren = placeholderChildren(json, element);
           return {
             // ownJson (not json): the container's own attributes must stay
             // whitelist-redacted in this early return (CR-01).
@@ -4957,28 +4961,7 @@ export class Game<
         } else if (zoneVisibility.mode === 'owner' && element.getEffectiveOwner()?.seat !== visibilityPosition) {
           // Owner-only zone and this player doesn't own it - show hidden placeholders
           // Preserve $-prefixed system attributes (like $type) for proper AutoUI rendering
-          const hiddenChildren: ElementJSON[] = [];
-          if (json.children) {
-            for (let i = 0; i < json.children.length; i++) {
-              const childJson = json.children[i];
-              // Redact identity-bearing image refs; keep only safe layout $-keys.
-              // A negative, projection-scoped id, as in the count-only branch
-              // above. Leaking the real, stable id lets a non-owner track a
-              // face-down card across zones and reveals.
-              const syntheticId = nextPlaceholderId--;
-              // CR-02 (159): see remap comment in the hidden/count-only branch above.
-              const childElement = element._t.children[i];
-              if (idRemap && childElement) {
-                idRemap.set(childElement.id, syntheticId);
-              }
-              hiddenChildren.push({
-                className: childJson.className,
-                id: syntheticId,
-                attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(childJson.attributes ?? {}) },
-                // Don't include name - could reveal card identity
-              });
-            }
-          }
+          const hiddenChildren = placeholderChildren(json, element);
           return {
             // ownJson (not json): the container's own attributes must stay
             // whitelist-redacted in this early return (CR-01).
