@@ -133,3 +133,63 @@ describe('GameShell cancels the pick in progress while viewing history (#553)', 
     wrapper.unmount();
   });
 });
+
+describe('GameShell defers a held follow-up that arrives while viewing history (#585)', () => {
+  /** The host's message, as a live server sends it. */
+  const fromHost = (data: Record<string, unknown>) =>
+    window.dispatchEvent(new MessageEvent('message', { data: { source: 'shufflewick', ...data } }));
+  const LOOT = {
+    name: 'loot',
+    prompt: 'Loot',
+    selections: [{
+      name: 'site',
+      type: 'choice',
+      prompt: 'Loot which site?',
+      choices: [{ value: 'cave', display: 'Cave' }, { value: 'ruin', display: 'Ruin' }],
+    }],
+  };
+
+  it('opens no pick beside a past board, and opens it on return', async () => {
+    const { wrapper, debugPanel, posted } = await mountTableWithDebugPanel(PickBoard, MOVE_WITH_A_PICK);
+    await flushPromises();
+    const controller = (wrapper.vm as unknown as { actionController: { currentAction: Ref<string | null> } }).actionController;
+    // The loot pick's choice fetches: the move pick open at mount fetched its own.
+    const fetches = () => posted.filter((message) => {
+      const request = message as { op?: string; payload?: { actionName?: string } };
+      return request.op === 'resolve_choices' && request.payload?.actionName === 'loot';
+    });
+
+    debugPanel.vm.$emit('time-travel', { view: {}, players: DEBUG_TABLE_PLAYERS }, 3, null);
+    await flushPromises();
+    // The server hands the seat a follow-up while the player looks at the past.
+    fromHost({
+      type: 'game_state',
+      view: {
+        flowState: { currentPlayer: 1, awaitingInput: true, availableActions: [] },
+        state: {
+          view: {}, players: DEBUG_TABLE_PLAYERS, currentPlayer: 1, isMyTurn: true, availableActions: [],
+          followUp: { action: 'loot', args: {}, metadata: LOOT },
+        },
+      },
+      winners: [],
+    });
+    await flushPromises();
+    expect(wrapper.find('.time-travel-banner').exists()).toBe(true);
+    expect(controller.currentAction.value).toBeNull();
+    expect(fetches()).toHaveLength(0);
+
+    debugPanel.vm.$emit('time-travel', null, null, null);
+    await flushPromises();
+    expect(controller.currentAction.value).toBe('loot');
+    const fetch = fetches()[0] as { requestId: string };
+    fromHost({
+      type: 'server_response',
+      requestId: fetch.requestId,
+      result: { success: true, choices: [{ value: 'cave', display: 'Cave' }, { value: 'ruin', display: 'Ruin' }] },
+    });
+    await flushPromises();
+    expect(wrapper.findComponent(ActionPanel).text()).toContain('Loot which site?');
+    expect(wrapper.find('[data-testid="board-pick"]').text()).toBe('loot');
+    wrapper.unmount();
+  });
+});

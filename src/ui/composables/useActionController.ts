@@ -456,6 +456,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * started it yet: a page that never saw the result it arrived in (a reload)
    * gets it back. One the player cancelled is not restarted here; it stays
    * startable through `resumeFollowUp` (the Action Panel offers a button).
+   *
+   * One that arrives while the player is viewing history is not started then,
+   * beside a past board (#585): it is started when they return.
    */
   function autoStartHeldFollowUp(): void {
     const offer = heldFollowUpOffer.value;
@@ -464,10 +467,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return;
     }
     if (followUpKey(offer) === lastFollowUpKey) return;
-    if (currentAction.value || pendingFollowUp.value || isExecuting.value) return;
+    if (currentAction.value || pendingFollowUp.value || isExecuting.value || isViewingHistoryValue()) return;
     queueFollowUp(offer);
   }
-  if (heldFollowUp) watch(heldFollowUpOffer, autoStartHeldFollowUp, { immediate: true });
+  if (heldFollowUp) {
+    watch(heldFollowUpOffer, autoStartHeldFollowUp, { immediate: true });
+    if (isViewingHistory) {
+      watch(isViewingHistory, (browsing) => {
+        if (!browsing) autoStartHeldFollowUp();
+      });
+    }
+  }
 
   /**
    * Start the follow-up the server holds for this seat, whether or not it was
