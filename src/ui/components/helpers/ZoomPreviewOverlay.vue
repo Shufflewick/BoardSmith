@@ -28,7 +28,7 @@ import type { PreviewState } from '../../composables/useZoomPreview.js';
 // games when only 2 have dice. The renderer is looked up instead, and it is
 // present only when the game imported `boardsmith/ui/dice` (which any game
 // drawing dice already does). See dice/die-preview-registry.ts.
-import { getDiePreviewComponent } from '../dice/die-preview-registry.js';
+import { ADD_DICE_SUPPORT_ADVICE, getDiePreviewComponent } from '../dice/die-preview-registry.js';
 
 const props = defineProps<{
   /** Preview state from useZoomPreview */
@@ -155,20 +155,22 @@ const isCloneMode = computed(() => props.previewState.clonedElement !== null);
 const isCardDataMode = computed(() => props.previewState.cardData !== null);
 const isDieDataMode = computed(() => props.previewState.dieData !== null);
 
-// null in a bundle with no dice support — the normal state for most games.
-const diePreview = getDiePreviewComponent();
+// Read when a die preview is requested, not at setup: the registry is not
+// reactive, and a game may import `boardsmith/ui/dice` only in a lazily loaded
+// dev UI, after this overlay mounted (#599). null in a bundle with no dice
+// support, the normal state for most games.
+const diePreview = computed(() => (props.previewState.dieData ? getDiePreviewComponent() : null));
 
 // A die preview with no renderer would silently show an empty box. Say what is
-// wrong and how to fix it, once per page load, in dev only — a player can do
+// wrong and how to fix it, once per page load, in dev only: a player can do
 // nothing with this.
-if (import.meta.env.DEV && !diePreview) {
+if (import.meta.env.DEV) {
   watchEffect(() => {
-    if (props.previewState.dieData && !warnedNoDiceSupport) {
+    if (props.previewState.dieData && !diePreview.value && !warnedNoDiceSupport) {
       warnedNoDiceSupport = true;
       console.warn(
         'A die zoom-preview was requested but this bundle has no dice support, so nothing will render. '
-        + "Import Die3D from 'boardsmith/ui/dice' in the component that draws your dice — that import is "
-        + 'what registers the preview renderer (and what opts this game into shipping three.js).',
+        + `To fix it, ${ADD_DICE_SUPPORT_ADVICE}`,
       );
     }
   });

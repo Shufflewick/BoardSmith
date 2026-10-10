@@ -31,6 +31,15 @@ import type { Component } from 'vue';
 let diePreviewComponent: Component | null = null;
 
 /**
+ * How to add dice support, for the dev warnings DieRenderer and the zoom-preview
+ * overlay give when a die is drawn or previewed with nothing registered. One
+ * string so the two cannot drift apart (#599). Completes a sentence.
+ */
+export const ADD_DICE_SUPPORT_ADVICE =
+  "add `import 'boardsmith/ui/dice';` to src/ui/uis.ts and run `npm install three @types/three`: "
+  + 'that import registers the 3D die (and opts this game into shipping three.js).';
+
+/**
  * Called by `boardsmith/ui/dice` on import. Not part of the public API — games
  * get this by importing the dice module, never by calling this directly.
  */
