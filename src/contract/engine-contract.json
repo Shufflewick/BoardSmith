@@ -1,7 +1,7 @@
 {
-  "revision": 151,
+  "revision": 152,
   "bundleProtocol": 2,
-  "surfaceHash": "dbd85fd9d4fcb20e",
+  "surfaceHash": "89ccecd62d942a97",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1303,6 +1303,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "boardsmith/ui exports GameRootView, a game-root view with required phase, isFinished and settings; board gameView props are GameRootView | null; boardsmith/testing's HiddenInfoGameView equals it; games whose hand-built view fixtures omit those fields must add them (#570)"
+    },
+    {
+      "revision": 152,
+      "date": "2026-10-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "89ccecd62d942a97",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "surfaceHash now covers what a compiled rules.js can reach beyond method names: statics, instance fields and symbol-keyed members (such as [Symbol.iterator]) of exported classes and functions, inherited ones included, and the own keys of exported plain objects and enums (TurnOrder, ErrorCode), each with its kind. #private members and the members of async and generator functions are recorded as nothing, being unreachable or the language's. No engine API changed; only the fingerprint widened, so this revision declares a surface no earlier revision shares and a world built before it stays on its older runner until rebuilt. Types, values, signatures and input shapes carried only by types remain outside the hash (#575)."
     }
   ]
 }
