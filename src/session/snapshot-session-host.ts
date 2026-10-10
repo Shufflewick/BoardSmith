@@ -9,7 +9,7 @@ import type {
   ReadOnlyOpType,
   StateEnvelope,
 } from './stateless-ops.js';
-import { closesSeat, debugOpRefusal, isReadOnlyOp } from './stateless-ops.js';
+import { closesSeat, debugOpRefusal, isReadOnlyOp, type DebugHistoryEntry } from './stateless-ops.js';
 import type { Annotation, FlowState, GameStateSnapshot, HistoryEntry } from '../engine/index.js';
 import { dueSeats, type SeatActivityState } from '../engine/flow/seat-activity.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
@@ -894,7 +894,7 @@ export class SnapshotSessionHost {
   }
 
   /** `history` with each entry's arrival time, where this host recorded one. */
-  private withArrivalTimes(history: HistoryEntry[]): HistoryEntry[] {
+  private withArrivalTimes(history: HistoryEntry[]): DebugHistoryEntry[] {
     return history.map((entry, index) => {
       const timestamp = this.arrivalTimes[index];
       return timestamp === undefined ? entry : { ...entry, timestamp };

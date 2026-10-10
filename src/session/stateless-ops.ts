@@ -435,12 +435,8 @@ export interface OpSuccessFields {
      */
     botStalled?: { seat: number; reason: string };
   };
-  /**
-   * The game's action history. `executeOp` holds no clock, so its entries carry
-   * no `timestamp`; `SnapshotSessionHost` stamps the time each move reached it,
-   * on its own answer only (#547).
-   */
-  debugHistory: { actionHistory: HistoryEntry[] };
+  /** The game's action history, oldest first. */
+  debugHistory: { actionHistory: DebugHistoryEntry[] };
   debugStateAt: { historicalState: unknown };
   debugStateDiff: { diff: ElementDiff };
   debugActionTraces: { traces: unknown[]; flowContext: unknown };
@@ -500,6 +496,14 @@ export type OpResultFor<T extends Op['type']> = OpSuccess<T> | OpFailure;
 
 /** What any op answers. Narrow it by the op that was sent with {@link OpResultFor}. */
 export type OpResult = { [T in Op['type']]: OpResultFor<T> }[Op['type']];
+
+/**
+ * One entry of the `debugHistory` answer: a history entry, plus when its move
+ * reached the session host. The time is never part of the engine's history or
+ * snapshot, which stay clock-free (#54). `executeOp` holds no clock, so its
+ * entries carry none; `SnapshotSessionHost` adds the times it recorded (#547).
+ */
+export type DebugHistoryEntry = HistoryEntry & { timestamp?: number };
 
 /** What the `debugStateDiff` op answers: the elements that changed between two action indices. */
 export interface ElementDiff extends ElementChanges {

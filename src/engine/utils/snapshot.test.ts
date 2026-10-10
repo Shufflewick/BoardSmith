@@ -74,7 +74,7 @@ describe('GameStateSnapshot', () => {
 
     it('should include action history', () => {
       const actions = [
-        { name: 'test', player: 0, args: {}, timestamp: Date.now() },
+        { name: 'test', player: 0, args: {} },
       ];
       const snapshot = createSnapshot(game, 'test-game', actions);
 

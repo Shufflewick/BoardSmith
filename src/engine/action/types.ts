@@ -874,13 +874,6 @@ export interface SerializedAction {
   player: number;
   /** Serialized arguments */
   args: Record<string, unknown>;
-  /**
-   * When this action reached the session host. Never in a snapshot or any
-   * history the engine holds, because engine-owned state must be
-   * byte-identical across two runs of the same seed (#54): `SnapshotSessionHost`
-   * keeps the time itself and stamps it only on its `debugHistory` answer (#547).
-   */
-  timestamp?: number;
   /** Whether this action was undoable (false if action.undoable was false) */
   undoable?: boolean;
 }
@@ -898,8 +891,6 @@ export interface SerializedSeatExpiry {
   /** The seat whose part ended */
   player: number;
   undoable: false;
-  /** When the host closed the seat, on the host's `debugHistory` answer only, as on `SerializedAction` */
-  timestamp?: number;
 }
 
 /**

@@ -76,7 +76,7 @@ describe('engine-owned state carries no wall-clock time (#54)', () => {
     const runner = playTwoActions('history');
     expect(runner.actionHistory).toHaveLength(2);
     for (const entry of runner.actionHistory) {
-      expect(entry.timestamp).toBeUndefined();
+      expect(entry).not.toHaveProperty('timestamp');
     }
   });
 
