@@ -344,8 +344,13 @@ gate ran the audit; under the fallow that recorded them, the baselines described
 Only the two whole-repository checks are in the list. `--changes` is scoped by
 fallow's own base detection (the branch's upstream or `origin/HEAD`), so on a
 merged tree it would audit whatever the remote happened to point at, and on
-`main` right after a merge it checks nothing. `--duplication` runs jscpd through
-`npx`, which is not pinned.
+`main` right after a merge it checks nothing. `--duplication` runs jscpd, which
+is pinned the same way fallow is (#551), but it has no baseline, and without
+`--threshold` jscpd exits 0 whatever it finds, so it would gate nothing.
+
+jscpd stays because fallow does not cover it: fallow scans only the script
+blocks of `.vue` files, so duplicated `<template>` markup in `src/ui` is
+reported by jscpd alone.
 
 When the audit re-addresses moved clone groups it writes the two dupes files,
 and verify then fails with "a check changed the working tree". Commit the
