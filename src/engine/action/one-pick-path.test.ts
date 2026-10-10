@@ -312,3 +312,30 @@ describe('a repeating pick is checked by the same rule as any other pick (#507)'
     expect(step.error).toBe(NO_LONGER_AVAILABLE);
   });
 });
+
+describe("a later pick's validate sees the earlier picks resolved (#507)", () => {
+  it('after a repeating chooseElement, the one-pick-at-a-time path hands validate elements, not ids', () => {
+    const game = new Yard();
+    const seen: unknown[] = [];
+    const action = Action.create('take')
+      .chooseElement('stones', { elements: () => game.rocks.all(Stone), ...once })
+      .chooseFrom('m', {
+        choices: [1, 2],
+        validate: (_m, args) => {
+          seen.push(args.stones);
+          return true;
+        },
+      })
+      .execute(() => {});
+    game.registerAction(action);
+    const executor = game.getActionExecutor();
+    const player = game.getPlayer(1)!;
+    const slate = game.stone('slate');
+
+    const pending = executor.createPendingActionState('take', 1);
+    expect(executor.processSelectionStep(action, player, pending, 'stones', slate.id).success).toBe(true);
+    expect(executor.processSelectionStep(action, player, pending, 'm', 1)).toEqual({ success: true });
+
+    expect(seen).toEqual([[slate]]);
+  });
+});
