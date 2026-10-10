@@ -567,3 +567,34 @@ describe('every player helper answers with the same set of players', () => {
     expect(game.getPlayerOrThrow(previous!.seat)).toBe(previous);
   });
 });
+
+describe('setFlow refuses keys a flow definition does not take (#617)', () => {
+  // A flow built without a typecheck (vitest strips types) can still carry
+  // isComplete/getWinners from before #503. Silently ignoring them left an
+  // unbounded loop spinning to "Flow exceeded 10000 iterations".
+  const root = loop({ maxIterations: 1, do: eachPlayer({ do: actionStep({ actions: ['a'] }) }) });
+
+  function setFlowWith(definition: Record<string, unknown>): () => void {
+    const game = new Game(makeOptions());
+    return () => game.setFlow(definition as unknown as Parameters<Game['setFlow']>[0]);
+  }
+
+  it.each(['isComplete', 'getWinners'])('names the removed key %s and says to declare the end on Game', (key) => {
+    const run = setFlowWith({ root, [key]: () => true });
+    expect(run).toThrowError(new RegExp(`\`${key}\``));
+    expect(run).toThrowError(/isFinished\(\)/);
+    expect(run).toThrowError(/getWinners\(\)/);
+    expect(run).toThrowError(/finish\(winners\)/);
+  });
+
+  it('refuses any other unknown key, listing the keys a flow definition takes', () => {
+    const run = setFlowWith({ root, onEnterPhse: () => {} });
+    expect(run).toThrowError(/`onEnterPhse`/);
+    expect(run).toThrowError(/root, setup, onEnterPhase, onExitPhase/);
+  });
+
+  it('accepts every key FlowDefinition declares', () => {
+    const run = setFlowWith({ root, setup: () => {}, onEnterPhase: () => {}, onExitPhase: () => {} });
+    expect(run).not.toThrow();
+  });
+});

@@ -48,6 +48,7 @@ import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js'
 import { getActionLevelDisabledReasons } from '../tutorial/gate.js';
 import { availableActionsForSeat } from '../flow/index.js';
 import { walkFlowNodes } from '../flow/walk-flow-nodes.js';
+import { refuseUnknownFlowKeys } from '../flow/flow-definition-keys.js';
 import { describeFlowPosition } from '../flow/describe-flow-position.js';
 import { buildActionMetadata, buildPickMetadata } from './action-metadata.js';
 import type { ActionMetadata, PickMetadata } from '../../types/protocol.js';
@@ -2965,6 +2966,7 @@ export class Game<
    * ```
    */
   setFlow(definition: FlowDefinition<G>): void {
+    refuseUnknownFlowKeys(definition);
     this._flowDefinition = definition;
   }
 
