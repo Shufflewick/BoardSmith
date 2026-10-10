@@ -158,7 +158,10 @@ export interface ScheduleArm {
    * cancels the recurrence's own key replaces the automatic re-arm: a schedule
    * under the key is the recurrence's new timing (a new interval, or a
    * one-shot), a cancel stops it, and no occurrence the old one still owed is
-   * run. Scheduling any OTHER key leaves the re-arm alone.
+   * run. Scheduling any OTHER key leaves the re-arm alone. Only a WORLD-OWNED
+   * recurrence is its handler's own key: a due handler runs as the clock, so a
+   * recurrence a seat armed keeps re-arming (docs/persistent-worlds.md,
+   * "Writing an occupied world's lifecycle with it").
    */
   readonly everyMs?: number;
 }

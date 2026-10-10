@@ -13,9 +13,15 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { Game, Player, Space, type GameElement, type GameOptions } from '../../engine/index.js';
-import { worldBudgets, worldClockAction, type WorldDefinition } from '../../world/index.js';
+import {
+  WORLD_OWNER,
+  worldAction,
+  worldBudgets,
+  worldClockAction,
+  type WorldDefinition,
+} from '../../world/index.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { ResidentWorld } from '../../world/host/index.js';
+import { ResidentWorld, worldSeatPlayer } from '../../world/host/index.js';
 import { frozenClock } from './frozen-clock.test-helper.js';
 import { openWorldStore, worldStorePath } from './world-store.js';
 
@@ -63,6 +69,16 @@ const arm = worldClockAction<Ticker>('arm')
     world.schedule({ key: 'tick', delayMs: MINUTE, everyMs: MINUTE, action: 'tick' });
   });
 
+/** The same recurrence armed by a seat's own command, so the seat owns it. */
+const armBySeat = worldAction<Ticker>('armBySeat')
+  .prompt('Start the tick')
+  .needs(() => [])
+  .execute((_args, { world }) => {
+    world.schedule({ key: 'tick', delayMs: MINUTE, everyMs: MINUTE, action: 'tick' });
+  });
+
+const PLAYER = worldSeatPlayer(1);
+
 function bundle(): ConstructorParameters<typeof ResidentWorld>[0]['definition'] {
   return {
     gameClass: Ticker,
@@ -72,7 +88,7 @@ function bundle(): ConstructorParameters<typeof ResidentWorld>[0]['definition'] 
       maxPlayers: 1,
       genesis: (game: Game): Record<string, GameElement> => ({ [LOG]: game.create(Log, LOG) }),
       view: () => [LOG],
-      actions: [tick, noop, arm],
+      actions: [tick, noop, arm, armBySeat],
     } as WorldDefinition,
   } as ConstructorParameters<typeof ResidentWorld>[0]['definition'];
 }
@@ -82,9 +98,10 @@ beforeEach(() => {
   dir = tempTree('bs-recurrence-own-key-');
 });
 
-/** A world with the tick armed and its clock frozen `minutes` and a half after
- *  launch, so occurrences 1m..<minutes>m are due. */
-async function behindBy(minutes: number) {
+/** A world with the tick armed -- by the clock, or by a seat's command -- and
+ *  its clock frozen `minutes` and a half after launch, so occurrences
+ *  1m..<minutes>m are due. */
+async function behindBy(minutes: number, armedBy: 'world' | 'seat' = 'world') {
   const clock = frozenClock(OPENED);
   const budgets = worldBudgets();
   const store = openWorldStore(worldStorePath(dir), budgets);
@@ -100,10 +117,17 @@ async function behindBy(minutes: number) {
     onNotice: () => {},
   });
   await world.start();
-  await world.clockCommand('arm', {});
+  if (armedBy === 'world') {
+    await world.clockCommand('arm', {});
+  } else {
+    world.seat(PLAYER, 1);
+    await world.run(() =>
+      world.command({ player: PLAYER, order: { id: 'order-1', at: world.now() }, action: 'armBySeat' }),
+    );
+  }
   clock.set(OPENED + minutes * MINUTE + MINUTE / 2);
   /** One wake of the clock, and what it left: the log, and the queue as
-   *  `<key>@<due>m/<every>m`. */
+   *  `<owner>:<key>@<due>m/<every>m`, the owner being `world` or `seat`. */
   const wake = async () => {
     await world.fireDue();
     const stored = await store.read(LOG);
@@ -114,7 +138,7 @@ async function behindBy(minutes: number) {
         .pendingEvents()
         .map(
           (event) =>
-            `${event.key}@${(event.due - OPENED) / MINUTE}m` +
+            `${event.owner === WORLD_OWNER ? 'world' : 'seat'}:${event.key}@${(event.due - OPENED) / MINUTE}m` +
             (event.everyMs === undefined ? '' : `/${event.everyMs / MINUTE}m`),
         )
         .sort(),
@@ -127,7 +151,14 @@ describe("#583: a recurrence's handler decides what happens to its own key", () 
   it("a handler that upserts its own key leaves ONE event under it, on the handler's schedule", async () => {
     mode = 'upsert-own';
     const { world, wake } = await behindBy(1);
-    expect(await wake()).toEqual({ marks: '1m', queued: ['tick@6m/5m'] });
+    expect(await wake()).toEqual({ marks: '1m', queued: ['world:tick@6m/5m'] });
+    await world.close();
+  });
+
+  it('a self-upsert during a catch-up stops the occurrences still owed', async () => {
+    mode = 'upsert-own';
+    const { world, wake } = await behindBy(4);
+    expect(await wake()).toEqual({ marks: '1m', queued: ['world:tick@6m/5m'] });
     await world.close();
   });
 
@@ -148,7 +179,25 @@ describe("#583: a recurrence's handler decides what happens to its own key", () 
   it('a handler that schedules a DIFFERENT key still gets the automatic re-arm', async () => {
     mode = 'other-key';
     const { world, wake } = await behindBy(1);
-    expect(await wake()).toEqual({ marks: '1m', queued: ['other@11m', 'tick@2m/1m'] });
+    expect(await wake()).toEqual({ marks: '1m', queued: ['world:other@11m', 'world:tick@2m/1m'] });
+    await world.close();
+  });
+});
+
+describe('#583: a recurrence a SEAT armed is not its handler\'s own key', () => {
+  // The handler runs as the clock, so its schedules belong to the world: the
+  // key it names is (world, tick), and the seat's (seat, tick) is untouched.
+  it('a cancel from the handler leaves the seat-owned tick re-arming', async () => {
+    mode = 'cancel-own';
+    const { world, wake } = await behindBy(1, 'seat');
+    expect(await wake()).toEqual({ marks: '1m', queued: ['seat:tick@2m/1m'] });
+    await world.close();
+  });
+
+  it('an upsert from the handler adds a world-owned tick beside the re-armed seat one', async () => {
+    mode = 'upsert-own';
+    const { world, wake } = await behindBy(1, 'seat');
+    expect(await wake()).toEqual({ marks: '1m', queued: ['seat:tick@2m/1m', 'world:tick@6m/5m'] });
     await world.close();
   });
 });

@@ -2054,7 +2054,12 @@ queue, rather than failing a check on the way in.
   recurrence changes its interval or turns into a one-shot -- and one that calls
   `ctx.world.cancel(key)` on it stops it. Either way the host does not re-arm it,
   and no occurrence the old recurrence still owed is run. Scheduling a
-  different key leaves the automatic re-arm alone. A host learns this from the
+  different key leaves the automatic re-arm alone. This is true only of a
+  **world-owned** recurrence: a due handler runs as the clock, so its schedules
+  belong to the world (see
+  [the bootstrap note above](#writing-an-occupied-worlds-lifecycle-with-it)),
+  and a recurrence a seat armed keeps re-arming whatever its handler does to
+  the key. A host learns this from the
   plan: `runDueOccurrences`' `call` answers `displaced: true` when the
   occurrence's plan `replaced` holds the event's own id, and then writes no
   re-arm at `owedDue`.
