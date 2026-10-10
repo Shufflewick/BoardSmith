@@ -30,6 +30,11 @@ import { boundaryKeyOf } from './testing/boundary-stamp.js';
 
 const KEY = 'flow:p=1';
 
+/** What a selection step with no value is told, on every path (#594). */
+const SELECTION_VALUE_MISSING =
+  'The "selectionStep" op has no "value": it is the choice for this selection. ' +
+  'Send null to skip an optional selection.';
+
 /** One well-formed op of every executor type. */
 const EVERY_EXECUTOR_OP: ExecutorOp[] = [
   { type: 'start' },
@@ -166,14 +171,24 @@ describe('parseExecutorOp (#530)', () => {
     }
   });
 
-  it('still refuses a required field set to undefined, which the type does not allow (#555)', () => {
+  it('refuses a required field set to undefined exactly as the wire refuses it missing (#555, #594)', () => {
     // @ts-expect-error -- actionName is required on an action op, so undefined does not type-check.
     const op: ExecutorOp = { type: 'action', actionName: undefined, player: 1, args: {}, boundaryKey: KEY };
-    expect(parseExecutorOp(op)).toEqual({
+    const refusal = {
       ok: false,
-      error: 'The "action" op\'s "actionName" must be a non-empty string, but it is undefined.',
-    });
+      error: 'The "action" op has no "actionName". It must be a non-empty string.',
+    };
+    expect(parseExecutorOp(op)).toEqual(refusal);
+    expect(parseExecutorOp(JSON.parse(JSON.stringify(op)))).toEqual(refusal);
     expect(parseExecutorOp({ type: 'action', actionName: 'go', player: 1, args: {}, boundaryKey: undefined }).ok).toBe(false);
+  });
+
+  it('refuses a selection step whose value is undefined, in-process and after a JSON hop alike (#594)', () => {
+    // @ts-expect-error -- a selection step's value is required and is never undefined; null skips.
+    const op: ExecutorOp = { type: 'selectionStep', player: 1, selectionName: 's', value: undefined, boundaryKey: KEY };
+    const refusal = { ok: false, error: SELECTION_VALUE_MISSING };
+    expect(parseExecutorOp(op)).toEqual(refusal);
+    expect(parseExecutorOp(JSON.parse(JSON.stringify(op)))).toEqual(refusal);
   });
 });
 
@@ -238,6 +253,26 @@ describe('the result of each op (#530, #536)', () => {
       expect(answer).not.toHaveProperty(key);
     }
     expect(answer).toHaveProperty('validElements');
+  });
+
+  it('refuses a selection step whose value is undefined, as parseExecutorOp does (#594)', async () => {
+    const def = collectTurnsFixtureDefinition;
+    const options = { playerCount: 2, seed: 'op-contract' };
+    const started = await executeOp(def, options, null, null, { type: 'start' });
+    if (!started.success) throw new Error(started.error);
+    const explored = await executeOp(def, options, started.snapshot, null, {
+      type: 'action', actionName: 'explore', player: 1, args: {}, boundaryKey: boundaryKeyOf(started.snapshot),
+    });
+    if (!explored.success) throw new Error(explored.error);
+    const step = {
+      type: 'selectionStep', player: 1, selectionName: 'item', actionName: 'collect',
+      value: undefined, boundaryKey: boundaryKeyOf(explored.snapshot),
+    };
+
+    for (const op of [step, JSON.parse(JSON.stringify(step))]) {
+      const refused = await executeOp(def, options, explored.snapshot, null, op as ExecutorOp);
+      expect(refused).toMatchObject({ success: false, category: 'protocol', error: SELECTION_VALUE_MISSING });
+    }
   });
 
   it('refuses with the failure shape alone', async () => {

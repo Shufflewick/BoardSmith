@@ -10,8 +10,9 @@
  *
  * It is strict: a key the op does not declare is refused rather than dropped,
  * `boundaryKey` is required on every submission, and each refusal names the
- * field and what to do about it. An optional field set to `undefined` counts as
- * left out, as it does in the `ExecutorOp` type and after a JSON hop.
+ * field and what to do about it. A field set to `undefined` counts as left out,
+ * as it does after a JSON hop, so an in-process caller and a wire caller always
+ * get the same answer (#555, #594).
  */
 import type { ExecutorOp, OpOfType } from './stateless-ops.js';
 
@@ -63,9 +64,10 @@ const argsObject = {
   must: 'an object of named arguments',
   accepts: isPlainObject,
 };
-const anyValue = {
+const selectionValue = {
   must: 'present',
   accepts: () => true,
+  why: 'it is the choice for this selection. Send null to skip an optional selection',
 };
 const boundaryKey = {
   ...nonEmptyString,
@@ -106,7 +108,7 @@ const RULES: OpRules = {
   selectionStep: {
     player: required(seatNumber),
     selectionName: required(nonEmptyString),
-    value: required(anyValue),
+    value: required(selectionValue),
     actionName: optional(nonEmptyString),
     initialArgs: optional(argsObject),
     boundaryKey: required(boundaryKey),
@@ -178,17 +180,34 @@ function fieldError(
   rules: Record<string, FieldRule<boolean>>,
 ): string | null {
   for (const [field, rule] of Object.entries(rules)) {
-    // An optional field holding undefined is absent: `ExecutorOp` lets an
-    // in-process caller write it, and JSON drops it on the wire (#555).
-    if (!(field in value) || (rule.optional && value[field] === undefined)) {
+    // A field holding undefined is absent, because JSON drops it on the wire
+    // and an in-process caller must get the wire's answer (#555, #594).
+    if (value[field] === undefined) {
       if (rule.optional) continue;
-      return `The "${type}" op has no "${field}"${rule.why ? `: ${rule.why}` : `. It must be ${rule.must}`}.`;
+      return missingFieldMessage(type, field);
     }
     if (!rule.accepts(value[field])) {
       return `The "${type}" op's "${field}" must be ${rule.must}, but it is ${describe(value[field])}.`;
     }
   }
   return null;
+}
+
+/**
+ * The refusal for an executor op that lacks a required field, or holds
+ * `undefined` in it. `executeOp` gives the same refusal for the fields it
+ * checks itself, so a caller that skips this parser is told the same thing.
+ */
+export function missingFieldError<T extends ExecutorOpType>(
+  type: T,
+  field: Exclude<keyof OpOfType<T>, 'type'> & string,
+): string {
+  return missingFieldMessage(type, field);
+}
+
+function missingFieldMessage(type: ExecutorOpType, field: string): string {
+  const rule: FieldRule<boolean> = (RULES[type] as Record<string, FieldRule<boolean>>)[field];
+  return `The "${type}" op has no "${field}"${rule.why ? `: ${rule.why}` : `. It must be ${rule.must}`}.`;
 }
 
 function describe(value: unknown): string {

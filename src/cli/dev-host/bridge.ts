@@ -208,7 +208,8 @@ export function translateOp(
         type: 'selectionStep',
         player: seat,
         selectionName: payload.selectionName as string,
-        value: payload.value,
+        // A value the client left out arrives undefined, and executeOp refuses it (#594).
+        value: payload.value as {} | null,
         actionName: payload.actionName as string | undefined,
         initialArgs: payload.initialArgs as Record<string, unknown> | undefined,
         boundaryKey: clientBoundaryKey(payload),

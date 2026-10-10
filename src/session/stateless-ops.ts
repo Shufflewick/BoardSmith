@@ -29,6 +29,7 @@ import type { BotMove } from '../bot/types.js';
 import { describeMoveForHint } from './move-summary.js';
 import { PERSIST_KEY, PERSIST_PRIVATE_KEY, type PersistCommit } from '../persistence/persistence.js';
 import { PickHandler } from './pick-handler.js';
+import { missingFieldError } from './parse-executor-op.js';
 import { runnerFromSnapshot } from './runner-from-snapshot.js';
 import {
   offerFollowUp,
@@ -111,7 +112,11 @@ export type ExecutorOp =
       type: 'selectionStep';
       player: number;
       selectionName: string;
-      value: unknown;
+      /**
+       * The choice for this selection: any value but `undefined`, which a JSON
+       * hop would drop. `null` skips an optional selection (#594).
+       */
+      value: {} | null;
       actionName?: string;
       initialArgs?: Record<string, unknown>;
     } & BoundaryStamped)
@@ -845,6 +850,9 @@ async function handleSelectionStep(
   pendingState: Record<string, unknown> | null,
   op: Extract<Op, { type: 'selectionStep' }>,
 ): Promise<OpResultFor<'selectionStep'>> {
+  // A caller that skipped parseExecutorOp gets its answer: undefined is what a
+  // JSON hop turns into a missing value, never a skip (#594).
+  if (op.value === undefined) return errorResult(missingFieldError('selectionStep', 'value'), 'protocol');
   const runner = runnerFromSnapshot(snapshot, def);
 
   const handler = new PickHandler(runner, gameOptions.playerCount);

@@ -181,7 +181,7 @@ function createHost() {
         actionName,
         player,
         selectionName,
-        value,
+        value: value as {} | null,
         initialArgs,
         boundaryKey: boundaryKeyOf(snapshot),
       });
