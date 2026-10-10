@@ -5,7 +5,8 @@
  * `dice-typecheck.test.ts` the dice entry point, `ui-without-dice-typecheck.test.ts`
  * a dice-free auto-UI game without three, `testing-typecheck.test.ts`
  * a game test importing `boardsmith/testing`, `aspect-boards-typecheck.test.ts`
- * the boards the aspect templates teach and `workers-typecheck.test.ts` the
+ * the boards the aspect templates teach, `docs-game-typecheck.test.ts` the game
+ * code the docs mark for compiling and `workers-typecheck.test.ts` the
  * platform-reachable engine under Workers globals, each in a sandbox. They differ in
  * WHAT they compile and WHAT they blame a failure on, and in nothing else -- so
  * the run, the rule for what counts as an error line, and the assertion that

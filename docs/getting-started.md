@@ -396,42 +396,70 @@ The Game class is the heart of your game. It:
 - Registers actions players can take
 - Defines the game flow
 
+<!-- typecheck: game src/rules/game.ts -->
 ```typescript
+import { Game, Player, type GameOptions } from 'boardsmith';
+import { Card, Hand, Deck } from './elements.js';
+import { createDrawAction, createPlayAction } from './actions.js';
+import { createGameFlow } from './flow.js';
+
+// Declared before MyGame so its static PlayerClass can name it.
+export class MyPlayer extends Player<MyGame, MyPlayer> {
+  hand!: Hand;
+  score = 0;
+}
+
 export class MyGame extends Game<MyGame, MyPlayer> {
   // Tells the engine to construct each player as a MyPlayer
   static PlayerClass = MyPlayer;
 
   deck!: Deck;
 
-  constructor(options: MyGameOptions) {
+  constructor(options: GameOptions) {
     super(options);
 
     // Register element classes (required for serialization)
     this.registerElements([Card, Hand, Deck]);
 
-    // Create game elements
+    // Create game elements: a deck, and a hand only its owner can see
     this.deck = this.create(Deck, 'deck');
+    for (const suit of ['H', 'D', 'C', 'S'] as const) {
+      for (const rank of ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'] as const) {
+        this.deck.create(Card, `${rank}${suit}`, { suit, rank });
+      }
+    }
+    for (const player of this.players) {
+      player.hand = this.create(Hand, `hand-${player.seat}`);
+      player.hand.player = player;
+      player.hand.contentsVisibleToOwner();
+    }
 
     // Set up initial state
     this.deck.shuffle();
     for (const player of this.players) {
-      // Deal cards...
+      for (let i = 0; i < 5; i++) {
+        this.deck.first(Card)?.putInto(player.hand);
+      }
     }
 
     // Register player actions
-    this.registerAction(createDrawAction(this));
-    this.registerAction(createPlayAction(this));
+    this.registerAction(createDrawAction());
+    this.registerAction(createPlayAction());
 
     // Set up game flow
-    this.setFlow(createGameFlow(this));
+    this.setFlow(createGameFlow());
   }
 
+  // The one place the game's end is declared: the flow stops as soon as
+  // this is true, and getWinners() names who won.
   override isFinished(): boolean {
     return this.deck.count(Card) === 0;
   }
 
   override getWinners(): MyPlayer[] {
-    // Return winning player(s)
+    if (!this.isFinished()) return [];
+    const best = Math.max(...this.players.map((player) => player.score));
+    return this.players.filter((player) => player.score === best);
   }
 }
 ```
@@ -448,11 +476,12 @@ Elements are the building blocks of your game state. BoardSmith provides base cl
 - **Piece** - Physical game pieces
 - **Card** - Playing cards
 
+<!-- typecheck: game src/rules/elements.ts -->
 ```typescript
 import { Card as BaseCard, Hand as BaseHand, Deck as BaseDeck } from 'boardsmith';
 
 export type Suit = 'H' | 'D' | 'C' | 'S';
-export type Rank = 'A' | '2' | '3' | ... | 'K';
+export type Rank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K';
 
 export class Card extends BaseCard {
   suit!: Suit;
@@ -467,18 +496,29 @@ export class Deck extends BaseDeck {}
 
 Actions define what players can do. Use the fluent builder API:
 
+<!-- typecheck: game src/rules/actions.ts -->
 ```typescript
 import { Action, type ActionDefinition } from 'boardsmith';
+import type { MyGame } from './game.js';
+import { Card } from './elements.js';
 
-export function createPlayAction(game: MyGame): ActionDefinition {
-  return Action.create('play')
+export function createDrawAction(): ActionDefinition {
+  return Action.create<MyGame>('draw')
+    .prompt('Draw a card')
+    .execute((args, ctx) => {
+      ctx.game.deck.first(Card)?.putInto(ctx.player.hand);
+      return { success: true };
+    });
+}
+
+export function createPlayAction(): ActionDefinition {
+  return Action.create<MyGame>('play')
     .prompt('Play a card from your hand')
     .chooseFrom('card', {
       prompt: 'Select a card to play',
       choices: (ctx) => [...ctx.player.hand.all(Card)],
     })
-    .execute((args, ctx) => {
-      const card = args.card as Card;
+    .execute(({ card }, ctx) => {
       card.remove();
       ctx.player.score += 1;
       return { success: true };
@@ -490,14 +530,17 @@ export function createPlayAction(game: MyGame): ActionDefinition {
 
 The flow defines turn structure and game phases:
 
+<!-- typecheck: game src/rules/flow.ts -->
 ```typescript
 import { loop, eachPlayer, actionStep, sequence, type FlowDefinition } from 'boardsmith';
 
-export function createGameFlow(game: MyGame): FlowDefinition {
+export function createGameFlow(): FlowDefinition {
   return {
     root: loop({
       name: 'game-loop',
-      while: () => !game.isFinished(),
+      // A safety tripwire: the loop throws at 100 rounds. The game ends first,
+      // when MyGame.isFinished() is true.
+      maxIterations: 100,
       do: eachPlayer({
         name: 'player-turns',
         do: sequence(

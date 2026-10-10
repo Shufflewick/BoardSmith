@@ -11,16 +11,17 @@
  * consumer's install holds, declared peers included (`Die3D` needs `three`).
  *
  * The docs teach boards too. A ```vue block in `docs/*.md` placed right after
- * a `<!-- typecheck: board -->` line is compiled the same way (#570): its
+ * a `<!-- typecheck: board -->` line (read by `markedDocBlocks`) is compiled
+ * the same way (#570): its
  * `props.gameView.settings` read compiled nowhere while `GameViewElement` did
  * not declare the game root's fields.
  */
 import { describe, it } from 'vitest';
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { generateTsConfig } from '../cli/lib/project-scaffold.js';
 import { consumerInstall, declaredPeers } from './consumer-install.test-helper.js';
+import { gameTsConfig, markedDocBlocks } from './doc-typecheck-blocks.test-helper.js';
 import { REPO_ROOT, expectCleanCompile } from './vue-tsc-run.test-helper.js';
 
 const ASPECTS = ['dice', 'hex-grid', 'playing-cards', 'square-grid'] as const;
@@ -38,47 +39,6 @@ function aspectBoard(aspect: string): string {
   return blocks[0];
 }
 
-/** The line that marks the next ```vue block of a doc as a board this test compiles. */
-const DOC_BOARD_MARKER = '<!-- typecheck: board -->';
-
-/** Every marked board in `docs/*.md`, keyed `<doc>-<n>`. */
-function docBoards(): Map<string, string> {
-  const boards = new Map<string, string>();
-  const docsDir = join(REPO_ROOT, 'docs');
-  for (const file of readdirSync(docsDir).filter((name) => name.endsWith('.md'))) {
-    const text = readFileSync(join(docsDir, file), 'utf8');
-    const blocks = [...text.matchAll(/<!-- typecheck: board -->\n```vue\n([\s\S]*?)```/g)].map((match) => match[1]);
-    const markers = text.split(DOC_BOARD_MARKER).length - 1;
-    if (markers !== blocks.length) {
-      throw new Error(
-        `docs/${file} has ${markers} "${DOC_BOARD_MARKER}" lines but only ${blocks.length} sit directly ` +
-          'above a ```vue block. Put the marker on the line right before the block it names.',
-      );
-    }
-    blocks.forEach((block, index) => boards.set(`${file.replace(/\.md$/, '')}-${index + 1}`, block));
-  }
-  return boards;
-}
-
-/** The game's tsconfig as `boardsmith init` writes it, compiling the boards under `src/`. */
-function gameTsConfig(): string {
-  const scaffolded = JSON.parse(generateTsConfig()) as { compilerOptions: Record<string, unknown> };
-  return JSON.stringify(
-    {
-      ...scaffolded,
-      compilerOptions: {
-        ...scaffolded.compilerOptions,
-        noEmit: true,
-        // Resolve from where the file SITS, not from where it really lives (see consumerInstall).
-        preserveSymlinks: true,
-      },
-      include: ['src/**/*.vue'],
-    },
-    null,
-    2,
-  );
-}
-
 describe('the aspect templates\' boards type-check against boardsmith\'s own types (#516, #565)', () => {
   it('reports zero vue-tsc errors for every aspect\'s GameTable.vue', () => {
     const root = consumerInstall({ entryPoints: [], alsoInstalled: declaredPeers() });
@@ -87,7 +47,7 @@ describe('the aspect templates\' boards type-check against boardsmith\'s own typ
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, 'GameTable.vue'), aspectBoard(aspect));
     }
-    writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig());
+    writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig(['src/**/*.vue']));
 
     expectCleanCompile(
       root,
@@ -100,17 +60,20 @@ describe('the aspect templates\' boards type-check against boardsmith\'s own typ
   }, 180_000);
 
   it('reports zero vue-tsc errors for every board the docs mark for type-checking (#570)', () => {
-    const boards = docBoards();
-    if (boards.size === 0) {
-      throw new Error(`No doc marks a board with "${DOC_BOARD_MARKER}", so this test would compile nothing.`);
+    const boards = markedDocBlocks('board');
+    if (boards.length === 0) {
+      throw new Error('No doc marks a board with "<!-- typecheck: board -->", so this test would compile nothing.');
     }
     const root = consumerInstall({ entryPoints: [], alsoInstalled: declaredPeers() });
-    for (const [name, board] of boards) {
-      const dir = join(root, 'src', name);
+    const perDoc = new Map<string, number>();
+    for (const { doc, code } of boards) {
+      const n = (perDoc.get(doc) ?? 0) + 1;
+      perDoc.set(doc, n);
+      const dir = join(root, 'src', `${doc}-${n}`);
       mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, 'Board.vue'), board);
+      writeFileSync(join(dir, 'Board.vue'), code);
     }
-    writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig());
+    writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig(['src/**/*.vue']));
 
     expectCleanCompile(
       root,
