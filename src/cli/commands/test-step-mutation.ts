@@ -229,7 +229,7 @@ export function generateMutants(file: string, source: string, addedLines: Readon
  * runs of that file, each under the same time limit as any other mutant. The check stops once every
  * test in the file has failed, so a file whose tests pin something real usually needs far fewer.
  */
-export const PIN_MUTANT_CAP = 100;
+const PIN_MUTANT_CAP = 100;
 
 /** The coverage setup file's name in the run's scratch directory (`test-step-coverage.ts`). */
 const COVERAGE_SETUP_NAME = 'coverage-setup.mjs';

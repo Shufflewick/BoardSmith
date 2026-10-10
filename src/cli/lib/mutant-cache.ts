@@ -349,7 +349,7 @@ async function installedLinks(nodeModules: string): Promise<string[]> {
  * the link's own location, so a worktree whose `node_modules` links to the main checkout's resolves
  * to the same key as the main checkout. A folder that cannot be read throws.
  */
-export async function linkedPackagesHash(projectDir: string): Promise<string> {
+async function linkedPackagesHash(projectDir: string): Promise<string> {
   const repository = await fs.realpath((await git(projectDir, ['rev-parse', '--show-toplevel'])).trim());
   const game = await fs.realpath(projectDir);
   // The install records here are in the key already (`installedPackagesHash`).
