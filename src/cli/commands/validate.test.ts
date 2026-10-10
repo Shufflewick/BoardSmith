@@ -1145,3 +1145,23 @@ describe('validateProject stops by throwing, so a command running it stops too (
     expect(printed.join('\n')).toContain('playerCount');
   });
 });
+
+describe('a project with no vitest is told to install it, never to run npx (#595)', () => {
+  it('names the install command in the test-type-coverage check', async () => {
+    const dir = tempTree('bs-validate-no-vitest-');
+    writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table' }));
+    mkdirSync(join(dir, 'tests'));
+    const printed: string[] = [];
+    const log = vi.spyOn(console, 'log').mockImplementation((line?: unknown) => void printed.push(String(line)));
+    try {
+      const typeCheck = { result: { name: 'TypeScript', passed: true, message: '' }, programFiles: [], compilerReport: [] };
+      await expect(validateProject(dir, { typeCheck })).rejects.toThrow('Validation failed.');
+    } finally {
+      log.mockRestore();
+    }
+    const output = printed.join('\n');
+    expect(output).toContain('vitest is not installed in this project.');
+    expect(output).toContain('npm install -D vitest');
+    expect(output).not.toContain('npx vitest');
+  });
+});
