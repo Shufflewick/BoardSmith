@@ -1,7 +1,7 @@
 {
   "revision": 152,
   "bundleProtocol": 2,
-  "surfaceHash": "dbd85fd9d4fcb20e",
+  "surfaceHash": "89ccecd62d942a97",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1308,10 +1308,10 @@
       "revision": 152,
       "date": "2026-10-10",
       "bundleProtocol": 2,
-      "surfaceHash": "dbd85fd9d4fcb20e",
+      "surfaceHash": "89ccecd62d942a97",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "A submitted pick is resolved and checked by one rule on every path (#507): a selection step resolves its value with the earlier picks in view and item by item for a multiSelect or chooseElements, so onSelect and later picks get the value named rather than the label or id sent; a repeating pick accepts an element id, display text or label as any pick does, honours the tutorial gate (refused with 'Selection disabled: ...', and repeatingPickCandidates no longer offers gated values), and refuses a value not on offer with the selection's unavailable sentence or the standard 'no longer available' one instead of 'Invalid choice' / 'Invalid element ID'. A replayed log in which a repeating pick took a gated value now refuses it."
+      "summary": "surfaceHash now covers what a compiled rules.js can reach beyond method names: statics, instance fields and symbol-keyed members (such as [Symbol.iterator]) of exported classes and functions, inherited ones included, and the own keys of exported plain objects and enums (TurnOrder, ErrorCode), each with its kind. #private members and the members of async and generator functions are recorded as nothing, being unreachable or the language's. No engine API changed; only the fingerprint widened, so this revision declares a surface no earlier revision shares and a world built before it stays on its older runner until rebuilt. Types, values, signatures and input shapes carried only by types remain outside the hash (#575)."
     }
   ]
 }
