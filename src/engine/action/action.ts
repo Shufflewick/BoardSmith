@@ -468,7 +468,9 @@ export class ActionExecutor {
    * (#507). Raw ids and display text must never reach `onSelect` or `execute`.
    *
    * Smart choice resolution needs the player the choices are built for, so
-   * without one a choice value is left as sent.
+   * without one a choice value is left as sent. A caller that already holds
+   * this pick's candidates passes them as `candidates`, so the `choices`
+   * callback is not run a second time for the same pick.
    */
   private resolveOne(
     selection: Selection,
@@ -476,6 +478,7 @@ export class ActionExecutor {
     player: Player | undefined,
     args: Record<string, unknown>,
     game: Game,
+    candidates?: readonly Candidate[],
   ): unknown {
     switch (selection.type) {
       case 'element':
@@ -485,11 +488,11 @@ export class ActionExecutor {
         if (Array.isArray(value)) {
           return this.isRepeatingSelection(selection) ? value.map(v => this.resolveElementItem(v, game)) : value;
         }
-        return this.resolveElementRef(value, game);
+        return this.resolveElementItem(value, game);
       case 'elements':
-        return Array.isArray(value) ? value.map(v => this.resolveElementItem(v, game)) : this.resolveElementRef(value, game);
+        return Array.isArray(value) ? value.map(v => this.resolveElementItem(v, game)) : this.resolveElementItem(value, game);
       case 'choice':
-        return this.resolveChoiceValue(selection as ChoiceSelection, value, player, args, game);
+        return this.resolveChoiceValue(selection as ChoiceSelection, value, player, args, game, candidates);
       default:
         return value;
     }
@@ -502,13 +505,14 @@ export class ActionExecutor {
     player: Player | undefined,
     args: Record<string, unknown>,
     game: Game,
+    known: readonly Candidate[] | undefined,
   ): unknown {
     if (isSerializedElement(value)) return game.getElementById((value as { id: number }).id) ?? value;
     if (!player) return value;
     // Only a multiSelect is resolved per item, so a single choice whose VALUE
     // is itself an array is never taken apart.
     if (Array.isArray(value) && selection.multiSelect === undefined) return value;
-    const candidates = this.candidatesOf(selection, { game, player, args });
+    const candidates = known ?? this.candidatesOf(selection, { game, player, args });
     const resolveItem = (item: unknown): unknown => {
       if (isSerializedElement(item)) return game.getElementById((item as { id: number }).id) ?? item;
       const match = findMatchingChoice(item, candidates);
@@ -517,18 +521,11 @@ export class ActionExecutor {
     return Array.isArray(value) ? value.map(resolveItem) : resolveItem(value);
   }
 
-  /** A single element reference (an id, or an object with a numeric `id`) as its element, or as sent when it names none. */
-  private resolveElementRef(value: unknown, game: Game): unknown {
-    if (typeof value === 'number') return game.getElementById(value) ?? value;
-    if (this.looksLikeSerializedElement(value)) return game.getElementById((value as { id: number }).id) ?? value;
-    return value;
-  }
-
   /**
-   * One entry of an element array (a chooseElements pick, or one pick of a
-   * repeating chooseElement) resolved to its element. An id that resolves to
-   * nothing is KEPT as its id, not dropped, so validateSelection can refuse the
-   * submission with an actionable error instead of letting it vanish.
+   * An element reference (an id, or an object with a numeric `id`) resolved to
+   * its element. A reference that names nothing is KEPT as its id, not
+   * dropped, so the pick is refused with an actionable error instead of
+   * vanishing, and `unavailable` is handed the id the client sent.
    */
   private resolveElementItem(item: unknown, game: Game): unknown {
     if (typeof item === 'number') return game.getElementById(item) ?? item;
@@ -1894,7 +1891,7 @@ export class ActionExecutor {
       args: this.repeatingSelectionArgs(action, player, pendingState, selection.name),
     };
     const currentChoices = this.getChoices(selection, player, context.args, action.name);
-    const resolved = this.resolveOne(selection, value, player, context.args, this.game);
+    const resolved = this.resolveOne(selection, value, player, context.args, this.game, currentChoices);
     const offered = this.matchOffered(repeatSelection, resolved, currentChoices, context, action.name);
     if ('refusal' in offered) {
       const nextChoices = formatRepeatCandidates(currentChoices, repeatSelection, context, warnings);

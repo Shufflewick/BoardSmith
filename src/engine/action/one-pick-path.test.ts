@@ -389,3 +389,50 @@ describe("a later pick's validate sees the earlier picks resolved (#507)", () =>
     expect(seen).toEqual([[slate]]);
   });
 });
+
+describe('a repeating pick asks for its choices once (#507)', () => {
+  it('runs the choices callback once to resolve and check a pick that ends the repeat', () => {
+    const game = new Yard();
+    let calls = 0;
+    const action = Action.create('place')
+      .chooseFrom('piece', {
+        choices: () => {
+          calls++;
+          return [{ value: 'a', label: 'Alpha' }, { value: 'b', label: 'Beta' }];
+        },
+        ...once,
+      })
+      .execute(() => {});
+    game.registerAction(action);
+    const executor = game.getActionExecutor();
+
+    const step = executor.processRepeatingStep(action, game.getPlayer(1)!, executor.createPendingActionState('place', 1), 'Beta');
+
+    expect(step).toEqual({ done: true });
+    expect(calls).toBe(1);
+  });
+});
+
+describe('an element reference that names nothing (#507)', () => {
+  it.each([
+    ['chooseElement', false],
+    ['chooseElements', true],
+  ])('a %s sent { id } for a missing element is refused, and `unavailable` is handed the id', (_kind, many) => {
+    const game = new Yard();
+    const handed: unknown[] = [];
+    const options = {
+      elements: () => game.rocks.all(Stone),
+      unavailable: (value: unknown) => {
+        handed.push(value);
+        return 'That stone is gone.';
+      },
+    };
+    const take = Action.create('take');
+    game.registerAction((many ? take.chooseElements('pick', options) : take.chooseElement('pick', options)).execute(() => {}));
+
+    const result = game.performAction('take', game.getPlayer(1)!, { pick: { id: 99_999 } });
+
+    expect(result.error).toBe('That stone is gone.');
+    expect(handed).toEqual([99_999]);
+  });
+});
