@@ -66,7 +66,6 @@ const chromeElements = computed(() =>
         v-for="el in chromeElements"
         :key="el.id"
         :element="el"
-        :depth="0"
       />
     </div>
 
@@ -76,7 +75,6 @@ const chromeElements = computed(() =>
         v-for="el in boardElements"
         :key="el.id"
         :element="el"
-        :depth="0"
       />
     </div>
 
@@ -86,7 +84,6 @@ const chromeElements = computed(() =>
         v-for="el in handElements"
         :key="el.id"
         :element="el"
-        :depth="0"
       />
     </div>
   </div>

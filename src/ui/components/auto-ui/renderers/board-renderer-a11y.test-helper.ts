@@ -52,7 +52,7 @@ export function mountBoardRenderer(
       provideBoardInteraction(interaction);
     },
     render() {
-      return h(component, { element, depth: 0 });
+      return h(component, { element });
     },
   });
   return {

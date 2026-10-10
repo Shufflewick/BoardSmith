@@ -58,7 +58,6 @@ const peripheralElements = computed(() =>
         v-for="el in peripheralElements"
         :key="el.id"
         :element="el"
-        :depth="0"
       />
     </div>
 
@@ -68,7 +67,6 @@ const peripheralElements = computed(() =>
         v-for="el in handElements"
         :key="el.id"
         :element="el"
-        :depth="0"
       />
     </div>
   </div>

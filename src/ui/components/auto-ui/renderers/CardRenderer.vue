@@ -15,10 +15,6 @@
  * Face/back image selection: hidden cards ALWAYS show the back image;
  * visible cards show the face image. The face URL is never exposed when
  * the element is a hidden placeholder (T-93-04).
- *
- * The `depth` prop is declared but not read, on purpose (#550): ElementRenderer
- * passes it to every renderer it dispatches to, and an undeclared prop would
- * fall through onto this renderer's root element as a `depth` attribute.
  */
 
 import { computed, inject, ref, watch, type Ref, type ComputedRef } from 'vue';
@@ -48,7 +44,6 @@ type ImageInfo =
 
 const props = defineProps<{
   element: GameElement;
-  depth: number;
 }>();
 
 // ---------------------------------------------------------------------------

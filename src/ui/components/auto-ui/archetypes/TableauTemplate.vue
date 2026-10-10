@@ -37,7 +37,6 @@ defineProps<{
       v-for="el in topLevelChildren"
       :key="el.id"
       :element="el"
-      :depth="0"
     />
   </div>
 </template>

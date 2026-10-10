@@ -229,7 +229,6 @@ describe('GoFish ask interaction tests', () => {
     const wrapper = mount(CardRenderer, {
       props: {
         element: hiddenOpponentCard,
-        depth: 0,
       },
       global: {
         provide: {

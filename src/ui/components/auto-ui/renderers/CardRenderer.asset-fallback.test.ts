@@ -27,7 +27,7 @@ function makeCardElement(id = 1) {
 describe('CardRenderer asset fallback (ASSET-01)', () => {
   it('shows the drawn card-face fallback and hides the real <img> before any load event', () => {
     const wrapper = mount(CardRenderer, {
-      props: { element: makeCardElement(), depth: 0 },
+      props: { element: makeCardElement() },
     });
 
     const img = wrapper.find('img.card-image');
@@ -42,7 +42,7 @@ describe('CardRenderer asset fallback (ASSET-01)', () => {
 
   it('reveals the real image once its @load event fires', async () => {
     const wrapper = mount(CardRenderer, {
-      props: { element: makeCardElement(), depth: 0 },
+      props: { element: makeCardElement() },
     });
 
     const img = wrapper.find('img.card-image');
@@ -53,7 +53,7 @@ describe('CardRenderer asset fallback (ASSET-01)', () => {
 
   it('reverts to the drawn card-face fallback when the image @error fires', async () => {
     const wrapper = mount(CardRenderer, {
-      props: { element: makeCardElement(), depth: 0 },
+      props: { element: makeCardElement() },
     });
 
     const img = wrapper.find('img.card-image');
@@ -69,7 +69,7 @@ describe('CardRenderer asset fallback (ASSET-01)', () => {
 
   it('resets loaded to false when the resolved src changes (reused element re-guards)', async () => {
     const wrapper = mount(CardRenderer, {
-      props: { element: makeCardElement(1), depth: 0 },
+      props: { element: makeCardElement(1) },
     });
 
     await wrapper.find('img.card-image').trigger('load');

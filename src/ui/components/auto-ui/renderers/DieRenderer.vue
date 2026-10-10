@@ -38,13 +38,6 @@ interface GameElement {
 
 const props = defineProps<{
   element: GameElement;
-  /**
-   * Not read here; declared on purpose (#550). ElementRenderer passes `depth`
-   * to whichever renderer the registry picks, so every renderer takes it.
-   * Undeclared, it would fall through onto this renderer's root element as a
-   * `depth` attribute.
-   */
-  depth: number;
 }>();
 
 const Die3D = getDiePreviewComponent();

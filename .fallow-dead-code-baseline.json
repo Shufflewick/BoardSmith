@@ -99,12 +99,7 @@
   "unused_store_members": [],
   "unprovided_injects": [],
   "unrendered_components": [],
-  "unused_component_props": [
-    "src/ui/components/auto-ui/renderers/CardRenderer.vue:depth",
-    "src/ui/components/auto-ui/renderers/DieRenderer.vue:depth",
-    "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:depth",
-    "src/ui/components/auto-ui/renderers/PieceRenderer.vue:depth"
-  ],
+  "unused_component_props": [],
   "unused_component_emits": [],
   "unused_component_inputs": [],
   "unused_component_outputs": [],
