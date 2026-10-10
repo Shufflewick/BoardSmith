@@ -13,6 +13,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { defineComponent, h, nextTick } from 'vue';
 import { flushPromises } from '@vue/test-utils';
 import ControlsMenu from './ControlsMenu.vue';
+import DebugPanel from './DebugPanel.vue';
 import {
   DEBUG_TABLE_PLAYERS,
   enterIframe,
@@ -62,6 +63,27 @@ describe('the controls menu (#515)', () => {
   });
 });
 
+/** The host relays a new game's first state into this same frame, as the dev host does on a restart. */
+async function postNewGame(players: unknown[], gameInstanceId: string): Promise<void> {
+  window.dispatchEvent(new MessageEvent('message', {
+    data: {
+      source: 'shufflewick',
+      type: 'game_state',
+      view: {
+        flowState: { currentPlayer: 1, awaitingInput: true, availableActions: ['move'] },
+        state: {
+          view: {}, players, currentPlayer: 1, isMyTurn: true, availableActions: ['move'],
+          gameInstanceId,
+        },
+      },
+      winners: [],
+    },
+  }));
+  await flushPromises();
+}
+
+const BlankBoard = defineComponent({ name: 'Board', setup: () => () => h('div') });
+
 describe('a new game ends time travel (#587)', () => {
   /**
    * The dev host does not reload this frame on a restart: "New game" in its
@@ -77,7 +99,7 @@ describe('a new game ends time travel (#587)', () => {
       return h('span', { class: 'stats' });
     };
     const { wrapper, debugPanel } = await mountTableWithDebugPanel(
-      defineComponent({ name: 'Board', setup: () => () => h('div') }),
+      BlankBoard,
       { gameInstanceId: 'game-1' },
       { 'player-stats': playerStats },
     );
@@ -90,27 +112,52 @@ describe('a new game ends time travel (#587)', () => {
     expect(wrapper.find('.time-travel-banner').exists()).toBe(true);
 
     const newPlayers = [...DEBUG_TABLE_PLAYERS, { name: 'P3', seat: 3 }];
-    window.dispatchEvent(new MessageEvent('message', {
-      data: {
-        source: 'shufflewick',
-        type: 'game_state',
-        view: {
-          flowState: { currentPlayer: 1, awaitingInput: true, availableActions: ['move'] },
-          state: {
-            view: {}, players: newPlayers, currentPlayer: 1, isMyTurn: true, availableActions: ['move'],
-            gameInstanceId: 'game-2',
-          },
-        },
-        winners: [],
-      },
-    }));
-    await flushPromises();
+    await postNewGame(newPlayers, 'game-2');
 
     expect(errors).toEqual([]);
     expect(wrapper.find('.time-travel-banner').exists()).toBe(false);
     expect(exposed.state?.flowState).not.toBeNull();
     expect(exposed.players).toEqual(newPlayers);
     expect(statsSeats.slice(-3).sort()).toEqual([1, 2, 3]);
+    wrapper.unmount();
+  });
+});
+
+describe('leaving history when what it belongs to goes away (#589)', () => {
+  it('returns the board to live when the host turns the debug panel off while it shows history', async () => {
+    const { wrapper, debugPanel } = await mountTableWithDebugPanel(BlankBoard);
+    debugPanel.vm.$emit('time-travel', { view: {}, players: DEBUG_TABLE_PLAYERS }, 1, null);
+    await nextTick();
+    expect(wrapper.find('.time-travel-banner').exists()).toBe(true);
+
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { source: 'shufflewick', type: 'dev-debug-available', available: false },
+    }));
+    await flushPromises();
+
+    expect(wrapper.findComponent(DebugPanel).exists()).toBe(false);
+    expect(wrapper.find('.time-travel-banner').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('cancels a rewind awaiting confirmation when a new game arrives, so confirming it cannot rewind the new game', async () => {
+    const { wrapper, debugPanel, posted } = await mountTableWithDebugPanel(BlankBoard, { gameInstanceId: 'game-1' });
+    const panel = debugPanel.vm as unknown as {
+      pendingRewindIndex: number | null;
+      requestRewind: (index: number) => void;
+      confirmRewind: () => Promise<void>;
+    };
+    panel.requestRewind(1);
+    await nextTick();
+    expect(panel.pendingRewindIndex).toBe(1);
+
+    await postNewGame(DEBUG_TABLE_PLAYERS, 'game-2');
+    expect(panel.pendingRewindIndex).toBeNull();
+
+    // Not awaited: a request that did go out would wait for a host reply that never comes.
+    void panel.confirmRewind();
+    await flushPromises();
+    expect(requestsFor(posted, 'debug:rewind')).toEqual([]);
     wrapper.unmount();
   });
 });
