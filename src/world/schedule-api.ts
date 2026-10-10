@@ -193,6 +193,18 @@ export const WORLD_SCHEDULE_KEY_MAX_BYTES = 512;
 export const WORLD_SCHEDULE_ARGS_MAX_BYTES = 4096;
 
 /**
+ * THE LONGEST ACTION NAME A SCHEDULE MAY CARRY, IN UTF-8 BYTES (#603).
+ *
+ * The name rides in the event's row beside its key and args. The engine also
+ * refuses a name that is not one of the world's registered actions, but only
+ * the engine holds that list: the parent re-plans every request without the
+ * bundle's actions, and registering an action does not bound its name. So the
+ * shape both sides share bounds the length. An action name is an identifier
+ * like `"resolveRaid"`, and 128 bytes is room for a long one.
+ */
+export const WORLD_SCHEDULE_ACTION_MAX_BYTES = 128;
+
+/**
  * TAKE BACK A KEYED TIMER THIS OWNER HOLDS (#177).
  *
  * ## Why this exists at all
@@ -591,20 +603,23 @@ export function scheduleBudget(
  * refused, for the same reason.
  */
 function shapeRefusal(request: ScheduleRequest): WorldRefusal | null {
-  if (isCancel(request)) return cancelShapeRefusal(request) ?? keySizeRefusal(request.cancel);
+  if (isCancel(request)) return cancelShapeRefusal(request) ?? keyRefusal(request.cancel);
   return (
     actionRefusal(request) ??
     argumentRefusal(request) ??
     argumentSizeRefusal(request) ??
-    (request.key === undefined ? null : keySizeRefusal(request.key)) ??
+    (request.key === undefined ? null : keyRefusal(request.key)) ??
     intervalRefusal(request) ??
     delayRefusal(request)
   );
 }
 
-/** A WAKE THAT RUNS NOTHING IS THE ONE THING A SCHEDULE MUST NOT BUY (#89). */
+/** A WAKE THAT RUNS NOTHING IS THE ONE THING A SCHEDULE MUST NOT BUY (#89), and
+ *  a name too long for its row is refused with it (#603). */
 function actionRefusal(request: ScheduleArm): WorldRefusal | null {
-  if (typeof request.action === "string" && request.action.length > 0) return null;
+  if (typeof request.action === "string" && request.action.length > 0) {
+    return actionSizeRefusal(request.action);
+  }
   return worldRefusal(
     "invalid-schedule-command",
     "A scheduled event must name the action the world runs when it comes due, and this one " +
@@ -629,6 +644,47 @@ function argumentRefusal(request: ScheduleArm): WorldRefusal | null {
 
 /** One encoder for the module: storage measures keys and rows in UTF-8. */
 const encoder = new TextEncoder();
+
+/** AN ACTION NAME TOO LONG FOR ANY ROW TO CARRY (#603). */
+function actionSizeRefusal(action: string): WorldRefusal | null {
+  const bytes = encoder.encode(action).length;
+  if (bytes <= WORLD_SCHEDULE_ACTION_MAX_BYTES) return null;
+  return worldRefusal(
+    "schedule-action-too-long",
+    `The scheduled action ${JSON.stringify(action.slice(0, 32))}... is ${bytes} bytes, over the ` +
+      `${WORLD_SCHEDULE_ACTION_MAX_BYTES}-byte limit an action name may be. Schedule one of this ` +
+      "world's clock actions by its name, and give that action a shorter one.",
+  );
+}
+
+/** A key a host can both encode (#604) and store (#602). */
+function keyRefusal(key: string): WorldRefusal | null {
+  return keyFormRefusal(key) ?? keySizeRefusal(key);
+}
+
+/**
+ * A KEY THAT IS NOT WELL-FORMED UNICODE IS REFUSED HERE, NOT AT THE CHECKPOINT
+ * (#604).
+ *
+ * A lone UTF-16 surrogate passes the byte count (UTF-8 writes it as the three
+ * bytes of U+FFFD), but a host that percent-encodes the key into a storage key
+ * throws `URIError` on it. `\p{Surrogate}` under the `u` flag matches only an
+ * unpaired surrogate, because a correct pair is read as the one code point it
+ * encodes; this is `String.prototype.isWellFormed`, which ES2022's typings do
+ * not declare.
+ */
+function keyFormRefusal(key: string): WorldRefusal | null {
+  if (!/\p{Surrogate}/u.test(key)) return null;
+  return worldRefusal(
+    "schedule-key-malformed",
+    // JSON.stringify escapes the lone surrogate, so the sentence itself is
+    // well-formed and survives whatever the host does with it.
+    `The schedule key ${JSON.stringify(key.slice(0, 32))} is not well-formed Unicode: it holds ` +
+      "half of a surrogate pair, which no host can encode into a storage key. This usually means " +
+      "a string was cut in the middle of an emoji or other character outside the Basic " +
+      "Multilingual Plane; build the key from whole characters.",
+  );
+}
 
 /** A KEY NO HOST CAN STORE IS REFUSED HERE, NOT AT THE CHECKPOINT (#602). */
 function keySizeRefusal(key: string): WorldRefusal | null {

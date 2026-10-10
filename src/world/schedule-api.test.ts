@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 import {
   WORLD_OWNER,
+  WORLD_SCHEDULE_ACTION_MAX_BYTES,
   WORLD_SCHEDULE_ARGS_MAX_BYTES,
   WORLD_SCHEDULE_KEY_MAX_BYTES,
   planSchedules,
@@ -809,5 +810,103 @@ describe("planSchedules -- what a host can store (#602)", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.refusal.code).toBe("schedule-args-too-large");
+  });
+});
+
+/**
+ * #603: AN ACTION NAME NO HOST SHOULD STORE IS REFUSED AT THE LINE.
+ *
+ * The action name rides in the event's row beside its key and args. Whether it
+ * names a registered action is known only where the bundle's actions are, in
+ * the engine; the parent re-plans without them, so the shape it shares with the
+ * engine bounds the name's length instead.
+ */
+describe("planSchedules -- how long an action name may be (#603)", () => {
+  const bytes = (text: string) => new TextEncoder().encode(text).length;
+
+  it("admits an action name of exactly the bound and refuses one byte over it", () => {
+    const atBound = "a".repeat(WORLD_SCHEDULE_ACTION_MAX_BYTES);
+    expect(plan([], [{ delayMs: 1, action: atBound }]).ok).toBe(true);
+
+    const over = plan([], [{ delayMs: 1, action: `${atBound}a` }]);
+    expect(over.ok).toBe(false);
+    if (over.ok) return;
+    expect(over.refusal.code).toBe("schedule-action-too-long");
+    expect(over.refusal.owner).toBe("game");
+    expect(over.refusal.message).toContain(`${WORLD_SCHEDULE_ACTION_MAX_BYTES + 1} bytes`);
+    // Quotes the start of the name, never the whole thing.
+    expect(over.refusal.message.length).toBeLessThan(600);
+  });
+
+  it("measures the action name in UTF-8 BYTES, not characters", () => {
+    // 42 "€" are 126 bytes, plus two ASCII letters is the bound exactly.
+    const atBound = "€".repeat(42) + "ab";
+    expect(bytes(atBound)).toBe(WORLD_SCHEDULE_ACTION_MAX_BYTES);
+    expect(plan([], [{ delayMs: 1, action: atBound }]).ok).toBe(true);
+
+    const over = "€".repeat(43);
+    expect(bytes(over)).toBe(WORLD_SCHEDULE_ACTION_MAX_BYTES + 1);
+    const result = plan([], [{ delayMs: 1, action: over }]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.refusal.code).toBe("schedule-action-too-long");
+  });
+
+  it("still refuses a missing action as a wake that runs nothing, not as a length", () => {
+    const result = plan([], [{ delayMs: 1, action: "" }]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.refusal.code).toBe("invalid-schedule-command");
+  });
+});
+
+/**
+ * #604: A KEY THAT IS NOT WELL-FORMED UNICODE IS REFUSED AT THE LINE.
+ *
+ * A lone UTF-16 surrogate passes #602's byte count (TextEncoder writes it as
+ * three bytes of U+FFFD), but a host that percent-encodes the key into a
+ * storage key throws `URIError` on it, at the checkpoint, as an outage.
+ */
+describe("planSchedules -- a key a host can encode (#604)", () => {
+  const HIGH = "\uD83D";
+  const LOW = "\uDE00";
+
+  it.each([
+    ["a lone high surrogate", `raid${HIGH}`],
+    ["a lone low surrogate", `${LOW}raid`],
+    ["a pair in the wrong order", `${LOW}${HIGH}`],
+    ["a high surrogate followed by an ordinary letter", `${HIGH}raid`],
+  ])("refuses an arm under a key with %s", (_name, key) => {
+    expect(() => encodeURIComponent(key)).toThrow(URIError);
+    const result = plan([], [{ delayMs: 1, action: "tick", key }]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.refusal.code).toBe("schedule-key-malformed");
+    expect(result.refusal.owner).toBe("game");
+    // The refusal's own message must survive the host that is going to
+    // percent-encode or log it.
+    expect(() => encodeURIComponent(result.refusal.message)).not.toThrow();
+  });
+
+  it("refuses a CANCEL under a key with a lone surrogate", () => {
+    const result = plan([], [{ cancel: `raid${HIGH}` }]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.refusal.code).toBe("schedule-key-malformed");
+  });
+
+  it("admits a well-formed surrogate PAIR, including at the byte bound", () => {
+    // 128 four-byte characters is exactly #602's bound, and every one of them
+    // is a correctly paired surrogate.
+    const key = `${HIGH}${LOW}`.repeat(WORLD_SCHEDULE_KEY_MAX_BYTES / 4);
+    expect(() => encodeURIComponent(key)).not.toThrow();
+    expect(plan([], [{ delayMs: 1, action: "tick", key }]).ok).toBe(true);
+    expect(plan([], [{ cancel: key }]).ok).toBe(true);
+  });
+
+  it("leaves args alone: a host stores them by structured clone, and JSON escapes a lone surrogate", () => {
+    const args = { s: `raid${HIGH}` };
+    expect(JSON.stringify(args)).toBe('{"s":"raid\\ud83d"}');
+    expect(plan([], [{ delayMs: 1, action: "tick", args }]).ok).toBe(true);
   });
 });

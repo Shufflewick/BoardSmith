@@ -297,6 +297,18 @@ export const WORLD_REFUSALS = {
     owner: "game",
     why: "#602: a handler armed or cancelled a timer under a key longer than `WORLD_SCHEDULE_KEY_MAX_BYTES` UTF-8 bytes. A host stores each event under a storage key built from the schedule key, so a longer one is an event no host can write, and it used to surface at the checkpoint as a storage outage. The key is the bundle's own text and the same line writes it again, so it dead-letters rather than parking the world",
   },
+  "schedule-key-malformed": {
+    owner: "game",
+    why: "#604: a handler armed or cancelled a timer under a key that is not well-formed Unicode -- it holds a lone UTF-16 surrogate. It passes the byte count, but a host that percent-encodes the key into a storage key throws on it, which used to surface at the checkpoint as a storage outage. The key is the bundle's own text, so it dead-letters rather than parking the world",
+  },
+  "schedule-action-too-long": {
+    owner: "game",
+    why: "#603: a handler scheduled an event whose action name is longer than `WORLD_SCHEDULE_ACTION_MAX_BYTES` UTF-8 bytes. The name rides in the event's row, and the parent, which re-plans without the bundle's action list, can bound its length where it cannot check it is registered. The name is the bundle's own, so it dead-letters rather than parking the world",
+  },
+  "schedule-unknown-action": {
+    owner: "game",
+    why: "#603: a handler scheduled an event naming an action this world does not register. It used to be found only when the event came due. The engine holds the registered actions and refuses at the line; the name is the bundle's own, so it dead-letters rather than parking the world",
+  },
   "schedule-args-too-large": {
     owner: "game",
     why: "#602: a handler scheduled an event whose args serialize to more than `WORLD_SCHEDULE_ARGS_MAX_BYTES` UTF-8 bytes of JSON. A host stores the args inside the event's row, so an event past it is one no host should have to write. The args are the bundle's own, so it dead-letters rather than parking the world",

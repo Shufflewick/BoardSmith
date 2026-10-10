@@ -2027,7 +2027,12 @@ queue, rather than failing a check on the way in.
   one. A scheduled event is the clock issuing one of the world's verbs, not a
   second kind of thing a world can be told -- the clock and a player reach the
   same registry. It has nobody acting, so naming a seated action is refused
-  rather than answered by inventing a player for it.
+  rather than answered by inventing a player for it. A name this world does
+  not register is refused at the `schedule()` line (`schedule-unknown-action`),
+  not when the event comes due, and a name may be at most **128 UTF-8 bytes**
+  (`WORLD_SCHEDULE_ACTION_MAX_BYTES`, `schedule-action-too-long`). The length is
+  checked separately because the host re-plans every request without your
+  action list, so it can bound the name where it cannot check it.
 - **`args`** are the action's own, and they must be **JSON scalars**: a string, a
   number, a boolean or null. Never an element, an array or an object. A schedule
   row outlives eviction and rehydration, so a stored element id names an element
@@ -2045,7 +2050,11 @@ queue, rather than failing a check on the way in.
   (`WORLD_SCHEDULE_KEY_MAX_BYTES`), and a cancel's key the same. A host stores
   each event under a storage key built from it: percent-encoding makes each
   byte at most three, so 512 bytes is at most 1536 encoded, which leaves 512 of
-  workerd's 2048-byte key limit for the host's own prefix and owner.
+  workerd's 2048-byte key limit for the host's own prefix and owner. A key
+  must also be **well-formed Unicode** (`schedule-key-malformed`): a lone half
+  of a surrogate pair, usually from slicing a string through an emoji, cannot
+  be percent-encoded. Args are not held to this, because a host stores them by
+  structured clone and their JSON escapes a lone surrogate.
 - **`everyMs`** makes it a **recurrence**. `delayMs` is the first occurrence,
   `everyMs` the gap between the rest, and the host re-arms it in the same write
   that settles the occurrence it just ran, so you never write the re-arm and
@@ -2732,6 +2741,9 @@ thing next time.
 | `invalid-schedule-interval` | A non-positive or non-finite `everyMs`, which is a wake that re-arms instantly forever. |
 | `invalid-schedule-command` | A schedule request that names no action, names a seated one, or carries an argument that is not a JSON scalar. |
 | `schedule-key-too-long` | A schedule or cancel key past 512 UTF-8 bytes, which no host can store as part of a storage key. |
+| `schedule-key-malformed` | A schedule or cancel key that is not well-formed Unicode (it holds a lone UTF-16 surrogate), which no host can percent-encode into a storage key. |
+| `schedule-unknown-action` | A schedule naming an action this world does not register. The refusal lists the clock actions it can schedule. |
+| `schedule-action-too-long` | A schedule whose action name is past 128 UTF-8 bytes. |
 | `schedule-args-too-large` | A schedule's args whose JSON is past 4096 UTF-8 bytes. Keep the data in a partition and pass its name. |
 | `invalid-schedule-cancel` | A cancel that names no key. A cancel is keyed the way arming is keyed, so a nameless one addresses nothing; cancelling a key nothing holds is a no-op rather than this. |
 | `engine-not-world-mode` | The engine was built over a game that is not in world mode. |

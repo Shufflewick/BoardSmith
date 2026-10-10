@@ -2627,6 +2627,27 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * `undeclared-partition` are classified, and a host's park ladder reads the
    * CODE rather than the sentence.
    */
+  /**
+   * A SCHEDULED ACTION THIS WORLD DOES NOT REGISTER, refused at the line (#603).
+   *
+   * Asked here and not in `scheduleBudget`, because only the engine holds the
+   * bundle's actions; the parent re-plans without them and bounds the name's
+   * length instead. Asked after `admit`, so a request with no action name at
+   * all is still refused as the wake that runs nothing.
+   */
+  private unknownScheduledAction(action: string): WorldRefusal | null {
+    if (this.actions.has(action)) return null;
+    const clock = [...this.actions.values()]
+      .filter((definition) => definition.world?.seatless === true)
+      .map((definition) => definition.name);
+    return worldRefusal(
+      "schedule-unknown-action",
+      `A schedule named the action ${JSON.stringify(action)}, and this world registers no action ` +
+        `by that name. The clock actions it can schedule are: ` +
+        `${clock.length > 0 ? clock.join(", ") : "none -- build one with `worldClockAction()`"}.`,
+    );
+  }
+
   private dispatchFacilities(
     action: string,
     named: readonly string[],
@@ -2852,7 +2873,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         // re-plans everything before it writes a single event; this is what
         // makes the refusal land inside the action, so the whole thing unwinds
         // and `refused` means the world is unchanged.
-        const refusal = budget.admit(request);
+        const refusal = budget.admit(request) ?? this.unknownScheduledAction(request.action);
         if (refusal !== null) raise(refusal);
         ledger.schedules.push(request);
       },
