@@ -24,7 +24,7 @@ describe('DieRenderer and the die registry', () => {
     });
     setDiePreviewComponent(RegisteredDie);
 
-    const wrapper = mount(DieRenderer, { props: { element, depth: 0 } });
+    const wrapper = mount(DieRenderer, { props: { element } });
 
     expect(wrapper.find('.registered-die').text()).toBe('d8:5');
   });

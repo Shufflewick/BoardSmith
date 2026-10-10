@@ -186,10 +186,8 @@ function mountTable(opts: ParityOptions) {
           availableActions: availableActions.value,
           actionMetadata: metadata.value,
           disabledActions: disabledActions.value,
-          playerSeat: 1,
           isMyTurn: true,
           completed: completed.value,
-          autoEndTurn: false,
         });
     },
   });

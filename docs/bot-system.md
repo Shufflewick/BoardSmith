@@ -91,7 +91,7 @@ const myGameBotStrategy: BotStrategy = {
       checker: (g, p) => {
         const center = g.board.cells.filter(c => c.isCentral);
         const playerPieces = center.filter(c => c.piece?.player?.seat === p);
-        return playerPieces.length >= 2;
+        return Math.min(playerPieces.length / 2, 1); // partial credit for one piece
       },
       weight: 0.3,
     },
@@ -100,7 +100,7 @@ const myGameBotStrategy: BotStrategy = {
     exposedKing: {
       checker: (g, p) => {
         const king = g.players.get(p)!.king;
-        return king.isExposed();
+        return king.isExposed() ? 1 : 0;
       },
       weight: -0.5,
     },
@@ -110,7 +110,7 @@ const myGameBotStrategy: BotStrategy = {
       checker: (g, p) => {
         const myPieces = g.pieces.filter(pc => pc.player?.seat === p);
         const oppPieces = g.pieces.filter(pc => pc.player?.seat !== p);
-        return myPieces.length > oppPieces.length;
+        return myPieces.length > oppPieces.length ? 1 : 0;
       },
       weight: 0.4,
     },
@@ -123,16 +123,22 @@ const bot = createBot(game, MyGame, 'my-game', 1, [], 'medium', myGameBotStrateg
 
 ### Objective Evaluation
 
-During playouts that don't reach a terminal state:
-- If total objective score > 0: returns 0.6 (slightly favorable)
-- If total objective score < 0: returns 0.4 (slightly unfavorable)
-- If total objective score = 0: returns 0.5 (neutral)
+Each `checker` returns an achievement level from 0 to 1: 0 means not achieved,
+1 means fully achieved, and values between give partial credit. Return `1` or
+`0` for a yes/no objective.
 
-Terminal states always use actual win/loss (1.0/0.0).
+When a playout stops before the game ends, the bot scores the position as the
+sum of `weight x checker` over all objectives. It then scales that sum to the
+range 0.1 to 0.9: the lowest possible sum (every negative-weight objective fully
+achieved, every positive one not) maps to 0.1, and the highest possible sum maps
+to 0.9. The score is 0.5 when there are no objectives, or when every weight is 0.
+
+A playout that reaches the end of the game scores 1 for a win, 0 for a loss and
+0.5 when the game declares no winner.
 
 ## Example: Checkers Bot
 
-From Checkers bot.ts:
+A simplified version of the Checkers game's `bot.ts`:
 
 ```typescript
 import type { BotStrategy } from 'boardsmith/bot';
@@ -145,7 +151,7 @@ export const checkersBotStrategy: BotStrategy = {
       checker: (g, p) => {
         const myPieces = countPieces(g, p);
         const oppPieces = countPieces(g, 1 - p);
-        return myPieces > oppPieces;
+        return myPieces > oppPieces ? 1 : 0;
       },
       weight: 0.5,
     },
@@ -154,7 +160,7 @@ export const checkersBotStrategy: BotStrategy = {
     hasKings: {
       checker: (g, p) => {
         const myKings = countKings(g, p);
-        return myKings > 0;
+        return myKings > 0 ? 1 : 0;
       },
       weight: 0.3,
     },
@@ -166,7 +172,7 @@ export const checkersBotStrategy: BotStrategy = {
         const myPiecesInCenter = centerCells.filter(
           c => c.piece?.player?.seat === p
         );
-        return myPiecesInCenter.length >= 2;
+        return myPiecesInCenter.length >= 2 ? 1 : 0;
       },
       weight: 0.2,
     },
@@ -226,7 +232,7 @@ interface BotConfig {
   /** Maximum time in milliseconds before returning best move found. Default: 2000 */
   timeout?: number;
 
-  /** Number of parallel ensemble searches. Default: 1 */
+  /** Number of ensemble searches, run one after another and sharing `timeout`. Default: 1 */
   parallel?: number;
 }
 ```
@@ -237,7 +243,7 @@ interface BotConfig {
 
 2. **Playout depth**: Deeper playouts give more accurate evaluations but take longer. 3-5 is usually sufficient.
 
-3. **Timeout**: The timeout ensures the bot always returns within a reasonable time, even if iterations haven't completed.
+3. **Timeout**: The timeout ensures the bot always returns within a reasonable time, even if iterations haven't completed. A parallel bot (`parallel > 1`) runs its searches one after another within that one timeout: each gets an equal share of the time left, so a `hard` move takes at most its 2000 ms, not 2000 ms per search.
 
 4. **Branching factor**: Games with many possible moves per turn will have fewer iterations explored per move. The bot samples up to 20 choices per selection to limit combinatorial explosion.
 

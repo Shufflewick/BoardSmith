@@ -67,7 +67,7 @@ describe('GridBoardRenderer fluid sizing', () => {
   it('sets --cols on the board-with-labels wrapper matching the grid column count', () => {
     const element = buildGridElement(8, 6);
     const wrapper = mount(GridBoardRenderer, {
-      props: { element, depth: 0 },
+      props: { element },
       global: { provide: {} },
     });
 
@@ -83,7 +83,7 @@ describe('GridBoardRenderer fluid sizing', () => {
   it('sets --rows on the board-with-labels wrapper matching the grid row count', () => {
     const element = buildGridElement(8, 6);
     const wrapper = mount(GridBoardRenderer, {
-      props: { element, depth: 0 },
+      props: { element },
       global: { provide: {} },
     });
 
@@ -105,7 +105,7 @@ describe('GridBoardRenderer fluid sizing', () => {
     };
     const element = buildGridElement(2, 2, [cell]);
     const wrapper = mount(GridBoardRenderer, {
-      props: { element, depth: 0 },
+      props: { element },
       global: { provide: {} },
     });
 
@@ -125,7 +125,7 @@ describe('GridBoardRenderer fluid sizing', () => {
     // --cols/--rows so --cell can resolve at runtime.
     const element = buildGridElement(10, 10);
     const wrapper = mount(GridBoardRenderer, {
-      props: { element, depth: 0 },
+      props: { element },
       global: { provide: {} },
     });
 

@@ -49,7 +49,7 @@ function mountCard(bi: BoardInteractionInstance, cardId = 1) {
       provideBoardInteraction(bi);
     },
     render() {
-      return h(CardRenderer, { element: makeCard(cardId), depth: 0 });
+      return h(CardRenderer, { element: makeCard(cardId) });
     },
   });
   return mount(Wrapper);

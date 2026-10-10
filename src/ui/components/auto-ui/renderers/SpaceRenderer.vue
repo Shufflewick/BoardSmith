@@ -30,7 +30,6 @@ interface GameElement {
 
 const props = defineProps<{
   element: GameElement;
-  depth: number;
 }>();
 
 // Board interaction for all six required states + drop-target (zone renderer)
@@ -195,7 +194,6 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
         v-for="(child, index) in children"
         :key="child.id"
         :element="child"
-        :depth="depth + 1"
         :style="{ '--card-index': index, '--card-count': children.length }"
       />
     </div>

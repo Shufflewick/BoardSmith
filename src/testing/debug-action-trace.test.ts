@@ -61,7 +61,7 @@ class TraceGame extends Game<TraceGame, Player> {
       Action.create<TraceGame>('pickEmpty')
         .chooseElement('token', {
           elementClass: Token,
-          filter: (element) => (element as Token).value > 99,
+          filter: (element) => element.value > 99,
         })
         .execute(() => ({ success: true })),
     );

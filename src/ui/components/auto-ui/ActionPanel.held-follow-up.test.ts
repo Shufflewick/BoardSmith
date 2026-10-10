@@ -21,7 +21,7 @@ const held = {
 describe('a held follow-up in the Action Panel', () => {
   it('is offered as a button when the step offers nothing else, and the button resumes it', async () => {
     const controller = stubActionController({ heldFollowUp: ref(held) });
-    const wrapper = mountPanel(controller, { availableActions: [], playerSeat: 1, isMyTurn: true });
+    const wrapper = mountPanel(controller, { availableActions: [], isMyTurn: true });
 
     const button = wrapper.find('[data-bs-follow-up]');
     expect(button.exists()).toBe(true);
@@ -40,7 +40,6 @@ describe('a held follow-up in the Action Panel', () => {
         loot: { name: 'loot', prompt: 'Loot the site', selections: [] },
         rest: { name: 'rest', prompt: 'Rest', selections: [] },
       },
-      playerSeat: 1,
       isMyTurn: true,
     });
 
@@ -65,7 +64,7 @@ describe('a held follow-up in the Action Panel', () => {
     const viewingHistory = ref(true);
     const wrapper = mountPanel(
       controller,
-      { availableActions: [], playerSeat: 1, isMyTurn: true },
+      { availableActions: [], isMyTurn: true },
       { provide: { [GAME_CONTEXT_KEYS.isViewingHistory as symbol]: viewingHistory } },
     );
     expect(wrapper.find('[data-bs-follow-up]').exists()).toBe(false);

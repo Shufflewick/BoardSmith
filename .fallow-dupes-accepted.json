@@ -40,6 +40,14 @@
       ]
     },
     {
+      "content": "0b60693abaf60f66",
+      "lines": 24,
+      "files": [
+        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
+      ]
+    },
+    {
       "content": "1207ddfa1fa44b57",
       "lines": 8,
       "files": [
@@ -127,13 +135,6 @@
       "files": [
         "src/ui/components/helpers/FlyingCardsOverlay.vue",
         "src/ui/components/helpers/ZoomPreviewOverlay.vue"
-      ]
-    },
-    {
-      "content": "310bf9041854f2cd",
-      "lines": 8,
-      "files": [
-        "src/cli/dev-host/DevHost.vue"
       ]
     },
     {
@@ -236,25 +237,10 @@
       ]
     },
     {
-      "content": "68d34a55e2e18ad1",
-      "lines": 25,
-      "files": [
-        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
-      ]
-    },
-    {
       "content": "6fe0a0be1e32e0c6",
       "lines": 13,
       "files": [
         "src/ui/components/PlayShell.vue"
-      ]
-    },
-    {
-      "content": "71218bdc04fb8152",
-      "lines": 33,
-      "files": [
-        "src/engine/element/game.ts"
       ]
     },
     {
@@ -517,7 +503,7 @@
       ]
     },
     {
-      "content": "d9ab14f07e4d1fb5",
+      "content": "d2c8c895c0955ba2",
       "lines": 32,
       "files": [
         "src/ui/components/auto-ui/AutoRenderer.vue",
@@ -530,14 +516,6 @@
       "lines": 5,
       "files": [
         "src/engine/element/game.ts"
-      ]
-    },
-    {
-      "content": "ec5f8cbeca8feebc",
-      "lines": 8,
-      "files": [
-        "scripts/action-bar-collapse-browser.mjs",
-        "scripts/multiline-text-browser.mjs"
       ]
     },
     {

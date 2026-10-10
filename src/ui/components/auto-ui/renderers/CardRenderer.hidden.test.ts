@@ -20,7 +20,7 @@ const overlay: PresentationOverlay = {
 
 function mountCard(element: ReturnType<typeof hiddenOpponentCard>) {
   return mount(CardRenderer, {
-    props: { element, depth: 0 },
+    props: { element },
     global: { provide: { [GAME_CONTEXT_KEYS.presentation]: computed(() => overlay) } },
   });
 }

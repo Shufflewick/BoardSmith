@@ -131,7 +131,6 @@ describe('ActionPanel interaction tests', () => {
       },
       props: {
         availableActions: ['twoStepMove'],
-        playerSeat: 1,
         isMyTurn: true,
       },
     });
@@ -199,7 +198,7 @@ describe('ActionPanel interaction tests', () => {
 
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
-      props: { availableActions: ['twoStepMove'], playerSeat: 1, isMyTurn: true },
+      props: { availableActions: ['twoStepMove'], isMyTurn: true },
     });
 
     expect(controller.currentPick.value?.name).toBe('destination');
@@ -261,7 +260,7 @@ describe('ActionPanel interaction tests', () => {
 
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
-      props: { availableActions: ['twoStepMove'], playerSeat: 1, isMyTurn: true },
+      props: { availableActions: ['twoStepMove'], isMyTurn: true },
     });
 
     expect(controller.currentPick.value?.name).toBe('destination');
@@ -321,7 +320,6 @@ describe('ActionPanel interaction tests', () => {
       },
       props: {
         availableActions: ['notationChoice'],
-        playerSeat: 1,
         isMyTurn: true,
       },
     });

@@ -27,7 +27,6 @@ interface GameElement {
 
 defineProps<{
   topLevelChildren: GameElement[];
-  gameView?: GameElement | null;
 }>();
 </script>
 
@@ -38,7 +37,6 @@ defineProps<{
       v-for="el in topLevelChildren"
       :key="el.id"
       :element="el"
-      :depth="0"
     />
   </div>
 </template>

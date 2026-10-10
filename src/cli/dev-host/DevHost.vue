@@ -68,14 +68,33 @@ const nameInput = ref('');
 const colorInput = ref<string | undefined>(undefined);
 
 // ── Lobby gameOption/preset selector (D13/DEVHOST-01) ─────────────────────────
-// Seeded from each declared option's `.default`; a chosen preset overlays its
-// `options` bundle on top (mirrors the colorInput precedent). Apply sends the
-// resolved selection to the host as a `configure` message — the host (Plan 02,
-// T-161-02) is the authoritative validator, this is advisory only.
-const optionSelection = ref<Record<string, unknown>>(
-  Object.fromEntries(cfg.gameOptions.map((o) => [o.id, o.default])),
-);
+// The host owns which options are applied (`--game-option`/`--preset` at
+// startup, then each accepted `configure`) and says so in every lobby message
+// (#541). The fields start from the declared defaults until that arrives; a
+// chosen preset overlays its `options` bundle on top (mirrors the colorInput
+// precedent). Apply sends the resolved selection to the host as a `configure`
+// message — the host (Plan 02, T-161-02) is the authoritative validator, this
+// is advisory only.
+const declaredOptionDefaults = Object.fromEntries(cfg.gameOptions.map((o) => [o.id, o.default]));
+const appliedOptions = ref<Record<string, unknown>>({ ...declaredOptionDefaults });
+const optionSelection = ref<Record<string, unknown>>({ ...declaredOptionDefaults });
 const presetSelection = ref('');
+let appliedOptionsKey = '';
+
+/**
+ * Take the host's applied selection from a lobby message. The fields are reset
+ * to it, and the preset picker cleared, only when it changed, so a rebroadcast
+ * (someone joining) does not throw away an edit the player has not applied yet,
+ * and a preset picked before the change is not sent again by the next Apply.
+ */
+function onAppliedOptions(applied: Record<string, unknown>): void {
+  const key = JSON.stringify(applied);
+  if (key === appliedOptionsKey) return;
+  appliedOptionsKey = key;
+  appliedOptions.value = { ...declaredOptionDefaults, ...applied };
+  optionSelection.value = { ...appliedOptions.value };
+  presetSelection.value = '';
+}
 
 function onPresetSelect(): void {
   const preset = cfg.presets.find((p) => p.name === presetSelection.value);
@@ -232,6 +251,7 @@ function onHostMessage(msg: Record<string, unknown>): void {
     case 'lobby': {
       seats.value = msg.seats as SeatInfo[];
       setDebugAvailable(msg.debug === true);
+      onAppliedOptions(msg.gameOptions as Record<string, unknown>);
       const mine = (msg.seats as SeatInfo[]).find((s) => s.mine);
       // Don't clear an already-known seat from a lobby broadcast (init is authoritative).
       if (mine) mySeat.value = mine.seat;
@@ -465,14 +485,14 @@ function choiceLabel(choice: { value: unknown; label?: string }): string {
 }
 
 /**
- * Resolve the display label for an option's default value. The default is
- * matched to its choice structurally, so an object-valued default finds the
- * choice it equals.
+ * Resolve the display label for one of an option's values. The value is
+ * matched to its choice structurally, so an object value finds the choice it
+ * equals.
  */
-function optionDefaultLabel(opt: { default?: unknown; choices?: Array<{ value: unknown; label?: string }> }): string {
-  if (opt.default === undefined || opt.default === null) return '—';
-  const match = opt.choices?.find((c) => valuesEqual(c.value, opt.default));
-  return match ? choiceLabel(match) : getDisplayFromValue(opt.default);
+function optionValueLabel(opt: { choices?: Array<{ value: unknown; label?: string }> }, value: unknown): string {
+  if (value === undefined || value === null) return '—';
+  const match = opt.choices?.find((c) => valuesEqual(c.value, value));
+  return match ? choiceLabel(match) : getDisplayFromValue(value);
 }
 
 /**
@@ -907,7 +927,7 @@ onUnmounted(() => {
                 class="table-setup__row"
               >
                 <dt>{{ opt.label || opt.id }}</dt>
-                <dd>{{ optionDefaultLabel(opt) }}</dd>
+                <dd>{{ optionValueLabel(opt, appliedOptions[opt.id]) }}</dd>
               </div>
             </template>
             <template v-if="cfg.playerOptions.length">
@@ -918,7 +938,7 @@ onUnmounted(() => {
                 class="table-setup__row"
               >
                 <dt>{{ opt.label || opt.id }}</dt>
-                <dd>{{ optionDefaultLabel(opt) }}</dd>
+                <dd>{{ optionValueLabel(opt, opt.default) }}</dd>
               </div>
             </template>
           </dl>

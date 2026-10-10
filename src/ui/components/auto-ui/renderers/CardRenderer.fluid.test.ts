@@ -119,7 +119,7 @@ describe('DeckRenderer.vue — fluid card-w token (IA-05)', () => {
 describe('CardRenderer mount', () => {
   it('renders a visible card without error', () => {
     const wrapper = mount(CardRenderer, {
-      props: { element: buildCardElement(), depth: 0 },
+      props: { element: buildCardElement() },
       global: { provide: {} },
     });
     expect(wrapper.exists()).toBe(true);
@@ -128,7 +128,7 @@ describe('CardRenderer mount', () => {
 
   it('renders a hidden card (card-back) without error', () => {
     const wrapper = mount(CardRenderer, {
-      props: { element: buildCardElement({ attributes: { __hidden: true } }), depth: 0 },
+      props: { element: buildCardElement({ attributes: { __hidden: true } }) },
       global: { provide: {} },
     });
     expect(wrapper.exists()).toBe(true);

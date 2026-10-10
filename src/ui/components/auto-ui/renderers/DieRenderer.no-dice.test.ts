@@ -22,7 +22,7 @@ describe('DieRenderer without dice support', () => {
     expect(getDiePreviewComponent()).toBeNull();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    const wrapper = mount(DieRenderer, { props: { element, depth: 0 } });
+    const wrapper = mount(DieRenderer, { props: { element } });
 
     expect(wrapper.find('.die-label').text()).toBe('red-die');
     expect(wrapper.find('.die-container').element.children).toHaveLength(1);
@@ -31,9 +31,9 @@ describe('DieRenderer without dice support', () => {
 
     // A second die and a remount must not repeat it: every game gets a dev auto-UI,
     // so a game with many dice and its own UI would otherwise flood the console.
-    mount(DieRenderer, { props: { element: { ...element, id: 8, name: 'blue-die' }, depth: 0 } });
+    mount(DieRenderer, { props: { element: { ...element, id: 8, name: 'blue-die' } } });
     wrapper.unmount();
-    mount(DieRenderer, { props: { element, depth: 0 } });
+    mount(DieRenderer, { props: { element } });
 
     const diceWarnings = warn.mock.calls.filter(([message]) => String(message).includes('boardsmith/ui/dice'));
     expect(diceWarnings).toHaveLength(1);

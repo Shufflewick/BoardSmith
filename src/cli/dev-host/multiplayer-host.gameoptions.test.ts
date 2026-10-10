@@ -285,3 +285,26 @@ describe('MultiplayerHost — a client cannot reach the seed or the element id k
     }
   });
 });
+
+describe('MultiplayerHost — every lobby message says which game options are applied (#541)', () => {
+  const lobbyOf = (frame: HostOutbound | undefined) => frame as Extract<HostOutbound, { type: 'lobby' }> | undefined;
+
+  it('a selection made at startup (`--game-option`) is the one a lobby message carries, not the declared default', async () => {
+    const baseGameOptions = selectGameOptions(declaredGameOptions, { ...declaredDefaults, difficulty: 'hard', rounds: 5 });
+    const { host, lastOfType, getStartOptions } = makeHost({ baseGameOptions });
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'getLobby', requestId: 'q' });
+
+    expect(getStartOptions().rounds).toBe(5);
+    expect(lobbyOf(lastOfType('A', 'lobby'))?.gameOptions).toEqual({ difficulty: 'hard', rounds: 5, hardMode: false, level: 1 });
+  });
+
+  it('an accepted `configure` is broadcast to every page, so a second page shows it too', async () => {
+    const { host, lastOfType } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('B', { type: 'hello' });
+    await host.handleMessage('A', { type: 'configure', gameOptions: { rounds: 2 } });
+
+    expect(lobbyOf(lastOfType('B', 'lobby'))?.gameOptions).toMatchObject({ rounds: 2, difficulty: 'easy' });
+  });
+});

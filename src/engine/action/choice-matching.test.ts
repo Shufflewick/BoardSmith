@@ -3,7 +3,7 @@
  * two values share a key exactly when the engine counts them as the same choice.
  */
 import { describe, it, expect } from 'vitest';
-import { choiceValueKey, valuesEqual } from './choice-matching.js';
+import { choiceValueKey, findMatchingChoice, valuesEqual } from './choice-matching.js';
 
 const VALUES: unknown[] = [
   'red',
@@ -31,5 +31,16 @@ describe('choiceValueKey (#563)', () => {
           .toBe(valuesEqual(a, b));
       }
     }
+  });
+});
+
+describe('display text matching (#507)', () => {
+  it('prefers an exact match on any choice over a case-insensitive one on an earlier choice', () => {
+    const choices = [{ value: 'Go' }, { value: 'x', label: 'go' }];
+    expect(findMatchingChoice('go', choices)?.value).toBe('x');
+  });
+
+  it('still matches case-insensitively when nothing matches exactly', () => {
+    expect(findMatchingChoice('GO', [{ value: 'Go' }, { value: 'x', label: 'stay' }])?.value).toBe('Go');
   });
 });

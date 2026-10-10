@@ -100,6 +100,12 @@ export type HostOutbound =
       seats: LobbySeat[];
       minPlayers: number;
       playerCount: number;
+      /**
+       * The game options the next (re)start uses: `--game-option`/`--preset`
+       * at startup, then each accepted `configure` (#541). The page shows
+       * these, never the declared defaults, which may not be what is applied.
+       */
+      gameOptions: GameOptionSelection;
       requestId?: string | null;
     }
   | { type: 'joined'; seat: number }
@@ -1743,6 +1749,7 @@ export class MultiplayerHost {
       })),
       minPlayers: this.opts.minPlayers,
       playerCount: this.opts.playerCount,
+      gameOptions: this.appliedGameOptions,
     };
   }
 

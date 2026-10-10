@@ -53,7 +53,7 @@ function mountPanel() {
   const wrapper = mount(ActionPanel, {
     attachTo: document.body,
     global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
-    props: { availableActions: ['enterWorld'], playerSeat: 1, isMyTurn: true },
+    props: { availableActions: ['enterWorld'], isMyTurn: true },
   });
   return { wrapper, controller, sendAction };
 }
@@ -186,7 +186,7 @@ describe('a six-selection action, the shape the report measured', () => {
     const wrapper = mount(ActionPanel, {
       attachTo: document.body,
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
-      props: { availableActions: ['create'], playerSeat: 1, isMyTurn: true },
+      props: { availableActions: ['create'], isMyTurn: true },
     });
     await nextTick();
 

@@ -12,8 +12,8 @@
  * Ordering: specific types (card/hand/deck/die/grid/hex) first at higher priorities;
  * piece (leaf node) second at priority 2; space (catch-all) last at priority 1.
  *
- * NOTE: test() has no access to `depth` — depth-dependent detection (grid-cell, hex-cell)
- * is handled internally by GridBoardRenderer and HexBoardRenderer, not top-level registry.
+ * NOTE: test() sees only the element, not where it sits — grid-cell and hex-cell detection
+ * is handled internally by GridBoardRenderer and HexBoardRenderer, not the top-level registry.
  */
 
 import { registerRenderer } from './renderer-registry.js';

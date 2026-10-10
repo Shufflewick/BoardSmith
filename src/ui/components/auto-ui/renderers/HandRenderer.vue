@@ -36,7 +36,6 @@ type ImageInfo =
 
 const props = defineProps<{
   element: GameElement;
-  depth: number;
 }>();
 
 // ---------------------------------------------------------------------------
@@ -319,7 +318,6 @@ void isBoardSelected;
             v-for="(child, index) in backRowCards"
             :key="child.id"
             :element="child"
-            :depth="depth + 1"
             class="hand-card"
             :style="{ '--card-index': index, '--card-count': backRowCards.length, '--row': 'back' }"
           />
@@ -349,7 +347,6 @@ void isBoardSelected;
             v-for="(child, index) in frontRowCards"
             :key="child.id"
             :element="child"
-            :depth="depth + 1"
             class="hand-card"
             :style="{ '--card-index': index, '--card-count': frontRowCards.length, '--row': 'front' }"
           />

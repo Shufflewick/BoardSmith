@@ -31,7 +31,7 @@ import { isDevMode, devWarn, isDevThrowEnabled } from '../../utils/dev.js';
 import { Action } from './action-builder.js';
 import { PlayerFacingError, NotSimulableError } from '../errors.js';
 import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
-import { findMatchingChoice, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
+import { findMatchingChoice, isSerializedElement, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
 import { numberRuleErrors } from './number-rules.js';
 import { formatRepeatCandidates } from '../element/pick-candidates.js';
 import type { ChoiceWithRefs, WarningEntry } from '../../types/protocol.js';
@@ -388,35 +388,6 @@ export class ActionExecutor {
   }
 
   /**
-   * Resolve a single selection's raw value to its resolved form.
-   * Element IDs become Element objects, choice values get smart-resolved, etc.
-   * @internal
-   */
-  resolveSelectionValue(selection: Selection, value: unknown, player: Player): unknown {
-    switch (selection.type) {
-      case 'element':
-      case 'elements': {
-        if (typeof value === 'number') {
-          return this.game.getElementById(value) ?? value;
-        }
-        if (this.looksLikeSerializedElement(value)) {
-          return this.game.getElementById((value as { id: number }).id) ?? value;
-        }
-        return value;
-      }
-      case 'choice': {
-        if (this.isSerializedElement(value)) {
-          return this.game.getElementById((value as { id: number }).id) ?? value;
-        }
-        const candidates = this.candidatesOf(selection, { game: this.game, player, args: {} });
-        return this.smartResolveChoiceValue(value, candidates);
-      }
-      default:
-        return value;
-    }
-  }
-
-  /**
    * Resolve serialized args (player indices, element IDs) to actual objects.
    * This is needed because network-serialized args use indices/IDs instead of objects.
    *
@@ -440,89 +411,13 @@ export class ActionExecutor {
     const resolved = { ...args };
     const selectionNames = new Set(action.selections.map(s => s.name));
 
-    // First pass: resolve selection args based on their type
+    // First pass: each selection's value, with the selections before it
+    // already resolved in view, so a `choices` callback that reads an earlier
+    // pick sees what it named.
     for (const selection of action.selections) {
       const value = args[selection.name];
       if (value === undefined || value === null) continue;
-
-      switch (selection.type) {
-        case 'element': {
-          if (Array.isArray(value)) {
-            // A repeating chooseElement's picks: one element per pick, in the
-            // order they were made (#325). Any other array is left as sent, for
-            // validateSelection to refuse.
-            if (this.isRepeatingSelection(selection)) {
-              resolved[selection.name] = value.map(v => this.resolveElementItem(v, game));
-            }
-          } else if (typeof value === 'number') {
-            // If value is a number, resolve to actual GameElement by ID
-            const element = game.getElementById(value);
-            if (element) {
-              resolved[selection.name] = element;
-            }
-          } else if (this.looksLikeSerializedElement(value)) {
-            // Handle serialized element objects from followUp args
-            const element = game.getElementById((value as { id: number }).id);
-            if (element) {
-              resolved[selection.name] = element;
-            }
-          }
-          break;
-        }
-        case 'elements': {
-          // chooseElements() selection - value is element ID(s)
-          // Resolve to actual GameElement object(s)
-          if (typeof value === 'number') {
-            // Single element ID
-            const element = game.getElementById(value);
-            if (element) {
-              resolved[selection.name] = element;
-            }
-          } else if (Array.isArray(value)) {
-            // Multi-select: array of element IDs or serialized elements.
-            const elements = value.map(v => this.resolveElementItem(v, game));
-            resolved[selection.name] = elements;
-          }
-          break;
-        }
-        case 'choice': {
-          // If the choice value is a serialized element (object with id and className),
-          // resolve it to the actual GameElement
-          if (this.isSerializedElement(value)) {
-            const element = game.getElementById((value as { id: number }).id);
-            if (element) {
-              resolved[selection.name] = element;
-            }
-          } else if (Array.isArray(value) && player) {
-            // multiSelect chooseFrom: canonicalize each array item exactly like
-            // the scalar path below, so element IDs / display strings sent by
-            // custom UIs resolve to canonical choice values before validation
-            // and never reach execute() as raw IDs (CR-01). Gated on multiSelect
-            // being configured so a single choice whose VALUE is itself an
-            // array is never corrupted by per-item resolution.
-            if ((selection as ChoiceSelection).multiSelect !== undefined) {
-              const candidates = this.candidatesOf(selection, { game, player, args: resolved });
-              resolved[selection.name] = value.map((item) => {
-                if (this.isSerializedElement(item)) {
-                  const element = game.getElementById((item as { id: number }).id);
-                  return element ?? item;
-                }
-                return this.smartResolveChoiceValue(item, candidates);
-              });
-            }
-          } else if (player) {
-            // Try smart resolution: element ID or display string → actual choice
-            // This supports custom UIs sending element IDs for chooseFrom selections
-            const candidates = this.candidatesOf(selection, { game, player, args: resolved });
-            const resolvedValue = this.smartResolveChoiceValue(value, candidates);
-
-            if (resolvedValue !== value) {
-              resolved[selection.name] = resolvedValue;
-            }
-          }
-          break;
-        }
-      }
+      resolved[selection.name] = this.resolveOne(selection, value, player, resolved, game);
     }
 
     // Second pass: resolve non-selection args that unambiguously represent element
@@ -542,7 +437,7 @@ export class ActionExecutor {
       // would hand the handler a wrong-class element (the corruption class ENG-05
       // removed, one step removed). On mismatch, leave the arg unresolved so it
       // fails loudly downstream -- mirroring relinkFlowVariables (flow/engine.ts).
-      if (this.isSerializedElement(value)) {
+      if (isSerializedElement(value)) {
         const serialized = value as { id: number; className: string };
         const element = game.getElementById(serialized.id);
         if (element && element.constructor.name === serialized.className) {
@@ -561,10 +456,77 @@ export class ActionExecutor {
   }
 
   /**
-   * One entry of an element array (a chooseElements pick, or one pick of a
-   * repeating chooseElement) resolved to its element. An id that resolves to
-   * nothing is KEPT as its id, not dropped, so validateSelection can refuse the
-   * submission with an actionable error instead of letting it vanish.
+   * What one submitted value of a selection names, as the game's callbacks
+   * receive it: an element id or `{ id }` becomes the element, and a
+   * `chooseFrom` value sent as an element id, a display string or a label
+   * becomes the choice value it names -- item by item for a multiSelect or an
+   * orderedList, and judged against the choices `args` (the picks before it)
+   * produce. A value that names nothing is returned as sent, for
+   * `matchOffered` to refuse.
+   *
+   * The one resolver: a whole submission (`resolveArgs`), a selection step and
+   * a repeating pick all call it, so a pick means the same thing on every path
+   * (#507). Raw ids and display text must never reach `onSelect` or `execute`.
+   *
+   * Smart choice resolution needs the player the choices are built for, so
+   * without one a choice value is left as sent. A caller that already holds
+   * this pick's candidates passes them as `candidates`, so the `choices`
+   * callback is not run a second time for the same pick.
+   */
+  private resolveOne(
+    selection: Selection,
+    value: unknown,
+    player: Player | undefined,
+    args: Record<string, unknown>,
+    game: Game,
+    candidates?: readonly Candidate[],
+  ): unknown {
+    switch (selection.type) {
+      case 'element':
+        // A repeating chooseElement's picks: one element per pick, in the
+        // order they were made (#325). Any other array is left as sent, for
+        // validateSelection to refuse.
+        if (Array.isArray(value)) {
+          return this.isRepeatingSelection(selection) ? value.map(v => this.resolveElementItem(v, game)) : value;
+        }
+        return this.resolveElementItem(value, game);
+      case 'elements':
+        return Array.isArray(value) ? value.map(v => this.resolveElementItem(v, game)) : this.resolveElementItem(value, game);
+      case 'choice':
+        return this.resolveChoiceValue(selection as ChoiceSelection, value, player, args, game, candidates);
+      default:
+        return value;
+    }
+  }
+
+  /** A `chooseFrom` value resolved as {@link resolveOne} describes. */
+  private resolveChoiceValue(
+    selection: ChoiceSelection,
+    value: unknown,
+    player: Player | undefined,
+    args: Record<string, unknown>,
+    game: Game,
+    known: readonly Candidate[] | undefined,
+  ): unknown {
+    if (isSerializedElement(value)) return game.getElementById((value as { id: number }).id) ?? value;
+    if (!player) return value;
+    // Only a multiSelect or an orderedList is resolved per item, so a single
+    // choice whose VALUE is itself an array is never taken apart.
+    if (Array.isArray(value) && selection.multiSelect === undefined && selection.orderedList === undefined) return value;
+    const candidates = known ?? this.candidatesOf(selection, { game, player, args });
+    const resolveItem = (item: unknown): unknown => {
+      if (isSerializedElement(item)) return game.getElementById((item as { id: number }).id) ?? item;
+      const match = findMatchingChoice(item, candidates);
+      return match === undefined ? item : match.value;
+    };
+    return Array.isArray(value) ? value.map(resolveItem) : resolveItem(value);
+  }
+
+  /**
+   * An element reference (an id, or an object with a numeric `id`) resolved to
+   * its element. A reference that names nothing is KEPT as its id, not
+   * dropped, so the pick is refused with an actionable error instead of
+   * vanishing, and `unavailable` is handed the id the client sent.
    */
   private resolveElementItem(item: unknown, game: Game): unknown {
     if (typeof item === 'number') return game.getElementById(item) ?? item;
@@ -584,15 +546,6 @@ export class ActionExecutor {
     if (typeof value !== 'object' || value === null) return false;
     const obj = value as Record<string, unknown>;
     return typeof obj.id === 'number';
-  }
-
-  /**
-   * Check if a value is a serialized game element (has id and className properties)
-   */
-  private isSerializedElement(value: unknown): boolean {
-    if (typeof value !== 'object' || value === null) return false;
-    const obj = value as Record<string, unknown>;
-    return typeof obj.id === 'number' && typeof obj.className === 'string';
   }
 
   /**
@@ -805,16 +758,16 @@ export class ActionExecutor {
     for (const item of items) {
       let matching: number[] = [];
       for (let i = 0; i < choices.length; i++) {
-        if (this.valuesEqual(choices[i].value, item)) matching.push(i);
+        if (valuesEqual(choices[i].value, item)) matching.push(i);
       }
       if (matching.length === 0) {
         // Raw element ID / display string: resolve to the canonical choice
         // value first, then claim by that identity.
-        const smartMatch = this.trySmartResolveChoice(item, choices);
+        const smartMatch = trySmartResolveChoice(item, choices);
         if (!smartMatch) continue; // invalid item — per-item validation rejects it
         matching = [];
         for (let i = 0; i < choices.length; i++) {
-          if (this.valuesEqual(choices[i].value, smartMatch.value)) matching.push(i);
+          if (valuesEqual(choices[i].value, smartMatch.value)) matching.push(i);
         }
       }
       const free = matching.find(i => !claimed[i]);
@@ -822,55 +775,6 @@ export class ActionExecutor {
       claimed[free] = true;
     }
     return false;
-  }
-
-  /**
-   * Check if two values are equal (handles objects by comparing JSON).
-   *
-   * Delegates to `choice-matching.ts`, which the browser's action controller
-   * imports too -- the two had separate implementations and disagreed (#219).
-   */
-  private valuesEqual(a: unknown, b: unknown): boolean {
-    return valuesEqual(a, b);
-  }
-
-  /**
-   * Check if a value exists in annotated choices (compares against .value)
-   */
-  private annotatedChoicesContain(choices: AnnotatedChoice<unknown>[], value: unknown): boolean {
-    return choices.some(choice => this.valuesEqual(choice.value, value));
-  }
-
-  /**
-   * Try to resolve a value to a valid choice using smart matching.
-   * Handles custom UIs sending element IDs
-   * when using chooseFrom with element-based choices.
-   *
-   * Smart matching tries (in order):
-   * 1. Element ID match: if value is a number and a choice is an element with that ID
-   * 2. Display match: if value is a string matching a choice's display property
-   *
-   * @returns the matched AnnotatedChoice (so callers can enforce `disabled`),
-   *   or undefined when the value cannot be resolved to any choice. Callers
-   *   MUST check `.disabled` on the match — a smart-resolved value must never
-   *   bypass disabled/tutorial-gate enforcement (CR-01).
-   */
-  private trySmartResolveChoice(
-    value: unknown,
-    choices: AnnotatedChoice<unknown>[]
-  ): AnnotatedChoice<unknown> | undefined {
-    return trySmartResolveChoice(value, choices);
-  }
-
-  /**
-   * Resolve a value to the actual choice value using smart matching.
-   * Used by resolveArgs to convert IDs/display strings to actual choice values.
-   *
-   * @returns The resolved choice value, or the original value if no match found
-   */
-  private smartResolveChoiceValue(value: unknown, candidates: Candidate[]): unknown {
-    const match = findMatchingChoice(value, candidates);
-    return match === undefined ? value : match.value;
   }
 
   /**
@@ -924,71 +828,22 @@ export class ActionExecutor {
     if (selection.type === 'choice' || selection.type === 'element') {
       const choices = this.getChoices(selection, player, args, actionName);
 
-      // Handle multiSelect arrays - validate each value in the array
-      if (Array.isArray(value)) {
-        // A single `element` selection is never multiSelect, so an array is
-        // never a valid submission shape for it (WR-08). Without this the
-        // loop below records no error for element selections (its checks are
-        // choice-only) and the raw array reaches execute() untouched.
-        if (selection.type === 'element') {
-          return {
-            valid: false,
-            errors: [
-              `Selection "${selection.name}" expects a single element, got an array of ${value.length}. ` +
-              `Submit one element or element ID; use chooseElements for multi-element selections.`,
-            ],
-          };
-        }
-        for (const v of value) {
-          // Check if this specific array item is disabled
-          const disabledItem = choices.find(c => this.valuesEqual(c.value, v) && c.disabled !== false);
-          if (disabledItem) {
-            errors.push(`Selection disabled: ${disabledItem.disabled}`);
-            continue;
-          }
-          if (!this.annotatedChoicesContain(choices, v)) {
-            // Try smart resolution for choice selections. A smart-resolved
-            // match must still pass the disabled check (CR-01): resolving an
-            // element ID / display string to a choice must never grant access
-            // to a disabled (including tutorial-gated) choice.
-            if (selection.type === 'choice') {
-              const smartMatch = this.trySmartResolveChoice(v, choices);
-              if (!smartMatch) {
-                errors.push(this.unavailableRefusal(
-                  selection, v, context, actionName,
-                  `Invalid selection for "${selection.name}": ${JSON.stringify(v)}. Valid choices: ${this.formatValidChoices(choices)}`,
-                ));
-              } else if (smartMatch.disabled !== false) {
-                errors.push(`Selection disabled: ${smartMatch.disabled}`);
-              }
-            }
-          }
-        }
-      } else {
-        // Check disabled FIRST -- if value matches a disabled item, reject with reason
-        const disabledMatch = choices.find(c => this.valuesEqual(c.value, value) && c.disabled !== false);
-        if (disabledMatch) {
-          errors.push(`Selection disabled: ${disabledMatch.disabled}`);
-        } else if (!this.annotatedChoicesContain(choices, value)) {
-          // Try smart resolution for choice selections; a match must still
-          // pass the disabled check (CR-01, same contract as the array path).
-          if (selection.type === 'choice') {
-            const smartMatch = this.trySmartResolveChoice(value, choices);
-            if (!smartMatch) {
-              errors.push(this.unavailableRefusal(
-                selection, value, context, actionName,
-                `Invalid selection for "${selection.name}": ${JSON.stringify(value)}. Valid choices: ${this.formatValidChoices(choices)}`,
-              ));
-            } else if (smartMatch.disabled !== false) {
-              errors.push(`Selection disabled: ${smartMatch.disabled}`);
-            }
-          } else if (selection.type === 'element') {
-            errors.push(this.unavailableRefusal(
-              selection, value, context, actionName,
-              `Invalid selection for "${selection.name}": ${this.describeSubmittedElement(value)}. Valid elements: ${this.formatValidChoices(choices)}`,
-            ));
-          }
-        }
+      // A single `element` selection is never multiSelect, so an array is
+      // never a valid submission shape for it (WR-08): it would otherwise reach
+      // execute() untouched.
+      if (Array.isArray(value) && selection.type === 'element') {
+        return {
+          valid: false,
+          errors: [
+            `Selection "${selection.name}" expects a single element, got an array of ${value.length}. ` +
+            `Submit one element or element ID; use chooseElements for multi-element selections.`,
+          ],
+        };
+      }
+      // A multiSelect or ordered list is checked item by item.
+      for (const item of Array.isArray(value) ? value : [value]) {
+        const offered = this.matchOffered(selection, item, choices, context, actionName);
+        if ('refusal' in offered) errors.push(offered.refusal);
       }
 
       // Enforce multiSelect min/max bounds on choice selections (ENG-04/F6).
@@ -1040,50 +895,13 @@ export class ActionExecutor {
     // After resolveArgs, values are GameElement objects (not raw IDs)
     if (selection.type === 'elements') {
       const annotatedElements = this.getChoices(selection, player, args, actionName);
-      const validElements = annotatedElements.map(c => c.value) as GameElement[];
-      const validIds = validElements.map(e => e.id);
-      const validNames = () => validElements.map(e => `${e.name} (id: ${e.id})`).join(', ');
 
       const validateElement = (elem: unknown): string | null => {
-        // Handle resolved GameElement objects
-        if (elem && typeof elem === 'object' && 'id' in elem) {
-          const id = (elem as { id: number }).id;
-          // Check disabled first
-          const disabledMatch = annotatedElements.find(
-            c => c.value && typeof c.value === 'object' && 'id' in c.value && (c.value as { id: number }).id === id && c.disabled !== false
-          );
-          if (disabledMatch) {
-            return `Selection disabled: ${disabledMatch.disabled}`;
-          }
-          if (!validIds.includes(id)) {
-            return this.unavailableRefusal(
-              selection, elem, context, actionName,
-              `Element ID ${id} is not a valid choice for "${selection.name}". Valid elements: [${validNames()}]`,
-            );
-          }
-          return null;
+        if (typeof elem !== 'number' && !this.looksLikeSerializedElement(elem)) {
+          return `Expected element or element ID for "${selection.name}", got ${typeof elem}: ${JSON.stringify(elem)}`;
         }
-        // Handle unresolved IDs (numeric element IDs)
-        if (typeof elem === 'number') {
-          // Check disabled first
-          const disabledMatch = annotatedElements.find(
-            c => c.value && typeof c.value === 'object' && 'id' in c.value && (c.value as { id: number }).id === elem && c.disabled !== false
-          );
-          if (disabledMatch) {
-            return `Selection disabled: ${disabledMatch.disabled}`;
-          }
-          if (!validIds.includes(elem)) {
-            // An ID that doesn't resolve to any element at all is "not found";
-            // an ID that resolves but isn't an offered choice is "not valid".
-            // The player is told the same thing either way: it is gone.
-            const detail = this.game.getElementById(elem)
-              ? `Element ID ${elem} is not a valid choice for "${selection.name}". Valid elements: [${validNames()}]`
-              : `Element ID ${elem} not found for "${selection.name}".`;
-            return this.unavailableRefusal(selection, elem, context, actionName, detail);
-          }
-          return null;
-        }
-        return `Expected element or element ID for "${selection.name}", got ${typeof elem}: ${JSON.stringify(elem)}`;
+        const offered = this.matchOffered(selection, elem, annotatedElements, context, actionName);
+        return 'refusal' in offered ? offered.refusal : null;
       };
 
       if (Array.isArray(value)) {
@@ -1173,6 +991,65 @@ export class ActionExecutor {
       valid: refusals.length === 0,
       errors: refusals,
     };
+  }
+
+  /**
+   * The offered choice a submitted value names, or the sentence the player is
+   * told when they cannot have it: the selection's `unavailable` sentence (or
+   * the standard one) when nothing on offer matches, and the `disabled` or
+   * tutorial-gate reason when the match is not selectable.
+   *
+   * A choice is matched exactly first, then by shorthand (an element id, a
+   * display string, a label); an element by its id. `choices` is the
+   * selection's `getChoices` for this pick, with the action's name so the
+   * tutorial gate is in them.
+   *
+   * The one membership rule: `validateSelection` (every selection of a whole
+   * submission, and each selection step) and `processRepeatingStep` all ask
+   * it, so no path can accept what another refuses (#507).
+   */
+  private matchOffered(
+    selection: ChoiceSelection | ElementSelection | ElementsSelection,
+    value: unknown,
+    choices: AnnotatedChoice<unknown>[],
+    context: ActionContext,
+    actionName: string | undefined,
+  ): { match: AnnotatedChoice<unknown> } | { refusal: string } {
+    const match = selection.type === 'choice'
+      ? findMatchingChoice(value, choices)
+      : this.offeredElement(value, choices);
+    if (match === undefined) {
+      const detail = this.notOfferedDetail(selection, value, choices);
+      return { refusal: this.unavailableRefusal(selection, value, context, actionName, detail) };
+    }
+    if (match.disabled !== false) return { refusal: `Selection disabled: ${match.disabled}` };
+    return { match };
+  }
+
+  /** The element choice a submitted element, id or `{ id }` names. */
+  private offeredElement(value: unknown, choices: AnnotatedChoice<unknown>[]): AnnotatedChoice<unknown> | undefined {
+    const id = typeof value === 'number'
+      ? value
+      : this.looksLikeSerializedElement(value) ? (value as { id: number }).id : undefined;
+    if (id === undefined) return undefined;
+    return choices.find((c) => isElement(c.value) && c.value.id === id);
+  }
+
+  /** Why a value matched nothing on offer, for the dev log. */
+  private notOfferedDetail(
+    selection: Selection,
+    value: unknown,
+    choices: AnnotatedChoice<unknown>[],
+  ): string {
+    if (selection.type === 'choice') {
+      return `Invalid selection for "${selection.name}": ${JSON.stringify(value)}. Valid choices: ${this.formatValidChoices(choices)}`;
+    }
+    // An id that names no element at all is "not found"; one that names an
+    // element not on offer is "not valid". The player is told the same thing.
+    if (typeof value === 'number' && !this.game.getElementById(value)) {
+      return `Element ID ${value} not found for "${selection.name}".`;
+    }
+    return `Invalid selection for "${selection.name}": ${this.describeSubmittedElement(value)}. Valid elements: ${this.formatValidChoices(choices)}`;
   }
 
   /**
@@ -1904,12 +1781,9 @@ export class ActionExecutor {
     context: ActionContext
   ): string | null {
     if (!selection.validate) return null;
-    const value = selection.type === 'element' || selection.type === 'elements'
-      ? this.resolveElementItem(pick, this.game)
-      : pick;
     const validate = selection.validate as (v: unknown, a: Record<string, unknown>, c: ActionContext) => boolean | string;
     return interpretValidateResult(
-      validate(value, context.args, context),
+      validate(pick, context.args, context),
       `validate for selection '${selection.name}' of action '${action.name}'`,
       `Invalid ${selection.name}`,
     );
@@ -1937,7 +1811,7 @@ export class ActionExecutor {
       );
     }
     const args = this.repeatingSelectionArgs(action, player, pendingState, selection.name);
-    const enabled = this.getChoices(selection, player, args).filter(c => c.disabled === false);
+    const enabled = this.getChoices(selection, player, args, action.name).filter(c => c.disabled === false);
     if (selection.type === 'element' || selection.type === 'elements') {
       return enabled.flatMap(c => (isElement(c.value) ? [c.value.id] : []));
     }
@@ -2010,72 +1884,42 @@ export class ActionExecutor {
     // Capture before accumulation -- onSelect fires on first iteration only
     const isFirstIteration = pendingState.repeating.iterationCount === 0;
 
-    // Validate the choice is in the available choices
+    // The pick is resolved and checked exactly as any other pick is (#507),
+    // against the choices the picks before it left.
     const context: ActionContext = {
       game: this.game,
       player,
       args: this.repeatingSelectionArgs(action, player, pendingState, selection.name),
     };
-
-    const currentChoices = this.getChoices(selection, player, context.args);
-
-    // For element selections, value is an element ID - validate it exists in choices
-    if (isElementSelection) {
-      const elementId = value as number;
-      // A choice whose value is not a live element cannot be selected by id.
-      // Such values do occur: a `choices`/`elements` closure reading redacted
-      // state yields `undefined` (see enumerate-moves' undefined-choice-value
-      // warning). Narrowing rather than casting turns that into a refused
-      // selection instead of a TypeError on `.id`.
-      const elementChoices = currentChoices.flatMap((c) =>
-        isElement(c.value) ? [{ element: c.value, disabled: c.disabled }] : []
-      );
-      if (!elementChoices.some((c) => c.element.id === elementId)) {
-        const nextChoices = formatRepeatCandidates(currentChoices, repeatSelection, context, warnings);
-        return { done: false, error: `Invalid element ID: ${elementId}`, nextChoices, warnings: said() };
-      }
-      // Check if the selected element is disabled
-      const disabledMatch = elementChoices.find(
-        (c) => c.element.id === elementId && c.disabled !== false
-      );
-      if (disabledMatch) {
-        return { done: false, error: `Selection disabled: ${disabledMatch.disabled}` };
-      }
-    } else if (!this.annotatedChoicesContain(currentChoices, value)) {
-      return {
-        done: false,
-        error: `Invalid choice: ${JSON.stringify(value)}`,
-        nextChoices: formatRepeatCandidates(currentChoices, repeatSelection, context, warnings),
-        warnings: said(),
-      };
-    } else {
-      // Check disabled for non-element choices
-      const disabledMatch = currentChoices.find(c => this.valuesEqual(c.value, value) && c.disabled !== false);
-      if (disabledMatch) {
-        return { done: false, error: `Selection disabled: ${disabledMatch.disabled}` };
-      }
+    const currentChoices = this.getChoices(selection, player, context.args, action.name);
+    const resolved = this.resolveOne(selection, value, player, context.args, this.game, currentChoices);
+    const offered = this.matchOffered(repeatSelection, resolved, currentChoices, context, action.name);
+    if ('refusal' in offered) {
+      const nextChoices = formatRepeatCandidates(currentChoices, repeatSelection, context, warnings);
+      return { done: false, error: offered.refusal, nextChoices, warnings: said() };
     }
+    // What the callbacks receive (the element, or the choice value), and the
+    // pick as the repeat holds it (an element selection's is the element's id).
+    const chosen = offered.match.value;
+    const pick = isElementSelection ? (chosen as GameElement).id : chosen;
 
     // The selection's own `validate` judges this ONE pick (#352), with the
     // picks made before it in `args`, before anything can change the game: a
     // refused pick leaves the repeat open and runs no onSelect/onEach.
-    const validateError = this.repeatPickRefusal(action, selection, value, context);
+    const validateError = this.repeatPickRefusal(action, selection, chosen, context);
     if (validateError) {
       return { done: false, error: validateError };
     }
 
     // Add to accumulated values
-    pendingState.repeating.accumulated.push(value);
+    pendingState.repeating.accumulated.push(pick);
     pendingState.repeating.iterationCount++;
 
     // Fire onSelect on first iteration only (after validation passes)
     if (isFirstIteration && selection.onSelect) {
       try {
-        const resolvedForHook = isElementSelection
-          ? (this.game.getElementById(value as number) ?? value)
-          : value;
         const ctx = this.createOnSelectContext();
-        (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedForHook, ctx);
+        (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(chosen, ctx);
 
         if (!pendingState.onSelectFired) {
           pendingState.onSelectFired = new Set();
@@ -2099,11 +1943,7 @@ export class ActionExecutor {
     // Run onEach callback if present
     if (repeatConfig?.onEach) {
       try {
-        // For element selections, resolve the value to actual element for onEach
-        const resolvedValue = isElementSelection
-          ? this.game.getElementById(value as number)
-          : value;
-        repeatConfig.onEach(context, resolvedValue);
+        repeatConfig.onEach(context, chosen);
       } catch (error) {
         return { done: true, error: error instanceof Error ? error.message : String(error) };
       }
@@ -2116,18 +1956,14 @@ export class ActionExecutor {
       // For elements, repeatUntil would be an element, so compare IDs
       if (isElementSelection) {
         const untilId = typeof repeatUntil === 'number' ? repeatUntil : isElement(repeatUntil) ? repeatUntil.id : undefined;
-        isDone = value === untilId;
+        isDone = pick === untilId;
       } else {
-        isDone = this.valuesEqual(value, repeatUntil);
+        isDone = valuesEqual(pick, repeatUntil);
       }
     } else if (repeatConfig?.until) {
       // Custom termination function
       try {
-        // For element selections, resolve value to actual element for until check
-        const resolvedValue = isElementSelection
-          ? this.game.getElementById(value as number)
-          : value;
-        isDone = repeatConfig.until(context, resolvedValue);
+        isDone = repeatConfig.until(context, chosen);
       } catch (error) {
         return { done: true, error: error instanceof Error ? error.message : String(error) };
       }
@@ -2148,7 +1984,7 @@ export class ActionExecutor {
       player,
       args: this.repeatingSelectionArgs(action, player, pendingState, selection.name),
     };
-    const nextAnnotated = this.getChoices(selection, player, nextContext.args);
+    const nextAnnotated = this.getChoices(selection, player, nextContext.args, action.name);
     const nextEnabled = nextAnnotated.filter(c => c.disabled === false);
 
     // If no more enabled choices available, terminate
@@ -2217,12 +2053,11 @@ export class ActionExecutor {
       return { success: true };
     }
 
-    // Resolve raw values (e.g. element IDs → GameElement objects) before validation.
-    // Clients send element IDs over the wire; validation compares against GameElement objects.
-    const resolvedValue = this.resolveSelectionValue(selection, value, player);
-
-    // Validate the selection (pass action.name so tutorial gate disabled reasons apply)
-    const validationResult = this.validateSelection(selection, resolvedValue, player, pendingState.collectedArgs, action.name);
+    // Resolve and check the pick exactly as a whole submission does (#507):
+    // with the picks before it resolved in view, then against what is offered.
+    const args = this.resolveArgs(action, pendingState.collectedArgs, player);
+    const resolvedValue = this.resolveOne(selection, value, player, args, this.game);
+    const validationResult = this.validateSelection(selection, resolvedValue, player, args, action.name);
     if (!validationResult.valid) {
       return { success: false, error: validationResult.errors.join('; ') };
     }

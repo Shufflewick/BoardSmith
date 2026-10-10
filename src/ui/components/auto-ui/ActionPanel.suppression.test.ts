@@ -41,7 +41,6 @@ describe('ActionPanel Action Panel suppression (LIBX-01)', () => {
             selections: [],
           },
         },
-        playerSeat: 1,
         isMyTurn: true,
       },
     });
@@ -72,7 +71,6 @@ describe('ActionPanel Action Panel suppression (LIBX-01)', () => {
             selections: [],
           },
         },
-        playerSeat: 1,
         isMyTurn: true,
       },
     });

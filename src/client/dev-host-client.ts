@@ -37,6 +37,8 @@ export interface DevHostLobbyReply {
   seats: DevHostSeatInfo[];
   minPlayers: number;
   playerCount: number;
+  /** The game options the next (re)start uses, as the host applied them (#541). */
+  gameOptions: Record<string, unknown>;
 }
 
 /** Reply shape for `getState()` — the caller's own seat view, same as a `game_state` broadcast. */
@@ -291,6 +293,7 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
         seats: msg.seats as DevHostSeatInfo[],
         minPlayers: msg.minPlayers as number,
         playerCount: msg.playerCount as number,
+        gameOptions: msg.gameOptions as Record<string, unknown>,
       };
     },
     async serverRequest(op, payload) {

@@ -38,7 +38,6 @@ interface GameElement {
 
 const props = defineProps<{
   element: GameElement;
-  depth: number;
 }>();
 
 const Die3D = getDiePreviewComponent();

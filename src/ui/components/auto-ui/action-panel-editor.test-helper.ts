@@ -58,7 +58,6 @@ export function panelsOver(actions: EnrichedActionMetadata[]) {
       props: {
         availableActions: availableActions.value,
         actionMetadata: metadata,
-        playerSeat: 1,
         isMyTurn: true,
       },
     });
