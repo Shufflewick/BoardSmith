@@ -25,7 +25,6 @@ import {
   Space,
   Card,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -81,15 +80,13 @@ class DiffGame extends Game<DiffGame, Player> {
 
     this.registerAction(Action.create<DiffGame>('pass').execute(() => ({ success: true })));
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => false,
-          maxIterations: 10,
-          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: () => false,
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
       }),
-    );
+    });
   }
 
   static override playerView = (

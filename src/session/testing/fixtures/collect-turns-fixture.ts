@@ -20,7 +20,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   sequence,
   actionStep,
   execute,
@@ -106,24 +105,22 @@ class CollectTurnsGame extends Game<CollectTurnsGame, Player> {
     // structured-cloneable across the broadcast/postMessage boundary.
     const activePlayer = (ctx: { game: Game }) =>
       ctx.game.getPlayer((ctx.game as CollectTurnsGame).activeSeat)!;
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 1000,
-          do: sequence(
-            // A turn is these two actions together, which is what makes the
-            // second entry a CONTINUATION: undo from it reaches back over both
-            // and stops at the turn's start, never into the prior seat's turn.
-            actionStep({ actions: ['explore', 'pass'], player: activePlayer, turnScope: 'restart' }),
-            actionStep({ actions: ['pass'], player: activePlayer, turnScope: 'continue' }),
-            execute((ctx) => {
-              const game = ctx.game as CollectTurnsGame;
-              game.activeSeat = game.activeSeat >= game.players.length ? 1 : game.activeSeat + 1;
-            }),
-          ),
-        }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 1000,
+        do: sequence(
+          // A turn is these two actions together, which is what makes the
+          // second entry a CONTINUATION: undo from it reaches back over both
+          // and stops at the turn's start, never into the prior seat's turn.
+          actionStep({ actions: ['explore', 'pass'], player: activePlayer, turnScope: 'restart' }),
+          actionStep({ actions: ['pass'], player: activePlayer, turnScope: 'continue' }),
+          execute((ctx) => {
+            const game = ctx.game as CollectTurnsGame;
+            game.activeSeat = game.activeSeat >= game.players.length ? 1 : game.activeSeat + 1;
+          }),
+        ),
       }),
-    );
+    });
   }
 
   heldFor(seat: number): Held {

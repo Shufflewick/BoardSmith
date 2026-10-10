@@ -26,6 +26,9 @@ import {
   boardWithATimidControl,
   boardWithAVanishingControl,
   boardThatHidesThePanelForAMoment,
+  boardThatRedrawsThePanel,
+  panelThatHangsOnThePointer,
+  HUNG,
   boardThatReplacesItsFrame,
   boardThatKeepsReordering,
   boardUnderTheHostsCover,
@@ -75,8 +78,8 @@ onMounted(() => console.error('the table lost its deck'));
  */
 async function smokeOf(world: boolean, files: Record<string, string> = {}) {
   const dir = await smokeProject(world, files);
-  const { outcome, pids, steps } = await smokeIn(dir);
-  return { dir, outcome, pids, steps };
+  const { outcome, pids, steps, said } = await smokeIn(dir);
+  return { dir, outcome, pids, steps, said };
 }
 
 /** Runs the smoke check on the greetings game (#470), with the spec's `inputs` written as `inputs`. */
@@ -86,14 +89,14 @@ function walkGreetings(inputs: string) {
 
 /**
  * Runs the smoke check on the project in `dir`, holds it to leaving nothing running and no copy
- * behind, and returns what the walk said it did at each step, in order.
+ * behind, and returns what the walk said it did at each step, in order, and every line the run said.
  */
 async function smokeIn(dir: string) {
   const said: string[] = [];
   const { outcome, pids } = await runSmoke({ projectDir: dir, log: (line) => said.push(line) });
   expect(pids.filter(isRunning)).toEqual([]);
   expect(existsSync(join(dir, '.boardsmith', 'smoke'))).toBe(false);
-  return { outcome, pids, steps: said.filter((line) => /^smoke( step \d+)?: /.test(line)) };
+  return { outcome, pids, said, steps: said.filter((line) => /^smoke( step \d+)?: /.test(line)) };
 }
 
 describe('boardsmith verify: the smoke check', () => {
@@ -500,6 +503,37 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.summary).toContain('- The panel offered "draw", but the walk never took it in 4 steps.');
   });
 
+  it('#562: presses a panel button the panel redrew as a new element just as the walk went to press it', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      ...aceGame(),
+      ...boardThatRedrawsThePanel(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 12 }),
+    });
+
+    expect(outcome.summary).not.toContain('did not work');
+    expect(steps.slice(1, 3)).toEqual(['smoke step 1: taking "draw"', 'smoke step 2: taking "play"']);
+    expect(outcome.passed).toBe(true);
+  });
+
+  it('#573: presses a panel button again when its click ran out of time after only the pointer pressed it, and takes the action once', async () => {
+    const { outcome, steps, said } = await smokeOf(false, {
+      ...aceGame(),
+      ...panelThatHangsOnThePointer(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 3, echo: HUNG }),
+    });
+
+    // The page hung the first press of each action: without it, this test would not exercise the
+    // press whose click never arrived.
+    expect(said.filter((line) => line.includes(HUNG))).toEqual([`${HUNG} "draw"`, `${HUNG} "play"`]);
+
+    // "draw" was taken at step 1 by the second press: a walk that counted the first press as landed
+    // would leave it untaken, and take it again at step 2.
+    expect(outcome.summary).not.toContain('did not work');
+    expect(outcome.summary).not.toContain('clicked twice');
+    expect(steps.slice(1, 3)).toEqual(['smoke step 1: taking "draw"', 'smoke step 2: taking "play"']);
+    expect(outcome.passed).toBe(true);
+  });
+
   it('presses the board control it found, though the board moved another into its place before the press', async () => {
     const { outcome, steps } = await smokeOf(false, boardThatKeepsReordering());
 
@@ -629,6 +663,14 @@ describe('boardsmith verify: the smoke check', () => {
       expect(steps.filter((line) => line.includes('waiting for a turn'))).toEqual([]);
     },
   );
+
+  it('#562: counts a panel press that reached its button as landed, though the page was too busy to answer within one look, and does not press it again', async () => {
+    const { outcome, steps } = await smokeOf(true, { ...gladeWorld({ busy: true }), 'tests/browser/smoke.spec.ts': gladeSpec({ steps: 8 }) });
+
+    expect(outcome.summary).not.toContain('did not work');
+    expect(steps.filter((line) => line.endsWith('taking "arrive"'))).toHaveLength(1);
+    expect(steps.some((line) => line.endsWith('taking "rest"'))).toBe(true);
+  });
 
   it(
     '#471: plays the seats a world spec names, each in a browser of its own, the second following the first, and takes ' +

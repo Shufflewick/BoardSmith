@@ -23,75 +23,26 @@
  * source. Games worked around it by re-deriving, from that nulled field, a
  * decision the shell already makes two lines away.
  *
- * Tested with this file's established convention for GameShell-derived
- * behaviour (see GameShell.time-travel-desync.test.ts): direct source
- * assertions on the wiring, plus a harness that renders both branches from the
- * SAME expressions to prove the two consumers agree.
+ * The shell's wiring is asserted on the real shell (see below); the harness
+ * here proves a board that reads those props withdraws its controls.
  */
 import { describe, it, expect } from 'vitest';
 import { defineComponent, ref, computed, h, nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const gameShellSource = fs.readFileSync(
-  path.join(path.dirname(fileURLToPath(import.meta.url)), 'GameShell.vue'),
-  'utf-8'
-);
-
-/** The `<component :is="selectedUiComponent" ... />` block — the custom board's props. */
-function customBoardBlock(): string {
-  const start = gameShellSource.indexOf(':is="selectedUiComponent"');
-  expect(start).toBeGreaterThan(-1);
-  const end = gameShellSource.indexOf('/>', start);
-  expect(end).toBeGreaterThan(start);
-  return gameShellSource.slice(start, end);
-}
-
-describe('B18: GameShell.vue states isViewingHistory to the custom board', () => {
-  it('passes :is-viewing-history as a prop, beside can-undo', () => {
-    // Stated, not deduced. The auto-UI is handed the boolean; a custom board
-    // must not have to reverse-engineer it from a nulled flowState.
-    expect(customBoardBlock()).toContain(':is-viewing-history="isViewingHistory"');
-  });
-
-  it('gates is-my-turn exactly like the auto ActionPanel', () => {
-    // useTableSeat's one gated value (#520), which the auto ActionPanel and the
-    // game context read too; GameShell.context-history.test.ts holds them equal.
-    expect(customBoardBlock()).toContain(':is-my-turn="gatedIsMyTurn"');
-  });
-
-  it('gates available-actions exactly like the auto ActionPanel', () => {
-    expect(customBoardBlock()).toContain(':available-actions="gatedAvailableActions"');
-  });
-
-  it('gates disabled-actions exactly like the auto ActionPanel', () => {
-    expect(customBoardBlock()).toContain(':disabled-actions="isViewingHistory ? undefined : disabledActions"');
-  });
-
-  it('hands the board the DISPLAYED flow state, never the live one', () => {
-    // `state?.flowState` is live: it would superimpose live turn info on a
-    // historical board -- the exact mix the nulled `displayedState.flowState`
-    // exists to avoid.
-    expect(customBoardBlock()).toContain(':flow-state="displayedState?.flowState"');
-    expect(customBoardBlock()).not.toContain(':flow-state="state?.flowState"');
-  });
-
-  it('leaves no ungated actionability prop on the board', () => {
-    const block = customBoardBlock();
-    expect(block).not.toContain(':is-my-turn="isMyTurn"');
-    expect(block).not.toContain(':available-actions="availableActions"');
-    expect(block).not.toContain(':disabled-actions="disabledActions"');
-  });
-});
+// The shell's side, that the board is handed `isViewingHistory` and every
+// actionability prop gated on it, and the DISPLAYED (nulled) flow state rather
+// than the live one, is asserted on the real GameShell in
+// `../board-props.shells.test.ts` (#516): the board's props are built by one
+// typed function from `useTableSeat`'s gated values. This file holds the
+// board's side: a board gated this way goes inert on a browse.
 
 // ── Behaviour: a board gated this way cannot offer a live control on a browse ─
 
 /**
- * Renders a board from the SAME expressions GameShell now uses, so the claim
- * under test is behavioural, not just textual: a board that gates its controls
- * on the props it is handed goes inert the moment the player browses history.
+ * Renders a board from the gating `useTableSeat` applies, so the claim under
+ * test is behavioural: a board that gates its controls on the props it is
+ * handed goes inert the moment the player browses history.
  */
 const BoardGatingHarness = defineComponent({
   name: 'BoardGatingHarness',

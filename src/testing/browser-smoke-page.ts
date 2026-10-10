@@ -115,6 +115,8 @@ export type Reached = 'it' | 'toast' | 'other' | 'nothing';
 /** What `guardClicks` keeps on a page's window for `clickReached`. */
 interface ClickGuard {
   hit: boolean;
+  /** Whether the `click` event itself reached the element, not only the pointer pressing on it. */
+  clicked: boolean;
   missed: Exclude<Reached, 'it' | 'nothing'> | undefined;
   remove: () => void;
 }
@@ -127,17 +129,18 @@ type GuardedWindow = Window & { __boardsmithSmokeGuard?: ClickGuard };
  * but `element` is stopped before the page sees it, as Playwright's own click does, so a click that
  * would land on something the page moved under the pointer does nothing and the walk can look again.
  * Which events reached the element, and whether the others reached a toast, is kept for
- * `clickReached`. With `element` null it guards the page it runs in, the page around the game's
+ * `clickReached` and `clickArrived`. With `element` null it guards the page it runs in, the page around the game's
  * frame (#478), where nothing is the control: every click there is stopped.
  */
 export function guardClicks(element: Element | null): void {
   const view = (element?.ownerDocument.defaultView ?? window) as GuardedWindow;
   const types = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
-  const guard: ClickGuard = { hit: false, missed: undefined, remove: () => types.forEach((type) => view.removeEventListener(type, stop, true)) };
+  const guard: ClickGuard = { hit: false, clicked: false, missed: undefined, remove: () => types.forEach((type) => view.removeEventListener(type, stop, true)) };
   function stop(event: Event): void {
     const target = event.target as Element | null;
     if (element !== null && target !== null && (target === element || element.contains(target))) {
       guard.hit = true;
+      if (event.type === 'click') guard.clicked = true;
       return;
     }
     if (guard.missed !== 'toast') guard.missed = target?.closest?.('.toast') ? 'toast' : 'other';
@@ -146,6 +149,15 @@ export function guardClicks(element: Element | null): void {
   }
   types.forEach((type) => view.addEventListener(type, stop, true));
   view.__boardsmithSmokeGuard = guard;
+}
+
+/**
+ * Whether the `click` event itself reached the element `guardClicks` guards, read before
+ * `clickReached` takes the guard off. A click that ran out of time waiting for a busy page to answer
+ * landed only if its `click` arrived; a pointer that only pressed on the control did not press it.
+ */
+export function clickArrived(): boolean {
+  return (window as GuardedWindow).__boardsmithSmokeGuard?.clicked === true;
 }
 
 /**

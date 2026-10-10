@@ -1,7 +1,7 @@
 {
-  "revision": 142,
+  "revision": 145,
   "bundleProtocol": 2,
-  "surfaceHash": "c89b5911c71dfb48",
+  "surfaceHash": "e949c8726719a502",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1218,10 +1218,37 @@
       "revision": 142,
       "date": "2026-10-09",
       "bundleProtocol": 2,
-      "surfaceHash": "c89b5911c71dfb48",
+      "surfaceHash": "bbb639d4800619db",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "A chooseFrom choice is a value or { value, label } (#509). The engine reads value out of exactly that shape (a plain object whose only keys are value and an optional string label) where the choices are built, so disabled, display, boardRefs, validate, onSelect and execute all receive the value, the wire carries the value with the label as its display, and a custom UI fill()s the value. Any other object, including { value, display } and { value, cost }, is a value in its own right and arrives whole: the resolve-time unwrap (extractChoiceValue) and the fill() unwrap are gone. Game.playerChoices() returns { value: seat, label: name }. A function-valued multiSelect or orderedList must return a count; returning undefined is refused with an error naming the selection instead of silently becoming a single pick. A game whose choices use { value, display } must rename display to label. A repeating choice pick's nextChoices from a selection step are wire choices ({ value, display, refs?, disabled? }) labelled as the first pass's were, not bare values."
+      "summary": "Adds the infrastructure-owned world refusal world-storage-unavailable and its raiser worldStorageUnavailable({ operation }) for the host's own durable storage failing (#580); unlike bundle-store-unavailable it can arrive after the bundle applied, so a host must roll the batch or command back rather than hold the event (ShufflewickPub #610)."
+    },
+    {
+      "revision": 143,
+      "date": "2026-10-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "e949c8726719a502",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A game's end and winners are declared on Game only (#503): finish(winners), or overrides of isFinished() and getWinners(). FlowDefinition loses isComplete and getWinners, FlowEngine.getWinners is removed, and a completed flow no longer writes settings.winners; the flow ends when game.isFinished() is true. defineFlow is removed: a flow definition is a plain object passed to setFlow. The MCTS bot and the benchmark now read game.getWinners(), the same result hosts show players, so a game that overrides getWinners() is no longer scored as a draw by bots. Bundles built on an earlier revision keep running on their own revision; to move to r143 they must be rebuilt from migrated source (Seven and WindupWarfare declared their end on the flow; any bundle importing defineFlow)."
+    },
+    {
+      "revision": 144,
+      "date": "2026-10-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "e949c8726719a502",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A recurrence's handler now has the last word over its own key (#583): runDueOccurrences' call must answer { ended, displaced }, where displaced is true when that occurrence's schedule plan replaced the running event's own id (plan.replaced includes event.id, because the handler upserted or cancelled the event's own (owner, key)); the loop then stops and answers nextDue null, and the host must not write the automatic re-arm at owedDue, so a self-upsert leaves exactly the handler's event under the key and a self-cancel leaves none. The platform host should compute displaced from its plan, drop its re-arm row for a displaced occurrence, and settle the event id once (ShufflewickPub follow-up)."
+    },
+    {
+      "revision": 145,
+      "date": "2026-10-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "e949c8726719a502",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "boardsmith/ui no longer reaches three through the auto-UI's DieRenderer (#590), so a game without 3D dice type-checks and validates against a packaged engine without three installed; a game whose dice the auto-UI draws in play must now add `import 'boardsmith/ui/dice';` (with three installed), or the auto-UI shows labels only and warns once in dev."
     }
   ]
 }

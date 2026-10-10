@@ -491,17 +491,17 @@ export interface FlowDebugInfo {
 }
 
 /**
- * Flow definition for a game
+ * Flow definition for a game: a plain object handed to `Game.setFlow()`.
+ *
+ * It says how play proceeds, not how it ends. The end and the winners are
+ * declared on `Game` (#503): `finish(winners)`, or overrides of
+ * `isFinished()` and `getWinners()`.
  */
 export interface FlowDefinition<G extends Game = Game> {
   /** The root flow node */
   root: FlowNode<G>;
   /** Setup function called before flow starts */
   setup?: (context: FlowContext<G>) => void;
-  /** Check if game is complete */
-  isComplete?: (context: FlowContext<G>) => boolean;
-  /** Determine winners when complete */
-  getWinners?: (context: FlowContext<G>) => PlayerOf<G>[];
   /** Called when entering a named phase */
   onEnterPhase?: (phaseName: string, context: FlowContext<G>) => void;
   /** Called when exiting a named phase */

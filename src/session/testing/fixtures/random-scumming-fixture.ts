@@ -50,7 +50,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   sequence,
   actionStep,
   simultaneousActionStep,
@@ -103,21 +102,19 @@ class ScumGame extends Game<ScumGame, Player> {
       }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 1000,
-          while: (ctx) => !ctx.game.isFinished(),
-          do: sequence(
-            actionStep({
-              actions: ['move', 'note', 'gamble', 'scout'],
-              player: (ctx) => ctx.game.getPlayer(1)!,
-              repeatUntil: () => false,
-            }),
-          ),
-        }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 1000,
+        while: (ctx) => !ctx.game.isFinished(),
+        do: sequence(
+          actionStep({
+            actions: ['move', 'note', 'gamble', 'scout'],
+            player: (ctx) => ctx.game.getPlayer(1)!,
+            repeatUntil: () => false,
+          }),
+        ),
       }),
-    );
+    });
   }
 }
 
@@ -143,20 +140,18 @@ class SimulScumGame extends Game<SimulScumGame, Player> {
       }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: simultaneousActionStep({
-          name: 'orders',
-          players: () => this.players,
-          actions: ['note', 'gamble'],
-          // Never individually done and never step-wide done: the step stays
-          // open for the whole test, so both seats keep acting into one frame
-          // and each seat's undo boundary stays its own first action.
-          playerDone: () => false,
-          allDone: () => false,
-        }),
+    this.setFlow({
+      root: simultaneousActionStep({
+        name: 'orders',
+        players: () => this.players,
+        actions: ['note', 'gamble'],
+        // Never individually done and never step-wide done: the step stays
+        // open for the whole test, so both seats keep acting into one frame
+        // and each seat's undo boundary stays its own first action.
+        playerDone: () => false,
+        allDone: () => false,
       }),
-    );
+    });
   }
 }
 
@@ -179,21 +174,19 @@ class ConstructorDrawGame extends Game<ConstructorDrawGame, Player> {
       Action.create('note').execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 1000,
-          while: (ctx) => !ctx.game.isFinished(),
-          do: sequence(
-            actionStep({
-              actions: ['note'],
-              player: (ctx) => ctx.game.getPlayer(1)!,
-              repeatUntil: () => false,
-            }),
-          ),
-        }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 1000,
+        while: (ctx) => !ctx.game.isFinished(),
+        do: sequence(
+          actionStep({
+            actions: ['note'],
+            player: (ctx) => ctx.game.getPlayer(1)!,
+            repeatUntil: () => false,
+          }),
+        ),
       }),
-    );
+    });
   }
 }
 

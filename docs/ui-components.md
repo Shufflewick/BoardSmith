@@ -19,7 +19,8 @@ The board itself is not a slot. `GameShell` renders the default UI from the game
          player's panel can be actionable (e.g. tap your own ability to use it), not
          just informational: playerSeat (the local seat), isMyTurn, availableActions,
          and actionController. `player` is the panel's player — gate actions on
-         `player.seat === playerSeat`. -->
+         `player.seat === playerSeat`. While the player browses history, `player`
+         and `players` are as that past position had them, like `gameView`. -->
     <template #player-stats="{ player, players, playerSeat, isMyTurn, availableActions, actionController }">
       <div class="player-stat">
         <span class="label">Score:</span>
@@ -127,25 +128,50 @@ need this.
 #### Board props
 
 The board component (the registry's default UI, or the dev switcher's
-selection) receives:
+selection) receives one typed set of props. Declare it by importing the type
+rather than restating the list:
+
+```vue
+<script setup lang="ts">
+import type { TableBoardProps } from 'boardsmith/ui';
+const props = defineProps<TableBoardProps>();
+</script>
+```
+
+`GameShell` builds the object it binds with the function whose return type is
+`TableBoardProps`, so the type is exactly what a table board receives.
+`WorldShell` does the same with `WorldBoardProps` for a world's board. Both
+extend `BoardBaseProps`, which is what a board that renders in either declares.
+A board that reads only some of them can declare `Pick<TableBoardProps, ...>`;
+anything it leaves undeclared falls through onto its root element as an
+attribute.
+
+`BoardBaseProps`, given by both shells:
 
 | Prop | Type | Description |
 |------|------|-------------|
-| `state` | `GameState` | Full game state |
-| `gameView` | `object` | Player-filtered view of game state |
-| `players` | `object[]` | Every seat's player, in seat order |
-| `myPlayer` | `object` | This seat's player |
-| `playerSeat` | `number` | Current player's seat |
-| `isMyTurn` | `boolean` | Whether it's this player's turn |
-| `availableActions` | `string[]` | Actions available to the player |
-| `actionArgs` | `object` | Current action selections - **read-only for display**, use `actionController` methods to modify |
-| `actionController` | `UseActionControllerReturn` | Unified action handling - execute, start, fill, cancel actions |
-| `setBoardPrompt` | `function` | Set a prompt message: `(text) => void` |
-| `canUndo` | `boolean` | Whether undo is available |
-| `undo` | `function` | Undo to turn start: `() => Promise` |
+| `gameView` | `GameViewElement \| null` | Player-filtered element tree |
+| `players` | `GameContextPlayer[]` | Every seat's player, in seat order |
+| `myPlayer` | `GameContextPlayer \| undefined` | This seat's player, or undefined for a spectator |
+| `playerSeat` | `number` | This seat; -1 before one is assigned |
+| `isMyTurn` | `boolean` | Whether this seat may act now |
+| `availableActions` | `string[]` | Actions this seat may take now |
+| `actionController` | `UseActionControllerReturn` | The one write path: start, fill, execute, cancel. Read the current selection from `actionController.currentArgs` |
+| `disabledActions` | `Record<string, string> \| undefined` | Action name → why it is disabled, for greying a control WITH its reason |
+
+`TableBoardProps` adds:
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `state` | `DisplayedGameState \| null` | This seat's frame, `{ flowState, state }`, for the position shown. `state.flowState` is the part of the flow state every seat may see, and `null` while browsing history |
 | `isViewingHistory` | `boolean` | True while the player is browsing a past position (see below) |
-| `disabledActions` | `object` | Action name → why it is disabled, for greying a control WITH its reason |
-| `flowState` | `PublicFlowState \| null` | Turn info for the displayed position — `null` while browsing history. The part of the server's flow state every seat may see: who is up, each seat's actions, the phase, the step's time limit. It carries no action count (#449) |
+| `canUndo` | `boolean` | Whether undo is available |
+| `undo` | `() => Promise<void>` | Undo to turn start |
+| `setBoardPrompt` | `(text: string \| null) => void` | Replace the action bar's prompt with the board's own text; `null` gives it back |
+
+`WorldBoardProps` adds `presence` (the seats awake, or null), `events` (the
+narration since the page mounted), `worldName` and `phase`. WorldShell does not
+let a board replace its prompt, so a world board is not given `setBoardPrompt`.
 
 #### Time travel: browsing a past position
 
@@ -153,16 +179,17 @@ Clicking a log line puts the shell into a read-only historical view. Your board
 is told, and is pre-gated so it cannot act by accident:
 
 - `isViewingHistory` is `true`.
-- `gameView` / `state` show the HISTORICAL position, and `flowState` is `null` —
-  there is no historical flow state to substitute.
-- `isMyTurn` is `false` and `availableActions` is `[]` for the whole browse, the
-  identical gating the auto-UI's Action Panel gets. A control your board gates on
-  those props therefore goes inert on its own.
+- `gameView` / `state` show the HISTORICAL position, and `state.flowState` is
+  `null`: there is no historical flow state to substitute.
+- `isMyTurn` is `false`, `availableActions` is `[]`, `disabledActions` is
+  undefined and `canUndo` is `false` for the whole browse, the same values the
+  auto-UI's Action Panel gets. A control your board gates on those props
+  therefore goes inert on its own.
 
 Use `isViewingHistory` for anything the props cannot gate for you — most often to
 tell "the game moved" from "the player clicked a log line" when you react to
-`gameView` changing. Do not infer the mode from `flowState === null`; the boolean
-is the stated fact.
+`gameView` changing. Do not infer the mode from `state.flowState === null`; the
+boolean is the stated fact.
 
 #### Undo, rewind, a new game, and an open pick
 
@@ -176,18 +203,20 @@ then re-offers the action from the new position. A board that drives selection t
 should not add one, since a game-specific "is my snapshot stale" fingerprint can
 only restate a fact the shell already acts on.
 
-#### Action State (actionArgs)
+#### Action state (`actionController.currentArgs`)
 
-The `actionArgs` object contains the current action's selection values. **Use it for reading/display only** - all modifications should go through `actionController` methods.
+`actionController.currentArgs` holds the current action's selection values.
+**Use it for reading and display only**: every change goes through
+`actionController` methods.
 
-**Reading actionArgs (safe)**
+**Reading the selection (safe)**
 ```vue
 <template>
   <div
     v-for="card in cards"
     :key="card.id"
     class="card"
-    :class="{ selected: actionArgs.card === card.id }"
+    :class="{ selected: actionController.currentArgs.value.card === card.id }"
   >
     <!-- Card shows selected state from ActionPanel selections -->
   </div>
@@ -202,29 +231,23 @@ actionController.start('move', { args: { piece: pieceId } });
 // Filling a selection during an action
 actionController.fill('destination', squareId);
 
-// DON'T write directly to actionArgs - use fill() instead
-// actionArgs.destination = squareId;  // Wrong!
+// currentArgs is read-only: use fill() instead
+// actionController.currentArgs.value.destination = squareId;  // Type error
 ```
 
 **Why not write directly?**
 
-The controller tracks which values it has set. When fetching choices from the server, it only sends values it knows about. Direct writes to `actionArgs` are ignored by the controller, preventing race conditions during async operations like `followUp` chains.
-
-If you write to `actionArgs` directly, you'll see a development warning:
-```
-Detected unexpected keys in actionArgs during 'collectEquipment': equipment
-  These were NOT set by the action controller (start/fill/startFollowUp).
-  This usually means your custom UI is writing to actionArgs in a watcher/computed.
-  The controller ignores these to prevent bugs - use actionController.fill() instead.
-```
+`currentArgs` is typed read-only, so a write is a type error. The controller
+tracks which values it has set, and when it fetches choices from the server it
+sends only those, which keeps async steps such as `followUp` chains free of
+races.
 
 **Board interactions pattern**
 ```vue
 <script setup lang="ts">
-const props = defineProps<{
-  actionArgs: Record<string, unknown>;
-  actionController: UseActionControllerReturn;
-}>();
+import type { TableBoardProps } from 'boardsmith/ui';
+
+const props = defineProps<Pick<TableBoardProps, 'actionController'>>();
 
 // When user clicks a piece, start the action with that piece pre-selected
 function onPieceClick(pieceId: number) {
@@ -249,7 +272,6 @@ Automatic UI generation from game state. A production-ready UI for any game — 
   <AutoUI
     :game-view="gameView"
     :player-seat="playerSeat"
-    :flow-state="flowState"
   />
 </template>
 
@@ -2047,12 +2069,12 @@ const selectedEquipment = { name: 'Laser Rifle', damage: 10 };
 // How do you find the ID?
 ```
 
-**The Solution:** Use `findElement` to search the merc's subtree by name:
+**The Solution:** Use `findElement` to search the merc's subtree. Its `name` criterion compares the element's own top-level `name` (the name the game gave the element when it created it), never anything in `attributes`. So this works only when the equipment element's `name` is the same string the UI is showing:
 
 ```typescript
 import { findElement, getElementId } from 'boardsmith/ui';
 
-// Find equipment element by its name
+// Only right when the element's own `name` equals the displayed name
 const equipment = findElement(merc, { name: selectedEquipment.name });
 const equipmentId = getElementId(equipment);
 
@@ -2075,6 +2097,8 @@ The `boardsmith/ui` package provides several helpers for finding elements:
 | `findPlayerHand(view, seat)` | The hand owned by a seat, wherever it sits in the tree | Finding a player's hand |
 | `getElementId(element)` | Get numeric ID from element | Extracting ID for action calls |
 
+`findElement` and `findElements` have no attribute criterion: `name` is the element's own `name`, and `type` is the `$type` attribute only. To match on any other attribute, take the candidates with `findElements` and filter on `attributes` yourself.
+
 **Example: Equipment Modal**
 
 ```typescript
@@ -2084,7 +2108,8 @@ const selectedEquipmentName = 'Plasma Cannon';
 // Find the merc that has this equipment
 const merc = findElement(gameView, { className: 'Merc' });
 
-// Find the equipment element by name within the merc
+// Find the equipment element by name within the merc.
+// This assumes each equipment element's own `name` is its display name.
 const equipment = findElement(merc, { name: selectedEquipmentName });
 
 if (equipment) {
@@ -2099,8 +2124,22 @@ if (equipment) {
 **Example: Finding Any Element by Name**
 
 ```typescript
-// Find a sector anywhere in the game by its unique name
+// Find a sector anywhere in the game by its unique name.
+// The game must have created the sector with the name 'alpha-3'.
 const sector = findElement(gameView, { name: 'alpha-3' });
+if (sector) {
+  await actionController.execute('moveTo', { destination: sector.id });
+}
+```
+
+**Example: Finding an Element by an Attribute**
+
+When the value you have is stored in an attribute rather than in the element's `name` (here a `sectorId` attribute), `{ name }` will not find it. Filter on the attribute instead:
+
+```typescript
+// Every sector, then the one whose sectorId attribute matches
+const sector = findElements(gameView, { className: 'Sector' })
+  .find(el => el.attributes?.sectorId === 'alpha-3');
 if (sector) {
   await actionController.execute('moveTo', { destination: sector.id });
 }

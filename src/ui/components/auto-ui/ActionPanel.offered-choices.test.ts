@@ -32,7 +32,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   actionStep,
   type GameOptions,
 } from '../../../engine/index.js';
@@ -92,14 +91,14 @@ class PicksGame extends Game<PicksGame, Player> {
     );
 
     this.setFlow(
-      defineFlow({
+      {
         root: actionStep({
           actions: ['sendMail', 'paint', 'mix', 'stack', 'swap'],
           player: (ctx) => ctx.game.getPlayer(1)!,
           repeatUntil: () => false,
           maxMoves: 20,
         }),
-      })
+      }
     );
   }
 }

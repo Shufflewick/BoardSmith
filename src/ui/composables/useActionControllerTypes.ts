@@ -348,8 +348,10 @@ export interface UseActionControllerOptions {
    * `toggleMultiSelect()`, `start()`, and the internal auto-execute watch all
    * refuse (or no-op) while this is true, so NO commit path — board click,
    * ActionPanel, or the controller's own auto-execute — can reach the live
-   * engine while the UI is displaying historical state. Defaults to `false`
-   * (never viewing history) for callers that don't wire time-travel.
+   * engine while the UI is displaying historical state. A follow-up that
+   * arrives while it is true is started when it turns false (#585, #586).
+   * Defaults to `false` (never viewing history) for callers that don't wire
+   * time-travel.
    */
   isViewingHistory?: Ref<boolean>;
 }

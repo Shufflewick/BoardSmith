@@ -24,7 +24,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   actionStep,
   enumerateLegalMoves,
   type GameOptions,
@@ -81,11 +80,9 @@ class RuneGame extends Game<RuneGame, Player> {
         }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: actionStep({ actions: ['cast'], player: (ctx) => ctx.game.getPlayer(1)! }),
-      }),
-    );
+    this.setFlow({
+      root: actionStep({ actions: ['cast'], player: (ctx) => ctx.game.getPlayer(1)! }),
+    });
   }
 
   /** The rule `validate` enforces: why `pick` may not follow `before`, or null. */
@@ -236,7 +233,7 @@ class GemGame extends Game<GemGame, Player> {
         })
         .execute(() => ({ success: true })),
     );
-    this.setFlow(defineFlow({ root: actionStep({ actions: ['take'], player: (ctx) => ctx.game.getPlayer(1)! }) }));
+    this.setFlow({ root: actionStep({ actions: ['take'], player: (ctx) => ctx.game.getPlayer(1)! }) });
   }
 }
 

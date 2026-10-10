@@ -13,7 +13,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { ref } from 'vue';
 import type { VueWrapper } from '@vue/test-utils';
-import { Game, Player, Action, defineFlow, loop, eachPlayer, actionStep, type GameOptions } from '../../engine/index.js';
+import { Game, Player, Action, loop, eachPlayer, actionStep, type GameOptions } from '../../engine/index.js';
 import { historyLabels } from '../../session/testing/history-labels.js';
 import { createBoardInteraction } from './useBoardInteraction.js';
 import { mountTableWiring, settle, startTable } from './table-wiring.test-helper.js';
@@ -38,9 +38,9 @@ class ScoutGame extends Game<ScoutGame, Player> {
         .chooseFrom('what', { choices: ['gold', 'gems'] })
         .execute(() => {}),
     );
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({ maxIterations: 2, while: (ctx) => (ctx.game as ScoutGame).scouted.length < 2, do: eachPlayer({ do: actionStep({ actions: ['scout'], turnScope: 'restart' }) }) }),
-    }));
+    });
   }
 }
 

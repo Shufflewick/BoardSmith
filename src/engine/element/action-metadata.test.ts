@@ -22,7 +22,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -108,16 +107,14 @@ class MultiSelectMetadataGame extends Game<MultiSelectMetadataGame, Player> {
         .execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 10,
-          do: eachPlayer({
-            do: actionStep({ actions: ['pickChoice'] }),
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 10,
+        do: eachPlayer({
+          do: actionStep({ actions: ['pickChoice'] }),
         }),
       }),
-    );
+    });
   }
 }
 
@@ -291,16 +288,14 @@ class ActionPanelSuppressionGame extends Game<ActionPanelSuppressionGame, Player
         .execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 5,
-          do: eachPlayer({
-            do: actionStep({ actions: ['hiddenAction', 'visibleAction'] }),
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 5,
+        do: eachPlayer({
+          do: actionStep({ actions: ['hiddenAction', 'visibleAction'] }),
         }),
       }),
-    );
+    });
   }
 }
 
@@ -382,16 +377,14 @@ class DivergenceGame extends Game<DivergenceGame, Player> {
         .execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 5,
-          do: eachPlayer({
-            do: actionStep({ actions: ['conditional', 'always'] }),
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 5,
+        do: eachPlayer({
+          do: actionStep({ actions: ['conditional', 'always'] }),
         }),
       }),
-    );
+    });
   }
 }
 
@@ -501,17 +494,15 @@ class DestructiveEmphasisGame extends Game<DestructiveEmphasisGame, Player> {
         .execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 5,
-          do: eachPlayer({
-            name: 'turn',
-            do: actionStep({ actions: ['endSurvivor', 'lookAround'] }),
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 5,
+        do: eachPlayer({
+          name: 'turn',
+          do: actionStep({ actions: ['endSurvivor', 'lookAround'] }),
         }),
       }),
-    );
+    });
   }
 }
 

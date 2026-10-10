@@ -3,7 +3,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   simultaneousActionStep,
   type GameOptions,
 } from '../engine/index.js';
@@ -52,19 +51,23 @@ class RaidGame extends Game<RaidGame, Player> {
           (ctx.game as RaidGame).looted.push({ seat: ctx.player.seat, where: args.where as string });
         }),
     );
-    this.setFlow(
-      defineFlow({
-        root: simultaneousActionStep({
-          actions: ['scout'],
-          playerDone: (ctx, player) => (ctx.game as RaidGame).scouted.includes(player.seat),
-        }),
-        isComplete: (ctx) => (ctx.game as RaidGame).looted.length === 3,
-        getWinners: (ctx) => {
-          const game = ctx.game as RaidGame;
-          return game.looted.filter((l) => l.where === 'north').map((l) => game.getPlayer(l.seat)!);
-        },
+    this.setFlow({
+      root: simultaneousActionStep({
+        actions: ['scout'],
+        playerDone: (ctx, player) => (ctx.game as RaidGame).scouted.includes(player.seat),
       }),
-    );
+    });
+  }
+
+  /** Over once all three seats have looted. */
+  override isFinished(): boolean {
+    return super.isFinished() || this.looted.length === 3;
+  }
+
+  /** Every seat that looted north wins. */
+  override getWinners(): Player[] {
+    if (!this.isFinished()) return [];
+    return this.looted.filter((l) => l.where === 'north').map((l) => this.getPlayer(l.seat)!);
   }
 }
 
@@ -165,15 +168,13 @@ class GatedPickGame extends Game<GatedPickGame, Player> {
           (ctx.game as GatedPickGame).picked.push(ctx.player.seat);
         }),
     );
-    this.setFlow(
-      defineFlow({
-        root: simultaneousActionStep({
-          actions: ['pick'],
-          playerDone: (ctx, player) => (ctx.game as GatedPickGame).picked.includes(player.seat),
-          allDone: () => false,
-        }),
+    this.setFlow({
+      root: simultaneousActionStep({
+        actions: ['pick'],
+        playerDone: (ctx, player) => (ctx.game as GatedPickGame).picked.includes(player.seat),
+        allDone: () => false,
       }),
-    );
+    });
   }
 }
 

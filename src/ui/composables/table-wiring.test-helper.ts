@@ -3,7 +3,10 @@
  *
  * `useTableActionWiring` over the live session host (`createHeadlessSession`),
  * with the transport build/test.md shows a game: actions go to the host as
- * `action` ops, pick lists come from `resolveChoices` ops. Tests of the wiring
+ * `action` ops, pick lists come from `resolveChoices` ops. Every op passes
+ * through `toCloneablePayload`, as GameShell's transport sends it: reactivity
+ * stripped, and stamped with the boundary of the flow state the seat rendered
+ * (#568). Tests of the wiring
  * itself (#378, #384) and tests that drive an action's picks through it (#392,
  * #407) share this, so a test wired here is wired the way production is.
  *
@@ -11,14 +14,15 @@
  * wrapper when the test is done. `mountLiveSeat` does the common case (seat 1 of
  * a fresh two-player table) in one call.
  */
-import { computed, defineComponent, h, nextTick, ref, type Ref } from 'vue';
+import { computed, defineComponent, h, nextTick, ref, toRaw, type Ref } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import type { Game, GameClass } from '../../engine/index.js';
-import { createHeadlessSession, type HeadlessSession } from '../../session/headless-session.js';
+import type { BoundaryKeyState } from '../../engine/flow/boundary-key.js';
+import { createHeadlessSession, type HeadlessOp, type HeadlessSession } from '../../session/headless-session.js';
 import type { PlayerGameState } from '../../session/types.js';
+import { toCloneablePayload } from '../components/platformRequestClone.js';
 import { createBoardInteraction, type BoardInteraction } from './useBoardInteraction.js';
 import { useTableActionWiring, type TableActionWiring } from './useTableActionWiring.js';
-import { withoutReactivity } from '../components/platformRequestClone.js';
 
 /** Let the controller's awaited fetches, sends and watchers run to rest. */
 export async function settle(): Promise<void> {
@@ -59,9 +63,28 @@ export function mountTableWiring<G extends Game>(
   options: TableWiringOptions<G>,
 ): { wiring: TableActionWiring; wrapper: VueWrapper } {
   const { session, seat, seatState, boardInteraction, afterPerform } = options;
-  // Every op's fields lose their Vue reactivity, as the shell's outbound step
-  // (usePlatformTransport) strips it: the controller holds an object-valued
-  // choice reactively, and the session refuses what postMessage could not clone.
+
+  /**
+   * The flow state published with the seat state the test let land, which is
+   * what GameShell stamps: the round the seat was looking at, not the host's.
+   */
+  function renderedFlowState(): BoundaryKeyState | null {
+    const rendered = toRaw(seatState.value);
+    const published = session().broadcasts as Array<Array<{ state: PlayerGameState; flowState?: BoundaryKeyState }>>;
+    for (let i = published.length - 1; i >= 0; i--) {
+      const view = published[i][seat - 1];
+      if (view?.state === rendered) return view.flowState ?? null;
+    }
+    throw new Error(
+      `Seat ${seat}'s seatState is not a state this table published. ` +
+      `Set it from session.playerState(${seat}), as a broadcast would deliver it.`,
+    );
+  }
+
+  /** `op` as GameShell's transport sends it. */
+  const cloneable = <T extends { type: HeadlessOp['type'] }>(op: T) =>
+    toCloneablePayload(op.type, op, renderedFlowState());
+
   let wiring: TableActionWiring | undefined;
   const Host = defineComponent({
     setup() {
@@ -74,21 +97,18 @@ export function mountTableWiring<G extends Game>(
         autoEndTurn: ref(options.autoEndTurn),
         isViewingHistory: ref(false),
         sendAction: async (actionName, args) => {
-          const result = await session().send(seat, { type: 'action', actionName, player: seat, args: withoutReactivity(args) });
+          const result = await session().send(seat, cloneable({ type: 'action', actionName, player: seat, args }));
           afterPerform?.();
           return result;
         },
         fetchPickChoices: async (actionName, selectionName, player, args) =>
-          session().send(player, { type: 'resolveChoices', actionName, selectionName, player, args: withoutReactivity(args) }),
+          session().send(player, cloneable({ type: 'resolveChoices', actionName, selectionName, player, args })),
         ...(options.withPickStep
           ? {
               pickStep: async (player: number, selectionName: string, value: unknown, actionName: string, initialArgs?: Record<string, unknown>) =>
-                session().send(player, {
-                  type: 'selectionStep', player, selectionName, actionName,
-                  value: withoutReactivity(value), initialArgs: withoutReactivity(initialArgs),
-                }),
+                session().send(player, cloneable({ type: 'selectionStep', player, selectionName, value, actionName, initialArgs })),
               cancelPendingAction: async (player: number) => {
-                await session().send(player, { type: 'cancelAction', player });
+                await session().send(player, cloneable({ type: 'cancelAction', player }));
               },
             }
           : {}),

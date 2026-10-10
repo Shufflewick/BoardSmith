@@ -86,6 +86,7 @@ const VALUES = [
   'worldRefusal',
   'worldSeatCount',
   'worldStateUnreadable',
+  'worldStorageUnavailable',
   'worldVacateAction',
 ];
 

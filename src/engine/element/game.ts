@@ -978,15 +978,23 @@ export type PlayerOf<G extends Game> = G extends Game<any, infer P>
  *     );
  *
  *     // Define game flow
- *     this.setFlow(defineFlow({
+ *     this.setFlow({
  *       root: loop({
  *         while: () => !this.isFinished(),
  *         do: eachPlayer({
  *           do: actionStep({ actions: ['playCard', 'endTurn'] })
  *         })
  *       }),
- *       getWinners: () => [this.getHighestScoringPlayer()]
- *     }));
+ *     });
+ *   }
+ *
+ *   // The end and the winners are declared here, on the game, and nowhere else.
+ *   override isFinished(): boolean {
+ *     return this.deck.count(Card) === 0;
+ *   }
+ *
+ *   override getWinners(): MyPlayer[] {
+ *     return this.isFinished() ? [this.getHighestScoringPlayer()] : [];
  *   }
  * }
  * ```
@@ -2929,17 +2937,19 @@ export class Game<
   /**
    * Set the flow definition for this game.
    *
-   * The flow defines the structure of your game: the order of turns,
-   * phases, and when the game ends. Use the flow builder functions
-   * (`defineFlow`, `loop`, `eachPlayer`, `actionStep`, etc.) to create
-   * the flow definition.
+   * The flow defines the structure of your game: the order of turns and
+   * phases. Build its nodes with the flow builder functions (`loop`,
+   * `eachPlayer`, `actionStep`, etc.). The flow does not decide when the game
+   * ends or who won: declare that on the game with `finish(winners)` or by
+   * overriding `isFinished()` and `getWinners()`. The flow ends as soon as
+   * `isFinished()` is true.
    *
-   * @param definition - Flow definition created with `defineFlow()`
+   * @param definition - The flow definition: a plain object with a `root` node
    *
    * @example
    * ```typescript
    * // In your game's constructor
-   * this.setFlow(defineFlow({
+   * this.setFlow({
    *   root: loop({
    *     while: () => !this.isFinished(),
    *     do: eachPlayer({
@@ -2949,9 +2959,7 @@ export class Game<
    *       )
    *     })
    *   }),
-   *   isComplete: () => this.deck.isEmpty(),
-   *   getWinners: () => [this.players.withHighestScore()]
-   * }));
+   * });
    * ```
    */
   setFlow(definition: FlowDefinition<G>): void {
@@ -3146,18 +3154,14 @@ export class Game<
    * Single place where a completed `FlowState` is reflected onto the game.
    * Every flow-advancing entry point (`startFlow`, `continueFlow`,
    * `continueFlowAfterPendingAction`) routes completion through here so a new
-   * entry point cannot finish a game without publishing its winners.
+   * entry point cannot complete a flow without finishing the game.
    *
-   * `settings.winners` is left untouched when the flow declared no winner, so a
-   * game that ended by calling `this.finish([...])` itself keeps its own result.
+   * It writes no winners: the game declares those itself (#503), through
+   * `finish(winners)` or a `getWinners()` override.
    */
   #applyFlowCompletion(state: FlowState): void {
     if (!state.complete) return;
     this.phase = 'finished';
-    const winners = this._flowEngine!.getWinners();
-    if (winners.length > 0) {
-      this.settings.winners = winners.map(p => p.seat);
-    }
   }
 
   /**
@@ -3927,8 +3931,8 @@ export class Game<
    * Transitions the game to 'finished' phase. Once finished, no more
    * actions can be taken. Use `getWinners()` to retrieve the winners.
    *
-   * @param winners - Optional array of winning players. If not provided,
-   *                  use `getWinners()` to let the flow engine determine winners.
+   * @param winners - Optional array of winning players. If not provided, the
+   *                  game names none unless it overrides `getWinners()`.
    *
    * @example
    * ```typescript
@@ -3938,7 +3942,7 @@ export class Game<
    * // End with multiple winners (tie)
    * this.finish([player1, player2]);
    *
-   * // End without specifying winners (flow's getWinners will be used)
+   * // End without specifying winners (a draw, unless getWinners() is overridden)
    * this.finish();
    * ```
    */
@@ -3951,6 +3955,10 @@ export class Game<
 
   /**
    * Check if the game is finished.
+   *
+   * Override it to declare the end from the game's own state; the flow ends as
+   * soon as it returns true. Together with `getWinners()` and `finish()` it is
+   * the one place a game's end is declared (#503).
    *
    * @returns `true` if the game phase is 'finished'
    *
@@ -3969,6 +3977,11 @@ export class Game<
 
   /**
    * Get the winners of the game.
+   *
+   * Every reader of the result takes it from here: the host's snapshot, the
+   * bot's search and the benchmark (#503). Override it to declare the winners
+   * from the game's own state; otherwise it returns the players `finish()`
+   * named.
    *
    * @returns Array of winning players, or empty array if no winners set
    *

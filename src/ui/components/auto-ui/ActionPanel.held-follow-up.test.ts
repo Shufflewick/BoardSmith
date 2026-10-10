@@ -8,7 +8,7 @@
  * shows a button for it whenever no action is in progress.
  */
 import { describe, it, expect } from 'vitest';
-import { ref } from 'vue';
+import { nextTick, ref } from 'vue';
 import { stubActionController, mountPanel } from './action-panel-controller.test-helper.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
@@ -58,18 +58,20 @@ describe('a held follow-up in the Action Panel', () => {
     expect(mountPanel(none).find('[data-bs-follow-up]').exists()).toBe(false);
   });
 
-  // The button starts through the shared action mutators (#513), so it is
-  // refused by the same guards as every other start.
-  it('does not resume the follow-up while the seat is viewing history', async () => {
+  // Beside a past board the panel offers nothing to take (#584): the button is
+  // not drawn while the seat is viewing history, and is drawn again on return.
+  it('does not offer the follow-up while the seat is viewing history', async () => {
     const controller = stubActionController({ heldFollowUp: ref(held) });
+    const viewingHistory = ref(true);
     const wrapper = mountPanel(
       controller,
       { availableActions: [], playerSeat: 1, isMyTurn: true },
-      { provide: { [GAME_CONTEXT_KEYS.isViewingHistory as symbol]: ref(true) } },
+      { provide: { [GAME_CONTEXT_KEYS.isViewingHistory as symbol]: viewingHistory } },
     );
+    expect(wrapper.find('[data-bs-follow-up]').exists()).toBe(false);
 
-    await wrapper.find('[data-bs-follow-up]').trigger('click');
-
-    expect(controller.resumeFollowUp).not.toHaveBeenCalled();
+    viewingHistory.value = false;
+    await nextTick();
+    expect(wrapper.find('[data-bs-follow-up]').exists()).toBe(true);
   });
 });

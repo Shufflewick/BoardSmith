@@ -28,6 +28,7 @@ import { ANNOUNCER_KEY, createAnnouncer, type UseAnnouncerReturn } from './useAn
 import { GAME_OVER_HOLDS_KEY, createGameOverReveal } from './useGameOverReveal.js';
 import { gameContextProvisions, type GameContextPlayer, type TimeTravelDiff } from './useGameContext.js';
 import type { TurnDeadline } from './useTurnDeadline.js';
+import type { EnrichedActionMetadata } from './useActionControllerTypes.js';
 import { useTableActionWiring, type TableActionWiring, type TableActionWiringOptions } from './useTableActionWiring.js';
 
 /** One value a board below can inject, under its key. */
@@ -86,6 +87,12 @@ export interface TableSeat extends TableActionWiring {
   gatedIsMyTurn: ComputedRef<boolean>;
   /** {@link availableActions}, but empty while a debug view shows history. Published and handed on like {@link gatedIsMyTurn}. */
   gatedAvailableActions: ComputedRef<string[]>;
+  /** The wiring's `actionMetadata`, but empty while a debug view shows history. Handed to the chrome and the Action Panel. */
+  gatedActionMetadata: ComputedRef<Record<string, EnrichedActionMetadata>>;
+  /** The wiring's `disabledActions`, but none while a debug view shows history. Handed to the board, the chrome and the Action Panel. */
+  gatedDisabledActions: ComputedRef<Record<string, string> | undefined>;
+  /** Whether this seat may undo now (`PlayerGameState.canUndo`), and false while a debug view shows history. */
+  gatedCanUndo: ComputedRef<boolean>;
   /** Whether this seat has already committed the current simultaneous step. False outside one. */
   completed: ComputedRef<boolean>;
   /** Every seat that has to act now, this one included. */
@@ -187,13 +194,18 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
     animationEvents,
   });
 
-  // The one place the turn signals are gated on history. The context publishes
+  // The one place the actionability signals are gated on history. The context publishes
   // these and the shell hands the same values to the board and the Action Panel,
   // so none of them can disagree about whether a seat browsing history can act.
   // The wiring above takes the live values and `isViewingHistory` itself, which
   // is how it refuses commits during a browse.
   const gatedIsMyTurn = computed(() => isMyTurn.value && !isViewingHistory.value);
   const gatedAvailableActions = computed<string[]>(() => (isViewingHistory.value ? [] : availableActions.value));
+  const gatedActionMetadata = computed<Record<string, EnrichedActionMetadata>>(() =>
+    isViewingHistory.value ? {} : wiring.actionMetadata.value,
+  );
+  const gatedDisabledActions = computed(() => (isViewingHistory.value ? undefined : wiring.disabledActions.value));
+  const gatedCanUndo = computed(() => !isViewingHistory.value && (state.value?.state.canUndo ?? false));
 
   const provisions: Provision[] = [
     [BOARD_INTERACTION_KEY, boardInteraction],
@@ -224,6 +236,9 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
     availableActions,
     gatedIsMyTurn,
     gatedAvailableActions,
+    gatedActionMetadata,
+    gatedDisabledActions,
+    gatedCanUndo,
     completed,
     dueSeats,
     players,

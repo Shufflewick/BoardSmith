@@ -21,7 +21,7 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
+  type FlowDefinition,
   loop,
   eachPlayer,
   actionStep,
@@ -37,15 +37,15 @@ import { enumerateLegalMoves } from '../engine/utils/enumerate-moves.js';
 // is driven entirely by that action's multiSelect resolution.
 // ============================================================================
 
-function makeFlow() {
-  return defineFlow({
+function makeFlow(): FlowDefinition {
+  return {
     root: loop({
       maxIterations: 10,
       do: eachPlayer({
         do: actionStep({ actions: ['pick'] }),
       }),
     }),
-  });
+  };
 }
 
 /** multiSelect function resolves to a concrete { min: 2, max: 2 } config. */

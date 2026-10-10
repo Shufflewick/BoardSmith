@@ -2049,6 +2049,20 @@ queue, rather than failing a check on the way in.
   world that was away for a week from delivering a week of notifications at once.
   If one of those occurrences refuses, the event stays queued at the occurrence
   that refused: the ones before it are durable and are never run again (#538).
+  **The handler has the last word over its own key** (#583). An occurrence that
+  schedules under the recurrence's own key replaces it -- that is how a
+  recurrence changes its interval or turns into a one-shot -- and one that calls
+  `ctx.world.cancel(key)` on it stops it. Either way the host does not re-arm it,
+  and no occurrence the old recurrence still owed is run. Scheduling a
+  different key leaves the automatic re-arm alone. This is true only of a
+  **world-owned** recurrence: a due handler runs as the clock, so its schedules
+  belong to the world (see
+  [the bootstrap note above](#writing-an-occupied-worlds-lifecycle-with-it)),
+  and a recurrence a seat armed keeps re-arming whatever its handler does to
+  the key. A host learns this from the
+  plan: `runDueOccurrences`' `call` answers `displaced: true` when the
+  occurrence's plan `replaced` holds the event's own id, and then writes no
+  re-arm at `owedDue`.
 
 **A scheduled event costs a wake, so do not buy one you do not need.** If the
 effect is only visible when somebody next looks, write a `completesAt` timestamp
@@ -2755,9 +2769,22 @@ so there is no earlier moment at which a ladder could decline to touch the
 world, and parking after two is what stops it spending a wake an hour on a
 refusal only a deploy or a clear can lift.
 
-**`infrastructure`**: a service the host depends on did not answer.
-`bundle-store-unavailable` is the one code, and it repairs itself when the
-service comes back. It costs the event nothing while it lasts.
+**`infrastructure`**: a service the host depends on did not answer. Both
+codes repair themselves when the service comes back, and neither is charged to
+your game:
+
+- `bundle-store-unavailable`: the store holding your rules bundle did not
+  answer. It is raised before any of your code runs, so the host holds the
+  event in place and it costs the event nothing while it lasts.
+- `world-storage-unavailable`: the host's own durable storage, where the
+  world's partitions and queue live, did not answer. It can arrive after your
+  code already ran, so the host rolls the batch or command back to its last
+  checkpoint rather than holding the event, and the next wake runs it once.
+  Raise it with `worldStorageUnavailable({ operation })`, where `operation` is
+  `"read"`, `"write"`, `"delete"` or `"list"`. It takes nothing else, because a
+  storage error's own text can name internal keys or stored values and a
+  refusal's words reach players and logs; log the underlying error where you
+  caught it.
 
 **Your game's own refusals are not in this table, and should not be.** A rule
 saying no is not a code a host's lifecycle policy reads; it is a sentence for the

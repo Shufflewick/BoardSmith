@@ -677,6 +677,8 @@ export default defineGameUIs({
 /** `src/ui/components/WorldBoard.vue` -- this world's BOARD AREA. */
 export function generateWorldBoardVue(): string {
   return `<script setup lang="ts">
+import type { WorldBoardProps } from 'boardsmith/ui';
+
 /**
  * This world's board, and ONLY its board.
  *
@@ -705,13 +707,7 @@ export function generateWorldBoardVue(): string {
  * and draw your own buttons -- that is the panel's job, and a second copy is
  * how the two drift apart.
  */
-const props = defineProps<{
-  gameView: unknown;
-  playerSeat: number;
-  availableActions: string[];
-  worldName: string | null;
-  presence: readonly number[] | null;
-}>();
+const props = defineProps<WorldBoardProps>();
 </script>
 
 <template>

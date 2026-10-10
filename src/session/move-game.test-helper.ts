@@ -12,7 +12,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   actionStep,
   type GameOptions,
 } from '../engine/index.js';
@@ -50,14 +49,14 @@ export class MoveGame extends Game<MoveGame, Player> {
     );
 
     this.setFlow(
-      defineFlow({
+      {
         root: actionStep({
           actions: ['move'],
           player: (ctx) => ctx.game.getPlayer(1)!,
           repeatUntil: () => false,
           maxMoves: 20,
         }),
-      })
+      }
     );
   }
 

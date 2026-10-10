@@ -9,7 +9,7 @@
  *   getActionHelpEnabled() / setActionHelpEnabled(value) → boardsmith_action_help
  *   const isActionHelpVisible = ref(getActionHelpEnabled())
  *   handleTeachingAction('help-toggle') → flip + persist
- *   isActionHelpVisible threaded into ControlsMenu, ActionPanel, board
+ *   isActionHelpVisible threaded into ControlsMenu and ActionPanel
  *
  * Each harness mirrors the exact production code under test — if the GameShell wiring
  * is broken, the harness must receive the same fix, making it a canary for the pattern.
@@ -25,12 +25,11 @@
  *   TOG-1: help-toggle handler flips isActionHelpVisible ref
  *   TOG-2: help-toggle handler calls setActionHelpEnabled with new value (persists)
  *   PAR-1: isActionHelpVisible is threaded into ActionPanel (AutoUI path)
- *   PAR-2: isActionHelpVisible is exposed in board props (custom-UI path)
  *   DIS-1: disabledActions computed reflects broadcast state.disabledActions
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ref, computed, defineComponent, nextTick, type PropType } from 'vue';
+import { ref, computed, defineComponent, type PropType } from 'vue';
 import { mount } from '@vue/test-utils';
 
 // ── Production localStorage helpers (mirrored from GameShell.vue) ────────────
@@ -187,11 +186,10 @@ describe('help-toggle handler (GameShell.handleTeachingAction)', () => {
 // ── Dual-path threading parity harness ────────────────────────────────────────
 //
 // Mirrors the production wiring from GameShell.vue where isActionHelpVisible
-// is passed to BOTH ActionPanel (AutoUI) AND the board props:
+// is passed to ActionPanel. A board is not handed it: it is shell chrome state,
+// and no board read it (#516).
 //
 //   <ActionPanel :is-action-help-visible="isActionHelpVisible" .../>
-//   <component :is="selectedUiComponent" :is-action-help-visible="isActionHelpVisible" ...>
-// (the harness uses a slot named "board" to capture the props the board receives)
 //
 // Also verifies disabledActions computed from broadcast state:
 //   const disabledActions = computed(() => state.value?.state?.disabledActions);
@@ -224,19 +222,11 @@ const ParityHarness = defineComponent({
         :data-is-action-help-visible="isActionHelpVisible"
         :data-has-disabled-actions="disabledActions !== undefined"
       />
-      <!-- board path (PAR-2) -->
-      <slot
-        name="board"
-        :is-action-help-visible="isActionHelpVisible"
-        :disabled-actions="disabledActions"
-      >
-        <div class="slot-fallback" />
-      </slot>
     </div>
   `,
 });
 
-describe('isActionHelpVisible dual-path threading (ActionPanel + board)', () => {
+describe('isActionHelpVisible threading (ActionPanel)', () => {
   beforeEach(() => {
     localStorage.clear();
   });
@@ -256,57 +246,6 @@ describe('isActionHelpVisible dual-path threading (ActionPanel + board)', () => 
     });
     const panel = wrapper.find('.action-panel-stub');
     expect(panel.attributes('data-is-action-help-visible')).toBe('false');
-    wrapper.unmount();
-  });
-
-  it('PAR-2: isActionHelpVisible is exposed in board props', async () => {
-    let capturedSlotProps: Record<string, unknown> | null = null;
-    const wrapper = mount(ParityHarness, {
-      props: { initialHelpVisible: true },
-      slots: {
-        board: (slotProps: Record<string, unknown>) => {
-          capturedSlotProps = slotProps;
-          return '<div class="custom-ui-stub" />';
-        },
-      },
-    });
-    await nextTick();
-    expect(capturedSlotProps).not.toBeNull();
-    expect((capturedSlotProps as any).isActionHelpVisible).toBe(true);
-    wrapper.unmount();
-  });
-
-  it('PAR-2b: board receives false when isActionHelpVisible is false', async () => {
-    let capturedSlotProps: Record<string, unknown> | null = null;
-    const wrapper = mount(ParityHarness, {
-      props: { initialHelpVisible: false },
-      slots: {
-        board: (slotProps: Record<string, unknown>) => {
-          capturedSlotProps = slotProps;
-          return '<div class="custom-ui-stub" />';
-        },
-      },
-    });
-    await nextTick();
-    expect(capturedSlotProps).not.toBeNull();
-    expect((capturedSlotProps as any).isActionHelpVisible).toBe(false);
-    wrapper.unmount();
-  });
-
-  it('PAR-parity: ActionPanel and slot both receive the SAME value', async () => {
-    let slotHelpVisible: unknown;
-    const wrapper = mount(ParityHarness, {
-      props: { initialHelpVisible: true },
-      slots: {
-        board: (slotProps: Record<string, unknown>) => {
-          slotHelpVisible = slotProps.isActionHelpVisible;
-          return '<div />';
-        },
-      },
-    });
-    await nextTick();
-    const panelAttr = wrapper.find('.action-panel-stub').attributes('data-is-action-help-visible');
-    expect(String(slotHelpVisible)).toBe(panelAttr);
     wrapper.unmount();
   });
 });
@@ -362,57 +301,6 @@ describe('disabledActions computed from broadcast state', () => {
     });
     const panel = wrapper.find('.action-panel-stub');
     expect(panel.attributes('data-has-disabled-actions')).toBe('true');
-    wrapper.unmount();
-  });
-
-  it('DIS-5: board receives disabledActions as a named prop', async () => {
-    // Verifies GameShell threads disabledActions to the custom-UI slot path (parity gap fix).
-    // Custom UI authors must be able to consume :disabled-actions without casting through state.
-    let capturedSlotProps: Record<string, unknown> | null = null;
-    const wrapper = mount(ParityHarness, {
-      props: {
-        initialHelpVisible: true,
-        broadcastState: {
-          state: { disabledActions: { move: 'Not your turn' } },
-        },
-      },
-      slots: {
-        board: (slotProps: Record<string, unknown>) => {
-          capturedSlotProps = slotProps;
-          return '<div class="custom-ui-stub" />';
-        },
-      },
-    });
-    await nextTick();
-    expect(capturedSlotProps).not.toBeNull();
-    expect((capturedSlotProps as any).disabledActions).toEqual({ move: 'Not your turn' });
-    wrapper.unmount();
-  });
-
-  it('DIS-6: ActionPanel and board both receive the SAME disabledActions object', async () => {
-    // Verifies parity: both paths (AutoUI ActionPanel and custom-UI slot) see identical
-    // disabledActions data so ActionHelpPopover renders the same popover in either context.
-    let slotDisabledActions: unknown;
-    const wrapper = mount(ParityHarness, {
-      props: {
-        initialHelpVisible: true,
-        broadcastState: {
-          state: { disabledActions: { defend: 'No shield equipped' } },
-        },
-      },
-      slots: {
-        board: (slotProps: Record<string, unknown>) => {
-          slotDisabledActions = slotProps.disabledActions;
-          return '<div />';
-        },
-      },
-    });
-    await nextTick();
-    // ActionPanel stub reflects disabledActions presence via data-has-disabled-actions
-    const panelHasDA = wrapper.find('.action-panel-stub').attributes('data-has-disabled-actions');
-    expect(panelHasDA).toBe('true');
-    // Slot received the same value
-    expect(slotDisabledActions).toEqual({ defend: 'No shield equipped' });
     wrapper.unmount();
   });
 });

@@ -14,7 +14,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   actionStep,
   enumerateLegalMoves,
   type GameOptions,
@@ -66,11 +65,9 @@ class GemGame extends Game<GemGame, Player> {
         }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: actionStep({ actions: ['take'], player: (ctx) => ctx.game.getPlayer(1)! }),
-      }),
-    );
+    this.setFlow({
+      root: actionStep({ actions: ['take'], player: (ctx) => ctx.game.getPlayer(1)! }),
+    });
   }
 }
 

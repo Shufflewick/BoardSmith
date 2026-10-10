@@ -12,7 +12,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -45,14 +44,12 @@ class ScoreRaceGame extends Game<ScoreRaceGame, RacePlayer> {
         }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 100,
-          do: eachPlayer({ do: actionStep({ actions: ['pick'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 100,
+        do: eachPlayer({ do: actionStep({ actions: ['pick'] }) }),
       }),
-    );
+    });
   }
 }
 

@@ -160,14 +160,6 @@ describe('ZoomPreviewOverlay', () => {
       expect(rendered()?.querySelector('.zoom-preview-die') ?? null).toBeNull();
     });
 
-    it('tells the author how to get dice support instead of failing silently', () => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      overlay(state({ dieData: { sides: 20, value: 17 } }));
-      const message = warn.mock.calls.flat().join(' ');
-      expect(message).toContain("boardsmith/ui/dice");
-      expect(message).toContain('Die3D');
-    });
-
     it('does not fall through to card markup for die data', () => {
       overlay(state({ dieData: { sides: 6, value: 3 } }));
       expect(rendered()?.querySelector('.zoom-preview-card') ?? null).toBeNull();

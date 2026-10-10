@@ -61,7 +61,8 @@ export interface ScheduledEvent {
    * The interval lives in the stored event instead, which is what lets the
    * drain integrate. The parent re-arms the recurrence itself, in the same
    * write that settles the occurrence it just ran, so a handler never has to
-   * re-arm and can never forget to.
+   * re-arm and can never forget to. A handler that does upsert or cancel its
+   * own key is obeyed instead of re-armed over (#583, `DueOccurrenceRan`).
    */
   everyMs?: number;
 }
@@ -287,17 +288,28 @@ export function occurrencesDue(
  *
  * `ended` is true when that occurrence ended the world (#395): the occurrences
  * after it belong to a world that no longer runs anything.
+ *
+ * `displaced` is true when that occurrence's own schedule plan displaced the
+ * event it ran (#583): the handler upserted or cancelled the event's own key,
+ * so the plan's `replaced` holds the event's id. THE HANDLER'S REQUEST WINS.
+ * The host does not re-arm the event at `owedDue`, the plan's own events are
+ * the whole of what is queued under that key, and the occurrences the old
+ * recurrence still owed are not run. This is how a recurrence stops itself or
+ * changes its interval, and it is the only answer a host whose index holds one
+ * row per (owner, key) can store.
  */
 export interface DueOccurrenceRan {
   readonly ended: boolean;
+  readonly displaced: boolean;
 }
 
 /**
  * WHAT ONE DUE EVENT CAME TO, once every occurrence that could run has.
  *
- * `ran` -- every occurrence ran, or one ended the world. `nextDue` is where the
- * recurrence goes next (`occurrencesDue`'s answer), or null for a one-shot and
- * for a world that ended.
+ * `ran` -- every occurrence ran, or one ended the world or displaced its own
+ * event. `nextDue` is where the recurrence goes next (`occurrencesDue`'s
+ * answer), or null for a one-shot, for a world that ended, and for an event
+ * whose handler upserted or cancelled its own key (#583).
  *
  * `refused` -- the occurrence at index `ran` threw `error`, and nothing after
  * it was tried. `resumeDue` is where the event must stand for a retry to owe
@@ -341,6 +353,11 @@ export type DueOccurrencesOutcome =
  * event already past what ran; a host that checkpoints per batch can ignore it
  * and use the outcome. Either way the two answers agree: a refusal at index
  * k > 0 resumes at the `owedDue` occurrence k - 1 was handed.
+ *
+ * AN OCCURRENCE THAT DISPLACED ITS OWN EVENT IS THE LAST ONE (#583). Its
+ * `owedDue` is not written -- the host checks its plan before it does -- and
+ * the outcome's `nextDue` is null, because what the event does next is what
+ * the handler planned.
  */
 export async function runDueOccurrences(
   event: ScheduledEvent,
@@ -367,6 +384,7 @@ export async function runDueOccurrences(
       };
     }
     if (ran.ended) return { kind: "ran", ran: index + 1, ended: true, nextDue: null };
+    if (ran.displaced) return { kind: "ran", ran: index + 1, ended: false, nextDue: null };
   }
   return { kind: "ran", ran: occurrences.length, ended: false, nextDue };
 }

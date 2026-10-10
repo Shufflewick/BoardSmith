@@ -40,7 +40,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   sequence,
   actionStep,
   execute,
@@ -75,23 +74,21 @@ class UndoFenceGame extends Game<UndoFenceGame, Player> {
     const activePlayer = (ctx: { game: Game }) =>
       ctx.game.getPlayer((ctx.game as UndoFenceGame).activeSeat)!;
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 1000,
-          while: (ctx) => !ctx.game.isFinished(),
-          do: sequence(
-            actionStep({ actions: ['play', 'lock', 'endGame'], player: activePlayer, repeatUntil: () => false }),
-            execute((ctx) => {
-              const game = ctx.game as UndoFenceGame;
-              if (!game.isFinished()) {
-                game.activeSeat = game.activeSeat >= game.players.length ? 1 : game.activeSeat + 1;
-              }
-            }),
-          ),
-        }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 1000,
+        while: (ctx) => !ctx.game.isFinished(),
+        do: sequence(
+          actionStep({ actions: ['play', 'lock', 'endGame'], player: activePlayer, repeatUntil: () => false }),
+          execute((ctx) => {
+            const game = ctx.game as UndoFenceGame;
+            if (!game.isFinished()) {
+              game.activeSeat = game.activeSeat >= game.players.length ? 1 : game.activeSeat + 1;
+            }
+          }),
+        ),
       }),
-    );
+    });
   }
 }
 

@@ -68,8 +68,6 @@ export function createHexFlow(game: HexGame): FlowDefinition {
         }),
       }),
     }),
-    isComplete: () => game.isFinished(),
-    getWinners: () => game.winner ? [game.winner] : [],
   };
 }
 ```
@@ -411,8 +409,6 @@ simultaneousActionStep({
 // flow.ts
 return {
   root: /* ... */,
-  isComplete: /* ... */,
-  getWinners: /* ... */,
 
   // Phase lifecycle hooks
   onEnterPhase: (phaseName, ctx) => {

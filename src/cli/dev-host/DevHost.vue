@@ -18,6 +18,8 @@ import { useToast } from '../../ui/composables/useToast.js';
 import { applyTheme } from '../../ui/theme.js';
 import { loadDevClientId, TABLE_CLIENT_KEY } from './dev-client-id.js';
 import { DEV_HOST_WS_PATH } from './socket-path.js';
+import { valuesEqual, choiceValueKey } from '../../engine/action/choice-matching.js';
+import { getDisplayFromValue } from '../../ui/composables/actionControllerHelpers.js';
 
 const props = defineProps<{ config: DevHostConfig }>();
 const cfg = props.config;
@@ -464,14 +466,23 @@ function handleChromeClick(e: MouseEvent) {
   }
 }
 
-/** Resolve the display label for an option's default value. */
+/**
+ * What an option choice shows: its label, or else the label the Action Panel
+ * derives for a value, so an object choice never reads "[object Object]".
+ */
+function choiceLabel(choice: { value: unknown; label?: string }): string {
+  return choice.label ?? getDisplayFromValue(choice.value);
+}
+
+/**
+ * Resolve the display label for an option's default value. The default is
+ * matched to its choice structurally, so an object-valued default finds the
+ * choice it equals.
+ */
 function optionDefaultLabel(opt: { default?: unknown; choices?: Array<{ value: unknown; label?: string }> }): string {
   if (opt.default === undefined || opt.default === null) return '—';
-  if (opt.choices) {
-    const match = opt.choices.find((c) => c.value === opt.default);
-    if (match) return match.label ?? String(match.value);
-  }
-  return String(opt.default);
+  const match = opt.choices?.find((c) => valuesEqual(c.value, opt.default));
+  return match ? choiceLabel(match) : getDisplayFromValue(opt.default);
 }
 
 /**
@@ -659,8 +670,8 @@ onUnmounted(() => {
                 class="dev-chrome__select"
                 :data-testid="`lobby-option-${opt.id}`"
               >
-                <option v-for="c in opt.choices" :key="String(c.value)" :value="c.value">
-                  {{ c.label ?? String(c.value) }}
+                <option v-for="c in opt.choices" :key="choiceValueKey(c.value)" :value="c.value">
+                  {{ choiceLabel(c) }}
                 </option>
               </select>
               <!-- WR-03: a real checkbox for `boolean` — no free-text

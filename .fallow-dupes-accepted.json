@@ -228,6 +228,14 @@
       ]
     },
     {
+      "content": "64c9b55ecd6a877d",
+      "lines": 21,
+      "files": [
+        "src/session/testing/fixtures/bookkeeping-execute-fixture.ts",
+        "src/session/testing/fixtures/execute-barrier-fixture.ts"
+      ]
+    },
+    {
       "content": "68d34a55e2e18ad1",
       "lines": 25,
       "files": [
@@ -269,14 +277,6 @@
       "lines": 13,
       "files": [
         "src/cli/commands/verify-impact.ts"
-      ]
-    },
-    {
-      "content": "7afa6e65784ca3f4",
-      "lines": 22,
-      "files": [
-        "src/session/testing/fixtures/bookkeeping-execute-fixture.ts",
-        "src/session/testing/fixtures/execute-barrier-fixture.ts"
       ]
     },
     {
@@ -363,14 +363,6 @@
       ]
     },
     {
-      "content": "94e18f077656ea6a",
-      "lines": 48,
-      "files": [
-        "src/ui/components/auto-ui/renderers/DieRenderer.vue",
-        "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
-      ]
-    },
-    {
       "content": "9aa734fbe4f4d143",
       "lines": 18,
       "files": [
@@ -391,6 +383,14 @@
       "files": [
         "src/engine/element/game-element.ts",
         "src/engine/utils/serializer.ts"
+      ]
+    },
+    {
+      "content": "a65a466bf25aee08",
+      "lines": 33,
+      "files": [
+        "src/ui/components/auto-ui/renderers/DieRenderer.vue",
+        "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
       ]
     },
     {
@@ -430,13 +430,6 @@
       "files": [
         "src/cli/commands/verify-classify.ts",
         "src/cli/commands/verify-repair.ts"
-      ]
-    },
-    {
-      "content": "b2de687b603095c5",
-      "lines": 10,
-      "files": [
-        "src/ui/components/auto-ui/ActionPanel.vue"
       ]
     },
     {

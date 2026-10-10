@@ -236,12 +236,12 @@ interface ExecutionFrame<G extends Game = Game> {
 /**
  * Executes flow definitions and manages game state progression.
  *
- * FlowEngine is the runtime interpreter for flow definitions created with
- * {@link defineFlow} and flow builder functions. It handles:
+ * FlowEngine is the runtime interpreter for flow definitions: plain objects
+ * whose nodes come from the flow builder functions. It handles:
  * - Executing flow nodes (sequences, loops, conditionals, action steps)
  * - Pausing at action steps to wait for player input
  * - Resuming after player actions
- * - Tracking game completion and determining winners
+ * - Ending the flow once the game says it is finished
  * - Serializing/restoring state for persistence
  *
  * Most game developers don't interact with FlowEngine directly - instead use
@@ -251,15 +251,13 @@ interface ExecutionFrame<G extends Game = Game> {
  * @example
  * ```typescript
  * // Define the flow
- * const flow = defineFlow({
+ * const flow: FlowDefinition = {
  *   setup: (ctx) => { ... },
  *   root: loop({
  *     while: (ctx) => !ctx.game.isFinished(),
  *     do: eachPlayer({ do: playerTurn })
  *   }),
- *   isComplete: (ctx) => someoneWon(ctx),
- *   getWinners: (ctx) => [getWinner(ctx)]
- * });
+ * };
  *
  * // Engine is created internally by GameRunner
  * const engine = new FlowEngine(game, flow);
@@ -434,7 +432,7 @@ export class FlowEngine<G extends Game = Game> {
 
   // ============================================================================
   // SECTION: Public API
-  // Purpose: External interface - start, resume, getState, restore, isComplete, getWinners
+  // Purpose: External interface - start, resume, getState, restore, isComplete
   // ============================================================================
 
   /**
@@ -1471,17 +1469,6 @@ export class FlowEngine<G extends Game = Game> {
     return this.lastActionResult;
   }
 
-  /**
-   * Get the winners (if game is complete)
-   */
-  getWinners(): Player[] {
-    if (!this.complete) return [];
-    if (this.definition.getWinners) {
-      return this.definition.getWinners(this.createContext());
-    }
-    return [];
-  }
-
   // ============================================================================
   // SECTION: Core Execution Loop
   // Purpose: Context creation, position tracking, main execution loop
@@ -1611,8 +1598,9 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   /**
-   * Whether the game is over: it was finished (`game.finish()`, the END_GAME
-   * command, or a game's own `isFinished()`), or the flow's `isComplete` says so.
+   * Whether the game is over: it was finished (`game.finish(winners)`, or a
+   * game's own `isFinished()` override). The game is the one place that
+   * declares its end (#503).
    *
    * A finished game ends the flow whatever loop it is in (#492). Only
    * `turnLoop` and `stateAwareLoop` used to stop on `isFinished()`, so a game
@@ -1621,7 +1609,7 @@ export class FlowEngine<G extends Game = Game> {
    * players could keep acting.
    */
   private isOver(): boolean {
-    return this.game.isFinished() || this.definition.isComplete?.(this.createContext()) === true;
+    return this.game.isFinished();
   }
 
   /** Mark the flow complete. A complete flow prompts no seat. */

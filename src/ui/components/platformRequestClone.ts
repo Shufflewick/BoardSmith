@@ -26,10 +26,6 @@ export function assertCloneable(op: string, payload: unknown): void {
  * Genuine non-plain objects (class instances such as live game elements) are left
  * intact, so `assertCloneable` still fails loud on a real element leak.
  */
-export function withoutReactivity<T>(value: T): T {
-  return deepUnwrap(value, new WeakMap()) as T;
-}
-
 function deepUnwrap(value: unknown, seen: WeakMap<object, unknown>): unknown {
   if (isRef(value)) value = unref(value);
   const raw = value && typeof value === 'object' ? toRaw(value as object) : value;
@@ -81,7 +77,7 @@ export function toCloneablePayload<T extends object>(
   renderedFlowState: BoundaryKeyState | null | undefined,
 ): T & { boundaryKey: string } {
   const stamped = { ...payload, boundaryKey: flowBoundaryKey(renderedFlowState) };
-  const plain = withoutReactivity(stamped);
+  const plain = deepUnwrap(stamped, new WeakMap()) as T & { boundaryKey: string };
   assertCloneable(op, plain);
   return plain;
 }

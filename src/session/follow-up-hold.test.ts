@@ -19,7 +19,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -108,7 +107,7 @@ function raidClass(shape: Shape, decline: boolean, timed = false): typeof RaidGa
     cls = class extends RaidGame {
       constructor(options: GameOptions) {
         super(options);
-        this.setFlow(defineFlow({ root: flowFor(shape, actions, timed ? 30_000 : undefined) }));
+        this.setFlow({ root: flowFor(shape, actions, timed ? 30_000 : undefined) });
       }
     };
     classes.set(key, cls);
@@ -361,13 +360,13 @@ describe('live session host', () => {
     class TwoMoveRaid extends RaidGame {
       constructor(options: GameOptions) {
         super(options);
-        this.setFlow(defineFlow({
+        this.setFlow({
           root: loop({
             maxIterations: 3,
             while: raiding,
             do: eachPlayer({ do: actionStep({ actions: ['scout', 'rest'], maxMoves: 2, turnScope: 'restart' }) }),
           }),
-        }));
+        });
       }
     }
     const s = await session(TwoMoveRaid);
@@ -654,12 +653,12 @@ describe('a host deadline that passed for a seat', () => {
       constructor(options: GameOptions) {
         super(options);
         this.registerAction(Action.create<RaidGame>('wait').execute(() => {}));
-        this.setFlow(defineFlow({
+        this.setFlow({
           root: loop({ maxIterations: 3, while: raiding, do: eachPlayer({ do: sequence(
             actionStep({ actions: ['scout'], turnScope: 'continue', timeLimitMs: 30_000 }),
             actionStep({ actions: ['wait'], turnScope: 'continue', maxMoves: 2 }),
           ) }) }),
-        }));
+        });
       }
     }
     const def: GameDefinitionLike = { gameClass: TwoStepTurn, gameType: 'raid', minPlayers: 2, maxPlayers: 3 };
@@ -689,9 +688,9 @@ describe('a custom allDone ends the step and drops held follow-ups (#494, ruled)
   class OneScoutEnough extends RaidGame {
     constructor(options: GameOptions) {
       super(options);
-      this.setFlow(defineFlow({
+      this.setFlow({
         root: simultaneousActionStep({ actions: ['scout'], allDone: (ctx) => (ctx.game as RaidGame).scouted.length >= 1 }),
-      }));
+      });
     }
   }
 

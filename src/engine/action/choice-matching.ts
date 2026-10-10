@@ -34,6 +34,16 @@ export function valuesEqual(a: unknown, b: unknown): boolean {
 }
 
 /**
+ * A string naming a choice value under the same identity as `valuesEqual`:
+ * objects by their JSON, anything else by type and value, so `1` and `'1'` stay
+ * apart. A UI keys a rendered list of choices by it (#563).
+ */
+export function choiceValueKey(value: unknown): string {
+  if (typeof value === 'object' && value !== null) return `object:${JSON.stringify(value)}`;
+  return `${typeof value}:${String(value)}`;
+}
+
+/**
  * Resolve a SHORTHAND to the choice it names -- an element id, a stable string
  * id, a display string, or an object carrying only the identifying fields --
  * for the common case of a UI that holds an identifier rather than the whole

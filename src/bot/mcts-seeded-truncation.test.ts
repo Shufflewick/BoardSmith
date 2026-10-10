@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { Game, Action, defineFlow, actionStep, loop, eachPlayer, type GameOptions } from '../engine/index.js';
+import { Game, Action, actionStep, loop, eachPlayer, type GameOptions } from '../engine/index.js';
 import { MCTSBot } from './mcts-bot.js';
 import { DIFFICULTY_PRESETS, type BotConfig } from './types.js';
 
@@ -29,9 +29,9 @@ class ChoiceGame extends Game {
         .execute(() => ({ success: true })),
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: actionStep({ actions: ['pick'] }),
-    }));
+    });
   }
 }
 
@@ -190,15 +190,20 @@ class ParityGame extends Game {
         }),
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({ maxIterations: 2, do: eachPlayer({ do: actionStep({ actions: ['pick'] }) }) }),
-      isComplete: (ctx) => (ctx.game as ParityGame).picks.length >= 4,
-      getWinners: (ctx) => {
-        const game = ctx.game as ParityGame;
-        const sum = game.picks.reduce((total, pick) => total + pick, 0);
-        return [game.getPlayer(sum % 2 === 0 ? 1 : 2)!];
-      },
-    }));
+    });
+  }
+
+  override isFinished(): boolean {
+    return super.isFinished() || this.picks.length >= 4;
+  }
+
+  /** Seat 1 wins when the four picks sum to an even number, seat 2 otherwise. */
+  override getWinners() {
+    if (!this.isFinished()) return [];
+    const sum = this.picks.reduce((total, pick) => total + pick, 0);
+    return [this.getPlayer(sum % 2 === 0 ? 1 : 2)!];
   }
 }
 

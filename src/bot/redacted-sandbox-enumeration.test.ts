@@ -3,7 +3,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   simultaneousActionStep,
   enumerateLegalMoves,
   RedactedAttributeError,
@@ -89,14 +88,12 @@ class TravelGame extends Game<TravelGame, Scout> {
         .execute(() => ({ success: true }))
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: simultaneousActionStep({
         actions: ['travel', 'trade', 'camp', 'pass'],
         playerDone: () => false,
       }),
-      isComplete: () => false,
-      getWinners: () => [],
-    }));
+    });
   }
 }
 

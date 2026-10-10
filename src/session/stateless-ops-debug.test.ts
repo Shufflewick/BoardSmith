@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../engine/index.js';
+import { Game, Player, Action, actionStep, loop, type GameOptions } from '../engine/index.js';
 import { executeOp, DEBUG_OP_TYPES, type GameDefinitionLike, type ExecutableOp, type Op, type StateEnvelope } from './stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 import { boundaryKeyOf, boundaryKeyOfHost } from './testing/boundary-stamp.js';
@@ -15,14 +15,12 @@ class PassGame extends Game<PassGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 1000,
-          do: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
-        }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 1000,
+        do: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
       }),
-    );
+    });
   }
 }
 

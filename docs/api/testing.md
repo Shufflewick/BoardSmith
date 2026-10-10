@@ -474,6 +474,13 @@ mode is off, so nothing starts or completes by itself, and the controller
 refuses to take a move, saying to take it with `testGame.doAction(...)` and
 render the seat again.
 
+**The prompt a table board sets is scanned too** (#564). GameShell shows the
+text a board passes to `setBoardPrompt` in the action bar, in place of the
+pick's own prompt, so the seat reads it. `renderAsSeat` records the last prompt
+the board set, and `assertNoHiddenInfoLeak` fails if it names something the
+seat may not see. A prompt the board gave back with `setBoardPrompt(null)` is
+no longer shown, so it is not checked.
+
 **A table seat is given everything GameShell gives its board** (#406): board
 interaction, the game context (`useGameContext()`), the announcer
 (`useAnnouncer()`) and animation events (`useAnimationEvents()`). GameShell and

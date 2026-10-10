@@ -1,3 +1,9 @@
+<script lang="ts">
+// Module scope, not setup: the missing-dice warning fires once per page load,
+// not once per die preview or per remount.
+let warnedNoDiceSupport = false;
+</script>
+
 <script setup lang="ts">
 /**
  * ZoomPreviewOverlay - Renders an enlarged card or die preview
@@ -153,10 +159,12 @@ const isDieDataMode = computed(() => props.previewState.dieData !== null);
 const diePreview = getDiePreviewComponent();
 
 // A die preview with no renderer would silently show an empty box. Say what is
-// wrong and how to fix it, once, in dev only — a player can do nothing with this.
-if (import.meta.env.DEV) {
+// wrong and how to fix it, once per page load, in dev only — a player can do
+// nothing with this.
+if (import.meta.env.DEV && !diePreview) {
   watchEffect(() => {
-    if (props.previewState.dieData && !diePreview) {
+    if (props.previewState.dieData && !warnedNoDiceSupport) {
+      warnedNoDiceSupport = true;
       console.warn(
         'A die zoom-preview was requested but this bundle has no dice support, so nothing will render. '
         + "Import Die3D from 'boardsmith/ui/dice' in the component that draws your dice — that import is "

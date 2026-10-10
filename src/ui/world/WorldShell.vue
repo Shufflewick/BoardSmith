@@ -85,21 +85,7 @@
         <component
           v-if="boardHostReady && boardComponent"
           :is="boardComponent"
-          :game-view="play.gameView.value"
-          :players="play.players.value"
-          :my-player="play.myPlayer.value"
-          :player-seat="host.seat.value ?? -1"
-          :is-my-turn="play.mayAct.value"
-          :available-actions="play.availableActions.value"
-          :action-args="actionController.currentArgs.value"
-          :set-board-prompt="() => {}"
-          :action-controller="actionController"
-          :is-action-help-visible="false"
-          :disabled-actions="play.disabledActions.value"
-          :presence="host.presence.value"
-          :events="host.events.value"
-          :world-name="host.worldName.value"
-          :phase="host.phase.value"
+          v-bind="boardProps"
         />
         <!-- Only reachable if the registry's default entry resolved to no
              component — a broken uis.ts. Name the fix, don't render blank.
@@ -127,6 +113,7 @@ import PlayShell, { type PlayConnection } from '../components/PlayShell.vue';
 import Toast from '../components/Toast.vue';
 import DisabledReasonTooltip from '../components/helpers/DisabledReasonTooltip.vue';
 import { resolveUiComponent, type GameUIRegistry } from '../game-uis.js';
+import { worldBoardProps } from '../board-props.js';
 import { createBoardInteraction } from '../composables/useBoardInteraction.js';
 import { useToast } from '../composables/useToast.js';
 import { applyTheme, BREAKPOINTS } from '../theme.js';
@@ -195,6 +182,9 @@ const toast = useToast();
 const seat = useWorldSeat({ host, boardInteraction: createBoardInteraction() });
 provideWorldSeat(seat);
 const { play, controller: actionController } = seat;
+
+/** The board's props, as the `WorldBoardProps` a world board declares (#516). */
+const boardProps = computed(() => worldBoardProps(seat, host));
 
 /** The world's own name once the host has said it, and the game's until then --
  *  two worlds of the same game have different names and only one is this one. */

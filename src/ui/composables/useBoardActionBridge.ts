@@ -386,6 +386,29 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     scheduleAutoStart(/* skipNoSelections */ true);
   }, { immediate: true });
 
+  // Browsing history (#553): the board and the Action Panel are handed no
+  // actions and no turn then, and every commit is refused, so a pick left open
+  // would ask for a move beside a past board. Entering history cancels it, as
+  // the panel's Cancel button does, so the panel and every custom UI reading
+  // this controller and board show no pick. Returning re-offers from the live
+  // position the way the runner watcher above does, a no-selection action
+  // staying a deliberate press.
+  //
+  // Except an action the server already holds (a follow-up, a repeating pick
+  // after its first step, an onSelect pick): cancelling it sends cancel_action
+  // to the LIVE game and throws the chain away for good, so it stays open, as
+  // the availableActions teardown above spares it. The controller still refuses
+  // every commit to it while history is on screen.
+  watch(() => isViewingHistory.value, (browsing) => {
+    if (!browsing) {
+      scheduleAutoStart(/* skipNoSelections */ true);
+      return;
+    }
+    if (!currentAction.value || controller.pendingOnServer?.value) return;
+    controller.cancel();
+    board.clear();
+  });
+
   // Retry auto-start when an execution completes (next action may auto-start).
   watch(isExecuting, (executing, wasExecuting) => {
     if (wasExecuting && !executing) scheduleAutoStart(false);
@@ -414,9 +437,16 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     if (wasPending && !pending) scheduleAutoStart(autoEndArmed ? false : true);
   });
 
+  // What the board is fed while history is on screen (#584): no open action and
+  // no pick. A pick the server holds stays open in the controller (the watcher
+  // above spares it), so it is hidden here, in what the board is handed, and
+  // fed again on return. Nothing is cancelled.
+  const shownAction = computed(() => (isViewingHistory.value ? null : currentAction.value));
+  const shownPick = computed(() => (isViewingHistory.value ? null : currentPick.value));
+
   // Feed the board substrate's selectable elements + click callback for the
   // current pick. This is the watcher whose absence broke board-centric play.
-  watch([currentPick, offeredElements, offeredChoices], ([selection]) => {
+  watch([shownPick, offeredElements, offeredChoices], ([selection]) => {
     if (!selection) {
       board.setValidElements([], () => {});
       board.setDraggableSelectedElement(null);
@@ -514,7 +544,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   // and never runs, so the board stays cleared by createActionMutators().startAction, and
   // the external-cancel watcher below reads that empty board as the player
   // cancelling.
-  watch([currentAction, controller.actionStartTick], ([action]) => {
+  watch([shownAction, controller.actionStartTick], ([action]) => {
     if (action) {
       const pickName = currentPick.value?.name ?? null;
       const pickIndex = currentActionMeta.value?.selections.findIndex(s => s.name === pickName) ?? 0;
@@ -537,11 +567,13 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   }, { immediate: true });
 
   // External cancel via custom UI calling board.clear(): sync the controller.
+  // Not while history is on screen: the board is cleared then because the pick
+  // is hidden (#584), and a cancel would reach the live game for a held pick.
   watch(() => board.currentAction, (boardAction) => {
-    if (boardAction !== null || currentAction.value === null) return;
+    if (boardAction !== null || currentAction.value === null || isViewingHistory.value) return;
     const actionAtClear = currentAction.value;
     void nextTick(() => {
-      if (currentAction.value === actionAtClear && board.currentAction == null) {
+      if (currentAction.value === actionAtClear && board.currentAction == null && !isViewingHistory.value) {
         controller.cancel();
       }
     });

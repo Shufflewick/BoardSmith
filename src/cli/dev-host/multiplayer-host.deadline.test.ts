@@ -14,7 +14,6 @@ import {
   Action,
   Game,
   Player,
-  defineFlow,
   dueSeats,
   loop,
   simultaneousActionStep,
@@ -87,19 +86,17 @@ class StuckGame extends Game<StuckGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     this.registerAction(Action.create('wait').execute(() => ({ success: true })));
-    this.setFlow(
-      defineFlow<StuckGame>({
-        root: loop({
-          maxIterations: 3,
-          do: simultaneousActionStep<StuckGame>({
-            name: 'stuck',
-            actions: ['wait'],
-            playerDone: () => false,
-            timeLimitMs: 10_000,
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 3,
+        do: simultaneousActionStep<StuckGame>({
+          name: 'stuck',
+          actions: ['wait'],
+          playerDone: () => false,
+          timeLimitMs: 10_000,
         }),
       }),
-    );
+    });
   }
 }
 const stuckDefinition: GameDefinitionLike = { gameClass: StuckGame, gameType: 'stuck', minPlayers: 2, maxPlayers: 2 };
@@ -124,15 +121,13 @@ class HeldGame extends Game<HeldGame, Player> {
       Action.create<HeldGame>('loot').chooseFrom('where', { choices: ['north', 'south'] }).execute(() => {}),
       Action.create<HeldGame>('commit').execute(() => ({ success: true })),
     );
-    this.setFlow(
-      defineFlow<HeldGame>({
-        root: loop({
-          maxIterations: 3,
-          while: (ctx) => (ctx.game as HeldGame).scouted.length < 2,
-          do: simultaneousActionStep<HeldGame>({ name: 'raid', actions: ['scout'], timeLimitMs: 10_000 }),
-        }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 3,
+        while: (ctx) => (ctx.game as HeldGame).scouted.length < 2,
+        do: simultaneousActionStep<HeldGame>({ name: 'raid', actions: ['scout'], timeLimitMs: 10_000 }),
       }),
-    );
+    });
   }
 }
 const heldDefinition: GameDefinitionLike = { gameClass: HeldGame, gameType: 'held', minPlayers: 2, maxPlayers: 2 };

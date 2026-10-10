@@ -3,18 +3,34 @@
  * `smokeProject` makes (its game is `dev-game`, so its classes are `DevGameGame` and
  * `DevGamePlayer`).
  */
+import { PRESS_MARK } from '../../testing/browser-smoke-page.js';
 
-/** A smoke spec listing `actions`, with `unreachable`, `seed` and `steps` given when they are. */
+/**
+ * A smoke spec listing `actions`, with `unreachable`, `seed` and `steps` given when they are. With
+ * `echo`, the spec also prints each page console line containing it to the walk's output, so a test
+ * can see what a fixture's page did.
+ */
 export function smokeSpec(
   actions: readonly string[],
   unreachable?: Record<string, string>,
-  more: { seed?: string | readonly string[]; steps?: number } = {},
+  more: { seed?: string | readonly string[]; steps?: number; echo?: string } = {},
 ): string {
   const declared = unreachable === undefined ? '' : `\n  unreachable: ${JSON.stringify(unreachable, null, 2).replace(/\n/g, '\n  ')},`;
   const seed = more.seed === undefined ? '' : `\n  seed: ${JSON.stringify(more.seed)},`;
   const steps = more.steps === undefined ? '' : `\n  steps: ${more.steps},`;
-  return `import { defineSmokeTest } from 'boardsmith/testing/browser';
+  const echo =
+    more.echo === undefined
+      ? ''
+      : `import { test } from '@playwright/test';
 
+test.beforeEach(({ page }) => {
+  page.on('console', (message) => {
+    if (message.text().includes(${JSON.stringify(more.echo)})) console.log(message.text());
+  });
+});
+`;
+  return `import { defineSmokeTest } from 'boardsmith/testing/browser';
+${echo}
 defineSmokeTest({
   actions: ${JSON.stringify(actions)},${declared}${seed}${steps}
 });
@@ -129,8 +145,6 @@ export function createGameFlow(game: DevGameGame): FlowDefinition {
         do: actionStep({ name: 'turn', actions: ['draw', 'play', 'showAce'], skipIf: () => game.isFinished() }),
       }),
     }),
-    isComplete: () => game.isFinished(),
-    getWinners: () => game.getWinners(),
   };
 }
 `,
@@ -324,8 +338,6 @@ export function createGameFlow(game: DevGameGame): FlowDefinition {
         }),
       }),
     }),
-    isComplete: () => game.isFinished(),
-    getWinners: () => game.getWinners(),
   };
 }
 `,
@@ -663,8 +675,6 @@ export function createGameFlow(game: DevGameGame): FlowDefinition {
         do: actionStep({ name: 'turn', actions: ['code', 'kindle', 'draw', 'rest'], skipIf: () => game.isFinished() }),
       }),
     }),
-    isComplete: () => game.isFinished(),
-    getWinners: () => game.getWinners(),
   };
 }
 `,
@@ -828,8 +838,6 @@ export function createGameFlow(game: DevGameGame): FlowDefinition {
         do: actionStep({ name: 'turn', actions: ['claim', 'rest'], skipIf: () => game.isFinished() }),
       }),
     }),
-    isComplete: () => game.isFinished(),
-    getWinners: () => game.getWinners(),
   };
 }
 `,
@@ -1057,6 +1065,109 @@ function lookAway() {
 }
 
 /**
+ * A PANEL THAT REDRAWS A BUTTON AS IT IS PRESSED (#562 review): the first time the walk marks one
+ * of the panel's action buttons to press it, the page puts a new element in its place, as a panel
+ * that redraws its buttons as new elements does, so the element the walk marked is gone. Clicking
+ * the new button puts the panel's own back; the inner press it then sends lands outside the guarded
+ * copy, so the walk's click guard stops it and the walk finds the panel's own button again and
+ * presses that, which takes the action.
+ */
+export function boardThatRedrawsThePanel(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue';
+
+const redrawn = new Set<string>();
+const watcher = new MutationObserver((changes) => {
+  for (const change of changes) {
+    const button = change.target as HTMLElement;
+    const action = button.getAttribute('data-bs-action');
+    if (action === null || redrawn.has(action) || !button.hasAttribute('${PRESS_MARK}')) continue;
+    redrawn.add(action);
+    const copy = button.cloneNode(true) as HTMLElement;
+    copy.removeAttribute('${PRESS_MARK}');
+    copy.addEventListener('click', () => {
+      copy.replaceWith(button);
+      button.click();
+    });
+    button.replaceWith(copy);
+  }
+});
+onMounted(() => watcher.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['${PRESS_MARK}'] }));
+onUnmounted(() => watcher.disconnect());
+</script>
+
+<template>
+  <div class="board">A board</div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/** What {@link panelThatHangsOnThePointer}'s page logs, before the action's name, each time it hangs a press (#600). */
+export const HUNG = 'the fixture hung the first press of';
+
+/**
+ * A PANEL THAT HANGS ON THE FIRST POINTER PRESS (#573): the first time the pointer presses one of
+ * the panel's action buttons, the page disables the button and is kept busy for 1.5s, longer than
+ * the walk gives one look at a panel button, then enables it again half a second later. The walk's
+ * click runs out of time after its `pointerdown` reached the button, and its `click` never arrives,
+ * since a disabled button takes none. That press did not press the button, so the walk must press it
+ * again. A button whose `click` arrives twice says so on the console, which fails the walk. Each
+ * hang is logged as {@link HUNG} and the action's name, so a test can see the press was hung.
+ */
+export function panelThatHangsOnThePointer(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue';
+
+const hung = new Set<string>();
+const clicked = new Set<string>();
+function hang(event: Event) {
+  const button = (event.target as Element | null)?.closest?.('[data-bs-action]') as HTMLButtonElement | null | undefined;
+  const action = button?.getAttribute('data-bs-action');
+  if (button == null || action == null || hung.has(action)) return;
+  hung.add(action);
+  console.info(\`${HUNG} "\${action}"\`);
+  button.disabled = true;
+  const until = Date.now() + 1500;
+  while (Date.now() < until) { /* busy */ }
+  setTimeout(() => { button.disabled = false; }, 500);
+}
+function count(event: Event) {
+  const action = (event.target as Element | null)?.closest?.('[data-bs-action]')?.getAttribute('data-bs-action');
+  if (action == null) return;
+  if (clicked.has(action)) console.error(\`"\${action}" was clicked twice\`);
+  clicked.add(action);
+}
+onMounted(() => {
+  document.addEventListener('pointerdown', hang, true);
+  document.addEventListener('click', count, true);
+});
+onUnmounted(() => {
+  document.removeEventListener('pointerdown', hang, true);
+  document.removeEventListener('click', count, true);
+});
+</script>
+
+<template>
+  <div class="board">A board</div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
  * A BOARD THAT KEEPS REORDERING ITS CONTROLS (#464 review): "North", "South" and "East" trade
  * places every 60 milliseconds (a keyed list, so each button moves rather than being redrawn), so
  * whichever button sat at a place when the walk looked has often moved by the time it presses. A
@@ -1194,8 +1305,6 @@ export function createGameFlow(game: DevGameGame): FlowDefinition {
         do: actionStep({ name: 'turn', actions: ['greet', 'wave', 'pledge', 'note', 'draw'], skipIf: () => game.isFinished() }),
       }),
     }),
-    isComplete: () => game.isFinished(),
-    getWinners: () => game.getWinners(),
   };
 }
 `,
@@ -1293,8 +1402,6 @@ import type { DevGameGame } from './game.js';
 export function createGameFlow(game: DevGameGame): FlowDefinition {
   return {
     root: sequence(actionStep({ name: 'draw-once', actions: ['draw'] }), actionStep({ name: 'tea', actions: ['wait'] })),
-    isComplete: () => false,
-    getWinners: () => [],
   };
 }
 `,
@@ -1329,8 +1436,10 @@ export const ALONE_REASON = 'There is nobody else in this glade to greet.';
  *
  * With `stumbles`, seat 4's arrival fails in its rules, so only seat 4's browser sees a failure.
  * With `manners`, seat 4 alone may also `bow`, an action the panel offers inside its "Manners" group.
+ * With `busy`, the page is kept busy for 1.5s by every click it takes, longer than the walk gives one
+ * look at a panel button, as a loaded machine keeps it (#562).
  */
-export function gladeWorld(options: { stumbles?: boolean; manners?: boolean } = {}): Record<string, string> {
+export function gladeWorld(options: { stumbles?: boolean; manners?: boolean; busy?: boolean } = {}): Record<string, string> {
   const stumble = options.stumbles ? "\n    if (ctx.player.seat === 4) throw new Error('seat four tripped on a root');" : '';
   const bow = options.manners
     ? `
@@ -1504,7 +1613,11 @@ function seenIn(node: ViewNode | null | undefined): number[] {
   return [];
 }
 
-const seen = computed(() => seenIn(props.gameView as ViewNode));
+${
+      options.busy
+        ? "document.addEventListener('click', () => { const until = Date.now() + 1500; while (Date.now() < until) { /* busy */ } }, true);\n"
+        : ''
+    }const seen = computed(() => seenIn(props.gameView as ViewNode));
 </script>
 
 <template>

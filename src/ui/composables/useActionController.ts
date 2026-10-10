@@ -456,6 +456,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * started it yet: a page that never saw the result it arrived in (a reload)
    * gets it back. One the player cancelled is not restarted here; it stays
    * startable through `resumeFollowUp` (the Action Panel offers a button).
+   *
+   * One that arrives while the player is viewing history is not started then,
+   * beside a past board (#585): it is started when they return.
    */
   function autoStartHeldFollowUp(): void {
     const offer = heldFollowUpOffer.value;
@@ -464,10 +467,31 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return;
     }
     if (followUpKey(offer) === lastFollowUpKey) return;
-    if (currentAction.value || pendingFollowUp.value || isExecuting.value) return;
+    if (currentAction.value || pendingFollowUp.value || isExecuting.value || isViewingHistoryValue()) return;
     queueFollowUp(offer);
   }
+
+  /**
+   * A follow-up from an action reply that landed while the player was viewing
+   * history, kept until they return (#586). Kept only when no held offer is
+   * wired: with one, the server holds the same follow-up in the seat state, and
+   * `autoStartHeldFollowUp` starts it on return, or does not if it was withdrawn.
+   */
+  let followUpFromHistory: NonNullable<ControllerActionResult['followUp']> | undefined;
+
   if (heldFollowUp) watch(heldFollowUpOffer, autoStartHeldFollowUp, { immediate: true });
+  if (isViewingHistory) {
+    watch(isViewingHistory, (browsing) => {
+      if (browsing) return;
+      if (heldFollowUp) {
+        autoStartHeldFollowUp();
+        return;
+      }
+      const kept = followUpFromHistory;
+      followUpFromHistory = undefined;
+      if (kept && !currentAction.value && !pendingFollowUp.value && !isExecuting.value) queueFollowUp(kept);
+    });
+  }
 
   /**
    * Start the follow-up the server holds for this seat, whether or not it was
@@ -486,8 +510,15 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   /**
    * Queue a follow-up action after reactive state has settled.
    * Uses a microtask + Vue tick instead of timers to avoid timing fragility.
+   * One that arrives while the player is viewing history (an action sent live
+   * whose reply lands after they entered it) is not started beside a past
+   * board: it waits for their return (#586).
    */
   function queueFollowUp(result: NonNullable<ControllerActionResult['followUp']>): void {
+    if (isViewingHistoryValue()) {
+      if (!heldFollowUp) followUpFromHistory = result;
+      return;
+    }
     lastFollowUpKey = followUpKey(result);
     pendingFollowUp.value = true;
     const { action: followUpAction, args: followUpArgs, metadata: followUpMetadata, display: followUpDisplay } = result;
@@ -2309,9 +2340,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     watch(playerSeat, (seat, previous) => {
       if (seat === previous) return;
       abandonDraft();
-      // What this page started or cancelled was the last seat's: the new seat's
-      // held follow-up, if it has one, is new to it.
+      // What this page started, cancelled or kept from history was the last
+      // seat's: the new seat's held follow-up, if it has one, is new to it.
       lastFollowUpKey = undefined;
+      followUpFromHistory = undefined;
       autoStartHeldFollowUp();
     });
   }

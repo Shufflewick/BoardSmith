@@ -25,7 +25,7 @@ import { createBoardInteraction } from '../../composables/useBoardInteraction.js
 import { mountLiveSeat, mountTableWiring, settle, startTable } from '../../composables/table-wiring.test-helper.js';
 import type { PlayerGameState } from '../../../session/types.js';
 import type { HeadlessSession } from '../../../session/headless-session.js';
-import { Game, Player, Action, defineFlow, actionStep, type GameOptions } from '../../../engine/index.js';
+import { Game, Player, Action, actionStep, type GameOptions } from '../../../engine/index.js';
 
 class ValuesGame extends Game<ValuesGame, Player> {
   /** What each callback received, in the order they ran. */
@@ -65,16 +65,14 @@ class ValuesGame extends Game<ValuesGame, Player> {
         .execute((args) => { note('execute', args.picks); return { success: true }; }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: actionStep({
-          actions: ['labelled', 'extra', 'many'],
-          player: (ctx) => ctx.game.getPlayer(1)!,
-          repeatUntil: () => false,
-          maxMoves: 20,
-        }),
+    this.setFlow({
+      root: actionStep({
+        actions: ['labelled', 'extra', 'many'],
+        player: (ctx) => ctx.game.getPlayer(1)!,
+        repeatUntil: () => false,
+        maxMoves: 20,
       }),
-    );
+    });
   }
 }
 
@@ -253,16 +251,14 @@ class LabelsGame extends Game<LabelsGame, Player> {
         .chooseFrom('list', { choices: SHAPES, orderedList: { min: 1, max: 8 } })
         .execute(() => ({ success: true })),
     );
-    this.setFlow(
-      defineFlow({
-        root: actionStep({
-          actions: ['made', 'repeated', 'ordered'],
-          player: (ctx) => ctx.game.getPlayer(1)!,
-          repeatUntil: () => false,
-          maxMoves: 20,
-        }),
+    this.setFlow({
+      root: actionStep({
+        actions: ['made', 'repeated', 'ordered'],
+        player: (ctx) => ctx.game.getPlayer(1)!,
+        repeatUntil: () => false,
+        maxMoves: 20,
       }),
-    );
+    });
   }
 }
 

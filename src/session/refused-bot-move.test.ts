@@ -3,7 +3,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   simultaneousActionStep,
   type GameOptions,
 } from '../engine/index.js';
@@ -44,9 +43,9 @@ class StubbornSeatGame extends Game<StubbornSeatGame, Mover> {
         return { success: true };
       }),
     );
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: simultaneousActionStep({ actions: ['move'], playerDone: (_ctx, player) => player.moved }),
-    }));
+    });
   }
 }
 

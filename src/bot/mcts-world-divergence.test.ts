@@ -3,7 +3,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   actionStep,
   execute,
   loop,
@@ -74,7 +73,7 @@ class HiddenGuessGame extends Game<HiddenGuessGame, Guesser> {
         }),
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({
         while: () => !this.leader(),
         maxIterations: 200,
@@ -94,12 +93,17 @@ class HiddenGuessGame extends Game<HiddenGuessGame, Guesser> {
           ),
         }),
       }),
-      isComplete: () => this.leader() !== undefined,
-      getWinners: () => {
-        const leader = this.leader();
-        return leader ? [leader] : [];
-      },
-    }));
+    });
+  }
+
+  /** Over once a seat reaches the winning score; that seat wins. */
+  override isFinished(): boolean {
+    return super.isFinished() || this.leader() !== undefined;
+  }
+
+  override getWinners(): Guesser[] {
+    const leader = this.leader();
+    return leader ? [leader] : [];
   }
 
   leader(): Guesser | undefined {
@@ -194,11 +198,9 @@ class PickyGame extends Game<PickyGame, Player> {
           return { success: true };
         }),
     );
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: actionStep({ actions: ['pick'], player: (ctx) => ctx.game.getPlayer(1)! }),
-      isComplete: () => this.isFinished(),
-      getWinners: () => ((this.settings.winners ?? []) as number[]).map((seat) => this.getPlayer(seat)!),
-    }));
+    });
   }
 }
 

@@ -973,21 +973,6 @@ export function useFlyingElements(
     }
 
     /**
-     * Find element in game view tree by ID
-     */
-    function findElementById(root: AutoWatchGameElement | null, id: number): AutoWatchGameElement | null {
-      if (!root) return null;
-      if (root.id === id) return root;
-      if (root.children) {
-        for (const child of root.children) {
-          const found = findElementById(child, id);
-          if (found) return found;
-        }
-      }
-      return null;
-    }
-
-    /**
      * Default shouldFlip: flip when visibility changes
      */
     function defaultShouldFlip(

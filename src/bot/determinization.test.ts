@@ -5,7 +5,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   actionStep,
   RedactedAttributeError,
   type GameOptions,
@@ -77,24 +76,17 @@ class VaultGame extends Game<VaultGame, Keeper> {
       })
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: actionStep({
         actions: ['open', 'walkAway'],
         player: (ctx) => ctx.game.getPlayer(1)!,
       }),
-      isComplete: (ctx) => ctx.game.isFinished(),
-      getWinners: (ctx) => (ctx.game as VaultGame).winnerPlayers(),
-    }));
+    });
   }
 
   /** Seat 2 keeps the vault; seat 1 is the one deciding. */
   get keeper(): Keeper {
     return this.getPlayer(2)!;
-  }
-
-  winnerPlayers(): Keeper[] {
-    const winners = (this.settings.winners ?? []) as number[];
-    return winners.map((seat) => this.getPlayer(seat)!);
   }
 }
 
@@ -406,10 +398,9 @@ class CardGame extends Game<CardGame, Player> {
         })
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: actionStep({ actions: ['claim'], player: (ctx) => ctx.game.getPlayer(1)! }),
-      isComplete: (ctx) => ctx.game.isFinished(),
-    }));
+    });
   }
 
   hand(seat: number): Space<CardGame> {

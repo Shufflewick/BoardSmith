@@ -5,7 +5,6 @@ import {
   Action,
   FlowEngine,
   FlowHaltedError,
-  defineFlow,
   sequence,
   execute,
   actionStep,
@@ -98,7 +97,7 @@ function registerActions(game: SeatGame, random: () => number): void {
 function simultaneousEngine(game: SeatGame): FlowEngine<SeatGame> {
   return new FlowEngine(
     game,
-    defineFlow({
+    {
       root: sequence(
         simultaneousActionStep({
           name: 'plan',
@@ -110,7 +109,7 @@ function simultaneousEngine(game: SeatGame): FlowEngine<SeatGame> {
           game.advanced = true;
         }),
       ),
-    }),
+    },
   );
 }
 
@@ -167,9 +166,9 @@ describe('a simultaneous step decides a seat the same way at entry, on refresh a
     game.registerAction(Action.create('b').execute(() => {}));
     const engine = new FlowEngine(
       game,
-      defineFlow({
+      {
         root: simultaneousActionStep({ name: 'bid', actions: () => (acted ? ['b', 'tpyo'] : ['a', 'b']) }),
-      }),
+      },
     );
     engine.start();
 
@@ -236,7 +235,7 @@ describe('every site reads a seat\'s action list once, not once per declared nam
     const calls = vi.spyOn(game, 'getAvailableActions');
     const engine = new FlowEngine(
       game,
-      defineFlow({ root: actionStep({ name: 'turn', actions: ['a', 'b', 'finish'], maxMoves: 1 }) }),
+      { root: actionStep({ name: 'turn', actions: ['a', 'b', 'finish'], maxMoves: 1 }) },
     );
 
     const entry = engine.start();

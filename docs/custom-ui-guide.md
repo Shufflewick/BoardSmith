@@ -117,12 +117,9 @@ const aceInHand = findElements(gameView, { className: 'Card', name: 'ace' });
 ```vue
 <script setup lang="ts">
 import { computed } from 'vue';
-import { findPlayerHand, findElement, type GameViewElement } from 'boardsmith/ui';
+import { findPlayerHand, findElement, type TableBoardProps } from 'boardsmith/ui';
 
-const props = defineProps<{
-  gameView: GameViewElement | null;
-  playerSeat: number;
-}>();
+const props = defineProps<TableBoardProps>();
 
 // Extract hand cards
 const myCards = computed(() => {
@@ -299,11 +296,9 @@ When an action uses `chooseElement()` or `chooseElements()`, the `actionControll
 
 ```vue
 <script setup lang="ts">
-import type { UseActionControllerReturn } from 'boardsmith/ui';
+import type { TableBoardProps } from 'boardsmith/ui';
 
-const props = defineProps<{
-  actionController: UseActionControllerReturn;
-}>();
+const props = defineProps<TableBoardProps>();
 
 // Reactive! Updates automatically when:
 // - Current selection changes
@@ -519,12 +514,9 @@ boardInteraction.currentPickName // 'destination' | null
 </template>
 
 <script setup lang="ts">
-import { useBoardInteraction, type UseActionControllerReturn } from 'boardsmith/ui';
+import { useBoardInteraction, type TableBoardProps } from 'boardsmith/ui';
 
-const props = defineProps<{
-  actionController: UseActionControllerReturn;
-  availableActions: string[];
-}>();
+const props = defineProps<TableBoardProps>();
 
 const boardInteraction = useBoardInteraction();
 
@@ -1195,8 +1187,7 @@ for (const sel of debug.details.selections) {
 | "That choice is no longer available" from the server | The value is not among the current choices: it went stale, or the UI passed the wrong value type | Read the dev log line starting `[BoardSmith] Invalid selection` for the value sent and the valid choices; pass an element ID (number), not an object |
 | Element not found in gameView | ID mismatch or element moved | Use `findElement(gameView, { id })` to verify |
 | validElements is empty | Choices not fetched yet | Check `isLoadingChoices`, wait for fetch |
-| Selection not applying | Wrote to actionArgs directly | Use `actionController.fill()` instead |
-| Spurious values in followUp args | Custom UI writing to actionArgs | See warning in console, use `fill()` |
+| Selection not applying | Wrote to `actionController.currentArgs` directly | Use `actionController.fill()` instead |
 
 ### ID vs Object Confusion
 
@@ -1228,17 +1219,10 @@ import {
   useBoardInteraction,
   findPlayerHand,
   findElement,
-  type GameViewElement,
-  type UseActionControllerReturn,
+  type TableBoardProps,
 } from 'boardsmith/ui';
 
-const props = defineProps<{
-  gameView: GameViewElement | null;
-  playerSeat: number;
-  isMyTurn: boolean;
-  availableActions: string[];
-  actionController: UseActionControllerReturn;
-}>();
+const props = defineProps<TableBoardProps>();
 
 const boardInteraction = useBoardInteraction();
 

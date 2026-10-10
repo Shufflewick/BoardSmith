@@ -14,7 +14,6 @@ import {
   Piece,
   Player,
   Action,
-  defineFlow,
   actionStep,
   type GameOptions,
 } from '../index.js';
@@ -132,14 +131,14 @@ describe('Space.sealed (SPACE-01/D22): append-only child removal guard', () => {
 
         this.registerAction(Action.create('noop').execute(() => ({ success: true })));
         this.setFlow(
-          defineFlow({
+          {
             root: actionStep({
               actions: ['noop'],
               player: (ctx) => ctx.game.getPlayer(1)!,
               repeatUntil: () => false,
               maxMoves: 10,
             }),
-          })
+          }
         );
       }
     }
@@ -217,14 +216,14 @@ describe('Space re-parent (SPACE-02/D23): a Space can be removed/re-parented', (
 
         this.registerAction(Action.create('noop').execute(() => ({ success: true })));
         this.setFlow(
-          defineFlow({
+          {
             root: actionStep({
               actions: ['noop'],
               player: (ctx) => ctx.game.getPlayer(1)!,
               repeatUntil: () => false,
               maxMoves: 10,
             }),
-          })
+          }
         );
       }
     }
@@ -268,14 +267,14 @@ describe('Space re-parent (SPACE-02/D23): a Space can be removed/re-parented', (
 
         this.registerAction(Action.create('noop').execute(() => ({ success: true })));
         this.setFlow(
-          defineFlow({
+          {
             root: actionStep({
               actions: ['noop'],
               player: (ctx) => ctx.game.getPlayer(1)!,
               repeatUntil: () => false,
               maxMoves: 10,
             }),
-          })
+          }
         );
       }
     }

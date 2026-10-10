@@ -26,7 +26,6 @@ import {
   HexGrid,
   HexCell,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -79,15 +78,13 @@ class CardLeakGame extends Game<CardLeakGame, Player> {
       Action.create<CardLeakGame>('pass').execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => false,
-          maxIterations: 10,
-          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: () => false,
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
       }),
-    );
+    });
   }
 }
 
@@ -184,15 +181,13 @@ class PlayerViewStripGame extends Game<PlayerViewStripGame, Player> {
       Action.create<PlayerViewStripGame>('pass').execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => false,
-          maxIterations: 10,
-          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: () => false,
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
       }),
-    );
+    });
   }
 
   static override playerView = (
@@ -329,15 +324,13 @@ class AriaLeakGame extends Game<AriaLeakGame, Player> {
       Action.create<AriaLeakGame>('pass').execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => false,
-          maxIterations: 10,
-          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: () => false,
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
       }),
-    );
+    });
   }
 }
 
@@ -481,15 +474,13 @@ class SymmetricDeckGame extends Game<SymmetricDeckGame, Player> {
       Action.create<SymmetricDeckGame>('pass').execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => false,
-          maxIterations: 10,
-          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: () => false,
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
       }),
-    );
+    });
   }
 }
 
@@ -551,15 +542,13 @@ class AdversarialSymmetricGame extends Game<AdversarialSymmetricGame, Player> {
       Action.create<AdversarialSymmetricGame>('pass').execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => false,
-          maxIterations: 10,
-          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: () => false,
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
       }),
-    );
+    });
   }
 }
 
@@ -663,15 +652,13 @@ class HexAggregationGame extends Game<HexAggregationGame, Player> {
       Action.create<HexAggregationGame>('pass').execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => false,
-          maxIterations: 10,
-          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: () => false,
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
       }),
-    );
+    });
   }
 }
 

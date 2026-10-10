@@ -13,8 +13,12 @@
  * `dev-host-typecheck.test.ts` uses it for the native-host modules.
  * `dice-typecheck.test.ts` uses it for `boardsmith/ui/dice`, twice: once with
  * the optional `three` peer installed and once without.
+ * `ui-without-dice-typecheck.test.ts` uses it for an auto-UI game that never
+ * imports `boardsmith/ui/dice`, compiled with every declared peer but `three`.
  * `testing-typecheck.test.ts` uses it for a game's test importing
  * `boardsmith/testing`, compiled under the game's own tsconfig.
+ * `aspect-boards-typecheck.test.ts` uses it for the `GameTable.vue` each aspect
+ * template teaches, compiled under the game's own tsconfig.
  * `workers-typecheck.test.ts` uses it for the platform-reachable entry points,
  * compiled under a tsconfig of its own that carries Workers-style globals.
  */

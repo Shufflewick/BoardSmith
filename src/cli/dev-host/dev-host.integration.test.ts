@@ -34,7 +34,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import type { Socket } from 'node:net';
 import { WebSocketServer, WebSocket as NodeWebSocket } from 'ws';
-import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../../engine/index.js';
+import { Game, Player, Action, actionStep, loop, type GameOptions } from '../../engine/index.js';
 import { executeOp, ErrorCode, type GameDefinitionLike } from '../../session/index.js';
 import { MultiplayerHost } from './multiplayer-host.js';
 import { claimDevHostSocket } from './connection-handler.js';
@@ -69,14 +69,12 @@ class PassGame extends Game<PassGame, Player> {
         .chooseFrom('second', { choices: ['x', 'y'] })
         .execute(() => ({ success: true })),
     );
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 1000,
-          do: actionStep({ actions: ['pass', 'twoStep'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
-        }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 1000,
+        do: actionStep({ actions: ['pass', 'twoStep'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
       }),
-    );
+    });
   }
 }
 

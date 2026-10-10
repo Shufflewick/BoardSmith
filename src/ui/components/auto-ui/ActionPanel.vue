@@ -46,6 +46,7 @@ import {
 // (#229 for text, #237 for number).
 import { numberRuleErrors } from '../../../engine/action/number-rules.js';
 import { textRuleErrors } from '../../../engine/action/text-rules.js';
+import { choiceValueKey } from '../../../engine/action/choice-matching.js';
 import ActionHelpPopover from '../helpers/ActionHelpPopover.vue';
 // Type-only, so the log component's module (and its stylesheet) never enters
 // this graph -- `verbatimModuleSyntax` erases the import outright.
@@ -232,6 +233,16 @@ const editorLabelId = `${editorInputId}-value-label`;
 const currentArgs = computed(() => actionController.currentArgs.value);
 
 /**
+ * Browsing history (#584): the panel draws no open action and no held
+ * follow-up, beside a past board. A pick the server holds stays open in the
+ * controller (cancelling it would reach the live game, #553), so this hides it
+ * here, in what the panel draws, and it is drawn again on return.
+ */
+const isViewingHistory = inject(GAME_CONTEXT_KEYS.isViewingHistory, undefined);
+const viewingHistory = computed(() => isViewingHistory?.value ?? false);
+const shownAction = computed(() => (viewingHistory.value ? null : currentAction.value));
+
+/**
  * The follow-up the server holds for this seat (#494). The seat keeps its turn
  * until it takes it or takes another offered action, so while no action is in
  * progress the panel always offers it: a player who cancelled it can start it
@@ -241,7 +252,7 @@ const currentArgs = computed(() => actionController.currentArgs.value);
 const heldFollowUp = computed(() => actionController.heldFollowUp.value);
 const heldFollowUpButton = computed(() => {
   const offer = heldFollowUp.value;
-  if (!offer || props.availableActions.includes(offer.action)) return undefined;
+  if (!offer || viewingHistory.value || props.availableActions.includes(offer.action)) return undefined;
   return { action: offer.action, prompt: offer.metadata?.prompt || formatActionName(offer.action) };
 });
 
@@ -854,6 +865,9 @@ const _splitChoices = computed(() => splitAnchoredChoices(offeredChoices.value, 
 
 // Primary (unanchored) choices: rendered as the main choice buttons in the panel.
 const filteredChoices = computed(() => _splitChoices.value.primary);
+/** A choice pick whose choices depend on an earlier pick (filterBy or dependsOn). */
+const isDependentChoicePick = computed(() =>
+  !!(currentPick.value?.filterBy || currentPick.value?.dependsOn));
 
 // Notation-anchored choices: rendered as a secondary focusable list of buttons
 // whose activation calls triggerElementSelect — parity with clicking the board element.
@@ -1254,9 +1268,8 @@ const multiSelectCountDisplay = computed(() => {
  * the board bridge (#513), handed the panel's view of the guards. What stays
  * here is the panel's own: its emits and the hover text it shows on the board.
  */
-const isViewingHistory = inject(GAME_CONTEXT_KEYS.isViewingHistory, undefined);
 const mutators = createActionMutators(actionController, boardInteraction, {
-  isViewingHistory: () => isViewingHistory?.value ?? false,
+  isViewingHistory: () => viewingHistory.value,
   isMyTurn: () => props.isMyTurn,
   isCompleted: () => !!props.completed,
   disabledReason: (name) => props.disabledActions?.[name],
@@ -1445,13 +1458,13 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
          a reader what it is doing, not an interruption, and it must not pull
          focus off whatever the player was already on. -->
     <div
-      v-if="!currentAction && actionsPending"
+      v-if="!shownAction && actionsPending"
       class="action-panel-arriving"
       data-testid="bs-actions-pending"
       role="status"
     >{{ ACTIONS_PENDING_TEXT }}</div>
 
-    <div v-else-if="!currentAction" class="action-buttons">
+    <div v-else-if="!shownAction" class="action-buttons">
       <!-- Menu chrome, drawn only inside a group (#228). At the top level there
            is none, so a game that declares no grouping renders exactly the flat
            panel it always did. -->
@@ -1540,14 +1553,14 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
     </div>
 
     <!-- Configuring an action -->
-    <div v-else class="action-config" :data-bs-open-action="currentAction">
+    <div v-else class="action-config" :data-bs-open-action="shownAction">
       <!-- What is being done so far: the action's name, its cancel, and the items
            already chosen. Lays out as nothing in the sentence flow; at phone width
            it stacks into one control row, so the open panel fits the two rows the
            shell reserves for it (issue 444). -->
       <div class="config-context">
         <div class="config-header">
-          <span class="config-title">{{ currentActionMeta?.prompt || formatActionName(currentAction) }}</span>
+          <span class="config-title">{{ currentActionMeta?.prompt || formatActionName(shownAction) }}</span>
           <button class="cancel-btn" @click="cancelAction" aria-label="Cancel action">
             <span aria-hidden="true">✕</span>
           </button>
@@ -1800,7 +1813,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
                  a row of buttons all reading "Add University" is unreadable. -->
             <button
               v-for="choice in filteredChoices"
-              :key="String(choice.value)"
+              :key="choiceValueKey(choice.value)"
               class="choice-btn ordered-list-add"
               :aria-label="`Add ${choice.display}`"
               v-disabled-reason="orderedListAddDisabledReason(choice.disabled)"
@@ -1837,7 +1850,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
                  elements variant above for why they are split. -->
             <label
               v-for="choice in filteredChoices"
-              :key="String(choice.value)"
+              :key="choiceValueKey(choice.value)"
               class="multi-select-choice"
               :class="{ selected: isMultiSelectValueSelected(choice.value) }"
               v-disabled-reason="multiSelectDisabledReason(choice.disabled, choice.value)"
@@ -1870,9 +1883,11 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           </div>
         </template>
 
-        <!-- Choice selection with filterBy or dependsOn (shows filtered choices, executes immediately) -->
-        <!-- This comes AFTER multi-select so multiSelect+dependsOn uses multi-select template above -->
-        <template v-else-if="currentPick.type === 'choice' && (currentPick.filterBy || currentPick.dependsOn)">
+        <!-- Choice selection. This comes AFTER multi-select so multiSelect+dependsOn uses the
+             multi-select template above. A dependent pick (filterBy or dependsOn) is shown even
+             before its choices arrive, and a click on one of its choices shows that choice on
+             the board before answering the pick (executeChoice). -->
+        <template v-else-if="currentPick.type === 'choice' && (isDependentChoicePick || filteredChoices.length)">
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.name}` }}
             <span v-if="currentPick.optional" class="optional-label">(optional)</span>
@@ -1880,10 +1895,11 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           <div class="choice-buttons">
             <button
               v-for="choice in filteredChoices"
-              :key="String(choice.value)"
-              class="choice-btn filtered-choice-btn"
+              :key="choiceValueKey(choice.value)"
+              class="choice-btn"
+              :class="{ 'filtered-choice-btn': isDependentChoicePick }"
               v-disabled-reason="choice.disabled"
-              @click="executeChoice(currentPick.name, choice)"
+              @click="isDependentChoicePick ? executeChoice(currentPick.name, choice) : setSelectionValue(currentPick.name, choice.value, choice.display)"
               @mouseenter="handleChoiceHover(choice)"
               @mouseleave="handleChoiceLeave"
             >
@@ -1911,37 +1927,6 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             >
               {{ skipLabel }}
             </button>
-          </div>
-        </template>
-
-        <!-- Regular choice selection -->
-        <template v-else-if="currentPick.type === 'choice' && filteredChoices.length">
-          <div class="selection-prompt">
-            {{ currentPick.prompt || `Select ${currentPick.name}` }}
-            <span v-if="currentPick.optional" class="optional-label">(optional)</span>
-          </div>
-          <div class="choice-buttons">
-            <button
-              v-for="choice in filteredChoices"
-              :key="String(choice.value)"
-              class="choice-btn"
-              v-disabled-reason="choice.disabled"
-              @click="setSelectionValue(currentPick.name, choice.value, choice.display)"
-              @mouseenter="handleChoiceHover(choice)"
-              @mouseleave="handleChoiceLeave"
-            >
-              {{ choice.display }}
-            </button>
-            <button
-              v-if="currentPick.optional"
-              class="choice-btn skip-btn"
-              @click="skipOptionalSelection"
-            >
-              {{ skipLabel }}
-            </button>
-            <span v-if="filteredChoices.length === 0 && !currentPick.optional" class="no-choices">
-              No options available
-            </span>
           </div>
         </template>
 
@@ -2084,7 +2069,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
         <template v-if="anchoredChoices.length && !deferPickToBoard">
           <button
             v-for="choice in anchoredChoices"
-            :key="String(choice.value)"
+            :key="choiceValueKey(choice.value)"
             class="choice-btn anchored-choice-btn"
             v-disabled-reason="choice.disabled"
             :aria-label="`${choice.display}${choice.refs?.find(r => r.ref.notation)?.ref.notation ? ' (' + choice.refs.find(r => r.ref.notation)!.ref.notation + ')' : ''}`"

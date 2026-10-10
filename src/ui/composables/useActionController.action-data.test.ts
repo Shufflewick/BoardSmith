@@ -29,7 +29,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   actionStep,
   loop,
   type GameOptions,
@@ -96,7 +95,7 @@ class ReportingGame extends Game<ReportingGame, Player> {
     );
 
     this.setFlow(
-      defineFlow({
+      {
         root: loop({
           maxIterations: 1000,
           do: actionStep({
@@ -105,7 +104,7 @@ class ReportingGame extends Game<ReportingGame, Player> {
             repeatUntil: () => false,
           }),
         }),
-      })
+      }
     );
   }
 }

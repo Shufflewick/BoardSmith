@@ -28,7 +28,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   simultaneousActionStep,
   type GameOptions,
 } from '../../../engine/index.js';
@@ -91,17 +90,15 @@ class CommitGame extends Game<CommitGame, CommitPlayer> {
         }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: simultaneousActionStep({
-          name: 'commit-step',
-          players: () => this.players,
-          actions: ['commit', 'endGame', 'lockCommit'],
-          playerDone: (_ctx, p) => (p as CommitPlayer).committed,
-          allDone: () => this.roundClosed,
-        }),
+    this.setFlow({
+      root: simultaneousActionStep({
+        name: 'commit-step',
+        players: () => this.players,
+        actions: ['commit', 'endGame', 'lockCommit'],
+        playerDone: (_ctx, p) => (p as CommitPlayer).committed,
+        allDone: () => this.roundClosed,
       }),
-    );
+    });
   }
 }
 

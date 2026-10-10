@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Space, Player, Action, FlowEngine, eachPlayer, simultaneousActionStep, execute, defineFlow } from '../index.js';
+import { Game, Space, Player, Action, FlowEngine, eachPlayer, simultaneousActionStep, execute,  } from '../index.js';
 
 /**
  * WHO GETS A TURN IS THE ROSTER, and the roster is `game.players`.
@@ -48,13 +48,13 @@ describe('turn order comes from the roster, not from an instanceof search', () =
     const acted: number[] = [];
     const engine = new FlowEngine(
       game,
-      defineFlow<RosterGame>({
+      {
         root: eachPlayer({
           do: execute((ctx) => {
             acted.push(ctx.player!.seat);
           }),
         }),
-      })
+      }
     );
     engine.start();
 
@@ -71,9 +71,9 @@ describe('turn order comes from the roster, not from an instanceof search', () =
 
     const engine = new FlowEngine(
       game,
-      defineFlow<RosterGame>({
+      {
         root: simultaneousActionStep({ actions: ['wait'] }),
-      })
+      }
     );
     const state = engine.start();
 

@@ -96,7 +96,6 @@ Production-ready automatic game UI.
   <AutoUI
     :game-view="gameView"
     :player-seat="playerSeat"
-    :flow-state="flowState"
   />
 </template>
 ```

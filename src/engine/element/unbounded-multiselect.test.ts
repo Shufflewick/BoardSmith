@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  Game, Player, Piece, Space, Action, defineFlow, loop, eachPlayer, actionStep,
+  Game, Player, Piece, Space, Action, loop, eachPlayer, actionStep,
   type GameOptions,
 } from '../index.js';
 import { buildActionMetadata } from './action-metadata.js';
@@ -38,12 +38,12 @@ class UnboundedGame extends Game<UnboundedGame, Player> {
         .chooseFrom('flavor', { prompt: 'Flavors', choices: ['a', 'b'], multiSelect: () => ({ min: 2 }) })
         .execute(() => ({ success: true })),
     );
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({
         maxIterations: 3,
         do: eachPlayer({ do: actionStep({ actions: ['pickChoice', 'pickElements', 'pickFn'] }) }),
       }),
-    }));
+    });
   }
 }
 

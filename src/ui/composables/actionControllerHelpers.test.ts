@@ -179,6 +179,10 @@ describe('getDisplayFromValue agrees with the server label (#509)', () => {
     expect(getDisplayFromValue(value)).toBe(serverLabel(value));
   });
 
+  it('shows an object with nothing to read as its JSON, never [object Object] (#572)', () => {
+    expect(getDisplayFromValue({ size: 3 })).toBe('{"size":3}');
+  });
+
   it('labels a missing value as nothing', () => {
     expect(getDisplayFromValue(undefined)).toBe('');
     expect(getDisplayFromValue(null)).toBe('');

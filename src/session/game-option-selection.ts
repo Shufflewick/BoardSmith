@@ -14,6 +14,7 @@
  * produce. A host that spreads a client's object straight into a constructor
  * is then a type error, not a leak found in review.
  */
+import { valuesEqual } from '../engine/action/choice-matching.js';
 import { ENGINE_OWNED_GAME_OPTION_KEYS } from '../engine/element/game.js';
 import { PERSIST_KEY } from '../persistence/persistence.js';
 import type { GameOptionDefinition, NumberOption } from '../types/protocol.js';
@@ -165,16 +166,20 @@ function coerce(name: string, def: GameOptionDefinition, raw: unknown): unknown 
       return b;
     }
     case 'select': {
-      // Resolve a string to the declared choice it names, so a numeric choice
-      // is reachable from a text input; membership is checked below.
-      const value = typeof raw === 'string' ? (def.choices.find((c) => String(c.value) === raw)?.value ?? raw) : raw;
-      if (!def.choices.some((c) => c.value === value)) {
+      // A value matches a choice under `valuesEqual`, so an object choice that
+      // crossed the wire as an equal object is still that choice (#574); a
+      // string also names the choice it spells, so a numeric choice is
+      // reachable from a text input. The declared choice's value is returned.
+      const choice =
+        def.choices.find((c) => valuesEqual(c.value, raw)) ??
+        (typeof raw === 'string' ? def.choices.find((c) => String(c.value) === raw) : undefined);
+      if (!choice) {
         throw new GameOptionSelectionError(
-          `Invalid value ${JSON.stringify(value)} for game option "${name}": must be one of: ` +
+          `Invalid value ${JSON.stringify(raw)} for game option "${name}": must be one of: ` +
             `${def.choices.map((c) => JSON.stringify(c.value)).join(', ')}.`,
         );
       }
-      return value;
+      return choice.value;
     }
     default:
       return raw;
