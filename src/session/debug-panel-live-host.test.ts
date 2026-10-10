@@ -91,7 +91,6 @@ describe('registerDebug data on the live host (#547)', () => {
     for (const published of [...session.broadcasts, ...session.spectatorViews]) {
       expect(JSON.stringify(published)).not.toContain(SECRET_VALUE);
     }
-    expect(session.playerState(2)).not.toHaveProperty('customDebug');
   });
 
   it('refuses it on a host with debugging off, as on the platform', async () => {

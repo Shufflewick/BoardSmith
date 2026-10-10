@@ -8,8 +8,9 @@
  * tab emits rather than deciding: the highlight belongs to the game surface, not
  * to the panel.
  *
- * It also renders `customDebug` -- whatever the game itself chose to publish --
- * because that is element-shaped and this is where a developer looks for it.
+ * It also renders the game's `registerDebug()` data, which the panel asks the
+ * host for while this tab is open (#547), because that is element-shaped and
+ * this is where a developer looks for it.
  *
  * Takes the view it renders and the panel's copy-with-toast; owns everything
  * else about its own concern.

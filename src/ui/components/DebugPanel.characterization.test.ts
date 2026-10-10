@@ -608,6 +608,16 @@ describe('DebugPanel view-tree derivations', () => {
     expect(vm.customDebugData).toBeNull();
   });
 
+  it('shows no custom-debug section for a game that registered no debug data', async () => {
+    const { wrapper, vm } = track(
+      mountPanel(async (op) => (op === 'debug:custom-data' ? { success: true, customDebug: {} } : { success: true }))
+    );
+    vm.activeTab = 'elements';
+    await flush();
+
+    expect(wrapper.find('.custom-debug-section').exists()).toBe(false);
+  });
+
   it('shows no custom debug data when the host refuses it', async () => {
     const { vm } = track(mountPanel(async () => ({ success: false, error: 'Debug tools are off' })));
     vm.activeTab = 'elements';

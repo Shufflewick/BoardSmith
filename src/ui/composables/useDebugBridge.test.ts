@@ -145,6 +145,11 @@ describe('debug bridge refusals that are answers, not failures', () => {
     expect(await bridge.customDebug()).toBeNull();
   });
 
+  it('reports no custom debug data for a game that registered none', async () => {
+    const { bridge } = bridgeWith(async () => ({ success: true, customDebug: {} }));
+    expect(await bridge.customDebug()).toBeNull();
+  });
+
   it('returns the game\'s custom debug data when the host has it', async () => {
     const { bridge } = bridgeWith(async () => ({ success: true, customDebug: { seed: 42 } }));
     expect(await bridge.customDebug()).toEqual({ seed: 42 });
