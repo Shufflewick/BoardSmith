@@ -873,6 +873,9 @@ async function wireTableSeat(
     // no action bar, so the prompt the board sets is recorded instead of drawn.
     contract: tableBoardProps(tableSeat, {
       state: frame,
+      // A rendered seat shows no history, so the players on screen are the seat's.
+      players: tableSeat.players.value,
+      myPlayer: tableSeat.myPlayer.value,
       gameView,
       playerSeat: seat,
       isViewingHistory: false,
