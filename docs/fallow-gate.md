@@ -330,9 +330,10 @@ The last full re-record was #545, for fallow 3.28.0. What it changed:
   then, and 2.48.0 reported each item as drift. The re-record accepted it so the
   pin could land, and #550 lists every item to remove or keep on purpose: three
   duplications, complexity growth in five files, two unused exports, 13 unused
-  component props and two unused emits. #550 removed all of it except the
-  `depth` prop of the card, die, hex board and piece renderers, which stays on
-  purpose: ElementRenderer passes it to every renderer, and each one says so.
+  component props and two unused emits. All of it is gone: the flow engine's
+  duplicated offered-actions block went in #501, AutoUI's `flowState` prop in
+  #516, and #550 removed the rest, including the `depth` prop every renderer
+  passed on and none read.
 
 ## The merge refuses baseline drift (#545)
 
