@@ -1651,3 +1651,59 @@ defineSmokeTest({
 });
 `;
 }
+
+/**
+ * How long {@link boardThatStarvesThePage} and {@link aceGameDealtSlowly} keep the browser or
+ * `boardsmith dev` busy (#609): longer than the walk gives a press (5s) or a deal (30s), as a machine
+ * running many verifies at once starves them.
+ */
+export const STARVED_FOR_MS = { page: 8_000, host: 35_000 } as const;
+
+/**
+ * A PAGE STARVED OF TIME (#609): the first pointer press anywhere in the dev host's page (the walk's
+ * press on the seat switcher, as it sets up) keeps the browser's main thread busy for
+ * {@link STARVED_FOR_MS}.page, which the game's frame shares, as a machine too loaded to run the
+ * browser does. With `forGood`, it never lets go: a page that has stopped answering altogether.
+ */
+export function boardThatStarvesThePage(options: { forGood?: boolean } = {}): Record<string, string> {
+  const busy = options.forGood ? 'for (;;) { /* never answers again */ }' : `const until = Date.now() + ${STARVED_FOR_MS.page};\n  while (Date.now() < until) { /* busy */ }`;
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { onMounted } from 'vue';
+
+function starve() {
+  ${busy}
+}
+onMounted(() => window.parent.document.addEventListener('pointerdown', starve, { capture: true, once: true }));
+</script>
+
+<template>
+  <div class="board">A board</div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/** The seed {@link aceGameDealtSlowly} deals slowly from. */
+export const SLOW_SEED = 'slow';
+
+/**
+ * THE ACE GAME, DEALT SLOWLY (#609): {@link aceGame}, whose first game dealt from {@link SLOW_SEED}
+ * keeps `boardsmith dev` busy for {@link STARVED_FOR_MS}.host while it deals, as a machine too
+ * loaded to run the dev host does. Every other game is dealt at once.
+ */
+export function aceGameDealtSlowly(): Record<string, string> {
+  const files = aceGame();
+  const rules = files['src/rules/game.ts']
+    .replace('export class DevGamePlayer', 'let dealtSlowly = false;\n\nexport class DevGamePlayer')
+    .replace(
+      '    super(options);\n',
+      `    super(options);\n    if (options.seed === ${JSON.stringify(SLOW_SEED)} && !dealtSlowly) {\n      dealtSlowly = true;\n      const until = Date.now() + ${STARVED_FOR_MS.host};\n      while (Date.now() < until) { /* busy */ }\n    }\n`,
+    );
+  return { ...files, 'src/rules/game.ts': rules };
+}

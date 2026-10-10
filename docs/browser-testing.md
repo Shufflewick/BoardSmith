@@ -471,6 +471,19 @@ markers this page documents, so it keeps up with any game without knowing it:
   bounds anything else at 15 (#464). A step that cannot go on is reported with
   its number and its deal, and ends that deal's walk; it never waits out the
   whole run.
+- Every wait in the walk (the 5 seconds a press gets, the 30 a deal or a turn
+  gets, the 90 the game gets to load) counts only time in which the page and
+  `boardsmith dev` were answering (#609). Every tenth of a second the walk asks
+  each of the page's frames for nothing and the dev host for
+  `/__boardsmith-alive`, and counts that tenth only once all have answered. A
+  machine too loaded to run them, as one running several verifies at once is,
+  stretches the walk rather than failing it, while a game or a control that is
+  stuck on a page that answers fails when it always did, with the same message.
+  A page or dev host that has not answered at all for 60 seconds has stopped,
+  and fails the walk saying so: look for something in the board or the rules
+  that runs without end. The walk also opens the dev host's seat menu again
+  when it closes before the walk's press lands in it, as it does when the
+  game's frame takes focus late on a slow machine (#610).
 - When a game ends with listed actions still to take, it deals a new game from
   the next seed of the deal it is walking (`smoke/2`, `smoke/3`...), the same way,
   and goes on in it (#458, #460). An action whose taking has ended every game it
