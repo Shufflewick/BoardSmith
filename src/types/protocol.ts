@@ -191,13 +191,18 @@ export interface NumberOption {
   step?: number;
 }
 
-/** Select option definition */
+/**
+ * Select option definition. A choice value may be any value the wire carries,
+ * an object included (a board size such as `{ width: 9, height: 9 }`); a
+ * selection is matched to a choice by `selectGameOptions`, and the game
+ * receives the declared value itself, frozen.
+ */
 export interface SelectOption {
   type: 'select';
   label: string;
   description?: string;
-  default?: string | number;
-  choices: Array<{ value: string | number; label: string }>;
+  default?: unknown;
+  choices: Array<{ value: unknown; label: string }>;
 }
 
 /** Boolean option definition */
