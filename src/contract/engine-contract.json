@@ -1,5 +1,5 @@
 {
-  "revision": 150,
+  "revision": 151,
   "bundleProtocol": 2,
   "surfaceHash": "dbd85fd9d4fcb20e",
   "payloadHash": "3f10d70c457a15ba",
@@ -1294,6 +1294,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "ctx.world.schedule() refuses a registered seated action at the schedule() line with the game-owned code schedule-seated-action, naming the clock actions that can be scheduled; clock-only-command still answers a seated event queued before this check (#608)"
+    },
+    {
+      "revision": 151,
+      "date": "2026-10-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "dbd85fd9d4fcb20e",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "boardsmith/ui exports GameRootView, a game-root view with required phase, isFinished and settings; board gameView props are GameRootView | null; boardsmith/testing's HiddenInfoGameView equals it; games whose hand-built view fixtures omit those fields must add them (#570)"
     }
   ]
 }

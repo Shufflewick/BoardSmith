@@ -96,7 +96,10 @@ in every game.
   `<path>` in a sandbox game, one game per doc, and compiles them under the
   tsconfig `boardsmith init` writes (#511). It also builds the getting-started
   game and plays a turn, because a type check cannot see a `loop()` that throws
-  when it is built. Leave a block unmarked only when it is deliberately partial.
+  when it is built. A board is marked `<!-- typecheck: board -->` instead, and
+  `src/contract/aspect-boards-typecheck.test.ts` compiles it as a game's
+  `.vue` board (#570). Leave a block unmarked only when it is deliberately
+  partial.
 - **Anything at runtime.** Types say nothing about a shape crossing a boundary
   the types do not describe.
 

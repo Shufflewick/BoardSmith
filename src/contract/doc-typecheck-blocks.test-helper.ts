@@ -8,8 +8,8 @@
  * each other (`./game.js`, `./elements.js`) compile together.
  *
  * `docs-game-typecheck.test.ts` compiles the `game` blocks (#511).
- * `aspect-boards-typecheck.test.ts` shares `gameTsConfig` for the boards the
- * aspect templates teach.
+ * `aspect-boards-typecheck.test.ts` compiles the `board` blocks (#570), and
+ * the boards the aspect templates teach under the same `gameTsConfig`.
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
