@@ -468,11 +468,13 @@ markers this page documents, so it keeps up with any game without knowing it:
   in the dialog), and the walk presses Escape instead; a dialog still open after
   Escape fails it too: a player in it has no way back to the game.
 - No press or read of an element waits longer than 5 seconds of the page's
-  time (below), and Playwright bounds a call the walk gives no time of its own
-  at 15 seconds (#464). A step that cannot go on is reported with its number and
-  its deal, and ends that deal's walk; it never waits out the whole run. The
-  whole run is bounded at 600 seconds of the wall clock, which ends a walk that
-  a machine stretches past it.
+  time (below), and Playwright bounds any other wait for an element at 15
+  seconds (#464). A script the walk runs in the page, or a count of elements,
+  takes no time limit in Playwright, and the walk gives it none yet: a board that
+  hangs during one runs until the 600-second limit on the whole run (#618). A
+  step that cannot go on is reported with its number and its deal, and ends that
+  deal's walk. The whole run is bounded at 600 seconds of the wall clock, which
+  ends a walk that a machine stretches past it.
 - Every wait in the walk (the 5 seconds a press gets, the 30 a deal or a turn
   gets, the 90 the game gets to load) counts only time in which the page and
   `boardsmith dev` were answering (#609). Every tenth of a second the walk asks
@@ -486,8 +488,9 @@ markers this page documents, so it keeps up with any game without knowing it:
   seconds to show, on the page's time.
 - A page or dev host that has not answered at all for 60 seconds has stopped.
   The walk notices that at its next timed wait and fails saying so: look for
-  something in the board or the rules that runs without end. A call the walk
-  gives no time of its own still ends at Playwright's 15 seconds instead.
+  something in the board or the rules that runs without end. A board that hangs
+  while the walk runs a script in it or counts its elements is not noticed this
+  way, and runs until the 600-second limit (#618).
 - The walk also opens the dev host's seat menu again when it closes before the
   walk's press lands in it, as it does when the game's frame takes focus late on
   a slow machine (#610). It never opens it again once the choice has taken
