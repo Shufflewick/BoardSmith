@@ -114,6 +114,26 @@ const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/
 /** One source-map segment: generated column, original line (0-based) and original column. */
 type Segment = [genColumn: number, line: number, column: number];
 
+/** The fields of one source-map segment, each a base64 VLQ value. */
+function decodeSegment(segmentText: string): number[] {
+  const fields: number[] = [];
+  let value = 0;
+  let shift = 0;
+  for (const char of segmentText) {
+    const digit = BASE64.indexOf(char);
+    if (digit < 0) throw new Error(`The source map vitest gave holds "${char}", which is not base64. This is a BoardSmith bug: file an issue.`);
+    value += (digit & 31) << shift;
+    if (digit & 32) {
+      shift += 5;
+      continue;
+    }
+    fields.push(value & 1 ? -(value >>> 1) : value >>> 1);
+    value = 0;
+    shift = 0;
+  }
+  return fields;
+}
+
 /**
  * The segments of a source map's `mappings`, by generated line (0-based). Segments with no original
  * position are dropped; the map's sources are taken as one file, the module itself.
@@ -126,21 +146,7 @@ export function decodeMappings(mappings: string): Segment[][] {
     state[0] = 0;
     for (const segmentText of lineText.split(',')) {
       if (segmentText === '') continue;
-      const fields: number[] = [];
-      let value = 0;
-      let shift = 0;
-      for (const char of segmentText) {
-        const digit = BASE64.indexOf(char);
-        if (digit < 0) throw new Error(`The source map vitest gave holds "${char}", which is not base64. This is a BoardSmith bug: file an issue.`);
-        value += (digit & 31) << shift;
-        if (digit & 32) {
-          shift += 5;
-          continue;
-        }
-        fields.push(value & 1 ? -(value >>> 1) : value >>> 1);
-        value = 0;
-        shift = 0;
-      }
+      const fields = decodeSegment(segmentText);
       fields.forEach((delta, i) => (state[i] += delta));
       if (fields.length >= 4) segments.push([state[0], state[2], state[3]]);
     }

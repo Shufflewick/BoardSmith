@@ -125,11 +125,6 @@
         "count": 1
       }
     },
-    "src/cli/commands/test-step-coverage.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/cli/commands/test-step-mutation.ts": {
       "complexity_moderate": {
         "count": 2
@@ -764,6 +759,7 @@
     "src/testing/debug.ts:complexity",
     "src/session/pending-action-manager.ts:complexity",
     "src/cli/commands/test-step-ast.ts:high impact",
+    "src/cli/commands/test-step-sfc.ts:high impact",
     "src/testing/random-simulation.ts:complexity",
     "src/cli/commands/lint.ts:complexity",
     "src/ui/components/auto-ui/renderers/HandRenderer.vue:complexity",
