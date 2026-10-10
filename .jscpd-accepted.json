@@ -1,0 +1,49 @@
+{
+  "accepted": [
+    {
+      "content": "5b31c53b62a98159",
+      "lines": 25,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.vue"
+      ]
+    },
+    {
+      "content": "6559950e6f08c86c",
+      "lines": 15,
+      "files": [
+        "src/ui/components/helpers/HintOverlay.vue",
+        "src/ui/components/helpers/TutorialOverlay.vue"
+      ]
+    },
+    {
+      "content": "8d4c7f2a0c6d2db3",
+      "lines": 23,
+      "files": [
+        "src/ui/components/helpers/HintOverlay.vue",
+        "src/ui/components/helpers/TutorialOverlay.vue"
+      ]
+    },
+    {
+      "content": "9cf21eb20be13d4e",
+      "lines": 20,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.vue"
+      ]
+    },
+    {
+      "content": "b5acc3db533e31a4",
+      "lines": 30,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.vue"
+      ]
+    },
+    {
+      "content": "d1a9361a5219c67f",
+      "lines": 17,
+      "files": [
+        "src/ui/components/GameHistory.vue",
+        "src/ui/components/auto-ui/ActionPanel.vue"
+      ]
+    }
+  ]
+}
