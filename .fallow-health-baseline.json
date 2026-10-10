@@ -314,10 +314,10 @@
     },
     "src/engine/flow/engine.ts": {
       "complexity_high": {
-        "count": 2
+        "count": 1
       },
       "complexity_moderate": {
-        "count": 12
+        "count": 10
       }
     },
     "src/engine/flow/walk-flow-nodes.ts": {

@@ -550,17 +550,7 @@ export class FlowEngine<G extends Game = Game> {
     // as one taken through resume() is: the other seats, and what the step
     // holds for them, are left as they are.
     const frame = this.stack[this.stack.length - 1];
-    if (frame?.node.type === 'simultaneous-action-step') {
-      const playerState = this.awaitingPlayers.find((p) => p.playerIndex === seat && !p.completed);
-      const player = this.game.getPlayer(seat);
-      if (!playerState || !player) {
-        throw new Error(
-          `Seat ${seat} is not awaited by the open simultaneous step, so its action cannot be settled there. ` +
-            `Ask GameRunner.refusalToPick(action, seat, pending) before running a pending action.`,
-        );
-      }
-      return this.settleSimultaneousAction(frame, playerState, player, result);
-    }
+    if (frame?.node.type === 'simultaneous-action-step') return this.settleExternalSimultaneousAction(frame, seat, result);
 
     if (frame?.node.type === 'action-step' && this.currentPlayer?.seat !== seat) {
       throw new Error(
@@ -572,6 +562,19 @@ export class FlowEngine<G extends Game = Game> {
     if (!this.recordActionResult(result, seat)) return this.getState();
     this.awaitingInput = false;
     return this.continueAfterCommittedAction(result);
+  }
+
+  /** Settles an action taken outside the flow for `seat` alone, in the open simultaneous step `frame`. */
+  private settleExternalSimultaneousAction(frame: ExecutionFrame<G>, seat: number, result: ActionResult): FlowState {
+    const playerState = this.awaitingPlayers.find((p) => p.playerIndex === seat && !p.completed);
+    const player = this.game.getPlayer(seat);
+    if (!playerState || !player) {
+      throw new Error(
+        `Seat ${seat} is not awaited by the open simultaneous step, so its action cannot be settled there. ` +
+          `Ask GameRunner.refusalToPick(action, seat, pending) before running a pending action.`,
+      );
+    }
+    return this.settleSimultaneousAction(frame, playerState, player, result);
   }
 
   /**
@@ -598,32 +601,37 @@ export class FlowEngine<G extends Game = Game> {
       throw new Error(`Seat ${seat} holds no follow-up in the open step, so there is nothing to expire.`);
     }
     this.holdFollowUp(frame, seat, undefined);
-
-    if (frame.node.type === 'simultaneous-action-step') {
-      const config = frame.node.config as SimultaneousActionStepConfig;
-      const playerState = this.awaitingPlayers.find((p) => p.playerIndex === seat);
-      if (playerState) playerState.completed = true;
-      const moveCount = ((frame.data?.moveCount as number) ?? 0) + 1;
-      frame.data = { ...frame.data, moveCount };
-      this.moveCount = moveCount;
-      const allDone = config.allDone
-        ? config.allDone(this.createContext())
-        : this.awaitingPlayers.every((p) => p.completed);
-      if (!allDone) {
-        this.warnIfDeadlockedSimultaneousStep(config);
-        return this.getState();
-      }
-      this.awaitingInput = false;
-      this.awaitingPlayers = [];
-      frame.completed = true;
-      return this.run();
-    }
+    if (frame.node.type === 'simultaneous-action-step') return this.expireSimultaneousSeat(frame, seat);
 
     const actionCount = ((frame.data?.actionCount as number) ?? 0) + 1;
     frame.data = { ...frame.data, actionCount };
     this.turnRun = { player: seat, count: (frame.data.moveCount as number) ?? 0, actions: actionCount };
     this.completeActionStep(frame);
     this.awaitingInput = false;
+    return this.run();
+  }
+
+  /**
+   * `expireHeldSeat` in a simultaneous step: the seat is marked done, and the
+   * step ends when its `allDone` says so.
+   */
+  private expireSimultaneousSeat(frame: ExecutionFrame<G>, seat: number): FlowState {
+    const config = frame.node.config as SimultaneousActionStepConfig;
+    const playerState = this.awaitingPlayers.find((p) => p.playerIndex === seat);
+    if (playerState) playerState.completed = true;
+    const moveCount = ((frame.data?.moveCount as number) ?? 0) + 1;
+    frame.data = { ...frame.data, moveCount };
+    this.moveCount = moveCount;
+    const allDone = config.allDone
+      ? config.allDone(this.createContext())
+      : this.awaitingPlayers.every((p) => p.completed);
+    if (!allDone) {
+      this.warnIfDeadlockedSimultaneousStep(config);
+      return this.getState();
+    }
+    this.awaitingInput = false;
+    this.awaitingPlayers = [];
+    frame.completed = true;
     return this.run();
   }
 
@@ -1201,6 +1209,13 @@ export class FlowEngine<G extends Game = Game> {
       currentPhase: this.currentPhase,
     };
 
+    this.publishMoveCounts(state);
+    this.publishOpenStep(state);
+    return state;
+  }
+
+  /** Writes the move counts an active action or simultaneous step publishes into `state`. */
+  private publishMoveCounts(state: FlowState): void {
     // Publish move count for ANY active action step, not just ones that
     // declare minMoves/maxMoves (UNDO-03). moveCount is the sole authoritative
     // input to computeUndoInfo's undo-boundary computation (session/utils.ts)
@@ -1215,29 +1230,36 @@ export class FlowEngine<G extends Game = Game> {
     // tracks its own per-frame moveCount (see `executeSimultaneousActionStep`
     // / `resumeSimultaneousAction`), which is the step-window lower bound
     // `session/utils.ts`'s per-seat simultaneous undo boundary depends on.
-    if (this.currentActionConfig || this.awaitingPlayers.length > 0) {
-      // An action step publishes its committed actions (every link of a
-      // follow-up chain), not its moves: this is undo's boundary (#495).
-      const top = this.stack[this.stack.length - 1];
-      state.moveCount = top?.node.type === 'action-step' && typeof top.data?.actionCount === 'number'
-        ? top.data.actionCount
-        : this.moveCount;
-      // Why moveCount is 0 here, when the seat plainly just acted: the step
-      // this frame belongs to never said whether re-entering it continues the
-      // same turn. Published so the undo refusal can name the cause instead of
-      // reporting "No actions to undo" -- see `entryRun`.
-      const undeclared = this.stack[this.stack.length - 1]?.data?.turnScopeUndeclared;
-      if (typeof undeclared === 'string') {
-        state.turnScopeUndeclared = undeclared;
-      }
-      if (this.currentActionConfig?.maxMoves) {
-        state.movesRemaining = this.currentActionConfig.maxMoves - this.moveCount;
-      }
-      if (this.currentActionConfig?.minMoves) {
-        state.movesRequired = Math.max(0, this.currentActionConfig.minMoves - this.moveCount);
-      }
+    if (!this.currentActionConfig && this.awaitingPlayers.length === 0) return;
+    // An action step publishes its committed actions (every link of a
+    // follow-up chain), not its moves: this is undo's boundary (#495).
+    const top = this.stack[this.stack.length - 1];
+    state.moveCount = top?.node.type === 'action-step' && typeof top.data?.actionCount === 'number'
+      ? top.data.actionCount
+      : this.moveCount;
+    // Why moveCount is 0 here, when the seat plainly just acted: the step
+    // this frame belongs to never said whether re-entering it continues the
+    // same turn. Published so the undo refusal can name the cause instead of
+    // reporting "No actions to undo" -- see `entryRun`.
+    const undeclared = this.stack[this.stack.length - 1]?.data?.turnScopeUndeclared;
+    if (typeof undeclared === 'string') {
+      state.turnScopeUndeclared = undeclared;
     }
+    this.publishMoveLimits(state);
+  }
 
+  /** Writes what an action step's `maxMoves` and `minMoves` leave of its moves into `state`. */
+  private publishMoveLimits(state: FlowState): void {
+    if (this.currentActionConfig?.maxMoves) {
+      state.movesRemaining = this.currentActionConfig.maxMoves - this.moveCount;
+    }
+    if (this.currentActionConfig?.minMoves) {
+      state.movesRequired = Math.max(0, this.currentActionConfig.minMoves - this.moveCount);
+    }
+  }
+
+  /** Writes the open step's window, the last action's error and the held follow-ups into `state`. */
+  private publishOpenStep(state: FlowState): void {
     // The open step's window, resolved when it was entered and kept on its
     // frame (see `openStepWindow`), so every restore path that rebuilds the
     // frame from `position.frameData` publishes the same number.
@@ -1265,8 +1287,6 @@ export class FlowEngine<G extends Game = Game> {
         state.followUps = seats.map((seat): PublishedFollowUp => ({ ...held[String(seat)], seat }));
       }
     }
-
-    return state;
   }
 
   /**
