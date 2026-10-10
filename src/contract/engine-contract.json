@@ -1,5 +1,5 @@
 {
-  "revision": 151,
+  "revision": 152,
   "bundleProtocol": 2,
   "surfaceHash": "f2c48bb2c4cabcea",
   "payloadHash": "3f10d70c457a15ba",
@@ -1297,6 +1297,15 @@
     },
     {
       "revision": 151,
+      "date": "2026-10-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "dbd85fd9d4fcb20e",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "boardsmith/ui exports GameRootView, a game-root view with required phase, isFinished and settings; board gameView props are GameRootView | null; boardsmith/testing's HiddenInfoGameView equals it; games whose hand-built view fixtures omit those fields must add them (#570)"
+    },
+    {
+      "revision": 152,
       "date": "2026-10-10",
       "bundleProtocol": 2,
       "surfaceHash": "f2c48bb2c4cabcea",

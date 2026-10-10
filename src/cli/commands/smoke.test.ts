@@ -21,6 +21,8 @@ import { isRunning, smokeProject } from './smoke-project.test-helper.js';
 import {
   ACE_SEEDS,
   aceGame,
+  aceGameDealtSlowly,
+  boardThatStarvesThePage,
   boardWithAPointerlessControl,
   boardWithAControlAtItsFoot,
   boardWithATimidControl,
@@ -45,6 +47,7 @@ import {
   pointerAimedGame,
   PLAYERS_GET_THE_TABLE,
   QUIET_CLAIM_REASON,
+  SLOW_SEED,
   smokeSpec,
   truceGame,
 } from './smoke-fixtures.test-helper.js';
@@ -741,6 +744,32 @@ describe('boardsmith verify: the smoke check', () => {
       'The smoke walk, dealt from seed "smoke", found a problem: - This game is played at a table, where the walk acts for ' +
         'every seat in turn, so `seats` in tests/browser/smoke.spec.ts has nothing to choose. Remove `seats` there.',
     );
+  });
+
+  it('#609: waits out a page kept too busy to answer for longer than a press is given, as a loaded machine does, and walks on', async () => {
+    const { outcome } = await smokeOf(false, boardThatStarvesThePage());
+
+    expect(outcome.summary).not.toContain('did not answer');
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took /);
+    expect(outcome.passed).toBe(true);
+  });
+
+  it('#609: waits out a deal that keeps boardsmith dev busy for longer than a deal is given, as a loaded machine does, and walks it', async () => {
+    const { outcome, said } = await smokeOf(false, {
+      ...aceGameDealtSlowly(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play', 'showAce'], { showAce: 'Offered only to a seat dealt the ace.' }, { seed: SLOW_SEED, steps: 4 }),
+    });
+
+    expect(said).toContain(`smoke: dealing a game from seed "${SLOW_SEED}"`);
+    expect(outcome.summary).not.toContain('had not dealt');
+    expect(outcome.passed).toBe(true);
+  });
+
+  it('#609: fails a page that stops answering altogether, saying so, rather than waiting on it for good', async () => {
+    const { outcome } = await smokeOf(false, boardThatStarvesThePage({ forGood: true }));
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toMatch(/The walk could not go on: the page stopped answering for 60s/);
   });
 
   it('fails a spec that passes without walking the game', async () => {

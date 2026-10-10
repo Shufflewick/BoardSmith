@@ -150,7 +150,7 @@ attribute.
 
 | Prop | Type | Description |
 |------|------|-------------|
-| `gameView` | `GameViewElement \| null` | Player-filtered element tree |
+| `gameView` | `GameRootView \| null` | Player-filtered element tree, from the game root down. The root also carries `phase`, `isFinished` and `settings` |
 | `players` | `GameContextPlayer[]` | Every seat's player, in seat order |
 | `myPlayer` | `GameContextPlayer \| undefined` | This seat's player, or undefined for a spectator |
 | `playerSeat` | `number` | This seat; -1 before one is assigned |
@@ -750,35 +750,34 @@ boardInteraction.currentPickName  // string | null
 
 **Example: Detecting when "Hire First MERC" is clicked**
 
+<!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
 import { computed, watch } from 'vue';
-import { useBoardInteraction } from 'boardsmith/ui';
+import { findElement, useBoardInteraction, type GameViewElement, type TableBoardProps } from 'boardsmith/ui';
 
-const props = defineProps<{
-  gameView: GameViewElement | null;
-}>();
+const props = defineProps<TableBoardProps>();
 
 const boardInteraction = useBoardInteraction();
 
 // Detect when hiring action is active
-const isHiringMerc = computed(() =>
-  boardInteraction?.currentAction === 'hireFirstMerc'
-);
+const isHiringMerc = computed(() => boardInteraction.currentAction === 'hireFirstMerc');
 
 // Get drawn mercs from game settings (stored by on-demand choices callback)
 const drawnMercs = computed(() => {
   if (!isHiringMerc.value) return [];
 
-  const ids = props.gameView.settings?._drawnMercsForHiring as number[] | undefined;
+  const ids = props.gameView?.settings._drawnMercsForHiring as number[] | undefined;
   if (!ids?.length) return [];
 
   // Find the elements by ID in the game view
-  return ids.map(id => findElement(props.gameView, { id })).filter(Boolean);
+  return ids
+    .map((id) => findElement(props.gameView, { id }))
+    .filter((merc): merc is GameViewElement => merc !== undefined);
 });
 
 // React to action changes
-watch(() => boardInteraction?.currentAction, (action, prevAction) => {
+watch(() => boardInteraction.currentAction, (action, prevAction) => {
   if (action === 'hireFirstMerc') {
     console.log('Player started hiring a MERC');
   }
@@ -794,7 +793,7 @@ watch(() => boardInteraction?.currentAction, (action, prevAction) => {
     <div v-if="isHiringMerc && drawnMercs.length" class="hiring-overlay">
       <h3>Choose a MERC to hire:</h3>
       <div class="drawn-mercs">
-        <MercCard v-for="merc in drawnMercs" :key="merc.id" :merc="merc" />
+        <div v-for="merc in drawnMercs" :key="merc.id" class="merc-card">{{ merc.name }}</div>
       </div>
     </div>
   </div>

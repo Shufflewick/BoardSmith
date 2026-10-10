@@ -24,6 +24,7 @@ import { githubIssueTracker, sweepDuplicateExports } from '../lib/duplicate-expo
 import {
   JSCPD_REPORT_FILE,
   TEMPLATE_DUPES_FILE,
+  describeEmptyScan,
   describeTemplateDrift,
   isJscpdReport,
   jscpdTemplateArgs,
@@ -423,7 +424,7 @@ export async function runTemplateDupesCheck(
     return {
       code: 0,
       nothingToCheck: true,
-      report: 'jscpd found no .vue files under src/, so the template duplication check checked nothing.',
+      report: describeEmptyScan(read.sources),
     };
   }
   if (read.recorded === null) {

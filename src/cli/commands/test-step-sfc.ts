@@ -66,7 +66,7 @@ function describeComponent(file: string, source: string) {
   if (errors.length > 0) {
     throw new Error(
       `Could not read ${file} as a Vue component: ${errors[0].message}\n` +
-        'Fix the component (run `npx vue-tsc --noEmit`) and run this check again.',
+        'Fix the component (run `boardsmith typecheck`) and run this check again.',
     );
   }
   return descriptor;

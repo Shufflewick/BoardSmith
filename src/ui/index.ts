@@ -54,7 +54,7 @@ export { default as ActionPanel } from './components/auto-ui/ActionPanel.vue';
 // Game UI registry (src/ui/uis.ts) — single source of truth for a game's UIs.
 export { defineGameUIs, defaultUI, devUI } from './game-uis.js';
 export type { GameUIEntry, DefaultGameUIEntry, GameUIRegistry } from './game-uis.js';
-export type { GameViewElement, BoardPlayer } from './types.js';
+export type { GameViewElement, GameRootView, BoardPlayer } from './types.js';
 // Whether a view element is a placeholder for something the seat cannot see.
 // The one check for it: the engine marks placeholders in attributes.__hidden.
 export { isHiddenPlaceholder } from '../engine/element/hidden-placeholder.js';
