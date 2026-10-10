@@ -1778,7 +1778,7 @@ The `fill()` function expects the raw value, not the wrapper object.
 
 ### Pit of Success
 
-As of v0.8, BoardSmith automatically unwraps choice objects passed to `fill()` and shows a dev warning. However, passing `choice.value` directly is clearer and recommended.
+`fill()` refuses the choice object the same way it refuses any value that is not on offer, so the mistake shows up as an error the first time you try it rather than as a value your action did not expect (#509).
 
 ---
 

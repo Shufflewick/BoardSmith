@@ -11,6 +11,7 @@ import {
   ErrorCode,
   type PlayerGameState,
   type WarningEntry,
+  type ChoiceWithRefs,
 } from './types.js';
 import { actionForSeat, buildPlayerState, offerFollowUp } from './utils.js';
 
@@ -28,7 +29,7 @@ export interface PickStepResult {
    */
   errorCode?: ErrorCode;
   done?: boolean;
-  nextChoices?: unknown[];
+  nextChoices?: ChoiceWithRefs[];
   actionComplete?: boolean;
   actionResult?: {
     success: boolean;

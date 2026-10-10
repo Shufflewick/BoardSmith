@@ -517,14 +517,6 @@
       ]
     },
     {
-      "content": "d945084cf025cf5f",
-      "lines": 9,
-      "files": [
-        "src/engine/element/pick-candidates.ts",
-        "src/ui/composables/actionControllerHelpers.ts"
-      ]
-    },
-    {
       "content": "d9ab14f07e4d1fb5",
       "lines": 32,
       "files": [

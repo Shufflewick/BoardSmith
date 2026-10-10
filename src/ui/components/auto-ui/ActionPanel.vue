@@ -16,7 +16,7 @@
 import { ref, computed, watch, inject, nextTick, useId } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
-import { getDisplayFromValue, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
+import { getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
 import type {
   UseActionControllerReturn,
@@ -1076,32 +1076,6 @@ function getSelectionDisplay(selectionName: string, value: unknown): string {
     }
   }
 
-  // Fallback for edge cases (shouldn't normally be needed)
-  return getDisplayFromValue(value);
-}
-
-/**
- * Get display text for an accumulated value in a repeating selection.
- * PIT OF SUCCESS: Now that accumulated stores {value, display} objects,
- * we can directly use the stored display.
- */
-function getAccumulatedDisplay(accumulated: unknown): string {
-  // New format: accumulated items are {value, display} objects
-  if (accumulated && typeof accumulated === 'object' && 'display' in accumulated) {
-    return (accumulated as { display: string }).display;
-  }
-
-  // Legacy fallback: accumulated item is just a value
-  const value = accumulated;
-  if (!currentPick.value) return getDisplayFromValue(value);
-
-  // For choice selections, look up display in choices
-  if (currentPick.value.type === 'choice') {
-    const choices = repeatingState.value?.currentChoices || currentPick.value.choices || [];
-    const choice = choices.find((c: ChoiceWithRefs) => c.value === value);
-    if (choice) return choice.display;
-  }
-
   return getDisplayFromValue(value);
 }
 
@@ -1206,10 +1180,9 @@ function restoreFocusAfterRemoval(index: number): void {
   )?.focus();
 }
 
-/** What one built entry reads as: the choice's own label, by preference. */
+/** What one built entry reads as: the label of the button that adds it. */
 function orderedEntryDisplay(value: unknown): string {
-  const choice = filteredChoices.value.find(c => c.value === value);
-  return choice?.display ?? getDisplayFromValue(value);
+  return labelOfPick(value, filteredChoices.value);
 }
 
 /** "Added: 2/3", or "Added: 2" when the list has no upper bound. */
@@ -1619,7 +1592,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           :key="idx"
           class="accumulated-chip"
         >
-          {{ getAccumulatedDisplay(val) }}
+          {{ val.display }}
         </span>
         <span v-if="repeatingState.awaitingServer" class="loading-indicator">...</span>
       </div>

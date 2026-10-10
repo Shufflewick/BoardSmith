@@ -15,6 +15,8 @@
 /** A choice as either side holds it: a value, and whatever else it carries. */
 interface MatchableChoice {
   value: unknown;
+  /** The label a `{ value, label }` choice brought (#509), matched as display text. */
+  label?: string;
 }
 
 /**
@@ -61,7 +63,7 @@ export function trySmartResolveChoice<C extends MatchableChoice>(
     ?? byIdentifyingSubset(value, choices);
 }
 
-/** An element id, or the `value` half of a `{value, display}` choice. */
+/** An element id, or the `value` field of an object choice. */
 function byNumericKey<C extends MatchableChoice>(
   value: unknown,
   choices: readonly C[],
@@ -106,6 +108,7 @@ function byDisplayText<C extends MatchableChoice>(
     || (typeof candidate === 'string' && candidate.toLowerCase() === lowerValue);
 
   return choices.find((choice) => {
+    if (choice.label !== undefined && textMatches(choice.label)) return true;
     const actual = choice.value;
     if (typeof actual === 'string') return textMatches(actual);
     if (!actual || typeof actual !== 'object') return false;
@@ -146,6 +149,22 @@ export function findMatchingChoice<C extends MatchableChoice>(
     if (valuesEqual(choice.value, value)) return choice;
   }
   return trySmartResolveChoice(value, choices);
+}
+
+/**
+ * The label a value reads as when nothing else names it: its own `name` or
+ * `label`, else the value itself. The server labels a choice with it and the
+ * client labels a pick it holds without a choice (a follow-up's or a prefill's
+ * arg) with it, so the button and the breadcrumb agree (#509). `label` is the
+ * one label key; a `display` field on a value is ordinary data.
+ */
+export function labelOfValue(value: unknown): string {
+  if (value === null || value === undefined) return String(value);
+  if (typeof value !== 'object') return String(value);
+  const obj = value as Record<string, unknown>;
+  if (typeof obj.name === 'string') return obj.name;
+  if (typeof obj.label === 'string') return obj.label;
+  try { return JSON.stringify(value); } catch { return '[Complex Object]'; }
 }
 
 /** A serialized game element, which is never a plain data object. */

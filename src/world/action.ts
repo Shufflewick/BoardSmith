@@ -81,7 +81,7 @@ import type {
   PlayerOf,
   Selection,
 } from "../engine/index.js";
-import type { ConditionConfig, MultiSelectConfig, OrderedListConfig } from "../engine/action/types.js";
+import type { ChoiceValue, ConditionConfig, MultiSelectConfig, OrderedListConfig } from "../engine/action/types.js";
 import type { TextPattern } from "../engine/action/text-rules.js";
 import type { WorldBudgets } from "./budgets.js";
 import type { ScheduleArm } from "./schedule-api.js";
@@ -382,13 +382,12 @@ export interface WorldClockFacilities extends WorldFacilities {
 /**
  * HOW MANY OF A THING A WORLD'S CHOICE TAKES (#376).
  *
- * The engine's own form also admits `undefined` from the function, meaning
- * "single-select after all". A world's does not, and that is the one place this
- * narrows what the engine can express: a `multiSelect` here ALWAYS resolves to
- * an array, so the argument's type is knowable from the call rather than from
- * whatever the function decided at render time. An author who wants exactly one
- * writes `{ min: 1, max: 1 }` and receives an array of one, which is a shape a
- * handler can write once instead of branching on.
+ * A `multiSelect` ALWAYS resolves to an array, as the engine's own form does
+ * (#509): the function returns a count and never `undefined`, so the
+ * argument's type is knowable from the call rather than from whatever the
+ * function decided at render time. An author who wants exactly one writes
+ * `{ min: 1, max: 1 }` and receives an array of one, which is a shape a handler
+ * can write once instead of branching on.
  */
 export type WorldMultiSelect<G extends Game = Game> =
   | number
@@ -412,23 +411,26 @@ export type WorldOrderedList<G extends Game = Game> =
 /**
  * Everything a world's `chooseFrom` takes apart from `multiSelect` and
  * `orderedList`, which are split out because they are what decide whether the
- * argument is a `T` or a `T[]` and therefore have to live in the overloads.
+ * argument is a value or an array and therefore have to live in the overloads.
+ *
+ * `T` is one entry of `choices`, a value or `{ value, label }`; every callback
+ * receives `ChoiceValue<T>`, the value the engine delivers (#509).
  */
 export interface WorldChoiceOptions<G extends Game, T, P = undefined> {
   prompt?: WorldPrompt<G>;
   needs?: (context: WorldNeedsContext<G>) => readonly string[];
   choices: T[] | ((context: WorldActionContext<G>) => T[]);
-  display?: (choice: T) => string;
+  display?: (choice: ChoiceValue<T>) => string;
   optional?: boolean | string;
   validate?: (
-    value: T,
+    value: ChoiceValue<T>,
     args: Record<string, unknown>,
     context: WorldActionContext<G>,
   ) => boolean | string;
-  boardRefs?: (choice: T, context: WorldActionContext<G>) => ChoiceBoardRefs;
+  boardRefs?: (choice: ChoiceValue<T>, context: WorldActionContext<G>) => ChoiceBoardRefs;
   /** Work every `disabled` call of one evaluation shares; see the engine's `chooseFrom` (#334). */
   prepare?: (context: WorldActionContext<G>) => P;
-  disabled?: (choice: T, context: WorldActionContext<G>, prepared: P) => string | false;
+  disabled?: (choice: ChoiceValue<T>, context: WorldActionContext<G>, prepared: P) => string | false;
   /**
    * The player-facing refusal for a submitted value that is no longer listed:
    * another seat took the offer, a second tab acted first (#393). `value` is
@@ -1081,7 +1083,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * declaration is authored, finite and readable.
    */
   // TWO OVERLOADS, because `multiSelect` is what decides whether the argument
-  // is a `T` or a `T[]`, and a handler should not have to be told which. Each
+  // is a value or an array, and a handler should not have to be told which. Each
   // signature is a "member" to the dead-code pass and each is reached only by
   // games.
   chooseFrom<K extends string, T, P = undefined>(
@@ -1090,7 +1092,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       multiSelect: WorldMultiSelect<G>;
       orderedList?: never;
     },
-  ): WorldAction<G, AddArg<A, K, T[]>>;
+  ): WorldAction<G, AddArg<A, K, ChoiceValue<T>[]>>;
   // A LIST IS A THIRD SIGNATURE AND NOT A FLAG (#249). `orderedList?: never` on
   // the other two is what makes "both" a compile error at the call site rather
   // than a refusal the author meets at the first submission that repeats.
@@ -1100,18 +1102,18 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       orderedList: WorldOrderedList<G>;
       multiSelect?: never;
     },
-  ): WorldAction<G, AddArg<A, K, T[]>>;
+  ): WorldAction<G, AddArg<A, K, ChoiceValue<T>[]>>;
   chooseFrom<K extends string, T, P = undefined>(
     name: K,
     options: WorldChoiceOptions<G, T, P> & { multiSelect?: undefined; orderedList?: undefined },
-  ): WorldAction<G, AddArg<A, K, T>>;
+  ): WorldAction<G, AddArg<A, K, ChoiceValue<T>>>;
   chooseFrom<K extends string, T, P = undefined>(
     name: K,
     options: WorldChoiceOptions<G, T, P> & {
       multiSelect?: WorldMultiSelect<G>;
       orderedList?: WorldOrderedList<G>;
     },
-  ): WorldAction<G, AddArg<A, K, T | T[]>> {
+  ): WorldAction<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[]>> {
     this.declareSelection(options.needs);
     this.inner.chooseFrom<K, T, P>(name, {
       // AN ORDINARY `ChoiceSelection` FIELD the facade had stopped passing on
@@ -1141,7 +1143,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
         : undefined,
       unavailable: forwardUnavailable<G>(options.unavailable),
     });
-    return this as unknown as WorldAction<G, AddArg<A, K, T | T[]>>;
+    return this as unknown as WorldAction<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[]>>;
   }
 
   /**
