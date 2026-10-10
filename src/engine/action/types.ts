@@ -874,13 +874,6 @@ export interface SerializedAction {
   player: number;
   /** Serialized arguments */
   args: Record<string, unknown>;
-  /**
-   * Wall-clock time this action was recorded, stamped by the SESSION, not the
-   * engine (#54). Absent on any history the engine produced on its own —
-   * a replay, a bot's search, a headless runner — because engine-owned state
-   * must be byte-identical across two runs of the same seed.
-   */
-  timestamp?: number;
   /** Whether this action was undoable (false if action.undoable was false) */
   undoable?: boolean;
 }
@@ -898,8 +891,6 @@ export interface SerializedSeatExpiry {
   /** The seat whose part ended */
   player: number;
   undoable: false;
-  /** Stamped by the session beside the entry, as on `SerializedAction` */
-  timestamp?: number;
 }
 
 /**

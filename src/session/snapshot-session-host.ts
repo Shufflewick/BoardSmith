@@ -9,8 +9,8 @@ import type {
   ReadOnlyOpType,
   StateEnvelope,
 } from './stateless-ops.js';
-import { closesSeat, debugOpRefusal, isReadOnlyOp } from './stateless-ops.js';
-import type { Annotation, FlowState, GameStateSnapshot } from '../engine/index.js';
+import { closesSeat, debugOpRefusal, isReadOnlyOp, type DebugHistoryEntry } from './stateless-ops.js';
+import type { Annotation, FlowState, GameStateSnapshot, HistoryEntry } from '../engine/index.js';
 import { dueSeats, type SeatActivityState } from '../engine/flow/seat-activity.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
 import { stepTimeLimitMs, type StepTimeLimitState } from '../engine/flow/step-time-limit.js';
@@ -457,6 +457,16 @@ export class SnapshotSessionHost {
   // across every seat/spectator, unlike pendingAction below.
   private lastFlowDebugInfo: SerializedFlowDebugInfo | null = null;
 
+  /**
+   * When each entry of the game's action history reached this host, by
+   * history index (#547): what the Debug panel's history shows beside each
+   * move. Held here, never in the snapshot, because engine history stays
+   * clock-free (#54). Recorded only while debugging is on, so a host with it
+   * off reads no clock; an entry with no time is one made while debugging was
+   * off or before this host held the game.
+   */
+  private arrivalTimes: Array<number | undefined> = [];
+
   // Demo loop cancellation flag, move cap, and cancellable-delay handle.
   // demoAbort: set by demoStop to cancel the in-flight runDemoLoop.
   // MAX_DEMO_MOVES: hard cap to guard against infinite/very long games (STRIDE T-110-06).
@@ -749,6 +759,8 @@ export class SnapshotSessionHost {
     const snapshot = host.checkedSnapshot(state.snapshot, 'restore');
     host.pendingStates = host.restorablePendingStates(state.pendingStates);
     host._snapshot = snapshot;
+    // Moves made before this host held the game arrived at times it never saw.
+    host.arrivalTimes = new Array<undefined>(snapshot.actionHistory.length).fill(undefined);
     host.botSeats = state.botSeats.map((s) => ({ ...s }));
     if (state.playerViews) host.lastPlayerViews = state.playerViews;
     if (state.spectatorView !== undefined) host.lastSpectatorView = state.spectatorView;
@@ -853,6 +865,7 @@ export class SnapshotSessionHost {
    */
   private async apply(res: StateEnvelope, seat?: number, pending: Record<string, unknown> | null = null): Promise<void> {
     this._snapshot = this.checkedSnapshot(res.snapshot, 'op');
+    this.noteArrivals(this._snapshot.actionHistory.length);
     // FLOW-01/03: every state-mutating op's stateEnvelope() carries a fresh
     // flowDebugInfo (shared serializeFlowDebugInfo — same shape as the
     // debug:flow-state op). Carry it forward
@@ -868,6 +881,24 @@ export class SnapshotSessionHost {
     if (this.disposed) return; // F-12: a dead session never broadcasts.
     this.publish('change');
     await this.persistDurableState();
+  }
+
+  /**
+   * Bring {@link arrivalTimes} to a history of `length` entries: drop the times
+   * of entries an undo or rewind removed, and stamp each new entry with now.
+   */
+  private noteArrivals(length: number): void {
+    if (this.arrivalTimes.length > length) this.arrivalTimes.length = length;
+    const now = this.adapters.debug === true ? Date.now() : undefined;
+    while (this.arrivalTimes.length < length) this.arrivalTimes.push(now);
+  }
+
+  /** `history` with each entry's arrival time, where this host recorded one. */
+  private withArrivalTimes(history: HistoryEntry[]): DebugHistoryEntry[] {
+    return history.map((entry, index) => {
+      const timestamp = this.arrivalTimes[index];
+      return timestamp === undefined ? entry : { ...entry, timestamp };
+    });
   }
 
   /**
@@ -1019,7 +1050,11 @@ export class SnapshotSessionHost {
     // mutating or broadcasting — just return the executor's result. They never
     // write the game snapshot, so they stay OFF the serialization chain.
     if (isReadOnlyOp(op)) {
-      return this.adapters.executeOp(this.snapshot, this.pendingStates.get(seat) ?? null, op);
+      const res = await this.adapters.executeOp(this.snapshot, this.pendingStates.get(seat) ?? null, op);
+      if (op.type === 'debugHistory' && res.success && 'actionHistory' in res) {
+        return { ...res, actionHistory: this.withArrivalTimes(res.actionHistory) };
+      }
+      return res;
     }
 
     // Every state-MUTATING op sequence runs serialized on opChain. Its trailing

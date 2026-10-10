@@ -647,7 +647,7 @@ export function buildPlayerState(
   runner: GameRunner,
   playerNames: string[],
   playerPosition: number,
-  options?: { includeActionMetadata?: boolean; includeDebugData?: boolean }
+  options?: { includeActionMetadata?: boolean }
 ): PlayerGameState {
   const flowState = runner.getFlowState();
 
@@ -798,14 +798,6 @@ export function buildPlayerState(
   if (options?.includeActionMetadata && playerPosition > 0) {
     const followUp = offerFollowUp(runner.game, flowState, playerPosition);
     if (followUp) state.followUp = followUp;
-  }
-
-  // Optionally include custom debug data
-  if (options?.includeDebugData) {
-    const customDebug = runner.game.getCustomDebugData();
-    if (Object.keys(customDebug).length > 0) {
-      state.customDebug = customDebug;
-    }
   }
 
   // Include colorSelectionEnabled from game settings so clients know to show color swatches

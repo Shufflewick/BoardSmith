@@ -2585,13 +2585,13 @@ export class Game<
    * The provided function will be called when debug data is requested.
    * Use this to expose game-specific debug information in the debug panel.
    *
-   * Debug payloads are dev-only: they reach a seat's state only when a host
-   * builds it with `buildPlayerState`'s `includeDebugData: true` (default
-   * `false`, SEC-04). Do NOT use `registerDebug` to expose hidden/secret game
-   * state (a hand's contents, an opponent's hidden hand, deck order, etc) —
-   * a host that included debug data in a live/production session would
-   * broadcast it to every connected player and spectator. Prefer non-secret diagnostics
-   * like element counts, tree shape, or public derived state.
+   * Debug payloads are dev-only and never part of a seat's state (SEC-04).
+   * The Debug panel asks for them with the `debugCustomData` op, which a host
+   * answers only while it has debugging on (`boardsmith dev`), and only to the
+   * seat that asked (#547). The platform runs with debugging off, so a
+   * published game's players never receive them. Even so, prefer non-secret
+   * diagnostics like element counts, tree shape, or public derived state: in
+   * `boardsmith dev --debug` the person at any seat can read them.
    *
    * @example
    * ```typescript

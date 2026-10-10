@@ -39,6 +39,16 @@ const simpleGameDef: GameDefinitionLike = {
   maxPlayers: 4,
 };
 
+/** SimpleGame plus one `registerDebug` entry, for the Debug panel's custom data (#547). */
+class DebugDataGame extends SimpleGame {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerDebug('turnCount', () => 'tracked');
+  }
+}
+
+const debugDataGameDef: GameDefinitionLike = { ...simpleGameDef, gameClass: DebugDataGame, gameType: 'debug-data' };
+
 const gameOptions = { playerCount: 2, seed: 'bridge-test' };
 
 interface Posted {
@@ -369,6 +379,25 @@ describe('dev host bridge', () => {
       expect(broadcasts()).toBe(before);
     });
 
+    it('debug:custom-data answers only the asking seat with the game\'s registerDebug data (#547)', async () => {
+      const responses: Array<{ seat: number; result: Record<string, unknown> }> = [];
+      const pushed: unknown[] = [];
+      const session = createDevSession({
+        debug: () => true,
+        playerCount: 2,
+        executeOp: (snap, pend, op) =>
+          executeOp(debugDataGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op, { debug: true }),
+        postGameState: (_seat, state) => pushed.push(state),
+        postServerResponse: (seat, _requestId, result) => responses.push({ seat, result }),
+      });
+      await session.start();
+
+      await session.handleServerRequest(2, 'c', 'debug:custom-data', {});
+
+      expect(responses).toEqual([{ seat: 2, result: { success: true, customDebug: { turnCount: 'tracked' } } }]);
+      expect(JSON.stringify(pushed)).not.toContain('tracked');
+    });
+
     it('debug:state-at returns historical state under the `state` key', async () => {
       const { session, responses } = makeResultSession();
       await session.start();
@@ -436,7 +465,7 @@ describe('dev host bridge', () => {
 
     it("a pick's warnings are captured as 'warning' entries sourced by the wireOp", async () => {
       const game: StateEnvelope = {
-        snapshot: { flowState: {}, winners: [] } as unknown as GameStateSnapshot,
+        snapshot: { flowState: {}, winners: [], actionHistory: [] } as unknown as GameStateSnapshot,
         playerViews: [],
         spectatorView: undefined,
         flowDebugInfo: {} as SerializedFlowDebugInfo,
@@ -475,7 +504,7 @@ describe('dev host bridge', () => {
         if (op.type === 'start') {
           return Promise.resolve({
             success: true,
-            snapshot: { flowState: {}, winners: [] } as unknown as GameStateSnapshot,
+            snapshot: { flowState: {}, winners: [], actionHistory: [] } as unknown as GameStateSnapshot,
             playerViews: [],
             spectatorView: undefined,
             flowDebugInfo: {} as SerializedFlowDebugInfo,
@@ -527,6 +556,7 @@ describe('dev host bridge', () => {
       });
       expect(translateOp('debug:action-traces', 2, { player: 1 })).toEqual({ type: 'debugActionTraces', player: 2 });
       expect(translateOp('debug:flow-state', 2, { player: 1 })).toEqual({ type: 'debugFlowState', player: 2 });
+      expect(translateOp('debug:custom-data', 2, { player: 1 })).toEqual({ type: 'debugCustomData', player: 2 });
     });
 
     it('pins hint and heatmap-toggle to the asking seat, whatever seat the payload names', () => {
@@ -562,6 +592,7 @@ describe('dev host bridge', () => {
       ['debug:state-diff', { fromIndex: 0, toIndex: 0 }],
       ['debug:action-traces', {}],
       ['debug:flow-state', {}],
+      ['debug:custom-data', {}],
       ['debug:rewind', { actionIndex: 0 }],
       ['debug:move-to-top', { cardId: 1 }],
       ['debug:reorder-card', { cardId: 1, targetIndex: 0 }],

@@ -43,7 +43,7 @@ const VIEW = {
   ],
 };
 
-const STATE = { state: { view: VIEW, customDebug: { seed: 42 } }, flowState: null };
+const STATE = { state: { view: VIEW }, flowState: null };
 
 const HISTORY = [
   { name: 'playCard', player: 1, args: {}, timestamp: 1000 },
@@ -562,9 +562,67 @@ describe('DebugPanel view-tree derivations', () => {
 
 
 
-  it('exposes the game-supplied custom debug data', async () => {
-    const { vm } = track(mountPanel());
+  it('asks the host for the game-supplied custom debug data when the Elements tab opens (#547)', async () => {
+    const { vm, platformRequest } = track(
+      mountPanel(async (op) => (op === 'debug:custom-data' ? { success: true, customDebug: { seed: 42 } } : { success: true }))
+    );
+    expect(vm.customDebugData).toBeNull();
+
+    vm.activeTab = 'elements';
+    await flush();
+
+    expect(callsFor(platformRequest, 'debug:custom-data')).toHaveLength(1);
     expect(vm.customDebugData).toEqual({ seed: 42 });
+  });
+
+  it('asks again for the custom debug data when a new state arrives on the Elements tab', async () => {
+    let seed = 1;
+    const { wrapper, vm, platformRequest } = track(
+      mountPanel(async (op) => (op === 'debug:custom-data' ? { success: true, customDebug: { seed } } : { success: true }))
+    );
+    vm.activeTab = 'elements';
+    await flush();
+
+    seed = 2;
+    await wrapper.setProps({ state: { state: { view: VIEW }, flowState: null } });
+    await flush();
+
+    expect(callsFor(platformRequest, 'debug:custom-data')).toHaveLength(2);
+    expect(vm.customDebugData).toEqual({ seed: 2 });
+  });
+
+  it('hides the live custom debug data while time travelling', async () => {
+    const { vm } = track(
+      mountPanel(async (op) => {
+        if (op === 'debug:custom-data') return { success: true, customDebug: { seed: 42 } };
+        if (op === 'debug:state-at') return { success: true, state: { view: VIEW } };
+        return { success: true, diff: null };
+      })
+    );
+    vm.activeTab = 'elements';
+    await flush();
+
+    await vm.selectAction(1);
+
+    expect(vm.isViewingHistory).toBe(true);
+    expect(vm.customDebugData).toBeNull();
+  });
+
+  it('shows no custom-debug section for a game that registered no debug data', async () => {
+    const { wrapper, vm } = track(
+      mountPanel(async (op) => (op === 'debug:custom-data' ? { success: true, customDebug: {} } : { success: true }))
+    );
+    vm.activeTab = 'elements';
+    await flush();
+
+    expect(wrapper.find('.custom-debug-section').exists()).toBe(false);
+  });
+
+  it('shows no custom debug data when the host refuses it', async () => {
+    const { vm } = track(mountPanel(async () => ({ success: false, error: 'Debug tools are off' })));
+    vm.activeTab = 'elements';
+    await flush();
+    expect(vm.customDebugData).toBeNull();
   });
 
   it('hands the tabs the historical view while time travelling', async () => {

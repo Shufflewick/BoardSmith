@@ -128,6 +128,12 @@ export interface DebugBridge {
   actionTraces(): Promise<{ traces: ActionTrace[]; flowContext: FlowContext | null }>;
   /** Where the flow stands for this seat, or `null` if the host declines to say. */
   flowState(): Promise<FlowStateInfo | null>;
+  /**
+   * What the game's `registerDebug()` functions report right now, or `null` if
+   * the game registered none or the host declines (it answers only while
+   * debugging is on, #547).
+   */
+  customDebug(): Promise<Record<string, unknown> | null>;
   /** Every action played so far, oldest first. */
   history(): Promise<HistoryEntry[]>;
   /** Captured server-side log lines. */
@@ -203,6 +209,13 @@ export function createDebugBridge(platformRequest: PlatformRequest | null): Debu
     async flowState() {
       const data = await sendOptional('debug:flow-state', {});
       return (data?.flowDebugInfo as FlowStateInfo) ?? null;
+    },
+
+    async customDebug() {
+      const data = await sendOptional('debug:custom-data', {});
+      // A game that registered nothing has no custom debug data to show.
+      const custom = data?.customDebug;
+      return isRecord(custom) && Object.keys(custom).length > 0 ? custom : null;
     },
 
     async history() {

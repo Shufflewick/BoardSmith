@@ -30,6 +30,7 @@ describe('debug bridge op names and payloads', () => {
     const { bridge, platformRequest } = bridgeWith(ok);
     await bridge.actionTraces();
     await bridge.flowState();
+    await bridge.customDebug();
     await bridge.history();
     await bridge.logs();
     await bridge.stateAt(5);
@@ -43,6 +44,7 @@ describe('debug bridge op names and payloads', () => {
     expect(platformRequest.mock.calls).toEqual([
       ['debug:action-traces', {}],
       ['debug:flow-state', {}],
+      ['debug:custom-data', {}],
       ['debug:history', {}],
       ['debug:logs', {}],
       ['debug:state-at', { actionIndex: 5 }],
@@ -131,6 +133,26 @@ describe('debug bridge refusals that are answers, not failures', () => {
     const info = { path: [0], awaiting: {}, description: 'phase: play' };
     const { bridge } = bridgeWith(async () => ({ success: true, flowDebugInfo: info }));
     expect(await bridge.flowState()).toEqual(info);
+  });
+
+  it('reports no custom debug data when the host declines to give it', async () => {
+    const { bridge } = bridgeWith(async () => ({ success: false, error: 'Debug tools are off' }));
+    expect(await bridge.customDebug()).toBeNull();
+  });
+
+  it('reports no custom debug data when the host sends something that is not a record', async () => {
+    const { bridge } = bridgeWith(async () => ({ success: true, customDebug: ['not', 'a', 'record'] }));
+    expect(await bridge.customDebug()).toBeNull();
+  });
+
+  it('reports no custom debug data for a game that registered none', async () => {
+    const { bridge } = bridgeWith(async () => ({ success: true, customDebug: {} }));
+    expect(await bridge.customDebug()).toBeNull();
+  });
+
+  it('returns the game\'s custom debug data when the host has it', async () => {
+    const { bridge } = bridgeWith(async () => ({ success: true, customDebug: { seed: 42 } }));
+    expect(await bridge.customDebug()).toEqual({ seed: 42 });
   });
 
   it('reports no diff when the host declines to produce one', async () => {

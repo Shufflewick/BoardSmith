@@ -148,6 +148,10 @@ export type DevOp =
   // same SerializedFlowDebugInfo shape as the session broadcast, plus the requesting
   // seat's own pending action (perspective-scoped via the threaded pendingState).
   | { type: 'debugFlowState'; player: number }
+  // debugCustomData: what the game's `registerDebug()` functions report right
+  // now, for the asking seat's Debug panel only (#547). It is never part of a
+  // view, so no other seat and no spectator is sent it.
+  | { type: 'debugCustomData'; player: number }
   | { type: 'debugRewind'; actionIndex: number }
   | { type: 'debugReorder'; cardId: number; targetIndex: number }
   | { type: 'debugTransfer'; cardId: number; targetDeckId: number; position: 'first' | 'last' }
@@ -261,6 +265,7 @@ const DEBUG_OP_TYPE_MAP: Record<DebugOpType, true> = {
   debugStateDiff: true,
   debugActionTraces: true,
   debugFlowState: true,
+  debugCustomData: true,
   debugRewind: true,
   debugReorder: true,
   debugTransfer: true,
@@ -280,6 +285,7 @@ export type ReadOnlyOpType =
   | 'debugStateDiff'
   | 'debugActionTraces'
   | 'debugFlowState'
+  | 'debugCustomData'
   | 'botSuggest';
 
 const READ_ONLY_OP_TYPE_MAP: Record<ReadOnlyOpType, true> = {
@@ -289,6 +295,7 @@ const READ_ONLY_OP_TYPE_MAP: Record<ReadOnlyOpType, true> = {
   debugStateDiff: true,
   debugActionTraces: true,
   debugFlowState: true,
+  debugCustomData: true,
   botSuggest: true,
 };
 export const READ_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set(Object.keys(READ_ONLY_OP_TYPE_MAP) as ReadOnlyOpType[]);
@@ -428,12 +435,15 @@ export interface OpSuccessFields {
      */
     botStalled?: { seat: number; reason: string };
   };
-  debugHistory: { actionHistory: HistoryEntry[] };
+  /** The game's action history, oldest first. */
+  debugHistory: { actionHistory: DebugHistoryEntry[] };
   debugStateAt: { historicalState: unknown };
   debugStateDiff: { diff: ElementDiff };
   debugActionTraces: { traces: unknown[]; flowContext: unknown };
   /** The asking seat's own pending action, beside the envelope's `flowDebugInfo`. */
   debugFlowState: { pendingAction?: SerializedPendingActionState };
+  /** Each `registerDebug()` name and what its function returned (or the error it threw). */
+  debugCustomData: { customDebug: Record<string, unknown> };
   debugRewind: Record<never, never>;
   debugReorder: Record<never, never>;
   debugTransfer: Record<never, never>;
@@ -486,6 +496,14 @@ export type OpResultFor<T extends Op['type']> = OpSuccess<T> | OpFailure;
 
 /** What any op answers. Narrow it by the op that was sent with {@link OpResultFor}. */
 export type OpResult = { [T in Op['type']]: OpResultFor<T> }[Op['type']];
+
+/**
+ * One entry of the `debugHistory` answer: a history entry, plus when its move
+ * reached the session host. The time is never part of the engine's history or
+ * snapshot, which stay clock-free (#54). `executeOp` holds no clock, so its
+ * entries carry none; `SnapshotSessionHost` adds the times it recorded (#547).
+ */
+export type DebugHistoryEntry = HistoryEntry & { timestamp?: number };
 
 /** What the `debugStateDiff` op answers: the elements that changed between two action indices. */
 export interface ElementDiff extends ElementChanges {
@@ -1552,6 +1570,23 @@ function handleDebugFlowState(
   };
 }
 
+function handleDebugCustomData(
+  def: RunnerDef,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+  op: Extract<Op, { type: 'debugCustomData' }>,
+): OpResultFor<'debugCustomData'> {
+  if (op.player < 1 || op.player > gameOptions.playerCount) {
+    return errorResult(`Invalid player seat: ${op.player}.`, 'protocol');
+  }
+  const runner = runnerFromSnapshot(snapshot, def);
+  return {
+    success: true,
+    ...stateEnvelope(runner, gameOptions.playerCount),
+    customDebug: runner.game.getCustomDebugData(),
+  };
+}
+
 function handleDebugRewind(
   def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
@@ -1770,6 +1805,8 @@ async function runOp(
         return handleDebugActionTraces(def, gameOptions, snap, op);
       case 'debugFlowState':
         return handleDebugFlowState(def, gameOptions, snap, pendingState, op);
+      case 'debugCustomData':
+        return handleDebugCustomData(def, gameOptions, snap, op);
       case 'debugRewind':
         return handleDebugRewind(def, gameOptions, snap, op);
       case 'restoreEarlier':

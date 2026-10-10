@@ -1,7 +1,7 @@
 {
-  "revision": 155,
+  "revision": 156,
   "bundleProtocol": 2,
-  "surfaceHash": "5697b01dd28b73de",
+  "surfaceHash": "0641cdb95e5251e7",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1339,6 +1339,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "No behaviour change: FlowEngine gains private helper methods (publishMoveCounts, publishMoveLimits, publishOpenStep, settleExternalSimultaneousAction, expireSimultaneousSeat) split out of getState, resumeAfterExternalAction and expireHeldSeat, so its prototype lists them (#550)."
+    },
+    {
+      "revision": 156,
+      "date": "2026-10-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "0641cdb95e5251e7",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Debug panel, dev only: a new debugCustomData debug op returns the game's registerDebug() data to the seat that asks (refused unless the host turns debugging on, so never on the platform), buildPlayerState loses its includeDebugData option and PlayerGameState its customDebug field, and SnapshotSessionHost stamps the time each move reached it on its debugHistory answer, held outside the snapshot (#547)."
     }
   ]
 }

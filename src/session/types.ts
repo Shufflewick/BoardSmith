@@ -339,8 +339,6 @@ export interface PlayerGameState {
    * seat count another seat's secret actions (#449).
    */
   actionsThisTurn?: number;
-  /** Custom debug data from game's registerDebug() calls (optional, debug mode only) */
-  customDebug?: Record<string, unknown>;
   /** Animation events pending playback (from game buffer). Only present when events exist. */
   animationEvents?: AnimationEvent[];
   /** ID of the last animation event, for acknowledgment convenience. Only present when events exist. */

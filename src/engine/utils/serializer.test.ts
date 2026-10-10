@@ -175,8 +175,8 @@ describe('Action Serialization', () => {
       expect(serialized.args.card).toEqual({ __elementId: card.id });
       // No timestamp: this entry goes into engine-owned actionHistory, which a
       // snapshot serializes and a replay compares byte-for-byte (#54). The
-      // session stamps arrival time on the side.
-      expect(serialized.timestamp).toBeUndefined();
+      // session host keeps arrival times beside it (#547).
+      expect(serialized).not.toHaveProperty('timestamp');
     });
 
     it('should serialize an action with player args', () => {
@@ -197,7 +197,6 @@ describe('Action Serialization', () => {
         name: 'play',
         player: 1,
         args: { card: { __elementId: card.id } },
-        timestamp: Date.now(),
       };
 
       const { actionName, player, args } = deserializeAction(serialized, game);
@@ -212,7 +211,6 @@ describe('Action Serialization', () => {
         name: 'play',
         player: 99,
         args: {},
-        timestamp: Date.now(),
       };
 
       expect(() => deserializeAction(serialized, game)).toThrow('Player at position 99 not found.');
