@@ -411,6 +411,9 @@ const ESLINT_CONFIGS = [
   'eslint.config.mjs',
   'eslint.config.cjs',
   'eslint.config.ts',
+  // ESLint no longer reads .eslintrc files. They stay here on purpose, so an
+  // author who has one gets ESLint's own message on how to migrate instead of
+  // a silently skipped check (#624).
   '.eslintrc.js',
   '.eslintrc.cjs',
   '.eslintrc.json',
