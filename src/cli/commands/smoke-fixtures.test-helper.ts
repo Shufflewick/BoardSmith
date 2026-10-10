@@ -130,8 +130,6 @@ export function createGameFlow(game: DevGameGame): FlowDefinition {
         do: actionStep({ name: 'turn', actions: ['draw', 'play', 'showAce'], skipIf: () => game.isFinished() }),
       }),
     }),
-    isComplete: () => game.isFinished(),
-    getWinners: () => game.getWinners(),
   };
 }
 `,
@@ -325,8 +323,6 @@ export function createGameFlow(game: DevGameGame): FlowDefinition {
         }),
       }),
     }),
-    isComplete: () => game.isFinished(),
-    getWinners: () => game.getWinners(),
   };
 }
 `,
@@ -664,8 +660,6 @@ export function createGameFlow(game: DevGameGame): FlowDefinition {
         do: actionStep({ name: 'turn', actions: ['code', 'kindle', 'draw', 'rest'], skipIf: () => game.isFinished() }),
       }),
     }),
-    isComplete: () => game.isFinished(),
-    getWinners: () => game.getWinners(),
   };
 }
 `,
@@ -829,8 +823,6 @@ export function createGameFlow(game: DevGameGame): FlowDefinition {
         do: actionStep({ name: 'turn', actions: ['claim', 'rest'], skipIf: () => game.isFinished() }),
       }),
     }),
-    isComplete: () => game.isFinished(),
-    getWinners: () => game.getWinners(),
   };
 }
 `,
@@ -1240,8 +1232,6 @@ export function createGameFlow(game: DevGameGame): FlowDefinition {
         do: actionStep({ name: 'turn', actions: ['greet', 'wave', 'pledge', 'note', 'draw'], skipIf: () => game.isFinished() }),
       }),
     }),
-    isComplete: () => game.isFinished(),
-    getWinners: () => game.getWinners(),
   };
 }
 `,
@@ -1339,8 +1329,6 @@ import type { DevGameGame } from './game.js';
 export function createGameFlow(game: DevGameGame): FlowDefinition {
   return {
     root: sequence(actionStep({ name: 'draw-once', actions: ['draw'] }), actionStep({ name: 'tea', actions: ['wait'] })),
-    isComplete: () => false,
-    getWinners: () => [],
   };
 }
 `,

@@ -1309,8 +1309,8 @@ export class MCTSBot<G extends Game = Game> {
 
     if (flowState.complete && this.searchGame) {
       // Terminal node - check winner to determine proof status
-      const winners = (this.searchGame as any).settings?.winners as number[] | undefined;
-      if (winners && winners.includes(this.playerIndex)) {
+      const winners = this.searchGame.getWinners().map(p => p.seat);
+      if (winners.includes(this.playerIndex)) {
         // Bot wins: proven
         proofNumber = 0;
         disproofNumber = Infinity;
@@ -1442,9 +1442,9 @@ export class MCTSBot<G extends Game = Game> {
       return 0.5; // Draw/unknown
     }
 
-    // Check for winner from game settings
-    const winners = (game as any).settings?.winners as number[] | undefined;
-    if (!winners || winners.length === 0) {
+    // The winners the game declares (#503)
+    const winners = game.getWinners().map(p => p.seat);
+    if (winners.length === 0) {
       return 0.5; // Draw
     }
 

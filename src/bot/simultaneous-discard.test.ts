@@ -15,7 +15,6 @@ import {
   Space,
   Piece,
   Action,
-  defineFlow,
   simultaneousActionStep,
   type GameOptions,
 } from '../engine/index.js';
@@ -62,16 +61,17 @@ class DiscardGame extends Game<DiscardGame, Player> {
         }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: simultaneousActionStep({
-          actions: ['discard'],
-          playerDone: (ctx, player) => (ctx.game as DiscardGame).handOf(player.seat).count(Card) <= 2,
-        }),
-        isComplete: (ctx) => (ctx.game as DiscardGame).crib.count(Card) === 4,
-        getWinners: () => [],
+    this.setFlow({
+      root: simultaneousActionStep({
+        actions: ['discard'],
+        playerDone: (ctx, player) => (ctx.game as DiscardGame).handOf(player.seat).count(Card) <= 2,
       }),
-    );
+    });
+  }
+
+  /** Over once both seats have discarded into the crib, with no winner. */
+  override isFinished(): boolean {
+    return super.isFinished() || this.crib.count(Card) === 4;
   }
 
   handOf(seat: number): Hand {

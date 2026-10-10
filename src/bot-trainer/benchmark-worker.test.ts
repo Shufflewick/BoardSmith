@@ -38,7 +38,7 @@ const ENGINE = join(REPO_ROOT, 'src/engine/index.ts');
  * so every game reaches an outcome.
  */
 const RULES = `
-import { Game, Player, Action, defineFlow, eachPlayer, actionStep, type GameOptions } from ${JSON.stringify(ENGINE)};
+import { Game, Player, Action, eachPlayer, actionStep, type GameOptions } from ${JSON.stringify(ENGINE)};
 import { objectives } from './bot.js';
 
 class HighCardGame extends Game<HighCardGame, Player> {
@@ -59,7 +59,7 @@ class HighCardGame extends Game<HighCardGame, Player> {
           return { success: true };
         }),
     );
-    this.setFlow(defineFlow({ root: eachPlayer({ do: actionStep({ actions: ['pick'] }) }) }));
+    this.setFlow({ root: eachPlayer({ do: actionStep({ actions: ['pick'] }) }) });
   }
 }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
-import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../engine/index.js';
+import { Game, Player, Action, actionStep, loop, type GameOptions } from '../engine/index.js';
 import { succeeded } from './op-result.test-helper.js';
 
 // #480: the pick handler resolves a step's ordered-list bounds against the
@@ -20,14 +20,12 @@ class BudgetGame extends Game<BudgetGame, Player> {
         })
         .execute(() => ({ success: true })),
     );
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 100,
-          do: actionStep({ actions: ['repair'], player: (ctx) => ctx.game.getPlayer(1)!, turnScope: 'restart' }),
-        }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 100,
+        do: actionStep({ actions: ['repair'], player: (ctx) => ctx.game.getPlayer(1)!, turnScope: 'restart' }),
       }),
-    );
+    });
   }
 }
 

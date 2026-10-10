@@ -6,7 +6,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   actionStep,
   simultaneousActionStep,
   forEach,
@@ -101,12 +100,12 @@ class HiddenInfoGame extends Game<HiddenInfoGame, Player> {
     // A high maxIterations loop (never exhausted by these single-guess tests)
     // keeps the flow perpetually non-terminal, so MCTS scores via the
     // `objectives` hook (a pure read) instead of the terminal-winner path.
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({
         maxIterations: 20,
         do: actionStep({ actions: ['guess'], player: (ctx) => ctx.game.getPlayer(guesserSeat)! , turnScope: 'restart' }),
       }),
-    }));
+    });
   }
 }
 
@@ -317,16 +316,18 @@ class SimultaneousGame extends Game<SimultaneousGame, Player> {
         })
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: simultaneousActionStep({
         actions: ['pick'],
         playerDone: (ctx, player) =>
           (ctx.game as SimultaneousGame).board.all(Marker).some((m) => m.owner === player.seat),
       }),
-      isComplete: (ctx) =>
-        (ctx.game as SimultaneousGame).board.all(Marker).length >= ctx.game.all(Player as any).length,
-      getWinners: () => [],
-    }));
+    });
+  }
+
+  /** Over once every seat has placed its marker, with no winner. */
+  override isFinished(): boolean {
+    return super.isFinished() || this.board.all(Marker).length >= this.players.length;
   }
 }
 
@@ -589,13 +590,13 @@ class HiddenFlowVarGame extends Game<HiddenFlowVarGame, Player> {
     // deck, do X"). The bot pauses on the first iteration's actionStep, so
     // `currentCard` is live in the flow position the moment captureSnapshot()
     // runs.
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: forEach({
         collection: (ctx) => (ctx.game as HiddenFlowVarGame).secretZone.all(FlowCard),
         as: 'currentCard',
         do: actionStep({ actions: ['guess'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
       }),
-    }));
+    });
   }
 }
 
@@ -687,13 +688,13 @@ class TrueHiddenFlowVarGame extends Game<TrueHiddenFlowVarGame, Player> {
         })
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: forEach({
         collection: (ctx) => (ctx.game as TrueHiddenFlowVarGame).secretZone.all(FlowCard),
         as: 'currentCard',
         do: actionStep({ actions: ['guess'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
       }),
-    }));
+    });
   }
 }
 

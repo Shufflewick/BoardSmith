@@ -36,7 +36,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   actionStep,
   loop,
   type GameOptions,
@@ -84,7 +83,7 @@ class CounterGame extends Game<CounterGame, Player> {
     // the SAME actionStep frame stays open across repeated 'draw' actions —
     // player 1 always has a legal 'draw' available, before AND after a
     // seeded load, as long as the deck is non-empty.
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({
         maxIterations: 1000,
         do: actionStep({
@@ -93,7 +92,7 @@ class CounterGame extends Game<CounterGame, Player> {
           repeatUntil: () => false,
         }),
       }),
-    }));
+    });
   }
 }
 

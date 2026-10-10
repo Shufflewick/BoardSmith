@@ -9,7 +9,7 @@
  * causing player roles to be assigned incorrectly in simulations.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Game, Player, Action, defineFlow, actionStep, type GameOptions } from '../engine/index.js';
+import { Game, Player, Action, actionStep, type GameOptions } from '../engine/index.js';
 import { MCTSBot } from './mcts-bot.js';
 
 // Test game that uses custom constructor options (like playerConfigs)
@@ -46,9 +46,9 @@ class ConfigTestGame extends Game {
         .execute(() => ({ success: true }))
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: actionStep({ actions: ['pass'] }),
-    }));
+    });
   }
 }
 

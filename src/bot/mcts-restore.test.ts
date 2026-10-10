@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Piece, Space, Action, defineFlow, sequence, actionStep, execute, loop, eachPlayer, createSnapshot, type GameOptions } from '../engine/index.js';
+import { Game, Player, Piece, Space, Action, sequence, actionStep, execute, loop, eachPlayer, createSnapshot, type GameOptions } from '../engine/index.js';
 import { MCTSBot } from './mcts-bot.js';
 
 // ============================================================================
@@ -31,7 +31,7 @@ class ExecuteFinishGame extends Game<ExecuteFinishGame, Player> {
         })
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({
         maxIterations: 20,
         do: sequence(
@@ -51,9 +51,7 @@ class ExecuteFinishGame extends Game<ExecuteFinishGame, Player> {
           }),
         ),
       }),
-      isComplete: (ctx) => ctx.game.isFinished(),
-      getWinners: (ctx) => ctx.game.isFinished() ? [ctx.game.getPlayer(1)!] : [],
-    }));
+    });
   }
 }
 
@@ -172,12 +170,12 @@ describe('MCTSBot restoreGame with execute block', () => {
             .execute(() => ({ success: true })),
         );
 
-        this.setFlow(defineFlow({
+        this.setFlow({
           root: loop({
             maxIterations: 20,
             do: actionStep({ actions: ['noop'], player: (ctx) => ctx.game.getPlayer(1)! }),
           }),
-        }));
+        });
       }
     }
 

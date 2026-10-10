@@ -3,7 +3,7 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
+  type FlowDefinition,
   actionStep,
   loop,
   type GameOptions,
@@ -35,14 +35,14 @@ const clients = createDevHostClientMemory();
 
 /** Seat 1 takes one action, repeatedly, until the game declares itself over.
  *  Shared by both test games below so neither carries a flow of its own. */
-function oneActionUntilFinished(action: string) {
-  return defineFlow({
+function oneActionUntilFinished(action: string): FlowDefinition {
+  return {
     root: loop({
       while: (ctx) => !ctx.game.isFinished(),
       maxIterations: 100,
       do: actionStep({ actions: [action], player: (ctx) => ctx.game.getPlayer(1)! }),
     }),
-  });
+  };
 }
 
 /**

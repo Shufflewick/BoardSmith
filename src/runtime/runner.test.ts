@@ -5,7 +5,7 @@ import {
   Piece,
   Player,
   Action,
-  defineFlow,
+  type FlowDefinition,
   loop,
   eachPlayer,
   actionStep,
@@ -91,7 +91,7 @@ class TestGame extends Game<TestGame, Player> {
     this.registerActions(drawAction, passAction);
 
     // Set up flow
-    const gameFlow = defineFlow({
+    const gameFlow: FlowDefinition = {
       root: loop({
         while: (ctx: FlowContext) => (ctx.get<number>('round') ?? 1) <= 2,
         maxIterations: 10,
@@ -102,7 +102,7 @@ class TestGame extends Game<TestGame, Player> {
         }),
       }),
       setup: (ctx) => ctx.set('round', 1),
-    });
+    };
     this.setFlow(gameFlow);
   }
 }
@@ -132,13 +132,13 @@ class LongGame extends Game<LongGame, Player> {
     this.registerActions(
       Action.create('pass').prompt('Pass').execute(() => ({ success: true })),
     );
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({
         while: () => true,
         maxIterations: 400,
         do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
       }),
-    }));
+    });
   }
 }
 
@@ -159,13 +159,13 @@ class MisdeclaredRefusalGame extends Game<MisdeclaredRefusalGame, Player> {
         .prompt('Refuse with an empty error')
         .execute(() => ({ success: false, error: '   ' })),
     );
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({
         while: () => true,
         maxIterations: 10,
         do: eachPlayer({ do: actionStep({ actions: ['refuse', 'refuseSilently'] }) }),
       }),
-    }));
+    });
   }
 }
 
@@ -182,11 +182,11 @@ class SimultaneousTestGame extends Game<SimultaneousTestGame, Player> {
 
     this.registerAction(testAction);
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: simultaneousActionStep({
         actions: ['test'],
       }),
-    });
+    };
     this.setFlow(flow);
   }
 }
@@ -208,14 +208,14 @@ class ThrowingFlowGame extends Game<ThrowingFlowGame, Player> {
 
     this.registerActions(triggerAction);
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: sequence(
         actionStep({ actions: ['trigger'] }),
         execute(() => {
           throw new Error('Kaboom');
         })
       ),
-    });
+    };
     this.setFlow(flow);
   }
 }
@@ -239,7 +239,7 @@ class UnmatchedSwitchGame extends Game<UnmatchedSwitchGame, Player> {
       });
     this.registerActions(setMode);
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: sequence(
         actionStep({ actions: ['setMode'] }),
         switchOn({
@@ -249,7 +249,7 @@ class UnmatchedSwitchGame extends Game<UnmatchedSwitchGame, Player> {
           },
         })
       ),
-    }));
+    });
   }
 }
 

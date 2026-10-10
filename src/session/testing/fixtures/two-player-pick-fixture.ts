@@ -3,7 +3,7 @@
  * rounds). Three choices, so a bot's search does not short-circuit to the
  * single-move path; endless turns, so a test can always find a decision point.
  */
-import { Game, Player, Action, defineFlow, loop, eachPlayer, actionStep, type GameOptions } from '../../../engine/index.js';
+import { Game, Player, Action, loop, eachPlayer, actionStep, type GameOptions } from '../../../engine/index.js';
 import type { GameDefinitionLike } from '../../stateless-ops.js';
 
 export class TwoPlayerPickGame extends Game<TwoPlayerPickGame, Player> {
@@ -19,16 +19,14 @@ export class TwoPlayerPickGame extends Game<TwoPlayerPickGame, Player> {
         .execute(() => {}),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 20,
-          do: eachPlayer({
-            do: actionStep({ actions: ['pick'] }),
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 20,
+        do: eachPlayer({
+          do: actionStep({ actions: ['pick'] }),
         }),
       }),
-    );
+    });
   }
 }
 

@@ -9,7 +9,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   actionStep,
   simultaneousActionStep,
   enumerateLegalMoves,
@@ -29,7 +28,7 @@ class RoundGame extends Game<RoundGame, Player> {
       Action.create('pass').prompt('Pass').execute(() => {}),
     );
     this.setFlow(
-      defineFlow({ root: simultaneousActionStep({ name: 'round', actions: ['bid', 'pass'] }) })
+      { root: simultaneousActionStep({ name: 'round', actions: ['bid', 'pass'] }) }
     );
   }
 }
@@ -66,7 +65,7 @@ describe('the unreachable-action check counts simultaneousActionStep (#24)', () 
           Action.create('used').prompt('Used').execute(() => {}),
           Action.create('orphan').prompt('Orphan').execute(() => {}),
         );
-        this.setFlow(defineFlow({ root: actionStep({ actions: ['used'] }) }));
+        this.setFlow({ root: actionStep({ actions: ['used'] }) });
       }
     }
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

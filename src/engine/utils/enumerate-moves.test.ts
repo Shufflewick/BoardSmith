@@ -11,7 +11,6 @@ import {
   Space,
   Action,
   GameElement,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -46,16 +45,14 @@ class TokenGame extends Game<TokenGame, Player> {
         .execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 10,
-          do: eachPlayer({
-            do: actionStep({ actions: ['pick'] }),
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 10,
+        do: eachPlayer({
+          do: actionStep({ actions: ['pick'] }),
         }),
       }),
-    );
+    });
   }
 }
 
@@ -202,16 +199,14 @@ class DynamicMultiSelectGame extends Game<DynamicMultiSelectGame, Player> {
         .execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 10,
-          do: eachPlayer({
-            do: actionStep({ actions: ['pick'] }),
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 10,
+        do: eachPlayer({
+          do: actionStep({ actions: ['pick'] }),
         }),
       }),
-    );
+    });
   }
 }
 
@@ -264,14 +259,12 @@ class UndefinedChoiceGame extends Game<UndefinedChoiceGame, Player> {
         .execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 10,
-          do: eachPlayer({ do: actionStep({ actions: ['pick'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: ['pick'] }) }),
       }),
-    );
+    });
   }
 }
 
@@ -313,14 +306,12 @@ describe('enumerateLegalMoves with an orderedList selection (#249)', () => {
             .chooseFrom('buildings', { choices, orderedList: bounds })
             .execute(() => ({ success: true })),
         );
-        this.setFlow(
-          defineFlow({
-            root: loop({
-              maxIterations: 10,
-              do: eachPlayer({ do: actionStep({ actions: ['repair'] }) }),
-            }),
+        this.setFlow({
+          root: loop({
+            maxIterations: 10,
+            do: eachPlayer({ do: actionStep({ actions: ['repair'] }) }),
           }),
-        );
+        });
       }
     }
     const game = new RepairGame({ playerCount: 2, seed: 'repair' });

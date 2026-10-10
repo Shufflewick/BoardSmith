@@ -25,7 +25,7 @@ beforeEach(() => clients.reset());
  */
 function rulesSource(policy: string): string {
   return [
-    "import { Action, Game, Player, actionStep, defineFlow, type GameOptions } from 'boardsmith';",
+    "import { Action, Game, Player, actionStep, type GameOptions } from 'boardsmith';",
     'export class PolicyGame extends Game<PolicyGame, Player> {',
     '  moves = 0;',
     '  lastRoll = 0;',
@@ -33,9 +33,9 @@ function rulesSource(policy: string): string {
     '    super(options);',
     "    this.registerAction(Action.create('move').execute(() => { this.moves += 1; }));",
     "    this.registerAction(Action.create('roll').execute(() => { this.lastRoll = this.random(); }));",
-    '    this.setFlow(defineFlow<PolicyGame>({',
+    '    this.setFlow({',
     "      root: actionStep({ actions: ['move', 'roll'], player: (ctx) => ctx.game.getPlayer(1)!, repeatUntil: () => false }),",
-    '    }));',
+    '    });',
     '  }',
     '}',
     'export const gameDefinition = {',

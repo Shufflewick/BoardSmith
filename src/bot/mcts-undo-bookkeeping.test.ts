@@ -3,7 +3,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   actionStep,
   simultaneousActionStep,
   loop,
@@ -54,16 +53,18 @@ class SimultaneousGame extends Game<SimultaneousGame, Player> {
         })
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: simultaneousActionStep({
         actions: ['pick'],
         playerDone: (ctx, player) =>
           (ctx.game as SimultaneousGame).picks[player.seat] !== undefined,
       }),
-      isComplete: (ctx) =>
-        Object.keys((ctx.game as SimultaneousGame).picks).length >= ctx.game.all(Player as any).length,
-      getWinners: () => [],
-    }));
+    });
+  }
+
+  /** Over once every seat has picked, with no winner. */
+  override isFinished(): boolean {
+    return super.isFinished() || Object.keys(this.picks).length >= this.players.length;
   }
 }
 
@@ -148,7 +149,7 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
             })
         );
 
-        this.setFlow(defineFlow({
+        this.setFlow({
           root: loop({
             maxIterations: 5,
             do: sequence(
@@ -160,9 +161,7 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
               }),
             ),
           }),
-          isComplete: (ctx) => ctx.game.isFinished(),
-          getWinners: (ctx) => ctx.game.isFinished() ? [ctx.game.getPlayer(1)!] : [],
-        }));
+        });
       }
     }
 

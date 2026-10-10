@@ -11,7 +11,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -43,15 +42,13 @@ class RaceGame extends Game<RaceGame, Player> {
         }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: (ctx) => !ctx.game.isFinished(),
-          maxIterations: 50,
-          do: eachPlayer({ do: actionStep({ actions: ['take'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: (ctx) => !ctx.game.isFinished(),
+        maxIterations: 50,
+        do: eachPlayer({ do: actionStep({ actions: ['take'] }) }),
       }),
-    );
+    });
   }
 }
 
@@ -180,7 +177,7 @@ describe('createBot', () => {
     runner.performAction(move.action, 1, move.args);
 
     expect(runner.game.isFinished()).toBe(true);
-    expect(runner.game.settings.winners).toEqual([1]);
+    expect(runner.game.getWinners().map((p) => p.seat)).toEqual([1]);
   });
 
   it('leaves the live game untouched while searching', async () => {

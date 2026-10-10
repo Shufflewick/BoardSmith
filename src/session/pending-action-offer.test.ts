@@ -22,7 +22,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -73,14 +72,14 @@ const shapes: Record<string, () => FlowNode<BuildGame>> = {
 class SimultaneousBuildGame extends BuildGame {
   constructor(options: GameOptions) {
     super(options);
-    this.setFlow(defineFlow({ root: shapes.simultaneous() }));
+    this.setFlow({ root: shapes.simultaneous() });
   }
 }
 
 class TurnBuildGame extends BuildGame {
   constructor(options: GameOptions) {
     super(options);
-    this.setFlow(defineFlow({ root: shapes.eachPlayer() }));
+    this.setFlow({ root: shapes.eachPlayer() });
   }
 }
 
@@ -258,9 +257,9 @@ class ScoutGame extends Game<ScoutGame, Player> {
           (ctx.game as ScoutGame).looted.push(ctx.player.seat);
         }),
     );
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({ maxIterations: 10, do: simultaneousActionStep({ actions: ['scout'] }) }),
-    }));
+    });
   }
 }
 

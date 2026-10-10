@@ -19,7 +19,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -66,16 +65,14 @@ class ArgBuilderGame extends Game<ArgBuilderGame, Player> {
         .execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 10,
-          do: eachPlayer({
-            do: actionStep({ actions: ['pick', 'guess'] }),
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 10,
+        do: eachPlayer({
+          do: actionStep({ actions: ['pick', 'guess'] }),
         }),
       }),
-    );
+    });
   }
 }
 

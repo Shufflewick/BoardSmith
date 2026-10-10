@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, defineFlow, execute, type GameOptions } from '../engine/index.js';
+import { Game, Player, Action, execute, type GameOptions } from '../engine/index.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 import { succeeded } from './op-result.test-helper.js';
@@ -20,14 +20,16 @@ class InstantWinGame extends Game<InstantWinGame, Player> {
     super(options);
     // Registered so the game has a legal action surface; the flow never reaches it.
     this.registerAction(Action.create('noop').execute(() => ({ success: true })));
-    this.setFlow(
-      defineFlow({
-        root: execute(() => {
-          // Nothing to do -- the flow's only node completes immediately.
-        }),
-        getWinners: (ctx) => [ctx.game.getPlayer(2)!],
+    this.setFlow({
+      root: execute(() => {
+        // Nothing to do -- the flow's only node completes immediately.
       }),
-    );
+    });
+  }
+
+  /** Seat 2 wins once the game is over, declared by the game itself (#503). */
+  override getWinners(): Player[] {
+    return this.isFinished() ? [this.getPlayer(2)!] : [];
   }
 }
 
@@ -41,7 +43,7 @@ const instantWinGameDef: GameDefinitionLike = {
 const instantWinOptions = { playerCount: 2, seed: 'instant-win-seed' };
 
 describe('a flow completing inside start() publishes its winners', () => {
-  it('the start op result carries the flow-declared winners, not an empty draw', async () => {
+  it('the start op result carries the game-declared winners, not an empty draw', async () => {
     const res = succeeded(await executeOp(instantWinGameDef, instantWinOptions, null, {}, { type: 'start' }));
 
     expect(res.success).toBe(true);

@@ -18,7 +18,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -68,18 +67,16 @@ class SelectionBuilderGame extends Game<SelectionBuilderGame, Player> {
         }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: (ctx) =>
-            ctx.game.moves < 3,
-          maxIterations: 20,
-          do: eachPlayer({
-            do: actionStep({ actions: ['categorize'] }),
-          }),
+    this.setFlow({
+      root: loop({
+        while: (ctx) =>
+          ctx.game.moves < 3,
+        maxIterations: 20,
+        do: eachPlayer({
+          do: actionStep({ actions: ['categorize'] }),
         }),
       }),
-    );
+    });
   }
 }
 

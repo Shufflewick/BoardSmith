@@ -3,7 +3,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -49,14 +48,12 @@ class CounterGame extends Game<CounterGame, Player> {
       }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 20,
-          do: eachPlayer({ do: actionStep({ actions: ['bump'], turnScope: 'restart' }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 20,
+        do: eachPlayer({ do: actionStep({ actions: ['bump'], turnScope: 'restart' }) }),
       }),
-    );
+    });
   }
 }
 

@@ -4,7 +4,6 @@ import {
   Player,
   Action,
   actionStep,
-  defineFlow,
   execute,
   loop,
   sequence,
@@ -39,11 +38,9 @@ class CoinGame extends Game<CoinGame, Player> {
         }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: simultaneousActionStep({ actions: ['spend'], playerDone: () => false }),
-      }),
-    );
+    this.setFlow({
+      root: simultaneousActionStep({ actions: ['spend'], playerDone: () => false }),
+    });
   }
 }
 
@@ -155,7 +152,7 @@ describe('#317: a game can declare where it is meant to rest', () => {
       constructor(options: GameOptions) {
         super(options);
         this.registerAction(Action.create<TextGame>('name').enterText('label').execute(() => {}));
-        this.setFlow(defineFlow({ root: simultaneousActionStep({ actions: ['name'], playerDone: () => false }) }));
+        this.setFlow({ root: simultaneousActionStep({ actions: ['name'], playerDone: () => false }) });
       }
     }
     let asked = 0;
@@ -218,22 +215,20 @@ class CheckInGame extends Game<CheckInGame, Player> {
         if (!ctx.game.checkedIn.includes(ctx.player.seat)) ctx.game.checkedIn.push(ctx.player.seat);
       }),
     );
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          unbounded: true,
-          do: sequence(
-            execute((ctx) => {
-              ctx.game.actedThisRound = [];
-            }),
-            simultaneousActionStep({
-              actions: ['checkIn'],
-              playerDone: (ctx, player) => ctx.game.actedThisRound.includes(player.seat),
-            }),
-          ),
-        }),
+    this.setFlow({
+      root: loop({
+        unbounded: true,
+        do: sequence(
+          execute((ctx) => {
+            ctx.game.actedThisRound = [];
+          }),
+          simultaneousActionStep({
+            actions: ['checkIn'],
+            playerDone: (ctx, player) => ctx.game.actedThisRound.includes(player.seat),
+          }),
+        ),
       }),
-    );
+    });
   }
 }
 
@@ -311,7 +306,7 @@ describe('#383: a game whose seats can always act can still rest', () => {
       constructor(options: GameOptions) {
         super(options);
         this.registerAction(Action.create<OneMoveGame>('finish').execute(() => {}));
-        this.setFlow(defineFlow({ root: actionStep({ actions: ['finish'] }) }));
+        this.setFlow({ root: actionStep({ actions: ['finish'] }) });
       }
     }
     let asked = 0;

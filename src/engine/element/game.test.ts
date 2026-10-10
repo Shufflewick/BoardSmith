@@ -18,7 +18,6 @@ import {
   Card,
   Piece,
   Die,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -33,16 +32,14 @@ class MissingActionGame extends Game<MissingActionGame, Player> {
     this.registerAction(
       Action.create<MissingActionGame>('known').execute(() => {}),
     );
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 5,
-          do: eachPlayer({
-            do: actionStep({ actions: ['known', 'missing'] }),
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 5,
+        do: eachPlayer({
+          do: actionStep({ actions: ['known', 'missing'] }),
         }),
       }),
-    );
+    });
   }
 }
 
@@ -57,16 +54,14 @@ class UnreachableActionGame extends Game<UnreachableActionGame, Player> {
     this.registerAction(
       Action.create<UnreachableActionGame>('unused').execute(() => {}),
     );
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 5,
-          do: eachPlayer({
-            do: actionStep({ actions: ['used'] }),
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 5,
+        do: eachPlayer({
+          do: actionStep({ actions: ['used'] }),
         }),
       }),
-    );
+    });
   }
 }
 
@@ -79,16 +74,14 @@ class CorrectlyWiredGame extends Game<CorrectlyWiredGame, Player> {
     this.registerAction(
       Action.create<CorrectlyWiredGame>('play').execute(() => {}),
     );
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 5,
-          do: eachPlayer({
-            do: actionStep({ actions: ['draw', 'play'] }),
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 5,
+        do: eachPlayer({
+          do: actionStep({ actions: ['draw', 'play'] }),
         }),
       }),
-    );
+    });
   }
 }
 
@@ -103,13 +96,11 @@ class FunctionValuedActionsGame extends Game<FunctionValuedActionsGame, Player> 
     // actions per player auto-completes the flow, avoiding an unrelated
     // loop-maxIterations safety error that would otherwise mask the
     // assertion this test cares about.
-    this.setFlow(
-      defineFlow({
-        root: eachPlayer({
-          do: actionStep({ actions: () => ['x'] }),
-        }),
+    this.setFlow({
+      root: eachPlayer({
+        do: actionStep({ actions: () => ['x'] }),
       }),
-    );
+    });
   }
 }
 
@@ -127,13 +118,11 @@ class DynamicallyReferencedActionGame extends Game<DynamicallyReferencedActionGa
     this.registerAction(
       Action.create<DynamicallyReferencedActionGame>('static').execute(() => {}),
     );
-    this.setFlow(
-      defineFlow({
-        root: eachPlayer({
-          do: actionStep({ actions: () => ['dynamic'] }),
-        }),
+    this.setFlow({
+      root: eachPlayer({
+        do: actionStep({ actions: () => ['dynamic'] }),
       }),
-    );
+    });
   }
 }
 
@@ -161,16 +150,14 @@ class UnregisteredQueryGame extends Game<UnregisteredQueryGame, Player> {
     this.registerElements([TestDeck, Card]);
     const deck = this.create(TestDeck, 'deck');
     deck.create(Card, 'card');
-    this.setFlow(
-      defineFlow({
-        setup: (ctx) => {
-          (ctx.game as UnregisteredQueryGame).all(Ghost);
-        },
-        root: eachPlayer({
-          do: actionStep({ actions: [] }),
-        }),
+    this.setFlow({
+      setup: (ctx) => {
+        (ctx.game as UnregisteredQueryGame).all(Ghost);
+      },
+      root: eachPlayer({
+        do: actionStep({ actions: [] }),
       }),
-    );
+    });
   }
 }
 
@@ -183,16 +170,14 @@ class CorrectlyRegisteredQueryGame extends Game<CorrectlyRegisteredQueryGame, Pl
     this.registerElements([TestDeck2]);
     const deck = this.create(TestDeck2, 'deck');
     deck.create(Card, 'card');
-    this.setFlow(
-      defineFlow({
-        setup: (ctx) => {
-          this.queriedCards = (ctx.game as CorrectlyRegisteredQueryGame).all(Card);
-        },
-        root: eachPlayer({
-          do: actionStep({ actions: [] }),
-        }),
+    this.setFlow({
+      setup: (ctx) => {
+        this.queriedCards = (ctx.game as CorrectlyRegisteredQueryGame).all(Card);
+      },
+      root: eachPlayer({
+        do: actionStep({ actions: [] }),
       }),
-    );
+    });
   }
 }
 class TestDeck2 extends Space<CorrectlyRegisteredQueryGame> {}
@@ -210,16 +195,14 @@ class UnregisteredHasQueryGame extends Game<UnregisteredHasQueryGame, Player> {
     this.registerElements([TestDeck3, Card]);
     const deck = this.create(TestDeck3, 'deck');
     deck.create(Card, 'card');
-    this.setFlow(
-      defineFlow({
-        setup: (ctx) => {
-          (ctx.game as UnregisteredHasQueryGame).has(Ghost);
-        },
-        root: eachPlayer({
-          do: actionStep({ actions: [] }),
-        }),
+    this.setFlow({
+      setup: (ctx) => {
+        (ctx.game as UnregisteredHasQueryGame).has(Ghost);
+      },
+      root: eachPlayer({
+        do: actionStep({ actions: [] }),
       }),
-    );
+    });
   }
 }
 
@@ -243,16 +226,14 @@ class BuiltinBaseQueryGame extends Game<BuiltinBaseQueryGame, Player> {
     // A subclass author would create their own Die subclass; here we create the
     // built-in Die directly to prove the base class need not be registered.
     bag.create(Die, 'd6');
-    this.setFlow(
-      defineFlow({
-        setup: (ctx) => {
-          this.dieCount = (ctx.game as BuiltinBaseQueryGame).all(Die).length;
-        },
-        root: eachPlayer({
-          do: actionStep({ actions: [] }),
-        }),
+    this.setFlow({
+      setup: (ctx) => {
+        this.dieCount = (ctx.game as BuiltinBaseQueryGame).all(Die).length;
+      },
+      root: eachPlayer({
+        do: actionStep({ actions: [] }),
       }),
-    );
+    });
   }
 }
 

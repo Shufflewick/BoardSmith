@@ -5,7 +5,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   sequence,
   actionStep,
   execute,
@@ -150,7 +149,7 @@ class TwoMoveTurnGame extends Game<TwoMoveTurnGame, Player> {
     const activePlayer = (ctx: { game: Game }) =>
       ctx.game.getPlayer((ctx.game as TwoMoveTurnGame).activeSeat)!;
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({
         maxIterations: 1000,
         do: sequence(
@@ -166,7 +165,7 @@ class TwoMoveTurnGame extends Game<TwoMoveTurnGame, Player> {
           }),
         ),
       }),
-    }));
+    });
   }
 }
 

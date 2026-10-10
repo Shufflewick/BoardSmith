@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, defineFlow, actionStep, type GameOptions } from '../engine/index.js';
+import { Game, Player, Action, actionStep, type GameOptions } from '../engine/index.js';
 import { createHeadlessSession } from './headless-session.js';
 
 const SECRET_VALUE = 'top-secret-deck-order';
@@ -24,14 +24,14 @@ class DebugGame extends Game<DebugGame, Player> {
     this.registerAction(Action.create('noop').execute(() => ({ success: true })));
 
     this.setFlow(
-      defineFlow({
+      {
         root: actionStep({
           actions: ['noop'],
           player: (ctx) => ctx.game.getPlayer(1)!,
           repeatUntil: () => false,
           maxMoves: 5,
         }),
-      })
+      }
     );
   }
 }

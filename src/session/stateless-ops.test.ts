@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions, type TutorialDefinition } from '../engine/index.js';
+import { Game, Player, Action, actionStep, loop, type GameOptions, type TutorialDefinition } from '../engine/index.js';
 import type { BotStrategy } from '../bot/types.js';
 import { executeOp, READ_ONLY_OP_TYPES, type GameDefinitionLike, type StateEnvelope } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
@@ -23,7 +23,7 @@ class SimpleGame extends Game<SimpleGame, Player> {
         .execute(() => ({ success: true }))
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({
         maxIterations: 1000,
         // 155-03: repeatUntil (never true within these tests) keeps the SAME
@@ -39,7 +39,7 @@ class SimpleGame extends Game<SimpleGame, Player> {
           turnScope: 'restart',
         }),
       }),
-    }));
+    });
   }
 }
 
@@ -73,7 +73,7 @@ class FollowUpGame extends Game<FollowUpGame, Player> {
         .execute(() => ({ success: true }))
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({
         maxIterations: 1000,
         do: actionStep({
@@ -82,7 +82,7 @@ class FollowUpGame extends Game<FollowUpGame, Player> {
           turnScope: 'restart',
         }),
       }),
-    }));
+    });
   }
 }
 
@@ -113,7 +113,7 @@ class TwoStepGame extends Game<TwoStepGame, Player> {
         .execute(() => ({ success: true }))
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({
         maxIterations: 1000,
         do: actionStep({
@@ -122,7 +122,7 @@ class TwoStepGame extends Game<TwoStepGame, Player> {
           turnScope: 'restart',
         }),
       }),
-    }));
+    });
   }
 }
 
@@ -167,7 +167,7 @@ class BadChoicesGame extends Game<BadChoicesGame, Player> {
         .execute(() => ({ success: true }))
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({
         maxIterations: 1000,
         do: actionStep({
@@ -176,7 +176,7 @@ class BadChoicesGame extends Game<BadChoicesGame, Player> {
           turnScope: 'restart',
         }),
       }),
-    }));
+    });
   }
 }
 
@@ -216,7 +216,7 @@ class WarningGame extends Game<WarningGame, Player> {
         .execute(() => ({ success: true }))
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({
         maxIterations: 1000,
         do: actionStep({
@@ -225,7 +225,7 @@ class WarningGame extends Game<WarningGame, Player> {
           turnScope: 'restart',
         }),
       }),
-    }));
+    });
   }
 }
 
@@ -711,19 +711,17 @@ describe('executeOp', () => {
           super(options);
           this.registerAction(Action.create('advance').execute(() => ({ success: true })));
           this.registerAction(Action.create('concede').execute(() => ({ success: true })));
-          this.setFlow(
-            defineFlow({
-              root: loop({
-                maxIterations: 100,
-                do: actionStep({
-                  actions: ['advance', 'concede'],
-                  player: (ctx) => ctx.game.getPlayer(1)!,
-                  repeatUntil: () => false,
-                  turnScope: 'restart',
-                }),
+          this.setFlow({
+            root: loop({
+              maxIterations: 100,
+              do: actionStep({
+                actions: ['advance', 'concede'],
+                player: (ctx) => ctx.game.getPlayer(1)!,
+                repeatUntil: () => false,
+                turnScope: 'restart',
               }),
             }),
-          );
+          });
         }
       }
 
@@ -857,7 +855,7 @@ describe('executeOp', () => {
             })
         );
 
-        this.setFlow(defineFlow({
+        this.setFlow({
           root: loop({
             maxIterations: 1000,
             do: actionStep({
@@ -866,7 +864,7 @@ describe('executeOp', () => {
               turnScope: 'restart',
             }),
           }),
-        }));
+        });
       }
     }
 
@@ -955,18 +953,16 @@ describe('executeOp', () => {
               return { success: true };
             }),
         );
-        this.setFlow(
-          defineFlow({
-            root: loop({
-              maxIterations: 100,
-              do: actionStep({
-                actions: ['move'],
-                player: (ctx) => ctx.game.getPlayer(1)!,
-                turnScope: 'restart',
-              }),
+        this.setFlow({
+          root: loop({
+            maxIterations: 100,
+            do: actionStep({
+              actions: ['move'],
+              player: (ctx) => ctx.game.getPlayer(1)!,
+              turnScope: 'restart',
             }),
           }),
-        );
+        });
       }
     }
 
@@ -1132,12 +1128,12 @@ describe('executeOp', () => {
             .chooseFrom('direction', { choices: ['left', 'right'] })
             .execute(() => ({ success: true })),
         );
-        this.setFlow(defineFlow({
+        this.setFlow({
           root: loop({
             maxIterations: 100,
             do: actionStep({ actions: ['move'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
           }),
-        }));
+        });
       }
     }
 
@@ -1293,12 +1289,12 @@ describe('executeOp', () => {
             .chooseFrom('direction', { choices: ['left', 'right'] })
             .execute(() => { this.moveCount++; return { success: true }; }),
         );
-        this.setFlow(defineFlow({
+        this.setFlow({
           root: loop({
             maxIterations: 100,
             do: actionStep({ actions: ['move'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
           }),
-        }));
+        });
       }
     }
 
@@ -1412,7 +1408,7 @@ describe('executeOp', () => {
         this.registerAction(
           Action.create('pass').execute(() => ({ success: true }))
         );
-        this.setFlow(defineFlow({
+        this.setFlow({
           root: loop({
             maxIterations: 1000,
             do: actionStep({
@@ -1421,7 +1417,7 @@ describe('executeOp', () => {
               turnScope: 'restart',
             }),
           }),
-        }));
+        });
       }
     }
 

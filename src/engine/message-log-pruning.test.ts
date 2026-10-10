@@ -20,7 +20,7 @@
  * exactly the lines that existed at it.
  */
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, defineFlow, loop, eachPlayer, actionStep, type FlowContext, type GameOptions } from './index.js';
+import { Game, Player, Action, loop, eachPlayer, actionStep, type FlowContext, type GameOptions } from './index.js';
 import { GameRunner } from '../runtime/runner.js';
 
 class ChattyGame extends Game<ChattyGame, Player> {
@@ -32,16 +32,14 @@ class ChattyGame extends Game<ChattyGame, Player> {
         game.message(`line ${game.messages.length + 1}`);
       }),
     );
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: (ctx: FlowContext) => (ctx.get<number>('round') ?? 1) <= 20,
-          maxIterations: 60,
-          do: eachPlayer({ do: actionStep({ actions: ['speak'] }) }),
-        }),
-        setup: (ctx) => ctx.set('round', 1),
+    this.setFlow({
+      root: loop({
+        while: (ctx: FlowContext) => (ctx.get<number>('round') ?? 1) <= 20,
+        maxIterations: 60,
+        do: eachPlayer({ do: actionStep({ actions: ['speak'] }) }),
       }),
-    );
+      setup: (ctx) => ctx.set('round', 1),
+    });
   }
 }
 

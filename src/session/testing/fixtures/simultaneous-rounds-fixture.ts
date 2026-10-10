@@ -42,7 +42,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   simultaneousActionStep,
   sequence,
   execute,
@@ -78,39 +77,37 @@ class SimultaneousRoundsGame extends Game<SimultaneousRoundsGame, RoundCommitPla
       }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: sequence(
-          loop({
-            name: 'rounds',
-            maxIterations: TOTAL_ROUNDS,
-            while: () => this.round <= TOTAL_ROUNDS,
-            do: sequence(
-              // Round start: every seat owes a commit again. This reset is the
-              // whole point of the fixture — it is what makes round N+1's due
-              // seats identical to round N's.
-              execute(() => {
-                for (const player of this.players) {
-                  player.committed = false;
-                }
-              }),
-              simultaneousActionStep({
-                name: 'commit-step',
-                players: () => this.players,
-                actions: ['commit'],
-                playerDone: (_ctx, p) => (p as RoundCommitPlayer).committed,
-              }),
-              execute(() => {
-                this.round += 1;
-              }),
-            ),
-          }),
-          execute(() => {
-            this.finish();
-          }),
-        ),
-      }),
-    );
+    this.setFlow({
+      root: sequence(
+        loop({
+          name: 'rounds',
+          maxIterations: TOTAL_ROUNDS,
+          while: () => this.round <= TOTAL_ROUNDS,
+          do: sequence(
+            // Round start: every seat owes a commit again. This reset is the
+            // whole point of the fixture — it is what makes round N+1's due
+            // seats identical to round N's.
+            execute(() => {
+              for (const player of this.players) {
+                player.committed = false;
+              }
+            }),
+            simultaneousActionStep({
+              name: 'commit-step',
+              players: () => this.players,
+              actions: ['commit'],
+              playerDone: (_ctx, p) => (p as RoundCommitPlayer).committed,
+            }),
+            execute(() => {
+              this.round += 1;
+            }),
+          ),
+        }),
+        execute(() => {
+          this.finish();
+        }),
+      ),
+    });
   }
 }
 

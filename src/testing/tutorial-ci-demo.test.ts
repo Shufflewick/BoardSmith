@@ -30,7 +30,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -102,17 +101,15 @@ class DemoGame extends Game<DemoGame, Player> {
 
     this.registerActions(move, capture);
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => true,
-          maxIterations: 20,
-          do: eachPlayer({
-            do: actionStep({ actions: ['move', 'capture'] }),
-          }),
+    this.setFlow({
+      root: loop({
+        while: () => true,
+        maxIterations: 20,
+        do: eachPlayer({
+          do: actionStep({ actions: ['move', 'capture'] }),
         }),
       }),
-    );
+    });
   }
 }
 
@@ -141,17 +138,15 @@ class DemoGameNoCaptureRule extends Game<DemoGameNoCaptureRule, Player> {
 
     this.registerActions(move);
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => true,
-          maxIterations: 20,
-          do: eachPlayer({
-            do: actionStep({ actions: ['move'] }),
-          }),
+    this.setFlow({
+      root: loop({
+        while: () => true,
+        maxIterations: 20,
+        do: eachPlayer({
+          do: actionStep({ actions: ['move'] }),
         }),
       }),
-    );
+    });
   }
 }
 

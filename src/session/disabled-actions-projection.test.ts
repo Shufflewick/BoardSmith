@@ -18,7 +18,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -46,13 +45,13 @@ class ForgeGame extends Game<ForgeGame, Player> {
     );
 
     this.setFlow(
-      defineFlow({
+      {
         root: loop({
           while: () => true,
           maxIterations: 20,
           do: eachPlayer({ do: actionStep({ actions: ['build', 'pass'] }) }),
         }),
-      })
+      }
     );
   }
 }
