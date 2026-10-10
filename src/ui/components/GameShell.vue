@@ -775,6 +775,8 @@ async function handleUndo(): Promise<void> {
 const boardProps = computed(() =>
   tableBoardProps(tableSeat, {
     state: displayedState.value,
+    players: displayedPlayers.value,
+    myPlayer: displayedMyPlayer.value,
     gameView: gameView.value ?? null,
     playerSeat: playerSeat.value,
     isViewingHistory: isViewingHistory.value,
