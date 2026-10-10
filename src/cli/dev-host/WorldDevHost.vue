@@ -29,6 +29,7 @@ import type { WorldDevConfig } from './world-config-types.js';
 import { WORLD_HOST_SOURCE, WORLD_UI_SOURCE } from '../../ui/world/worldProtocol.js';
 import { loadDevClientId, WORLD_CLIENT_KEY } from './dev-client-id.js';
 import { applyTheme } from '../../ui/theme.js';
+import { useMenuDismiss } from './use-menu-dismiss.js';
 
 const props = defineProps<{ config: WorldDevConfig }>();
 const cfg = props.config;
@@ -336,6 +337,8 @@ function onWindowMessage(event: MessageEvent): void {
 // ── The dev controls ─────────────────────────────────────────────────────────
 const seats = computed(() => Array.from({ length: cfg.seatCount }, (_, i) => i + 1));
 const seatMenuOpen = ref(false);
+const seatMenuRef = ref<HTMLElement | null>(null);
+useMenuDismiss(seatMenuOpen, seatMenuRef);
 
 function takeSeat(seat: number): void {
   seatMenuOpen.value = false;
@@ -386,7 +389,7 @@ onUnmounted(() => {
       <span class="world-dev__dot" :class="{ 'world-dev__dot--on': connected }" />
 
       <!-- SEAT SWITCHER: one person, several seats. -->
-      <div class="world-dev__seat">
+      <div ref="seatMenuRef" class="world-dev__seat">
         <!-- The seat held and each seat offered carry their number, so a smoke walk
              playing several seats (#471) takes the one its spec names. -->
         <button

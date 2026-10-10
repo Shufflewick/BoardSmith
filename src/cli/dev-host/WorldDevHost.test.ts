@@ -232,6 +232,68 @@ describe('#167: the seat switcher', () => {
   });
 });
 
+describe('#610: the seat menu closes the way a menu does', () => {
+  async function openMenu(): Promise<VueWrapper> {
+    const wrapper = await open();
+    socket!.deliver(stateFrame());
+    await wrapper.vm.$nextTick();
+    await wrapper.find('[data-testid="world-seat-switcher"]').trigger('click');
+    expect(wrapper.find('.world-dev__menu').exists()).toBe(true);
+    return wrapper;
+  }
+
+  it('closes on Escape', async () => {
+    const wrapper = await openMenu();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.world-dev__menu').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('stays open on a key that is not Escape', async () => {
+    const wrapper = await openMenu();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.world-dev__menu').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('closes on a click outside it', async () => {
+    const wrapper = await openMenu();
+    await wrapper.find('.world-dev__name').trigger('click');
+    expect(wrapper.find('.world-dev__menu').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('closes when focus leaves the page, which is what a click inside the world frame does', async () => {
+    // A click in the iframe is delivered to the frame's document, never to this
+    // one; all this page sees is its own window losing focus.
+    const wrapper = await openMenu();
+    window.dispatchEvent(new Event('blur'));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.world-dev__menu').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('closes on choosing a seat, including the one already held', async () => {
+    const wrapper = await openMenu();
+    await wrapper.find('[data-testid="world-take-seat"][data-seat="1"]').trigger('click');
+    expect(wrapper.find('.world-dev__menu').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('stops listening once the bar is gone', async () => {
+    const wrapper = await openMenu();
+    const removeDocument = vi.spyOn(document, 'removeEventListener');
+    const removeWindow = vi.spyOn(window, 'removeEventListener');
+    wrapper.unmount();
+    expect(removeDocument.mock.calls.map((call) => call[0])).toEqual(expect.arrayContaining(['keydown', 'click']));
+    expect(removeWindow.mock.calls.map((call) => call[0])).toContain('blur');
+    removeDocument.mockRestore();
+    removeWindow.mockRestore();
+  });
+});
+
 describe('#167: fire due events now', () => {
   it('is refused while nothing is scheduled, rather than sending a no-op', async () => {
     const wrapper = await open();

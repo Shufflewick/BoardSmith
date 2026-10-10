@@ -169,6 +169,39 @@ describe('DevHost — seat switcher menu (presence + follow)', () => {
   });
 });
 
+describe('#610: the seat menu closes the way a menu does', () => {
+  async function openMenu(): Promise<VueWrapper> {
+    const wrapper = await mountDevHost();
+    await activateSeat(wrapper);
+    await wrapper.find('[data-testid="seat-switcher"]').trigger('click');
+    expect(wrapper.find('.seat-switcher-menu').exists()).toBe(true);
+    return wrapper;
+  }
+
+  it('closes on Escape', async () => {
+    const wrapper = await openMenu();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.seat-switcher-menu').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('closes on a click outside it', async () => {
+    const wrapper = await openMenu();
+    await wrapper.find('.dev-chrome__brand').trigger('click');
+    expect(wrapper.find('.seat-switcher-menu').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('closes when focus leaves the page, which is what a click inside the game frame does', async () => {
+    const wrapper = await openMenu();
+    window.dispatchEvent(new Event('blur'));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.seat-switcher-menu').exists()).toBe(false);
+    wrapper.unmount();
+  });
+});
+
 describe('DevHost — seat switcher', () => {
   it('has a seat switcher button in-game', async () => {
     const wrapper = await mountDevHost();
