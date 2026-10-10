@@ -195,11 +195,7 @@ export function defineSmokeTest(options: SmokeTestOptions): void {
       // Reported after the errors the page showed first, which usually say why the walk stopped.
       note(walk, walkStopped(error, PRESS_MS / 1000));
     } finally {
-      clocks.get(page)?.stop();
-      for (const opened of browsers) {
-        for (const shown of opened.pages()) clocks.get(shown)?.stop();
-        await opened.close();
-      }
+      await closeTheWalk(page, browsers);
     }
     const played = memories.reduce((sum, m) => ({ controls: sum.controls + m.controls, games: sum.games + m.games }), { controls: 0, games: 0 });
     const record = smokeRecord(walk, played);
@@ -207,6 +203,15 @@ export function defineSmokeTest(options: SmokeTestOptions): void {
     const problems = smokeProblems(walk);
     if (problems.length > 0) throw new Error(smokeFailure(walk, problems));
   });
+}
+
+/** Stops the clock of `page` and of every page in `browsers`, the world's other seats, and closes those browsers. */
+async function closeTheWalk(page: Page, browsers: readonly BrowserContext[]): Promise<void> {
+  clocks.get(page)?.stop();
+  for (const opened of browsers) {
+    for (const shown of opened.pages()) clocks.get(shown)?.stop();
+    await opened.close();
+  }
 }
 
 /** Walks a table's game dealt from each of `seeds` in turn (#460), remembering each deal's walk in `memories`. */
