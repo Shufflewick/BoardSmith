@@ -54,5 +54,6 @@ export function strayMessage(strays, root) {
     'parallel, so check that one first, then any running beside it.',
     'Point the test at a temp directory (`tempTree` in src/testing/temp-tree.test-helper.ts),',
     'or, if the file is real build output, add its path to .gitignore. Then remove the file.',
+    'If you created the file yourself while the run was going, no test wrote it: keep it and run again.',
   ].join('\n');
 }
