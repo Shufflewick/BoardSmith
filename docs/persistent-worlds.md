@@ -2027,9 +2027,10 @@ queue, rather than failing a check on the way in.
   one. A scheduled event is the clock issuing one of the world's verbs, not a
   second kind of thing a world can be told -- the clock and a player reach the
   same registry. It has nobody acting, so naming a seated action is refused
-  rather than answered by inventing a player for it. A name this world does
-  not register is refused at the `schedule()` line (`schedule-unknown-action`),
-  not when the event comes due, and a name may be at most **128 UTF-8 bytes**
+  rather than answered by inventing a player for it. Both a seated action
+  (`schedule-seated-action`) and a name this world does not register
+  (`schedule-unknown-action`) are refused at the `schedule()` line, not when
+  the event comes due, and a name may be at most **128 UTF-8 bytes**
   (`WORLD_SCHEDULE_ACTION_MAX_BYTES`, `schedule-action-too-long`). The length is
   checked separately because the host re-plans every request without your
   action list, so it can bound the name where it cannot check it.
@@ -2708,7 +2709,7 @@ your game.
 | --- | --- |
 | `unknown-command` | A client named an action this world does not have. |
 | `unknown-player` | A command named somebody this world does not seat. |
-| `clock-only-command` | A player sent a seatless action -- one built with `worldClockAction()`, which the clock reaches and nobody else does -- or a scheduled event came due naming a seated action, which has no player to act for. |
+| `clock-only-command` | A player sent a seatless action -- one built with `worldClockAction()`, which the clock reaches and nobody else does -- or a scheduled event came due naming a seated action, which has no player to act for. Since `schedule-seated-action`, a seated action is refused at the `schedule()` line, so this second case answers only an event queued before that check, in a world that already holds one. |
 | `world-full` | A seating would exceed the bundle's own `maxPlayers`. Seats are assigned once and never handed on. |
 | `seat-conflict` | A seating named a player who already holds a different seat. |
 | `world-catching-up` | A world declaring `ordering: "chronological"` was still behind the instant this command arrived at, so it was not applied. Sending it again is safe and is the intended response: an order's durable identity makes the repeat run exactly once, and the world is already catching up. |
@@ -2739,10 +2740,11 @@ thing next time.
 | `schedule-world-cap` | The world's whole queue is at its ceiling. |
 | `invalid-schedule-delay` | A negative or non-finite `delayMs`. |
 | `invalid-schedule-interval` | A non-positive or non-finite `everyMs`, which is a wake that re-arms instantly forever. |
-| `invalid-schedule-command` | A schedule request that names no action, or carries an argument that is not a JSON scalar. A request naming a seated action is not refused at the `schedule()` line; it is refused as `clock-only-command` when the event comes due. |
+| `invalid-schedule-command` | A schedule request that names no action, or carries an argument that is not a JSON scalar. |
 | `schedule-key-too-long` | A schedule or cancel key past 512 UTF-8 bytes, which no host can store as part of a storage key. |
 | `schedule-key-malformed` | A schedule or cancel key that is not well-formed Unicode (it holds a lone UTF-16 surrogate), which no host can percent-encode into a storage key. |
 | `schedule-unknown-action` | A schedule naming an action this world does not register. The refusal lists the clock actions it can schedule. |
+| `schedule-seated-action` | A schedule naming a registered seated action, which acts for a player when a due event has none. The refusal lists the clock actions it can schedule. |
 | `schedule-action-too-long` | A schedule whose action name is past 128 UTF-8 bytes. |
 | `schedule-args-too-large` | A schedule's args whose JSON is past 4096 UTF-8 bytes. Keep the data in a partition and pass its name. |
 | `invalid-schedule-cancel` | A cancel that names no key. A cancel is keyed the way arming is keyed, so a nameless one addresses nothing; cancelling a key nothing holds is a no-op rather than this. |

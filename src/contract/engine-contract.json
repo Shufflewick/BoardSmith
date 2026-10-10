@@ -1,7 +1,7 @@
 {
-  "revision": 149,
+  "revision": 150,
   "bundleProtocol": 2,
-  "surfaceHash": "b10378da0e3dad03",
+  "surfaceHash": "dbd85fd9d4fcb20e",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1285,6 +1285,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "ctx.world.schedule() refuses an action name the world does not register or one over 128 UTF-8 bytes, and a schedule or cancel key that is not well-formed Unicode, with the game-owned codes schedule-unknown-action, schedule-action-too-long and schedule-key-malformed (#603, #604)"
+    },
+    {
+      "revision": 150,
+      "date": "2026-10-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "dbd85fd9d4fcb20e",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "ctx.world.schedule() refuses a registered seated action at the schedule() line with the game-owned code schedule-seated-action, naming the clock actions that can be scheduled; clock-only-command still answers a seated event queued before this check (#608)"
     }
   ]
 }

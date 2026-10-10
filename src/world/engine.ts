@@ -1956,9 +1956,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
           "it, and no player may issue it.",
       );
     }
-    // AND THE CLOCK MAY NOT ISSUE A SEAT'S. The other half of the same rule,
-    // and it was missing: a scheduled event naming an ordinary action reached
-    // `player.seat` on nothing and answered with a TypeError out of game code,
+    // AND THE CLOCK MAY NOT ISSUE A SEAT'S. The other half of the same rule.
+    // Since #608 `schedule()` refuses a seated action at the line
+    // (`schedule-seated-action`), so this is reached only by an event queued
+    // before that, in a world that already holds one. Before this check, a
+    // scheduled event naming an ordinary action reached `player.seat` on nothing and answered with a TypeError out of game code,
     // which tells a bundle author neither what happened nor which schedule row
     // did it. A seated action asks a person a question, and a due event has
     // nobody to ask.
@@ -2444,7 +2446,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // had already changed. The budget does that counting, so this side and the
     // host cannot count differently.
     const budget = scheduleBudget(charge.owner, charge.allowance, this.budgets, (name) =>
-      this.unknownScheduledAction(name),
+      this.unschedulableAction(name),
     );
 
     // WHAT THE WORLD LOOKS LIKE BEFORE THIS ACTION (#68, #294).
@@ -2618,22 +2620,34 @@ export class BoardSmithWorldEngine implements WorldEngine {
   }
 
   /**
-   * A SCHEDULED ACTION THIS WORLD DOES NOT REGISTER, refused at the line (#603).
+   * A SCHEDULED ACTION THE CLOCK CANNOT RUN, refused at the line: one this
+   * world does not register (#603), or a seated one, which acts for a player
+   * when a due event has none (#608).
    *
    * Handed to `scheduleBudget`, which asks it after the shape checks and before
    * the caps. Only the engine holds the bundle's actions; the parent re-plans
    * without them and bounds the name's length instead.
    */
-  private unknownScheduledAction(action: string): WorldRefusal | null {
-    if (this.actions.has(action)) return null;
+  private unschedulableAction(action: string): WorldRefusal | null {
+    const definition = this.actions.get(action);
+    if (definition?.world?.seatless === true) return null;
     const clock = [...this.actions.values()]
-      .filter((definition) => definition.world?.seatless === true)
-      .map((definition) => definition.name);
+      .filter((candidate) => candidate.world?.seatless === true)
+      .map((candidate) => candidate.name);
+    const schedulable =
+      `The clock actions it can schedule are: ` +
+      `${clock.length > 0 ? clock.join(", ") : "none -- build one with `worldClockAction()`"}.`;
+    if (definition === undefined) {
+      return worldRefusal(
+        "schedule-unknown-action",
+        `A schedule named the action ${JSON.stringify(action)}, and this world registers no ` +
+          `action by that name. ${schedulable}`,
+      );
+    }
     return worldRefusal(
-      "schedule-unknown-action",
-      `A schedule named the action ${JSON.stringify(action)}, and this world registers no action ` +
-        `by that name. The clock actions it can schedule are: ` +
-        `${clock.length > 0 ? clock.join(", ") : "none -- build one with `worldClockAction()`"}.`,
+      "schedule-seated-action",
+      `A schedule named the action ${JSON.stringify(action)}, which acts for a player, and a due ` +
+        `event has no player to act for. ${schedulable}`,
     );
   }
 
