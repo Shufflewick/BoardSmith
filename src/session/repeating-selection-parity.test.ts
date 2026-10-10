@@ -158,7 +158,7 @@ describe('a repeating selection is one protocol on every path (#325)', () => {
 
   it('a pick that onEach has already made unavailable is refused, and rolled back', async () => {
     // p1 is in the hand after the first pick, so the second 'p1' is not offered.
-    await expectRefusedAndRolledBack(['p1', 'p1', 'stop'], /Invalid choice/);
+    await expectRefusedAndRolledBack(['p1', 'p1', 'stop'], /no longer available/);
   });
 });
 

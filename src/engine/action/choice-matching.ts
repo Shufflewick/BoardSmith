@@ -167,8 +167,8 @@ export function labelOfValue(value: unknown): string {
   try { return JSON.stringify(value); } catch { return '[Complex Object]'; }
 }
 
-/** A serialized game element, which is never a plain data object. */
-function isSerializedElement(value: unknown): boolean {
+/** A serialized game element (`{ id, className }`), which is never a plain data object. */
+export function isSerializedElement(value: unknown): boolean {
   if (typeof value !== 'object' || value === null) return false;
   const obj = value as Record<string, unknown>;
   return typeof obj.id === 'number' && typeof obj.className === 'string';
