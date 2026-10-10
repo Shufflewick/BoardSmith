@@ -106,7 +106,7 @@ export function mountTableWiring<G extends Game>(
         ...(options.withPickStep
           ? {
               pickStep: async (player: number, selectionName: string, value: unknown, actionName: string, initialArgs?: Record<string, unknown>) =>
-                session().send(player, cloneable({ type: 'selectionStep', player, selectionName, value, actionName, initialArgs })),
+                session().send(player, cloneable({ type: 'selectionStep', player, selectionName, value: value as {} | null, actionName, initialArgs })),
               cancelPendingAction: async (player: number) => {
                 await session().send(player, cloneable({ type: 'cancelAction', player }));
               },
