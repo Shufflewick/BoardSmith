@@ -25,6 +25,7 @@ import { resolveUserPath } from '../lib/user-path.js';
 import { makeCommandBuildDir } from '../lib/command-build-dir.js';
 import { loadWorldRuntime, startWorldDevServer, type WorldRuntime } from './dev-world.js';
 import {
+  answerAlive,
   devNotFoundMiddleware,
   monorepoBoardsmithResolvePlugin,
   reloadOnRulesEdit,
@@ -526,6 +527,7 @@ export function boardsmithDevHostPlugin(args: {
     configureServer(server) {
       // The dev host serves exactly two HTML documents: the Dev chrome in the
       // main window, and the game UI in the board iframe (GAME_IFRAME_PATH).
+      answerAlive(server);
       serveDevDocuments(server, (url) => {
         const isHostPage = url === '/' || url === '/index.html';
         if (!isHostPage && url !== GAME_IFRAME_PATH) return null;

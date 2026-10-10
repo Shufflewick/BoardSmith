@@ -52,6 +52,7 @@ import type { GameDefinition } from '../../session/index.js';
 import { importRuntimeBundle, toPosix } from './game-runtime.js';
 import {
   claimWebSocketPath,
+  answerAlive,
   devNotFoundMiddleware,
   monorepoBoardsmithResolvePlugin,
   reloadOnRulesEdit,
@@ -134,6 +135,7 @@ function boardsmithWorldDevPlugin(args: {
     configureServer(server) {
       // The world run serves exactly two documents: the dev chrome in the main
       // window, and the world's own surface in the frame.
+      answerAlive(server);
       serveDevDocuments(server, (url) => {
         const isHostPage = url === '/' || url === '/index.html';
         if (!isHostPage) {
