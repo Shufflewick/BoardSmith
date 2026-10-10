@@ -239,8 +239,9 @@ export function createProgram(): Command {
   // Code-quality audits
   program
     .command('audit')
-    .description("Audit what this branch changed (fallow), plus duplication-baseline and health-baseline drift")
+    .description("Audit what this branch changed (fallow), plus duplication and baseline drift")
     .option('--changes', 'Run only the changed-files audit (fallow, baseline-aware)')
+    .option('--duplication', 'Run only the duplication audit')
     .option('--health-baseline', 'Run only the health-baseline drift check')
     .option(
       '--dupes-baseline',

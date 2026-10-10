@@ -23,9 +23,9 @@ import { fallowCommandLine, runToolCapturingStdout } from './run-tool.js';
  *
  * `boardsmith audit --since <first commit>` does put the whole tree in scope
  * WITH the baselines applied, and it passes today. But it is a GATE: it exits
- * non-zero on findings and it drags the health-baseline drift check along
- * with it, which reports this repo's accepted backlog over a whole-repository
- * scope. Run on a schedule it would
+ * non-zero on findings and it drags the jscpd duplication sweep and the
+ * health-baseline drift check along with it, both of which report this repo's
+ * accepted backlog over a whole-repository scope. Run on a schedule it would
  * be red forever, which is the failure mode that teaches people to stop
  * reading a gate.
  *

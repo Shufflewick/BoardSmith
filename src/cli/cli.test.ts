@@ -467,23 +467,3 @@ describe('init --into-existing is a flag on the real command (#304)', () => {
     expect(readdirSync(repo).sort()).toEqual(['.git', 'package.json']);
   });
 });
-
-/**
- * #551: `boardsmith audit --duplication` ran an unpinned jscpd through npx. It
- * was removed, not pinned: `--dupes-baseline` (the pinned fallow's duplication
- * scan) does the same job with a baseline. The flag must be refused, not
- * silently ignored, so a script still passing it finds out.
- */
-describe('audit --duplication — the retired jscpd check is unreachable', () => {
-  it('is refused with commander\'s own "unknown option" error', async () => {
-    const result = await spawnCli(['audit', '--duplication']);
-    expect(result.code).not.toBe(0);
-    expect(result.stderr).toContain("unknown option '--duplication'");
-  });
-
-  it('is not listed in `audit --help`', async () => {
-    const result = await spawnCli(['audit', '--help']);
-    expect(result.code).toBe(0);
-    expect(result.stdout).not.toContain('--duplication');
-  });
-});
