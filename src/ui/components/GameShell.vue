@@ -436,9 +436,20 @@ const displayedPlayers = computed(() => displayedState.value?.state.players ?? [
 // The viewer's own player and a seat's player, as the state on screen has them
 // (#581, #582). The players panel's rows stay live; what is handed to game code
 // beside the historical gameView is the snapshot's. Seats are fixed for a game,
-// so every snapshot holds every seat the panel shows.
+// so every snapshot holds every seat the panel shows; one that does not is a
+// broken snapshot, and displayedPlayerAt throws rather than hand the slot the
+// live player or nothing.
 const displayedMyPlayer = computed(() => displayedPlayers.value.find((player) => player.seat === playerSeat.value));
-const displayedPlayerAt = (seat: number) => displayedPlayers.value.find((player) => player.seat === seat);
+const displayedPlayerAt = (seat: number) => {
+  const player = displayedPlayers.value.find((candidate) => candidate.seat === seat);
+  if (!player) {
+    throw new Error(
+      `GameShell: the state on screen has no player at seat ${seat}, but the players panel shows that seat. ` +
+      'Seats are fixed for a game, so every snapshot must list every seat; check the snapshot the debug panel time-travelled to.',
+    );
+  }
+  return player;
+};
 
 // The generic request/response bridge to the host (which relays to the games
 // worker / executor). Every server operation the embedded game needs —
