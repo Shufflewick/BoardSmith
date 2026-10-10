@@ -19,6 +19,8 @@
  * `boardsmith/testing`, compiled under the game's own tsconfig.
  * `aspect-boards-typecheck.test.ts` uses it for the `GameTable.vue` each aspect
  * template teaches, compiled under the game's own tsconfig.
+ * `docs-game-typecheck.test.ts` uses it for the game code the docs mark for
+ * compiling, under the same tsconfig.
  * `workers-typecheck.test.ts` uses it for the platform-reachable entry points,
  * compiled under a tsconfig of its own that carries Workers-style globals.
  */

@@ -266,3 +266,99 @@ describe('DevHost: object-valued game options (#572)', () => {
     expect(options.map((o) => o.text())).toEqual(['Forest', '{"size":3}']);
   });
 });
+
+// ── The host's applied selection is what the page shows (#541) ────────────────
+//
+// `boardsmith dev --game-option difficulty=hard` starts the game on 'hard', and
+// a `configure` from another page changes it. The page learns either only from
+// the lobby message, so the lobby fields and Table setup must show that value,
+// never the declared default.
+describe('DevHost: shows the game options the host applied (#541)', () => {
+  const lobbyApplying = (gameOptions: Record<string, unknown>) => ({ ...SEAT_LOBBY, gameOptions });
+
+  it('the lobby field shows the applied value, and Apply keeps it rather than resetting to the default', async () => {
+    const wrapper = await mountInLobby();
+    const ws = mockWsInstance!;
+    ws.simulateMessage(lobbyApplying({ difficulty: 'hard' }));
+    await wrapper.vm.$nextTick();
+
+    const select = wrapper.find('[data-testid="lobby-option-difficulty"]');
+    expect((select.element as HTMLSelectElement).value).toBe('hard');
+
+    ws.send.mockClear();
+    await wrapper.find('[data-testid="lobby-apply-options"]').trigger('click');
+    const frames = ws.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    expect(frames.find((f) => f.type === 'configure')?.gameOptions).toEqual({ difficulty: 'hard' });
+  });
+
+  it('Table setup shows the applied value', async () => {
+    const wrapper = await mountInLobby();
+    const ws = mockWsInstance!;
+    ws.simulateMessage(lobbyApplying({ difficulty: 'hard' }));
+    ws.simulateMessage({ type: 'init', seat: 1 });
+    await wrapper.vm.$nextTick();
+    await wrapper.findAll('[data-testid="table-setup-toggle"]')[0].trigger('click');
+    await wrapper.vm.$nextTick();
+    const row = wrapper.findAll('.table-setup__row').find((r) => r.find('dt').text() === 'Difficulty');
+    expect(row?.find('dd').text()).toBe('Hard');
+  });
+
+  it('a lobby message that applies nothing new leaves an edit the player has not applied yet', async () => {
+    const wrapper = await mountInLobby();
+    const ws = mockWsInstance!;
+    ws.simulateMessage(lobbyApplying({ difficulty: 'easy' }));
+    await wrapper.vm.$nextTick();
+    const select = wrapper.find('[data-testid="lobby-option-difficulty"]');
+    await select.setValue('hard');
+
+    ws.simulateMessage(lobbyApplying({ difficulty: 'easy' }));
+    await wrapper.vm.$nextTick();
+    expect((select.element as HTMLSelectElement).value).toBe('hard');
+  });
+});
+
+describe('DevHost: a change the host applies later replaces what the page shows (#541)', () => {
+  const lobbyApplying = (gameOptions: Record<string, unknown>) => ({ ...SEAT_LOBBY, gameOptions });
+
+  // TEST_CONFIG's one option has two choices, so the field reads the old
+  // applied value here: anything else would already be the new one.
+  it('a later lobby with new values replaces the field, and Table setup follows', async () => {
+    const wrapper = await mountInLobby();
+    const ws = mockWsInstance!;
+    ws.simulateMessage(lobbyApplying({ difficulty: 'easy' }));
+    await wrapper.vm.$nextTick();
+    const select = wrapper.find('[data-testid="lobby-option-difficulty"]');
+    expect((select.element as HTMLSelectElement).value).toBe('easy');
+
+    ws.simulateMessage(lobbyApplying({ difficulty: 'hard' }));
+    await wrapper.vm.$nextTick();
+    expect((select.element as HTMLSelectElement).value).toBe('hard');
+
+    ws.simulateMessage({ type: 'init', seat: 1 });
+    await wrapper.vm.$nextTick();
+    await wrapper.findAll('[data-testid="table-setup-toggle"]')[0].trigger('click');
+    await wrapper.vm.$nextTick();
+    const row = wrapper.findAll('.table-setup__row').find((r) => r.find('dt').text() === 'Difficulty');
+    expect(row?.find('dd').text()).toBe('Hard');
+  });
+
+  it('a later lobby with new values clears a preset chosen earlier, so the next Apply does not send it', async () => {
+    const wrapper = await mountInLobby();
+    const ws = mockWsInstance!;
+    ws.simulateMessage(lobbyApplying({ difficulty: 'easy' }));
+    await wrapper.vm.$nextTick();
+    const presetPicker = wrapper.find('[data-testid="lobby-preset-picker"]');
+    await presetPicker.setValue('Quick Match');
+
+    ws.simulateMessage(lobbyApplying({ difficulty: 'hard' }));
+    await wrapper.vm.$nextTick();
+    expect((presetPicker.element as HTMLSelectElement).value).toBe('');
+
+    ws.send.mockClear();
+    await wrapper.find('[data-testid="lobby-apply-options"]').trigger('click');
+    const frames = ws.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    const configure = frames.find((f) => f.type === 'configure');
+    expect(configure?.preset).toBeUndefined();
+    expect(configure?.gameOptions).toEqual({ difficulty: 'hard' });
+  });
+});

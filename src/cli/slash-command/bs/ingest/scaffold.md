@@ -172,7 +172,7 @@ error, and what to fix) — never proceed past a failing step assuming it will "
 
    ```bash
    cd <name>   # skip this line after --into-existing: you are already in the project
-   npx vue-tsc --noEmit
+   boardsmith typecheck
    ```
 
    Use `vue-tsc`, never plain `tsc`: plain `tsc` cannot type a `.vue` import, so on a fresh
@@ -182,7 +182,7 @@ error, and what to fix) — never proceed past a failing step assuming it will "
    If errors occur:
    1. Read the error message carefully.
    2. Fix the specific issue.
-   3. Run `npx vue-tsc --noEmit` again.
+   3. Run `boardsmith typecheck` again.
    4. Repeat until clean.
 
    Do not proceed to step 2 until this is clean.

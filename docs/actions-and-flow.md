@@ -1700,7 +1700,9 @@ finishes it:
 `finish(winners)`, or override `isFinished()` and `getWinners()` on your `Game`
 subclass. Every reader takes the result from there: the host shows players
 `game.getWinners()`, and the bot's search and the benchmark score the same
-seats. A flow definition has no `isComplete` or `getWinners`.
+seats. A flow definition has no `isComplete` or `getWinners`: `setFlow()`
+refuses a definition that has either, or any key other than `root`, `setup`,
+`onEnterPhase` and `onExitPhase`, rather than ignoring it.
 
 ```typescript
 class MyGame extends Game<MyGame, MyPlayer> {
