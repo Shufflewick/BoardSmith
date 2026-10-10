@@ -133,7 +133,7 @@ describe('a served Vite leaves the process alone (#382)', () => {
 });
 
 describe('the dev host says it is answering (#609)', () => {
-  it(`answers ${DEV_HOST_ALIVE_PATH} with nothing, ahead of every other middleware`, async () => {
+  it(`answers ${DEV_HOST_ALIVE_PATH} with nothing, and leaves every other path to the rest of the dev host`, async () => {
     dir = tempTree('bs-dev-alive-');
     writeFileSync(join(dir, 'index.html'), '<!doctype html><title>t</title>');
     const port = await freePort();

@@ -1657,7 +1657,7 @@ defineSmokeTest({
  * `boardsmith dev` busy (#609): longer than the walk gives a press (5s) or a deal (30s), as a machine
  * running many verifies at once starves them.
  */
-export const STARVED_FOR_MS = { page: 8_000, host: 35_000 } as const;
+const STARVED_FOR_MS = { page: 8_000, host: 35_000 } as const;
 
 /**
  * A PAGE STARVED OF TIME (#609): the first pointer press anywhere in the dev host's page (the walk's

@@ -746,7 +746,7 @@ describe('boardsmith verify: the smoke check', () => {
     );
   });
 
-  it('#609: waits out a page kept too busy to answer for longer than a press is given, as a loaded machine does, opening the seat menu again when the game took focus and closed it, and walks on', async () => {
+  it('#609: waits out a page kept too busy to answer for longer than a press is given, as a loaded machine does, and walks on', async () => {
     const { outcome } = await smokeOf(false, boardThatStarvesThePage());
 
     expect(outcome.summary).not.toContain('did not answer');

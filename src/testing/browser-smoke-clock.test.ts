@@ -48,7 +48,7 @@ describe('PageClock', () => {
     clock.stop();
   });
 
-  it('says how long the page has gone unanswered, and that it has stopped answering after FROZEN_MS', async () => {
+  it('says the page has stopped answering only once it has gone FROZEN_MS without answering', async () => {
     let answer = 0;
     const { clock } = clockAnswering(() => answer);
     await vi.advanceTimersByTimeAsync(1_000);

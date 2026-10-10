@@ -35,7 +35,7 @@ export const FROZEN_MS = 60_000;
 export const DEV_HOST_ALIVE_PATH = '/__boardsmith-alive';
 
 /** How the walk says a page or dev host stopped answering altogether. */
-export const FROZEN_SAYS =
+const FROZEN_SAYS =
   `the page stopped answering for ${FROZEN_MS / 1000}s: the browser, or \`boardsmith dev\` behind it, was busy the whole ` +
   'time and never finished. Run `boardsmith smoke` to watch it, and look for something in the board or the rules that ' +
   'runs without end.';
