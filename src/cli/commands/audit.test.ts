@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   AUDIT_ORDER,
@@ -7,6 +7,8 @@ import {
   runChangedFilesAudit,
   runDupesBaselineCheck,
   runHealthBaselineCheck,
+  runTemplateDupesCheck,
+  rekeyTemplateDupes,
 } from './audit.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
@@ -410,6 +412,122 @@ describe('runDupesBaselineCheck and rekeyDupesBaseline', () => {
       expect(result.code).not.toBe(0);
       expect(result.report).toContain('cannot be ruled out');
     });
+  });
+});
+
+/**
+ * #596: `boardsmith audit --duplication` used to run jscpd with no baseline and
+ * no `--threshold`, so it exited 0 on 136 clones and gated nothing. It now
+ * gates duplicated Vue template and style markup -- the one kind fallow cannot
+ * see -- against a content-keyed record, the same way the dupes baseline does.
+ *
+ * These drive the real, pinned jscpd over real `.vue` files: the claim under
+ * test is what jscpd reports for them, not what a fixture says it would.
+ */
+describe('runTemplateDupesCheck and rekeyTemplateDupes', () => {
+  const RECORD = '.jscpd-accepted.json';
+
+  /** Twelve lines of template markup, long enough to clear jscpd's minimums. */
+  const markup = (tag: string) =>
+    Array.from({ length: 12 }, (_, i) =>
+      `      <${tag} class="row-${i}" :data-total="item.a${i} + item.b${i}">{{ item.label${i} }} / {{ item.value${i} }}</${tag}>`);
+
+  /** Twelve lines of script, duplicated too, which fallow owns and this check must ignore. */
+  const script = Array.from({ length: 12 }, (_, i) =>
+    `const total${i} = (item: { a: number; b: number }) => item.a * ${i} + item.b - ${i};`);
+
+  /**
+   * A component whose duplicated markup sits under a heading of its own, so
+   * the clone's first line is fixed and `above` only moves it down.
+   */
+  function component(above: string[] = [], tag = 'li', heading = 'h1'): string {
+    return [
+      '<template>',
+      ...above,
+      '  <ul>',
+      `    <${heading}>{{ title }}</${heading}>`,
+      ...markup(tag),
+      '  </ul>',
+      '</template>',
+      '',
+      '<script setup lang="ts">',
+      ...script,
+      '</script>',
+      '',
+    ].join('\n');
+  }
+
+  function project(files: Record<string, string>): string {
+    const dir = tempTree('bs-template-dupes-');
+    mkdirSync(join(dir, 'src'));
+    for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, 'src', name), text);
+    return dir;
+  }
+
+  const record = (dir: string) => readFileSync(join(dir, RECORD), 'utf-8');
+
+  it('fails on a duplicated template in a project with no record, ignoring the duplicated script', async () => {
+    const dir = project({ 'A.vue': component(), 'B.vue': component() });
+    const result = await runTemplateDupesCheck(dir);
+    expect(result.code).not.toBe(0);
+    expect(result.report).toContain('1 unaccepted');
+    expect(result.report).toContain('src/A.vue, src/B.vue');
+    expect(result.report).toContain('boardsmith audit --rekey-dupes');
+  });
+
+  it('records the tree, then passes, and a line shift above the clone changes nothing', async () => {
+    const dir = project({ 'A.vue': component(), 'B.vue': component([], 'li', 'h2') });
+    const recorded = await rekeyTemplateDupes(dir);
+    expect(recorded.code).toBe(0);
+    expect(recorded.report).toContain('Recorded 1 template clone');
+    const before = record(dir);
+
+    writeFileSync(join(dir, 'src', 'A.vue'), component(['  <hr />', '  <hr />', '  <hr />']));
+    const shifted = await runTemplateDupesCheck(dir);
+
+    expect(shifted.code).toBe(0);
+    expect(record(dir)).toBe(before);
+  });
+
+  it('fails on a new copy, and refuses to record it over an existing record', async () => {
+    const dir = project({ 'A.vue': component(), 'B.vue': component() });
+    await rekeyTemplateDupes(dir);
+    const before = record(dir);
+    writeFileSync(join(dir, 'src', 'C.vue'), component([], 'div'));
+    writeFileSync(join(dir, 'src', 'D.vue'), component([], 'div'));
+
+    const result = await runTemplateDupesCheck(dir);
+    expect(result.code).not.toBe(0);
+    expect(result.report).toContain('src/C.vue, src/D.vue');
+
+    const refused = await rekeyTemplateDupes(dir);
+    expect(refused.code).not.toBe(0);
+    expect(refused.report).toContain('Nothing was written');
+    expect(record(dir)).toBe(before);
+  });
+
+  it('fails on an accepted clone that is gone, and the re-key drops it', async () => {
+    const dir = project({ 'A.vue': component(), 'B.vue': component() });
+    await rekeyTemplateDupes(dir);
+    writeFileSync(join(dir, 'src', 'B.vue'), component().replace(/<li /g, '<p ').replace(/<\/li>/g, '</p>'));
+
+    const result = await runTemplateDupesCheck(dir);
+    expect(result.code).not.toBe(0);
+    expect(result.report).toContain('src/A.vue, src/B.vue');
+    expect(result.report).toContain('boardsmith audit --rekey-dupes');
+
+    const dropped = await rekeyTemplateDupes(dir);
+    expect(dropped.code).toBe(0);
+    expect(dropped.report).toContain('Dropped 1');
+    expect(JSON.parse(record(dir))).toEqual({ accepted: [] });
+    expect((await runTemplateDupesCheck(dir)).code).toBe(0);
+  });
+
+  it('says so when jscpd wrote no readable report', async () => {
+    const dir = project({ 'A.vue': component() });
+    const result = await runTemplateDupesCheck(dir, async () => 2);
+    expect(result.code).not.toBe(0);
+    expect(result.report).toContain('cannot be ruled out');
   });
 });
 

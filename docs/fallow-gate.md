@@ -335,22 +335,65 @@ The last full re-record was #545, for fallow 3.28.0. What it changed:
 ## The merge refuses baseline drift (#545)
 
 `.agent-policy.json`'s verify list runs
-`boardsmith audit --dupes-baseline --health-baseline` before the test suite, so
-`agent-policy verify` and `npm run thread:merge`'s check of the merged tree
-both fail when either baseline no longer describes the tree. Before this, no
-gate ran the audit; under the fallow that recorded them, the baselines described
-`main` until 2026-10-02 and then drifted with almost every merge.
+`boardsmith audit --dupes-baseline --health-baseline --duplication` before the
+test suite, so `agent-policy verify` and `npm run thread:merge`'s check of the
+merged tree both fail when either baseline no longer describes the tree, or
+when a Vue template or style block is duplicated and `.jscpd-accepted.json`
+does not accept it (#596). Before #545, no gate ran the audit; under the fallow
+that recorded them, the baselines described `main` until 2026-10-02 and then
+drifted with almost every merge.
 
-Only the two whole-repository checks are in the list. `--changes` is scoped by
-fallow's own base detection (the branch's upstream or `origin/HEAD`), so on a
-merged tree it would audit whatever the remote happened to point at, and on
-`main` right after a merge it checks nothing. `--duplication` runs jscpd, which
-is pinned the same way fallow is (#551), but it has no baseline, and without
-`--threshold` jscpd exits 0 whatever it finds, so it would gate nothing.
+`--changes` is not in the list. It is scoped by fallow's own base detection
+(the branch's upstream or `origin/HEAD`), so on a merged tree it would audit
+whatever the remote happened to point at, and on `main` right after a merge it
+checks nothing.
 
-jscpd stays because fallow does not cover it: fallow scans only the script
-blocks of `.vue` files, so duplicated `<template>` markup in `src/ui` is
-reported by jscpd alone.
+## Vue template duplication is gated by jscpd (#596)
+
+fallow scans only the script blocks of `.vue` files, so duplicated `<template>`
+and `<style>` markup in `src/ui` is reported by jscpd alone. Until #596,
+`boardsmith audit --duplication` ran jscpd over all of `src/` with no gate: jscpd
+5.3.2 exits 0 whenever the scan ran and no `--threshold` or
+`--fail-on-new-clones` fired, so it reported 134 clones and exited 0, and it
+could block nothing.
+
+It now gates the way the fallow duplication check does:
+
+- **The record is `.jscpd-accepted.json`**, in the same shape as
+  `.fallow-dupes-accepted.json` and keyed the same way: a hash of the clone's
+  own text. jscpd reports a clone as a pair of line ranges, so each pair becomes
+  a group of its two instances, read from the source by whole lines, and is
+  keyed by `cloneGroupKey`. Code moving above or below a clone does not change
+  its key. Editing the clone, or copying it once more, does. A change to the
+  line just above or below a clone can change where jscpd says it starts, and
+  so its key, exactly as for fallow.
+- **The check fails** on any template or style clone the record does not
+  accept, and on an accepted one that is gone, and writes nothing when it
+  fails. A project with no record accepts nothing. When the content matches and
+  only the `files` it names moved (a rename), it rewrites the record and says
+  so; commit it.
+- **`boardsmith audit --rekey-dupes` handles both records.** For this one it
+  creates the record when none exists, drops accepted clones that are gone, and
+  refuses while the tree holds a clone the record does not accept.
+
+**Scope: `.vue` template and style blocks only.** jscpd runs with
+`--format vue`, which splits each component into blocks and names each clone's
+block (`ActionPanel.vue:html`). Clones in script blocks are dropped, and `.ts`
+files are not scanned, because fallow already gates both. Counting them twice
+would make every script clone need two acceptances, under two different
+thresholds and two different test-file rules, which would disagree. The
+thresholds are the ones the jscpd run always had: 10 lines and 100 tokens.
+
+jscpd 5.3.2 has a baseline of its own (`--baseline`, `--update-baseline`,
+`--fail-on-new-clones`) with content fingerprints. It is not used because it
+fingerprints every clone in the scan, script blocks included, so it cannot be
+scoped to templates; and it does not report an accepted clone that is gone.
+
+Recorded on `main` at `c2944bcd`: six accepted clones, three inside
+`ActionPanel.vue`'s template, two between the styles of `HintOverlay.vue` and
+`TutorialOverlay.vue`, and one between the styles of `GameHistory.vue` and
+`ActionPanel.vue`. The check takes about one second, which is why it is in the
+verify list.
 
 When the audit re-addresses moved clone groups it writes the two dupes files,
 and verify then fails with "a check changed the working tree". Commit the

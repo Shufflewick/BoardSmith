@@ -21,6 +21,14 @@ import {
   type DupesScan,
 } from '../lib/dupes-baseline.js';
 import { githubIssueTracker, sweepDuplicateExports } from '../lib/duplicate-export-sweep.js';
+import {
+  JSCPD_REPORT_FILE,
+  TEMPLATE_DUPES_FILE,
+  describeTemplateDrift,
+  isJscpdReport,
+  jscpdTemplateArgs,
+  templateScan,
+} from '../lib/template-dupes.js';
 
 export interface AuditOptions {
   /** Selector flags — when any is set, only the selected audits run. */
@@ -320,6 +328,129 @@ export async function rekeyDupesBaseline(
 }
 
 /**
+ * One jscpd scan of the workspace's `.vue` files, writing its JSON report into
+ * `outputDir`. Resolves to jscpd's exit code. Injected in tests.
+ */
+type ScanTemplates = (outputDir: string, cwd: string) => Promise<number>;
+
+const scanTemplatesWithJscpd: ScanTemplates = async (outputDir, cwd) =>
+  // Captured so jscpd's own summary lines stay out of the audit's output: the
+  // verdict and the clones it is about are what `runTemplateDupesCheck` prints.
+  (await runToolCapturingStdout('jscpd', jscpdTemplateArgs(outputDir), { cwd })).code;
+
+/** A JSON file's contents, or undefined when it is missing or not JSON. */
+function readJson(path: string): unknown {
+  try {
+    return JSON.parse(readFileSync(path, 'utf-8'));
+  } catch {
+    return undefined;
+  }
+}
+
+/** This tree's template duplication, the committed record of it, and where they disagree. */
+interface TemplateReading {
+  fresh: AcceptedDupes;
+  /** The committed record's text, or null when the project keeps none. */
+  recorded: string | null;
+  drift: ReturnType<typeof compareAcceptedDupes>;
+}
+
+/** Scan this tree's template and style duplication, or say why nothing could be concluded. */
+async function readTemplateDupes(
+  cwd: string,
+  scan: ScanTemplates,
+): Promise<TemplateReading | { failure: string }> {
+  const scratch = mkdtempSync(join(tmpdir(), 'boardsmith-jscpd-'));
+  let code: number;
+  let parsed: unknown;
+  try {
+    code = await scan(scratch, cwd);
+    parsed = readJson(join(scratch, JSCPD_REPORT_FILE));
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+  // jscpd 5.3.2 exits 0 whenever the scan ran and no gate it was given fired;
+  // this run gives it none, so anything else means the scan itself failed.
+  if (code !== 0 || !isJscpdReport(parsed)) {
+    return {
+      failure:
+        `jscpd exited ${code} without a readable report, so template duplication against `
+        + `${TEMPLATE_DUPES_FILE} cannot be ruled out.\n`
+        + 'jscpd prints its own error above this line.',
+    };
+  }
+  const fresh = acceptedFromScan(templateScan(parsed, cwd));
+  const recordPath = join(cwd, TEMPLATE_DUPES_FILE);
+  const recorded = existsSync(recordPath) ? readFileSync(recordPath, 'utf-8') : null;
+  const committed: AcceptedDupes = recorded === null ? { accepted: [] } : (JSON.parse(recorded) as AcceptedDupes);
+  return { fresh, recorded, drift: compareAcceptedDupes(committed, fresh) };
+}
+
+/**
+ * Does `.jscpd-accepted.json` still account for every duplicated Vue template
+ * and style block (#596)?
+ *
+ * The same two questions as the fallow duplication check, in the same order.
+ * Content that does not match fails and writes nothing. A record whose content
+ * matches but whose `files` moved (a rename) is rewritten and reported, because
+ * nothing about the debt changed. A project with no record accepts nothing, so
+ * any template clone fails until one is recorded with `--rekey-dupes`.
+ */
+export async function runTemplateDupesCheck(
+  cwd: string,
+  scan: ScanTemplates = scanTemplatesWithJscpd,
+): Promise<{ code: number; report: string }> {
+  const read = await readTemplateDupes(cwd, scan);
+  if ('failure' in read) return { code: 1, report: read.failure };
+  if (read.drift.length > 0) {
+    return { code: 1, report: describeTemplateDrift(read.drift, read.recorded !== null) };
+  }
+  const fresh = asJson(read.fresh);
+  if (read.recorded !== null && read.recorded !== fresh) {
+    writeFileSync(join(cwd, TEMPLATE_DUPES_FILE), fresh);
+    return {
+      code: 0,
+      report:
+        `Re-addressed ${TEMPLATE_DUPES_FILE}: every clone matched by content, so no debt was `
+        + 'forgiven; only the files it names moved. Commit it with your change.',
+    };
+  }
+  return { code: 0, report: `${TEMPLATE_DUPES_FILE} still describes this tree's template duplication.` };
+}
+
+/**
+ * Record this tree's template duplication when no record exists, or drop
+ * accepted clones that are gone. Refuses, writing nothing, while the tree holds
+ * template duplication an existing record does not accept: the same boundary
+ * as `rekeyDupesBaseline`.
+ */
+export async function rekeyTemplateDupes(
+  cwd: string,
+  scan: ScanTemplates = scanTemplatesWithJscpd,
+): Promise<{ code: number; report: string }> {
+  const read = await readTemplateDupes(cwd, scan);
+  if ('failure' in read) return { code: 1, report: read.failure };
+  const count = (n: number) => `${n} template ${n === 1 ? 'clone' : 'clones'}`;
+  if (read.recorded !== null && read.drift.some((entry) => entry.direction === 'new')) {
+    return {
+      code: 1,
+      report:
+        `Nothing was written to ${TEMPLATE_DUPES_FILE}. Re-keying only drops accepted `
+        + 'duplication that is gone. This tree holds template duplication the record does not accept:\n\n'
+        + describeTemplateDrift(read.drift, true),
+    };
+  }
+  writeFileSync(join(cwd, TEMPLATE_DUPES_FILE), asJson(read.fresh));
+  return {
+    code: 0,
+    report:
+      read.recorded === null
+        ? `Recorded ${count(read.fresh.accepted.length)} as this tree's accepted duplication, in ${TEMPLATE_DUPES_FILE}.`
+        : `Dropped ${count(read.drift.length)} whose duplication is gone from ${TEMPLATE_DUPES_FILE}; no debt was forgiven.`,
+  };
+}
+
+/**
  * What one audit concluded. `nothing-to-check` is its own answer because a
  * clean report over zero files is not a pass, and printing it as one is how a
  * gate stops meaning anything (#176).
@@ -439,8 +570,9 @@ const outcomeOf = (code: number): AuditOutcome => (code === 0 ? 'pass' : 'fail')
 
 /**
  * Code-quality audits. Deliberately not part of `boardsmith lint`. The two
- * baseline checks are also a merge gate: `.agent-policy.json`'s verify list
- * runs them, so `agent-policy verify` and a thread merge refuse drift (#545).
+ * baseline checks and the template duplication check are also a merge gate:
+ * `.agent-policy.json`'s verify list runs them, so `agent-policy verify` and a
+ * thread merge refuse drift (#545, #596).
  */
 function buildAudits(
   options: AuditOptions,
@@ -455,9 +587,12 @@ function buildAudits(
       },
     },
     duplication: {
-      name: 'duplication',
-      run: async (cwd) =>
-        outcomeOf(await runTool('jscpd', ['src/', '--min-lines', '10', '--min-tokens', '100'], { cwd })),
+      name: 'template duplication',
+      run: async (cwd) => {
+        const { code, report } = await runTemplateDupesCheck(cwd);
+        console.log(code === 0 ? chalk.dim(report) : chalk.yellow(report));
+        return outcomeOf(code);
+      },
     },
     healthBaseline: {
       name: 'health baseline',
@@ -540,7 +675,8 @@ async function sweepAction(cwd: string, conflicting: boolean, fileIssue: boolean
 }
 
 /**
- * `--rekey-dupes`: a WRITE, so it runs alone.
+ * `--rekey-dupes`: a WRITE, so it runs alone. It re-keys both duplication
+ * records, fallow's and jscpd's template record (#596), each on its own terms.
  *
  * A run that re-addressed the duplication baseline and then audited against it
  * would be grading its own homework.
@@ -551,9 +687,13 @@ async function rekeyAction(cwd: string, conflicting: boolean): Promise<void> {
     console.error(chalk.dim('Run `boardsmith audit --rekey-dupes` on its own, then `boardsmith audit`.'));
     process.exit(1);
   }
-  const { code, report } = await rekeyDupesBaseline(cwd);
-  console.log(code === 0 ? chalk.green(report) : chalk.yellow(report));
-  if (code !== 0) process.exit(code);
+  let failed = false;
+  for (const rekey of [rekeyDupesBaseline, rekeyTemplateDupes]) {
+    const { code, report } = await rekey(cwd);
+    console.log(code === 0 ? chalk.green(report) : chalk.yellow(report));
+    failed ||= code !== 0;
+  }
+  if (failed) process.exit(1);
 }
 
 /**

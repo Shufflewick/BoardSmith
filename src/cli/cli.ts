@@ -241,7 +241,7 @@ export function createProgram(): Command {
     .command('audit')
     .description("Audit what this branch changed (fallow), plus duplication and baseline drift")
     .option('--changes', 'Run only the changed-files audit (fallow, baseline-aware)')
-    .option('--duplication', 'Run only the duplication audit')
+    .option('--duplication', 'Run only the Vue template and style duplication check (jscpd, against .jscpd-accepted.json)')
     .option('--health-baseline', 'Run only the health-baseline drift check')
     .option(
       '--dupes-baseline',
@@ -256,7 +256,7 @@ export function createProgram(): Command {
     .option('--file-issue', 'Open a GitHub issue for each finding --sweep reports, one per finding, once')
     .option(
       '--rekey-dupes',
-      "Record this tree's duplication from scratch, or drop accepted entries whose duplication is gone — refuses on any unaccepted duplication",
+      "Record this tree's duplication from scratch, or drop accepted entries whose duplication is gone, in both duplication records — refuses on any unaccepted duplication",
     )
     .action(auditCommand);
 
