@@ -77,14 +77,18 @@ describe('strayMessage', () => {
   });
 });
 
-/** Runs this repo's vitest in `root`, wired to the guard the way `vitest.config.ts` wires it. */
-function runGuardedVitest(root, testFiles) {
+/**
+ * Runs this repo's vitest in `root`, wired to the guard the way `vitest.config.ts` wires it.
+ * `settings` are added to the run's `test` config, such as a worker count.
+ */
+function runGuardedVitest(root, testFiles, settings = {}) {
   symlinkSync(join(PROJECT_ROOT, 'node_modules'), join(root, 'node_modules'));
   writeFileSync(
     join(root, 'vitest.config.mjs'),
     `export default { test: { include: ['*.test.mjs'], ` +
       `globalSetup: [${JSON.stringify(join(GUARD_DIR, 'global-setup.mjs'))}], ` +
-      `setupFiles: [${JSON.stringify(join(GUARD_DIR, 'after-each-file.mjs'))}] } };\n`,
+      `setupFiles: [${JSON.stringify(join(GUARD_DIR, 'after-each-file.mjs'))}], ` +
+      `...${JSON.stringify(settings)} } };\n`,
   );
   for (const [name, body] of Object.entries(testFiles)) writeFileSync(join(root, name), body);
   execFileSync('git', ['add', 'vitest.config.mjs', ...Object.keys(testFiles)], { cwd: root });
@@ -114,28 +118,57 @@ describe('the guard in a real vitest run', () => {
     expect(output).toContain('probe/left.vue (first seen when strays.test.mjs finished)');
   }, 120_000);
 
-  it('passes a run whose tests write only to ignored paths, or clean up what they wrote', () => {
+  it('passes a run whose test writes only to ignored paths, or cleans up what it wrote', () => {
+    // One test file only: with a second file running beside it, that file's guard could see
+    // scratch.txt before this file's afterAll removes it, and the run rightly fails (#611).
     const root = gitRepo();
     const run = runGuardedVitest(root, {
-      'ignored.test.mjs': [
-        "import { it } from 'vitest';",
-        "import { mkdirSync, writeFileSync } from 'node:fs';",
+      'tidy.test.mjs': [
+        "import { afterAll, it } from 'vitest';",
+        "import { mkdirSync, rmSync, writeFileSync } from 'node:fs';",
+        "afterAll(() => rmSync('scratch.txt'));",
         "it('writes build output', () => {",
         "  mkdirSync('out', { recursive: true });",
         "  writeFileSync('out/bundle.js', 'x');",
         "  writeFileSync('debug.log', 'x');",
         '});',
-      ].join('\n'),
-      'cleans.test.mjs': [
-        "import { afterAll, it } from 'vitest';",
-        "import { rmSync, writeFileSync } from 'node:fs';",
-        "afterAll(() => rmSync('scratch.txt'));",
         "it('writes a file its own afterAll removes', () => writeFileSync('scratch.txt', 'x'));",
       ].join('\n'),
     });
 
     expect(run.stdout + run.stderr).not.toContain('git neither tracks nor ignores');
     expect(run.status, run.stdout + run.stderr).toBe(0);
+  }, 120_000);
+
+  it('names the test file that saw a file another test file had not yet removed', () => {
+    // Forces the interleaving: lingers.test.mjs keeps scratch.txt until the guard has logged it
+    // after brief.test.mjs, so the sighting is certain rather than down to timing. Each waits on
+    // the other, so the run needs two workers whatever the machine's CPU count, and each inner
+    // test gets a timeout long enough for a loaded machine.
+    const root = gitRepo();
+    const run = runGuardedVitest(root, {
+      'brief.test.mjs': [
+        "import { it } from 'vitest';",
+        "import { existsSync } from 'node:fs';",
+        "it('finishes once scratch.txt exists', async () => {",
+        "  while (!existsSync('scratch.txt')) await new Promise((r) => setTimeout(r, 10));",
+        '}, 60_000);',
+      ].join('\n'),
+      'lingers.test.mjs': [
+        "import { afterAll, inject, it } from 'vitest';",
+        "import { readFileSync, rmSync, writeFileSync } from 'node:fs';",
+        "afterAll(() => rmSync('scratch.txt'));",
+        "it('keeps scratch.txt until the guard has seen it', async () => {",
+        "  writeFileSync('scratch.txt', 'x');",
+        "  const { log } = inject('untrackedGuard');",
+        "  while (!readFileSync(log, 'utf8').includes('scratch.txt')) await new Promise((r) => setTimeout(r, 10));",
+        '}, 60_000);',
+      ].join('\n'),
+    }, { minWorkers: 2, maxWorkers: 2 });
+    const output = run.stdout + run.stderr;
+
+    expect(run.status, output).not.toBe(0);
+    expect(output).toContain('scratch.txt (first seen when brief.test.mjs finished)');
   }, 120_000);
 
   it('passes a run in a checkout that already had untracked files before it started', () => {

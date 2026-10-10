@@ -456,10 +456,10 @@ describe("createWorld — one construction, every host", () => {
     const spam = worldAction<TinyWorld>("spam")
       .needs(() => [])
       .execute((_args, ctx) => {
-        ctx.world.schedule({ delayMs: 1, action: "spam" });
-        ctx.world.schedule({ delayMs: 2, action: "spam" });
+        ctx.world.schedule({ delayMs: 1, action: "sweep" });
+        ctx.world.schedule({ delayMs: 2, action: "sweep" });
       });
-    const definition = bundle({ world: { maxPlayers: 2, view: () => [], actions: [spam] } });
+    const definition = bundle({ world: { maxPlayers: 2, view: () => [], actions: [spam, sweep] } });
     const { runner } = createWorld({
       elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
       definition,
@@ -499,11 +499,11 @@ describe("createWorld — one construction, every host", () => {
       .needs(() => [])
       .execute((_args, ctx) => {
         ctx.world.cancel("raid");
-        ctx.world.schedule({ delayMs: 60_000, key: "raid", action: "rearm" });
+        ctx.world.schedule({ delayMs: 60_000, key: "raid", action: "sweep" });
       });
     const { runner } = createWorld({
       elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
-      definition: bundle({ world: { maxPlayers: 2, view: () => [], actions: [rearm] } }),
+      definition: bundle({ world: { maxPlayers: 2, view: () => [], actions: [rearm, sweep] } }),
       seed: "s",
       seats: new Map([["p1", 1]]),
     });
@@ -522,7 +522,7 @@ describe("createWorld — one construction, every host", () => {
 
     expect(result.schedules).toEqual([
       { cancel: "raid" },
-      { delayMs: 60_000, key: "raid", action: "rearm" },
+      { delayMs: 60_000, key: "raid", action: "sweep" },
     ]);
   });
 
@@ -616,6 +616,12 @@ describe("createWorld — one construction, every host", () => {
         });
     const cases = [
       { action: arming({ delayMs: 1, action: "sweeep" }), code: "schedule-unknown-action" },
+      // A registered SEATED action: it acts for a player, and a due event has
+      // none, so it is refused here rather than when it comes due (#608).
+      {
+        action: arming({ delayMs: 1, action: "pokeThenSchedule" }),
+        code: "schedule-seated-action",
+      },
       { action: arming({ delayMs: 1, action: longName }), code: "schedule-action-too-long" },
       {
         action: arming({ delayMs: 1, action: "sweep", key: "raid\uD83D" }),
@@ -698,6 +704,44 @@ describe("createWorld — one construction, every host", () => {
     ).rejects.toThrow(/"sweeep".*sweep/s);
   });
 
+  it("names the clock actions a world CAN schedule when it refuses a seated one, and still schedules a clock action (#608)", async () => {
+    const seated = worldAction<TinyWorld>("seated")
+      .needs(() => [])
+      .execute((_args, ctx) => {
+        ctx.world.schedule({ delayMs: 1, action: "seated" });
+      });
+    const clocked = worldAction<TinyWorld>("clocked")
+      .needs(() => [])
+      .execute((_args, ctx) => {
+        ctx.world.schedule({ delayMs: 1, action: "sweep" });
+      });
+    const { runner } = createWorld({
+      elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
+      definition: bundle({
+        world: { maxPlayers: 2, view: () => [], actions: [seated, clocked, sweep] },
+      }),
+      seed: "s",
+      seats: new Map([["p1", 1]]),
+    });
+    const command = (name: string) => ({
+      player: "p1",
+      command: { name, args: {} },
+      timing: null,
+      arrivedAt: 0,
+      allowance: { unkeyed: 0, keys: [], worldPending: 0 },
+      presence: [],
+      activity: null,
+      declaredActivity: [],
+      declaredNotices: [],
+    });
+
+    await expect(runner.apply(command("seated"))).rejects.toThrow(
+      /"seated".*acts for a player.*clock actions it can schedule are: sweep\./s,
+    );
+    const admitted = await runner.apply(command("clocked"));
+    expect(admitted.schedules).toEqual([{ delayMs: 1, action: "sweep" }]);
+  });
+
   it("refuses a misspelled action as unknown, not as a full queue, and a malformed request by its shape first (#603)", async () => {
     // The world and the player are both at their caps, so a request that got
     // as far as the caps would be refused as a full queue -- which tells an
@@ -712,6 +756,11 @@ describe("createWorld — one construction, every host", () => {
     const cases = [
       { request: { delayMs: 1, action: "sweeep" }, code: "schedule-unknown-action" },
       { request: { delayMs: 1, action: "sweeep", key: "k" }, code: "schedule-unknown-action" },
+      // A seated action at the caps is refused as seated, not as a full queue
+      // (#608), and by its shape first when its shape is wrong too.
+      { request: { delayMs: 1, action: "arm" }, code: "schedule-seated-action" },
+      { request: { delayMs: 1, action: "arm", key: "k" }, code: "schedule-seated-action" },
+      { request: { delayMs: -1, action: "arm" }, code: "invalid-schedule-delay" },
       // A request wrong in its own shape AND naming nothing registered is
       // refused for its shape: that is the check both sides of the isolate
       // share, so the engine and the host give the same answer.
