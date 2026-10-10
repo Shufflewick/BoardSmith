@@ -18,6 +18,7 @@ import { useToast } from '../../ui/composables/useToast.js';
 import { applyTheme } from '../../ui/theme.js';
 import { loadDevClientId, TABLE_CLIENT_KEY } from './dev-client-id.js';
 import { DEV_HOST_WS_PATH } from './socket-path.js';
+import { useMenuDismiss } from './use-menu-dismiss.js';
 import { valuesEqual, choiceValueKey } from '../../engine/action/choice-matching.js';
 import { getDisplayFromValue } from '../../ui/composables/actionControllerHelpers.js';
 
@@ -448,22 +449,11 @@ function toggleDebug(): void {
   postToGame({ type: 'dev-debug-toggle' });
 }
 
-// ── Dismissal: Escape key closes both disclosure widgets; document click
-// closes the seat switcher when clicking outside its container (WR-02).
+// ── Dismissal: the seat switcher closes like any dev-bar menu (#610); Escape
+// also closes the table setup panel.
+useMenuDismiss(seatSwitcherOpen, seatSwitcherRef);
 function handleChromeKeydown(e: KeyboardEvent) {
-  if (e.key !== 'Escape') return;
-  seatSwitcherOpen.value = false;
-  tableSetupOpen.value = false;
-}
-
-function handleChromeClick(e: MouseEvent) {
-  if (
-    seatSwitcherOpen.value &&
-    seatSwitcherRef.value &&
-    !seatSwitcherRef.value.contains(e.target as Node)
-  ) {
-    seatSwitcherOpen.value = false;
-  }
+  if (e.key === 'Escape') tableSetupOpen.value = false;
 }
 
 /**
@@ -518,7 +508,6 @@ onMounted(() => {
   applyTheme();
   window.addEventListener('message', onWindowMessage);
   document.addEventListener('keydown', handleChromeKeydown);
-  document.addEventListener('click', handleChromeClick);
   connect();
 
   // DEV-02: Expose synchronous read-only devtools global for agents and tooling.
@@ -544,7 +533,6 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('message', onWindowMessage);
   document.removeEventListener('keydown', handleChromeKeydown);
-  document.removeEventListener('click', handleChromeClick);
   closedByUs = true;
   if (heartbeatTimer !== null) clearInterval(heartbeatTimer);
   if (reconnectTimer) clearTimeout(reconnectTimer);
