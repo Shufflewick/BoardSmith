@@ -24,7 +24,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   loop,
   simultaneousActionStep,
   type GameOptions,
@@ -106,12 +105,12 @@ class QuarryGame extends Game<QuarryGame, Player> {
           ctx.game.ran.push(`loot:${ctx.player.seat}`);
         }),
     );
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({
         maxIterations: 10,
         do: simultaneousActionStep({ actions: ['build', 'take', 'return', 'sap', 'rest', 'dig', 'scout'] }),
       }),
-    }));
+    });
   }
 }
 

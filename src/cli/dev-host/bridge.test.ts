@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Game, Player, Action, defineFlow, actionStep, loop, type FollowUpOffer, type GameOptions, type GameStateSnapshot } from '../../engine/index.js';
+import { Game, Player, Action, actionStep, loop, type FollowUpOffer, type GameOptions, type GameStateSnapshot } from '../../engine/index.js';
 import {
   executeOp,
   type ExecutableOp,
@@ -23,14 +23,12 @@ class SimpleGame extends Game<SimpleGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 1000,
-          do: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
-        }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 1000,
+        do: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
       }),
-    );
+    });
   }
 }
 

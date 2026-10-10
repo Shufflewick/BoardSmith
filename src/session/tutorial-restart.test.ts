@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createHeadlessSession } from './headless-session.js';
-import { Game, Player, Action, defineFlow, actionStep, eachPlayer, loop, sequence, execute, type GameOptions } from '../engine/index.js';
+import { Game, Player, Action, actionStep, eachPlayer, loop, sequence, execute, type GameOptions } from '../engine/index.js';
 import type { TutorialDefinition } from '../engine/index.js';
 
 /**
@@ -15,26 +15,24 @@ class TwoSeatTutorialGame extends Game<TwoSeatTutorialGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
-    this.setFlow(
-      defineFlow({
-        root: sequence(
-          execute((ctx) => {
-            ctx.game.openings++;
+    this.setFlow({
+      root: sequence(
+        execute((ctx) => {
+          ctx.game.openings++;
+        }),
+        loop({
+          maxIterations: 20,
+          do: eachPlayer({
+            do: sequence(
+              actionStep({ actions: ['pass'] }),
+              execute((ctx) => {
+                ctx.game.turns++;
+              }),
+            ),
           }),
-          loop({
-            maxIterations: 20,
-            do: eachPlayer({
-              do: sequence(
-                actionStep({ actions: ['pass'] }),
-                execute((ctx) => {
-                  ctx.game.turns++;
-                }),
-              ),
-            }),
-          }),
-        ),
-      }),
-    );
+        }),
+      ),
+    });
   }
 }
 

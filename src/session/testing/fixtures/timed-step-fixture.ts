@@ -22,7 +22,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -72,11 +71,9 @@ export class DeployGame extends Game<DeployGame, Player> {
         return { success: true };
       }),
     );
-    this.setFlow(
-      defineFlow<DeployGame>({
-        root: loop({ name: 'rounds', maxIterations: 3, do: roundStep(shape, limit) }),
-      }),
-    );
+    this.setFlow({
+      root: loop({ name: 'rounds', maxIterations: 3, do: roundStep(shape, limit) }),
+    });
   }
 }
 

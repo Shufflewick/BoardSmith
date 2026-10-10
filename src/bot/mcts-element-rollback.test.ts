@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Piece, Space, Action, defineFlow, loop, actionStep, createSnapshot, type GameOptions } from '../engine/index.js';
+import { Game, Player, Piece, Space, Action, loop, actionStep, createSnapshot, type GameOptions } from '../engine/index.js';
 import { MCTSBot } from './mcts-bot.js';
 
 // ============================================================================
@@ -41,12 +41,12 @@ class DrawGame extends Game<DrawGame, Player> {
         }),
     );
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({
         maxIterations: 20,
         do: actionStep({ actions: ['draw'], player: (ctx) => ctx.game.getPlayer(1)! }),
       }),
-    }));
+    });
   }
 }
 

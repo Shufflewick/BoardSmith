@@ -8,7 +8,7 @@
  * view, so no host has to dig a commit out of a view or strip a secret off one.
  */
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions, type PlayerViewFunction } from '../engine/index.js';
+import { Game, Player, Action, actionStep, loop, type GameOptions, type PlayerViewFunction } from '../engine/index.js';
 import { executeOp, type GameDefinitionLike, type StateEnvelope } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { succeeded } from './op-result.test-helper.js';
@@ -31,15 +31,13 @@ class RecordingGame extends Game<RecordingGame, Player> {
         return { success: true };
       }),
     );
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => !this.isFinished(),
-          maxIterations: 10,
-          do: actionStep({ actions: ['finish'], player: (ctx) => ctx.game.getPlayer(1)! }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: () => !this.isFinished(),
+        maxIterations: 10,
+        do: actionStep({ actions: ['finish'], player: (ctx) => ctx.game.getPlayer(1)! }),
       }),
-    );
+    });
   }
 }
 

@@ -150,6 +150,31 @@ describe('parseExecutorOp (#530)', () => {
     expect(parseExecutorOp({ type: 'botTurn', seats: [{ seat: 2 }] }).ok).toBe(true);
     expect(parseExecutorOp({ type: 'selectionStep', player: 1, selectionName: 's', value: null, boundaryKey: KEY }).ok).toBe(true);
   });
+
+  it('treats an optional field set to undefined as left out, as the type and the wire do (#555)', () => {
+    // These literals type-check as ExecutorOp, so the parser must accept them.
+    const inProcess: ExecutorOp[] = [
+      { type: 'selectionStep', player: 1, selectionName: 's', value: 1, actionName: undefined, boundaryKey: KEY },
+      { type: 'selectionStep', player: 1, selectionName: 's', value: 1, initialArgs: undefined, boundaryKey: KEY },
+      { type: 'botTurn', seats: [{ seat: 1, level: undefined }] },
+    ];
+    for (const op of inProcess) {
+      const parsed = parseExecutorOp(op);
+      expect(parsed, JSON.stringify(op)).toEqual({ ok: true, op });
+      // The same op after a network hop, where JSON drops the undefined keys.
+      expect(parseExecutorOp(JSON.parse(JSON.stringify(op))).ok).toBe(true);
+    }
+  });
+
+  it('still refuses a required field set to undefined, which the type does not allow (#555)', () => {
+    // @ts-expect-error -- actionName is required on an action op, so undefined does not type-check.
+    const op: ExecutorOp = { type: 'action', actionName: undefined, player: 1, args: {}, boundaryKey: KEY };
+    expect(parseExecutorOp(op)).toEqual({
+      ok: false,
+      error: 'The "action" op\'s "actionName" must be a non-empty string, but it is undefined.',
+    });
+    expect(parseExecutorOp({ type: 'action', actionName: 'go', player: 1, args: {}, boundaryKey: undefined }).ok).toBe(false);
+  });
 });
 
 type Succeeded<T extends Op['type']> = Extract<OpResultFor<T>, { success: true }>;

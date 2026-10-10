@@ -23,7 +23,6 @@ import {
   Game,
   Player,
   actionStep,
-  defineFlow,
   loop,
   type GameOptions,
 } from '../../engine/index.js';
@@ -55,19 +54,17 @@ class PickGame extends Game<PickGame, Player> {
           ctx.game.pairs.push([args.first as string, args.second as string]);
         }),
     );
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 1000,
-          while: (ctx) => !ctx.game.isFinished(),
-          do: actionStep({
-            actions: ['move', 'pair'],
-            player: (ctx) => ctx.game.getPlayer(1)!,
-            repeatUntil: () => false,
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 1000,
+        while: (ctx) => !ctx.game.isFinished(),
+        do: actionStep({
+          actions: ['move', 'pair'],
+          player: (ctx) => ctx.game.getPlayer(1)!,
+          repeatUntil: () => false,
         }),
       }),
-    );
+    });
   }
 }
 

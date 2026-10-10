@@ -1622,11 +1622,13 @@ import { loop, eachPlayer, actionStep, sequence, type FlowDefinition } from 'boa
 export function createGameFlow(game: MyGame): FlowDefinition<MyGame> {
   return {
     root: /* flow node */,
-    isComplete: (ctx) => game.isFinished(),
-    getWinners: (ctx) => game.getWinners(),
   };
 }
 ```
+
+A flow definition is a plain object. It says how play proceeds, not how it
+ends: the end and the winners are declared on your `Game` (see "Ending the
+game" below).
 
 **Two things to know about how the type reaches your callbacks.**
 
@@ -1668,9 +1670,26 @@ A game ends the moment it is finished, wherever the flow is. Any of these
 finishes it:
 
 - an action or an `execute()` calls `game.finish([winner])`,
-- something runs the `END_GAME` command,
-- your game's own `isFinished()` override starts returning true,
-- the flow's `isComplete` returns true, or the flow runs out of nodes.
+- your game's own `isFinished()` override starts returning true, or
+- the flow runs out of nodes.
+
+**The game declares its end and its winners, and only the game.** Call
+`finish(winners)`, or override `isFinished()` and `getWinners()` on your `Game`
+subclass. Every reader takes the result from there: the host shows players
+`game.getWinners()`, and the bot's search and the benchmark score the same
+seats. A flow definition has no `isComplete` or `getWinners`.
+
+```typescript
+class MyGame extends Game<MyGame, MyPlayer> {
+  override isFinished(): boolean {
+    return this.players.some((p) => p.score >= 10);
+  }
+
+  override getWinners(): MyPlayer[] {
+    return this.isFinished() ? this.players.filter((p) => p.score >= 10) : [];
+  }
+}
+```
 
 The flow engine checks before every node, so once the game is finished no
 further node runs and no seat is offered an action, not even a `followUp` the
@@ -2187,8 +2206,6 @@ export function createCribbageFlow(game: CribbageGame): FlowDefinition {
         execute(() => game.rotateDealer()),
       ),
     }),
-    isComplete: () => game.isFinished(),
-    getWinners: () => game.getWinners(),
   };
 }
 ```
@@ -2214,8 +2231,6 @@ export function createHexFlow(game: HexGame): FlowDefinition {
         }),
       }),
     }),
-    isComplete: () => game.isFinished(),
-    getWinners: () => game.winner ? [game.winner] : [],
   };
 }
 ```

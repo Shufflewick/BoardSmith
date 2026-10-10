@@ -21,7 +21,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   actionStep,
   flowBoundaryKey,
   type BoundaryKeyState,
@@ -66,15 +65,13 @@ class ShopGame extends Game<ShopGame, Player> {
         return { success: true };
       }),
     );
-    this.setFlow(
-      defineFlow({
-        root: actionStep({
-          actions: ['buySecretly', 'buy'],
-          player: (ctx) => ctx.game.getPlayer(ctx.game.shopped ? 2 : 1)!,
-          repeatUntil: () => false,
-        }),
+    this.setFlow({
+      root: actionStep({
+        actions: ['buySecretly', 'buy'],
+        player: (ctx) => ctx.game.getPlayer(ctx.game.shopped ? 2 : 1)!,
+        repeatUntil: () => false,
       }),
-    );
+    });
   }
 }
 

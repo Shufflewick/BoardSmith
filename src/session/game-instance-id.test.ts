@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, defineFlow, actionStep, type GameOptions } from '../engine/index.js';
+import { Game, Player, Action, actionStep, type GameOptions } from '../engine/index.js';
 import type { GameStateSnapshot } from '../engine/utils/snapshot.js';
 import { GameRunner } from '../runtime/index.js';
 import { createHeadlessSession } from './headless-session.js';
@@ -39,16 +39,14 @@ class CallGame extends Game<CallGame, Player> {
           return { success: true };
         }),
     );
-    this.setFlow(
-      defineFlow({
-        root: actionStep({
-          actions: ['call'],
-          player: (ctx) => ctx.game.getPlayer(1)!,
-          repeatUntil: () => false,
-          maxMoves: 10,
-        }),
+    this.setFlow({
+      root: actionStep({
+        actions: ['call'],
+        player: (ctx) => ctx.game.getPlayer(1)!,
+        repeatUntil: () => false,
+        maxMoves: 10,
       }),
-    );
+    });
   }
 }
 

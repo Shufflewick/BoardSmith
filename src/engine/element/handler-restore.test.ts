@@ -27,7 +27,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   actionStep,
   type GameOptions,
 } from '../index.js';
@@ -89,14 +88,14 @@ class HandlerGame extends Game<HandlerGame, Player> {
     );
 
     this.setFlow(
-      defineFlow({
+      {
         root: actionStep({
           actions: ['moveIn', 'moveOut'],
           player: (ctx) => ctx.game.getPlayer(1)!,
           repeatUntil: () => false,
           maxMoves: 10,
         }),
-      })
+      }
     );
   }
 }
@@ -219,14 +218,14 @@ class CrossWireGame extends Game<CrossWireGame, Player> {
     );
 
     this.setFlow(
-      defineFlow({
+      {
         root: actionStep({
           actions: ['intoA', 'aToB'],
           player: (ctx) => ctx.game.getPlayer(1)!,
           repeatUntil: () => false,
           maxMoves: 10,
         }),
-      })
+      }
     );
   }
 }
@@ -296,14 +295,14 @@ class StaleRefGame extends Game<StaleRefGame, Player> {
     );
 
     this.setFlow(
-      defineFlow({
+      {
         root: actionStep({
           actions: ['deliver'],
           player: (ctx) => ctx.game.getPlayer(1)!,
           repeatUntil: () => false,
           maxMoves: 10,
         }),
-      })
+      }
     );
   }
 }
@@ -402,14 +401,14 @@ class PerPlayerGame extends Game<PerPlayerGame, Player> {
     );
 
     this.setFlow(
-      defineFlow({
+      {
         root: actionStep({
           actions: ['dealTo1', 'dealTo2'],
           player: (ctx) => ctx.game.getPlayer(1)!,
           repeatUntil: () => false,
           maxMoves: 10,
         }),
-      })
+      }
     );
   }
 }
@@ -503,14 +502,14 @@ class SameNameGame extends Game<SameNameGame, Player> {
     );
 
     this.setFlow(
-      defineFlow({
+      {
         root: actionStep({
           actions: ['stashA', 'stashB'],
           player: (ctx) => ctx.game.getPlayer(1)!,
           repeatUntil: () => false,
           maxMoves: 10,
         }),
-      })
+      }
     );
   }
 }

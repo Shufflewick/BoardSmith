@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CommitGame } from '../../session/testing/fixtures/simultaneous-fixture.js';
-import { Game, Player, Action, FlowEngine, defineFlow, simultaneousActionStep } from '../index.js';
+import { Game, Player, Action, FlowEngine, type FlowDefinition, simultaneousActionStep } from '../index.js';
 
 /**
  * SIM-03 / D21 regression: once every awaiting seat has individually
@@ -92,7 +92,7 @@ describe('SIM-03 / D21 adversarial: variant route via auto-completed availableAc
         }),
     );
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: simultaneousActionStep({
         actions: ['commit'],
         // Deliberately NO playerDone -- completion for each seat comes
@@ -100,7 +100,7 @@ describe('SIM-03 / D21 adversarial: variant route via auto-completed availableAc
         // (engine.ts resumeSimultaneousAction, not the playerDone branch).
         allDone: () => game.roundClosed,
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     const start = engine.start();

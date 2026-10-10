@@ -19,7 +19,7 @@
  * session.
  */
 import { describe, it, expect } from 'vitest';
-import { Game, Space, Piece, Player, Action, defineFlow, actionStep, type GameOptions } from '../engine/index.js';
+import { Game, Space, Piece, Player, Action, actionStep, type GameOptions } from '../engine/index.js';
 import { createBot } from './index.js';
 import { GameRunner } from '../runtime/runner.js';
 
@@ -46,7 +46,7 @@ class BlindGame extends Game<BlindGame, Player> {
         .chooseElement('secret', { from: (ctx) => (ctx.game as BlindGame).vault })
         .execute(() => {})
     );
-    this.setFlow(defineFlow({ root: actionStep({ actions: ['reveal'] }) }));
+    this.setFlow({ root: actionStep({ actions: ['reveal'] }) });
   }
 }
 
@@ -92,7 +92,7 @@ describe('a bot that CAN see its choices is unaffected', () => {
           .chooseElement('secret', { from: (ctx) => (ctx.game as OpenGame).vault })
           .execute(() => {})
       );
-      this.setFlow(defineFlow({ root: actionStep({ actions: ['reveal'] }) }));
+      this.setFlow({ root: actionStep({ actions: ['reveal'] }) });
     }
   }
 

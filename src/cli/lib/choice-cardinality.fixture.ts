@@ -8,7 +8,7 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
+  type FlowDefinition,
   loop,
   eachPlayer,
   actionStep,
@@ -27,14 +27,14 @@ interface TurnCounted {
 }
 
 /** Four turns of the named actions, then the game ends. */
-function shortFlow(actions: string[]) {
-  return defineFlow({
+function shortFlow(actions: string[]): FlowDefinition {
+  return {
     root: loop({
       while: (ctx) => (ctx.game as unknown as TurnCounted).turns < 4,
       maxIterations: 20,
       do: eachPlayer({ do: actionStep({ actions }) }),
     }),
-  });
+  };
 }
 
 /** Every action here does the same thing: burn a turn so the flow advances. */
@@ -145,7 +145,7 @@ export class UnfinishedWideGame extends Game<UnfinishedWideGame, Player> {
         .execute(burnTurn),
     );
 
-    this.setFlow(defineFlow({ root: simultaneousActionStep({ actions: ['shout'], playerDone: () => false }) }));
+    this.setFlow({ root: simultaneousActionStep({ actions: ['shout'], playerDone: () => false }) });
   }
 }
 
@@ -179,7 +179,7 @@ export class LateWideGame extends Game<LateWideGame, Player> {
     );
 
     this.setFlow(
-      defineFlow({ root: simultaneousActionStep({ actions: ['warmUp', 'shout'], playerDone: () => false }) }),
+      { root: simultaneousActionStep({ actions: ['warmUp', 'shout'], playerDone: () => false }) },
     );
   }
 }

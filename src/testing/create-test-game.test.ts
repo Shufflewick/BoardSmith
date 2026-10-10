@@ -9,7 +9,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -43,15 +42,13 @@ class CountGame extends Game<CountGame, CountPlayer> {
         }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: (ctx) => ctx.game.total < 6,
-          maxIterations: 50,
-          do: eachPlayer({ do: actionStep({ actions: ['claim'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: (ctx) => ctx.game.total < 6,
+        maxIterations: 50,
+        do: eachPlayer({ do: actionStep({ actions: ['claim'] }) }),
       }),
-    );
+    });
   }
 }
 

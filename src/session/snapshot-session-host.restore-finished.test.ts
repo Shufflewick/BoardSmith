@@ -8,7 +8,7 @@
  * a JSON round trip, the way a Durable Object's storage hands it back.
  */
 import { describe, it, expect, expectTypeOf } from 'vitest';
-import { Game, Player, Action, defineFlow, execute, loop, actionStep, type GameOptions } from '../engine/index.js';
+import { Game, Player, Action, execute, loop, actionStep, type GameOptions } from '../engine/index.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import {
   SnapshotSessionHost,
@@ -27,12 +27,13 @@ function finishedGameDef(winnerSeats: number[]): GameDefinitionLike {
     constructor(options: GameOptions) {
       super(options);
       this.registerAction(Action.create('noop').execute(() => ({ success: true })));
-      this.setFlow(
-        defineFlow({
-          root: execute(() => {}),
-          getWinners: (ctx) => winnerSeats.map((seat) => ctx.game.getPlayer(seat)!),
-        }),
-      );
+      this.setFlow({
+        root: execute(() => {}),
+      });
+    }
+
+    override getWinners(): Player[] {
+      return this.isFinished() ? winnerSeats.map((seat) => this.getPlayer(seat)!) : [];
     }
   }
   return { gameClass: FinishedGame, gameType: 'finished', minPlayers: 1, maxPlayers: 4 };
@@ -53,15 +54,13 @@ function actionFinishDef(flowEnds: boolean): GameDefinitionLike {
           this.finish([ctx.player as Player]);
         }),
       );
-      this.setFlow(
-        defineFlow({
-          root: loop({
-            maxIterations: 10,
-            while: (ctx) => !flowEnds || !ctx.game.isFinished(),
-            do: actionStep({ actions: ['win'] }),
-          }),
+      this.setFlow({
+        root: loop({
+          maxIterations: 10,
+          while: (ctx) => !flowEnds || !ctx.game.isFinished(),
+          do: actionStep({ actions: ['win'] }),
         }),
-      );
+      });
     }
   }
   return { gameClass: ActionFinishGame, gameType: 'action-finish', minPlayers: 1, maxPlayers: 4 };
@@ -85,7 +84,7 @@ function leaderDef(): GameDefinitionLike {
           this.points[seat] = (this.points[seat] ?? 0) + 1;
         }),
       );
-      this.setFlow(defineFlow({ root: loop({ maxIterations: 10, do: actionStep({ actions: ['win'] }) }) }));
+      this.setFlow({ root: loop({ maxIterations: 10, do: actionStep({ actions: ['win'] }) }) });
     }
 
     override getWinners(): Player[] {

@@ -106,6 +106,28 @@ describe('GameShell binds TableBoardProps onto a table board (#516)', () => {
     expectOneGatedValue(wrapper);
     wrapper.unmount();
   });
+
+  it('hands the board the players and own player of the state on screen, live and in history (#586)', async () => {
+    const { wrapper, debugPanel } = await tableWithDebugPanel();
+    expect(received.players).toEqual(DEBUG_TABLE_PLAYERS);
+    expect(received.myPlayer).toEqual(DEBUG_TABLE_PLAYERS[0]);
+
+    // The board draws the historical gameView and state, so the players it
+    // reads a score off are the snapshot's, not the live seat's.
+    const historicalPlayers = DEBUG_TABLE_PLAYERS.map((player) => ({ ...player, score: player.seat * 10 }));
+    debugPanel.vm.$emit('time-travel', { view: {}, players: historicalPlayers }, 3, null);
+    await nextTick();
+    expect(received.isViewingHistory).toBe(true);
+    expect(received.players).toEqual(historicalPlayers);
+    expect(received.players).toBe((received.state as { state: { players: unknown } }).state.players);
+    expect(received.myPlayer).toEqual(historicalPlayers[0]);
+
+    debugPanel.vm.$emit('time-travel', null, null, null);
+    await nextTick();
+    expect(received.players).toEqual(DEBUG_TABLE_PLAYERS);
+    expect(received.myPlayer).toEqual(DEBUG_TABLE_PLAYERS[0]);
+    wrapper.unmount();
+  });
 });
 
 describe('GameShell gates the #player-stats slot like the board (#554)', () => {

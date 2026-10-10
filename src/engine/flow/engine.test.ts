@@ -17,7 +17,6 @@ import {
   playerActions,
   switchOn,
   ifThen,
-  defineFlow,
   execute,
   setVar,
   noop,
@@ -105,12 +104,10 @@ describe('Flow Builders', () => {
   });
 
   it('should create flow definition', () => {
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: noop(),
-      isComplete: () => false,
-    });
+    };
     expect(flow.root).toBeDefined();
-    expect(flow.isComplete).toBeDefined();
   });
 
   it('should create turnLoop node', () => {
@@ -142,9 +139,9 @@ describe('FlowEngine', () => {
 
   describe('Basic Execution', () => {
     it('should complete empty sequence immediately', () => {
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: sequence(),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       const state = engine.start();
@@ -156,12 +153,12 @@ describe('FlowEngine', () => {
     it('should run setup function', () => {
       let setupCalled = false;
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         setup: () => {
           setupCalled = true;
         },
         root: sequence(),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       engine.start();
@@ -169,10 +166,15 @@ describe('FlowEngine', () => {
       expect(setupCalled).toBe(true);
     });
 
-    it('should complete when isComplete returns true', () => {
+    it("should complete as soon as the game's own isFinished() says so", () => {
       let iterations = 0;
+      class CountingGame extends TestGame {
+        override isFinished(): boolean {
+          return iterations >= 5;
+        }
+      }
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: loop({
           maxIterations: 10,
           while: () => true,
@@ -180,10 +182,9 @@ describe('FlowEngine', () => {
             iterations++;
           }),
         }),
-        isComplete: () => iterations >= 5,
-      });
+      };
 
-      const engine = new FlowEngine(game, flow);
+      const engine = new FlowEngine(new CountingGame({ playerCount: 2 }), flow);
       const state = engine.start();
 
       expect(state.complete).toBe(true);
@@ -195,7 +196,7 @@ describe('FlowEngine', () => {
     it('should execute loop while condition is true', () => {
       let count = 0;
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: loop({
           maxIterations: 10,
           while: () => count < 3,
@@ -203,7 +204,7 @@ describe('FlowEngine', () => {
             count++;
           }),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       engine.start();
@@ -214,7 +215,7 @@ describe('FlowEngine', () => {
     it('should throw when a loop hits its maxIterations safety cap', () => {
       let count = 0;
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: loop({
           name: 'runaway-loop',
           while: () => true,
@@ -223,7 +224,7 @@ describe('FlowEngine', () => {
             count++;
           }),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
 
@@ -240,7 +241,7 @@ describe('FlowEngine', () => {
     it('completes cleanly when its while condition becomes false below the cap', () => {
       let count = 0;
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: loop({
           name: 'condition-loop',
           while: () => count < 3,
@@ -249,7 +250,7 @@ describe('FlowEngine', () => {
             count++;
           }),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       const state = engine.start();
@@ -264,7 +265,7 @@ describe('FlowEngine', () => {
     it('still throws the loud safety-assertion error for a bounded loop that exceeds its numeric maxIterations', () => {
       let count = 0;
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: loop({
           name: 'bounded-runaway-loop',
           while: () => true,
@@ -273,7 +274,7 @@ describe('FlowEngine', () => {
             count++;
           }),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
 
@@ -295,7 +296,7 @@ describe('FlowEngine', () => {
 
       game.registerAction(Action.create('tick').execute(() => ({ success: true })));
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: loop({
           name: 'unbounded-loop',
           unbounded: true,
@@ -307,7 +308,7 @@ describe('FlowEngine', () => {
             actionStep({ actions: ['tick'], turnScope: 'restart' })
           ),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       let state = engine.start();
@@ -334,14 +335,14 @@ describe('FlowEngine', () => {
     // Distinguished from Test D by asserting the run()-level message (not the
     // per-loop cap-hit message), since an unbounded loop's own cap is Infinity.
     it('the whole-flow run() tripwire still fires for a stuck unbounded loop (not the per-loop cap)', () => {
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: loop({
           name: 'stuck-unbounded-loop',
           unbounded: true,
           while: () => true,
           do: execute(() => {}),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
 
@@ -360,14 +361,14 @@ describe('FlowEngine', () => {
     it('should execute repeat fixed times', () => {
       let count = 0;
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: repeat(
           4,
           execute(() => {
             count++;
           })
         ),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       engine.start();
@@ -382,9 +383,9 @@ describe('FlowEngine', () => {
           .execute(() => ({ success: true }))
       );
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: repeat(2, actionStep({ actions: ['test'], turnScope: 'restart' })),
-      });
+      };
 
       const engine1 = new FlowEngine(game, flow);
       let state = engine1.start();
@@ -404,14 +405,14 @@ describe('FlowEngine', () => {
     it('should iterate through all players', () => {
       const visitedPlayers: number[] = [];
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: eachPlayer({
           name: 'player',
           do: execute((ctx) => {
             visitedPlayers.push(ctx.player!.seat);
           }),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       engine.start();
@@ -422,14 +423,14 @@ describe('FlowEngine', () => {
     it('should filter players', () => {
       const visitedPlayers: number[] = [];
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: eachPlayer({
           filter: (p) => p.seat !== 2,  // Skip player at seat 2
           do: execute((ctx) => {
             visitedPlayers.push(ctx.player!.seat);
           }),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       engine.start();
@@ -440,14 +441,14 @@ describe('FlowEngine', () => {
     it('should iterate backward', () => {
       const visitedPlayers: number[] = [];
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: eachPlayer({
           direction: 'backward',
           do: execute((ctx) => {
             visitedPlayers.push(ctx.player!.seat);
           }),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       engine.start();
@@ -465,12 +466,12 @@ describe('FlowEngine', () => {
         })
       );
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: eachPlayer({
           filter: (player) => player.isActive,
           do: actionStep({ actions: ['act'] , turnScope: 'restart' }),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       let state = engine.start();
@@ -485,14 +486,14 @@ describe('FlowEngine', () => {
         const fourPlayerGame = new TestGame({ playerCount: 4 });
         const visitedPlayers: number[] = [];
 
-        const flow = defineFlow({
+        const flow: FlowDefinition = {
           root: eachPlayer({
             startingPlayer: (ctx) => ctx.game.getPlayerOrThrow(3),
             do: execute((ctx) => {
               visitedPlayers.push(ctx.player!.seat);
             }),
           }),
-        });
+        };
 
         const engine = new FlowEngine(fourPlayerGame, flow);
         engine.start();
@@ -511,7 +512,7 @@ describe('FlowEngine', () => {
         const fourPlayerGame = new TestGame({ playerCount: 4 });
         const visitedPlayers: number[] = [];
 
-        const flow = defineFlow({
+        const flow: FlowDefinition = {
           root: eachPlayer({
             startingPlayer: (ctx) => ctx.game.getPlayerOrThrow(2),
             filter: (p) => p.seat !== 2,
@@ -519,7 +520,7 @@ describe('FlowEngine', () => {
               visitedPlayers.push(ctx.player!.seat);
             }),
           }),
-        });
+        };
 
         const engine = new FlowEngine(fourPlayerGame, flow);
         engine.start();
@@ -531,13 +532,13 @@ describe('FlowEngine', () => {
         const fourPlayerGame = new TestGame({ playerCount: 4 });
         const visitedPlayers: number[] = [];
 
-        const flow = defineFlow({
+        const flow: FlowDefinition = {
           root: eachPlayer({
             do: execute((ctx) => {
               visitedPlayers.push(ctx.player!.seat);
             }),
           }),
-        });
+        };
 
         const engine = new FlowEngine(fourPlayerGame, flow);
         engine.start();
@@ -551,7 +552,7 @@ describe('FlowEngine', () => {
     it('should iterate through collection', () => {
       const items: number[] = [];
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: forEach({
           collection: [10, 20, 30],
           as: 'num',
@@ -559,7 +560,7 @@ describe('FlowEngine', () => {
             items.push(ctx.get('num') as number);
           }),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       engine.start();
@@ -577,7 +578,7 @@ describe('FlowEngine', () => {
 
       const cardNames: string[] = [];
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: forEach({
           collection: (ctx) => [...ctx.game.all(Card)],
           as: 'card',
@@ -585,7 +586,7 @@ describe('FlowEngine', () => {
             cardNames.push((ctx.get('card') as Card).name!);
           }),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       engine.start();
@@ -605,7 +606,7 @@ describe('FlowEngine', () => {
 
       const visitedIds: number[] = [];
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: forEach({
           collection: (ctx) => [...ctx.game.all(Card)],
           as: 'card',
@@ -616,7 +617,7 @@ describe('FlowEngine', () => {
             card.putInto(pile);
           }),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       engine.start();
@@ -640,7 +641,7 @@ describe('FlowEngine', () => {
       game.registerAction(Action.create('step').execute(() => ({ success: true })));
 
       const visitedIds: number[] = [];
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: forEach({
           collection: (ctx) => [...ctx.game.all(Card)],
           as: 'card',
@@ -651,7 +652,7 @@ describe('FlowEngine', () => {
             actionStep({ actions: ['step'], turnScope: 'restart' })
           ),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       engine.start(); // iteration 1 begins, awaiting 'step'
@@ -686,7 +687,7 @@ describe('FlowEngine', () => {
         value: i + 1,
       }));
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: forEach({
           collection: (ctx) => [...ctx.game.all(Card)],
           as: 'card',
@@ -700,21 +701,21 @@ describe('FlowEngine', () => {
             }
           }),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       expect(() => engine.start()).toThrow(/no longer exists in the game tree/);
     });
 
     it('should throw on collection items that are neither GameElements nor JSON primitives', () => {
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: forEach({
           // Cast past the compile-time constraint to exercise the runtime guard.
           collection: [{ round: 1 }, { round: 2 }] as unknown as number[],
           as: 'r',
           do: noop(),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       expect(() => engine.start()).toThrow(/not a GameElement or JSON primitive/);
@@ -725,7 +726,7 @@ describe('FlowEngine', () => {
     it('should set and get variables', () => {
       let finalValue: number | undefined;
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: sequence(
           setVar('counter', 0),
           setVar('counter', (ctx: FlowContext) => (ctx.get('counter') as number) + 1),
@@ -734,7 +735,7 @@ describe('FlowEngine', () => {
             finalValue = ctx.get('counter') as number;
           })
         ),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       engine.start();
@@ -747,7 +748,7 @@ describe('FlowEngine', () => {
     it('should execute then branch when condition is true', () => {
       let branch = '';
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: ifThen({
           condition: () => {
             branch = 'then'; // Set directly in condition
@@ -755,7 +756,7 @@ describe('FlowEngine', () => {
           },
           then: sequence(), // Empty sequence
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       engine.start();
@@ -764,13 +765,13 @@ describe('FlowEngine', () => {
     });
 
     it('should execute else branch when condition is false', () => {
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: ifThen({
           condition: () => false,
           then: sequence(),
           else: setVar('test', 'else'),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       const state = engine.start();
@@ -779,7 +780,7 @@ describe('FlowEngine', () => {
     });
 
     it('should handle switch cases', () => {
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: switchOn({
           on: () => 'b',
           cases: {
@@ -788,7 +789,7 @@ describe('FlowEngine', () => {
             c: setVar('result', 'case-c'),
           },
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       const state = engine.start();
@@ -797,7 +798,7 @@ describe('FlowEngine', () => {
     });
 
     it('should use switch default case', () => {
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: switchOn({
           on: () => 'x',
           cases: {
@@ -805,7 +806,7 @@ describe('FlowEngine', () => {
           },
           default: setVar('result', 'default'),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       const state = engine.start();
@@ -814,7 +815,7 @@ describe('FlowEngine', () => {
     });
 
     it('should throw an actionable error when switchOn has no matching case and no default', () => {
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: switchOn({
           on: () => 'combatt',
           cases: {
@@ -823,7 +824,7 @@ describe('FlowEngine', () => {
             combat: setVar('result', 'case-combat'),
           },
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
 
@@ -835,7 +836,7 @@ describe('FlowEngine', () => {
     });
 
     it('should execute the matched branch when switchOn has a matching case (control)', () => {
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: switchOn({
           on: () => 'play',
           cases: {
@@ -844,7 +845,7 @@ describe('FlowEngine', () => {
             combat: setVar('result', 'case-combat'),
           },
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       const state = engine.start();
@@ -853,7 +854,7 @@ describe('FlowEngine', () => {
     });
 
     it('should execute the default branch when switchOn has no matching case but has a default (control)', () => {
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: switchOn({
           on: () => 'combatt',
           cases: {
@@ -863,7 +864,7 @@ describe('FlowEngine', () => {
           },
           default: setVar('result', 'default'),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       const state = engine.start();
@@ -885,11 +886,11 @@ describe('FlowEngine', () => {
     });
 
     it('should pause for player action', () => {
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: actionStep({
           actions: ['test'],
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       const state = engine.start();
@@ -902,7 +903,7 @@ describe('FlowEngine', () => {
     it('should resume after action', () => {
       let afterAction = false;
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: sequence(
           actionStep({
             actions: ['test'],
@@ -911,7 +912,7 @@ describe('FlowEngine', () => {
             afterAction = true;
           })
         ),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       let state = engine.start();
@@ -929,11 +930,11 @@ describe('FlowEngine', () => {
         Action.create('other').execute(() => ({ success: true }))
       );
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: actionStep({
           actions: ['test'],
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       let state = engine.start();
@@ -949,12 +950,12 @@ describe('FlowEngine', () => {
     it('should skip if condition is met', () => {
       let actionReached = false;
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: actionStep({
           actions: ['test'],
           skipIf: () => true,
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       const state = engine.start();
@@ -966,7 +967,7 @@ describe('FlowEngine', () => {
     it('should repeat until condition', () => {
       let actionCount = 0;
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: sequence(
           setVar('count', 0),
           actionStep({
@@ -974,7 +975,7 @@ describe('FlowEngine', () => {
             repeatUntil: (ctx) => (ctx.get('count') as number) >= 2,
           })
         ),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       let state = engine.start();
@@ -999,7 +1000,7 @@ describe('FlowEngine', () => {
         Action.create('second').execute(() => ({ success: true }))
       );
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: sequence(
           actionStep({ actions: ['first'] }),
           actionStep({
@@ -1008,7 +1009,7 @@ describe('FlowEngine', () => {
             turnScope: 'restart',
           })
         ),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       let state = engine.start();
@@ -1024,7 +1025,7 @@ describe('FlowEngine', () => {
       const playerA = game.getPlayer(1)!;
       const playerB = game.getPlayer(2)!;
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: eachPlayer({
           filter: (p) => p === playerA,
           do: sequence(
@@ -1041,7 +1042,7 @@ describe('FlowEngine', () => {
             }),
           ),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       let state = engine.start();
@@ -1062,7 +1063,7 @@ describe('FlowEngine', () => {
       const playerB = game.getPlayer(2)!;
       const playerC = game.getPlayer(3)!;
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: eachPlayer({
           do: sequence(
             // Override to player C for every player's turn
@@ -1078,7 +1079,7 @@ describe('FlowEngine', () => {
             }),
           ),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       let state = engine.start();
@@ -1102,13 +1103,13 @@ describe('FlowEngine', () => {
 
   describe('State Serialization', () => {
     it('should serialize flow position', () => {
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: sequence(
           setVar('step', 1),
           actionStep({ actions: ['test'] }),
           setVar('step', 2),
         ),
-      });
+      };
 
       // Register action
       game.registerAction(
@@ -1125,12 +1126,12 @@ describe('FlowEngine', () => {
     });
 
     it('should include variables in position', () => {
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: sequence(
           setVar('myVar', 42),
           actionStep({ actions: ['test'] }),
         ),
-      });
+      };
 
       game.registerAction(
         Action.create('test')
@@ -1149,13 +1150,13 @@ describe('FlowEngine', () => {
         Action.create('elseAction').execute(() => ({ success: true }))
       );
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: ifThen({
           condition: () => false,
           then: actionStep({ actions: ['thenAction'] }),
           else: actionStep({ actions: ['elseAction'] }),
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       const state = engine.start();
@@ -1174,12 +1175,12 @@ describe('FlowEngine', () => {
         Action.create('count').execute(() => ({ success: true }))
       );
 
-      const flow = defineFlow({
+      const flow: FlowDefinition = {
         root: actionStep({
           actions: ['count'],
           maxMoves: 2,
         }),
-      });
+      };
 
       const engine = new FlowEngine(game, flow);
       let state = engine.start();
@@ -1240,14 +1241,14 @@ describe('Game Flow Integration', () => {
   });
 
   it('should set and start flow', () => {
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: eachPlayer({
         do: actionStep({
           actions: ['draw', 'pass'],
           turnScope: 'restart',
         }),
       }),
-    });
+    };
 
     game.setFlow(flow);
     const state = game.startFlow();
@@ -1258,14 +1259,14 @@ describe('Game Flow Integration', () => {
   });
 
   it('should continue flow after action', () => {
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: eachPlayer({
         do: actionStep({
           actions: ['draw', 'pass'],
           turnScope: 'restart',
         }),
       }),
-    });
+    };
 
     game.setFlow(flow);
     let state = game.startFlow();
@@ -1280,9 +1281,9 @@ describe('Game Flow Integration', () => {
   });
 
   it('should get flow state', () => {
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: actionStep({ actions: ['pass'] }),
-    });
+    };
 
     game.setFlow(flow);
     game.startFlow();
@@ -1293,9 +1294,9 @@ describe('Game Flow Integration', () => {
   });
 
   it('should check isAwaitingInput', () => {
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: actionStep({ actions: ['pass'] }),
-    });
+    };
 
     game.setFlow(flow);
     game.startFlow();
@@ -1308,11 +1309,11 @@ describe('Game Flow Integration', () => {
   });
 
   it('should get current flow player', () => {
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: eachPlayer({
         do: actionStep({ actions: ['pass'] , turnScope: 'restart' }),
       }),
-    });
+    };
 
     game.setFlow(flow);
     game.startFlow();
@@ -1325,9 +1326,9 @@ describe('Game Flow Integration', () => {
   });
 
   it('should get available flow actions', () => {
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: actionStep({ actions: ['draw', 'pass'] }),
-    });
+    };
 
     game.setFlow(flow);
     game.startFlow();
@@ -1338,9 +1339,9 @@ describe('Game Flow Integration', () => {
   });
 
   it('should finish game when flow completes', () => {
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: actionStep({ actions: ['pass'] }),
-    });
+    };
 
     game.setFlow(flow);
     game.startFlow();
@@ -1349,18 +1350,21 @@ describe('Game Flow Integration', () => {
     expect(game.phase).toBe('finished');
   });
 
-  it('should determine winners when flow completes', () => {
-    const flow = defineFlow({
-      root: actionStep({ actions: ['pass'] }),
-      getWinners: (ctx) => [ctx.game.getPlayer(1)!],
-    });
+  it("takes the winners from the game's own getWinners() when the flow completes", () => {
+    class SeatOneWinsGame extends TestGame {
+      override getWinners(): Player[] {
+        return this.isFinished() ? [this.getPlayer(1)!] : [];
+      }
+    }
+    const won = new SeatOneWinsGame({ playerCount: 2 });
+    won.registerActions(Action.create('pass').execute(() => ({ success: true })));
+    won.setFlow({ root: actionStep({ actions: ['pass'] }) });
+    won.startFlow();
+    expect(won.getWinners()).toEqual([]);
 
-    game.setFlow(flow);
-    game.startFlow();
-    game.continueFlow('pass', {});
+    won.continueFlow('pass', {});
 
-    expect(game.getWinners()).toHaveLength(1);
-    expect(game.getWinners()[0]).toBe(game.getPlayer(1)!);
+    expect(won.getWinners()).toEqual([won.getPlayer(1)!]);
   });
 });
 
@@ -1383,7 +1387,7 @@ describe('Complex Flow Scenarios', () => {
 
     let turnCount = 0;
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: loop({
         maxIterations: 10,
         while: () => turnCount < 4,
@@ -1396,7 +1400,7 @@ describe('Complex Flow Scenarios', () => {
           ),
         }),
       }),
-    });
+    };
 
     game.setFlow(flow);
     let state = game.startFlow();
@@ -1419,7 +1423,7 @@ describe('Complex Flow Scenarios', () => {
 
     let innerCount = 0;
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: repeat(
         2,
         eachPlayer({
@@ -1431,7 +1435,7 @@ describe('Complex Flow Scenarios', () => {
           ),
         })
       ),
-    });
+    };
 
     game.setFlow(flow);
     let state = game.startFlow();
@@ -1461,14 +1465,14 @@ describe('Named Phases', () => {
   });
 
   it('should track current phase in state', () => {
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: sequence(
         phase('setup', { do: execute(() => {}) }),
         phase('main', {
           do: actionStep({ actions: ['act'] , turnScope: 'restart' }),
         })
       ),
-    });
+    };
 
     game.registerAction(
       Action.create('act').execute(() => {})
@@ -1484,7 +1488,7 @@ describe('Named Phases', () => {
   it('should call onEnterPhase hook', () => {
     const enteredPhases: string[] = [];
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: sequence(
         phase('setup', { do: execute(() => {}) }),
         phase('main', { do: execute(() => {}) })
@@ -1492,7 +1496,7 @@ describe('Named Phases', () => {
       onEnterPhase: (name) => {
         enteredPhases.push(name);
       },
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     engine.start();
@@ -1503,7 +1507,7 @@ describe('Named Phases', () => {
   it('should call onExitPhase hook', () => {
     const exitedPhases: string[] = [];
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: sequence(
         phase('setup', { do: execute(() => {}) }),
         phase('main', { do: execute(() => {}) })
@@ -1511,7 +1515,7 @@ describe('Named Phases', () => {
       onExitPhase: (name) => {
         exitedPhases.push(name);
       },
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     engine.start();
@@ -1522,7 +1526,7 @@ describe('Named Phases', () => {
   it('should handle nested phases', () => {
     const phaseLog: string[] = [];
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: phase('outer', {
         do: sequence(
           execute(() => phaseLog.push('in outer')),
@@ -1534,7 +1538,7 @@ describe('Named Phases', () => {
       }),
       onEnterPhase: (name) => phaseLog.push(`enter:${name}`),
       onExitPhase: (name) => phaseLog.push(`exit:${name}`),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     engine.start();
@@ -1569,7 +1573,7 @@ describe('Move Limits', () => {
       })
     );
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: eachPlayer({
         do: actionStep({
           actions: ['count'],
@@ -1577,7 +1581,7 @@ describe('Move Limits', () => {
           turnScope: 'restart',
         }),
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     let state = engine.start();
@@ -1609,13 +1613,13 @@ describe('Move Limits', () => {
       Action.create('count').execute(() => {})
     );
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: actionStep({
         actions: ['count'],
         minMoves: 2,
         maxMoves: 3,
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     let state = engine.start();
@@ -1640,13 +1644,13 @@ describe('Move Limits', () => {
       })
     );
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: actionStep({
         actions: ['count'],
         minMoves: 3,
         repeatUntil: () => shouldEnd,
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     let state = engine.start();
@@ -1685,13 +1689,13 @@ describe('turnLoop Helper', () => {
       })
     );
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: turnLoop({
         actions: ['act'],
         // A solo turn loop: each pass is its own turn.
         turnScope: 'restart',
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     let state = engine.start();
@@ -1721,13 +1725,13 @@ describe('turnLoop Helper', () => {
       })
     );
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: turnLoop({
         actions: ['act'],
         while: () => actionsRemaining > 0,
         turnScope: 'restart',
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     let state = engine.start();
@@ -1756,13 +1760,13 @@ describe('turnLoop Helper', () => {
 
     // Terminate via a real condition (stop after 2 actions), not by abusing
     // the maxIterations safety cap as a loop terminator.
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: turnLoop({
         actions: ['act'],
         while: () => actionCount < 2,
         turnScope: 'restart',
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     let state = engine.start();
@@ -1796,11 +1800,11 @@ describe('turnLoop Helper', () => {
       })
     );
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: turnLoop({
         actions: () => [...actionsAvailable, 'endTurn'],
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     const state = engine.start();
@@ -1824,7 +1828,7 @@ describe('turnLoop Helper', () => {
       })
     );
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: loop({
         maxIterations: 10,
         while: () => turnsTaken < 4,
@@ -1840,7 +1844,7 @@ describe('turnLoop Helper', () => {
           ),
         }),
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     let state = engine.start();
@@ -1866,14 +1870,14 @@ describe('Turn Order Presets', () => {
   it('should use DEFAULT turn order', () => {
     const visitedPlayers: number[] = [];
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: eachPlayer({
         ...TurnOrder.DEFAULT,
         do: execute((ctx) => {
           visitedPlayers.push(ctx.player!.seat);
         }),
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     engine.start();
@@ -1884,14 +1888,14 @@ describe('Turn Order Presets', () => {
   it('should use REVERSE turn order', () => {
     const visitedPlayers: number[] = [];
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: eachPlayer({
         ...TurnOrder.REVERSE,
         do: execute((ctx) => {
           visitedPlayers.push(ctx.player!.seat);
         }),
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     engine.start();
@@ -1902,14 +1906,14 @@ describe('Turn Order Presets', () => {
   it('should use ONLY to filter players', () => {
     const visitedPlayers: number[] = [];
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: eachPlayer({
         ...TurnOrder.ONLY([1, 3]),  // 1-indexed: players at positions 1 and 3
         do: execute((ctx) => {
           visitedPlayers.push(ctx.player!.seat);
         }),
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     engine.start();
@@ -1921,14 +1925,14 @@ describe('Turn Order Presets', () => {
   it('should use START_FROM with position (wraps around)', () => {
     const visitedPlayers: number[] = [];
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: eachPlayer({
         ...TurnOrder.START_FROM(2),  // 1-indexed: start from player at position 2
         do: execute((ctx) => {
           visitedPlayers.push(ctx.player!.seat);
         }),
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     engine.start();
@@ -1943,14 +1947,14 @@ describe('Turn Order Presets', () => {
 
     const visitedPlayers: number[] = [];
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: eachPlayer({
         ...TurnOrder.CONTINUE,
         do: execute((ctx) => {
           visitedPlayers.push(ctx.player!.seat);
         }),
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     engine.start();
@@ -1968,14 +1972,14 @@ describe('Turn Order Presets', () => {
 
     const visitedPlayers: number[] = [];
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: eachPlayer({
         ...TurnOrder.ACTIVE_ONLY,
         do: execute((ctx) => {
           visitedPlayers.push(ctx.player!.seat);
         }),
       }),
-    });
+    };
 
     const engine = new FlowEngine(activeOnlyGame, flow);
     engine.start();
@@ -1988,14 +1992,14 @@ describe('Turn Order Presets', () => {
     const activeOnlyGame = new TestGame({ playerCount: 3 });
     const visitedPlayers: number[] = [];
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: eachPlayer({
         ...TurnOrder.ACTIVE_ONLY,
         do: execute((ctx) => {
           visitedPlayers.push(ctx.player!.seat);
         }),
       }),
-    });
+    };
 
     new FlowEngine(activeOnlyGame, flow).start();
 
@@ -2029,11 +2033,11 @@ describe('Action Chaining with followUp in FlowState', () => {
 
     game.registerActions(exploreAction, collectAction);
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: actionStep({
         actions: ['explore', 'collect'],
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     let state = engine.start();
@@ -2057,11 +2061,11 @@ describe('Action Chaining with followUp in FlowState', () => {
 
     game.registerAction(simpleAction);
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: actionStep({
         actions: ['simple'],
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     let state = engine.start();
@@ -2091,13 +2095,13 @@ describe('Action Chaining with followUp in FlowState', () => {
     game.registerActions(firstAction, secondAction);
 
     // Use playerActions to keep awaiting input after each action
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: playerActions({
         actions: ['first', 'second'],
         // Allow 2 actions total
         repeatUntil: (ctx) => (ctx as unknown as { moveCount: number }).moveCount >= 2,
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     let state = engine.start();
@@ -2134,11 +2138,11 @@ describe('Action Chaining with followUp in FlowState', () => {
 
     game.registerAction(selectAndChainAction);
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: actionStep({
         actions: ['selectAndChain'],
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     let state = engine.start();
@@ -2175,7 +2179,7 @@ describe('Action Chaining with followUp in FlowState', () => {
 
     // Create a loop with maxIterations: 2 - if followUp counted as iterations,
     // the chain of 5 would exceed this and fail
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: loop({
         maxIterations: 2,
         while: () => chainDepth < maxChainDepth,
@@ -2184,7 +2188,7 @@ describe('Action Chaining with followUp in FlowState', () => {
           turnScope: 'restart',
         }),
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     let state = engine.start();
@@ -2222,7 +2226,7 @@ describe('Unknown action in a flow step is fatal (F20, #51)', () => {
   // wait for, and nothing downstream can recover.
 
   it('throws from actionStep, naming the action and the step', () => {
-    const flow = defineFlow({ root: actionStep({ name: 'turn', actions: ['nope'] }) });
+    const flow: FlowDefinition = { root: actionStep({ name: 'turn', actions: ['nope'] }) };
 
     let message = '';
     expect(() => {
@@ -2250,7 +2254,7 @@ describe('Unknown action in a flow step is fatal (F20, #51)', () => {
   });
 
   it('throws from simultaneousActionStep too', () => {
-    const flow = defineFlow({ root: simultaneousActionStep({ name: 'bid', actions: ['missing'] }) });
+    const flow: FlowDefinition = { root: simultaneousActionStep({ name: 'bid', actions: ['missing'] }) };
 
     let message = '';
     expect(() => {
@@ -2269,7 +2273,7 @@ describe('Unknown action in a flow step is fatal (F20, #51)', () => {
   });
 
   it('lists what IS registered, so a near-miss name is obvious', () => {
-    const flow = defineFlow({ root: actionStep({ actions: ['nope'] }) });
+    const flow: FlowDefinition = { root: actionStep({ actions: ['nope'] }) };
     let message = '';
     try {
       new FlowEngine(game, flow).start();
@@ -2297,11 +2301,11 @@ describe('ENG-03 simultaneous action failure signaling', () => {
   });
 
   it('sets actionError when a simultaneous action fails validation, without disturbing awaitingPlayers/awaitingInput', () => {
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: simultaneousActionStep({
         actions: ['test'],
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     const startState = engine.start();
@@ -2319,11 +2323,11 @@ describe('ENG-03 simultaneous action failure signaling', () => {
   });
 
   it('clears actionError once a later action in the same step succeeds (fail-then-succeed)', () => {
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: simultaneousActionStep({
         actions: ['test'],
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     engine.start();
@@ -2351,12 +2355,12 @@ describe('ENG-03 simultaneous action failure signaling', () => {
       })
     );
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: simultaneousActionStep({
         actions: ['done'],
         playerDone: (ctx, p) => acted.has(p.seat),
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     engine.start();
@@ -2373,11 +2377,11 @@ describe('ENG-03 simultaneous action failure signaling', () => {
   });
 
   it('records actionError instead of throwing when the action is not in the player allow-list (WR-03)', () => {
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: simultaneousActionStep({
         actions: ['test'],
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     engine.start();
@@ -2389,11 +2393,11 @@ describe('ENG-03 simultaneous action failure signaling', () => {
   });
 
   it('records actionError instead of throwing when the acting player is not awaiting (WR-03)', () => {
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: simultaneousActionStep({
         actions: ['test'],
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     engine.start();
@@ -2419,7 +2423,7 @@ describe('ENG-03 simultaneous action failure signaling', () => {
       })
     );
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: simultaneousActionStep({
         actions: ['done'],
         // Setup-time evaluation succeeds; the post-commit evaluation throws.
@@ -2428,7 +2432,7 @@ describe('ENG-03 simultaneous action failure signaling', () => {
           throw new Error('playerDone exploded');
         },
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     engine.start();
@@ -2452,7 +2456,7 @@ describe('ENG-03 simultaneous action failure signaling', () => {
       })
     );
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: simultaneousActionStep({
         actions: ['done'],
         playerDone: (ctx, p) => acted.has(p.seat),
@@ -2462,7 +2466,7 @@ describe('ENG-03 simultaneous action failure signaling', () => {
           throw new Error('allDone exploded');
         },
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     engine.start();
@@ -2486,7 +2490,7 @@ describe('ENG-03 simultaneous action failure signaling', () => {
       })
     );
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: simultaneousActionStep({
         // Setup-time evaluations succeed; the post-commit re-eval throws.
         actions: () => {
@@ -2495,7 +2499,7 @@ describe('ENG-03 simultaneous action failure signaling', () => {
         },
         playerDone: () => false,
       }),
-    });
+    };
 
     const engine = new FlowEngine(game, flow);
     engine.start();
@@ -2527,12 +2531,12 @@ describe('Flow variable get() unset-key warning (F24)', () => {
 
   it('warns when ctx.get reads a flow variable that was never set (typo)', () => {
     let read: unknown = 'sentinel';
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: execute((ctx) => {
         // Simulates a typo: setVar wrote 'turnCount' but get reads 'turnCout'.
         read = ctx.get('turnCout');
       }),
-    });
+    };
 
     new FlowEngine(game, flow).start();
 
@@ -2544,7 +2548,7 @@ describe('Flow variable get() unset-key warning (F24)', () => {
   });
 
   it('does NOT warn when the variable was set first (including set to undefined)', () => {
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: sequence(
         setVar('turnCount', 0),
         setVar('maybe', undefined),
@@ -2553,7 +2557,7 @@ describe('Flow variable get() unset-key warning (F24)', () => {
           ctx.get('maybe');
         })
       ),
-    });
+    };
 
     new FlowEngine(game, flow).start();
 
@@ -2561,7 +2565,7 @@ describe('Flow variable get() unset-key warning (F24)', () => {
   });
 
   it('does NOT warn for a forEach-bound variable read inside the loop body', () => {
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: forEach({
         collection: [1, 2, 3],
         as: 'num',
@@ -2569,7 +2573,7 @@ describe('Flow variable get() unset-key warning (F24)', () => {
           ctx.get('num');
         }),
       }),
-    });
+    };
 
     new FlowEngine(game, flow).start();
 

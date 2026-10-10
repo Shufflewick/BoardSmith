@@ -101,6 +101,12 @@ export function useDebugTimeline(options: DebugTimelineOptions): DebugTimeline {
   const historicalStateLoading = ref(false);
   const historicalStateError = ref<string | null>(null);
   const stateDiff = ref<ElementDiff | null>(null);
+  /**
+   * Bumped by every state load and every return to live, so a load answered
+   * after either (a new game arrived, the panel closed) is dropped rather than
+   * putting the shell back into history (#589).
+   */
+  let stateAtGeneration = 0;
 
   const rewindLoading = ref(false);
   const rewindError = ref<string | null>(null);
@@ -127,6 +133,8 @@ export function useDebugTimeline(options: DebugTimelineOptions): DebugTimeline {
   }
 
   function clearHistoricalState(): void {
+    stateAtGeneration++;
+    historicalStateLoading.value = false;
     selectedActionIndex.value = null;
     historicalState.value = null;
     historicalStateError.value = null;
@@ -135,6 +143,7 @@ export function useDebugTimeline(options: DebugTimelineOptions): DebugTimeline {
   }
 
   async function fetchStateAtAction(actionIndex: number): Promise<void> {
+    const generation = ++stateAtGeneration;
     historicalStateLoading.value = true;
     historicalStateError.value = null;
 
@@ -147,17 +156,19 @@ export function useDebugTimeline(options: DebugTimelineOptions): DebugTimeline {
           ? bridge.stateDiff(actionIndex - 1, actionIndex)
           : Promise.resolve(null),
       ]);
+      if (generation !== stateAtGeneration) return;
 
       historicalState.value = state;
       stateDiff.value = diff;
       onTimeTravel(state, actionIndex, diff);
     } catch (e) {
+      if (generation !== stateAtGeneration) return;
       historicalStateError.value = e instanceof Error ? e.message : 'Unknown error';
       historicalState.value = null;
       stateDiff.value = null;
       onTimeTravel(null, null, null);
     } finally {
-      historicalStateLoading.value = false;
+      if (generation === stateAtGeneration) historicalStateLoading.value = false;
     }
   }
 

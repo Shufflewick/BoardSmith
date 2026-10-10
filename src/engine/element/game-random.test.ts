@@ -4,7 +4,7 @@
  * state that snapshots, checkpoints and bot search can carry exactly.
  */
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { Action, Game, Piece, Player, Space, actionStep, defineFlow, loop } from '../index.js';
+import { Action, Game, Piece, Player, Space, actionStep, loop } from '../index.js';
 import { GameRunner } from '../../runtime/runner.js';
 import { createHeadlessSession } from '../../session/headless-session.js';
 
@@ -18,7 +18,7 @@ class CardGame extends Game<CardGame, Player> {
     this.deck = this.create(Pile, 'deck');
     for (let i = 0; i < 52; i += 1) this.deck.create(Card, `card-${i}`);
     this.registerActions(Action.create('pass').execute(() => ({ success: true })));
-    this.setFlow(defineFlow({ root: loop({ maxIterations: 100, do: actionStep({ actions: ['pass'] }) }) }));
+    this.setFlow({ root: loop({ maxIterations: 100, do: actionStep({ actions: ['pass'] }) }) });
   }
   order(): Array<string | undefined> {
     return this.deck.all(Card).map((card) => card.name);

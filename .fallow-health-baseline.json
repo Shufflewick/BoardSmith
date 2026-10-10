@@ -15,7 +15,7 @@
       }
     },
     "src/bot-trainer/benchmark.ts": {
-      "complexity_critical": {
+      "complexity_high": {
         "count": 1
       },
       "complexity_moderate": {
@@ -37,7 +37,7 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 5
+        "count": 4
       }
     },
     "src/cli/commands/audit.ts": {

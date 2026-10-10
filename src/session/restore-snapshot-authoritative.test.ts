@@ -28,7 +28,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   actionStep,
   loop,
   eachPlayer,
@@ -218,7 +217,7 @@ class TutorialRestoreGame extends Game<TutorialRestoreGame, Player> {
     this.registerActions(moveAction, passAction);
 
     this.setFlow(
-      defineFlow({
+      {
         root: loop({
           while: () => true,
           maxIterations: 20,
@@ -226,7 +225,7 @@ class TutorialRestoreGame extends Game<TutorialRestoreGame, Player> {
             do: actionStep({ actions: ['move', 'pass'] }),
           }),
         }),
-      })
+      }
     );
   }
 }
@@ -329,14 +328,14 @@ class ZoneGame extends Game<ZoneGame, Player> {
     this.registerAction(Action.create('noop').execute(() => ({ success: true })));
 
     this.setFlow(
-      defineFlow({
+      {
         root: actionStep({
           actions: ['noop'],
           player: (ctx) => ctx.game.getPlayer(1)!,
           repeatUntil: () => false,
           maxMoves: 5,
         }),
-      })
+      }
     );
   }
 }

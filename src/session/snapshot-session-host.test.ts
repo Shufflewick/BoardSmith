@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../engine/index.js';
+import { Game, Player, Action, actionStep, loop, type GameOptions } from '../engine/index.js';
 import type { Annotation } from '../engine/index.js';
 import type { BotStrategy } from '../bot/types.js';
 import { executeOp, type GameDefinitionLike, type ExecutableOp, type Op, type OpResult } from './stateless-ops.js';
@@ -18,18 +18,16 @@ class SimpleGame extends Game<SimpleGame, Player> {
     this.registerAction(
       Action.create('pass').execute(() => ({ success: true })),
     );
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 1000,
-          do: actionStep({
-            actions: ['pass'],
-            player: (ctx) => ctx.game.getPlayer(1)!,
-            turnScope: 'restart',
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 1000,
+        do: actionStep({
+          actions: ['pass'],
+          player: (ctx) => ctx.game.getPlayer(1)!,
+          turnScope: 'restart',
         }),
       }),
-    );
+    });
   }
 }
 
@@ -55,18 +53,16 @@ class TwoStepGame extends Game<TwoStepGame, Player> {
         .chooseFrom('size', { choices: ['S', 'M', 'L'] })
         .execute(() => ({ success: true })),
     );
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 1000,
-          do: actionStep({
-            actions: ['pick'],
-            player: (ctx) => ctx.game.getPlayer(1)!,
-            turnScope: 'restart',
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 1000,
+        do: actionStep({
+          actions: ['pick'],
+          player: (ctx) => ctx.game.getPlayer(1)!,
+          turnScope: 'restart',
         }),
       }),
-    );
+    });
   }
 }
 

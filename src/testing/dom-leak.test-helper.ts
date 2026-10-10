@@ -17,7 +17,6 @@ import {
   Hand,
   Card,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -56,15 +55,13 @@ export class SecretHandGame extends Game<SecretHandGame, Player> {
         .execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => true,
-          maxIterations: 10,
-          do: eachPlayer({ do: actionStep({ actions: ['pass', 'peek'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: () => true,
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: ['pass', 'peek'] }) }),
       }),
-    );
+    });
   }
 }
 

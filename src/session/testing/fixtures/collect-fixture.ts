@@ -16,7 +16,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   actionStep,
   loop,
   type GameOptions,
@@ -112,20 +111,18 @@ class CollectGame extends Game<CollectGame, Player> {
         }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 1000,
-          do: actionStep({
-            actions: ['explore'],
-            player: (ctx) => ctx.game.getPlayer(1)!,
-            // One seat, one action per loop iteration: every iteration is a
-            // new turn, so undo does not reach behind the current one.
-            turnScope: 'restart',
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 1000,
+        do: actionStep({
+          actions: ['explore'],
+          player: (ctx) => ctx.game.getPlayer(1)!,
+          // One seat, one action per loop iteration: every iteration is a
+          // new turn, so undo does not reach behind the current one.
+          turnScope: 'restart',
         }),
       }),
-    );
+    });
   }
 }
 

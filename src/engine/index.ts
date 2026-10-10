@@ -179,7 +179,6 @@ export {
   playerActions,
   switchOn,
   ifThen,
-  defineFlow,
   noop,
   execute,
   setVar,

@@ -11,7 +11,6 @@ import {
   Space,
   Card,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -36,15 +35,13 @@ class HiddenHandGame extends Game<HiddenHandGame, Player> {
       hand.create(SecretCard, `card-${player.seat}`, { rank: player.seat === 1 ? 'A' : 'K' });
     }
     this.registerAction(Action.create<HiddenHandGame>('pass').execute(() => ({ success: true })));
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => false,
-          maxIterations: 10,
-          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: () => false,
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
       }),
-    );
+    });
   }
 }
 

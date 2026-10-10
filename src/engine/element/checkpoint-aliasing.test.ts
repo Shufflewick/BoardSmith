@@ -28,7 +28,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   actionStep,
   type GameOptions,
 } from '../index.js';
@@ -68,14 +67,14 @@ class AliasGame extends Game<AliasGame, Player> {
     );
 
     this.setFlow(
-      defineFlow({
+      {
         root: actionStep({
           actions: ['noop', 'logAndStash', 'grantVisibility'],
           player: (ctx) => ctx.game.getPlayer(1)!,
           repeatUntil: () => false,
           maxMoves: 10,
         }),
-      })
+      }
     );
   }
 }

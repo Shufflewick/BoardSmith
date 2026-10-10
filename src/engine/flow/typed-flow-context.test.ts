@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Piece, Action } from '../index.js';
 import {
-  defineFlow,
   loop,
   sequence,
   eachPlayer,
@@ -10,7 +9,7 @@ import {
   execute,
   ifThen,
 } from './builders.js';
-import type { PlayerOf } from '../index.js';
+import type { FlowDefinition, PlayerOf } from '../index.js';
 
 /**
  * The flow definition a game writes is generic over that game, so every callback
@@ -66,10 +65,10 @@ describe('Flow callbacks are typed to the game that declared them (issue #52)', 
     void basePlayer.purse;
   });
 
-  it('threads the game type through every nested builder from defineFlow', () => {
+  it('threads the game type through every nested builder from the flow definition', () => {
     const seen: string[] = [];
 
-    const flow = defineFlow<TypedFlowGame>({
+    const flow: FlowDefinition<TypedFlowGame> = {
       root: sequence(
         loop({
           maxIterations: 2,
@@ -107,12 +106,10 @@ describe('Flow callbacks are typed to the game that declared them (issue #52)', 
           skipPlayer: (_ctx, player) => player.purse < 0,
         })
       ),
-      isComplete: (ctx) => ctx.game.treasury <= 0,
-      getWinners: (ctx) => ctx.game.players.filter((p) => p.purse > 0),
       setup: (ctx) => {
         ctx.game.treasury = 100;
       },
-    });
+    };
 
     expect(flow.root).toBeDefined();
     expect(seen).toEqual([]);
@@ -135,7 +132,7 @@ describe('Flow callbacks are typed to the game that declared them (issue #52)', 
   });
 
   it('rejects a read the concrete types do not permit', () => {
-    defineFlow<TypedFlowGame>({
+    const flow: FlowDefinition<TypedFlowGame> = {
       root: execute((ctx) => {
         // @ts-expect-error - `vault` is not on TypedFlowGame. Without the
         // threading `ctx.game` is the base `Game` and this is still an error,
@@ -143,7 +140,7 @@ describe('Flow callbacks are typed to the game that declared them (issue #52)', 
         // context is a real type rather than `any`.
         void ctx.game.vault;
       }),
-    });
-    expect(true).toBe(true);
+    };
+    expect(flow.root).toBeDefined();
   });
 });

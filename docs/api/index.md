@@ -92,7 +92,6 @@ import {
 - `playerActions()` - Define available actions
 - `switchOn()` - Branch based on value
 - `ifThen()` - Conditional execution
-- `defineFlow()` - Define reusable flow
 - `noop()` - No operation
 - `execute()` - Execute function
 - `setVar()` - Set flow variable

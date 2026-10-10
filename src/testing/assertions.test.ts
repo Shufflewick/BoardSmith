@@ -11,7 +11,6 @@ import {
   Space,
   Card,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -75,18 +74,16 @@ class AssertionsFixtureGame extends Game<AssertionsFixtureGame, Player> {
     // registered on the game but deliberately excluded from the flow step so it
     // never appears in availableActions — making assertActionAvailable for it
     // fail and trigger the trace path.
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: (ctx) =>
-            ctx.game.total < 6,
-          maxIterations: 100,
-          do: eachPlayer({
-            do: actionStep({ actions: ['pick', 'pass'] }),
-          }),
+    this.setFlow({
+      root: loop({
+        while: (ctx) =>
+          ctx.game.total < 6,
+        maxIterations: 100,
+        do: eachPlayer({
+          do: actionStep({ actions: ['pick', 'pass'] }),
         }),
       }),
-    );
+    });
   }
 }
 
@@ -234,14 +231,12 @@ class BidGame extends Game<BidGame, BidPlayer> {
       }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: simultaneousActionStep({
-          actions: ['bid', 'fold'],
-          playerDone: (_ctx, p) => (p as BidPlayer).hasBid,
-        }),
+    this.setFlow({
+      root: simultaneousActionStep({
+        actions: ['bid', 'fold'],
+        playerDone: (_ctx, p) => (p as BidPlayer).hasBid,
       }),
-    );
+    });
   }
 }
 
@@ -331,15 +326,13 @@ class VisAssertGame extends Game<VisAssertGame, Player> {
       Action.create<VisAssertGame>('pass').execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => false,
-          maxIterations: 10,
-          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: () => false,
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
       }),
-    );
+    });
   }
 }
 
@@ -411,15 +404,13 @@ class VisAssertPlayerViewGame extends Game<VisAssertPlayerViewGame, Player> {
       Action.create<VisAssertPlayerViewGame>('pass').execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => false,
-          maxIterations: 10,
-          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: () => false,
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
       }),
-    );
+    });
   }
 
   static override playerView = (

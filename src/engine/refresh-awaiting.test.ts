@@ -20,7 +20,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   simultaneousActionStep,
   type GameOptions,
 } from './index.js';
@@ -54,13 +53,13 @@ class LateArrivalGame extends Game<LateArrivalGame, Player> {
     );
 
     this.setFlow(
-      defineFlow({
+      {
         root: simultaneousActionStep({
           name: 'round',
           actions: ['act', 'grant'],
           allDone: (ctx) => (ctx.game as LateArrivalGame).acted.filter((a) => a.startsWith('act:')).length >= 2,
         }),
-      })
+      }
     );
   }
 }

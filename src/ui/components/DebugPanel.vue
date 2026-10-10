@@ -34,7 +34,7 @@ export interface DebugPanelProps {
  * Each of those is tested on its own; `DebugPanel.characterization.test.ts`
  * pins the behaviour they add up to.
  */
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount, onUnmounted, nextTick } from 'vue';
 import { TreeNode } from './debug/TreeNode.js';
 import { searchStateTree } from './debug/state-tree-search.js';
 import {
@@ -218,6 +218,23 @@ const {
   bridge,
   onTimeTravel: (state, actionIndex, diff) => emit('time-travel', state, actionIndex, diff),
 });
+
+// A snapshot belongs to the game it was taken in. A host that starts a new
+// game relays its first state into this same page (the dev host does not
+// reload the frame), so the old game's snapshot is dropped then, before the
+// shell draws the new game's seats beside it (#587). A rewind awaiting
+// confirmation named an action of the old game, so it is cancelled too (#589).
+watch(() => props.state?.state?.gameInstanceId, (game, previous) => {
+  if (previous !== undefined && game !== previous) {
+    clearHistoricalState();
+    cancelRewind();
+  }
+});
+
+// The shell renders a snapshot only because this panel chose one, and the
+// panel is the only way back to live. When the host turns debugging off and
+// the panel goes, the shell goes back to live with it (#589).
+onBeforeUnmount(() => clearHistoricalState());
 
 /**
  * The state every tab reads from: the historical snapshot while time

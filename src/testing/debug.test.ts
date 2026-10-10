@@ -11,7 +11,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -30,15 +29,13 @@ class DebugFixtureGame extends Game<DebugFixtureGame, Player> {
       Action.create<DebugFixtureGame>('pass').execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => true,
-          maxIterations: 1,
-          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: () => true,
+        maxIterations: 1,
+        do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
       }),
-    );
+    });
   }
 }
 

@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Space, Action, defineFlow, loop, eachPlayer, actionStep, type FlowContext } from '../index.js';
+import { Game, Player, Space, Action, type FlowDefinition, loop, eachPlayer, actionStep, type FlowContext } from '../index.js';
 import { GameRunner } from '../../runtime/runner.js';
 import { initialProgress, nextProgress } from './progress.js';
 import { getActiveTutorialStepView } from './gate.js';
@@ -68,7 +68,7 @@ class AnnotationTestGame extends Game<AnnotationTestGame, Player> {
 
     this.registerActions(moveAction, passAction);
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: loop({
         while: () => true,
         maxIterations: 20,
@@ -76,7 +76,7 @@ class AnnotationTestGame extends Game<AnnotationTestGame, Player> {
           do: actionStep({ actions: ['move', 'pass'] }),
         }),
       }),
-    });
+    };
     this.setFlow(flow);
   }
 }

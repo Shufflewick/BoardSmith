@@ -21,7 +21,6 @@ import {
   Player,
   Action,
   NotSimulableError,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -67,14 +66,14 @@ class FogGame extends Game<FogGame, Player> {
     );
 
     this.setFlow(
-      defineFlow({
+      {
         root: loop({
           while: (ctx) => (ctx.get<number>('round') ?? 1) <= 10,
           maxIterations: 30,
           do: eachPlayer({ do: actionStep({ actions: ['travel', 'rest'] }) }),
         }),
         setup: (ctx) => ctx.set('round', 1),
-      })
+      }
     );
   }
 }

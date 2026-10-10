@@ -12,7 +12,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import type { VueWrapper } from '@vue/test-utils';
 import { mountLiveSeat, settle } from './table-wiring.test-helper.js';
-import { Game, Player, Action, defineFlow, actionStep, type GameOptions } from '../../engine/index.js';
+import { Game, Player, Action, actionStep, type GameOptions } from '../../engine/index.js';
 
 interface Card { suit: string; rank: number }
 
@@ -32,7 +32,7 @@ class CardGame extends Game<CardGame, Player> {
           return { success: true };
         }),
     );
-    this.setFlow(defineFlow({ root: actionStep({ actions: ['play'] }) }));
+    this.setFlow({ root: actionStep({ actions: ['play'] }) });
   }
 }
 

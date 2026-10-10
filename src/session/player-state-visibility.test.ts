@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Game, Player, defineFlow, loop, eachPlayer, actionStep, Action } from '../engine/index.js';
+import { Game, Player, loop, eachPlayer, actionStep, Action } from '../engine/index.js';
 import { GameRunner } from '../runtime/runner.js';
 import { buildPlayerState } from './utils.js';
 
@@ -30,13 +30,13 @@ class VisGame extends Game<VisGame, SecretPlayer> {
     this.registerActions(passAction);
 
     this.setFlow(
-      defineFlow({
+      {
         root: loop({
           while: () => true,
           maxIterations: 10,
           do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
         }),
-      })
+      }
     );
   }
 }

@@ -15,7 +15,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -71,16 +70,14 @@ class SpaceGame extends Game<SpaceGame, Player> {
         .execute(() => {}),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 20,
-          do: eachPlayer({
-            do: actionStep({ actions: ['move', 'pass'] }),
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 20,
+        do: eachPlayer({
+          do: actionStep({ actions: ['move', 'pass'] }),
         }),
       }),
-    );
+    });
   }
 }
 

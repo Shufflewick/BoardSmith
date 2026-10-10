@@ -22,7 +22,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   sequence,
   actionStep,
   execute,
@@ -43,22 +42,20 @@ class BookkeepingExecuteGame extends Game<BookkeepingExecuteGame, Player> {
 
     const p1 = (ctx: { game: Game }) => ctx.game.getPlayer(1)!;
 
-    this.setFlow(
-      defineFlow({
-        root: sequence(
-          actionStep({ actions: ['act1'], player: p1 }),
-          // NO `{ irreversible: true }` — this is bookkeeping, and undo may
-          // cross it.
-          execute((ctx) => {
-            (ctx.game as BookkeepingExecuteGame).turnFlag += 1;
-          }),
-          actionStep({ actions: ['act2'], player: p1, maxMoves: 2, turnScope: 'restart' }),
-          // Holds the flow (and `game.phase`) open so undo attempts reach the
-          // commitment fence rather than the unrelated finished-phase fence.
-          actionStep({ actions: ['idle'], player: p1, turnScope: 'restart' }),
-        ),
-      }),
-    );
+    this.setFlow({
+      root: sequence(
+        actionStep({ actions: ['act1'], player: p1 }),
+        // NO `{ irreversible: true }` — this is bookkeeping, and undo may
+        // cross it.
+        execute((ctx) => {
+          (ctx.game as BookkeepingExecuteGame).turnFlag += 1;
+        }),
+        actionStep({ actions: ['act2'], player: p1, maxMoves: 2, turnScope: 'restart' }),
+        // Holds the flow (and `game.phase`) open so undo attempts reach the
+        // commitment fence rather than the unrelated finished-phase fence.
+        actionStep({ actions: ['idle'], player: p1, turnScope: 'restart' }),
+      ),
+    });
   }
 }
 

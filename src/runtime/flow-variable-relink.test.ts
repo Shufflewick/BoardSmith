@@ -5,7 +5,6 @@ import {
   Piece,
   Player,
   Action,
-  defineFlow,
   forEach,
   sequence,
   actionStep,
@@ -49,25 +48,23 @@ class RelinkGame extends Game<RelinkGame, Player> {
     // For each token: await `mark`, then (AFTER the await) read the element-valued
     // flow variable `token` and mutate it. The mutation only persists to the
     // restored tree if `token` is re-linked to a live loaded element.
-    this.setFlow(
-      defineFlow({
-        root: forEach<Token>({
-          collection: (ctx: FlowContext) => (ctx.game as RelinkGame).bag.all(Token),
-          as: 'token',
-          do: sequence(
-            // One mark per token, and the forEach moves on: each iteration is
-            // its own turn as far as undo is concerned.
-            actionStep({ actions: ['mark'], turnScope: 'restart' }),
-            execute((ctx: FlowContext) => {
-              const token = ctx.get<Token>('token');
-              if (token) {
-                token.marked = true;
-              }
-            }),
-          ),
-        }),
+    this.setFlow({
+      root: forEach<Token>({
+        collection: (ctx: FlowContext) => (ctx.game as RelinkGame).bag.all(Token),
+        as: 'token',
+        do: sequence(
+          // One mark per token, and the forEach moves on: each iteration is
+          // its own turn as far as undo is concerned.
+          actionStep({ actions: ['mark'], turnScope: 'restart' }),
+          execute((ctx: FlowContext) => {
+            const token = ctx.get<Token>('token');
+            if (token) {
+              token.marked = true;
+            }
+          }),
+        ),
       }),
-    );
+    });
   }
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, FlowEngine, defineFlow, simultaneousActionStep, sequence, execute } from '../index.js';
+import { Game, Player, Action, FlowEngine, type FlowDefinition, simultaneousActionStep, sequence, execute } from '../index.js';
 
 /**
  * BUG 7 regression (reported from 1-2 Punch): a seat is absent from
@@ -58,7 +58,7 @@ describe('BUG 7 / simultaneousActionStep: allDone is authoritative on an empty a
   }
 
   function buildEngine(game: DepletedGame): FlowEngine<DepletedGame> {
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: sequence(
         simultaneousActionStep({
           name: 'plan',
@@ -69,7 +69,7 @@ describe('BUG 7 / simultaneousActionStep: allDone is authoritative on an empty a
           game.advanced = true;
         }),
       ),
-    });
+    };
     return new FlowEngine(game, flow);
   }
 
@@ -107,14 +107,14 @@ describe('BUG 7 / simultaneousActionStep: allDone is authoritative on an empty a
     // the step open, so the original auto-complete remains correct. This pins
     // the fix to allDone-bearing steps only.
     const game = buildGame([1, 1]);
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: sequence(
         simultaneousActionStep({ name: 'plan', actions: ['commit'] }),
         execute(() => {
           game.advanced = true;
         }),
       ),
-    });
+    };
 
     const state = new FlowEngine(game, flow).start();
 

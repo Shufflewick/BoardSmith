@@ -7,7 +7,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -40,15 +39,13 @@ class PickGame extends Game<PickGame, Player> {
         .execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: (ctx) => ctx.game.total < 6,
-          maxIterations: 100,
-          do: eachPlayer({ do: actionStep({ actions: ['pick', 'cheat'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: (ctx) => ctx.game.total < 6,
+        maxIterations: 100,
+        do: eachPlayer({ do: actionStep({ actions: ['pick', 'cheat'] }) }),
       }),
-    );
+    });
   }
 }
 

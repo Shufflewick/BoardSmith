@@ -10,7 +10,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -48,15 +47,13 @@ class CheckGame extends Game<CheckGame, Player> {
         }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: (ctx) => ctx.game.total < 30,
-          maxIterations: 100,
-          do: eachPlayer({ do: actionStep({ actions: ['add'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: (ctx) => ctx.game.total < 30,
+        maxIterations: 100,
+        do: eachPlayer({ do: actionStep({ actions: ['add'] }) }),
       }),
-    );
+    });
   }
 }
 

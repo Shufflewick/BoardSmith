@@ -3,7 +3,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -43,14 +42,12 @@ class SizedGame extends Game<SizedGame, Player> {
       Action.create('pass').execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 4,
-          do: eachPlayer({ do: actionStep({ actions: ['pass'], turnScope: 'restart' }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 4,
+        do: eachPlayer({ do: actionStep({ actions: ['pass'], turnScope: 'restart' }) }),
       }),
-    );
+    });
   }
 }
 

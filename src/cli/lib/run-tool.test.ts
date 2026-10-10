@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdirSync, writeFileSync, chmodSync } from 'node:fs';
-import { delimiter, join, relative } from 'node:path';
+import { delimiter, dirname, join, relative, sep } from 'node:path';
 import { createRequire } from 'node:module';
-import { fallowCommandLine, runTool, runToolCapturingStdout } from './run-tool.js';
+import { fallowCommandLine, runTool, runToolCapturingStdout, toolCommand } from './run-tool.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
@@ -190,5 +190,42 @@ describe('fallow', () => {
     const line = fallowCommandLine(['health', '--save-baseline', 'x.json'], workspace);
 
     expect(line).toBe(`node ${relative(workspace, script)} health --save-baseline x.json`);
+  });
+});
+
+/**
+ * #551: `boardsmith audit --duplication` ran jscpd through `npx`, so whichever
+ * jscpd the machine had cached or npm called latest decided the verdict.
+ * fallow cannot replace it: it scans only the script blocks of `.vue` files,
+ * and jscpd is what catches duplicated `<template>` markup in `src/ui`. So
+ * boardsmith depends on one exact jscpd and runs THAT one, as it does fallow.
+ */
+describe('jscpd', () => {
+  const boardsmithRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..', '..');
+
+  it("is pinned to an exact version in boardsmith's own dependencies", () => {
+    const require = createRequire(import.meta.url);
+    const { dependencies } = require(join(boardsmithRoot, 'package.json')) as {
+      dependencies: Record<string, string>;
+    };
+
+    expect(dependencies.jscpd).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  it("resolves from boardsmith's own install, never the workspace's or npx", () => {
+    writeLocalBin('jscpd', 'echo "jscpd 0.0.0-workspace"');
+
+    const { command, commandArgs } = toolCommand('jscpd', ['src/'], workspace);
+
+    expect(command).toBe(process.execPath);
+    expect(commandArgs[0]).toContain(`${sep}node_modules${sep}jscpd${sep}`);
+    expect(commandArgs.slice(1)).toEqual(['src/']);
+  });
+
+  it('never falls back to npx when the workspace has no jscpd', () => {
+    const { command } = toolCommand('jscpd', [], workspace);
+
+    expect(command).not.toBe('npx');
+    expect(command).toBe(process.execPath);
   });
 });

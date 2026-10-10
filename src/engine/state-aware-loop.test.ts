@@ -13,7 +13,7 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
+  type FlowDefinition,
   stateAwareLoop,
   sequence,
   actionStep,
@@ -48,8 +48,8 @@ class PhaseGame extends Game<PhaseGame, Player> {
 }
 
 /** The MERC shape: a composite body, a fixed actor, and a skip. */
-function buildFlow(options: { skip?: boolean } = {}) {
-  return defineFlow({
+function buildFlow(options: { skip?: boolean } = {}): FlowDefinition {
+  return {
     root: stateAwareLoop({
       name: 'rebel-phase',
       maxIterations: 12,
@@ -82,7 +82,7 @@ function buildFlow(options: { skip?: boolean } = {}) {
         }),
       ),
     }),
-  });
+  };
 }
 
 function run(options: { skip?: boolean } = {}) {
@@ -125,14 +125,14 @@ describe('a player override on the simple form', () => {
       gameOptions: { playerCount: 2, playerNames: ['A', 'B'], seed: 'who' },
     });
     runner.game.setFlow(
-      defineFlow({
+      {
         root: stateAwareLoop({
           actions: ['strike', 'hold'],
           maxIterations: 12,
           while: (ctx: FlowContext) => (ctx.game as PhaseGame).actionsLeft > 0,
           player: (ctx) => ctx.game.getPlayer(seat)!,
         }),
-      })
+      }
     );
     runner.start();
     return runner;
@@ -153,14 +153,14 @@ describe('a player override on the simple form', () => {
       gameOptions: { playerCount: 2, playerNames: ['A', 'B'], seed: 'skip' },
     });
     runner.game.setFlow(
-      defineFlow({
+      {
         root: stateAwareLoop({
           actions: ['strike', 'hold'],
           maxIterations: 12,
           while: (ctx: FlowContext) => (ctx.game as PhaseGame).iterations++ < 2,
           skipIf: () => true,
         }),
-      })
+      }
     );
     runner.start();
     expect(runner.game.resolved).toEqual([]);
@@ -188,7 +188,7 @@ describe('the simple form still works exactly as before', () => {
       gameOptions: { playerCount: 2, playerNames: ['A', 'B'], seed: 'simple' },
     });
     runner.game.setFlow(
-      defineFlow({
+      {
         root: stateAwareLoop({
           actions: ['strike', 'hold'],
           maxIterations: 12,
@@ -196,7 +196,7 @@ describe('the simple form still works exactly as before', () => {
           pendingStates: (ctx) => [(ctx.game as PhaseGame).pendingCombat],
           turnScope: 'continue',
         }),
-      })
+      }
     );
     runner.start();
     expect(runner.getFlowState()?.awaitingInput).toBe(true);

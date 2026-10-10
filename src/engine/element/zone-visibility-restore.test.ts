@@ -37,7 +37,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   actionStep,
   type GameOptions,
 } from '../index.js';
@@ -87,14 +86,14 @@ class ZoneVisGame extends Game<ZoneVisGame, Player> {
     );
 
     this.setFlow(
-      defineFlow({
+      {
         root: actionStep({
           actions: ['noop', 'reveal', 'rehide'],
           player: (ctx) => ctx.game.getPlayer(1)!,
           repeatUntil: () => false,
           maxMoves: 10,
         }),
-      })
+      }
     );
   }
 }
