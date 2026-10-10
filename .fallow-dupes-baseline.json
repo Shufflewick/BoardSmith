@@ -2,7 +2,7 @@
   "kind": "dupes",
   "clone_groups": [
     "src/ui/components/auto-ui/renderers/DeckRenderer.vue:40-79|src/ui/components/auto-ui/renderers/HandRenderer.vue:60-99",
-    "src/eslint-plugin/rules/no-element-array-state.ts:152-179|src/eslint-plugin/rules/no-element-identity-comparison.ts:177-204",
+    "src/eslint-plugin/rules/no-element-array-state.ts:152-179|src/eslint-plugin/rules/no-element-identity-comparison.ts:175-202",
     "src/eslint-plugin/rules/no-element-array-state.ts:66-107|src/eslint-plugin/rules/no-element-identity-comparison.ts:59-110",
     "src/ui/components/helpers/HeatmapOverlay.vue:211-236|src/ui/components/helpers/HintOverlay.vue:221-246|src/ui/components/helpers/TutorialOverlay.vue:290-315",
     "src/session/testing/fixtures/bookkeeping-execute-fixture.ts:34-51|src/session/testing/fixtures/execute-barrier-fixture.ts:62-82",

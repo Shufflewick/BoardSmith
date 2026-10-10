@@ -449,7 +449,7 @@ After generating the code:
 
 2. **Verify TypeScript compiles**:
    ```bash
-   npx vue-tsc --noEmit
+   boardsmith typecheck
    ```
    Fix any errors and re-run.
 
@@ -566,7 +566,7 @@ After generating the code:
 3. **Use rng()** - Playout policy MUST use weighted-random, not deterministic
 4. **playerSeat is 1-indexed** - In 2-player games: 1 or 2
 5. **Verify imports** - Check element types match actual class names
-6. **Run vue-tsc** - Always verify TypeScript compiles (`npx vue-tsc --noEmit`, never plain `tsc`)
+6. **Run vue-tsc** - Always verify TypeScript compiles (`boardsmith typecheck`, never plain `tsc`)
 7. **Test manually** - bot vs bot misses human exploits
 8. **Weight semantics** - Positive = maximize, negative = minimize/avoid
 
