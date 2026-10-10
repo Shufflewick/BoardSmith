@@ -1,7 +1,7 @@
 {
-  "revision": 151,
+  "revision": 152,
   "bundleProtocol": 2,
-  "surfaceHash": "dbd85fd9d4fcb20e",
+  "surfaceHash": "6896b64c617ed8c6",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1303,6 +1303,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "boardsmith/ui exports GameRootView, a game-root view with required phase, isFinished and settings; board gameView props are GameRootView | null; boardsmith/testing's HiddenInfoGameView equals it; games whose hand-built view fixtures omit those fields must add them (#570)"
+    },
+    {
+      "revision": 152,
+      "date": "2026-10-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "6896b64c617ed8c6",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "No behaviour change: FlowEngine gains private helper methods (publishMoveCounts, publishMoveLimits, publishOpenStep, settleExternalSimultaneousAction, expireSimultaneousSeat) split out of getState, resumeAfterExternalAction and expireHeldSeat, so its prototype lists them."
     }
   ]
 }
