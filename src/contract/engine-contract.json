@@ -1,5 +1,5 @@
 {
-  "revision": 145,
+  "revision": 146,
   "bundleProtocol": 2,
   "surfaceHash": "e949c8726719a502",
   "payloadHash": "3f10d70c457a15ba",
@@ -1249,6 +1249,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "boardsmith/ui no longer reaches three through the auto-UI's DieRenderer (#590), so a game without 3D dice type-checks and validates against a packaged engine without three installed; a game whose dice the auto-UI draws in play must now add `import 'boardsmith/ui/dice';` (with three installed), or the auto-UI shows labels only and warns once in dev."
+    },
+    {
+      "revision": 146,
+      "date": "2026-10-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "e949c8726719a502",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A simultaneous step's players filter now also governs game.refreshAwaitingActions() (#557): a refresh admits only seats the filter includes and never removes a seat already awaited because the filter has dropped it, so replaying a log in which a refresh had admitted a seat the filter excluded now refuses that seat's moves and the game diverges."
     }
   ]
 }
