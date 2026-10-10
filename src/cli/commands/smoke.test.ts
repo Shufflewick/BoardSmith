@@ -28,6 +28,7 @@ import {
   boardThatHidesThePanelForAMoment,
   boardThatRedrawsThePanel,
   panelThatHangsOnThePointer,
+  HUNG,
   boardThatReplacesItsFrame,
   boardThatKeepsReordering,
   boardUnderTheHostsCover,
@@ -77,8 +78,8 @@ onMounted(() => console.error('the table lost its deck'));
  */
 async function smokeOf(world: boolean, files: Record<string, string> = {}) {
   const dir = await smokeProject(world, files);
-  const { outcome, pids, steps } = await smokeIn(dir);
-  return { dir, outcome, pids, steps };
+  const { outcome, pids, steps, said } = await smokeIn(dir);
+  return { dir, outcome, pids, steps, said };
 }
 
 /** Runs the smoke check on the greetings game (#470), with the spec's `inputs` written as `inputs`. */
@@ -88,14 +89,14 @@ function walkGreetings(inputs: string) {
 
 /**
  * Runs the smoke check on the project in `dir`, holds it to leaving nothing running and no copy
- * behind, and returns what the walk said it did at each step, in order.
+ * behind, and returns what the walk said it did at each step, in order, and every line the run said.
  */
 async function smokeIn(dir: string) {
   const said: string[] = [];
   const { outcome, pids } = await runSmoke({ projectDir: dir, log: (line) => said.push(line) });
   expect(pids.filter(isRunning)).toEqual([]);
   expect(existsSync(join(dir, '.boardsmith', 'smoke'))).toBe(false);
-  return { outcome, pids, steps: said.filter((line) => /^smoke( step \d+)?: /.test(line)) };
+  return { outcome, pids, said, steps: said.filter((line) => /^smoke( step \d+)?: /.test(line)) };
 }
 
 describe('boardsmith verify: the smoke check', () => {
@@ -515,11 +516,15 @@ describe('boardsmith verify: the smoke check', () => {
   });
 
   it('#573: presses a panel button again when its click ran out of time after only the pointer pressed it, and takes the action once', async () => {
-    const { outcome, steps } = await smokeOf(false, {
+    const { outcome, steps, said } = await smokeOf(false, {
       ...aceGame(),
       ...panelThatHangsOnThePointer(),
-      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 3 }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 3, echo: HUNG }),
     });
+
+    // The page hung the first press of each action: without it, this test would not exercise the
+    // press whose click never arrived.
+    expect(said.filter((line) => line.includes(HUNG))).toEqual([`${HUNG} "draw"`, `${HUNG} "play"`]);
 
     // "draw" was taken at step 1 by the second press: a walk that counted the first press as landed
     // would leave it untaken, and take it again at step 2.
