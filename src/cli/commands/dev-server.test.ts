@@ -22,7 +22,8 @@ import { join } from 'node:path';
 import { createServer as createViteServer, type ViteDevServer } from 'vite';
 import { WebSocket as WsClient } from 'ws';
 
-import { claimWebSocketPath, reloadOnRulesEdit, serveVite } from './dev-server.js';
+import { answerAlive, claimWebSocketPath, reloadOnRulesEdit, serveVite } from './dev-server.js';
+import { DEV_HOST_ALIVE_PATH } from '../../testing/browser-smoke-clock.js';
 import { freePort } from '../lib/free-port.js';
 import { teardownInOrder } from '../dev-host/shutdown.js';
 import { createRulesReloadQueue } from '../dev-host/rules-reload-queue.js';
@@ -128,6 +129,35 @@ describe('a served Vite leaves the process alone (#382)', () => {
     await served.vite.restart();
     expect(process.listenerCount('SIGTERM')).toBe(sigterm);
     expect(process.stdin.listenerCount('end')).toBe(stdinEnd);
+  }, 30000);
+});
+
+describe('the dev host says it is answering (#609)', () => {
+  it(`answers ${DEV_HOST_ALIVE_PATH} with nothing, and leaves every other path to the rest of the dev host`, async () => {
+    dir = tempTree('bs-dev-alive-');
+    writeFileSync(join(dir, 'index.html'), '<!doctype html><title>t</title>');
+    const port = await freePort();
+    const served = await serveVite({
+      config: {
+        root: dir,
+        configFile: false,
+        logLevel: 'silent',
+        plugins: [{ name: 'alive', configureServer: (server) => answerAlive(server) }],
+      },
+      port,
+      host: '127.0.0.1',
+      sockets: [],
+      release: () => {},
+    });
+    const teardown = teardownInOrder(served.resources);
+    stopServed = () => teardown.run();
+
+    const alive = await fetch(`http://127.0.0.1:${port}${DEV_HOST_ALIVE_PATH}`);
+    const page = await fetch(`http://127.0.0.1:${port}/`);
+
+    expect(alive.status).toBe(204);
+    expect(await alive.text()).toBe('');
+    expect(page.status).toBe(200);
   }, 30000);
 });
 

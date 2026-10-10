@@ -290,13 +290,17 @@ async function startDev(started: Started, copy: string): Promise<string | SmokeO
 }
 
 /**
- * The longest any one action or read of an element may wait under Playwright (#464). The walk
- * bounds its own waits more tightly; this is the floor under any it does not, so nothing waits
- * out the whole run.
+ * The longest any one Playwright call that takes a time limit may wait for an element (#464). The
+ * walk bounds its own waits more tightly. A script run in the page (`evaluate`, `evaluateAll`) or
+ * a count of elements takes no time limit, so this does not bound it: until #618, a board that
+ * hangs during one runs until {@link WALK_LIMIT_MS}.
  */
 const ACTION_LIMIT_MS = 15_000;
 
-/** The longest a page load may take: Vite prepares the game on its first load. */
+/**
+ * The longest `boardsmith dev` may take to start answering a page load. The walk loads each page only
+ * that far (`waitUntil: 'commit'`) and waits for the game to show on the page's clock (#609).
+ */
 const NAVIGATION_LIMIT_MS = 90_000;
 
 /** The Playwright configuration for one run, as the module the runner loads. */
