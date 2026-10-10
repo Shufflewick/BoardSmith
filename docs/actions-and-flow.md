@@ -17,6 +17,11 @@ Pass your concrete game class to `Action.create<MyGame>(...)`. The builder then
   `execute` handler receives a **fully-typed `args`** — no `args.card as Card`
   casts, and a typo'd key (`args.crad`) is a compile error instead of silently
   returning `undefined`.
+- A selection's `validate(value, args, ctx)` gets `args` typed the same way,
+  from the picks declared before it (a repeating pick also sees its own earlier
+  picks as an array), so `args.amount` is a `number`, not `unknown`.
+- A `chooseElement` given `elementClass: Cell` hands its `filter` a `Cell`, since
+  every candidate is one: `filter: (cell) => cell.isEmpty()` needs no cast.
 
 - `ctx.player` is typed as **your** player subclass too. It is derived from the
   game type you already named, so `Action.create<MyGame>(...)` on a
@@ -170,7 +175,7 @@ then `onEach` runs for it, and `until` is tested.
     choices: ['ice', 'fire', 'stop'],
     repeatUntil: 'stop',
     validate: (pick, args) =>                          // pick: string
-      !(pick === 'fire' && (args.rune as string[]).includes('ice')) || 'Fire cannot follow ice.',
+      !(pick === 'fire' && args.rune.includes('ice')) || 'Fire cannot follow ice.',
   })
   ```
 
