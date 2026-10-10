@@ -59,11 +59,22 @@ platform's tooling reads cannot drift apart.
 Three fingerprints, all recomputed by `src/contract/engine-contract.test.ts` on
 every test run:
 
-- **`surfaceHash`** — the sorted runtime export names of the three entrypoints
-  the platform can reach: `boardsmith` and `boardsmith/session` (supplied to
-  game rules by the executor's `sandboxedRequire`) and
-  `boardsmith/session-host` (imported directly by the games worker). Catches
-  added, removed, and renamed API.
+- **`surfaceHash`** — the runtime API of the entrypoints the platform can
+  reach (`PLATFORM_ENTRYPOINTS`): `boardsmith` and `boardsmith/session`
+  (supplied to game rules by the executor's `sandboxedRequire`), and
+  `boardsmith/session-host`, `boardsmith/persistence` and `boardsmith/world`
+  (imported directly by the games worker). For each export it records the name
+  and, for a class or function, every member a compiled `rules.js` can reach,
+  each with its kind: prototype methods and accessors, statics, and instance
+  fields, inherited ones included (#575). Instance fields exist only once a
+  class is constructed, so they are read from the entrypoint's TypeScript
+  source. Catches added, removed and renamed API, and a member that changed
+  kind (a method turned into a getter, a field moved onto the class).
+
+  ShufflewickPub routes a persistent world only to a runner declaring the same
+  `surfaceHash` as the revision its bundle was built on (ShufflewickPub #599),
+  so anything this hash cannot see can put a world on a runner without a
+  member its rules call.
 - **`payloadHash`** — what a fixed fixture in `src/contract/fingerprint.ts`
   ships to clients, on **both backends**. Catches semantic changes that leave
   the API identical but alter what a player receives.
@@ -127,11 +138,17 @@ platform-visible engine change without either recording it or deleting a test.
 
 ### The known limit
 
-`surfaceHash` sees runtime values only. `verbatimModuleSyntax` erases type-only
-exports, so changing an exported **type** — adding an optional field to
-`PlayerStateView`, say — moves neither hash unless it also changes a real
-payload. Type-level contract changes still need a judgement call. If you make
-one, extend the fixture so the change becomes visible, then update the contract.
+`surfaceHash` sees member **names and kinds** only, never types, values or
+signatures. That is a choice, not an oversight: types are erased from
+`rules.js`, so no compiled bundle can depend on one at runtime, and a type change
+a running game can feel arrives as a changed payload, which `payloadHash`
+covers. Hashing types would mint a new surface for every type refinement, and on
+the platform each new surface keeps an older world runner alive for every world
+built before it. So changing an exported **type** (adding an optional field to
+`PlayerStateView`, say) or a method's parameters moves neither hash unless it
+also changes a real payload. Those changes still need a judgement call. If you
+make one, extend the fixture so the change becomes visible, then update the
+contract.
 
 This limit is stated rather than hidden because a fingerprint people
 over-trust is worse than one they understand.
