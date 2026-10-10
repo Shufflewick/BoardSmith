@@ -1670,7 +1670,6 @@ A game ends the moment it is finished, wherever the flow is. Any of these
 finishes it:
 
 - an action or an `execute()` calls `game.finish([winner])`,
-- something runs the `END_GAME` command,
 - your game's own `isFinished()` override starts returning true, or
 - the flow runs out of nodes.
 
