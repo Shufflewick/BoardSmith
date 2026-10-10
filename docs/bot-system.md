@@ -232,7 +232,7 @@ interface BotConfig {
   /** Maximum time in milliseconds before returning best move found. Default: 2000 */
   timeout?: number;
 
-  /** Number of parallel ensemble searches. Default: 1 */
+  /** Number of ensemble searches, run one after another and sharing `timeout`. Default: 1 */
   parallel?: number;
 }
 ```
@@ -243,7 +243,7 @@ interface BotConfig {
 
 2. **Playout depth**: Deeper playouts give more accurate evaluations but take longer. 3-5 is usually sufficient.
 
-3. **Timeout**: The timeout ensures the bot always returns within a reasonable time, even if iterations haven't completed.
+3. **Timeout**: The timeout ensures the bot always returns within a reasonable time, even if iterations haven't completed. A parallel bot (`parallel > 1`) runs its searches one after another within that one timeout: each gets an equal share of the time left, so a `hard` move takes at most its 2000 ms, not 2000 ms per search.
 
 4. **Branching factor**: Games with many possible moves per turn will have fewer iterations explored per move. The bot samples up to 20 choices per selection to limit combinatorial explosion.
 

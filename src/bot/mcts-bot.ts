@@ -194,10 +194,15 @@ export class MCTSBot<G extends Game = Game> {
    * bot's own random source. Taking the first sub-search's move on a split
    * made every other sub-search's work count only when it agreed, so a
    * `parallel: 2` bot was a single search of half the iterations (#427).
+   *
+   * The sub-searches run one after another and share the bot's one `timeout`:
+   * each gets an equal share of the time still left, so the whole move stays
+   * within `timeout` (#634). An infinite timeout stays infinite for each.
    */
   private async playParallel(): Promise<BotMove | null> {
     const parallelCount = this.config.parallel!;
     const iterationsPerSearch = Math.floor(this.config.iterations / parallelCount);
+    const deadline = Date.now() + (this.config.timeout ?? 2000);
 
     // Votes and summed root visits for each move any sub-search chose or explored.
     const tally = new Map<string, { votes: number; visits: number; move: BotMove }>();
@@ -220,6 +225,7 @@ export class MCTSBot<G extends Game = Game> {
         ...this.config,
         seed: this.seed === undefined ? undefined : `${this.seed}-parallel-${i}`,
         iterations: iterationsPerSearch,
+        timeout: Math.max(0, deadline - Date.now()) / (parallelCount - i),
         parallel: 1, // Prevent recursion
       };
 
