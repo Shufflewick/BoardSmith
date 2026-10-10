@@ -37,7 +37,6 @@
  *
  * @module
  */
-import { setTimeout as sleep } from 'node:timers/promises';
 import { errors, test, type Browser, type BrowserContext, type Frame, type Locator, type Page } from '@playwright/test';
 import { DEV_HOST_ALIVE_PATH, PageClock, PageFrozen } from './browser-smoke-clock.js';
 import {
@@ -393,7 +392,7 @@ async function actWithinPageTime(
   const acting = act(0);
   acting.catch(() => undefined);
   for (;;) {
-    if (await Promise.race([acting.then(() => true), sleep(TRY_MS / 10).then(() => false)])) return;
+    if (await Promise.race([acting.then(() => true), new Promise<boolean>((tick) => setTimeout(() => tick(false), TRY_MS / 10))])) return;
     if (over(budgetMs)) throw new errors.TimeoutError(`${what}: not done in ${budgetMs / 1000}s of the page answering`);
     await meanwhile?.();
   }
