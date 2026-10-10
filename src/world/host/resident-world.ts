@@ -120,6 +120,33 @@ function vacancyWrite(
   return vacated === undefined ? {} : { vacate: vacated };
 }
 
+/**
+ * THE QUEUE WRITES ONE DISPATCH COMES TO: what it settles, what it arms, and
+ * whether it displaced the occurrence it ran (#583).
+ *
+ * A due occurrence settles its own event and re-arms it at `owedDue`, beside
+ * whatever its plan inserted and displaced. When the plan displaced the event
+ * itself -- the handler upserted or cancelled its own key -- the handler's
+ * request wins and the re-arm is not written. The event's id is settled once
+ * even when the plan names it too.
+ */
+function queueWrite(
+  occurrence: { readonly event: PlannedEvent; readonly owedDue: number | null } | undefined,
+  plan: { readonly events: readonly PlannedEvent[]; readonly replaced: readonly string[] },
+): { settle: string[]; schedule: PlannedEvent[]; displaced: boolean } {
+  if (occurrence === undefined) {
+    return { settle: [...plan.replaced], schedule: [...plan.events], displaced: false };
+  }
+  const { event, owedDue } = occurrence;
+  const displaced = plan.replaced.includes(event.id);
+  const rearm = displaced || owedDue === null ? [] : [{ ...event, due: owedDue, attempts: 0 }];
+  return {
+    settle: [event.id, ...plan.replaced.filter((id) => id !== event.id)],
+    schedule: [...rearm, ...plan.events],
+    displaced,
+  };
+}
+
 interface ResidentWorldOptions {
   /** The bundle's `gameDefinition`, exactly as `createWorld` reads it. */
   readonly definition: WorldRunnerOptions["definition"];
@@ -1001,15 +1028,9 @@ export class ResidentWorld {
       this.#budgets,
     );
 
-    // THE HANDLER'S OWN REQUEST WINS (#583). An occurrence whose plan displaced
-    // the event it ran upserted or cancelled that event's key, so the plan is
-    // what stays queued under it and the automatic re-arm is not written.
-    const { occurrence } = request;
-    const displaced = occurrence !== undefined && plan.replaced.includes(occurrence.event.id);
-    const rearm =
-      occurrence === undefined || displaced || occurrence.owedDue === null
-        ? undefined
-        : { ...occurrence.event, due: occurrence.owedDue, attempts: 0 };
+    // THE HANDLER'S OWN REQUEST WINS (#583): `queueWrite` drops the re-arm of
+    // an occurrence whose plan displaced its own event.
+    const { settle, schedule, displaced } = queueWrite(request.occurrence, plan);
 
     // RECORDED BEFORE THE CHECKPOINT, deliberately: a restart that finds a
     // non-empty dirty set is being told the truth about which partitions'
@@ -1021,8 +1042,8 @@ export class ResidentWorld {
         // SETTLED AND ARMED IN THE SAME WRITE AS THE EFFECTS. A crash between
         // them would replay a handler onto already-durable state, or leave a
         // rolled-back command's timers behind.
-        settle: [...new Set([...(occurrence === undefined ? [] : [occurrence.event.id]), ...plan.replaced])],
-        schedule: [...(rearm === undefined ? [] : [rearm]), ...plan.events],
+        settle,
+        schedule,
         // THE ORDER'S RECEIPT LANDS WITH ITS EFFECTS (#195), or neither does.
         ...(request.receipt === undefined ? {} : { receipt: request.receipt }),
         // And the ledger is swept on the way past, so a world running for
