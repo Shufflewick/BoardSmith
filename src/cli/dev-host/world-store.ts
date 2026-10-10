@@ -1132,8 +1132,9 @@ interface SqliteModule {
  * the process emits, including the author's own, is untouched, which is why
  * this is not `--no-warnings` and not a listener that mutes the category.
  *
- * The decision itself is not hidden: it is written here, in `engines.node`, and
- * in the getting-started page's Node requirement.
+ * The decision itself is not hidden: it is written in this file, in the
+ * "WHY `node:sqlite`" section at the top and in `REQUIRED_NODE_VERSION`, which
+ * `assertNodeSupportsSqlite` checks before this import.
  */
 function loadSqlite(): SqliteModule {
   assertNodeSupportsSqlite();
