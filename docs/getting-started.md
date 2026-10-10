@@ -19,7 +19,7 @@ written.
 
 ## Prerequisites
 
-- Node.js 22.5+ (BoardSmith keeps a persistent world's local store in SQLite through Node's own `node:sqlite`, which arrived in 22.5)
+- Node.js 22.13+ or 24+ (BoardSmith runs its own copy of ESLint 10 for `boardsmith lint` and `boardsmith validate`, and ESLint 10 supports only those versions; Node 23 is not supported)
 - npm, pnpm, or yarn
 
 ## Quick Start

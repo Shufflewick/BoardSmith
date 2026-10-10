@@ -39,8 +39,8 @@
  * `node:sqlite` is built into Node, so it adds no dependency and no native
  * build step. `better-sqlite3` would keep the Node floor at `>=20` but would
  * put a compiler in front of every author who types `npm install boardsmith`,
- * which is the opposite of what #164 is for. The price is BoardSmith's
- * `engines.node` floor rising to `>=22.5`, which is paid deliberately and once.
+ * which is the opposite of what #164 is for. The price is needing Node 22.5 or
+ * newer. BoardSmith's `engines.node` floor is higher still (22.13, for ESLint 10).
  *
  * ## WHY A DIRECTORY, AND NOT UNDER `.boardsmith/`
  *
@@ -105,8 +105,9 @@ import type { WorldReceipt } from '../../world/orders.js';
  * The lowest Node that has `node:sqlite`.
  *
  * Named rather than spelled inside the check, because the same number is the
- * one `package.json`'s `engines.node` declares and the one the error message
- * has to tell an author to install.
+ * one the error message has to tell an author to install. `package.json`'s
+ * `engines.node` asks for more (22.13, for ESLint 10); this constant is only
+ * what the world store itself needs.
  */
 export const REQUIRED_NODE_VERSION = '22.5.0';
 
