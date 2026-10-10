@@ -18,6 +18,7 @@ import {
   parseSource,
 } from './test-step-ast.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { scriptRegions } from './test-step-sfc.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 
 // -------------------------------------------------------------------------------------------
@@ -181,9 +182,18 @@ const notAVerb = standingVerb;
 describe('parseSource on a file that does not parse', () => {
   // #303: plain `tsc` cannot type a `.vue` import, so pointing a game author at it buries the
   // real syntax error under a TS2307 for every single-file component.
-  it('sends the author to vue-tsc, the checker a game installs, never plain tsc', () => {
+  // #613: `npx vue-tsc` would offer to download the latest vue-tsc when the game has none.
+  it('sends the author to boardsmith typecheck, never plain tsc or npx', () => {
     expect(() => parseSource('export const = ;', 'src/rules/game.ts')).toThrow(
-      /Fix the syntax error \(run `npx vue-tsc --noEmit`\)/,
+      /Fix the syntax error \(run `boardsmith typecheck`\)/,
+    );
+  });
+});
+
+describe('scriptRegions on a component that does not parse', () => {
+  it('sends the author to boardsmith typecheck, never npx', () => {
+    expect(() => scriptRegions('src/ui/Board.vue', '<template><div></template>')).toThrow(
+      /Fix the component \(run `boardsmith typecheck`\)/,
     );
   });
 });

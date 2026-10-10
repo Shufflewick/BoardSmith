@@ -151,8 +151,11 @@ describe('runVitestRecorded in a project with no vitest (#595)', () => {
     try {
       await expect(runVitestRecorded([], project)).rejects.toThrow('npm install -D vitest');
     } finally {
-      process.env.TMPDIR = original;
+      if (original === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = original;
     }
     expect(readdirSync(tmp)).toEqual([]);
+    // #613: an unset TMPDIR must stay unset, not become the string 'undefined'.
+    expect(process.env.TMPDIR).toBe(original);
   });
 });
