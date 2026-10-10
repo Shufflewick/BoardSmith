@@ -252,6 +252,7 @@ const EVERY_DEBUG_OP: ExecutableOp[] = [
   { type: 'debugStateDiff', fromIndex: 0, toIndex: 1, player: 1 },
   { type: 'debugActionTraces', player: 1 },
   { type: 'debugFlowState', player: 1 },
+  { type: 'debugCustomData', player: 1 },
   { type: 'debugRewind', actionIndex: 1 },
   { type: 'debugReorder', cardId: 1, targetIndex: 0 },
   { type: 'debugTransfer', cardId: 1, targetDeckId: 1, position: 'first' },
@@ -264,6 +265,7 @@ const SEAT_VIEW_OPS: ExecutableOp[] = [
   { type: 'debugStateDiff', fromIndex: 0, toIndex: 1, player: 2 },
   { type: 'debugActionTraces', player: 2 },
   { type: 'debugFlowState', player: 2 },
+  { type: 'debugCustomData', player: 2 },
 ];
 
 describe('#481 debug op gate', () => {

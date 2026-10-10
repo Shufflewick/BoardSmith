@@ -51,6 +51,6 @@ describe('SEC-04: customDebug absent from what the live session host publishes',
     for (const published of [...session.broadcasts, ...session.spectatorViews]) {
       expect(JSON.stringify(published)).not.toContain(SECRET_VALUE);
     }
-    expect(session.playerState(1).customDebug).toBeUndefined();
+    expect(session.playerState(1)).not.toHaveProperty('customDebug');
   });
 });

@@ -61,7 +61,7 @@ function countingSession(options: { botSeats?: Array<{ seat: number }>; botsStop
   const result = (snapshot: Count): OpSuccess<'start'> => ({
     success: true,
     // The host holds only a snapshot that carries its flow state and winners.
-    snapshot: { ...snapshot, flowState: {}, winners: [] } as unknown as GameStateSnapshot,
+    snapshot: { ...snapshot, flowState: {}, winners: [], actionHistory: [] } as unknown as GameStateSnapshot,
     playerViews: [{ state: { count: snapshot.count } }],
     spectatorView: undefined,
     flowDebugInfo: {} as SerializedFlowDebugInfo,

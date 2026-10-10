@@ -191,7 +191,7 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
     // dropped whenever a pump happens to be in flight is not a wake.
     const base = {
       success: true,
-      snapshot: { flowState: {}, winners: [] },
+      snapshot: { flowState: {}, winners: [], actionHistory: [] },
       playerViews: [],
       botMoved: false,
     };
@@ -272,7 +272,7 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
     // the conversion went through `runBotTurnsInner` and not a clone of it.
     const base = {
       success: true,
-      snapshot: { flowState: {}, winners: [] },
+      snapshot: { flowState: {}, winners: [], actionHistory: [] },
       playerViews: [],
       botMoved: true,
     };

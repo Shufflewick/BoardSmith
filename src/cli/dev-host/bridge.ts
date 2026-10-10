@@ -63,6 +63,7 @@ export type WireOp =
   | 'debug:state-diff'
   | 'debug:action-traces'
   | 'debug:flow-state'
+  | 'debug:custom-data'
   | 'debug:rewind'
   | 'debug:move-to-top'
   | 'debug:reorder-card'
@@ -255,6 +256,8 @@ export function translateOp(
       return { type: 'debugActionTraces', player: seat };
     case 'debug:flow-state':
       return { type: 'debugFlowState', player: seat };
+    case 'debug:custom-data':
+      return { type: 'debugCustomData', player: seat };
     case 'debug:rewind':
       return { type: 'debugRewind', actionIndex: payload.actionIndex as number };
     case 'debug:move-to-top':
@@ -370,6 +373,7 @@ const SHAPERS: { [T in Op['type']]: (result: OpResultFor<T>) => Reply } = {
     r.success
       ? { success: true, flowDebugInfo: r.flowDebugInfo, pendingAction: r.pendingAction }
       : refusal(r),
+  debugCustomData: (r) => (r.success ? { success: true, customDebug: r.customDebug } : refusal(r)),
   debugRewind: outcomeOnly,
   debugReorder: outcomeOnly,
   debugTransfer: outcomeOnly,

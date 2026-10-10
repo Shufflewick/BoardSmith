@@ -1,7 +1,7 @@
 {
-  "revision": 150,
+  "revision": 151,
   "bundleProtocol": 2,
-  "surfaceHash": "dbd85fd9d4fcb20e",
+  "surfaceHash": "f2c48bb2c4cabcea",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1294,6 +1294,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "ctx.world.schedule() refuses a registered seated action at the schedule() line with the game-owned code schedule-seated-action, naming the clock actions that can be scheduled; clock-only-command still answers a seated event queued before this check (#608)"
+    },
+    {
+      "revision": 151,
+      "date": "2026-10-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "f2c48bb2c4cabcea",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Debug panel, dev only: a new debugCustomData debug op returns the game's registerDebug() data to the seat that asks (refused unless the host turns debugging on, so never on the platform), buildPlayerState loses its includeDebugData option and PlayerGameState its customDebug field, and SnapshotSessionHost stamps the time each move reached it on its debugHistory answer, held outside the snapshot (#547)."
     }
   ]
 }

@@ -408,6 +408,26 @@ async function fetchLogs() {
   }
 }
 
+// ── Elements tab: the game's own debug data ─────────────────────────────────
+
+/**
+ * What the game's `registerDebug()` functions report now. The host sends it
+ * only to this seat and only when asked (#547), so it is fetched rather than
+ * read from the state. It describes the live game, so time travel hides it.
+ */
+const liveCustomDebug = ref<Record<string, unknown> | null>(null);
+const customDebugLastFetched = ref(0);
+const customDebugData = computed(() => (isViewingHistory.value ? null : liveCustomDebug.value));
+
+async function fetchCustomDebug() {
+  customDebugLastFetched.value = Date.now();
+  try {
+    liveCustomDebug.value = await bridge.customDebug();
+  } catch {
+    liveCustomDebug.value = null;
+  }
+}
+
 // ── Tab-driven refreshing ───────────────────────────────────────────────────
 // Entering a tab loads it, unless it was loaded moments ago; a new game state
 // reloads whichever tab is showing, because that state is what it describes.
@@ -423,6 +443,9 @@ watch(activeTab, (tab) => {
   if (tab === 'logs' && Date.now() - logsLastFetched.value > TAB_REFRESH_MAX_AGE_MS) {
     fetchLogs();
   }
+  if (tab === 'elements' && Date.now() - customDebugLastFetched.value > TAB_REFRESH_MAX_AGE_MS) {
+    fetchCustomDebug();
+  }
 });
 
 watch(() => props.state, () => {
@@ -432,6 +455,7 @@ watch(() => props.state, () => {
   }
   if (activeTab.value === 'history') fetchHistory();
   if (activeTab.value === 'logs') fetchLogs();
+  if (activeTab.value === 'elements') fetchCustomDebug();
 }, { deep: false });
 
 /**
@@ -442,11 +466,6 @@ watch(() => props.state, () => {
  * not mounted yet.
  */
 const deckCount = computed(() => discoverDecks(displayedView.value).length);
-
-/** Whatever extra the game itself chose to publish for debugging. */
-const customDebugData = computed(
-  () => (displayedState.value as { state?: { customDebug?: unknown } } | null)?.state?.customDebug ?? null
-);
 
 // ── Controls tab ────────────────────────────────────────────────────────────
 

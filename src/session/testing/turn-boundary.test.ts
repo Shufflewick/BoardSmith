@@ -236,7 +236,7 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
       playerCount: 2,
       executeOp: stubExecuteOp(async () => ({
         success: true,
-        snapshot: { flowState: completeButAwaiting, winners: [1] },
+        snapshot: { flowState: completeButAwaiting, winners: [1], actionHistory: [] },
         playerViews: [{}, {}],
       })),
       push: () => {}, record: (_views, meta) => metas.push(meta),

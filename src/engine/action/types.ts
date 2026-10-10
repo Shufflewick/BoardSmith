@@ -875,10 +875,10 @@ export interface SerializedAction {
   /** Serialized arguments */
   args: Record<string, unknown>;
   /**
-   * Wall-clock time this action was recorded, stamped by the SESSION, not the
-   * engine (#54). Absent on any history the engine produced on its own —
-   * a replay, a bot's search, a headless runner — because engine-owned state
-   * must be byte-identical across two runs of the same seed.
+   * When this action reached the session host. Never in a snapshot or any
+   * history the engine holds, because engine-owned state must be
+   * byte-identical across two runs of the same seed (#54): `SnapshotSessionHost`
+   * keeps the time itself and stamps it only on its `debugHistory` answer (#547).
    */
   timestamp?: number;
   /** Whether this action was undoable (false if action.undoable was false) */
@@ -898,7 +898,7 @@ export interface SerializedSeatExpiry {
   /** The seat whose part ended */
   player: number;
   undoable: false;
-  /** Stamped by the session beside the entry, as on `SerializedAction` */
+  /** When the host closed the seat, on the host's `debugHistory` answer only, as on `SerializedAction` */
   timestamp?: number;
 }
 
