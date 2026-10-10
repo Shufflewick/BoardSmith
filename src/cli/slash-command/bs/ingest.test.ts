@@ -143,7 +143,7 @@ describe('INGEST-04 — scaffold with compile+serve verification', () => {
   it('scaffold.md names boardsmith init, vue-tsc --noEmit, and an explicit kill instruction', () => {
     const scaffold = read('ingest/scaffold.md');
     expect(scaffold).toContain('boardsmith init');
-    expect(scaffold).toContain('npx vue-tsc --noEmit');
+    expect(scaffold).toContain('boardsmith typecheck');
     expect(scaffold).toMatch(/kill/i);
   });
 });
