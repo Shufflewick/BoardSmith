@@ -276,9 +276,9 @@ const execFileAsync = promisify(execFile);
 /**
  * The GitHub issue tracker, through the `gh` CLI.
  *
- * Spawned directly rather than through `runTool`, which falls back to `npx`
- * for anything not in `node_modules/.bin` — `gh` is a system binary and `npx
- * gh` would fetch an unrelated package.
+ * Spawned directly rather than through `runTool`, which runs only the tools
+ * boardsmith pins or a workspace's own `node_modules/.bin`: `gh` is a system
+ * binary, found on PATH.
  *
  * `find` searches BOTH open and closed issues. A closed issue is a human's
  * ruling on this exact finding, and re-filing it every run is the auto-filer

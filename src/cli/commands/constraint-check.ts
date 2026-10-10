@@ -16,6 +16,7 @@ import { testRunScopeProblem } from '../lib/test-run-scope.js';
 import { extractSection, parseRulings } from './build-manifest.js';
 import { ENTRY_NUMBER, entryHeadingPattern } from '../lib/ledger-entries.js';
 import { escapeRegExp } from '../lib/regexp.js';
+import { toolCommand } from '../lib/run-tool.js';
 
 /**
  * `boardsmith constraint-check [slug]`: does the project hold its own hard constraints (#288)?
@@ -377,9 +378,16 @@ export const runVitest: TestRunner = async (projectDir, files) => {
     // Not `runVitestRecorded` (lib/vitest-run.ts), which prints the run to the terminal: this run's
     // output, stdout and stderr together, is handed back to the caller to report, and the JSON
     // report says which files ran.
-    const args = ['vitest', 'run', '--reporter=default', '--reporter=json', `--outputFile.json=${reportPath}`, ...files];
+    const args = ['run', '--reporter=default', '--reporter=json', `--outputFile.json=${reportPath}`, ...files];
+    let vitest: { command: string; commandArgs: string[] };
+    try {
+      vitest = toolCommand('vitest', args, projectDir);
+    } catch (error) {
+      // No vitest of the project's own: a refusal, so a merge running this puts everything back.
+      return { refused: (error as Error).message };
+    }
     const { ok, output } = await new Promise<{ ok: boolean; output: string }>((done) => {
-      const child = spawn('npx', args, { cwd: projectDir, shell: process.platform === 'win32' });
+      const child = spawn(vitest.command, vitest.commandArgs, { cwd: projectDir, shell: process.platform === 'win32' });
       let text = '';
       child.stdout.on('data', (d: Buffer) => (text += d.toString()));
       child.stderr.on('data', (d: Buffer) => (text += d.toString()));

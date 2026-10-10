@@ -1,5 +1,5 @@
 import { createWriteStream, existsSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
 
@@ -19,48 +19,64 @@ interface ToolEnd {
 }
 
 /**
- * Tools boardsmith itself depends on at an exact version, keyed by bin name,
- * each mapped to its entry script inside the package.
+ * Tools boardsmith itself depends on at an exact version, each keyed by its
+ * bin name and mapped to the package that provides it.
  *
  * These run from boardsmith's OWN install whatever the cwd, because their
- * output is a verdict `boardsmith audit` gives: their findings change between
+ * output is a verdict boardsmith gives: their findings change between
  * releases, so a game's own copy, a global one on PATH or whatever `npx`
  * fetches would grade the same tree differently on every machine. fallow was
- * pinned in #545, jscpd in #551.
+ * pinned in #545, jscpd in #551, eslint (whose plugin and sandbox scan
+ * boardsmith already ships) in #595.
  */
 const BOARDSMITH_TOOLS: Readonly<Record<string, string>> = {
-  fallow: 'fallow/bin/fallow',
-  jscpd: 'jscpd/run-jscpd.js',
+  eslint: 'eslint',
+  fallow: 'fallow',
+  jscpd: 'jscpd',
 };
 
-/** The entry script of `bin` in boardsmith's own install, or a readable error. */
-function boardsmithToolScript(bin: string, entry: string): string {
+/**
+ * The entry script of `bin` in boardsmith's own install, or a readable error.
+ * Found through the package's `bin` field, since a package's `exports` need
+ * not expose its bin script (eslint's does not).
+ */
+function boardsmithToolScript(bin: string, pkg: string): string {
+  const require = createRequire(import.meta.url);
+  let manifestPath: string;
   try {
-    return createRequire(import.meta.url).resolve(entry);
+    manifestPath = require.resolve(`${pkg}/package.json`);
   } catch {
     throw new Error(
-      `boardsmith depends on ${bin}, but its install has no copy of it.\n`
+      `boardsmith depends on ${pkg}, but its install has no copy of it.\n`
       + 'Reinstall boardsmith\'s dependencies with: npm install',
     );
   }
+  const { bin: bins } = require(manifestPath) as { bin: string | Record<string, string> };
+  return join(dirname(manifestPath), typeof bins === 'string' ? bins : bins[bin]);
 }
 
 /**
  * The command and arguments that run `bin` for a workspace at `cwd`: the one
  * resolution every spawn of a developer tool goes through, exported so a test
  * that must run the same binary as `boardsmith audit` can.
+ *
+ * Any tool boardsmith does not pin (vitest, vue-tsc, stylelint) must match the
+ * workspace's own vue, TypeScript and config, so it runs only from the
+ * workspace's `node_modules/.bin`. A workspace without it is refused with the
+ * install command; nothing is ever fetched with `npx` (#595).
  */
 export function toolCommand(bin: string, args: string[], cwd: string): { command: string; commandArgs: string[] } {
-  const entry = BOARDSMITH_TOOLS[bin];
-  if (entry !== undefined) {
+  const pkg = BOARDSMITH_TOOLS[bin];
+  if (pkg !== undefined) {
     // Resolved from this module, so it is the copy boardsmith's package.json
     // pins, and run with this Node, so no shell or PATH lookup is involved.
-    return { command: process.execPath, commandArgs: [boardsmithToolScript(bin, entry), ...args] };
+    return { command: process.execPath, commandArgs: [boardsmithToolScript(bin, pkg), ...args] };
   }
   const localBin = join(cwd, 'node_modules', '.bin', bin);
-  return existsSync(localBin)
-    ? { command: localBin, commandArgs: args }
-    : { command: 'npx', commandArgs: [bin, ...args] };
+  if (!existsSync(localBin)) {
+    throw new Error(`${bin} is not installed in this project.\nInstall it with: npm install -D ${bin}`);
+  }
+  return { command: localBin, commandArgs: args };
 }
 
 /**
@@ -78,9 +94,9 @@ export function fallowCommandLine(args: string[], cwd: string): string {
  * `boardsmith <command>` is the single way to invoke it.
  *
  * A tool boardsmith depends on (`BOARDSMITH_TOOLS`) runs from boardsmith's own
- * install. Any other tool prefers the workspace's own `node_modules/.bin/<bin>`
- * so a declared devDependency is always what runs, and falls back to `npx` when
- * the workspace has none.
+ * install. Any other tool runs from the workspace's own `node_modules/.bin/<bin>`
+ * so a declared devDependency is always what runs, and is refused when the
+ * workspace has none.
  *
  * `output` decides where the child's output goes: inherited (the developer
  * reads it), stdout piped back to the caller (a command reasons about it), or
@@ -102,8 +118,8 @@ function spawnTool(
       // stderr stays inherited when only stdout is captured: progress and
       // warnings belong on the developer's terminal, not in the parsed value.
       stdio: output === 'inherit' ? 'inherit' : output === 'capture' ? ['inherit', 'pipe', 'inherit'] : ['inherit', 'pipe', 'pipe'],
-      // On Windows both `npx` and the `.bin` shims are batch files, which
-      // `spawn` cannot execute without a shell; Node itself needs none. Everywhere else, running
+      // On Windows the `.bin` shims are batch files, which `spawn` cannot
+      // execute without a shell; Node itself needs none. Everywhere else, running
       // without a shell keeps glob arguments (e.g. 'src/**/*.vue') intact so
       // the tool does its own matching rather than the shell doing it first.
       shell: process.platform === 'win32' && command !== process.execPath,
@@ -168,7 +184,7 @@ function exitCodeOf(end: ToolEnd): number {
  *
  * Resolves with the child's exit code and never throws on a non-zero exit: the
  * caller decides what a failing tool means for the command as a whole. Rejects
- * only when the tool could not be spawned at all.
+ * only when the tool is not installed or could not be spawned at all.
  */
 export async function runTool(
   bin: string,

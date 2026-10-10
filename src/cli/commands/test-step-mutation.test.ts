@@ -195,6 +195,14 @@ async function check(project: string, testSource: string, claims = [1, 2]) {
 }
 
 describe('runMutationCheck', () => {
+  it('refuses a project with no vitest of its own with the install command (#595)', async () => {
+    const tree = tempTree('bs-mutation-');
+    const project = await designProjectFixtures(() => tree).makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    await expect(check(project, "import { it } from 'vitest';\nit('x', () => {});\n")).rejects.toThrow(
+      'vitest is not installed in this project.\nInstall it with: npm install -D vitest',
+    );
+  });
+
   it('passes tests that fail when the implementation is broken', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
     const expectOtherRunsKept = plantOtherRuns(project);

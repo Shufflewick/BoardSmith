@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdirSync, writeFileSync, chmodSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { delimiter, dirname, join, relative, sep } from 'node:path';
 import { createRequire } from 'node:module';
 import { fallowCommandLine, runTool, runToolCapturingStdout, toolCommand } from './run-tool.js';
@@ -9,8 +9,9 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
  * `runTool` is the single spawn point every `boardsmith` command uses to invoke
  * a developer tool, so its two contracts matter everywhere:
  *
- *  1. the workspace's OWN `node_modules/.bin/<tool>` wins, so a declared
- *     devDependency is what runs — never a different version fetched by npx;
+ *  1. a tool runs from exactly one place: boardsmith's own install for a tool
+ *     boardsmith depends on, or the workspace's own `node_modules/.bin/<tool>`
+ *     for any other, and a missing one is refused, never fetched by npx (#595);
  *  2. a non-zero exit is RETURNED, not thrown, so a command can run every
  *     configured check before reporting one overall verdict.
  */
@@ -227,5 +228,72 @@ describe('jscpd', () => {
 
     expect(command).not.toBe('npx');
     expect(command).toBe(process.execPath);
+  });
+});
+
+/**
+ * #595: eslint, stylelint, vitest and vue-tsc ran through `npx` whenever the
+ * workspace had no local copy, so whichever version npx found or fetched
+ * decided the verdict, and it differed by machine.
+ *
+ * eslint is a `dependencies` entry of boardsmith (its plugin and the sandbox
+ * scan run it), so boardsmith pins it and runs its own copy, as it does fallow.
+ * vitest, vue-tsc and stylelint have to match the workspace's own vue,
+ * TypeScript and style setup, so they come only from the workspace, and a
+ * workspace without one is told which package to install.
+ */
+describe('eslint', () => {
+  const boardsmithRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..', '..');
+
+  it("is pinned to an exact version in boardsmith's own dependencies", () => {
+    const require = createRequire(import.meta.url);
+    const { dependencies } = require(join(boardsmithRoot, 'package.json')) as {
+      dependencies: Record<string, string>;
+    };
+
+    expect(dependencies.eslint).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  it("runs boardsmith's own eslint, not the workspace's", async () => {
+    writeLocalBin('eslint', 'echo "v0.0.0-workspace"');
+    const require = createRequire(import.meta.url);
+    const { version } = require('eslint/package.json') as { version: string };
+
+    const result = await runToolCapturingStdout('eslint', ['--version'], { cwd: workspace });
+
+    expect(result.stdout.trim()).toBe(`v${version}`);
+  });
+});
+
+describe('a tool the workspace must install itself', () => {
+  it.each(['vitest', 'vue-tsc', 'stylelint'])('runs the workspace\'s own %s', async (bin) => {
+    writeLocalBin(bin, 'exit 42');
+
+    await expect(runTool(bin, [], { cwd: workspace })).resolves.toBe(42);
+  });
+
+  it.each(['vitest', 'vue-tsc', 'stylelint'])(
+    'refuses with the install command when the workspace has no %s',
+    (bin) => {
+      expect(() => toolCommand(bin, [], workspace)).toThrow(
+        `${bin} is not installed in this project.\nInstall it with: npm install -D ${bin}`,
+      );
+    },
+  );
+
+  it('never runs npx, even when one is on PATH', async () => {
+    const pathDir = join(workspace, 'path-bin');
+    const marker = join(workspace, 'npx-ran');
+    mkdirSync(pathDir);
+    writeFileSync(join(pathDir, 'npx'), `#!/bin/sh\ntouch "${marker}"\n`);
+    chmodSync(join(pathDir, 'npx'), 0o755);
+    const original = process.env.PATH;
+    process.env.PATH = `${pathDir}${delimiter}${original}`;
+    try {
+      await expect(runTool('vitest', ['run'], { cwd: workspace })).rejects.toThrow('npm install -D vitest');
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      process.env.PATH = original;
+    }
   });
 });

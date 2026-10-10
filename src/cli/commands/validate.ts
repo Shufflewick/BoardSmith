@@ -596,7 +596,7 @@ export function typeScriptFailureDetails(cwd: string, allErrors: string[]): stri
   const shown = allErrors.slice(0, maxShown);
   const remaining = allErrors.length - shown.length;
   if (remaining > 0) {
-    shown.push(`... and ${remaining} more error${remaining === 1 ? '' : 's'}. Run \`npx vue-tsc --noEmit\` for full output.`);
+    shown.push(`... and ${remaining} more error${remaining === 1 ? '' : 's'}. Run \`boardsmith typecheck\` for full output.`);
   }
 
   // A game that imports `boardsmith/ui/dice` without installing the
@@ -621,7 +621,7 @@ export function typeScriptFailureDetails(cwd: string, allErrors: string[]): stri
     ...(engineChange ?? []),
     ...shown,
   ];
-  return details.length > 0 ? details : ['Run `npx vue-tsc --noEmit` for details'];
+  return details.length > 0 ? details : ['Run `boardsmith typecheck` for details'];
 }
 
 /** The engine revision `dist/manifest.json` was built against, when the game has been built. */
@@ -717,7 +717,7 @@ async function validateTestTypeCoverage(
       passed: false,
       message: 'Could not ask vitest which test files it runs',
       details: [
-        'Run `npx vitest list --filesOnly` to see why.',
+        listing.refusal ?? 'Run `node_modules/.bin/vitest list --filesOnly` to see why.',
         'A tests/ directory that vitest cannot enumerate means `boardsmith test` runs nothing this check could cover.',
       ],
     };
@@ -747,10 +747,15 @@ async function validateTestTypeCoverage(
 }
 
 /** Ask vitest for the files it would run, without running them. */
-async function listVitestFiles(cwd: string): Promise<{ ok: boolean; files: string[] }> {
+async function listVitestFiles(cwd: string): Promise<{ ok: boolean; files: string[]; refusal?: string }> {
   // Not `runVitestRecorded`: that runs tests and records their progress, and this only lists them.
-  const listed = await runToolCapturingStdout('vitest', ['list', '--filesOnly'], { cwd }).catch(() => undefined);
-  if (listed === undefined) return { ok: false, files: [] };
+  let listed: { code: number; stdout: string };
+  try {
+    listed = await runToolCapturingStdout('vitest', ['list', '--filesOnly'], { cwd });
+  } catch (error) {
+    // vitest is missing or would not start: say why, since nothing else will.
+    return { ok: false, files: [], refusal: (error as Error).message };
+  }
   return {
     ok: listed.code === 0,
     files: listed.stdout
