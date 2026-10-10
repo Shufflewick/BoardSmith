@@ -219,6 +219,14 @@ const {
   onTimeTravel: (state, actionIndex, diff) => emit('time-travel', state, actionIndex, diff),
 });
 
+// A snapshot belongs to the game it was taken in. A host that starts a new
+// game relays its first state into this same page (the dev host does not
+// reload the frame), so the old game's snapshot is dropped then, before the
+// shell draws the new game's seats beside it (#587).
+watch(() => props.state?.state?.gameInstanceId, (game, previous) => {
+  if (previous !== undefined && game !== previous) clearHistoricalState();
+});
+
 /**
  * The state every tab reads from: the historical snapshot while time
  * travelling, the live props otherwise.

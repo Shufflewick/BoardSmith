@@ -101,6 +101,8 @@ function postFromHost(data: Record<string, unknown>): void {
  * that needs undo, disabled reasons or metadata in the frame.
  *
  * `slots` are GameShell slots, for a test about what a slot is handed.
+ * `posted` is everything the shell posted to the host, for a test about which
+ * server ops it sent.
  *
  * Call {@link leaveIframe} in `afterEach`.
  */
@@ -109,7 +111,7 @@ export async function mountTableWithDebugPanel(
   seatState: Record<string, unknown> = {},
   slots?: PlatformShellOptions['slots'],
 ) {
-  enterIframe();
+  const posted = enterIframe();
   const wrapper = mountPlatformShell({ board, slots });
   await nextTick();
   postFromHost({ type: 'init', seat: 1 });
@@ -130,5 +132,5 @@ export async function mountTableWithDebugPanel(
   await nextTick();
   const debugPanel = wrapper.findComponent(DebugPanel);
   if (!debugPanel.exists()) throw new Error('the debug panel did not open; the shell never saw dev-debug-toggle');
-  return { wrapper, debugPanel };
+  return { wrapper, debugPanel, posted };
 }

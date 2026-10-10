@@ -428,6 +428,29 @@ const displayedState = computed<DisplayedGameState | null>(() => {
   return state.value;
 });
 
+// The players of the state on screen: the viewed snapshot's while the debug
+// panel shows history, so a #player-stats slot reading a score off them shows
+// it as it was then, beside the historical gameView (#578).
+const displayedPlayers = computed(() => displayedState.value?.state.players ?? []);
+
+// The viewer's own player and a seat's player, as the state on screen has them
+// (#581, #582). The players panel's rows stay live; what is handed to game code
+// beside the historical gameView is the snapshot's. Seats are fixed for a game,
+// so every snapshot holds every seat the panel shows; one that does not is a
+// broken snapshot, and displayedPlayerAt throws rather than hand the slot the
+// live player or nothing.
+const displayedMyPlayer = computed(() => displayedPlayers.value.find((player) => player.seat === playerSeat.value));
+const displayedPlayerAt = (seat: number) => {
+  const player = displayedPlayers.value.find((candidate) => candidate.seat === seat);
+  if (!player) {
+    throw new Error(
+      `GameShell: the state on screen has no player at seat ${seat}, but the players panel shows that seat. ` +
+      'Seats are fixed for a game, so every snapshot must list every seat; check the snapshot the debug panel time-travelled to.',
+    );
+  }
+  return player;
+};
+
 // The generic request/response bridge to the host (which relays to the games
 // worker / executor). Every server operation the embedded game needs —
 // fetching choices, stepping selections, cancelling, undo — goes through this
@@ -752,6 +775,8 @@ async function handleUndo(): Promise<void> {
 const boardProps = computed(() =>
   tableBoardProps(tableSeat, {
     state: displayedState.value,
+    players: displayedPlayers.value,
+    myPlayer: displayedMyPlayer.value,
     gameView: gameView.value ?? null,
     playerSeat: playerSeat.value,
     isViewingHistory: isViewingHistory.value,
@@ -1148,6 +1173,15 @@ function handleTimeTravel(
   timeTravelDiff.value = diff;
 }
 
+// A snapshot belongs to the game it was taken in. A host that starts a new
+// game relays its first state into this same frame (the dev host does not
+// reload it on a restart), so the old game's snapshot is dropped before the new
+// game's seats are drawn beside it (#587). The debug panel drops its own
+// selection on the same change.
+watch(() => state.value?.state.gameInstanceId, (game, previous) => {
+  if (previous !== undefined && game !== previous) handleTimeTravel(null, null, null);
+});
+
 // Debug highlight handler - highlights an element on the board
 function handleHighlightElement(elementId: number | null) {
   debugHighlightedElementId.value = elementId;
@@ -1319,12 +1353,13 @@ if (isDevBuild) {
 
 // Expose to parent/slots. `gameView` is the historical view while the debug
 // panel shows history, so turn and actions are the same history-gated values
-// the board gets (#576).
+// the board gets (#576), and state and players are the viewed snapshot's
+// (#581, #582).
 defineExpose({
-  state,
+  state: displayedState,
   gameView,
-  players,
-  myPlayer,
+  players: displayedPlayers,
+  myPlayer: displayedMyPlayer,
   playerSeat,
   isMyTurn: gatedIsMyTurn,
   availableActions: gatedAvailableActions,
@@ -1549,7 +1584,7 @@ defineExpose({
         <slot name="sidebar-extra"
           :state="displayedState"
           :game-view="gameView"
-          :players="players"
+          :players="displayedPlayers"
         ></slot>
       </template>
 
@@ -1565,13 +1600,14 @@ defineExpose({
       <!-- Expose interaction state so a game's player-stats can be actionable
            (e.g. tap your own special ability to use it), not just informational.
            `gameView` is the historical view while time-traveling, so turn and
-           actions are the same history-gated values the board gets (#554). -->
+           actions are the same history-gated values the board gets (#554), and
+           `players` and `player` are the viewed snapshot's (#578, #581). -->
       <template #player-stats="{ player }">
         <slot
           name="player-stats"
-          :player="player"
+          :player="displayedPlayerAt(player.seat)"
           :game-view="gameView"
-          :players="players"
+          :players="displayedPlayers"
           :player-seat="playerSeat"
           :is-my-turn="gatedIsMyTurn"
           :available-actions="gatedAvailableActions"

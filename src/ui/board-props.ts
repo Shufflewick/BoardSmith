@@ -32,9 +32,9 @@ import type { WorldNarration, WorldPhase } from './world/worldProtocol.js';
 export interface BoardBaseProps {
   /** The element tree to draw. During time travel, the historical one. */
   gameView: GameViewElement | null;
-  /** Every player, in seat order. */
+  /** Every player, in seat order. During time travel, the historical snapshot's. */
   players: GameContextPlayer[];
-  /** The viewing player, or undefined for a spectator. */
+  /** The viewing player, or undefined for a spectator. During time travel, the historical snapshot's. */
   myPlayer?: GameContextPlayer;
   /** The viewer's seat; -1 before one is assigned. */
   playerSeat: number;
@@ -88,6 +88,8 @@ export interface WorldBoardProps extends BoardBaseProps {
 /** What a table's shell knows that its seat does not. */
 interface TableShellBoardInput {
   state: DisplayedGameState | null;
+  players: GameContextPlayer[];
+  myPlayer: GameContextPlayer | undefined;
   gameView: GameViewElement | null;
   playerSeat: number;
   isViewingHistory: boolean;
@@ -103,8 +105,8 @@ interface TableShellBoardInput {
 export function tableBoardProps(seat: TableSeat, shell: TableShellBoardInput): TableBoardProps {
   return {
     gameView: shell.gameView,
-    players: seat.players.value,
-    myPlayer: seat.myPlayer.value,
+    players: shell.players,
+    myPlayer: shell.myPlayer,
     playerSeat: shell.playerSeat,
     isMyTurn: seat.gatedIsMyTurn.value,
     availableActions: seat.gatedAvailableActions.value,
