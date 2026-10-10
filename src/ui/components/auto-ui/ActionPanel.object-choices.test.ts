@@ -101,10 +101,10 @@ describe('object-valued choices in the Action Panel (#563)', () => {
 
   // A stub controller, because no live path can hold this case yet: the only way
   // an OPEN pick's list changes at a live table is a repeating pick, and a
-  // repeating pick's later lists come back without their labels (#598). Between
+  // repeating pick's later lists come back without their labels (#561). Between
   // two picks the panel redraws the list from scratch, so a two-pick action
   // cannot show a button being handed to another choice. Move this to a live
-  // seat once #598 is fixed.
+  // seat once #561 is fixed.
   it('keeps each object choice on its own button when the list changes', async () => {
     const EAST = { value: { from: 'market', to: 'east' }, display: 'Market to east' };
     const north = { value: NORTH, display: 'Harbor to north' };
