@@ -12,6 +12,7 @@ module.exports = {
   },
 
   // Phase 99 (Theming Swap) is complete — all neon hex literals migrated to --bsg-* tokens.
-  // color-no-hex is enforced with zero exclusions across all of src/ui/**/*.vue.
+  // color-no-hex is enforced with zero exclusions across all of src/**/*.vue, the
+  // glob `boardsmith lint` passes (dev-host chrome included, since it installs the tokens too).
   ignoreFiles: [],
 };

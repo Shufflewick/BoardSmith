@@ -330,8 +330,8 @@ function chunkSources(projectDir: string, slug: string): ChunkSources {
 }
 
 /** A commit of the chunk's history, as messages name it. */
-function commitName({ hash, label }: ChunkCommit): string {
-  return `${hash.slice(0, 10)} (${label})`;
+function commitName(commit: ChunkCommit): string {
+  return `${commit.hash.slice(0, 10)} (${commit.label})`;
 }
 
 /** Reads the cited file as it was in the commit of the chunk's history it is pinned to (#426). */

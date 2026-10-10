@@ -501,6 +501,6 @@ defineSlots<{
   margin: 2px 0 0;
   padding: 0 9px;
   font-size: 12px;
-  color: var(--bsg-muted, #8b8b8b);
+  color: var(--bsg-ink-3);
 }
 </style>

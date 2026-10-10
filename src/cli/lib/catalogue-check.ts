@@ -469,8 +469,8 @@ export async function checkCatalogue(options: CatalogueOptions): Promise<Catalog
   const [stored, treeId] = await Promise.all([readPasses(cachePath).then((p) => new Set(p)), treeIdentity(tree)]);
   const keyOf = async (game: CatalogueRepo): Promise<string> => {
     const closure = await linkClosure(game, linksOf);
-    const repos = await Promise.all(closure.map(async (r) => [r.slug, r.commit, await installRecord(r.dir)]));
-    return sha256Hex(JSON.stringify([CACHE_FORMAT, process.version, treeId, repos]));
+    const closureRecords = await Promise.all(closure.map(async (r) => [r.slug, r.commit, await installRecord(r.dir)]));
+    return sha256Hex(JSON.stringify([CACHE_FORMAT, process.version, treeId, closureRecords]));
   };
   const keys = await Promise.all(games.map(keyOf));
   const toRun = games.filter((_, i) => !stored.has(keys[i]));

@@ -386,8 +386,8 @@ export const runVitest: TestRunner = async (projectDir, files) => {
       child.on('error', (error) => done({ ok: false, output: error.message }));
       child.on('close', (code) => done({ ok: code === 0, output: text }));
     });
-    const report = await fs.readFile(reportPath, 'utf-8').catch(() => undefined);
-    return { ok, output, ran: testFilesInReport(report, await fs.realpath(projectDir)) };
+    const reportText = await fs.readFile(reportPath, 'utf-8').catch(() => undefined);
+    return { ok, output, ran: testFilesInReport(reportText, await fs.realpath(projectDir)) };
   } finally {
     await fs.rm(reportDir, { recursive: true, force: true });
   }
@@ -400,13 +400,13 @@ export const runVitest: TestRunner = async (projectDir, files) => {
  */
 export function testFilesInReport(text: string | undefined, root: string): string[] | undefined {
   if (text === undefined) return undefined;
-  let report: unknown;
+  let parsed: unknown;
   try {
-    report = JSON.parse(text);
+    parsed = JSON.parse(text);
   } catch {
     return undefined;
   }
-  const results = (report as { testResults?: unknown } | null)?.testResults;
+  const results = (parsed as { testResults?: unknown } | null)?.testResults;
   if (!Array.isArray(results) || !results.every((r) => typeof (r as { name?: unknown })?.name === 'string')) return undefined;
   return results.map((r: { name: string }) => relative(root, r.name).split(sep).join(posix.sep));
 }

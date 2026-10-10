@@ -28,6 +28,7 @@ import { ref, computed, onMounted, onUnmounted, shallowRef } from 'vue';
 import type { WorldDevConfig } from './world-config-types.js';
 import { WORLD_HOST_SOURCE, WORLD_UI_SOURCE } from '../../ui/world/worldProtocol.js';
 import { loadDevClientId, WORLD_CLIENT_KEY } from './dev-client-id.js';
+import { applyTheme } from '../../ui/theme.js';
 
 const props = defineProps<{ config: WorldDevConfig }>();
 const cfg = props.config;
@@ -364,6 +365,9 @@ function humanMs(ms: number): string {
 }
 
 onMounted(() => {
+  // The bar is drawn in --bsg-* tokens, and the world frame installs them only
+  // in its own document, so this outer page installs them too.
+  applyTheme();
   window.addEventListener('message', onWindowMessage);
   connect();
 });
@@ -461,8 +465,8 @@ onUnmounted(() => {
   flex-direction: column;
   height: 100%;
   font: 13px/1.4 system-ui, -apple-system, sans-serif;
-  background: #14161a;
-  color: #e6e8ec;
+  background: var(--bsg-bg);
+  color: var(--bsg-ink);
 }
 .world-dev__bar {
   display: flex;
@@ -470,32 +474,32 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.6rem;
   padding: 0.4rem 0.75rem;
-  background: #1d2027;
-  border-bottom: 1px solid #2c313a;
+  background: var(--bsg-surface);
+  border-bottom: 1px solid var(--bsg-line);
 }
 .world-dev__brand {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-size: 11px;
-  color: #8d97a8;
+  color: var(--bsg-ink-2);
 }
 .world-dev__name { font-weight: 600; }
 .world-dev__dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #7a3030;
+  background: var(--bsg-danger);
 }
-.world-dev__dot--on { background: #2f9e5f; }
-.world-dev__field { color: #9aa3b2; }
-.world-dev__skew { color: #d9b45f; }
-.world-dev__generic { color: #d9b45f; }
+.world-dev__dot--on { background: var(--bsg-ok); }
+.world-dev__field { color: var(--bsg-ink-2); }
+.world-dev__skew { color: var(--bsg-warn); }
+.world-dev__generic { color: var(--bsg-warn); }
 .world-dev button {
   font: inherit;
   color: inherit;
-  background: #2a2f38;
-  border: 1px solid #3a4150;
+  background: var(--bsg-surface-2);
+  border: 1px solid var(--bsg-line-2);
   border-radius: 4px;
   padding: 0.2rem 0.55rem;
   cursor: pointer;
@@ -509,8 +513,8 @@ onUnmounted(() => {
   left: 0;
   margin-top: 0.25rem;
   list-style: none;
-  background: #1d2027;
-  border: 1px solid #3a4150;
+  background: var(--bsg-surface);
+  border: 1px solid var(--bsg-line-2);
   border-radius: 4px;
   max-height: 16rem;
   overflow-y: auto;
@@ -523,28 +527,28 @@ onUnmounted(() => {
   border-radius: 0;
   background: transparent;
 }
-.world-dev__menu button[aria-current='true'] { background: #34506b; }
-.world-dev__menu em { color: #6fbf8f; font-style: normal; float: right; }
+.world-dev__menu button[aria-current='true'] { background: color-mix(in srgb, var(--bsg-accent) 30%, transparent); }
+.world-dev__menu em { color: var(--bsg-ok); font-style: normal; float: right; }
 .world-dev__notice {
   margin: 0;
   padding: 0.4rem 0.75rem;
-  background: #2c2a19;
-  color: #f0e0b0;
-  border-bottom: 1px solid #3d3a22;
+  background: color-mix(in srgb, var(--bsg-warn) 15%, transparent);
+  color: var(--bsg-ink);
+  border-bottom: 1px solid color-mix(in srgb, var(--bsg-warn) 40%, transparent);
 }
 .world-dev__frame {
   flex: 1 1 auto;
   width: 100%;
   border: 0;
-  background: #fff;
+  background: var(--bsg-bg);
 }
 .world-dev__foot {
   display: flex;
   gap: 0.5rem;
   padding: 0.3rem 0.75rem;
   font-size: 11px;
-  color: #6f7887;
-  background: #1d2027;
-  border-top: 1px solid #2c313a;
+  color: var(--bsg-ink-3);
+  background: var(--bsg-surface);
+  border-top: 1px solid var(--bsg-line);
 }
 </style>
