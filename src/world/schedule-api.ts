@@ -500,11 +500,18 @@ interface ScheduleBudget {
  * player is told no and the world is unchanged. Refusing only in the parent
  * would leave a command that ran, changed the world, and had its timers
  * dropped.
+ *
+ * `unknownAction` is the CHILD's: only the engine holds the bundle's actions,
+ * so only it can say an action name is not registered (#603). It is asked after
+ * the shape checks both sides share and before the caps, so a misspelled action
+ * in a full world is refused as misspelled rather than as a full queue. The
+ * parent passes none and bounds the name's length instead.
  */
 export function scheduleBudget(
   owner: string,
   allowance: ScheduleAllowance,
   budgets: WorldBudgets,
+  unknownAction?: (action: string) => WorldRefusal | null,
 ): ScheduleBudget {
   // The owner's pending keys, plus the ones this command has minted so far. A
   // set, because the only question asked of it is membership -- does this
@@ -552,6 +559,9 @@ export function scheduleBudget(
     // and a handler looping a million times over one cancel writes no row and
     // still hands the host a million requests to carry and walk.
     if (isCancel(request)) return batchRefusal();
+
+    const unknown = unknownAction?.(request.action) ?? null;
+    if (unknown !== null) return unknown;
 
     // AN UPSERT IS ADMITTED BY EVERY DEPTH CAP. It replaces a pending event
     // rather than adding one, so nothing those caps measure moves -- and a cap

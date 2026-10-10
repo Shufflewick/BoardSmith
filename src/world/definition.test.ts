@@ -698,6 +698,60 @@ describe("createWorld — one construction, every host", () => {
     ).rejects.toThrow(/"sweeep".*sweep/s);
   });
 
+  it("refuses a misspelled action as unknown, not as a full queue, and a malformed request by its shape first (#603)", async () => {
+    // The world and the player are both at their caps, so a request that got
+    // as far as the caps would be refused as a full queue -- which tells an
+    // author to cancel timers when the fix is to spell the action right.
+    const budgets = worldBudgets({ maxUnkeyedPendingPerPlayer: 1, maxPendingEvents: 1 });
+    const scheduling = (request: ScheduleArm) =>
+      worldAction<TinyWorld>("arm")
+        .needs(() => [])
+        .execute((_args, ctx) => {
+          ctx.world.schedule(request);
+        });
+    const cases = [
+      { request: { delayMs: 1, action: "sweeep" }, code: "schedule-unknown-action" },
+      { request: { delayMs: 1, action: "sweeep", key: "k" }, code: "schedule-unknown-action" },
+      // A request wrong in its own shape AND naming nothing registered is
+      // refused for its shape: that is the check both sides of the isolate
+      // share, so the engine and the host give the same answer.
+      { request: { delayMs: -1, action: "sweeep" }, code: "invalid-schedule-delay" },
+      { request: { delayMs: 1, action: "sweeep", key: "k\uD83D" }, code: "schedule-key-malformed" },
+      // And a registered action at the caps is still refused by them.
+      { request: { delayMs: 1, action: "sweep" }, code: "schedule-world-cap" },
+    ] as const;
+
+    for (const { request, code } of cases) {
+      const { runner } = createWorld({
+        elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
+        definition: bundle({
+          world: { maxPlayers: 2, view: () => [], actions: [scheduling(request), sweep] },
+        }),
+        seed: "s",
+        seats: new Map([["p1", 1]]),
+        budgets,
+      });
+      const refused = await runner
+        .apply({
+          player: "p1",
+          command: { name: "arm", args: {} },
+          timing: null,
+          arrivedAt: 0,
+          allowance: { unkeyed: 1, keys: [], worldPending: 1 },
+          presence: [],
+          activity: null,
+          declaredActivity: [],
+          declaredNotices: [],
+        })
+        .then(
+          () => null,
+          (error: unknown) => error,
+        );
+      expect(refused).toBeInstanceOf(WorldRefusal);
+      expect((refused as WorldRefusal).code).toBe(code);
+    }
+  });
+
   it("REFUSES a cancel with no key, at the offending line, so the command unwinds", async () => {
     const forget = worldAction<TinyWorld>("forget")
       .needs(() => [])

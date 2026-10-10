@@ -2443,7 +2443,9 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // a cap's worth twice and the host would refuse the batch after the world
     // had already changed. The budget does that counting, so this side and the
     // host cannot count differently.
-    const budget = scheduleBudget(charge.owner, charge.allowance, this.budgets);
+    const budget = scheduleBudget(charge.owner, charge.allowance, this.budgets, (name) =>
+      this.unknownScheduledAction(name),
+    );
 
     // WHAT THE WORLD LOOKS LIKE BEFORE THIS ACTION (#68, #294).
     const before = this.snapshotResident();
@@ -2616,24 +2618,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
   }
 
   /**
-   * THE WORLD AN ACTION ACTS THROUGH, for the length of one dispatch.
-   *
-   * Every refusal these raise is RECORDED before it propagates, and that is
-   * what the ledger is for. A refusal thrown from inside `execute` travels out
-   * through `ActionExecutor.executeAction`, which catches it and answers
-   * `{success: false, error}` -- a STRING. That is right for a game's own
-   * refusal, whose sentence is the whole of what it carries, and wrong for the
-   * platform's: `schedule-cap`, `invalid-schedule-delay` and
-   * `undeclared-partition` are classified, and a host's park ladder reads the
-   * CODE rather than the sentence.
-   */
-  /**
    * A SCHEDULED ACTION THIS WORLD DOES NOT REGISTER, refused at the line (#603).
    *
-   * Asked here and not in `scheduleBudget`, because only the engine holds the
-   * bundle's actions; the parent re-plans without them and bounds the name's
-   * length instead. Asked after `admit`, so a request with no action name at
-   * all is still refused as the wake that runs nothing.
+   * Handed to `scheduleBudget`, which asks it after the shape checks and before
+   * the caps. Only the engine holds the bundle's actions; the parent re-plans
+   * without them and bounds the name's length instead.
    */
   private unknownScheduledAction(action: string): WorldRefusal | null {
     if (this.actions.has(action)) return null;
@@ -2648,6 +2637,18 @@ export class BoardSmithWorldEngine implements WorldEngine {
     );
   }
 
+  /**
+   * THE WORLD AN ACTION ACTS THROUGH, for the length of one dispatch.
+   *
+   * Every refusal these raise is RECORDED before it propagates, and that is
+   * what the ledger is for. A refusal thrown from inside `execute` travels out
+   * through `ActionExecutor.executeAction`, which catches it and answers
+   * `{success: false, error}` -- a STRING. That is right for a game's own
+   * refusal, whose sentence is the whole of what it carries, and wrong for the
+   * platform's: `schedule-cap`, `invalid-schedule-delay` and
+   * `undeclared-partition` are classified, and a host's park ladder reads the
+   * CODE rather than the sentence.
+   */
   private dispatchFacilities(
     action: string,
     named: readonly string[],
@@ -2873,7 +2874,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         // re-plans everything before it writes a single event; this is what
         // makes the refusal land inside the action, so the whole thing unwinds
         // and `refused` means the world is unchanged.
-        const refusal = budget.admit(request) ?? this.unknownScheduledAction(request.action);
+        const refusal = budget.admit(request);
         if (refusal !== null) raise(refusal);
         ledger.schedules.push(request);
       },
