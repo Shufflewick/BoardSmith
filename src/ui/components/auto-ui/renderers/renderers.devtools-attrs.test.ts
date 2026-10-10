@@ -122,19 +122,19 @@ describe('PieceRenderer — DEV-01 devtools attrs', () => {
   };
 
   it('root has data-bs-el-id matching String(element.id)', () => {
-    const wrapper = mountWithInteraction(PieceRenderer, { element, depth: 0 }, makeSelectableMock());
+    const wrapper = mountWithInteraction(PieceRenderer, { element }, makeSelectableMock());
     const root = wrapper.find('.piece').element;
     expect(root.getAttribute('data-bs-el-id')).toBe(String(ELEMENT_ID));
   });
 
   it('root has data-element-id (FLIP alias present)', () => {
-    const wrapper = mountWithInteraction(PieceRenderer, { element, depth: 0 }, makeSelectableMock());
+    const wrapper = mountWithInteraction(PieceRenderer, { element }, makeSelectableMock());
     const root = wrapper.find('.piece').element;
     expect(root.getAttribute('data-element-id')).not.toBeNull();
   });
 
   it('root has data-bs-el-name when element carries a name', () => {
-    const wrapper = mountWithInteraction(PieceRenderer, { element, depth: 0 }, makeSelectableMock());
+    const wrapper = mountWithInteraction(PieceRenderer, { element }, makeSelectableMock());
     const root = wrapper.find('.piece').element;
     expect(root.getAttribute('data-bs-el-name')).toBe(element.name);
   });
@@ -155,19 +155,19 @@ describe('SpaceRenderer — DEV-01 devtools attrs', () => {
   };
 
   it('root has data-bs-el-id matching String(element.id)', () => {
-    const wrapper = mountWithInteraction(SpaceRenderer, { element, depth: 0 }, makeSelectableMock());
+    const wrapper = mountWithInteraction(SpaceRenderer, { element }, makeSelectableMock());
     const root = wrapper.find('.space-container').element;
     expect(root.getAttribute('data-bs-el-id')).toBe(String(ELEMENT_ID));
   });
 
   it('root has data-element-id (FLIP alias present)', () => {
-    const wrapper = mountWithInteraction(SpaceRenderer, { element, depth: 0 }, makeSelectableMock());
+    const wrapper = mountWithInteraction(SpaceRenderer, { element }, makeSelectableMock());
     const root = wrapper.find('.space-container').element;
     expect(root.getAttribute('data-element-id')).not.toBeNull();
   });
 
   it('root has data-bs-el-name when element carries a name', () => {
-    const wrapper = mountWithInteraction(SpaceRenderer, { element, depth: 0 }, makeSelectableMock());
+    const wrapper = mountWithInteraction(SpaceRenderer, { element }, makeSelectableMock());
     const root = wrapper.find('.space-container').element;
     expect(root.getAttribute('data-bs-el-name')).toBe(element.name);
   });
@@ -194,7 +194,7 @@ describe('DieRenderer — DEV-01 devtools attrs', () => {
 
   it('root has data-bs-el-id matching String(element.id)', () => {
     const wrapper = mountWithInteraction(
-      DieRenderer, { element, depth: 0 }, makeSelectableMock(), DIE_STUB_OPTIONS,
+      DieRenderer, { element }, makeSelectableMock(), DIE_STUB_OPTIONS,
     );
     const root = wrapper.find('.die-container').element;
     expect(root.getAttribute('data-bs-el-id')).toBe(String(ELEMENT_ID));
@@ -202,7 +202,7 @@ describe('DieRenderer — DEV-01 devtools attrs', () => {
 
   it('root has data-element-id (FLIP alias present)', () => {
     const wrapper = mountWithInteraction(
-      DieRenderer, { element, depth: 0 }, makeSelectableMock(), DIE_STUB_OPTIONS,
+      DieRenderer, { element }, makeSelectableMock(), DIE_STUB_OPTIONS,
     );
     const root = wrapper.find('.die-container').element;
     expect(root.getAttribute('data-element-id')).not.toBeNull();
@@ -210,7 +210,7 @@ describe('DieRenderer — DEV-01 devtools attrs', () => {
 
   it('root has data-bs-el-name when element carries a name', () => {
     const wrapper = mountWithInteraction(
-      DieRenderer, { element, depth: 0 }, makeSelectableMock(), DIE_STUB_OPTIONS,
+      DieRenderer, { element }, makeSelectableMock(), DIE_STUB_OPTIONS,
     );
     const root = wrapper.find('.die-container').element;
     expect(root.getAttribute('data-bs-el-name')).toBe(element.name);
@@ -234,26 +234,26 @@ describe('CardRenderer — DEV-01 devtools attrs', () => {
   };
 
   it('root has data-bs-el-id matching String(element.id)', () => {
-    const wrapper = mountWithInteraction(CardRenderer, { element, depth: 0 }, makeSelectableMock());
+    const wrapper = mountWithInteraction(CardRenderer, { element }, makeSelectableMock());
     const root = wrapper.find('.card-container').element;
     expect(root.getAttribute('data-bs-el-id')).toBe(String(ELEMENT_ID));
   });
 
   it('root has data-element-id (FLIP alias present)', () => {
-    const wrapper = mountWithInteraction(CardRenderer, { element, depth: 0 }, makeSelectableMock());
+    const wrapper = mountWithInteraction(CardRenderer, { element }, makeSelectableMock());
     const root = wrapper.find('.card-container').element;
     expect(root.getAttribute('data-element-id')).not.toBeNull();
   });
 
   it('root has data-bs-el-notation when element carries a name (falls back to name)', () => {
-    const wrapper = mountWithInteraction(CardRenderer, { element, depth: 0 }, makeSelectableMock());
+    const wrapper = mountWithInteraction(CardRenderer, { element }, makeSelectableMock());
     const root = wrapper.find('.card-container').element;
     // CardRenderer's elementNotation falls back to element.name when attributes.notation is absent
     expect(root.getAttribute('data-bs-el-notation')).toBe(element.name);
   });
 
   it('root has data-bs-el-name when element carries a name', () => {
-    const wrapper = mountWithInteraction(CardRenderer, { element, depth: 0 }, makeSelectableMock());
+    const wrapper = mountWithInteraction(CardRenderer, { element }, makeSelectableMock());
     const root = wrapper.find('.card-container').element;
     expect(root.getAttribute('data-bs-el-name')).toBe(element.name);
   });

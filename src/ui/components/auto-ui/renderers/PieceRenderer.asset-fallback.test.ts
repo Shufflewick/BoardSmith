@@ -27,7 +27,7 @@ function makePieceElement(id = 1) {
 describe('PieceRenderer asset fallback (ASSET-01)', () => {
   it('shows the drawn piece-token fallback and hides the real <img> before any load event', () => {
     const wrapper = mount(PieceRenderer, {
-      props: { element: makePieceElement(), depth: 0 },
+      props: { element: makePieceElement() },
     });
 
     const img = wrapper.find('img.piece-image');
@@ -41,7 +41,7 @@ describe('PieceRenderer asset fallback (ASSET-01)', () => {
 
   it('reveals the real image once its @load event fires', async () => {
     const wrapper = mount(PieceRenderer, {
-      props: { element: makePieceElement(), depth: 0 },
+      props: { element: makePieceElement() },
     });
 
     const img = wrapper.find('img.piece-image');
@@ -52,7 +52,7 @@ describe('PieceRenderer asset fallback (ASSET-01)', () => {
 
   it('reverts to the drawn piece-token fallback when the image @error fires', async () => {
     const wrapper = mount(PieceRenderer, {
-      props: { element: makePieceElement(), depth: 0 },
+      props: { element: makePieceElement() },
     });
 
     const img = wrapper.find('img.piece-image');
@@ -68,7 +68,7 @@ describe('PieceRenderer asset fallback (ASSET-01)', () => {
 
   it('resets loaded to false when the resolved src changes (reused element re-guards)', async () => {
     const wrapper = mount(PieceRenderer, {
-      props: { element: makePieceElement(1), depth: 0 },
+      props: { element: makePieceElement(1) },
     });
 
     await wrapper.find('img.piece-image').trigger('load');

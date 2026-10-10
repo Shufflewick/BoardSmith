@@ -26,7 +26,6 @@ interface GameElement {
 
 const props = defineProps<{
   element: GameElement;
-  depth: number;
 }>();
 
 // ---------------------------------------------------------------------------
@@ -147,7 +146,6 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
         v-for="{ card, stackIndex } in stackCards"
         :key="card.id"
         :element="card"
-        :depth="depth + 1"
         class="deck-card"
         :style="{ '--stack-index': stackIndex }"
       />

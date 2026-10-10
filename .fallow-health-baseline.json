@@ -125,16 +125,6 @@
         "count": 1
       }
     },
-    "src/cli/commands/test-step-coverage.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "src/cli/commands/test-step-mutation.ts": {
-      "complexity_moderate": {
-        "count": 2
-      }
-    },
     "src/cli/commands/trace-check.ts": {
       "complexity_critical": {
         "count": 1
@@ -249,11 +239,6 @@
         "count": 1
       }
     },
-    "src/cli/lib/mutant-cache.ts": {
-      "complexity_high": {
-        "count": 2
-      }
-    },
     "src/cli/slash-command/bs/build-chunk.test.ts": {
       "complexity_moderate": {
         "count": 1
@@ -329,10 +314,10 @@
     },
     "src/engine/flow/engine.ts": {
       "complexity_high": {
-        "count": 2
+        "count": 1
       },
       "complexity_moderate": {
-        "count": 12
+        "count": 10
       }
     },
     "src/engine/flow/walk-flow-nodes.ts": {
@@ -391,11 +376,6 @@
     "src/runtime/runner.ts": {
       "complexity_moderate": {
         "count": 5
-      }
-    },
-    "src/session/game-option-selection.ts": {
-      "complexity_moderate": {
-        "count": 3
       }
     },
     "src/session/move-summary.ts": {
@@ -764,6 +744,7 @@
     "src/testing/debug.ts:complexity",
     "src/session/pending-action-manager.ts:complexity",
     "src/cli/commands/test-step-ast.ts:high impact",
+    "src/cli/commands/test-step-sfc.ts:high impact",
     "src/testing/random-simulation.ts:complexity",
     "src/cli/commands/lint.ts:complexity",
     "src/ui/components/auto-ui/renderers/HandRenderer.vue:complexity",

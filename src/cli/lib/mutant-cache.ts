@@ -172,6 +172,41 @@ function entryTargets(value: unknown, into: string[] = []): string[] {
 }
 
 /**
+ * The folder inside the package at `root` that the entry target `target` reaches, as path parts,
+ * and whether the target is a `*` pattern. A pattern reaches the folder before its `*`; a plain
+ * path, the folder holding it. Throws when that is the whole package or lies outside it.
+ */
+function entryScope(root: string, target: string): { parts: string[]; star: boolean } {
+  const star = target.indexOf('*');
+  const fixed = star === -1 ? target : target.slice(0, star);
+  const scope = relative(root, join(root, star === -1 || fixed.endsWith('/') ? fixed : dirname(fixed)));
+  if (scope === '') throw new Error(`the package in ${root} exports "${target}", which reaches every file in it, so the files git ignores cannot be bounded`);
+  if (scope === '..' || scope.startsWith(`..${sep}`) || isAbsolute(scope)) {
+    throw new Error(`the package in ${root} names "${target}", which is outside the package`);
+  }
+  return { parts: scope.split(sep), star: star !== -1 };
+}
+
+/** The outermost of the folders `parts` names, from the top down, that git ignores, if any. */
+async function outermostIgnored(root: string, parts: string[]): Promise<string | undefined> {
+  for (let n = 1; n <= parts.length; n++) {
+    const prefix = parts.slice(0, n).join('/');
+    if (await ignoredByGit(root, prefix)) return prefix;
+  }
+  return undefined;
+}
+
+/** Every ignored file or folder under the folder `parts` names, except those inside `node_modules`. */
+async function ignoredUnder(root: string, parts: string[]): Promise<string[]> {
+  const listing = await git(root, ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory', '--', `${parts.join('/')}/`]);
+  return listing
+    .split('\0')
+    .filter(Boolean)
+    .map((entry) => entry.replace(/\/$/, ''))
+    .filter((path) => !path.split('/').includes('node_modules'));
+}
+
+/**
  * The git-ignored files a linked checkout's package exposes, by content: `checkoutRevision` sees
  * only what git tracks or would track, and a package often loads build output git ignores.
  *
@@ -196,27 +231,10 @@ async function ignoredEntryPointsHash(root: string): Promise<string> {
     hashed.set(path, stat === undefined ? 'absent' : stat.isDirectory() ? await folderContentHash(full) : sha256Hex(await fs.readFile(full)));
   };
   for (const target of targets) {
-    const star = target.indexOf('*');
-    const fixed = star === -1 ? target : target.slice(0, star);
-    const scope = relative(root, join(root, star === -1 || fixed.endsWith('/') ? fixed : dirname(fixed)));
-    if (scope === '') throw new Error(`the package in ${root} exports "${target}", which reaches every file in it, so the files git ignores cannot be bounded`);
-    if (scope === '..' || scope.startsWith(`..${sep}`) || isAbsolute(scope)) {
-      throw new Error(`the package in ${root} names "${target}", which is outside the package`);
-    }
-    const parts = scope.split(sep);
-    let ignored: string | undefined;
-    for (let n = 1; n <= parts.length && ignored === undefined; n++) {
-      const prefix = parts.slice(0, n).join('/');
-      if (await ignoredByGit(root, prefix)) ignored = prefix;
-    }
+    const { parts, star } = entryScope(root, target);
+    const ignored = await outermostIgnored(root, parts);
     if (ignored !== undefined) await hashPath(ignored);
-    else if (star !== -1) {
-      const listing = await git(root, ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory', '--', `${parts.join('/')}/`]);
-      for (const entry of listing.split('\0').filter(Boolean)) {
-        const path = entry.replace(/\/$/, '');
-        if (!path.split('/').includes('node_modules')) await hashPath(path);
-      }
-    }
+    else if (star) for (const path of await ignoredUnder(root, parts)) await hashPath(path);
   }
   return sha256Hex(JSON.stringify([...hashed].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))));
 }
@@ -335,6 +353,20 @@ async function installedLinks(nodeModules: string): Promise<string[]> {
 }
 
 /**
+ * What names the linked folder `target` in the key: `checkoutRevision` and the ignored files its
+ * package exposes when it is the top of a git checkout, otherwise every file in it. Throws, naming
+ * the folder and `link`, when it cannot be read.
+ */
+async function linkedFolderName(target: string, link: string): Promise<string> {
+  try {
+    const checkout = await checkoutRevision(target);
+    return checkout === undefined ? `content ${await folderContentHash(target)}` : `${checkout} ${await ignoredEntryPointsHash(target)}`;
+  } catch (error) {
+    throw new Error(`could not read ${target}, linked from ${link}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
  * Every package the tests can load through a link to a folder outside the repository, by that
  * folder's content. npm installs `"dep": "file:../dep"` as such a link, and its install record names
  * the link, not what is behind it.
@@ -349,7 +381,7 @@ async function installedLinks(nodeModules: string): Promise<string[]> {
  * the link's own location, so a worktree whose `node_modules` links to the main checkout's resolves
  * to the same key as the main checkout. A folder that cannot be read throws.
  */
-export async function linkedPackagesHash(projectDir: string): Promise<string> {
+async function linkedPackagesHash(projectDir: string): Promise<string> {
   const repository = await fs.realpath((await git(projectDir, ['rev-parse', '--show-toplevel'])).trim());
   const game = await fs.realpath(projectDir);
   // The install records here are in the key already (`installedPackagesHash`).
@@ -357,31 +389,27 @@ export async function linkedPackagesHash(projectDir: string): Promise<string> {
   const named = new Map<string, string>();
   const scanned = new Set<string>();
 
+  async function visitLink(link: string): Promise<void> {
+    let target: string;
+    try {
+      target = await fs.realpath(link);
+    } catch {
+      const points = await fs.readlink(link);
+      named.set(`missing ${link}`, points);
+      return;
+    }
+    if (named.has(target) || within(repository, target) || target.split(sep).includes('node_modules')) return;
+    named.set(target, await linkedFolderName(target, link));
+    await scan(target);
+  }
+
   async function scan(from: string): Promise<void> {
     for (const dir of ancestors(from)) {
       if (scanned.has(dir)) continue;
       scanned.add(dir);
       const record = await readIfPresent(join(dir, 'node_modules', '.package-lock.json'));
       if (record !== undefined && !gameFolders.has(dir)) named.set(`record ${dir}`, sha256Hex(record));
-      for (const link of await installedLinks(join(dir, 'node_modules'))) {
-        let target: string;
-        try {
-          target = await fs.realpath(link);
-        } catch {
-          const points = await fs.readlink(link);
-          named.set(`missing ${link}`, points);
-          continue;
-        }
-        if (named.has(target) || within(repository, target) || target.split(sep).includes('node_modules')) continue;
-        named.set(target, '');
-        try {
-          const checkout = await checkoutRevision(target);
-          named.set(target, checkout === undefined ? `content ${await folderContentHash(target)}` : `${checkout} ${await ignoredEntryPointsHash(target)}`);
-        } catch (error) {
-          throw new Error(`could not read ${target}, linked from ${link}: ${error instanceof Error ? error.message : String(error)}`);
-        }
-        await scan(target);
-      }
+      for (const link of await installedLinks(join(dir, 'node_modules'))) await visitLink(link);
     }
   }
   await scan(game);

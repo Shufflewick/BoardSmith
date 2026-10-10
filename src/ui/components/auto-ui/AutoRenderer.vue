@@ -219,7 +219,6 @@ useAutoRendererAnimations(animationEvents, { fly });
     <GridBoardTemplate
       v-else-if="archetype === 'grid-board'"
       :top-level-children="topLevelChildren"
-      :game-view="gameView"
     />
     <CardTemplate
       v-else-if="archetype === 'card'"

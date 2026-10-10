@@ -1,7 +1,7 @@
 {
-  "revision": 154,
+  "revision": 155,
   "bundleProtocol": 2,
-  "surfaceHash": "89ccecd62d942a97",
+  "surfaceHash": "5697b01dd28b73de",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1330,6 +1330,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "An orderedList chooseFrom is resolved item by item as a multiSelect is (#636): a submission naming its items by label, display text or element id now hands onSelect, validate, later picks and execute the values named, in the order sent with repeats kept, on the whole-submission and selection-step paths. Before this, such a submission passed validation and execute received the labels or raw ids."
+    },
+    {
+      "revision": 155,
+      "date": "2026-10-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "5697b01dd28b73de",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "No behaviour change: FlowEngine gains private helper methods (publishMoveCounts, publishMoveLimits, publishOpenStep, settleExternalSimultaneousAction, expireSimultaneousSeat) split out of getState, resumeAfterExternalAction and expireHeldSeat, so its prototype lists them (#550)."
     }
   ]
 }

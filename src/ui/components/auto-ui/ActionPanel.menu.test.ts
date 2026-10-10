@@ -35,7 +35,6 @@ function mountPanel(actions: Meta[], extra: Partial<ActionPanelProps> = {}) {
     props: {
       availableActions: actions.map((a) => a.name),
       actionMetadata: metadata,
-      playerSeat: 1,
       isMyTurn: true,
       ...extra,
     },

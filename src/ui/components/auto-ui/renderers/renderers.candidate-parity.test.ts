@@ -100,12 +100,12 @@ function boardOfCells(layout: 'grid' | 'hex-grid') {
 }
 
 const ELEMENT_CASES: Array<[string, unknown, Record<string, unknown>, Record<string, unknown>]> = [
-  ['CardRenderer', CardRenderer, { element: leaf('card'), depth: 0 }, {}],
-  ['DeckRenderer', DeckRenderer, { element: leaf('deck'), depth: 0 }, {}],
-  ['DieRenderer', DieRenderer, { element: { ...leaf('die'), attributes: { $type: 'die', sides: 6, value: 3 } }, depth: 0 }, DIE_STUB],
-  ['HandRenderer', HandRenderer, { element: leaf('hand'), depth: 0 }, {}],
-  ['PieceRenderer', PieceRenderer, { element: leaf(), depth: 0 }, {}],
-  ['SpaceRenderer', SpaceRenderer, { element: leaf(), depth: 0 }, {}],
+  ['CardRenderer', CardRenderer, { element: leaf('card') }, {}],
+  ['DeckRenderer', DeckRenderer, { element: leaf('deck') }, {}],
+  ['DieRenderer', DieRenderer, { element: { ...leaf('die'), attributes: { $type: 'die', sides: 6, value: 3 } } }, DIE_STUB],
+  ['HandRenderer', HandRenderer, { element: leaf('hand') }, {}],
+  ['PieceRenderer', PieceRenderer, { element: leaf() }, {}],
+  ['SpaceRenderer', SpaceRenderer, { element: leaf() }, {}],
 ];
 
 describe.each(ELEMENT_CASES)('%s — anchored candidate hook (#189)', (_name, component, props, opts) => {
@@ -136,7 +136,7 @@ describe.each(BOARD_CASES)('%s — anchored candidate hook (#189)', (_name, comp
   it('marks the candidate cell, and only that cell', () => {
     const wrapper = mountWith(
       component,
-      { element: boardOfCells(layout), depth: 0 },
+      { element: boardOfCells(layout) },
       boardOffering(CANDIDATE_ID, LABEL),
     );
     const hits = wrapper.findAll('[data-bs-candidate]');
@@ -150,7 +150,7 @@ describe.each(BOARD_CASES)('%s — anchored candidate hook (#189)', (_name, comp
   it('carries no candidate hook when nothing is being picked', () => {
     const wrapper = mountWith(
       component,
-      { element: boardOfCells(layout), depth: 0 },
+      { element: boardOfCells(layout) },
       createBoardInteraction(),
     );
     expect(wrapper.find('[data-bs-candidate]').exists()).toBe(false);
@@ -163,7 +163,7 @@ describe('the candidate label falls back to the id when the pick supplies no wor
   it('never leaves a candidate unmarked', () => {
     const board = createBoardInteraction();
     board.setValidElements([{ id: CANDIDATE_ID, ref: { id: CANDIDATE_ID } }], () => {});
-    const wrapper = mountWith(PieceRenderer, { element: leaf(), depth: 0 }, board);
+    const wrapper = mountWith(PieceRenderer, { element: leaf() }, board);
     expect(wrapper.find('[data-bs-candidate]').attributes('data-bs-candidate'))
       .toBe(String(CANDIDATE_ID));
     wrapper.unmount();

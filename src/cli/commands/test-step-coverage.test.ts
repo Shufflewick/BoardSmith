@@ -27,4 +27,7 @@ describe('decodeMappings', () => {
       [[16, 1, 21]],
     ]);
   });
+  it('refuses a character that is not base64, naming it', () => {
+    expect(() => decodeMappings('AA!A')).toThrow('holds "!", which is not base64');
+  });
 });

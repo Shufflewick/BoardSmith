@@ -46,7 +46,7 @@ import { ErrorCode } from '../types/protocol.js';
 export { ErrorCode };
 
 // Re-export debug tracing types from engine for convenience
-export type { ActionTrace, PickTrace, ConditionDetail } from '../engine/index.js';
+export type { PickTrace, ConditionDetail } from '../engine/index.js';
 
 // Re-export repeating selection types from engine
 export type { PendingActionState, RepeatingSelectionState, RepeatConfig } from '../engine/index.js';

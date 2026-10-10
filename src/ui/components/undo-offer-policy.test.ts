@@ -65,7 +65,6 @@ function mountPanel(state: PlayerGameState) {
     props: {
       availableActions: state.availableActions ?? [],
       actionMetadata: state.actionMetadata,
-      playerSeat: 1,
       isMyTurn: state.isMyTurn,
       canUndo: state.canUndo,
     },

@@ -27,8 +27,6 @@ defineProps<{
   pendingRewindDiscardCount: number;
   rewindLoading: boolean;
   rewindError: string | null;
-  /** Whether the game log holds anything to copy or clear. */
-  historyHasMessages: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -38,8 +36,6 @@ const emit = defineEmits<{
   rewind: [index: number | null];
   'confirm-rewind': [];
   'cancel-rewind': [];
-  'copy-history': [];
-  'clear-history': [];
 }>();
 </script>
 

@@ -81,7 +81,6 @@ async function travelTable(seed: string) {
       h(ActionPanel, {
         availableActions: seatState.value.availableActions ?? [],
         actionMetadata: wiring.actionMetadata.value,
-        playerSeat: 1,
         isMyTurn: true,
       }),
   });

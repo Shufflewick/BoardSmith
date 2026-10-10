@@ -141,7 +141,7 @@ describe('CardRenderer — a11y (A11Y-01, A11Y-04)', () => {
   it('selectable card has role="button"', () => {
     const wrapper = mountWithInteraction(
       CardRenderer,
-      { element: makeCardElement(), depth: 0 },
+      { element: makeCardElement() },
       bi,
     );
     expect(wrapper.find('.card-container').attributes('role')).toBe('button');
@@ -150,7 +150,7 @@ describe('CardRenderer — a11y (A11Y-01, A11Y-04)', () => {
   it('selectable card has tabindex="0"', () => {
     const wrapper = mountWithInteraction(
       CardRenderer,
-      { element: makeCardElement(), depth: 0 },
+      { element: makeCardElement() },
       bi,
     );
     expect(wrapper.find('.card-container').attributes('tabindex')).toBe('0');
@@ -159,7 +159,7 @@ describe('CardRenderer — a11y (A11Y-01, A11Y-04)', () => {
   it('keydown Enter fires triggerElementSelect exactly once', async () => {
     const wrapper = mountWithInteraction(
       CardRenderer,
-      { element: makeCardElement(), depth: 0 },
+      { element: makeCardElement() },
       bi,
     );
     await wrapper.find('.card-container').trigger('keydown', { key: 'Enter' });
@@ -169,7 +169,7 @@ describe('CardRenderer — a11y (A11Y-01, A11Y-04)', () => {
   it('keydown Space fires triggerElementSelect exactly once', async () => {
     const wrapper = mountWithInteraction(
       CardRenderer,
-      { element: makeCardElement(), depth: 0 },
+      { element: makeCardElement() },
       bi,
     );
     await wrapper.find('.card-container').trigger('keydown', { key: ' ' });
@@ -194,7 +194,7 @@ describe('PieceRenderer — a11y (A11Y-01, A11Y-04)', () => {
   it('selectable piece has role="button"', () => {
     const wrapper = mountWithInteraction(
       PieceRenderer,
-      { element: makePieceElement(), depth: 0 },
+      { element: makePieceElement() },
       bi,
     );
     expect(wrapper.find('.piece').attributes('role')).toBe('button');
@@ -203,7 +203,7 @@ describe('PieceRenderer — a11y (A11Y-01, A11Y-04)', () => {
   it('selectable piece has tabindex="0"', () => {
     const wrapper = mountWithInteraction(
       PieceRenderer,
-      { element: makePieceElement(), depth: 0 },
+      { element: makePieceElement() },
       bi,
     );
     expect(wrapper.find('.piece').attributes('tabindex')).toBe('0');
@@ -212,7 +212,7 @@ describe('PieceRenderer — a11y (A11Y-01, A11Y-04)', () => {
   it('keydown Enter fires triggerElementSelect exactly once', async () => {
     const wrapper = mountWithInteraction(
       PieceRenderer,
-      { element: makePieceElement(), depth: 0 },
+      { element: makePieceElement() },
       bi,
     );
     await wrapper.find('.piece').trigger('keydown', { key: 'Enter' });
@@ -237,7 +237,7 @@ describe('DeckRenderer — a11y (A11Y-01, A11Y-04)', () => {
   it('selectable deck has role="button"', () => {
     const wrapper = mountWithInteraction(
       DeckRenderer,
-      { element: makeDeckElement(), depth: 0 },
+      { element: makeDeckElement() },
       bi,
     );
     expect(wrapper.find('.deck-container').attributes('role')).toBe('button');
@@ -246,7 +246,7 @@ describe('DeckRenderer — a11y (A11Y-01, A11Y-04)', () => {
   it('selectable deck has tabindex="0"', () => {
     const wrapper = mountWithInteraction(
       DeckRenderer,
-      { element: makeDeckElement(), depth: 0 },
+      { element: makeDeckElement() },
       bi,
     );
     expect(wrapper.find('.deck-container').attributes('tabindex')).toBe('0');
@@ -255,7 +255,7 @@ describe('DeckRenderer — a11y (A11Y-01, A11Y-04)', () => {
   it('keydown Enter fires triggerElementSelect exactly once', async () => {
     const wrapper = mountWithInteraction(
       DeckRenderer,
-      { element: makeDeckElement(), depth: 0 },
+      { element: makeDeckElement() },
       bi,
     );
     await wrapper.find('.deck-container').trigger('keydown', { key: 'Enter' });

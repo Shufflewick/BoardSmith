@@ -44,7 +44,6 @@ type ImageInfo =
 
 const props = defineProps<{
   element: GameElement;
-  depth: number;
 }>();
 
 // ---------------------------------------------------------------------------

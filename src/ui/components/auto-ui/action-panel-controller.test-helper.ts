@@ -105,7 +105,7 @@ export type ActionPanelProps = InstanceType<typeof ActionPanel>['$props'];
 
 export function mountPanel(
   controller: ReturnType<typeof stubActionController>,
-  props: ActionPanelProps = { availableActions: [], playerSeat: 1, isMyTurn: true },
+  props: ActionPanelProps = { availableActions: [], isMyTurn: true },
   /**
    * `attachTo: document.body` for a test about FOCUS. A detached mount has no
    * `document.activeElement` to speak of, so `el.focus()` is a no-op and a test

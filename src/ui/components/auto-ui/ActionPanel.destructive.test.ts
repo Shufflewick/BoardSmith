@@ -37,7 +37,6 @@ function panel() {
           selections: [],
         },
       },
-      playerSeat: 1,
       isMyTurn: true,
     },
   });

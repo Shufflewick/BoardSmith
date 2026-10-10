@@ -66,7 +66,7 @@ function mountWithInteraction(
       provideBoardInteraction(interaction);
     },
     render() {
-      return h(HandRenderer, { element, depth: 0 });
+      return h(HandRenderer, { element });
     },
   });
 

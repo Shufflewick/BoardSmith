@@ -43,6 +43,7 @@ import {
   assert,
   barGeometry,
   check,
+  onFreshPage,
   runBrowserRegression,
   summarise,
   surfaceOf,
@@ -551,13 +552,7 @@ function screens() {
 
 async function onASmallerScreen(browser, hostUrl, viewport) {
   const size = `${viewport.width}x${viewport.height}`;
-  const context = await browser.newContext({ viewport });
-  try {
-    const page = await context.newPage();
-    await page.goto(hostUrl);
-    await seated(page);
-    const surface = surfaceOf(page);
-
+  await onFreshPage(browser, hostUrl, { viewport }, seated, async (page, surface) => {
     await check(`${size}: at rest the bar sits inside the strip the board reserves, without scrolling`, async () => {
       const bar = await barGeometry(surface);
       assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}`);
@@ -604,8 +599,6 @@ async function onASmallerScreen(browser, hostUrl, viewport) {
       const bar = await barGeometry(surface);
       assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}`);
     });
-  } finally {
-    await context.close();
-  }
+  });
 }
 

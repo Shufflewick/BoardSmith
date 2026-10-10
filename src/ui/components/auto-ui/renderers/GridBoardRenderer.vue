@@ -37,7 +37,6 @@ interface GameElement {
 
 const props = defineProps<{
   element: GameElement;
-  depth: number;
 }>();
 
 // Board interaction for cell states
@@ -308,7 +307,6 @@ function handleDrop(event: DragEvent, cell: GameElement) {
               v-for="child in (cell.children ?? [])"
               :key="child.id"
               :element="child"
-              :depth="depth + 2"
             />
           </div>
         </div>

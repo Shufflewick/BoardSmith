@@ -711,4 +711,11 @@ describe('a pending action is settled only for the seat whose turn it is', () =>
     const r = runner('turn');
     expect(() => r.game.continueFlowAfterPendingAction({ success: true }, 2)).toThrow(/seat 2.*seat 1/i);
   });
+
+  it('simultaneous: settling it for a seat the step does not await is refused loudly', () => {
+    const r = runner('simultaneous');
+    expect(() => r.game.continueFlowAfterPendingAction({ success: true }, 9)).toThrow(
+      'Seat 9 is not awaited by the open simultaneous step',
+    );
+  });
 });

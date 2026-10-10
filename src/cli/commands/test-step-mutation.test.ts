@@ -5,7 +5,6 @@ import {
   generateMutants,
   isAssertionFailure,
   orderPinSites,
-  PIN_MUTANT_CAP,
   runDiffMutationCheck,
   runMutationCheck,
   spreadOrder,

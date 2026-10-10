@@ -17,7 +17,7 @@
 import { valuesEqual } from '../engine/action/choice-matching.js';
 import { ENGINE_OWNED_GAME_OPTION_KEYS } from '../engine/element/game.js';
 import { PERSIST_KEY } from '../persistence/persistence.js';
-import type { GameOptionDefinition, NumberOption } from '../types/protocol.js';
+import type { GameOptionDefinition, NumberOption, SelectOption } from '../types/protocol.js';
 
 /**
  * Every option name a player's selection may not use: each `GameOptions`
@@ -75,7 +75,8 @@ export function assertDeclarableGameOptions(declared: Record<string, GameOptionD
   }
 }
 
-function assertDeclarableBounds(name: string, def: NumberOption): void {
+/** Throws, naming the field, when a number option declares a bound or default that is not a finite number. */
+function assertFiniteBoundFields(name: string, def: NumberOption): void {
   for (const field of ['min', 'max', 'step', 'default'] as const) {
     const value: unknown = def[field];
     if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value))) {
@@ -85,6 +86,10 @@ function assertDeclarableBounds(name: string, def: NumberOption): void {
       );
     }
   }
+}
+
+function assertDeclarableBounds(name: string, def: NumberOption): void {
+  assertFiniteBoundFields(name, def);
   if (def.min !== undefined && def.max !== undefined && def.min > def.max) {
     throw new Error(
       `This game declares number option "${name}" with min ${def.min} above max ${def.max}, ` +
@@ -123,23 +128,24 @@ function plain(n: number): string {
  * multiple of 0.1 in binary, but 1000000001 is plainly not a multiple of 2).
  */
 function numberBoundsProblem(def: NumberOption, n: number): string | undefined {
-  const { min, max, step } = def;
-  if ((min !== undefined && n < min) || (max !== undefined && n > max)) {
-    return min !== undefined && max !== undefined
-      ? `between ${plain(min)} and ${plain(max)}`
-      : min !== undefined
-        ? `at least ${plain(min)}`
-        : `at most ${plain(max as number)}`;
-  }
-  if (step !== undefined) {
-    const base = min ?? 0;
-    const k = Math.round((n - base) / step);
-    if (Math.abs(n - (base + k * step)) > Math.max(step * 1e-9, Math.abs(n) * 1e-12)) {
-      const examples = [0, 1, 2].map((i) => plain(base + i * step)).join(', ');
-      return `in steps of ${plain(step)} from ${plain(base)} (${examples}, ...)`;
-    }
-  }
-  return undefined;
+  return rangeProblem(def, n) ?? stepProblem(def, n);
+}
+
+/** The option's range, said for a message, if `n` is outside it. */
+function rangeProblem({ min, max }: NumberOption, n: number): string | undefined {
+  if ((min === undefined || n >= min) && (max === undefined || n <= max)) return undefined;
+  if (min === undefined) return `at most ${plain(max as number)}`;
+  return max === undefined ? `at least ${plain(min)}` : `between ${plain(min)} and ${plain(max)}`;
+}
+
+/** The option's step, said for a message, if `n` is off it (see `numberBoundsProblem`). */
+function stepProblem({ min, step }: NumberOption, n: number): string | undefined {
+  if (step === undefined) return undefined;
+  const base = min ?? 0;
+  const k = Math.round((n - base) / step);
+  if (Math.abs(n - (base + k * step)) <= Math.max(step * 1e-9, Math.abs(n) * 1e-12)) return undefined;
+  const examples = [0, 1, 2].map((i) => plain(base + i * step)).join(', ');
+  return `in steps of ${plain(step)} from ${plain(base)} (${examples}, ...)`;
 }
 
 /**
@@ -166,47 +172,56 @@ function coerce(name: string, def: GameOptionDefinition, raw: unknown): unknown 
   // string is read as the declared type; whatever arrives, the value is
   // checked against that type before it is admitted.
   switch (def.type) {
-    case 'number': {
-      const n = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
-      if (typeof n !== 'number' || !Number.isFinite(n)) {
-        throw new GameOptionSelectionError(`Game option "${name}" must be a number, got ${JSON.stringify(raw)}.`);
-      }
-      const problem = numberBoundsProblem(def, n);
-      if (problem !== undefined) {
-        throw new GameOptionSelectionError(`Game option "${name}" must be ${problem}, got ${n}.`);
-      }
-      return n;
-    }
-    case 'boolean': {
-      const b = raw === 'true' ? true : raw === 'false' ? false : raw;
-      if (typeof b !== 'boolean') {
-        throw new GameOptionSelectionError(`Game option "${name}" must be true or false, got ${JSON.stringify(raw)}.`);
-      }
-      return b;
-    }
-    case 'select': {
-      // A value matches a choice under `valuesEqual`, so an object choice that
-      // crossed the wire as an equal object is still that choice (#574). Failing
-      // that, a string names the non-object choice it spells, so a numeric
-      // choice is reachable from a text input; an object is never named by its
-      // text, which would make "[object Object]" the first object choice (#593).
-      // The declared choice's value is returned, frozen (see `deepFreeze`).
-      const choice =
-        def.choices.find((c) => valuesEqual(c.value, raw)) ??
-        (typeof raw === 'string'
-          ? def.choices.find((c) => (typeof c.value !== 'object' || c.value === null) && String(c.value) === raw)
-          : undefined);
-      if (!choice) {
-        throw new GameOptionSelectionError(
-          `Invalid value ${JSON.stringify(raw)} for game option "${name}": must be one of: ` +
-            `${def.choices.map((c) => JSON.stringify(c.value)).join(', ')}.`,
-        );
-      }
-      return deepFreeze(choice.value);
-    }
+    case 'number':
+      return coerceNumber(name, def, raw);
+    case 'boolean':
+      return coerceBoolean(name, raw);
+    case 'select':
+      return coerceSelect(name, def, raw);
     default:
       return raw;
   }
+}
+
+function coerceNumber(name: string, def: NumberOption, raw: unknown): number {
+  const n = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
+  if (typeof n !== 'number' || !Number.isFinite(n)) {
+    throw new GameOptionSelectionError(`Game option "${name}" must be a number, got ${JSON.stringify(raw)}.`);
+  }
+  const problem = numberBoundsProblem(def, n);
+  if (problem !== undefined) {
+    throw new GameOptionSelectionError(`Game option "${name}" must be ${problem}, got ${n}.`);
+  }
+  return n;
+}
+
+function coerceBoolean(name: string, raw: unknown): boolean {
+  const b = raw === 'true' ? true : raw === 'false' ? false : raw;
+  if (typeof b !== 'boolean') {
+    throw new GameOptionSelectionError(`Game option "${name}" must be true or false, got ${JSON.stringify(raw)}.`);
+  }
+  return b;
+}
+
+function coerceSelect(name: string, def: SelectOption, raw: unknown): unknown {
+  // A value matches a choice under `valuesEqual`, so an object choice that
+  // crossed the wire as an equal object is still that choice (#574). Failing
+  // that, a string names the non-object choice it spells, so a numeric
+  // choice is reachable from a text input; an object is never named by its
+  // text, which would make "[object Object]" the first object choice (#593).
+  // The declared choice's value is returned, frozen (see `deepFreeze`).
+  const choice =
+    def.choices.find((c) => valuesEqual(c.value, raw)) ??
+    (typeof raw === 'string'
+      ? def.choices.find((c) => (typeof c.value !== 'object' || c.value === null) && String(c.value) === raw)
+      : undefined);
+  if (!choice) {
+    throw new GameOptionSelectionError(
+      `Invalid value ${JSON.stringify(raw)} for game option "${name}": must be one of: ` +
+        `${def.choices.map((c) => JSON.stringify(c.value)).join(', ')}.`,
+    );
+  }
+  return deepFreeze(choice.value);
 }
 
 /**

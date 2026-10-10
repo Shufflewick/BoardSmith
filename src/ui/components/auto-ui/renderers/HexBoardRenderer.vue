@@ -52,8 +52,6 @@ interface GameElement {
 
 const props = defineProps<{
   element: GameElement;
-  depth: number;
-  hexPieceSize?: number;
 }>();
 
 // Board interaction for polygon states

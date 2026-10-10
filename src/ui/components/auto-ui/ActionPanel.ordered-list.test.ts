@@ -46,7 +46,7 @@ function mountRepair(
   });
   const wrapper = mountPanel(
     controller,
-    { availableActions: ['repair'], playerSeat: 1, isMyTurn: true },
+    { availableActions: ['repair'], isMyTurn: true },
     mountOptions,
   );
   return { wrapper, controller };
