@@ -344,8 +344,13 @@ gate ran the audit; under the fallow that recorded them, the baselines described
 Only the two whole-repository checks are in the list. `--changes` is scoped by
 fallow's own base detection (the branch's upstream or `origin/HEAD`), so on a
 merged tree it would audit whatever the remote happened to point at, and on
-`main` right after a merge it checks nothing. `--duplication` runs jscpd through
-`npx`, which is not pinned.
+`main` right after a merge it checks nothing.
+
+There used to be a fourth check, `--duplication`, which ran jscpd through `npx`
+over `src/`. It was removed rather than pinned (#551): its version depended on
+the machine, it had no baseline, and `--dupes-baseline` already scans the whole
+tree for duplication with the pinned fallow at lower thresholds (5 lines and 50
+tokens against jscpd's 10 and 100).
 
 When the audit re-addresses moved clone groups it writes the two dupes files,
 and verify then fails with "a check changed the working tree". Commit the
@@ -741,9 +746,8 @@ has accepted". A latent duplicate is one line in that flood.
 
 `boardsmith audit --since <first commit>` does put the whole tree in scope with
 the baselines applied, and it passes today. But it is a gate: it exits non-zero
-on findings, and it drags the jscpd duplication sweep and the health-baseline
-drift check along with it, both of which report this repo's accepted backlog
-over a whole-repository scope. On a schedule it would be red forever, which is
+on findings, and it drags the health-baseline drift check along with it, which
+reports this repo's accepted backlog over a whole-repository scope. On a schedule it would be red forever, which is
 what teaches people to stop reading a gate.
 
 So no new analysis and no new scope rule was added. What was missing was a run

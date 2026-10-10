@@ -427,9 +427,15 @@ describe('AUDIT_ORDER', () => {
     expect(AUDIT_ORDER.indexOf('dupesBaseline')).toBeLessThan(AUDIT_ORDER.indexOf('changes'));
   });
 
-  it('still runs all four checks', () => {
+  /**
+   * #551: there is no separate jscpd duplication check. It ran an unpinned
+   * jscpd through npx over `src/` with no baseline, so its verdict varied by
+   * machine and it reported the accepted backlog. `dupesBaseline` runs the
+   * pinned fallow's duplication scan over the whole tree, baseline-aware.
+   */
+  it('runs exactly the three fallow checks, with no jscpd duplication check (#551)', () => {
     expect([...AUDIT_ORDER].sort()).toEqual(
-      ['changes', 'dupesBaseline', 'duplication', 'healthBaseline'],
+      ['changes', 'dupesBaseline', 'healthBaseline'],
     );
   });
 

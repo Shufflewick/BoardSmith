@@ -25,7 +25,6 @@ import { githubIssueTracker, sweepDuplicateExports } from '../lib/duplicate-expo
 export interface AuditOptions {
   /** Selector flags — when any is set, only the selected audits run. */
   changes?: boolean;
-  duplication?: boolean;
   healthBaseline?: boolean;
   dupesBaseline?: boolean;
   /** Git ref the changed-files audit diffs against, overriding fallow's own base detection. */
@@ -444,7 +443,7 @@ const outcomeOf = (code: number): AuditOutcome => (code === 0 ? 'pass' : 'fail')
  */
 function buildAudits(
   options: AuditOptions,
-): Record<'changes' | 'duplication' | 'healthBaseline' | 'dupesBaseline', Audit> {
+): Record<'changes' | 'healthBaseline' | 'dupesBaseline', Audit> {
   return {
     changes: {
       name: 'changed files',
@@ -453,11 +452,6 @@ function buildAudits(
         console.log(outcome === 'pass' ? chalk.dim(report) : chalk.yellow(report));
         return outcome;
       },
-    },
-    duplication: {
-      name: 'duplication',
-      run: async (cwd) =>
-        outcomeOf(await runTool('jscpd', ['src/', '--min-lines', '10', '--min-tokens', '100'], { cwd })),
     },
     healthBaseline: {
       name: 'health baseline',
@@ -572,13 +566,12 @@ async function rekeyAction(cwd: string, conflicting: boolean): Promise<void> {
  * branch runs this audit and commits what it rewrote. The addresses on `main`
  * are therefore always the addresses of the tree that was merged.
  */
-export const AUDIT_ORDER = ['dupesBaseline', 'changes', 'duplication', 'healthBaseline'] as const;
+export const AUDIT_ORDER = ['dupesBaseline', 'changes', 'healthBaseline'] as const;
 
 /** The checks this run asked for, in the order they are reported. */
 function selectedAudits(options: AuditOptions): Audit[] {
   const wants = selectChecks({
     changes: options.changes,
-    duplication: options.duplication,
     healthBaseline: options.healthBaseline,
     dupesBaseline: options.dupesBaseline,
   });
@@ -611,8 +604,8 @@ async function runAudits(
 /**
  * Run BoardSmith's code-quality audits.
  *
- * With no flags every audit runs; pass `--changes`, `--duplication`,
- * `--health-baseline` or `--dupes-baseline` to run just one. Exits non-zero if
+ * With no flags every audit runs; pass `--changes`, `--health-baseline` or
+ * `--dupes-baseline` to run just one. Exits non-zero if
  * any audit reports findings, so it can gate a refactor.
  */
 export async function auditCommand(options: AuditOptions): Promise<void> {
@@ -621,7 +614,7 @@ export async function auditCommand(options: AuditOptions): Promise<void> {
   requireBoardsmithWorkspace(cwd);
 
   const selectors = Boolean(
-    options.changes || options.duplication || options.healthBaseline || options.dupesBaseline,
+    options.changes || options.healthBaseline || options.dupesBaseline,
   );
 
   if (options.sweep) {

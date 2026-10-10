@@ -77,8 +77,8 @@ export function fallowCommandLine(args: string[], cwd: string): string {
  *
  * A tool boardsmith depends on (`BOARDSMITH_TOOLS`) runs from boardsmith's own
  * install. Any other tool prefers the workspace's own `node_modules/.bin/<bin>`
- * so a declared devDependency is always what runs, and falls back to `npx` only
- * for `jscpd`, which is deliberately not a dependency.
+ * so a declared devDependency is always what runs, and falls back to `npx` when
+ * the workspace has none.
  *
  * `output` decides where the child's output goes: inherited (the developer
  * reads it), stdout piped back to the caller (a command reasons about it), or
