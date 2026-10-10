@@ -316,3 +316,49 @@ describe('DevHost: shows the game options the host applied (#541)', () => {
     expect((select.element as HTMLSelectElement).value).toBe('hard');
   });
 });
+
+describe('DevHost: a change the host applies later replaces what the page shows (#541)', () => {
+  const lobbyApplying = (gameOptions: Record<string, unknown>) => ({ ...SEAT_LOBBY, gameOptions });
+
+  // TEST_CONFIG's one option has two choices, so the field reads the old
+  // applied value here: anything else would already be the new one.
+  it('a later lobby with new values replaces the field, and Table setup follows', async () => {
+    const wrapper = await mountInLobby();
+    const ws = mockWsInstance!;
+    ws.simulateMessage(lobbyApplying({ difficulty: 'easy' }));
+    await wrapper.vm.$nextTick();
+    const select = wrapper.find('[data-testid="lobby-option-difficulty"]');
+    expect((select.element as HTMLSelectElement).value).toBe('easy');
+
+    ws.simulateMessage(lobbyApplying({ difficulty: 'hard' }));
+    await wrapper.vm.$nextTick();
+    expect((select.element as HTMLSelectElement).value).toBe('hard');
+
+    ws.simulateMessage({ type: 'init', seat: 1 });
+    await wrapper.vm.$nextTick();
+    await wrapper.findAll('[data-testid="table-setup-toggle"]')[0].trigger('click');
+    await wrapper.vm.$nextTick();
+    const row = wrapper.findAll('.table-setup__row').find((r) => r.find('dt').text() === 'Difficulty');
+    expect(row?.find('dd').text()).toBe('Hard');
+  });
+
+  it('a later lobby with new values clears a preset chosen earlier, so the next Apply does not send it', async () => {
+    const wrapper = await mountInLobby();
+    const ws = mockWsInstance!;
+    ws.simulateMessage(lobbyApplying({ difficulty: 'easy' }));
+    await wrapper.vm.$nextTick();
+    const presetPicker = wrapper.find('[data-testid="lobby-preset-picker"]');
+    await presetPicker.setValue('Quick Match');
+
+    ws.simulateMessage(lobbyApplying({ difficulty: 'hard' }));
+    await wrapper.vm.$nextTick();
+    expect((presetPicker.element as HTMLSelectElement).value).toBe('');
+
+    ws.send.mockClear();
+    await wrapper.find('[data-testid="lobby-apply-options"]').trigger('click');
+    const frames = ws.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    const configure = frames.find((f) => f.type === 'configure');
+    expect(configure?.preset).toBeUndefined();
+    expect(configure?.gameOptions).toEqual({ difficulty: 'hard' });
+  });
+});

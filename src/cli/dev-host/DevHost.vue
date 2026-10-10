@@ -83,8 +83,9 @@ let appliedOptionsKey = '';
 
 /**
  * Take the host's applied selection from a lobby message. The fields are reset
- * to it only when it changed, so a rebroadcast (someone joining) does not throw
- * away an edit the player has not applied yet.
+ * to it, and the preset picker cleared, only when it changed, so a rebroadcast
+ * (someone joining) does not throw away an edit the player has not applied yet,
+ * and a preset picked before the change is not sent again by the next Apply.
  */
 function onAppliedOptions(applied: Record<string, unknown>): void {
   const key = JSON.stringify(applied);
@@ -92,6 +93,7 @@ function onAppliedOptions(applied: Record<string, unknown>): void {
   appliedOptionsKey = key;
   appliedOptions.value = { ...declaredOptionDefaults, ...applied };
   optionSelection.value = { ...appliedOptions.value };
+  presetSelection.value = '';
 }
 
 function onPresetSelect(): void {
