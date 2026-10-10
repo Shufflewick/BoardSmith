@@ -838,6 +838,34 @@ describe('useActionController', () => {
       expect(sendAction).not.toHaveBeenCalled();
     });
 
+    it('holds a follow-up from an action reply that lands in history, and starts it once on return, with no held offer wired (#586)', async () => {
+      const isViewingHistory = ref(false);
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn, isViewingHistory });
+      let reply!: (result: unknown) => void;
+      sendAction.mockReturnValueOnce(new Promise((resolve) => { reply = resolve; }));
+      const loot = { name: 'loot', prompt: 'Loot', selections: [{ name: 'where', type: 'choice', prompt: 'Where', choices: [{ value: 'north', display: 'North' }] }] };
+
+      const sent = controller.execute('endTurn');
+      isViewingHistory.value = true;
+      reply({ success: true, followUp: { action: 'loot', args: {}, metadata: loot } });
+      await sent;
+      for (let i = 0; i < 5; i++) await nextTick();
+      expect(controller.currentAction.value).toBeNull();
+      expect(controller.pendingFollowUp.value).toBe(false);
+
+      isViewingHistory.value = false;
+      for (let i = 0; i < 5; i++) await nextTick();
+      expect(controller.currentAction.value).toBe('loot');
+
+      // A second visit to history and back does not start it again.
+      controller.cancel();
+      isViewingHistory.value = true;
+      await nextTick();
+      isViewingHistory.value = false;
+      for (let i = 0; i < 5; i++) await nextTick();
+      expect(controller.currentAction.value).toBeNull();
+    });
+
     it('does not affect normal operation when isViewingHistory is not provided (default false)', async () => {
       const controller = useActionController({
         sendAction,
