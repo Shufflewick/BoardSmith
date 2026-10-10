@@ -7,6 +7,8 @@
 import { describe, expect, it } from "vitest";
 import {
   WORLD_OWNER,
+  WORLD_SCHEDULE_ARGS_MAX_BYTES,
+  WORLD_SCHEDULE_KEY_MAX_BYTES,
   planSchedules,
   type PlannedEvent,
   type ScheduleRequest,
@@ -712,5 +714,100 @@ describe("#177 — a keyed timer can be taken back", () => {
     if (result.ok) return;
     expect(result.refusal.code).toBe("invalid-schedule-cancel");
     expect(result.refusal.message).toMatch(/name the key/i);
+  });
+});
+
+/**
+ * #602: A KEY OR ARGS NO HOST CAN STORE IS REFUSED AT THE LINE.
+ *
+ * A host stores each event under a storage key built from the schedule key and
+ * its args inside a row value. Neither was bounded, so a game could schedule an
+ * event no host could write, and the failure surfaced at the checkpoint as an
+ * outage rather than in the handler as the bundle's own mistake.
+ */
+describe("planSchedules -- what a host can store (#602)", () => {
+  const bytes = (text: string) => new TextEncoder().encode(text).length;
+  /** Args whose JSON is exactly `size` UTF-8 bytes: `{"s":"…"}` is 8 bytes of
+   *  framing around the string. */
+  const argsOf = (size: number) => ({ s: "x".repeat(size - 8) });
+
+  it("admits a key of exactly the bound and refuses one byte over it", () => {
+    const atBound = "k".repeat(WORLD_SCHEDULE_KEY_MAX_BYTES);
+    expect(plan([], [{ delayMs: 1, action: "tick", key: atBound }]).ok).toBe(true);
+
+    const over = plan([], [{ delayMs: 1, action: "tick", key: `${atBound}k` }]);
+    expect(over.ok).toBe(false);
+    if (over.ok) return;
+    expect(over.refusal.code).toBe("schedule-key-too-long");
+    expect(over.refusal.owner).toBe("game");
+    expect(over.refusal.message).toContain(`${WORLD_SCHEDULE_KEY_MAX_BYTES + 1} bytes`);
+    // The sentence quotes the start of the key, never the whole thing: the key
+    // is the game's own text and it is over-long by definition.
+    expect(over.refusal.message.length).toBeLessThan(600);
+  });
+
+  it("measures the key in UTF-8 BYTES, not characters", () => {
+    // "€" is three bytes. 170 of them and two ASCII letters is exactly the
+    // bound; 171 of them is one byte over it in far fewer characters than the
+    // bound, which a character count would have admitted.
+    const atBound = "€".repeat(170) + "ab";
+    expect(bytes(atBound)).toBe(WORLD_SCHEDULE_KEY_MAX_BYTES);
+    expect(plan([], [{ delayMs: 1, action: "tick", key: atBound }]).ok).toBe(true);
+
+    const over = "€".repeat(171);
+    expect(bytes(over)).toBe(WORLD_SCHEDULE_KEY_MAX_BYTES + 1);
+    const result = plan([], [{ delayMs: 1, action: "tick", key: over }]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.refusal.code).toBe("schedule-key-too-long");
+
+    // A four-byte character too: 128 of them is the bound exactly.
+    expect(plan([], [{ delayMs: 1, action: "tick", key: "😀".repeat(128) }]).ok).toBe(true);
+    expect(plan([], [{ delayMs: 1, action: "tick", key: "😀".repeat(129) }]).ok).toBe(false);
+  });
+
+  it("fits a worst-case percent-encoded key in workerd's 2048-byte key with room for a prefix", () => {
+    // The arithmetic the bound was chosen by: every UTF-8 byte of the key can
+    // become three when a host percent-encodes it, and what is left of 2048 is
+    // the host's own prefix and owner.
+    const worst = "€".repeat(170) + "ab";
+    expect(bytes(encodeURIComponent(worst))).toBeLessThanOrEqual(3 * WORLD_SCHEDULE_KEY_MAX_BYTES);
+    expect(2048 - 3 * WORLD_SCHEDULE_KEY_MAX_BYTES).toBeGreaterThanOrEqual(512);
+  });
+
+  it("refuses a CANCEL under a key no schedule could have been armed under", () => {
+    // Not a no-op: no arm can ever hold such a key, so the cancel is the
+    // bundle's mistake, and saying so is kinder than forgetting nothing.
+    const result = plan([], [{ cancel: "k".repeat(WORLD_SCHEDULE_KEY_MAX_BYTES + 1) }]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.refusal.code).toBe("schedule-key-too-long");
+    expect(plan([], [{ cancel: "k".repeat(WORLD_SCHEDULE_KEY_MAX_BYTES) }]).ok).toBe(true);
+  });
+
+  it("admits args of exactly the bound and refuses one byte over it", () => {
+    const atBound = argsOf(WORLD_SCHEDULE_ARGS_MAX_BYTES);
+    expect(bytes(JSON.stringify(atBound))).toBe(WORLD_SCHEDULE_ARGS_MAX_BYTES);
+    expect(plan([], [{ delayMs: 1, action: "tick", args: atBound }]).ok).toBe(true);
+
+    const over = plan([], [
+      { delayMs: 1, action: "tick", args: argsOf(WORLD_SCHEDULE_ARGS_MAX_BYTES + 1) },
+    ]);
+    expect(over.ok).toBe(false);
+    if (over.ok) return;
+    expect(over.refusal.code).toBe("schedule-args-too-large");
+    expect(over.refusal.owner).toBe("game");
+    expect(over.refusal.message).toContain(`${WORLD_SCHEDULE_ARGS_MAX_BYTES + 1} bytes`);
+  });
+
+  it("measures args in UTF-8 bytes of their JSON, so multibyte text counts in full", () => {
+    // 1364 "€" are 4092 bytes; with 8 bytes of framing that is 4100, over the
+    // bound in about a third of the characters.
+    const args = { s: "€".repeat(1364) };
+    expect(JSON.stringify(args).length).toBeLessThan(WORLD_SCHEDULE_ARGS_MAX_BYTES);
+    const result = plan([], [{ delayMs: 1, action: "tick", args }]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.refusal.code).toBe("schedule-args-too-large");
   });
 });

@@ -25,6 +25,11 @@ import {
 } from "./definition.js";
 import { worldAction, worldClockAction } from "./action.js";
 import { worldBudgets } from "./budgets.js";
+import {
+  WORLD_SCHEDULE_ARGS_MAX_BYTES,
+  WORLD_SCHEDULE_KEY_MAX_BYTES,
+  type ScheduleArm,
+} from "./schedule-api.js";
 import { WorldRefusal } from "./refusals.js";
 import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 import { worldElementIds } from "../engine/element/element-ids.js";
@@ -518,6 +523,70 @@ describe("createWorld — one construction, every host", () => {
       { cancel: "raid" },
       { delayMs: 60_000, key: "raid", action: "rearm" },
     ]);
+  });
+
+  it("REFUSES a key or args too large to store, at the offending line, so the change unwinds (#602)", async () => {
+    // The action changes the world FIRST and asks for the timer second, which
+    // is the order that proves the rollback: a refusal raised only in the host
+    // would leave the poke behind with its timer dropped.
+    const pokeThen = (request: ScheduleArm) =>
+      worldAction<TinyWorld>("pokeThenSchedule")
+        .needs(() => ["yard:1"])
+        .execute((_args, ctx) => {
+          (ctx.world.partition("yard:1") as Yard).pokes += 1;
+          ctx.world.schedule(request);
+        });
+    const cases = [
+      {
+        request: { delayMs: 1, action: "sweep", key: "k".repeat(WORLD_SCHEDULE_KEY_MAX_BYTES + 1) },
+        code: "schedule-key-too-long",
+      },
+      {
+        request: { delayMs: 1, action: "sweep", args: { s: "x".repeat(WORLD_SCHEDULE_ARGS_MAX_BYTES) } },
+        code: "schedule-args-too-large",
+      },
+    ] as const;
+
+    for (const { request, code } of cases) {
+      const { runner } = createWorld({
+        elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
+        definition: bundle({
+          world: {
+            maxPlayers: 2,
+            genesis: (game) => ({ "yard:1": game.create(Yard, "yard") as GameElement }),
+            view: () => ["yard:1"],
+            actions: [pokeThen(request), sweep],
+          },
+        }),
+        seed: "s",
+        seats: new Map([["p1", 1]]),
+      });
+      await runner.genesis();
+
+      const refused = await runner
+        .apply({
+          player: "p1",
+          command: { name: "pokeThenSchedule", args: {} },
+          timing: null,
+          arrivedAt: 0,
+          allowance: { unkeyed: 0, keys: [], worldPending: 0 },
+          presence: [],
+          activity: null,
+          declaredActivity: [],
+          declaredNotices: [],
+        })
+        .then(
+          () => null,
+          (error: unknown) => error,
+        );
+      expect(refused).toBeInstanceOf(WorldRefusal);
+      expect((refused as WorldRefusal).code).toBe(code);
+
+      const checkpoint = await runner.serialize(["yard:1"]);
+      expect(JSON.parse(checkpoint.partitions["yard:1"]!)).toMatchObject({
+        attributes: { pokes: 0 },
+      });
+    }
   });
 
   it("REFUSES a cancel with no key, at the offending line, so the command unwinds", async () => {

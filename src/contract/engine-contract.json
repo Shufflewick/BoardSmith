@@ -1,7 +1,7 @@
 {
-  "revision": 147,
+  "revision": 148,
   "bundleProtocol": 2,
-  "surfaceHash": "e949c8726719a502",
+  "surfaceHash": "bc041041e4ac2e6d",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1267,6 +1267,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A chooseFrom choice is a value or { value, label } (#509). The engine reads value out of exactly that shape (a plain object whose only keys are value and an optional string label) where the choices are built, so disabled, display, boardRefs, validate, onSelect and execute all receive the value, the wire carries the value with the label as its display, and a custom UI fill()s the value. Any other object, including { value, display } and { value, cost }, is a value in its own right and arrives whole: the resolve-time unwrap (extractChoiceValue) and the fill() unwrap are gone. Game.playerChoices() returns { value: seat, label: name }. A function-valued multiSelect or orderedList must return a count; returning undefined is refused with an error naming the selection instead of silently becoming a single pick. A game whose choices use { value, display } must rename display to label. A repeating choice pick's nextChoices from a selection step are wire choices ({ value, display, refs?, disabled? }) labelled as the first pass's were, not bare values."
+    },
+    {
+      "revision": 148,
+      "date": "2026-10-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "bc041041e4ac2e6d",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "ctx.world.schedule() and ctx.world.cancel() refuse a key over 512 UTF-8 bytes (schedule-key-too-long) and args whose JSON is over 4096 UTF-8 bytes (schedule-args-too-large), both game-owned and raised at the offending line, and boardsmith/world exports the two bounds as WORLD_SCHEDULE_KEY_MAX_BYTES and WORLD_SCHEDULE_ARGS_MAX_BYTES."
     }
   ]
 }

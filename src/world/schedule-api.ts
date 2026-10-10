@@ -167,6 +167,32 @@ export interface ScheduleArm {
 }
 
 /**
+ * THE LONGEST SCHEDULE KEY, IN UTF-8 BYTES, ANY HOST MUST BE ABLE TO STORE (#602).
+ *
+ * A host stores each pending event under a storage key built from the schedule
+ * key. ShufflewickPub percent-encodes it into a Durable Object key, and workerd
+ * caps a key at 2048 bytes. Percent-encoding turns each UTF-8 byte into at most
+ * three (`%E2`), so a 512-byte key is at most 1536 bytes encoded, which leaves
+ * 2048 - 1536 = 512 bytes for the host's own prefix and the encoded owner.
+ *
+ * The same bound applies to a cancel's key: no arm can hold a longer one, so a
+ * cancel naming one is a mistake rather than a no-op.
+ */
+export const WORLD_SCHEDULE_KEY_MAX_BYTES = 512;
+
+/**
+ * THE LARGEST SCHEDULE ARGS, AS UTF-8 BYTES OF THEIR JSON (#602).
+ *
+ * A host stores an event's args inside the event's row, and a Durable Object
+ * row holds 2 MB with its key. Args are JSON scalars that NAME things (a
+ * partition, a seat, a short label), so 4 KiB is room for a paragraph of text
+ * and four times what a whole notice may be. Sized against the drain rather
+ * than the row: a 200-event drain batch at the bound reads 800 KiB of args,
+ * and a row stays under a five-hundredth of the wall.
+ */
+export const WORLD_SCHEDULE_ARGS_MAX_BYTES = 4096;
+
+/**
  * TAKE BACK A KEYED TIMER THIS OWNER HOLDS (#177).
  *
  * ## Why this exists at all
@@ -565,10 +591,12 @@ export function scheduleBudget(
  * refused, for the same reason.
  */
 function shapeRefusal(request: ScheduleRequest): WorldRefusal | null {
-  if (isCancel(request)) return cancelShapeRefusal(request);
+  if (isCancel(request)) return cancelShapeRefusal(request) ?? keySizeRefusal(request.cancel);
   return (
     actionRefusal(request) ??
     argumentRefusal(request) ??
+    argumentSizeRefusal(request) ??
+    (request.key === undefined ? null : keySizeRefusal(request.key)) ??
     intervalRefusal(request) ??
     delayRefusal(request)
   );
@@ -596,6 +624,35 @@ function argumentRefusal(request: ScheduleArm): WorldRefusal | null {
       "outlives eviction and rehydration, so an element -- or anything holding one -- names " +
       "something that may not be resident when the event comes due, and may have been " +
       "re-minted since. Pass the partition's NAME and let the action read inside it.",
+  );
+}
+
+/** One encoder for the module: storage measures keys and rows in UTF-8. */
+const encoder = new TextEncoder();
+
+/** A KEY NO HOST CAN STORE IS REFUSED HERE, NOT AT THE CHECKPOINT (#602). */
+function keySizeRefusal(key: string): WorldRefusal | null {
+  const bytes = encoder.encode(key).length;
+  if (bytes <= WORLD_SCHEDULE_KEY_MAX_BYTES) return null;
+  return worldRefusal(
+    "schedule-key-too-long",
+    `The schedule key ${JSON.stringify(key.slice(0, 32))}... is ${bytes} bytes, over the ` +
+      `${WORLD_SCHEDULE_KEY_MAX_BYTES}-byte limit a key may be (measured in UTF-8, so an accented ` +
+      "or non-Latin character counts two to four). A key names one timer, like " +
+      '`"raid"` or `"burn:3"`; put anything longer in the args or in a partition.',
+  );
+}
+
+/** ARGS NO HOST CAN STORE ARE REFUSED HERE, NOT AT THE CHECKPOINT (#602). */
+function argumentSizeRefusal(request: ScheduleArm): WorldRefusal | null {
+  if (request.args === undefined) return null;
+  const bytes = encoder.encode(JSON.stringify(request.args)).length;
+  if (bytes <= WORLD_SCHEDULE_ARGS_MAX_BYTES) return null;
+  return worldRefusal(
+    "schedule-args-too-large",
+    `A scheduled event's args are ${bytes} bytes as JSON, over the ` +
+      `${WORLD_SCHEDULE_ARGS_MAX_BYTES}-byte limit. Args should name things, not carry them: ` +
+      "keep the data in a partition and pass the partition's name.",
   );
 }
 
