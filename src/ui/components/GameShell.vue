@@ -1173,6 +1173,15 @@ function handleTimeTravel(
   timeTravelDiff.value = diff;
 }
 
+// A snapshot belongs to the game it was taken in. A host that starts a new
+// game relays its first state into this same frame (the dev host does not
+// reload it on a restart), so the old game's snapshot is dropped before the new
+// game's seats are drawn beside it (#587). The debug panel drops its own
+// selection on the same change.
+watch(() => state.value?.state.gameInstanceId, (game, previous) => {
+  if (previous !== undefined && game !== previous) handleTimeTravel(null, null, null);
+});
+
 // Debug highlight handler - highlights an element on the board
 function handleHighlightElement(elementId: number | null) {
   debugHighlightedElementId.value = elementId;
