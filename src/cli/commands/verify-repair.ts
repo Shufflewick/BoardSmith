@@ -286,17 +286,17 @@ export function appendAuditRoundHeading(chunkMd: string, heading: string): strin
 }
 
 /**
- * Writes a planned verify-episode round's heading into `chunkMdPath`, through `atomicWriteFile` —
+ * Writes a planned verify-episode round's heading into `chunkFile`, through `atomicWriteFile` —
  * the ONE atomic write path in the repo (T-176-06: a torn `CHUNK.md` on crash mid-append is
  * mitigated only by never writing any other way).
  */
 export async function writeAppendedAuditRound(
-  chunkMdPath: string,
+  chunkFile: string,
   chunkMd: string,
   heading: string,
 ): Promise<string> {
   const updated = appendAuditRoundHeading(chunkMd, heading);
-  await atomicWriteFile(chunkMdPath, updated);
+  await atomicWriteFile(chunkFile, updated);
   return updated;
 }
 

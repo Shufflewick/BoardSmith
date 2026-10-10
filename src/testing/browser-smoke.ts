@@ -1281,7 +1281,7 @@ async function pressABoardControl(
 }
 
 /**
- * Presses one board control the walk has not pressed yet, other than those `leftToTheLead` names.
+ * Presses one board control the walk has not pressed yet, other than those in `leadsControls`.
  * Returns false when every one was pressed.
  */
 async function pressAnUntriedControl(
@@ -1290,10 +1290,10 @@ async function pressAnUntriedControl(
   walk: SmokeWalk,
   memory: WalkMemory,
   step: number,
-  leftToTheLead: ReadonlySet<string>,
+  leadsControls: ReadonlySet<string>,
 ): Promise<boolean> {
   for (const control of await boardControls(frame)) {
-    if (memory.pressed.has(control.key) || leftToTheLead.has(control.key)) continue;
+    if (memory.pressed.has(control.key) || leadsControls.has(control.key)) continue;
     memory.pressed.add(control.key);
     play.boardPress = control.key;
     await pressABoardControl(control, `the board's "${nameOf(control)}"`, walk, memory, step);

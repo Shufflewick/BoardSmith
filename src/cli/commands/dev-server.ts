@@ -294,9 +294,9 @@ export async function serveVite(args: {
       ...args.config,
       server: { ...args.config.server, middlewareMode: true, hmr: { server: httpServer } },
     });
-    await new Promise<void>((resolve, reject) => {
+    await new Promise<void>((listening, reject) => {
       httpServer.once('error', (error: NodeJS.ErrnoException) => reject(new Error(portRefusal(args.port, args.host, error))));
-      httpServer.listen(args.port, args.host, resolve);
+      httpServer.listen(args.port, args.host, listening);
     });
   } catch (error) {
     await vite?.close();
@@ -313,8 +313,8 @@ export async function serveVite(args: {
       {
         name: 'the HTTP server',
         close: () =>
-          new Promise<void>((resolve, reject) => {
-            httpServer.close((error) => (error ? reject(error) : resolve()));
+          new Promise<void>((closed, reject) => {
+            httpServer.close((error) => (error ? reject(error) : closed()));
             httpServer.closeAllConnections();
           }),
       },

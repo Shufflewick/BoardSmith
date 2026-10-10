@@ -219,19 +219,19 @@ async function strandedScratchFindings(projectDir: string): Promise<DoctorFindin
     rootEntries = [];
   }
   const findings: DoctorFinding[] = [];
-  for (const e of rootEntries.filter((e) => e.isFile() && SCRATCH_FILE_RE.test(e.name))) {
-    const to = join(SCRATCH_DIR, e.name);
+  for (const entry of rootEntries.filter((e) => e.isFile() && SCRATCH_FILE_RE.test(e.name))) {
+    const to = join(SCRATCH_DIR, entry.name);
     if (await exists(join(projectDir, to))) {
       findings.push({
         kind: 'move-conflict',
-        from: e.name,
+        from: entry.name,
         to,
         fixed: false,
         detail: `${to} already exists — rename or delete it, then re-run.`,
       });
       continue;
     }
-    findings.push({ kind: 'scratch-in-root', from: e.name, to, fixed: false });
+    findings.push({ kind: 'scratch-in-root', from: entry.name, to, fixed: false });
   }
   return findings;
 }
