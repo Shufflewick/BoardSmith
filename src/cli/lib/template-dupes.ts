@@ -42,17 +42,32 @@ const SCAN_ROOT = 'src';
 /** The file jscpd's `json` reporter writes into its `--output` directory. */
 export const JSCPD_REPORT_FILE = 'jscpd-report.json';
 
+/** jscpd skips a file shorter than either minimum, so it is not among the sources it counts. */
+const MIN_LINES = 10;
+const MIN_TOKENS = 100;
+
 /** The arguments of the one jscpd scan the gate runs, writing its JSON report into `outputDir`. */
 export function jscpdTemplateArgs(outputDir: string): string[] {
   return [
     SCAN_ROOT,
     '--format', 'vue',
-    '--min-lines', '10',
-    '--min-tokens', '100',
+    '--min-lines', String(MIN_LINES),
+    '--min-tokens', String(MIN_TOKENS),
     '--reporters', 'json',
     '--output', outputDir,
     '--silent',
   ];
+}
+
+/**
+ * What a scan that analyzed no files means (#614). jscpd 5.3.2's report counts a
+ * tree with no `.vue` files and one whose `.vue` files are all below the
+ * minimums the same way, so this names both.
+ */
+export function describeEmptyScan(sources: number): string {
+  return `jscpd analyzed ${sources} files under ${SCAN_ROOT}/: either there are no .vue files there, `
+    + `or none is large enough to analyze (at least ${MIN_LINES} lines and ${MIN_TOKENS} tokens). `
+    + 'The template duplication check checked nothing.';
 }
 
 /** Block formats fallow already scans, so their clones are left to it. */
