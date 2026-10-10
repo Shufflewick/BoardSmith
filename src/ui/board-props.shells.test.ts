@@ -8,7 +8,7 @@
  * `board-props.test.ts`), so a prop added to a template and not to the type,
  * or the other way round, fails here.
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, expectTypeOf, afterEach } from 'vitest';
 import { camelize, defineComponent, h, nextTick, useAttrs } from 'vue';
 import { mount, flushPromises } from '@vue/test-utils';
 import WorldShell from './world/WorldShell.vue';
@@ -16,6 +16,7 @@ import { WORLD_HOST_SOURCE } from './world/worldProtocol.js';
 import { defineGameUIs, defaultUI } from './game-uis.js';
 import ActionPanel from './components/auto-ui/ActionPanel.vue';
 import PlayShell from './components/PlayShell.vue';
+import GameShell from './components/GameShell.vue';
 import ControlsMenu from './components/ControlsMenu.vue';
 import {
   DEBUG_TABLE_PLAYERS,
@@ -165,6 +166,24 @@ describe('GameShell gates the #player-stats slot like the board (#554)', () => {
     debugPanel.vm.$emit('time-travel', null, null, null);
     await nextTick();
     expect(statsProps.player).toEqual(DEBUG_TABLE_PLAYERS[0]);
+    wrapper.unmount();
+  });
+
+  it('types the slot\'s player as always present, so game code reads it without a guard (#581)', () => {
+    type PlayerStatsSlot = NonNullable<InstanceType<typeof GameShell>['$slots']['player-stats']>;
+    type SlotPlayer = Parameters<PlayerStatsSlot>[0]['player'];
+    expectTypeOf<Extract<SlotPlayer, undefined>>().toBeNever();
+    expectTypeOf<SlotPlayer>().toHaveProperty('seat');
+  });
+
+  it('refuses, naming the seat, a viewed snapshot that lacks a seat the panel shows (#581)', async () => {
+    const { wrapper, debugPanel } = await mountTableWithDebugPanel(AttrsBoard, {}, { 'player-stats': playerStats });
+    const errors: unknown[] = [];
+    wrapper.vm.$.appContext.config.errorHandler = (error) => { errors.push(error); };
+    debugPanel.vm.$emit('time-travel', { view: {}, players: DEBUG_TABLE_PLAYERS.slice(0, 1) }, 3, null);
+    await nextTick();
+    expect(errors).toHaveLength(1);
+    expect(String(errors[0])).toMatch(/seat 2/);
     wrapper.unmount();
   });
 });
