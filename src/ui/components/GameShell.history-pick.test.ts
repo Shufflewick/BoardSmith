@@ -148,8 +148,21 @@ describe('GameShell defers a held follow-up that arrives while viewing history (
       choices: [{ value: 'cave', display: 'Cave' }, { value: 'ruin', display: 'Ruin' }],
     }],
   };
+  /** Seat 1's frame with nothing else to do, and the follow-up the server holds, if any. */
+  const postSeatState = (followUp: Record<string, unknown> | undefined) => fromHost({
+    type: 'game_state',
+    view: {
+      flowState: { currentPlayer: 1, awaitingInput: true, availableActions: [] },
+      state: {
+        view: {}, players: DEBUG_TABLE_PLAYERS, currentPlayer: 1, isMyTurn: true, availableActions: [],
+        ...(followUp ? { followUp } : {}),
+      },
+    },
+    winners: [],
+  });
 
-  it('opens no pick beside a past board, and opens it on return', async () => {
+  /** The shell in history, the server having just handed seat 1 the loot follow-up. */
+  async function followUpArrivesInHistory() {
     const { wrapper, debugPanel, posted } = await mountTableWithDebugPanel(PickBoard, MOVE_WITH_A_PICK);
     await flushPromises();
     const controller = (wrapper.vm as unknown as { actionController: { currentAction: Ref<string | null> } }).actionController;
@@ -161,26 +174,22 @@ describe('GameShell defers a held follow-up that arrives while viewing history (
 
     debugPanel.vm.$emit('time-travel', { view: {}, players: DEBUG_TABLE_PLAYERS }, 3, null);
     await flushPromises();
-    // The server hands the seat a follow-up while the player looks at the past.
-    fromHost({
-      type: 'game_state',
-      view: {
-        flowState: { currentPlayer: 1, awaitingInput: true, availableActions: [] },
-        state: {
-          view: {}, players: DEBUG_TABLE_PLAYERS, currentPlayer: 1, isMyTurn: true, availableActions: [],
-          followUp: { action: 'loot', args: {}, metadata: LOOT },
-        },
-      },
-      winners: [],
-    });
+    postSeatState({ action: 'loot', args: {}, metadata: LOOT });
     await flushPromises();
     expect(wrapper.find('.time-travel-banner').exists()).toBe(true);
     expect(controller.currentAction.value).toBeNull();
     expect(fetches()).toHaveLength(0);
+    return { wrapper, debugPanel, controller, fetches };
+  }
+
+  it('opens no pick beside a past board, and opens it once on return', async () => {
+    const { wrapper, debugPanel, controller, fetches } = await followUpArrivesInHistory();
 
     debugPanel.vm.$emit('time-travel', null, null, null);
     await flushPromises();
     expect(controller.currentAction.value).toBe('loot');
+    // Started once: a second start would fetch the pick's choices again.
+    expect(fetches()).toHaveLength(1);
     const fetch = fetches()[0] as { requestId: string };
     fromHost({
       type: 'server_response',
@@ -188,8 +197,23 @@ describe('GameShell defers a held follow-up that arrives while viewing history (
       result: { success: true, choices: [{ value: 'cave', display: 'Cave' }, { value: 'ruin', display: 'Ruin' }] },
     });
     await flushPromises();
+    expect(fetches()).toHaveLength(1);
     expect(wrapper.findComponent(ActionPanel).text()).toContain('Loot which site?');
     expect(wrapper.find('[data-testid="board-pick"]').text()).toBe('loot');
+    wrapper.unmount();
+  });
+
+  it('does not open a follow-up the server withdrew while the player was in history', async () => {
+    const { wrapper, debugPanel, controller, fetches } = await followUpArrivesInHistory();
+    postSeatState(undefined);
+    await flushPromises();
+
+    debugPanel.vm.$emit('time-travel', null, null, null);
+    await flushPromises();
+    expect(controller.currentAction.value).toBeNull();
+    expect(fetches()).toHaveLength(0);
+    expect(wrapper.findComponent(ActionPanel).text()).not.toContain('Loot which site?');
+    expect(wrapper.find('[data-testid="board-pick"]').text()).toBe('none');
     wrapper.unmount();
   });
 });
