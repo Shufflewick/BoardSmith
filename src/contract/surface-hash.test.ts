@@ -11,16 +11,15 @@
  * Each case writes a small entrypoint to a temp folder, once as it was and once
  * changed, and compares what `describeSurface` says about the two.
  */
-import { afterAll, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { describe, expect, it } from 'vitest';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { describeSurface } from './fingerprint.js';
+import { tempTree } from '../testing/temp-tree.test-helper.js';
 
-const dir = mkdtempSync(join(tmpdir(), 'bs575-surface-'));
-afterAll(() => rmSync(dir, { recursive: true, force: true }));
+const dir = tempTree('bs575-surface-');
 
 let written = 0;
 
@@ -30,14 +29,9 @@ async function surfaceOf(source: string): Promise<string[]> {
   // would describe the first version's runtime values against the second's source.
   const file = join(dir, `entry-${written++}.ts`);
   writeFileSync(file, source);
-  return describeSurface([
-    {
-      specifier: 'fixture',
-      source: file,
-      // Dynamic import: the module under test is a file this test just wrote.
-      module: () => import(pathToFileURL(file).href),
-    },
-  ]);
+  // Dynamic import: the module under test is a file this test just wrote.
+  const module = () => import(pathToFileURL(file).href);
+  return describeSurface([{ specifier: 'fixture', source: file, module }]);
 }
 
 const BASE = `
