@@ -5,10 +5,16 @@
  * No new die visual logic here — Die3D owns all 3D rendering, animation,
  * and face-label logic. This component maps element attributes to Die3D props
  * and forwards board interaction state.
+ *
+ * Die3D comes from the die registry, never from an import (#590). This file is
+ * on every game's graph (GameShell offers the auto-UI), and Die3D needs three.js,
+ * an optional peer only a dice game installs. Importing `boardsmith/ui/dice` is
+ * what registers Die3D, so a game with dice elements in its auto-UI imports that
+ * entry once, in `src/ui/uis.ts` or wherever it draws dice.
  */
 
 import { computed } from 'vue';
-import { Die3D } from '../../dice/index.js';
+import { getDiePreviewComponent } from '../../dice/die-preview-registry.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 
@@ -28,6 +34,19 @@ const props = defineProps<{
   element: GameElement;
   depth: number;
 }>();
+
+const Die3D = getDiePreviewComponent();
+
+// Without a registered die the box shows only its label. Say why and how to fix
+// it, in dev only: a player can do nothing with this.
+if (import.meta.env.DEV && !Die3D) {
+  console.warn(
+    `The auto-UI found a die (${props.element.name || props.element.className}) but this bundle has no ` +
+      "dice support, so only its label is drawn. Add `import 'boardsmith/ui/dice';` to src/ui/uis.ts and " +
+      'run `npm install three @types/three`: that import registers the 3D die (and opts this game into ' +
+      'shipping three.js).',
+  );
+}
 
 // Board interaction for all six required states
 const boardInteraction = tryUseBoardInteraction();
@@ -120,7 +139,9 @@ const ariaLabel = computed(() => {
     @click="onClick"
     @keydown="onKeydown"
   >
-    <Die3D
+    <component
+      :is="Die3D"
+      v-if="Die3D"
       :sides="dieProps.sides"
       :value="dieProps.value"
       :color="dieProps.color"
