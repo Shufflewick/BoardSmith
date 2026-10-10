@@ -383,11 +383,6 @@
         "count": 5
       }
     },
-    "src/session/game-option-selection.ts": {
-      "complexity_moderate": {
-        "count": 3
-      }
-    },
     "src/session/move-summary.ts": {
       "complexity_moderate": {
         "count": 1
