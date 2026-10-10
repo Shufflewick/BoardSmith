@@ -74,6 +74,12 @@ interface GameViewElement {
 }
 ```
 
+The board's `gameView` prop is the root of that tree, the game element itself,
+typed `GameRootView`. It is a `GameViewElement` with three more fields:
+`phase` (`'setup'`, `'started'` or `'finished'`), `isFinished`, and `settings`,
+the game's settings bag as this seat may see it. Read values the game keeps in
+`settings` from `props.gameView?.settings`.
+
 **Critical:** The `id` is at the top level, NOT in `attributes`:
 
 ```typescript

@@ -20,7 +20,7 @@
  * @module
  */
 import type { GameState, PublicFlowState } from '../client/types.js';
-import type { GameViewElement } from './types.js';
+import type { GameRootView } from './types.js';
 import type { GameContextPlayer } from './composables/useGameContext.js';
 import type { UseActionControllerReturn } from './composables/useActionControllerTypes.js';
 import type { TableSeat } from './composables/useTableSeat.js';
@@ -30,8 +30,8 @@ import type { WorldNarration, WorldPhase } from './world/worldProtocol.js';
 
 /** What both shells give a board. The same fields `usePlayContext()` publishes, as plain values. */
 export interface BoardBaseProps {
-  /** The element tree to draw. During time travel, the historical one. */
-  gameView: GameViewElement | null;
+  /** The element tree to draw, from the game root down. During time travel, the historical one. */
+  gameView: GameRootView | null;
   /** Every player, in seat order. During time travel, the historical snapshot's. */
   players: GameContextPlayer[];
   /** The viewing player, or undefined for a spectator. During time travel, the historical snapshot's. */
@@ -90,7 +90,7 @@ interface TableShellBoardInput {
   state: DisplayedGameState | null;
   players: GameContextPlayer[];
   myPlayer: GameContextPlayer | undefined;
-  gameView: GameViewElement | null;
+  gameView: GameRootView | null;
   playerSeat: number;
   isViewingHistory: boolean;
   undo: () => Promise<void>;
