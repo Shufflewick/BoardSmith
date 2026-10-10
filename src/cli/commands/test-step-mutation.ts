@@ -684,17 +684,77 @@ async function pinSites(
       unreadable.push({ path, reason: error.reason });
       continue;
     }
-    const changed = added.get(path) ?? new Set<number>();
-    const byRank = new Map<number, PinSite[]>();
-    for (const site of sites) {
-      const runs = coverage.runs(path, site.line, site.column);
-      if (!runs.ran) continue;
-      const rank = changed.has(site.line) ? 0 : runs.tests.length > 0 ? runs.tests.length : coverage.tests.length + 1;
-      byRank.set(rank, [...(byRank.get(rank) ?? []), { path, text, site, tests: runs.tests }]);
-    }
+    const byRank = rankPinSites(path, text, sites, coverage, added.get(path) ?? new Set<number>());
     for (const [rank, mutants] of byRank) modules.push({ path, rank, mutants });
   }
   return { sites: orderPinSites(modules), unreadable };
+}
+
+/** The sites of the module `path` a pin runs, by rank (`pinSites` says what a rank is). */
+function rankPinSites(
+  path: string,
+  text: string,
+  sites: MutantSite[],
+  coverage: FileCoverage,
+  changed: ReadonlySet<number>,
+): Map<number, PinSite[]> {
+  const byRank = new Map<number, PinSite[]>();
+  for (const site of sites) {
+    const runs = coverage.runs(path, site.line, site.column);
+    if (!runs.ran) continue;
+    const rank = changed.has(site.line) ? 0 : runs.tests.length > 0 ? runs.tests.length : coverage.tests.length + 1;
+    byRank.set(rank, [...(byRank.get(rank) ?? []), { path, text, site, tests: runs.tests }]);
+  }
+  return byRank;
+}
+
+/**
+ * For each of `pin`'s tests, by `testKey`, the sites it runs, in `pinSites` order; a site that runs
+ * only while the file loads counts as run by every test.
+ */
+function pinQueues(
+  pin: ChunkTestFile,
+  tracked: Outcome[],
+  coverage: FileCoverage,
+  sites: PinSite[],
+): Map<string, PinSite[]> {
+  return new Map(
+    tracked
+      .filter((o) => o.path === pin.path)
+      .map((o) => {
+        const index = coverage.tests.indexOf(testKeyOf(o.fullName, o.line));
+        if (index < 0) {
+          throw new Error(
+            `The run that records which game code ${pin.path} runs has no record of its test "${o.fullName}", so the ` +
+              'mutation check cannot tell what that test pins. This is a BoardSmith bug: file an issue with the test file attached.',
+          );
+        }
+        return [testKey(o), sites.filter((s) => s.tests.length === 0 || s.tests.includes(index))] as const;
+      }),
+  );
+}
+
+/**
+ * Runs one mutant against `scope`, counts it in `summary` (timed out, killed or survived), and
+ * returns the outcomes `credit` counts as catching it: none when the run timed out.
+ */
+async function runCounted(
+  runner: Runner,
+  scope: ChunkTestFile[],
+  mutant: { absPath: string; source: string },
+  timeoutMs: number,
+  summary: MutationSummary,
+  credit: (outcome: Outcome) => boolean,
+): Promise<Outcome[]> {
+  const result = await runner.run(scope, mutant, timeoutMs);
+  summary.mutants++;
+  if (result.kind === 'timed-out') {
+    summary.timedOut++;
+    return [];
+  }
+  const credited = result.outcomes.filter(credit);
+  summary[credited.length > 0 ? 'killed' : 'survived']++;
+  return credited;
 }
 
 /**
@@ -717,19 +777,7 @@ async function killPinTests(
   files: Set<string>,
 ): Promise<{ killed: Set<string>; plan: PinPlan }> {
   const { sites, unreadable } = await pinSites(realpathSync(input.projectDir), coverage, input.added);
-  const tests = tracked.filter((o) => o.path === pin.path);
-  const queues = new Map(
-    tests.map((o) => {
-      const index = coverage.tests.indexOf(testKeyOf(o.fullName, o.line));
-      if (index < 0) {
-        throw new Error(
-          `The run that records which game code ${pin.path} runs has no record of its test "${o.fullName}", so the ` +
-            'mutation check cannot tell what that test pins. This is a BoardSmith bug: file an issue with the test file attached.',
-        );
-      }
-      return [testKey(o), sites.filter((s) => s.tests.length === 0 || s.tests.includes(index))] as const;
-    }),
-  );
+  const queues = pinQueues(pin, tracked, coverage, sites);
   const plan: PinPlan = {
     perTest: new Map([...queues].map(([key, queue]) => [key, { runnable: queue.length, tried: 0 }])),
     unreadable,
@@ -749,14 +797,7 @@ async function killPinTests(
       const mutant = { ...mutantAt(next.path, next.text, next.site), absPath: join(realpathSync(input.projectDir), next.path) };
       files.add(next.path);
       input.log(`mutant ${tried.size}/${limit}: ${mutant.file}:${mutant.line} ${mutant.description}`);
-      const result = await runner.run([pin], mutant, timeoutMs);
-      summary.mutants++;
-      if (result.kind === 'timed-out') {
-        summary.timedOut++;
-        continue;
-      }
-      const credited = result.outcomes.filter((o) => o.failedOnAssertion);
-      summary[credited.length > 0 ? 'killed' : 'survived']++;
+      const credited = await runCounted(runner, [pin], mutant, timeoutMs, summary, (o) => o.failedOnAssertion);
       credited.forEach((o) => killed.add(testKey(o)));
     }
     if (!ranThisRound) break;
@@ -784,14 +825,7 @@ async function killTests(
     const files = input.testFiles.filter((f) => mutant.targets.has(f.path) && remaining.some((o) => o.path === f.path));
     if (files.length === 0) continue;
     input.log(`mutant ${i + 1}/${mutants.length}: ${mutant.file}:${mutant.line} ${mutant.description}`);
-    const result = await runner.run(files, mutant, timeoutMs);
-    summary.mutants++;
-    if (result.kind === 'timed-out') {
-      summary.timedOut++;
-      continue;
-    }
-    const failed = result.outcomes.filter((o) => o.status === 'failed');
-    summary[failed.length > 0 ? 'killed' : 'survived']++;
+    const failed = await runCounted(runner, files, mutant, timeoutMs, summary, (o) => o.status === 'failed');
     failed.forEach((o) => killed.add(testKey(o)));
   }
   return killed;

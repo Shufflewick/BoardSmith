@@ -125,11 +125,6 @@
         "count": 1
       }
     },
-    "src/cli/commands/test-step-mutation.ts": {
-      "complexity_moderate": {
-        "count": 2
-      }
-    },
     "src/cli/commands/trace-check.ts": {
       "complexity_critical": {
         "count": 1
