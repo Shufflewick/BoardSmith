@@ -296,7 +296,10 @@ async function startDev(started: Started, copy: string): Promise<string | SmokeO
  */
 const ACTION_LIMIT_MS = 15_000;
 
-/** The longest a page load may take: Vite prepares the game on its first load. */
+/**
+ * The longest `boardsmith dev` may take to start answering a page load. The walk loads each page only
+ * that far (`waitUntil: 'commit'`) and waits for the game to show on the page's clock (#609).
+ */
 const NAVIGATION_LIMIT_MS = 90_000;
 
 /** The Playwright configuration for one run, as the module the runner loads. */

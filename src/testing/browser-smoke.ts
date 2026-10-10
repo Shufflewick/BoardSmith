@@ -39,6 +39,7 @@
  */
 import { errors, test, type Browser, type BrowserContext, type Frame, type Locator, type Page } from '@playwright/test';
 import { DEV_HOST_ALIVE_PATH, PageClock, PageFrozen } from './browser-smoke-clock.js';
+import { chooseFromMenu, reopening, type DevHostMenu, type PressWithin } from './browser-smoke-menu.js';
 import {
   clickArrived,
   clickReached,
@@ -178,7 +179,7 @@ export function defineSmokeTest(options: SmokeTestOptions): void {
     await recordResolvedActions(page);
     startClock(page);
     try {
-      await page.goto('/');
+      await page.goto('/', { waitUntil: 'commit' });
       await takeASeat(page);
       await followTheActiveSeat(page);
       if (await canDeal(page)) {
@@ -398,25 +399,24 @@ async function actWithinPageTime(
   }
 }
 
-/**
- * Opens the dev host's seat menu with `toggle` whenever none of `items`, which it shows, is there.
- * The dev host closes that menu when its window loses focus (#610), and the game's frame takes
- * focus once it has loaded: on a machine slow to load it, after the walk opened the menu (#609).
- */
-function reopening(page: Page, toggle: Locator, items: Locator, what: string): () => Promise<void> {
-  return async () => {
-    if ((await items.count()) === 0) await actWithinPageTime(page, PRESS_MS, `opening the menu for ${what}`, (timeout) => toggle.click({ timeout }));
-  };
+/** {@link actWithinPageTime} for a press into one of the dev host's menus, given {@link PRESS_MS} of `page`'s time. */
+function pressWithin(page: Page): PressWithin {
+  return (what, act, meanwhile) => actWithinPageTime(page, PRESS_MS, what, () => act(), meanwhile);
 }
 
 /**
- * Presses `item` in the dev host's seat menu, which `toggle` opens (`reopening`). The press is made
- * once, and lands on `item` whenever it is there, while the menu is opened again each time it is
- * found closed, until {@link PRESS_MS} of the page's time has passed. A press that has landed closes
- * the menu too, and may find it opened again behind it; the next click anywhere closes it.
+ * The dev host menu `toggle` opens, showing `items`, choosing `item` from it, which has taken effect
+ * once `taken` shows, waited for within {@link TURN_WAIT_MS} of the page's time and saying `late`
+ * when it has not.
  */
-async function chooseFromMenu(page: Page, toggle: Locator, item: Locator, what: string): Promise<void> {
-  await actWithinPageTime(page, PRESS_MS, what, (timeout) => item.click({ timeout }), reopening(page, toggle, item, what));
+function devHostMenu(page: Page, menu: { toggle: Locator; items: Locator; item: Locator; taken: Locator; late: string }): DevHostMenu {
+  return {
+    pressItem: () => menu.item.click({ timeout: 0 }),
+    pressToggle: () => menu.toggle.click({ timeout: 0 }),
+    isOpen: async () => (await menu.items.count()) > 0,
+    isTaken: async () => (await menu.taken.count()) > 0,
+    waitTaken: () => withinPageTime(page, TURN_WAIT_MS, (timeout) => menu.taken.waitFor({ timeout })).catch(saying(menu.late)),
+  };
 }
 
 /** A handler that throws `message` in place of the error it is given, unless that is the page having stopped answering. */
@@ -474,13 +474,17 @@ async function takeASeat(page: Page): Promise<void> {
 async function followTheActiveSeat(page: Page): Promise<void> {
   const switcher = page.getByTestId('seat-switcher');
   if ((await switcher.count()) === 0) return;
-  await chooseFromMenu(page, switcher, page.getByTestId('follow-active-seat'), 'pressing "Follow active seat"');
-  await withinPageTime(page, TURN_WAIT_MS, (timeout) => page.locator('[data-testid="seat-switcher"][data-following="true"]').waitFor({ timeout })).catch(
-    saying(
+  const follow = page.getByTestId('follow-active-seat');
+  const menu = devHostMenu(page, {
+    toggle: switcher,
+    items: follow,
+    item: follow,
+    taken: page.locator('[data-testid="seat-switcher"][data-following="true"]'),
+    late:
       `The dev host did not follow the active seat ${TURN_WAIT_MS / 1000}s after "Follow active seat" was pressed. ` +
-        'Run `boardsmith dev` and press it to see why.',
-    ),
-  );
+      'Run `boardsmith dev` and press it to see why.',
+  });
+  await chooseFromMenu(menu, pressWithin(page), 'pressing "Follow active seat"');
 }
 
 /** The dev host's "Table setup" toggle, which a table's dev host has and a world's has not. */
@@ -567,7 +571,7 @@ async function seatTheWorld(
       watchForErrors(seated, walk);
       await recordResolvedActions(seated);
       startClock(seated);
-      await seated.goto('/');
+      await seated.goto('/', { waitUntil: 'commit' });
       await takeASeat(seated);
     }
     await takeWorldSeat(seated, seat);
@@ -590,18 +594,21 @@ async function takeWorldSeat(page: Page, seat: number): Promise<void> {
   );
   if ((await holding(seat).count()) > 0) return;
   const offered = page.getByTestId('world-take-seat');
-  await actWithinPageTime(page, PRESS_MS, 'opening the seat switcher', (timeout) => offered.first().waitFor({ timeout }), reopening(page, switcher, offered, 'choosing a seat'));
   const choice = page.locator(`[data-testid="world-take-seat"][data-seat="${seat}"]`);
+  const menu = devHostMenu(page, {
+    toggle: switcher,
+    items: offered,
+    item: choice,
+    taken: holding(seat),
+    late:
+      `The dev host had not seated the page at seat ${seat} ${TURN_WAIT_MS / 1000}s after the walk chose it. ` +
+      'Run `boardsmith dev` and choose it in the seat switcher to see why.',
+  });
+  await actWithinPageTime(page, PRESS_MS, 'opening the seat switcher', () => offered.first().waitFor({ timeout: 0 }), reopening(menu, pressWithin(page), 'choosing a seat'));
   if ((await choice.count()) === 0) {
     throw new Error(`\`seats\` in ${SMOKE_SPEC_PATH} names seat ${seat}, but this world has seats 1 to ${await offered.count()}. Name seats it has.`);
   }
-  await chooseFromMenu(page, switcher, choice, `choosing seat ${seat}`);
-  await withinPageTime(page, TURN_WAIT_MS, (timeout) => holding(seat).waitFor({ timeout })).catch(
-    saying(
-      `The dev host had not seated the page at seat ${seat} ${TURN_WAIT_MS / 1000}s after the walk chose it. ` +
-        'Run `boardsmith dev` and choose it in the seat switcher to see why.',
-    ),
-  );
+  await chooseFromMenu(menu, pressWithin(page), `choosing seat ${seat}`);
 }
 
 // -------------------------------------------------------------------------------------------
@@ -1628,7 +1635,7 @@ async function waitForATurn(frames: readonly Frame[]): Promise<boolean> {
   const offered = (frame: Frame, timeout: number) =>
     frame.locator('[data-bs-action]:not([aria-disabled="true"]), [data-bs-open-action], .game-over-card').first().waitFor({ timeout });
   // Counted on the first browser's clock: a world's browsers share the machine that starves them.
-  const anyOffered = (timeout: number) => Promise.any(frames.map((frame) => offered(frame, timeout))).catch((none: AggregateError) => Promise.reject(none.errors[0]));
+  const anyOffered = (timeout: number) => Promise.any(frames.map((frame) => offered(frame, timeout))).catch((none: AggregateError) => Promise.reject(none.errors.find(ranOut) ?? none.errors[0]));
   return withinPageTime(frames[0].page(), TURN_WAIT_MS, anyOffered).then(
     () => true,
     (error: unknown) => {
