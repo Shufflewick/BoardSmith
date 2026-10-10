@@ -48,6 +48,7 @@ import { COVERAGE_SETUP, coverageEnv, readCoverage, testKeyOf, type FileCoverage
 import type { MutantCache } from '../lib/mutant-cache.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { VITEST_CONFIG_NAMES } from '../lib/test-run-scope.js';
+import { toolCommand } from '../lib/run-tool.js';
 
 // -------------------------------------------------------------------------------------------
 // generateMutants
@@ -492,13 +493,8 @@ async function readReport(
  * files (`withCommandBuildDir`), so two checks in one project never share one, and it removes it.
  */
 async function createRunner(projectDir: string, testFiles: ChunkTestFile[], workDir: string): Promise<Runner> {
-  const vitestBin = join(projectDir, 'node_modules', '.bin', 'vitest');
-  if (!existsSync(vitestBin)) {
-    throw new Error(
-      `vitest is not installed in ${projectDir}.\n` +
-        'Run `npm install` in the project (vitest is one of its devDependencies), then run this check again.',
-    );
-  }
+  // Resolved once, before any file is written: a project with no vitest of its own is refused here.
+  const { command: vitestBin } = toolCommand('vitest', [], projectDir);
   const configPath = join(workDir, 'vitest.config.mts');
   const mutantPath = join(workDir, 'mutant.json');
   const reportPath = join(workDir, REPORT_NAME);

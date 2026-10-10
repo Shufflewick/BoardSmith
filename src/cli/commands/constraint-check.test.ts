@@ -389,6 +389,12 @@ describe('runVitest leaves chunk worktrees out of the run', () => {
     expect(run).toMatchObject({ ok: true, ran: ['tests/ok.test.ts'] });
   }, 60_000);
 
+  it('refuses a project with no vitest of its own, naming the install command, and never runs npx (#595)', async () => {
+    const project = await makeProject({ ...WIP, [VITEST_CONFIG_FILE]: generateVitestConfig(undefined) });
+    const run = await runVitest(project, []);
+    expect(run).toEqual({ refused: 'vitest is not installed in this project.\nInstall it with: npm install -D vitest' });
+  });
+
   it('refuses to run a project whose vitest config would collect the worktrees', async () => {
     const project = await makeProject({ ...WIP, 'vitest.config.mjs': 'export default { test: {} };\n' });
     await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');

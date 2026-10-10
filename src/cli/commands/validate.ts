@@ -596,7 +596,7 @@ export function typeScriptFailureDetails(cwd: string, allErrors: string[]): stri
   const shown = allErrors.slice(0, maxShown);
   const remaining = allErrors.length - shown.length;
   if (remaining > 0) {
-    shown.push(`... and ${remaining} more error${remaining === 1 ? '' : 's'}. Run \`npx vue-tsc --noEmit\` for full output.`);
+    shown.push(`... and ${remaining} more error${remaining === 1 ? '' : 's'}. Run \`boardsmith typecheck\` for full output.`);
   }
 
   // A game that imports `boardsmith/ui/dice` without installing the
@@ -621,7 +621,7 @@ export function typeScriptFailureDetails(cwd: string, allErrors: string[]): stri
     ...(engineChange ?? []),
     ...shown,
   ];
-  return details.length > 0 ? details : ['Run `npx vue-tsc --noEmit` for details'];
+  return details.length > 0 ? details : ['Run `boardsmith typecheck` for details'];
 }
 
 /** The engine revision `dist/manifest.json` was built against, when the game has been built. */
@@ -717,7 +717,7 @@ async function validateTestTypeCoverage(
       passed: false,
       message: 'Could not ask vitest which test files it runs',
       details: [
-        listing.refusal ?? 'Run `npx vitest list --filesOnly` to see why.',
+        listing.refusal ?? 'Run `node_modules/.bin/vitest list --filesOnly` to see why.',
         'A tests/ directory that vitest cannot enumerate means `boardsmith test` runs nothing this check could cover.',
       ],
     };

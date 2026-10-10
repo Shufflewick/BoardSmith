@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { readTestProgress, testRunVerdict, type TestProgress } from './vitest-run.js';
+import { readdirSync } from 'node:fs';
+import { readTestProgress, runVitestRecorded, testRunVerdict, type TestProgress } from './vitest-run.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import type { TestProgressEvent } from './test-progress-reporter.js';
 
 /**
@@ -137,5 +139,20 @@ describe('testRunVerdict', () => {
     // A globalSetup teardown's error, such as the untracked-file guard's (#579), is printed under
     // "Startup Error" even though it comes after the run.
     expect(text).toContain('Look for "Unhandled Errors", or "Startup Error" for an error from a globalSetup file,');
+  });
+});
+
+describe('runVitestRecorded in a project with no vitest (#595)', () => {
+  it('refuses with the install command and leaves no record directory behind', async () => {
+    const project = tempTree('bs-vitest-run-no-vitest-');
+    const tmp = tempTree('bs-vitest-run-tmp-');
+    const original = process.env.TMPDIR;
+    process.env.TMPDIR = tmp;
+    try {
+      await expect(runVitestRecorded([], project)).rejects.toThrow('npm install -D vitest');
+    } finally {
+      process.env.TMPDIR = original;
+    }
+    expect(readdirSync(tmp)).toEqual([]);
   });
 });

@@ -102,11 +102,18 @@ export async function runVitestRecorded(args: string[], cwd: string): Promise<Re
   // The output reaches the terminal through a pipe now; keep vitest's colours when a person is watching.
   if (process.stdout.isTTY && env.FORCE_COLOR === undefined) env.FORCE_COLOR = '1';
 
-  const end = await runToolLogged(
-    'vitest',
-    ['run', '--reporter=default', `--reporter=${progressReporterPath()}`, ...args],
-    { cwd, env, logPath },
-  );
+  let end: Awaited<ReturnType<typeof runToolLogged>>;
+  try {
+    end = await runToolLogged(
+      'vitest',
+      ['run', '--reporter=default', `--reporter=${progressReporterPath()}`, ...args],
+      { cwd, env, logPath },
+    );
+  } catch (error) {
+    // No run happened (no vitest of the project's own, say), so there is no record to keep.
+    rmSync(recordDir, { recursive: true, force: true });
+    throw error;
+  }
   const progress = readTestProgress(existsSync(progressPath) ? readFileSync(progressPath, 'utf-8') : '');
   return { ...end, progress, recordDir, logPath };
 }
