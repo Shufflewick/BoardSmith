@@ -140,12 +140,11 @@ describe('selectGameOptions coerces wire strings to the declared type', () => {
 });
 
 describe('selectGameOptions matches a select value by the choice-matching rule (#574)', () => {
-  // `SelectOption` types a choice as a string or a number, but a game bundle's
-  // declarations are not type-checked when loaded, and the dev host already
-  // shows object-valued choices (#572).
+  // A choice value may be an object, as game bundles and the dev host's lobby
+  // already use (#572), so this declaration needs no cast (#593).
   const small = { width: 9, height: 9 };
-  const large = { width: 19, height: 19 };
-  const board = {
+  const large = { width: 19, height: 19, tiles: [{ kind: 'stone' }] };
+  const board: Record<string, GameOptionDefinition> = {
     board: {
       type: 'select',
       label: 'Board',
@@ -154,12 +153,44 @@ describe('selectGameOptions matches a select value by the choice-matching rule (
         { value: large, label: 'Large' },
       ],
     },
-  } as unknown as Record<string, GameOptionDefinition>;
+  };
 
-  it('admits an object choice that crossed the wire as a different, equal object', () => {
+  it('admits an object choice that crossed the wire as a different, equal object, returning the declared object', () => {
     const sent = JSON.parse(JSON.stringify({ board: large })) as Record<string, unknown>;
     expect(sent.board).not.toBe(large);
-    expect(selectGameOptions(board, sent)).toEqual({ board: large });
+    expect(selectGameOptions(board, sent).board).toBe(large);
+  });
+
+  it('refuses the text "[object Object]": a string names a choice by its text only when the choice is not an object (#593)', () => {
+    expect(() => selectGameOptions(board, { board: '[object Object]' })).toThrow(GameOptionSelectionError);
+    expect(() => selectGameOptions(board, { board: '[object Object]' })).toThrow(/"board".*one of:/);
+  });
+
+  it('a direct match wins over a match by text (#593)', () => {
+    const ambiguous: Record<string, GameOptionDefinition> = {
+      pick: {
+        type: 'select',
+        label: 'Pick',
+        choices: [
+          { value: 1, label: 'Number one' },
+          { value: '1', label: 'Text one' },
+        ],
+      },
+    };
+    expect(selectGameOptions(ambiguous, { pick: '1' }).pick).toBe('1');
+    expect(selectGameOptions(ambiguous, { pick: 1 }).pick).toBe(1);
+  });
+
+  it('freezes the declared choice it returns, deeply, so a game cannot change the declaration for the next game (#593)', () => {
+    const chosen = selectGameOptions(board, { board: { width: 19, height: 19, tiles: [{ kind: 'stone' }] } }).board as typeof large;
+    expect(() => {
+      chosen.width = 5;
+    }).toThrow(TypeError);
+    expect(() => chosen.tiles.push({ kind: 'sand' })).toThrow(TypeError);
+    expect(() => {
+      chosen.tiles[0].kind = 'sand';
+    }).toThrow(TypeError);
+    expect(selectGameOptions(board, { board: { width: 19, height: 19, tiles: [{ kind: 'stone' }] } }).board).toBe(large);
   });
 
   it('still refuses an object that is not one of the choices', () => {

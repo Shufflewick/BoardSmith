@@ -142,6 +142,25 @@ function numberBoundsProblem(def: NumberOption, n: number): string | undefined {
   return undefined;
 }
 
+/**
+ * Freeze a declared choice value, and every plain object and array inside it,
+ * in place. A game receives the declared value itself, and the same
+ * declaration starts every later game in the process (the dev host restarts
+ * from it), so a game that could change the value would change its own
+ * declaration for the next game; frozen, the write throws in the game instead.
+ * Anything that is not a plain object or array is left as it is.
+ */
+function deepFreeze(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    value.forEach(deepFreeze);
+  } else if (typeof value === 'object' && value !== null && Object.getPrototypeOf(value) === Object.prototype) {
+    Object.values(value).forEach(deepFreeze);
+  } else {
+    return value;
+  }
+  return Object.freeze(value);
+}
+
 function coerce(name: string, def: GameOptionDefinition, raw: unknown): unknown {
   // A lobby text field and a `--game-option` flag both send strings, so a
   // string is read as the declared type; whatever arrives, the value is
@@ -167,19 +186,23 @@ function coerce(name: string, def: GameOptionDefinition, raw: unknown): unknown 
     }
     case 'select': {
       // A value matches a choice under `valuesEqual`, so an object choice that
-      // crossed the wire as an equal object is still that choice (#574); a
-      // string also names the choice it spells, so a numeric choice is
-      // reachable from a text input. The declared choice's value is returned.
+      // crossed the wire as an equal object is still that choice (#574). Failing
+      // that, a string names the non-object choice it spells, so a numeric
+      // choice is reachable from a text input; an object is never named by its
+      // text, which would make "[object Object]" the first object choice (#593).
+      // The declared choice's value is returned, frozen (see `deepFreeze`).
       const choice =
         def.choices.find((c) => valuesEqual(c.value, raw)) ??
-        (typeof raw === 'string' ? def.choices.find((c) => String(c.value) === raw) : undefined);
+        (typeof raw === 'string'
+          ? def.choices.find((c) => (typeof c.value !== 'object' || c.value === null) && String(c.value) === raw)
+          : undefined);
       if (!choice) {
         throw new GameOptionSelectionError(
           `Invalid value ${JSON.stringify(raw)} for game option "${name}": must be one of: ` +
             `${def.choices.map((c) => JSON.stringify(c.value)).join(', ')}.`,
         );
       }
-      return choice.value;
+      return deepFreeze(choice.value);
     }
     default:
       return raw;
