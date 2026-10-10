@@ -437,9 +437,16 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     if (wasPending && !pending) scheduleAutoStart(autoEndArmed ? false : true);
   });
 
+  // What the board is fed while history is on screen (#584): no open action and
+  // no pick. A pick the server holds stays open in the controller (the watcher
+  // above spares it), so it is hidden here, in what the board is handed, and
+  // fed again on return. Nothing is cancelled.
+  const shownAction = computed(() => (isViewingHistory.value ? null : currentAction.value));
+  const shownPick = computed(() => (isViewingHistory.value ? null : currentPick.value));
+
   // Feed the board substrate's selectable elements + click callback for the
   // current pick. This is the watcher whose absence broke board-centric play.
-  watch([currentPick, offeredElements, offeredChoices], ([selection]) => {
+  watch([shownPick, offeredElements, offeredChoices], ([selection]) => {
     if (!selection) {
       board.setValidElements([], () => {});
       board.setDraggableSelectedElement(null);
@@ -537,7 +544,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   // and never runs, so the board stays cleared by createActionMutators().startAction, and
   // the external-cancel watcher below reads that empty board as the player
   // cancelling.
-  watch([currentAction, controller.actionStartTick], ([action]) => {
+  watch([shownAction, controller.actionStartTick], ([action]) => {
     if (action) {
       const pickName = currentPick.value?.name ?? null;
       const pickIndex = currentActionMeta.value?.selections.findIndex(s => s.name === pickName) ?? 0;
@@ -560,11 +567,13 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   }, { immediate: true });
 
   // External cancel via custom UI calling board.clear(): sync the controller.
+  // Not while history is on screen: the board is cleared then because the pick
+  // is hidden (#584), and a cancel would reach the live game for a held pick.
   watch(() => board.currentAction, (boardAction) => {
-    if (boardAction !== null || currentAction.value === null) return;
+    if (boardAction !== null || currentAction.value === null || isViewingHistory.value) return;
     const actionAtClear = currentAction.value;
     void nextTick(() => {
-      if (currentAction.value === actionAtClear && board.currentAction == null) {
+      if (currentAction.value === actionAtClear && board.currentAction == null && !isViewingHistory.value) {
         controller.cancel();
       }
     });

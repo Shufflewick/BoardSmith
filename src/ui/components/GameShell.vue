@@ -433,6 +433,13 @@ const displayedState = computed<DisplayedGameState | null>(() => {
 // it as it was then, beside the historical gameView (#578).
 const displayedPlayers = computed(() => displayedState.value?.state.players ?? []);
 
+// The viewer's own player and a seat's player, as the state on screen has them
+// (#581, #582). The players panel's rows stay live; what is handed to game code
+// beside the historical gameView is the snapshot's. Seats are fixed for a game,
+// so every snapshot holds every seat the panel shows.
+const displayedMyPlayer = computed(() => displayedPlayers.value.find((player) => player.seat === playerSeat.value));
+const displayedPlayerAt = (seat: number) => displayedPlayers.value.find((player) => player.seat === seat);
+
 // The generic request/response bridge to the host (which relays to the games
 // worker / executor). Every server operation the embedded game needs —
 // fetching choices, stepping selections, cancelling, undo — goes through this
@@ -1324,12 +1331,13 @@ if (isDevBuild) {
 
 // Expose to parent/slots. `gameView` is the historical view while the debug
 // panel shows history, so turn and actions are the same history-gated values
-// the board gets (#576).
+// the board gets (#576), and state and players are the viewed snapshot's
+// (#581, #582).
 defineExpose({
-  state,
+  state: displayedState,
   gameView,
-  players,
-  myPlayer,
+  players: displayedPlayers,
+  myPlayer: displayedMyPlayer,
   playerSeat,
   isMyTurn: gatedIsMyTurn,
   availableActions: gatedAvailableActions,
@@ -1554,7 +1562,7 @@ defineExpose({
         <slot name="sidebar-extra"
           :state="displayedState"
           :game-view="gameView"
-          :players="players"
+          :players="displayedPlayers"
         ></slot>
       </template>
 
@@ -1571,11 +1579,11 @@ defineExpose({
            (e.g. tap your own special ability to use it), not just informational.
            `gameView` is the historical view while time-traveling, so turn and
            actions are the same history-gated values the board gets (#554), and
-           `players` are the viewed snapshot's (#578). -->
+           `players` and `player` are the viewed snapshot's (#578, #581). -->
       <template #player-stats="{ player }">
         <slot
           name="player-stats"
-          :player="player"
+          :player="displayedPlayerAt(player.seat)"
           :game-view="gameView"
           :players="displayedPlayers"
           :player-seat="playerSeat"

@@ -87,38 +87,7 @@ describe('GameShell cancels the pick in progress while viewing history (#553)', 
    * chain away for good. Browsing history must leave it alone.
    */
   it('leaves a server-held follow-up open, sends no cancel, and still has it on return', async () => {
-    const { wrapper, debugPanel, posted } = await mountTableWithDebugPanel(PickBoard, {
-      followUp: {
-        action: 'loot',
-        args: {},
-        metadata: {
-          name: 'loot',
-          prompt: 'Loot',
-          selections: [{
-            name: 'site',
-            type: 'choice',
-            prompt: 'Loot which site?',
-            choices: [{ value: 'cave', display: 'Cave' }, { value: 'ruin', display: 'Ruin' }],
-          }],
-        },
-      },
-    });
-    await flushPromises();
-    // The host answers the follow-up's choice fetch, as a live server does.
-    const fetch = posted.find((message) => (message as { op?: string }).op === 'resolve_choices') as { requestId: string };
-    window.dispatchEvent(new MessageEvent('message', {
-      data: {
-        source: 'shufflewick',
-        type: 'server_response',
-        requestId: fetch.requestId,
-        result: { success: true, choices: [{ value: 'cave', display: 'Cave' }, { value: 'ruin', display: 'Ruin' }] },
-      },
-    }));
-    await flushPromises();
-    expect(wrapper.findComponent(ActionPanel).text()).toContain('Loot which site?');
-    const controller = (wrapper.vm as unknown as { actionController: { currentAction: Ref<string | null>; pendingOnServer: Ref<boolean> } }).actionController;
-    expect(controller.currentAction.value).toBe('loot');
-    expect(controller.pendingOnServer.value).toBe(true);
+    const { wrapper, debugPanel, posted, controller } = await mountWithHeldFollowUp();
     const ops = () => posted.map((message) => (message as { op?: string }).op);
 
     debugPanel.vm.$emit('time-travel', { view: {}, players: DEBUG_TABLE_PLAYERS }, 3, null);
@@ -132,7 +101,79 @@ describe('GameShell cancels the pick in progress while viewing history (#553)', 
     expect(wrapper.findComponent(ActionPanel).text()).toContain('Loot which site?');
     wrapper.unmount();
   });
+
+  /**
+   * The held pick stays open in the controller, but neither the Action Panel
+   * nor the board shows it beside a past board (#584): both read
+   * isViewingHistory and draw no open action while it is set, and draw it again
+   * on return. Nothing is cancelled, so nothing reaches the live game.
+   */
+  it('shows a server-held follow-up on neither the Action Panel nor the board in history, and again on return', async () => {
+    const { wrapper, debugPanel, posted, controller } = await mountWithHeldFollowUp();
+    const panel = () => wrapper.findComponent(ActionPanel);
+    const boardPick = () => wrapper.find('[data-testid="board-pick"]').text();
+    expect(boardPick()).toBe('loot');
+
+    debugPanel.vm.$emit('time-travel', { view: {}, players: DEBUG_TABLE_PLAYERS }, 3, null);
+    await flushPromises();
+    expect(wrapper.find('.time-travel-banner').exists()).toBe(true);
+    expect(panel().text()).not.toContain('Loot which site?');
+    expect(panel().find('.cancel-btn').exists()).toBe(false);
+    expect(panel().find('[data-bs-follow-up]').exists()).toBe(false);
+    expect(boardPick()).toBe('none');
+    expect(controller.currentAction.value).toBe('loot');
+
+    debugPanel.vm.$emit('time-travel', null, null, null);
+    await flushPromises();
+    expect(panel().text()).toContain('Loot which site?');
+    expect(boardPick()).toBe('loot');
+    expect(posted.map((message) => (message as { op?: string }).op)).not.toContain('cancel_action');
+    expect(controller.currentAction.value).toBe('loot');
+    expect(controller.pendingOnServer.value).toBe(true);
+    wrapper.unmount();
+  });
 });
+
+/**
+ * The shell with a follow-up the server holds for seat 1 open in the
+ * controller, its choices answered by the host as a live server does.
+ */
+async function mountWithHeldFollowUp() {
+  const mounted = await mountTableWithDebugPanel(PickBoard, {
+    followUp: {
+      action: 'loot',
+      args: {},
+      metadata: {
+        name: 'loot',
+        prompt: 'Loot',
+        selections: [{
+          name: 'site',
+          type: 'choice',
+          prompt: 'Loot which site?',
+          choices: [{ value: 'cave', display: 'Cave' }, { value: 'ruin', display: 'Ruin' }],
+        }],
+      },
+    },
+  });
+  await flushPromises();
+  const fetch = mounted.posted.find((message) => (message as { op?: string }).op === 'resolve_choices') as { requestId: string };
+  window.dispatchEvent(new MessageEvent('message', {
+    data: {
+      source: 'shufflewick',
+      type: 'server_response',
+      requestId: fetch.requestId,
+      result: { success: true, choices: [{ value: 'cave', display: 'Cave' }, { value: 'ruin', display: 'Ruin' }] },
+    },
+  }));
+  await flushPromises();
+  expect(mounted.wrapper.findComponent(ActionPanel).text()).toContain('Loot which site?');
+  const controller = (mounted.wrapper.vm as unknown as {
+    actionController: { currentAction: Ref<string | null>; pendingOnServer: Ref<boolean> };
+  }).actionController;
+  expect(controller.currentAction.value).toBe('loot');
+  expect(controller.pendingOnServer.value).toBe(true);
+  return { ...mounted, controller };
+}
 
 describe('GameShell defers a held follow-up that arrives while viewing history (#585)', () => {
   /** The host's message, as a live server sends it. */
