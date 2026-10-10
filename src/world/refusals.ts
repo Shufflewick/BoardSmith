@@ -293,6 +293,14 @@ export const WORLD_REFUSALS = {
     owner: "game",
     why: "a handler asked to cancel a timer without naming the key it was armed under (#177) -- a cancel is keyed the way arming is keyed, so a nameless one addresses nothing",
   },
+  "schedule-key-too-long": {
+    owner: "game",
+    why: "#602: a handler armed or cancelled a timer under a key longer than `WORLD_SCHEDULE_KEY_MAX_BYTES` UTF-8 bytes. A host stores each event under a storage key built from the schedule key, so a longer one is an event no host can write, and it used to surface at the checkpoint as a storage outage. The key is the bundle's own text and the same line writes it again, so it dead-letters rather than parking the world",
+  },
+  "schedule-args-too-large": {
+    owner: "game",
+    why: "#602: a handler scheduled an event whose args serialize to more than `WORLD_SCHEDULE_ARGS_MAX_BYTES` UTF-8 bytes of JSON. A host stores the args inside the event's row, so an event past it is one no host should have to write. The args are the bundle's own, so it dead-letters rather than parking the world",
+  },
   "bundle-not-a-world": {
     owner: "game",
     why: "a bundle reached a world isolate without `world.actions`, or asked to require a module the child does not have -- the manifest declared a world and the compiled rules do not implement one, which upload validation cannot see",

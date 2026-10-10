@@ -2034,11 +2034,18 @@ queue, rather than failing a check on the way in.
   that may not be resident when the event comes due -- or, worse, one that has
   been re-minted since, in which case the id silently names something else. Pass
   a **partition name** and let the action look inside it, which is what every
-  clock verb in the catalogue already does.
+  clock verb in the catalogue already does. Their JSON may be at most
+  **4096 UTF-8 bytes** (`WORLD_SCHEDULE_ARGS_MAX_BYTES`): the host stores them
+  in the event's row, args name things rather than carry them, and a 200-event
+  drain batch at the bound still reads only 800 KiB.
 - **`key`** makes it an **upsert**: it replaces the pending event with the same
   owner and key, so the count under one key never grows. This is the shape you
   should usually be writing, and it is why the cap refusal's first suggestion is
-  to use one.
+  to use one. A key may be at most **512 UTF-8 bytes**
+  (`WORLD_SCHEDULE_KEY_MAX_BYTES`), and a cancel's key the same. A host stores
+  each event under a storage key built from it: percent-encoding makes each
+  byte at most three, so 512 bytes is at most 1536 encoded, which leaves 512 of
+  workerd's 2048-byte key limit for the host's own prefix and owner.
 - **`everyMs`** makes it a **recurrence**. `delayMs` is the first occurrence,
   `everyMs` the gap between the rest, and the host re-arms it in the same write
   that settles the occurrence it just ran, so you never write the re-arm and
@@ -2724,6 +2731,8 @@ thing next time.
 | `invalid-schedule-delay` | A negative or non-finite `delayMs`. |
 | `invalid-schedule-interval` | A non-positive or non-finite `everyMs`, which is a wake that re-arms instantly forever. |
 | `invalid-schedule-command` | A schedule request that names no action, names a seated one, or carries an argument that is not a JSON scalar. |
+| `schedule-key-too-long` | A schedule or cancel key past 512 UTF-8 bytes, which no host can store as part of a storage key. |
+| `schedule-args-too-large` | A schedule's args whose JSON is past 4096 UTF-8 bytes. Keep the data in a partition and pass its name. |
 | `invalid-schedule-cancel` | A cancel that names no key. A cancel is keyed the way arming is keyed, so a nameless one addresses nothing; cancelling a key nothing holds is a no-op rather than this. |
 | `engine-not-world-mode` | The engine was built over a game that is not in world mode. |
 | `not-the-vacancy-verb` | An action called `ctx.world.vacate()` and it is not the verb this world declared as `world.vacateByClock` — or this world declares none at all. See [giving a chair back](#giving-a-chair-back). |

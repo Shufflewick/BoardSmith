@@ -161,6 +161,8 @@ export type {
 } from './schedule.js';
 export {
   WORLD_OWNER,
+  WORLD_SCHEDULE_ARGS_MAX_BYTES,
+  WORLD_SCHEDULE_KEY_MAX_BYTES,
   planSchedules,
   scheduleBudget,
 } from './schedule-api.js';
