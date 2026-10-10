@@ -40,6 +40,14 @@
       ]
     },
     {
+      "content": "0b60693abaf60f66",
+      "lines": 24,
+      "files": [
+        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
+      ]
+    },
+    {
       "content": "1207ddfa1fa44b57",
       "lines": 8,
       "files": [
@@ -226,14 +234,6 @@
       "files": [
         "src/session/testing/fixtures/bookkeeping-execute-fixture.ts",
         "src/session/testing/fixtures/execute-barrier-fixture.ts"
-      ]
-    },
-    {
-      "content": "68d34a55e2e18ad1",
-      "lines": 25,
-      "files": [
-        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
       ]
     },
     {
@@ -503,7 +503,7 @@
       ]
     },
     {
-      "content": "d9ab14f07e4d1fb5",
+      "content": "d2c8c895c0955ba2",
       "lines": 32,
       "files": [
         "src/ui/components/auto-ui/AutoRenderer.vue",
