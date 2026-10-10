@@ -240,7 +240,7 @@ describe('Action Executor', () => {
       const action = Action.create('test')
         .chooseElement('card', {
           elementClass: Card,
-          filter: (e) => (e as Card).value >= 3,
+          filter: (e) => e.value >= 3,
         })
         .execute(() => {});
 
@@ -1749,7 +1749,7 @@ describe('Better Filter Error Messages', () => {
         // Bug: accessing piece.value without null check - crashes during availability check
         filter: (element, ctx) => {
           const piece = ctx.args.piece as Card;
-          return (element as Card).value > piece.value; // crashes when piece is undefined
+          return element.value > piece.value; // crashes when piece is undefined
         },
       })
       .execute(() => {});
@@ -1768,7 +1768,7 @@ describe('Better Filter Error Messages', () => {
         elementClass: Card,
         filter: (element, ctx) => {
           const piece = ctx.args.piece as Card;
-          return (element as Card).value > piece.value;
+          return element.value > piece.value;
         },
       })
       .execute(() => {});
@@ -1808,7 +1808,7 @@ describe('Better Filter Error Messages', () => {
         filter: (element, ctx) => {
           const piece = ctx.args?.piece as Card | undefined;
           if (!piece) return true; // Allow all during availability check
-          return (element as Card).value > piece.value;
+          return element.value > piece.value;
         },
       })
       .execute(() => {});
@@ -2836,7 +2836,7 @@ describe('Element selection API (F23/F28)', () => {
 
   it('chooseElement still supports the board pattern (elementClass/from/filter)', () => {
     const action = Action.create('test')
-      .chooseElement('card', { elementClass: Card, filter: (c) => (c as Card).value > 1 })
+      .chooseElement('card', { elementClass: Card, filter: (c) => c.value > 1 })
       .execute(() => {});
 
     const choices = executor.getChoices(action.selections[0], game.getPlayer(1)!, {});
