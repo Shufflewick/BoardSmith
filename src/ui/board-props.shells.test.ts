@@ -149,6 +149,48 @@ describe('GameShell gates the #player-stats slot like the board (#554)', () => {
     expect(statsProps.players).toEqual(DEBUG_TABLE_PLAYERS);
     wrapper.unmount();
   });
+
+  it('hands the slot its player as the state on screen has it, live and in history (#581)', async () => {
+    const { wrapper, debugPanel } = await mountTableWithDebugPanel(AttrsBoard, {}, { 'player-stats': playerStats });
+    expect(statsProps.player).toEqual(DEBUG_TABLE_PLAYERS[0]);
+
+    // The panel's own player row stays live; the slot draws beside the
+    // historical gameView, so the player it reads a score off is the snapshot's.
+    const historicalPlayers = DEBUG_TABLE_PLAYERS.map((player) => ({ ...player, score: player.seat * 10 }));
+    debugPanel.vm.$emit('time-travel', { view: {}, players: historicalPlayers }, 3, null);
+    await nextTick();
+    expect(received.isViewingHistory).toBe(true);
+    expect(statsProps.player).toEqual(historicalPlayers[0]);
+
+    debugPanel.vm.$emit('time-travel', null, null, null);
+    await nextTick();
+    expect(statsProps.player).toEqual(DEBUG_TABLE_PLAYERS[0]);
+    wrapper.unmount();
+  });
+});
+
+describe('GameShell hands the #sidebar-extra slot the state on screen (#582)', () => {
+  it('hands the slot the players of the displayed state, live and in history', async () => {
+    let sidebarProps: Record<string, unknown> = {};
+    const sidebarExtra = (slotProps: Record<string, unknown>) => {
+      sidebarProps = slotProps;
+      return h('span', { class: 'sidebar-extra' });
+    };
+    const { wrapper, debugPanel } = await mountTableWithDebugPanel(AttrsBoard, {}, { 'sidebar-extra': sidebarExtra });
+    expect(sidebarProps.players).toEqual(DEBUG_TABLE_PLAYERS);
+
+    const historicalPlayers = DEBUG_TABLE_PLAYERS.map((player) => ({ ...player, score: player.seat * 10 }));
+    debugPanel.vm.$emit('time-travel', { view: {}, players: historicalPlayers }, 3, null);
+    await nextTick();
+    expect(received.isViewingHistory).toBe(true);
+    expect(sidebarProps.players).toEqual(historicalPlayers);
+    expect(sidebarProps.players).toBe((sidebarProps.state as { state: { players: unknown } }).state.players);
+
+    debugPanel.vm.$emit('time-travel', null, null, null);
+    await nextTick();
+    expect(sidebarProps.players).toEqual(DEBUG_TABLE_PLAYERS);
+    wrapper.unmount();
+  });
 });
 
 describe('GameShell exposes the board\'s gated turn and actions (#576)', () => {
@@ -166,6 +208,36 @@ describe('GameShell exposes the board\'s gated turn and actions (#576)', () => {
     expect(exposed.isMyTurn).toBe(false);
     expect(exposed.availableActions).toEqual([]);
     expect(exposed.availableActions).toBe(received.availableActions);
+    wrapper.unmount();
+  });
+
+  it('hands a parent the state, players and own player on screen, live and in history (#581, #582)', async () => {
+    const { wrapper, debugPanel } = await tableWithDebugPanel();
+    const exposed = wrapper.vm as unknown as {
+      state: { state: { players: unknown }; flowState: unknown } | null;
+      players: unknown[];
+      myPlayer: unknown;
+    };
+    expect(exposed.players).toEqual(DEBUG_TABLE_PLAYERS);
+    expect(exposed.myPlayer).toEqual(DEBUG_TABLE_PLAYERS[0]);
+    expect(exposed.state?.flowState).not.toBeNull();
+
+    const historicalPlayers = DEBUG_TABLE_PLAYERS.map((player) => ({ ...player, score: player.seat * 10 }));
+    debugPanel.vm.$emit('time-travel', { view: {}, players: historicalPlayers }, 3, null);
+    await nextTick();
+    expect(received.isViewingHistory).toBe(true);
+    // Beside the historical gameView, the state and players are the snapshot's.
+    expect(exposed.state).toBe(received.state);
+    expect(exposed.state?.flowState).toBeNull();
+    expect(exposed.players).toEqual(historicalPlayers);
+    expect(exposed.players).toBe(exposed.state?.state.players);
+    expect(exposed.myPlayer).toEqual(historicalPlayers[0]);
+
+    debugPanel.vm.$emit('time-travel', null, null, null);
+    await nextTick();
+    expect(exposed.players).toEqual(DEBUG_TABLE_PLAYERS);
+    expect(exposed.myPlayer).toEqual(DEBUG_TABLE_PLAYERS[0]);
+    expect(exposed.state?.flowState).not.toBeNull();
     wrapper.unmount();
   });
 });

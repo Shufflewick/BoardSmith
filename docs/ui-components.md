@@ -19,7 +19,8 @@ The board itself is not a slot. `GameShell` renders the default UI from the game
          player's panel can be actionable (e.g. tap your own ability to use it), not
          just informational: playerSeat (the local seat), isMyTurn, availableActions,
          and actionController. `player` is the panel's player — gate actions on
-         `player.seat === playerSeat`. -->
+         `player.seat === playerSeat`. While the player browses history, `player`
+         and `players` are as that past position had them, like `gameView`. -->
     <template #player-stats="{ player, players, playerSeat, isMyTurn, availableActions, actionController }">
       <div class="player-stat">
         <span class="label">Score:</span>
