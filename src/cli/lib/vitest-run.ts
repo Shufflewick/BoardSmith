@@ -154,7 +154,7 @@ function finishedRun(end: VitestEnd, progress: TestProgress, files: string[], sh
   if (end.code !== 0) {
     return [
       `Every test file passed, but vitest exited with code ${end.code}: it reported errors outside any test.`,
-      'Look for "Unhandled Errors" in the output.',
+      'Look for "Unhandled Errors", or "Startup Error" for an error from a globalSetup file, in the output.',
     ];
   }
   return undefined;

@@ -549,6 +549,8 @@ export class ${pascal}Game extends Game<${pascal}Game, ${pascal}Player> {
     return this.first(Hand, \`hand-\${player.seat}\`)!;
   }
 
+  // The one place the game's end is declared: the flow stops as soon as this
+  // is true, and players, bots and the benchmark all read getWinners().
   override isFinished(): boolean {
     return this.deck.count(Card) === 0;
   }
@@ -646,7 +648,6 @@ export function createGameFlow(game: ${pascal}Game): FlowDefinition {
     actionStep({
       name: 'draw-step',
       actions: ['draw'],
-      skipIf: () => game.deck.count(Card) === 0,
     }),
     actionStep({
       name: 'play-step',
@@ -661,18 +662,17 @@ export function createGameFlow(game: ${pascal}Game): FlowDefinition {
     }),
   );
 
+  // Turns repeat until the game is finished. The game declares its own end
+  // and winners (isFinished/getWinners in game.ts), and the flow stops there.
   return {
     root: loop({
       name: 'game-loop',
-      while: () => game.deck.count(Card) > 0,
       maxIterations: 100,
       do: eachPlayer({
         name: 'player-turns',
         do: playerTurn,
       }),
     }),
-    isComplete: () => game.deck.count(Card) === 0,
-    getWinners: () => game.getWinners(),
   };
 }
 `;

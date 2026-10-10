@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, FlowEngine, defineFlow, simultaneousActionStep, sequence } from '../index.js';
+import { Game, Player, Action, FlowEngine, simultaneousActionStep, sequence } from '../index.js';
 
 /**
  * Pins the `simultaneousActionStep` default-`allDone` trap that
@@ -54,7 +54,7 @@ describe('simultaneousActionStep default allDone', () => {
     // Seat 2 is momentarily unable to act — it is expected back, not out.
     game.getPlayerOrThrow(2).ready = false;
 
-    const engine = new FlowEngine(game, defineFlow({ root: orderStep() }));
+    const engine = new FlowEngine(game, { root: orderStep() });
     engine.start();
 
     expect(
@@ -78,7 +78,7 @@ describe('simultaneousActionStep default allDone', () => {
 
     const engine = new FlowEngine(
       game,
-      defineFlow({ root: orderStep(ctx => ctx.game.all(OrderPlayer).every(p => p.order !== undefined)) })
+      { root: orderStep(ctx => ctx.game.all(OrderPlayer).every(p => p.order !== undefined)) }
     );
     engine.start();
 
@@ -118,7 +118,7 @@ describe('simultaneousActionStep default allDone', () => {
     // trap); entry 2 rebuilds the participant list and admits it.
     const engine = new FlowEngine(
       game,
-      defineFlow({ root: sequence(orderStep(), orderStep()) })
+      { root: sequence(orderStep(), orderStep()) }
     );
 
     engine.start();

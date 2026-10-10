@@ -19,7 +19,6 @@ import {
   Space,
   Card,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -75,15 +74,13 @@ class NoPlayerViewGame extends Game<NoPlayerViewGame, Player> {
       Action.create<NoPlayerViewGame>('pass').execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => false,
-          maxIterations: 10,
-          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: () => false,
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
       }),
-    );
+    });
   }
 }
 
@@ -183,15 +180,13 @@ class WithPlayerViewGame extends Game<WithPlayerViewGame, Player> {
       Action.create<WithPlayerViewGame>('pass').execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => false,
-          maxIterations: 10,
-          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: () => false,
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
       }),
-    );
+    });
   }
 
   static override playerView = (

@@ -21,7 +21,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   sequence,
   simultaneousActionStep,
   type GameOptions,
@@ -57,28 +56,26 @@ class CrossPhaseGame extends Game<CrossPhaseGame, CrossPhasePlayer> {
         }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: sequence(
-          // Step A: seat 2 is the ONLY participant -- completes the instant
-          // seat 2 commits, with no seat-1 action ever recorded here.
-          simultaneousActionStep({
-            name: 'step-a',
-            players: () => this.players.filter((p) => p.seat === 2),
-            actions: ['commitA'],
-            playerDone: (_ctx, p) => (p as CrossPhasePlayer).committedA,
-          }),
-          // Step B: both seats are eligible; seat 2 acts first (seat 1 may
-          // act later or never, within a single test).
-          simultaneousActionStep({
-            name: 'step-b',
-            players: () => this.players,
-            actions: ['commitB'],
-            playerDone: (_ctx, p) => (p as CrossPhasePlayer).committedB,
-          }),
-        ),
-      }),
-    );
+    this.setFlow({
+      root: sequence(
+        // Step A: seat 2 is the ONLY participant -- completes the instant
+        // seat 2 commits, with no seat-1 action ever recorded here.
+        simultaneousActionStep({
+          name: 'step-a',
+          players: () => this.players.filter((p) => p.seat === 2),
+          actions: ['commitA'],
+          playerDone: (_ctx, p) => (p as CrossPhasePlayer).committedA,
+        }),
+        // Step B: both seats are eligible; seat 2 acts first (seat 1 may
+        // act later or never, within a single test).
+        simultaneousActionStep({
+          name: 'step-b',
+          players: () => this.players,
+          actions: ['commitB'],
+          playerDone: (_ctx, p) => (p as CrossPhasePlayer).committedB,
+        }),
+      ),
+    });
   }
 }
 

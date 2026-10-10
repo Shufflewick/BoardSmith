@@ -21,7 +21,6 @@ import {
   Space,
   Player,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -66,7 +65,7 @@ class AutoAdvanceGame extends Game<AutoAdvanceGame, Player> {
 
     this.registerActions(moveAction, passAction);
 
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({
         while: () => true,
         maxIterations: 20,
@@ -74,7 +73,7 @@ class AutoAdvanceGame extends Game<AutoAdvanceGame, Player> {
           do: actionStep({ actions: ['move', 'pass'] }),
         }),
       }),
-    }));
+    });
   }
 }
 

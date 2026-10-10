@@ -20,7 +20,7 @@ import { Space } from './space.js';
 import { ENGINE_OWNED_GAME_FIELDS, describeEngineFieldShadow } from './engine-owned-fields.js';
 import { TestGame } from '../../testing/test-game.js';
 import { Action } from '../action/index.js';
-import { defineFlow, actionStep } from '../flow/index.js';
+import { actionStep } from '../flow/index.js';
 
 class Zone extends Space {}
 
@@ -60,7 +60,7 @@ class WellBehavedGame extends Game<WellBehavedGame> {
     this.message('Setting up');
     this.settings.variant = 'standard';
     this.registerActions(Action.create('pass').execute(() => {}));
-    this.setFlow(defineFlow({ root: actionStep({ actions: ['pass'] }) }));
+    this.setFlow({ root: actionStep({ actions: ['pass'] }) });
   }
 }
 

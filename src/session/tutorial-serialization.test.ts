@@ -36,7 +36,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   actionStep,
   type GameOptions,
 } from '../engine/index.js';
@@ -77,14 +76,14 @@ class TutorialGame extends Game<TutorialGame, Player> {
     );
 
     this.setFlow(
-      defineFlow({
+      {
         root: actionStep({
           actions: ['movePawn'],
           player: (ctx) => ctx.game.getPlayer(1)!,
           repeatUntil: () => false,
           maxMoves: 10,
         }),
-      })
+      }
     );
   }
 }

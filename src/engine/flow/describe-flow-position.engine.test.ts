@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   Game,
   Action,
-  defineFlow,
   sequence,
   actionStep,
   ifThen,
@@ -28,18 +27,16 @@ class StepTourGame extends Game<StepTourGame> {
       Action.create<StepTourGame>('go').execute(() => ({ success: true })),
     );
     const step = (name: string) => actionStep<StepTourGame>({ name, actions: ['go'] });
-    this.setFlow(
-      defineFlow<StepTourGame>({
-        root: sequence(
-          step('first'),
-          step('second'),
-          ifThen({ condition: () => false, then: step('then-branch'), else: step('else-branch') }),
-          switchOn({ on: () => 'b', cases: { a: step('case-a'), b: step('case-b') } }),
-          switchOn({ on: () => 'none', cases: { a: step('unused-case') }, default: step('default-branch') }),
-          step('last'),
-        ),
-      }),
-    );
+    this.setFlow({
+      root: sequence(
+        step('first'),
+        step('second'),
+        ifThen({ condition: () => false, then: step('then-branch'), else: step('else-branch') }),
+        switchOn({ on: () => 'b', cases: { a: step('case-a'), b: step('case-b') } }),
+        switchOn({ on: () => 'none', cases: { a: step('unused-case') }, default: step('default-branch') }),
+        step('last'),
+      ),
+    });
   }
 }
 

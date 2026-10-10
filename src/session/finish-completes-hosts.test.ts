@@ -10,7 +10,7 @@
  * turn.
  */
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, defineFlow, eachPlayer, actionStep, type GameOptions } from '../engine/index.js';
+import { Game, Player, Action, eachPlayer, actionStep, type GameOptions } from '../engine/index.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters, type PublishMeta } from './snapshot-session-host.js';
 import { boundaryKeyOf, boundaryKeyOfHost } from './testing/boundary-stamp.js';
@@ -25,11 +25,9 @@ class FinishInTurnGame extends Game<FinishInTurnGame, Player> {
         ctx.game.finish([ctx.player]);
       }),
     );
-    this.setFlow(
-      defineFlow({
-        root: eachPlayer({ do: actionStep({ actions: ['pass', 'win'], turnScope: 'restart' }) }),
-      }),
-    );
+    this.setFlow({
+      root: eachPlayer({ do: actionStep({ actions: ['pass', 'win'], turnScope: 'restart' }) }),
+    });
   }
 }
 

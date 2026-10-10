@@ -15,7 +15,7 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
+  type FlowDefinition,
   loop,
   eachPlayer,
   actionStep,
@@ -57,7 +57,7 @@ class TutSimGame extends Game<TutSimGame, Player> {
 
     this.registerActions(moveAction, passAction);
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: loop({
         while: () => true,
         maxIterations: 50,
@@ -65,7 +65,7 @@ class TutSimGame extends Game<TutSimGame, Player> {
           do: actionStep({ actions: ['move', 'pass'] , turnScope: 'restart' }),
         }),
       }),
-    });
+    };
     this.setFlow(flow);
   }
 }

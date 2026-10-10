@@ -15,7 +15,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   actionStep,
   enumerateLegalMoves,
   type GameOptions,
@@ -78,16 +77,14 @@ class FieldGame extends Game<FieldGame, Player> {
         .execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: actionStep({
-          actions: ['place', 'lift'],
-          player: (ctx) => ctx.game.getPlayer(1)!,
-          repeatUntil: () => false,
-          maxMoves: 10,
-        }),
+    this.setFlow({
+      root: actionStep({
+        actions: ['place', 'lift'],
+        player: (ctx) => ctx.game.getPlayer(1)!,
+        repeatUntil: () => false,
+        maxMoves: 10,
       }),
-    );
+    });
   }
 }
 

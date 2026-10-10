@@ -12,7 +12,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -54,14 +53,12 @@ export class DeadEndGame extends Game<DeadEndGame, Player> {
         }),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: (ctx) => ctx.game.total < 12,
-          maxIterations: 50,
-          do: eachPlayer({ do: actionStep({ actions: ['add', 'sign'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: (ctx) => ctx.game.total < 12,
+        maxIterations: 50,
+        do: eachPlayer({ do: actionStep({ actions: ['add', 'sign'] }) }),
       }),
-    );
+    });
   }
 }

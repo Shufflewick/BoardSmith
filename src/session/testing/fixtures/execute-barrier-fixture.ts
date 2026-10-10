@@ -47,7 +47,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   sequence,
   actionStep,
   execute,
@@ -75,24 +74,22 @@ class ExecuteBarrierGame extends Game<ExecuteBarrierGame, Player> {
 
     const p1 = (ctx: { game: Game }) => ctx.game.getPlayer(1)!;
 
-    this.setFlow(
-      defineFlow({
-        root: sequence(
-          actionStep({ actions: ['act1'], player: p1 }),
-          execute(
-            (ctx) => {
-              (ctx.game as ExecuteBarrierGame).score += 1;
-            },
-            // Declares the commitment: this is the fence these tests exercise.
-            { irreversible: true },
-          ),
-          // Each of these steps is its own closed turn: the barrier tests pin
-          // that undo never reaches behind the step it is offered in.
-          actionStep({ actions: ['act2'], player: p1, maxMoves: 2, turnScope: 'restart' }),
-          actionStep({ actions: ['idle'], player: p1, turnScope: 'restart' }),
+    this.setFlow({
+      root: sequence(
+        actionStep({ actions: ['act1'], player: p1 }),
+        execute(
+          (ctx) => {
+            (ctx.game as ExecuteBarrierGame).score += 1;
+          },
+          // Declares the commitment: this is the fence these tests exercise.
+          { irreversible: true },
         ),
-      }),
-    );
+        // Each of these steps is its own closed turn: the barrier tests pin
+        // that undo never reaches behind the step it is offered in.
+        actionStep({ actions: ['act2'], player: p1, maxMoves: 2, turnScope: 'restart' }),
+        actionStep({ actions: ['idle'], player: p1, turnScope: 'restart' }),
+      ),
+    });
   }
 }
 

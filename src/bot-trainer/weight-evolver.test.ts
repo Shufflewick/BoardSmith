@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ObjectiveWeight, TrainingProgress } from './types.js';
 import type { WeightEvolverConfig } from './weight-evolver.js';
-import { Game, Player, Action, defineFlow, actionStep, type GameOptions } from '../engine/index.js';
+import { Game, Player, Action, actionStep, type GameOptions } from '../engine/index.js';
 import type { BotStrategy } from '../bot/index.js';
 
 /** Fitness for each benchmarked population, controlled per test. */
@@ -32,7 +32,7 @@ class EvolveGame extends Game<EvolveGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     this.registerAction(Action.create<EvolveGame>('pass').execute(() => {}));
-    this.setFlow(defineFlow({ root: actionStep({ actions: ['pass'] }) }));
+    this.setFlow({ root: actionStep({ actions: ['pass'] }) });
   }
 }
 

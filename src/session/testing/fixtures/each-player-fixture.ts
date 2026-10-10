@@ -10,7 +10,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   actionStep,
   loop,
   eachPlayer,
@@ -24,20 +23,18 @@ class EachPlayerGame extends Game<EachPlayerGame, Player> {
 
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 100,
-          do: eachPlayer({
-            // At a one-seat table `eachPlayer` re-prompts the same seat every
-            // iteration; each of those is its own turn.
-            // At a one-seat table `eachPlayer` re-prompts the same seat every
-            // iteration; each of those is its own turn.
-            do: actionStep({ actions: ['pass'], turnScope: 'restart' }),
-          }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 100,
+        do: eachPlayer({
+          // At a one-seat table `eachPlayer` re-prompts the same seat every
+          // iteration; each of those is its own turn.
+          // At a one-seat table `eachPlayer` re-prompts the same seat every
+          // iteration; each of those is its own turn.
+          do: actionStep({ actions: ['pass'], turnScope: 'restart' }),
         }),
       }),
-    );
+    });
   }
 }
 

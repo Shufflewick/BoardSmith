@@ -132,8 +132,10 @@ describe('testRunVerdict', () => {
   it('points at the unhandled errors when every file passed but vitest still failed the run', () => {
     const record = progress(paths('a.test.ts'), started('a.test.ts'), done('a.test.ts'), finished);
 
-    expect(verdict({ code: 1, signal: null }, record)).toContain(
-      'Every test file passed, but vitest exited with code 1: it reported errors outside any test',
-    );
+    const text = verdict({ code: 1, signal: null }, record);
+    expect(text).toContain('Every test file passed, but vitest exited with code 1: it reported errors outside any test');
+    // A globalSetup teardown's error, such as the untracked-file guard's (#579), is printed under
+    // "Startup Error" even though it comes after the run.
+    expect(text).toContain('Look for "Unhandled Errors", or "Startup Error" for an error from a globalSetup file,');
   });
 });

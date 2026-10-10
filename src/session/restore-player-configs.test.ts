@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Game, defineFlow, actionStep, loop, Action, type GameOptions } from '../engine/index.js';
+import { Game, actionStep, loop, Action, type GameOptions } from '../engine/index.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { runnerFromSnapshot } from './runner-from-snapshot.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
@@ -32,7 +32,7 @@ class RestoreTestGame extends Game {
     if (leader) this.leaderSeat = options.playerConfigs!.indexOf(leader) + 1;
 
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
-    this.setFlow(defineFlow({ root: loop({ maxIterations: 100, do: actionStep({ actions: ['pass'], turnScope: 'restart' }) }) }));
+    this.setFlow({ root: loop({ maxIterations: 100, do: actionStep({ actions: ['pass'], turnScope: 'restart' }) }) });
   }
 }
 

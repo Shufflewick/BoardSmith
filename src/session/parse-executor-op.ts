@@ -10,7 +10,8 @@
  *
  * It is strict: a key the op does not declare is refused rather than dropped,
  * `boundaryKey` is required on every submission, and each refusal names the
- * field and what to do about it.
+ * field and what to do about it. An optional field set to `undefined` counts as
+ * left out, as it does in the `ExecutorOp` type and after a JSON hop.
  */
 import type { ExecutorOp, OpOfType } from './stateless-ops.js';
 
@@ -177,7 +178,9 @@ function fieldError(
   rules: Record<string, FieldRule<boolean>>,
 ): string | null {
   for (const [field, rule] of Object.entries(rules)) {
-    if (!(field in value)) {
+    // An optional field holding undefined is absent: `ExecutorOp` lets an
+    // in-process caller write it, and JSON drops it on the wire (#555).
+    if (!(field in value) || (rule.optional && value[field] === undefined)) {
       if (rule.optional) continue;
       return `The "${type}" op has no "${field}"${rule.why ? `: ${rule.why}` : `. It must be ${rule.must}`}.`;
     }

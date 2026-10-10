@@ -3,7 +3,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   simultaneousActionStep,
   type GameOptions,
 } from '../engine/index.js';
@@ -37,15 +36,13 @@ class SimGateGame extends Game<SimGateGame, Player> {
           return { success: true };
         }),
     );
-    this.setFlow(
-      defineFlow({
-        root: simultaneousActionStep({
-          name: 'sim-play',
-          players: () => this.players,
-          actions: ['play'],
-        }),
+    this.setFlow({
+      root: simultaneousActionStep({
+        name: 'sim-play',
+        players: () => this.players,
+        actions: ['play'],
       }),
-    );
+    });
   }
 }
 

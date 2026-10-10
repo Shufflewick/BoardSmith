@@ -17,7 +17,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   sequence,
@@ -69,7 +68,7 @@ function start(root: FlowNode<EndingGame>, playerCount = 3): GameRunner<EndingGa
     gameType: 'ending',
     gameOptions: { playerCount, seed: 'finish-ends-flow' },
   });
-  runner.game.setFlow(defineFlow({ root }));
+  runner.game.setFlow({ root });
   runner.start();
   return runner;
 }
@@ -216,7 +215,7 @@ describe('a game finished by a flow node rather than an action', () => {
 class EachPlayerEndingGame extends EndingGame {
   constructor(options: GameOptions) {
     super(options);
-    this.setFlow(defineFlow({ root: eachPlayer<EndingGame>({ do: step() }) }));
+    this.setFlow({ root: eachPlayer<EndingGame>({ do: step() }) });
   }
 }
 

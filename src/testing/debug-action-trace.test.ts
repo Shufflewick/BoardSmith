@@ -11,7 +11,6 @@ import {
   Piece,
   Space,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -67,15 +66,13 @@ class TraceGame extends Game<TraceGame, Player> {
         .execute(() => ({ success: true })),
     );
 
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: (ctx) => ctx.game.score < 6,
-          maxIterations: 100,
-          do: eachPlayer({ do: actionStep({ actions: ['take', 'spend', 'pickEmpty'] }) }),
-        }),
+    this.setFlow({
+      root: loop({
+        while: (ctx) => ctx.game.score < 6,
+        maxIterations: 100,
+        do: eachPlayer({ do: actionStep({ actions: ['take', 'spend', 'pickEmpty'] }) }),
       }),
-    );
+    });
   }
 }
 

@@ -1,5 +1,5 @@
 import { beforeEach, describe, it, expect } from 'vitest';
-import { Game, Player, Action, defineFlow, actionStep, loop, eachPlayer, type GameOptions } from '../../engine/index.js';
+import { Game, Player, Action, actionStep, loop, eachPlayer, type GameOptions } from '../../engine/index.js';
 import { executeOp, type GameDefinitionLike } from '../../session/index.js';
 import { MultiplayerHost, type HostOutbound, type MultiplayerHostOptions } from './multiplayer-host.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
@@ -17,14 +17,12 @@ class PassGame extends Game<PassGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 1000,
-          do: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
-        }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 1000,
+        do: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
       }),
-    );
+    });
   }
 }
 
@@ -42,11 +40,9 @@ class AlternateGame extends Game<AlternateGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
-    this.setFlow(
-      defineFlow({
-        root: eachPlayer({ do: actionStep({ actions: ['pass'] , turnScope: 'restart' }) }),
-      }),
-    );
+    this.setFlow({
+      root: eachPlayer({ do: actionStep({ actions: ['pass'] , turnScope: 'restart' }) }),
+    });
   }
 }
 

@@ -60,13 +60,13 @@ const FLOWS = {
 function rulesSource(args: { step: number; flow: string; seats?: number; demo?: boolean }): string {
   const seats = args.seats ?? 1;
   return [
-    "import { Action, Game, Player, actionStep, defineFlow, eachPlayer, loop, sequence, type GameOptions } from 'boardsmith';",
+    "import { Action, Game, Player, actionStep, eachPlayer, loop, sequence, type GameOptions } from 'boardsmith';",
     'export class CounterGame extends Game<CounterGame, Player> {',
     '  count = 0;',
     '  constructor(options: GameOptions) {',
     '    super(options);',
     `    this.registerAction(Action.create('bump').execute(() => { this.count += ${args.step}; }));`,
-    `    this.setFlow(defineFlow<CounterGame>({ root: ${args.flow} }));`,
+    `    this.setFlow({ root: ${args.flow} });`,
     '  }',
     '}',
     'export const gameDefinition = {',

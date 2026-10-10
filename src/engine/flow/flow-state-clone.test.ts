@@ -7,7 +7,6 @@ import {
   GameElement,
   Player,
   Action,
-  defineFlow,
   sequence,
   actionStep,
   type FlowContext,
@@ -310,19 +309,17 @@ class PlayerOverrideGame extends Game<PlayerOverrideGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
-    this.setFlow(
-      defineFlow({
-        root: sequence(
-          // Seat 2 acts under a `player:` override, which makes the engine save
-          // the PREVIOUS current player (a live Player) into the frame's data.
-          actionStep({
-            actions: ['pass'],
-            player: (ctx: FlowContext) => (ctx.game as PlayerOverrideGame).getPlayer(2)!,
-          }),
-          actionStep({ actions: ['pass'] }),
-        ),
-      }),
-    );
+    this.setFlow({
+      root: sequence(
+        // Seat 2 acts under a `player:` override, which makes the engine save
+        // the PREVIOUS current player (a live Player) into the frame's data.
+        actionStep({
+          actions: ['pass'],
+          player: (ctx: FlowContext) => (ctx.game as PlayerOverrideGame).getPlayer(2)!,
+        }),
+        actionStep({ actions: ['pass'] }),
+      ),
+    });
   }
 }
 

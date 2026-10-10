@@ -5,7 +5,7 @@
  * is sent for it (#450).
  */
 
-import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../../../engine/index.js';
+import { Game, Player, Action, actionStep, loop, type GameOptions } from '../../../engine/index.js';
 import type { GameDefinitionLike } from '../../stateless-ops.js';
 
 class SecretPlayer extends Player<SecretGame, SecretPlayer> {
@@ -25,14 +25,12 @@ class SecretGame extends Game<SecretGame, SecretPlayer> {
         .chooseFrom('color', { choices: ['red', 'blue'] })
         .execute(() => ({ success: true })),
     );
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 100,
-          do: actionStep({ actions: ['pick'], player: (ctx) => ctx.game.getPlayer(2)!, turnScope: 'restart' }),
-        }),
+    this.setFlow({
+      root: loop({
+        maxIterations: 100,
+        do: actionStep({ actions: ['pick'], player: (ctx) => ctx.game.getPlayer(2)!, turnScope: 'restart' }),
       }),
-    );
+    });
   }
 }
 

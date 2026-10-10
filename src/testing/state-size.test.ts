@@ -5,7 +5,6 @@ import {
   Space,
   Piece,
   Action,
-  defineFlow,
   loop,
   eachPlayer,
   actionStep,
@@ -27,13 +26,13 @@ class BudgetGame extends Game<BudgetGame, Player> {
     this.registerActions(
       Action.create('pass').prompt('Pass').execute(() => ({ success: true })),
     );
-    this.setFlow(defineFlow({
+    this.setFlow({
       root: loop({
         while: () => true,
         maxIterations: 200,
         do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
       }),
-    }));
+    });
   }
 }
 

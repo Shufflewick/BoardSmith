@@ -21,7 +21,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   sequence,
   simultaneousActionStep,
   actionStep,
@@ -80,19 +79,17 @@ class SecretDeploymentGame extends Game<SecretDeploymentGame, SecretDeploymentPl
     );
     this.registerAction(Action.create('battle').execute(() => ({ success: true })));
 
-    this.setFlow(
-      defineFlow({
-        root: sequence(
-          simultaneousActionStep({
-            name: 'deploy',
-            players: () => this.players,
-            actions: ['placePack', 'burnPack', 'signal', 'done'],
-            playerDone: (_ctx, p) => (p as SecretDeploymentPlayer).isDone,
-          }),
-          actionStep({ name: 'battle', actions: ['battle'], player: (ctx) => ctx.game.getPlayer(1)! }),
-        ),
-      }),
-    );
+    this.setFlow({
+      root: sequence(
+        simultaneousActionStep({
+          name: 'deploy',
+          players: () => this.players,
+          actions: ['placePack', 'burnPack', 'signal', 'done'],
+          playerDone: (_ctx, p) => (p as SecretDeploymentPlayer).isDone,
+        }),
+        actionStep({ name: 'battle', actions: ['battle'], player: (ctx) => ctx.game.getPlayer(1)! }),
+      ),
+    });
   }
 }
 

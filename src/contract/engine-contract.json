@@ -1,7 +1,7 @@
 {
   "revision": 143,
   "bundleProtocol": 2,
-  "surfaceHash": "bbb639d4800619db",
+  "surfaceHash": "e949c8726719a502",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1225,12 +1225,12 @@
     },
     {
       "revision": 143,
-      "date": "2026-10-10",
+      "date": "2026-10-09",
       "bundleProtocol": 2,
-      "surfaceHash": "bbb639d4800619db",
+      "surfaceHash": "e949c8726719a502",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "A recurrence's handler now has the last word over its own key (#583): runDueOccurrences' call must answer { ended, displaced }, where displaced is true when that occurrence's schedule plan replaced the running event's own id (plan.replaced includes event.id, because the handler upserted or cancelled the event's own (owner, key)); the loop then stops and answers nextDue null, and the host must not write the automatic re-arm at owedDue, so a self-upsert leaves exactly the handler's event under the key and a self-cancel leaves none. The platform host should compute displaced from its plan, drop its re-arm row for a displaced occurrence, and settle the event id once (ShufflewickPub follow-up)."
+      "summary": "A game's end and winners are declared on Game only (#503): finish(winners), or overrides of isFinished() and getWinners(). FlowDefinition loses isComplete and getWinners, FlowEngine.getWinners is removed, and a completed flow no longer writes settings.winners; the flow ends when game.isFinished() is true. defineFlow is removed: a flow definition is a plain object passed to setFlow. The MCTS bot and the benchmark now read game.getWinners(), the same result hosts show players, so a game that overrides getWinners() is no longer scored as a draw by bots. Bundles built on an earlier revision keep running on their own revision; to move to r143 they must be rebuilt from migrated source (Seven and WindupWarfare declared their end on the flow; any bundle importing defineFlow)."
     }
   ]
 }

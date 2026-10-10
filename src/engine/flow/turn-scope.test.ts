@@ -5,7 +5,6 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
   sequence,
   actionStep,
   loop,
@@ -82,21 +81,19 @@ const seatOne = (ctx: { game: Game }) => ctx.game.getPlayer(1)!;
 class ContinueLoopGame extends ScoreGame {
   constructor(options: GameOptions) {
     super(options);
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          name: 'turn-loop',
-          while: (ctx) => (ctx.game as ContinueLoopGame).moves < 4,
-          maxIterations: 10,
-          do: sequence(
-            // A non-action node between the actions, exactly like Go Fish's
-            // empty-hand refill: the carry must survive it.
-            execute(() => {}),
-            actionStep({ name: 'act-step', actions: ['act'], player: seatOne, turnScope: 'continue' }),
-          ),
-        }),
+    this.setFlow({
+      root: loop({
+        name: 'turn-loop',
+        while: (ctx) => (ctx.game as ContinueLoopGame).moves < 4,
+        maxIterations: 10,
+        do: sequence(
+          // A non-action node between the actions, exactly like Go Fish's
+          // empty-hand refill: the carry must survive it.
+          execute(() => {}),
+          actionStep({ name: 'act-step', actions: ['act'], player: seatOne, turnScope: 'continue' }),
+        ),
       }),
-    );
+    });
   }
 }
 
@@ -104,16 +101,14 @@ class ContinueLoopGame extends ScoreGame {
 class RestartLoopGame extends ScoreGame {
   constructor(options: GameOptions) {
     super(options);
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          name: 'turn-loop',
-          while: (ctx) => (ctx.game as RestartLoopGame).moves < 4,
-          maxIterations: 10,
-          do: actionStep({ name: 'act-step', actions: ['act'], player: seatOne, turnScope: 'restart' }),
-        }),
+    this.setFlow({
+      root: loop({
+        name: 'turn-loop',
+        while: (ctx) => (ctx.game as RestartLoopGame).moves < 4,
+        maxIterations: 10,
+        do: actionStep({ name: 'act-step', actions: ['act'], player: seatOne, turnScope: 'restart' }),
       }),
-    );
+    });
   }
 }
 
@@ -121,16 +116,14 @@ class RestartLoopGame extends ScoreGame {
 class UndeclaredLoopGame extends ScoreGame {
   constructor(options: GameOptions) {
     super(options);
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          name: 'turn-loop',
-          while: (ctx) => (ctx.game as UndeclaredLoopGame).moves < 4,
-          maxIterations: 10,
-          do: actionStep({ name: 'act-step', actions: ['act'], player: seatOne }),
-        }),
+    this.setFlow({
+      root: loop({
+        name: 'turn-loop',
+        while: (ctx) => (ctx.game as UndeclaredLoopGame).moves < 4,
+        maxIterations: 10,
+        do: actionStep({ name: 'act-step', actions: ['act'], player: seatOne }),
       }),
-    );
+    });
   }
 }
 
@@ -148,15 +141,13 @@ class SequenceTurnGame extends ScoreGame {
         return { success: true };
       }),
     );
-    this.setFlow(
-      defineFlow({
-        root: sequence(
-          actionStep({ name: 'first', actions: ['act'], player: seatOne }),
-          actionStep({ name: 'second', actions: ['act'], player: seatOne, turnScope: 'continue' }),
-          actionStep({ name: 'third', actions: ['finish'], player: seatOne, turnScope: 'continue' }),
-        ),
-      }),
-    );
+    this.setFlow({
+      root: sequence(
+        actionStep({ name: 'first', actions: ['act'], player: seatOne }),
+        actionStep({ name: 'second', actions: ['act'], player: seatOne, turnScope: 'continue' }),
+        actionStep({ name: 'third', actions: ['finish'], player: seatOne, turnScope: 'continue' }),
+      ),
+    });
   }
 }
 
@@ -167,19 +158,17 @@ class SequenceTurnGame extends ScoreGame {
 class AlternatingGame extends ScoreGame {
   constructor(options: GameOptions) {
     super(options);
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          name: 'game-loop',
-          while: (ctx) => (ctx.game as AlternatingGame).moves < 4,
-          maxIterations: 10,
-          do: eachPlayer({
-            name: 'seats',
-            do: actionStep({ name: 'place', actions: ['act'] }),
-          }),
+    this.setFlow({
+      root: loop({
+        name: 'game-loop',
+        while: (ctx) => (ctx.game as AlternatingGame).moves < 4,
+        maxIterations: 10,
+        do: eachPlayer({
+          name: 'seats',
+          do: actionStep({ name: 'place', actions: ['act'] }),
         }),
       }),
-    );
+    });
   }
 }
 

@@ -13,7 +13,7 @@ import {
   Game,
   Player,
   Action,
-  defineFlow,
+  type FlowDefinition,
   loop,
   eachPlayer,
   actionStep,
@@ -42,7 +42,7 @@ class GateTestGame extends Game<GateTestGame, Player> {
 
     this.registerActions(moveAction, passAction);
 
-    const flow = defineFlow({
+    const flow: FlowDefinition = {
       root: loop({
         while: () => true,
         maxIterations: 20,
@@ -50,7 +50,7 @@ class GateTestGame extends Game<GateTestGame, Player> {
           do: actionStep({ actions: ['move', 'pass'] }),
         }),
       }),
-    });
+    };
     this.setFlow(flow);
   }
 }
