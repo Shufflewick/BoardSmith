@@ -174,3 +174,87 @@ async function mountWithHeldFollowUp() {
   expect(controller.pendingOnServer.value).toBe(true);
   return { ...mounted, controller };
 }
+
+describe('GameShell defers a held follow-up that arrives while viewing history (#585)', () => {
+  /** The host's message, as a live server sends it. */
+  const fromHost = (data: Record<string, unknown>) =>
+    window.dispatchEvent(new MessageEvent('message', { data: { source: 'shufflewick', ...data } }));
+  const LOOT = {
+    name: 'loot',
+    prompt: 'Loot',
+    selections: [{
+      name: 'site',
+      type: 'choice',
+      prompt: 'Loot which site?',
+      choices: [{ value: 'cave', display: 'Cave' }, { value: 'ruin', display: 'Ruin' }],
+    }],
+  };
+  /** Seat 1's frame with nothing else to do, and the follow-up the server holds, if any. */
+  const postSeatState = (followUp: Record<string, unknown> | undefined) => fromHost({
+    type: 'game_state',
+    view: {
+      flowState: { currentPlayer: 1, awaitingInput: true, availableActions: [] },
+      state: {
+        view: {}, players: DEBUG_TABLE_PLAYERS, currentPlayer: 1, isMyTurn: true, availableActions: [],
+        ...(followUp ? { followUp } : {}),
+      },
+    },
+    winners: [],
+  });
+
+  /** The shell in history, the server having just handed seat 1 the loot follow-up. */
+  async function followUpArrivesInHistory() {
+    const { wrapper, debugPanel, posted } = await mountTableWithDebugPanel(PickBoard, MOVE_WITH_A_PICK);
+    await flushPromises();
+    const controller = (wrapper.vm as unknown as { actionController: { currentAction: Ref<string | null> } }).actionController;
+    // The loot pick's choice fetches: the move pick open at mount fetched its own.
+    const fetches = () => posted.filter((message) => {
+      const request = message as { op?: string; payload?: { actionName?: string } };
+      return request.op === 'resolve_choices' && request.payload?.actionName === 'loot';
+    });
+
+    debugPanel.vm.$emit('time-travel', { view: {}, players: DEBUG_TABLE_PLAYERS }, 3, null);
+    await flushPromises();
+    postSeatState({ action: 'loot', args: {}, metadata: LOOT });
+    await flushPromises();
+    expect(wrapper.find('.time-travel-banner').exists()).toBe(true);
+    expect(controller.currentAction.value).toBeNull();
+    expect(fetches()).toHaveLength(0);
+    return { wrapper, debugPanel, controller, fetches };
+  }
+
+  it('opens no pick beside a past board, and opens it once on return', async () => {
+    const { wrapper, debugPanel, controller, fetches } = await followUpArrivesInHistory();
+
+    debugPanel.vm.$emit('time-travel', null, null, null);
+    await flushPromises();
+    expect(controller.currentAction.value).toBe('loot');
+    // Started once: a second start would fetch the pick's choices again.
+    expect(fetches()).toHaveLength(1);
+    const fetch = fetches()[0] as { requestId: string };
+    fromHost({
+      type: 'server_response',
+      requestId: fetch.requestId,
+      result: { success: true, choices: [{ value: 'cave', display: 'Cave' }, { value: 'ruin', display: 'Ruin' }] },
+    });
+    await flushPromises();
+    expect(fetches()).toHaveLength(1);
+    expect(wrapper.findComponent(ActionPanel).text()).toContain('Loot which site?');
+    expect(wrapper.find('[data-testid="board-pick"]').text()).toBe('loot');
+    wrapper.unmount();
+  });
+
+  it('does not open a follow-up the server withdrew while the player was in history', async () => {
+    const { wrapper, debugPanel, controller, fetches } = await followUpArrivesInHistory();
+    postSeatState(undefined);
+    await flushPromises();
+
+    debugPanel.vm.$emit('time-travel', null, null, null);
+    await flushPromises();
+    expect(controller.currentAction.value).toBeNull();
+    expect(fetches()).toHaveLength(0);
+    expect(wrapper.findComponent(ActionPanel).text()).not.toContain('Loot which site?');
+    expect(wrapper.find('[data-testid="board-pick"]').text()).toBe('none');
+    wrapper.unmount();
+  });
+});
