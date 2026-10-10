@@ -50,6 +50,10 @@ async function twoCommitRepo(): Promise<{ repoDir: string; firstSha: string; sec
   const repoDir = join(dir, 'proj');
   await fs.mkdir(repoDir, { recursive: true });
   execSync('git init', { cwd: repoDir, stdio: 'ignore' });
+  // Every `git commit` otherwise ends by starting `git maintenance run --auto` detached, which
+  // can go on rewriting `.git/objects` after the commit has returned, while a test reads the repo
+  // (#588). Nothing here is about maintenance, so the fixture repo never runs it.
+  execSync('git config maintenance.auto false', { cwd: repoDir, stdio: 'ignore' });
 
   await fs.writeFile(join(repoDir, 'kept.txt'), 'v1\n');
   await fs.writeFile(join(repoDir, 'deleted.txt'), 'gone soon\n');
@@ -178,8 +182,12 @@ async function makeChunk(
   await fs.writeFile(join(chunkDir, 'CHUNK.md'), parts.join('\n'));
 }
 
-/** Whole-project content hash: every file's relative path + bytes, in sorted order. */
-async function hashProject(root: string): Promise<string> {
+/**
+ * Whole-project content snapshot: every file's path relative to `root`, mapped to the sha256 of
+ * its bytes. Compared with `toEqual`, a failing READ-ONLY check names each file that appeared,
+ * vanished or changed (#588), where a single whole-project hash only said that something did.
+ */
+async function snapshotProject(root: string): Promise<Record<string, string>> {
   const files: string[] = [];
   async function walk(current: string): Promise<void> {
     const entries = await fs.readdir(current, { withFileTypes: true });
@@ -191,12 +199,22 @@ async function hashProject(root: string): Promise<string> {
   }
   await walk(root);
   files.sort();
-  const hash = createHash('sha256');
+  const snapshot: Record<string, string> = {};
   for (const f of files) {
-    hash.update(f.slice(root.length));
-    hash.update(await fs.readFile(f));
+    snapshot[f.slice(root.length)] = createHash('sha256').update(await fs.readFile(f)).digest('hex');
   }
-  return hash.digest('hex');
+  return snapshot;
+}
+
+/** Writes two files whose blob ids start with `17`, the directory git samples for `gc --auto`. */
+async function plantTwoLooseObjectsUnder17(repoDir: string): Promise<void> {
+  const blobId = (content: string): string =>
+    createHash('sha1').update(`blob ${Buffer.byteLength(content)}\0${content}`).digest('hex');
+  let planted = 0;
+  for (let i = 0; planted < 2; i++) {
+    const content = `sample ${i}\n`;
+    if (blobId(content).startsWith('17')) await fs.writeFile(join(repoDir, `sampled-${planted++}.txt`), content);
+  }
 }
 
 describe('driftCheckCommand', () => {
@@ -337,17 +355,22 @@ describe('driftCheckCommand', () => {
     expect(process.exitCode).toBe(before);
   });
 
-  it('READ-ONLY: a whole-project byte-hash taken before and after a run is identical', async () => {
+  it('READ-ONLY: every file in the project has the same bytes before and after a run', async () => {
     const { repoDir, firstSha } = await twoCommitRepo();
     await makeChunk(repoDir, 'jab', { hash: firstSha, manifestRows: [{ files: 'kept.txt', status: 'NEW' }] });
+    // Git estimates the loose-object count from `objects/17/` alone, and with two objects there
+    // the auto-maintenance that `git commit` starts in the background repacks the whole object
+    // store after the commit has returned (#588). Object ids are effectively random, so this
+    // happened to an ordinary fixture about once in a few hundred runs; here it always does.
+    await plantTwoLooseObjectsUnder17(repoDir);
     execSync('git add -A', { cwd: repoDir, stdio: 'ignore' });
     execSync('git -c user.email=t@t -c user.name=t commit -m chunk', { cwd: repoDir, stdio: 'ignore' });
 
-    const before = await hashProject(repoDir);
+    const before = await snapshotProject(repoDir);
     await driftCheckCommand({ project: repoDir });
-    const after = await hashProject(repoDir);
+    const after = await snapshotProject(repoDir);
 
-    expect(after).toBe(before);
+    expect(after).toEqual(before);
   });
 
   it('throws a one-line actionable error when there is no chunks/ directory', async () => {
