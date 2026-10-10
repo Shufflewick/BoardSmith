@@ -1,129 +1,14 @@
 /**
  * `boardsmith catalogue` validates each catalogue game against the BoardSmith tree it is given (#591).
- *
- * Every fixture here is a temp tree: a fake BoardSmith checkout whose `bin/boardsmith.js` stands in
- * for `boardsmith validate`, and a fake catalogue of game repositories, each with an "installed"
- * `node_modules` whose `boardsmith` links to some other, wrong checkout, as the real shared
- * checkouts link to the root `~/BoardSmith`. The stub fails unless the game it is run in loads the
- * tree under check, so a run that reached the shared checkouts' engine shows up as a failure.
+ * The fixtures are in `catalogue-fixture.test-helper.ts`.
  */
-import { describe, it, expect } from 'vitest';
-import { existsSync, mkdirSync, readdirSync, realpathSync, symlinkSync } from 'node:fs';
+import { describe, it, expect, vi } from 'vitest';
+import { mkdirSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { commitAll, git, initRepo, writeFiles } from './verify-result.test-helper.js';
 import { CATALOGUE_CLONE_COMMAND, catalogueCachePath, checkCatalogue } from './catalogue-check.js';
-
-/**
- * The stand-in for `boardsmith validate`. It passes only when, in the folder it runs in:
- * `node_modules/boardsmith` and `node_modules/.bin/boardsmith` are this tree, `node_modules/.bin/tool`
- * is still reachable, every catalogue dependency named in `deps.txt` is a committed copy that loads
- * this tree too, and there is no `BROKEN` file.
- */
-const STUB_VALIDATE = `
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-const tree = realpathSync(join(dirname(fileURLToPath(import.meta.url)), '..'));
-const fail = (why) => { console.error(why); process.exit(1); };
-if (process.argv[2] !== 'validate') fail('expected validate, got ' + process.argv.slice(2).join(' '));
-const loads = (dir) => realpathSync(join(dir, 'node_modules', 'boardsmith'));
-if (loads('.') !== tree) fail('the game loads boardsmith from ' + loads('.'));
-if (realpathSync('node_modules/.bin/boardsmith') !== join(tree, 'bin', 'boardsmith.js')) fail('.bin/boardsmith is not this tree');
-if (!existsSync('node_modules/.bin/tool')) fail('.bin/tool is missing');
-const deps = existsSync('deps.txt') ? readFileSync('deps.txt', 'utf-8').split('\\n').filter(Boolean) : [];
-for (const dep of deps) {
-  const dir = join('node_modules', dep);
-  if (existsSync(join(dir, 'WORKING_TREE_ONLY'))) fail(dep + ' is its working tree, not its main');
-  if (loads(dir) !== tree) fail(dep + ' loads boardsmith from ' + loads(dir));
-}
-if (existsSync('BROKEN')) fail('BROKEN: ' + readFileSync('BROKEN', 'utf-8'));
-console.log('valid');
-`;
-
-interface Fixture {
-  tree: string;
-  /** The checkout the shared games' installs link to, standing in for the root `~/BoardSmith`. */
-  elsewhere: string;
-  catalogue: string;
-}
-
-/** A BoardSmith tree to check, a different BoardSmith the installs point at, and an empty catalogue. */
-function fixture(): Fixture {
-  const made = tempTree('bs-catalogue-');
-  const root = realpathSync(made);
-  const tree = join(root, 'BoardSmith');
-  const elsewhere = join(root, 'RootBoardSmith');
-  const catalogue = join(root, 'BoardSmithGames');
-  for (const dir of [tree, elsewhere, catalogue]) mkdirSync(dir, { recursive: true });
-  return { tree, elsewhere, catalogue };
-}
-
-async function makeTree(dir: string): Promise<void> {
-  await writeFiles(dir, {
-    'package.json': JSON.stringify({ name: 'boardsmith', version: '0.0.1', type: 'module' }),
-    'bin/boardsmith.js': STUB_VALIDATE,
-    '.gitignore': 'node_modules/\n',
-  });
-  initRepo(dir);
-  commitAll(dir, 'tree');
-}
-
-interface GameSpec {
-  /** The boardsmith dependency main's package.json declares. */
-  boardsmith?: string;
-  /** Files committed on main besides package.json. */
-  files?: Record<string, string>;
-  /** Catalogue games this one's install links to, as `file:../<slug>` dependencies. */
-  links?: string[];
-  /** Whether the shared checkout has an install at all. */
-  installed?: boolean;
-}
-
-/** A game repository on `main`, with an install whose `boardsmith` links to `fx.elsewhere`. */
-async function makeGame(fx: Fixture, slug: string, spec: GameSpec = {}): Promise<string> {
-  const dir = join(fx.catalogue, slug);
-  const deps: Record<string, string> = { boardsmith: spec.boardsmith ?? 'file:../../BoardSmith' };
-  for (const link of spec.links ?? []) deps[link] = `file:../${link}`;
-  await writeFiles(dir, {
-    'package.json': JSON.stringify({ name: slug, type: 'module', dependencies: deps }),
-    '.gitignore': 'node_modules/\n.boardsmith/\n',
-    ...(spec.links ? { 'deps.txt': spec.links.join('\n') } : {}),
-    ...spec.files,
-  });
-  if (spec.installed !== false) {
-    const modules = join(dir, 'node_modules');
-    await writeFiles(modules, {
-      '.package-lock.json': JSON.stringify({ name: slug, packages: {} }),
-      'tool/package.json': JSON.stringify({ name: 'tool', bin: 'run.js' }),
-      'tool/run.js': '',
-      '.vite/deps/cache.json': '{}',
-    });
-    symlinkSync(fx.elsewhere, join(modules, 'boardsmith'));
-    mkdirSync(join(modules, '.bin'));
-    symlinkSync('../boardsmith/bin/boardsmith.js', join(modules, '.bin', 'boardsmith'));
-    symlinkSync('../tool/run.js', join(modules, '.bin', 'tool'));
-    for (const link of spec.links ?? []) symlinkSync(`../../${link}`, join(modules, link));
-  }
-  initRepo(dir);
-  commitAll(dir, `${slug} main`);
-  return dir;
-}
-
-/** What a shared checkout looks like to someone using it: status, worktrees and its install. */
-function checkoutState(dir: string): string {
-  const modules = join(dir, 'node_modules');
-  return JSON.stringify([
-    git(dir, 'status', '--porcelain', '--ignored'),
-    git(dir, 'worktree', 'list', '--porcelain'),
-    git(dir, 'rev-parse', 'HEAD'),
-    existsSync(modules) ? readdirSync(modules).sort() : [],
-  ]);
-}
-
-function statusOf(run: Awaited<ReturnType<typeof checkCatalogue>>): Record<string, string> {
-  return Object.fromEntries(run.results.map((r) => [r.slug, r.status]));
-}
+import { checkoutState, fixture, makeGame, makeTree, runningIn, statusOf, workFolders } from './catalogue-fixture.test-helper.js';
 
 describe('which games are checked (#591)', () => {
   it('checks the games whose main links boardsmith to a checkout, and names the ones it does not', async () => {
@@ -186,11 +71,13 @@ describe('what each game is checked against (#591)', () => {
     // Uncommitted work in the shared checkout is not main, so it is not what is checked.
     await writeFiles(hex, { BROKEN: 'only in the working tree' });
     const before = checkoutState(hex);
+    const treeBefore = checkoutState(fx.tree);
 
     const run = await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue });
 
     expect(run.results).toEqual([expect.objectContaining({ slug: 'hex', status: 'passed' })]);
     expect(checkoutState(hex)).toBe(before);
+    expect(checkoutState(fx.tree)).toBe(treeBefore);
   });
 
   it("reports a game that fails, with the validator's own output", async () => {
@@ -313,5 +200,67 @@ describe('the cache of passing games (#591)', () => {
 
     expect(statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }))).toEqual({ cribbage: 'failed' });
     expect(statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }))).toEqual({ cribbage: 'failed' });
+  });
+});
+
+describe('games left out on purpose (#591)', () => {
+  it('does not run a skipped game, and lists it under not checked with its reason', async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    await makeGame(fx, 'hex');
+    await makeGame(fx, 'WindupWarfare', { files: { HANG: 'never finishes' } });
+
+    const run = await checkCatalogue({
+      tree: fx.tree,
+      catalogueRoot: fx.catalogue,
+      skip: { WindupWarfare: 'validate does not finish (Shufflewick/WindupWarfare#100)' },
+    });
+
+    expect(statusOf(run)).toEqual({ hex: 'passed' });
+    expect(run.notChecked).toEqual([{ slug: 'WindupWarfare', reason: 'skipped: validate does not finish (Shufflewick/WindupWarfare#100)' }]);
+    expect(runningIn(fx)).toEqual([]);
+  });
+
+  it('refuses a skip that names no game the catalogue checks, so a stale skip cannot linger', async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    await makeGame(fx, 'hex');
+
+    await expect(
+      checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue, skip: { gone: 'was slow' } }),
+    ).rejects.toThrow(/--skip names gone, which is not a game this catalogue checks/);
+  });
+});
+
+describe('the time limit on one game (#591)', () => {
+  it('stops a validate that runs past the limit, child processes included, and fails the game by name', async () => {
+    const fx = fixture();
+    const workRoot = tempTree('bs-catalogue-work-');
+    await makeTree(fx.tree);
+    await makeGame(fx, 'WindupWarfare', { files: { HANG: 'never finishes' } });
+
+    const run = await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue, timeLimitMs: 2_000, workRoot });
+
+    expect(statusOf(run)).toEqual({ WindupWarfare: 'failed' });
+    expect(run.results[0].output).toContain('WindupWarfare did not finish boardsmith validate within 2 seconds, so it was stopped');
+    await vi.waitFor(() => expect(runningIn(fx)).toEqual([]), { timeout: 30_000 });
+    expect(workFolders(workRoot)).toEqual([]);
+  });
+});
+
+describe('the work folder (#591)', () => {
+  it.each([
+    ['a pass', {}],
+    ['a failed game', { files: { BROKEN: 'broken' } }],
+    ['a game that could not be exported and linked', { installed: false }],
+  ])('is removed after %s', async (_, spec) => {
+    const fx = fixture();
+    const workRoot = tempTree('bs-catalogue-work-');
+    await makeTree(fx.tree);
+    await makeGame(fx, 'hex', spec);
+
+    await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue, workRoot });
+
+    expect(workFolders(workRoot)).toEqual([]);
   });
 });

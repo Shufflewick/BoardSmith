@@ -284,6 +284,8 @@ export function createProgram(): Command {
     .command('catalogue')
     .description("Validate each catalogue game's main against this BoardSmith checkout (a step of verify)")
     .option('--catalogue <folder>', 'The folder holding the game checkouts (default: ~/BoardSmithGames)')
+    .option('--skip <game=reason...>', 'Leave a game out, with the reason (an issue) the report lists')
+    .option('--time-limit <minutes>', "Stop and fail a game whose validate runs longer than this (default: 5)")
     .action(catalogueCommand);
 
   // Headless simulation

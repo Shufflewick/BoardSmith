@@ -24,12 +24,17 @@
  *   candidate in the root checkout while that checkout's HEAD is detached at the candidate, and a
  *   worktree's verify checks the worktree.
  *
+ * A game that validates for longer than the time limit (`DEFAULT_GAME_TIME_LIMIT_MS`) is stopped,
+ * with every process it started, and fails by name; a stop signal ends them the same way. A game
+ * that cannot pass for a known reason is left out only by an explicit `skip` naming that reason,
+ * which the report lists.
+ *
  * A pass is cached (`catalogueCachePath`) under the game's `main` commit and install record, those
  * of each catalogue game it links to, and the tree's content and install record. The tree is named
  * by its git TREE, not its commit, so a thread merge of a branch whose tree it just verified finds
  * every game already passed. A failure is never cached.
  */
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdtempSync, promises as fs, realpathSync } from 'node:fs';
 import { cpus, homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -83,7 +88,22 @@ export interface CatalogueOptions {
   catalogueRoot: string;
   /** How many games validate at once. */
   concurrency?: number;
+  /**
+   * Games not to run, each with the reason, which the report lists. Each must name a game the
+   * catalogue would check, so a skip cannot outlive the game it was for.
+   */
+  skip?: Record<string, string>;
+  /** How long one game's validate may run before it is stopped and the game fails. */
+  timeLimitMs?: number;
+  /** Where the run's temporary work folder is made: the OS temp folder unless a test says otherwise. */
+  workRoot?: string;
 }
+
+/**
+ * The default for `timeLimitMs`. A game validates in 10 to 40 seconds on a busy machine, so only a
+ * validate that will never finish reaches it.
+ */
+export const DEFAULT_GAME_TIME_LIMIT_MS = 5 * 60_000;
 
 /** A catalogue run cannot answer at all; the message says what to do. */
 function catalogueMissing(root: string, problem: string): Error {
@@ -253,26 +273,65 @@ async function savePasses(path: string, passed: string[]): Promise<void> {
   await fs.rename(partial, path);
 }
 
-/** Runs `command` in `cwd`, resolving with its exit code and everything it printed. */
-function run(command: string, args: string[], cwd: string): Promise<{ code: number; output: string }> {
-  return new Promise((resolve) => {
-    const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
-    let output = '';
-    child.stdout.on('data', (chunk) => (output += chunk));
-    child.stderr.on('data', (chunk) => (output += chunk));
-    child.on('error', (error) => resolve({ code: 1, output: `${output}${error.message}\n` }));
-    child.on('close', (code) => resolve({ code: code ?? 1, output }));
-  });
+/**
+ * The processes this run started, so a time limit or a stop signal can end them. Each is started in
+ * its own process group and ended with the whole group, so what it started in turn (vue-tsc, a
+ * bundler) ends with it.
+ */
+class Children {
+  private readonly live = new Set<ChildProcess>();
+
+  /**
+   * Runs `command` in `cwd`, resolving with its exit code, everything it printed, and whether
+   * `timeLimitMs` ran out first and it was stopped.
+   */
+  run(command: string, args: string[], cwd: string, timeLimitMs = Infinity): Promise<{ code: number; output: string; timedOut: boolean }> {
+    return new Promise((resolve) => {
+      const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+      this.live.add(child);
+      let output = '';
+      let timedOut = false;
+      const timer = Number.isFinite(timeLimitMs)
+        ? setTimeout(() => {
+            timedOut = true;
+            this.end(child);
+          }, timeLimitMs)
+        : undefined;
+      const settle = (code: number, extra = '') => {
+        clearTimeout(timer);
+        this.live.delete(child);
+        resolve({ code, output: `${output}${extra}`, timedOut });
+      };
+      child.stdout.on('data', (chunk) => (output += chunk));
+      child.stderr.on('data', (chunk) => (output += chunk));
+      child.on('error', (error) => settle(1, `${error.message}\n`));
+      child.on('close', (code) => settle(code ?? 1));
+    });
+  }
+
+  /** Ends every process still running, and everything each started. */
+  endAll(): void {
+    for (const child of this.live) this.end(child);
+  }
+
+  private end(child: ChildProcess): void {
+    if (child.pid === undefined) return;
+    try {
+      process.kill(-child.pid, 'SIGKILL');
+    } catch {
+      // The group has already exited.
+    }
+  }
 }
 
 /**
  * Writes the files of `repo` at its `main` commit into the empty folder `dest`, by way of a tar
  * file beside it: git writes the archive itself, so its bytes never pass through a string.
  */
-async function exportMain(repo: CatalogueRepo, dest: string): Promise<void> {
+async function exportMain(repo: CatalogueRepo, dest: string, children: Children): Promise<void> {
   const archive = `${dest}.tar`;
   await git(repo.dir, ['archive', '--format=tar', '-o', archive, repo.commit]);
-  const untar = await run('tar', ['-x', '-f', archive, '-C', dest], dest);
+  const untar = await children.run('tar', ['-x', '-f', archive, '-C', dest], dest);
   await fs.rm(archive);
   if (untar.code !== 0) throw new Error(`could not unpack ${repo.slug} at ${repo.commit}: ${untar.output.trim()}`);
 }
@@ -319,10 +378,86 @@ async function pooled<T, R>(items: T[], limit: number, work: (item: T) => Promis
 
 const named = ({ slug, dir, commit }: CatalogueRepo) => ({ slug, dir, commit });
 
+/** `games` less those `skip` names, which join `notChecked` with their reasons. */
+function applySkips(
+  games: CatalogueRepo[],
+  notChecked: CatalogueRun['notChecked'],
+  skip: Record<string, string>,
+): { games: CatalogueRepo[]; notChecked: CatalogueRun['notChecked'] } {
+  for (const slug of Object.keys(skip)) {
+    if (!games.some((g) => g.slug === slug)) {
+      throw new Error(
+        `--skip names ${slug}, which is not a game this catalogue checks (${games.map((g) => g.slug).join(', ')}). `
+          + 'Remove that skip from the command, or from .agent-policy.json if it is there.',
+      );
+    }
+  }
+  return {
+    games: games.filter((g) => skip[g.slug] === undefined),
+    notChecked: [...notChecked, ...Object.entries(skip).map(([slug, reason]) => ({ slug, reason: `skipped: ${reason}` }))],
+  };
+}
+
+/** How a time limit reads in a report: whole seconds under two minutes, whole minutes from there. */
+function describeLimit(ms: number): string {
+  return ms < 120_000 ? `${Math.round(ms / 1000)} seconds` : `${Math.round(ms / 60_000)} minutes`;
+}
+
+/**
+ * Validates each of `games` in an export of its main, in a work folder that is removed when the run
+ * ends, and ends every process the run started if a signal stops it first.
+ */
+async function runGames(
+  games: CatalogueRepo[],
+  tree: string,
+  linksOf: (r: CatalogueRepo) => Promise<Map<string, CatalogueRepo>>,
+  options: CatalogueOptions,
+): Promise<Map<string, CatalogueGameResult>> {
+  const ran = new Map<string, CatalogueGameResult>();
+  const children = new Children();
+  const timeLimitMs = options.timeLimitMs ?? DEFAULT_GAME_TIME_LIMIT_MS;
+  const work = realpathSync(mkdtempSync(join(options.workRoot ?? tmpdir(), 'boardsmith-catalogue-')));
+  await withDirRemovedAfter(work, async () => {
+    // Each repository is exported once, whether it is checked, linked to, or both.
+    const exports = new Map<string, Promise<string>>();
+    const exported = (r: CatalogueRepo): Promise<string> => {
+      if (!exports.has(r.slug)) {
+        exports.set(r.slug, (async () => {
+          const dest = join(work, r.slug);
+          await fs.mkdir(dest);
+          await exportMain(r, dest, children);
+          await linkInstall(r, dest, tree, await linksOf(r));
+          return dest;
+        })());
+      }
+      return exports.get(r.slug) as Promise<string>;
+    };
+    const concurrency = options.concurrency ?? Math.max(1, Math.min(4, Math.floor(cpus().length / 2)));
+    await pooled(games, concurrency, async (game) => {
+      let dir: string;
+      try {
+        [dir] = await Promise.all((await linkClosure(game, linksOf)).map(exported));
+      } catch (error) {
+        ran.set(game.slug, { ...named(game), status: 'failed', output: error instanceof Error ? error.message : String(error) });
+        return;
+      }
+      const validate = await children.run(process.execPath, [join(tree, 'bin', 'boardsmith.js'), 'validate'], dir, timeLimitMs);
+      const output = validate.timedOut
+        ? `${validate.output}\n${game.slug} did not finish boardsmith validate within ${describeLimit(timeLimitMs)}, so it was stopped. `
+          + 'A game validates in well under a minute; find what never ends, or skip the game with --skip and an issue.\n'
+        : validate.output;
+      ran.set(game.slug, validate.code === 0 && !validate.timedOut ? { ...named(game), status: 'passed' } : { ...named(game), status: 'failed', output });
+    });
+  }, () => children.endAll());
+  return ran;
+}
+
 /** Each catalogue game validated against `tree`, from the cache where these inputs passed before. */
 export async function checkCatalogue(options: CatalogueOptions): Promise<CatalogueRun> {
   const tree = await requireBoardsmithTree(options.tree);
-  const { repos, games, notChecked } = await readCatalogue(options.catalogueRoot);
+  const catalogue = await readCatalogue(options.catalogueRoot);
+  const { repos } = catalogue;
+  const { games, notChecked } = applySkips(catalogue.games, catalogue.notChecked, options.skip ?? {});
   const byDir = new Map(repos.map((r) => [r.dir, r]));
   const linkCache = new Map<string, Promise<Map<string, CatalogueRepo>>>();
   const linksOf = (r: CatalogueRepo) => {
@@ -340,39 +475,7 @@ export async function checkCatalogue(options: CatalogueOptions): Promise<Catalog
   const keys = await Promise.all(games.map(keyOf));
   const toRun = games.filter((_, i) => !stored.has(keys[i]));
 
-  const ran = new Map<string, CatalogueGameResult>();
-  if (toRun.length > 0) {
-    await withDirRemovedAfter(realpathSync(mkdtempSync(join(tmpdir(), 'boardsmith-catalogue-'))), async (work) => {
-      // Each repository is exported once, whether it is checked, linked to, or both.
-      const exports = new Map<string, Promise<string>>();
-      const exported = (r: CatalogueRepo): Promise<string> => {
-        if (!exports.has(r.slug)) {
-          exports.set(r.slug, (async () => {
-            const dest = join(work, r.slug);
-            await fs.mkdir(dest);
-            await exportMain(r, dest);
-            await linkInstall(r, dest, tree, await linksOf(r));
-            return dest;
-          })());
-        }
-        return exports.get(r.slug) as Promise<string>;
-      };
-      const concurrency = options.concurrency ?? Math.max(1, Math.min(4, Math.floor(cpus().length / 2)));
-      await pooled(toRun, concurrency, async (game) => {
-        let dir: string;
-        try {
-          const closure = await linkClosure(game, linksOf);
-          [dir] = await Promise.all(closure.map(exported));
-        } catch (error) {
-          ran.set(game.slug, { ...named(game), status: 'failed', output: error instanceof Error ? error.message : String(error) });
-          return;
-        }
-        const validate = await run(process.execPath, [join(tree, 'bin', 'boardsmith.js'), 'validate'], dir);
-        ran.set(game.slug, validate.code === 0 ? { ...named(game), status: 'passed' } : { ...named(game), status: 'failed', output: validate.output });
-      });
-    });
-  }
-
+  const ran = toRun.length === 0 ? new Map<string, CatalogueGameResult>() : await runGames(toRun, tree, linksOf, options);
   const results = games.map((game): CatalogueGameResult => ran.get(game.slug) ?? { ...named(game), status: 'cached' });
   // A cached pass is saved again too, so the passes in use stay at the front of the file.
   await savePasses(cachePath, keys.filter((_, i) => results[i].status !== 'failed'));

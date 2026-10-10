@@ -8,7 +8,7 @@
  */
 import chalk from 'chalk';
 import { gitOutput as git } from '../lib/git-output.js';
-import { DEFAULT_CATALOGUE_ROOT, checkCatalogue, type CatalogueRun } from '../lib/catalogue-check.js';
+import { DEFAULT_CATALOGUE_ROOT, DEFAULT_GAME_TIME_LIMIT_MS, checkCatalogue, type CatalogueRun } from '../lib/catalogue-check.js';
 
 /** What the command prints for `run`, and whether it passes. */
 export function catalogueReport(run: CatalogueRun): { ok: boolean; text: string } {
@@ -31,10 +31,36 @@ export function catalogueReport(run: CatalogueRun): { ok: boolean; text: string 
   return { ok: failures.length === 0, text: lines.join('\n') };
 }
 
-export async function catalogueCommand(options: { catalogue?: string }): Promise<void> {
+/** `--skip` entries, each `<game>=<reason>`, by game. A skip with no reason is refused. */
+export function parseSkips(entries: string[]): Record<string, string> {
+  const skips: Record<string, string> = {};
+  for (const entry of entries) {
+    const at = entry.indexOf('=');
+    const slug = at === -1 ? entry : entry.slice(0, at);
+    const reason = at === -1 ? '' : entry.slice(at + 1).trim();
+    if (reason === '') throw new Error(`--skip ${slug} has no reason. Write it as --skip "${slug}=<why, with the issue that tracks it>".`);
+    skips[slug] = reason;
+  }
+  return skips;
+}
+
+/** `--time-limit` in minutes, as milliseconds. */
+function parseTimeLimit(minutes: string | undefined): number {
+  if (minutes === undefined) return DEFAULT_GAME_TIME_LIMIT_MS;
+  const value = Number(minutes);
+  if (!(value > 0)) throw new Error(`--time-limit ${minutes} is not a number of minutes above zero.`);
+  return value * 60_000;
+}
+
+export async function catalogueCommand(options: { catalogue?: string; skip?: string[]; timeLimit?: string }): Promise<void> {
   try {
     const tree = (await git(process.cwd(), ['rev-parse', '--show-toplevel'])).trim();
-    const run = await checkCatalogue({ tree, catalogueRoot: options.catalogue ?? DEFAULT_CATALOGUE_ROOT });
+    const run = await checkCatalogue({
+      tree,
+      catalogueRoot: options.catalogue ?? DEFAULT_CATALOGUE_ROOT,
+      skip: parseSkips(options.skip ?? []),
+      timeLimitMs: parseTimeLimit(options.timeLimit),
+    });
     const report = catalogueReport(run);
     console.log(report.text);
     if (report.ok) console.log(chalk.green(`\nEvery catalogue game validates against this tree.`));
