@@ -25,10 +25,11 @@
  *    renderer re-enters the eager graph and the split silently stops working.
  *
  * 2. Importing this module REGISTERS the die renderer for the zoom-preview
- *    overlay. GameShell renders that overlay for every game, and it used to
- *    import Die3D itself — a live reference in every game's graph, which is why
- *    all 14 example games shipped the three.js chunk when only 2 have dice. The
- *    overlay looks the renderer up now, and only a game that imported this
+ *    overlay and the auto-UI's DieRenderer. GameShell reaches both for every
+ *    game, and they used to import Die3D themselves — a live reference in every
+ *    game's graph, which is why all 14 example games shipped the three.js chunk
+ *    when only 2 have dice, and why a game without three failed to type-check
+ *    (#590). Both look the renderer up now, and only a game that imported this
  *    module has one.
  *
  * The registration is a side effect on purpose. A game that draws dice already

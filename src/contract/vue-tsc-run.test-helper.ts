@@ -2,7 +2,8 @@
  * ONE WAY TO ASK `vue-tsc` WHAT IT FOUND, for the contract gates that ask.
  *
  * `dev-host-typecheck.test.ts` compiles the development host,
- * `dice-typecheck.test.ts` the dice entry point, `testing-typecheck.test.ts`
+ * `dice-typecheck.test.ts` the dice entry point, `ui-without-dice-typecheck.test.ts`
+ * a dice-free auto-UI game without three, `testing-typecheck.test.ts`
  * a game test importing `boardsmith/testing`, `aspect-boards-typecheck.test.ts`
  * the boards the aspect templates teach and `workers-typecheck.test.ts` the
  * platform-reachable engine under Workers globals, each in a sandbox. They differ in
