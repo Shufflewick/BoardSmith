@@ -538,7 +538,8 @@ export function createGameFlow(): FlowDefinition {
   return {
     root: loop({
       name: 'game-loop',
-      // A cap on rounds; the game ends sooner, when MyGame.isFinished() is true.
+      // A safety tripwire: the loop throws at 100 rounds. The game ends first,
+      // when MyGame.isFinished() is true.
       maxIterations: 100,
       do: eachPlayer({
         name: 'player-turns',

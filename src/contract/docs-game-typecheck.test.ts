@@ -18,23 +18,17 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { TestGame } from '../testing/index.js';
-import type { Game, GameOptions } from '../engine/index.js';
+import type { Game, GameOptions, Player } from '../engine/index.js';
 import { consumerInstall, declaredPeers } from './consumer-install.test-helper.js';
-import { gameTsConfig, markedDocBlocks } from './doc-typecheck-blocks.test-helper.js';
+import { gameBlockFiles, gameTsConfig, markedDocBlocks } from './doc-typecheck-blocks.test-helper.js';
 import { expectCleanCompile } from './vue-tsc-run.test-helper.js';
 
 const blocks = markedDocBlocks('game');
 const root = consumerInstall({ entryPoints: [], alsoInstalled: declaredPeers() });
-for (const block of blocks) {
-  if (!block.path) {
-    throw new Error(
-      `docs/${block.doc}.md marks a block "<!-- typecheck: game -->" without a path. Name the file the block ` +
-        'is, e.g. "<!-- typecheck: game src/rules/actions.ts -->", so the blocks it imports resolve.',
-    );
-  }
-  const file = join(root, 'docs', block.doc, block.path);
+for (const [path, code] of gameBlockFiles(blocks)) {
+  const file = join(root, path);
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, block.code);
+  writeFileSync(file, code);
 }
 writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig(['docs/**/*.ts']));
 
@@ -56,16 +50,32 @@ describe('the game code the docs teach (#511)', () => {
     );
   }, 180_000);
 
-  it('builds the getting-started game and plays a turn of it', async () => {
+  it('plays the getting-started game to the end it declares, before the loop\'s tripwire', async () => {
     // Dynamic import: the module is the doc's block, which this file wrote into the sandbox above.
     const { MyGame } = (await import(join(root, 'docs/getting-started/src/rules/game.ts'))) as {
-      MyGame: new (options: GameOptions) => Game;
+      MyGame: new (options: GameOptions) => Game & { deck: { count(): number } };
     };
     const game = TestGame.create(MyGame, { playerCount: 2, seed: 'getting-started' });
 
-    game.action('draw', 1).execute();
-    const [card] = game.action('play', 1).getChoices('card');
-    game.action('play', 1).select('card', card).execute();
-    expect(game.getCurrentPlayer()?.seat).toBe(2);
+    // 52 cards, 5 dealt to each of 2 players: 42 draws empty the deck, 21 rounds of the 100 allowed.
+    let draws = 0;
+    while (!game.isComplete()) {
+      const seat = game.getCurrentPlayer()!.seat;
+      game.action('draw', seat).execute();
+      draws += 1;
+      if (game.isComplete()) break;
+      const [card] = game.action('play', seat).getChoices('card');
+      game.action('play', seat).select('card', card).execute();
+    }
+
+    expect(draws).toBe(42);
+    expect(game.game.isFinished()).toBe(true);
+    expect(game.game.deck.count()).toBe(0);
+    const players = game.getPlayers() as Array<Player & { score: number }>;
+    const best = Math.max(...players.map((player) => player.score));
+    expect(best).toBeGreaterThan(0);
+    expect(game.getWinners().map((player) => player.seat)).toEqual(
+      players.filter((player) => player.score === best).map((player) => player.seat),
+    );
   });
 });
