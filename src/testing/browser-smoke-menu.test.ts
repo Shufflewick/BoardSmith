@@ -60,6 +60,7 @@ describe('chooseFromMenu', () => {
 
     await chooseFromMenu(menu, landsBeforeItIsReported, 'choosing seat 4');
 
+    expect(state.presses).toEqual(['item']);
     expect(state.taken).toBe(true);
     expect(state.open).toBe(false);
   });
