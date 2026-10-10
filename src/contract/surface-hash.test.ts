@@ -47,10 +47,24 @@ export class Piece extends Base {
   static unserializableAttributes = ['a'];
   owner: string | null = null;
   constructor(public readonly seat: number) { super(); }
+  private secret = 0;
+  #hidden = 0;
   get label(): string { return 'p'; }
   move(): void {}
+  *[Symbol.iterator](): Iterator<number> { yield this.#hidden; }
 }
 export function helper(): number { return 1; }
+export async function settle(): Promise<number> { return 1; }
+export function* walk(): Generator<number> { yield 1; }
+export async function* stream(): AsyncGenerator<number> { yield 1; }
+export class Refused extends Error { code = 'x'; }
+export const Order = {
+  DEFAULT: 1,
+  skipIf(): boolean { return false; },
+  get current(): number { return 1; },
+};
+export enum Code { INVALID = 'INVALID', LATE = 'LATE' }
+export const LIST = [1, 2];
 `;
 
 async function moves(changed: string): Promise<boolean> {
@@ -74,9 +88,49 @@ describe('surfaceHash covers what a compiled rules.js can reach (#575)', () => {
       'method move',
       'method baseMethod',
       'get label',
+      'field secret',
+      'method [Symbol.iterator]',
     ]) {
       expect(line).toContain(member);
     }
+  });
+
+  it('records no #private member', async () => {
+    const [line] = await surfaceOf(BASE);
+    expect(line).not.toContain('#hidden');
+    expect(await moves(BASE.replaceAll('#hidden', '#concealed'))).toBe(false);
+  });
+
+  it('moves when a TypeScript private field is renamed', async () => {
+    expect(await moves(BASE.replace('private secret = 0;', 'private kept = 0;'))).toBe(true);
+  });
+
+  it('records no member of the language on an Error subclass or an async or generator function', async () => {
+    const [line] = await surfaceOf(BASE);
+    expect(line).toContain('Refused{field code}');
+    expect(line).toMatch(/,settle,/);
+    expect(line).toMatch(/,stream,/);
+    expect(line).toMatch(/,walk$/);
+  });
+
+  it('moves when a well-known symbol member is removed', async () => {
+    expect(await moves(BASE.replace('*[Symbol.iterator](): Iterator<number> { yield this.#hidden; }', ''))).toBe(true);
+  });
+
+  it('names the keys of a plain object export with their kinds, and of an enum', async () => {
+    const [line] = await surfaceOf(BASE);
+    expect(line).toContain('Order{field DEFAULT,field skipIf,get current}');
+    expect(line).toContain('Code{field INVALID,field LATE}');
+    expect(line).toMatch(/,LIST,/);
+  });
+
+  it('moves when a plain object export or an enum loses a key', async () => {
+    expect(await moves(BASE.replace('DEFAULT: 1,', ''))).toBe(true);
+    expect(await moves(BASE.replace(", LATE = 'LATE'", ''))).toBe(true);
+  });
+
+  it('does not move when a plain object value changes', async () => {
+    expect(await moves(BASE.replace('DEFAULT: 1,', 'DEFAULT: 2,'))).toBe(false);
   });
 
   it('moves when a static is removed', async () => {
@@ -147,7 +201,8 @@ class Internal { hidden = 1; }
   });
 
   it('does not move when a member moves up to an exported base class', async () => {
-    // What a game can call on Piece is unchanged.
+    // What a game can call on Piece is unchanged. The whole hash still moves,
+    // because Base's own line gains the member; this checks Piece's line only.
     const changed = BASE
       .replace('move(): void {}', '')
       .replace('baseMethod(): number { return 1; }', 'baseMethod(): number { return 1; }\n  move(): void {}');

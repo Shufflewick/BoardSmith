@@ -64,12 +64,15 @@ every test run:
   (supplied to game rules by the executor's `sandboxedRequire`), and
   `boardsmith/session-host`, `boardsmith/persistence` and `boardsmith/world`
   (imported directly by the games worker). For each export it records the name
-  and, for a class or function, every member a compiled `rules.js` can reach,
-  each with its kind: prototype methods and accessors, statics, and instance
-  fields, inherited ones included (#575). Instance fields exist only once a
-  class is constructed, so they are read from the entrypoint's TypeScript
-  source. Catches added, removed and renamed API, and a member that changed
-  kind (a method turned into a getter, a field moved onto the class).
+  and, each with its kind: for a class or function, its prototype methods and
+  accessors, statics, instance fields and symbol-keyed members such as
+  `[Symbol.iterator]`, inherited ones included; for a plain object or an enum,
+  its own keys (`TurnOrder.DEFAULT`, `ErrorCode.NOT_YOUR_TURN`) (#575).
+  Instance fields exist only once a class is constructed, so they are read
+  from the entrypoint's TypeScript source. Catches added, removed and renamed
+  API, and a member that changed kind (a method turned into a getter, a field
+  moved onto the class). What it does not see is listed under "The known
+  limit" below.
 
   ShufflewickPub routes a persistent world only to a runner declaring the same
   `surfaceHash` as the revision its bundle was built on (ShufflewickPub #599),
@@ -140,15 +143,25 @@ platform-visible engine change without either recording it or deleting a test.
 
 `surfaceHash` sees member **names and kinds** only, never types, values or
 signatures. That is a choice, not an oversight: types are erased from
-`rules.js`, so no compiled bundle can depend on one at runtime, and a type change
-a running game can feel arrives as a changed payload, which `payloadHash`
-covers. Hashing types would mint a new surface for every type refinement, and on
-the platform each new surface keeps an older world runner alive for every world
-built before it. So changing an exported **type** (adding an optional field to
-`PlayerStateView`, say) or a method's parameters moves neither hash unless it
-also changes a real payload. Those changes still need a judgement call. If you
-make one, extend the fixture so the change becomes visible, then update the
-contract.
+`rules.js`, so no compiled bundle can depend on one at runtime. Hashing types
+would mint a new surface for every type refinement, and on the platform each new
+surface keeps an older world runner alive for every world built before it.
+
+The cost is that a type change a running game can feel is caught only when it
+also changes a payload. Some do, and `payloadHash` sees them. **Input shapes
+carried only by types do not:** renaming an option key in
+`actionStep({ actions })` or in a `TurnOrderConfig`, or adding a parameter to a
+method, changes what a game must pass and moves neither hash. Changing an
+exported **type** (adding an optional field to `PlayerStateView`, say) is the
+same. Those changes are a judgement call. If you make one, extend the fixture
+so the change becomes visible and update the contract; if no fixture can show
+it, record it with `--adopt`.
+
+The surface also opens values only one level deep: a class's or function's
+members and a plain object's or enum's own keys. Any other exported value (an
+array, a class instance, a `Map`) is its name only, a plain object's nested keys
+are not described, and ECMAScript `#private` members are left out because
+nothing outside the class can reach them.
 
 This limit is stated rather than hidden because a fingerprint people
 over-trust is worse than one they understand.
