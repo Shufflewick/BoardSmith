@@ -55,6 +55,8 @@ interface PickCase {
 }
 
 const labelled = [{ value: 'skip', label: 'Skip' }, { value: 'go', label: 'Go' }];
+/** 'stop' is one choice's value and another's label: the value wins. */
+const shadowed = [{ value: 'go', label: 'stop' }, { value: 'stop', label: 'Halt' }];
 const dependent = (ctx: ActionContext) =>
   ctx.args.a === 'p' ? [{ value: 1, label: 'One' }] : [{ value: 2, label: 'Two' }];
 
@@ -79,6 +81,12 @@ const choiceCases = (repeat: boolean): PickCase[] => [
     build: (_game, log) => chooseFromCase(log, { choices: labelled, ...(repeat && once) }),
     picks: () => [['pick', 'Skip']],
     means: () => 'skip',
+  },
+  {
+    name: "a value submitted exactly, though it is also another choice's label",
+    build: (_game, log) => chooseFromCase(log, { choices: shadowed, ...(repeat && once) }),
+    picks: () => [['pick', 'stop']],
+    means: () => 'stop',
   },
   {
     name: 'a string choice submitted by display text in another case',
@@ -203,6 +211,22 @@ describe('every entry point resolves a pick the same way (#507)', () => {
     });
   }
 
+  it('a chooseElements submitted as a single { id } hands execute the element', () => {
+    const game = new Yard();
+    const handed: unknown[] = [];
+    game.registerAction(
+      Action.create('take')
+        .chooseElements('pick', { elements: () => game.rocks.all(Stone) })
+        .execute((args) => { handed.push(args.pick); }),
+    );
+    const slate = game.stone('slate');
+
+    const result = game.performAction('take', game.getPlayer(1)!, { pick: { id: slate.id } });
+
+    expect(result.error).toBeUndefined();
+    expect(handed).toEqual([slate]);
+  });
+
   it('the step path stores the value a multiSelect named, not the labels sent, for the picks after it', () => {
     const game = new Yard();
     const log: Log = { onSelect: [], execute: [] };
@@ -253,6 +277,32 @@ describe('a repeating pick is checked by the same rule as any other pick (#507)'
 
     expect(plainError).toMatch(/^Selection disabled: Tutorial step requires a specific piece/);
     expect(repeatingError).toBe(`Pick 1 of "piece": ${plainError}`);
+  });
+
+  it('a refused gated repeating pick still hands back the next choices, with the enabled one selectable', () => {
+    const { action, executor, player } = gatedGame(true);
+    const pending = executor.createPendingActionState('place', 1);
+
+    const step = executor.processRepeatingStep(action, player, pending, 'b');
+
+    expect(step.error).toMatch(/^Selection disabled:/);
+    expect(step.nextChoices?.map((c) => c.value)).toEqual(['a', 'b', 'c']);
+    expect(step.nextChoices?.filter((c) => !c.disabled).map((c) => c.value)).toEqual(['a']);
+  });
+
+  it('a repeating pick sent by label that names a gated value is refused with the gate reason', () => {
+    const game = new Yard();
+    const action = Action.create('place')
+      .chooseFrom('piece', { choices: [{ value: 'a', label: 'Alpha' }, { value: 'b', label: 'Beta' }], ...once })
+      .execute(() => {});
+    game.registerAction(action);
+    game.tutorialDefinition = gatedTutorial;
+    game.tutorialProgress.set(1, { stepId: 'first', status: 'running' });
+    const executor = game.getActionExecutor();
+
+    const step = executor.processRepeatingStep(action, game.getPlayer(1)!, executor.createPendingActionState('place', 1), 'Beta');
+
+    expect(step.error).toMatch(/^Selection disabled: Tutorial step requires a specific piece/);
   });
 
   it('repeatingPickCandidates does not list a value the tutorial step gates out', () => {
