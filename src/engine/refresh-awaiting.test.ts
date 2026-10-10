@@ -158,3 +158,84 @@ describe('game.refreshAwaitingActions() admits a seat that became eligible', () 
     expect(() => game.refreshAwaitingActions(99)).toThrow(/seat 99/);
   });
 });
+
+/**
+ * A step's `players` filter decides which seats are considered at all (#557).
+ * Refresh re-evaluates it to decide which ABSENT seats may be admitted, and
+ * never uses it to remove a seat already in the awaiting set: that seat was
+ * admitted under the filter, may already have acted, and dropping it would
+ * take a seat out of a step it is partway through.
+ */
+class FilteredGame extends Game<FilteredGame, Player> {
+  participants: number[] = [1];
+  acted: number[] = [];
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.registerActions(
+      Action.create<FilteredGame>('a')
+        .prompt('A')
+        .execute((_a, ctx) => {
+          (ctx.game as FilteredGame).acted.push(ctx.player.seat);
+        }),
+    );
+
+    this.setFlow({
+      root: simultaneousActionStep({
+        name: 'filtered',
+        actions: ['a'],
+        players: (ctx) => {
+          const game = ctx.game as FilteredGame;
+          return game.players.filter((p) => game.participants.includes(p.seat));
+        },
+        allDone: (ctx) => (ctx.game as FilteredGame).acted.length >= 5,
+      }),
+    });
+  }
+}
+
+function awaitingSeats(game: Game): number[] {
+  return (game.getFlowState()?.awaitingPlayers ?? []).map((p) => p.playerIndex).sort();
+}
+
+describe('game.refreshAwaitingActions() honours the step\'s players filter', () => {
+  function startedFiltered(): FilteredGame {
+    const game = new FilteredGame({ playerCount: 2, playerNames: ['A', 'B'], seed: 'filter' });
+    game.startFlow();
+    return game;
+  }
+
+  it('does not admit a seat the filter excludes', () => {
+    const game = startedFiltered();
+    expect(awaitingSeats(game)).toEqual([1]);
+
+    game.refreshAwaitingActions();
+    expect(awaitingSeats(game)).toEqual([1]);
+
+    game.refreshAwaitingActions(2);
+    expect(awaitingSeats(game)).toEqual([1]);
+  });
+
+  it('admits a seat once the filter includes it', () => {
+    const game = startedFiltered();
+    game.participants = [1, 2];
+
+    game.refreshAwaitingActions();
+    expect(awaitingSeats(game)).toEqual([1, 2]);
+  });
+
+  it('keeps a seat that already acted when the filter later excludes it', () => {
+    const game = startedFiltered();
+    game.continueFlow('a', {}, 1);
+    expect(awaitingSeats(game)).toEqual([1]);
+
+    game.participants = [2];
+    game.refreshAwaitingActions();
+
+    expect(awaitingSeats(game)).toEqual([1, 2]);
+    const state = game.continueFlow('a', {}, 1);
+    expect(state.actionError).toBeUndefined();
+    expect(game.acted).toEqual([1, 1]);
+  });
+});
