@@ -343,8 +343,8 @@ defineExpose({ host });
   z-index: 20;
   margin: 0;
   padding: 0.75rem 1rem;
-  background: #4a3410;
-  color: #f7e6c4;
+  background: color-mix(in srgb, var(--bsg-warn) 25%, var(--bsg-surface));
+  color: var(--bsg-ink);
 }
 
 .empty-game-area {

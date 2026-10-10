@@ -1455,7 +1455,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     action: string,
     selection: string,
     value: unknown,
-    sent: Readonly<Record<string, unknown>>,
+    answers: Readonly<Record<string, unknown>>,
     named: readonly string[],
   ): void {
     if (value === undefined || value === null) return;
@@ -1463,7 +1463,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       if (item instanceof GameElement && named.includes(this.partitionOf(item))) continue;
       throw worldRefusal(
         "stale-draft",
-        `The draft of "${action}" answers "${selection}" with ${JSON.stringify(sent[selection])}, ` +
+        `The draft of "${action}" answers "${selection}" with ${JSON.stringify(answers[selection])}, ` +
           "which is not one of the elements this action can offer here now. Ask for the " +
           "action's offer again and pick from it.",
       );

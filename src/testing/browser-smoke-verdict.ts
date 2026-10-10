@@ -602,7 +602,7 @@ export function smokeSummary(record: SmokeRecord): string {
   const games =
     record.games > deals ? `, over ${record.games} games (a new one each time a game ended with listed actions still to take)` : '';
   const dealt = record.seeds.length === 0 ? '' : ` and ${dealtFrom(record.seeds)}`;
-  const excused =
+  const excusedNote =
     record.excused.length > 0
       ? ` Not required, as ${SMOKE_SPEC_PATH} says a walk from a fresh game cannot reach them: ` +
         `${record.excused.map(({ action, reason }) => `"${action}" ("${reason}")`).join('; ')}.`
@@ -613,7 +613,7 @@ export function smokeSummary(record: SmokeRecord): string {
         `reach: remove ${record.reachedAnyway.length === 1 ? 'it' : 'them'} from \`unreachable\` there, so the walk requires ` +
         `${record.reachedAnyway.length === 1 ? 'it' : 'them'}.`
       : '';
-  return `Served by \`boardsmith dev\` from a fresh start${dealt}, ${whoPlayed(record)} took ${took} and pressed ${pressed}, with no error${games}.${excused}${reached}`;
+  return `Served by \`boardsmith dev\` from a fresh start${dealt}, ${whoPlayed(record)} took ${took} and pressed ${pressed}, with no error${games}.${excusedNote}${reached}`;
 }
 
 /** Who a passing walk played as: the world seats it played (#471), or one seated player. */

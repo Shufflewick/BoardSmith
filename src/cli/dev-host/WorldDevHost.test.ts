@@ -688,3 +688,19 @@ describe('#379: while a saved rules edit is building', () => {
     wrapper.unmount();
   });
 });
+
+/**
+ * #607: the world bar is drawn in `--bsg-*` tokens, like the table's dev chrome,
+ * so this page has to install them itself. Without them every colour on the bar
+ * resolves to nothing and the chrome renders unstyled.
+ */
+describe('#607: the world bar has tokens to be drawn in', () => {
+  it('emits the theme on mount, as the table dev host does', async () => {
+    document.getElementById('bsg-tokens')?.remove();
+    const wrapper = await open();
+    const style = document.getElementById('bsg-tokens');
+    expect(style, 'no --bsg-* tokens: the world bar would render unstyled').not.toBeNull();
+    expect(style!.textContent).toContain('--bsg-surface');
+    wrapper.unmount();
+  });
+});

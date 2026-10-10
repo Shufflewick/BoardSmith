@@ -1,5 +1,6 @@
 {
   "verify": [
+    { "name": "lint", "run": "node bin/boardsmith.js lint" },
     { "name": "audit", "run": "node bin/boardsmith.js audit --dupes-baseline --health-baseline --duplication" },
     { "name": "test", "run": "node bin/boardsmith.js test --verdict-file {verdictFile}", "verdictFile": true },
     { "name": "catalogue", "run": "node bin/boardsmith.js catalogue --skip 'WindupWarfare=validate does not finish (Shufflewick/WindupWarfare#100)'" }
