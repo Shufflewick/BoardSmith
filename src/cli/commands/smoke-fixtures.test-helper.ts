@@ -1095,6 +1095,59 @@ onUnmounted(() => watcher.disconnect());
 }
 
 /**
+ * A PANEL THAT HANGS ON THE FIRST POINTER PRESS (#573): the first time the pointer presses one of
+ * the panel's action buttons, the page disables the button and is kept busy for 1.5s, longer than
+ * the walk gives one look at a panel button, then enables it again half a second later. The walk's
+ * click runs out of time after its `pointerdown` reached the button, and its `click` never arrives,
+ * since a disabled button takes none. That press did not press the button, so the walk must press it
+ * again. A button whose `click` arrives twice says so on the console, which fails the walk.
+ */
+export function panelThatHangsOnThePointer(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue';
+
+const hung = new Set<string>();
+const clicked = new Set<string>();
+function hang(event: Event) {
+  const button = (event.target as Element | null)?.closest?.('[data-bs-action]') as HTMLButtonElement | null | undefined;
+  const action = button?.getAttribute('data-bs-action');
+  if (button == null || action == null || hung.has(action)) return;
+  hung.add(action);
+  button.disabled = true;
+  const until = Date.now() + 1500;
+  while (Date.now() < until) { /* busy */ }
+  setTimeout(() => { button.disabled = false; }, 500);
+}
+function count(event: Event) {
+  const action = (event.target as Element | null)?.closest?.('[data-bs-action]')?.getAttribute('data-bs-action');
+  if (action == null) return;
+  if (clicked.has(action)) console.error(\`"\${action}" was clicked twice\`);
+  clicked.add(action);
+}
+onMounted(() => {
+  document.addEventListener('pointerdown', hang, true);
+  document.addEventListener('click', count, true);
+});
+onUnmounted(() => {
+  document.removeEventListener('pointerdown', hang, true);
+  document.removeEventListener('click', count, true);
+});
+</script>
+
+<template>
+  <div class="board">A board</div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
  * A BOARD THAT KEEPS REORDERING ITS CONTROLS (#464 review): "North", "South" and "East" trade
  * places every 60 milliseconds (a keyed list, so each button moves rather than being redrawn), so
  * whichever button sat at a place when the walk looked has often moved by the time it presses. A
