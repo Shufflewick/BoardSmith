@@ -56,6 +56,7 @@ import {
   assert,
   barGeometry,
   check,
+  onFreshPage,
   runBrowserRegression,
   summarise,
   surfaceOf,
@@ -385,13 +386,7 @@ const PICK_PARTS = [
 
 async function pickAfterAChoice(browser, hostUrl, viewport, colorScheme) {
   const size = `${viewport.width}x${viewport.height} ${colorScheme}`;
-  const context = await browser.newContext({ viewport, colorScheme });
-  try {
-    const page = await context.newPage();
-    await page.goto(hostUrl);
-    await seated(page);
-    const surface = surfaceOf(page);
-
+  await onFreshPage(browser, hostUrl, { viewport, colorScheme }, seated, async (page, surface) => {
     await check(`${size}: an element pick after an earlier choice sits inside the strip, without scrolling`, async () => {
       await surface.locator('[data-bs-action="plant"]').click();
       await surface.locator('.action-config .choice-btn', { hasText: 'Scuttlers' }).click();
@@ -422,9 +417,7 @@ async function pickAfterAChoice(browser, hostUrl, viewport, colorScheme) {
       const scrolled = await barGeometry(surface, ['.board-handoff-btn']);
       assert(scrolled.outside.length === 0, 'the board handoff cannot be scrolled into view inside the bar');
     });
-  } finally {
-    await context.close();
-  }
+  });
 }
 
 // THE WHOLE RUN, IN THE HARNESS'S ORDER (#231). It checks the checkout is

@@ -104,6 +104,30 @@ async function loadChromium(script) {
 export const surfaceOf = (page) => page.frameLocator('.world-dev__frame');
 
 /**
+ * Open the world in a fresh browser context and run `body` against it.
+ *
+ * The context is closed whatever `body` does, so a failed check never leaves a
+ * page open for the next one to share.
+ *
+ * @param browser        a launched browser, from `launch()`
+ * @param hostUrl        the dev host's URL
+ * @param contextOptions passed to `browser.newContext` (viewport, colorScheme)
+ * @param ready          awaited with the page once it has loaded, e.g. to wait for a seat
+ * @param body           called with `(page, surface)`, `surface` being `surfaceOf(page)`
+ */
+export async function onFreshPage(browser, hostUrl, contextOptions, ready, body) {
+  const context = await browser.newContext(contextOptions);
+  try {
+    const page = await context.newPage();
+    await page.goto(hostUrl);
+    await ready(page);
+    await body(page, surfaceOf(page));
+  } finally {
+    await context.close();
+  }
+}
+
+/**
  * WHERE THE ACTION BAR SITS AGAINST THE STRIP THE BOARD RESERVES (#444).
  *
  * The board is fitted above the board region's padding-bottom and the bar is
