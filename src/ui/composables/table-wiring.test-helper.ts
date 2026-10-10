@@ -106,7 +106,7 @@ export function mountTableWiring<G extends Game>(
         ...(options.withPickStep
           ? {
               pickStep: async (player: number, selectionName: string, value: unknown, actionName: string, initialArgs?: Record<string, unknown>) =>
-                session().send(player, cloneable({ type: 'selectionStep', player, selectionName, value, actionName, initialArgs })),
+                session().send(player, cloneable({ type: 'selectionStep', player, selectionName, value: value as {} | null, actionName, initialArgs })),
               cancelPendingAction: async (player: number) => {
                 await session().send(player, cloneable({ type: 'cancelAction', player }));
               },
@@ -132,12 +132,15 @@ interface LiveSeat<G extends Game> {
 /**
  * Seat 1 of a new two-player table, wired with auto mode off and its state
  * re-read as soon as each of its actions is applied. The wrapper is pushed onto
- * `mounted` for the test's `afterEach` to unmount.
+ * `mounted` for the test's `afterEach` to unmount. Pass `withPickStep` for a
+ * game whose picks travel through the selection-step transport (a repeating
+ * pick, a pick with `onSelect`).
  */
 export async function mountLiveSeat<G extends Game>(
   GameClass: GameClass<G>,
   seed: string,
   mounted: VueWrapper[],
+  options: { withPickStep?: boolean } = {},
 ): Promise<LiveSeat<G>> {
   const board = createBoardInteraction();
   const session = await startTable(GameClass, seed);
@@ -148,6 +151,7 @@ export async function mountLiveSeat<G extends Game>(
     boardInteraction: board,
     seatState,
     autoEndTurn: false,
+    withPickStep: options.withPickStep,
     afterPerform: () => { seatState.value = session.playerState(1); },
   });
   mounted.push(wrapper);
