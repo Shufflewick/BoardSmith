@@ -309,6 +309,10 @@ export const WORLD_REFUSALS = {
     owner: "game",
     why: "#603: a handler scheduled an event naming an action this world does not register. It used to be found only when the event came due. The engine holds the registered actions and refuses at the line; the name is the bundle's own, so it dead-letters rather than parking the world",
   },
+  "schedule-seated-action": {
+    owner: "game",
+    why: "#608: a handler scheduled an event naming a registered SEATED action, which acts for a player when a due event has none. It used to be found only when the event came due, as `clock-only-command`, which still answers an event queued before this check. The engine refuses at the line; the name is the bundle's own, so it dead-letters rather than parking the world",
+  },
   "schedule-args-too-large": {
     owner: "game",
     why: "#602: a handler scheduled an event whose args serialize to more than `WORLD_SCHEDULE_ARGS_MAX_BYTES` UTF-8 bytes of JSON. A host stores the args inside the event's row, so an event past it is one no host should have to write. The args are the bundle's own, so it dead-letters rather than parking the world",
