@@ -254,7 +254,11 @@ export interface TurnRun {
  * Configuration for simultaneous action step (multiple players act at once)
  */
 export interface SimultaneousActionStepConfig<G extends Game = Game> extends BaseFlowConfig {
-  /** Players who can act (defaults to all players) */
+  /**
+   * Players who can act (defaults to all players). Read at step entry, and again
+   * by `game.refreshAwaitingActions()` to decide which absent seats may join; a
+   * refresh never removes a seat already awaited because this changed.
+   */
   players?: (context: FlowContext<G>) => PlayerOf<G>[];
   /** Actions available to each player */
   actions: string[] | ((context: FlowContext<G>, player: PlayerOf<G>) => string[]);
