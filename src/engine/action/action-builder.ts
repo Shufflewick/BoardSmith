@@ -195,8 +195,13 @@ type ChooseElementOptions<G extends Game, A extends Record<string, unknown>, T e
   prompt?: string | ((context: ActionContext<G>) => string);
   elementClass?: ElementClass<T>;
   from?: GameElement | ((context: ActionContext<G>) => GameElement);
-  /** Narrows the candidates. With `elementClass`, every candidate is that class, so `element` is typed as it. */
-  filter?: (element: T, context: ActionContext<G>) => boolean;
+  /**
+   * Narrows the candidates. With `elementClass`, every candidate is that class,
+   * so `element` is typed as it. `NoInfer`: the type comes from `elementClass`
+   * or `elements` only, because without them filter sees every board element
+   * and an annotated parameter must not narrow what the pick claims to hold.
+   */
+  filter?: (element: NoInfer<T>, context: ActionContext<G>) => boolean;
   /**
    * Precomputed candidates (alternative to elementClass/from/filter).
    * Custom UIs send the element ID directly.

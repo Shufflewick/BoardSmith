@@ -300,6 +300,15 @@ describe('builder callbacks are typed from the chain (#510)', () => {
       });
   });
 
+  it('never lets a filter annotation narrow the pick: without elementClass every board element reaches filter', () => {
+    Action.create<TypedGame>('loose')
+      .chooseElement('c', {
+        // @ts-expect-error - filter is handed every board element here, so it
+        // cannot claim to receive only coins; T comes from elementClass or elements.
+        filter: (c: Coin) => c.faceValue > 0,
+      });
+  });
+
   it('types a selection validate by the picks declared before it', () => {
     Action.create<TypedGame>('pair')
       .chooseFrom('n', { choices: [1, 2] })
