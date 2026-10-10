@@ -274,3 +274,116 @@ describe('chooseFrom args are typed as the delivered value (#509)', () => {
     expect(received).toBe(3);
   });
 });
+
+/**
+ * #510: the callbacks inside the chain get the types the builder already knows.
+ *
+ * - A `chooseElement` given `elementClass: Coin` only ever offers coins, so its
+ *   `filter` receives a `Coin`, not the base `GameElement`.
+ * - A selection's `validate` receives `args` typed from the picks declared
+ *   before it; on a repeating pick, also this pick's earlier values.
+ *
+ * Each positive assignment compiles only with the fix (without it these are
+ * `GameElement`/`unknown`). Each `@ts-expect-error` fails the build as an unused
+ * directive if `args` went back to an index signature where any key is
+ * `unknown`. The runtime test proves the same values arrive.
+ */
+describe('builder callbacks are typed from the chain (#510)', () => {
+  it('types a filter by its elementClass', () => {
+    Action.create<TypedGame>('spend')
+      .chooseElement('coin', {
+        elementClass: Coin,
+        filter: (coin) => {
+          const face: number = coin.faceValue;
+          return face > 0;
+        },
+      });
+  });
+
+  it('never lets a filter annotation narrow the pick: without elementClass every board element reaches filter', () => {
+    Action.create<TypedGame>('loose')
+      .chooseElement('c', {
+        // @ts-expect-error - filter is handed every board element here, so it
+        // cannot claim to receive only coins; T comes from elementClass or elements.
+        filter: (c: Coin) => c.faceValue > 0,
+      });
+  });
+
+  it('types a selection validate by the picks declared before it', () => {
+    Action.create<TypedGame>('pair')
+      .chooseFrom('n', { choices: [1, 2] })
+      .chooseElement('coin', { elementClass: Coin })
+      .chooseFrom('m', {
+        choices: [1, 2],
+        validate: (m, args) => {
+          const n: number = args.n;
+          const face: number = args.coin.faceValue;
+          // @ts-expect-error - 'nn' was never declared.
+          void args.nn;
+          return m + n + face > 0;
+        },
+      })
+      .enterText('note', { validate: (_text, args) => args.m > 0 })
+      .enterNumber('count', { validate: (_count, args) => args.note.length > 0 })
+      .chooseElements('coins', {
+        elements: (ctx) => [...ctx.game.all(Coin)],
+        validate: (_coins, args) => args.count > 0,
+      });
+  });
+
+  it('types a repeating pick validate with its own earlier values', () => {
+    Action.create<TypedGame>('collect')
+      .chooseFrom('n', { choices: [1, 2] })
+      .chooseFrom('runes', {
+        choices: ['ice', 'fire', 'stop'],
+        repeatUntil: 'stop',
+        validate: (rune, args) => {
+          const before: string[] = args.runes;
+          const n: number = args.n;
+          return !before.includes(rune) || n > 1;
+        },
+      })
+      .chooseElement('coins', {
+        elementClass: Coin,
+        repeat: { until: () => true },
+        validate: (coin, args) => {
+          const before: Coin[] = args.coins;
+          return !before.includes(coin);
+        },
+      });
+  });
+
+  it('delivers the earlier picks to filter and validate at run time', () => {
+    const seen: { filterFaces: number[]; validateN?: number } = { filterFaces: [] };
+    const game = new TypedGame({ playerCount: 2 });
+    game.create(Coin, 'low', { faceValue: 1 });
+    const high = game.create(Coin, 'high', { faceValue: 5 });
+    game.registerAction(
+      Action.create<TypedGame>('typedRun')
+        .chooseFrom('n', { choices: [2, 3] })
+        .chooseFrom('m', {
+          choices: [1, 2, 3],
+          validate: (_m, args) => {
+            seen.validateN = args.n;
+            return true;
+          },
+        })
+        .chooseElement('coin', {
+          elementClass: Coin,
+          filter: (coin) => {
+            seen.filterFaces.push(coin.faceValue);
+            return coin.faceValue > 2;
+          },
+        })
+        .execute(() => ({ success: true })),
+    );
+    const result = game.getActionExecutor().executeAction(
+      game.getAction('typedRun')!,
+      game.getPlayer(1)!,
+      { n: 3, m: 1, coin: high },
+    );
+    expect(result.success, result.error).toBe(true);
+    expect(seen.validateN).toBe(3);
+    expect(new Set(seen.filterFaces)).toEqual(new Set([1, 5]));
+  });
+});

@@ -13,7 +13,10 @@
  * This module answers it mechanically instead, with two fingerprints:
  *
  * - `surfaceHash` — the runtime export names of every entrypoint the platform
- *   can reach. Catches added, removed, or renamed API.
+ *   can reach and, with their kinds, the members of each exported class or
+ *   function (prototype members, statics, instance fields) and the own keys of
+ *   each exported plain object or enum (#575). Catches added, removed, or
+ *   renamed API.
  * - `payloadHash` — a canonical per-player view rendered from a fixed fixture
  *   game. Catches SEMANTIC changes that leave the API identical but alter what
  *   the platform ships to clients (the `Deck` case: same exports, different
@@ -31,10 +34,18 @@
  *
  * KNOWN LIMITS, stated so nobody over-trusts this:
  *
- * - `surfaceHash` sees runtime values only. `verbatimModuleSyntax` erases
- *   type-only exports, so a change to an exported TYPE (a new optional field on
- *   `PlayerStateView`, say) moves neither hash unless it also changes a real
- *   payload.
+ * - `surfaceHash` sees member NAMES and KINDS only. Exported types, member
+ *   types and signatures are deliberately left out: they are erased from
+ *   `rules.js`, so a change to one (a new optional field on `PlayerStateView`,
+ *   a parameter added to a method) moves neither hash unless it also changes a
+ *   real payload. INPUT shapes carried only by types are the sharp end of
+ *   this: a renamed option key in `actionStep({ actions })` or in a
+ *   `TurnOrderConfig` changes what a game must pass and moves neither hash.
+ *   Such a change is a judgement call. See `describeExport` for why.
+ * - `surfaceHash` opens classes, functions, plain objects and enums one level
+ *   deep. Any other exported value (an array, a class instance, a `Map`) is
+ *   its name only, a plain object's nested keys are not described, and
+ *   `#private` members, unreachable from outside the class, are left out.
  * - The package `exports` map is not covered. Remapping `./session` in
  *   package.json is platform-visible and moves neither hash, because this
  *   module imports the entrypoint files directly.
@@ -106,6 +117,9 @@
  */
 
 import { createHash } from 'node:crypto';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 import formatFixtureGolden from './format-fixture.json' with { type: 'json' };
 import type { WorldHostMessage, WorldUiMessage } from '../ui/world/worldProtocol.js';
@@ -283,13 +297,24 @@ export const WORLD_VERBS_THE_FIXTURE_DRIVES: readonly (keyof WorldEngine)[] = WO
  * types, which `surfaceHash` cannot see. `WORLD_WIRE_FIXTURE` below makes it
  * visible.
  */
+const SRC = dirname(dirname(fileURLToPath(import.meta.url)));
+
 export const PLATFORM_ENTRYPOINTS = [
   // Supplied to game rules at runtime by the executor's `sandboxedRequire`.
-  { specifier: 'boardsmith', module: () => import('../engine/index.js') },
-  { specifier: 'boardsmith/session', module: () => import('../session/index.js') },
+  {
+    specifier: 'boardsmith',
+    source: join(SRC, 'engine/index.ts'),
+    module: () => import('../engine/index.js'),
+  },
+  {
+    specifier: 'boardsmith/session',
+    source: join(SRC, 'session/index.ts'),
+    module: () => import('../session/index.js'),
+  },
   // Imported directly by the games worker to host a session.
   {
     specifier: 'boardsmith/session-host',
+    source: join(SRC, 'session/snapshot-session-host.ts'),
     module: () => import('../session/snapshot-session-host.js'),
   },
   // Imported directly by the games worker as its persistence validation core:
@@ -297,6 +322,7 @@ export const PLATFORM_ENTRYPOINTS = [
   // it, so a rename here silently removes the platform's commit validator.
   {
     specifier: 'boardsmith/persistence',
+    source: join(SRC, 'persistence/index.ts'),
     module: () => import('../persistence/index.js'),
   },
   // Imported directly by the games worker as its world runner core (#165):
@@ -308,9 +334,10 @@ export const PLATFORM_ENTRYPOINTS = [
   // the archive exists to prevent.
   {
     specifier: 'boardsmith/world',
+    source: join(SRC, 'world/index.ts'),
     module: () => import('../world/index.js'),
   },
-] as const;
+] as const satisfies readonly SurfaceEntrypoint[];
 
 /**
  * The world wire, one canonical message per shape, both directions.
@@ -561,34 +588,280 @@ function sha256(input: string): string {
 }
 
 /**
- * Describe one export for the surface hash.
+ * One platform-reachable entrypoint: the module the platform loads, and the
+ * TypeScript source it is compiled from.
+ */
+export interface SurfaceEntrypoint {
+  readonly specifier: string;
+  /**
+   * The entrypoint's source file. It is read for INSTANCE FIELDS, which no
+   * runtime value carries until a class is constructed.
+   */
+  readonly source: string;
+  readonly module: () => Promise<unknown>;
+}
+
+/**
+ * The prototypes of async, generator and async generator functions, and of
+ * the objects a generator returns. Their constructors are not globals, so the
+ * global check in `isBuiltin` cannot see them.
+ */
+const HIDDEN_BUILTINS: ReadonlySet<unknown> = new Set(
+  [async function () {}, function* () {}, async function* () {}].flatMap((fn) => {
+    const fnPrototype = Object.getPrototypeOf(fn) as { prototype?: unknown };
+    return [fnPrototype, fnPrototype.prototype];
+  }),
+);
+
+/** A link whose members are the language's, not the engine's. */
+function isBuiltin(link: object, owner: unknown): boolean {
+  if (link === Object.prototype || link === Function.prototype || HIDDEN_BUILTINS.has(link)) return true;
+  return typeof owner === 'function' && (globalThis as Record<string, unknown>)[owner.name] === owner;
+}
+
+const WELL_KNOWN_SYMBOLS = new Map<symbol, string>(
+  Object.getOwnPropertyNames(Symbol)
+    .filter((name) => typeof (Symbol as unknown as Record<string, unknown>)[name] === 'symbol')
+    .map((name) => [(Symbol as unknown as Record<string, symbol>)[name]!, `[Symbol.${name}]`]),
+);
+
+/**
+ * How a property key is written in the surface: a string as itself, a
+ * well-known symbol as `[Symbol.iterator]` (the form the TypeScript source
+ * spells it in, so both sides name it alike), any other symbol by its
+ * registry key or description.
+ */
+function keyName(key: string | symbol): string {
+  if (typeof key === 'string') return key;
+  const wellKnown = WELL_KNOWN_SYMBOLS.get(key);
+  if (wellKnown !== undefined) return wellKnown;
+  const registered = Symbol.keyFor(key);
+  return registered !== undefined ? `[Symbol.for(${registered})]` : `[symbol ${key.description ?? ''}]`;
+}
+
+/** The kind of one runtime member, from its property descriptor. */
+function memberKind(descriptor: PropertyDescriptor): string {
+  if (descriptor.get && descriptor.set) return 'accessor';
+  if (descriptor.get) return 'get';
+  if (descriptor.set) return 'set';
+  // Class methods are defined non-enumerable; fields are plain assignments.
+  return typeof descriptor.value === 'function' && !descriptor.enumerable ? 'method' : 'field';
+}
+
+/**
+ * The members found walking `start` and its prototype chain, nearest first, so
+ * an override is described by the class a game actually reaches. The walk
+ * stops at a built-in (`Object`, `Array`, `Error`, `Function`): their members
+ * belong to the language and cannot move with the engine.
+ */
+function chainMembers(
+  start: object,
+  ownerOf: (link: object) => unknown,
+  skip: ReadonlySet<string>,
+  into: Map<string, string>,
+): void {
+  for (let link: object | null = start; link !== null; link = Object.getPrototypeOf(link)) {
+    if (isBuiltin(link, ownerOf(link))) return;
+    ownMembers(link, skip, into);
+  }
+}
+
+/** The own members of `target`, string and symbol keys alike, each with its kind. */
+function ownMembers(target: object, skip: ReadonlySet<string>, into: Map<string, string>): void {
+  for (const key of Reflect.ownKeys(target)) {
+    const name = keyName(key);
+    if (skip.has(name) || into.has(name)) continue;
+    into.set(name, memberKind(Object.getOwnPropertyDescriptor(target, key)!));
+  }
+}
+
+const NOTHING_SKIPPED: ReadonlySet<string> = new Set();
+
+/** An object literal or a compiled enum: one whose prototype is `Object.prototype` or nothing. */
+function isPlainObject(value: unknown): value is object {
+  if (value === null || typeof value !== 'object') return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+const FUNCTION_OWN = new Set(['length', 'name', 'prototype', 'arguments', 'caller']);
+
+/**
+ * Describe one export for the surface hash: its name and, for a class or
+ * function, its members, and for a plain object or a compiled enum, its own
+ * keys, each with its kind (#575).
  *
- * Top-level names alone are not the API games call. Rules call METHODS —
- * `deck.shuffle()`, `game.followUp()`, the whole element and action surface —
- * so renaming or removing a method while leaving the class exported would keep
- * a name-only hash still, let the change ship unrecorded, and let the upload
- * gate compare two equal revisions on a bundle that calls a method the vendored
- * engine no longer has. That is the exact failure the gate exists to prevent,
- * so prototype members are part of the surface.
+ * Top-level names alone are not the API games call. Rules call METHODS
+ * (`deck.shuffle()`), STATICS (`Action.create()`, `Game.PlayerClass`), and
+ * read and assign INSTANCE FIELDS (`player.seat`, `game.settings`), and a game
+ * subclasses engine classes, so a field it declares can collide with one the
+ * engine adds. Removing or renaming any of them while the class stays exported
+ * would leave a name-only hash still, and ShufflewickPub would route a world
+ * whose rules call the member onto a runner that no longer has it (#599). So:
+ *
+ * - prototype members, own and inherited, each with its kind (`method`, `get`,
+ *   `set`, `accessor`): a method turned into a getter breaks `x.m()`;
+ * - statics, own and inherited, the same way (`static method`, `static field`);
+ * - instance fields, own and inherited, from the TypeScript source
+ *   (`fieldsOf`), since none exists until the class is constructed;
+ * - symbol-keyed members by name (`[Symbol.iterator]`): `for (const x of map)`
+ *   calls one;
+ * - the own keys of a plain object or a compiled enum (`TurnOrder.DEFAULT`,
+ *   `ErrorCode.NOT_YOUR_TURN`), the same way. Their values are not covered.
+ *
+ * Built-in ancestors (`Object`, `Array`, `Error`, and the async and generator
+ * function prototypes) are the language's, so their members are left out.
+ *
+ * Members are flattened through the class's ancestors rather than described
+ * once on the class that declares them. A base the entrypoint does not export
+ * would otherwise be invisible, and moving a member between a class and its
+ * base changes nothing a game can call.
+ *
+ * NAMES AND KINDS ONLY, never values, signatures or types. Types are erased
+ * from `rules.js`, so no compiled bundle can depend on one at runtime. A type
+ * change a game can feel either arrives as a changed payload, which is
+ * `payloadHash`'s job, or is an input shape (an option key), which no hash
+ * sees and is a judgement call. Hashing types would make every refinement mint a
+ * surface, and on the platform each new surface keeps an older world runner
+ * alive for every world built before it.
  *
  * This is deliberately conservative: it includes members that are private by
- * convention, so an internal method rename also forces a revision bump. False
- * positives cost one `contract --update`; false negatives cost a production
- * bug nobody can trace.
+ * convention or by TypeScript's `private`, since both exist at runtime and a
+ * game subclass can collide with either. ECMAScript `#private` members are
+ * left out: nothing outside the class can reach one. False positives cost one
+ * `contract --update`; false negatives cost a production bug nobody can trace.
  */
-function describeExport(name: string, value: unknown): string {
-  if (typeof value !== 'function' || value.prototype === undefined) return name;
+function describeExport(name: string, value: unknown, fields: readonly string[]): string {
+  if (isPlainObject(value)) {
+    const keys = new Map<string, string>();
+    ownMembers(value, NOTHING_SKIPPED, keys);
+    const members = [...keys].map(([member, kind]) => `${kind} ${member}`).sort();
+    return members.length > 0 ? `${name}{${members.join(',')}}` : name;
+  }
+  if (typeof value !== 'function') return name;
 
-  const members = Object.getOwnPropertyNames(value.prototype)
-    .filter((member) => member !== 'constructor')
-    .sort();
+  const instance = new Map<string, string>();
+  for (const field of fields) instance.set(field, 'field');
+  if (value.prototype !== undefined) {
+    chainMembers(value.prototype as object, (link) => (link as { constructor?: unknown }).constructor, new Set(['constructor']), instance);
+  }
+  const statics = new Map<string, string>();
+  chainMembers(value, (link) => link, FUNCTION_OWN, statics);
 
+  const members = [
+    ...[...instance].map(([member, kind]) => `${kind} ${member}`),
+    ...[...statics].map(([member, kind]) => `static ${kind} ${member}`),
+  ].sort();
   return members.length > 0 ? `${name}{${members.join(',')}}` : name;
 }
 
 /**
+ * How the surface names one property of an instance type, or `undefined` when
+ * it is not an engine field: a method or accessor (the runtime prototype
+ * describes those), a field the standard library declares, or a `#private`
+ * one. A computed key (`[Symbol.iterator]`) is written as the source spells
+ * it, because the compiler's own name for it carries a per-program id.
+ */
+function fieldName(program: ts.Program, property: ts.Symbol): string | undefined {
+  if (!(property.flags & ts.SymbolFlags.Property)) return undefined;
+  const declaration = property.valueDeclaration ?? property.declarations?.[0];
+  if (declaration === undefined || program.isSourceFileDefaultLibrary(declaration.getSourceFile())) return undefined;
+  const declared = ts.getNameOfDeclaration(declaration);
+  if (declared === undefined) return property.name;
+  if (ts.isPrivateIdentifier(declared)) return undefined;
+  return ts.isComputedPropertyName(declared) ? `[${declared.expression.getText()}]` : property.name;
+}
+
+/**
+ * The instance fields of every class `entrypoints` export, by entrypoint and
+ * export name, read from the TypeScript source.
+ *
+ * A field (`owner = null`, a `declare`d one, a constructor parameter property)
+ * is assigned by the constructor, so no runtime value shows it without
+ * building an instance, and most engine classes cannot be built without a
+ * game. The compiler's view of the declared instance type is the complete
+ * list, inherited ones included. Fields declared by the standard library
+ * (an `Error`'s `message`) are the language's and are left out, as are
+ * `#private` ones.
+ */
+function fieldsOf(entrypoints: readonly SurfaceEntrypoint[]): Map<string, Map<string, string[]>> {
+  const config = ts.readConfigFile(join(dirname(SRC), 'tsconfig.json'), ts.sys.readFile);
+  const { options } = ts.parseJsonConfigFileContent(config.config, ts.sys, dirname(SRC));
+  // Ambient types (node, vite) name no class member; leaving them out keeps
+  // this independent of what else is installed.
+  const program = ts.createProgram(
+    entrypoints.map((entry) => entry.source),
+    { ...options, types: [], noEmit: true },
+  );
+  const checker = program.getTypeChecker();
+
+  const byEntry = new Map<string, Map<string, string[]>>();
+  for (const entry of entrypoints) {
+    const file = program.getSourceFile(entry.source);
+    const moduleSymbol = file && checker.getSymbolAtLocation(file);
+    if (moduleSymbol === undefined) {
+      throw new Error(
+        `The engine contract cannot read ${entry.source}, the source of '${entry.specifier}'. ` +
+          'Point the entrypoint\'s `source` at the TypeScript file its `module` loads.',
+      );
+    }
+    const exports = new Map<string, string[]>();
+    for (const exported of checker.getExportsOfModule(moduleSymbol)) {
+      const symbol = exported.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(exported) : exported;
+      if (!(symbol.flags & ts.SymbolFlags.Value)) continue;
+      // A construct signature's return type is the instance type, whether the
+      // export is a class declaration, a class expression or a mixin.
+      const construct = checker.getTypeOfSymbol(symbol).getConstructSignatures()[0];
+      const fields = construct
+        ? checker
+            .getPropertiesOfType(construct.getReturnType())
+            .flatMap((property) => fieldName(program, property) ?? [])
+        : [];
+      exports.set(exported.name, fields);
+    }
+    byEntry.set(entry.specifier, exports);
+  }
+  return byEntry;
+}
+
+/**
+ * One line per entrypoint: its runtime export names, each described by
+ * `describeExport`.
+ *
+ * The runtime module decides WHICH exports exist (type-only exports are erased
+ * and are not part of it); the source is read only for their instance fields.
+ * A runtime export the source does not declare means the two disagree about
+ * what the entrypoint is, and the hash would silently describe less than the
+ * platform loads, so it is refused by name.
+ */
+export async function describeSurface(entrypoints: readonly SurfaceEntrypoint[]): Promise<string[]> {
+  const fields = fieldsOf(entrypoints);
+  const lines: string[] = [];
+  for (const entry of entrypoints) {
+    const module = (await entry.module()) as Record<string, unknown>;
+    const declared = fields.get(entry.specifier)!;
+    const described = Object.keys(module)
+      .sort()
+      .map((name) => {
+        const own = declared.get(name);
+        if (own === undefined) {
+          throw new Error(
+            `'${entry.specifier}' exports '${name}' at runtime, but ${entry.source} declares no value of that name, ` +
+              'so the engine contract cannot read its instance fields. The entrypoint\'s `module` and `source` ' +
+              'must be the same file.',
+          );
+        }
+        return describeExport(name, module[name], own);
+      });
+    lines.push(`${entry.specifier}: ${described.join(',')}`);
+  }
+  return lines;
+}
+
+/**
  * Hash the runtime export surface of every platform-reachable entrypoint:
- * export names plus, for classes and functions, their prototype members.
+ * export names plus their members and keys (`describeExport`), and the world
+ * refusal registry.
  *
  * Shapes only, never implementations — a changed function body is a semantic
  * change, which is `payloadHash`'s job. Conflating the two would make this hash
@@ -614,13 +887,7 @@ export async function computeSurfaceHash(): Promise<string> {
     .sort();
   lines.push(`world-refusals: ${refusals.join(',')}`);
 
-  for (const entry of PLATFORM_ENTRYPOINTS) {
-    const module = (await entry.module()) as Record<string, unknown>;
-    const described = Object.keys(module)
-      .sort()
-      .map((name) => describeExport(name, module[name]));
-    lines.push(`${entry.specifier}: ${described.join(',')}`);
-  }
+  lines.push(...(await describeSurface(PLATFORM_ENTRYPOINTS)));
 
   return sha256(lines.join('\n'));
 }

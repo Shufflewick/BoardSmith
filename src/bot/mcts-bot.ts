@@ -44,9 +44,10 @@ type SearchMoveOutcome = 'made' | 'refused' | 'refusedAfterChanges';
  * 3. PLAYOUT: Random moves until game ends (up to playoutDepth)
  * 4. BACKPROPAGATE: Update win counts up the tree
  *
- * Uses incremental state management: maintains a single game instance
- * and applies/undoes moves as it traverses the tree, rather than
- * reconstructing game state from snapshots at each node.
+ * Each iteration starts from the root position: the search game is
+ * restored whole from the root snapshot, then the tree path and playout
+ * moves are applied to it. Moves are never undone. The restore costs time
+ * in proportion to the game's element tree, once per iteration.
  */
 export class MCTSBot<G extends Game = Game> {
   private game: G;
@@ -384,7 +385,7 @@ export class MCTSBot<G extends Game = Game> {
           treeMoves.push({ move: child.parentMove, player: leaf.currentPlayer });
         }
 
-        // BACKPROPAGATE: Update stats, RAVE table, and undo back to root
+        // BACKPROPAGATE: Update stats and RAVE table, then restore searchGame to root
         this.backpropagateWithUndo(child, playout.score, playout.playoutMoves, treeMoves);
       } else {
         // A refused move changed part of this world before it was refused
@@ -865,9 +866,8 @@ export class MCTSBot<G extends Game = Game> {
   // ============================================================================
 
   /**
-   * BACKPROPAGATE with undo: Update statistics, RAVE table, and roll back searchGame to root state.
-   * First undoes all playout moves to get back to node state, then undoes tree moves
-   * as we walk up to root.
+   * BACKPROPAGATE: Update statistics and the RAVE table up the tree, then reset
+   * searchGame to the root position by restoring it from the root snapshot.
    *
    * @param node - The leaf node to start backpropagation from
    * @param result - The playout score (0=loss, 0.5=draw, 1=win for bot)

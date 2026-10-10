@@ -34,14 +34,14 @@ export type DeterminizeSampler = (sandbox: Game, seat: number, rng: () => number
  */
 export interface BotConfig {
   /**
-   * CEILING on MCTS iterations (higher = stronger but slower). Default: 1000.
+   * CEILING on MCTS iterations (higher = stronger but slower). Default: 300.
    *
    * Not a guarantee: `timeout` can cut the search short, in which case fewer
    * iterations actually run. Pair with `timeout: Infinity` when you need
    * exactly this many (see `seed`).
    */
   iterations: number;
-  /** Maximum playout depth before evaluating position. Default: 50 */
+  /** Maximum playout depth before evaluating position. Default: 3 */
   playoutDepth: number;
   /**
    * Random seed for reproducible behavior.
