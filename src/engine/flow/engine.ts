@@ -912,6 +912,12 @@ export class FlowEngine<G extends Game = Game> {
    * that already completed this step is left alone — a refresh must never
    * un-complete a commitment.
    *
+   * The step's `players` filter is re-evaluated and decides which seats NOT
+   * already in the awaiting set may be admitted, so a refresh never brings in a
+   * seat the filter leaves out (#557). It never removes a seat already in the
+   * set: that seat was admitted under the filter and may be partway through the
+   * step, so a filter that changes mid-step only governs who joins.
+   *
    * No-op when no simultaneous step is open: there is no stale list to correct.
    *
    * @param seat - Refresh only this seat. Omit to refresh every seat.
@@ -933,6 +939,10 @@ export class FlowEngine<G extends Game = Game> {
       );
     }
 
+    const admissible = config.players
+      ? new Set(config.players(context).map((p) => p.seat))
+      : undefined;
+
     for (const player of players) {
       if (seat !== undefined && player.seat !== seat) continue;
 
@@ -940,6 +950,8 @@ export class FlowEngine<G extends Game = Game> {
       // A seat that already committed this step stays committed. Re-deriving
       // its list would be the one change a refresh must never make.
       if (existing?.completed) continue;
+      // The players filter decides who joins, never who is removed.
+      if (!existing && admissible && !admissible.has(player.seat)) continue;
 
       if (this.seatEligibility(config, context, player, frame) !== 'awaited') {
         if (existing) this.awaitingPlayers = this.awaitingPlayers.filter((p) => p !== existing);

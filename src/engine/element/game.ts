@@ -2303,7 +2303,9 @@ export class Game<
    * entry, even though the game considers it a full participant.
    *
    * The awaiting set can grow as well as shrink. A seat that already committed
-   * this step is left alone. No-op when no simultaneous step is open.
+   * this step is left alone. The step's `players` filter is re-evaluated and
+   * only seats it includes are admitted; a seat already awaited stays even if
+   * the filter has since dropped it. No-op when no simultaneous step is open.
    *
    * @param seat - Refresh only this seat (1-indexed). Omit for every seat.
    *
