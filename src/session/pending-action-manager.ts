@@ -189,7 +189,7 @@ export class PendingActionManager<G extends Game = Game> {
       const result = executor.processRepeatingStep(action, player, pendingState, value);
 
       if (result.error) {
-        return { success: false, error: result.error, nextChoices: result.nextChoices, errorCode: ErrorCode.INVALID_PICK };
+        return { success: false, error: result.error, nextChoices: result.nextChoices, warnings: result.warnings, errorCode: ErrorCode.INVALID_PICK };
       }
 
       // onEach may have modified game state.
@@ -206,6 +206,7 @@ export class PendingActionManager<G extends Game = Game> {
         success: true,
         done: result.done,
         nextChoices: result.nextChoices,
+        warnings: result.warnings,
         actionComplete: false,
         state: this.#seatState(playerPosition),
       };

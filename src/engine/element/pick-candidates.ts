@@ -135,6 +135,31 @@ export function formatElementCandidates(
   });
 }
 
+/**
+ * Format a repeating pick's candidates for a later pass (its `nextChoices`),
+ * by the rule its first pass was drawn with (#605).
+ *
+ * A choice pick's rows are `formatChoiceCandidates`'s. An element pick's are
+ * `formatElementCandidates`'s, carried as `{ value: id, ... }` because a
+ * repeat's next choices are one wire shape for every kind. Candidates whose
+ * value is not a live element cannot be picked by id and are left out. Soft
+ * failures go into `warnings` exactly as on the first pass.
+ */
+export function formatRepeatCandidates(
+  candidates: readonly AnnotatedCandidate[],
+  selection: ChoiceSelection | ElementSelection | ElementsSelection,
+  ctx: CandidateContext,
+  warnings: WarningEntry[],
+): ChoiceWithRefs[] {
+  if (selection.type === 'choice') return formatChoiceCandidates(candidates, selection, ctx, warnings);
+  const live = candidates.filter((c) => isElement(c.value));
+  return formatElementCandidates(live, selection, ctx, warnings).map(({ id, display, refs, disabled }) => {
+    const choice: ChoiceWithRefs = { value: id, display: display!, refs };
+    if (disabled !== undefined) choice.disabled = disabled;
+    return choice;
+  });
+}
+
 /** The little of an element these formatters read. */
 type ElementLike = { id: number; name?: string; notation?: string };
 
