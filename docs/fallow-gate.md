@@ -374,7 +374,11 @@ It now gates the way the fallow duplication check does:
   so; commit it.
 - **`boardsmith audit --rekey-dupes` handles both records.** For this one it
   creates the record when none exists, drops accepted clones that are gone, and
-  refuses while the tree holds a clone the record does not accept.
+  refuses while the tree holds a clone the record does not accept. The two
+  records are handled independently, so one may be written while the other
+  refuses; the command then exits non-zero, and says which did what.
+- **A scan that analyzed no `.vue` files gives no verdict** (#176): the check
+  reports that it checked nothing rather than passing.
 
 **Scope: `.vue` template and style blocks only.** jscpd runs with
 `--format vue`, which splits each component into blocks and names each clone's
@@ -396,8 +400,9 @@ Recorded on `main` at `c2944bcd`: six accepted clones, three inside
 verify list.
 
 When the audit re-addresses moved clone groups it writes the two dupes files,
-and verify then fails with "a check changed the working tree". Commit the
-rewritten files and verify again. On a merge, the same refusal means the merge
+or `.jscpd-accepted.json` when a component with an accepted template clone was
+renamed, and verify then fails with "a check changed the working tree". Commit
+the rewritten files and verify again. On a merge, the same refusal means the merge
 itself moved lines: merge `main` into the branch, run `boardsmith audit`, and
 commit what it rewrites.
 

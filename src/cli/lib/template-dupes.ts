@@ -74,10 +74,13 @@ export interface JscpdReport {
     firstFile: JscpdLocation;
     secondFile: JscpdLocation;
   }[];
+  /** `sources` is how many files the scan analyzed: 0 means it checked nothing. */
+  statistics: { total: { sources: number } };
 }
 
 export function isJscpdReport(value: unknown): value is JscpdReport {
-  return Array.isArray((value as Partial<JscpdReport> | null)?.duplicates);
+  const report = value as Partial<JscpdReport> | null;
+  return Array.isArray(report?.duplicates) && typeof report?.statistics?.total?.sources === 'number';
 }
 
 /** The workspace-relative source file a jscpd location names. */
@@ -86,7 +89,7 @@ function sourcePath(name: string): string {
 }
 
 /** The template and style clones in a jscpd report, as clone groups keyed by their text. */
-export function templateScan(report: JscpdReport, cwd: string): DupesScan {
+export function templateScan(report: Pick<JscpdReport, 'duplicates'>, cwd: string): DupesScan {
   const sources = new Map<string, string[]>();
   const instance = (location: JscpdLocation) => {
     const file = sourcePath(location.name);

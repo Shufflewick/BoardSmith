@@ -350,6 +350,8 @@ function readJson(path: string): unknown {
 /** This tree's template duplication, the committed record of it, and where they disagree. */
 interface TemplateReading {
   fresh: AcceptedDupes;
+  /** How many `.vue` files jscpd analyzed. */
+  sources: number;
   /** The committed record's text, or null when the project keeps none. */
   recorded: string | null;
   drift: ReturnType<typeof compareAcceptedDupes>;
@@ -383,7 +385,7 @@ async function readTemplateDupes(
   const recordPath = join(cwd, TEMPLATE_DUPES_FILE);
   const recorded = existsSync(recordPath) ? readFileSync(recordPath, 'utf-8') : null;
   const committed: AcceptedDupes = recorded === null ? { accepted: [] } : (JSON.parse(recorded) as AcceptedDupes);
-  return { fresh, recorded, drift: compareAcceptedDupes(committed, fresh) };
+  return { fresh, sources: parsed.statistics.total.sources, recorded, drift: compareAcceptedDupes(committed, fresh) };
 }
 
 /**
@@ -399,7 +401,7 @@ async function readTemplateDupes(
 export async function runTemplateDupesCheck(
   cwd: string,
   scan: ScanTemplates = scanTemplatesWithJscpd,
-): Promise<{ code: number; report: string }> {
+): Promise<{ code: number; report: string; nothingToCheck?: boolean }> {
   const read = await readTemplateDupes(cwd, scan);
   if ('failure' in read) return { code: 1, report: read.failure };
   if (read.drift.length > 0) {
@@ -414,6 +416,18 @@ export async function runTemplateDupesCheck(
         `Re-addressed ${TEMPLATE_DUPES_FILE}: every clone matched by content, so no debt was `
         + 'forgiven; only the files it names moved. Commit it with your change.',
     };
+  }
+  // #176: a clean report over zero files is not a pass. An accepted clone in a
+  // tree with no `.vue` files has already failed above, as gone.
+  if (read.sources === 0) {
+    return {
+      code: 0,
+      nothingToCheck: true,
+      report: 'jscpd found no .vue files under src/, so the template duplication check checked nothing.',
+    };
+  }
+  if (read.recorded === null) {
+    return { code: 0, report: `No Vue template or style duplication, so no ${TEMPLATE_DUPES_FILE} is needed.` };
   }
   return { code: 0, report: `${TEMPLATE_DUPES_FILE} still describes this tree's template duplication.` };
 }
@@ -589,9 +603,9 @@ function buildAudits(
     duplication: {
       name: 'template duplication',
       run: async (cwd) => {
-        const { code, report } = await runTemplateDupesCheck(cwd);
-        console.log(code === 0 ? chalk.dim(report) : chalk.yellow(report));
-        return outcomeOf(code);
+        const { code, report, nothingToCheck } = await runTemplateDupesCheck(cwd);
+        console.log(code === 0 && !nothingToCheck ? chalk.dim(report) : chalk.yellow(report));
+        return nothingToCheck ? 'nothing-to-check' : outcomeOf(code);
       },
     },
     healthBaseline: {

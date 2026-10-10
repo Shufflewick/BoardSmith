@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   AUDIT_ORDER,
@@ -417,7 +417,7 @@ describe('runDupesBaselineCheck and rekeyDupesBaseline', () => {
 
 /**
  * #596: `boardsmith audit --duplication` used to run jscpd with no baseline and
- * no `--threshold`, so it exited 0 on 136 clones and gated nothing. It now
+ * no `--threshold`, so it exited 0 on 134 clones and gated nothing. It now
  * gates duplicated Vue template and style markup -- the one kind fallow cannot
  * see -- against a content-keyed record, the same way the dupes baseline does.
  *
@@ -521,6 +521,40 @@ describe('runTemplateDupesCheck and rekeyTemplateDupes', () => {
     expect(dropped.report).toContain('Dropped 1');
     expect(JSON.parse(record(dir))).toEqual({ accepted: [] });
     expect((await runTemplateDupesCheck(dir)).code).toBe(0);
+  });
+
+  it('re-addresses a renamed component without changing what it accepts', async () => {
+    const dir = project({ 'A.vue': component(), 'B.vue': component([], 'li', 'h2') });
+    await rekeyTemplateDupes(dir);
+    const keys = () => (JSON.parse(record(dir)) as { accepted: { content: string }[] }).accepted.map((e) => e.content);
+    const before = keys();
+    mkdirSync(join(dir, 'src', 'moved'));
+    renameSync(join(dir, 'src', 'B.vue'), join(dir, 'src', 'moved', 'C.vue'));
+
+    const result = await runTemplateDupesCheck(dir);
+
+    expect(result.code).toBe(0);
+    expect(result.report).toContain('Re-addressed');
+    expect(keys()).toEqual(before);
+    expect(JSON.parse(record(dir)).accepted[0].files).toEqual(['src/A.vue', 'src/moved/C.vue']);
+  });
+
+  // #176: a clean report over zero files is not a pass.
+  it('gives no verdict when there are no .vue files to scan', async () => {
+    const dir = project({ 'a.ts': 'export const a = 1;\n' });
+    const result = await runTemplateDupesCheck(dir);
+    expect(result.code).toBe(0);
+    expect(result.nothingToCheck).toBe(true);
+    expect(result.report).toContain('no .vue files');
+  });
+
+  it('does not claim a record describes the tree when there is no record and no duplication', async () => {
+    const dir = project({ 'A.vue': component() });
+    const result = await runTemplateDupesCheck(dir);
+    expect(result.code).toBe(0);
+    expect(result.nothingToCheck).toBeFalsy();
+    expect(result.report).not.toContain('still describes');
+    expect(result.report).toContain('No Vue template or style duplication');
   });
 
   it('says so when jscpd wrote no readable report', async () => {
