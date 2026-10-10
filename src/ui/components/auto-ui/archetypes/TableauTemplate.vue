@@ -27,7 +27,6 @@ interface GameElement {
 
 defineProps<{
   topLevelChildren: GameElement[];
-  gameView?: GameElement | null;
 }>();
 </script>
 

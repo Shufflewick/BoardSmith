@@ -100,23 +100,12 @@
   "unprovided_injects": [],
   "unrendered_components": [],
   "unused_component_props": [
-    "src/ui/components/auto-ui/ActionPanel.vue:playerSeat",
-    "src/ui/components/auto-ui/ActionPanel.vue:autoEndTurn",
-    "src/ui/components/auto-ui/archetypes/CardTemplate.vue:gameView",
-    "src/ui/components/auto-ui/archetypes/GridBoardTemplate.vue:gameView",
-    "src/ui/components/auto-ui/archetypes/TableauTemplate.vue:gameView",
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:depth",
     "src/ui/components/auto-ui/renderers/DieRenderer.vue:depth",
     "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:depth",
-    "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:hexPieceSize",
-    "src/ui/components/auto-ui/renderers/PieceRenderer.vue:depth",
-    "src/ui/components/auto-ui/renderers/PieceRenderer.vue:hexPieceSize",
-    "src/ui/components/debug/HistoryTab.vue:historyHasMessages"
+    "src/ui/components/auto-ui/renderers/PieceRenderer.vue:depth"
   ],
-  "unused_component_emits": [
-    "src/ui/components/debug/HistoryTab.vue:copy-history",
-    "src/ui/components/debug/HistoryTab.vue:clear-history"
-  ],
+  "unused_component_emits": [],
   "unused_component_inputs": [],
   "unused_component_outputs": [],
   "unused_svelte_events": [],

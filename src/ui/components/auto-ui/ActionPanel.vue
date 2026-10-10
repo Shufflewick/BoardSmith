@@ -105,7 +105,6 @@ const ACTIONS_PENDING_TEXT = 'Working out what you can do here\u2026';
 const props = defineProps<{
   availableActions: string[];
   actionMetadata?: Record<string, EnrichedActionMetadata>;
-  playerSeat: number;
   isMyTurn: boolean;
   /**
    * The viewer's OWN `completed` flag for the current simultaneous step
@@ -117,13 +116,6 @@ const props = defineProps<{
    */
   completed?: boolean;
   canUndo?: boolean;
-  /**
-   * Auto mode: streamlines UX by reducing unnecessary clicks (default: true)
-   * - Auto-executes endTurn when it's the only available action
-   * - Auto-starts any single available action (shows its first selection prompt)
-   * - Auto-executes actions with no selections when they're the only option
-   */
-  autoEndTurn?: boolean;
   /** Game messages to display while waiting. The same shape the log renders:
    *  a line is a bare string or a `{ text }` record, and `latestMessage` below
    *  has always handled both -- only this declaration disagreed (#179). */

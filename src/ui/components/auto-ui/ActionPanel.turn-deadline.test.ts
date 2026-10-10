@@ -24,7 +24,6 @@ function mountPanel(deadline: TurnDeadline | null | 'unprovided', isMyTurn = tru
     {
       availableActions: ['pass'],
       actionMetadata: { pass: { name: 'pass', prompt: 'Pass', selections: [] } },
-      playerSeat: 1,
       isMyTurn,
     },
     { provide },

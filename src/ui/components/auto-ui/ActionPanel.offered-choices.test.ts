@@ -125,7 +125,6 @@ async function table(): Promise<Table> {
       h(ActionPanel, {
         availableActions: seatState.value.availableActions ?? [],
         actionMetadata: wiring.actionMetadata.value,
-        playerSeat: SEAT,
         isMyTurn: true,
       }),
   });

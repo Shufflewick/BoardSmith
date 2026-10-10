@@ -124,9 +124,7 @@ function mountHarness(): Harness {
           h(ActionPanel, {
             availableActions: AVAILABLE,
             actionMetadata: METADATA,
-            playerSeat: 0,
             isMyTurn: true,
-            autoEndTurn: false,
           }),
           h(AutoUI, { gameView: GAME_VIEW, playerSeat: 0 }),
         ]);

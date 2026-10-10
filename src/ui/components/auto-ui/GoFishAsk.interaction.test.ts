@@ -174,9 +174,7 @@ describe('GoFish ask interaction tests', () => {
       },
       props: {
         availableActions: ['ask'],
-        playerSeat: 1,
         isMyTurn: true,
-        autoEndTurn: false,   // don't auto-execute during test
         autoFill: false,      // controller already handled auto-fill above
       },
     });

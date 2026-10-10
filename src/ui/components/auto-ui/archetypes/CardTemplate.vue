@@ -29,7 +29,6 @@ interface GameElement {
 
 const props = defineProps<{
   topLevelChildren: GameElement[];
-  gameView?: GameElement | null;
 }>();
 
 // ---------------------------------------------------------------------------

@@ -114,8 +114,6 @@ const props = withDefaults(defineProps<{
   completed?: boolean;
   /** Whether undo is offered right now. A world never offers it. */
   canUndo?: boolean;
-  /** The auto-end-turn preference, for the panel's own footer. */
-  autoEndTurn?: boolean;
   /**
    * Take the action panel away entirely (the platform's D-02 escape hatch).
    * The prompt survives it: a board that says nothing and offers nothing is the
@@ -584,11 +582,9 @@ const mobileToggleLabel = computed(() => {
                 :disabled-actions="disabledActions"
                 :actions-pending="actionsPending"
                 :players="players"
-                :player-seat="playerSeat"
                 :is-my-turn="mayAct"
                 :completed="completed"
                 :can-undo="canUndo"
-                :auto-end-turn="autoEndTurn"
                 :messages="messages"
                 :current-player-name="currentPlayerName"
                 :current-player-color="currentPlayerColor"

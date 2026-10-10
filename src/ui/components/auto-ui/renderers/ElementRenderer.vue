@@ -29,8 +29,11 @@ interface GameElement {
 
 const props = defineProps<{
   element: GameElement;
+  /**
+   * How deep `element` sits below the template that started rendering. Passed
+   * to every renderer, so each one declares it whether it reads it or not.
+   */
   depth: number;
-  hexPieceSize?: number;
 }>();
 
 const rendererComponent = computed(() => resolveRenderer(props.element));
@@ -42,7 +45,6 @@ const rendererComponent = computed(() => resolveRenderer(props.element));
     :is="rendererComponent"
     :element="element"
     :depth="depth"
-    :hex-piece-size="hexPieceSize"
   />
   <!-- null = registry empty or no match; built-in registration (93-06) guarantees a match at runtime -->
 </template>

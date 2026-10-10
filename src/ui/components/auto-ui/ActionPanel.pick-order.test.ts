@@ -62,7 +62,6 @@ async function panel() {
     props: {
       availableActions: ['sendMail'],
       actionMetadata: { sendMail },
-      playerSeat: 1,
       isMyTurn: true,
     },
   });
@@ -126,7 +125,7 @@ describe('an optional pick offers Skip in every shape (#392)', () => {
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
       attachTo: document.body,
-      props: { availableActions: [action.name], actionMetadata: { [action.name]: action }, playerSeat: 1, isMyTurn: true },
+      props: { availableActions: [action.name], actionMetadata: { [action.name]: action }, isMyTurn: true },
     });
     mounted.push(wrapper);
     await settle();

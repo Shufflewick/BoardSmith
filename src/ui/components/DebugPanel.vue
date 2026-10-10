@@ -584,15 +584,12 @@ function handleRestartClick() {
           :pending-rewind-discard-count="pendingRewindDiscardCount"
           :rewind-loading="rewindLoading"
           :rewind-error="rewindError"
-          :history-has-messages="props.historyHasMessages"
           @refresh="fetchHistory"
           @select-action="selectAction($event)"
           @back-to-live="clearHistoricalState"
           @rewind="$event !== null && requestRewind($event)"
           @confirm-rewind="confirmRewind"
           @cancel-rewind="cancelRewind"
-          @copy-history="emit('copy-history')"
-          @clear-history="emit('clear-history')"
         />
 
         <!-- Logs Tab (ERR-04) -->
