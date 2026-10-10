@@ -545,7 +545,20 @@ describe('runTemplateDupesCheck and rekeyTemplateDupes', () => {
     const result = await runTemplateDupesCheck(dir);
     expect(result.code).toBe(0);
     expect(result.nothingToCheck).toBe(true);
-    expect(result.report).toContain('no .vue files');
+    expect(result.report).toContain('jscpd analyzed 0 files');
+  });
+
+  // #614: jscpd skips a file below its minimum size, so a tree whose only .vue
+  // file is small also analyses 0 sources. jscpd's report counts both cases the
+  // same, so the audit must name both rather than claim no .vue files exist.
+  it('does not claim there are no .vue files when the only one is too small to analyse', async () => {
+    const dir = project({ 'A.vue': '<template>\n  <div>hi</div>\n</template>\n' });
+    const result = await runTemplateDupesCheck(dir);
+    expect(result.code).toBe(0);
+    expect(result.nothingToCheck).toBe(true);
+    expect(result.report).not.toContain('found no .vue files');
+    expect(result.report).toContain('jscpd analyzed 0 files');
+    expect(result.report).toContain('none is large enough');
   });
 
   it('does not claim a record describes the tree when there is no record and no duplication', async () => {
