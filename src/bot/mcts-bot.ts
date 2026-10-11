@@ -18,6 +18,7 @@ import type {
 import { DEFAULT_CONFIG } from './types.js';
 import { applyDeterminization } from './determinization.js';
 import { SeededRandom, mintSeed } from '../utils/random.js';
+import { isDevMode } from '../utils/dev.js';
 
 /** Game class constructor type */
 type GameClass<G extends Game = Game> = new (options: GameOptions) => G;
@@ -86,6 +87,8 @@ export class MCTSBot<G extends Game = Game> {
   private cachedUctC: number = Math.sqrt(2);
   /** Warn at most once per bot about a truncated seeded search (see below). */
   private warnedSeededTruncation = false;
+  /** Why the first step this search threw away was thrown away (#669). */
+  private firstDroppedStepReason?: string;
 
   /** Live game instance used during search (cloned from original) */
   private searchGame: G | null = null;
@@ -397,6 +400,8 @@ export class MCTSBot<G extends Game = Game> {
     // Track truncation so a SEEDED search can tell the caller its result was
     // not actually reproducible (see warnIfSeededSearchWasTruncated).
     let completedIterations = 0;
+    let scoredSteps = 0;
+    this.firstDroppedStepReason = undefined;
 
     for (let i = 0; i < this.config.iterations; i++) {
       // Check timeout before each iteration
@@ -424,6 +429,7 @@ export class MCTSBot<G extends Game = Game> {
 
         // BACKPROPAGATE: Update stats and RAVE table
         this.backpropagate(child, playout.score, playout.playoutMoves, treeMoves);
+        scoredSteps++;
       }
       // Otherwise a refused move changed part of this world before it was
       // refused (#421), so the position no longer describes any node, and
@@ -458,6 +464,7 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     this.warnIfSeededSearchWasTruncated(completedIterations, timeout);
+    this.warnIfStepsWereDropped(completedIterations, scoredSteps, root.children.length === 0);
 
     // Cleanup search state — null the bot's own snapshot fields.
     // The local `root` reference is returned to callers so they can read
@@ -789,15 +796,15 @@ export class MCTSBot<G extends Game = Game> {
     let flowState: FlowState;
     try {
       flowState = game.continueFlow(move.action, this.rebindArgs(move.args), seat);
-    } catch {
+    } catch (error) {
       // The flow itself threw, possibly after the move changed the game.
+      this.firstDroppedStepReason ??= error instanceof Error ? error.message : String(error);
       return { outcome: 'refusedAfterChanges', flowState: this.worldFlowState() };
     }
     if (flowState.actionError === undefined) return { outcome: 'made', flowState };
-    return {
-      outcome: flowState.actionPartiallyApplied ? 'refusedAfterChanges' : 'refused',
-      flowState,
-    };
+    if (!flowState.actionPartiallyApplied) return { outcome: 'refused', flowState };
+    this.firstDroppedStepReason ??= flowState.actionError;
+    return { outcome: 'refusedAfterChanges', flowState };
   }
 
   /**
@@ -1599,6 +1606,28 @@ export class MCTSBot<G extends Game = Game> {
       + 'timeout, so this move is NOT reproducible — the same seed will pick a different '
       + 'move on a faster/slower machine. Pass `timeout: Infinity` to bound the search by '
       + 'iterations alone, or lower `iterations` so the search finishes within the timeout.',
+    );
+  }
+
+  /**
+   * In development mode, warn when at least half of this search's steps were
+   * thrown away (#669). A step is thrown away when a move it made changed the
+   * game and then failed, which is what a game's flow reading a card this seat
+   * cannot see does when the game declares no `determinize` sampler: the
+   * search then quietly rests its choice on a few steps, or on none. The
+   * warning changes nothing about which move is chosen.
+   */
+  private warnIfStepsWereDropped(steps: number, scoredSteps: number, choseAtRandom: boolean): void {
+    const dropped = steps - scoredSteps;
+    if (!isDevMode() || steps === 0 || dropped * 2 < steps) return;
+    console.warn(
+      `[BoardSmith] MCTS bot for seat ${this.playerIndex}: ${dropped} of ${steps} search steps were thrown away, `
+      + 'because a move changed the game and then failed. The first one failed with:\n\n'
+      + `  ${this.firstDroppedStepReason}\n\n`
+      + (choseAtRandom ? 'No step was scored, so the bot chose its move at random.\n\n' : '')
+      + 'When the game reads state this seat cannot see (an opponent\'s hand, a face-down deck), declare a '
+      + '`determinize` sampler in the game\'s bot strategy so the search can play those moves in a supposed '
+      + 'world. See docs/bot-system.md, "Determinization".',
     );
   }
 }

@@ -289,6 +289,11 @@ ply where the seat to move has a choice), and at each one runs:
   inside the other parts. The bench stops with an error if the two runs differ
   in steps or chosen move.
 
+Beside each step count, "scored" is how many of those steps were scored. The
+rest were thrown away because a move in them changed the game and then failed
+(see "Hidden information" below). A search whose scored count is far below its
+steps chose its move on almost nothing, however fast it ran (#669).
+
 It always measures in production mode, where `isDevMode()` is false, as in a
 worker child, whatever `NODE_ENV` the shell has. Development mode makes the bot
 up to 1.7 times slower (#628), and the report refuses to print numbers taken in
@@ -385,6 +390,18 @@ you doing either:
 - **Fabricating the missing state** so `execute()` succeeds makes the bot search
   a world that does not exist. It is the same mistake as deriving `choices` from
   state the caller cannot see, one layer later: the answer is no move, not a guess.
+
+A skipped move that changed the game before it failed costs the whole search
+step it was made in: the step is thrown away, unscored. That is what happens
+when a game's flow reads a card this seat cannot see after a move, as
+Cribbage's starter cut and Seven's discard reveal did (#669), and with no
+sampler nearly every step of such a search is thrown away. In development mode
+the search warns, once per search, when at least half of its steps were thrown
+away. The warning gives the count, quotes the first failure (usually a hidden
+read, "... is not known here"), says when no step was scored and the move was
+chosen at random, and points here. It changes nothing about which move is
+chosen, and production searches never warn. The bench's "scored" columns show
+the same count (see "Measuring bot speed").
 
 A bot that skips its unresolvable moves plays worse than one that could resolve
 them. Making it play WELL in a hidden-information game needs determinization,
