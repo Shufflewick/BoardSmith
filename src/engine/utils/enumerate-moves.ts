@@ -219,14 +219,23 @@ function enumerateGatedSelections(
   // the pump halted on the rejection with the round never closing for any
   // seat. Every move handed back must be one `performAction` would accept.
   if (!actionDef.validate) return combos;
-  // Execution validates the resolved args, where a skipped pick is absent
-  // (#648), so the keys resolveArgs dropped are left out here too.
-  const skipped = Object.keys(bound).filter((key) => !(key in resolved));
-  return combos.filter((args) => {
-    const executed = { ...args };
-    for (const key of skipped) delete executed[key];
-    return executor.validateAction(actionDef, player, executed, { asFollowUp }).valid;
-  });
+  return combos.filter(
+    (args) => executor.validateAction(actionDef, player, argsCallbacksSee(actionDef, args), { asFollowUp }).valid,
+  );
+}
+
+/**
+ * The args a rule callback (`choices`, `disabled`, `multiSelect`, `validate`)
+ * is shown for a move, as execution shows them: a skipped (`null`) pick is
+ * absent (#627, #648, #659). The move itself keeps the `null`, which the runner
+ * binds back when a follow-up runs.
+ */
+function argsCallbacksSee(actionDef: ActionDefinition, args: Record<string, unknown>): Record<string, unknown> {
+  const seen = { ...args };
+  for (const selection of actionDef.selections) {
+    if (seen[selection.name] === null) delete seen[selection.name];
+  }
+  return seen;
 }
 
 // ─── Repeating selections ────────────────────────────────────────────────────
@@ -547,7 +556,8 @@ function _enumerateRecursive(
   if (Object.prototype.hasOwnProperty.call(currentArgs, selection.name)) {
     return _enumerateRecursive(game, actionDef, player, index + 1, currentArgs);
   }
-  const choices = _getChoices(game, actionDef.name, selection, player, currentArgs);
+  const seen = argsCallbacksSee(actionDef, currentArgs);
+  const choices = _getChoices(game, actionDef.name, selection, player, seen);
 
   // Text/number inputs cannot be enumerated — skip optional, block required
   if (selection.type === 'text' || selection.type === 'number') {
@@ -569,7 +579,7 @@ function _enumerateRecursive(
   // three used to be three copies of this recursion, which is how a fourth shape
   // would have arrived with its own subtly different one.
   const results: Record<string, unknown>[] = [];
-  for (const value of _valuesToTry(game, actionDef, player, selection, choices, currentArgs)) {
+  for (const value of _valuesToTry(game, actionDef, player, selection, choices, seen)) {
     // Element objects stay in currentArgs so dependent selections receive the
     // real objects (matching the bot's original behavior).
     const newArgs = { ...currentArgs, [selection.name]: value };
