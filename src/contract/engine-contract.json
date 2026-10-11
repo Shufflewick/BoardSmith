@@ -1437,7 +1437,7 @@
       "surfaceHash": "3cd66e7b422f0cbf",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "A selection step's initialArgs are now made as the seat's own picks, in order, through the engine's one-pick path (resolved, checked against what is offered, validated, onSelect and onEach run): a required earlier pick left out is refused ('Missing required selection: <pick>'), a value never offered is refused with the 'no longer available' message, either refusal cancels the new pending action (onCancel runs), and an initial arg that names no pick is not taken. A held follow-up's published args bind from the engine when the pending action starts, so every pick's callbacks see them, and a client's values for engine-bound follow-up picks are never read from initialArgs; ActionExecutor gains makePicksBefore (#658)"
+      "summary": "A chooseFrom that takes one choice refuses a list of its choices with \"takes one choice\", and accepts a choice whose value is itself an array; only a multiSelect or orderedList pick is checked item by item (#660)"
     }
   ]
 }
