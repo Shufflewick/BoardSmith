@@ -18,6 +18,7 @@
  */
 import { isDevMode } from '../../utils/dev.js';
 import { reachPartition, type GameElement } from './game-element.js';
+import { stateChanged } from './state-version.js';
 import type { ElementClass, ElementFinder } from './types.js';
 
 /** First coordinate, then second, to the grid's first child cell at them. */
@@ -25,9 +26,15 @@ type CellMap = Map<unknown, Map<unknown, GameElement>>;
 
 const cellMaps = new WeakMap<GameElement, CellMap>();
 
-/** Drop `parent`'s cell index, if it has one: its children changed. Called wherever children are added, removed or reordered. */
+/**
+ * `parent`'s children changed: drop its cell index, if it has one, and mark
+ * the game changed (#631). Called wherever children are added, removed or
+ * reordered.
+ */
 export function childrenChanged(parent: GameElement | undefined): void {
-  if (parent) cellMaps.delete(parent);
+  if (!parent) return;
+  cellMaps.delete(parent);
+  stateChanged(parent._ctx);
 }
 
 /**

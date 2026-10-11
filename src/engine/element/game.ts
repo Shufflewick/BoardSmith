@@ -13,6 +13,7 @@ import {
 } from './game-element.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE } from './hidden-placeholder.js';
 import { childrenChanged } from './cell-index.js';
+import { stateChanged } from './state-version.js';
 import { Piece } from './piece.js';
 import { Card } from './card.js';
 import { Hand } from './hand.js';
@@ -445,11 +446,17 @@ export interface GameRandom {
  * SHA-256 of the whole seed) as a function, with its state exposed so it can be
  * captured in a snapshot and restored authoritatively (no action replay needed).
  */
-function createGameRandom(seed: string): GameRandom {
+function createGameRandom(seed: string, drawn: () => void): GameRandom {
   const generator = new SeededRandom(seed);
-  const random = (() => generator.next()) as GameRandom;
+  const random = (() => {
+    drawn();
+    return generator.next();
+  }) as GameRandom;
   random.getState = () => generator.getState();
-  random.setState = (state: RandomState) => generator.setState(state);
+  random.setState = (state: RandomState) => {
+    drawn();
+    generator.setState(state);
+  };
   return random;
 }
 
@@ -1151,7 +1158,9 @@ export class Game<
   constructor(options: GameOptions) {
     // Create seed for random
     const seed = options.seed ?? mintSeed();
-    const random = createGameRandom(seed);
+    // A draw changes the game (#631): a candidate callback that draws must be
+    // run every time it is asked, as it always was, never answered from a reuse.
+    const random = createGameRandom(seed, () => stateChanged(ctx as ElementContext));
 
     // Ids are keyed by a secret of their own, never the seed, so they carry no
     // count of hidden creations (#447). A table mints its own key; a world's
@@ -1166,6 +1175,8 @@ export class Game<
       ...(worldIds === undefined ? {} : { _worldIds: worldIds }),
       classRegistry: new Map(),
       _elementsById: new Map(),
+      _stateVersion: 0,
+      _changingDepth: 0,
       random,
     };
 
@@ -3108,6 +3119,7 @@ export class Game<
     // Update game phase based on flow state
     if (this.phase === 'setup') {
       this.phase = 'started';
+      stateChanged(this._ctx);
     }
     // A flow can run to completion inside start() (a game whose whole result is
     // decided in setup, or a flow restored one step from its end). That is a
@@ -3152,6 +3164,7 @@ export class Game<
   #applyFlowCompletion(state: FlowState): void {
     if (!state.complete) return;
     this.phase = 'finished';
+    stateChanged(this._ctx);
   }
 
   /**
@@ -5346,6 +5359,8 @@ export class Game<
     // Resolve element references in all restored elements
     // This converts { __elementRef: "path" } objects back to actual element references
     this.resolveElementReferences(this);
+    // The tree was replaced whole, not through its tree methods (#631).
+    stateChanged(this._ctx);
   }
 
   /**

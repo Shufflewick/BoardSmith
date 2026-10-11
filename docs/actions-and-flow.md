@@ -249,6 +249,44 @@ Measured on a 3,720-space `chooseFrom` with 300 packs on the board: reading the
 packs inside `disabled` cost about 1,600 ms per evaluation; reading them once in
 `prepare` and checking a set of covered spaces cost about 7 ms.
 
+#### A pick's candidates are worked out once per game state
+
+A pick's candidate code (`choices`, `elements`, or `from` with `filter`) runs
+once for a seat in a given game state. Every later question about that pick in
+the same state is answered from that run: the flow's offer, move enumeration,
+validating a submission, resolving a submitted id, and the UI's request (#631).
+Nothing in the game has to change to get this.
+
+- **Keyed by the earlier picks the code reads.** The engine records which of
+  `ctx.args` your callbacks read. A destination list that never reads the piece
+  picked first (the engine applies `filterBy` itself) runs once for every piece;
+  a list that reads `ctx.args.target` runs once per target.
+- **Dropped when the game changes.** The game has a state version, and every
+  change advances it: an element created, moved, removed or shuffled; an
+  action's `execute`; a pick's `onSelect`, `onCancel` or `onEach`; a flow
+  `execute` step, the flow's `setup` and phase hooks; a space's `onEnter` and
+  `onExit` handlers; a bot's `determinize` sampler; a tutorial's `setup`; a
+  random draw; a restore; the game starting and ending. While any of that game
+  code is running, nothing is reused, so it may ask, write and ask again.
+- **Candidate code must not change the game.** That was already the rule; now
+  a write made there (or anywhere else the engine does not run game code) is
+  not seen until the next change the engine does see. A callback that moves an
+  element or draws from `game.random` is simply run every time, as before.
+- **A callback that reads `game.getFlowState()` is run every time.** The flow
+  asks for a step's choices before it has moved to that step, so the flow's
+  position is not part of the state the version describes.
+- **Development mode reuses nothing**, so a test may write to a game directly
+  between two questions and see its change. World mode reuses nothing either.
+
+`disabled` and `prepare` are not part of the reused answer: they run on every
+evaluation, as above.
+
+A `filter` still runs once per candidate in each state. If it reads a fact
+about the whole position, such as a list of every legal move, that fact is
+worked out once per candidate. Give such a pick its candidates whole instead,
+with `chooseElement`'s `elements: (ctx) => ...`, so the whole-position fact is
+worked out once.
+
 #### On-Demand Choices
 
 Choices are always evaluated on-demand when the player needs to make a selection. This means the `choices` callback runs at the moment the player is presented with the selection, not when the action metadata is built.

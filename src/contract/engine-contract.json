@@ -1,5 +1,5 @@
 {
-  "revision": 169,
+  "revision": 170,
   "bundleProtocol": 2,
   "surfaceHash": "a8e02fb25f517721",
   "payloadHash": "3f10d70c457a15ba",
@@ -1465,6 +1465,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A seat's args in a world are its picks, refused as the caller's on every road (#665): a seat's command (applyCommand) and its declaration walk (commandNeeds with a player), a quote (quotePartitions, resolveQuote) and a re-asked pick (pickPartitions, resolvePick) refuse a key no pick declares with the new caller-owned refusal undeclared-arg, carrying ActionExecutor.undeclaredArgsRefusal's sentence, before any of the action's declarations or callbacks run. A seat's command with such a key was previously refused only by the executor and travelled as a plain Error, which the platform treats as game-owned and shows as an error in the game's rules. A scheduled event (commandNeeds with a null player, onEvent) is not checked: the clock's verbs ask no picks and their args are the bundle's own. ActionExecutor.undeclaredArgsRefusal takes Readonly args."
+    },
+    {
+      "revision": 170,
+      "date": "2026-10-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "a8e02fb25f517721",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A pick's choices are worked out once per game state and reused by the flow's offer, move enumeration, validation and the UI's request until the game changes (#631): chess's bot searches about 2.2x faster. A game whose candidate code does not change the game (the existing rule) behaves exactly as before; the platform should run this build for table games' speed."
     }
   ]
 }

@@ -3,6 +3,7 @@ import { GameElement, hasZoneVisibility } from '../element/game-element.js';
 import { Player } from '../player/player.js';
 import { devWarn, isDevMode } from '../../utils/dev.js';
 import { PlayerFacingError } from '../errors.js';
+import { changing, flowStateRead } from '../element/state-version.js';
 import type { ActionResult, FollowUpAction } from '../action/types.js';
 import type {
   FlowNode,
@@ -442,7 +443,7 @@ export class FlowEngine<G extends Game = Game> {
   start(): FlowState {
     const context = this.createContext();
     if (this.definition.setup) {
-      this.definition.setup(context);
+      changing(this.game._ctx, () => this.definition.setup!(context));
     }
     this.resetToRoot(context.variables);
     return this.run();
@@ -1176,6 +1177,7 @@ export class FlowEngine<G extends Game = Game> {
    * Get the current flow state
    */
   getState(): FlowState {
+    flowStateRead();
     // `currentPlayer` and `availableActions` describe ONE seat's prompt, so they
     // are published only while an action step is the step awaiting input. The
     // private fields keep the last action step's values after the flow moves
@@ -2318,7 +2320,7 @@ export class FlowEngine<G extends Game = Game> {
       return { awaitingInput: false };
     }
     // Run the side effect function
-    config.fn(context);
+    changing(this.game._ctx, () => config.fn(context));
     // Update variables in engine from context
     this.variables = { ...context.variables };
     frame.completed = true;
@@ -2347,7 +2349,7 @@ export class FlowEngine<G extends Game = Game> {
 
       // Call onEnterPhase hook
       if (this.definition.onEnterPhase) {
-        this.definition.onEnterPhase(config.name, context);
+        changing(this.game._ctx, () => this.definition.onEnterPhase!(config.name, context));
       }
 
       // Push the phase body and mark as entered
@@ -2359,7 +2361,7 @@ export class FlowEngine<G extends Game = Game> {
 
     // Phase body has completed - call onExitPhase hook
     if (this.definition.onExitPhase) {
-      this.definition.onExitPhase(config.name, context);
+      changing(this.game._ctx, () => this.definition.onExitPhase!(config.name, context));
     }
 
     // Restore previous phase (for nested phases)
