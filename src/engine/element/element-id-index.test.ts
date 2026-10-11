@@ -108,9 +108,8 @@ describe('atId after an in-place restore (the undo path)', () => {
     expect(game.getElementById(later.id)).toBeUndefined();
   });
 
-  it('answers the tree from the game and the pile from the pile when both hold the same id', () => {
-    // The pile is not part of a snapshot, so a card removed after the state
-    // was taken is back in the tree after the restore AND still in the pile.
+  it('finds a card removed after the state it went back to in the tree, and not in the emptied pile', () => {
+    // A restore empties the pile (#650), so the card is only where the state put it.
     const { game, deck } = table();
     const state = game.toJSON();
     const card = deck._t.children[0] as Card;
@@ -119,7 +118,7 @@ describe('atId after an in-place restore (the undo path)', () => {
 
     expect(game.atId(card.id)).toBe(walk(game, card.id));
     expect(game.atId(card.id)).not.toBe(card);
-    expect(game.pile.atId(card.id)).toBe(card);
+    expect(game.pile.atId(card.id)).toBeUndefined();
   });
 });
 

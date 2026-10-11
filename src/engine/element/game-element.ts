@@ -248,8 +248,8 @@ export function reachPartition<T extends GameElement | undefined>(from: T): T {
  * Looked up in the game's id index (#632) when the element filed there is in
  * the game's tree under `from`: ids are unique in the game's tree, so that is
  * the element a walk would find. Anything else -- a lookup in the pile, which
- * can hold one id twice after a restore (#650), or an id the subtree does not
- * hold -- walks the subtree, so the answer is always the walk's.
+ * is outside the game's tree, or an id the subtree does not hold -- walks the
+ * subtree, so the answer is always the walk's.
  */
 export function lookUpId(from: GameElement, id: number): GameElement | undefined {
   const indexed = from._ctx._elementsById.get(id);
