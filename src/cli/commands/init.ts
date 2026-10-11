@@ -538,11 +538,11 @@ export class ${pascal}Game extends Game<${pascal}Game, ${pascal}Player> {
     }
 
     // Register actions
-    this.registerAction(createDrawAction(this));
-    this.registerAction(createPlayAction(this));
+    this.registerAction(createDrawAction());
+    this.registerAction(createPlayAction());
 
     // Set up game flow
-    this.setFlow(createGameFlow(this));
+    this.setFlow(createGameFlow());
   }
 
   getPlayerHand(player: ${pascal}Player): Hand {
@@ -593,38 +593,35 @@ export class PlayArea extends Space {
 
 export function generateActionsTs(pascal: string): string {
   return `import { Action, type ActionDefinition } from 'boardsmith';
-import type { ${pascal}Game, ${pascal}Player } from './game.js';
+import type { ${pascal}Game } from './game.js';
 import { Card } from './elements.js';
 
-export function createDrawAction(game: ${pascal}Game): ActionDefinition {
-  return Action.create('draw')
+// Action.create<${pascal}Game> types every callback by this game: ctx.game is a
+// ${pascal}Game, ctx.player a ${pascal}Player, and each choice arrives as what
+// its choices returned.
+export function createDrawAction(): ActionDefinition {
+  return Action.create<${pascal}Game>('draw')
     .prompt('Draw a card from the deck')
     .execute((args, ctx) => {
-      const player = ctx.player as ${pascal}Player;
-      const card = game.deck.first(Card);
+      const card = ctx.game.deck.first(Card);
       if (card) {
-        card.putInto(player.hand);
+        card.putInto(ctx.player.hand);
         return { success: true, message: 'Drew a card' };
       }
       return { success: false, message: 'No cards left in deck' };
     });
 }
 
-export function createPlayAction(game: ${pascal}Game): ActionDefinition {
-  return Action.create('play')
+export function createPlayAction(): ActionDefinition {
+  return Action.create<${pascal}Game>('play')
     .prompt('Play a card from your hand')
     .chooseFrom('card', {
       prompt: 'Select a card to play',
-      choices: (ctx) => {
-        const player = ctx.player as ${pascal}Player;
-        return [...player.hand.all(Card)];
-      },
+      choices: (ctx) => [...ctx.player.hand.all(Card)],
     })
-    .execute((args, ctx) => {
-      const player = ctx.player as ${pascal}Player;
-      const card = args.card as Card;
+    .execute(({ card }, ctx) => {
       card.remove();
-      player.score += 1;
+      ctx.player.score += 1;
       return { success: true, message: 'Played a card' };
     });
 }
@@ -639,12 +636,12 @@ export function generateFlowTs(pascal: string): string {
   sequence,
   type FlowDefinition,
 } from 'boardsmith';
-import type { ${pascal}Game, ${pascal}Player } from './game.js';
+import type { ${pascal}Game } from './game.js';
 import { Card } from './elements.js';
 
-export function createGameFlow(game: ${pascal}Game): FlowDefinition {
+export function createGameFlow(): FlowDefinition<${pascal}Game> {
   // Player turn: draw a card, then play a card
-  const playerTurn = sequence(
+  const playerTurn = sequence<${pascal}Game>(
     actionStep({
       name: 'draw-step',
       actions: ['draw'],
@@ -655,10 +652,7 @@ export function createGameFlow(game: ${pascal}Game): FlowDefinition {
       // The same seat acts again right after drawing. 'continue' says this is
       // still that seat's turn, so undo can reach back over the draw too.
       turnScope: 'continue',
-      skipIf: (ctx) => {
-        const player = ctx.player as ${pascal}Player;
-        return player.hand.count(Card) === 0;
-      },
+      skipIf: (ctx) => ctx.player?.hand.count(Card) === 0,
     }),
   );
 
