@@ -12,6 +12,10 @@
  * compiled under the tsconfig `boardsmith init` writes. Compiling cannot see
  * what throws at construction, so the getting-started game is also built and
  * played one turn.
+ *
+ * The aspect templates `/design-game` copies game code from
+ * (`src/cli/slash-command/aspects/*.md`) mark theirs the same way (#645): the
+ * square-grid one taught a `from` that handed an array where one element goes.
  */
 import { describe, expect, it } from 'vitest';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -30,21 +34,30 @@ for (const [path, code] of gameBlockFiles(blocks)) {
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, code);
 }
-writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig(['docs/**/*.ts']));
+writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig(['docs/**/*.ts', 'src/cli/slash-command/aspects/**/*.ts']));
 
 describe('the game code the docs teach (#511)', () => {
   it('marks the getting-started rules for compiling', () => {
     expect(
-      blocks.filter((block) => block.doc === 'getting-started').map((block) => block.path),
+      blocks.filter((block) => block.doc === 'docs/getting-started').map((block) => block.path),
     ).toEqual(['src/rules/game.ts', 'src/rules/elements.ts', 'src/rules/actions.ts', 'src/rules/flow.ts']);
+  });
+
+  it('marks the game code of every aspect template for compiling (#645)', () => {
+    for (const aspect of ['dice', 'hex-grid', 'playing-cards', 'square-grid']) {
+      expect(
+        blocks.filter((block) => block.doc === `src/cli/slash-command/aspects/${aspect}`).map((block) => block.path),
+        aspect,
+      ).toEqual(['src/rules/game.ts', 'src/rules/elements.ts', 'src/rules/actions.ts']);
+    }
   });
 
   it('reports zero vue-tsc errors for every block the docs mark as game code', () => {
     expectCleanCompile(
       root,
       'game.tsconfig.json',
-      'the game code the docs mark with "<!-- typecheck: game <path> -->" (docs/<doc>/<path> is that block ' +
-        'of docs/<doc>.md)',
+      'the game code the docs and aspect templates mark with "<!-- typecheck: game <path> -->" ' +
+        '(<doc>/<path> is that block of <doc>.md)',
       'Fix the doc, not this test: a block an author copies must compile in their game as written, with ' +
         'its imports and the game type its builders take.',
     );
