@@ -78,13 +78,15 @@ const props = withDefaults(defineProps<DebugPanelProps>(), {
 });
 
 /**
- * The seats of the running game: the players in the state the host sent
- * (#525). The Controls tab draws one "switch player" button per seat from it.
+ * The players in the state the host sent, the same list the player cards read.
+ * The Controls tab draws one "switch player" button per seat (#525), and the
+ * History tab colours each seat's badge with its player's colour (#641).
  */
-const seats = computed<number[]>(() => {
-  const players = props.state?.state?.players;
-  return Array.isArray(players) ? players.map((player: { seat: number }) => player.seat) : [];
+const players = computed<Array<{ seat: number; color?: string }>>(() => {
+  const statePlayers = props.state?.state?.players;
+  return Array.isArray(statePlayers) ? statePlayers : [];
 });
+const seats = computed<number[]>(() => players.value.map((player) => player.seat));
 
 const emit = defineEmits<{
   'switch-player': [position: number];
@@ -595,6 +597,7 @@ function handleRestartClick() {
         <HistoryTab
           v-show="activeTab === 'history'"
           :action-history="actionHistory"
+          :players="players"
           :history-loading="historyLoading"
           :history-error="historyError"
           :selected-action-index="selectedActionIndex"

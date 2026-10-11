@@ -91,8 +91,8 @@
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
-  background: color-mix(in srgb, var(--badge-seat) 30%, transparent);
-  color: var(--badge-seat);
+  background: color-mix(in srgb, var(--badge-seat, var(--bsg-accent)) 30%, transparent);
+  color: var(--badge-seat, var(--bsg-accent));
 }
 .history-action-name {
   color: var(--bsg-ink);

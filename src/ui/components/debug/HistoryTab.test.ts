@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 /**
- * THE HISTORY TAB's seat badge (#622).
+ * THE HISTORY TAB's seat badge (#622, #641).
  *
  * A history entry's `player` is the 1-based seat that made the move
  * (`serializeAction` stores `player.seat`). These play real moves through a
- * headless session, feed its `debugHistory` answer to the tab, and check each
- * badge names, and is coloured as, the seat that moved.
+ * headless session, feed its `debugHistory` answer and its players to the tab,
+ * and check each badge names the seat that moved and wears that player's own
+ * colour, the one the player cards show.
  */
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
@@ -14,9 +15,14 @@ import { Game, Player, Action, actionStep, loop, eachPlayer, type GameOptions } 
 import { createHeadlessSession } from '../../../session/headless-session.js';
 import type { GameDefinitionLike } from '../../../session/stateless-ops.js';
 
+// The game's own colours, set in setup as `Player.color` documents. Seat 2 is
+// left with no colour, the case the player cards draw in the accent colour.
+const GAME_COLOURS = ['#123456', undefined];
+
 class TurnsGame extends Game<TurnsGame, Player> {
   constructor(options: GameOptions) {
     super(options);
+    for (const player of this.all(Player)) player.color = GAME_COLOURS[player.seat - 1];
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
     this.setFlow({
       root: loop({
@@ -38,13 +44,15 @@ async function historyAfterEachSeatMoves() {
   }
   const history = await session.send(1, { type: 'debugHistory' });
   if (!history.success) throw new Error(history.error);
-  return history.actionHistory;
+  const views = session.broadcasts.at(-1) as Array<{ state: { players: Array<{ seat: number; color?: string }> } }>;
+  return { actionHistory: history.actionHistory, players: views[0]!.state.players };
 }
 
-function mountHistory(actionHistory: Awaited<ReturnType<typeof historyAfterEachSeatMoves>>) {
+function mountHistory({ actionHistory, players }: Awaited<ReturnType<typeof historyAfterEachSeatMoves>>) {
   return mount(HistoryTab, {
     props: {
       actionHistory,
+      players,
       historyLoading: false,
       historyError: null,
       selectedActionIndex: null,
@@ -57,19 +65,19 @@ function mountHistory(actionHistory: Awaited<ReturnType<typeof historyAfterEachS
   });
 }
 
-describe('HistoryTab seat badge (#622)', () => {
+describe('HistoryTab seat badge (#622, #641)', () => {
   it('names the seat that made each move', async () => {
     const wrapper = mountHistory(await historyAfterEachSeatMoves());
 
     expect(wrapper.findAll('.history-player').map((badge) => badge.text())).toEqual(['P1', 'P2']);
   });
 
-  it('colours each badge with the colour of the seat that made the move', async () => {
+  it("colours each badge with the moving player's own colour, and leaves a colourless player to the accent fallback", async () => {
     const wrapper = mountHistory(await historyAfterEachSeatMoves());
 
     expect(wrapper.findAll('.history-player').map((badge) => badge.attributes('style'))).toEqual([
-      '--badge-seat: var(--bsg-seat-1);',
-      '--badge-seat: var(--bsg-seat-2);',
+      '--badge-seat: #123456;',
+      undefined,
     ]);
   });
 });

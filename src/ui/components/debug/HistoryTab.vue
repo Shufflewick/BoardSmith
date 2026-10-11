@@ -17,8 +17,14 @@ import { formatHistoryEntry, formatActionArgs, formatTimestamp } from './debug-f
 import DebugButton from './DebugButton.vue';
 import DebugDialog from './DebugDialog.vue';
 
-defineProps<{
+const props = defineProps<{
   actionHistory: HistoryEntry[];
+  /**
+   * The game's players, from the same state the player cards read. A badge
+   * wears its seat's `color`, as the cards do; a player with none gets the
+   * cards' fallback, the accent colour.
+   */
+  players: ReadonlyArray<{ seat: number; color?: string }>;
   historyLoading: boolean;
   historyError: string | null;
   selectedActionIndex: number | null;
@@ -28,6 +34,10 @@ defineProps<{
   rewindLoading: boolean;
   rewindError: string | null;
 }>();
+
+function seatColour(seat: number): string | undefined {
+  return props.players.find((player) => player.seat === seat)?.color;
+}
 
 const emit = defineEmits<{
   refresh: [];
@@ -134,7 +144,7 @@ const emit = defineEmits<{
           >
             <div class="history-item-header">
               <span class="history-index">{{ index + 1 }}</span>
-              <span class="history-player" :style="{ '--badge-seat': `var(--bsg-seat-${action.player})` }">
+              <span class="history-player" :style="{ '--badge-seat': seatColour(action.player) }">
                 P{{ action.player }}
               </span>
               <span class="history-action-name">{{ formatHistoryEntry(action) }}</span>
