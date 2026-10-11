@@ -308,9 +308,9 @@ same machine, close together, and put both tables in the ticket. The fixed
 search's steps and chosen move must not change unless the ticket means to change
 the search; its ms, steps per second and part shares are the gain. Check the
 load average the report prints: every timed number moves with the machine's
-load. Two back-to-back runs on a shared machine (the committed baseline's run,
-at a load of 5 to 7, and the one before it, which started as the load fell from
-about 130) gave identical fixed searches, and preset step counts within 10% for
+load. Two back-to-back runs on a shared machine (#630's baseline run, at a load
+of 5 to 7, and the one before it, which started as the load fell from about
+130) gave identical fixed searches, and preset step counts within 10% for
 hex at both sizes and for the games that finish their budget, but 16% to 62%
 apart for chess and checkers, whose fixed search times also differed by up to 3
 times at single positions. So run both sides more than once when the machine
