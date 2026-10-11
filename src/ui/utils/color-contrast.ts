@@ -13,10 +13,12 @@
  * and the standard CSS named colors (`CSS_NAMED_COLORS`) — the shapes
  * `STANDARD_PLAYER_COLORS` (hex) and `createColorOption()`-based custom game
  * palettes (any legal CSS color string) can supply. It fails loud (throws) on
- * anything else rather than silently guessing wrong contrast — see this
- * module's callers (e.g. `PlayerToken.vue`) for how a render path should
- * handle that throw (degrade to a safe default ink, never crash).
+ * anything else rather than silently guessing wrong contrast. A render path
+ * calls `seatInk()` instead, which degrades to a safe default ink rather than
+ * crashing.
  */
+
+import { devWarn } from '../../utils/dev.js';
 
 export interface ContrastInk {
   ink: '#000000' | '#ffffff';
@@ -200,9 +202,8 @@ const WHITE_LUMINANCE = relativeLuminance({ r: 255, g: 255, b: 255 });
  * @throws {Error} if `seatColor` is not a `#rgb`, `#rrggbb`, `rgb()`,
  *   `rgba()`, `hsl()`/`hsla()`, or standard CSS named color string, or if a
  *   recognized format has an out-of-range channel/component — fails loud
- *   rather than guessing wrong contrast. Callers in a render path (e.g. a Vue
- *   `computed`) MUST catch this and degrade to a safe default ink; see
- *   `PlayerToken.vue` for the reference pattern.
+ *   rather than guessing wrong contrast. A render path uses `seatInk()`,
+ *   which catches this.
  */
 export function contrastInk(seatColor: string): ContrastInk {
   const rgb = parseColor(seatColor);
@@ -215,4 +216,34 @@ export function contrastInk(seatColor: string): ContrastInk {
   const textShadow = ink === '#ffffff' ? '0 1px 2px rgba(0,0,0,.5)' : 'none';
 
   return { ink, textShadow };
+}
+
+/** The ink for a seat with no colour, drawn in the accent colour: white with a dark halo. */
+const DEFAULT_SEAT_INK: ContrastInk = { ink: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,.5)' };
+
+/**
+ * The ink for text drawn on a player's colour, for any component that fills
+ * with `player.color` (PlayerToken, GameOverCard, the Debug History badge), so
+ * they all read alike.
+ *
+ * A seat with no colour gets the default white ink, matching the accent fill
+ * those components fall back to. `player.color` is a plain string at the
+ * `createColorOption()` boundary, so it can be a legal CSS colour
+ * `contrastInk()` cannot parse; rather than crash the render, that also gets
+ * the default ink, with one warning per colour naming `renderer` so the game
+ * author can see why.
+ */
+export function seatInk(color: string | undefined, renderer: string): ContrastInk {
+  if (!color) return DEFAULT_SEAT_INK;
+  try {
+    return contrastInk(color);
+  } catch (err) {
+    devWarn(
+      `${renderer}-unparseable-color:${color}`,
+      `${renderer} received a color ("${color}") that contrastInk() can't parse, ` +
+        `so it uses the default white ink instead. ` +
+        `${err instanceof Error ? err.message : String(err)}`,
+    );
+    return DEFAULT_SEAT_INK;
+  }
 }

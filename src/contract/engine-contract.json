@@ -1,5 +1,5 @@
 {
-  "revision": 168,
+  "revision": 167,
   "bundleProtocol": 2,
   "surfaceHash": "3cd66e7b422f0cbf",
   "payloadHash": "3f10d70c457a15ba",
@@ -1447,15 +1447,6 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A selection step's initialArgs are now made as the seat's own picks, in order, through the engine's one-pick path (resolved, checked against what is offered, validated, onSelect and onEach run): a required earlier pick left out is refused ('Missing required selection: <pick>'), a value never offered is refused with the 'no longer available' message, either refusal cancels the new pending action (onCancel runs), and an initial arg that names no pick is not taken. A held follow-up's published args bind from the engine when the pending action starts, so every pick's callbacks see them, and a client's values for engine-bound follow-up picks are never read from initialArgs; ActionExecutor gains makePicksBefore (#658)"
-    },
-    {
-      "revision": 168,
-      "date": "2026-10-11",
-      "bundleProtocol": 2,
-      "surfaceHash": "3cd66e7b422f0cbf",
-      "payloadHash": "3f10d70c457a15ba",
-      "formatHash": "3aff5d1f34f52ec0",
-      "summary": "A client may send only the picks an action declares (#662): a key no pick declares is refused with a message naming it and the picks the action takes ('<action>' was sent '<key>', which is not one of its picks. It takes: <picks>.) on a whole submission (repeating or not, and a world command), on a selection step's initialArgs (the new pending action is cancelled), and on resolveChoices (INVALID_PICK), so a .followUpArgs key is never client data. A follow-up's other args come only from the follow-up the seat holds: Game.performAction and ActionExecutor.executeAction take { followUp } in place of { asFollowUp } and bind its args over the client's (a whole follow-up with a repeating pick now receives them too), resolveChoices binds the held follow-up's args, and a pick the follow-up answered is passed over on every step path so a client's value for it is never stored or seen by later picks. GameRunner.startPendingAction binds follow-up args as the session does and GameRunner.followUpArgsFor is new; enumerateLegalMoves moves and actionHistory entries carry only picks (replay rebinds the rest), and the UI controller sends only picks; ActionExecutor gains undeclaredArgsRefusal and picksOf."
     }
   ]
 }

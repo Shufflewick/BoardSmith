@@ -14,11 +14,18 @@
  */
 import type { HistoryEntry } from '../../composables/useDebugBridge.js';
 import { formatHistoryEntry, formatActionArgs, formatTimestamp } from './debug-format.js';
+import { seatInk, type ContrastInk } from '../../utils/color-contrast.js';
 import DebugButton from './DebugButton.vue';
 import DebugDialog from './DebugDialog.vue';
 
-defineProps<{
+const props = defineProps<{
   actionHistory: HistoryEntry[];
+  /**
+   * The game's players, from the same state the player cards read. A badge
+   * is filled with its seat's `color` and inked by `seatInk`, as the cards
+   * are; a player with none gets the cards' accent fill and white ink.
+   */
+  players: ReadonlyArray<{ seat: number; color?: string }>;
   historyLoading: boolean;
   historyError: string | null;
   selectedActionIndex: number | null;
@@ -28,6 +35,11 @@ defineProps<{
   rewindLoading: boolean;
   rewindError: string | null;
 }>();
+
+function badgeStyle(seat: number): { '--badge-seat': string | undefined; color: ContrastInk['ink'] } {
+  const color = props.players.find((player) => player.seat === seat)?.color;
+  return { '--badge-seat': color, color: seatInk(color, 'HistoryTab').ink };
+}
 
 const emit = defineEmits<{
   refresh: [];
@@ -134,7 +146,7 @@ const emit = defineEmits<{
           >
             <div class="history-item-header">
               <span class="history-index">{{ index + 1 }}</span>
-              <span class="history-player" :style="{ '--badge-seat': `var(--bsg-seat-${action.player})` }">
+              <span class="history-player" :style="badgeStyle(action.player)">
                 P{{ action.player }}
               </span>
               <span class="history-action-name">{{ formatHistoryEntry(action) }}</span>
