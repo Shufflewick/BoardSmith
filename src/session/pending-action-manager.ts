@@ -280,9 +280,9 @@ export class PendingActionManager<G extends Game = Game> {
    * Make the picks a client sent as `initialArgs` with the first step of a
    * new pending action: the picks it collected before `selectionName`, each
    * made as its own step would be, in order (#658). A pick a held follow-up
-   * answered is the engine's and is not taken from the client. An arg that
-   * names no pick is passed on, as a whole submission's is. A refused pick
-   * cancels the action, running `onCancel` for any `onSelect` that ran.
+   * answered is the engine's and is not taken from the client, and an arg
+   * that names no pick is not taken at all. A refused pick cancels the
+   * action, running `onCancel` for any `onSelect` that ran.
    */
   #makeInitialPicks(
     pendingState: PendingActionState,
@@ -291,19 +291,12 @@ export class PendingActionManager<G extends Game = Game> {
     initialArgs: Record<string, unknown>,
   ): PickStepResult | undefined {
     const game = this.#runner.game;
-    const action = game.getAction(pendingState.actionName)!;
-    const picks = new Set(action.selections.map(s => s.name));
-    for (const [key, value] of Object.entries(initialArgs)) {
-      if (!picks.has(key) && !Object.hasOwn(pendingState.collectedArgs, key)) pendingState.collectedArgs[key] = value;
-    }
-
-    const made = game.getActionExecutor().makePicksBefore(
-      action, game.getPlayer(playerPosition)!, pendingState, selectionName, initialArgs,
+    const error = game.getActionExecutor().makePicksBefore(
+      game.getAction(pendingState.actionName)!, game.getPlayer(playerPosition)!, pendingState, selectionName, initialArgs,
     );
-    if (made.error === undefined) return undefined;
+    if (error === undefined) return undefined;
     this.cancelPendingAction(playerPosition);
-    if (made.applied) this.#runner.captureCheckpoint();
-    return { success: false, error: made.error, errorCode: ErrorCode.INVALID_PICK };
+    return { success: false, error, errorCode: ErrorCode.INVALID_PICK };
   }
 
   /** The acting seat's state after a step, as the step result returns it. */

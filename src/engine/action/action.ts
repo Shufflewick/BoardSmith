@@ -1343,7 +1343,7 @@ export class ActionExecutor {
    * `GameRunner.bindFollowUpArgs`). That is engine data, not the client's: it
    * is passed over, and `submitted` is not read for it.
    *
-   * `applied` says whether an `onEach` has run, which can change the game.
+   * Returns why a pick was refused, or `undefined` when every pick was made.
    */
   makePicksBefore(
     action: ActionDefinition,
@@ -1351,20 +1351,18 @@ export class ActionExecutor {
     pendingState: PendingActionState,
     selectionName: string,
     submitted: Record<string, unknown>
-  ): { error?: string; applied: boolean } {
+  ): string | undefined {
     const target = action.selections.findIndex(s => s.name === selectionName);
-    let applied = false;
     while (pendingState.currentSelectionIndex < target) {
       const selection = action.selections[pendingState.currentSelectionIndex];
       if (Object.hasOwn(pendingState.collectedArgs, selection.name)) {
         pendingState.currentSelectionIndex++;
         continue;
       }
-      const step = this.feedSelection(action, player, pendingState, selection, submitted[selection.name]);
-      applied ||= step.applied;
-      if (step.error !== undefined) return { error: step.error, applied };
+      const { error } = this.feedSelection(action, player, pendingState, selection, submitted[selection.name]);
+      if (error !== undefined) return error;
     }
-    return { applied };
+    return undefined;
   }
 
   /**
