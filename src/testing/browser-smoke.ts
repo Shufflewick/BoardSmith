@@ -408,10 +408,15 @@ function pressWithin(page: Page): PressWithin {
  * The dev host menu `toggle` opens, showing `items`, choosing `item` from it, which has taken effect
  * once `taken` shows, waited for within {@link TURN_WAIT_MS} of the page's time and saying `late`
  * when it has not.
+ *
+ * The item is pressed with a `click` sent to it whole, not with the pointer: the menu closes when the
+ * game's frame takes focus (#610), and a frame that does so between the pointer pressing and lifting
+ * on the item, as one on a loaded machine does, takes the item away before the click it would make,
+ * while Playwright, which checks only where the pointer pressed, reports the press done (#646).
  */
 function devHostMenu(page: Page, menu: { toggle: Locator; items: Locator; item: Locator; taken: Locator; late: string }): DevHostMenu {
   return {
-    pressItem: () => menu.item.click({ timeout: 0 }),
+    pressItem: () => menu.item.dispatchEvent('click', undefined, { timeout: 0 }),
     pressToggle: () => menu.toggle.click({ timeout: 0 }),
     isOpen: async () => (await menu.items.count()) > 0,
     isTaken: async () => (await menu.taken.count()) > 0,
