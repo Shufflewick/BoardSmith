@@ -29,6 +29,18 @@ type GameClass<G extends Game = Game> = new (options: GameOptions) => G;
 const MAX_SAMPLED_ARGS = 20;
 
 /**
+ * The most memory one search's saved copies may hold (#633): 32 MiB, a quarter
+ * of a 128 MB Workers isolate, which leaves the rest for the live game, the
+ * root snapshot, the search tree and the session around them. A copy of hex
+ * 19x19 is 84 KB early in a game, so the budget holds a few hundred of them;
+ * chess, checkers and the card games are smaller.
+ */
+const SAVED_COPY_BUDGET_BYTES = 32 * 1024 * 1024;
+
+/** A move made on a search step, and the seat that made it, for the RAVE table. */
+type TreeMove = { move: BotMove; player: number };
+
+/**
  * What became of a move the search made in the world it is in (#421).
  * `refusedAfterChanges` is a refusal that may have changed the game first, so
  * the world matches no position the move sequence can reach.
@@ -44,10 +56,11 @@ type SearchMoveOutcome = 'made' | 'refused' | 'refusedAfterChanges';
  * 3. PLAYOUT: Random moves until game ends (up to playoutDepth)
  * 4. BACKPROPAGATE: Update win counts up the tree
  *
- * Each iteration starts from the root position: the search game is
- * restored whole from the root snapshot, then the tree path and playout
- * moves are applied to it. Moves are never undone. The restore costs time
- * in proportion to the game's element tree, once per iteration.
+ * Each iteration restores the search game whole, from the root snapshot or
+ * from a saved copy of a node on its path, then the rest of the tree path and
+ * the playout moves are applied to it. Moves are never undone. The restore
+ * costs time in proportion to the game's element tree, once per iteration;
+ * a saved copy spares making the moves above it again (#633).
  */
 export class MCTSBot<G extends Game = Game> {
   private game: G;
@@ -78,6 +91,22 @@ export class MCTSBot<G extends Game = Game> {
   private searchGame: G | null = null;
   /** Root snapshot for fallback recovery */
   private rootSnapshot: GameStateSnapshot | null = null;
+  /**
+   * Saved copies of the search game at tree nodes (#633): each the JSON of a
+   * snapshot of the position the node stands for, so it is restored whole and
+   * nothing a later move does can change it. Only kept without a world sampler,
+   * and only for positions that no move on the way drew randomness for (see
+   * {@link saveCopyOf}). Dropped when the search ends.
+   */
+  private savedCopies = new Map<MCTSNode, string>();
+  /** What the saved copies hold, in bytes as V8 stores the strings. */
+  private savedCopyBytes = 0;
+  /** At most this many bytes of saved copies; past it, steps make moves again. */
+  private savedCopyBudget = SAVED_COPY_BUDGET_BYTES;
+  /** Set once a copy did not fit the budget: no more are made this search. */
+  private savedCopiesFull = false;
+  /** The game's random position when this step's search game was restored. */
+  private resumedRandomState?: string;
   /**
    * T-159-07 (bot-02): pre-reveal baseline clone of searchGame, captured the
    * moment a fresh simultaneous step begins (before any co-decider's action
@@ -299,6 +328,7 @@ export class MCTSBot<G extends Game = Game> {
     // redacted view is byte-identical to the full view, so this is a no-op.
     this.rootSnapshot = this.captureSnapshot();
     this.searchGame = this.restoreGame(this.rootSnapshot) as G;
+    this.dropSavedCopies();
     // #73: the first world. Every later iteration gets its own from
     // `restoreSearchGameToRoot`, so the tree's statistics average over worlds
     // rather than describing the one this root happened to draw.
@@ -375,7 +405,8 @@ export class MCTSBot<G extends Game = Game> {
       }
       completedIterations = i + 1;
 
-      // SELECT: Walk down tree, applying moves to searchGame, collecting tree moves for RAVE
+      // SELECT: Position searchGame for this step, walk down the tree applying
+      // moves to it, and collect the tree moves for RAVE
       const selection = this.selectWithPath(root);
 
       // EXPAND: Try one unexplored move, creating child
@@ -391,14 +422,18 @@ export class MCTSBot<G extends Game = Game> {
           treeMoves.push({ move: child.parentMove, player: leaf.currentPlayer });
         }
 
-        // BACKPROPAGATE: Update stats and RAVE table, then restore searchGame to root
-        this.backpropagateAndRestoreRoot(child, playout.score, playout.playoutMoves, treeMoves);
-      } else {
-        // A refused move changed part of this world before it was refused
-        // (#421), so the position no longer describes any node. Nothing from
-        // this iteration is scored; the next one starts from a fresh world.
-        this.restoreSearchGameToRoot();
+        // BACKPROPAGATE: Update stats and RAVE table
+        this.backpropagate(child, playout.score, playout.playoutMoves, treeMoves);
       }
+      // Otherwise a refused move changed part of this world before it was
+      // refused (#421), so the position no longer describes any node, and
+      // nothing from this iteration is scored.
+      //
+      // Under a world sampler the next step starts from a fresh world drawn at
+      // the root now, as it always has (#73). Without one, the next step's
+      // selection restores the search game itself, from the deepest saved copy
+      // on its path (#633).
+      if (this.determinize) this.restoreSearchGameToRoot();
 
       // Yield to the event loop in async mode (every iteration). Prefer the
       // Scheduler API when present: inside a Cloudflare Worker, Date.now() is
@@ -429,6 +464,7 @@ export class MCTSBot<G extends Game = Game> {
     // root.children AFTER this point (cleanup only nulls instance fields).
     this.searchGame = null;
     this.rootSnapshot = null;
+    this.dropSavedCopies();
 
     // Select best child (most visits for robustness)
     if (root.children.length === 0) {
@@ -486,22 +522,32 @@ export class MCTSBot<G extends Game = Game> {
 
   /**
    * SELECTION with path tracking: Walk down tree using UCT, applying moves to searchGame.
-   * After this completes, searchGame is positioned at the returned leaf node's state.
-   * Returns the leaf node and the tree moves traversed (for RAVE).
+   * Without a world sampler it first restores searchGame from the deepest saved
+   * copy on the path (#633); under one, searchGame is already at the root of a
+   * fresh world. After this completes, searchGame is positioned at the returned
+   * leaf node's state. Returns the leaf node and the tree moves traversed (for RAVE).
    *
    * The walk stops at a node whose turn is not the one this world is on
    * (#421): below it, every child is a move for a seat that is not to move
    * here. `spoiled` means a refused move changed this world before it was
    * refused, so it matches no node and the iteration has to be dropped.
    */
-  private selectWithPath(node: MCTSNode): {
+  private selectWithPath(root: MCTSNode): {
     leaf: MCTSNode;
-    treeMoves: Array<{ move: BotMove; player: number }>;
+    treeMoves: TreeMove[];
     spoiled: boolean;
   } {
-    const treeMoves: Array<{ move: BotMove; player: number }> = [];
+    const treeMoves: TreeMove[] = [];
+    let node = root;
+    if (!this.determinize) {
+      const resumed = this.deepestSavedCopy(root);
+      node = resumed.node;
+      treeMoves.push(...resumed.treeMoves);
+      this.resumeSearchGame(resumed.copy);
+    }
 
     while (this.turnMatchesWorld(node)) {
+      this.saveCopyOf(node);
       const eligible = this.eligibleChildrenForWorld(node);
       if (node.untriedMoves.length > 0 || eligible.length === 0) break;
       const child = this.selectChild(node, eligible);
@@ -788,8 +834,8 @@ export class MCTSBot<G extends Game = Game> {
     const newMoves =
       nextSeat === undefined ? [] : this.movesFor(this.searchGame!, flowState, nextSeat, { sample: true });
 
-    // Create child node (no snapshot needed: the search game is reset to the
-    // root by a full restore after each iteration)
+    // Create child node (no snapshot needed: every step restores the search
+    // game whole, from the root or a saved copy, before it walks the tree)
     const child = this.createNode(flowState, node, move, newMoves);
     node.children.push(child);
 
@@ -872,22 +918,20 @@ export class MCTSBot<G extends Game = Game> {
   // ============================================================================
 
   /**
-   * BACKPROPAGATE: Update statistics and the RAVE table up the tree, then reset
-   * searchGame to the root position by restoring it from the root snapshot.
+   * BACKPROPAGATE: Update statistics and the RAVE table up the tree. It never
+   * touches `searchGame`: the next step restores that whole (see runSearch).
    *
    * @param node - The leaf node to start backpropagation from
    * @param result - The playout score (0=loss, 0.5=draw, 1=win for bot)
    * @param playoutMoves - Moves played during playout with player info (for RAVE)
    * @param treeMoves - Moves from tree path with player info (for RAVE)
    */
-  private backpropagateAndRestoreRoot(
+  private backpropagate(
     node: MCTSNode | null,
     result: number,
-    playoutMoves: Array<{ move: BotMove; player: number }> = [],
-    treeMoves: Array<{ move: BotMove; player: number }> = []
+    playoutMoves: TreeMove[] = [],
+    treeMoves: TreeMove[] = []
   ): void {
-    if (!this.searchGame) return;
-
     // Update RAVE table with all moves from this playout (if enabled)
     if (this.config.useRAVE !== false) {
       // Combine tree moves and playout moves for RAVE update
@@ -912,9 +956,7 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     // Backpropagate up the tree, updating pure node bookkeeping (visits, value,
-    // proof numbers). NOTE: this loop must NOT touch `searchGame` -- the game is
-    // reset to root state below via a full authoritative restore. See the
-    // block after the loop for why.
+    // proof numbers).
     while (node !== null) {
       node.visits++;
       // Value is from perspective of player who just moved to reach this node
@@ -931,43 +973,112 @@ export class MCTSBot<G extends Game = Game> {
 
       node = node.parent;
     }
-
-    // v4.8 F-01 (bot-02): reset `searchGame` to the ROOT position via a full
-    // authoritative restore. Element moves (`Piece.putInto` -> `moveToInternal`)
-    // splice `_t.children` directly and plain custom-property mutations are
-    // just assignments, so nothing short of adopting the serialized root again
-    // rolls a move back. A full restore is state-authoritative (adopts the
-    // serialized element tree, flow position, phase/winners, sequence). The
-    // stored tree-node move args resolve by element id (`resolveArgs` ->
-    // `getElementById`), and ids are stable across restore, so replaying the
-    // tree path on the fresh instance is sound.
-    //
-    // This is O(tree size) per iteration. RNG advancement is preserved across
-    // iterations (below) so playouts stay varied -- a naive restore would reset
-    // the RNG and make every iteration's playout identical.
-    this.restoreSearchGameToRoot();
   }
 
   /**
-   * Reset `searchGame` to the ROOT snapshot's authoritative state while
-   * PRESERVING the RNG position, so successive iterations produce varied
-   * playouts. See the call site in `backpropagateAndRestoreRoot` (v4.8 F-01).
+   * Walk down from the root the way selection will, through every chosen child
+   * that has a saved copy, and say which node the deepest such copy is at
+   * (#633). With no copy on the path, that is the root and no copy.
+   *
+   * Only without a world sampler, where selection reads the tree alone
+   * (`eligibleChildrenForWorld` is every child), so this walk chooses the
+   * children selection would; and a copy exists only where the turn matched the
+   * world all the way down, which it still does, as nothing on the way drew
+   * randomness (see {@link saveCopyOf}).
    */
-  private restoreSearchGameToRoot(): void {
+  private deepestSavedCopy(root: MCTSNode): { node: MCTSNode; treeMoves: TreeMove[]; copy?: string } {
+    const treeMoves: TreeMove[] = [];
+    let node = root;
+    let copy: string | undefined;
+    while (node.untriedMoves.length === 0 && node.children.length > 0) {
+      const child = this.selectChild(node);
+      const childCopy = this.savedCopies.get(child);
+      if (childCopy === undefined) break;
+      treeMoves.push({ move: child.parentMove!, player: node.currentPlayer });
+      node = child;
+      copy = childCopy;
+    }
+    return { node, treeMoves, copy };
+  }
+
+  /**
+   * Restore `searchGame` whole from a saved copy, or from the root snapshot
+   * when there is none, while PRESERVING the game's random position so
+   * successive steps draw differently.
+   *
+   * A full restore is the only rollback there is (v4.8 F-01): element moves
+   * (`Piece.putInto` -> `moveToInternal`) splice `_t.children` directly and
+   * custom-property mutations are plain assignments, so nothing short of
+   * adopting a serialized state again undoes a move. The stored tree-node move
+   * args resolve by element id, and ids are stable across restore, so making
+   * the tree path's moves on the fresh instance is sound (see `rebindArgs`).
+   */
+  private resumeSearchGame(copy?: string): void {
     if (!this.rootSnapshot || !this.searchGame) return;
-    // Carry the advanced RNG position forward across the restore so playouts do
-    // not repeat. Everything else (tree, flow, phase, winners) resets to root.
     const rngState = this.searchGame.getRandomState();
-    this.searchGame = this.restoreGame(this.rootSnapshot) as G;
+    this.searchGame = this.restoreGame(copy === undefined ? this.rootSnapshot : JSON.parse(copy)) as G;
     this.searchGame.setRandomState(rngState);
+    this.resumedRandomState = rngState;
     // F-07: drop any baseline captured last iteration — it was cloned from the
     // now-discarded searchGame instance. It is re-captured fresh during this
     // iteration's descent/expand when a fresh simultaneous step is reached.
     this.simultaneousBaseline = undefined;
+  }
+
+  /**
+   * Reset `searchGame` to the root and draw a fresh world into it. Only under
+   * a world sampler, after every step (see runSearch).
+   */
+  private restoreSearchGameToRoot(): void {
+    this.resumeSearchGame();
     // #73: a fresh world for the next iteration. Re-sampling HERE — per
     // playout, not per move — is what makes the tree's statistics describe the
     // seat's uncertainty instead of one hypothesis it happened to draw.
     this.sampleWorld();
+  }
+
+  /**
+   * Save a copy of `searchGame`, which stands at `node`, for later steps to
+   * resume from (#633), unless one cannot stand for `node` in every step:
+   *
+   * - under a world sampler, each step's position belongs to its own world;
+   * - when a move on the way here drew from the game's random source, the
+   *   position depends on the draw, and the next step draws differently. A move
+   *   that drew nothing this time draws nothing ever: it is the same code on
+   *   the same position, and only the draw could have differed;
+   * - inside a step every seat takes at once, the moves below read the
+   *   pre-reveal baseline captured on the way here, which a copy does not carry.
+   *
+   * Copies fill the budget first come, first kept, and the walk down the tree
+   * reaches the shallow, most-visited nodes first.
+   */
+  private saveCopyOf(node: MCTSNode): void {
+    if (!this.shouldSaveCopyOf(node)) return;
+    const copy = JSON.stringify(createSnapshot(this.searchGame!, this.gameType, [], this.seed));
+    // V8 keeps a string of Latin-1 characters at one byte each, and any other at two.
+    const bytes = /[^\x00-\xff]/.test(copy) ? copy.length * 2 : copy.length;
+    if (this.savedCopyBytes + bytes > this.savedCopyBudget) {
+      this.savedCopiesFull = true;
+      return;
+    }
+    this.savedCopies.set(node, copy);
+    this.savedCopyBytes += bytes;
+  }
+
+  /** Whether {@link saveCopyOf} should save a copy at `node`: see its rules. */
+  private shouldSaveCopyOf(node: MCTSNode): boolean {
+    if (this.determinize || this.savedCopiesFull || node.parent === null || this.savedCopies.has(node)) return false;
+    if (this.searchGame!.getRandomState() !== this.resumedRandomState) return false;
+    const flow = this.worldFlowState();
+    // A finished game has no moves below it to spare.
+    return !flow.complete && !flow.awaitingPlayers?.length;
+  }
+
+  /** Forget every saved copy, at the start and the end of a search. */
+  private dropSavedCopies(): void {
+    this.savedCopies.clear();
+    this.savedCopyBytes = 0;
+    this.savedCopiesFull = false;
   }
 
   /**
@@ -991,7 +1102,7 @@ export class MCTSBot<G extends Game = Game> {
    * Re-resolve any element-valued args to the CURRENT `searchGame`'s live
    * element objects by id (v4.8 F-01). Tree-node moves store in-process element
    * OBJECTS captured on a PRIOR searchGame instance; because
-   * `restoreSearchGameToRoot` rebuilds the tree each iteration, those stored
+   * every step restores the search game whole (`resumeSearchGame`), those stored
    * objects go stale. Feeding a stale (foreign-tree) element into
    * `continueFlow` -> `Piece.putInto` would splice a wrong-instance object into
    * the live tree and duplicate its id. Element ids are stable across restore,

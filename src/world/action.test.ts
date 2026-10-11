@@ -823,3 +823,86 @@ describe("#627 — a world action's types say what the engine passes", () => {
       });
   });
 });
+
+describe("#665 — a seat sends only an action's picks, on every road", () => {
+  /** Every game callback `peek` has records its name, so a refusal can be shown
+   *  to come before the game's code ran at all. */
+  function peeking() {
+    const calls: string[] = [];
+    const peek = worldAction<VillageFixture>("peek")
+      .needs(({ player }) => {
+        calls.push("needs");
+        return [holdingPartition(player.seat)];
+      })
+      .chooseFrom("look", {
+        choices: () => {
+          calls.push("choices");
+          return ["glance", "stare"];
+        },
+      })
+      .quote(() => {
+        calls.push("quote");
+        return null;
+      })
+      .execute(() => {
+        calls.push("execute");
+      });
+    return { calls, ...newEngine([peek]) };
+  }
+  const BRIBED = { look: "glance", bribe: 100 };
+  const REFUSAL = {
+    code: "undeclared-arg",
+    message: "'peek' was sent 'bribe', which is not one of its picks. It takes: look.",
+  };
+
+  it("refuses a command's declaration walk before any declaration runs", () => {
+    const { engine, calls } = peeking();
+    expect(() =>
+      engine.commandNeeds("p1", { name: "peek", args: BRIBED }, arrival(STAMP.now), STAMP),
+    ).toThrow(expect.objectContaining(REFUSAL));
+    expect(calls).toEqual([]);
+  });
+
+  it("refuses the command itself as the caller's, before any declaration or handler runs", async () => {
+    const { engine, calls } = peeking();
+    await engine.hydrate([holdingPartition(1)]);
+    await expect(engine.applyCommand("p1", { name: "peek", args: BRIBED }, STAMP)).rejects.toMatchObject(
+      REFUSAL,
+    );
+    expect(calls).toEqual([]);
+  });
+
+  it("refuses a quote and a re-asked pick before any declaration, pick or quote runs", async () => {
+    const { engine, calls } = peeking();
+    await engine.hydrate([holdingPartition(1)]);
+    const stamp = { now: STAMP.now, presence: [], activity: STAMP.activity };
+    expect(() => engine.quotePartitions("p1", "peek", BRIBED, STAMP.now)).toThrow(
+      expect.objectContaining(REFUSAL),
+    );
+    expect(() => engine.pickPartitions("p1", "peek", "look", BRIBED, STAMP.now)).toThrow(
+      expect.objectContaining(REFUSAL),
+    );
+    await expect(engine.resolveQuote("p1", "peek", BRIBED, stamp)).rejects.toMatchObject(REFUSAL);
+    await expect(engine.resolvePick("p1", "peek", "look", BRIBED, stamp)).rejects.toMatchObject(REFUSAL);
+    expect(calls).toEqual([]);
+  });
+
+  it("still takes a command that sends only its picks", async () => {
+    const { engine, calls } = peeking();
+    await apply(engine, "p1", { name: "peek", args: { look: "glance" } });
+    expect(calls).toContain("execute");
+  });
+
+  it("leaves a scheduled event's args to the bundle that scheduled them: the clock asks no picks", async () => {
+    // The clock's own verbs take no picks (`refuses a seatless action that asks a
+    // question`), so a scheduled event's args are the bundle's data, not a seat's
+    // answers, and the picks rule has nothing to hold them to.
+    const { engine } = newEngine();
+    const result = await fireThroughWalk(
+      engine,
+      { name: "settleBurn", args: { holding: holdingPartition(1), note: "the bundle's own" } },
+      { due: STAMP.now, missedCount: 0 },
+    );
+    expect(result.dirty).toContain(COMMONS);
+  });
+});

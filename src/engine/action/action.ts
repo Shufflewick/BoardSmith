@@ -1379,7 +1379,7 @@ export class ActionExecutor {
    * every key names one of its picks (#662). A client sends picks and nothing
    * else: a follow-up's other args come from the follow-up the seat holds.
    */
-  undeclaredArgsRefusal(action: ActionDefinition, args: Record<string, unknown>): string | undefined {
+  undeclaredArgsRefusal(action: ActionDefinition, args: Readonly<Record<string, unknown>>): string | undefined {
     const picks = action.selections.map(s => s.name);
     const undeclared = Object.keys(args).filter(key => !picks.includes(key));
     if (undeclared.length === 0) return undefined;

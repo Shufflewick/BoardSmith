@@ -49,6 +49,23 @@ export class PageFrozen extends Error {
 }
 
 /**
+ * Thrown by a call into the page that was still not done after its budget of the page's time
+ * ({@link PageClock.now}), while the page kept answering: something in the page held that one call
+ * up. `what` names the call as the walk describes it ("looking for the control again"). Callers
+ * pass it on as it is: it is neither a control that never became pressable nor a page that was
+ * replaced or stopped answering (#666).
+ */
+export class PageTimeOverrun extends Error {
+  constructor(what: string, budgetMs: number) {
+    super(
+      `${what} was still not done after ${budgetMs / 1000}s, though the page kept answering the whole time, so something ` +
+        'in the page held that call up. Run `boardsmith smoke` to watch it.',
+    );
+    this.name = 'PageTimeOverrun';
+  }
+}
+
+/**
  * The time a page and its dev host have been answering, read with {@link now}. `ask` puts the
  * trivial question; one that is refused (a page navigating away refuses an evaluation) was still
  * answered. {@link start} starts asking, and {@link stop} stops it when the walk is done.

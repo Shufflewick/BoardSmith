@@ -876,7 +876,8 @@ pick re-asked with earlier answers bound (`prompt`, `choices`/`elements`,
 `prepare`, `disabled`, `multiSelect`). Those elements are read-only, like
 everything else a read sees. A draft naming an element this action cannot offer
 the seat any more is refused with `stale-draft` rather than handed over as a bare
-number.
+number, and a draft carrying a key none of the action's picks declares is refused
+with `undeclared-arg`, as the command itself is.
 
 **The number being typed is in there.** That is the point: the panel sends the
 value in its editor before it has been submitted, so the price shown is the price
@@ -2717,6 +2718,7 @@ your game.
 | `invalid-order` | A player command arrived with no usable order identity: no id, an id past 128 characters, or no mint instant. Every player command carries one -- see [an order that survives a lost reply](#an-order-that-survives-a-lost-reply). |
 | `order-outcome-unknown` | A repeat arrived for an order minted before this world's receipt floor, so nothing can say whether it committed. Refused rather than run, because running it is the second spend the identity exists to prevent. |
 | `stale-draft` | A quote, or a pick re-asked with earlier answers bound, was asked about a draft whose element selection names nothing this action can offer the seat now: the element was taken since the offer was sent, or the id was never in an offer. Ask for the offer again. |
+| `undeclared-arg` | A seat's command, a quote, or a pick re-asked with earlier answers bound, was sent a key none of the action's picks declares. A client sends only picks. Refused before any of the action's declarations or callbacks run. A scheduled event is not checked: the clock's verbs ask no picks, and their args are the bundle's own. |
 
 **`game`**: your bundle's own doing. Fix these; the same bundle does the same
 thing next time.
