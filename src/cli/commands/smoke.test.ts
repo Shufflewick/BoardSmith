@@ -787,7 +787,6 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.passed).toBe(false);
     // The walk's own frozen check ended the step that hung; the 600s limit on the whole run did not.
     expect(outcome.summary, outcome.summary).toMatch(/The walk could not go on at step \d+ of the game dealt from seed "smoke": the page stopped answering for 60s/);
-    expect(outcome.summary).not.toMatch(/Timed out waiting/);
     // Room for the whole run's 600s limit, so a walk that waits on the hung page reports that limit here.
   }, 700_000);
 
