@@ -1,5 +1,8 @@
 import { Space } from './space.js';
 import type { Game } from './game.js';
+import type { GameElement } from './game-element.js';
+import type { ElementClass, ElementFinder } from './types.js';
+import { firstCell } from './cell-index.js';
 import type { Player } from '../player/player.js';
 
 /**
@@ -24,6 +27,15 @@ export type ElementLayout =
  * - Automatic grid layout rendering
  * - Row/column labels for UI display
  * - Coordinate attributes on cells for positioning
+ * - The cell at a coordinate, `board.first(Square, { rank, file })` with
+ *   exactly the `$rowCoord`/`$colCoord` attributes, is a lookup, not a search
+ *
+ * **The rule for cells:** a cell's coordinates do not change while it is in
+ * its grid, and cells are the grid's direct children. The grid finds a cell by
+ * the coordinates it had when it entered. To give a cell new coordinates, take
+ * it out (`cell.reparent(holdingSpace)`), change them, and put it back.
+ * Development mode checks every lookup against a search of the grid and throws
+ * when a cell was re-addressed in place.
  *
  * @example
  * ```typescript
@@ -87,6 +99,23 @@ export class Grid<G extends Game = any, P extends Player = any> extends Space<G,
    * AutoUI uses this to position grid cells correctly
    */
   $colCoord?: string;
+
+
+  /**
+   * The first matching descendant, as {@link GameElement.first}. The cell at a
+   * coordinate, `first(CellClass, { <$rowCoord>: r, <$colCoord>: c })` with exactly the
+   * grid's two coordinate attributes, is looked up rather than searched for
+   * (#632), which is why a cell's coordinates must not change while it is in
+   * the grid (see the class docs).
+   */
+  override first<F extends GameElement>(
+    classNameOrFinder?: ElementClass<F> | ElementFinder<F>,
+    ...finders: ElementFinder<F>[]
+  ): F | undefined {
+    return firstCell(this, GridCell, this.$rowCoord && this.$colCoord ? [this.$rowCoord, this.$colCoord] : undefined, classNameOrFinder, finders, () =>
+      super.first(classNameOrFinder as ElementClass<F>, ...finders),
+    );
+  }
 
   static override unserializableAttributes = [
     ...Space.unserializableAttributes,

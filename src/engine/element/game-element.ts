@@ -1,4 +1,5 @@
 import { ElementCollection } from './element-collection.js';
+import { childrenChanged } from './cell-index.js';
 import type {
   ElementClass,
   ElementContext,
@@ -225,7 +226,7 @@ function markNearestPartition(
  *
  * Free in snapshot mode: no partitions, one map check.
  */
-function reachPartition<T extends GameElement | undefined>(from: T): T {
+export function reachPartition<T extends GameElement | undefined>(from: T): T {
   if (!from) return from;
   const ctx = from._ctx;
   // THE SET IS THE SWITCH. It exists from the moment the game has a partition
@@ -801,6 +802,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    */
   protected addChild(element: GameElement): void {
     element._t.parent = this;
+    childrenChanged(this);
 
     if (this._t.order === 'stacking') {
       this._t.children.unshift(element);
@@ -817,6 +819,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     if (index !== -1) {
       this._t.children.splice(index, 1);
       element._t.parent = undefined;
+      childrenChanged(this);
     }
   }
 
@@ -928,6 +931,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       const index = oldParent._t.children.indexOf(this);
       if (index !== -1) {
         oldParent._t.children.splice(index, 1);
+        childrenChanged(oldParent);
       } else if (isDevMode()) {
         // The element points at a parent that does not list it. Completing the
         // move would re-parent it while leaving the stale reference in place,
@@ -956,6 +960,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
 
     // Add to new parent
     this._t.parent = destination;
+    childrenChanged(destination);
 
     const pos = position ?? (destination._t.order === 'stacking' ? 'first' : 'last');
     if (pos === 'first') {

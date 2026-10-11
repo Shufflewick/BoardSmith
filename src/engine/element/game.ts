@@ -12,6 +12,7 @@ import {
   registerCreatedElementClass,
 } from './game-element.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE } from './hidden-placeholder.js';
+import { childrenChanged } from './cell-index.js';
 import { Piece } from './piece.js';
 import { Card } from './card.js';
 import { Hand } from './hand.js';
@@ -2124,6 +2125,7 @@ export class Game<
     element._t.parent = parent;
     element.game = this;
     parent._t.children.push(element);
+    childrenChanged(parent);
 
     element.resolveElementReferences(this);
 
@@ -2186,6 +2188,7 @@ export class Game<
     const index = parent._t.children.indexOf(element);
     parent._t.children.splice(index, 1);
     element._t.parent = undefined;
+    childrenChanged(parent);
 
     // An evicted partition must not stay in memory through the id index.
     forEachInSubtree(element, (evicted) => this._ctx._elementsById.delete(evicted._t.id));
