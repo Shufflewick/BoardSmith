@@ -5,7 +5,7 @@
  * Fake timers stand in for the machine: an answer that takes long is a page or host that was busy.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ANSWER_TICK_MS, FROZEN_MS, PageClock } from './browser-smoke-clock.js';
+import { ANSWER_TICK_MS, clocks, FROZEN_MS, PageClock, PageTimeOverrun, withinPageTime } from './browser-smoke-clock.js';
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -84,5 +84,23 @@ describe('PageClock', () => {
     await vi.advanceTimersByTimeAsync(10_000);
 
     expect(asked()).toBe(before);
+  });
+});
+
+describe('withinPageTime', () => {
+  it('names the wait that ran past its page time, as the caller describes it (#670)', async () => {
+    const { clock } = clockAnswering(() => 0);
+    const page = {};
+    clocks.set(page, clock);
+
+    // A try that never settles, as a script Playwright runs in a held-up page does.
+    const waiting = withinPageTime(page, 5_000, 'waiting for the seat switcher', () => new Promise<never>(() => undefined));
+    const failed = expect(waiting).rejects.toThrow(
+      new PageTimeOverrun('waiting for the seat switcher', 5_000).message,
+    );
+    await vi.advanceTimersByTimeAsync(6_000);
+
+    await failed;
+    clock.stop();
   });
 });
