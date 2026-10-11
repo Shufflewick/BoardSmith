@@ -1168,11 +1168,12 @@ onUnmounted(() => {
 }
 
 /**
- * A BOARD THAT KEEPS REORDERING ITS CONTROLS (#464 review): "North", "South" and "East" trade
- * places every 60 milliseconds (a keyed list, so each button moves rather than being redrawn), so
- * whichever button sat at a place when the walk looked has often moved by the time it presses. A
- * button pressed twice says so on the console, which fails the walk; a walk that presses the button
- * it meant to presses each once.
+ * A BOARD THAT KEEPS REORDERING ITS CONTROLS (#464 review): each time the walk marks one of "North",
+ * "South" and "East" to press it, the three trade places (a keyed list, so each button moves rather
+ * than being redrawn), so another button sits where the marked one was when the walk goes to press
+ * it. The move follows the walk's own mark rather than a timer, so a machine too loaded to answer
+ * quickly sees the same moves as an idle one (#643). A press of a button the walk did not mark, or
+ * of one button twice, says so on the console, which fails the walk.
  */
 export function boardThatKeepsReordering(): Record<string, string> {
   return {
@@ -1180,21 +1181,23 @@ export function boardThatKeepsReordering(): Record<string, string> {
 import { onMounted, onUnmounted, ref } from 'vue';
 
 const order = ref(['North', 'South', 'East']);
+const board = ref<HTMLElement>();
 const pressed = new Set<string>();
-let timer: ReturnType<typeof setInterval> | undefined;
-onMounted(() => {
-  timer = setInterval(() => order.value.push(order.value.shift()!), 60);
+const watcher = new MutationObserver((changes) => {
+  if (changes.some((change) => (change.target as HTMLElement).hasAttribute('${PRESS_MARK}'))) order.value.push(order.value.shift()!);
 });
-onUnmounted(() => clearInterval(timer));
-function pressIt(name: string) {
+onMounted(() => watcher.observe(board.value!, { subtree: true, attributes: true, attributeFilter: ['${PRESS_MARK}'] }));
+onUnmounted(() => watcher.disconnect());
+function pressIt(event: MouseEvent, name: string) {
+  if (!(event.currentTarget as HTMLElement).hasAttribute('${PRESS_MARK}')) console.error(\`\${name} was pressed, though the walk did not mark it\`);
   if (pressed.has(name)) console.error(\`\${name} was pressed twice\`);
   pressed.add(name);
 }
 </script>
 
 <template>
-  <div class="board">
-    <button v-for="name in order" :key="name" type="button" @click="pressIt(name)">{{ name }}</button>
+  <div ref="board" class="board">
+    <button v-for="name in order" :key="name" type="button" @click="pressIt($event, name)">{{ name }}</button>
   </div>
 </template>
 
