@@ -115,10 +115,10 @@ function newRunner() {
   return runner;
 }
 
-async function searchFor(runner: ReturnType<typeof newRunner>, strategy?: BotStrategy) {
+async function searchFor(runner: ReturnType<typeof newRunner>, strategy?: BotStrategy, parallel = 1) {
   const bot = new MCTSBot(
     runner.game, CutGame, 'cut', 1, runner.actionHistory,
-    { iterations: ITERATIONS, playoutDepth: 4, async: false, timeout: Infinity, seed: 'cut-bot' },
+    { iterations: ITERATIONS, playoutDepth: 4, async: false, timeout: Infinity, seed: 'cut-bot', parallel },
     strategy,
   );
   return bot.play();
@@ -162,7 +162,7 @@ describe('a search that throws away its steps', () => {
     expect(warnings[0]).not.toContain('at random');
   });
 
-  it('says the move was chosen at random when no step was scored and the root grew no children', async () => {
+  it('says the move was chosen at random when no move at the root could be played through', async () => {
     const runner = newRunner();
     // Seat 2 has discarded, so every discard of the bot's closes the step and cuts the starter.
     const seat2Card = runner.game.handOf(2).first(Card)!;
@@ -175,7 +175,16 @@ describe('a search that throws away its steps', () => {
     const warnings = droppedStepWarnings(warn);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain(`${ITERATIONS} of ${ITERATIONS} search steps were thrown away`);
-    expect(warnings[0]).toContain('at random');
+    expect(warnings[0]).toContain('No move at the root could be played through, so the bot chose its move at random');
+  });
+
+  it('warns once for a bot that splits its move into sub-searches, with their steps added up', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await searchFor(newRunner(), undefined, 2);
+
+    const warnings = droppedStepWarnings(warn);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(`${ITERATIONS} of ${ITERATIONS} search steps were thrown away`);
   });
 
   it('chooses the same move whether or not it warns', async () => {

@@ -49,6 +49,13 @@ type TreeMove = { move: BotMove; player: number };
 type SearchMoveOutcome = 'made' | 'refused' | 'refusedAfterChanges';
 
 /**
+ * A search's steps (#669): how many it made, how many were scored (the rest
+ * were thrown away), whether it chose at random because no root move could be
+ * played through, and why the first thrown-away step failed.
+ */
+type SearchSteps = { made: number; scored: number; choseAtRandom: boolean; firstFailure?: string };
+
+/**
  * MCTS (Monte-Carlo Tree Search) Bot
  *
  * Implements the UCT algorithm for game-agnostic bot:
@@ -87,8 +94,8 @@ export class MCTSBot<G extends Game = Game> {
   private cachedUctC: number = Math.sqrt(2);
   /** Warn at most once per bot about a truncated seeded search (see below). */
   private warnedSeededTruncation = false;
-  /** Why the first step this search threw away was thrown away (#669). */
-  private firstDroppedStepReason?: string;
+  /** The last search's steps, for the warning about thrown-away steps (#669). */
+  private searchSteps: SearchSteps = { made: 0, scored: 0, choseAtRandom: false };
 
   /** Live game instance used during search (cloned from original) */
   private searchGame: G | null = null;
@@ -189,7 +196,9 @@ export class MCTSBot<G extends Game = Game> {
     if (this.config.parallel && this.config.parallel > 1) {
       return this.playParallel();
     }
-    return (await this.runSearch()).move;
+    const { move } = await this.runSearch();
+    this.warnIfStepsWereDropped(this.searchSteps);
+    return move;
   }
 
   /**
@@ -205,6 +214,7 @@ export class MCTSBot<G extends Game = Game> {
   async playWithStats(): Promise<{ move: BotMove | null; stats: BotMoveStats[] }> {
     // Force single-mode search — parallel mode loses per-child stats.
     const { move, root } = await this.runSearch();
+    this.warnIfStepsWereDropped(this.searchSteps);
     if (!move || !root) return { move: null, stats: [] };
     const stats: BotMoveStats[] = root.children.map(child => ({
       move: child.parentMove!,
@@ -248,6 +258,9 @@ export class MCTSBot<G extends Game = Game> {
       return entry;
     };
 
+    // The sub-searches' steps added up: the move is one search, split (#669).
+    const steps: SearchSteps = { made: 0, scored: 0, choseAtRandom: true };
+
     for (let i = 0; i < parallelCount; i++) {
       // Each sub-search needs its own random source for diversity. A seeded
       // bot derives each sub-seed from its own seed, so the ensemble stays
@@ -287,10 +300,15 @@ export class MCTSBot<G extends Game = Game> {
         return null;
       }
 
+      steps.made += subBot.searchSteps.made;
+      steps.scored += subBot.searchSteps.scored;
+      steps.firstFailure ??= subBot.searchSteps.firstFailure;
+      steps.choseAtRandom &&= subBot.searchSteps.choseAtRandom;
       entryFor(move).votes++;
       for (const child of root.children) entryFor(child.parentMove!).visits += child.visits;
     }
 
+    this.warnIfStepsWereDropped(steps);
     const entries = [...tally.values()];
     const mostVotes = Math.max(...entries.map(entry => entry.votes));
     const voted = entries.filter(entry => entry.votes === mostVotes);
@@ -318,6 +336,7 @@ export class MCTSBot<G extends Game = Game> {
     if (!this.canBotAct(liveFlowState)) {
       throw new Error(`Not bot's turn (player ${this.playerIndex})`);
     }
+    this.searchSteps = { made: 0, scored: 0, choseAtRandom: false };
 
     // CR-01 (159): build the redacted search sandbox FIRST, then enumerate/
     // threat-check/UCT-weight from it -- never from `this.game` (full truth).
@@ -400,8 +419,6 @@ export class MCTSBot<G extends Game = Game> {
     // Track truncation so a SEEDED search can tell the caller its result was
     // not actually reproducible (see warnIfSeededSearchWasTruncated).
     let completedIterations = 0;
-    let scoredSteps = 0;
-    this.firstDroppedStepReason = undefined;
 
     for (let i = 0; i < this.config.iterations; i++) {
       // Check timeout before each iteration
@@ -429,7 +446,7 @@ export class MCTSBot<G extends Game = Game> {
 
         // BACKPROPAGATE: Update stats and RAVE table
         this.backpropagate(child, playout.score, playout.playoutMoves, treeMoves);
-        scoredSteps++;
+        this.searchSteps.scored++;
       }
       // Otherwise a refused move changed part of this world before it was
       // refused (#421), so the position no longer describes any node, and
@@ -464,7 +481,8 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     this.warnIfSeededSearchWasTruncated(completedIterations, timeout);
-    this.warnIfStepsWereDropped(completedIterations, scoredSteps, root.children.length === 0);
+    this.searchSteps.made = completedIterations;
+    this.searchSteps.choseAtRandom = root.children.length === 0;
 
     // Cleanup search state — null the bot's own snapshot fields.
     // The local `root` reference is returned to callers so they can read
@@ -798,12 +816,12 @@ export class MCTSBot<G extends Game = Game> {
       flowState = game.continueFlow(move.action, this.rebindArgs(move.args), seat);
     } catch (error) {
       // The flow itself threw, possibly after the move changed the game.
-      this.firstDroppedStepReason ??= error instanceof Error ? error.message : String(error);
+      this.searchSteps.firstFailure ??= error instanceof Error ? error.message : String(error);
       return { outcome: 'refusedAfterChanges', flowState: this.worldFlowState() };
     }
     if (flowState.actionError === undefined) return { outcome: 'made', flowState };
     if (!flowState.actionPartiallyApplied) return { outcome: 'refused', flowState };
-    this.firstDroppedStepReason ??= flowState.actionError;
+    this.searchSteps.firstFailure ??= flowState.actionError;
     return { outcome: 'refusedAfterChanges', flowState };
   }
 
@@ -1614,17 +1632,18 @@ export class MCTSBot<G extends Game = Game> {
    * thrown away (#669). A step is thrown away when a move it made changed the
    * game and then failed, which is what a game's flow reading a card this seat
    * cannot see does when the game declares no `determinize` sampler: the
-   * search then quietly rests its choice on a few steps, or on none. The
+   * search then quietly rests its choice on a few steps, or on none. Once per
+   * move: a parallel bot adds its sub-searches' steps up and warns once. The
    * warning changes nothing about which move is chosen.
    */
-  private warnIfStepsWereDropped(steps: number, scoredSteps: number, choseAtRandom: boolean): void {
-    const dropped = steps - scoredSteps;
-    if (!isDevMode() || steps === 0 || dropped * 2 < steps) return;
+  private warnIfStepsWereDropped({ made, scored, choseAtRandom, firstFailure }: SearchSteps): void {
+    const dropped = made - scored;
+    if (!isDevMode() || made === 0 || dropped * 2 < made) return;
     console.warn(
-      `[BoardSmith] MCTS bot for seat ${this.playerIndex}: ${dropped} of ${steps} search steps were thrown away, `
+      `[BoardSmith] MCTS bot for seat ${this.playerIndex}: ${dropped} of ${made} search steps were thrown away, `
       + 'because a move changed the game and then failed. The first one failed with:\n\n'
-      + `  ${this.firstDroppedStepReason}\n\n`
-      + (choseAtRandom ? 'No step was scored, so the bot chose its move at random.\n\n' : '')
+      + `  ${firstFailure}\n\n`
+      + (choseAtRandom ? 'No move at the root could be played through, so the bot chose its move at random.\n\n' : '')
       + 'When the game reads state this seat cannot see (an opponent\'s hand, a face-down deck), declare a '
       + '`determinize` sampler in the game\'s bot strategy so the search can play those moves in a supposed '
       + 'world. See docs/bot-system.md, "Determinization".',

@@ -396,10 +396,11 @@ step it was made in: the step is thrown away, unscored. That is what happens
 when a game's flow reads a card this seat cannot see after a move, as
 Cribbage's starter cut and Seven's discard reveal did (#669), and with no
 sampler nearly every step of such a search is thrown away. In development mode
-the search warns, once per search, when at least half of its steps were thrown
-away. The warning gives the count, quotes the first failure (usually a hidden
-read, "... is not known here"), says when no step was scored and the move was
-chosen at random, and points here. It changes nothing about which move is
+the bot warns, once per move, when at least half of its search steps were
+thrown away; a bot that splits its move into sub-searches (`parallel`) adds
+their steps up. The warning gives the count, quotes the first failure (usually
+a hidden read, "... is not known here"), says when no move at the root could be
+played through and the move was chosen at random, and points here. It changes nothing about which move is
 chosen, and production searches never warn. The bench's "scored" columns show
 the same count (see "Measuring bot speed").
 
