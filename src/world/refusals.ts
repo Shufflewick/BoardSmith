@@ -185,7 +185,7 @@ export const WORLD_REFUSALS = {
 
   "undeclared-arg": {
     owner: "caller",
-    why: "#665: a seat asked about a draft (a quote, or a pick re-asked with earlier answers bound) carrying a key none of the action's picks declares. A client sends picks and nothing else (#662), and the command itself refuses the same args when submitted, so a read refuses them too rather than answering from client data the command would never see. One request refused; the world is unaffected",
+    why: "#662, #665: a seat's command, its declaration walk, a quote, or a pick re-asked with earlier answers bound carried a key none of the action's picks declares. A client sends picks and nothing else, so the args are refused before any of the action's declarations or callbacks see them, rather than reaching the rules and coming back as the game's own refusal. A scheduled event is not checked: the clock's verbs ask no picks and their args are the bundle's own. One request refused; the world is unaffected",
   },
 
   // ---- GAME: the bundle's own doing; dead-letters, never parks ----

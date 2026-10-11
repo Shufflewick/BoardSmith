@@ -1008,10 +1008,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
     command: WorldCommand,
     stamp: WorldCommandStamp,
   ): Promise<WorldCommandResult> {
+    const seat = this.seatFor(player);
+    // A SEAT'S ARGS ARE ITS PICKS (#665), refused as the caller's before the
+    // walk or the handler sees them, as `commandNeeds` refuses them.
+    this.refuseUndeclaredArgs(this.actionFor(command.name, seat), command.args);
     // The acting player is the schedule OWNER: their events are charged to
     // their budget, and a bundle cannot charge them to somebody else because
     // it never gets to name one.
-    return this.dispatch(command, this.seatFor(player), null, {
+    return this.dispatch(command, seat, null, {
       now: stamp.now,
       owner: player,
       allowance: stamp.allowance,
@@ -1560,9 +1564,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
     return [];
   }
 
-  /** A seat's draft may carry only the action's picks (#665): the command
-   *  itself refuses any other key (#662), so a read about it does too, with
-   *  the same sentence, before a declaration or callback sees the draft. */
+  /** A seat's args may carry only the action's picks (#662, #665): a command,
+   *  its declaration walk, a quote and a re-asked pick all refuse any other key
+   *  with this one caller-owned refusal, before a declaration or callback sees
+   *  the args. */
   private refuseUndeclaredArgs(
     definition: ActionDefinition,
     args: Readonly<Record<string, unknown>>,
@@ -1727,6 +1732,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
   ): WorldDispatchNeeds {
     const seat = player === null ? null : this.seatFor(player);
     const definition = this.actionFor(command.name, seat);
+    // A SEAT'S ARGS ARE ITS PICKS (#665), refused before a declaration sees
+    // them. The clock's args are the bundle's own data: a seatless action asks
+    // no picks.
+    if (seat !== null) this.refuseUndeclaredArgs(definition, command.args);
     assertClockIsTimed(command.name, seat, when);
     // WHICH OF THE HOST'S ANSWERS THIS WALK HAS ACCOUNTED FOR SO FAR.
     //

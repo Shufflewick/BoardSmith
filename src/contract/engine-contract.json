@@ -1464,7 +1464,7 @@
       "surfaceHash": "a8e02fb25f517721",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "A world's read paths take only an action's declared picks (#665): a quote (quotePartitions, resolveQuote) and a re-asked pick (pickPartitions, resolvePick) refuse a draft carrying a key no pick declares with the new caller-owned refusal undeclared-arg and the same sentence world dispatch gives since #662, before any declaration or callback sees the draft; ActionExecutor.undeclaredArgsRefusal takes Readonly args."
+      "summary": "A seat's args in a world are its picks, refused as the caller's on every road (#665): a seat's command (applyCommand) and its declaration walk (commandNeeds with a player), a quote (quotePartitions, resolveQuote) and a re-asked pick (pickPartitions, resolvePick) refuse a key no pick declares with the new caller-owned refusal undeclared-arg, carrying ActionExecutor.undeclaredArgsRefusal's sentence, before any of the action's declarations or callbacks run. A seat's command with such a key was previously refused only by the executor and travelled as a plain Error, which the platform treats as game-owned and shows as an error in the game's rules. A scheduled event (commandNeeds with a null player, onEvent) is not checked: the clock's verbs ask no picks and their args are the bundle's own. ActionExecutor.undeclaredArgsRefusal takes Readonly args."
     }
   ]
 }
