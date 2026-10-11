@@ -13,7 +13,7 @@
  * page's job. Nothing visual is proven here.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount, type VueWrapper } from '@vue/test-utils';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import WorldDevHost from './WorldDevHost.vue';
 import type { WorldDevConfig } from './world-config-types.js';
 import { WORLD_HOST_SOURCE, WORLD_UI_SOURCE } from '../../ui/world/worldProtocol.js';
@@ -247,6 +247,19 @@ describe('#610: the seat menu closes the way a menu does', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.world-dev__menu').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it.each([
+    ['another seat', '3'],
+    ['the seat already held', '1'],
+  ])('returns focus to its button after choosing %s (#668)', async (_what, seat) => {
+    const wrapper = await openMenu();
+    const item = wrapper.find(`[data-testid="world-take-seat"][data-seat="${seat}"]`).element as HTMLElement;
+    item.focus();
+    item.click();
+    await flushPromises();
+    expect(document.activeElement).toBe(wrapper.find('[data-testid="world-seat-switcher"]').element);
     wrapper.unmount();
   });
 

@@ -339,10 +339,10 @@ const seats = computed(() => Array.from({ length: cfg.seatCount }, (_, i) => i +
 const seatMenuOpen = ref(false);
 const seatMenuRef = ref<HTMLElement | null>(null);
 const seatMenuTrigger = ref<HTMLElement | null>(null);
-useMenuDismiss(seatMenuOpen, seatMenuRef, seatMenuTrigger);
+const seatChosen = useMenuDismiss(seatMenuOpen, seatMenuRef, seatMenuTrigger);
 
 function takeSeat(seat: number): void {
-  seatMenuOpen.value = false;
+  seatChosen();
   if (seat === mySeat.value) return;
   wsSend({ type: 'attach', seat });
 }
