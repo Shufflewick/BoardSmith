@@ -2126,6 +2126,7 @@ export class Game<
     element.game = this;
     parent._t.children.push(element);
     childrenChanged(parent);
+    forEachInSubtree(element, (adopted) => this._ctx._elementsById.set(adopted._t.id, adopted));
 
     element.resolveElementReferences(this);
 
@@ -5236,14 +5237,10 @@ export class Game<
     // share its id (#650). Every restore, in place or fresh, starts it empty.
     this.pile._t.children = [];
 
-    // Clear existing children and rebuild the tree from JSON. The id index
-    // is rebuilt with it (#632): `fromJSON` files each rebuilt element, and the
-    // root and the pile, which a restore keeps, are filed again here. Nothing
-    // the restore discarded stays in it.
+    // Clear existing children and rebuild the tree from JSON, then rebuild the
+    // id index from the finished tree (#632), so nothing the restore discarded
+    // stays in it and every rebuilt element is in it.
     this._t.children = [];
-    this._ctx._elementsById.clear();
-    this._ctx._elementsById.set(this._t.id, this);
-    forEachInSubtree(this.pile, (kept) => this._ctx._elementsById.set(kept._t.id, kept));
     if (json.children) {
       for (const childJson of json.children) {
         const child = GameElement.fromJSON(childJson, this._ctx, this._ctx.classRegistry);
@@ -5252,6 +5249,8 @@ export class Game<
         this._t.children.push(child);
       }
     }
+    this._ctx._elementsById.clear();
+    forEachInSubtree(this, (element) => this._ctx._elementsById.set(element._t.id, element));
 
     // Re-attach captured handlers to the rebuilt tree by element id
     // (RST-01/F10). Any handler that cannot be matched is dropped LOUDLY

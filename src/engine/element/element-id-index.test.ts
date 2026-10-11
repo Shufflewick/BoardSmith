@@ -37,6 +37,26 @@ function subtree(root: GameElement): GameElement[] {
   return [root, ...root._t.children.flatMap(subtree)];
 }
 
+/**
+ * The elements in the game's tree the id index does not hold. A lookup of any
+ * of them still answers right, by walking, so only this shows the index
+ * falling behind.
+ */
+function unindexed(game: IndexGame): string[] {
+  return subtree(game)
+    .filter((element) => game._ctx._elementsById.get(element._t.id) !== element)
+    .map((element) => `${element.name ?? element.constructor.name}#${element._t.id}`);
+}
+
+/** The game's state restored into a new game, as GameRunner.fromSnapshot and the bot's search do. */
+function restoredFresh(game: IndexGame): IndexGame {
+  const fresh = new IndexGame({ ...game.getConstructorOptions(), playerCount: 2 } as GameOptions);
+  fresh.loadSerializedState(game.toJSON());
+  // The runner puts the id counter back from the snapshot, after the tree.
+  fresh._ctx.sequence = game._ctx.sequence;
+  return fresh;
+}
+
 function table() {
   const game = new IndexGame({ playerCount: 2, seed: 'id-index' });
   const deck = game.create(Zone, 'deck');
@@ -122,6 +142,43 @@ describe('atId after an in-place restore (the undo path)', () => {
   });
 });
 
+describe('the id index holds every element in the game tree', () => {
+  it('after elements are created and moved', () => {
+    const { game, deck, hand } = table();
+    for (const card of deck._t.children.slice(0, 10)) (card as Card).putInto(hand);
+    hand.create(Card, 'late');
+    expect(unindexed(game)).toEqual([]);
+  });
+
+  it('after an in-place restore', () => {
+    const { game, deck, hand } = table();
+    const state = game.toJSON();
+    deck.createMany(5, Card, 'late');
+    (deck._t.children[0] as Card).putInto(hand);
+    game.loadSerializedState(state);
+    expect(unindexed(game)).toEqual([]);
+  });
+
+  it('after a restore into a fresh game, where the ids construction mints can be ids already restored', () => {
+    // Cards made in play, then moved in front of the ones the constructor
+    // made: rebuilding them mints, in order, ids the state already gave out.
+    const { game, deck, hand } = table();
+    for (let i = 0; i < 20; i++) hand.create(Card, `late${i}`).putInto(deck, { position: 'first' });
+    expect(unindexed(restoredFresh(game))).toEqual([]);
+  });
+
+  it('after a world adopts a partition', () => {
+    const game = new IndexGame({ playerCount: 2, seed: 'id-index-adopt', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    const room = game.create(Zone, 'room');
+    room.createMany(10, Card, 'token');
+    game.definePartition(room.id);
+    const json = JSON.parse(JSON.stringify(room.toJSON())) as ElementJSON;
+    game.evictSubtree(room.id);
+    game.adoptSubtree(game.id, json);
+    expect(unindexed(game)).toEqual([]);
+  });
+});
+
 describe('atId in world mode', () => {
   function world() {
     const game = new IndexGame({ playerCount: 2, seed: 'id-index-world', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
@@ -173,7 +230,7 @@ describe('atId never answers differently from a walk', () => {
     it(`over a random run of creates, moves, removals, shuffles and restores (seed ${seed})`, () => {
       const random = mulberry32(seed);
       const pick = <T>(items: readonly T[]): T => items[Math.floor(random() * items.length)];
-      const game = new IndexGame({ playerCount: 2, seed: `id-index-${seed}` });
+      let game = new IndexGame({ playerCount: 2, seed: `id-index-${seed}` });
       const zones = [game.create(Zone, 'a'), game.create(Zone, 'b')];
       zones[0].createMany(6, Card, 'card');
       const seen = new Set<number>();
@@ -193,11 +250,11 @@ describe('atId never answers differently from a walk', () => {
           () => pick(spaces).shuffle(),
           () => states.push(game.toJSON()),
           () => states.length > 0 && game.loadSerializedState(pick(states)),
+          () => (game = restoredFresh(game)),
         ];
         pick(operations)();
 
-        // The pile is gathered by hand: after a restore it can hold two
-        // elements with one id (#650), which a query refuses.
+        expect(unindexed(game)).toEqual([]);
         for (const element of [...subtree(game), ...subtree(game.pile)]) seen.add(element._t.id);
         const askers = [game, ...subtree(game.pile), ...game.all(GameElement)];
         for (const id of [...seen, -1]) {

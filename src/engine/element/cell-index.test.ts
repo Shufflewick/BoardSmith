@@ -18,8 +18,11 @@ import {
   HexGrid,
   HexCell,
   ElementCollection,
+  type ElementJSON,
   type GameOptions,
 } from '../index.js';
+import { executeDebugCommand } from '../../session/debug-command.js';
+import { TEST_WORLD_ELEMENT_ID_KEY } from './world-element-id-key.test-helper.js';
 
 const devMode = vi.hoisted(() => ({ override: null as boolean | null }));
 vi.mock('../../utils/dev.js', async (importOriginal) => {
@@ -130,6 +133,19 @@ describe('a grid looks a cell up by coordinate', () => {
   });
 });
 
+describe('a grid whose cells are reordered by a debug command', () => {
+  it('finds the cell now first at a coordinate two cells share', () => {
+    devMode.override = true;
+    const game = new CellGame({ playerCount: 2 });
+    const first = game.board.create(Square, 'first', { file: 9, rank: 9 });
+    const second = game.board.create(Square, 'second', { file: 9, rank: 9 });
+    expect(game.board.first(Square, { file: 9, rank: 9 })).toBe(first);
+
+    expect(executeDebugCommand(game, { type: 'REORDER_CHILD', elementId: second.id, targetIndex: 0 })).toEqual({ success: true });
+    expect(game.board.first(Square, { file: 9, rank: 9 })).toBe(second);
+  });
+});
+
 describe('the rule, checked in development mode', () => {
   it("refuses an answer once a cell's coordinates changed while it was in its grid", () => {
     devMode.override = true;
@@ -154,42 +170,104 @@ function mulberry32(seed: number): () => number {
   };
 }
 
+/** The game's state restored into a new game, as GameRunner.fromSnapshot does. */
+function restoredFresh(game: CellGame): CellGame {
+  const fresh = new CellGame({ ...game.getConstructorOptions(), playerCount: 2 } as GameOptions);
+  fresh.loadSerializedState(game.toJSON());
+  // The runner puts the id counter back from the snapshot, after the tree.
+  fresh._ctx.sequence = game._ctx.sequence;
+  return fresh;
+}
+
+/** Both grids, each with its cell class and coordinate names. */
+function gridsOf(game: CellGame) {
+  return [
+    { grid: game.board, cellClass: Square, keys: ['file', 'rank'] },
+    { grid: game.hexes, cellClass: Hex, keys: ['q', 'r'] },
+  ] as const;
+}
+
+/** Every coordinate query on both grids answers as a search of the grid does. */
+function expectLookupsMatchSearch(game: CellGame): void {
+  for (const { grid, cellClass, keys } of gridsOf(game)) {
+    for (let a = 0; a < 6; a++) {
+      for (let b = 0; b < 6; b++) {
+        const coordinates = { [keys[0]]: a, [keys[1]]: b };
+        expect(grid.first(cellClass as never, coordinates as never)).toBe(searched(grid, cellClass as never, coordinates));
+      }
+    }
+  }
+}
+
+/**
+ * The operations a random run picks from, each as often as it appears. A
+ * cell's coordinates change only while it is out of its grid: the rule.
+ */
+function operations(game: CellGame, step: number, random: () => number) {
+  const pick = <T>(items: readonly T[]): T => items[Math.floor(random() * items.length)];
+  const coordinate = () => Math.floor(random() * 6);
+  const { grid, cellClass, keys } = pick(gridsOf(game));
+  const inGrid = [...grid.all(cellClass as never)] as (Square | Hex)[];
+  const held = [...game.holding.all(cellClass as never)] as (Square | Hex)[];
+  return [
+    () => inGrid.length > 0 && pick(inGrid).reparent(game.holding),
+    () => {
+      if (held.length === 0) return;
+      const cell = pick(held) as unknown as Record<string, number> & (Square | Hex);
+      cell[keys[0]] = coordinate();
+      cell[keys[1]] = coordinate();
+      cell.reparent(grid);
+    },
+    () => inGrid.length > 0 && pick(inGrid).create(Stone, `stone${step}`),
+    () => grid.shuffle(),
+  ];
+}
+
 describe('the index never answers differently from a search while the rule holds', () => {
   for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
-    it(`over a random run of cells moved out, re-addressed and back, stones placed, shuffles and restores (seed ${seed})`, () => {
+    it(`over a random run on a Grid and a HexGrid, with in-place and fresh-game restores (seed ${seed})`, () => {
       devMode.override = false;
       const random = mulberry32(seed);
-      const pick = <T>(items: readonly T[]): T => items[Math.floor(random() * items.length)];
-      const coordinate = () => Math.floor(random() * 6);
-      const game = new CellGame({ playerCount: 2 });
+      let game = new CellGame({ playerCount: 2 });
       const states: ReturnType<CellGame['toJSON']>[] = [];
 
       for (let step = 0; step < 150; step++) {
-        const onBoard = [...game.board.all(Square)];
-        const held = [...game.holding.all(Square)];
-        // Each operation, as often as it appears here. A cell's coordinates
-        // change only while it is out of the grid: the rule.
-        const operations = [
-          () => onBoard.length > 0 && pick(onBoard).reparent(game.holding),
-          () => {
-            if (held.length === 0) return;
-            const square = pick(held);
-            square.file = coordinate();
-            square.rank = coordinate();
-            square.reparent(game.board);
-          },
-          () => onBoard.length > 0 && pick(onBoard).create(Stone, `stone${step}`),
-          () => game.board.shuffle(),
+        const restores = [
           () => states.push(game.toJSON()),
-          () => states.length > 0 && game.loadSerializedState(pick(states)),
+          () => states.length > 0 && game.loadSerializedState(states[Math.floor(random() * states.length)]),
+          () => (game = restoredFresh(game)),
         ];
-        pick(operations)();
+        const choices = [...operations(game, step, random), ...restores];
+        choices[Math.floor(random() * choices.length)]();
+        expectLookupsMatchSearch(game);
+      }
+    });
 
-        for (let file = 0; file < 6; file++) {
-          for (let rank = 0; rank < 6; rank++) {
-            expect(game.board.first(Square, { file, rank })).toBe(searched(game.board, Square, { file, rank }));
-          }
-        }
+    it(`over a random run in a world, with cells evicted and adopted back (seed ${seed})`, () => {
+      devMode.override = false;
+      const random = mulberry32(seed);
+      const game = new CellGame({ playerCount: 2, worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+      const evicted: { parentId: number; json: ElementJSON }[] = [];
+
+      for (let step = 0; step < 150; step++) {
+        const { grid, cellClass } = gridsOf(game)[Math.floor(random() * 2)];
+        const inGrid = [...grid.all(cellClass as never)] as (Square | Hex)[];
+        const residency = [
+          () => {
+            if (inGrid.length === 0) return;
+            const cell = inGrid[Math.floor(random() * inGrid.length)];
+            game.definePartition(cell.id);
+            evicted.push({ parentId: grid.id, json: JSON.parse(JSON.stringify(cell.toJSON())) as ElementJSON });
+            game.evictSubtree(cell.id);
+          },
+          () => {
+            const back = evicted.splice(Math.floor(random() * evicted.length), 1)[0];
+            if (back) game.adoptSubtree(back.parentId, back.json);
+          },
+        ];
+        const choices = [...operations(game, step, random), ...residency];
+        choices[Math.floor(random() * choices.length)]();
+        expectLookupsMatchSearch(game);
       }
     });
   }

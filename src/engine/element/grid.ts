@@ -100,7 +100,6 @@ export class Grid<G extends Game = any, P extends Player = any> extends Space<G,
    */
   $colCoord?: string;
 
-
   /**
    * The first matching descendant, as {@link GameElement.first}. The cell at a
    * coordinate, `first(CellClass, { <$rowCoord>: r, <$colCoord>: c })` with exactly the

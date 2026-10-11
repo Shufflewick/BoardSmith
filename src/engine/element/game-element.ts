@@ -1854,10 +1854,12 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // the game's direct children get it in loadSerializedState), so e.g.
     // `piece.remove()` → `this.game.pile` throws after any restore.
     if (ctx.game) (element as GameElement).game = ctx.game;
-    // The stored id replaces the one construction minted, in the id index too.
-    ctx._elementsById.delete(element._t.id);
+    // The stored id replaces the one construction minted. The minted id leaves
+    // the id index, unless it already names another element: a restore can
+    // mint an id it has already restored. Whoever builds the tree files it
+    // once it is built (`Game#loadSerializedState`, `Game#adoptSubtree`).
+    if (ctx._elementsById.get(element._t.id) === element) ctx._elementsById.delete(element._t.id);
     element._t.id = json.id;
-    ctx._elementsById.set(json.id, element);
 
     if (json.name) {
       element.name = json.name;

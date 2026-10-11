@@ -46,11 +46,13 @@ export type ElementContext = {
   /** Turns a creation-counter value into the element's id (#447). */
   ids: ElementIds;
   /**
-   * Internal (#632): every element this game has given an id, by that id, so
-   * `atId` can look an element up instead of walking the tree. Derived, never
+   * Internal (#632): every element in the game's tree, by id, so `atId` can
+   * look an element up instead of walking the tree. Derived, never
    * serialized: the tree is the source of truth, and `atId` answers from here
    * only for an element whose parents reach both the element asked and the
-   * game. Rebuilt by a restore and pruned by an eviction. Not public API.
+   * game. An element is filed when it is created; a restore files the whole
+   * rebuilt tree and an adoption the grafted subtree, once each is built; an
+   * eviction drops the evicted subtree. Not public API.
    */
   _elementsById: Map<number, GameElement>;
   /** Current player context (for "mine" queries) */
