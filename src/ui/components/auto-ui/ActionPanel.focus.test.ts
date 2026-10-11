@@ -14,13 +14,16 @@
  * STRANDED (on `body`, or on a node no longer in the document). A user who
  * deliberately tabbed somewhere else is never yanked back.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { nextTick, ref } from 'vue';
 import { useActionController } from '../../composables/useActionController.js';
 import type { EnrichedActionMetadata } from '../../composables/useActionController.js';
 import ActionPanel from './ActionPanel.vue';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
+import { documentHasFocus } from './document-has-focus.test-helper.js';
+
+documentHasFocus();
 
 const twoChoiceAction: EnrichedActionMetadata = {
   name: 'enterWorld',
@@ -208,6 +211,48 @@ describe('a six-selection action, the shape the report measured', () => {
     expect(observed).toHaveLength(7);
     expect(observed.filter((f) => f === 'BODY')).toEqual([]);
     expect(observed.filter((f) => f === 'DETACHED')).toEqual([]);
+    wrapper.unmount();
+  });
+});
+
+// A document without focus, such as the GameShell iframe while the player is
+// using the page around it (#649), has focus on its body by definition. That is
+// not a stranded keyboard user: placing focus there would pull it out of the
+// host page, closing its menus and interrupting its text fields, every time a
+// new state arrives.
+describe('a document that does not have focus (#649)', () => {
+  let focus: MockInstance<() => void>;
+  beforeEach(() => {
+    vi.mocked(document.hasFocus).mockReturnValue(false);
+    focus = vi.spyOn(HTMLElement.prototype, 'focus');
+  });
+  afterEach(() => {
+    focus.mockRestore();
+  });
+
+  it('leaves focus alone when the available actions change', async () => {
+    const { wrapper } = mountPanel();
+    await nextTick();
+
+    await wrapper.setProps({ availableActions: ['enterWorld', 'rest'] });
+    await nextTick();
+    await nextTick();
+
+    expect(focus).not.toHaveBeenCalled();
+    expect(focusDescription()).toBe('BODY');
+    wrapper.unmount();
+  });
+
+  it('leaves focus alone when the step changes', async () => {
+    const { wrapper, controller } = mountPanel();
+    await nextTick();
+
+    await controller.start('enterWorld');
+    await nextTick();
+    await nextTick();
+
+    expect(focus).not.toHaveBeenCalled();
+    expect(focusDescription()).toBe('BODY');
     wrapper.unmount();
   });
 });

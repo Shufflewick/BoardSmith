@@ -716,8 +716,14 @@ const stepIdentity = computed(() => {
   return `${action}/${pick}/${accumulated}`;
 });
 
-/** Focus is stranded when it is nowhere, on the body, or on a removed node. */
+/**
+ * Focus is stranded when it is nowhere, on the body, or on a removed node, in a
+ * document that has focus. A document without focus (the GameShell iframe while
+ * the player uses the page around it, #649) has nothing to repair; placing focus
+ * there would pull it out of the host page on every state update.
+ */
 function focusIsStranded(): boolean {
+  if (!document.hasFocus()) return false;
   const active = document.activeElement;
   return !active || active === document.body || !active.isConnected;
 }
