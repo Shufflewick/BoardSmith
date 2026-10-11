@@ -27,7 +27,7 @@ describe('walkFlowNodes', () => {
   it('yields the inner action-step via config.do for loop / phase / each-player', () => {
     const inner = actionStepNode(['roll'], 'inner');
 
-    const loopNode: FlowNode = { type: 'loop', config: { do: inner } };
+    const loopNode: FlowNode = { type: 'loop', config: { maxIterations: 10, do: inner } };
     expect([...walkFlowNodes(loopNode)]).toContain(inner);
 
     const phaseInner = actionStepNode(['roll'], 'phase-inner');
