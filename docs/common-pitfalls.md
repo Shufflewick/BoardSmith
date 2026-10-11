@@ -2034,7 +2034,7 @@ class MyGame extends Game<MyGame, MyPlayer> {
 ```
 
 This type-checks and works in a fresh game. But the engine never saves `pile`
-and rebuilds it on every restore, so after the first undo, reload or bot search
+and empties it on every restore, so after the first undo, reload or bot search
 `game.pile` points at the engine's container again while your real zone sits in
 the tree. Choices read one board and moves change the other.
 
