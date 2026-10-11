@@ -11,7 +11,7 @@
  * just bridges the WS transport to the iframe's postMessage protocol — so dev is
  * inherently multiplayer (open another browser / another computer to join).
  */
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import type { DevHostConfig } from './config-types.js';
 import Toast from '../../ui/components/Toast.vue';
 import { useToast } from '../../ui/composables/useToast.js';
@@ -157,18 +157,18 @@ function restartGame(seed?: string): void {
 function handleNewGameClick(): void {
   if (!restartConfirming.value) {
     restartConfirming.value = true;
-    restartConfirmTimer = setTimeout(() => {
-      restartConfirming.value = false;
-      restartConfirmTimer = null;
-    }, 5000);
+    restartConfirmTimer = setTimeout(cancelRestartConfirm, 5000);
   } else {
-    if (restartConfirmTimer !== null) {
-      clearTimeout(restartConfirmTimer);
-      restartConfirmTimer = null;
-    }
-    restartConfirming.value = false;
+    cancelRestartConfirm();
     restartGame();
   }
+}
+
+/** Disarms New game's confirm, so the next click only arms it again. */
+function cancelRestartConfirm(): void {
+  if (restartConfirmTimer !== null) clearTimeout(restartConfirmTimer);
+  restartConfirmTimer = null;
+  restartConfirming.value = false;
 }
 
 /** Seats this client may take: open, or held by an away (disconnected) player. */
@@ -443,10 +443,12 @@ function seatLabel(seat: SeatInfo): string {
 // ── Seat switcher ─────────────────────────────────────────────────────────────
 const seatSwitcherOpen = ref(false);
 const seatSwitcherRef = ref<HTMLElement | null>(null);
+const seatSwitcherTrigger = ref<HTMLElement | null>(null);
 
 // ── … menu: the phone-width home of the secondary controls ─────────────────────
 const overflowOpen = ref(false);
 const overflowRef = ref<HTMLElement | null>(null);
+const overflowTrigger = ref<HTMLElement | null>(null);
 
 // ── Table setup panel (read-only config display — DEV-04) ─────────────────────
 const tableSetupOpen = ref(false);
@@ -475,8 +477,13 @@ function toggleDebug(): void {
 
 // ── Dismissal: the seat switcher (#610) and the … menu (#664) close like any
 // dev-bar menu; Escape also closes the table setup panel.
-useMenuDismiss(seatSwitcherOpen, seatSwitcherRef);
-useMenuDismiss(overflowOpen, overflowRef);
+useMenuDismiss(seatSwitcherOpen, seatSwitcherRef, seatSwitcherTrigger);
+useMenuDismiss(overflowOpen, overflowRef, overflowTrigger);
+// New game armed in the … menu disarms when the menu closes, however it closes,
+// so reopening it never restarts on one click (#667).
+watch(overflowOpen, (open) => {
+  if (!open) cancelRestartConfirm();
+});
 function handleChromeKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') tableSetupOpen.value = false;
 }
@@ -738,15 +745,17 @@ onUnmounted(() => {
               <button
                 type="button"
                 class="dev-chrome__badge dev-chrome__badge--btn"
+                ref="seatSwitcherTrigger"
                 data-testid="seat-switcher"
                 :data-following="String(followActive)"
                 aria-haspopup="true"
+                aria-controls="dev-seat-menu"
                 :aria-expanded="seatSwitcherOpen"
                 @click="seatSwitcherOpen = !seatSwitcherOpen"
               >
                 {{ followActive ? 'Following' : `Seat ${mySeat}` }} ▾
               </button>
-              <div v-if="seatSwitcherOpen" class="seat-switcher-menu">
+              <div v-if="seatSwitcherOpen" id="dev-seat-menu" class="seat-switcher-menu">
                 <!-- Follow active seat: first option in the seat selector -->
                 <button
                   type="button"
@@ -816,15 +825,17 @@ onUnmounted(() => {
             <div class="dev-chrome__overflow" ref="overflowRef">
               <button
                 type="button"
+                ref="overflowTrigger"
                 class="dev-chrome__overflow-trigger btn"
                 aria-label="More dev controls"
                 aria-haspopup="true"
+                aria-controls="dev-overflow-menu"
                 :aria-expanded="overflowOpen"
                 @click="overflowOpen = !overflowOpen"
               >…</button>
               <!-- New game's first click only arms its confirm, so the menu stays
                    open for the second; every other choice closes it (#664). -->
-              <div v-if="overflowOpen" class="dev-chrome__overflow-menu">
+              <div v-if="overflowOpen" id="dev-overflow-menu" class="dev-chrome__overflow-menu">
                 <button
                   type="button"
                   class="btn btn--start"

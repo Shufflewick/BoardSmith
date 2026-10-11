@@ -338,7 +338,8 @@ function onWindowMessage(event: MessageEvent): void {
 const seats = computed(() => Array.from({ length: cfg.seatCount }, (_, i) => i + 1));
 const seatMenuOpen = ref(false);
 const seatMenuRef = ref<HTMLElement | null>(null);
-useMenuDismiss(seatMenuOpen, seatMenuRef);
+const seatMenuTrigger = ref<HTMLElement | null>(null);
+useMenuDismiss(seatMenuOpen, seatMenuRef, seatMenuTrigger);
 
 function takeSeat(seat: number): void {
   seatMenuOpen.value = false;
@@ -393,14 +394,16 @@ onUnmounted(() => {
         <!-- The seat held and each seat offered carry their number, so a smoke walk
              playing several seats (#471) takes the one its spec names. -->
         <button
+          ref="seatMenuTrigger"
           type="button"
           data-testid="world-seat-switcher"
+          aria-controls="world-seat-menu"
           :data-seat="mySeat ?? undefined"
           @click="seatMenuOpen = !seatMenuOpen"
         >
           Seat {{ mySeat ?? '—' }} ▾
         </button>
-        <ul v-if="seatMenuOpen" class="world-dev__menu">
+        <ul v-if="seatMenuOpen" id="world-seat-menu" class="world-dev__menu">
           <li v-for="seat in seats" :key="seat">
             <button
               type="button"
