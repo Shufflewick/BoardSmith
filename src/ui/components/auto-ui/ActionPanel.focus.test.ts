@@ -14,13 +14,16 @@
  * STRANDED (on `body`, or on a node no longer in the document). A user who
  * deliberately tabbed somewhere else is never yanked back.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { nextTick, ref } from 'vue';
 import { useActionController } from '../../composables/useActionController.js';
 import type { EnrichedActionMetadata } from '../../composables/useActionController.js';
 import ActionPanel from './ActionPanel.vue';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
+import { documentHasFocus } from './document-has-focus.test-helper.js';
+
+documentHasFocus();
 
 const twoChoiceAction: EnrichedActionMetadata = {
   name: 'enterWorld',
@@ -209,5 +212,108 @@ describe('a six-selection action, the shape the report measured', () => {
     expect(observed.filter((f) => f === 'BODY')).toEqual([]);
     expect(observed.filter((f) => f === 'DETACHED')).toEqual([]);
     wrapper.unmount();
+  });
+});
+
+// A document without focus, such as the GameShell iframe while the player is
+// using the page around it (#649), has focus on its body by definition. That is
+// not a stranded keyboard user: placing focus there would pull it out of the
+// host page, closing its menus and interrupting its text fields, every time a
+// new state arrives. The repair is put off until the window regains focus.
+describe('a document that does not have focus (#649)', () => {
+  let focus: MockInstance<() => void>;
+  beforeEach(() => {
+    vi.mocked(document.hasFocus).mockReturnValue(false);
+    focus = vi.spyOn(HTMLElement.prototype, 'focus');
+  });
+  afterEach(() => {
+    focus.mockRestore();
+  });
+
+  it('leaves focus alone when the available actions change', async () => {
+    const { wrapper } = mountPanel();
+    await nextTick();
+
+    await wrapper.setProps({ availableActions: ['enterWorld', 'rest'] });
+    await nextTick();
+    await nextTick();
+
+    expect(focus).not.toHaveBeenCalled();
+    expect(focusDescription()).toBe('BODY');
+    wrapper.unmount();
+  });
+
+  it('leaves focus alone when the step changes', async () => {
+    const { wrapper, controller } = mountPanel();
+    await nextTick();
+
+    await controller.start('enterWorld');
+    await nextTick();
+    await nextTick();
+
+    expect(focus).not.toHaveBeenCalled();
+    expect(focusDescription()).toBe('BODY');
+    wrapper.unmount();
+  });
+
+  // A keyboard player switches tab while waiting, and the opponent's move
+  // removes the button they were on. The repair waits for them to come back.
+  it('repairs a skipped stranding when the window regains focus', async () => {
+    const { wrapper, controller } = mountPanel();
+    await nextTick();
+
+    await controller.start('enterWorld');
+    await nextTick();
+    await nextTick();
+    expect(focus).not.toHaveBeenCalled();
+
+    vi.mocked(document.hasFocus).mockReturnValue(true);
+    window.dispatchEvent(new Event('focus'));
+
+    expect(focusDescription()).toContain('Wolf');
+    wrapper.unmount();
+  });
+
+  it('does not move focus on a window focus when no repair was skipped', async () => {
+    const { wrapper } = mountPanel();
+    await nextTick();
+
+    vi.mocked(document.hasFocus).mockReturnValue(true);
+    window.dispatchEvent(new Event('focus'));
+
+    expect(focus).not.toHaveBeenCalled();
+    expect(focusDescription()).toBe('BODY');
+    wrapper.unmount();
+  });
+
+  it('does not move focus the player put somewhere else before coming back', async () => {
+    const { wrapper, controller } = mountPanel();
+    await nextTick();
+    await controller.start('enterWorld');
+    await nextTick();
+    await nextTick();
+
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+    vi.mocked(document.hasFocus).mockReturnValue(true);
+    outside.focus();
+    window.dispatchEvent(new Event('focus'));
+
+    expect(document.activeElement).toBe(outside);
+    wrapper.unmount();
+  });
+
+  it('stops listening for window focus when the panel unmounts', () => {
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    const { wrapper } = mountPanel();
+    const added = add.mock.calls.filter(([type]) => type === 'focus');
+    expect(added).toHaveLength(1);
+
+    wrapper.unmount();
+
+    expect(remove.mock.calls.filter(([type]) => type === 'focus')).toEqual([['focus', added[0][1]]]);
+    add.mockRestore();
+    remove.mockRestore();
   });
 });

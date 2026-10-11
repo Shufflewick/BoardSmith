@@ -21,6 +21,9 @@ import type { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { panelsOver } from './action-panel-editor.test-helper.js';
 import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
+import { documentHasFocus } from './document-has-focus.test-helper.js';
+
+documentHasFocus();
 
 const DESCRIBE: EnrichedActionMetadata = {
   name: 'describeEmpire',
