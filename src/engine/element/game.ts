@@ -5238,10 +5238,14 @@ export class Game<
     // (Handlers are constructor-registered closures; only constructor-created
     // Spaces ever have handlers to capture, and those are exactly the Spaces
     // whose ids round-trip.)
+    //
+    // Handlers are saved from Spaces in the pile as well as the tree (#656): a
+    // removed Space keeps its handlers, and the state being restored may hold it
+    // in the tree again, as an undo of its removal does.
     const spaceHandlerKey = (space: Space): string => String(space.id);
     type CapturedHandlers = { enter: ElementEventHandler<GameElement>[]; exit: ElementEventHandler<GameElement>[] };
     const capturedHandlers = new Map<string, CapturedHandlers>();
-    for (const space of this.all(Space)) {
+    for (const space of [...this.all(Space), ...this.pile.all(Space)]) {
       const handlers = space._captureEventHandlers();
       if (handlers.enter.length > 0 || handlers.exit.length > 0) {
         capturedHandlers.set(spaceHandlerKey(space), handlers);
@@ -5281,11 +5285,13 @@ export class Game<
         devWarn(
           `unbound-event-handlers:${key}`,
           `Space "${key}" had onEnter/onExit handlers registered before a snapshot ` +
-          `restore, but the restored tree has no Space with that element id. These ` +
-          `handlers were dropped, not silently carried over. This usually means the ` +
-          `Space structure changed between save and restore (e.g. conditional Space ` +
-          `creation in the constructor) — make sure Spaces with onEnter/onExit ` +
-          `handlers are always created, in the same order, in the constructor.`
+          `restore, but the restored state has no Space with that element id, so these ` +
+          `handlers were dropped. If that Space had been removed when the state was ` +
+          `saved, this is expected: a removed Space is not part of a saved state, and ` +
+          `there is nothing to fix. Otherwise the Space structure changed between save ` +
+          `and restore (for example, a Space created only under some condition in the ` +
+          `constructor): create every Space that has onEnter/onExit handlers in the ` +
+          `constructor, always, and in the same order.`
         );
       }
     }

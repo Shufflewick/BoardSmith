@@ -166,6 +166,58 @@ describe('RST-01/F10: onEnter/onExit handlers survive snapshot restore', () => {
   });
 });
 
+describe('a Space in the pile when a restore runs keeps its handlers (#656)', () => {
+  // The issue's case: `dest` is in the tree in the saved state but in the pile
+  // when the restore runs, as when an undo brings back a removed Space.
+  it('an in-place restore that brings a removed Space back keeps its onEnter and onExit', () => {
+    const game = buildRunner().game;
+    const state = roundTripJson(game.toJSON());
+    game.dest.remove();
+
+    game.loadSerializedState(state);
+    game.source.first(Token)!.putInto(game.dest);
+    game.dest.first(Token)!.putInto(game.source);
+
+    expect([game.enterCount, game.exitCount]).toEqual([1, 1]);
+  });
+
+  it('a fresh restore of the same state also keeps them, so the two restores agree', () => {
+    const runner = buildRunner();
+    const snapshot = roundTripJson(runner.getSnapshot());
+    runner.game.dest.remove();
+
+    const restored = GameRunner.fromSnapshot<HandlerGame>(snapshot, HandlerGame).game;
+    restored.source.first(Token)!.putInto(restored.dest);
+    restored.dest.first(Token)!.putInto(restored.source);
+
+    expect([restored.enterCount, restored.exitCount]).toEqual([1, 1]);
+  });
+
+  // A snapshot does not hold the pile, and every restore empties it (#650), so
+  // a state taken after the removal has no Space to give the handlers to. Both
+  // restores say so, rather than one dropping them silently.
+  it('in-place and fresh restores of a state without the Space both warn that its handlers were dropped', () => {
+    const runner = buildRunner();
+    const destId = runner.game.dest.id;
+    runner.game.dest.remove();
+    const snapshot = roundTripJson(runner.getSnapshot());
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    _clearShownWarnings();
+    runner.game.loadSerializedState(snapshot.state);
+    _clearShownWarnings();
+    GameRunner.fromSnapshot<HandlerGame>(snapshot, HandlerGame);
+    const warnings = warnSpy.mock.calls.map((call) => String(call[0]));
+    warnSpy.mockRestore();
+
+    expect(warnings).toHaveLength(2);
+    for (const warning of warnings) {
+      expect(warning).toContain(`Space "${destId}"`);
+      expect(warning).toContain('removed when the state was saved, this is expected');
+    }
+  });
+});
+
 // ---------------------------------------------------------------------------
 // WR-02 (iteration 2): handler re-binding must NOT cross-wire same-class
 // sibling Spaces when sibling indices shift. The constructor creates a Piece
