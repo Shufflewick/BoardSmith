@@ -150,6 +150,17 @@ describe('world-action callbacks receive element selections as elements (#418)',
     await world.close();
   });
 
+  it('a submitted command with a key no pick declares is refused, and execute never runs (#662)', async () => {
+    const seen = new Map<string, Seen[]>();
+    const { world, room } = await surveying(seen);
+
+    await expect(world.take(1, 'survey', { room, look: 'stare', bribe: 100 })).rejects.toThrow(
+      "'survey' was sent 'bribe', which is not one of its picks. It takes: room, look.",
+    );
+    expect(seen.get('execute')).toBeUndefined();
+    await world.close();
+  });
+
   it("a refused pick's unavailable sentence is handed the element", async () => {
     const seen = new Map<string, Seen[]>();
     const { world, room } = await surveying(seen);

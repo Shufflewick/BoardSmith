@@ -1840,6 +1840,20 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return { success: false, error };
     }
 
+    // Only picks reach the server (buildServerArgs, #662): say so rather than
+    // drop an arg the caller meant to send.
+    const picks = meta.selections.map((s) => s.name);
+    const undeclared = Object.keys(initialArgs).filter((key) => !picks.includes(key));
+    if (undeclared.length > 0) {
+      const sent = undeclared.map((key) => `'${key}'`).join(', ');
+      devWarn(
+        `start-undeclared-args:${actionName}`,
+        `start('${actionName}') was given ${sent}, which ${undeclared.length === 1 ? 'is not one of its picks' : 'are not among its picks'} ` +
+          `(${picks.join(', ') || 'it has none'}), so ${undeclared.length === 1 ? 'it is' : 'they are'} not sent to the server. ` +
+          `Pass only the action's picks; an arg the rules need besides those belongs in the followUp that starts the action.`
+      );
+    }
+
     currentAction.value = actionName;
     actionStartTick.value++;
     clearArgs();
@@ -2024,7 +2038,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         selection.name,
         value,
         currentAction.value,
-        { ...currentArgs.value }
+        buildServerArgs()
       );
 
       // Guard: repeatingState may have been cleared by startFollowUp during the await

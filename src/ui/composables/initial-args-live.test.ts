@@ -8,7 +8,8 @@
  * seat's own steps would, so the later pick's choices see them. Driven on a
  * live table, wired as GameShell wires it.
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { _clearShownWarnings } from '../../utils/dev.js';
 import type { VueWrapper } from '@vue/test-utils';
 import { Game, Player, Piece, Space, Action, loop, eachPlayer, actionStep, type GameOptions } from '../../engine/index.js';
 import { mountLiveSeat, settle } from './table-wiring.test-helper.js';
@@ -71,6 +72,29 @@ class HopGame extends Game<HopGame, Player> {
   }
 }
 
+/** A follow-up with an arg no pick declares and a repeating pick: each coin is its own server step. */
+class SweepGame extends Game<SweepGame, Player> {
+  swept: string[] = [];
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerActions(
+      Action.create<SweepGame>('begin')
+        .prompt('Begin')
+        .execute(() => ({ success: true, followUp: { action: 'sweep', args: { by: 'engine' } } })),
+      Action.create<SweepGame>('sweep')
+        .prompt('Sweep')
+        .followUpArgs<{ by: string }>()
+        .condition({ 'only as a follow-up': () => false })
+        .chooseFrom('coins', { choices: ['a', 'stop'], repeat: { until: (_ctx, last) => last === 'stop' } })
+        .execute((args) => {
+          this.swept.push(`${args.by}:${args.coins.join(',')}`);
+        }),
+    );
+    this.setFlow({ root: loop({ maxIterations: 4, do: eachPlayer({ do: actionStep({ actions: ['begin'] }) }) }) });
+  }
+}
+
 const mounted: VueWrapper[] = [];
 afterEach(() => {
   for (const wrapper of mounted.splice(0)) wrapper.unmount();
@@ -107,5 +131,42 @@ describe('locally collected picks travel as initialArgs (#658)', () => {
     expect(controller.lastError.value).toBe(null);
     expect(controller.currentAction.value).toBe(null);
     expect(session.readGame().landed).toEqual(['jumper:jumper-right:2']);
+  });
+
+  it('warns when start() is given an arg no pick declares, and sends only the picks', async () => {
+    _clearShownWarnings();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { session, wiring } = await mountLiveSeat(PayGame, 'initial-args-undeclared', mounted, { withPickStep: true });
+      const { controller } = wiring;
+
+      await controller.start('buy', { args: { color: 'blue', coupon: 5 } });
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining(
+        "start('buy') was given 'coupon', which is not one of its picks (color, pay)",
+      ));
+
+      await controller.fill('pay', 'silver');
+      await settle();
+      expect(controller.lastError.value).toBe(null);
+      expect(session.readGame().bought).toEqual(['blue:silver']);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("plays a follow-up's repeating pick step by step, with the engine's follow-up args", async () => {
+    const { session, wiring } = await mountLiveSeat(SweepGame, 'initial-args-repeating-follow-up', mounted, { withPickStep: true });
+    const { controller } = wiring;
+
+    await controller.execute('begin');
+    await settle();
+    expect(controller.currentAction.value).toBe('sweep');
+    await controller.fill('coins', 'a');
+    await settle();
+    await controller.fill('coins', 'stop');
+    await settle();
+
+    expect(controller.lastError.value).toBe(null);
+    expect(session.readGame().swept).toEqual(['engine:a,stop']);
   });
 });
