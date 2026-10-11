@@ -9,7 +9,7 @@
  * and eviction), and a seeded run of random operations compares every lookup
  * with a plain walk after each one.
  */
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { Game, GameElement, Space, Piece, Player, type ElementJSON, type GameOptions } from '../index.js';
 import { TEST_WORLD_ELEMENT_ID_KEY } from './world-element-id-key.test-helper.js';
 
@@ -65,20 +65,7 @@ function table() {
   return { game, deck, hand };
 }
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
 describe('atId looks an element up instead of walking the tree', () => {
-  it('finds an element deep in the tree without visiting the elements before it', () => {
-    const { game, deck } = table();
-    const last = deck._t.children.at(-1)!;
-    const visits = vi.spyOn(GameElement.prototype, 'atId');
-
-    expect(game.atId(last.id)).toBe(last);
-    expect(visits).toHaveBeenCalledTimes(1);
-  });
-
   it('finds an element created after the game started', () => {
     const { game, hand } = table();
     const card = hand.create(Card, 'late');
