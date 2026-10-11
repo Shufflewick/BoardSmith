@@ -307,17 +307,19 @@ async function recordResolvedActions(page: Page): Promise<void> {
 
 /** The actions resolved in `frame` since the last call, recorded (`recordResolved`): taken ones taken, failed ones reported. */
 async function drainResolved(frame: Frame, walk: SmokeWalk, memory: WalkMemory): Promise<number> {
-  const resolved = await frame.evaluate(() => {
-    const log = (window as unknown as { __boardsmithSmokeResolved?: unknown[] }).__boardsmithSmokeResolved ?? [];
-    return log.splice(0, log.length) as ResolvedAction[];
-  });
+  const resolved = await inPageTime(frame.page(), 'reading the actions resolved', () =>
+    frame.evaluate(() => {
+      const log = (window as unknown as { __boardsmithSmokeResolved?: unknown[] }).__boardsmithSmokeResolved ?? [];
+      return log.splice(0, log.length) as ResolvedAction[];
+    }),
+  );
   recordResolved(resolved, walk, memory, browserNames.get(frame.page()));
   return resolved.length;
 }
 
 /** Reports each error toast the game shows a player, once, except one repeating a refused number (#466). */
 async function noteErrorToasts(frame: Frame, walk: SmokeWalk, memory: WalkMemory): Promise<void> {
-  for (const text of await frame.locator('.toast.error').allInnerTexts()) {
+  for (const text of await inPageTime(frame.page(), 'reading the error toasts', () => frame.locator('.toast.error').allInnerTexts())) {
     if (![...memory.refusals].some((refusal) => text.includes(refusal))) noteIn(frame.page(), walk, `The game showed an error: ${text.trim()}`);
   }
 }
@@ -363,13 +365,14 @@ const ranOut = (error: unknown) => error instanceof Error && error.name === 'Tim
 /**
  * Waits for what `attempt` waits for, given `timeout` ms of the wall clock a try, until `budgetMs`
  * of `page`'s time has passed, and then throws the last try's timeout. Only for a wait that may be
- * tried again: one that reads or waits, never one that presses.
+ * tried again: one that reads or waits, never one that presses. A try that hangs in the page, as a
+ * script Playwright runs once it has found the element does, is held to the page's time too (#618).
  */
 async function withinPageTime<T>(page: Page, budgetMs: number, attempt: (timeout: number) => Promise<T>): Promise<T> {
   const over = stopwatch(page);
   for (;;) {
     try {
-      return await attempt(TRY_MS);
+      return await actWithinPageTime(page, budgetMs, 'waiting on the page', () => attempt(TRY_MS));
     } catch (error) {
       if (!ranOut(error) || over(budgetMs)) throw error;
     }
@@ -377,26 +380,39 @@ async function withinPageTime<T>(page: Page, budgetMs: number, attempt: (timeout
 }
 
 /**
- * Does what `act` does once, with no timeout of its own (`timeout` 0), and throws a timeout when it
- * has not finished in `budgetMs` of `page`'s time, running `meanwhile` every tenth of a try while it
- * waits. For a press, which is never tried again: one that ran out may still land, so the walk ends
- * there (its set-up presses) or reports it and moves on, as `press` and closing a dialog with Escape do.
+ * Does what `act` does once, with no timeout of its own (`timeout` 0), and returns what it gives.
+ * It throws a timeout when `act` has not finished in `budgetMs` of `page`'s time, and
+ * {@link PageFrozen} once the page has stopped answering, running `meanwhile` every tenth of a try
+ * while it waits. For a press, which is never tried again: one that ran out may still land, so the
+ * walk ends there (its set-up presses) or reports it and moves on, as `press` and closing a dialog
+ * with Escape do. And for every call into the page that takes no time limit of its own
+ * ({@link inPageTime}).
  */
-async function actWithinPageTime(
+async function actWithinPageTime<T>(
   page: Page,
   budgetMs: number,
   what: string,
-  act: (timeout: number) => Promise<unknown>,
+  act: (timeout: number) => Promise<T>,
   meanwhile?: () => Promise<void>,
-): Promise<void> {
+): Promise<T> {
   const over = stopwatch(page);
   const acting = act(0);
   acting.catch(() => undefined);
   for (;;) {
-    if (await Promise.race([acting.then(() => true), new Promise<boolean>((tick) => setTimeout(() => tick(false), TRY_MS / 10))])) return;
+    if (await Promise.race([acting.then(() => true), new Promise<boolean>((tick) => setTimeout(() => tick(false), TRY_MS / 10))])) return acting;
     if (over(budgetMs)) throw new errors.TimeoutError(`${what}: not done in ${budgetMs / 1000}s of the page answering`);
     await meanwhile?.();
   }
+}
+
+/**
+ * Runs `call`, one call into `page` that Playwright gives no time limit (a script run in the page, a
+ * count of elements, a move of the mouse), within {@link PRESS_MS} of the page's time, so a board
+ * that hangs during it fails the walk saying the page stopped answering, as any timed wait does,
+ * rather than holding it until the limit on the whole run (#618). `what` names the call in the timeout.
+ */
+function inPageTime<T>(page: Page, what: string, call: () => Promise<T>): Promise<T> {
+  return actWithinPageTime(page, PRESS_MS, what, call);
 }
 
 /** {@link actWithinPageTime} for a press into one of the dev host's menus, given {@link PRESS_MS} of `page`'s time. */
@@ -418,8 +434,8 @@ function devHostMenu(page: Page, menu: { toggle: Locator; items: Locator; item: 
   return {
     pressItem: () => menu.item.dispatchEvent('click', undefined, { timeout: 0 }),
     pressToggle: () => menu.toggle.click({ timeout: 0 }),
-    isOpen: async () => (await menu.items.count()) > 0,
-    isTaken: async () => (await menu.taken.count()) > 0,
+    isOpen: async () => (await inPageTime(page, 'looking for the menu', () => menu.items.count())) > 0,
+    isTaken: async () => (await inPageTime(page, 'looking for the choice taken', () => menu.taken.count())) > 0,
     waitTaken: () => withinPageTime(page, TURN_WAIT_MS, (timeout) => menu.taken.waitFor({ timeout })).catch(saying(menu.late)),
   };
 }
@@ -462,7 +478,7 @@ async function takeASeat(page: Page): Promise<void> {
   await withinPageTime(page, SHELL_WAIT_MS, (timeout) => Promise.race([lobbySeat.waitFor({ timeout }), frameShown.waitFor({ timeout })])).catch(
     saying(`The dev host showed neither a seat nor the game after ${SHELL_WAIT_MS / 1000}s. Run \`boardsmith dev\` and open it to see what it shows instead.`),
   );
-  if (await lobbySeat.isVisible()) await actWithinPageTime(page, PRESS_MS, 'pressing "Take seat"', (timeout) => lobbySeat.click({ timeout }));
+  if (await inPageTime(page, 'looking for "Take seat"', () => lobbySeat.isVisible())) await actWithinPageTime(page, PRESS_MS, 'pressing "Take seat"', (timeout) => lobbySeat.click({ timeout }));
   const frame = await gameFrame(page);
   await withinPageTime(page, SHELL_WAIT_MS, (timeout) => frame.locator('[data-testid="bs-actionbar"]').waitFor({ state: 'attached', timeout })).catch(
     saying(
@@ -478,7 +494,7 @@ async function takeASeat(page: Page): Promise<void> {
  */
 async function followTheActiveSeat(page: Page): Promise<void> {
   const switcher = page.getByTestId('seat-switcher');
-  if ((await switcher.count()) === 0) return;
+  if ((await inPageTime(page, 'looking for the seat switcher', () => switcher.count())) === 0) return;
   const follow = page.getByTestId('follow-active-seat');
   const menu = devHostMenu(page, {
     toggle: switcher,
@@ -497,7 +513,7 @@ const tableSetup = (page: Page) => page.getByTestId('table-setup-toggle').filter
 
 /** Whether the dev host deals its games from a seed the page names: a table's does, a world's does not. */
 async function canDeal(page: Page): Promise<boolean> {
-  return (await tableSetup(page).count()) > 0;
+  return (await inPageTime(page, 'looking for "Table setup"', () => tableSetup(page).count())) > 0;
 }
 
 /**
@@ -597,7 +613,7 @@ async function takeWorldSeat(page: Page, seat: number): Promise<void> {
   await withinPageTime(page, TURN_WAIT_MS, (timeout) => page.locator('[data-testid="world-seat-switcher"][data-seat]').waitFor({ timeout })).catch(
     saying(`The dev host had not seated the page ${TURN_WAIT_MS / 1000}s after it opened. Run \`boardsmith dev\` and open it to see why.`),
   );
-  if ((await holding(seat).count()) > 0) return;
+  if ((await inPageTime(page, 'looking for the seat held', () => holding(seat).count())) > 0) return;
   const offered = page.getByTestId('world-take-seat');
   const choice = page.locator(`[data-testid="world-take-seat"][data-seat="${seat}"]`);
   const menu = devHostMenu(page, {
@@ -610,8 +626,9 @@ async function takeWorldSeat(page: Page, seat: number): Promise<void> {
       'Run `boardsmith dev` and choose it in the seat switcher to see why.',
   });
   await actWithinPageTime(page, PRESS_MS, 'opening the seat switcher', () => offered.first().waitFor({ timeout: 0 }), reopening(menu, pressWithin(page), 'choosing a seat'));
-  if ((await choice.count()) === 0) {
-    throw new Error(`\`seats\` in ${SMOKE_SPEC_PATH} names seat ${seat}, but this world has seats 1 to ${await offered.count()}. Name seats it has.`);
+  if ((await inPageTime(page, 'looking for the seat chosen', () => choice.count())) === 0) {
+    const seats = await inPageTime(page, 'counting the seats', () => offered.count());
+    throw new Error(`\`seats\` in ${SMOKE_SPEC_PATH} names seat ${seat}, but this world has seats 1 to ${seats}. Name seats it has.`);
   }
   await chooseFromMenu(menu, pressWithin(page), `choosing seat ${seat}`);
 }
@@ -633,14 +650,7 @@ async function settle(frame: Frame): Promise<void> {
   await withinPageTime(frame.page(), TURN_WAIT_MS, (timeout) =>
     frame.locator('[data-testid="bs-actions-pending"]').waitFor({ state: 'detached', timeout }),
   ).catch(saying(`The panel was still loading its actions after ${TURN_WAIT_MS / 1000}s.`));
-  // Two frames painted, or a second gone by in a frame the browser does not paint.
-  await frame.evaluate(
-    () =>
-      new Promise((done) => {
-        requestAnimationFrame(() => requestAnimationFrame(done));
-        setTimeout(done, 1000);
-      }),
-  );
+  await framesPass(frame);
 }
 
 /** What the page offers now: its action buttons, the open action, and the board's untried controls. */
@@ -662,7 +672,7 @@ interface Offers {
  * the reasons it gives for those greyed out (#472), unless an action in flight greys them all.
  */
 async function readOffers(frame: Frame, walk: SmokeWalk): Promise<Offers> {
-  const offers = await frame.evaluate(() => {
+  const offers = await inPageTime(frame.page(), "reading the panel's offers", () => frame.evaluate(() => {
     const buttons = [...document.querySelectorAll<HTMLElement>('[data-bs-action]')];
     const greyed = buttons.filter((b) => b.getAttribute('aria-disabled') === 'true');
     return {
@@ -675,7 +685,7 @@ async function readOffers(frame: Frame, walk: SmokeWalk): Promise<Offers> {
       inGroup: document.querySelector('[data-bs-menu-back]') !== null,
       open: document.querySelector<HTMLElement>('[data-bs-open-action]')?.dataset.bsOpenAction ?? null,
     };
-  });
+  }));
   const open = offers.open === null ? [] : [offers.open];
   for (const name of [...offers.all, ...open]) walk.offered.add(name);
   for (const name of [...offers.enabled, ...open]) walk.enabled.add(name);
@@ -721,7 +731,7 @@ interface Control extends PageControl {
  */
 async function controlsOf(frame: Frame, selector: string, within?: Locator): Promise<Control[]> {
   const visible = visibleMatches(frame, selector, within);
-  return (await visible.evaluateAll(pageControls)).map((control) => ({
+  return (await inPageTime(frame.page(), 'looking for controls', () => visible.evaluateAll(pageControls))).map((control) => ({
     ...control,
     target: visible.nth(control.index),
     frame,
@@ -745,7 +755,9 @@ async function stillThere(control: Control): Promise<Control> {
   const mark = String(++pressMarks);
   const over = stopwatch(frame.page());
   for (;;) {
-    const now = await visibleMatches(frame, selector, within).evaluateAll(pageControls, { key: control.key, index: control.index, mark });
+    const now = await inPageTime(frame.page(), 'looking for the control again', () =>
+      visibleMatches(frame, selector, within).evaluateAll(pageControls, { key: control.key, index: control.index, mark }),
+    );
     const same = now.find((c) => c.marked);
     if (same !== undefined && (same.enabled || control.candidate)) {
       return { ...same, target: frame.locator(`[${PRESS_MARK}="${mark}"]`), frame, selector, within };
@@ -765,7 +777,9 @@ let pressMarks = 0;
 
 /** Takes the walk's press marks off the page again, so the game's page is left as the game drew it. */
 async function unmark(frame: Frame): Promise<void> {
-  await frame.locator(`[${PRESS_MARK}]`).evaluateAll((marked, name) => marked.forEach((element) => element.removeAttribute(name)), PRESS_MARK);
+  await inPageTime(frame.page(), "taking the walk's marks off the page", () =>
+    frame.locator(`[${PRESS_MARK}]`).evaluateAll((marked, name) => marked.forEach((element) => element.removeAttribute(name)), PRESS_MARK),
+  );
 }
 
 /** The first enabled control matched by the first of `selectors` that matches one, or undefined. */
@@ -791,7 +805,7 @@ class UnderAToast extends Error {}
 
 /** Why a press did not land, as a player would put it. */
 async function whyNotPressed(target: Locator, error: unknown): Promise<string> {
-  if ((await target.count()) === 0) return GONE;
+  if ((await inPageTime(target.page(), 'looking for the control', () => target.count())) === 0) return GONE;
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof UnderAToast || /intercepts pointer events/.test(message)) return COVERED;
   if (error instanceof Error && error.name === 'TimeoutError') return `it did not become pressable within ${PRESS_MS / 1000}s`;
@@ -833,7 +847,7 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
         if (error instanceof UnderAToast || control.frame.isDetached()) throw error;
         if (over(PRESS_MS)) throw toastOnTop(error);
         const lookRanOut = error instanceof Error && error.name === 'TimeoutError';
-        if (!lookRanOut && (await now.target.count()) > 0) throw error;
+        if (!lookRanOut && (await inPageTime(now.target.page(), 'looking for the control', () => now.target.count())) > 0) throw error;
       }
     }
   };
@@ -850,11 +864,16 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
       }
     }
   } catch (error) {
+    if (error instanceof PageFrozen) throw error;
     noteIn(control.frame.page(), walk, control.frame.isDetached() ? replaced : `Pressing ${what} did not work: ${await whyNotPressed(control.target, error)}.`);
     return false;
   } finally {
     // The marks went with the page that was replaced; the press is reported once, whichever read saw it go.
-    await unmark(control.frame).catch(() => noteIn(control.frame.page(), walk, replaced));
+    // A page that stopped answering was not replaced, and ends the walk (#618).
+    await unmark(control.frame).catch((error: unknown) => {
+      if (error instanceof PageFrozen) throw error;
+      noteIn(control.frame.page(), walk, replaced);
+    });
   }
 }
 
@@ -935,7 +954,7 @@ const LOOK_MS = 1_000;
 
 /** What lies on top at fractions (x, y) of `control`'s box, scrolled into view where it shows. */
 function onTopAt(control: Control, x: number, y: number): Promise<OnTop> {
-  return control.target.evaluate(
+  return inPageTime(control.frame.page(), 'looking at what is on top of the control', () => control.target.evaluate(
     (element, [fx, fy]): OnTop => {
       // Scrolled into view as little as it takes first, then to the middle, the top and the bottom
       // of its scroller, as a player scrolls a control out from under a bar fixed along an edge.
@@ -950,12 +969,12 @@ function onTopAt(control: Control, x: number, y: number): Promise<OnTop> {
     },
     [x, y] as const,
     { timeout: LOOK_MS },
-  );
+  ));
 }
 
 /** Where fractions (x, y) of `control`'s box are on the page. */
 async function placeOf(control: Control, x: number, y: number): Promise<{ x: number; y: number }> {
-  const box = await control.target.boundingBox({ timeout: LOOK_MS });
+  const box = await inPageTime(control.frame.page(), 'measuring the control', () => control.target.boundingBox({ timeout: LOOK_MS }));
   if (box === null) throw new Error(GONE);
   return { x: box.x + box.width * x, y: box.y + box.height * y };
 }
@@ -970,7 +989,8 @@ async function pointAt(control: Control, x: number, y: number): Promise<{ x: num
   const top = await onTopAt(control, x, y);
   if (top !== 'it') return top;
   const at = await placeOf(control, x, y);
-  await control.frame.page().mouse.move(at.x, at.y);
+  const page = control.frame.page();
+  await inPageTime(page, 'pointing at the control', () => page.mouse.move(at.x, at.y));
   return at;
 }
 
@@ -982,12 +1002,14 @@ const SETTLE_LOOKS = 10;
 
 /** Waits for the page to paint twice, or a second in a frame the browser does not paint. */
 async function framesPass(frame: Frame): Promise<void> {
-  await frame.evaluate(
-    () =>
-      new Promise((done) => {
-        requestAnimationFrame(() => requestAnimationFrame(done));
-        setTimeout(done, 1000);
-      }),
+  await inPageTime(frame.page(), 'waiting for the page to paint', () =>
+    frame.evaluate(
+      () =>
+        new Promise((done) => {
+          requestAnimationFrame(() => requestAnimationFrame(done));
+          setTimeout(done, 1000);
+        }),
+    ),
   );
 }
 
@@ -1000,18 +1022,18 @@ async function framesPass(frame: Frame): Promise<void> {
  * else under the pointer at that instant, is stopped (`landsOnlyOn`), and the walk looks again.
  */
 async function clickAt(control: Control, at: { x: number; y: number }, x: number, y: number): Promise<void> {
-  const mouse = control.frame.page().mouse;
+  const page = control.frame.page();
   let pointer = at;
   for (let looks = 1; looks <= 2 * SETTLE_LOOKS; looks++) {
     await framesPass(control.frame);
-    if ((await control.target.count()) === 0) throw new Error(GONE);
+    if ((await inPageTime(page, 'looking for the control', () => control.target.count())) === 0) throw new Error(GONE);
     const top = await onTopAt(control, x, y);
     if (top === 'toast') throw new UnderAToast(COVERED);
     if (top === 'other') throw new Error(COVERED);
     const now = await placeOf(control, x, y);
     const still = Math.abs(now.x - pointer.x) <= STILL_PX && Math.abs(now.y - pointer.y) <= STILL_PX;
-    if ((still || looks >= SETTLE_LOOKS) && (await landsOnlyOn(control, () => mouse.click(now.x, now.y)))) return;
-    await mouse.move(now.x, now.y);
+    if ((still || looks >= SETTLE_LOOKS) && (await landsOnlyOn(control, () => page.mouse.click(now.x, now.y)))) return;
+    await inPageTime(page, 'pointing at the control', () => page.mouse.move(now.x, now.y));
     pointer = now;
   }
   throw new Error('it kept moving out from under the pointer, so no click landed on it');
@@ -1032,19 +1054,20 @@ const OVER_THE_FRAME = "the click reached nothing in the game, so something over
  * busy page to answer, still landed if it reached `control`; one that did not fails as `click` did.
  */
 async function landsOnlyOn(control: Control, click: () => Promise<void>): Promise<boolean> {
+  const page = control.frame.page();
   const around = pagesAround(control.frame);
-  await control.target.evaluate(guardClicks, undefined, { timeout: LOOK_MS });
-  for (const outer of around) await outer.evaluate(guardClicks, null);
+  await inPageTime(page, 'guarding the click', () => control.target.evaluate(guardClicks, undefined, { timeout: LOOK_MS }));
+  for (const outer of around) await inPageTime(page, 'guarding the click', () => outer.evaluate(guardClicks, null));
   const reached: Reached[] = [];
   let failed: { error: unknown } | undefined;
-  await click().catch((error: unknown) => {
+  await inPageTime(page, 'clicking the control', click).catch((error: unknown) => {
     failed = { error };
   });
   // The page around the game is read first: it stays when the click replaced the game's frame,
   // and must be left unguarded whatever the frame's read finds.
-  for (const outer of around) reached.push(await outer.evaluate(clickReached));
-  const arrived = failed !== undefined && (await control.frame.evaluate(clickArrived));
-  reached.push(await control.frame.evaluate(clickReached));
+  for (const outer of around) reached.push(await inPageTime(page, 'reading what the click reached', () => outer.evaluate(clickReached)));
+  const arrived = failed !== undefined && (await inPageTime(page, 'reading whether the click arrived', () => control.frame.evaluate(clickArrived)));
+  reached.push(await inPageTime(page, 'reading what the click reached', () => control.frame.evaluate(clickReached)));
   if (reached.includes('toast')) throw new UnderAToast(COVERED);
   const inTheGame = reached[reached.length - 1];
   if (failed !== undefined) {
@@ -1172,8 +1195,9 @@ async function pressAnswer(answer: Control, { walk, memory, name, step }: Answer
  */
 async function answerMultiSelect(answering: Answering): Promise<string | undefined> {
   const { frame, picked } = answering;
-  const inPanel = (await frame.locator('.action-config .multi-select-choice input[type="checkbox"]').count()) > 0;
-  const chosen = inPanel ? await frame.locator('.action-config .multi-select-choice input:checked').count() : picked.size;
+  const count = (selector: string) => inPageTime(frame.page(), 'counting the choices', () => frame.locator(selector).count());
+  const inPanel = (await count('.action-config .multi-select-choice input[type="checkbox"]')) > 0;
+  const chosen = inPanel ? await count('.action-config .multi-select-choice input:checked') : picked.size;
   const done = await firstPressable(frame, ['.action-config .done-button']);
   const next =
     done !== undefined && chosen > 0
@@ -1196,7 +1220,7 @@ async function answerOneChoice(answering: Answering): Promise<string | undefined
   if (answering.stop !== undefined) return undefined;
   // An ordered list shows a count too, and is answered by its Add buttons below.
   const multiSelect = frame.locator('.action-config .multi-select-count:not(.ordered-list-count)');
-  if ((await multiSelect.count()) > 0) return answerMultiSelect(answering);
+  if ((await inPageTime(frame.page(), 'looking for a multi-select pick', () => multiSelect.count())) > 0) return answerMultiSelect(answering);
 
   const target =
     (await firstPressable(frame, ['.action-config [data-bs-confirm]', BOARD_CANDIDATES])) ??
@@ -1229,7 +1253,9 @@ async function aimedElsewhere(answering: Answering): Promise<Control | undefined
       if (candidate.enabled || candidate.keyboardOnly || refused.has(candidate.key)) continue;
       const pinned = await stillThere(candidate);
       const named = async (x: number, y: number) =>
-        typeof (await pointAt(pinned, x, y)) === 'string' ? undefined : pinned.target.getAttribute('data-bs-candidate', { timeout: LOOK_MS });
+        typeof (await pointAt(pinned, x, y)) === 'string'
+          ? undefined
+          : inPageTime(frame.page(), 'reading what the candidate stands for', () => pinned.target.getAttribute('data-bs-candidate', { timeout: LOOK_MS }));
       const first = await named(0.1, 0.1);
       if (first !== undefined && first !== (await named(0.9, 0.9))) return asItStandsNow(pinned);
       refused.add(candidate.key);
@@ -1246,7 +1272,7 @@ async function aimedElsewhere(answering: Answering): Promise<Control | undefined
  * gives it, since the pin comes off once the pointing is done.
  */
 async function asItStandsNow(control: Control): Promise<Control> {
-  const [now] = await control.target.evaluateAll(pageControls);
+  const [now] = await inPageTime(control.frame.page(), 'reading the control again', () => control.target.evaluateAll(pageControls));
   if (now === undefined) throw new Error(GONE);
   const { frame, selector, within } = control;
   return { ...control, label: now.label, key: now.key, enabled: now.enabled, target: visibleMatches(frame, selector, within).nth(control.index) };
@@ -1259,7 +1285,7 @@ async function asItStandsNow(control: Control): Promise<Control> {
 function inputView(frame: Frame, otherSeats: readonly number[]): SmokeInputView {
   return {
     texts: async (selector) =>
-      (await frame.locator(selector).filter({ visible: true }).allInnerTexts())
+      (await inPageTime(frame.page(), `reading the texts of ${selector}`, () => frame.locator(selector).filter({ visible: true }).allInnerTexts()))
         .map((text) => text.replace(/\s+/g, ' ').trim())
         .filter((text) => text !== ''),
     otherSeats,
@@ -1324,7 +1350,9 @@ async function answerWhenOffered(answering: Answering): Promise<string | undefin
 
 /** The open action's panel, as text, to tell whether a press changed anything: empty when it has closed. */
 async function openActionState(frame: Frame): Promise<string> {
-  const texts = await frame.locator('.action-config').evaluateAll((panels) => panels.map((panel) => (panel as HTMLElement).innerText));
+  const texts = await inPageTime(frame.page(), 'reading the open action', () =>
+    frame.locator('.action-config').evaluateAll((panels) => panels.map((panel) => (panel as HTMLElement).innerText)),
+  );
   return texts.join('\n').replace(/\s+/g, ' ').trim();
 }
 
@@ -1338,7 +1366,7 @@ async function abandon(frame: Frame, walk: SmokeWalk, memory: WalkMemory, name: 
   memory.failed.add(name);
   // An action that closed by itself, or that has no way to back out of it, has no Cancel to press.
   const cancel = '.action-config .cancel-btn';
-  if ((await frame.locator(cancel).count()) > 0) await pressThePanels(frame, cancel, 'Cancel', walk, memory);
+  if ((await inPageTime(frame.page(), 'looking for Cancel', () => frame.locator(cancel).count())) > 0) await pressThePanels(frame, cancel, 'Cancel', walk, memory);
 }
 
 /**
@@ -1466,7 +1494,7 @@ async function reopenADialog(play: SeatPlay, frame: Frame, walk: SmokeWalk, memo
 /** The open modal dialog on top, if any (`pageDialogs`), and the locator that reaches it. */
 async function openDialog(frame: Frame): Promise<{ name: string; target: Locator } | undefined> {
   const dialogs = frame.locator(MODAL_DIALOGS).filter({ visible: true });
-  const top = (await dialogs.evaluateAll(pageDialogs)).at(-1);
+  const top = (await inPageTime(frame.page(), 'looking for an open dialog', () => dialogs.evaluateAll(pageDialogs))).at(-1);
   return top === undefined ? undefined : { name: top.name, target: dialogs.nth(top.index) };
 }
 
@@ -1859,7 +1887,7 @@ async function stepIn(play: SeatPlay, plays: readonly SeatPlay[], walk: SmokeWal
   acting.now = play.seat;
   await drainResolved(frame, walk, memory);
   await noteErrorToasts(frame, walk, memory);
-  if (await frame.locator('.game-over-card').isVisible()) return afterTheGame(play.page, walk, memory, step);
+  if (await inPageTime(play.page, 'looking for the end of the game', () => frame.locator('.game-over-card').isVisible())) return afterTheGame(play.page, walk, memory, step);
   const inDialog = await answerAnOpenDialog(play, frame, walk, memory, step);
   if (inDialog !== undefined) return inDialog;
   const offers = await settledOffers(frame, walk);

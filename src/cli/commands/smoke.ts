@@ -291,9 +291,8 @@ async function startDev(started: Started, copy: string): Promise<string | SmokeO
 
 /**
  * The longest any one Playwright call that takes a time limit may wait for an element (#464). The
- * walk bounds its own waits more tightly. A script run in the page (`evaluate`, `evaluateAll`) or
- * a count of elements takes no time limit, so this does not bound it: until #618, a board that
- * hangs during one runs until {@link WALK_LIMIT_MS}.
+ * walk bounds its own waits more tightly, and gives a call that takes no time limit (a script run
+ * in the page, a count of elements) its own on the page's clock (#618).
  */
 const ACTION_LIMIT_MS = 15_000;
 

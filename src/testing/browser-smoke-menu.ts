@@ -33,7 +33,7 @@ export interface DevHostMenu {
  * Does `act` once within the walk's time for a press, running `meanwhile` while it waits, and throws
  * when that time has passed (`actWithinPageTime` in `browser-smoke`).
  */
-export type PressWithin = (what: string, act: () => Promise<unknown>, meanwhile?: () => Promise<void>) => Promise<void>;
+export type PressWithin = (what: string, act: () => Promise<unknown>, meanwhile?: () => Promise<void>) => Promise<unknown>;
 
 /**
  * Opens `menu` when it is closed and the choice has not yet taken effect, for `what`. Used while a

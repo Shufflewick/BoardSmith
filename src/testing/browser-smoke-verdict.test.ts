@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { rulesErrorSentence } from '../engine/action/rules-error.js';
+import { PageFrozen } from './browser-smoke-clock.js';
 import {
   actionFailed,
   answered,
@@ -512,6 +513,12 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
       problem: `\`inputs.pledge.coins\` in ${SMOKE_SPEC_PATH} gives "7x" for a number field. Give a number, such as 7.`,
     });
     expect(await inputFor({ pledge: { coins: ' 7 ' } }, 'pledge', 'coins', 'number', page())).toEqual({ value: '7' });
+  });
+
+  it('#618: lets the page having stopped answering while a function read it end the walk, not count as the input failing', async () => {
+    const frozen: SmokeInputView = { texts: () => Promise.reject(new PageFrozen()), otherSeats: [] };
+    const inputs = { attack: { target: async ({ texts }: SmokeInputView) => (await texts('.nearby li'))[0] } };
+    await expect(inputFor(inputs, 'attack', 'target', 'text', frozen)).rejects.toBeInstanceOf(PageFrozen);
   });
 
   it('says which input failed, and how, when its function throws', async () => {
