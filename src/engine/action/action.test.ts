@@ -838,6 +838,25 @@ describe('Action Executor', () => {
       expect(result.errors[0]).toContain('Missing required');
     });
 
+    it('stops at a missing required pick, so a later pick never validates without it (#651)', () => {
+      let laterValidateRan = false;
+      const action = Action.create('test')
+        .chooseFrom('pick1', { choices: ['a', 'b'] })
+        .chooseFrom('pick2', {
+          choices: ['x', 'y'],
+          validate: (_value, args) => {
+            laterValidateRan = true;
+            return args.pick1 === 'a' || 'pick1 must be a';
+          },
+        })
+        .execute(() => {});
+
+      const result = executor.validateAction(action, game.getPlayer(1)!, { pick2: 'x' });
+
+      expect(laterValidateRan).toBe(false);
+      expect(result).toEqual({ valid: false, errors: ['Missing required selection: pick1'] });
+    });
+
     it('should pass on missing optional selection', () => {
       const action = Action.create('test')
         .chooseFrom('optional', {
