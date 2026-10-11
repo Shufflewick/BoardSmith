@@ -217,7 +217,7 @@ loop({
   name: 'capture-chain',
   while: (ctx) => {
     const piece = ctx.get<Piece>('movingPiece');
-    return piece && game.canCapture(piece);
+    return piece && ctx.game.canCapture(piece);
   },
   do: actionStep({
     name: 'continue-capture',
@@ -235,10 +235,10 @@ loop({
   }
 
   // Perform capture
-  game.performCapture(piece, args.target);
+  ctx.game.performCapture(piece, args.target);
 
   // If piece can't capture anymore, clear tracking
-  if (!game.canCapture(piece)) {
+  if (!ctx.game.canCapture(piece)) {
     ctx.set('movingPiece', null);
   }
 
@@ -379,7 +379,7 @@ class CheckerPiece extends Piece {
   const promotionRow = piece.player?.seat === 1 ? 0 : 7;
   if (destination.row === promotionRow && !piece.isKing) {
     piece.promote();
-    game.message(`${piece} was crowned king!`);
+    ctx.game.message(`${piece} was crowned king!`);
   }
 
   return { success: true };
