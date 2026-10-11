@@ -244,6 +244,21 @@ describe("a draft is quoted by the game that will charge for it", () => {
     expect(engine.quotePartitions("player-a", "boost", { resource: "storage" }, NOW)).toEqual([]);
   });
 
+  it("REFUSES a draft carrying a key no pick declares, as the command itself would (#665)", async () => {
+    const engine = await warmEngine();
+    const refusal = {
+      code: "undeclared-arg",
+      message: "'boost' was sent 'bribe', which is not one of its picks. It takes: weeks, resource.",
+    };
+
+    expect(() =>
+      engine.quotePartitions("player-a", "boost", { resource: "storage", bribe: 100 }, NOW),
+    ).toThrow(expect.objectContaining(refusal));
+    await expect(
+      engine.resolveQuote("player-a", "boost", { resource: "storage", bribe: 100 }, STAMP),
+    ).rejects.toMatchObject(refusal);
+  });
+
   it("REFUSES to quote an action that declares no quote, rather than inventing one", async () => {
     const engine = await warmEngine();
 

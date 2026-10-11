@@ -1346,6 +1346,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     stamp: WorldOfferStamp,
     answer: (acting: Player, named: readonly string[], draft: Readonly<Record<string, unknown>>) => T,
   ): Promise<T> {
+    this.refuseUndeclaredArgs(definition, args);
     const seat = this.seatFor(player);
     const acting = this.playerFor(seat);
     const named: string[] = [];
@@ -1547,6 +1548,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     args: Readonly<Record<string, unknown>>,
     now: number,
   ): readonly string[] {
+    this.refuseUndeclaredArgs(definition, args);
     const seat = this.seatFor(player);
     for (let step = 0; step <= through; step++) {
       for (const round of definition.world!.needs) {
@@ -1556,6 +1558,17 @@ export class BoardSmithWorldEngine implements WorldEngine {
       }
     }
     return [];
+  }
+
+  /** A seat's draft may carry only the action's picks (#665): the command
+   *  itself refuses any other key (#662), so a read about it does too, with
+   *  the same sentence, before a declaration or callback sees the draft. */
+  private refuseUndeclaredArgs(
+    definition: ActionDefinition,
+    args: Readonly<Record<string, unknown>>,
+  ): void {
+    const refusal = this.game.getActionExecutor().undeclaredArgsRefusal(definition, args);
+    if (refusal !== undefined) throw worldRefusal("undeclared-arg", refusal);
   }
 
   /** The action a seat could be offered under this name, or a refusal naming
