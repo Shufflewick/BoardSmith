@@ -190,9 +190,9 @@ class MyGame extends Game<MyGame, MyPlayer> {
 
 // In flow
 loop({
-  while: () => game.shouldPlayerGoAgain(),
+  while: (ctx) => ctx.game.shouldPlayerGoAgain(),
   do: sequence(
-    execute(() => game.resetPlayerGoesAgain()),
+    execute((ctx) => ctx.game.resetPlayerGoesAgain()),
     actionStep({ actions: ['play'] }),
   ),
 })
