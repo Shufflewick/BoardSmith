@@ -1,5 +1,5 @@
 {
-  "revision": 161,
+  "revision": 162,
   "bundleProtocol": 2,
   "surfaceHash": "3cd66e7b422f0cbf",
   "payloadHash": "3f10d70c457a15ba",
@@ -1393,6 +1393,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "An undo that brings back a removed Space keeps its onEnter/onExit handlers (#656): Game.loadSerializedState now saves handlers from Spaces in the pile as well as the tree before the restore, and re-attaches them to the restored tree, so an in-place restore agrees with a fresh one; a restored state without the Space warns on both paths, and the warning says that is expected when the Space was removed when the state was saved. No surface, payload or format change."
+    },
+    {
+      "revision": 162,
+      "date": "2026-10-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "3cd66e7b422f0cbf",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Element lookups are faster: atId looks an element up in an id index, and Grid/HexGrid find the cell at a coordinate (first(CellClass, { row, col }) with exactly the grid's two coordinate attributes) from a cell index. New rule for authors: a cell's coordinates must not change while it is in its grid; give it new ones by taking it out and putting it back. Development mode throws if a cell was re-addressed in place; production finds it at its old coordinates. (#632)"
     }
   ]
 }
