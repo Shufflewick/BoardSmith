@@ -430,20 +430,22 @@ describe("a later pick's callbacks see a pre-filled null pick as absent (#659)",
     constructor(options: GameOptions & { shape: Shape; repeating: boolean }) {
       super(options);
       const { shape, repeating } = options;
+      type Ctx = { args: Record<string, unknown> };
+      const base = Action.create<SkipCallbackGame>('chained').chooseFrom('a', { choices: [1, 2], optional: true });
+      const pick = {
+        choices: shape === 'choices' ? (ctx: Ctx) => (skipped(ctx) ? ['x', 'y'] : ['z']) : ['x', 'y', 'z'],
+        disabled: (choice: string, ctx: Ctx) =>
+          (shape === 'multiSelect' ? choice === 'z' : shape === 'disabled' && skipped(ctx) === (choice === 'z'))
+            ? 'not now'
+            : false,
+      };
       this.registerAction(
-        Action.create<SkipCallbackGame>('chained')
-          .chooseFrom('a', { choices: [1, 2], optional: true })
-          .chooseFrom('b', {
-            choices: shape === 'choices' ? (ctx) => (skipped(ctx) ? ['x', 'y'] : ['z']) : ['x', 'y', 'z'],
-            ...(shape === 'disabled' && {
-              disabled: (choice: string, ctx) => (skipped(ctx) === (choice === 'z') ? 'not now' : false),
-            }),
-            ...(shape === 'multiSelect' && {
-              disabled: (choice: string) => (choice === 'z' ? 'not now' : false),
-              multiSelect: (ctx) => (skipped(ctx) ? { min: 1, max: 1 } : { min: 2, max: 2 }),
-            }),
-            ...(repeating && { repeat: { until: () => true } }),
-          })
+        (shape === 'multiSelect'
+          ? base.chooseFrom('b', { ...pick, multiSelect: (ctx) => (skipped(ctx) ? { min: 1, max: 1 } : { min: 2, max: 2 }) })
+          : repeating
+            ? base.chooseFrom('b', { ...pick, repeat: { until: () => true } })
+            : base.chooseFrom('b', pick)
+        )
           .execute(() => ({ success: true })),
       );
     }
