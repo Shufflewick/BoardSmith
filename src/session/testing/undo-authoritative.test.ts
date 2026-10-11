@@ -70,7 +70,6 @@ describe('authoritative undo across a prior pending mutation (155-03 contract)',
     // ── Turn 1 (player 1): explore, then collect one item into held-1 ─────────
     const explore = succeeded(await session.send(1, { type: 'action', actionName: 'explore', player: 1, args: {} }));
     expect(explore.success).toBe(true);
-    const followUpArgs = (explore.followUp as { args: Record<string, unknown> }).args;
 
     const choices = succeeded(await session.send(1, {
       type: 'resolveChoices', actionName: 'collect', player: 1, selectionName: 'item', args: {},
@@ -80,7 +79,7 @@ describe('authoritative undo across a prior pending mutation (155-03 contract)',
 
     const collect = succeeded(await session.send(1, {
       type: 'selectionStep', player: 1, selectionName: 'item', value: collectedId,
-      actionName: 'collect', initialArgs: followUpArgs,
+      actionName: 'collect',
     }));
     expect(collect.success).toBe(true);
     expect(collect.actionComplete).toBe(true);

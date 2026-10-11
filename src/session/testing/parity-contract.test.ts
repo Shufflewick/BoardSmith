@@ -33,7 +33,6 @@ describe('collect-equipment parity contract', () => {
 
     const explore = succeeded(await session.send(1, { type: 'action', actionName: 'explore', player: 1, args: {} }));
     expect(explore.success).toBe(true);
-    const followUpArgs = (explore.followUp as { args: Record<string, unknown> }).args;
 
     // Read the stash items currently available to collect.
     const before = succeeded(await session.send(1, {
@@ -55,7 +54,6 @@ describe('collect-equipment parity contract', () => {
       selectionName: 'item',
       value: firstId,
       actionName: 'collect',
-      initialArgs: followUpArgs,
     });
     expect(step.success).toBe(true);
 
@@ -80,7 +78,6 @@ describe('collect-equipment parity contract', () => {
 
     const explore = succeeded(await session.send(1, { type: 'action', actionName: 'explore', player: 1, args: {} }));
     expect(explore.success).toBe(true);
-    const followUpArgs = (explore.followUp as { args: Record<string, unknown> }).args;
 
     const res = succeeded(await session.send(1, {
       type: 'selectionStep',
@@ -88,7 +85,6 @@ describe('collect-equipment parity contract', () => {
       selectionName: 'item',
       value: null,
       actionName: 'collect',
-      initialArgs: followUpArgs,
     }));
 
     expect(res.success).toBe(true);

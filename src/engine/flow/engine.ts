@@ -530,9 +530,10 @@ export class FlowEngine<G extends Game = Game> {
    * Take a seat's held follow-up as one whole action. Its condition is not
    * checked (the chain offers it, not the condition) and the args it was
    * published with are the ones it runs with: a follow-up is pre-filled.
+   * `args` are the client's, and may name only picks (#662).
    */
   private performFollowUp(followUp: FollowUpAction, player: PlayerOf<G>, args: Record<string, unknown>): ActionResult {
-    return this.game.performAction(followUp.action, player, { ...args, ...followUp.args }, { asFollowUp: true });
+    return this.game.performAction(followUp.action, player, args, { followUp });
   }
 
   /**

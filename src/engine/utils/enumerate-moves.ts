@@ -139,8 +139,10 @@ export function enumerateLegalMoves(
  * @param options.maxPerAction - Truncate to this many arg sets. Default:
  *   unlimited (full enumeration).
  * @param options.followUp - The seat's held follow-up naming this action: its
- *   args are bound in every move, and its condition is not checked (the chain
- *   offers it, not the condition).
+ *   args are bound while the moves are found, and its condition is not checked
+ *   (the chain offers it, not the condition). A move carries only picks, as a
+ *   seat submits it: the engine binds the follow-up's other args when it runs
+ *   (#662).
  */
 export function enumerateActionMoves(
   game: Game,
@@ -173,10 +175,11 @@ export function enumerateActionMoves(
     // they are being made, so its moves can only be found by making them.
     const legal = executor.hasRepeatingSelections(actionDef)
       ? enumerateThroughSelectionSteps(game, actionDef, player, bound)
-      : enumerateGatedSelections(game, actionDef, player, bound, followUp !== undefined);
+      : enumerateGatedSelections(game, actionDef, player, bound, followUp);
+    const moves = legal.map((args) => executor.picksOf(actionDef, args));
 
     // Apply maxPerAction truncation only when caller opts in (D-07: full enumeration default)
-    return options?.maxPerAction !== undefined ? legal.slice(0, options.maxPerAction) : legal;
+    return options?.maxPerAction !== undefined ? moves.slice(0, options.maxPerAction) : moves;
   } catch (error) {
     // #19: this game is a REDACTED clone (a bot's search sandbox) and one of
     // the action's gates needed a value the clone was never told. There is no
@@ -206,7 +209,7 @@ function enumerateGatedSelections(
   actionDef: ActionDefinition,
   player: Player,
   bound: Record<string, unknown>,
-  asFollowUp: boolean,
+  followUp: FollowUpAction | undefined,
 ): Record<string, unknown>[] {
   const executor = game.getActionExecutor();
   // Every pre-filled key is an answered pick, a `null` (skipped) one included:
@@ -220,7 +223,7 @@ function enumerateGatedSelections(
   // seat. Every move handed back must be one `performAction` would accept.
   if (!actionDef.validate) return combos;
   return combos.filter(
-    (args) => executor.validateAction(actionDef, player, argsCallbacksSee(actionDef, args), { asFollowUp }).valid,
+    (args) => executor.validateAction(actionDef, player, argsCallbacksSee(actionDef, args), { followUp }).valid,
   );
 }
 
