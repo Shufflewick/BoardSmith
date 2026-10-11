@@ -59,7 +59,7 @@ describe('Space.shuffleInternal', () => {
 
   it('throws an actionable error when no seeded rng is reachable', () => {
     // Constructed with a context that numbers elements but has no Game and no `random`.
-    const disconnected = new Space({ sequence: 0, ids: opaqueElementIds('0123456789abcdef') } as never);
+    const disconnected = new Space({ sequence: 0, ids: opaqueElementIds('0123456789abcdef'), _elementsById: new Map() } as never);
     expect(() => disconnected.shuffleInternal()).toThrow(
       /seeded random number generator is reachable/i,
     );

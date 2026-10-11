@@ -1,5 +1,5 @@
 {
-  "revision": 162,
+  "revision": 164,
   "bundleProtocol": 2,
   "surfaceHash": "3cd66e7b422f0cbf",
   "payloadHash": "3f10d70c457a15ba",
@@ -1396,6 +1396,24 @@
     },
     {
       "revision": 162,
+      "date": "2026-10-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "3cd66e7b422f0cbf",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Enumeration validates a follow-up's null-skipped pick as absent, as execution does (#648): enumerateActionMoves passes an action-level validate the resolved args with the skipped key dropped, so a validate written to the new type no longer refuses a move the engine accepts; the move args still carry the null the runner binds. No surface, payload or format change."
+    },
+    {
+      "revision": 163,
+      "date": "2026-10-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "3cd66e7b422f0cbf",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Element lookups are faster: atId looks an element up in an id index, and Grid/HexGrid find the cell at a coordinate (first(CellClass, { row, col }) with exactly the grid's two coordinate attributes) from a cell index. New rule for authors: a cell's coordinates must not change while it is in its grid; give it new ones by taking it out and putting it back. Development mode throws if a cell was re-addressed in place; production finds it at its old coordinates. (#632)"
+    },
+    {
+      "revision": 164,
       "date": "2026-10-11",
       "bundleProtocol": 2,
       "surfaceHash": "3cd66e7b422f0cbf",

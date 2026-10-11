@@ -7,6 +7,7 @@
 
 import type { Game } from '../engine/element/game.js';
 import type { Space } from '../engine/element/space.js';
+import { childrenChanged } from '../engine/element/cell-index.js';
 
 /** Move an element to a new parent. */
 interface MoveCommand {
@@ -103,5 +104,6 @@ function executeReorderChild(game: Game, command: ReorderChildCommand): CommandR
   }
   children.splice(currentIndex, 1);
   children.splice(command.targetIndex, 0, element);
+  childrenChanged(parent);
   return { success: true };
 }

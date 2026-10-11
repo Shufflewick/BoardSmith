@@ -212,13 +212,21 @@ function enumerateGatedSelections(
   // Every pre-filled key is an answered pick, a `null` (skipped) one included:
   // resolveArgs drops a null pick (#627), and the runner binds it back when the
   // follow-up runs, so it is laid back under the resolved values here.
-  const combos = enumerateSelections(game, actionDef, player, { ...bound, ...executor.resolveArgs(actionDef, bound, player) });
+  const resolved = executor.resolveArgs(actionDef, bound, player);
+  const combos = enumerateSelections(game, actionDef, player, { ...bound, ...resolved });
   // #19: an action-level `.validate()` refuses a SUBMISSION, and enumeration
   // never called it — so a bot enumerated moves the engine then rejected, and
   // the pump halted on the rejection with the round never closing for any
   // seat. Every move handed back must be one `performAction` would accept.
   if (!actionDef.validate) return combos;
-  return combos.filter((args) => executor.validateAction(actionDef, player, args, { asFollowUp }).valid);
+  // Execution validates the resolved args, where a skipped pick is absent
+  // (#648), so the keys resolveArgs dropped are left out here too.
+  const skipped = Object.keys(bound).filter((key) => !(key in resolved));
+  return combos.filter((args) => {
+    const executed = { ...args };
+    for (const key of skipped) delete executed[key];
+    return executor.validateAction(actionDef, player, executed, { asFollowUp }).valid;
+  });
 }
 
 // ─── Repeating selections ────────────────────────────────────────────────────

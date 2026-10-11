@@ -2,6 +2,9 @@ import { Space } from './space.js';
 import type { Game } from './game.js';
 import type { Player } from '../player/player.js';
 import type { ElementLayout } from './grid.js';
+import type { GameElement } from './game-element.js';
+import type { ElementClass, ElementFinder } from './types.js';
+import { firstCell } from './cell-index.js';
 
 /**
  * Hex orientation options
@@ -26,6 +29,16 @@ export type HexCoordSystem = 'offset' | 'axial' | 'cube';
  * - Flat-top or pointy-top orientation
  * - Axial or cube coordinate systems
  * - Automatic hex layout rendering
+ * - The cell at a coordinate, `board.first(Tile, { q, r })` with exactly the
+ *   `$qCoord`/`$rCoord` attributes (default `q` and `r`), is a lookup, not a
+ *   search
+ *
+ * **The rule for cells:** a cell's coordinates do not change while it is in
+ * its grid, and cells are the grid's direct children. The grid finds a cell by
+ * the coordinates it had when it entered. To give a cell new coordinates, take
+ * it out (`cell.reparent(holdingSpace)`), change them, and put it back.
+ * Development mode checks every lookup against a search of the grid and throws
+ * when a cell was re-addressed in place.
  *
  * @example
  * ```typescript
@@ -103,6 +116,22 @@ export class HexGrid<G extends Game = any, P extends Player = any> extends Space
    * @default 50
    */
   $hexSize?: number;
+
+  /**
+   * The first matching descendant, as {@link GameElement.first}. The cell at a
+   * coordinate, `first(CellClass, { <$qCoord>: r, <$rCoord>: c })` with exactly the
+   * grid's two coordinate attributes, is looked up rather than searched for
+   * (#632), which is why a cell's coordinates must not change while it is in
+   * the grid (see the class docs).
+   */
+  override first<F extends GameElement>(
+    classNameOrFinder?: ElementClass<F> | ElementFinder<F>,
+    ...finders: ElementFinder<F>[]
+  ): F | undefined {
+    return firstCell(this, HexCell, [this.$qCoord ?? 'q', this.$rCoord ?? 'r'], classNameOrFinder, finders, () =>
+      super.first(classNameOrFinder as ElementClass<F>, ...finders),
+    );
+  }
 
   static override unserializableAttributes = [
     ...Space.unserializableAttributes,

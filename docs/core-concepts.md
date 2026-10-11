@@ -91,6 +91,32 @@ deck.shuffle();
 deck.setOrder('stacking');                  // Last in, first out
 ```
 
+### Grid Cells by Coordinate
+
+A `Grid` or `HexGrid` looks the cell at a coordinate up rather than searching
+for it, when the query names a cell class and exactly the grid's two
+coordinate attributes (`$rowCoord`/`$colCoord`, or `$qCoord`/`$rCoord`, which
+default to `q` and `r`):
+
+```typescript
+board.first(Square, { file: 4, rank: 2 });  // a lookup
+board.first(Square, { file: 4 });           // a search, as any other query
+```
+
+**The rule:** a cell's coordinates do not change while it is in its grid, and
+cells are the grid's direct children. To give a cell new coordinates, take it
+out of the grid, change them, and put it back:
+
+```typescript
+cell.reparent(holding);
+cell.q = 5;
+cell.reparent(board);
+```
+
+Development mode checks every lookup against a search of the grid and throws,
+naming the grid and the coordinates, when a cell was re-addressed in place.
+Production trusts the rule (#632).
+
 ### Custom Element Classes
 
 Extend base classes to add game-specific properties:
