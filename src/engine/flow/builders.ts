@@ -5,6 +5,7 @@ import type {
   FlowContext,
   SequenceConfig,
   LoopConfig,
+  LoopBound,
   EachPlayerConfig,
   ForEachConfig,
   ActionStepConfig,
@@ -83,25 +84,22 @@ export function phase<G extends Game = Game>(name: string, config: { do: FlowNod
  * })
  * ```
  */
-export function loop<G extends Game = Game>(config: {
-  name?: string;
-  while?: (context: FlowContext<G>) => boolean;
-  maxIterations?: number;
-  /**
-   * Opt-in for a genuinely unbounded game — makes `maxIterations` optional.
-   * The global whole-flow safety tripwire still applies even when set.
-   */
-  unbounded?: boolean;
-  do: FlowNode<G>;
-}): FlowNode<G> {
+export function loop<G extends Game = Game>(config: LoopConfig<G>): FlowNode<G> {
+  // The type already refuses neither and both; these checks are for rules
+  // compiled without the type check, so they read the fields untyped.
+  const { name, maxIterations, unbounded } = config as {
+    name?: string;
+    maxIterations?: number;
+    unbounded?: boolean;
+  };
   // Fail fast at construction time unless the author has provided a numeric
   // cap OR explicitly opted into `unbounded: true`. A missing cap with no
   // opt-in silently falls back to the engine's DEFAULT_MAX_ITERATIONS (10000),
   // which turns an authoring mistake into a surprise runtime throw deep into
   // a game session instead of an actionable error at flow-definition time.
-  if (config.maxIterations === undefined && !config.unbounded) {
+  if (maxIterations === undefined && !unbounded) {
     throw new Error(
-      `loop(${config.name ? `'${config.name}'` : ''}) requires maxIterations, or an explicit ` +
+      `loop(${name ? `'${name}'` : ''}) requires maxIterations, or an explicit ` +
       `unbounded: true opt-in for a genuinely unbounded game.\n` +
       `  Bounded:   loop({ maxIterations: 100, while: ..., do: ... })\n` +
       `  Unbounded: loop({ unbounded: true, while: ..., do: ... })\n` +
@@ -119,26 +117,29 @@ export function loop<G extends Game = Game>(config: {
   // before adding `unbounded: true`, or vice versa), and BoardSmith's
   // "fail fast at construction, not deep in a render/runtime path" pattern
   // (used for the missing-cap case just above) applies equally here.
-  if (config.unbounded && config.maxIterations !== undefined) {
+  if (unbounded && maxIterations !== undefined) {
     throw new Error(
-      `loop(${config.name ? `'${config.name}'` : ''}) cannot combine unbounded: true with an ` +
-      `explicit maxIterations: ${config.maxIterations} -- choose one.\n` +
-      `  Bounded:   loop({ maxIterations: ${config.maxIterations}, while: ..., do: ... })\n` +
+      `loop(${name ? `'${name}'` : ''}) cannot combine unbounded: true with an ` +
+      `explicit maxIterations: ${maxIterations} -- choose one.\n` +
+      `  Bounded:   loop({ maxIterations: ${maxIterations}, while: ..., do: ... })\n` +
       `  Unbounded: loop({ unbounded: true, while: ..., do: ... })\n` +
       `  See: https://boardsmith.io/docs/common-pitfalls#loop-safety`
     );
   }
 
-  return {
-    type: 'loop',
-    config: {
-      name: config.name,
-      while: config.while,
-      maxIterations: config.maxIterations,
-      unbounded: config.unbounded,
-      do: config.do,
-    },
-  };
+  return { type: 'loop', config };
+}
+
+/**
+ * The bound turnLoop and stateAwareLoop hand to loop(): their `maxIterations`
+ * cap, 100 when not given, or `unbounded: true` in its place.
+ */
+function defaultLoopBound(bound: Partial<LoopBound>): LoopBound {
+  // A rule compiled without the type check may give both; forwarding its
+  // maxIterations alongside unbounded lets loop() refuse that loudly.
+  return bound.unbounded
+    ? { unbounded: true, maxIterations: bound.maxIterations }
+    : { maxIterations: bound.maxIterations ?? 100 };
 }
 
 /**
@@ -561,16 +562,6 @@ export function turnLoop<G extends Game = Game>(config: {
   actions: string[] | ((context: FlowContext<G>) => string[]);
   /** Continue looping while this returns true. A finished game ends the flow regardless. */
   while?: (context: FlowContext<G>) => boolean;
-  /** Safety limit to prevent infinite loops (default: 100 unless `unbounded`) */
-  maxIterations?: number;
-  /**
-   * LIBX-02 / F-16: opt-in for a genuinely unbounded game, forwarded to
-   * `loop()` so the valve is reachable from this convenience builder (not just
-   * raw `loop()`). Omits the default 100 cap; the global whole-flow tripwire
-   * still applies. Cannot be combined with an explicit `maxIterations`
-   * (`loop()` fails fast on that).
-   */
-  unbounded?: boolean;
   /**
    * Whether a second pass round this loop continues the same seat's turn or
    * starts a new one, forwarded to the action step it builds. Deliberately
@@ -580,7 +571,7 @@ export function turnLoop<G extends Game = Game>(config: {
    * {@link ActionStepConfig.turnScope}.
    */
   turnScope?: TurnScope;
-}): FlowNode<G> {
+} & Partial<LoopBound>): FlowNode<G> {
   return loop({
     name: config.name,
     while: (ctx) => {
@@ -592,10 +583,7 @@ export function turnLoop<G extends Game = Game>(config: {
       // the game is finished, whatever loop it is in.
       return true;
     },
-    // F-16: only apply the default cap when NOT unbounded — loop() throws if
-    // `unbounded` is combined with a defined `maxIterations`.
-    maxIterations: config.unbounded ? config.maxIterations : (config.maxIterations ?? 100),
-    unbounded: config.unbounded,
+    ...defaultLoopBound(config),
     do: actionStep({
       actions: config.actions,
       turnScope: config.turnScope,
@@ -695,15 +683,6 @@ export function stateAwareLoop<G extends Game = Game>(config: {
    * This ensures async game state (like combat) is resolved before the loop exits.
    */
   pendingStates?: (context: FlowContext<G>) => unknown[];
-  /** Safety limit to prevent infinite loops (default: 100 unless `unbounded`) */
-  maxIterations?: number;
-  /**
-   * LIBX-02 / F-16: opt-in for a genuinely unbounded game, forwarded to
-   * `loop()` (the valve is otherwise unreachable from this convenience
-   * builder). Omits the default 100 cap; the global whole-flow tripwire still
-   * applies. Cannot be combined with an explicit `maxIterations`.
-   */
-  unbounded?: boolean;
   /**
    * Whether a second pass round this loop continues the same seat's turn or
    * starts a new one, forwarded to the action step it builds. Ignored when
@@ -711,7 +690,7 @@ export function stateAwareLoop<G extends Game = Game>(config: {
    * {@link ActionStepConfig.turnScope}.
    */
   turnScope?: TurnScope;
-}): FlowNode<G> {
+} & Partial<LoopBound>): FlowNode<G> {
   // Two ways to say what the body is, and exactly one must be used. Accepting
   // both would mean silently ignoring one of them.
   if (config.actions !== undefined && config.do !== undefined) {
@@ -753,9 +732,7 @@ export function stateAwareLoop<G extends Game = Game>(config: {
       // the game is finished, whatever loop it is in.
       return true;
     },
-    // F-16: only apply the default cap when NOT unbounded (see turnLoop).
-    maxIterations: config.unbounded ? config.maxIterations : (config.maxIterations ?? 100),
-    unbounded: config.unbounded,
+    ...defaultLoopBound(config),
     // `skipIf` on a COMPOSITE body cannot ride on the actionStep (there may be
     // several, or none), so it gates the whole iteration here instead.
     do: config.do && config.skipIf

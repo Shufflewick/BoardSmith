@@ -55,7 +55,7 @@ describe('describeFlowPosition', () => {
 
   it('walks nested loop / each-player structures following the path', () => {
     const innerStep = actionStepNode(['draw'], 'draw-step');
-    const loopNode: FlowNode = { type: 'loop', config: { do: innerStep } };
+    const loopNode: FlowNode = { type: 'loop', config: { maxIterations: 10, do: innerStep } };
     const eachPlayerNode: FlowNode = { type: 'each-player', config: { do: loopNode } };
     const root: FlowNode = {
       type: 'phase',
