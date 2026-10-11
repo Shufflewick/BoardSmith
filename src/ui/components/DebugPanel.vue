@@ -661,7 +661,6 @@ function handleRestartClick() {
   pointer-events: none;
 }
 
-/* Toggle tab on right edge */
 /* Drawer panel */
 .debug-drawer {
   position: absolute;
@@ -683,8 +682,14 @@ function handleRestartClick() {
   transform: translateX(0);
 }
 
-/* Phone bottom-sheet — slides up from the bottom on narrow viewports */
+/* Phone bottom-sheet — slides up from the bottom on narrow viewports. The
+   panel has no width of its own (the drawer is absolute), so it is stretched
+   across the viewport for the sheet to fill (#639). */
 @media (max-width: 639px) {
+  .debug-panel {
+    left: 0;
+  }
+
   .debug-drawer {
     left: 0;
     right: 0;

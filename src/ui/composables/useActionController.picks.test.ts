@@ -1670,6 +1670,95 @@ describe('useActionController picks', () => {
       expect(controller.isLoadingChoices.value).toBe(false);
     });
 
+    describe('a stale request settling while the next action loads (#663)', () => {
+      function held() {
+        let resolve!: (result: PickChoicesResult) => void;
+        let reject!: (err: unknown) => void;
+        const promise = new Promise<PickChoicesResult>((res, rej) => { resolve = res; reject = rej; });
+        return { promise, resolve, reject };
+      }
+
+      function startCancelStart() {
+        const a = held();
+        const b = held();
+        const fetchPickChoices = vi.fn()
+          .mockReturnValueOnce(a.promise)
+          .mockReturnValueOnce(b.promise);
+        actionMetadata.value = {
+          ...createTestMetadata(),
+          move: {
+            name: 'move',
+            prompt: 'Move piece',
+            selections: [{ name: 'destination', type: 'choice', prompt: 'Select destination' }],
+          },
+        };
+        availableActions.value = [...(availableActions.value ?? []), 'move'];
+        const controller = useActionController({
+          sendAction, availableActions, actionMetadata, isMyTurn,
+          autoExecute: false, autoFill: false, playerSeat: ref(0), fetchPickChoices,
+        });
+        const startA = controller.start('move');
+        controller.cancel();
+        const startB = controller.start('move');
+        return { controller, a, b, startA, startB };
+      }
+
+      it('keeps loading until the current request settles, and shows only its choices', async () => {
+        const { controller, a, b, startA, startB } = startCancelStart();
+        expect(controller.isLoadingChoices.value).toBe(true);
+
+        a.resolve({ success: true, choices: [{ value: 'stale', display: 'Stale' }] });
+        await startA;
+        await nextTick();
+        expect(controller.isLoadingChoices.value).toBe(true);
+        expect(controller.actionSnapshot?.value?.pickSnapshots.has('destination')).toBe(false);
+
+        b.resolve({ success: true, choices: [{ value: 'fresh', display: 'Fresh' }] });
+        await startB;
+        await nextTick();
+        expect(controller.isLoadingChoices.value).toBe(false);
+        expect(controller.actionSnapshot?.value?.pickSnapshots.get('destination')?.choices?.map(c => c.value))
+          .toEqual(['fresh']);
+      });
+
+      it('does not report a stale request\'s failure against the next action', async () => {
+        const { controller, a, b, startA, startB } = startCancelStart();
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        a.reject(new Error('connection lost'));
+        await startA;
+        await nextTick();
+        expect(controller.lastError.value).toBeNull();
+        expect(controller.isLoadingChoices.value).toBe(true);
+
+        b.resolve({ success: true, choices: [{ value: 'fresh', display: 'Fresh' }] });
+        await startB;
+        expect(controller.isLoadingChoices.value).toBe(false);
+      });
+
+      it('ends loading when the action is cancelled and nothing replaces it', async () => {
+        const a = held();
+        actionMetadata.value = {
+          ...createTestMetadata(),
+          move: {
+            name: 'move',
+            prompt: 'Move piece',
+            selections: [{ name: 'destination', type: 'choice', prompt: 'Select destination' }],
+          },
+        };
+        availableActions.value = [...(availableActions.value ?? []), 'move'];
+        const controller = useActionController({
+          sendAction, availableActions, actionMetadata, isMyTurn,
+          autoExecute: false, autoFill: false, playerSeat: ref(0),
+          fetchPickChoices: vi.fn().mockReturnValueOnce(a.promise),
+        });
+        void controller.start('move');
+        expect(controller.isLoadingChoices.value).toBe(true);
+        controller.cancel();
+        expect(controller.isLoadingChoices.value).toBe(false);
+      });
+    });
+
     it('isLoadingChoices is true while fetch is in-flight and false after (R-06 loading guard)', async () => {
       // This validates the loading-state invariant that ActionPanel uses to decide
       // whether to show "Loading choices..." vs "No options available".
