@@ -392,7 +392,7 @@ export class MCTSBot<G extends Game = Game> {
         }
 
         // BACKPROPAGATE: Update stats and RAVE table, then restore searchGame to root
-        this.backpropagateWithUndo(child, playout.score, playout.playoutMoves, treeMoves);
+        this.backpropagateAndRestoreRoot(child, playout.score, playout.playoutMoves, treeMoves);
       } else {
         // A refused move changed part of this world before it was refused
         // (#421), so the position no longer describes any node. Nothing from
@@ -880,7 +880,7 @@ export class MCTSBot<G extends Game = Game> {
    * @param playoutMoves - Moves played during playout with player info (for RAVE)
    * @param treeMoves - Moves from tree path with player info (for RAVE)
    */
-  private backpropagateWithUndo(
+  private backpropagateAndRestoreRoot(
     node: MCTSNode | null,
     result: number,
     playoutMoves: Array<{ move: BotMove; player: number }> = [],
@@ -951,7 +951,7 @@ export class MCTSBot<G extends Game = Game> {
   /**
    * Reset `searchGame` to the ROOT snapshot's authoritative state while
    * PRESERVING the RNG position, so successive iterations produce varied
-   * playouts. See the call site in `backpropagateWithUndo` (v4.8 F-01).
+   * playouts. See the call site in `backpropagateAndRestoreRoot` (v4.8 F-01).
    */
   private restoreSearchGameToRoot(): void {
     if (!this.rootSnapshot || !this.searchGame) return;
