@@ -1290,14 +1290,7 @@ export class SnapshotSessionHost {
     let computed: Array<[number, HeatmapEntry[]]>;
     do {
       at = this._snapshot;
-      computed = [];
-      for (const [seat, transient] of this.transientTeachingState) {
-        if (!transient.heatmap?.visible) continue;
-        // The heatmap op recomputes only when `seat` can act; otherwise it returns
-        // a protocol error, which we treat as "not this seat's turn → clear".
-        const res = await this.adapters.executeOp(at, null, { type: 'heatmapToggle', seat, visible: true });
-        computed.push([seat, res.success && res.heatmapUpdate ? res.heatmapUpdate.entries : []]);
-      }
+      computed = await this.computeVisibleHeatmaps(at);
     } while (this._snapshot !== at);
     let changed = false;
     for (const [seat, entries] of computed) {
@@ -1309,6 +1302,19 @@ export class SnapshotSessionHost {
       changed = true;
     }
     if (changed) this.broadcastCurrent();
+  }
+
+  /** Each seat whose heatmap is visible, with its heatmap computed on `at`: none when the seat cannot act there. */
+  private async computeVisibleHeatmaps(at: GameStateSnapshot | null): Promise<Array<[number, HeatmapEntry[]]>> {
+    const computed: Array<[number, HeatmapEntry[]]> = [];
+    for (const [seat, transient] of this.transientTeachingState) {
+      if (!transient.heatmap?.visible) continue;
+      // The heatmap op recomputes only when `seat` can act; otherwise it returns
+      // a protocol error, which we treat as "not this seat's turn → clear".
+      const res = await this.adapters.executeOp(at, null, { type: 'heatmapToggle', seat, visible: true });
+      computed.push([seat, res.success && res.heatmapUpdate ? res.heatmapUpdate.entries : []]);
+    }
+    return computed;
   }
 
   /**
