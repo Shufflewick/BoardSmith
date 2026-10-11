@@ -34,6 +34,8 @@ import {
   HUNG,
   boardThatReplacesItsFrame,
   boardThatKeepsReordering,
+  boardThatMovesUnderThePress,
+  MOVED_UNDER_THE_PRESS,
   boardThatTakesFocusUnderThePress,
   boardUnderTheHostsCover,
   boardWithDialogs,
@@ -544,6 +546,31 @@ describe('boardsmith verify: the smoke check', () => {
 
     expect(outcome.passed, outcome.summary).toBe(true);
     expect(steps.filter((line) => /pressing the board's "(North|South|East)"/.test(line))).toHaveLength(3);
+  });
+
+  it('#647: looks again when its click on a board control would land on another, because the board moved them as the pointer went down, and presses each control once', async () => {
+    const { outcome, steps, said } = await smokeOf(false, {
+      ...boardThatMovesUnderThePress({ always: false }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { echo: MOVED_UNDER_THE_PRESS }),
+    });
+
+    // The board moved its buttons under the walk's first press: without it, this test would not
+    // exercise the click that landed on another button.
+    expect(said.filter((line) => line.includes(MOVED_UNDER_THE_PRESS))).toHaveLength(1);
+    expect(outcome.summary).not.toContain('did not work');
+    expect(steps.filter((line) => /pressing the board's "(North|South|East)"/.test(line))).toHaveLength(3);
+    expect(outcome.passed, outcome.summary).toBe(true);
+  });
+
+  it('#647: gives up on a board control that moves every time its click goes down, and says it kept moving', async () => {
+    const { outcome, said } = await smokeOf(false, {
+      ...boardThatMovesUnderThePress({ always: true }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { echo: MOVED_UNDER_THE_PRESS }),
+    });
+
+    expect(said.filter((line) => line.includes(MOVED_UNDER_THE_PRESS)).length).toBeGreaterThan(1);
+    expect(outcome.summary).toContain('did not work: it kept moving out from under the pointer, so no click landed on it.');
+    expect(outcome.passed).toBe(false);
   });
 
   it("#646: follows the active seat though the game's frame took focus and closed the seat menu while the pointer was down on \"Follow active seat\"", async () => {

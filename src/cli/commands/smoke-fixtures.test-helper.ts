@@ -1209,6 +1209,54 @@ function pressIt(event: MouseEvent, name: string) {
   };
 }
 
+/** What {@link boardThatMovesUnderThePress}'s page logs each time it moves its buttons under a press (#647). */
+export const MOVED_UNDER_THE_PRESS = 'the fixture moved its buttons under the press on';
+
+/**
+ * A BOARD THAT MOVES ITS CONTROLS UNDER THE PRESS (#647): when the pointer goes down on the button
+ * the walk marked, after the walk has measured it and is clicking, "North", "South" and "East" trade
+ * places (a keyed list, so each button moves rather than being redrawn), so the pointer lifts over
+ * another button and the click lands there. The walk's click guard stops that click, and the walk
+ * must look again and click where the marked button went. With `always`, the buttons move under
+ * every press, so no click ever lands; without it, only under the first. Each move is logged as
+ * {@link MOVED_UNDER_THE_PRESS} and the button's name. A press of a button the walk did not mark, or
+ * of one button twice, says so on the console, which fails the walk.
+ */
+export function boardThatMovesUnderThePress({ always }: { always: boolean }): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { ref } from 'vue';
+
+const order = ref(['North', 'South', 'East']);
+const pressed = new Set<string>();
+let moved = false;
+function move(event: PointerEvent, name: string) {
+  if (!(event.currentTarget as HTMLElement).hasAttribute('${PRESS_MARK}') || (moved && !${always})) return;
+  moved = true;
+  console.info(\`${MOVED_UNDER_THE_PRESS} "\${name}"\`);
+  order.value.push(order.value.shift()!);
+}
+function pressIt(event: MouseEvent, name: string) {
+  if (!(event.currentTarget as HTMLElement).hasAttribute('${PRESS_MARK}')) console.error(\`\${name} was pressed, though the walk did not mark it\`);
+  if (pressed.has(name)) console.error(\`\${name} was pressed twice\`);
+  pressed.add(name);
+}
+</script>
+
+<template>
+  <div class="board">
+    <button v-for="name in order" :key="name" type="button" @pointerdown="move($event, name)" @click="pressIt($event, name)">{{ name }}</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
 /**
  * A BOARD THAT TAKES FOCUS UNDER THE WALK'S PRESS (#646): at the first event of the walk's press on
  * the dev host's "Follow active seat" (the pointer going down, or the click), the board takes the
