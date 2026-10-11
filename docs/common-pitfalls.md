@@ -425,7 +425,7 @@ safety net, not your primary exit condition:
 ```typescript
 // CORRECT - explicit maxIterations required by the constructor
 loop({
-  while: () => !game.isFinished(),
+  while: (ctx) => !ctx.game.isFinished(),
   maxIterations: 1000,  // Safety net; loop should exit via while() first
   do: actionStep({ actions: ['play'] })
 })
@@ -968,7 +968,7 @@ return {
 filter: (element, ctx) => {
   // ctx.args.sectorId IS a number here — bare numeric non-selection args are
   // never coerced into elements. Resolve it explicitly.
-  const sector = game.getElementById(ctx.args.sectorId as number);
+  const sector = ctx.game.getElementById(ctx.args.sectorId as number);
   return element.container === sector;
 }
 ```
