@@ -397,12 +397,13 @@ onUnmounted(() => {
           ref="seatMenuTrigger"
           type="button"
           data-testid="world-seat-switcher"
+          aria-controls="world-seat-menu"
           :data-seat="mySeat ?? undefined"
           @click="seatMenuOpen = !seatMenuOpen"
         >
           Seat {{ mySeat ?? '—' }} ▾
         </button>
-        <ul v-if="seatMenuOpen" class="world-dev__menu">
+        <ul v-if="seatMenuOpen" id="world-seat-menu" class="world-dev__menu">
           <li v-for="seat in seats" :key="seat">
             <button
               type="button"

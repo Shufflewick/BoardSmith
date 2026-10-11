@@ -315,6 +315,21 @@ describe('DevHost — choosing from the … menu closes it (#664)', () => {
   });
 });
 
+// #667: Escape returns focus only from a menu that was open. Escape also closes
+// Table setup, and that must not pull focus to a menu's button.
+it('an Escape with no menu open leaves focus where it is', async () => {
+  const wrapper = await mountDevHost();
+  await activateSeat(wrapper);
+  const toggle = wrapper.find('.dev-chrome__bar-wide [data-testid="table-setup-toggle"]');
+  await toggle.trigger('click');
+  (toggle.element as HTMLElement).focus();
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  await wrapper.vm.$nextTick();
+  expect(toggle.attributes('aria-expanded')).toBe('false');
+  expect(document.activeElement).toBe(toggle.element);
+  wrapper.unmount();
+});
+
 describe('DevHost — seat switcher', () => {
   it('has a seat switcher button in-game', async () => {
     const wrapper = await mountDevHost();
