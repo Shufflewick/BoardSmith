@@ -5,7 +5,8 @@
     "src/cli/lib/test-progress-reporter.ts"
   ],
   "ignoreDependencies": [
-    "postcss-html"
+    "postcss-html",
+    "jscpd"
   ],
   "audit": {
     "deadCodeBaseline": ".fallow-dead-code-baseline.json",

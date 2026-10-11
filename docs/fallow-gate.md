@@ -66,7 +66,18 @@ this and is *not* the same as switching the gate off:
 
 `postcss-html` is in `ignoreDependencies` as a **verified false positive**:
 `.stylelintrc.cjs:5` sets `customSyntax: 'postcss-html'`, a string reference no
-static import analyzer can see.
+static import analyzer can see. `jscpd` is there for the same reason (#629):
+boardsmith runs its own pinned copy (#551), found through
+``require.resolve(`${pkg}/package.json`)`` over `BOARDSMITH_TOOLS` in
+`src/cli/lib/run-tool.ts`, a name built at run time.
+
+Three `ActionExecutor` members in the dead-code baseline are **verified false
+positives** too (#629): `hasFollowUpChoices` (`src/engine/flow/engine.ts`),
+`pendingActionRefusal` and `repeatingPickCandidates`
+(`src/engine/utils/enumerate-moves.ts`) are each called on the value
+`game.getActionExecutor()` returns, and fallow does not follow a method's
+return type. They surfaced when #499 stopped exporting `ActionExecutor` from
+`boardsmith`; while it was public, fallow counted every member as used.
 
 ## The complexity rule is cyclomatic 9, and it says so (#277)
 
