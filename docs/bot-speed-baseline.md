@@ -8,6 +8,7 @@ Written by `node scripts/bench-bot/run.mjs` (#630). See docs/bot-system.md, "Mea
 - Mode: production (`isDevMode()` is false in the bundled engine, as in a worker child)
 - Machine: 18 x Apple M5 Max
 - Load average (1, 5, 15 min): 4.20, 12.58, 15.10 at the start; 5.53, 9.38, 13.23 at the end
+- Left out: merc, whose vendored copy of BoardSmith does not load against current BoardSmith (Shufflewick/MERC#64)
 - Games: checkers at `54eacf5` (2 players, 111 plies played); chess at `2cdf9e3` (2 players, 76 plies played); cribbage at `21b3b56` (2 players, 121 plies played); go-fish at `822f9d8` (4 players, 87 plies played); hex-11 at `ef6bf90` (2 players, 102 plies played); hex-19 at `ef6bf90` (2 players, 360 plies played); seven at `bc558aa` (7 players, 788 plies played)
 
 ## Difficulty presets

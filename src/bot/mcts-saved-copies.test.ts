@@ -21,17 +21,18 @@ import {
   eachPlayer,
   actionStep,
   sequence,
+  execute,
   simultaneousActionStep,
   type GameOptions,
 } from '../engine/index.js';
 import { MCTSBot } from './mcts-bot.js';
-import type { BotConfig, BotMove, BotStrategy } from './types.js';
+import type { BotConfig, BotMove, BotStrategy, MCTSNode } from './types.js';
 
 interface StoneRules {
   /** Cells per side of the square board. */
   size: number;
-  /** Each placement draws from the game's random source. */
-  drawsRandomness?: boolean;
+  /** A placement in a row this says yes to draws from the game's random source. */
+  drawsOnRow?: (row: number) => boolean;
   /** Each round opens with a step every seat takes at once. */
   simultaneousBids?: boolean;
 }
@@ -67,8 +68,9 @@ function stoneGame(rules: StoneRules) {
           .chooseElement('cell', { elementClass: Cell, filter: (cell) => (cell as Cell).isEmpty() })
           .execute((args, ctx) => {
             const game = ctx.game as StoneGame;
-            (args.cell as Cell).create(Stone, 'stone', { seat: ctx.player.seat });
-            if (rules.drawsRandomness) game.lastDraw = game.random();
+            const cell = args.cell as Cell;
+            cell.create(Stone, 'stone', { seat: ctx.player.seat });
+            if (rules.drawsOnRow?.(cell.row)) game.lastDraw = game.random();
             return { success: true };
           }),
       );
@@ -143,12 +145,15 @@ interface SearchProbe {
   peakBytes: number;
   /** Whether a copy was ever left unsaved because it would not fit the budget. */
   full: boolean;
+  /** Every node the bot held a saved copy for, after any step's selection. */
+  savedNodes: Set<MCTSNode>;
 }
 
 interface BotInternals {
   savedCopyBudget: number;
   savedCopyBytes: number | undefined;
   savedCopiesFull: boolean | undefined;
+  savedCopies: Map<MCTSNode, string> | undefined;
   applyMoveToSearchGame: (...args: unknown[]) => unknown;
   selectWithPath: (...args: unknown[]) => unknown;
 }
@@ -159,8 +164,8 @@ interface BotInternals {
  * and report what it chose, its root statistics, and what it did.
  */
 async function search(
-  GameClass: StoneGameClass,
-  game: StoneGame,
+  GameClass: new (options: GameOptions) => Game,
+  game: Game,
   options: { budget?: number; config?: Partial<BotConfig>; botStrategy?: BotStrategy } = {},
 ): Promise<{ move: BotMove | null; stats: unknown; probe: SearchProbe; budget: number }> {
   const seat = game.getFlowState()!.currentPlayer ?? 1;
@@ -174,7 +179,7 @@ async function search(
   const internals = bot as unknown as BotInternals;
   if (options.budget !== undefined) internals.savedCopyBudget = options.budget;
 
-  const probe: SearchProbe = { remade: 0, peakBytes: 0, full: false };
+  const probe: SearchProbe = { remade: 0, peakBytes: 0, full: false, savedNodes: new Set() };
   const remake = internals.applyMoveToSearchGame;
   internals.applyMoveToSearchGame = function (this: unknown, ...args: unknown[]) {
     probe.remade++;
@@ -185,6 +190,7 @@ async function search(
     const result = select.apply(this, args);
     probe.peakBytes = Math.max(probe.peakBytes, internals.savedCopyBytes ?? 0);
     probe.full ||= internals.savedCopiesFull ?? false;
+    for (const node of internals.savedCopies?.keys() ?? []) probe.savedNodes.add(node);
     return result;
   };
 
@@ -218,7 +224,7 @@ describe('MCTS saved copies (#633)', () => {
   });
 
   it('keeps no copy below a move that drew on the game\'s random source, and still matches', async () => {
-    const GameClass = stoneGame({ size: 5, drawsRandomness: true });
+    const GameClass = stoneGame({ size: 5, drawsOnRow: () => true });
     const without = await search(GameClass, startedGame(GameClass, 4), { budget: 0 });
     const withCopies = await search(GameClass, startedGame(GameClass, 4));
 
@@ -226,6 +232,42 @@ describe('MCTS saved copies (#633)', () => {
     expect(withCopies.stats).toEqual(without.stats);
     expect(withCopies.probe.peakBytes).toBe(0);
     expect(withCopies.probe.remade).toBe(without.probe.remade);
+  });
+
+  it('keeps copies above a move that drew on the random source and none below it, and still matches', async () => {
+    // Only placements in the top row draw.
+    const GameClass = stoneGame({ size: 5, drawsOnRow: (row) => row === 0 });
+    const game = startedGame(GameClass, 4);
+    const without = await search(GameClass, startedGame(GameClass, 4), { budget: 0 });
+    const withCopies = await search(GameClass, game);
+
+    expect(withCopies.move).toEqual(without.move);
+    expect(withCopies.stats).toEqual(without.stats);
+    expect(withCopies.probe.remade).toBeLessThan(without.probe.remade);
+    const drewOnTheWay = (node: MCTSNode) => {
+      for (let at: MCTSNode | null = node; at?.parentMove; at = at.parent) {
+        const cell = game.getElementById(at.parentMove.args.cell as number) as unknown as { row: number };
+        if (cell.row === 0) return true;
+      }
+      return false;
+    };
+    const saved = [...withCopies.probe.savedNodes];
+    expect(saved.length).toBeGreaterThan(0);
+    expect(saved.filter(drewOnTheWay)).toEqual([]);
+    // The search did reach below a drawing move: some node it saved above has a child that drew.
+    expect(saved.some((node) => node.children.some(drewOnTheWay))).toBe(true);
+  });
+
+  it('keeps no copy inside a step every seat takes at once, where a seat\'s moves depend on the picks before it', async () => {
+    const without = await search(ClaimGame, startedClaimGame(), { budget: 0, config: claimConfig, botStrategy: claimStrategy });
+    const withCopies = await search(ClaimGame, startedClaimGame(), { config: claimConfig, botStrategy: claimStrategy });
+
+    expect(withCopies.move).toEqual(without.move);
+    expect(withCopies.stats).toEqual(without.stats);
+    // Every position in this game is inside such a step, so no copy is kept.
+    expect([...withCopies.probe.savedNodes]).toEqual([]);
+    // Yet the walk went through nodes in the middle of a step again and again.
+    expect(withCopies.probe.remade).toBeGreaterThan(100);
   });
 
   it('keeps no copy for a game that samples hidden worlds, and still matches', async () => {
@@ -289,3 +331,59 @@ describe('MCTS saved copies (#633)', () => {
 function approxCopyBytes(game: StoneGame): number {
   return JSON.stringify(game.toJSON()).length;
 }
+
+/**
+ * Three seats each claim a value at once, round after round; a value one seat
+ * has claimed this round is gone for the seats after it. So the moves a seat
+ * may make in the middle of the step depend on the picks committed before it,
+ * which the search must not see (T-159-07): it lists them from the position
+ * the step started in.
+ */
+class ClaimGame extends Game<ClaimGame, Player> {
+  claimed: string[] = [];
+  claimedBy: number[] = [];
+  score: Record<number, number> = {};
+
+  constructor(options: GameOptions) {
+    super(options);
+    const values: Record<string, number> = { a: 1, b: 2, c: 3, d: 4 };
+    this.registerAction(
+      Action.create<ClaimGame>('claim')
+        .chooseFrom('value', { choices: (ctx) => Object.keys(values).filter((v) => !(ctx.game as ClaimGame).claimed.includes(v)) })
+        .execute((args, ctx) => {
+          const game = ctx.game as ClaimGame;
+          const value = args.value as string;
+          game.claimed.push(value);
+          game.claimedBy.push(ctx.player.seat);
+          game.score[ctx.player.seat] = (game.score[ctx.player.seat] ?? 0) + values[value];
+          return { success: true };
+        }),
+    );
+    this.setFlow({
+      root: loop<ClaimGame>({
+        maxIterations: 3,
+        do: sequence(
+          execute((ctx) => {
+            (ctx.game as ClaimGame).claimed = [];
+            (ctx.game as ClaimGame).claimedBy = [];
+          }),
+          simultaneousActionStep<ClaimGame>({
+            actions: ['claim'],
+            playerDone: (ctx, player) => (ctx.game as ClaimGame).claimedBy.includes(player.seat),
+          }),
+        ),
+      }),
+    });
+  }
+}
+
+function startedClaimGame(): ClaimGame {
+  const game = new ClaimGame({ playerCount: 3, playerNames: ['A', 'B', 'C'], seed: 'claims', elementIdKey: '0633063306330633' });
+  game.startFlow();
+  return game;
+}
+
+const claimConfig: Partial<BotConfig> = { iterations: 200, playoutDepth: 4 };
+const claimStrategy: BotStrategy = {
+  objectives: (_game, seat) => ({ score: { checker: (g) => ((g as ClaimGame).score[seat] ?? 0) / 12, weight: 1 } }),
+};

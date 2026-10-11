@@ -834,8 +834,8 @@ export class MCTSBot<G extends Game = Game> {
     const newMoves =
       nextSeat === undefined ? [] : this.movesFor(this.searchGame!, flowState, nextSeat, { sample: true });
 
-    // Create child node (no snapshot needed: the search game is reset to the
-    // root by a full restore after each iteration)
+    // Create child node (no snapshot needed: every step restores the search
+    // game whole, from the root or a saved copy, before it walks the tree)
     const child = this.createNode(flowState, node, move, newMoves);
     node.children.push(child);
 
@@ -932,7 +932,6 @@ export class MCTSBot<G extends Game = Game> {
     playoutMoves: TreeMove[] = [],
     treeMoves: TreeMove[] = []
   ): void {
-
     // Update RAVE table with all moves from this playout (if enabled)
     if (this.config.useRAVE !== false) {
       // Combine tree moves and playout moves for RAVE update
@@ -1103,7 +1102,7 @@ export class MCTSBot<G extends Game = Game> {
    * Re-resolve any element-valued args to the CURRENT `searchGame`'s live
    * element objects by id (v4.8 F-01). Tree-node moves store in-process element
    * OBJECTS captured on a PRIOR searchGame instance; because
-   * `restoreSearchGameToRoot` rebuilds the tree each iteration, those stored
+   * every step restores the search game whole (`resumeSearchGame`), those stored
    * objects go stale. Feeding a stale (foreign-tree) element into
    * `continueFlow` -> `Piece.putInto` would splice a wrong-instance object into
    * the live tree and duplicate its id. Element ids are stable across restore,
