@@ -33,7 +33,7 @@ Pass your concrete game class to `Action.create<MyGame>(...)`. The builder then
 import { Action, Card, type ActionDefinition } from 'boardsmith';
 import type { MyGame } from './game.js';
 
-export function createMyAction(game: MyGame): ActionDefinition {
+export function createMyAction(): ActionDefinition {
   return Action.create<MyGame>('actionName')
     .prompt('Description shown to player')
     .condition({
@@ -1651,7 +1651,7 @@ to it: `ctx.game` is `MyGame` and `ctx.player` is `MyPlayer`, with no casts.
 import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
 import type { MyGame } from './game.js';
 
-export function createGameFlow(game: MyGame): FlowDefinition<MyGame> {
+export function createGameFlow(): FlowDefinition<MyGame> {
   return {
     root: loop({
       name: 'game-loop',
@@ -1678,7 +1678,7 @@ required in an action context. That is not an oversight: a `loop` or an
 ```typescript
 execute((ctx) => {
   if (!ctx.player) throw new Error('Turn setup ran with no active seat.');
-  game.startTurn(ctx.player);
+  ctx.game.startTurn(ctx.player);
 })
 ```
 
@@ -2361,9 +2361,9 @@ export class MyGame extends Game<MyGame, MyPlayer> {
     super(options);
     // ... element setup ...
 
-    this.registerAction(createMyAction(this));
+    this.registerAction(createMyAction());
 
-    this.setFlow(createGameFlow(this));
+    this.setFlow(createGameFlow());
   }
 }
 ```
