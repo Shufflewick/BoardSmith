@@ -413,9 +413,12 @@ export class ActionExecutor {
 
     // First pass: each selection's value, with the selections before it
     // already resolved in view, so a `choices` callback that reads an earlier
-    // pick sees what it named.
+    // pick sees what it named. A skipped optional pick is ABSENT (#627): a
+    // whole submission may send it as `null`, but every callback and `execute`
+    // see it the way a player's skipped step leaves it, with no key at all.
     for (const selection of action.selections) {
       const value = args[selection.name];
+      if (value === null) delete resolved[selection.name];
       if (value === undefined || value === null) continue;
       resolved[selection.name] = this.resolveOne(selection, value, player, resolved, game);
     }

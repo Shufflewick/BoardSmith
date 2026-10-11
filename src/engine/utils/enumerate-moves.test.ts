@@ -17,7 +17,7 @@ import {
   type GameOptions,
 } from '../index.js';
 import { MCTSBot } from '../../bot/mcts-bot.js';
-import { enumerateLegalMoves } from './enumerate-moves.js';
+import { enumerateActionMoves, enumerateLegalMoves } from './enumerate-moves.js';
 
 // ============================================================================
 // Test game: 3 Piece tokens on a board, action picks one via chooseElement.
@@ -347,5 +347,36 @@ describe('enumerateLegalMoves with an orderedList selection (#249)', () => {
     const moves = enumerateLegalMoves(game, 1);
 
     expect(moves.map((move) => move.args.buildings)).toEqual([[], ['university']]);
+  });
+});
+
+// #627: a follow-up may pre-fill an optional pick as `null`, meaning skipped.
+// The runner binds that null back when the follow-up runs, so enumeration must
+// treat the pick as answered on both of its paths, not offer it again.
+describe('a follow-up that pre-fills an optional pick as null (#627)', () => {
+  /** Declares 'chained' in its constructor, so the scratch copy a repeating pick is enumerated on has it too. */
+  class SkipGame extends Game<SkipGame, Player> {
+    constructor(options: GameOptions & { repeating?: boolean }) {
+      super(options);
+      const base = Action.create<SkipGame>('chained').chooseFrom('a', { choices: [1, 2], optional: true });
+      this.registerAction(
+        (options.repeating
+          ? base.chooseFrom('b', { choices: ['x', 'y'], repeat: { until: () => true } })
+          : base.chooseFrom('b', { choices: ['x', 'y'] })
+        ).execute(() => ({ success: true })),
+      );
+    }
+  }
+
+  it.each([
+    ['an ordinary action', false],
+    ['an action with a repeating pick', true],
+  ])('treats the pick as answered for %s', (_kind, repeating) => {
+    const game = new SkipGame({ playerCount: 2, repeating });
+    const moves = enumerateActionMoves(game, game.getAction('chained')!, game.getPlayer(1)!, {
+      followUp: { action: 'chained', args: { a: null } },
+    });
+    expect(moves).toHaveLength(2);
+    expect(moves.every((move) => move.a === null)).toBe(true);
   });
 });

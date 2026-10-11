@@ -387,3 +387,117 @@ describe('builder callbacks are typed from the chain (#510)', () => {
     expect(new Set(seen.filterFaces)).toEqual(new Set([1, 5]));
   });
 });
+
+/**
+ * #627: the types say what the engine passes.
+ *
+ * - A `multiSelect` or `orderedList` pick is checked as a whole: its `validate`
+ *   and `onSelect` get the array, as `execute` does. Per-choice callbacks
+ *   (`display`, `disabled`, `boardRefs`) still get one value.
+ * - An `optional` pick the player skipped is absent: `execute` and every later
+ *   pick's `validate` see it as possibly `undefined`, whichever way the skip was
+ *   submitted (left out, or sent as `null`).
+ */
+describe('builder types match what the engine passes (#627)', () => {
+  it('types a multiSelect or orderedList validate and onSelect as the whole array', () => {
+    Action.create<TypedGame>('many')
+      .chooseFrom('m', {
+        choices: [1, 2],
+        multiSelect: 2,
+        validate: (v) => {
+          expectTypeOf(v).toEqualTypeOf<number[]>();
+          // @ts-expect-error - a multiSelect is validated as the array it submits.
+          const n: number = v;
+          return n > 0;
+        },
+        onSelect: (v) => { expectTypeOf(v).toEqualTypeOf<number[]>(); },
+        disabled: (choice) => { expectTypeOf(choice).toEqualTypeOf<number>(); return false; },
+        display: (choice) => { expectTypeOf(choice).toEqualTypeOf<number>(); return String(choice); },
+      })
+      .chooseFrom('o', {
+        choices: [{ value: 'x', label: 'X' }],
+        orderedList: 3,
+        validate: (v) => { expectTypeOf(v).toEqualTypeOf<string[]>(); return true; },
+        onSelect: (v) => { expectTypeOf(v).toEqualTypeOf<string[]>(); },
+      });
+  });
+
+  it('types an optional pick as possibly undefined after it, and a required one as present', () => {
+    Action.create<TypedGame>('maybe')
+      .chooseFrom('n', { choices: [1, 2], optional: true })
+      .chooseFrom('labelled', { choices: ['a'], optional: 'No thanks' })
+      .chooseFrom('required', { choices: [1], optional: false })
+      .chooseFrom('many', { choices: [1], multiSelect: 2, optional: true })
+      .chooseElement('coin', { elementClass: Coin, optional: true })
+      .chooseElements('coins', { elements: (ctx) => [...ctx.game.all(Coin)], optional: true })
+      .enterText('note', { optional: true })
+      .enterNumber('count', {
+        optional: true,
+        validate: (_count, args) => {
+          expectTypeOf(args.n).toEqualTypeOf<number | undefined>();
+          expectTypeOf(args.coin).toEqualTypeOf<Coin | undefined>();
+          return true;
+        },
+      })
+      .execute((args) => {
+        expectTypeOf(args.n).toEqualTypeOf<number | undefined>();
+        expectTypeOf(args.labelled).toEqualTypeOf<string | undefined>();
+        expectTypeOf(args.required).toEqualTypeOf<number>();
+        expectTypeOf(args.many).toEqualTypeOf<number[] | undefined>();
+        expectTypeOf(args.coin).toEqualTypeOf<Coin | undefined>();
+        expectTypeOf(args.coins).toEqualTypeOf<Coin[] | undefined>();
+        expectTypeOf(args.note).toEqualTypeOf<string | undefined>();
+        expectTypeOf(args.count).toEqualTypeOf<number | undefined>();
+        return { success: true };
+      });
+  });
+
+  it('passes the array to a multiSelect or orderedList validate and onSelect at run time', () => {
+    const seen: Record<string, unknown> = {};
+    const game = new TypedGame({ playerCount: 2 });
+    game.registerAction(
+      Action.create<TypedGame>('arrays')
+        .chooseFrom('m', {
+          choices: [1, 2, 3],
+          multiSelect: 2,
+          validate: (v) => { seen.mValidate = v; return true; },
+          onSelect: (v) => { seen.mOnSelect = v; },
+        })
+        .chooseFrom('o', {
+          choices: ['x', 'y'],
+          orderedList: 3,
+          validate: (v) => { seen.oValidate = v; return true; },
+          onSelect: (v) => { seen.oOnSelect = v; },
+        })
+        .execute(() => ({ success: true })),
+    );
+    const result = game.getActionExecutor().executeAction(
+      game.getAction('arrays')!,
+      game.getPlayer(1)!,
+      { m: [1, 3], o: ['y', 'y'] },
+    );
+    expect(result.success, result.error).toBe(true);
+    expect(seen).toEqual({ mValidate: [1, 3], mOnSelect: [1, 3], oValidate: ['y', 'y'], oOnSelect: ['y', 'y'] });
+  });
+
+  it.each([
+    ['left out', {}],
+    ['sent as null', { n: null }],
+  ])('leaves a skipped optional pick absent from execute and later validates when it is %s', (_how, skip) => {
+    const seen: { validateHad?: boolean; executeHad?: boolean } = {};
+    const game = new TypedGame({ playerCount: 2 });
+    game.registerAction(
+      Action.create<TypedGame>('skip')
+        .chooseFrom('n', { choices: [1, 2], optional: true })
+        .chooseFrom('m', { choices: [3], validate: (_m, args) => { seen.validateHad = 'n' in args; return true; } })
+        .execute((args) => { seen.executeHad = 'n' in args; return { success: true }; }),
+    );
+    const result = game.getActionExecutor().executeAction(
+      game.getAction('skip')!,
+      game.getPlayer(1)!,
+      { ...skip, m: 3 },
+    );
+    expect(result.success, result.error).toBe(true);
+    expect(seen).toEqual({ validateHad: false, executeHad: false });
+  });
+});

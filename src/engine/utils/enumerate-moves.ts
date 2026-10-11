@@ -209,7 +209,10 @@ function enumerateGatedSelections(
   asFollowUp: boolean,
 ): Record<string, unknown>[] {
   const executor = game.getActionExecutor();
-  const combos = enumerateSelections(game, actionDef, player, executor.resolveArgs(actionDef, bound, player));
+  // Every pre-filled key is an answered pick, a `null` (skipped) one included:
+  // resolveArgs drops a null pick (#627), and the runner binds it back when the
+  // follow-up runs, so it is laid back under the resolved values here.
+  const combos = enumerateSelections(game, actionDef, player, { ...bound, ...executor.resolveArgs(actionDef, bound, player) });
   // #19: an action-level `.validate()` refuses a SUBMISSION, and enumeration
   // never called it — so a bot enumerated moves the engine then rejected, and
   // the pump halted on the rejection with the round never closing for any

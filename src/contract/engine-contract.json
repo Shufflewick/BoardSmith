@@ -1,5 +1,5 @@
 {
-  "revision": 156,
+  "revision": 157,
   "bundleProtocol": 2,
   "surfaceHash": "0641cdb95e5251e7",
   "payloadHash": "3f10d70c457a15ba",
@@ -1348,6 +1348,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "Debug panel, dev only: a new debugCustomData debug op returns the game's registerDebug() data to the seat that asks (refused unless the host turns debugging on, so never on the platform), buildPlayerState loses its includeDebugData option and PlayerGameState its customDebug field, and SnapshotSessionHost stamps the time each move reached it on its debugHistory answer, held outside the snapshot (#547)."
+    },
+    {
+      "revision": 157,
+      "date": "2026-10-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "0641cdb95e5251e7",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A skipped optional pick sent as null (a bot, an agent or a direct submission) now reaches validate, onSelect and execute as a missing key, as a player's skipped step already did, and optional picks are typed as possibly undefined (#627)."
     }
   ]
 }
