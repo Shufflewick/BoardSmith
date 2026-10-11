@@ -86,18 +86,27 @@ function checkout(dir) {
   }
 }
 
+/**
+ * The games named, or with none named the whole catalogue less any game that
+ * is run only where it is checked out and is not, with why each was skipped.
+ */
+function selectGames(games) {
+  if (games.length > 0) return { setups: games.map(setupFor), skipped: [] };
+  const missing = CATALOGUE.filter((entry) => entry.whereCheckedOut && !isGameProject(entry.dir));
+  return {
+    setups: CATALOGUE.filter((entry) => !missing.includes(entry)).map((entry) => setupFor(entry.name)),
+    skipped: missing.map((entry) => `${entry.name}, which is not checked out at ${entry.dir}`),
+  };
+}
+
 async function main() {
   // Production mode, as in a worker child, where `isDevMode()` is false. The
   // engine reads it when asked, so it holds for the bundles loaded below; the
   // bundles report what the engine saw, and the report refuses anything else.
   process.env.NODE_ENV = 'production';
   const { out, games } = parseArgs(process.argv.slice(2));
-  const missing = games.length === 0 ? CATALOGUE.filter((entry) => entry.whereCheckedOut && !isGameProject(entry.dir)) : [];
-  const skipped = missing.map((entry) => `${entry.name}, which is not checked out at ${entry.dir}`);
+  const { setups, skipped } = selectGames(games);
   for (const reason of skipped) process.stderr.write(`bench-bot: skipping ${reason}\n`);
-  const setups = games.length === 0
-    ? CATALOGUE.filter((entry) => !missing.includes(entry)).map((entry) => setupFor(entry.name))
-    : games.map(setupFor);
 
   await import('tsx');
   const { importRuntimeBundle } = await import('../../src/cli/commands/game-runtime.ts');
