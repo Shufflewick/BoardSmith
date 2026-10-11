@@ -2,13 +2,12 @@
 
 Written by `node scripts/bench-bot/run.mjs` (#630). See docs/bot-system.md, "Measuring bot speed".
 
-- Date: 2026-10-11T03:33:46.092Z
-- BoardSmith commit: `e4d6a41b`
+- Date: 2026-10-11T14:06:57.512Z
+- BoardSmith commit: `ddf7bfb5`
 - Node: v22.23.3
 - Mode: production (`isDevMode()` is false in the bundled engine, as in a worker child)
 - Machine: 18 x Apple M5 Max
-- Load average (1, 5, 15 min): 5.02, 20.62, 43.46 at the start; 6.75, 24.22, 35.75 at the end
-- Skipped: merc, which is not checked out at /Users/jtsmith/Dropbox/MERC/BoardSmith/MERC
+- Load average (1, 5, 15 min): 14.63, 33.72, 28.23 at the start; 8.82, 22.81, 24.65 at the end
 - Games: checkers at `54eacf5` (2 players, 111 plies played); chess at `2cdf9e3` (2 players, 76 plies played); cribbage at `21b3b56` (2 players, 121 plies played); go-fish at `822f9d8` (4 players, 87 plies played); hex-11 at `ef6bf90` (2 players, 102 plies played); hex-19 at `ef6bf90` (2 players, 360 plies played); seven at `bc558aa` (7 players, 788 plies played)
 
 ## Difficulty presets
@@ -17,27 +16,27 @@ Each preset as a game plays it, with its timeout: search steps done, ms for the 
 
 | Game | Position | easy steps | easy ms | easy steps/s | medium steps | medium ms | medium steps/s | hard steps | hard ms | hard steps/s |
 |---|---|---|---|---|---|---|---|---|---|---|
-| checkers | early (ply 14, seat 2) | 37 | 1047 | 35.3 | 47 | 1513 | 31.1 | 56 | 2037 | 27.5 |
-| checkers | middle (ply 56, seat 1) | 64 | 1011 | 63.3 | 82 | 1515 | 54.1 | 111 | 2025 | 54.8 |
-| checkers | late (ply 100, seat 1) | 100 | 498 | 201 | 300 | 1483 | 202 | 398 | 2014 | 198 |
-| chess | early (ply 7, seat 2) | 8 | 1087 | 7.4 | 9 | 1580 | 5.7 | 10 | 2120 | 4.7 |
-| chess | middle (ply 38, seat 1) | 10 | 1071 | 9.3 | 10 | 1534 | 6.5 | 12 | 2096 | 5.7 |
-| chess | late (ply 68, seat 2) | 16 | 1060 | 15.1 | 19 | 1575 | 12.1 | 20 | 2108 | 9.5 |
-| cribbage | early (ply 12, seat 2) | 100 | 35 | 2842 | 300 | 95 | 3151 | 500 | 165 | 3037 |
-| cribbage | middle (ply 60, seat 1) | 100 | 38 | 2644 | 300 | 107 | 2801 | 500 | 181 | 2760 |
-| cribbage | late (ply 111, seat 1) | 100 | 88 | 1141 | 300 | 249 | 1203 | 500 | 480 | 1042 |
-| go-fish | early (ply 8, seat 2) | 100 | 115 | 871 | 300 | 334 | 899 | 500 | 517 | 967 |
-| go-fish | middle (ply 43, seat 2) | 100 | 117 | 855 | 300 | 362 | 830 | 500 | 656 | 762 |
-| go-fish | late (ply 78, seat 2) | 100 | 82 | 1216 | 300 | 419 | 716 | 500 | 505 | 990 |
-| hex-11 | early (ply 10, seat 1) | 100 | 660 | 152 | 200 | 1505 | 133 | 255 | 2012 | 127 |
-| hex-11 | middle (ply 51, seat 2) | 100 | 623 | 160 | 175 | 1508 | 116 | 226 | 2007 | 113 |
-| hex-11 | late (ply 91, seat 2) | 100 | 857 | 117 | 150 | 1505 | 99.6 | 167 | 2012 | 83 |
-| hex-19 | early (ply 36, seat 1) | 67 | 1018 | 65.8 | 83 | 1516 | 54.8 | 90 | 2030 | 44.3 |
-| hex-19 | middle (ply 180, seat 1) | 42 | 1028 | 40.8 | 55 | 1533 | 35.9 | 64 | 2011 | 31.8 |
-| hex-19 | late (ply 324, seat 1) | 24 | 1025 | 23.4 | 28 | 1538 | 18.2 | 32 | 2034 | 15.7 |
-| seven | early (ply 78, seat 2) | 100 | 68 | 1472 | 300 | 201 | 1493 | 500 | 380 | 1316 |
-| seven | middle (ply 394, seat 2) | 100 | 57 | 1748 | 300 | 170 | 1767 | 500 | 275 | 1816 |
-| seven | late (ply 709, seat 6) | 100 | 47 | 2105 | 300 | 129 | 2318 | 500 | 231 | 2168 |
+| checkers | early (ply 14, seat 2) | 100 | 462 | 217 | 222 | 1509 | 147 | 319 | 2004 | 159 |
+| checkers | middle (ply 56, seat 1) | 100 | 173 | 579 | 300 | 973 | 308 | 500 | 1728 | 289 |
+| checkers | late (ply 100, seat 1) | 100 | 78 | 1281 | 300 | 222 | 1353 | 500 | 944 | 530 |
+| chess | early (ply 7, seat 2) | 53 | 1018 | 52 | 60 | 1508 | 39.8 | 70 | 2028 | 34.5 |
+| chess | middle (ply 38, seat 1) | 52 | 1018 | 51.1 | 62 | 1509 | 41.1 | 83 | 2011 | 41.3 |
+| chess | late (ply 68, seat 2) | 67 | 1006 | 66.6 | 79 | 1519 | 52 | 88 | 2007 | 43.8 |
+| cribbage | early (ply 12, seat 2) | 100 | 35 | 2847 | 300 | 99 | 3025 | 500 | 147 | 3399 |
+| cribbage | middle (ply 60, seat 1) | 100 | 33 | 3068 | 300 | 100 | 3004 | 500 | 200 | 2497 |
+| cribbage | late (ply 111, seat 1) | 100 | 85 | 1179 | 300 | 252 | 1193 | 500 | 401 | 1248 |
+| go-fish | early (ply 8, seat 2) | 100 | 98 | 1015 | 300 | 275 | 1090 | 500 | 414 | 1208 |
+| go-fish | middle (ply 43, seat 2) | 100 | 85 | 1173 | 300 | 268 | 1119 | 500 | 470 | 1065 |
+| go-fish | late (ply 78, seat 2) | 100 | 83 | 1205 | 300 | 216 | 1389 | 500 | 448 | 1116 |
+| hex-11 | early (ply 10, seat 1) | 100 | 234 | 427 | 300 | 919 | 326 | 500 | 1704 | 293 |
+| hex-11 | middle (ply 51, seat 2) | 100 | 252 | 396 | 300 | 883 | 340 | 500 | 1699 | 294 |
+| hex-11 | late (ply 91, seat 2) | 100 | 287 | 348 | 300 | 1162 | 258 | 500 | 1976 | 253 |
+| hex-19 | early (ply 36, seat 1) | 100 | 788 | 127 | 157 | 1505 | 104 | 181 | 2011 | 90 |
+| hex-19 | middle (ply 180, seat 1) | 99 | 1007 | 98.4 | 137 | 1516 | 90.4 | 171 | 2012 | 85 |
+| hex-19 | late (ply 324, seat 1) | 100 | 858 | 117 | 156 | 1512 | 103 | 186 | 2011 | 92.5 |
+| seven | early (ply 78, seat 2) | 100 | 75 | 1325 | 300 | 244 | 1229 | 500 | 325 | 1537 |
+| seven | middle (ply 394, seat 2) | 100 | 65 | 1534 | 300 | 219 | 1372 | 500 | 382 | 1310 |
+| seven | late (ply 709, seat 6) | 100 | 62 | 1619 | 300 | 195 | 1540 | 500 | 374 | 1336 |
 
 ## Fixed 300-step search
 
@@ -45,24 +44,24 @@ A seeded 300-step search with no timeout, so the work is the same on every run. 
 
 | Game | Position | steps | ms | steps/s | rebuild % | legal moves % | apply % | re-apply % | scoring % | determinize % | other % | lookup % | chosen move |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| checkers | early (ply 14, seat 2) | 300 | 24544 | 12.2 | 1 | 4 | 6 | 89 | 0 | 0 | 0 | 88 | `move piece="p2-6-5" destination={"pieceId":"p2-6-5","fromNotation":"f2","toNotation":"g3","isCapture":false,"becomesKing":false,"capturedNotations":[]}` |
-| checkers | middle (ply 56, seat 1) | 300 | 8449 | 35.5 | 2 | 8 | 15 | 73 | 1 | 0 | 0 | 88 | `move piece="p1-0-1" destination={"pieceId":"p1-0-1","fromNotation":"c7","toNotation":"b6","isCapture":false,"becomesKing":false,"capturedNotations":[]}` |
-| checkers | late (ply 100, seat 1) | 300 | 1493 | 201 | 10 | 1 | 3 | 85 | 0 | 0 | 1 | 82 | `move piece="p1-0-5" destination={"pieceId":"p1-0-5","fromNotation":"g7","toNotation":"f6","isCapture":false,"becomesKing":false,"capturedNotations":[]}` |
-| chess | early (ply 7, seat 2) | 300 | 81560 | 3.7 | 0 | 21 | 27 | 52 | 1 | 0 | 0 | 80 | `movePiece piece="black-pawn-e7" destination={"pieceId":"black-pawn-e7","fromNotation":"e7","toNotation":"e6"}` |
-| chess | middle (ply 38, seat 1) | 300 | 143219 | 2.1 | 0 | 20 | 28 | 51 | 1 | 0 | 0 | 81 | `movePiece piece="white-knight-b1" destination={"pieceId":"white-knight-b1","fromNotation":"a5","toNotation":"b3"}` |
-| chess | late (ply 68, seat 2) | 300 | 37583 | 8 | 0 | 28 | 44 | 27 | 1 | 0 | 0 | 80 | `movePiece piece="black-pawn-a7" destination={"pieceId":"black-pawn-a7","fromNotation":"a6","toNotation":"a5"}` |
-| cribbage | early (ply 12, seat 2) | 300 | 84 | 3566 | 57 | 7 | 17 | 0 | 0 | 0 | 20 | 10 | `discard cards=["KC","QC"]` |
-| cribbage | middle (ply 60, seat 1) | 300 | 106 | 2832 | 52 | 11 | 19 | 0 | 0 | 0 | 18 | 16 | `playCard card="4H"` |
-| cribbage | late (ply 111, seat 1) | 300 | 283 | 1060 | 28 | 3 | 3 | 51 | 0 | 0 | 14 | 4 | `discard cards=["9C","10S"]` |
-| go-fish | early (ply 8, seat 2) | 300 | 275 | 1090 | 24 | 11 | 28 | 8 | 5 | 11 | 14 | 42 | `ask target=3 rank="8"` |
-| go-fish | middle (ply 43, seat 2) | 300 | 341 | 881 | 25 | 10 | 23 | 12 | 4 | 15 | 12 | 40 | `ask target=4 rank="6"` |
-| go-fish | late (ply 78, seat 2) | 300 | 413 | 727 | 18 | 9 | 19 | 27 | 2 | 13 | 12 | 47 | `ask target=1 rank="7"` |
-| hex-11 | early (ply 10, seat 1) | 300 | 2597 | 116 | 4 | 3 | 24 | 32 | 18 | 0 | 19 | 60 | `placeStone cell="cell-2-8"` |
-| hex-11 | middle (ply 51, seat 2) | 300 | 2453 | 122 | 4 | 3 | 36 | 15 | 20 | 0 | 21 | 62 | `placeStone cell="cell-4-4"` |
-| hex-11 | late (ply 91, seat 2) | 300 | 3177 | 94.4 | 4 | 2 | 40 | 30 | 11 | 0 | 13 | 71 | `placeStone cell="cell-4-4"` |
-| hex-19 | early (ply 36, seat 1) | 300 | 6527 | 46 | 4 | 3 | 26 | 22 | 23 | 0 | 22 | 57 | `placeStone cell="cell-3-17"` |
-| hex-19 | middle (ply 180, seat 1) | 300 | 9245 | 32.4 | 3 | 3 | 40 | 19 | 18 | 0 | 17 | 67 | `placeStone cell="cell-2-6"` |
-| hex-19 | late (ply 324, seat 1) | 300 | 20922 | 14.3 | 2 | 1 | 47 | 38 | 6 | 0 | 6 | 83 | `placeStone cell="cell-2-8"` |
-| seven | early (ply 78, seat 2) | 300 | 203 | 1476 | 67 | 2 | 7 | 7 | 0 | 0 | 16 | 14 | `discard card="red-3-1"` |
-| seven | middle (ply 394, seat 2) | 300 | 166 | 1810 | 69 | 2 | 6 | 7 | 0 | 0 | 16 | 16 | `discard card="green-7-1"` |
-| seven | late (ply 709, seat 6) | 300 | 130 | 2313 | 75 | 1 | 7 | 3 | 0 | 0 | 14 | 17 | `discard card="red-4-3"` |
+| checkers | early (ply 14, seat 2) | 300 | 2216 | 135 | 3 | 4 | 6 | 83 | 1 | 0 | 3 | 37 | `move piece="p2-6-5" destination={"pieceId":"p2-6-5","fromNotation":"f2","toNotation":"g3","isCapture":false,"becomesKing":false,"capturedNotations":[]}` |
+| checkers | middle (ply 56, seat 1) | 300 | 923 | 325 | 9 | 7 | 14 | 64 | 2 | 0 | 5 | 35 | `move piece="p1-0-1" destination={"pieceId":"p1-0-1","fromNotation":"c7","toNotation":"b6","isCapture":false,"becomesKing":false,"capturedNotations":[]}` |
+| checkers | late (ply 100, seat 1) | 300 | 273 | 1099 | 28 | 1 | 2 | 58 | 0 | 0 | 10 | 26 | `move piece="p1-0-5" destination={"pieceId":"p1-0-5","fromNotation":"g7","toNotation":"f6","isCapture":false,"becomesKing":false,"capturedNotations":[]}` |
+| chess | early (ply 7, seat 2) | 300 | 13009 | 23.1 | 1 | 21 | 30 | 46 | 1 | 0 | 1 | 27 | `movePiece piece="black-pawn-e7" destination={"pieceId":"black-pawn-e7","fromNotation":"e7","toNotation":"e6"}` |
+| chess | middle (ply 38, seat 1) | 300 | 10147 | 29.6 | 1 | 19 | 28 | 50 | 1 | 0 | 1 | 27 | `movePiece piece="white-knight-b1" destination={"pieceId":"white-knight-b1","fromNotation":"a5","toNotation":"b3"}` |
+| chess | late (ply 68, seat 2) | 300 | 6461 | 46.4 | 2 | 26 | 44 | 26 | 1 | 0 | 1 | 24 | `movePiece piece="black-pawn-a7" destination={"pieceId":"black-pawn-a7","fromNotation":"a6","toNotation":"a5"}` |
+| cribbage | early (ply 12, seat 2) | 300 | 94 | 3181 | 61 | 7 | 13 | 0 | 0 | 0 | 20 | 7 | `discard cards=["KC","QC"]` |
+| cribbage | middle (ply 60, seat 1) | 300 | 123 | 2441 | 58 | 7 | 14 | 0 | 0 | 0 | 21 | 12 | `playCard card="4H"` |
+| cribbage | late (ply 111, seat 1) | 300 | 255 | 1177 | 29 | 2 | 3 | 51 | 0 | 0 | 15 | 3 | `discard cards=["9C","10S"]` |
+| go-fish | early (ply 8, seat 2) | 300 | 208 | 1441 | 25 | 11 | 24 | 7 | 4 | 13 | 14 | 38 | `ask target=3 rank="8"` |
+| go-fish | middle (ply 43, seat 2) | 300 | 286 | 1047 | 26 | 11 | 18 | 10 | 3 | 16 | 15 | 34 | `ask target=4 rank="6"` |
+| go-fish | late (ply 78, seat 2) | 300 | 342 | 876 | 20 | 10 | 16 | 24 | 2 | 15 | 14 | 41 | `ask target=1 rank="7"` |
+| hex-11 | early (ply 10, seat 1) | 300 | 866 | 347 | 9 | 5 | 18 | 24 | 21 | 0 | 24 | 34 | `placeStone cell="cell-2-8"` |
+| hex-11 | middle (ply 51, seat 2) | 300 | 1022 | 293 | 11 | 4 | 24 | 11 | 24 | 0 | 26 | 38 | `placeStone cell="cell-4-4"` |
+| hex-11 | late (ply 91, seat 2) | 300 | 1246 | 241 | 11 | 3 | 26 | 21 | 16 | 0 | 22 | 46 | `placeStone cell="cell-4-4"` |
+| hex-19 | early (ply 36, seat 1) | 300 | 3005 | 99.8 | 9 | 5 | 18 | 15 | 25 | 0 | 28 | 28 | `placeStone cell="cell-3-17"` |
+| hex-19 | middle (ply 180, seat 1) | 300 | 3225 | 93 | 10 | 4 | 24 | 11 | 24 | 0 | 26 | 38 | `placeStone cell="cell-2-6"` |
+| hex-19 | late (ply 324, seat 1) | 300 | 3084 | 97.3 | 11 | 3 | 28 | 23 | 17 | 0 | 19 | 48 | `placeStone cell="cell-2-8"` |
+| seven | early (ply 78, seat 2) | 300 | 209 | 1435 | 71 | 2 | 5 | 5 | 0 | 0 | 17 | 12 | `discard card="red-3-1"` |
+| seven | middle (ply 394, seat 2) | 300 | 198 | 1514 | 65 | 2 | 6 | 6 | 0 | 0 | 21 | 12 | `discard card="green-7-1"` |
+| seven | late (ply 709, seat 6) | 300 | 267 | 1122 | 73 | 2 | 7 | 3 | 0 | 0 | 16 | 13 | `discard card="red-4-3"` |
