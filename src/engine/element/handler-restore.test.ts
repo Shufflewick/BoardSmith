@@ -192,6 +192,27 @@ describe('a Space in the pile when a restore runs keeps its handlers (#656)', ()
 
     expect([restored.enterCount, restored.exitCount]).toEqual([1, 1]);
   });
+
+  // A snapshot does not hold the pile, and every restore empties it (#650), so
+  // a state taken after the removal has no Space to give the handlers to. Both
+  // restores say so, rather than one dropping them silently.
+  it('in-place and fresh restores of a state without the Space both warn that its handlers were dropped', () => {
+    const runner = buildRunner();
+    const destId = runner.game.dest.id;
+    runner.game.dest.remove();
+    const snapshot = roundTripJson(runner.getSnapshot());
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    _clearShownWarnings();
+    runner.game.loadSerializedState(snapshot.state);
+    _clearShownWarnings();
+    GameRunner.fromSnapshot<HandlerGame>(snapshot, HandlerGame);
+    const warnings = warnSpy.mock.calls.map((call) => String(call[0]));
+    warnSpy.mockRestore();
+
+    expect(warnings).toHaveLength(2);
+    for (const warning of warnings) expect(warning).toContain(`Space "${destId}"`);
+  });
 });
 
 // ---------------------------------------------------------------------------

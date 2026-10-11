@@ -1,5 +1,5 @@
 {
-  "revision": 159,
+  "revision": 160,
   "bundleProtocol": 2,
   "surfaceHash": "3cd66e7b422f0cbf",
   "payloadHash": "3f10d70c457a15ba",
@@ -1374,7 +1374,16 @@
       "surfaceHash": "3cd66e7b422f0cbf",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "An undo that brings back a removed Space keeps its onEnter/onExit handlers (#656): Game.loadSerializedState now reads and re-attaches handlers on Spaces in the pile as well as the tree, so an in-place restore no longer drops them silently and agrees with a fresh restore. No surface, payload or format change."
+      "summary": "Every restore (undo, failed-action rollback, reload, bot search) empties game.pile, so a removed element brought back by the restore is never also in the pile under the same id (#650)"
+    },
+    {
+      "revision": 160,
+      "date": "2026-10-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "3cd66e7b422f0cbf",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "An undo that brings back a removed Space keeps its onEnter/onExit handlers (#656): Game.loadSerializedState now reads and re-attaches handlers on Spaces in the pile as well as the tree, so an in-place restore no longer drops them silently and agrees with a fresh restore; a restored state that lacks the Space warns on both paths. No surface, payload or format change."
     }
   ]
 }
