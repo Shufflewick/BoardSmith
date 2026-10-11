@@ -1347,6 +1347,42 @@ export class ActionExecutor {
   }
 
   /**
+   * Make a pending action's picks before `selectionName` from `submitted`, in
+   * order, exactly as a player's own steps make them (#658): each is resolved,
+   * checked against what is offered with the picks before it in view, run
+   * through its `validate`, and fires its `onSelect` or `onEach`. A required
+   * pick `submitted` leaves out is refused, and an optional one is skipped.
+   * A client that collected picks locally sends them with the first pick it
+   * routes to the server, so the pick it names starts where they end.
+   *
+   * A pick already in `pendingState.collectedArgs` was bound by the engine
+   * before any client pick (a held follow-up's published args, see
+   * `GameRunner.bindFollowUpArgs`). That is engine data, not the client's: it
+   * is passed over, and `submitted` is not read for it.
+   *
+   * Returns why a pick was refused, or `undefined` when every pick was made.
+   */
+  makePicksBefore(
+    action: ActionDefinition,
+    player: Player,
+    pendingState: PendingActionState,
+    selectionName: string,
+    submitted: Record<string, unknown>
+  ): string | undefined {
+    const target = action.selections.findIndex(s => s.name === selectionName);
+    while (pendingState.currentSelectionIndex < target) {
+      const selection = action.selections[pendingState.currentSelectionIndex];
+      if (Object.hasOwn(pendingState.collectedArgs, selection.name)) {
+        pendingState.currentSelectionIndex++;
+        continue;
+      }
+      const { error } = this.feedSelection(action, player, pendingState, selection, submitted[selection.name]);
+      if (error !== undefined) return error;
+    }
+    return undefined;
+  }
+
+  /**
    * Feed a repeating selection's picks, in order, through `processRepeatingStep`,
    * so each pick runs `onEach` and is checked against the choices the previous
    * one left. The picks must end exactly where the repeat ends.

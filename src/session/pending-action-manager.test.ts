@@ -225,9 +225,10 @@ describe('PendingActionManager', () => {
     it('returns PICK_NOT_FOUND when the selectionName does not match the expected current selection', async () => {
       const { manager } = createManager();
 
-      // Auto-creates the 'pick' pending action (currentSelectionIndex 0 → 'color'),
-      // but the step targets 'size' — a mismatch.
-      const result = await manager.processSelectionStep(1, 'size', 'M', 'pick');
+      // The open 'pick' pending action waits on 'size', but the step targets
+      // 'color' again — a mismatch.
+      expect((await manager.processSelectionStep(1, 'color', 'red', 'pick')).success).toBe(true);
+      const result = await manager.processSelectionStep(1, 'color', 'blue');
 
       expect(result.success).toBe(false);
       expect(result.errorCode).toBe(ErrorCode.PICK_NOT_FOUND);
