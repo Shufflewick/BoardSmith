@@ -16,6 +16,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 import { mountPanel, stubActionController } from './action-panel-controller.test-helper.js';
+import { documentHasFocus } from './document-has-focus.test-helper.js';
+
+documentHasFocus();
 
 const mockToast = vi.hoisted(() => ({ error: vi.fn() }));
 vi.mock('../../composables/useToast', () => ({
