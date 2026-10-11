@@ -1798,6 +1798,43 @@ export function aceGameDealtSlowly(): Record<string, string> {
 }
 
 /**
+ * A BOARD THAT HOLDS ITS FRAMES WHILE POINTED AT (#666): while the pointer is over its "Hold" button,
+ * the board's page keeps every animation frame and timer it is asked for, and runs them once the
+ * pointer leaves. The page answers all the while, so a call the walk makes into it that waits for
+ * the page to paint (`framesPass`) runs past its page-time budget on a live page, which the walk
+ * must report as that call taking too long.
+ */
+export function boardThatHoldsItsFrames(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+const held: Array<() => void> = [];
+const { requestAnimationFrame: frame, setTimeout: timer } = window;
+function hold() {
+  window.requestAnimationFrame = ((callback: FrameRequestCallback) => (held.push(() => callback(performance.now())), 0)) as typeof window.requestAnimationFrame;
+  window.setTimeout = ((callback: () => void) => (held.push(callback), 0)) as typeof window.setTimeout;
+}
+function letGo() {
+  window.requestAnimationFrame = frame;
+  window.setTimeout = timer;
+  for (const callback of held.splice(0)) callback();
+}
+</script>
+
+<template>
+  <div class="board">
+    <button type="button" @pointerenter="hold" @pointerleave="letGo">Hold</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
  * A BOARD THAT HANGS AFTER A PRESS (#618): pressing "Spin" on the board starts a loop that never
  * ends in the task after the click, so the click lands and the page stops answering for good while
  * the walk reads what the press did: a script or a count it runs in the page, which takes no time

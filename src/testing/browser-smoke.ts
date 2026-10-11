@@ -37,8 +37,8 @@
  *
  * @module
  */
-import { errors, test, type Browser, type BrowserContext, type Frame, type Locator, type Page } from '@playwright/test';
-import { DEV_HOST_ALIVE_PATH, PageClock, PageFrozen } from './browser-smoke-clock.js';
+import { test, type Browser, type BrowserContext, type Frame, type Locator, type Page } from '@playwright/test';
+import { DEV_HOST_ALIVE_PATH, PageClock, PageFrozen, PageTimeOverrun } from './browser-smoke-clock.js';
 import { chooseFromMenu, reopening, type DevHostMenu, type PressWithin } from './browser-smoke-menu.js';
 import {
   clickArrived,
@@ -381,7 +381,8 @@ async function withinPageTime<T>(page: Page, budgetMs: number, attempt: (timeout
 
 /**
  * Does what `act` does once, with no timeout of its own (`timeout` 0), and returns what it gives.
- * It throws a timeout when `act` has not finished in `budgetMs` of `page`'s time, and
+ * It throws {@link PageTimeOverrun}, naming `what`, when `act` has not finished in `budgetMs` of
+ * `page`'s time, and
  * {@link PageFrozen} once the page has stopped answering, running `meanwhile` every tenth of a try
  * while it waits. For a press, which is never tried again: one that ran out may still land, so the
  * walk ends there (its set-up presses) or reports it and moves on, as `press` and closing a dialog
@@ -400,7 +401,7 @@ async function actWithinPageTime<T>(
   acting.catch(() => undefined);
   for (;;) {
     if (await Promise.race([acting.then(() => true), new Promise<boolean>((tick) => setTimeout(() => tick(false), TRY_MS / 10))])) return acting;
-    if (over(budgetMs)) throw new errors.TimeoutError(`${what}: not done in ${budgetMs / 1000}s of the page answering`);
+    if (over(budgetMs)) throw new PageTimeOverrun(what, budgetMs);
     await meanwhile?.();
   }
 }
@@ -409,7 +410,8 @@ async function actWithinPageTime<T>(
  * Runs `call`, one call into `page` that Playwright gives no time limit (a script run in the page, a
  * count of elements, a move of the mouse), within {@link PRESS_MS} of the page's time, so a board
  * that hangs during it fails the walk saying the page stopped answering, as any timed wait does,
- * rather than holding it until the limit on the whole run (#618). `what` names the call in the timeout.
+ * rather than holding it until the limit on the whole run (#618). `what` names the call in the
+ * {@link PageTimeOverrun} it throws.
  */
 function inPageTime<T>(page: Page, what: string, call: () => Promise<T>): Promise<T> {
   return actWithinPageTime(page, PRESS_MS, what, call);
@@ -809,7 +811,7 @@ async function whyNotPressed(target: Locator, error: unknown): Promise<string> {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof UnderAToast || /intercepts pointer events/.test(message)) return COVERED;
   if (error instanceof Error && error.name === 'TimeoutError') return `it did not become pressable within ${PRESS_MS / 1000}s`;
-  return message.split('\n')[0];
+  return message.split('\n')[0].replace(/\.$/, '');
 }
 
 /** `error` as an {@link UnderAToast} when it is Playwright's click finding a toast on top of the control, else itself. */
@@ -869,9 +871,10 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
     return false;
   } finally {
     // The marks went with the page that was replaced; the press is reported once, whichever read saw it go.
-    // A page that stopped answering was not replaced, and ends the walk (#618).
+    // Any other failure, as a page that stopped answering (#618) or a call that ran past its page
+    // time (#666), was not a replaced page, and ends the walk.
     await unmark(control.frame).catch((error: unknown) => {
-      if (error instanceof PageFrozen) throw error;
+      if (!control.frame.isDetached()) throw error;
       noteIn(control.frame.page(), walk, replaced);
     });
   }
