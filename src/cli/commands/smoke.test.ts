@@ -540,7 +540,7 @@ describe('boardsmith verify: the smoke check', () => {
   it('presses the board control it found, though the board moved another into its place before the press', async () => {
     const { outcome, steps } = await smokeOf(false, boardThatKeepsReordering());
 
-    expect(outcome.passed).toBe(true);
+    expect(outcome.passed, outcome.summary).toBe(true);
     expect(steps.filter((line) => /pressing the board's "(North|South|East)"/.test(line))).toHaveLength(3);
   });
 

@@ -492,12 +492,12 @@ Use the `playerChoices()` helper on your Game class to generate player choices f
 Action.create('askPlayer')
   .chooseFrom('target', {
     prompt: 'Who do you want to ask?',
-    choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
+    choices: (ctx) => ctx.game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
   })
   .execute((args, ctx) => {
     // playerChoices returns { value: seat, label: name } choices, so the arg
     // is the seat number (1-indexed).
-    const targetPlayer = game.getPlayerOrThrow(args.target);
+    const targetPlayer = ctx.game.getPlayerOrThrow(args.target);
     // ...
   });
 ```
@@ -654,7 +654,7 @@ names it, when none does:
 ```typescript
 Action.create('dropEquipment')
   .chooseElement('merc', {
-    elements: () => [...game.all(Merc)],
+    elements: (ctx) => [...ctx.game.all(Merc)],
   })
   .chooseElement('equipment', {
     dependsOn: 'merc',  // check every merc for equipment before offering
@@ -724,7 +724,7 @@ Control when actions are available using labeled conditions:
 ```typescript
 Action.create('draw')
   .condition({
-    'deck has cards': (ctx) => game.deck.count(Card) > 0,
+    'deck has cards': (ctx) => ctx.game.deck.count(Card) > 0,
   })
   .execute(...)
 
@@ -732,7 +732,7 @@ Action.create('draw')
 Action.create('purchase')
   .condition({
     'player can afford cost': (ctx) => ctx.player.gold >= 10,
-    'item is available': (ctx) => game.shop.count(Item) > 0,
+    'item is available': (ctx) => ctx.game.shop.count(Item) > 0,
   })
   .execute(...)
 ```
@@ -1759,7 +1759,7 @@ sequence(
 ```typescript
 loop({
   name: 'game-loop',
-  while: (ctx) => !game.isFinished(),
+  while: (ctx) => !ctx.game.isFinished(),
   maxIterations: 1000,  // Safety limit
   do: /* flow node */,
 })
@@ -1829,7 +1829,7 @@ forEach({
   as: 'player',  // Variable name to access current item
   do: execute((ctx) => {
     const player = ctx.get('player');
-    game.scoreHand(player);
+    ctx.game.scoreHand(player);
   }),
 })
 ```
@@ -1840,7 +1840,7 @@ forEach({
 actionStep({
   name: 'move-step',
   actions: ['move', 'jump'],      // Available actions
-  skipIf: (ctx) => game.isFinished(),
+  skipIf: (ctx) => ctx.game.isFinished(),
 })
 ```
 
@@ -2029,7 +2029,7 @@ section 5 for who enforces what.
 ```typescript
 phase('setup', {
   do: sequence(
-    execute(() => game.deal()),
+    execute((ctx) => ctx.game.deal()),
     simultaneousActionStep({ actions: ['discard'] }),
   ),
 })
@@ -2039,7 +2039,7 @@ phase('setup', {
 
 ```typescript
 switchOn({
-  on: (ctx) => game.currentPhase,
+  on: (ctx) => ctx.game.currentPhase,
   cases: {
     'deal': /* flow node */,
     'play': /* flow node */,
@@ -2452,7 +2452,7 @@ This means custom UIs can send element IDs even for `chooseFrom` selections:
 ```typescript
 // Action definition using chooseFrom
 .chooseFrom('target', {
-  choices: (ctx) => game.validTargets,  // Returns element objects
+  choices: (ctx) => ctx.game.validTargets,  // Returns element objects
   display: (target) => target.name,
 })
 

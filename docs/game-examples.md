@@ -347,7 +347,7 @@ Cribbage is the most complex example, demonstrating multi-phase flow, simultaneo
 // flow.ts
 const playRound = sequence(
   // Initialize round
-  execute((ctx) => game.startNewRound()),
+  execute((ctx) => ctx.game.startNewRound()),
 
   // Discard phase - simultaneous
   phase('discarding', {
@@ -355,18 +355,18 @@ const playRound = sequence(
       actions: ['discard'],
       prompt: 'Discard 2 cards to the crib',
       playerDone: (ctx, player) => {
-        const hand = game.getPlayerHand(player);
+        const hand = ctx.game.getPlayerHand(player);
         return hand.count(Card) <= 4;  // Done when 4 cards left
       },
-      allDone: (ctx) => game.allPlayersDiscarded(),
+      allDone: (ctx) => ctx.game.allPlayersDiscarded(),
     }),
   }),
 
   // Store hands before play
-  execute(() => game.storeOriginalHands()),
+  execute((ctx) => ctx.game.storeOriginalHands()),
 
   // Cut starter
-  execute(() => game.cutStarterCard()),
+  execute((ctx) => ctx.game.cutStarterCard()),
 
   // Play phase - alternating turns
   phase('play', { do: playPhaseSequence }),
@@ -374,16 +374,16 @@ const playRound = sequence(
   // Scoring phase
   phase('scoring', {
     do: sequence(
-      execute(() => game.scoreRoundAndBuildSummary()),
+      execute((ctx) => ctx.game.scoreRoundAndBuildSummary()),
       simultaneousActionStep({
         actions: ['acknowledgeScore'],
-        allDone: () => !game.roundSummary.active,
+        allDone: (ctx) => !ctx.game.roundSummary.active,
       }),
     ),
   }),
 
   // Rotate dealer
-  execute(() => game.rotateDealer()),
+  execute((ctx) => ctx.game.rotateDealer()),
 );
 ```
 
@@ -396,11 +396,11 @@ simultaneousActionStep({
   actions: ['discard'],
   prompt: 'Discard 2 cards to the crib',
   playerDone: (ctx, player) => {
-    const hand = game.getPlayerHand(player as CribbagePlayer);
+    const hand = ctx.game.getPlayerHand(player as CribbagePlayer);
     return hand.count(Card) <= 4;
   },
   allDone: (ctx) => {
-    return game.allPlayersDiscarded() || game.isFinished();
+    return ctx.game.allPlayersDiscarded() || ctx.game.isFinished();
   },
 });
 ```
@@ -434,33 +434,33 @@ return {
 loop({
   maxIterations: 100,
   name: 'play-loop',
-  while: () => !game.allCardsPlayed() && !game.isFinished(),
+  while: (ctx) => !ctx.game.allCardsPlayed() && !ctx.game.isFinished(),
   do: sequence(
     // Check if count needs reset
-    execute(() => {
+    execute((ctx) => {
       const currentStuck = currentSaidGo || !currentCanPlay;
       const otherStuck = otherSaidGo || !otherCanPlay;
 
       if (currentStuck && otherStuck && (hasCards)) {
         // Award "Go" point
-        if (game.runningTotal < 31) {
-          game.addPoints(lastPlayer, 1, 'Go');
+        if (ctx.game.runningTotal < 31) {
+          ctx.game.addPoints(lastPlayer, 1, 'Go');
         }
-        game.resetCount();
+        ctx.game.resetCount();
       }
     }),
 
     // Player plays or says Go
     actionStep({
-      player: () => game.getCurrentPlayPlayer(),
+      player: (ctx) => ctx.game.getCurrentPlayPlayer(),
       actions: ['playCard', 'sayGo'],
       skipIf: () => playerAlreadySaidGo || !hasCards,
     }),
 
     // Switch turns
-    execute(() => {
+    execute((ctx) => {
       if (!otherSaidGo && otherHasCards) {
-        game.switchPlayTurn();
+        ctx.game.switchPlayTurn();
       }
     }),
   ),

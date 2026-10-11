@@ -7,7 +7,7 @@ Conditions control when actions are available to players. They use labeled predi
 ```typescript
 Action.create('draw')
   .condition({
-    'deck has cards': (ctx) => game.deck.count(Card) > 0,
+    'deck has cards': (ctx) => ctx.game.deck.count(Card) > 0,
   })
   .execute(...)
 ```
@@ -27,8 +27,8 @@ All conditions must pass for the action to be available:
 Action.create('purchase')
   .condition({
     'player can afford cost': (ctx) => ctx.player.gold >= 10,
-    'item is available': (ctx) => game.shop.count(Item) > 0,
-    'shop is open': (ctx) => game.phase === 'shopping',
+    'item is available': (ctx) => ctx.game.shop.count(Item) > 0,
+    'shop is open': (ctx) => ctx.game.phase === 'shopping',
   })
   .execute(...)
 ```
@@ -63,9 +63,9 @@ For conditions with complex logic, keep the predicate function readable:
 ```typescript
 .condition({
   'can continue multi-jump': (ctx) => {
-    const piece = game.multiJumpPiece;
+    const piece = ctx.game.multiJumpPiece;
     if (!piece) return true;  // No multi-jump in progress
-    return game.getJumpMoves(piece).length === 0;
+    return ctx.game.getJumpMoves(piece).length === 0;
   },
 })
 ```
@@ -76,8 +76,8 @@ For conditions with complex logic, keep the predicate function readable:
 
 ```typescript
 .condition({
-  'in discarding phase': (ctx) => game.phase === 'discarding',
-  'has cards to discard': (ctx) => game.getPlayerHand(ctx.player).count(Card) > 4,
+  'in discarding phase': (ctx) => ctx.game.phase === 'discarding',
+  'has cards to discard': (ctx) => ctx.game.getPlayerHand(ctx.player).count(Card) > 4,
 })
 ```
 
@@ -96,7 +96,7 @@ For conditions with complex logic, keep the predicate function readable:
 
 ```typescript
 .condition({
-  'player can take action': (ctx) => game.canTakeAction(ctx.player),
+  'player can take action': (ctx) => ctx.game.canTakeAction(ctx.player),
 })
 ```
 

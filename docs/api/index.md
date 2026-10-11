@@ -190,12 +190,12 @@ import { sequence, eachPlayer, actionStep, loop, execute } from 'boardsmith';
 
 const gameFlow = sequence(
   // Setup phase
-  execute(() => game.deal()),
+  execute((ctx) => ctx.game.deal()),
 
   // Main game loop
   loop({
     // Continue until game ends
-    while: () => !game.isFinished(),
+    while: (ctx) => !ctx.game.isFinished(),
     maxIterations: 100,
     do: eachPlayer({
       do: actionStep({ actions: ['play'] }),
