@@ -293,10 +293,15 @@ lookups), so compare fixed numbers only with fixed numbers.
 same machine, close together, and put both tables in the ticket. The fixed
 search's steps and chosen move must not change unless the ticket means to change
 the search; its ms, steps per second and part shares are the gain. Check the
-load average the report prints: with the machine busy, the preset step counts
-drop with it. Two runs on the same machine give preset step counts within 10%
-of each other when the load is steady. When a change lands, write a new
-baseline with `--out docs/bot-speed-baseline.md` and commit it with the change.
+load average the report prints: every timed number moves with the machine's
+load. Two back-to-back runs on a shared machine whose load swung between 4 and
+20 (the committed baseline's run and the one after it) gave identical fixed
+searches, preset step counts within 10% for chess, hex 19x19 and the games that
+finish their budget, and up to 21% apart for checkers and hex 11x11, whose fixed
+search times also differed by up to 4 times at single positions. So run both
+sides more than once when the machine is busy, and trust a gain only when it is
+larger than the spread between runs. When a change lands, write a new baseline
+with `--out docs/bot-speed-baseline.md` and commit it with the change.
 
 ## Limitations
 
