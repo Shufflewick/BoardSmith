@@ -13,6 +13,8 @@ export const SEARCH_PARTS = {
   restoreGame: 'rebuild',
   captureSnapshot: 'rebuild',
   cloneSearchGame: 'rebuild',
+  resumeSearchGame: 'rebuild',
+  saveCopyOf: 'rebuild',
   movesFor: 'legalMoves',
   makeSearchMove: 'apply',
   applyMoveToSearchGame: 'reapply',

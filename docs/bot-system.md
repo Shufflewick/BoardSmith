@@ -249,6 +249,8 @@ interface BotConfig {
 
 5. **Game complexity**: Simple games (Hex, Checkers) work well. Complex games (Cribbage with many scoring possibilities) may need custom objectives.
 
+6. **Saved copies**: Every search step restores the search game whole and then makes the moves down the tree path again, which is most of a step's time where moves are costly (checkers, chess). So the search keeps a saved copy of the game at the tree nodes it walks through, as the JSON of a snapshot, and a step restores from the deepest saved copy on its path instead of from the root (#633). The copies change only the speed: a seeded search chooses the same move with them as without. They are kept within 32 MiB per search, a quarter of a 128 MB Workers isolate; past that, steps make the moves again from the deepest copy they have, and every copy is dropped when the search ends. There are none, and every step starts from the root as before, for a game with a `determinize` sampler (each step searches its own sampled world), below a move that drew from the game's random source (the position depends on the draw), or inside a step every seat takes at once.
+
 ## Measuring bot speed
 
 `scripts/bench-bot/run.mjs` measures how fast the bot searches, and where its
@@ -279,7 +281,8 @@ ply where the seat to move has a choice), and at each one runs:
   same on every run and on every machine, and it must choose the same move each
   time. It runs twice. The first run gives its ms and steps per second. The
   second is profiled, and gives how its time splits into parts: rebuilding the
-  search game from the root snapshot, listing legal moves, applying moves,
+  search game from the root snapshot or a saved copy (and saving the copies),
+  listing legal moves, applying moves,
   re-applying moves down the tree path, scoring (objectives and end-of-game
   results) and the determinize hook, with the rest as "other". "lookup" is the
   share spent in element tree walks (`ElementCollection._finder`), which happen
