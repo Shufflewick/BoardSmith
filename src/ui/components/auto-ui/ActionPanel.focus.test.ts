@@ -317,3 +317,50 @@ describe('a document that does not have focus (#649)', () => {
     remove.mockRestore();
   });
 });
+
+// A step whose choices come from the server is drawn before they arrive (#653).
+// Go Fish's ask showed it: at the moment the step changed, the selection held no
+// control yet, so the repair fell through to the panel's first control, the
+// cancel button -- and focus parked there was no longer stranded, so it stayed
+// when the choices landed a moment later. Enter would have abandoned the action.
+describe('a step whose choices are still loading (#653)', () => {
+  it('lands on the first choice once they arrive, not on cancel', async () => {
+    let answer!: () => void;
+    const fetchPickChoices = vi.fn(() => new Promise<{ success: true; choices: { value: string; display: string }[] }>((resolve) => {
+      answer = () => resolve({ success: true, choices: [
+        { value: 'wolf', display: 'Wolf' },
+        { value: 'hare', display: 'Hare' },
+      ] });
+    }));
+    const fetched: EnrichedActionMetadata = {
+      name: 'enterWorld',
+      prompt: 'Enter the world',
+      selections: [{ name: 'species', type: 'choice', prompt: 'Pick a species' }],
+    };
+    const controller = useActionController({
+      sendAction: vi.fn().mockResolvedValue({ success: true }),
+      availableActions: ref(['enterWorld']),
+      actionMetadata: ref({ enterWorld: fetched }),
+      isMyTurn: ref(true),
+      autoFill: false,
+      autoExecute: false,
+      fetchPickChoices,
+    });
+    const wrapper = mount(ActionPanel, {
+      attachTo: document.body,
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
+      props: { availableActions: ['enterWorld'], isMyTurn: true },
+    });
+    await nextTick();
+
+    void controller.start('enterWorld');
+    await nextTick();
+    await nextTick();
+    expect(fetchPickChoices).toHaveBeenCalled();
+    expect(focusDescription()).not.toContain('✕');
+
+    answer();
+    await vi.waitFor(() => expect(focusDescription()).toContain('Wolf'));
+    wrapper.unmount();
+  });
+});
