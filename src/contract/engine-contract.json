@@ -1,7 +1,7 @@
 {
-  "revision": 169,
+  "revision": 170,
   "bundleProtocol": 2,
-  "surfaceHash": "a8e02fb25f517721",
+  "surfaceHash": "e41fa2badef24819",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1465,6 +1465,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A seat's args in a world are its picks, refused as the caller's on every road (#665): a seat's command (applyCommand) and its declaration walk (commandNeeds with a player), a quote (quotePartitions, resolveQuote) and a re-asked pick (pickPartitions, resolvePick) refuse a key no pick declares with the new caller-owned refusal undeclared-arg, carrying ActionExecutor.undeclaredArgsRefusal's sentence, before any of the action's declarations or callbacks run. A seat's command with such a key was previously refused only by the executor and travelled as a plain Error, which the platform treats as game-owned and shows as an error in the game's rules. A scheduled event (commandNeeds with a null player, onEvent) is not checked: the clock's verbs ask no picks and their args are the bundle's own. ActionExecutor.undeclaredArgsRefusal takes Readonly args."
+    },
+    {
+      "revision": 170,
+      "date": "2026-10-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "e41fa2badef24819",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Element queries cost less per call (#654): ElementCollection._finder is now a static method taking the roots to walk, so GameElement queries no longer copy their children, and ElementCollection's private finderToPredicate and isElementClass methods are gone. Every query answers with the same elements in the same order, asks function finders about the same elements in the same order, and throws the same tree-corruption error in development mode; a first() on an empty or one-piece square costs about 15 ns instead of about 490 ns."
     }
   ]
 }

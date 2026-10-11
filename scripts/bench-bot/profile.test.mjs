@@ -125,6 +125,6 @@ describe('the methods the benchmark wraps', () => {
     for (const name of [...Object.keys(SEARCH_PARTS), STEP_METHOD]) {
       expect(MCTSBot.prototype[name], `MCTSBot.${name}`).toBeTypeOf('function');
     }
-    expect(ElementCollection.prototype[LOOKUP_METHOD]).toBeTypeOf('function');
+    expect(ElementCollection[LOOKUP_METHOD]).toBeTypeOf('function');
   });
 });
