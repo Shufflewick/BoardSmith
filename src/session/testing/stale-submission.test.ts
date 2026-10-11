@@ -223,7 +223,6 @@ describe('BSMITH-05: a submission composed against a closed boundary', () => {
     }));
     expect(explore.success).toBe(true);
     const openKey = keyOf(explore);
-    const followUpArgs = (explore.followUp as { args: Record<string, unknown> }).args;
 
     const choices = succeeded(await run(def, explore.snapshot, {
       type: 'resolveChoices', actionName: 'collect', player: 1, selectionName: 'item', args: {},
@@ -240,7 +239,7 @@ describe('BSMITH-05: a submission composed against a closed boundary', () => {
 
     const stale = refused(await run(def, caretaker.snapshot, {
       type: 'selectionStep', player: 1, selectionName: 'item', value: itemId,
-      actionName: 'collect', initialArgs: followUpArgs, boundaryKey: openKey,
+      actionName: 'collect', boundaryKey: openKey,
     }));
 
     expect(stale.success).toBe(false);

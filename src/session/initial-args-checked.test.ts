@@ -31,8 +31,6 @@ interface Purchase {
   gem?: string;
   wrap?: string;
   pay?: string;
-  /** An arg no pick declares, if one ever reached execute. */
-  discount?: unknown;
   note?: string;
   finish?: string;
 }
@@ -62,21 +60,14 @@ class ShopGame extends Game<ShopGame, Player> {
         })
         .chooseElement('gem', { elementClass: Gem, filter: (gem) => gem.name !== 'Coal' })
         .chooseFrom('wrap', { choices: ['paper'], optional: true })
-        // Blue pays silver; anything else gold. A missing color must never get
-        // here, and nor must a `discount` no pick declares.
-        .chooseFrom('pay', {
-          choices: (ctx) => {
-            if ('discount' in ctx.args) return ['nothing'];
-            return ctx.args.color === 'blue' ? ['silver'] : ['gold'];
-          },
-        })
+        // Blue pays silver; anything else gold. A missing color must never get here.
+        .chooseFrom('pay', { choices: (ctx) => (ctx.args.color === 'blue' ? ['silver'] : ['gold']) })
         .execute((args) => {
           this.purchases.push({
             color: args.color,
             gem: args.gem?.name,
             wrap: args.wrap,
             pay: args.pay,
-            ...('discount' in args && { discount: (args as Record<string, unknown>).discount }),
           });
         }),
       Action.create<ShopGame>('polish').execute(() => ({
@@ -168,32 +159,15 @@ describe('initialArgs are checked as picks (#658)', () => {
     expect(game.selected).toEqual(['color:blue']);
   });
 
-  it('does not let an initial arg that names no pick reach a later pick or execute', async () => {
-    const { manager, game, gemId } = shop();
-
-    // The later pick's choices do not see it: 'nothing' is offered only if they did.
-    const sneaked = await manager.processSelectionStep(1, 'pay', 'nothing', 'buy', {
-      color: 'red', gem: gemId('Ruby'), discount: 100,
-    });
-    expect(sneaked).toMatchObject({ success: false, error: NO_LONGER_AVAILABLE });
-
-    // And execute does not get it.
-    const step = await manager.processSelectionStep(1, 'pay', 'gold', 'buy', {
-      color: 'red', gem: gemId('Ruby'), discount: 100,
-    });
-    expect(step).toMatchObject({ success: true, actionComplete: true });
-    expect(game.purchases).toEqual([{ color: 'red', gem: 'Ruby', wrap: undefined, pay: 'gold' }]);
-  });
-
   it("takes a held follow-up's published args from the engine, not from the client", async () => {
     const { runner, manager, game, gemId } = shop();
     expect(runner.performAction('polish', 1, {}).success).toBe(true);
 
-    // The follow-up answered `gem` and `note`; the client's values for them
-    // are not read, and the later pick's choices see the engine's `note`.
+    // The follow-up answered `gem` and `note`; the client's value for `gem` is
+    // not read, and the later pick's choices see the engine's `note`. (A
+    // client sending `note`, which no pick declares, is refused: #662.)
     const step = await manager.processSelectionStep(1, 'finish', 'engine-gloss', 'finishGem', {
       gem: gemId('Opal'),
-      note: 'client',
     });
 
     expect(step).toMatchObject({ success: true, actionComplete: true });

@@ -407,13 +407,12 @@ describe('an action-level validate sees a pre-filled null pick as absent (#648)'
     const game = new SkipValidateGame({ playerCount: 2, repeating });
     const action = game.getAction('chained')!;
     const player = game.getPlayer(1)!;
-    const moves = enumerateActionMoves(game, action, player, {
-      followUp: { action: 'chained', args: { a: null } },
-    });
+    const followUp = { action: 'chained', args: { a: null } };
+    const moves = enumerateActionMoves(game, action, player, { followUp });
     expect(moves).toHaveLength(2);
     for (const move of moves) {
       expect(move.a).toBe(null);
-      expect(game.getActionExecutor().executeAction(action, player, move, { asFollowUp: true }).success).toBe(true);
+      expect(game.getActionExecutor().executeAction(action, player, move, { followUp }).success).toBe(true);
     }
   });
 });
@@ -465,11 +464,10 @@ describe("a later pick's callbacks see a pre-filled null pick as absent (#659)",
     const game = new SkipCallbackGame({ playerCount: 2, shape, repeating });
     const action = game.getAction('chained')!;
     const player = game.getPlayer(1)!;
-    const moves = enumerateActionMoves(game, action, player, {
-      followUp: { action: 'chained', args: { a: null } },
-    });
+    const followUp = { action: 'chained', args: { a: null } };
+    const moves = enumerateActionMoves(game, action, player, { followUp });
     const accepts = (b: unknown) =>
-      game.getActionExecutor().executeAction(action, player, { a: null, b: repeating ? [b] : b }, { asFollowUp: true })
+      game.getActionExecutor().executeAction(action, player, { a: null, b: repeating ? [b] : b }, { followUp })
         .success;
 
     for (const move of moves) expect(move.a).toBe(null);

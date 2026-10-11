@@ -657,8 +657,10 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
     let argsToSerialize = args;
     if (actionDef) {
+      // Only the picks: a follow-up's other args are bound again by the engine
+      // when the entry is replayed (#662).
       const executor = new ActionExecutor(this.game);
-      argsToSerialize = executor.resolveArgs(actionDef, args, player);
+      argsToSerialize = executor.resolveArgs(actionDef, executor.picksOf(actionDef, args), player);
     }
 
     return serializeAction(
@@ -717,6 +719,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
     const executor = this.game.getActionExecutor();
     const pendingState = executor.createPendingActionState(actionName, playerPosition);
+    // A held follow-up's published args are the engine's, bound before any
+    // client pick, so every pick's callbacks see them.
+    this.bindFollowUpArgs(pendingState, playerPosition);
     this.pendingActions.set(playerPosition, pendingState);
     return pendingState;
   }
@@ -880,15 +885,23 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   }
 
   /**
+   * The args `seat`'s held follow-up was published with, when it holds one
+   * naming `actionName`; otherwise none. They are the engine's: a client never
+   * sends them (#662).
+   */
+  followUpArgsFor(actionName: string, seat: number): Record<string, unknown> {
+    const followUp = followUpForSeat(this.getFlowState(), seat);
+    return followUp?.action === actionName ? followUp.args ?? {} : {};
+  }
+
+  /**
    * When `pendingState` is `seat`'s held follow-up, bind the args the follow-up
-   * was published with: a follow-up runs with those, whatever the client sent
-   * for them. Every pending-action path calls this just before it executes.
+   * was published with before any client pick: a follow-up runs with those,
+   * and a pick they answer is passed over, whatever the client sends for it.
+   * Every pending action is started through this.
    */
   bindFollowUpArgs(pendingState: PendingActionState, seat: number): void {
-    const followUp = followUpForSeat(this.getFlowState(), seat);
-    if (followUp?.action === pendingState.actionName && followUp.args) {
-      Object.assign(pendingState.collectedArgs, followUp.args);
-    }
+    Object.assign(pendingState.collectedArgs, this.followUpArgsFor(pendingState.actionName, seat));
   }
 
   /**
@@ -978,7 +991,6 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     pendingState: PendingActionState,
     playerPosition: number
   ): PendingStepResult & { actionComplete: true } {
-    this.bindFollowUpArgs(pendingState, playerPosition);
     const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs);
     const actionResult = executor.executePendingAction(action, player, pendingState);
     this.pendingActions.delete(playerPosition);
