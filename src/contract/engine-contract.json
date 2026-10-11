@@ -1,5 +1,5 @@
 {
-  "revision": 158,
+  "revision": 159,
   "bundleProtocol": 2,
   "surfaceHash": "3cd66e7b422f0cbf",
   "payloadHash": "3f10d70c457a15ba",
@@ -1366,6 +1366,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "ctx.args in action builder callbacks is typed from the declared picks, so an undeclared key is a compile error, and the new Action#followUpArgs<...>() declares the args a follow-up starts with (#626)."
+    },
+    {
+      "revision": 159,
+      "date": "2026-10-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "3cd66e7b422f0cbf",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "An undo that brings back a removed Space keeps its onEnter/onExit handlers (#656): Game.loadSerializedState now reads and re-attaches handlers on Spaces in the pile as well as the tree, so an in-place restore no longer drops them silently and agrees with a fresh restore. No surface, payload or format change."
     }
   ]
 }

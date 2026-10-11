@@ -5237,10 +5237,15 @@ export class Game<
     // (Handlers are constructor-registered closures; only constructor-created
     // Spaces ever have handlers to capture, and those are exactly the Spaces
     // whose ids round-trip.)
+    //
+    // Spaces are read from the pile as well as the tree (#656): a removed
+    // Space keeps its handlers, and the state being restored may hold it in the
+    // tree again, as an undo of its removal does.
     const spaceHandlerKey = (space: Space): string => String(space.id);
+    const allSpaces = (): Space[] => [...this.all(Space), ...this.pile.all(Space)];
     type CapturedHandlers = { enter: ElementEventHandler<GameElement>[]; exit: ElementEventHandler<GameElement>[] };
     const capturedHandlers = new Map<string, CapturedHandlers>();
-    for (const space of this.all(Space)) {
+    for (const space of allSpaces()) {
       const handlers = space._captureEventHandlers();
       if (handlers.enter.length > 0 || handlers.exit.length > 0) {
         capturedHandlers.set(spaceHandlerKey(space), handlers);
@@ -5263,7 +5268,7 @@ export class Game<
     // via devWarn — never silently, since a dropped handler is silent
     // game-logic loss (e.g. a scoring trigger that stops firing).
     if (capturedHandlers.size > 0) {
-      for (const space of this.all(Space)) {
+      for (const space of allSpaces()) {
         const key = spaceHandlerKey(space);
         const handlers = capturedHandlers.get(key);
         if (handlers) {
