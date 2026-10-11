@@ -1,6 +1,8 @@
 {
   "entry": [
     "scripts/*-browser.mjs",
+    "scripts/bench-bot/run.mjs",
+    "scripts/bench-bot/probe.mjs",
     "src/**/*.node.ts",
     "src/cli/lib/test-progress-reporter.ts"
   ],

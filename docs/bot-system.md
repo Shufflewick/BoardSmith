@@ -249,6 +249,66 @@ interface BotConfig {
 
 5. **Game complexity**: Simple games (Hex, Checkers) work well. Complex games (Cribbage with many scoring possibilities) may need custom objectives.
 
+## Measuring bot speed
+
+`scripts/bench-bot/run.mjs` measures how fast the bot searches, and where its
+time goes, against the BoardSmith in the checkout it is run from (#630):
+
+```bash
+node scripts/bench-bot/run.mjs                   # the catalogue table games, from ~/BoardSmithGames
+node scripts/bench-bot/run.mjs chess hex-19      # some of them
+node scripts/bench-bot/run.mjs ~/path/to/a-game  # any game project, at its smallest table
+node scripts/bench-bot/run.mjs --out docs/bot-speed-baseline.md
+```
+
+The catalogue is checkers, chess, cribbage, go-fish (4 players), hex at 11 and
+19, and seven (7 players), plus MERC (at its smallest table) when it is checked
+out at `~/Dropbox/MERC/BoardSmith/MERC`. When it is not, a run prints that it
+skipped MERC and the report says so. The games are only read, and every game's
+`boardsmith` imports are bundled from this checkout, MERC's included, whatever
+copy of BoardSmith the game itself uses.
+
+For each game it plays one seeded game of random moves, picks an early, a
+middle and a late position (a tenth, half and nine tenths of the way in, at a
+ply where the seat to move has a choice), and at each one runs:
+
+- **each difficulty preset**, with its timeout, as a game plays it: the search
+  steps it finished, the ms it took and the steps per second. Under a timeout
+  the step count is the speed measurement, and it moves with the machine's load.
+- **a fixed 300-step search** with a seed and no timeout, so its work is the
+  same on every run and on every machine, and it must choose the same move each
+  time. It runs twice. The first run gives its ms and steps per second. The
+  second is profiled, and gives how its time splits into parts: rebuilding the
+  search game from the root snapshot, listing legal moves, applying moves,
+  re-applying moves down the tree path, scoring (objectives and end-of-game
+  results) and the determinize hook, with the rest as "other". "lookup" is the
+  share spent in element tree walks (`ElementCollection._finder`), which happen
+  inside the other parts. The bench stops with an error if the two runs differ
+  in steps or chosen move.
+
+It always measures in production mode, where `isDevMode()` is false, as in a
+worker child, whatever `NODE_ENV` the shell has. Development mode makes the bot
+up to 1.7 times slower (#628), and the report refuses to print numbers taken in
+it. The split is taken by wrapping the bot's methods for the length of the
+profiled run only, so the bot has no timers in it otherwise. The wrappers cost
+time of their own, most of it timing lookups, which is why the headline ms and
+steps per second come from the run without them: a change that cuts lookups
+would otherwise also cut the wrappers' cost and look faster than it is.
+
+**For a bot speed ticket:** run the bench on `main` and on your branch, on the
+same machine, close together, and put both tables in the ticket. The fixed
+search's steps and chosen move must not change unless the ticket means to change
+the search; its ms, steps per second and part shares are the gain. Check the
+load average the report prints: every timed number moves with the machine's
+load. Two back-to-back runs on a shared machine (the committed baseline's run,
+at a load of 5 to 7, and the one before it, which started as the load fell from
+about 130) gave identical fixed searches, and preset step counts within 10% for
+hex at both sizes and for the games that finish their budget, but 16% to 62%
+apart for chess and checkers, whose fixed search times also differed by up to 3
+times at single positions. So run both sides more than once when the machine
+is busy, and trust a gain only when it is larger than the spread between runs. When a change lands, write a new baseline
+with `--out docs/bot-speed-baseline.md` and commit it with the change.
+
 ## Limitations
 
 - **No learning**: The bot doesn't learn from past games. Each game starts fresh.
