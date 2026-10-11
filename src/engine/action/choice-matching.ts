@@ -157,6 +157,25 @@ export function findMatchingChoice<C extends MatchableChoice>(
 }
 
 /**
+ * The refusal for a list sent to a chooseFrom that takes ONE choice (#660), or
+ * undefined when `value` is not such a list. The one choice may itself be an
+ * array, so an array that names a choice whole is that choice; and when the
+ * choices are arrays, one with an item not on offer is a stale choice, refused
+ * as any other is. The engine and the action controller both call this (#661),
+ * only for a pick that is neither a multiSelect nor an ordered list.
+ */
+export function oneChoiceListRefusal(
+  name: string,
+  value: unknown,
+  choices: readonly MatchableChoice[],
+): string | undefined {
+  if (!Array.isArray(value) || findMatchingChoice(value, choices) !== undefined) return undefined;
+  if (choices.some((c) => Array.isArray(c.value))
+    && !value.every((item) => findMatchingChoice(item, choices) !== undefined)) return undefined;
+  return `Selection "${name}" takes one choice, got a list of ${value.length}. Submit one of its choices.`;
+}
+
+/**
  * The label a value reads as when nothing else names it: its own `name` or
  * `label`, else the value itself. The server labels a choice with it and the
  * client labels a pick it holds without a choice (a follow-up's or a prefill's

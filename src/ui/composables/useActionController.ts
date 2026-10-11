@@ -92,7 +92,7 @@
 import { ref, readonly, computed, watch, nextTick, getCurrentScope, onScopeDispose } from 'vue';
 import { isDevMode, devWarn, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
-import { findMatchingChoice } from '../../engine/action/choice-matching.js';
+import { findMatchingChoice, oneChoiceListRefusal } from '../../engine/action/choice-matching.js';
 
 // Re-export all types from the types module for consumers
 export type {
@@ -713,8 +713,15 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // engine's own matcher, imported rather than reimplemented.
     const choices = getChoices(selection);
     if (choices.length > 0) {
-      // Handle arrays (multiSelect) - check each element is valid and not disabled
-      if (Array.isArray(value)) {
+      // An element pick, multiSelect or ordered list is checked item by item. A chooseFrom that
+      // takes one choice follows the engine's rule (#661): its choice may itself
+      // be an array, and a list of its choices is refused.
+      const takesItems = selection.type !== 'choice'
+        || resolveMultiSelectConfig(selection) !== undefined
+        || resolveOrderedListConfig(selection) !== undefined;
+      const listRefusal = takesItems ? undefined : oneChoiceListRefusal(selection.name, value, choices);
+      if (listRefusal) return { valid: false, error: listRefusal };
+      if (Array.isArray(value) && takesItems) {
         for (const v of value) {
           const matched = findMatchingChoice(v, choices);
           if (matched && matched.disabled) {
