@@ -211,20 +211,23 @@ function randomQuery(rng: Rng): Query {
 
 type Target = GameElement | ElementCollection<GameElement>;
 
-/** The query through the live code. */
+/** The query through the live code, by method. */
+const LIVE: Record<Method, (target: Target, n: number, args: QueryArgs) => unknown> = {
+  all: (target, _n, args) => target.all(...args),
+  first: (target, _n, args) => target.first(...args),
+  firstN: (target, n, args) => target.firstN(n, ...args),
+  last: (target, _n, args) => target.last(...args),
+  lastN: (target, n, args) => target.lastN(n, ...args),
+  has: (target, _n, args) => target.has(...args),
+  // ElementCollection has no count; Array#length of all() is what a game writes.
+  count: (target, _n, args) => (target instanceof GameElement ? target.count(...args) : target.all(...args).length),
+};
+
+type QueryArgs = [ElementClass<GameElement>, ...ElementFinder<GameElement>[]];
+
 function ask(target: Target, query: Query, finders: ElementFinder<GameElement>[]): unknown {
-  const args = (query.className ? [query.className, ...finders] : finders) as [ElementClass<GameElement>, ...ElementFinder<GameElement>[]];
-  switch (query.method) {
-    case 'firstN': return target.firstN(query.n, ...args);
-    case 'lastN': return target.lastN(query.n, ...args);
-    case 'count':
-      // ElementCollection has no count; Array#length of all() is what a game writes.
-      return target instanceof GameElement ? target.count(...args) : target.all(...args).length;
-    case 'all': return target.all(...args);
-    case 'first': return target.first(...args);
-    case 'last': return target.last(...args);
-    case 'has': return target.has(...args);
-  }
+  const args = (query.className ? [query.className, ...finders] : finders) as QueryArgs;
+  return LIVE[query.method](target, query.n, args);
 }
 
 /** The same query through the oracle, shaped as the public methods shaped it. */

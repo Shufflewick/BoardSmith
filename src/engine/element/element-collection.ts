@@ -311,22 +311,10 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
       duplicates: [],
     };
     walk(roots, query, 0, undefined);
-
     // A duplicate visit is a proven invariant violation, not a diagnostic:
     // this result set feeds snapshots and player views, so returning it ships
     // the corruption onward and poisons every later restore (#45).
-    const duplicates = query.duplicates;
-    if (duplicates.length > 0) {
-      // Only name the first few, so the message stays readable.
-      const shown = duplicates.slice(0, 5);
-      const more = duplicates.length > 5 ? ` (and ${duplicates.length - 5} more)` : '';
-      throw new Error(
-        `TREE CORRUPTION: ${duplicates.length} duplicate element visit(s) during traversal.\n` +
-        shown.map(d => `  - ${d.name} (id: ${d.id}) reachable under BOTH "${containerLabel(d.firstUnder)}" and "${containerLabel(d.under)}" (depth ${d.depth})`).join('\n') + more + '\n' +
-        `  An element is parented in two places, or two elements share an id.\n` +
-        `  The two container labels above are where to look.`
-      );
-    }
+    if (query.duplicates.length > 0) throw treeCorruption(query.duplicates);
 
     // A walk from the end met the matches last-first.
     if (fromEnd) result.reverse();
@@ -361,40 +349,65 @@ type Query = {
 
 /** Visit `elements` (children of `under`, or the roots) and their subtrees, collecting matches. */
 function walk(elements: readonly GameElement[], query: Query, depth: number, under: GameElement | undefined): void {
-  const { className, predicates, limit, fromEnd, result, firstSeenUnder } = query;
+  const { limit, fromEnd, result, firstSeenUnder } = query;
   const count = elements.length;
   for (let i = 0; i < count; i++) {
     if (result.length >= limit) return;
     const el = elements[fromEnd ? count - 1 - i : i];
-
     // DEV: an element visited twice is tree corruption; skip it so a cycle cannot loop.
-    if (firstSeenUnder) {
-      if (firstSeenUnder.has(el.id)) {
-        query.duplicates.push({
-          id: el.id,
-          name: el.name ?? el.constructor.name,
-          depth,
-          firstUnder: firstSeenUnder.get(el.id),
-          under,
-        });
-        continue;
-      }
-      firstSeenUnder.set(el.id, under);
-    }
-
-    // The class first, and the predicates only for an element of it (#283).
-    // A predicate is typed for the class it was written against, and on a
-    // world's offer road every call wraps the element it is handed in a
-    // read-only projection -- so asking it about the whole tree cost a
-    // projection per element walked to find one character.
-    if (!className || el instanceof className) {
-      let matches = true;
-      for (let p = 0; p < predicates.length && matches; p++) matches = predicates[p](el);
-      if (matches) result.push(el);
-    }
-
+    if (firstSeenUnder && isRepeatVisit(query, firstSeenUnder, el, depth, under)) continue;
+    if (matches(query, el)) result.push(el);
     if (el._t.children.length > 0) walk(el._t.children, query, depth + 1, el);
   }
+}
+
+/**
+ * The class first, and the predicates only for an element of it (#283).
+ * A predicate is typed for the class it was written against, and on a
+ * world's offer road every call wraps the element it is handed in a
+ * read-only projection -- so asking it about the whole tree cost a
+ * projection per element walked to find one character.
+ */
+function matches({ className, predicates }: Query, el: GameElement): boolean {
+  if (className && !(el instanceof className)) return false;
+  for (let p = 0; p < predicates.length; p++) {
+    if (!predicates[p](el)) return false;
+  }
+  return true;
+}
+
+/** Whether `el` was visited before in this query, recording the duplicate if so and the visit if not. */
+function isRepeatVisit(
+  query: Query,
+  firstSeenUnder: Map<number, GameElement | undefined>,
+  el: GameElement,
+  depth: number,
+  under: GameElement | undefined,
+): boolean {
+  if (!firstSeenUnder.has(el.id)) {
+    firstSeenUnder.set(el.id, under);
+    return false;
+  }
+  query.duplicates.push({
+    id: el.id,
+    name: el.name ?? el.constructor.name,
+    depth,
+    firstUnder: firstSeenUnder.get(el.id),
+    under,
+  });
+  return true;
+}
+
+/** The error for a walk that visited elements twice, naming the first few and both places each was reached from. */
+function treeCorruption(duplicates: Query['duplicates']): Error {
+  const shown = duplicates.slice(0, 5);
+  const more = duplicates.length > 5 ? ` (and ${duplicates.length - 5} more)` : '';
+  return new Error(
+    `TREE CORRUPTION: ${duplicates.length} duplicate element visit(s) during traversal.\n` +
+    shown.map(d => `  - ${d.name} (id: ${d.id}) reachable under BOTH "${containerLabel(d.firstUnder)}" and "${containerLabel(d.under)}" (depth ${d.depth})`).join('\n') + more + '\n' +
+    `  An element is parented in two places, or two elements share an id.\n` +
+    `  The two container labels above are where to look.`
+  );
 }
 
 /** How a corruption report names the container an element was reached under. */
