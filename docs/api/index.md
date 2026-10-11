@@ -186,20 +186,21 @@ class MyGame extends Game<MyGame, MyPlayer> {
 ### Using Flow Control
 
 ```typescript
-import { sequence, eachPlayer, actionStep, loop } from 'boardsmith';
+import { sequence, eachPlayer, actionStep, loop, execute } from 'boardsmith';
 
 const gameFlow = sequence(
   // Setup phase
   execute(() => game.deal()),
 
   // Main game loop
-  loop(
-    eachPlayer({
-      do: actionStep({ name: 'play' }),
-    }),
+  loop({
     // Continue until game ends
-    () => !game.isOver(),
-  ),
+    while: () => !game.isFinished(),
+    maxIterations: 100,
+    do: eachPlayer({
+      do: actionStep({ actions: ['play'] }),
+    }),
+  }),
 );
 ```
 

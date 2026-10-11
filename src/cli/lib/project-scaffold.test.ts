@@ -24,6 +24,7 @@ import {
   generateElementsTs,
   generateActionsTs,
   generateFlowTs,
+  generateTestTs,
 } from '../commands/init.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
@@ -236,6 +237,35 @@ describe('generateRulesIndexTs', () => {
       .filter((d) => d.file && d.file.fileName.startsWith(dir))
       .map((d) => `${d.file!.fileName.replace(dir, '')} TS${d.code}: ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
     expect(diagnostics).toEqual([]);
+  });
+
+  it('types each action by the game, so no generated rule casts what it is handed (#620)', () => {
+    // A cast compiles whatever the builder really hands over, and an author copies the scaffold's
+    // patterns, so it teaches the habit that hides a wrong type. `as const` narrows a literal and
+    // is the one assertion allowed. Read from the syntax tree, so comments and strings are not code.
+    const casts = (code: string): string[] => {
+      const found: string[] = [];
+      const visit = (node: ts.Node): void => {
+        if (
+          (ts.isAsExpression(node) || ts.isTypeAssertionExpression(node)) &&
+          node.type.getText() !== 'const'
+        ) {
+          found.push(node.getText());
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(ts.createSourceFile('scaffold.ts', code, ts.ScriptTarget.ES2022, true));
+      return found;
+    };
+
+    const actions = generateActionsTs('MyGame');
+    expect(actions.match(/Action\.create(<\w+>)?\(/g)).toEqual([
+      'Action.create<MyGameGame>(',
+      'Action.create<MyGameGame>(',
+    ]);
+    for (const code of [generateGameTs('MyGame'), actions, generateFlowTs('MyGame'), generateTestTs('MyGame')]) {
+      expect(casts(code)).toEqual([]);
+    }
   });
 });
 
