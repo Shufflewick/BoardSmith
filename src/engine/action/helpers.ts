@@ -1,6 +1,7 @@
 import type { Game } from '../element/game.js';
 import type { Player } from '../player/player.js';
 import type { ActionContext } from './types.js';
+import { stateChanged } from '../element/state-version.js';
 
 /**
  * Wrap a filter function to provide helpful error messages when it crashes
@@ -88,7 +89,13 @@ export interface ActionTempState {
  *
  * **CRITICAL**: Module-level variables (Maps, arrays, etc.) do NOT persist
  * between choices() and execute() because they run in different contexts.
- * Always use this helper or game.settings for temporary action state.
+ * Always use this helper for temporary action state.
+ *
+ * Writing through it (`set`, `clear`) marks the game changed, so a `choices`
+ * callback that writes temp state is run again on every question instead of
+ * having its answer reused (#631), and what `execute` reads is what the last
+ * run for the submitted picks wrote. A direct write to `game.settings` is not
+ * seen that way.
  *
  * @example
  * ```typescript
@@ -144,6 +151,7 @@ export function actionTempState(
   return {
     set(key: string, value: unknown): void {
       game.settings[`${prefix}_${key}`] = value;
+      stateChanged(game._ctx);
     },
 
     get<T>(key: string): T | undefined {
@@ -160,6 +168,7 @@ export function actionTempState(
       for (const k of keysToDelete) {
         delete game.settings[k];
       }
+      stateChanged(game._ctx);
     },
   };
 }

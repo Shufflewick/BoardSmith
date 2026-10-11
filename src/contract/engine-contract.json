@@ -1,5 +1,5 @@
 {
-  "revision": 170,
+  "revision": 171,
   "bundleProtocol": 2,
   "surfaceHash": "e41fa2badef24819",
   "payloadHash": "3f10d70c457a15ba",
@@ -1474,6 +1474,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "Element queries cost less per call (#654): ElementCollection._finder is now a static method taking the roots to walk, so GameElement queries no longer copy their children, and ElementCollection's private finderToPredicate and isElementClass methods are gone. Every query answers with the same elements in the same order, asks function finders about the same elements in the same order, and throws the same tree-corruption error in development mode; a first() on an empty or one-piece square costs about 15 ns instead of about 490 ns."
+    },
+    {
+      "revision": 171,
+      "date": "2026-10-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "e41fa2badef24819",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A pick's choices are worked out once per game state and reused by the flow's offer, move enumeration, validation and the UI's request until the state version moves (#631). The version moves on every tree change (create, move, remove, shuffle), every random draw, every restore, every write of the game's phase, every write through actionTempState, and after every call into game code that may change the game (execute, onSelect, onCancel, onEach, the flow's setup, execute steps and phase hooks, a space's onEnter and onExit, a bot's determinize sampler, a tutorial's setup). An attribute or settings write anywhere else, including in a candidate callback or a flow condition (a while, an eachPlayer filter, an actionStep player), is not versioned and is not seen until the next change that is. Development mode and world mode reuse nothing, and an answer that read the flow's state is never kept."
     }
   ]
 }
