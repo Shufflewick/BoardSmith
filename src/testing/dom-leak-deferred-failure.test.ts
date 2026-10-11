@@ -159,7 +159,9 @@ describe('a subject that holds nothing', () => {
     /** Answers a frame and an empty world -- the shape a subject takes when the
      *  thing it was meant to read never got built. */
     const empty = {
-      getPlayerView: () => ({ state: { id: 0, className: 'Nothing' } }),
+      getPlayerView: () => ({
+        state: { id: 0, className: 'Nothing', attributes: {}, phase: 'started' as const, isFinished: false, settings: {} },
+      }),
       unredactedElements: () => [],
     };
 

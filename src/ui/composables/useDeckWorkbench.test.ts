@@ -29,7 +29,7 @@ function stubBridge(over: Partial<DebugBridge> = {}): DebugBridge {
     customDebug: vi.fn(async () => null),
     history: vi.fn(async () => []),
     logs: vi.fn(async () => []),
-    stateAt: vi.fn(async () => null),
+    stateAt: vi.fn(),
     stateDiff: vi.fn(async () => null),
     rewind: vi.fn(async () => {}),
     moveCardToTop: vi.fn(async () => {}),

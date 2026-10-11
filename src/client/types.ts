@@ -12,7 +12,7 @@ import type { AnimationEvent, PublicFlowState, FollowUpOffer, TutorialStepView }
 // `PlayerGameState`, so borrowing the server's own payload types is what keeps
 // the two from silently drifting apart again — see the fields at the end of
 // PlayerState.
-import type { SerializedFlowDebugInfo, SerializedPendingActionState } from '../session/types.js';
+import type { PlayerGameState, SerializedFlowDebugInfo, SerializedPendingActionState } from '../session/types.js';
 
 /**
  * What a seat is sent of the flow: the engine's `PublicFlowState`, never its
@@ -38,7 +38,7 @@ export interface PlayerState {
   isMyTurn: boolean;
 
   /** Player's view of the game state (filtered for hidden information) */
-  view: unknown;
+  view: PlayerGameState['view'];
 
   /** Animation events pending playback. Only present when events exist. */
   animationEvents?: AnimationEvent[];

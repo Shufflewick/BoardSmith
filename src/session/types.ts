@@ -6,7 +6,7 @@
  * session surface — they are defined once, in one place.
  */
 
-import type { FlowState, Game, GameClass, AnimationEvent, PendingActionState } from '../engine/index.js';
+import type { FlowState, Game, GameClass, AnimationEvent, PendingActionState, PlayerStateView } from '../engine/index.js';
 import type { BotStrategy } from '../bot/index.js';
 import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
 import type { CheckpointPolicy, UndoPolicy } from '../engine/index.js';
@@ -319,7 +319,8 @@ export interface PlayerGameState {
   currentPlayer?: number;
   availableActions: string[];
   isMyTurn: boolean;
-  view: unknown;
+  /** This seat's game root, as `Game.toJSONForPlayer` writes it. */
+  view: PlayerStateView['state'];
   /** Action metadata for auto-UI generation (optional) */
   actionMetadata?: Record<string, ActionMetadata>;
   /**

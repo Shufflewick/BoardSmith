@@ -71,6 +71,7 @@ import { useDebugBridge, type ActionTrace, type FlowContext, type FlowStateInfo,
 import { useDebugTimeline } from '../composables/useDebugTimeline.js';
 import { useDeckWorkbench } from '../composables/useDeckWorkbench.js';
 import { useStateTree } from '../composables/useStateTree.js';
+import type { PlayerState } from '../../client/types.js';
 
 const props = withDefaults(defineProps<DebugPanelProps>(), {
   expanded: false,
@@ -92,7 +93,7 @@ const emit = defineEmits<{
   'switch-player': [position: number];
   'restart-game': [];
   'update:expanded': [value: boolean];
-  'time-travel': [state: any | null, actionIndex: number | null, diff: ElementDiff | null];
+  'time-travel': [state: PlayerState | null, actionIndex: number | null, diff: ElementDiff | null];
   'highlight-element': [elementId: number | null];
   'copy-history': [];
   'clear-history': [];
