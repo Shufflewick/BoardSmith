@@ -28,8 +28,10 @@ Pass your concrete game class to `Action.create<MyGame>(...)`. The builder then
   `class MyGame extends Game<MyGame, MyPlayer>` gives `ctx.player: MyPlayer` with
   nothing extra written and no `ctx.player as MyPlayer` cast.
 
+<!-- typecheck: game src/rules/actions.ts -->
 ```typescript
-import { Action, type ActionDefinition } from 'boardsmith';
+import { Action, Card, type ActionDefinition } from 'boardsmith';
+import type { MyGame } from './game.js';
 
 export function createMyAction(game: MyGame): ActionDefinition {
   return Action.create<MyGame>('actionName')
@@ -1644,12 +1646,20 @@ The Flow system defines game structure using composable nodes.
 Name your game once, on the return type, and every callback in the flow is typed
 to it: `ctx.game` is `MyGame` and `ctx.player` is `MyPlayer`, with no casts.
 
+<!-- typecheck: game src/rules/flow.ts -->
 ```typescript
-import { loop, eachPlayer, actionStep, sequence, type FlowDefinition } from 'boardsmith';
+import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+import type { MyGame } from './game.js';
 
 export function createGameFlow(game: MyGame): FlowDefinition<MyGame> {
   return {
-    root: /* flow node */,
+    root: loop({
+      name: 'game-loop',
+      maxIterations: 100,
+      do: eachPlayer({
+        do: actionStep({ actions: ['actionName'] }),
+      }),
+    }),
   };
 }
 ```
@@ -2334,16 +2344,27 @@ signal anywhere.
 
 Actions must be registered in your Game constructor:
 
+<!-- typecheck: game src/rules/game.ts -->
 ```typescript
-constructor(options) {
-  super(options);
-  // ... element setup ...
+import { Game, Player, type GameOptions } from 'boardsmith';
+import { createMyAction } from './actions.js';
+import { createGameFlow } from './flow.js';
 
-  this.registerAction(createMoveAction(this));
-  this.registerAction(createDrawAction(this));
-  this.registerAction(createPlayAction(this));
+export class MyPlayer extends Player<MyGame, MyPlayer> {
+  gold = 0;
+}
 
-  this.setFlow(createGameFlow(this));
+export class MyGame extends Game<MyGame, MyPlayer> {
+  static PlayerClass = MyPlayer;
+
+  constructor(options: GameOptions) {
+    super(options);
+    // ... element setup ...
+
+    this.registerAction(createMyAction(this));
+
+    this.setFlow(createGameFlow(this));
+  }
 }
 ```
 
