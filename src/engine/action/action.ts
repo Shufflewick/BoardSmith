@@ -1156,9 +1156,12 @@ export class ActionExecutor {
       // Handle missing or skipped selections
       // undefined = not provided (key absent from args)
       // null = explicitly skipped (from direct API/bot calls; UI strips skipped via buildServerArgs)
+      // A missing required pick stops validation: every later pick's validate
+      // is typed as seeing it present (#651).
       if (value === undefined || value === null) {
         if (!selection.optional) {
           allErrors.push(`Missing required selection: ${selection.name}`);
+          break;
         }
         continue;
       }

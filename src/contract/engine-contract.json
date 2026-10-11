@@ -1,5 +1,5 @@
 {
-  "revision": 159,
+  "revision": 161,
   "bundleProtocol": 2,
   "surfaceHash": "3cd66e7b422f0cbf",
   "payloadHash": "3f10d70c457a15ba",
@@ -1375,6 +1375,24 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "Every restore (undo, failed-action rollback, reload, bot search) empties game.pile, so a removed element brought back by the restore is never also in the pile under the same id (#650)"
+    },
+    {
+      "revision": 160,
+      "date": "2026-10-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "3cd66e7b422f0cbf",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A whole submission missing a required pick is refused with that pick's message alone; later picks' validate no longer runs without it (#651)"
+    },
+    {
+      "revision": 161,
+      "date": "2026-10-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "3cd66e7b422f0cbf",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "An undo that brings back a removed Space keeps its onEnter/onExit handlers (#656): Game.loadSerializedState now saves handlers from Spaces in the pile as well as the tree before the restore, and re-attaches them to the restored tree, so an in-place restore agrees with a fresh one; a restored state without the Space warns on both paths, and the warning says that is expected when the Space was removed when the state was saved. No surface, payload or format change."
     }
   ]
 }
