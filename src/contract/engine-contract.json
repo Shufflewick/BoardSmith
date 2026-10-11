@@ -1,5 +1,5 @@
 {
-  "revision": 161,
+  "revision": 162,
   "bundleProtocol": 2,
   "surfaceHash": "3cd66e7b422f0cbf",
   "payloadHash": "3f10d70c457a15ba",
@@ -1393,6 +1393,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "An undo that brings back a removed Space keeps its onEnter/onExit handlers (#656): Game.loadSerializedState now saves handlers from Spaces in the pile as well as the tree before the restore, and re-attaches them to the restored tree, so an in-place restore agrees with a fresh one; a restored state without the Space warns on both paths, and the warning says that is expected when the Space was removed when the state was saved. No surface, payload or format change."
+    },
+    {
+      "revision": 162,
+      "date": "2026-10-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "3cd66e7b422f0cbf",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A repeating chooseElement or chooseElements hands repeat.until and repeat.onEach its values so far as elements, as validate and execute get them, not element ids; those values are now typed as the pick (#657)"
     }
   ]
 }

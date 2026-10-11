@@ -1943,8 +1943,9 @@ export class ActionExecutor {
       }
     }
 
-    // Update context with new accumulated value
-    context.args[selection.name] = pendingState.repeating.accumulated;
+    // onEach and until see this pick's values so far as validate saw the ones
+    // before it (resolved, in a fresh array), now ending with this one.
+    (context.args[selection.name] as unknown[]).push(chosen);
 
     // Run onEach callback if present
     if (repeatConfig?.onEach) {
