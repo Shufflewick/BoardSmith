@@ -1,5 +1,5 @@
 {
-  "revision": 164,
+  "revision": 165,
   "bundleProtocol": 2,
   "surfaceHash": "3cd66e7b422f0cbf",
   "payloadHash": "3f10d70c457a15ba",
@@ -1420,6 +1420,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A repeating chooseElement or chooseElements hands repeat.until and repeat.onEach its values so far as elements, as validate and execute get them, not element ids; those values are now typed as the pick (#657)"
+    },
+    {
+      "revision": 165,
+      "date": "2026-10-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "3cd66e7b422f0cbf",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Bot move enumeration shows later picks' choices, disabled and multiSelect callbacks a follow-up's null-skipped pick as absent, as execution does, so it offers exactly the moves the engine accepts (#659)"
     }
   ]
 }
