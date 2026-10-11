@@ -11,25 +11,25 @@ const block = (marker: string, code = 'export {};\n') => `${marker}\n\`\`\`types
 
 describe('the doc typecheck markers (#511)', () => {
   it('reads a known kind and its path', () => {
-    expect(parseMarkedBlocks('a.md', block('<!-- typecheck: game src/a.ts -->'), 'game')).toEqual([
-      { doc: 'a', path: 'src/a.ts', code: 'export {};\n' },
+    expect(parseMarkedBlocks('docs/a.md', block('<!-- typecheck: game src/a.ts -->'), 'game')).toEqual([
+      { doc: 'docs/a', path: 'src/a.ts', code: 'export {};\n' },
     ]);
   });
 
   it('refuses a kind no gate compiles, naming the doc and the known kinds', () => {
-    expect(() => parseMarkedBlocks('a.md', block('<!-- typecheck: gmae src/a.ts -->'), 'game')).toThrow(
+    expect(() => parseMarkedBlocks('docs/a.md', block('<!-- typecheck: gmae src/a.ts -->'), 'game')).toThrow(
       /docs\/a\.md marks a block "gmae".*"game", "board"/,
     );
   });
 
   it('refuses a game block that is not a .ts file, pointing a board to its own marker', () => {
-    const blocks = parseMarkedBlocks('a.md', block('<!-- typecheck: game src/Board.vue -->'), 'game');
+    const blocks = parseMarkedBlocks('docs/a.md', block('<!-- typecheck: game src/Board.vue -->'), 'game');
     expect(() => gameBlockFiles(blocks)).toThrow(/docs\/a\.md.*src\/Board\.vue.*\.ts.*typecheck: board/);
   });
 
   it('refuses two game blocks with one path in one doc', () => {
     const text = block('<!-- typecheck: game src/a.ts -->') + block('<!-- typecheck: game src/a.ts -->');
-    expect(() => gameBlockFiles(parseMarkedBlocks('a.md', text, 'game'))).toThrow(
+    expect(() => gameBlockFiles(parseMarkedBlocks('docs/a.md', text, 'game'))).toThrow(
       /docs\/a\.md marks two blocks "src\/a\.ts"/,
     );
   });

@@ -4,11 +4,15 @@
 
 ## Element Setup (game.ts)
 
+<!-- typecheck: game src/rules/game.ts -->
 ```typescript
 import { Game, Die, type GameOptions } from 'boardsmith';
 import { DicePool, MyPlayer } from './elements.js';
 
 export class MyGame extends Game<MyGame, MyPlayer> {
+  // Tells the engine to construct each player as a MyPlayer
+  static PlayerClass = MyPlayer;
+
   dicePool!: DicePool;
 
   // HMR-SAFE: Use a getter to access dice, not a stored array
@@ -18,7 +22,7 @@ export class MyGame extends Game<MyGame, MyPlayer> {
     return this.dicePool?.all(Die) ?? [];
   }
 
-  constructor(options: MyGameOptions) {
+  constructor(options: GameOptions) {
     super(options);
 
     this.registerElements([DicePool, Die]);
@@ -32,6 +36,7 @@ export class MyGame extends Game<MyGame, MyPlayer> {
 
 ## Elements (elements.ts)
 
+<!-- typecheck: game src/rules/elements.ts -->
 ```typescript
 import { Space, Player } from 'boardsmith';
 import type { MyGame } from './game.js';
@@ -45,24 +50,21 @@ export class MyPlayer extends Player {
 
 ## Roll Action Pattern (actions.ts)
 
+<!-- typecheck: game src/rules/actions.ts -->
 ```typescript
 import { Action, Die, type ActionDefinition } from 'boardsmith';
 import type { MyGame } from './game.js';
 
-export function createRollAction(game: MyGame): ActionDefinition {
-  return Action.create('roll')
+export function createRollAction(): ActionDefinition {
+  return Action.create<MyGame>('roll')
     .prompt('Roll the dice')
     .execute((args, ctx) => {
-      const currentGame = ctx.game as MyGame;
-      const dice = currentGame.dicePool.all(Die);
-
       let total = 0;
-      for (const die of dice) {
-        const rolled = die.roll();  // Returns value AND triggers animation
-        total += rolled;
+      for (const die of ctx.game.dicePool.all(Die)) {
+        total += die.roll();  // Returns value AND triggers animation
       }
 
-      currentGame.message(`${ctx.player.name} rolled ${total}!`);
+      ctx.game.message(`${ctx.player.name} rolled ${total}!`);
       return { success: true };
     });
 }

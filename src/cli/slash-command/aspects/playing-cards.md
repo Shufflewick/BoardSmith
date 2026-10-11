@@ -4,14 +4,18 @@
 
 ## Element Setup (game.ts)
 
+<!-- typecheck: game src/rules/game.ts -->
 ```typescript
 import { Game, type GameOptions } from 'boardsmith';
 import { Card, Hand, DrawPile, MyPlayer } from './elements.js';
 
 export class MyGame extends Game<MyGame, MyPlayer> {
+  // Tells the engine to construct each player as a MyPlayer
+  static PlayerClass = MyPlayer;
+
   deck!: DrawPile;
 
-  constructor(options: MyGameOptions) {
+  constructor(options: GameOptions) {
     super(options);
 
     this.registerElements([Card, Hand, DrawPile]);
@@ -51,6 +55,7 @@ export class MyGame extends Game<MyGame, MyPlayer> {
 
 ## Elements (elements.ts)
 
+<!-- typecheck: game src/rules/elements.ts -->
 ```typescript
 import { Card as BaseCard, Hand as BaseHand, Deck, Player } from 'boardsmith';
 import type { MyGame } from './game.js';
@@ -77,43 +82,39 @@ export class MyPlayer extends Player {
 
 ## Action Patterns (actions.ts)
 
+<!-- typecheck: game src/rules/actions.ts -->
 ```typescript
 import { Action, type ActionDefinition } from 'boardsmith';
 import { Card } from './elements.js';
 import type { MyGame } from './game.js';
 
 // Draw a card
-export function createDrawAction(game: MyGame): ActionDefinition {
-  return Action.create('draw')
+export function createDrawAction(): ActionDefinition {
+  return Action.create<MyGame>('draw')
     .prompt('Draw a card')
     .execute((args, ctx) => {
-      const currentGame = ctx.game as MyGame;
-      const card = currentGame.deck.first(Card);
+      const card = ctx.game.deck.first(Card);
       if (!card) {
-        return { success: false, message: 'Deck is empty' };
+        return { success: false, error: 'The deck is empty.' };
       }
       card.putInto(ctx.player.hand);
-      currentGame.message(`${ctx.player.name} drew a card`);
+      ctx.game.message(`${ctx.player.name} drew a card`);
       return { success: true };
     });
 }
 
 // Play a card from hand
-export function createPlayAction(game: MyGame): ActionDefinition {
-  return Action.create('play')
+export function createPlayAction(): ActionDefinition {
+  return Action.create<MyGame>('play')
     .prompt('Play a card')
-    .chooseElement<Card>('card', {
+    .chooseElement('card', {
       prompt: 'Select a card to play',
-      from: (ctx) => ctx.player.hand.all(Card),
+      elementClass: Card,
+      from: (ctx) => ctx.player.hand,
     })
-    .execute((args, ctx) => {
-      const currentGame = ctx.game as MyGame;
-      const cardArg = args.card as { id: number };
-      const card = currentGame.all(Card).find(c => c.id === cardArg.id);
-      if (!card) return { success: false };
-
+    .execute(({ card }, ctx) => {
       card.remove();
-      currentGame.message(`${ctx.player.name} played ${card.rank}${card.suit}`);
+      ctx.game.message(`${ctx.player.name} played ${card.rank}${card.suit}`);
       return { success: true };
     });
 }

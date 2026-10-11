@@ -7,6 +7,9 @@
  * the block sits in the game it belongs to, so blocks of one doc that import
  * each other (`./game.js`, `./elements.js`) compile together.
  *
+ * The docs (`docs/*.md`) and the aspect templates `/design-game` copies game
+ * code from (`src/cli/slash-command/aspects/*.md`, #645) both carry markers.
+ *
  * `docs-game-typecheck.test.ts` compiles the `game` blocks (#511).
  * `aspect-boards-typecheck.test.ts` compiles the `board` blocks (#570), and
  * the boards the aspect templates teach under the same `gameTsConfig`.
@@ -19,7 +22,7 @@ import { REPO_ROOT } from './vue-tsc-run.test-helper.js';
 
 /** One marked block: the doc it is in, the path its marker names, and its code. */
 export interface MarkedDocBlock {
-  /** The doc's file name without `.md`, e.g. `getting-started`. */
+  /** The doc's path from the repo root without `.md`, e.g. `docs/getting-started`. */
   readonly doc: string;
   /** The marker's path, or `undefined` when it names none. */
   readonly path: string | undefined;
@@ -33,7 +36,7 @@ const ANY_MARKER = /^<!-- typecheck:/gm;
 const KNOWN_KINDS = ['game', 'board'] as const;
 
 /**
- * The blocks of one doc (`file` is its name, `text` its content) whose marker
+ * The blocks of one doc (`file` is its path from the repo root, `text` its content) whose marker
  * names `kind`, in document order.
  *
  * Throws when a marker does not sit directly above a fence: a block whose
@@ -44,14 +47,14 @@ export function parseMarkedBlocks(file: string, text: string, kind: string): Mar
   const markers = text.match(ANY_MARKER)?.length ?? 0;
   if (markers !== blocks.length) {
     throw new Error(
-      `docs/${file} has ${markers} "<!-- typecheck: ... -->" lines but only ${blocks.length} sit directly ` +
+      `${file} has ${markers} "<!-- typecheck: ... -->" lines but only ${blocks.length} sit directly ` +
         'above a fenced code block. Put each marker on the line right before the block it names.',
     );
   }
   for (const [, blockKind] of blocks) {
     if (!(KNOWN_KINDS as readonly string[]).includes(blockKind)) {
       throw new Error(
-        `docs/${file} marks a block "${blockKind}", which no gate compiles. Use one of ` +
+        `${file} marks a block "${blockKind}", which no gate compiles. Use one of ` +
           `${KNOWN_KINDS.map((known) => `"${known}"`).join(', ')}.`,
       );
     }
@@ -60,17 +63,24 @@ export function parseMarkedBlocks(file: string, text: string, kind: string): Mar
   return blocks.filter(([, blockKind]) => blockKind === kind).map(([, , path, code]) => ({ doc, path, code }));
 }
 
-/** Every block in `docs/*.md` whose marker names `kind`, in document order (see `parseMarkedBlocks`). */
+/** The folders whose `*.md` files may mark blocks, relative to the repo root. */
+const MARKED_DIRS = ['docs', 'src/cli/slash-command/aspects'];
+
+/**
+ * Every block in the `*.md` of `MARKED_DIRS` whose marker names `kind`, in
+ * document order (see `parseMarkedBlocks`).
+ */
 export function markedDocBlocks(kind: string): MarkedDocBlock[] {
-  const docsDir = join(REPO_ROOT, 'docs');
-  return readdirSync(docsDir)
-    .filter((name) => name.endsWith('.md'))
-    .sort()
-    .flatMap((file) => parseMarkedBlocks(file, readFileSync(join(docsDir, file), 'utf8'), kind));
+  return MARKED_DIRS.flatMap((dir) =>
+    readdirSync(join(REPO_ROOT, dir))
+      .filter((name) => name.endsWith('.md'))
+      .sort()
+      .flatMap((name) => parseMarkedBlocks(`${dir}/${name}`, readFileSync(join(REPO_ROOT, dir, name), 'utf8'), kind)),
+  );
 }
 
 /**
- * Where each `game` block goes in the sandbox: `docs/<doc>/<path>`, mapped to
+ * Where each `game` block goes in the sandbox: `<doc>/<path>`, mapped to
  * its code. Throws on a block that would not be compiled there: one with no
  * path, a path that is not `.ts`, or a path another block of the doc took.
  */
@@ -79,20 +89,20 @@ export function gameBlockFiles(blocks: readonly MarkedDocBlock[]): Map<string, s
   for (const block of blocks) {
     if (!block.path) {
       throw new Error(
-        `docs/${block.doc}.md marks a block "<!-- typecheck: game -->" without a path. Name the file the block ` +
+        `${block.doc}.md marks a block "<!-- typecheck: game -->" without a path. Name the file the block ` +
           'is, e.g. "<!-- typecheck: game src/rules/actions.ts -->", so the blocks it imports resolve.',
       );
     }
     if (!block.path.endsWith('.ts')) {
       throw new Error(
-        `docs/${block.doc}.md marks "${block.path}" as game code, but only .ts game files are compiled. ` +
+        `${block.doc}.md marks "${block.path}" as game code, but only .ts game files are compiled. ` +
           'Name a .ts path, or mark a .vue board with "<!-- typecheck: board -->" instead.',
       );
     }
-    const file = `docs/${block.doc}/${block.path}`;
+    const file = `${block.doc}/${block.path}`;
     if (files.has(file)) {
       throw new Error(
-        `docs/${block.doc}.md marks two blocks "${block.path}", so one would overwrite the other unseen. ` +
+        `${block.doc}.md marks two blocks "${block.path}", so one would overwrite the other unseen. ` +
           'Give each block its own path.',
       );
     }
