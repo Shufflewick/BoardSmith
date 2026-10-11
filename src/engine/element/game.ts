@@ -369,6 +369,34 @@ export function animationFloorOf(state: unknown): AnimationFloor {
 }
 
 /**
+ * The root less the fields only the authoritative `toJSON()` carries, for
+ * restores, which `toJSONForPlayer` removes from every seat's view (#671):
+ *
+ * - `messagesEvicted`, the log's eviction offset (#25), is engine bookkeeping
+ *   with no meaning to a client, and an ever-growing number in every payload.
+ * - `animationEventSeq` counts EVERY seat's events, `animateTo` ones included,
+ *   so a seat watching it rise would learn another seat played a private
+ *   animation, and be pushed a changed view when nothing it may see changed
+ *   (#487). `animationSeqBySeat` holds every seat's own counter (#489).
+ *
+ * This destructure is the one list of those fields: `SeatViewJSON` and
+ * `RestoreOnlyRootField` are derived from it. The object is rebuilt rather
+ * than `delete`d from, which would move it into dictionary mode; this runs once
+ * per seat per broadcast and once per MCTS playout, and a deoptimized shape
+ * here is measurable in bot search time.
+ */
+function withoutRestoreOnlyFields(root: ReturnType<Game['toJSON']>) {
+  const { messagesEvicted: _evicted, animationEventSeq: _seq, animationSeqBySeat: _seqBySeat, ...seatView } = root;
+  return seatView;
+}
+
+/** A seat's view of the game: the root as `toJSONForPlayer` writes it, without the restore-only fields. */
+export type SeatViewJSON = ReturnType<typeof withoutRestoreOnlyFields>;
+
+/** The root fields `toJSON()` writes for restores and no seat's view carries. */
+export type RestoreOnlyRootField = Exclude<keyof ReturnType<Game['toJSON']>, keyof SeatViewJSON>;
+
+/**
  * Game phase
  */
 export type GamePhase = 'setup' | 'started' | 'finished';
@@ -4548,7 +4576,7 @@ export class Game<
    *   `flow/engine.ts`. Individually-hidden single elements (the two branches above
    *   this comment) keep their real id already, so they need no remap entry.
    */
-  toJSONForPlayer(player: P | number | null, idRemap?: Map<number, number>): ReturnType<Game['toJSON']> {
+  toJSONForPlayer(player: P | number | null, idRemap?: Map<number, number>): SeatViewJSON {
     return this.redactTreeForSeat(this.toJSON(), player, idRemap);
   }
 
@@ -4682,7 +4710,7 @@ export class Game<
    * same reason `testing/visibility.ts` gates its own fast paths on the hook's
    * absence.
    */
-  toJSONForPlayers(players: readonly (P | number | null)[]): ReturnType<Game['toJSON']>[] {
+  toJSONForPlayers(players: readonly (P | number | null)[]): SeatViewJSON[] {
     const GameClass = this.constructor as typeof Game;
     if (GameClass.playerView !== undefined) {
       return players.map((player) => this.toJSONForPlayer(player));
@@ -4702,7 +4730,7 @@ export class Game<
     fullJson: ReturnType<Game['toJSON']>,
     player: P | number | null,
     idRemap?: Map<number, number>,
-  ): ReturnType<Game['toJSON']> {
+  ): SeatViewJSON {
     const playerSeat = player === null ? null : (typeof player === 'number' ? player : player.seat);
     // For visibility checks, spectators use -1 (no special access)
     const visibilityPosition = playerSeat ?? -1;
@@ -5010,21 +5038,9 @@ export class Game<
     // for player views. Do not reintroduce a `messages` field on this payload;
     // a per-seat tree is not the log's home, and the leak SEC-04 fixed came
     // from exactly that arrangement.
-    // The eviction offset is engine bookkeeping for restores (#25): it has no
-    // meaning to a client, and shipping it puts an ever-growing number in every
-    // seat's payload for nothing. Dropped by REBUILDING the object rather than
-    // by `delete`, which would move it into dictionary mode — this runs once
-    // per seat per broadcast and once per MCTS playout, and a deoptimized shape
-    // here is measurable in bot search time.
     //
-    // The animation id counter goes for a second reason (#487): it counts EVERY
-    // seat's events, `animateTo` ones included, so a seat watching it rise
-    // learns another seat played a private animation, and is pushed a changed
-    // view when nothing it may see changed. Restores read it from `toJSON()`,
-    // never from a seat's view.
-    const { messagesEvicted: _engineOnly, animationEventSeq: _restoreOnly, animationSeqBySeat: _restoreOnlyBySeat, ...withoutEngineBookkeeping } =
-      filteredState as ReturnType<Game['toJSON']> & { messagesEvicted?: number };
-    const view = withoutEngineBookkeeping as ReturnType<Game['toJSON']>;
+    // The restore-only root fields go: see `withoutRestoreOnlyFields`.
+    const view = withoutRestoreOnlyFields(filteredState as ReturnType<Game['toJSON']>);
 
     // SEC-05: scope `tutorialProgress` to the receiving seat.
     //

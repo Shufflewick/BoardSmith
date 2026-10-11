@@ -26,7 +26,7 @@ import type { Component } from 'vue';
 import type { VueWrapper } from '@vue/test-utils';
 import type { default as AutoUIComponent } from '../ui/components/auto-ui/AutoUI.vue';
 import type { GameRootView } from '../ui/types.js';
-import type { ElementJSON, Game } from '../engine/index.js';
+import type { ElementJSON, SeatViewJSON } from '../engine/index.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE, isHiddenPlaceholder } from '../engine/element/hidden-placeholder.js';
 import type { BoardInteraction } from '../ui/composables/useBoardInteraction.js';
 import type { TableSeat } from '../ui/composables/useTableSeat.js';
@@ -82,7 +82,7 @@ export interface HiddenInfoSubject {
  */
 export interface SeatProjection {
   /** The redacted per-seat element tree: the game root as `toJSONForPlayer` writes it. */
-  readonly state: ReturnType<Game['toJSON']>;
+  readonly state: SeatViewJSON;
 }
 
 /**

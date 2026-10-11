@@ -1,4 +1,4 @@
-import type { Game, MessageEntry } from '../element/game.js';
+import type { Game, MessageEntry, SeatViewJSON } from '../element/game.js';
 import { Player } from '../player/player.js';
 import type { HistoryEntry } from '../action/types.js';
 import type { FlowState } from '../flow/types.js';
@@ -374,7 +374,7 @@ export interface PlayerStateView {
   player: number;
 
   /** Filtered state (hidden elements obscured): the game root as `toJSONForPlayer` writes it */
-  state: ReturnType<Game['toJSON']>;
+  state: SeatViewJSON;
 
   /** Flow state relevant to this player */
   flowState?: {

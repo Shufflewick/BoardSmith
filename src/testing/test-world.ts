@@ -30,7 +30,7 @@
  * await assertNoHiddenInfoLeak(world, 2, { component: MyWorldBoard });
  * ```
  */
-import type { ElementJSON, Game } from '../engine/index.js';
+import type { ElementJSON, SeatViewJSON } from '../engine/index.js';
 import {
   mintWorldElementIdKey,
   worldBudgets,
@@ -99,7 +99,7 @@ export interface WorldSeatView {
    * `world.view` declaration projected for this seat and redacted by the
    * engine, so a partition this seat cannot see is not in it at all.
    */
-  readonly state: ReturnType<Game['toJSON']>;
+  readonly state: SeatViewJSON;
   /** Every action offered to this seat, disabled ones included -- what arrives
    *  as `world_offers.actions`. */
   readonly offers: readonly WorldActionOffer[];
@@ -303,7 +303,7 @@ export class TestWorld {
         // hands the body over as `unknown` (the world contract does not know the
         // engine), and the engine's `viewFor` wrote this tree with
         // `toJSONForPlayer`, so it is typed as that root here, once.
-        state: (view as { state?: unknown } | null)?.state as ReturnType<Game['toJSON']>,
+        state: (view as { state?: unknown } | null)?.state as SeatViewJSON,
         offers,
         availableActions: offers.map((offer) => offer.name),
         disabledActions,
