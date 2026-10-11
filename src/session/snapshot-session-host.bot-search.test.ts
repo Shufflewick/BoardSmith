@@ -76,6 +76,11 @@ function table(endsGame = false) {
     humanReads.push(from);
     return answer(snap(from + 10, endsGame ? { complete: true } : {}));
   };
+  /** A heatmap computed from `v` = `from`, held until the test releases it; turning it off answers at once. */
+  const heatmap = async (from: number, op: Extract<ExecutableOp, { type: 'heatmapToggle' }>) => {
+    if (op.visible) await new Promise<void>((release) => heatmaps.push({ from, release }));
+    return { success: true, heatmapUpdate: { seat: op.seat, visible: op.visible, entries: op.visible ? [{ from }] : [] } };
+  };
   const adapters: SnapshotSessionAdapters = {
     playerCount: 2,
     executeOp: stubExecuteOp(async (snapshot, _pending, op) => {
@@ -86,11 +91,7 @@ function table(endsGame = false) {
         botMoves.push(from);
         return refuseBot.shift() ?? answer(snap(from + 1));
       }
-      if (op.type === 'heatmapToggle') {
-        if (!op.visible) return { success: true, heatmapUpdate: { seat: op.seat, visible: false, entries: [] } };
-        await new Promise<void>((release) => heatmaps.push({ from, release }));
-        return { success: true, heatmapUpdate: { seat: op.seat, visible: true, entries: [{ from }] } };
-      }
+      if (op.type === 'heatmapToggle') return heatmap(from, op);
       return humanOp(from, op);
     }),
     record: () => recorded.push((host.snapshot as unknown as Snap).v),
