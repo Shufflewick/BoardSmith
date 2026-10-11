@@ -819,6 +819,14 @@ function forwardUnavailable<G extends Game>(
   return (value, context) => unavailable(value, withWorld<G>(context));
 }
 
+/** A selection's `validate`, handed the WORLD context like every other callback here. */
+function forwardValidate<G extends Game, V>(
+  validate: ((value: V, args: Record<string, unknown>, context: WorldActionContext<G>) => boolean | string) | undefined,
+): ((value: V, args: Record<string, unknown>, context: AnyContext) => boolean | string) | undefined {
+  if (validate === undefined) return undefined;
+  return (value, args, context) => validate(value, args, withWorld<G>(context));
+}
+
 /**
  * A world's COUNT CONFIG, re-typed onto the engine's -- `multiSelect` and
  * `orderedList` alike (#376, #249).
@@ -1131,9 +1139,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
           : options.choices,
       display: options.display,
       optional: options.optional,
-      validate: options.validate
-        ? (value, args, context) => options.validate!(value, args, withWorld<G>(context))
-        : undefined,
+      validate: forwardValidate(options.validate),
       boardRefs: options.boardRefs
         ? (choice, context) => options.boardRefs!(choice, withWorld<G>(context))
         : undefined,
@@ -1170,9 +1176,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
     this.declareSelection(options.needs);
     this.inner.chooseElement<K, T, P, O>(name, {
       ...forwardElementOptions<G, T, P, O>(options),
-      validate: options.validate
-        ? (value, args, context) => options.validate!(value, args, withWorld<G>(context))
-        : undefined,
+      validate: forwardValidate(options.validate),
     });
     return this as unknown as WorldAction<G, AddArg<A, K, T, O>>;
   }
@@ -1207,9 +1211,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
     this.inner.chooseElements<K, T, P, O>(name, {
       ...forwardElementOptions<G, T, P, O>(options),
       multiSelect: forwardCount<G, number | MultiSelectConfig>(options.multiSelect),
-      validate: options.validate
-        ? (value, args, context) => options.validate!(value, args, withWorld<G>(context))
-        : undefined,
+      validate: forwardValidate(options.validate),
     });
     return this as unknown as WorldAction<G, AddArg<A, K, T[], O>>;
   }
@@ -1252,9 +1254,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       multiline: options.multiline,
       pattern: options.pattern,
       optional: options.optional,
-      validate: options.validate
-        ? (value, args, context) => options.validate!(value, args, withWorld<G>(context))
-        : undefined,
+      validate: forwardValidate(options.validate),
     });
     return this as unknown as WorldAction<G, AddArg<A, K, string, O>>;
   }
@@ -1295,9 +1295,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       initial: options.initial,
       display: options.display,
       optional: options.optional,
-      validate: options.validate
-        ? (value, args, context) => options.validate!(value, args, withWorld<G>(context))
-        : undefined,
+      validate: forwardValidate(options.validate),
     });
     return this as unknown as WorldAction<G, AddArg<A, K, number, O>>;
   }

@@ -33,13 +33,6 @@
       ]
     },
     {
-      "content": "09e96631fa865c6a",
-      "lines": 6,
-      "files": [
-        "src/world/action.ts"
-      ]
-    },
-    {
       "content": "0b60693abaf60f66",
       "lines": 24,
       "files": [
@@ -485,13 +478,6 @@
       "files": [
         "src/ui/components/auto-ui/renderers/HandRenderer.vue",
         "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
-      ]
-    },
-    {
-      "content": "cd579f1df4c96d10",
-      "lines": 6,
-      "files": [
-        "src/world/action.ts"
       ]
     },
     {
