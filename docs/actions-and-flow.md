@@ -1798,7 +1798,7 @@ loop({
 })
 ```
 
-`unbounded: true` makes `maxIterations` optional and removes the per-loop
+`unbounded: true` takes the place of `maxIterations` (give one or the other, never both) and removes the per-loop
 cap-hit throw — the loop exits only via `while` becoming false. The engine's
 own global whole-flow safety tripwire (a fixed cap on total flow-step
 executions across the entire flow, independent of any single loop's
