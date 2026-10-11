@@ -7,7 +7,7 @@
  * tick is charged to, never how long anything took.
  */
 import { describe, it, expect } from 'vitest';
-import { measureSearch, SEARCH_PARTS, STEP_METHOD, LOOKUP_METHOD } from './profile.mjs';
+import { measureSearch, SEARCH_PARTS, STEP_METHOD, SCORED_METHOD, LOOKUP_METHOD } from './profile.mjs';
 import { MCTSBot } from '../../src/bot/mcts-bot.ts';
 import { ElementCollection } from '../../src/engine/element/element-collection.ts';
 
@@ -41,6 +41,7 @@ function fakes() {
       return 0.5;
     }
     sampleWorld() {}
+    backpropagate() {}
   }
   class Collection {
     _finder(depth) {
@@ -59,6 +60,19 @@ describe('measureSearch', () => {
     }, { profile: false, now: tickingClock() });
     expect(measured.steps).toBe(7);
     expect(measured.parts).toBeUndefined();
+  });
+
+  it('counts the steps that were scored, which a step thrown away never is (#669)', async () => {
+    const { Bot, targets } = fakes();
+    const bot = new Bot();
+    const measured = await measureSearch(targets, async () => {
+      for (let i = 0; i < 7; i++) {
+        bot.selectWithPath();
+        if (i % 3 === 0) bot.backpropagate();
+      }
+    }, { profile: false, now: tickingClock() });
+    expect(measured.steps).toBe(7);
+    expect(measured.scored).toBe(3);
   });
 
   it('charges a move made on the way down the tree to re-applying, not to applying', async () => {
@@ -101,14 +115,14 @@ describe('measureSearch', () => {
 
   it('puts every wrapped method back, even when the search throws', async () => {
     const { Bot, Collection, targets } = fakes();
-    const originals = [...Object.keys(SEARCH_PARTS), STEP_METHOD].map((name) => Bot.prototype[name]);
+    const originals = [...Object.keys(SEARCH_PARTS), STEP_METHOD, SCORED_METHOD].map((name) => Bot.prototype[name]);
     const lookup = Collection.prototype._finder;
     await expect(
       measureSearch(targets, async () => {
         throw new Error('search failed');
       }, { profile: true, now: tickingClock() }),
     ).rejects.toThrow('search failed');
-    expect([...Object.keys(SEARCH_PARTS), STEP_METHOD].map((name) => Bot.prototype[name])).toEqual(originals);
+    expect([...Object.keys(SEARCH_PARTS), STEP_METHOD, SCORED_METHOD].map((name) => Bot.prototype[name])).toEqual(originals);
     expect(Collection.prototype._finder).toBe(lookup);
   });
 
@@ -124,7 +138,7 @@ describe('measureSearch', () => {
 
 describe('the methods the benchmark wraps', () => {
   it('all exist on the real bot and element collection', () => {
-    for (const name of [...Object.keys(SEARCH_PARTS), STEP_METHOD]) {
+    for (const name of [...Object.keys(SEARCH_PARTS), STEP_METHOD, SCORED_METHOD]) {
       expect(MCTSBot.prototype[name], `MCTSBot.${name}`).toBeTypeOf('function');
     }
     expect(ElementCollection.prototype[LOOKUP_METHOD]).toBeTypeOf('function');
