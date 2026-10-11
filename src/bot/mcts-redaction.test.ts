@@ -63,8 +63,8 @@ class HiddenInfoGame extends Game<HiddenInfoGame, Player> {
    *  `game.finish()`'s `settings.winners`/`phase` mutation used to leak
    *  across simulated branches because the old incremental command undo
    *  never reverted it.
-   *  That is now fixed in `backpropagateAndRestoreRoot` (resyncs bookkeeping to
-   *  the root node every backpropagation), so this fixture could call
+   *  That is now fixed by restoring the search game whole for every step
+   *  (`resumeSearchGame`), so this fixture could call
    *  `finish()` too -- kept non-terminal anyway since that's the simplest
    *  way to exercise the `objectives` scoring hook this suite is about.) */
   lastGuess?: number;
@@ -355,7 +355,7 @@ describe('MCTSBot simultaneous-step soundness (bot-02 / T-159-07)', () => {
    * leak -- backpropagation's old incremental undo never reverted the
    * flow engine's own `awaitingPlayers[].completed` bookkeeping across
    * sibling root branches, in a full tree search. That is now fixed
-   * (`restoreSearchGameToRoot` restores the root in full every iteration); this
+   * (`resumeSearchGame` restores the search game in full every iteration); this
    * fixture still drives the low-level primitives directly because that's
    * the narrowest way to reproduce T-159-07's specific pre-reveal-leak vector,
    * not because of the undo bug.)

@@ -35,6 +35,8 @@ function fakes() {
     restoreGame() {}
     captureSnapshot() {}
     cloneSearchGame() {}
+    resumeSearchGame() {}
+    saveCopyOf() {}
     evaluateTerminalFromGame() {
       return 0.5;
     }

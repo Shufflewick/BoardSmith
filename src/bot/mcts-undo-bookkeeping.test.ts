@@ -19,10 +19,10 @@ import { MCTSBot } from './mcts-bot.js';
 // plain-property mutations (`game.finish()`'s `settings.winners`/`phase`) or
 // the flow engine's own internal bookkeeping (`awaitingPlayers[].completed`,
 // mutated in place by `resumeSimultaneousAction`). The search game is now
-// reset by a full restore of the root snapshot. Both fixtures below drive the
+// reset by a full restore of the root snapshot (or a saved copy, #633). Both fixtures below drive the
 // bot's low-level EXPAND/BACKPROPAGATE primitives directly (mirrors
 // mcts-redaction.test.ts fixture 2) so the check is isolated to exactly
-// `backpropagateAndRestoreRoot`, with no tree search nondeterminism involved.
+// `backpropagate` and the next `selectWithPath`, with no tree search nondeterminism involved.
 //
 // Fixture 1 deliberately avoids touching any GameElement (uses a plain
 // `picks` dict instead of pieces) so the flow-bookkeeping case is isolated
@@ -114,8 +114,9 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
     const seat1AfterPick = child.flowState.awaitingPlayers.find((p: any) => p.playerIndex === 1);
     expect(seat1AfterPick.completed).toBe(true);
 
-    // BACKPROPAGATE: restore the root state.
-    bot.backpropagateAndRestoreRoot(child, 0.5, [], []);
+    // BACKPROPAGATE, then the next step's selection restores the root state.
+    bot.backpropagate(child, 0.5, [], []);
+    bot.selectWithPath(root);
 
     // Second simulated branch at the SAME root: seat 1 picks 'y' (the next
     // untried move). This must succeed exactly like the first branch did --
@@ -198,8 +199,9 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
     expect((bot.searchGame as FinishGame).isFinished()).toBe(true);
     expect((bot.searchGame as any).settings.winners).toEqual([1]);
 
-    // BACKPROPAGATE: restore the root state.
-    bot.backpropagateAndRestoreRoot(child, 1, [], []);
+    // BACKPROPAGATE, then the next step's selection restores the root state.
+    bot.backpropagate(child, 1, [], []);
+    bot.selectWithPath(root);
 
     // Root cause proof: `game.finish()` sets `phase`/`settings.winners` as
     // plain properties -- the old command undo (element-tree only) never reverted
