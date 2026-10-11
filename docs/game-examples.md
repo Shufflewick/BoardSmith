@@ -506,7 +506,7 @@ constructor(options) {
   this.registerElements([...]);  // Always register elements
   // Create board/deck
   // Register actions
-  this.setFlow(createGameFlow(this));
+  this.setFlow(createGameFlow());
 }
 ```
 

@@ -41,26 +41,26 @@ class MyGame extends Game<MyGame, MyPlayer> {
 ### In Flow
 
 ```typescript
-export function createGameFlow(game: MyGame): FlowDefinition {
+export function createGameFlow(): FlowDefinition<MyGame> {
   return {
     root: loop({
       maxIterations: 100,
-      while: () => !game.isFinished(),
+      while: (ctx) => !ctx.game.isFinished(),
       do: sequence(
         // Deal from current dealer
-        execute(() => game.deal()),
+        execute((ctx) => ctx.game.deal()),
 
         // Play round starting from player after dealer.
         // eachPlayer always wraps around the FULL player list starting from
         // startingPlayer -- every player gets exactly one turn, in order,
         // regardless of which player you start from.
         eachPlayer({
-          startingPlayer: () => game.playerAfterDealer,
+          startingPlayer: (ctx) => ctx.game.playerAfterDealer,
           do: actionStep({ actions: ['play'] }),
         }),
 
         // Rotate dealer for next round
-        execute(() => game.rotateDealer()),
+        execute((ctx) => ctx.game.rotateDealer()),
       ),
     }),
     // ...
@@ -133,19 +133,19 @@ class MyGame extends Game<MyGame, MyPlayer> {
   playerGoesAgain: boolean = false;
 }
 
-export function createGameFlow(game: MyGame): FlowDefinition {
+export function createGameFlow(): FlowDefinition<MyGame> {
   return {
     root: loop({
       maxIterations: 100,
-      while: () => !game.isFinished(),
+      while: (ctx) => !ctx.game.isFinished(),
       do: eachPlayer({
         do: loop({
           maxIterations: 100,
           name: 'player-turn',
-          while: () => game.playerGoesAgain,
+          while: (ctx) => ctx.game.playerGoesAgain,
           do: sequence(
             // Reset go-again flag
-            execute(() => { game.playerGoesAgain = false; }),
+            execute((ctx) => { ctx.game.playerGoesAgain = false; }),
 
             // Player takes action
             actionStep({ actions: ['play'] }),
@@ -194,9 +194,9 @@ class MyGame extends Game<MyGame, MyPlayer> {
 // In flow
 loop({
   maxIterations: 100,
-  while: () => game.shouldPlayerGoAgain(),
+  while: (ctx) => ctx.game.shouldPlayerGoAgain(),
   do: sequence(
-    execute(() => game.resetPlayerGoesAgain()),
+    execute((ctx) => ctx.game.resetPlayerGoesAgain()),
     actionStep({ actions: ['play'] }),
   ),
 })
