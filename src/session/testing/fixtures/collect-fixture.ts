@@ -73,7 +73,8 @@ class CollectGame extends Game<CollectGame, Player> {
     // ("done collecting") when the player skips (no item).
     this.registerAction(
       Action.create('collect')
-        .condition({ 'has sector arg': (ctx) => ctx.args?.sectorId != null })
+        .followUpArgs<{ combatantId: number; sectorId: number }>()
+        .condition({ 'has sector arg': (ctx) => ctx.args.sectorId != null })
         .chooseElement('item', {
           optional: true,
           elementClass: Equipment,
@@ -92,8 +93,8 @@ class CollectGame extends Game<CollectGame, Player> {
           // piece — the mutation under test for snapshot persistence. Non-selection
           // followUp args are plain numbers (ENG-05: resolveArgs no longer coerces
           // bare numbers), so resolve explicitly via getElementById.
-          const held = ctx.game.getElementById(ctx.args.combatantId as number) as Held;
-          const sector = ctx.game.getElementById(ctx.args.sectorId as number) as Sector;
+          const held = ctx.game.getElementById(ctx.args.combatantId) as Held;
+          const sector = ctx.game.getElementById(ctx.args.sectorId) as Sector;
           item.putInto(held);
 
           // More items left -> chain back into collect with plain ids again.

@@ -20,6 +20,16 @@ Pass your concrete game class to `Action.create<MyGame>(...)`. The builder then
 - A selection's `validate(value, args, ctx)` gets `args` typed the same way,
   from the picks declared before it (a repeating pick also sees its own earlier
   picks as an array), so `args.amount` is a `number`, not `unknown`.
+- `ctx.args` is typed from the chain too, and a key nothing declared is a
+  compile error. In `validate` and `execute` it holds every pick, typed as
+  `args` is. In the callbacks that run while the action is being filled in
+  (`prompt`, `choices`, `filter`, `display`, `disabled`, `condition`) it holds
+  the picks declared before that callback, each possibly `undefined`, because
+  the engine also runs them with nothing picked to decide whether the action is
+  offered at all. A repeating pick sees its own earlier picks there as an
+  `unknown[]`; its `validate` gets them typed. Args a follow-up starts with are
+  declared with `.followUpArgs<...>()` (see
+  [Action Chaining with `followUp`](#action-chaining-with-followup)).
 - A `chooseElement` given `elementClass: Cell` hands its `filter` a `Cell`, since
   every candidate is one: `filter: (cell) => cell.isEmpty()` needs no cast.
 
@@ -1344,61 +1354,58 @@ Action chaining allows one action to automatically trigger another action with p
 
 ### Basic Usage
 
-Return a `followUp` object from your execute function:
+Return a `followUp` object from your execute function, and declare the args the
+follow-up starts with on the action it starts, with `.followUpArgs<...>()`:
 
+<!-- typecheck: game src/rules/collect.ts -->
 ```typescript
-Action.create('explore')
-  .chooseElement('merc', {
-    prompt: 'Select MERC to explore',
-    elementClass: Merc,
-  })
-  .execute((args, ctx) => {
-    const merc = args.merc as Merc;
-    const sector = merc.getCurrentSector();
+import { Action, Piece, Space, type ActionDefinition } from 'boardsmith';
+import type { MyGame } from './game.js';
 
-    // Draw equipment to the sector's stash
-    for (let i = 0; i < sector.lootCount; i++) {
-      const equipment = ctx.game.drawEquipment();
-      if (equipment) equipment.putInto(sector.stashZone);
-    }
-    sector.explored = true;
-    merc.useAction(1);
+export class Sector extends Space<MyGame> {}
+export class Equipment extends Piece<MyGame> {}
 
-    ctx.game.message(`${merc.name} explored ${sector.name}`);
-
-    // Chain to collect action - UI will see the drawn equipment
-    return {
+export function createExploreAction(): ActionDefinition {
+  return Action.create<MyGame>('explore')
+    .chooseElement('sector', { elementClass: Sector })
+    .execute(({ sector }) => ({
       success: true,
+      // Chain to collect. The UI sees the state this action left first.
       followUp: {
         action: 'collectEquipment',
-        args: {
-          mercId: merc.id,
-          sectorId: sector.id,
-        },
+        // The {id, className} shape: it reaches the follow-up as the Sector.
+        args: { sector: { id: sector.id, className: sector.constructor.name } },
       },
-    };
-  });
+    }));
+}
 
-// The follow-up action receives pre-filled args
-Action.create('collectEquipment')
-  .chooseElement('equipment', {
-    prompt: 'Select equipment to take',
-    elements: (ctx) => {
-      // UI shows updated state - stash has the drawn equipment
-      const sector = ctx.game.getElementById(ctx.args.sectorId) as Sector;
-      return [...sector.stashZone.all(Equipment)];
-    },
-    optional: 'Done taking equipment',
-  })
-  .execute((args, ctx) => {
-    if (args.equipment) {
-      const merc = ctx.game.getElementById(ctx.args.mercId) as Merc;
-      (args.equipment as Equipment).putInto(merc.inventoryZone);
-      ctx.game.message(`Took ${(args.equipment as Equipment).name}`);
-    }
-    return { success: true };
-  });
+export function createCollectAction(): ActionDefinition {
+  return Action.create<MyGame>('collectEquipment')
+    // ctx.args.sector is a declared key from here on; a misspelt one is an error.
+    .followUpArgs<{ sector: Sector }>()
+    .chooseElement('equipment', {
+      // Possibly undefined here: the engine also asks before any follow-up exists.
+      prompt: (ctx) => `Take equipment from ${ctx.args.sector?.name ?? 'the sector'}`,
+      elementClass: Equipment,
+      filter: (item, ctx) => item.parent === ctx.args.sector,
+      optional: 'Done taking equipment',
+    })
+    .execute(({ sector, equipment }, ctx) => {
+      if (equipment) {
+        ctx.game.message(`Took ${equipment.name} from ${sector.name}`);
+        equipment.remove();
+      }
+      return { success: true };
+    });
+}
 ```
+
+`.followUpArgs<...>()` is type-only. It makes the follow-up's args declared keys
+of `args` and `ctx.args`, so reading one needs no cast and a typo is caught where
+the action is defined. Declare a key optional (`round?: number`) when the action
+can also be taken without being chained into, and declare the args before the
+picks that read them. See [Common Pitfalls #15](./common-pitfalls.md) for which
+values arrive resolved to elements.
 
 ### Conditional Chaining
 
@@ -1412,7 +1419,7 @@ Only chain to follow-up when a condition is met:
     success: true,
     // Only chain if there's equipment to collect
     followUp: sector.stashZone.count() > 0
-      ? { action: 'collectEquipment', args: { sectorId: sector.id } }
+      ? { action: 'collectEquipment', args: { sector: { id: sector.id, className: 'Sector' } } }
       : undefined,
   };
 })

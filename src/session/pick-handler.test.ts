@@ -332,6 +332,7 @@ class BoardRefsGame extends Game<BoardRefsGame, Player> {
     // getPickChoices({trigger:true}) call reaches the throwing branch.
     this.registerAction(
       Action.create('pickThrowChoices')
+        .followUpArgs<{ trigger?: boolean }>()
         .chooseFrom('option', {
           prompt: 'Choose an option',
           choices: (ctx) => {

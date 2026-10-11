@@ -1262,7 +1262,7 @@ describe('Action Executor', () => {
         const card = deck.create(Card, 'card', { rank: 'A', suit: 'spades', value: 10 });
 
         let receivedTurnCount: unknown;
-        const action = Action.create('test').execute((_args, ctx) => {
+        const action = Action.create('test').followUpArgs<{ turnCount: number }>().execute((_args, ctx) => {
           receivedTurnCount = ctx.args.turnCount;
         });
 
@@ -1281,7 +1281,7 @@ describe('Action Executor', () => {
         const card = deck.create(Card, 'card', { rank: 'A', suit: 'spades', value: 10 });
 
         let receivedSectorId: unknown;
-        const action = Action.create('test').execute((_args, ctx) => {
+        const action = Action.create('test').followUpArgs<{ sectorId: Card }>().execute((_args, ctx) => {
           receivedSectorId = ctx.args.sectorId;
         });
 
@@ -1303,7 +1303,7 @@ describe('Action Executor', () => {
         const card = deck.create(Card, 'card', { rank: 'A', suit: 'spades', value: 10 });
 
         let receivedSectorId: unknown;
-        const action = Action.create('test').execute((_args, ctx) => {
+        const action = Action.create('test').followUpArgs<{ sectorId: Card }>().execute((_args, ctx) => {
           receivedSectorId = ctx.args.sectorId;
         });
 

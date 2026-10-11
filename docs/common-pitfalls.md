@@ -986,6 +986,10 @@ filter: (element, ctx) => {
 }
 ```
 
+Either way, declare the args on the follow-up action so `ctx.args` knows them:
+`.followUpArgs<{ sectorId: number }>()` for a bare id,
+`.followUpArgs<{ sectorId: Sector }>()` for the resolved shape (see #15).
+
 Named element-typed selections (`chooseElement`/`chooseElements`) are unaffected by
 this — a bare numeric ID sent for a declared `element`/`elements` selection still
 resolves to the `GameElement`, since those args are explicitly typed by the developer.
@@ -1427,37 +1431,51 @@ guard for free.
 
 ### The Problem
 
-When using `followUp` to chain actions, the args passed in `followUp.args` need to be available in `prompt` and `filter` functions. A common pattern is filtering choices based on a context element:
+When using `followUp` to chain actions, the args passed in `followUp.args` need to be available in `prompt` and `filter` functions. A common pattern is filtering choices based on a context element. But `ctx.args` is typed from the action's chain, so a key no pick declares is a compile error:
 
 ```typescript
-Action.create('collectEquipment')
+Action.create<MyGame>('collectEquipment')
   .chooseElement('equipment', {
-    prompt: (ctx) => {
-      // You want ctx.args.sectorId to show "Select from Sector X"
-      const sector = ctx.game.getElementById(ctx.args?.sectorId);
-      return `Select from ${sector?.name}`;
-    },
-    filter: (element, ctx) => {
-      // You want ctx.args.sectorId to filter to only this sector's items
-      const sector = ctx.game.getElementById(ctx.args?.sectorId);
-      return sector?.stash.contains(element);
-    },
+    elementClass: Equipment,
+    // Error: Property 'sector' does not exist. Nothing declared it.
+    filter: (item, ctx) => item.parent === ctx.args.sector,
   })
-  .execute((args, ctx) => {
-    // Process the selection...
+```
+
+### The Solution
+
+Declare the follow-up args on the action they start, with `.followUpArgs<...>()`,
+before the picks that read them, and pass elements in the `{id, className}` shape:
+
+```typescript
+Action.create<MyGame>('collectEquipment')
+  .followUpArgs<{ sector: Sector }>()
+  .chooseElement('equipment', {
+    // Possibly undefined in a pick's callbacks: the engine also evaluates them
+    // before any follow-up exists, to decide whether the action is offered.
+    prompt: (ctx) => `Select from ${ctx.args.sector?.name ?? 'the sector'}`,
+    elementClass: Equipment,
+    filter: (item, ctx) => item.parent === ctx.args.sector,
+  })
+  .execute(({ sector, equipment }) => {
+    // args.sector (and ctx.args.sector) is the resolved Sector here.
+    sector.stash.remove(equipment);
     if (moreItemsAvailable) {
       return {
         followUp: {
           action: 'collectEquipment',
           // Pass the {id, className} shape (or the element itself) -- NOT a bare id
-          args: { sectorId: { id: sector.id, className: sector.constructor.name } }
+          args: { sector: { id: sector.id, className: sector.constructor.name } }
         }
       };
     }
   });
 ```
 
-### The Solution
+`.followUpArgs<...>()` is type-only: it says what the follow-up will carry, so
+the declaration has to match what the chaining action sends, as resolved below.
+Declare a key optional (`round?: number`) when the action can also be taken
+without being chained into.
 
 Only the explicit serialized-element shape resolves. When you return `followUp.args`:
 
@@ -1467,56 +1485,22 @@ Only the explicit serialized-element shape resolves. When you return `followUp.a
    works — `GameElement.toJSON` serializes it to `{id, className, ...}` and it
    resolves on the way back.
 2. **Bare numeric IDs are NEVER resolved** (ENG-05): a plain number stays a plain
-   number in every callback. `element.container === ctx.args.sectorId` against a
-   number is silently always-false. Resolve it yourself with
-   `ctx.game.getElementById(ctx.args.sectorId as number)`, or better, pass the
-   `{id, className}` shape so the server resolves it for you.
+   number in every callback, so declare it as one (`sectorId: number`) and
+   resolve it yourself with `ctx.game.getElementById(ctx.args.sectorId)`.
+   Declaring it as an element would make `element.container === ctx.args.sectorId`
+   compile and always be false; better, pass the `{id, className}` shape.
 3. **Consistent args**: the same resolved `ctx.args` is available in prompt, filter, and execute.
 
 ### Best Practices for followUp Args
 
 1. **Prefer the explicit `{ id, className }` shape** — unambiguous, and
    structured-clone-safe across the postMessage/RPC boundary (a live element in
-   `followUp.args` is not):
+   `followUp.args` is not). The `className` must match the element's actual
+   class — a mismatch leaves the arg unresolved (with a dev warning) rather than
+   delivering a wrong-class element.
 
-```typescript
-return {
-  followUp: {
-    action: 'collectEquipment',
-    args: { sectorId: { id: sector.id, className: sector.constructor.name } }
-  }
-};
-```
-
-The `className` must match the element's actual class — a mismatch leaves the arg
-unresolved (with a dev warning) rather than delivering a wrong-class element.
-
-2. **Access directly via ctx.args** - already resolved to Elements:
-
-```typescript
-prompt: (ctx) => {
-  // ctx.args.sectorId is the resolved Element
-  return `Select from ${ctx.args.sectorId?.name}`;
-},
-filter: (element, ctx) => {
-  // Same - ctx.args.sectorId is the Element
-  return ctx.args.sectorId?.stash.contains(element);
-},
-execute: (args, ctx) => {
-  // args.sectorId is also the resolved Element (not just in ctx.args)
-  const sector = args.sectorId;
-  sector.stash.remove(args.equipment);
-}
-```
-
-3. **If you pass a bare numeric ID, resolve it explicitly in every callback**:
-
-```typescript
-filter: (element, ctx) => {
-  const sector = ctx.game.getElementById(ctx.args.sectorId as number);
-  return sector ? element.container === sector : false;
-}
-```
+2. **Declare what arrives**: an element type for the `{id, className}` shape, a
+   `number` for a bare id, and optional keys for args the action can run without.
 
 ### Why This Works
 
@@ -1531,7 +1515,7 @@ BoardSmith resolves only unambiguous element references through the action lifec
    - Bare numbers pass through untouched — declared `chooseElement`/`chooseElements`
      selection args are the only place a bare numeric ID resolves, because those
      args are explicitly element-typed by the developer
-4. **Consistent element access**: `ctx.args.sectorId` is the same value in prompt, filter, and execute
+4. **Consistent element access**: `ctx.args.sector` is the same value in prompt, filter, and execute
 
 ---
 

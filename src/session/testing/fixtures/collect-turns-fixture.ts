@@ -73,7 +73,8 @@ class CollectTurnsGame extends Game<CollectTurnsGame, Player> {
     // held space — the mutation under test for undo persistence.
     this.registerAction(
       Action.create('collect')
-        .condition({ 'has sector arg': (ctx) => ctx.args?.sectorId != null })
+        .followUpArgs<{ combatantId: number; sectorId: number }>()
+        .condition({ 'has sector arg': (ctx) => ctx.args.sectorId != null })
         .chooseElement('item', {
           optional: true,
           elementClass: Equipment,
@@ -86,7 +87,7 @@ class CollectTurnsGame extends Game<CollectTurnsGame, Player> {
           }
           // Non-selection followUp args are plain numbers (ENG-05: resolveArgs no
           // longer coerces bare numbers), so resolve explicitly via getElementById.
-          const held = ctx.game.getElementById(ctx.args.combatantId as number) as Held;
+          const held = ctx.game.getElementById(ctx.args.combatantId) as Held;
           item.putInto(held);
           return { success: true };
         }),
