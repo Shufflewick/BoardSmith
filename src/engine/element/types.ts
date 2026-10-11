@@ -55,6 +55,24 @@ export type ElementContext = {
    * eviction drops the evicted subtree. Not public API.
    */
   _elementsById: Map<number, GameElement>;
+  /**
+   * Internal (#631): the state version, advanced by every change to the game
+   * (`state-version.ts` says what counts). A pick's choices are reused only
+   * while it stands still. Derived, never serialized. Not public API.
+   */
+  _stateVersion: number;
+  /**
+   * Internal (#631): how many calls into game code that may change the game
+   * are running (`changing` in `state-version.ts`). No answer is reused while
+   * one is. Not public API.
+   */
+  _changingDepth: number;
+  /**
+   * Internal (#631): how many reads of the flow's state there have been
+   * (`flowStateRead` in `state-version.ts`), to tell whether a pick's callbacks
+   * made one. Not public API.
+   */
+  _flowStateReads: number;
   /** Current player context (for "mine" queries) */
   player?: Player;
   /** Registry of element classes by name for deserialization and commands */

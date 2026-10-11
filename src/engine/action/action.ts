@@ -37,6 +37,8 @@ import { numberRuleErrors } from './number-rules.js';
 import { formatRepeatCandidates } from '../element/pick-candidates.js';
 import type { ChoiceWithRefs, WarningEntry } from '../../types/protocol.js';
 import { textRuleErrors } from './text-rules.js';
+import { changing } from '../element/state-version.js';
+import { reusedCandidates } from './choice-cache.js';
 import { resolveMultiSelect, resolveOrderedList } from '../utils/resolve-multiselect.js';
 
 // Re-export Action class from action-builder
@@ -636,9 +638,10 @@ export class ActionExecutor {
 
   /** A choice selection's `choices`, after `filterBy`, as the game wrote them. */
   private choiceItemsOf(choiceSel: ChoiceSelection, context: ActionContext): unknown[] {
-    let choices = typeof choiceSel.choices === 'function'
-      ? choiceSel.choices(context)
-      : [...choiceSel.choices];
+    const { choices: listed } = choiceSel;
+    let choices = typeof listed === 'function'
+      ? this.reused(choiceSel, context, listed)
+      : [...listed];
 
     // Apply filterBy if present and the dependent selection has a value
     if (choiceSel.filterBy) {
@@ -673,20 +676,26 @@ export class ActionExecutor {
   /** An element selection's candidates, or none for a selection without a list (text, number). */
   private elementCandidatesOf(selection: Selection, context: ActionContext): GameElement[] {
     if (selection.type === 'elements') {
-      const elementsSel = selection as ElementsSelection;
-      return typeof elementsSel.elements === 'function'
-        ? elementsSel.elements(context)
-        : [...elementsSel.elements];
+      const { elements } = selection as ElementsSelection;
+      return typeof elements === 'function' ? this.reused(selection, context, elements) : [...elements];
     }
     if (selection.type !== 'element') return [];
     const elementSel = selection as ElementSelection;
     // Precomputed candidates (chooseElement's `elements`)
-    if (elementSel.elements) {
-      return typeof elementSel.elements === 'function'
-        ? elementSel.elements(context)
-        : [...elementSel.elements];
+    const { elements } = elementSel;
+    if (elements) {
+      return typeof elements === 'function' ? this.reused(selection, context, elements) : [...elements];
     }
-    return this.boardElementsOf(elementSel, context);
+    return this.reused(selection, context, (reading) => this.boardElementsOf(elementSel, reading));
+  }
+
+  /**
+   * A candidate callback's answer, reused while the game's state stands still
+   * (#631, `choice-cache.ts`). Only the live game's answers are kept: a
+   * world's read-only projection is asked afresh.
+   */
+  private reused<T>(selection: Selection, context: ActionContext, workOut: (context: ActionContext) => T[]): T[] {
+    return context.game === this.game ? reusedCandidates(selection, context, workOut) : workOut(context);
   }
 
   /** A chooseElement's candidates from its `from`/`elementClass`/`filter` search of the board. */
@@ -1234,7 +1243,7 @@ export class ActionExecutor {
     for (const selection of action.selections) {
       if (selection.onSelect && resolvedArgs[selection.name] != null) {
         try {
-          (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedArgs[selection.name], onSelectCtx);
+          changing(this.game._ctx, () => (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedArgs[selection.name], onSelectCtx));
           firedSelections.push(selection);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -1242,7 +1251,7 @@ export class ActionExecutor {
           for (const fired of firedSelections) {
             if (fired.onCancel) {
               try {
-                fired.onCancel(onSelectCtx);
+                changing(this.game._ctx, () => fired.onCancel!(onSelectCtx));
               } catch (cancelError) {
                 console.error(`[BoardSmith] onCancel for '${fired.name}' threw during abort:`, cancelError);
               }
@@ -1262,8 +1271,13 @@ export class ActionExecutor {
       args: resolvedArgs,
     };
 
+    return this.runExecute(action, resolvedArgs, context);
+  }
+
+  /** Run an action's `execute`, the one place it is called, as game code that changes the game (#631). */
+  private runExecute(action: ActionDefinition, args: Record<string, unknown>, context: ActionContext): ActionResult {
     try {
-      const result = action.execute(resolvedArgs, context);
+      const result = changing(this.game._ctx, () => action.execute(args, context));
       return result ? acceptExecuteResult(action.name, result) : { success: true };
     } catch (error) {
       return failedExecute(action.name, error);
@@ -2008,7 +2022,7 @@ export class ActionExecutor {
     if (isFirstIteration && selection.onSelect) {
       try {
         const ctx = this.createOnSelectContext();
-        (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(chosen, ctx);
+        changing(this.game._ctx, () => (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(chosen, ctx));
 
         if (!pendingState.onSelectFired) {
           pendingState.onSelectFired = new Set();
@@ -2033,7 +2047,7 @@ export class ActionExecutor {
     // Run onEach callback if present
     if (repeatConfig?.onEach) {
       try {
-        repeatConfig.onEach(context, chosen);
+        changing(this.game._ctx, () => repeatConfig.onEach!(context, chosen));
       } catch (error) {
         return { done: true, error: error instanceof Error ? error.message : String(error) };
       }
@@ -2163,7 +2177,7 @@ export class ActionExecutor {
     if (selection.onSelect) {
       try {
         const ctx = this.createOnSelectContext();
-        (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedValue, ctx);
+        changing(this.game._ctx, () => (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedValue, ctx));
 
         // Track that onSelect fired for this selection (for onCancel)
         if (!pendingState.onSelectFired) {
@@ -2202,7 +2216,7 @@ export class ActionExecutor {
       const selection = action.selections[index];
       if (selection?.onCancel) {
         try {
-          selection.onCancel(ctx);
+          changing(this.game._ctx, () => selection.onCancel!(ctx));
         } catch (error) {
           console.error(`[BoardSmith] onCancel for '${selection.name}' threw:`, error);
         }
@@ -2269,11 +2283,6 @@ export class ActionExecutor {
       return { success: false, error: validateError };
     }
 
-    try {
-      const result = action.execute(resolvedArgs, context);
-      return result ? acceptExecuteResult(action.name, result) : { success: true };
-    } catch (error) {
-      return failedExecute(action.name, error);
-    }
+    return this.runExecute(action, resolvedArgs, context);
   }
 }

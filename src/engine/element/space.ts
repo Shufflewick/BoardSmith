@@ -1,5 +1,6 @@
 import { GameElement } from './game-element.js';
 import { childrenChanged } from './cell-index.js';
+import { changing } from './state-version.js';
 import type { ElementClass, ElementAttributes, ElementContext, ElementJSON } from './types.js';
 import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
@@ -355,7 +356,7 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
   triggerEvent(type: 'enter' | 'exit', element: GameElement): void {
     for (const handler of this._eventHandlers[type]) {
       if (!handler.elementClass || element instanceof handler.elementClass) {
-        handler.callback(element);
+        changing(this._ctx, () => handler.callback(element));
       }
     }
   }

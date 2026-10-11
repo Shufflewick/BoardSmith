@@ -24,6 +24,7 @@
 import type { Game } from '../engine/index.js';
 import type { GameElement } from '../engine/index.js';
 import type { DeterminizeSampler } from './types.js';
+import { changing } from '../engine/element/state-version.js';
 
 /**
  * A game's determinization sampler broke the one contract it has (#73).
@@ -155,7 +156,7 @@ export function applyDeterminization(
   const before = recordKnownWorld(sandbox);
 
   try {
-    sampler(sandbox, seat, rng);
+    changing(sandbox._ctx, () => sampler(sandbox, seat, rng));
   } catch (error) {
     const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
     throw new DeterminizationError(

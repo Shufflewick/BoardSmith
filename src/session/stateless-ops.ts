@@ -31,6 +31,7 @@ import { PERSIST_KEY, PERSIST_PRIVATE_KEY, type PersistCommit } from '../persist
 import { PickHandler } from './pick-handler.js';
 import { missingFieldError } from './parse-executor-op.js';
 import { runnerFromSnapshot } from './runner-from-snapshot.js';
+import { changing } from '../engine/element/state-version.js';
 import {
   offerFollowUp,
   buildPlayerState,
@@ -1241,7 +1242,8 @@ function handleStartTutorial(
   // R-01: apply the tutorial's setup callback before setting initial progress so
   // the board is in the deterministic tutorial position before any advanceWhen
   // predicates fire. setup is optional; games without a preset omit it.
-  def.tutorial.setup?.(runner.game as Game);
+  const setup = def.tutorial.setup;
+  if (setup) changing(runner.game._ctx, () => setup(runner.game as Game));
   // #546: a tutorial begins on the learner's turn, so hand the turn back
   // to the flow's first seat. This runs none of the game's opening again.
   runner.game.restartFlowForTutorial();

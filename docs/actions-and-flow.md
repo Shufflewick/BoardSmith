@@ -249,14 +249,68 @@ Measured on a 3,720-space `chooseFrom` with 300 packs on the board: reading the
 packs inside `disabled` cost about 1,600 ms per evaluation; reading them once in
 `prepare` and checking a set of covered spaces cost about 7 ms.
 
+#### A pick's candidates are worked out once per game state
+
+A pick's candidate code (`choices`, `elements`, or `from` with `filter`) runs
+once for a seat in a given game state. Every later question about that pick in
+the same state is answered from that run: the flow's offer, move enumeration,
+validating a submission, resolving a submitted id, and the UI's request (#631).
+Nothing in the game has to change to get this.
+
+- **Keyed by the earlier picks the code reads.** The engine records which of
+  `ctx.args` your callbacks read. A destination list that never reads the piece
+  picked first (the engine applies `filterBy` itself) runs once for every piece;
+  a list that reads `ctx.args.target` runs once per target.
+- **Dropped when the game changes.** The game has a state version, and these
+  advance it: an element created, moved, removed or shuffled; an action's
+  `execute`; a pick's `onSelect`, `onCancel` or `onEach`; a flow `execute`
+  step, the flow's `setup` and phase hooks; a space's `onEnter` and `onExit`
+  handlers; a bot's `determinize` sampler; a tutorial's `setup`; a random
+  draw; a write through `actionTempState`; a restore; the game's phase
+  changing (`start()`, `finish()`, the flow starting and ending). While any of
+  that game code is running, nothing is reused, so it may ask, write and ask
+  again. An attribute write anywhere else is not seen until one of these
+  happens.
+- **What a candidate callback writes.** A callback that creates, moves or
+  removes an element (drawing a card), draws from `game.random`, or writes
+  through `actionTempState` marks the game changed, so its answer is never
+  reused: it runs on every question, as it did before answers were reused. Any
+  other write, such as setting a game or element attribute or writing
+  `game.settings` directly, is not seen. Answers worked out before it stay in
+  use until the next change the engine does see, and the callback itself is not
+  run again for the same picks, so code that reads that write later (an
+  `execute`) may read the value written for different picks. Do not write
+  that way from candidate code. The same holds for a flow condition (a
+  `while`, an `eachPlayer` `filter`, an `actionStep` `player`).
+- **A callback that reads `game.getFlowState()` or `game.getLastActionResult()`
+  is run every time.** The flow asks for a step's choices before it has moved
+  to that step, so the flow's state is not part of what the version describes.
+- **Development mode reuses nothing**, so a test may write to a game directly
+  between two questions and see its change. World mode reuses nothing either.
+
+`disabled` and `prepare` are not part of the reused answer: they run on every
+evaluation, as above.
+
+A `filter` still runs once per candidate in each state. If it reads a fact
+about the whole position, such as a list of every legal move, that fact is
+worked out once per candidate. Give such a pick its candidates whole instead,
+with `chooseElement`'s `elements: (ctx) => ...`, so the whole-position fact is
+worked out once.
+
 #### On-Demand Choices
 
 Choices are always evaluated on-demand when the player needs to make a selection. This means the `choices` callback runs at the moment the player is presented with the selection, not when the action metadata is built.
 
 **This enables:**
-- Choice computation with side effects (e.g., drawing cards from a deck)
 - Choices that depend on the current game state
-- Manipulating state (like decks) right before showing choices
+- Choice computation with side effects, such as drawing cards from a deck and
+  recording them with `actionTempState()`
+
+A callback with side effects runs on every question about the pick (the offer,
+move enumeration, validating the submission), not once, so its effects happen
+each time. Only the writes listed in
+[A pick's candidates are worked out once per game state](#a-picks-candidates-are-worked-out-once-per-game-state)
+are seen; make every write in a callback one of those.
 
 > ⚠️ **CRITICAL: Module-Level Variables Don't Work**
 >
@@ -317,6 +371,13 @@ Action.create('armsDealer')
 - `temp.clear()` - Remove all temp state for this action/player
 
 The helper automatically namespaces by action name and player, so multiple players or actions won't conflict.
+
+Writing through `temp.set` or `temp.clear` marks the game changed, so a
+`choices` callback that writes temp state runs on every question and is never
+answered from an earlier run: `execute` reads what the run for the submitted
+picks wrote. Write temp state only through this helper. A direct
+`game.settings` write from `choices` is not seen, and `execute` could read a
+value written for a different earlier pick.
 
 #### Full On-Demand Choices Example
 

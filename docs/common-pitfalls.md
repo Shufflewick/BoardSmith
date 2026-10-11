@@ -735,6 +735,16 @@ Action.create('hireFirstMerc')
   })
 ```
 
+A callback with side effects still runs on every question about the pick
+(the offer, move enumeration, validating the submission), so its effects
+happen each time. Only some writes are seen by the engine: creating, moving or
+removing an element, drawing from `game.random`, and writing through
+`actionTempState()`. A callback that makes one of those is run again on every
+question. Any other write (a game or element attribute, `game.settings`
+directly) is not seen, the callback is not run again for the same picks, and
+`execute` may read a value written for different picks. Keep state that
+`execute` needs in `actionTempState()`.
+
 See [On-Demand Choices](./actions-and-flow.md#on-demand-choices) in the Actions & Flow documentation for full details.
 
 ---
