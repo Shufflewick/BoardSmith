@@ -29,7 +29,7 @@ const ELEMENT_ID_KEY = '0630063006300630';
 /** Where a game that has not ended is cut off. */
 const MAX_PLIES = 2000;
 
-const targets = { bot: MCTSBot.prototype, collection: ElementCollection.prototype };
+const targets = { bot: MCTSBot.prototype, collection: ElementCollection };
 
 /** Every move `seat` can make, with the engine's own move enumeration. */
 function legalMoves(game, flowState, seat) {

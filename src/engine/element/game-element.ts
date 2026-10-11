@@ -1,4 +1,4 @@
-import { ElementCollection } from './element-collection.js';
+import { ElementCollection, isElementClass } from './element-collection.js';
 import { childrenChanged } from './cell-index.js';
 import type {
   ElementClass,
@@ -29,20 +29,6 @@ import {
   isEncodableTypedArray,
   isSerializedTypedArray,
 } from './typed-array-codec.js';
-
-/**
- * Check if a value is an ElementClass (a GameElement subclass constructor).
- * Mirrors the equivalent private guard in ElementCollection — duplicated
- * here (rather than imported) because ElementCollection has no `_ctx`/game
- * linkage and cannot be the recording hook (see PIT-02 plan notes).
- */
-function isElementClass<F extends GameElement>(value: unknown): value is ElementClass<F> {
-  return (
-    typeof value === 'function' &&
-    'isGameElement' in value &&
-    (value as ElementClass<F>).isGameElement === true
-  );
-}
 
 /**
  * SPACE-04/D25: the ONE shared write path for `ctx.classRegistry`. Every
@@ -145,10 +131,8 @@ export function registerCreatedElementClass(
  * classes of queries are NOT covered and will not trigger the PIT-02
  * unregistered-class throw:
  *   1. Queries made directly on an `ElementCollection` instance, e.g.
- *      `board.children.all(Foo)` — `ElementCollection` has its own finder
- *      implementations with no `_ctx` linkage (see the comment on
- *      `isElementClass` above), so it cannot call into this hook.
- *      Instrumenting `ElementCollection` itself was considered and
+ *      `board.children.all(Foo)` — a collection has no `_ctx` linkage, so
+ *      its queries cannot call into this hook. Instrumenting `ElementCollection` itself was considered and
  *      rejected for this reason.
  *   2. Any query made after `startFlow()`'s first traversal completes
  *      (post-start / async queries) — recording is switched off by then.
@@ -1014,8 +998,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     ...finders: ElementFinder<F>[]
   ): ElementCollection<F> {
     recordQueriedClassIfActive(this._ctx, classNameOrFinder);
-    const collection = new ElementCollection(...this._t.children);
-    return reachAll(this, collection.all(classNameOrFinder as ElementClass<F>, ...finders));
+    return reachAll(this, ElementCollection._finder(this._t.children, classNameOrFinder, finders, Infinity, false, new ElementCollection<F>()));
   }
 
   /**
@@ -1050,8 +1033,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     ...finders: ElementFinder<F>[]
   ): F | undefined {
     recordQueriedClassIfActive(this._ctx, classNameOrFinder);
-    const collection = new ElementCollection(...this._t.children);
-    return reachPartition(collection.first(classNameOrFinder as ElementClass<F>, ...finders));
+    return reachPartition(ElementCollection._finder<F, F[]>(this._t.children, classNameOrFinder, finders, 1, false, [])[0]);
   }
 
   /**
@@ -1083,8 +1065,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     ...finders: ElementFinder<F>[]
   ): ElementCollection<F> {
     recordQueriedClassIfActive(this._ctx, classNameOrFinder);
-    const collection = new ElementCollection(...this._t.children);
-    return reachAll(this, collection.firstN(n, classNameOrFinder as ElementClass<F>, ...finders));
+    return reachAll(this, ElementCollection._finder(this._t.children, classNameOrFinder, finders, n, false, new ElementCollection<F>()));
   }
 
   /**
@@ -1116,8 +1097,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     ...finders: ElementFinder<F>[]
   ): F | undefined {
     recordQueriedClassIfActive(this._ctx, classNameOrFinder);
-    const collection = new ElementCollection(...this._t.children);
-    return reachPartition(collection.last(classNameOrFinder as ElementClass<F>, ...finders));
+    return reachPartition(ElementCollection._finder<F, F[]>(this._t.children, classNameOrFinder, finders, 1, true, [])[0]);
   }
 
   /**
@@ -1146,8 +1126,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     ...finders: ElementFinder<F>[]
   ): ElementCollection<F> {
     recordQueriedClassIfActive(this._ctx, classNameOrFinder);
-    const collection = new ElementCollection(...this._t.children);
-    return reachAll(this, collection.lastN(n, classNameOrFinder as ElementClass<F>, ...finders));
+    return reachAll(this, ElementCollection._finder(this._t.children, classNameOrFinder, finders, n, true, new ElementCollection<F>()));
   }
 
   /**
@@ -1181,8 +1160,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     ...finders: ElementFinder<F>[]
   ): boolean {
     recordQueriedClassIfActive(this._ctx, classNameOrFinder);
-    const collection = new ElementCollection(...this._t.children);
-    return collection.has(classNameOrFinder as ElementClass<F>, ...finders);
+    return ElementCollection._finder<F, F[]>(this._t.children, classNameOrFinder, finders, 1, false, []).length > 0;
   }
 
   /**

@@ -1,7 +1,7 @@
 {
-  "revision": 170,
+  "revision": 171,
   "bundleProtocol": 2,
-  "surfaceHash": "719445e066885571",
+  "surfaceHash": "c8181d5d978dc5a6",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1470,10 +1470,19 @@
       "revision": 170,
       "date": "2026-10-11",
       "bundleProtocol": 2,
-      "surfaceHash": "719445e066885571",
+      "surfaceHash": "e41fa2badef24819",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "A table host's bot search no longer holds the table (#635): SnapshotSessionHost runs each botTurn outside its one-at-a-time section, against the snapshot the game stood on when the search began, and adopts the bot's move only if the game still stands there; otherwise it throws the move away and searches again (after 3 stale searches in a row, the next one runs inside the section). A human's move, undo, expiry or view request no longer waits for a bot to think. No op, result or executor contract changed; runBotTurns() still resolves once no bot has a move to make, and a call during a run now joins it. Re-vendor the games worker to pick it up."
+      "summary": "Element queries cost less per call (#654): ElementCollection._finder is now a static method taking the roots to walk, so GameElement queries no longer copy their children, and ElementCollection's private finderToPredicate and isElementClass methods are gone. Every query answers with the same elements in the same order, asks function finders about the same elements in the same order, and throws the same tree-corruption error in development mode; a first() on an empty or one-piece square costs about 15 ns instead of about 490 ns."
+    },
+    {
+      "revision": 171,
+      "date": "2026-10-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "c8181d5d978dc5a6",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A bot's search no longer holds the table (#635): botSuggest is now an executor op (ExecutorOp, parseExecutorOp; same seats field as botTurn) that changes nothing and answers with the due bot seat's move (botPlayer, suggestedAction, suggestedArgs), botStalled when that seat could not choose, or neither when no bot seat is due, so its result fields are now optional; it no longer refuses a game without bot objectives and is refused in an order-entry session. SnapshotSessionHost searches with botSuggest outside its one-at-a-time section and makes the move as an ordinary action for the bot's seat only if the game still stands where the search began, so it never sends botTurn and every game-changing op result it receives is one it applies; a refused bot move fails as an action result, without botPlayer. botTurn is unchanged and still accepted. A human's move made during a search is published at once, though its handleOp still resolves after the bot run it wakes."
     }
   ]
 }

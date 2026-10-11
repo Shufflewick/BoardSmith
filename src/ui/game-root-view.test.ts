@@ -9,31 +9,26 @@
  * - The engine's root is assignable to `GameRootView`: renaming, dropping or
  *   retyping `phase`, `isFinished` or `settings` (or an element field) breaks it.
  * - The root fields the engine adds over `ElementJSON` are exactly the ones
- *   `GameRootView` adds over `GameViewElement`, plus two named exclusions, each
- *   with its reason below. A new root field must be added to `GameRootView` or
+ *   `GameRootView` adds over `GameViewElement`, plus two named exclusions: the
+ *   engine's `RestoreOnlyRootField` (#671), and `AnimationEventsRootField`, with
+ *   its reason below. A new root field must be added to `GameRootView` or
  *   to an exclusion that says why a board does not read it. Assignability alone cannot catch an addition, and the reverse
  *   assignment is not the contract: a view is a reader's type (optional
  *   attributes, no visibility markers) that nothing hands back to the engine.
- * - Every path that hands a board its root carries that type, so the shells
+ * - Every path that hands a board its root carries a seat's view,
+ *   `SeatViewJSON` (#671), the root less the fields redaction removes, so the shells
  *   and the test harness need no cast to type it.
  */
 import { describe, it, expectTypeOf } from 'vitest';
 import type { ComputedRef } from 'vue';
-import type { Game, ElementJSON, PlayerStateView } from '../engine/index.js';
+import type { Game, ElementJSON, PlayerStateView, RestoreOnlyRootField, SeatViewJSON } from '../engine/index.js';
 import type { PlayerGameState } from '../session/index.js';
 import type { PlayerState } from '../client/types.js';
-import type { WorldSeatView } from '../testing/index.js';
+import type { SeatProjection, WorldSeatView } from '../testing/index.js';
 import type { GameRootView, GameViewElement } from './types.js';
 import type { useTableSeat } from './composables/useTableSeat.js';
 
 type GameRootJSON = ReturnType<Game['toJSON']>;
-
-/**
- * Root fields only the authoritative `toJSON()` carries, for restores: the
- * animation counters and the log's eviction offset. `toJSONForPlayer` removes
- * them, so no seat's view has them.
- */
-type RestoreOnlyRootField = 'animationEventSeq' | 'animationSeqBySeat' | 'messagesEvicted';
 
 /**
  * Ships in a seat's view (its visible events, renumbered for the seat), but a
@@ -67,16 +62,41 @@ describe('GameRootView and Game.toJSON (#615)', () => {
     expectTypeOf<BoardRootFields<Added>>().toEqualTypeOf<Exclude<keyof GameRootView, keyof GameViewElement>>();
   });
 
-  it('is what every path to a board carries', () => {
-    expectTypeOf<PlayerStateView['state']>().toEqualTypeOf<GameRootJSON>();
-    expectTypeOf<PlayerGameState['view']>().toEqualTypeOf<GameRootJSON>();
-    expectTypeOf<PlayerState['view']>().toEqualTypeOf<GameRootJSON>();
-    expectTypeOf<WorldSeatView['state']>().toEqualTypeOf<GameRootJSON>();
+  it('is what every path to a board carries: the seat view toJSONForPlayer writes', () => {
+    expectTypeOf<ReturnType<Game['toJSONForPlayer']>>().toEqualTypeOf<SeatViewJSON>();
+    expectTypeOf<ReturnType<Game['toJSONForPlayers']>>().toEqualTypeOf<SeatViewJSON[]>();
+    expectTypeOf<PlayerStateView['state']>().toEqualTypeOf<SeatViewJSON>();
+    expectTypeOf<PlayerGameState['view']>().toEqualTypeOf<SeatViewJSON>();
+    expectTypeOf<PlayerState['view']>().toEqualTypeOf<SeatViewJSON>();
+    expectTypeOf<SeatProjection['state']>().toEqualTypeOf<SeatViewJSON>();
+    expectTypeOf<WorldSeatView['state']>().toEqualTypeOf<SeatViewJSON>();
   });
 
   it('is the table seat gameView type', () => {
     expectTypeOf<Parameters<typeof useTableSeat>[0]['gameView']>().toEqualTypeOf<
       ComputedRef<GameRootView | null>
     >();
+  });
+});
+
+describe("a seat's view and the root (#671)", () => {
+  it('names the restore-only fields redaction removes', () => {
+    // Redacting another root field changes RestoreOnlyRootField, and this list with it.
+    expectTypeOf<RestoreOnlyRootField>().toEqualTypeOf<'animationEventSeq' | 'animationSeqBySeat' | 'messagesEvicted'>();
+  });
+
+  it('is the root less exactly the restore-only fields', () => {
+    expectTypeOf<keyof SeatViewJSON>().toEqualTypeOf<Exclude<keyof GameRootJSON, RestoreOnlyRootField>>();
+    expectTypeOf<SeatViewJSON>().toMatchTypeOf<GameRootView>();
+  });
+
+  it('has no restore-only field to read', () => {
+    expectTypeOf<SeatViewJSON>().not.toHaveProperty('messagesEvicted');
+    expectTypeOf<SeatViewJSON>().not.toHaveProperty('animationEventSeq');
+    expectTypeOf<SeatViewJSON>().not.toHaveProperty('animationSeqBySeat');
+  });
+
+  it('restores: a seat view is a root loadSerializedState accepts', () => {
+    expectTypeOf<SeatViewJSON>().toMatchTypeOf<Parameters<Game['loadSerializedState']>[0]>();
   });
 });

@@ -69,6 +69,9 @@ export type {
   DieSides,
   AnimationEvent,
   AnimationFloor,
+  // A seat's view of the game root, and the root fields it never carries (#671).
+  SeatViewJSON,
+  RestoreOnlyRootField,
   // INTRO-01/02: action-space introspection view types
   ActionSpaceView,
   ActionSchemaView,
