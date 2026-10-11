@@ -898,6 +898,11 @@ session-free runner and the stateless `selectionStep` op that every session
 host runs alike.
 A host that resumes a pending action without its persisted pending state (only
 `initialArgs`) is treated as starting it, so the condition must hold then.
+Those `initialArgs` are the picks the client made before the one it sends, and
+each is made in order as the seat's own step would be (#658): a required one
+left out, or a value the game does not offer, is refused, and the pending
+action is cancelled. A held follow-up's published args come from the engine,
+never from `initialArgs`.
 
 #### Why not just refuse inside `execute`?
 
