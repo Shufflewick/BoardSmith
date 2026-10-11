@@ -183,6 +183,11 @@ export const WORLD_REFUSALS = {
     why: "#418: a seat asked about a draft (a quote, or a pick re-asked with earlier answers bound) whose element selection names nothing this action can offer here -- the element was taken since the offer was sent, or the client named an id no offer carried. A draft is resolved to elements before the action's own callbacks see it, and one that resolves to nothing cannot be answered without handing a callback typed for an element a bare number. One request refused; the world is unaffected, and the next offer carries what can be picked now",
   },
 
+  "undeclared-arg": {
+    owner: "caller",
+    why: "#662, #665: a seat's command, its declaration walk, a quote, or a pick re-asked with earlier answers bound carried a key none of the action's picks declares. A client sends picks and nothing else, so the args are refused before any of the action's declarations or callbacks see them, rather than reaching the rules and coming back as the game's own refusal. A scheduled event is not checked: the clock's verbs ask no picks and their args are the bundle's own. One request refused; the world is unaffected",
+  },
+
   // ---- GAME: the bundle's own doing; dead-letters, never parks ----
   "undeclared-partition": {
     owner: "game",

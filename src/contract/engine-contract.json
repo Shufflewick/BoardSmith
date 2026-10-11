@@ -1,7 +1,7 @@
 {
-  "revision": 168,
+  "revision": 169,
   "bundleProtocol": 2,
-  "surfaceHash": "3cd66e7b422f0cbf",
+  "surfaceHash": "a8e02fb25f517721",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1456,6 +1456,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A client may send only the picks an action declares (#662): a key no pick declares is refused with a message naming it and the picks the action takes ('<action>' was sent '<key>', which is not one of its picks. It takes: <picks>.) on a whole submission (repeating or not, and a world command), on a selection step's initialArgs (the new pending action is cancelled), and on resolveChoices (INVALID_PICK), so a .followUpArgs key is never client data. A follow-up's other args come only from the follow-up the seat holds: Game.performAction and ActionExecutor.executeAction take { followUp } in place of { asFollowUp } and bind its args over the client's (a whole follow-up with a repeating pick now receives them too), resolveChoices binds the held follow-up's args, and a pick the follow-up answered is passed over on every step path so a client's value for it is never stored or seen by later picks. GameRunner.startPendingAction binds follow-up args as the session does and GameRunner.followUpArgsFor is new; enumerateLegalMoves moves and actionHistory entries carry only picks (replay rebinds the rest); the UI controller sends only picks on every step and submission, and start() warns in development when given an arg no pick declares; ActionExecutor gains undeclaredArgsRefusal and picksOf."
+    },
+    {
+      "revision": 169,
+      "date": "2026-10-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "a8e02fb25f517721",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A seat's args in a world are its picks, refused as the caller's on every road (#665): a seat's command (applyCommand) and its declaration walk (commandNeeds with a player), a quote (quotePartitions, resolveQuote) and a re-asked pick (pickPartitions, resolvePick) refuse a key no pick declares with the new caller-owned refusal undeclared-arg, carrying ActionExecutor.undeclaredArgsRefusal's sentence, before any of the action's declarations or callbacks run. A seat's command with such a key was previously refused only by the executor and travelled as a plain Error, which the platform treats as game-owned and shows as an error in the game's rules. A scheduled event (commandNeeds with a null player, onEvent) is not checked: the clock's verbs ask no picks and their args are the bundle's own. ActionExecutor.undeclaredArgsRefusal takes Readonly args."
     }
   ]
 }

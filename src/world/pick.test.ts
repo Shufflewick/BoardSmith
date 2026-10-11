@@ -205,6 +205,21 @@ describe("#378 — one pick, re-asked with the arguments bound so far", () => {
     ).rejects.toThrow(/nosuchverb/);
   });
 
+  it("REFUSES args carrying a key no pick declares, as the command itself would (#665)", async () => {
+    const engine = await warmEngine();
+    const refusal = {
+      code: "undeclared-arg",
+      message: "'deploy' was sent 'bribe', which is not one of its picks. It takes: ship, crew.",
+    };
+
+    expect(() =>
+      engine.pickPartitions("player-a", "deploy", "crew", { ship: "dory", bribe: 100 }, STAMP.now),
+    ).toThrow(expect.objectContaining(refusal));
+    await expect(
+      engine.resolvePick("player-a", "deploy", "crew", { ship: "dory", bribe: 100 }, STAMP),
+    ).rejects.toMatchObject(refusal);
+  });
+
   it("REFUSES a selection the action does not have", async () => {
     const engine = await warmEngine();
 
