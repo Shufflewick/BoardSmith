@@ -439,7 +439,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Bump the fetch-generation counter so any in-flight fetchChoicesForPick
     // calls that resolve after this point discard their results instead of
     // writing them to the next action's snapshot (R-06 stale-choice race fix).
+    // Those calls no longer end the loading state either (#663), so it ends here.
     choiceFetchGen++;
+    isLoadingChoices.value = false;
   }
 
   /** Which follow-up this controller last started, so a held one is never started twice. */
@@ -967,8 +969,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     // Capture the generation before the await. clearAdvancedState() (called
     // on action completion/cancel/start) bumps this counter. If it differs
-    // after the round-trip the action is gone/replaced — discard the result
-    // rather than writing it to the new action's snapshot (R-06).
+    // after the round-trip the action is gone/replaced — discard the result,
+    // success or failure, rather than applying it to the new action (R-06, #663).
     const capturedFetchGen = choiceFetchGen;
 
     isLoadingChoices.value = true;
@@ -1013,6 +1015,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         setError(result.error ?? describeUndescribablePick(selection));
       }
     } catch (err) {
+      if (choiceFetchGen !== capturedFetchGen) return;
       const fetchDuration = Date.now() - fetchStartTime;
       console.error(
         `[BoardSmith] Error fetching pick choices for '${selectionName}' after ${fetchDuration}ms:`,
@@ -1020,7 +1023,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       );
       setError(describeUndescribablePick(selection));
     } finally {
-      isLoadingChoices.value = false;
+      // Only a request of the current action ends its loading state (#663).
+      if (choiceFetchGen === capturedFetchGen) isLoadingChoices.value = false;
     }
   }
 
