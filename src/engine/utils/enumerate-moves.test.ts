@@ -417,3 +417,65 @@ describe('an action-level validate sees a pre-filled null pick as absent (#648)'
     }
   });
 });
+
+// #659: execution shows every callback the resolved args, where the skipped
+// pick is absent, so a later pick's choices, disabled and multiSelect must see
+// the same args in enumeration, or the bot is offered moves the engine refuses
+// and misses ones it accepts.
+describe("a later pick's callbacks see a pre-filled null pick as absent (#659)", () => {
+  type Shape = 'choices' | 'disabled' | 'multiSelect';
+  const skipped = (ctx: { args: Record<string, unknown> }) => ctx.args.a === undefined;
+
+  class SkipCallbackGame extends Game<SkipCallbackGame, Player> {
+    constructor(options: GameOptions & { shape: Shape; repeating: boolean }) {
+      super(options);
+      const { shape, repeating } = options;
+      type Ctx = { args: Record<string, unknown> };
+      const base = Action.create<SkipCallbackGame>('chained').chooseFrom('a', { choices: [1, 2], optional: true });
+      const pick = {
+        choices: shape === 'choices' ? (ctx: Ctx) => (skipped(ctx) ? ['x', 'y'] : ['z']) : ['x', 'y', 'z'],
+        disabled: (choice: string, ctx: Ctx) =>
+          (shape === 'multiSelect' ? choice === 'z' : shape === 'disabled' && skipped(ctx) === (choice === 'z'))
+            ? 'not now'
+            : false,
+      };
+      this.registerAction(
+        (shape === 'multiSelect'
+          ? base.chooseFrom('b', { ...pick, multiSelect: (ctx) => (skipped(ctx) ? { min: 1, max: 1 } : { min: 2, max: 2 }) })
+          : repeating
+            ? base.chooseFrom('b', { ...pick, repeat: { until: () => true } })
+            : base.chooseFrom('b', pick)
+        )
+          .execute(() => ({ success: true })),
+      );
+    }
+  }
+
+  // Every value `b` could be sent as, for checking no accepted move is missing.
+  const singles = ['x', 'y', 'z'];
+  const lists = [['x'], ['y'], ['z'], ['x', 'y']];
+
+  it.each([
+    ['choices', false],
+    ['choices', true],
+    ['disabled', false],
+    ['disabled', true],
+    ['multiSelect', false],
+  ] as const)('enumerates exactly what execution accepts when b uses %s (repeating: %s)', (shape, repeating) => {
+    const game = new SkipCallbackGame({ playerCount: 2, shape, repeating });
+    const action = game.getAction('chained')!;
+    const player = game.getPlayer(1)!;
+    const moves = enumerateActionMoves(game, action, player, {
+      followUp: { action: 'chained', args: { a: null } },
+    });
+    const accepts = (b: unknown) =>
+      game.getActionExecutor().executeAction(action, player, { a: null, b: repeating ? [b] : b }, { asFollowUp: true })
+        .success;
+
+    for (const move of moves) expect(move.a).toBe(null);
+    const offered = moves.map((move) => (repeating ? (move.b as unknown[])[0] : move.b));
+    const expected = shape === 'multiSelect' ? [['x'], ['y']] : ['x', 'y'];
+    expect(offered).toEqual(expected);
+    expect((shape === 'multiSelect' ? lists : singles).filter(accepts)).toEqual(expected);
+  });
+});

@@ -81,21 +81,35 @@ export interface SequenceConfig<G extends Game = Game> extends BaseFlowConfig {
 /**
  * Configuration for loop flow
  */
-export interface LoopConfig<G extends Game = Game> extends BaseFlowConfig {
+export type LoopConfig<G extends Game = Game> = BaseFlowConfig & LoopBound & {
   /** Condition to continue looping (evaluated before each iteration) */
   while?: (context: FlowContext<G>) => boolean;
-  /** Maximum iterations (safety limit) */
-  maxIterations?: number;
-  /**
-   * Opt-in for a genuinely unbounded game — makes `maxIterations` optional.
-   * The high global whole-flow safety tripwire (DEFAULT_MAX_ITERATIONS) still
-   * applies even when this is set, so a genuinely stuck loop still fails loud
-   * instead of hanging the process.
-   */
-  unbounded?: boolean;
   /** Body of the loop */
   do: FlowNode<G>;
-}
+};
+
+/**
+ * How a loop is bounded: exactly one of a numeric `maxIterations` safety cap,
+ * or an explicit `unbounded: true` opt-in for a genuinely unbounded game.
+ * Giving neither, or both, does not compile (and `loop()` refuses either at
+ * construction, for rules compiled without the type check).
+ */
+export type LoopBound =
+  | {
+      /** Maximum iterations (safety limit) */
+      maxIterations: number;
+      unbounded?: false;
+    }
+  | {
+      /**
+       * Opt-in for a genuinely unbounded game, in place of `maxIterations`.
+       * The high global whole-flow safety tripwire (DEFAULT_MAX_ITERATIONS)
+       * still applies, so a genuinely stuck loop still fails loud instead of
+       * hanging the process.
+       */
+      unbounded: true;
+      maxIterations?: undefined;
+    };
 
 /**
  * Configuration for repeat flow

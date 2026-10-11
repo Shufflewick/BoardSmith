@@ -3,8 +3,11 @@ import { loop, noop, turnLoop, stateAwareLoop } from './builders.js';
 
 describe('loop() — PIT-01 construction-time maxIterations guard', () => {
   it('throws an actionable error when maxIterations is omitted', () => {
+    // @ts-expect-error -- no maxIterations and no unbounded: true; a compiled rule reaches the runtime check
     expect(() => loop({ do: noop() })).toThrow(/maxIterations/);
+    // @ts-expect-error -- no maxIterations and no unbounded: true; a compiled rule reaches the runtime check
     expect(() => loop({ do: noop() })).toThrow(/loop\(\{ maxIterations: 100/);
+    // @ts-expect-error -- no maxIterations and no unbounded: true; a compiled rule reaches the runtime check
     expect(() => loop({ do: noop() })).toThrow(/10000/);
   });
 
@@ -43,7 +46,9 @@ describe('loop() — LIBX-02 unbounded valve', () => {
   // unbounded must still throw, and the message must name the unbounded valve
   // too (not just maxIterations) so authors discover the correct fix.
   it('still throws, naming both the bounded and unbounded valves, when neither is provided', () => {
+    // @ts-expect-error -- no maxIterations and no unbounded: true; a compiled rule reaches the runtime check
     expect(() => loop({ do: noop() })).toThrow(/maxIterations/);
+    // @ts-expect-error -- no maxIterations and no unbounded: true; a compiled rule reaches the runtime check
     expect(() => loop({ do: noop() })).toThrow(/unbounded/);
   });
 });
@@ -54,10 +59,13 @@ describe('loop() — 164-IN-02 conflicting unbounded + maxIterations guard', () 
   // no-op nothing tells the author about -- a plausible authoring mistake
   // (e.g. leftover maxIterations from before adding unbounded:true).
   it('throws an actionable error when both unbounded:true and maxIterations are provided', () => {
+    // @ts-expect-error -- maxIterations and unbounded: true together; a compiled rule reaches the runtime check
     expect(() => loop({ unbounded: true, maxIterations: 50, do: noop() })).toThrow(
       /cannot combine unbounded: true with an explicit maxIterations/
     );
+    // @ts-expect-error -- maxIterations and unbounded: true together; a compiled rule reaches the runtime check
     expect(() => loop({ unbounded: true, maxIterations: 50, do: noop() })).toThrow(/50/);
+    // @ts-expect-error -- maxIterations and unbounded: true together; a compiled rule reaches the runtime check
     expect(() => loop({ unbounded: true, maxIterations: 50, do: noop() })).toThrow(/choose one/);
   });
 
@@ -84,7 +92,15 @@ describe('turnLoop()/stateAwareLoop() — LIBX-02 / F-16 unbounded passthrough',
   });
 
   it('turnLoop rejects combining unbounded with an explicit maxIterations (fail fast)', () => {
+    // @ts-expect-error -- maxIterations and unbounded: true together; a compiled rule reaches the runtime check
     expect(() => turnLoop({ actions: ['play'], unbounded: true, maxIterations: 50 })).toThrow(
+      /cannot combine unbounded/
+    );
+  });
+
+  it('stateAwareLoop rejects combining unbounded with an explicit maxIterations (fail fast)', () => {
+    // @ts-expect-error -- maxIterations and unbounded: true together; a compiled rule reaches the runtime check
+    expect(() => stateAwareLoop({ actions: ['play'], unbounded: true, maxIterations: 50 })).toThrow(
       /cannot combine unbounded/
     );
   });

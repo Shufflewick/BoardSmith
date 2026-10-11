@@ -464,7 +464,7 @@ loop({
 })
 ```
 
-`unbounded: true` makes `maxIterations` optional and removes the per-loop
+`unbounded: true` takes the place of `maxIterations` (give one or the other, never both) and removes the per-loop
 cap-hit throw entirely — the loop can only exit via its `while` condition
 becoming false. It is greppable and self-documenting: a reviewer scanning
 the flow definition immediately sees which loops are intentionally
