@@ -40,6 +40,21 @@ function legalMoves(game, flowState, seat) {
   });
 }
 
+/**
+ * A started game, the same one every time: seeded, and with a fixed element id key.
+ *
+ * @param setup `{ playerCount, options }` for the game's constructor.
+ */
+export function startGame(gameDefinition, setup) {
+  const runner = new GameRunner({
+    GameClass: gameDefinition.gameClass,
+    gameType: gameDefinition.gameType,
+    gameOptions: { ...setup.options, playerCount: setup.playerCount, seed: SEED, elementIdKey: ELEMENT_ID_KEY },
+  });
+  runner.start();
+  return runner;
+}
+
 /** The seat to move and its moves, or nothing when the game is over or no seat can move. */
 function nextTurn(runner) {
   const flowState = runner.getFlowState();
@@ -59,12 +74,7 @@ function nextTurn(runner) {
  * @returns the number of moves made
  */
 async function play(gameDefinition, setup, visit) {
-  const runner = new GameRunner({
-    GameClass: gameDefinition.gameClass,
-    gameType: gameDefinition.gameType,
-    gameOptions: { ...setup.options, playerCount: setup.playerCount, seed: SEED, elementIdKey: ELEMENT_ID_KEY },
-  });
-  runner.start();
+  const runner = startGame(gameDefinition, setup);
   const rng = new SeededRandom(`${SEED}-moves`);
   for (let ply = 0; ply < MAX_PLIES; ply++) {
     const turn = nextTurn(runner);
@@ -97,16 +107,29 @@ async function searchPosition(gameDefinition, runner, seat) {
     const { steps, ms } = await measureSearch(targets, () => bot.play(), { profile: false });
     presets[level] = { steps, ms };
   }
-  const { gameClass, gameType, bot: strategy } = gameDefinition;
-  const bot = createBot(runner.game, gameClass, gameType, seat, runner.actionHistory, FIXED_STEPS, strategy, { seed: SEED });
-  const { result, ...fixed } = await measureSearch(targets, () => bot.play(), { profile: true });
-  return { presets, fixed: { ...fixed, move: describeMove(runner.game, result) } };
+  // The fixed search twice: counting steps only, for its time, then wrapped for where the
+  // time goes. The wrappers cost time of their own, most of it on element
+  // lookups, so a change that cuts lookups would otherwise look faster than it is.
+  const fixedBot = () => createBot(
+    runner.game, gameDefinition.gameClass, gameDefinition.gameType, seat, runner.actionHistory,
+    FIXED_STEPS, gameDefinition.bot, { seed: SEED },
+  );
+  const fixed = await measureSearch(targets, () => fixedBot().play(), { profile: false });
+  const { result, steps, ...profile } = await measureSearch(targets, () => fixedBot().play(), { profile: true });
+  const move = describeMove(runner.game, fixed.result);
+  if (steps !== fixed.steps || describeMove(runner.game, result) !== move) {
+    throw new Error(
+      `The seeded ${FIXED_STEPS}-step search did not repeat itself: it made ${fixed.steps} steps and chose ` +
+        `${move}, then ${steps} steps and ${describeMove(runner.game, result)}. Something in the search or the ` +
+        "game's bot hooks is not seeded, so this game's fixed numbers cannot be compared between runs.",
+    );
+  }
+  return { presets, fixed: { steps, ms: fixed.ms, move }, profile };
 }
 
 /**
  * A move as the report shows it, with each element named rather than given by
- * id, wherever the id sits in the args: element ids differ from one process to
- * the next, names do not.
+ * id, wherever the id sits in the args, so a reader can tell which move it is.
  */
 function describeMove(game, move) {
   if (!move) return 'none';
@@ -148,5 +171,12 @@ export async function runBench(gameDefinition, setup) {
     }
     return positions.length < marks.length;
   });
+  if (positions.length !== marks.length) {
+    throw new Error(
+      `The second play of the seeded game did not reach every position the first one found: it searched ` +
+        `${positions.length} of ${marks.map((mark) => `${mark.name} (ply ${mark.ply})`).join(', ')}. ` +
+        'The game played differently with the same seed, so its positions are not repeatable.',
+    );
+  }
   return { devMode: isDevMode(), plies, positions };
 }

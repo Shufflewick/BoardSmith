@@ -262,9 +262,11 @@ node scripts/bench-bot/run.mjs --out docs/bot-speed-baseline.md
 ```
 
 The catalogue is checkers, chess, cribbage, go-fish (4 players), hex at 11 and
-19, and seven (7 players). The games are only read. MERC is not in it: it runs
-on its own vendored copy of BoardSmith, so a run here would not measure this
-checkout.
+19, and seven (7 players), plus MERC (at its smallest table) when it is checked
+out at `~/Dropbox/MERC/BoardSmith/MERC`. When it is not, a run prints that it
+skipped MERC and the report says so. The games are only read, and every game's
+`boardsmith` imports are bundled from this checkout, MERC's included, whatever
+copy of BoardSmith the game itself uses.
 
 For each game it plays one seeded game of random moves, picks an early, a
 middle and a late position (a tenth, half and nine tenths of the way in, at a
@@ -275,19 +277,23 @@ ply where the seat to move has a choice), and at each one runs:
   the step count is the speed measurement, and it moves with the machine's load.
 - **a fixed 300-step search** with a seed and no timeout, so its work is the
   same on every run and on every machine, and it must choose the same move each
-  time. Its time is split into parts: rebuilding the search game from the root
-  snapshot, listing legal moves, applying moves, re-applying moves down the tree
-  path, scoring (objectives and end-of-game results) and the determinize hook,
-  with the rest as "other". "lookup" is the share spent in element tree walks
-  (`ElementCollection._finder`), which happen inside the other parts.
+  time. It runs twice. The first run gives its ms and steps per second. The
+  second is profiled, and gives how its time splits into parts: rebuilding the
+  search game from the root snapshot, listing legal moves, applying moves,
+  re-applying moves down the tree path, scoring (objectives and end-of-game
+  results) and the determinize hook, with the rest as "other". "lookup" is the
+  share spent in element tree walks (`ElementCollection._finder`), which happen
+  inside the other parts. The bench stops with an error if the two runs differ
+  in steps or chosen move.
 
 It always measures in production mode, where `isDevMode()` is false, as in a
 worker child, whatever `NODE_ENV` the shell has. Development mode makes the bot
 up to 1.7 times slower (#628), and the report refuses to print numbers taken in
 it. The split is taken by wrapping the bot's methods for the length of the
-fixed search only, so the bot has no timers in it otherwise. The wrappers cost
-time of their own (about a tenth more in hex 11x11, most of it timing the
-lookups), so compare fixed numbers only with fixed numbers.
+profiled run only, so the bot has no timers in it otherwise. The wrappers cost
+time of their own, most of it timing lookups, which is why the headline ms and
+steps per second come from the run without them: a change that cuts lookups
+would otherwise also cut the wrappers' cost and look faster than it is.
 
 **For a bot speed ticket:** run the bench on `main` and on your branch, on the
 same machine, close together, and put both tables in the ticket. The fixed

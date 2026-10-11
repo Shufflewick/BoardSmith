@@ -4,8 +4,8 @@
  *
  *   node scripts/bench-bot/run.mjs [game ...] [--out <file>]
  *
- * With no game it runs the catalogue table games below, from ~/BoardSmithGames
- * (read only). A game is a catalogue name (`chess`, `hex-19`) or the directory
+ * With no game it runs the catalogue table games below, from ~/BoardSmithGames,
+ * and MERC when it is checked out (all read only). A game is a catalogue name (`chess`, `hex-19`) or the directory
  * of any game project. For each game it plays a seeded game of random moves to
  * an early, a middle and a late position, and there runs every difficulty
  * preset and a fixed-step search, against the BoardSmith in THIS checkout. It
@@ -26,16 +26,23 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..', '..');
 const GAMES_DIR = join(homedir(), 'BoardSmithGames');
 
-/** The catalogue table games, with the table sizes the 2026-10-10 measurement used (#628). */
+/**
+ * The catalogue table games, with the table sizes the 2026-10-10 measurement
+ * used (#628). MERC is run when it is checked out, and left out with a note
+ * when it is not.
+ */
 const CATALOGUE = [
-  { name: 'checkers', dir: 'checkers', playerCount: 2 },
-  { name: 'chess', dir: 'chess', playerCount: 2 },
-  { name: 'cribbage', dir: 'cribbage', playerCount: 2 },
-  { name: 'go-fish', dir: 'go-fish', playerCount: 4 },
-  { name: 'hex-11', dir: 'hex', playerCount: 2, options: { boardSize: 11 } },
-  { name: 'hex-19', dir: 'hex', playerCount: 2, options: { boardSize: 19 } },
-  { name: 'seven', dir: 'seven', playerCount: 7 },
+  { name: 'checkers', dir: join(GAMES_DIR, 'checkers'), playerCount: 2 },
+  { name: 'chess', dir: join(GAMES_DIR, 'chess'), playerCount: 2 },
+  { name: 'cribbage', dir: join(GAMES_DIR, 'cribbage'), playerCount: 2 },
+  { name: 'go-fish', dir: join(GAMES_DIR, 'go-fish'), playerCount: 4 },
+  { name: 'hex-11', dir: join(GAMES_DIR, 'hex'), playerCount: 2, options: { boardSize: 11 } },
+  { name: 'hex-19', dir: join(GAMES_DIR, 'hex'), playerCount: 2, options: { boardSize: 19 } },
+  { name: 'seven', dir: join(GAMES_DIR, 'seven'), playerCount: 7 },
+  { name: 'merc', dir: join(homedir(), 'Dropbox', 'MERC', 'BoardSmith', 'MERC'), whereCheckedOut: true },
 ];
+
+const isGameProject = (dir) => existsSync(join(dir, 'boardsmith.json'));
 
 function parseArgs(args) {
   const outAt = args.indexOf('--out');
@@ -49,17 +56,18 @@ function parseArgs(args) {
 function setupFor(arg) {
   const listed = CATALOGUE.find((entry) => entry.name === arg);
   if (listed) {
-    const dir = join(GAMES_DIR, listed.dir);
-    if (!existsSync(join(dir, 'boardsmith.json'))) {
+    if (!isGameProject(listed.dir)) {
       throw new Error(
-        `${listed.name} is not checked out at ${dir}. Clone the catalogue with ` +
-          'bash ~/ShufflewickPub/scripts/clone-game-catalogue.sh, or name only the games you have.',
+        `${listed.name} is not checked out at ${listed.dir}. ` +
+          (listed.whereCheckedOut
+            ? 'Check it out there, or name only the games you have.'
+            : 'Clone the catalogue with bash ~/ShufflewickPub/scripts/clone-game-catalogue.sh, or name only the games you have.'),
       );
     }
-    return { ...listed, dir };
+    return listed;
   }
   const dir = resolve(arg);
-  if (!existsSync(join(dir, 'boardsmith.json'))) {
+  if (!isGameProject(dir)) {
     throw new Error(
       `"${arg}" is neither a catalogue game (${CATALOGUE.map((entry) => entry.name).join(', ')}) ` +
         'nor a game project directory (one with a boardsmith.json).',
@@ -84,7 +92,12 @@ async function main() {
   // bundles report what the engine saw, and the report refuses anything else.
   process.env.NODE_ENV = 'production';
   const { out, games } = parseArgs(process.argv.slice(2));
-  const setups = games.length === 0 ? CATALOGUE.map((entry) => setupFor(entry.name)) : games.map(setupFor);
+  const missing = games.length === 0 ? CATALOGUE.filter((entry) => entry.whereCheckedOut && !isGameProject(entry.dir)) : [];
+  const skipped = missing.map((entry) => `${entry.name}, which is not checked out at ${entry.dir}`);
+  for (const reason of skipped) process.stderr.write(`bench-bot: skipping ${reason}\n`);
+  const setups = games.length === 0
+    ? CATALOGUE.filter((entry) => !missing.includes(entry)).map((entry) => setupFor(entry.name))
+    : games.map(setupFor);
 
   await import('tsx');
   const { importRuntimeBundle } = await import('../../src/cli/commands/game-runtime.ts');
@@ -126,6 +139,7 @@ async function main() {
       loadAfter: loadavg(),
       cpus: cpus().length,
       cpuModel: cpus()[0]?.model ?? 'unknown CPU',
+      skipped,
     },
     results,
   );

@@ -4,7 +4,7 @@
  * that the baseline states where and how it was measured.
  */
 import { describe, it, expect } from 'vitest';
-import { pickPositions, summarize, formatReport } from './report.mjs';
+import { pickPositions, summarize, shares, formatReport } from './report.mjs';
 
 describe('pickPositions', () => {
   it('takes the plies at a tenth, a half and nine tenths of the game', () => {
@@ -35,15 +35,18 @@ describe('pickPositions', () => {
 });
 
 describe('summarize', () => {
-  it('gives steps per second and each part of the search as a share of its time', () => {
-    const row = summarize({
-      steps: 300,
+  it('gives steps per second', () => {
+    expect(summarize({ steps: 50, ms: 1000 })).toEqual({ steps: 50, ms: 1000, stepsPerSecond: 50 });
+  });
+});
+
+describe('shares', () => {
+  it('gives each part of a profiled search as a percent of that search\'s time, the rest as other', () => {
+    expect(shares({
       ms: 2000,
       parts: { rebuild: 200, legalMoves: 400, apply: 300, reapply: 600, scoring: 100, determinize: 0 },
       lookupMs: 500,
-    });
-    expect(row.stepsPerSecond).toBe(150);
-    expect(row.shares).toEqual({
+    })).toEqual({
       rebuild: 10,
       legalMoves: 20,
       apply: 15,
@@ -53,10 +56,6 @@ describe('summarize', () => {
       other: 20,
       lookup: 25,
     });
-  });
-
-  it('leaves out shares for a search that was not profiled', () => {
-    expect(summarize({ steps: 50, ms: 1000 })).toEqual({ steps: 50, ms: 1000, stepsPerSecond: 50 });
   });
 });
 
@@ -81,12 +80,11 @@ describe('formatReport', () => {
       medium: { steps: 300, ms: 1500 },
       hard: { steps: 480, ms: 2000 },
     },
-    fixed: {
-      steps: 300,
-      ms: 3000,
-      move: 'move {"to":4}',
-      parts: { rebuild: 300, legalMoves: 300, apply: 300, reapply: 300, scoring: 300, determinize: 0 },
-      lookupMs: 600,
+    fixed: { steps: 300, ms: 3000, move: 'move {"to":4}' },
+    profile: {
+      ms: 6000,
+      parts: { rebuild: 600, legalMoves: 600, apply: 600, reapply: 600, scoring: 600, determinize: 0 },
+      lookupMs: 1200,
     },
   };
   const report = formatReport(meta, [{ name: 'hex-11', commit: 'def5678', playerCount: 2, plies: 100, positions: [position] }]);
@@ -98,6 +96,12 @@ describe('formatReport', () => {
     expect(report).toContain('Load average (1, 5, 15 min): 3.25, 2.50, 2.00 at the start; 4.00, 3.00, 2.25 at the end');
   });
 
+  it('names a game it skipped, and why', () => {
+    expect(formatReport({ ...meta, skipped: ['merc: not checked out at /x/MERC'] }, [])).toContain(
+      '- Skipped: merc: not checked out at /x/MERC',
+    );
+  });
+
   it('says so when the checkout had uncommitted changes', () => {
     expect(formatReport({ ...meta, dirty: true }, [])).toContain('`abc1234` with uncommitted changes');
   });
@@ -106,7 +110,7 @@ describe('formatReport', () => {
     expect(() => formatReport({ ...meta, devMode: true }, [])).toThrow(/development mode/);
   });
 
-  it('has a row per position for the presets and for the fixed search', () => {
+  it('has a row per position for the presets, and for the fixed search with its time from the unwrapped run', () => {
     expect(report).toContain('| hex-11 | early (ply 10, seat 1) | 100 | 500 | 200 | 300 | 1500 | 200 | 480 | 2000 | 240 |');
     expect(report).toContain('| hex-11 | early (ply 10, seat 1) | 300 | 3000 | 100 | 10 | 10 | 10 | 10 | 10 | 0 | 50 | 20 | `move {"to":4}` |');
   });

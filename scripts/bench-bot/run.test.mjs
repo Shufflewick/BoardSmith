@@ -22,7 +22,8 @@ const game = await devProject(false);
 /** Run the bench on the scaffolded game and return what it printed. */
 function bench() {
   const { NODE_ENV: _unset, ...env } = process.env;
-  const ran = spawnSync(process.execPath, [RUN, game], { encoding: 'utf8', env });
+  // A hang guard, so a bench that never ends fails this file instead of holding it open.
+  const ran = spawnSync(process.execPath, [RUN, game], { encoding: 'utf8', env, timeout: 300_000 });
   return { status: ran.status, output: `${ran.stdout}${ran.stderr}` };
 }
 
