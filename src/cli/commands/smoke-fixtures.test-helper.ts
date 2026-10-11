@@ -1748,3 +1748,33 @@ export function aceGameDealtSlowly(): Record<string, string> {
     );
   return { ...files, 'src/rules/game.ts': rules };
 }
+
+/**
+ * A BOARD THAT HANGS AFTER A PRESS (#618): pressing "Spin" on the board starts a loop that never
+ * ends in the task after the click, so the click lands and the page stops answering for good while
+ * the walk reads what the press did: a script or a count it runs in the page, which takes no time
+ * limit of its own.
+ */
+export function boardThatHangsWhenPressed(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+function spin() {
+  setTimeout(() => {
+    for (;;) { /* never answers again */ }
+  });
+}
+</script>
+
+<template>
+  <div class="board">
+    <button type="button" @click="spin">Spin</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
