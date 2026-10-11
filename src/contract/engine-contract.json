@@ -1,7 +1,7 @@
 {
-  "revision": 170,
+  "revision": 171,
   "bundleProtocol": 2,
-  "surfaceHash": "a8e02fb25f517721",
+  "surfaceHash": "e41fa2badef24819",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1470,10 +1470,19 @@
       "revision": 170,
       "date": "2026-10-11",
       "bundleProtocol": 2,
-      "surfaceHash": "a8e02fb25f517721",
+      "surfaceHash": "e41fa2badef24819",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "A pick's choices are worked out once per game state and reused by the flow's offer, move enumeration, validation and the UI's request until the game changes (#631): chess's bot searches about 2.2x faster. A game whose candidate code does not change the game (the existing rule) behaves exactly as before; the platform should run this build for table games' speed."
+      "summary": "Element queries cost less per call (#654): ElementCollection._finder is now a static method taking the roots to walk, so GameElement queries no longer copy their children, and ElementCollection's private finderToPredicate and isElementClass methods are gone. Every query answers with the same elements in the same order, asks function finders about the same elements in the same order, and throws the same tree-corruption error in development mode; a first() on an empty or one-piece square costs about 15 ns instead of about 490 ns."
+    },
+    {
+      "revision": 171,
+      "date": "2026-10-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "e41fa2badef24819",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A pick's choices are worked out once per game state and reused by the flow's offer, move enumeration, validation and the UI's request until the game changes (#631). A game whose candidate code does not change the game (the existing rule) behaves exactly as before; the platform should run this build for table games' speed."
     }
   ]
 }
