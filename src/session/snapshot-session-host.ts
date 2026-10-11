@@ -1377,11 +1377,12 @@ export class SnapshotSessionHost {
       this.holdBotSeatBack(seat);
       return 'again';
     }
+    // A refused search can carry any category (a platform relabels some), so it names none.
     const what = seat === undefined
-      ? `The bot search for seat(s) ${seats.map((s) => s.seat).join(', ')}`
-      : `The move the bot chose for seat ${seat}`;
+      ? `The bot search for seat(s) ${seats.map((s) => s.seat).join(', ')} was refused`
+      : `The move the bot chose for seat ${seat} was refused, not by the game's rules (${res.category})`;
     console.error(
-      `[SnapshotSessionHost] ${what} was refused, not by the game's rules (${res.category}): ` +
+      `[SnapshotSessionHost] ${what}: ` +
         `${res.error}${code}. The bots stop here and are asked again on the next move, ` +
         `roster change or resume.`,
     );

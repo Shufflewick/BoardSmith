@@ -52,7 +52,8 @@ interface HeatmapCompute {
  * `v + 10` (to `complete` when `endsGame` says so), and a human action named
  * `slow` holds the section until the test releases it. A bot's move moves the
  * game from `v` to `v + 1`, unless the test queued a refusal in `refuseBot`.
- * Every bot search, and every heatmap computed, waits until the test releases it.
+ * Every bot search, and every heatmap computed, waits until the test releases it;
+ * turning a heatmap off answers at once.
  */
 function table(endsGame = false) {
   const searches: Search[] = [];
@@ -86,6 +87,7 @@ function table(endsGame = false) {
         return refuseBot.shift() ?? answer(snap(from + 1));
       }
       if (op.type === 'heatmapToggle') {
+        if (!op.visible) return { success: true, heatmapUpdate: { seat: op.seat, visible: false, entries: [] } };
         await new Promise<void>((release) => heatmaps.push({ from, release }));
         return { success: true, heatmapUpdate: { seat: op.seat, visible: true, entries: [{ from }] } };
       }
@@ -463,7 +465,25 @@ describe('a refused bot move (#635)', () => {
 
     expect(logged).toHaveLength(1);
     expect(logged[0]).toMatch(/briefly unreachable/);
+    expect(logged[0]).toMatch(/not by the game's rules \(executor\)/);
     expect(logged[0]).not.toMatch(/selections|move enumeration/);
+  });
+
+  it('a refused search says which seats it was for and why, and does not say who refused it', async () => {
+    const errors = errorLog();
+    const t = table();
+    await t.host.start();
+    const pump = t.host.runBotTurns();
+    await untilSearches(t, 1);
+    // A platform may report a search's failure under any category, the game's own included.
+    t.searches[0].release({ success: false, error: 'The bot could not load the game.', category: 'bundle' });
+    await pump;
+
+    const logged = errors.mock.calls.map((call) => String(call[0]));
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toMatch(/The bot search for seat\(s\) 2 was refused: The bot could not load the game\./);
+    expect(logged[0]).not.toMatch(/game's rules/);
+    expect(t.botMoves).toEqual([]);
   });
 
   it('a move found for a seat a human has taken since the search began is never made', async () => {
@@ -507,6 +527,45 @@ describe('a visible heatmap, refreshed after a move (#635)', () => {
     t.heatmaps[2].release();
     await Promise.all([a, b]);
     expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([{ from: 20 }]);
+  });
+
+  it('a heatmap turned off while it is being refreshed stays off, and nothing is published for it', async () => {
+    const t = table();
+    t.setRoster([]);
+    await t.host.start();
+    t.host.transientTeachingState.set(1, { heatmap: { visible: true, entries: [] } });
+    const move = humanMove(t.host);
+    await settle();
+    expect(t.heatmaps.map((h) => h.from)).toEqual([10]);
+
+    succeeded(await t.host.handleOp(1, { type: 'heatmapToggle', seat: 1, visible: false }));
+    const published = t.recorded.length;
+    t.heatmaps[0].release();
+    await move;
+
+    expect(t.host.transientTeachingState.get(1)?.heatmap).toEqual({ visible: false, entries: [] });
+    expect(t.recorded).toHaveLength(published);
+  });
+
+  it('an undo made while a heatmap is being refreshed leaves it cleared, as every undo does', async () => {
+    const t = table();
+    t.setRoster([]);
+    await t.host.start();
+    t.host.transientTeachingState.set(1, { heatmap: { visible: true, entries: [] } });
+    const move = humanMove(t.host);
+    await settle();
+    expect(t.heatmaps.map((h) => h.from)).toEqual([10]);
+
+    succeeded(await t.host.handleOp(1, { type: 'undo', player: 1 }));
+    expect((t.host.snapshot as unknown as Snap).v).toBe(20);
+    const published = t.recorded.length;
+    t.heatmaps[0].release();
+    await move;
+
+    // The heatmap computed before the undo was not stored, and none was computed after it.
+    expect(t.host.transientTeachingState.has(1)).toBe(false);
+    expect(t.heatmaps).toHaveLength(1);
+    expect(t.recorded).toHaveLength(published);
   });
 });
 
