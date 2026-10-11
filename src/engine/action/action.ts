@@ -31,7 +31,7 @@ import { isDevMode, devWarn, isDevThrowEnabled } from '../../utils/dev.js';
 import { Action } from './action-builder.js';
 import { PlayerFacingError, NotSimulableError } from '../errors.js';
 import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
-import { findMatchingChoice, isSerializedElement, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
+import { findMatchingChoice, isSerializedElement, oneChoiceListRefusal, oneElementListRefusal, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
 import { numberRuleErrors } from './number-rules.js';
 import { formatRepeatCandidates } from '../element/pick-candidates.js';
 import type { ChoiceWithRefs, WarningEntry } from '../../types/protocol.js';
@@ -834,33 +834,19 @@ export class ActionExecutor {
       // A single `element` selection is never multiSelect, so an array is
       // never a valid submission shape for it (WR-08): it would otherwise reach
       // execute() untouched.
-      if (Array.isArray(value) && selection.type === 'element') {
-        return {
-          valid: false,
-          errors: [
-            `Selection "${selection.name}" expects a single element, got an array of ${value.length}. ` +
-            `Submit one element or element ID; use chooseElements for multi-element selections.`,
-          ],
-        };
-      }
+      const elementRefusal = selection.type === 'element'
+        ? oneElementListRefusal(selection.name, value)
+        : undefined;
+      if (elementRefusal) return { valid: false, errors: [elementRefusal] };
       // A multiSelect or ordered list is checked item by item. Any other
-      // chooseFrom takes one choice, which may itself be an array (#660). An
-      // array that is not one is a list sent to a one-choice pick, unless the
-      // choices are arrays and it names items not on offer: then it is one
-      // stale choice, refused like any other.
+      // chooseFrom takes one choice, which may itself be an array (#660); the
+      // action controller applies the same rule through the same helper (#661).
       const takesItems = selection.type === 'choice'
         && (selection.multiSelect !== undefined || selection.orderedList !== undefined);
-      if (Array.isArray(value) && selection.type === 'choice' && !takesItems
-        && findMatchingChoice(value, choices) === undefined
-        && (!choices.some((c) => Array.isArray(c.value))
-          || value.every((item) => findMatchingChoice(item, choices) !== undefined))) {
-        return {
-          valid: false,
-          errors: [
-            `Selection "${selection.name}" takes one choice, got a list of ${value.length}. Submit one of its choices.`,
-          ],
-        };
-      }
+      const listRefusal = selection.type === 'choice' && !takesItems
+        ? oneChoiceListRefusal(selection.name, value, choices)
+        : undefined;
+      if (listRefusal) return { valid: false, errors: [listRefusal] };
       for (const item of Array.isArray(value) && takesItems ? value : [value]) {
         const offered = this.matchOffered(selection, item, choices, context, actionName);
         if ('refusal' in offered) errors.push(offered.refusal);
