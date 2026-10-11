@@ -665,3 +665,114 @@ describe('ctx.args is typed from the chain (#626)', () => {
     expect(seen).toEqual({ filterSector: sector, executeSector: sector });
   });
 });
+
+/**
+ * #652: a repeat's `until` and `onEach` get `ctx.args` typed from the chain.
+ *
+ * They run after a pick is made, so the picks before the repeating one are
+ * present (an optional one may be absent), and so are declared follow-up args.
+ * The repeating pick's own values so far are `unknown[]`, as in its other
+ * callbacks. The pick's type is still inferred from `choices` or `elements`.
+ */
+describe('repeat until and onEach get typed ctx.args (#652)', () => {
+  it('types until and onEach ctx.args as the earlier picks, the follow-up args and the values so far', () => {
+    Action.create<TypedGame>('repeatCtx')
+      .followUpArgs<{ sector: Coin }>()
+      .chooseFrom('n', { choices: [1, 2] })
+      .enterText('note', { optional: true })
+      .chooseFrom('runes', {
+        choices: ['ice', 'fire', 'stop'],
+        repeat: {
+          onEach: (ctx, rune) => {
+            expectTypeOf(rune).toEqualTypeOf<string>();
+            expectTypeOf(ctx.args.n).toEqualTypeOf<number>();
+            expectTypeOf(ctx.args.note).toEqualTypeOf<string | undefined>();
+            expectTypeOf(ctx.args.sector).toEqualTypeOf<Coin>();
+            expectTypeOf(ctx.args.runes).toEqualTypeOf<unknown[]>();
+            expectTypeOf(ctx.game).toEqualTypeOf<TypedGame>();
+            // @ts-expect-error - 'nn' was never declared.
+            void ctx.args.nn;
+          },
+          until: (ctx, rune) => {
+            expectTypeOf(rune).toEqualTypeOf<string>();
+            expectTypeOf(ctx.args.n).toEqualTypeOf<number>();
+            // @ts-expect-error - 'rune' is misspelt; the pick is 'runes'.
+            void ctx.args.rune;
+            return rune === 'stop';
+          },
+        },
+      })
+      .chooseElement('coins', {
+        elementClass: Coin,
+        repeat: {
+          until: (ctx, coin) => {
+            expectTypeOf(coin).toEqualTypeOf<Coin>();
+            expectTypeOf(ctx.args.runes).toEqualTypeOf<string[]>();
+            expectTypeOf(ctx.args.coins).toEqualTypeOf<unknown[]>();
+            // @ts-expect-error - 'coin' is misspelt; the pick is 'coins'.
+            void ctx.args.coin;
+            return true;
+          },
+        },
+      })
+      .chooseElements('piles', {
+        elements: (ctx) => [...ctx.game.all(Coin)],
+        repeat: {
+          onEach: (ctx, pile) => {
+            expectTypeOf(pile).toEqualTypeOf<Coin>();
+            expectTypeOf(ctx.args.coins).toEqualTypeOf<Coin[]>();
+            expectTypeOf(ctx.args.piles).toEqualTypeOf<unknown[]>();
+            // @ts-expect-error - 'pile' is misspelt; the pick is 'piles'.
+            void ctx.args.pile;
+          },
+          until: () => true,
+        },
+      })
+      .execute((args) => {
+        expectTypeOf(args.runes).toEqualTypeOf<string[]>();
+        expectTypeOf(args.coins).toEqualTypeOf<Coin[]>();
+        return { success: true };
+      });
+  });
+
+  it('still infers the pick type from a choices function alongside until and onEach', () => {
+    Action.create<TypedGame>('inferred')
+      .chooseFrom('n', { choices: [1, 2] })
+      .chooseFrom('amount', {
+        choices: (ctx) => [ctx.game.treasury, 0],
+        repeat: {
+          onEach: (ctx, amount) => { ctx.game.treasury -= amount + (ctx.args.n); },
+          until: (_ctx, amount) => amount === 0,
+        },
+      })
+      .execute((args) => {
+        expectTypeOf(args.amount).toEqualTypeOf<number[]>();
+        return { success: true };
+      });
+  });
+
+  it('passes the earlier picks and the values so far to until and onEach at run time', () => {
+    const seen: { onEach: unknown[]; until: unknown[] } = { onEach: [], until: [] };
+    const game = new TypedGame({ playerCount: 2 });
+    game.registerAction(
+      Action.create<TypedGame>('repeatRun')
+        .chooseFrom('n', { choices: [2, 3] })
+        .chooseFrom('runes', {
+          choices: ['ice', 'stop'],
+          repeat: {
+            onEach: (ctx) => { seen.onEach.push({ n: ctx.args.n, runes: [...ctx.args.runes] }); },
+            until: (ctx, rune) => { seen.until.push({ n: ctx.args.n, runes: [...ctx.args.runes] }); return rune === 'stop'; },
+          },
+        })
+        .execute(() => ({ success: true })),
+    );
+    const result = game.getActionExecutor().executeAction(
+      game.getAction('repeatRun')!,
+      game.getPlayer(1)!,
+      { n: 3, runes: ['ice', 'stop'] },
+    );
+    expect(result.success, result.error).toBe(true);
+    const expected = [{ n: 3, runes: ['ice'] }, { n: 3, runes: ['ice', 'stop'] }];
+    expect(seen).toEqual({ onEach: expected, until: expected });
+  });
+});

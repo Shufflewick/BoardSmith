@@ -108,18 +108,22 @@ export interface DependentFilter {
 /**
  * Configuration for repeating selections.
  * Allows a selection to be shown multiple times until a termination condition is met.
+ *
+ * @typeParam Args - What `context.args` holds. The action builder types it
+ *   from the chain (#652): the picks before the repeating one and any
+ *   `.followUpArgs<...>()`, with the repeating pick's values so far as an array.
  */
-export interface RepeatConfig<T = unknown> {
+export interface RepeatConfig<T = unknown, G extends Game = Game, Args extends Record<string, unknown> = Record<string, unknown>> {
   /**
    * Condition to stop repeating. Called after each selection.
    * Return true to stop repeating and complete this selection.
    */
-  until: (context: ActionContext, lastChoice: T) => boolean;
+  until: (context: ActionContext<G, Args>, lastChoice: T) => boolean;
   /**
    * Callback after each selection, before computing next choices.
    * Can modify game state (e.g., equip an item, update available choices).
    */
-  onEach?: (context: ActionContext, choice: T) => void;
+  onEach?: (context: ActionContext<G, Args>, choice: T) => void;
 }
 
 /**
