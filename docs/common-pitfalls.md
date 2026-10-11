@@ -1727,6 +1727,7 @@ Any loop that can trigger async state changes should check for that state:
 ```typescript
 // Template for async-state-aware loops
 loop({
+  maxIterations: 100,
   while: (ctx) => {
     // 1. Check game completion
     if (ctx.game.isFinished()) return false;
