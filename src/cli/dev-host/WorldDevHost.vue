@@ -338,7 +338,8 @@ function onWindowMessage(event: MessageEvent): void {
 const seats = computed(() => Array.from({ length: cfg.seatCount }, (_, i) => i + 1));
 const seatMenuOpen = ref(false);
 const seatMenuRef = ref<HTMLElement | null>(null);
-useMenuDismiss(seatMenuOpen, seatMenuRef);
+const seatMenuTrigger = ref<HTMLElement | null>(null);
+useMenuDismiss(seatMenuOpen, seatMenuRef, seatMenuTrigger);
 
 function takeSeat(seat: number): void {
   seatMenuOpen.value = false;
@@ -393,6 +394,7 @@ onUnmounted(() => {
         <!-- The seat held and each seat offered carry their number, so a smoke walk
              playing several seats (#471) takes the one its spec names. -->
         <button
+          ref="seatMenuTrigger"
           type="button"
           data-testid="world-seat-switcher"
           :data-seat="mySeat ?? undefined"

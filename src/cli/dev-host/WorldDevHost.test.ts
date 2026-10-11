@@ -250,6 +250,15 @@ describe('#610: the seat menu closes the way a menu does', () => {
     wrapper.unmount();
   });
 
+  it('returns focus to its button on Escape (#667)', async () => {
+    const wrapper = await openMenu();
+    (wrapper.find('.world-dev__menu button').element as HTMLElement).focus();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await wrapper.vm.$nextTick();
+    expect(document.activeElement).toBe(wrapper.find('[data-testid="world-seat-switcher"]').element);
+    wrapper.unmount();
+  });
+
   it('stays open on a key that is not Escape', async () => {
     const wrapper = await openMenu();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));

@@ -212,6 +212,37 @@ describe.each([
     expect(wrapper.find(menu).exists()).toBe(false);
     wrapper.unmount();
   });
+
+  // #667: a keyboard user who presses Escape lands back where they opened it.
+  it('returns focus to its own button on Escape', async () => {
+    const wrapper = await openMenu();
+    (wrapper.find(`${menu} button`).element as HTMLElement).focus();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await wrapper.vm.$nextTick();
+    expect(document.activeElement).toBe(wrapper.find(trigger).element);
+    wrapper.unmount();
+  });
+
+  it('leaves focus where the user put it when closed by a click outside it', async () => {
+    const wrapper = await openMenu();
+    const outside = document.createElement('input');
+    document.body.appendChild(outside);
+    outside.focus();
+    outside.click();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find(menu).exists()).toBe(false);
+    expect(document.activeElement).toBe(outside);
+    outside.remove();
+    wrapper.unmount();
+  });
+
+  it('names the list it opens with aria-controls', async () => {
+    const wrapper = await openMenu();
+    const id = wrapper.find(menu).attributes('id');
+    expect(id).toBeTruthy();
+    expect(wrapper.find(trigger).attributes('aria-controls')).toBe(id);
+    wrapper.unmount();
+  });
 });
 
 // #664: at phone width the secondary controls live in the … menu, and choosing
@@ -248,6 +279,38 @@ describe('DevHost — choosing from the … menu closes it (#664)', () => {
     expect(wrapper.find(MENU).exists()).toBe(false);
     const frames = mockWsInstance!.send.mock.calls.map((c) => JSON.parse(c[0] as string));
     expect(frames.some((f) => f.type === 'restart')).toBe(true);
+    wrapper.unmount();
+  });
+
+  // #667: an armed New game must not survive the menu closing, or reopening
+  // the menu within 5 s would restart on one click.
+  it.each([
+    ['Escape', () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))],
+    ['a click outside it', () => document.querySelector<HTMLElement>('.dev-chrome__brand')!.click()],
+    ['focus leaving the page', () => window.dispatchEvent(new Event('blur'))],
+    ['its own button', () => document.querySelector<HTMLElement>('.dev-chrome__overflow-trigger')!.click()],
+    ['choosing Table setup', () => document.querySelector<HTMLElement>(`${MENU} [data-testid="table-setup-toggle"]`)!.click()],
+  ])('closing it by %s cancels an armed New game', async (_how, close) => {
+    const wrapper = await openOverflow();
+    await wrapper.find(`${MENU} [data-testid="new-game"]`).trigger('click');
+    close();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find(MENU).exists()).toBe(false);
+
+    await wrapper.find('.dev-chrome__overflow-trigger').trigger('click');
+    expect(wrapper.find(`${MENU} [data-testid="new-game"]`).text()).toContain('New game');
+    expect(wrapper.find(`${MENU} [data-testid="new-game"]`).text()).not.toContain('Confirm restart?');
+    wrapper.unmount();
+  });
+
+  it('an Escape while the … menu is closed leaves the bar\'s armed New game armed', async () => {
+    const wrapper = await mountDevHost();
+    await activateSeat(wrapper);
+    const barNewGame = '.dev-chrome__bar-wide [data-testid="new-game"]';
+    await wrapper.find(barNewGame).trigger('click');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find(barNewGame).text()).toContain('Confirm restart?');
     wrapper.unmount();
   });
 });
