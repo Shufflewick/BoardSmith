@@ -10,7 +10,7 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import type { VueWrapper } from '@vue/test-utils';
-import { Game, Player, Action, loop, eachPlayer, actionStep, type GameOptions } from '../../engine/index.js';
+import { Game, Player, Piece, Space, Action, loop, eachPlayer, actionStep, type GameOptions } from '../../engine/index.js';
 import { mountLiveSeat, settle } from './table-wiring.test-helper.js';
 
 class PayGame extends Game<PayGame, Player> {
@@ -35,6 +35,35 @@ class PayGame extends Game<PayGame, Player> {
   }
 }
 
+class Checker extends Piece<HopGame> {}
+class Board extends Space<HopGame> {}
+
+/** Checkers' multi-jump in small: a follow-up pre-fills the piece, the seat picks where it lands. */
+class HopGame extends Game<HopGame, Player> {
+  landed: string[] = [];
+
+  constructor(options: GameOptions) {
+    super(options);
+    const board = this.create(Board, 'board');
+    board.create(Checker, 'jumper');
+    board.create(Checker, 'other');
+    this.registerActions(
+      Action.create<HopGame>('jump')
+        .prompt('Jump')
+        .execute(() => ({ success: true, followUp: { action: 'land', args: { piece: this.first(Checker, 'jumper')!.id } } })),
+      Action.create<HopGame>('land')
+        .prompt('Land')
+        .condition({ 'only as a follow-up': () => false })
+        .chooseElement('piece', { elementClass: Checker })
+        .chooseFrom('to', { choices: (ctx) => [`${ctx.args.piece?.name}-left`, `${ctx.args.piece?.name}-right`] })
+        .execute((args) => {
+          this.landed.push(`${args.piece.name}:${args.to}`);
+        }),
+    );
+    this.setFlow({ root: loop({ maxIterations: 4, do: eachPlayer({ do: actionStep({ actions: ['jump'] }) }) }) });
+  }
+}
+
 const mounted: VueWrapper[] = [];
 afterEach(() => {
   for (const wrapper of mounted.splice(0)) wrapper.unmount();
@@ -54,5 +83,20 @@ describe('locally collected picks travel as initialArgs (#658)', () => {
     expect(controller.lastError.value).toBe(null);
     expect(controller.currentAction.value).toBe(null);
     expect(session.readGame().bought).toEqual(['blue:silver']);
+  });
+
+  it("takes a follow-up's pre-filled pick from the engine and the seat's next pick through the step", async () => {
+    const { session, wiring } = await mountLiveSeat(HopGame, 'initial-args-follow-up', mounted, { withPickStep: true });
+    const { controller } = wiring;
+
+    await controller.execute('jump');
+    await settle();
+    expect(controller.currentAction.value).toBe('land');
+    await controller.fill('to', 'jumper-right');
+    await settle();
+
+    expect(controller.lastError.value).toBe(null);
+    expect(controller.currentAction.value).toBe(null);
+    expect(session.readGame().landed).toEqual(['jumper:jumper-right']);
   });
 });
