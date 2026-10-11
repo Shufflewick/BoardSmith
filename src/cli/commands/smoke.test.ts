@@ -33,6 +33,7 @@ import {
   HUNG,
   boardThatReplacesItsFrame,
   boardThatKeepsReordering,
+  boardThatTakesFocusUnderThePress,
   boardUnderTheHostsCover,
   boardWithDialogs,
   candidateBoard,
@@ -542,6 +543,12 @@ describe('boardsmith verify: the smoke check', () => {
 
     expect(outcome.passed, outcome.summary).toBe(true);
     expect(steps.filter((line) => /pressing the board's "(North|South|East)"/.test(line))).toHaveLength(3);
+  });
+
+  it("#646: follows the active seat though the game's frame took focus and closed the seat menu while the pointer was down on \"Follow active seat\"", async () => {
+    const { outcome } = await smokeOf(false, boardThatTakesFocusUnderThePress());
+
+    expect(outcome.passed, outcome.summary).toBe(true);
   });
 
   it(

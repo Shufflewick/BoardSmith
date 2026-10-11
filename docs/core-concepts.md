@@ -21,6 +21,10 @@ Game (root)
 └── Pile (removed elements)
 ```
 
+The pile sits outside the tree and is not saved: every restore (undo, reload,
+a bot's search) empties it. Keep anything your rules read later, such as a
+discard pile, in a space of your own.
+
 ### Element Types
 
 | Class | Purpose | Example |
@@ -75,7 +79,7 @@ card.putInto(hand);                         // Move card to hand
 card.putInto(hand, { position: 'first' }); // Put at beginning
 
 // Remove elements
-card.remove();                              // Remove from game
+card.remove();                              // Remove from game, into game.pile
 
 // Create elements
 const stone = cell.create(Stone, 'stone-1', { player });

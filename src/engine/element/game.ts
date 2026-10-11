@@ -5081,7 +5081,8 @@ export class Game<
   /**
    * Load a serialized state payload (a `game.toJSON()` result) into THIS existing
    * game instance, replacing the element tree, phase, messages, settings and
-   * animation buffer with the serialized values.
+   * animation buffer with the serialized values. The pile is not in the state,
+   * so it is emptied (#650).
    *
    * The game's registered actions, flow definition and seeded RNG live on the
    * instance (not in the JSON) and are preserved. This is the authoritative way
@@ -5229,6 +5230,11 @@ export class Game<
         capturedHandlers.set(spaceHandlerKey(space), handlers);
       }
     }
+
+    // Empty the pile: it is not in the state, and an element removed after the
+    // state was taken comes back in the tree below, so a copy left here would
+    // share its id (#650). Every restore, in place or fresh, starts it empty.
+    this.pile._t.children = [];
 
     // Clear existing children and rebuild the tree from JSON. The id index
     // is rebuilt with it (#632): `fromJSON` files each rebuilt element, and the

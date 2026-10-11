@@ -156,6 +156,7 @@ class BadChoicesGame extends Game<BadChoicesGame, Player> {
     // failure is isolated to getPickChoices's own try/catch (CHOICES_EVALUATION_ERROR).
     this.registerAction(
       Action.create('pick')
+        .followUpArgs<{ trigger?: boolean }>()
         .chooseFrom('option', {
           choices: (ctx) => {
             if (ctx.args.trigger) {

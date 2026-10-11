@@ -21,6 +21,9 @@ import ActionPanel from './ActionPanel.vue';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 import { stubActionController, type ActionPanelProps } from './action-panel-controller.test-helper.js';
 import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
+import { documentHasFocus } from './document-has-focus.test-helper.js';
+
+documentHasFocus();
 
 /** An action as this file declares one: a name, and whatever else the test needs. */
 type Meta = Partial<EnrichedActionMetadata> & { name: string };

@@ -562,8 +562,11 @@ export type Selection =
  * the game type threads through every callback in the builder chain.
  *
  * @typeParam G - The concrete Game subclass. Defaults to the base `Game`.
+ * @typeParam Args - What `args` holds. The action builder types it from the
+ *   chain (#626): the picks declared so far and any `.followUpArgs<...>()`, so a
+ *   key nothing declared is an error. Untyped code sees a plain record.
  */
-export interface ActionContext<G extends Game = Game> {
+export interface ActionContext<G extends Game = Game, Args extends Record<string, unknown> = Record<string, unknown>> {
   /** The game instance, typed as the concrete game class. */
   game: G;
   /**
@@ -574,7 +577,7 @@ export interface ActionContext<G extends Game = Game> {
    */
   player: PlayerOf<G>;
   /** Arguments collected so far */
-  args: Record<string, unknown>;
+  args: Args;
 }
 
 // ============================================
@@ -585,8 +588,10 @@ export interface ActionContext<G extends Game = Game> {
  * A condition predicate function that checks if an action is available.
  *
  * @typeParam G - The concrete Game subclass, so `ctx.game` is fully typed.
+ * @typeParam Args - What `ctx.args` holds; see {@link ActionContext}.
  */
-export type ConditionPredicate<G extends Game = Game> = (context: ActionContext<G>) => boolean;
+export type ConditionPredicate<G extends Game = Game, Args extends Record<string, unknown> = Record<string, unknown>> =
+  (context: ActionContext<G, Args>) => boolean;
 
 /**
  * Object-based condition where keys are human-readable labels and values are predicates.
@@ -601,7 +606,8 @@ export type ConditionPredicate<G extends Game = Game> = (context: ActionContext<
  * }
  * ```
  */
-export type ObjectCondition<G extends Game = Game> = Record<string, ConditionPredicate<G>>;
+export type ObjectCondition<G extends Game = Game, Args extends Record<string, unknown> = Record<string, unknown>> =
+  Record<string, ConditionPredicate<G, Args>>;
 
 /**
  * Condition configuration using object format with labeled predicates.
@@ -617,7 +623,8 @@ export type ObjectCondition<G extends Game = Game> = Record<string, ConditionPre
  * })
  * ```
  */
-export type ConditionConfig<G extends Game = Game> = ObjectCondition<G>;
+export type ConditionConfig<G extends Game = Game, Args extends Record<string, unknown> = Record<string, unknown>> =
+  ObjectCondition<G, Args>;
 
 /**
  * Definition of an action
