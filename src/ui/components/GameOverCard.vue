@@ -18,8 +18,7 @@
  */
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useFocusTrap } from '../composables/useFocusTrap';
-import { contrastInk } from '../utils/color-contrast';
-import { devWarn } from '../../utils/dev.js';
+import { seatInk } from '../utils/color-contrast';
 
 export interface Player {
   seat: number;
@@ -52,24 +51,11 @@ const emit = defineEmits<{
 
 const cardRef = ref<HTMLElement | null>(null);
 
-// LIBX-03 / F-17: derive the winner glyph's ink from the seat color the same
-// way PlayerToken does (`contrastInk`) instead of hardcoding `--bsg-bg`. A dark
-// seat color on the dark theme (or a pale color on light) made the winner
-// initial near-invisible. Fail visible, not fatal: an unparseable color
-// degrades to white ink with a warning rather than crashing the card.
+// LIBX-03 / F-17: the winner glyph's ink comes from the seat color the same
+// way PlayerToken's does, instead of a hardcoded `--bsg-bg`, so a dark seat
+// color on the dark theme (or a pale one on light) stays legible.
 function winnerInk(color?: string): string {
-  if (!color) return '#ffffff';
-  try {
-    return contrastInk(color).ink;
-  } catch (err) {
-    devWarn(
-      `game-over-card-unparseable-color:${color}`,
-      `GameOverCard received a winner color ("${color}") that contrastInk() can't parse — ` +
-        `falling back to white ink instead of crashing. ` +
-        `${err instanceof Error ? err.message : String(err)}`,
-    );
-    return '#ffffff';
-  }
+  return seatInk(color, 'GameOverCard').ink;
 }
 
 const { open: openTrap, close: closeTrap, handleKeydown } = useFocusTrap(cardRef, {
