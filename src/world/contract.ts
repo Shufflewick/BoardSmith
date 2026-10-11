@@ -139,11 +139,12 @@
  *
  * The obvious lazy tree -- children present but unhydrated, faulting in on
  * access -- does not work here, and the reason is measurable rather than
- * aesthetic. `GameElement.atId` is a full-tree DFS with NO ID INDEX
- * (`game-element.ts:310-317`), and every command path resolves ids through it;
- * the finders recurse `_t.children` eagerly too. So the FIRST `getElementById`
- * of any command would fault in the entire world, and laziness would buy
- * nothing.
+ * aesthetic. `GameElement.atId` was a full-tree DFS with NO ID INDEX when
+ * this was decided, and every command path resolves ids through it; the
+ * finders recurse `_t.children` eagerly too. So the FIRST `getElementById` of
+ * any command would fault in the entire world, and laziness would buy nothing.
+ * (`atId` now looks resident elements up in an id index, #632, and falls back
+ * to the same walk for anything else; the finders still recurse.)
  *
  * With absence instead, `atId`, `all()` and `toJSON` all cost O(loaded) with
  * ZERO changes to traversal. That is the whole trick: the expensive property of

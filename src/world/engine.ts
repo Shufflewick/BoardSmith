@@ -643,8 +643,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
       partition: (name) => {
         const id = this.residentIds.get(name);
         if (id === undefined) return undefined;
-        // ASKED OF THE ROOT TABLE, NOT OF THE TREE (#381). `getElementById` is
-        // a depth-first walk of the whole resident world, so the name-to-id map
+        // ASKED OF THE ROOT TABLE, NOT OF THE TREE (#381). `getElementById` was
+        // a depth-first walk of the whole resident world (before #632), so the name-to-id map
         // above saved a search and then this line spent it again -- once per
         // declared root per round per offer refresh. `partitionRoot` is the
         // direct reference the engine already holds, and it is the same reader
@@ -3262,8 +3262,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
           `becomes resident when a command declares it in partitions().`,
       );
     }
-    // ASKED OF THE ROOT TABLE, NOT OF THE TREE (#316). `getElementById` is a
-    // depth-first walk of the whole resident world, so a caller that looks one
+    // ASKED OF THE ROOT TABLE, NOT OF THE TREE (#316). `getElementById` was a
+    // depth-first walk of the whole resident world (before #632), so a caller that looks one
     // root up per resident partition paid O(resident) per lookup -- and every
     // per-command pass over the residency did exactly that.
     const root = this.game.partitionRoot(id);

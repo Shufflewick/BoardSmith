@@ -1,4 +1,5 @@
 import { ElementCollection } from './element-collection.js';
+import { childrenChanged } from './cell-index.js';
 import type {
   ElementClass,
   ElementContext,
@@ -225,7 +226,7 @@ function markNearestPartition(
  *
  * Free in snapshot mode: no partitions, one map check.
  */
-function reachPartition<T extends GameElement | undefined>(from: T): T {
+export function reachPartition<T extends GameElement | undefined>(from: T): T {
   if (!from) return from;
   const ctx = from._ctx;
   // THE SET IS THE SWITCH. It exists from the moment the game has a partition
@@ -237,6 +238,45 @@ function reachPartition<T extends GameElement | undefined>(from: T): T {
   if (!reached) return from;
   markNearestPartition(from, reached.roots, reached.partitions);
   return from;
+}
+
+/**
+ * The element with this id in `from`'s subtree, WITHOUT marking anything
+ * reached: `atId` is the door that marks, and the engine's own reference
+ * harvest must not (ShufflewickPub #295).
+ *
+ * Looked up in the game's id index (#632) when the element filed there is in
+ * the game's tree under `from`: ids are unique in the game's tree, so that is
+ * the element a walk would find. Anything else -- a lookup in the pile, which
+ * is outside the game's tree, or an id the subtree does not hold -- walks the
+ * subtree, so the answer is always the walk's.
+ */
+export function lookUpId(from: GameElement, id: number): GameElement | undefined {
+  const indexed = from._ctx._elementsById.get(id);
+  let underFrom = false;
+  for (let el = indexed; el; el = el._t.parent) {
+    if (el === from) underFrom = true;
+    if (el === from._ctx.game) {
+      if (underFrom) return indexed;
+      break;
+    }
+  }
+  return walkForId(from, id);
+}
+
+function walkForId(from: GameElement, id: number): GameElement | undefined {
+  if (from._t.id === id) return from;
+  for (const child of from._t.children) {
+    const found = walkForId(child, id);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/** Visit `element` and everything under it, in tree order, marking nothing reached. */
+export function forEachInSubtree(element: GameElement, visit: (element: GameElement) => void): void {
+  visit(element);
+  for (const child of element._t.children) forEachInSubtree(child, visit);
 }
 
 /**
@@ -527,6 +567,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       id,
       order: 'normal',
     };
+    this._ctx._elementsById.set(id, this);
   }
 
   /**
@@ -605,19 +646,11 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * Find an element by its immutable ID
+   * Find an element by its immutable ID, in this element's subtree. A lookup
+   * from the game's id index when it can be one (see {@link lookUpId}).
    */
   atId(id: number): GameElement | undefined {
-    if (this._t.id === id) return reachPartition(this);
-
-    for (const child of this._t.children) {
-      // Marked at the level that MATCHED, not here: the recursion hands the
-      // same element up every level, and one parent-chain walk is enough.
-      const found = child.atId(id);
-      if (found) return found;
-    }
-
-    return undefined;
+    return reachPartition(lookUpId(this, id));
   }
 
 
@@ -769,6 +802,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    */
   protected addChild(element: GameElement): void {
     element._t.parent = this;
+    childrenChanged(this);
 
     if (this._t.order === 'stacking') {
       this._t.children.unshift(element);
@@ -785,6 +819,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     if (index !== -1) {
       this._t.children.splice(index, 1);
       element._t.parent = undefined;
+      childrenChanged(this);
     }
   }
 
@@ -896,6 +931,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       const index = oldParent._t.children.indexOf(this);
       if (index !== -1) {
         oldParent._t.children.splice(index, 1);
+        childrenChanged(oldParent);
       } else if (isDevMode()) {
         // The element points at a parent that does not list it. Completing the
         // move would re-parent it while leaving the stale reference in place,
@@ -924,6 +960,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
 
     // Add to new parent
     this._t.parent = destination;
+    childrenChanged(destination);
 
     const pos = position ?? (destination._t.order === 'stacking' ? 'first' : 'last');
     if (pos === 'first') {
@@ -1817,6 +1854,11 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // the game's direct children get it in loadSerializedState), so e.g.
     // `piece.remove()` → `this.game.pile` throws after any restore.
     if (ctx.game) (element as GameElement).game = ctx.game;
+    // The stored id replaces the one construction minted. The minted id leaves
+    // the id index, unless it already names another element: a restore can
+    // mint an id it has already restored. Whoever builds the tree files it
+    // once it is built (`Game#loadSerializedState`, `Game#adoptSubtree`).
+    if (ctx._elementsById.get(element._t.id) === element) ctx._elementsById.delete(element._t.id);
     element._t.id = json.id;
 
     if (json.name) {
