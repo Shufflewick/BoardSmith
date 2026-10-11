@@ -9,9 +9,9 @@
  * - The engine's root is assignable to `GameRootView`: renaming, dropping or
  *   retyping `phase`, `isFinished` or `settings` (or an element field) breaks it.
  * - The root fields the engine adds over `ElementJSON` are exactly the ones
- *   `GameRootView` adds over `GameViewElement`, plus the named bookkeeping
- *   fields a board does not read. A new root field must be added to one or the
- *   other. Assignability alone cannot catch an addition, and the reverse
+ *   `GameRootView` adds over `GameViewElement`, plus two named exclusions, each
+ *   with its reason below. A new root field must be added to `GameRootView` or
+ *   to an exclusion that says why a board does not read it. Assignability alone cannot catch an addition, and the reverse
  *   assignment is not the contract: a view is a reader's type (optional
  *   attributes, no visibility markers) that nothing hands back to the engine.
  * - Every path that hands a board its root carries that type, so the shells
@@ -28,11 +28,23 @@ import type { useTableSeat } from './composables/useTableSeat.js';
 
 type GameRootJSON = ReturnType<Game['toJSON']>;
 
-/** Root fields the engine writes for itself: animation counters and the log's eviction offset. */
-type EngineOnlyRootField = 'animationEvents' | 'animationEventSeq' | 'animationSeqBySeat' | 'messagesEvicted';
+/**
+ * Root fields only the authoritative `toJSON()` carries, for restores: the
+ * animation counters and the log's eviction offset. `toJSONForPlayer` removes
+ * them, so no seat's view has them.
+ */
+type RestoreOnlyRootField = 'animationEventSeq' | 'animationSeqBySeat' | 'messagesEvicted';
 
-/** The root fields a root type adds over a plain element, less the engine's own. */
-type BoardRootFields<Root> = Exclude<keyof Root, keyof ElementJSON | EngineOnlyRootField>;
+/**
+ * Ships in a seat's view (its visible events, renumbered for the seat), but a
+ * board reads animation events through `useAnimationEvents`, fed from
+ * `PlayerState.animationEvents`. Declaring it on `GameRootView` would give a
+ * board a second place to read the same events.
+ */
+type AnimationEventsRootField = 'animationEvents';
+
+/** The root fields a root type adds over a plain element, less the ones a board does not read from the root. */
+type BoardRootFields<Root> = Exclude<keyof Root, keyof ElementJSON | RestoreOnlyRootField | AnimationEventsRootField>;
 
 describe('GameRootView and Game.toJSON (#615)', () => {
   it('accepts the root the engine writes', () => {
