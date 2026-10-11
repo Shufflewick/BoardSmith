@@ -91,22 +91,8 @@
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
-}
-.history-player.player-0 {
-  background: color-mix(in srgb, var(--bsg-seat-2) 30%, transparent);
-  color: var(--bsg-seat-2);
-}
-.history-player.player-1 {
-  background: color-mix(in srgb, var(--bsg-seat-1) 30%, transparent);
-  color: var(--bsg-seat-1);
-}
-.history-player.player-2 {
-  background: color-mix(in srgb, var(--bsg-seat-3) 30%, transparent);
-  color: var(--bsg-seat-3);
-}
-.history-player.player-3 {
-  background: color-mix(in srgb, var(--bsg-seat-5) 30%, transparent);
-  color: var(--bsg-seat-5);
+  background: color-mix(in srgb, var(--badge-seat) 30%, transparent);
+  color: var(--badge-seat);
 }
 .history-action-name {
   color: var(--bsg-ink);
