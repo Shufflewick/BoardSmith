@@ -59,6 +59,7 @@ export class HexGame extends Game<HexGame, HexPlayer> {
 export function createHexFlow(game: HexGame): FlowDefinition {
   return {
     root: loop({
+      maxIterations: 100,
       name: 'game-loop',
       while: () => !game.isFinished(),
       do: eachPlayer({
@@ -153,6 +154,7 @@ const playerTurn = sequence(
   setVar('turnEnded', false),
 
   loop({
+    maxIterations: 100,
     name: 'turn-loop',
     while: (ctx) => {
       if (ctx.get('turnEnded')) return false;
@@ -430,6 +432,7 @@ return {
 ```typescript
 // Play phase loop with "Go" mechanics
 loop({
+  maxIterations: 100,
   name: 'play-loop',
   while: () => !game.allCardsPlayed() && !game.isFinished(),
   do: sequence(
@@ -562,6 +565,7 @@ override getWinners(): MyPlayer[] {
 sequence(
   setVar('roundNumber', 1),
   loop({
+    maxIterations: 100,
     while: (ctx) => ctx.get('roundNumber') <= 10,
     do: sequence(
       /* round logic */,

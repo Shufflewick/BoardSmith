@@ -44,6 +44,7 @@ class MyGame extends Game<MyGame, MyPlayer> {
 export function createGameFlow(game: MyGame): FlowDefinition {
   return {
     root: loop({
+      maxIterations: 100,
       while: () => !game.isFinished(),
       do: sequence(
         // Deal from current dealer
@@ -135,9 +136,11 @@ class MyGame extends Game<MyGame, MyPlayer> {
 export function createGameFlow(game: MyGame): FlowDefinition {
   return {
     root: loop({
+      maxIterations: 100,
       while: () => !game.isFinished(),
       do: eachPlayer({
         do: loop({
+          maxIterations: 100,
           name: 'player-turn',
           while: () => game.playerGoesAgain,
           do: sequence(
@@ -190,6 +193,7 @@ class MyGame extends Game<MyGame, MyPlayer> {
 
 // In flow
 loop({
+  maxIterations: 100,
   while: () => game.shouldPlayerGoAgain(),
   do: sequence(
     execute(() => game.resetPlayerGoesAgain()),
@@ -209,6 +213,7 @@ A single turn consists of multiple moves.
 ```typescript
 // In flow - allow multiple captures in one turn
 loop({
+  maxIterations: 100,
   name: 'capture-chain',
   while: (ctx) => {
     const piece = ctx.get<Piece>('movingPiece');

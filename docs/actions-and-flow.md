@@ -2198,54 +2198,106 @@ loop({
 
 ### Example: Cribbage Flow
 
-Complex multi-phase flow from Cribbage:
+Complex multi-phase flow, condensed from the Cribbage example game (bodies
+marked `// ...` are trimmed; see `src/rules/flow.ts` in the game for the full
+version):
 
 ```typescript
-export function createCribbageFlow(game: CribbageGame): FlowDefinition {
-  return {
-    root: loop({
-      name: 'game-loop',
-      while: () => !game.isFinished(),
+export function createCribbageFlow(): FlowDefinition {
+  // Discard phase - both players discard 2 cards at the same time
+  const discardPhase = phase('discarding', {
+    do: simultaneousActionStep({
+      name: 'simultaneous-discard',
+      actions: ['discard'],
+      playerDone: (ctx, player) => {
+        const game = ctx.game as CribbageGame;
+        return game.getPlayerHand(player as CribbagePlayer).count(Card) <= 4;
+      },
+      allDone: (ctx) => {
+        const game = ctx.game as CribbageGame;
+        return game.allPlayersDiscarded() || game.isFinished();
+      },
+    }),
+  });
+
+  // Play phase - players alternate playing cards one at a time
+  const playPhase = phase('play', {
+    do: sequence(
+      execute((ctx) => { /* reset the running total; non-dealer leads */ }),
+
+      loop({
+        name: 'play-loop',
+        while: (ctx) => {
+          const game = ctx.game as CribbageGame;
+          return !game.allCardsPlayed() && !game.isFinished();
+        },
+        maxIterations: 100,
+        do: sequence(
+          // Reset the count once both players are stuck ("Go")
+          execute((ctx) => { /* ... */ }),
+
+          // The current player plays one card or says Go
+          actionStep({
+            name: 'play-or-go-step',
+            turnScope: 'continue',
+            player: (ctx) => (ctx.game as CribbageGame).getCurrentPlayPlayer(),
+            actions: ['playCard', 'sayGo'],
+            skipIf: (ctx) => { /* finished, no cards left, or already said Go */ },
+          }),
+
+          // Pass the turn unless the other player has said Go
+          execute((ctx) => { /* ... */ }),
+        ),
+      }),
+
+      // Award the "last card" point
+      execute((ctx) => { /* ... */ }),
+    ),
+  });
+
+  // One complete round
+  const playRound = sequence(
+    // Shuffle and deal. Undo must not reach back past cards players have seen.
+    execute((ctx) => (ctx.game as CribbageGame).startNewRound(), { irreversible: true }),
+    discardPhase,
+    execute((ctx) => (ctx.game as CribbageGame).storeOriginalHands()),
+    execute((ctx) => (ctx.game as CribbageGame).cutStarterCard(), { irreversible: true }),
+    playPhase,
+
+    // Score hands and crib, then wait for a player to acknowledge
+    phase('scoring', {
       do: sequence(
-        // Deal phase
-        phase('deal', {
-          do: execute(() => game.dealHands()),
+        execute((ctx) => (ctx.game as CribbageGame).scoreRoundAndBuildSummary()),
+        simultaneousActionStep({
+          name: 'acknowledge-round-summary',
+          actions: ['acknowledgeScore'],
+          allDone: (ctx) => {
+            const game = ctx.game as CribbageGame;
+            return game.isFinished() || !game.roundSummary.active;
+          },
         }),
-
-        // Discard phase - all players discard simultaneously
-        phase('discard', {
-          do: simultaneousActionStep({
-            actions: ['discard'],
-            prompt: 'Discard 2 cards to the crib',
-          }),
-        }),
-
-        // Play phase - alternating card play
-        phase('play', {
-          do: loop({
-            while: () => !game.playPhaseComplete(),
-            do: eachPlayer({
-              do: actionStep({
-                actions: ['playCard', 'sayGo'],
-                skipIf: (ctx) => !game.canPlay(ctx.player),
-              }),
-            }),
-          }),
-        }),
-
-        // Show phase - score hands
-        phase('show', {
-          do: forEach({
-            collection: () => game.getShowOrder(),
-            as: 'player',
-            do: execute((ctx) => game.scoreHand(ctx.get('player'))),
-          }),
-        }),
-
-        // Rotate dealer
-        execute(() => game.rotateDealer()),
       ),
     }),
+
+    // Rotate dealer for the next round
+    execute((ctx) => { /* rotateDealer(), hide the crib again */ }),
+  );
+
+  return {
+    root: sequence(
+      execute((ctx) => (ctx.game as CribbageGame).createDeck()),
+
+      loop({
+        name: 'game-loop',
+        while: (ctx) => !(ctx.game as CribbageGame).isFinished(),
+        maxIterations: 100,
+        do: playRound,
+      }),
+
+      execute((ctx) => { /* announce the winner, skunk or double skunk */ }),
+    ),
+
+    onEnterPhase: (phaseName, ctx) => { /* set game.cribbagePhase, announce the phase */ },
   };
 }
 ```
