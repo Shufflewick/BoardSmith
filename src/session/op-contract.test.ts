@@ -54,6 +54,7 @@ const EVERY_EXECUTOR_OP: ExecutorOp[] = [
   { type: 'cancelAction', player: 1 },
   { type: 'undo', player: 2 },
   { type: 'botTurn', seats: [{ seat: 1 }, { seat: 2, level: 'hard' }] },
+  { type: 'botSuggest', seats: [{ seat: 1 }, { seat: 2, level: 'hard' }] },
 ];
 
 describe('the op kinds (#530)', () => {
@@ -61,9 +62,11 @@ describe('the op kinds (#530)', () => {
     expectTypeOf<Op>().toEqualTypeOf<ExecutorOp | DevOp | HostOp>();
     expectTypeOf<ExecutableOp>().toEqualTypeOf<ExecutorOp | DevOp>();
     expectTypeOf<ExecutorOp['type']>().toEqualTypeOf<
-      'start' | 'action' | 'expireSeat' | 'selectionStep' | 'resolveChoices' | 'cancelAction' | 'undo' | 'botTurn'
+      'start' | 'action' | 'expireSeat' | 'selectionStep' | 'resolveChoices' | 'cancelAction' | 'undo' | 'botTurn' | 'botSuggest'
     >();
     expectTypeOf<HostOp['type']>().toEqualTypeOf<'demoStart' | 'demoStop' | 'demoControl' | 'convertSeatToBot'>();
+    // A bot's search is an executor op, so a table host can search without changing the game (#635).
+    expectTypeOf<Extract<DevOp['type'], 'botSuggest'>>().toBeNever();
   });
 
   it('executeOp refuses a host lifecycle op at compile time', async () => {
@@ -98,7 +101,7 @@ describe('parseExecutorOp (#530)', () => {
       ok: false,
       error:
         'An executor op has type "demoStart", which an executor does not run. An executor op\'s type ' +
-        'is one of: start, action, expireSeat, selectionStep, resolveChoices, cancelAction, undo, botTurn.',
+        'is one of: start, action, expireSeat, selectionStep, resolveChoices, cancelAction, undo, botTurn, botSuggest.',
     });
     expect(parseExecutorOp({}).ok).toBe(false);
     expect(parseExecutorOp({ type: 7 }).ok).toBe(false);
@@ -206,6 +209,10 @@ describe('the result of each op (#530, #536)', () => {
     expectTypeOf<Succeeded<'action'>>().not.toHaveProperty('flowState');
     expectTypeOf<Succeeded<'action'>>().not.toHaveProperty('isComplete');
     expectTypeOf<Succeeded<'action'>>().not.toHaveProperty('winners');
+    // A bot's search answers with its move, or with neither a move nor a stall
+    // when no bot seat is due, or with the seat that could not move (#29, #635).
+    expectTypeOf<Succeeded<'botSuggest'>['botPlayer']>().toEqualTypeOf<number | undefined>();
+    expectTypeOf<Succeeded<'botSuggest'>['botStalled']>().toEqualTypeOf<{ seat: number; reason: string } | undefined>();
     expectTypeOf<Succeeded<'botTurn'>['botMoved']>().toEqualTypeOf<boolean>();
     expectTypeOf<Succeeded<'action'>>().not.toHaveProperty('botMoved');
     // The host's lifecycle ops publish through the host; their answer carries no state.

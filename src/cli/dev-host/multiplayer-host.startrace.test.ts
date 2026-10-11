@@ -64,7 +64,7 @@ function makeDeferred(): { promise: Promise<void>; resolve: () => void } {
 
 /**
  * Builds a host whose `start` op suspends on `gate.promise` when `gate` is
- * supplied — the deterministic interleave hook. Every other op (botTurn,
+ * supplied — the deterministic interleave hook. Every other op (botSuggest,
  * action, ...) runs immediately against the real pure executor.
  */
 function makeRaceHost(gate: { promise: Promise<void> } | null) {

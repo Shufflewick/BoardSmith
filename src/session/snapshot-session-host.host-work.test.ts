@@ -52,7 +52,7 @@ function manualGate() {
 
 /**
  * A one-seat game whose only move adds `rules.step`. Bots move while the count
- * is below `botsStopAt`.
+ * is below `botsStopAt`, and always when it is not given (the demo).
  */
 function countingSession(options: { botSeats?: Array<{ seat: number }>; botsStopAt?: number; onBotTurn?: () => void }) {
   const rules = { step: 1 };
@@ -73,13 +73,11 @@ function countingSession(options: { botSeats?: Array<{ seat: number }>; botsStop
       case 'start':
         return result({ count: 0 });
       case 'botSuggest':
+        options.onBotTurn?.();
+        if (options.botsStopAt !== undefined && at.count >= options.botsStopAt) return result(at);
         return { ...result(at), botPlayer: 1, suggestedAction: 'bump', suggestedArgs: {} };
       case 'action':
         return result({ count: at.count + rules.step });
-      case 'botTurn':
-        options.onBotTurn?.();
-        if (at.count >= (options.botsStopAt ?? 0)) return { ...result(at), botMoved: false };
-        return { ...result({ count: at.count + rules.step }), botMoved: true };
       default:
         throw new Error(`this test's game does not answer ${op.type}`);
     }

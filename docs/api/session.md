@@ -67,8 +67,8 @@ import {
 - `executeOp(definition, gameOptions, snapshot, pendingState, op, hostOptions?)` - Run one op against a snapshot, statelessly
 - `parseExecutorOp(value)` - Check a value read off a wire is an `ExecutorOp`; returns `{ ok: true, op }` or `{ ok: false, error }`
 - `ParsedExecutorOp` - What `parseExecutorOp` returns
-- `ExecutorOp` - The ops a platform executor runs: `start`, `action`, `expireSeat`, `selectionStep`, `resolveChoices`, `cancelAction`, `undo`, `botTurn`
-- `DevOp` - Ops `executeOp` runs only inside `boardsmith dev` (the `debug*` family, `restoreEarlier`, tutorial, `hint`, `heatmapToggle`, `botSuggest`)
+- `ExecutorOp` - The ops a platform executor runs: `start`, `action`, `expireSeat`, `selectionStep`, `resolveChoices`, `cancelAction`, `undo`, `botTurn`, `botSuggest`
+- `DevOp` - Ops `executeOp` runs only inside `boardsmith dev` (the `debug*` family, `restoreEarlier`, tutorial, `hint`, `heatmapToggle`)
 - `HostOp` - Lifecycle ops `SnapshotSessionHost.handleOp` handles itself and `executeOp` never sees (`demoStart`, `demoStop`, `demoControl`, `convertSeatToBot`)
 - `Op` - `ExecutorOp | DevOp | HostOp`, what `handleOp` takes
 - `OpResultFor<T>` - What an op of type `T` answers: its own success shape, or the shared `OpFailure`
@@ -206,12 +206,15 @@ await session.send(1, { type: 'action', actionName: 'move', player: 1, args: { f
 ```
 
 `start()` does not run the bot pump. When a bot seat moves first, run it once
-with `await session.host.runBotTurns()`. A bot's search does not hold the table:
-another seat's move, undo or view request runs while the bot thinks, and a move
-the bot found for a position that has since changed is thrown away and searched
-again (#635). `runBotTurns()` resolves once no bot has a move to make; a call
-while the bots are being asked joins that run. To hand a seat to the bot mid-game,
-call `session.makeSeatBot(seat, level)` and then send
+with `await session.host.runBotTurns()`. A bot's search (`botSuggest`, which
+changes nothing) does not hold the table: another seat's move or undo is made
+and published while the bot thinks, though the `send` that made it resolves only
+once the bot run it wakes has finished. The bot's move is then made as an
+ordinary `action` for its seat, and a move found for a position that has since
+changed is never made: the bot searches again (#635). `runBotTurns()` resolves
+once no bot has a move to make; a call while the bots are being asked joins that
+run. To hand a seat to the bot mid-game, call `session.makeSeatBot(seat, level)`
+and then send
 `{ type: 'convertSeatToBot', seat }`: the first changes the roster, the second
 wakes the pump.
 
@@ -349,8 +352,10 @@ state envelope: `snapshot` (which holds the flow state and winners; read them
 with `flowStateOf`, `isCompleteOf` and `winnersOf`), `playerViews`,
 `spectatorView`, `flowDebugInfo` and `persistCommit`, plus the op's own fields
 (`followUp`, `data` and `message` on an `action`; `botMoved`, `botPlayer` and
-`botStalled` on a `botTurn`). A `resolveChoices` success carries only its
-answer and no envelope, because a query changes nothing and answers one seat:
+`botStalled` on a `botTurn`; `botPlayer`, `suggestedAction` and `suggestedArgs`
+on a `botSuggest` that found a move, `botStalled` on one whose due bot seat could
+not choose, and neither when no bot seat is due). A `resolveChoices` success
+carries only its answer and no envelope, because a query changes nothing and answers one seat:
 
 ```typescript
 function reply(result: OpResultFor<'resolveChoices'>) {

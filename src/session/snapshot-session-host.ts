@@ -34,6 +34,24 @@ const MAX_STALE_BOT_SEARCHES = 3;
 /** What became of one bot search: see {@link SnapshotSessionHost.runBotTurns}. */
 type BotStep = 'moved' | 'again' | 'stale' | 'done';
 
+/**
+ * The `action` op that makes the move a bot chose on `searched` for its seat.
+ * A SERVER-COMPOSED op acting NOW: the caller has checked, inside the
+ * one-at-a-time section, that the game still stands on `searched`, so the
+ * boundary the move was composed against is that snapshot's own. Stamping the
+ * current key is correct HERE and would be a silent bypass anywhere a human's
+ * intent is being carried (docs/simultaneous-and-interrupt-semantics.md §7).
+ */
+function botMoveOp(
+  searched: unknown,
+  player: number,
+  actionName: string,
+  args: Record<string, unknown>,
+): Extract<MutatingOp, { type: 'action' }> {
+  const boundaryKey = flowBoundaryKey((searched as { flowState?: BoundaryKeyState } | null)?.flowState);
+  return { type: 'action', actionName, player, args, boundaryKey };
+}
+
 /** Whether `op`, which `res` answered with success, ended the acting seat's move. */
 function completesAction(op: Op, res: OpResult): boolean {
   return closesSeat(op) || ('actionComplete' in res && res.actionComplete === true);
@@ -413,11 +431,11 @@ export class SnapshotSessionHost {
 
   /**
    * The one-at-a-time section: every change to the game snapshot (an op's
-   * execute and apply, a bot move's adoption, a rules reload, a demo move)
+   * execute and apply, a bot's move, a rules reload, a demo move)
    * runs to completion before the next begins. Without it, two ops would read
    * the same base snapshot and the last write would silently clobber the other
    * (dev-host-bot-op-race #1). Read-only and teaching ops stay off it, and so
-   * does a bot's search: only adopting its move is inside (#635).
+   * does a bot's search: only making the move it found is inside (#635).
    */
   private opChain: Promise<unknown> = Promise.resolve();
 
@@ -1297,15 +1315,17 @@ export class SnapshotSessionHost {
    * joins that run and makes it look once more before it stops, so a wake is
    * never lost and two runs never overlap.
    *
-   * A bot's search runs OUTSIDE the one-at-a-time section, against the
-   * snapshot the game stands on when the search starts, so a human's move,
-   * undo or view request never waits for a bot to think (#635). The move it
-   * found is adopted inside the section only if the game still stands on that
-   * snapshot. Otherwise it is stale: it is thrown away, and the bot searches
-   * again from where the game is now. After {@link MAX_STALE_BOT_SEARCHES}
-   * stale searches in a row, the next search runs inside the section, so a
-   * table that keeps changing still sees the bot move; everyone else waits for
-   * that one search.
+   * A bot's search (`botSuggest`, which changes nothing) runs OUTSIDE the
+   * one-at-a-time section, against the snapshot the game stands on when the
+   * search starts, so a human's move, undo or seat close is made and published
+   * while a bot thinks, not after it (#635). The `handleOp` call that made it
+   * still resolves only once the bot run it wakes, or joins, has finished. The
+   * move the bot found is made inside the section, as an ordinary `action` for
+   * its seat, only if the game still stands on that snapshot. Otherwise it is
+   * stale: it is never made, and the bot searches again from where the game is
+   * now. After {@link MAX_STALE_BOT_SEARCHES} stale searches in a row, the next
+   * search runs inside the section, so a table that keeps changing still sees
+   * the bot move; everyone else waits for that one search.
    */
   runBotTurns(): Promise<void> {
     this.botWakes++;
@@ -1321,10 +1341,9 @@ export class SnapshotSessionHost {
   }
 
   /**
-   * Report a refused bot turn, and hold the refused seat back until the game
-   * state changes (#421). Returns whether the pump may go on to the other bot
-   * seats: not when the op failed without naming a seat, because then there is
-   * no seat to skip.
+   * Report a bot move the host could not make: the search was refused (no
+   * `seat`), or the game refused the move the bot chose for `seat`, which is
+   * then held back until the game state changes (#421).
    *
    * A FAILED bot turn is not the same as "no bot turn was due". Breaking on
    * both without a word is how a bot seat silently stops driving the flow:
@@ -1334,8 +1353,7 @@ export class SnapshotSessionHost {
    * hooks, or move enumeration, and the developer needs to see it the moment
    * it happens.
    */
-  private holdBackRefusedSeat(res: OpFailure, seats: Array<{ seat: number }>): boolean {
-    const seat = res.botPlayer;
+  private holdBackRefusedSeat(res: OpFailure, seats: Array<{ seat: number }>, seat?: number): void {
     const who = seat === undefined ? `seat(s) ${seats.map((s) => s.seat).join(', ')}` : `seat ${seat}`;
     const until = seat === undefined ? '' : ', and the bot will not try again until the game changes';
     console.error(
@@ -1344,20 +1362,18 @@ export class SnapshotSessionHost {
         `not advance past this step${until}. Check the action's selections and the bot's move ` +
         `enumeration for this seat.`,
     );
-    if (seat === undefined) return false;
-    this.holdBotSeatBack(seat);
-    return true;
+    if (seat !== undefined) this.holdBotSeatBack(seat);
   }
 
   /**
    * Report a stalled bot seat, and hold it back until the game state changes
    * (#421).
    *
-   * #29: `botMoved: false` covers both "no bot seat was due" (ordinary, the
-   * pump is finished) and "a bot seat was due and could not act". The second
-   * used to be an exception that never got this far — it escaped executeOp and
-   * the seat silently never moved, holding open every simultaneous step at the
-   * table. Say it out loud.
+   * #29: a search that finds no move covers both "no bot seat was due"
+   * (ordinary, the pump is finished) and "a bot seat was due and could not
+   * act", which `botStalled` tells apart. The second used to be an exception
+   * that never got this far — it escaped executeOp and the seat silently never
+   * moved, holding open every simultaneous step at the table. Say it out loud.
    */
   private holdBackStalledSeat(stalled: { seat: number; reason: string }): void {
     console.error(
@@ -1387,8 +1403,7 @@ export class SnapshotSessionHost {
         // A change already in the section lands first: a search begun before
         // it would be stale before it started.
         await this.enqueue(async () => {});
-        const seats = this.botSeatsToAsk();
-        if (this.disposed || this.isComplete || seats.length === 0) break;
+        if (this.disposed || this.isComplete || this.botSeatsToAsk().length === 0) break;
         // A save landed while this chain ran (#388). The move under way when it
         // landed has finished; the rest wait for the reload.
         if (this.hostWork.reloadPending) {
@@ -1401,8 +1416,8 @@ export class SnapshotSessionHost {
         }
         const wakes = this.botWakes;
         const step = staleInARow < MAX_STALE_BOT_SEARCHES
-          ? await this.botStep(seats, false)
-          : await this.enqueue(() => this.botStep(seats, true));
+          ? await this.botStep(false)
+          : await this.enqueue(() => this.botStep(true));
         if (step === 'stale') {
           staleInARow++;
           continue;
@@ -1417,23 +1432,38 @@ export class SnapshotSessionHost {
   }
 
   /**
-   * One bot search, and its move adopted inside the one-at-a-time section when
-   * the game still stands where the search began. `inSection` says the caller
-   * already holds the section, so the game cannot move during the search.
+   * One bot search, and its move made inside the one-at-a-time section when
+   * the game still stands where the search began. The search (`botSuggest`)
+   * changes nothing; the move is an ordinary `action` for the bot's seat, so
+   * no op that changes the game is ever run and then thrown away. `inSection`
+   * says the caller already holds the section, so the game cannot move during
+   * the search. The bot seats are read once the step can see the game it
+   * searches: a roster change made while it waited is never missed.
    */
-  private async botStep(seats: Array<{ seat: number; level?: string }>, inSection: boolean): Promise<BotStep> {
+  private async botStep(inSection: boolean): Promise<BotStep> {
+    const seats = this.botSeatsToAsk();
+    if (this.disposed || this.isComplete || seats.length === 0) return 'done';
     const searched = this._snapshot;
-    const res = await this.adapters.executeOp(searched, null, { type: 'botTurn', seats });
+    const found = await this.adapters.executeOp(searched, null, { type: 'botSuggest', seats });
     const settle = async (): Promise<BotStep> => {
+      if (this.disposed) return 'done';
       if (this._snapshot !== searched) return 'stale';
-      if (!res.success) return this.holdBackRefusedSeat(res, seats) ? 'again' : 'done';
-      if (res.botStalled) {
-        this.holdBackStalledSeat(res.botStalled);
+      if (!found.success) {
+        this.holdBackRefusedSeat(found, seats);
+        return 'done';
+      }
+      if (found.botStalled) {
+        this.holdBackStalledSeat(found.botStalled);
         return 'again';
       }
-      if (!res.botMoved) return 'done';
-      await this.apply(res);
-      return 'moved';
+      if (found.botPlayer === undefined) return 'done';
+      const made = await this.commitMutatingOp(
+        found.botPlayer,
+        botMoveOp(searched, found.botPlayer, found.suggestedAction, found.suggestedArgs),
+      );
+      if (made.success) return 'moved';
+      this.holdBackRefusedSeat(made, seats, found.botPlayer);
+      return 'again';
     };
     return inSection ? settle() : this.enqueue(settle);
   }
@@ -1475,7 +1505,8 @@ export class SnapshotSessionHost {
           type: 'botSuggest',
           seats: allSeats,
         });
-        if (!suggestRes.success) break;
+        // No move to show: the search was refused, no seat is due, or the bot stalled.
+        if (!suggestRes.success || suggestRes.botPlayer === undefined) break;
 
         // Check abort AFTER the async botSuggest (Pitfall 1 — second check).
         if (this.demoAbort) break;
@@ -1580,43 +1611,20 @@ export class SnapshotSessionHost {
     // Record the pre-move snapshot so 'back' can rewind exactly one move.
     this.demoHistory.push(this.snapshot);
 
-    // Phase 4: Execute the EXACT same move via 'action' op.
-    // ANTI-PATTERN AVOIDED: Do NOT re-run botSuggest/botTurn here — a second
-    // MCTS call could produce a different move, making the narration a lie
+    // Phase 4: Execute the EXACT same move as an 'action' op, as the bot pump
+    // does. ANTI-PATTERN AVOIDED: Do NOT search again here — a second MCTS
+    // call could produce a different move, making the narration a lie
     // (RESEARCH: "narrate/execute mismatch" anti-pattern).
+    // Phase 5: the move is applied and broadcast with the narration cleared.
     this.narrationText = null;
-    const execRes = await this.adapters.executeOp(iterSnapshot, null, {
-      type: 'action',
-      actionName: suggestedAction,
-      player: botPlayer,
-      args: suggestedArgs,
-      // A SERVER-COMPOSED op acting NOW: the demo bot chose this move from
-      // `iterSnapshot`, which is still the game's position (checked above, on
-      // the op chain), so the boundary it was composed against is that
-      // snapshot's own. Stamping the current key is correct HERE and would be a
-      // silent bypass anywhere a human's intent is being carried
-      // (docs/simultaneous-and-interrupt-semantics.md §7).
-      boundaryKey: flowBoundaryKey((iterSnapshot as { flowState?: BoundaryKeyState } | null)?.flowState),
-    });
-
+    const execRes = await this.commitMutatingOp(
+      botPlayer,
+      botMoveOp(iterSnapshot, botPlayer, suggestedAction, suggestedArgs),
+    );
     if (!execRes.success) {
       this.demoHistory.pop(); // fail-clean: undo the history push
       return 'failed';
     }
-
-    // Clear the acting seat's hint, as applyMutatingOp does for a human move.
-    const seatTransient = this.transientTeachingState.get(botPlayer);
-    if (seatTransient?.hint) {
-      const { hint: _h, ...rest } = seatTransient;
-      if (Object.keys(rest).length > 0) {
-        this.transientTeachingState.set(botPlayer, rest);
-      } else {
-        this.transientTeachingState.delete(botPlayer);
-      }
-    }
-
-    // Phase 5: Apply (broadcasts updated state; narration is already null).
-    await this.apply(execRes);
     return 'moved';
   }
 

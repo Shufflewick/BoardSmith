@@ -6,7 +6,7 @@ import {
   simultaneousActionStep,
   type GameOptions,
 } from '../engine/index.js';
-import { executeOp, type ExecutableOp, type GameDefinitionLike, type OpResultFor } from './stateless-ops.js';
+import { executeOp, type ExecutableOp, type GameDefinitionLike } from './stateless-ops.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 import { SnapshotSessionHost } from './snapshot-session-host.js';
 
@@ -63,28 +63,26 @@ afterEach(() => {
 describe('#421: SnapshotSessionHost with a bot seat whose move is refused', () => {
   function makeHost() {
     const gameOptions = { playerCount: 3, seed: 'bs421-host' };
-    const botTurns: Array<{ seats: number[]; result: OpResultFor<'botTurn'> }> = [];
+    /** Every move a bot seat made or tried, and whether the game took it. */
+    const botMoves: Array<{ seat: number; made: boolean }> = [];
     const host = new SnapshotSessionHost({
       playerCount: 3,
       executeOp: async (snapshot, pendingState, op) => {
         const result = await executeOp(stubbornDef, gameOptions, snapshot, pendingState, op);
         const asked: ExecutableOp = op;
-        if (asked.type === 'botTurn') {
-          botTurns.push({ seats: asked.seats.map((s) => s.seat), result: result as OpResultFor<'botTurn'> });
-        }
+        if (asked.type === 'action' && asked.player !== 1) botMoves.push({ seat: asked.player, made: result.success });
         return result;
       },
       record: () => {}, push: () => {},
     });
     host.setBotSeats([{ seat: 2, level: 'easy' }, { seat: 3, level: 'easy' }]);
-    const refusalsOfSeat2 = () =>
-      botTurns.filter((t) => !t.result.success && t.result.botPlayer === 2).length;
-    return { host, botTurns, refusalsOfSeat2 };
+    const refusalsOfSeat2 = () => botMoves.filter((m) => m.seat === 2 && !m.made).length;
+    return { host, botMoves, refusalsOfSeat2 };
   }
 
   it('asks a refused seat once per game state, says so each time, and lets the rest of the table move', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const { host, botTurns, refusalsOfSeat2 } = makeHost();
+    const { host, botMoves, refusalsOfSeat2 } = makeHost();
     await host.start();
     const refusalLogs = () =>
       errors.mock.calls.map((c) => String(c[0])).filter((m) => m.includes(REFUSAL));
@@ -92,7 +90,7 @@ describe('#421: SnapshotSessionHost with a bot seat whose move is refused', () =
     await host.runBotTurns();
     // Seat 2 is asked first and refused. Seat 3 still moves, which changes the
     // game, so seat 2 is asked once more, at the new state, and refused again.
-    expect(botTurns.filter((t) => t.result.success && t.result.botMoved && t.result.botPlayer === 3)).toHaveLength(1);
+    expect(botMoves.filter((m) => m.seat === 3 && m.made)).toHaveLength(1);
     expect(refusalsOfSeat2()).toBe(2);
     expect(refusalLogs()).toHaveLength(2);
     expect(refusalLogs()[0]).toMatch(/seat 2\b/);
