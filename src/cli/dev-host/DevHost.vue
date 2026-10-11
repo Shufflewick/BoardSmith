@@ -452,6 +452,8 @@ const overflowTrigger = ref<HTMLElement | null>(null);
 
 // ── Table setup panel (read-only config display — DEV-04) ─────────────────────
 const tableSetupOpen = ref(false);
+/** The panel's first control, where opening it from the … menu puts focus (#668). */
+const dealSeedField = ref<HTMLElement | null>(null);
 
 // ── Debug panel toggle: the DebugPanel lives inside the game iframe, but its
 // trigger belongs in the Dev header so all dev controls are together. We post a
@@ -476,9 +478,14 @@ function toggleDebug(): void {
 }
 
 // ── Dismissal: the seat switcher (#610) and the … menu (#664) close like any
-// dev-bar menu; Escape also closes the table setup panel.
-useMenuDismiss(seatSwitcherOpen, seatSwitcherRef, seatSwitcherTrigger);
-useMenuDismiss(overflowOpen, overflowRef, overflowTrigger);
+// dev-bar menu; Escape also closes the table setup panel. A choice closes its
+// menu through `seatChosen`/`overflowChosen`, which also place focus (#668).
+const seatChosen = useMenuDismiss(seatSwitcherOpen, seatSwitcherRef, seatSwitcherTrigger);
+const overflowChosen = useMenuDismiss(overflowOpen, overflowRef, overflowTrigger);
+function toggleTableSetupFromMenu(): void {
+  tableSetupOpen.value = !tableSetupOpen.value;
+  overflowChosen(tableSetupOpen.value ? dealSeedField : undefined);
+}
 // New game armed in the … menu disarms when the menu closes, however it closes,
 // so reopening it never restarts on one click (#667).
 watch(overflowOpen, (open) => {
@@ -762,7 +769,7 @@ onUnmounted(() => {
                   class="seat-switcher-menu__item"
                   data-testid="follow-active-seat"
                   :class="{ 'seat-switcher-menu__item--current': followActive }"
-                  @click="seatSwitcherOpen = false; toggleFollow()"
+                  @click="seatChosen(); toggleFollow()"
                 >
                   <span class="dev-chrome__btn-icon" aria-hidden="true">{{ followActive ? '◉' : '○' }}</span>
                   Follow active seat
@@ -778,7 +785,7 @@ onUnmounted(() => {
                     'seat-switcher-menu__item--disabled': !canTake(seat) && seat.seat !== mySeat,
                   }"
                   :disabled="!canTake(seat) && seat.seat !== mySeat"
-                  @click="seatSwitcherOpen = false; switchSeat(seat.seat)"
+                  @click="seatChosen(); switchSeat(seat.seat)"
                 >
                   <span class="seat-switcher-menu__dot"
                     :class="seat.connected ? 'is-online' : 'is-offline'"
@@ -792,7 +799,9 @@ onUnmounted(() => {
                      solo dev never reaches the lobby preset/gameOption picker
                      without an explicit way to un-seat. Reuses leaveSeat() (sets
                      mySeat=null), which returns the view to the lobby where the
-                     picker (data-testid="lobby-preset-picker") renders. -->
+                     picker (data-testid="lobby-preset-picker") renders. The seat
+                     button goes with the game view, so focus stays on the page
+                     rather than waiting to return to it (#668). -->
                 <button
                   type="button"
                   class="seat-switcher-menu__item"
@@ -841,7 +850,7 @@ onUnmounted(() => {
                   class="btn btn--start"
                   data-testid="new-game"
                   :class="{ 'btn--confirming': restartConfirming }"
-                  @click="overflowOpen = !restartConfirming; handleNewGameClick()"
+                  @click="restartConfirming && overflowChosen(); handleNewGameClick()"
                 >
                   <span class="dev-chrome__btn-icon" aria-hidden="true">↺</span>
                   <span class="dev-chrome__btn-label">{{ restartConfirming ? 'Confirm restart?' : 'New game' }}</span>
@@ -852,7 +861,7 @@ onUnmounted(() => {
                   class="btn"
                   data-testid="fire-deadline"
                   title="Close the timed step now, as if its time ran out"
-                  @click="overflowOpen = false; fireDeadline()"
+                  @click="overflowChosen(); fireDeadline()"
                 >
                   <span class="dev-chrome__btn-icon" aria-hidden="true">⏱</span>
                   <span class="dev-chrome__btn-label">End step</span>
@@ -863,7 +872,7 @@ onUnmounted(() => {
                   data-testid="table-setup-toggle"
                   :class="{ 'btn--on': tableSetupOpen }"
                   :aria-expanded="tableSetupOpen"
-                  @click="overflowOpen = false; tableSetupOpen = !tableSetupOpen"
+                  @click="toggleTableSetupFromMenu"
                 >
                   <span class="dev-chrome__btn-icon" aria-hidden="true">⚙</span>
                   <span class="dev-chrome__btn-label">Table setup</span>
@@ -875,7 +884,7 @@ onUnmounted(() => {
                   data-testid="debug-toggle"
                   :class="{ 'btn--on': debugOpen }"
                   :aria-pressed="debugOpen"
-                  @click="overflowOpen = false; toggleDebug()"
+                  @click="overflowChosen(); toggleDebug()"
                 >
                   <span class="dev-chrome__btn-icon" aria-hidden="true">⟨⟩</span>
                   <span class="dev-chrome__btn-label">Debug</span>
@@ -970,7 +979,7 @@ onUnmounted(() => {
           <form class="table-setup__deal" data-testid="deal-form" @submit.prevent="dealFromSeed">
             <label>
               Deal from seed
-              <input v-model="dealSeedInput" type="text" data-testid="deal-seed" />
+              <input ref="dealSeedField" v-model="dealSeedInput" type="text" data-testid="deal-seed" />
             </label>
             <button type="submit" class="btn" data-testid="deal">Deal</button>
           </form>

@@ -28,6 +28,9 @@ export const PART_NAMES = ['rebuild', 'legalMoves', 'apply', 'reapply', 'scoring
 /** Called once per search step: one walk down the tree from the root. */
 export const STEP_METHOD = 'selectWithPath';
 
+/** Called once per step that was scored. A step thrown away never reaches it (#669). */
+export const SCORED_METHOD = 'backpropagate';
+
 /** The element tree walk behind every `all`/`first` query (#632), timed across all parts. */
 export const LOOKUP_METHOD = '_finder';
 
@@ -54,10 +57,11 @@ function patch(object, name, wrap) {
  * @param options `profile` also splits the time into parts and times element
  *   lookups; that adds two clock reads per wrapped call, so leave it off where
  *   the step count under a timeout is what is measured. `now` is the clock.
- * @returns `{ result, steps, ms }`, plus `parts` (ms per part) and `lookupMs` when profiled.
+ * @returns `{ result, steps, scored, ms }`, plus `parts` (ms per part) and `lookupMs` when profiled.
  */
 export async function measureSearch(targets, search, { profile, now = () => performance.now() }) {
   let steps = 0;
+  let scored = 0;
   const parts = Object.fromEntries(PART_NAMES.map((part) => [part, 0]));
   const stack = [];
   let mark = 0;
@@ -75,6 +79,10 @@ export async function measureSearch(targets, search, { profile, now = () => perf
   try {
     restores.push(patch(targets.bot, STEP_METHOD, (original) => function (...args) {
       steps++;
+      return original.apply(this, args);
+    }));
+    restores.push(patch(targets.bot, SCORED_METHOD, (original) => function (...args) {
+      scored++;
       return original.apply(this, args);
     }));
     if (profile) {
@@ -106,7 +114,7 @@ export async function measureSearch(targets, search, { profile, now = () => perf
     const start = now();
     const result = await search();
     const ms = now() - start;
-    return profile ? { result, steps, ms, parts, lookupMs } : { result, steps, ms };
+    return profile ? { result, steps, scored, ms, parts, lookupMs } : { result, steps, scored, ms };
   } finally {
     for (const restore of restores.reverse()) restore();
   }
