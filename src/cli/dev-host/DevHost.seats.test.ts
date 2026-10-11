@@ -7,7 +7,7 @@
  * a real socket connection.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount, type VueWrapper } from '@vue/test-utils';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import DevHost from './DevHost.vue';
 import type { DevHostConfig } from './config-types.js';
 
@@ -311,6 +311,126 @@ describe('DevHost — choosing from the … menu closes it (#664)', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     await wrapper.vm.$nextTick();
     expect(wrapper.find(barNewGame).text()).toContain('Confirm restart?');
+    wrapper.unmount();
+  });
+});
+
+// #668: a chosen item goes away with its menu, so focus must not fall to the
+// page. It moves into what the choice opened when that is on this page, and
+// otherwise back to the menu's button.
+describe('DevHost — after a menu choice, focus goes where the choice leads (#668)', () => {
+  const SEAT_TRIGGER = '[data-testid="seat-switcher"]';
+  const OVERFLOW_TRIGGER = '.dev-chrome__overflow-trigger';
+  const OVERFLOW = '.dev-chrome__overflow-menu';
+
+  /** Press a menu item the way a keyboard user does: focus it, then activate it. */
+  async function choose(wrapper: VueWrapper, selector: string): Promise<void> {
+    const item = wrapper.find(selector).element as HTMLElement;
+    item.focus();
+    item.click();
+    await flushPromises();
+  }
+
+  async function inGame(): Promise<VueWrapper> {
+    const wrapper = await mountDevHost();
+    await activateSeat(wrapper);
+    const ws = mockWsInstance!;
+    ws.simulateMessage({ ...SEAT_LOBBY, debug: true });
+    ws.simulateMessage({ type: 'game_state', view: {}, isComplete: false, winners: [], isDraw: false, deadlineAt: 9_000, serverNow: 4_000 });
+    await wrapper.vm.$nextTick();
+    return wrapper;
+  }
+
+  it('Follow active seat returns focus to the seat button', async () => {
+    const wrapper = await inGame();
+    await wrapper.find(SEAT_TRIGGER).trigger('click');
+    await choose(wrapper, '[data-testid="follow-active-seat"]');
+    expect(document.activeElement).toBe(wrapper.find(SEAT_TRIGGER).element);
+    wrapper.unmount();
+  });
+
+  it('choosing the seat already held returns focus to the seat button', async () => {
+    const wrapper = await inGame();
+    await wrapper.find(SEAT_TRIGGER).trigger('click');
+    await choose(wrapper, '.seat-switcher-menu__item--current:not([data-testid])');
+    expect(document.activeElement).toBe(wrapper.find(SEAT_TRIGGER).element);
+    wrapper.unmount();
+  });
+
+  // A seat change sends this page back through the lobby until the host seats
+  // it again, so the seat button is a new one by the time focus can go to it.
+  it('choosing another seat puts focus on the seat button once the host has seated this page', async () => {
+    const wrapper = await inGame();
+    await wrapper.find(SEAT_TRIGGER).trigger('click');
+    await choose(wrapper, '.seat-switcher-menu__item:not(:disabled):not([data-testid]):not(.seat-switcher-menu__item--current)');
+    mockWsInstance!.simulateMessage({ type: 'joined', seat: 2 });
+    await flushPromises();
+    expect(document.activeElement).toBe(wrapper.find(SEAT_TRIGGER).element);
+    wrapper.unmount();
+  });
+
+  it('a seat change leaves focus alone if the user moved it while the host was seating this page', async () => {
+    const wrapper = await inGame();
+    await wrapper.find(SEAT_TRIGGER).trigger('click');
+    await choose(wrapper, '.seat-switcher-menu__item:not(:disabled):not([data-testid]):not(.seat-switcher-menu__item--current)');
+    const elsewhere = document.createElement('input');
+    document.body.appendChild(elsewhere);
+    elsewhere.focus();
+    mockWsInstance!.simulateMessage({ type: 'joined', seat: 2 });
+    await flushPromises();
+    expect(document.activeElement).toBe(elsewhere);
+    elsewhere.remove();
+    wrapper.unmount();
+  });
+
+  // The seat button goes away with the game view, so there is nothing on this
+  // page for focus to return to; it stays on the page, and taking a seat again
+  // later does not pull it to the seat button.
+  it('Back to lobby leaves focus on the page, and a later seat does not take it', async () => {
+    const wrapper = await inGame();
+    await wrapper.find(SEAT_TRIGGER).trigger('click');
+    await choose(wrapper, '[data-testid="leave-seat"]');
+    expect(wrapper.find(SEAT_TRIGGER).exists()).toBe(false);
+    expect(document.activeElement).toBe(document.body);
+    mockWsInstance!.simulateMessage({ type: 'joined', seat: 1 });
+    await flushPromises();
+    expect(document.activeElement).toBe(document.body);
+    wrapper.unmount();
+  });
+
+  it.each(['fire-deadline', 'debug-toggle'])('%s in the … menu returns focus to the … button', async (testid) => {
+    const wrapper = await inGame();
+    await wrapper.find(OVERFLOW_TRIGGER).trigger('click');
+    await choose(wrapper, `${OVERFLOW} [data-testid="${testid}"]`);
+    expect(document.activeElement).toBe(wrapper.find(OVERFLOW_TRIGGER).element);
+    wrapper.unmount();
+  });
+
+  it('a confirmed New game returns focus to the … button', async () => {
+    const wrapper = await inGame();
+    await wrapper.find(OVERFLOW_TRIGGER).trigger('click');
+    await choose(wrapper, `${OVERFLOW} [data-testid="new-game"]`);
+    expect(document.activeElement).toBe(wrapper.find(`${OVERFLOW} [data-testid="new-game"]`).element);
+    await choose(wrapper, `${OVERFLOW} [data-testid="new-game"]`);
+    expect(document.activeElement).toBe(wrapper.find(OVERFLOW_TRIGGER).element);
+    wrapper.unmount();
+  });
+
+  it('opening Table setup puts focus on its first control', async () => {
+    const wrapper = await inGame();
+    await wrapper.find(OVERFLOW_TRIGGER).trigger('click');
+    await choose(wrapper, `${OVERFLOW} [data-testid="table-setup-toggle"]`);
+    expect(document.activeElement).toBe(wrapper.find('[data-testid="deal-seed"]').element);
+    wrapper.unmount();
+  });
+
+  it('closing Table setup from the … menu returns focus to the … button', async () => {
+    const wrapper = await inGame();
+    await wrapper.find('.dev-chrome__bar-wide [data-testid="table-setup-toggle"]').trigger('click');
+    await wrapper.find(OVERFLOW_TRIGGER).trigger('click');
+    await choose(wrapper, `${OVERFLOW} [data-testid="table-setup-toggle"]`);
+    expect(wrapper.find('.table-setup').exists()).toBe(false);
+    expect(document.activeElement).toBe(wrapper.find(OVERFLOW_TRIGGER).element);
     wrapper.unmount();
   });
 });
