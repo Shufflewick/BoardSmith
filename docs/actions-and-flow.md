@@ -474,6 +474,9 @@ the same order: the action's selections, top to bottom, each answered or
 skipped before the next. So put an optional pick that narrows an earlier answer
 ("who exactly?") straight after that answer.
 
+A skipped optional pick is absent from `args`, so it is typed `T | undefined`
+in `execute` and in the `validate` of every later pick (#627).
+
 Each pick offers exactly the list your action gives it, in the Action Panel and
 on the board alike (#407). Nothing hides a value because an earlier pick of the
 same action already took it. If two picks must differ, say so in the later
