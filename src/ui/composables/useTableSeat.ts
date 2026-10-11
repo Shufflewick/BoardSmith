@@ -53,7 +53,7 @@ interface TableSeatOptions extends SeatTransport {
   /** This seat's latest frame, `{ flowState, state }` as a session publishes it; null before the first. */
   state: Ref<GameState | null>;
   /** The tree the board draws. The shell's follows time travel; otherwise it is `state.state.view`. */
-  gameView: ComputedRef<GameRootView | null | undefined>;
+  gameView: ComputedRef<GameRootView | null>;
   /** The viewer's seat; -1 before one is assigned. */
   playerSeat: Ref<number>;
   /** Whether this seat may act now. */

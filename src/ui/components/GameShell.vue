@@ -396,12 +396,13 @@ const hasActionHelp = computed(() => {
 });
 
 // Game view - computed here so actionController can use it for element enrichment
-// When viewing historical state (time travel), use that instead of live state
-const gameView = computed<GameRootView | null | undefined>(() => {
+// When viewing historical state (time travel), use that instead of live state.
+// Null until the first frame arrives, as a board's `gameView` prop is typed.
+const gameView = computed<GameRootView | null>(() => {
   if (timeTravelState.value) {
     return timeTravelState.value.view;
   }
-  return state.value?.state.view;
+  return state.value?.state.view ?? null;
 });
 
 // LIBX-04 (D31): single source of truth for the board's displayed state. During
@@ -778,7 +779,7 @@ const boardProps = computed(() =>
     state: displayedState.value,
     players: displayedPlayers.value,
     myPlayer: displayedMyPlayer.value,
-    gameView: gameView.value ?? null,
+    gameView: gameView.value,
     playerSeat: playerSeat.value,
     isViewingHistory: isViewingHistory.value,
     undo: handleUndo,

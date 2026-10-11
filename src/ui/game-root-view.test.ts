@@ -64,7 +64,7 @@ describe('GameRootView and Game.toJSON (#615)', () => {
 
   it('is the table seat gameView type', () => {
     expectTypeOf<Parameters<typeof useTableSeat>[0]['gameView']>().toEqualTypeOf<
-      ComputedRef<GameRootView | null | undefined>
+      ComputedRef<GameRootView | null>
     >();
   });
 });
