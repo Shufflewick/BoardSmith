@@ -37,7 +37,6 @@ import {
   assertNoHiddenInfoLeak,
   preloadSeatRenderer,
   renderAsSeat,
-  type HiddenInfoGameView,
 } from './dom-leak.js';
 
 // #354: loading AutoUI's module graph is the one slow thing a render does. Done
@@ -131,7 +130,7 @@ describe('assertNoHiddenInfoLeak — positive control (proves the matcher is not
     const tg = makeCardLeakGame();
     // Deliberately bypass toJSONForPlayer's redaction — the raw, unfiltered
     // state contains player 2's real card face image and name.
-    const unfilteredView = tg.game.toJSON() as unknown as HiddenInfoGameView;
+    const unfilteredView = tg.game.toJSON();
 
     await expect(
       assertNoHiddenInfoLeak(tg, 1, { gameViewOverride: unfilteredView }),
@@ -140,7 +139,7 @@ describe('assertNoHiddenInfoLeak — positive control (proves the matcher is not
 
   it('the thrown message names the leaked marker, owning element, and seat', async () => {
     const tg = makeCardLeakGame();
-    const unfilteredView = tg.game.toJSON() as unknown as HiddenInfoGameView;
+    const unfilteredView = tg.game.toJSON();
 
     let thrown: Error | undefined;
     try {
@@ -223,7 +222,7 @@ describe('assertNoHiddenInfoLeak — static playerView blind spot honored', () =
     // Simulate a bug where the stripped attribute leaked back into the
     // rendered view: re-inject $images.face into the ALREADY-transformed
     // (playerView-stripped) state.
-    const leaky = cloneJson(tg.getPlayerView(1).state) as unknown as ElementJSON;
+    const leaky = cloneJson(tg.getPlayerView(1).state);
     const node = findNodeById(leaky, card.id);
     expect(node).toBeDefined();
     node!.attributes = {
@@ -233,7 +232,7 @@ describe('assertNoHiddenInfoLeak — static playerView blind spot honored', () =
 
     await expect(
       assertNoHiddenInfoLeak(tg, 1, {
-        gameViewOverride: leaky as unknown as HiddenInfoGameView,
+        gameViewOverride: leaky,
       }),
     ).rejects.toThrow(/hidden-info leak/i);
   });
@@ -281,7 +280,7 @@ describe('assertNoHiddenInfoLeak — allowlist suppresses a known false positive
     const collidingValue = String(p2Hand.id);
     p1Card.rank = collidingValue;
 
-    const unfilteredView = tg.game.toJSON() as unknown as HiddenInfoGameView;
+    const unfilteredView = tg.game.toJSON();
 
     await expect(
       assertNoHiddenInfoLeak(tg, 2, {
@@ -352,14 +351,14 @@ describe('assertNoHiddenInfoLeak — CR-01 regression: aria-label/alt/title surf
     // (attributes/$images already stripped, __hidden: true) but `name` is
     // re-injected onto the hidden placeholder -- e.g. a renderer computing
     // aria-label from a source that bypasses the engine's redaction.
-    const leaky = cloneJson(tg.getPlayerView(2).state) as unknown as ElementJSON;
+    const leaky = cloneJson(tg.getPlayerView(2).state);
     const node = findNodeById(leaky, card.id);
     expect(node).toBeDefined();
     expect(node!.attributes?.__hidden).toBe(true);
     node!.name = card.name;
 
     await expect(
-      assertNoHiddenInfoLeak(tg, 2, { gameViewOverride: leaky as unknown as HiddenInfoGameView }),
+      assertNoHiddenInfoLeak(tg, 2, { gameViewOverride: leaky }),
     ).rejects.toThrow(/hidden-info leak/i);
   });
 });
@@ -387,7 +386,7 @@ describe('renderAsSeat / assertNoHiddenInfoLeak — WR-03: actionable error outs
 
   it('assertNoHiddenInfoLeak throws the same actionable error when document is undefined', async () => {
     const tg = makeCardLeakGame();
-    const unfilteredView = tg.game.toJSON() as unknown as HiddenInfoGameView;
+    const unfilteredView = tg.game.toJSON();
     const originalDocument = globalThis.document;
     // @ts-expect-error -- deliberately simulating a non-DOM environment
     delete globalThis.document;
@@ -503,7 +502,7 @@ describe('assertNoHiddenInfoLeak — TOOL-04 (D20): symmetric-deck (identical-na
     // Deliberately bypass toJSONForPlayer's redaction — the raw, unfiltered
     // state renders BOTH "Ace" cards, including the real hidden one under
     // its own element id.
-    const unfilteredView = tg.game.toJSON() as unknown as HiddenInfoGameView;
+    const unfilteredView = tg.game.toJSON();
 
     await expect(
       assertNoHiddenInfoLeak(tg, 1, { gameViewOverride: unfilteredView }),
@@ -570,14 +569,14 @@ describe('assertNoHiddenInfoLeak — Task 3 adversarial: elementId-keying cannot
     // hidden placeholder), then re-inject the real name onto the hidden
     // card's OWN node id — exactly what a renderer bug that bypasses
     // redaction would produce.
-    const leaky = cloneJson(tg.getPlayerView(1).state) as unknown as ElementJSON;
+    const leaky = cloneJson(tg.getPlayerView(1).state);
     const node = findNodeById(leaky, secret.id);
     expect(node).toBeDefined();
     expect(node!.attributes?.__hidden).toBe(true);
     node!.name = secret.name;
 
     await expect(
-      assertNoHiddenInfoLeak(tg, 1, { gameViewOverride: leaky as unknown as HiddenInfoGameView }),
+      assertNoHiddenInfoLeak(tg, 1, { gameViewOverride: leaky }),
     ).rejects.toThrow(/hidden-info leak/i);
   });
 
@@ -683,14 +682,14 @@ describe('assertNoHiddenInfoLeak — CR-01 regression: aggregation leak (hidden 
     // redaction would produce. The resulting leak surfaces on the CELL's
     // aria-label and the piece's own <title>, neither of which carries
     // `data-element-id` -- only the enclosing Space does.
-    const leaky = cloneJson(tg.getPlayerView(2).state) as unknown as ElementJSON;
+    const leaky = cloneJson(tg.getPlayerView(2).state);
     const node = findNodeById(leaky, piece.id);
     expect(node).toBeDefined();
     expect(node!.attributes?.__hidden).toBe(true);
     node!.name = piece.name;
 
     await expect(
-      assertNoHiddenInfoLeak(tg, 2, { gameViewOverride: leaky as unknown as HiddenInfoGameView }),
+      assertNoHiddenInfoLeak(tg, 2, { gameViewOverride: leaky }),
     ).rejects.toThrow(/hidden-info leak/i);
   });
 });

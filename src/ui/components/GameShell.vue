@@ -39,7 +39,8 @@ import { useAutoZoom, SETTLE_MS } from '../composables/useAutoZoom';
 import { useToast } from '../composables/useToast';
 import type { ControllerActionResult } from '../composables/useActionController';
 import type { PickChoicesResult, PickStepResponse } from '../composables/useActionControllerTypes.js';
-import type { GameState } from '../../client/types.js';
+import type { GameState, PlayerState } from '../../client/types.js';
+import type { GameRootView } from '../types.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 import { usePlatformTransport } from '../composables/usePlatformTransport.js';
 
@@ -328,7 +329,7 @@ function dismissGameOver(): void {
 }
 
 // Time travel state (for viewing historical game states)
-const timeTravelState = ref<any>(null);
+const timeTravelState = ref<PlayerState | null>(null);
 const timeTravelActionIndex = ref<number | null>(null);
 const timeTravelDiff = ref<{ added: number[]; removed: number[]; changed: number[] } | null>(null);
 const isViewingHistory = computed(() => timeTravelState.value !== null);
@@ -396,11 +397,11 @@ const hasActionHelp = computed(() => {
 
 // Game view - computed here so actionController can use it for element enrichment
 // When viewing historical state (time travel), use that instead of live state
-const gameView = computed(() => {
+const gameView = computed<GameRootView | null | undefined>(() => {
   if (timeTravelState.value) {
-    return timeTravelState.value.view as any;
+    return timeTravelState.value.view;
   }
-  return state.value?.state.view as any;
+  return state.value?.state.view;
 });
 
 // LIBX-04 (D31): single source of truth for the board's displayed state. During
@@ -1164,7 +1165,7 @@ function handleRestartGame() {
 
 // Time travel handler - updates the game view to show historical state
 function handleTimeTravel(
-  historicalState: any | null,
+  historicalState: PlayerState | null,
   actionIndex: number | null,
   diff: { added: number[]; removed: number[]; changed: number[] } | null
 ) {

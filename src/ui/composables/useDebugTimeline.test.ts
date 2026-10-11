@@ -2,12 +2,22 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { nextTick } from 'vue';
 import { useDebugTimeline } from './useDebugTimeline.js';
 import type { DebugBridge, SerializedAction } from './useDebugBridge.js';
+import type { PlayerState } from '../../client/types.js';
 
 const HISTORY: SerializedAction[] = [
   { name: 'playCard', player: 1, args: {}, timestamp: 1000 },
   { name: 'endTurn', player: 1, args: {}, timestamp: 2000 },
   { name: 'playCard', player: 2, args: {}, timestamp: 3000 },
 ];
+
+/** The seat's state after an action, as the host answers `debug:state-at`. */
+const HISTORICAL: PlayerState = {
+  phase: 'play',
+  players: [],
+  availableActions: [],
+  isMyTurn: false,
+  view: { className: 'Game', id: 0, attributes: {}, phase: 'started', isFinished: false, settings: {} },
+};
 
 const DIFF = { added: [1], removed: [], changed: [], fromIndex: 0, toIndex: 1 };
 
@@ -18,7 +28,7 @@ function stubBridge(over: Partial<DebugBridge> = {}): DebugBridge {
     customDebug: vi.fn(async () => null),
     history: vi.fn(async () => HISTORY),
     logs: vi.fn(async () => []),
-    stateAt: vi.fn(async () => ({ phase: 'play' })),
+    stateAt: vi.fn(async () => HISTORICAL),
     stateDiff: vi.fn(async () => DIFF),
     rewind: vi.fn(async () => {}),
     moveCardToTop: vi.fn(async () => {}),
@@ -139,7 +149,7 @@ describe('time travel', () => {
   it('tells the shell which state to render', async () => {
     const { onTimeTravel, timeline } = setup();
     await timeline.fetchStateAtAction(1);
-    expect(onTimeTravel).toHaveBeenCalledWith({ phase: 'play' }, 1, DIFF);
+    expect(onTimeTravel).toHaveBeenCalledWith(HISTORICAL, 1, DIFF);
   });
 
   it('sends the shell back to live when the state cannot be read', async () => {
@@ -156,7 +166,7 @@ describe('time travel', () => {
   it('keeps the historical state when only the diff is unavailable', async () => {
     const { timeline } = setup({ stateDiff: vi.fn(async () => null) });
     await timeline.fetchStateAtAction(1);
-    expect(timeline.historicalState.value).toEqual({ phase: 'play' });
+    expect(timeline.historicalState.value).toEqual(HISTORICAL);
     expect(timeline.stateDiff.value).toBeNull();
     expect(timeline.historicalStateError.value).toBeNull();
   });

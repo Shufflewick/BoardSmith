@@ -26,7 +26,7 @@ import type { Component } from 'vue';
 import type { VueWrapper } from '@vue/test-utils';
 import type { default as AutoUIComponent } from '../ui/components/auto-ui/AutoUI.vue';
 import type { GameRootView } from '../ui/types.js';
-import type { ElementJSON } from '../engine/index.js';
+import type { ElementJSON, Game } from '../engine/index.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE, isHiddenPlaceholder } from '../engine/element/hidden-placeholder.js';
 import type { BoardInteraction } from '../ui/composables/useBoardInteraction.js';
 import type { TableSeat } from '../ui/composables/useTableSeat.js';
@@ -81,8 +81,8 @@ export interface HiddenInfoSubject {
  * seat as WorldShell does (#413).
  */
 export interface SeatProjection {
-  /** The redacted per-seat element tree. */
-  readonly state: unknown;
+  /** The redacted per-seat element tree: the game root as `toJSONForPlayer` writes it. */
+  readonly state: ReturnType<Game['toJSON']>;
 }
 
 /**
@@ -90,10 +90,10 @@ export interface SeatProjection {
  * a board's `gameView` prop) accept: a game root as `Game.toJSON()` writes it,
  * an `ElementJSON` tree (id/className/attributes/children/childCount/name; a
  * hidden placeholder is marked by `attributes.__hidden`, read with
- * isHiddenPlaceholder) whose root also carries phase, isFinished and settings. Exported so callers constructing a
- * deliberately-leaky override (e.g. `game.toJSON()`, or a mutated
- * `getPlayerView(seat).state`) have a name for the cast instead of reaching
- * for `any`.
+ * isHiddenPlaceholder) whose root also carries phase, isFinished and settings.
+ * `game.toJSON()` and `getPlayerView(seat).state` are already assignable to it,
+ * so a deliberately-leaky override built from either needs no cast (#615); the
+ * name is for a test that builds a view by hand.
  */
 export type HiddenInfoGameView = GameRootView;
 
@@ -791,14 +791,14 @@ async function seatContextFor(
       { includeActionMetadata: true },
     );
     const gameView =
-      options.gameViewOverride !== undefined ? options.gameViewOverride : (seatState.view as GameRootView);
+      options.gameViewOverride !== undefined ? options.gameViewOverride : seatState.view;
     return wireTableSeat(table, seat, seatState, gameView, boardInteraction);
   }
   // AWAITED, because a world's projection is a read of its store: `viewsFor`
   // settles the bundle's own `world.view` declaration and hydrates whatever it
   // names before it can answer.
   const frame = await shell.world.getPlayerView(seat);
-  const gameView = options.gameViewOverride !== undefined ? options.gameViewOverride : (frame.state as GameRootView);
+  const gameView = options.gameViewOverride !== undefined ? options.gameViewOverride : frame.state;
   return wireWorldSeat(shell.world, seat, frame, gameView, boardInteraction);
 }
 
@@ -1532,7 +1532,7 @@ export async function assertNoHiddenInfoLeak(
   }
   const { markers, ownValuesById } = deriveLeakDetectionData(
     unredacted,
-    (await subject.getPlayerView(seat)).state as ElementJSON,
+    (await subject.getPlayerView(seat)).state,
   );
   const { allow } = options;
   const activeMarkers = allow
