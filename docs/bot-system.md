@@ -249,6 +249,55 @@ interface BotConfig {
 
 5. **Game complexity**: Simple games (Hex, Checkers) work well. Complex games (Cribbage with many scoring possibilities) may need custom objectives.
 
+## Measuring bot speed
+
+`scripts/bench-bot/run.mjs` measures how fast the bot searches, and where its
+time goes, against the BoardSmith in the checkout it is run from (#630):
+
+```bash
+node scripts/bench-bot/run.mjs                   # the catalogue table games, from ~/BoardSmithGames
+node scripts/bench-bot/run.mjs chess hex-19      # some of them
+node scripts/bench-bot/run.mjs ~/path/to/a-game  # any game project, at its smallest table
+node scripts/bench-bot/run.mjs --out docs/bot-speed-baseline.md
+```
+
+The catalogue is checkers, chess, cribbage, go-fish (4 players), hex at 11 and
+19, and seven (7 players). The games are only read. MERC is not in it: it runs
+on its own vendored copy of BoardSmith, so a run here would not measure this
+checkout.
+
+For each game it plays one seeded game of random moves, picks an early, a
+middle and a late position (a tenth, half and nine tenths of the way in, at a
+ply where the seat to move has a choice), and at each one runs:
+
+- **each difficulty preset**, with its timeout, as a game plays it: the search
+  steps it finished, the ms it took and the steps per second. Under a timeout
+  the step count is the speed measurement, and it moves with the machine's load.
+- **a fixed 300-step search** with a seed and no timeout, so its work is the
+  same on every run and on every machine, and it must choose the same move each
+  time. Its time is split into parts: rebuilding the search game from the root
+  snapshot, listing legal moves, applying moves, re-applying moves down the tree
+  path, scoring (objectives and end-of-game results) and the determinize hook,
+  with the rest as "other". "lookup" is the share spent in element tree walks
+  (`ElementCollection._finder`), which happen inside the other parts.
+
+It always measures in production mode, where `isDevMode()` is false, as in a
+worker child, whatever `NODE_ENV` the shell has. Development mode makes the bot
+up to 1.7 times slower (#628), and the report refuses to print numbers taken in
+it. The split is taken by wrapping the bot's methods for the length of the
+fixed search only, so the bot has no timers in it otherwise. The wrappers cost
+time of their own (about a tenth more in hex 11x11, most of it timing the
+lookups), so compare fixed numbers only with fixed numbers.
+
+**For a bot speed ticket:** run the bench on `main` and on your branch, on the
+same machine, close together, and put both tables in the ticket. The fixed
+search's steps and chosen move must not change unless the ticket means to change
+the search; its ms, steps per second and part shares are the gain. Check the
+load average the report prints: with the machine busy, the preset step counts
+drop with it. Two runs on the same machine give preset step counts within 10%
+of each other when the load is steady. When a change lands, write a new
+baseline with `--out docs/bot-speed-baseline.md` and commit it with the change.
+
 ## Limitations
 
 - **No learning**: The bot doesn't learn from past games. Each game starts fresh.
