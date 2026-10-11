@@ -1539,7 +1539,8 @@ describe('useActionController picks', () => {
       expect(sendAction).toHaveBeenCalledTimes(2);
       const lastCall = sendAction.mock.calls[1];
       expect(lastCall[0]).toBe('collect');
-      expect(lastCall[1]).toHaveProperty('sector', 3);
+      // Only picks are sent: the server binds the follow-up's `sector` (#662).
+      expect(lastCall[1]).toEqual({});
     });
   });
 

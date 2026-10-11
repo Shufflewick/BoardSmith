@@ -558,7 +558,6 @@ describe('GameRunner', () => {
       const explore = succeeded(await session.send(1, {
         type: 'action', actionName: 'explore', player: 1, args: {},
       }));
-      const followUpArgs = (explore.followUp as { args: Record<string, unknown> }).args;
 
       const before = succeeded(await session.send(1, {
         type: 'resolveChoices', actionName: 'collect', player: 1, selectionName: 'item', args: {},
@@ -572,7 +571,6 @@ describe('GameRunner', () => {
         selectionName: 'item',
         value: firstId,
         actionName: 'collect',
-        initialArgs: followUpArgs,
       }));
       expect(step.success).toBe(true);
 

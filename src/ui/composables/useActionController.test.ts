@@ -2136,7 +2136,7 @@ describe('useActionController', () => {
       for (const [name, value] of Object.entries(args)) expect(controller.currentArgs.value[name]).toBe(value);
     }
 
-    it('should preserve followUp pre-filled args when skip triggers auto-execute', async () => {
+    it('sends only the picks when skip triggers auto-execute; the server binds the followUp args (#662)', async () => {
       actionMetadata.value = { ...createTestMetadata(), ...followUpMeta };
       availableActions.value = [...(availableActions.value ?? []), 'collectEquipment'];
 
@@ -2168,13 +2168,12 @@ describe('useActionController', () => {
       await nextTick();
       await nextTick(); // Extra tick for auto-execute watch
 
-      // The auto-execute should have sent the action with ALL args including pre-filled followUp args
-      // Bug: executeCurrentAction uses { ...currentArgs.value } which can be wiped by external code
-      // Fix: should use buildServerArgs() which reads from collectedPicks (controller-owned state)
+      // The auto-execute sends the action's picks (here none: equipment was
+      // skipped). The followUp's combatantId and sectorId name no pick, so the
+      // server refuses them from a client and binds its own (#662).
       const lastCall = sendAction.mock.calls[sendAction.mock.calls.length - 1];
       expect(lastCall[0]).toBe('collectEquipment');
-      expect(lastCall[1]).toHaveProperty('combatantId', 42);
-      expect(lastCall[1]).toHaveProperty('sectorId', 7);
+      expect(lastCall[1]).toEqual({});
     });
 
     it('starts the followUp an action with NO metadata hands back, as every send path does', async () => {

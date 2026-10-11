@@ -2511,8 +2511,10 @@ export class Game<
   /**
    * Perform an action with the given arguments.
    *
-   * `options.asFollowUp` is for the flow engine alone: the action is the
-   * seat's held follow-up, whose condition is not checked.
+   * `args` name the action's picks and nothing else; any other key is
+   * refused (#662). `options.followUp` is for the flow engine alone: the
+   * action is the seat's held follow-up, whose condition is not checked and
+   * whose args are bound over `args`.
    */
   performAction(
     actionName: string,

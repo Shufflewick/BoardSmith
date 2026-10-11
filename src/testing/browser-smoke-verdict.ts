@@ -5,6 +5,7 @@
  * decided by plain code a vitest test can hold to its wording.
  */
 import { rulesErrorSentence } from '../engine/action/rules-error.js';
+import { PageFrozen } from './browser-smoke-clock.js';
 
 /** Where a game keeps its smoke test. `boardsmith init` writes it and `boardsmith verify` runs it. */
 export const SMOKE_SPEC_PATH = 'tests/browser/smoke.spec.ts';
@@ -161,6 +162,8 @@ export async function inputFor(
   try {
     return answerOf(String((typeof input === 'function' ? await input(view) : input) ?? ''), kind, action, field);
   } catch (error) {
+    // The page stopped answering while the function read it (#618): that ends the walk, as any such read does.
+    if (error instanceof PageFrozen) throw error;
     const said = error instanceof Error ? error.message.split('\n')[0] : String(error);
     return { problem: `${inputName(action, field)} in ${SMOKE_SPEC_PATH} failed while the walk answered "${action}": ${said}` };
   }

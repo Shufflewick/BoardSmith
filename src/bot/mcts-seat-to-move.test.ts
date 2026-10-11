@@ -138,14 +138,13 @@ describe('MCTSBot: one seat per search node (#522)', () => {
     // Nothing the search listed was refused when it was made.
     for (const node of nodes) expect([...node.refusedMoveKeys]).toEqual([]);
 
-    // Every move below a node belongs to the seat the node says is moving.
-    const lootChildren = nodes.flatMap((node) =>
-      node.children
-        .filter((child) => child.parentMove!.action === 'loot')
-        .map((child) => ({ by: child.parentMove!.args.by, seat: node.currentPlayer })),
+    // A loot move carries its pick only; the engine binds the seat's own `by`
+    // when it is made, and loot throws on any other, so none was refused above.
+    const lootMoves = nodes.flatMap((node) =>
+      node.children.filter((child) => child.parentMove!.action === 'loot').map((child) => child.parentMove!.args),
     );
-    expect(lootChildren.length).toBeGreaterThan(0);
-    for (const { by, seat } of lootChildren) expect(by).toBe(seat);
+    expect(lootMoves.length).toBeGreaterThan(0);
+    for (const args of lootMoves) expect(Object.keys(args)).toEqual(['where']);
   });
 });
 

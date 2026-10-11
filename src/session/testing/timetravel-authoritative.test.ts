@@ -54,16 +54,15 @@ async function startAndCollect(): Promise<{ session: HeadlessTable; collectedId:
   await session.start();
 
   const explore = succeeded(await session.send(1, { type: 'action', actionName: 'explore', player: 1, args: {} }));
-  const followUpArgs = (explore.followUp as { args: Record<string, unknown> }).args;
 
   const choices = succeeded(await session.send(1, {
-    type: 'resolveChoices', actionName: 'collect', selectionName: 'item', player: 1, args: followUpArgs,
+    type: 'resolveChoices', actionName: 'collect', selectionName: 'item', player: 1, args: {},
   }));
   const collectedId = ((choices.validElements as Array<{ id: number }>) ?? [])[0].id;
 
   const collect = succeeded(await session.send(1, {
     type: 'selectionStep', player: 1, selectionName: 'item', value: collectedId,
-    actionName: 'collect', initialArgs: followUpArgs,
+    actionName: 'collect',
   }));
   expect(collect.actionComplete).toBe(true);
   expect(viewChildIds(session.playerState(1).view, 'held-1')).toContain(collectedId);

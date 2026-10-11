@@ -25,6 +25,7 @@ import type {
   DisabledRule,
   UnavailableRule,
   OnSelectContext,
+  FollowUpAction,
 } from './types.js';
 import { wrapFilterWithHelpfulErrors } from './helpers.js';
 import { isDevMode, devWarn, isDevThrowEnabled } from '../../utils/dev.js';
@@ -359,11 +360,12 @@ function choiceCountErrors(
 /** How an action is being taken, when it is not an ordinary offered action. */
 export interface PerformOptions {
   /**
-   * The action is the acting seat's held follow-up: its condition is not
-   * checked, since the chain offers it, not the condition. Only the flow
-   * engine passes this, for the seat that owns the follow-up.
+   * The acting seat's held follow-up, when the action is it: its condition is
+   * not checked, since the chain offers it, not the condition, and its args
+   * are bound over what the client sent (#662). Only the flow engine passes
+   * this, for the seat that owns the follow-up.
    */
-  asFollowUp?: boolean;
+  followUp?: FollowUpAction;
 }
 
 export class ActionExecutor {
@@ -1145,7 +1147,7 @@ export class ActionExecutor {
     };
 
     // Check condition. A follow-up is offered by the chain, not its condition.
-    if (!options?.asFollowUp && action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
+    if (!options?.followUp && action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
       return {
         valid: false,
         errors: ['Action is not available'],
@@ -1198,6 +1200,9 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): ActionResult {
+    const refusal = this.undeclaredArgsRefusal(action, args);
+    if (refusal) return { success: false, error: refusal };
+
     // A repeating selection is a protocol, not a value: each pick is checked
     // against the choices the previous pick's onEach left, runs onEach, and is
     // tested against `until`. That protocol lives in processRepeatingStep, so a
@@ -1207,8 +1212,9 @@ export class ActionExecutor {
       return this.executeThroughSelectionSteps(action, player, args, options);
     }
 
-    // Resolve serialized args (player indices, element IDs) to actual objects
-    const resolvedArgs = this.resolveArgs(action, args, player);
+    // Resolve serialized args (player indices, element IDs) to actual objects,
+    // a held follow-up's args over the client's.
+    const resolvedArgs = this.resolveArgs(action, { ...args, ...options?.followUp?.args }, player);
 
     // Validate with resolved args
     const validation = this.validateAction(action, player, resolvedArgs, options);
@@ -1286,13 +1292,15 @@ export class ActionExecutor {
     options?: PerformOptions,
   ): ActionResult {
     const context = { game: this.game, player, args: this.resolveArgs(action, args, player) };
-    if (!options?.asFollowUp && action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
+    if (!options?.followUp && action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
       return { success: false, error: 'Action is not available' };
     }
 
     const pendingState = this.createPendingActionState(action.name, player.seat);
+    Object.assign(pendingState.collectedArgs, options?.followUp?.args);
     let applied = false;
     for (const selection of action.selections) {
+      if (this.passBoundPick(action, pendingState)) continue;
       const step = this.feedSelection(action, player, pendingState, selection, args[selection.name]);
       applied ||= step.applied;
       if (step.error !== undefined) {
@@ -1341,10 +1349,9 @@ export class ActionExecutor {
    * A client that collected picks locally sends them with the first pick it
    * routes to the server, so the pick it names starts where they end.
    *
-   * A pick already in `pendingState.collectedArgs` was bound by the engine
-   * before any client pick (a held follow-up's published args, see
-   * `GameRunner.bindFollowUpArgs`). That is engine data, not the client's: it
-   * is passed over, and `submitted` is not read for it.
+   * A pick a held follow-up answered is the engine's and is passed over
+   * (`passBoundPick`): `submitted` is not read for it. A key of `submitted`
+   * that names no pick is refused (#662).
    *
    * Returns why a pick was refused, or `undefined` when every pick was made.
    */
@@ -1355,17 +1362,53 @@ export class ActionExecutor {
     selectionName: string,
     submitted: Record<string, unknown>
   ): string | undefined {
+    const refusal = this.undeclaredArgsRefusal(action, submitted);
+    if (refusal) return refusal;
     const target = action.selections.findIndex(s => s.name === selectionName);
     while (pendingState.currentSelectionIndex < target) {
+      if (this.passBoundPick(action, pendingState)) continue;
       const selection = action.selections[pendingState.currentSelectionIndex];
-      if (Object.hasOwn(pendingState.collectedArgs, selection.name)) {
-        pendingState.currentSelectionIndex++;
-        continue;
-      }
       const { error } = this.feedSelection(action, player, pendingState, selection, submitted[selection.name]);
       if (error !== undefined) return error;
     }
     return undefined;
+  }
+
+  /**
+   * Why a client's `args` cannot be taken for `action`, or `undefined` when
+   * every key names one of its picks (#662). A client sends picks and nothing
+   * else: a follow-up's other args come from the follow-up the seat holds.
+   */
+  undeclaredArgsRefusal(action: ActionDefinition, args: Record<string, unknown>): string | undefined {
+    const picks = action.selections.map(s => s.name);
+    const undeclared = Object.keys(args).filter(key => !picks.includes(key));
+    if (undeclared.length === 0) return undefined;
+    const sent = undeclared.map(key => `'${key}'`).join(', ');
+    if (picks.length === 0) return `'${action.name}' was sent ${sent}, but it takes no picks.`;
+    const which = undeclared.length === 1 ? 'which is not one of its picks' : 'which are not among its picks';
+    return `'${action.name}' was sent ${sent}, ${which}. It takes: ${picks.join(', ')}.`;
+  }
+
+  /**
+   * The keys of `args` that name one of `action`'s picks: what a seat submits
+   * for it. A follow-up's other args are the engine's, bound when it runs, so
+   * a move or a history entry carries only these (#662).
+   */
+  picksOf(action: ActionDefinition, args: Record<string, unknown>): Record<string, unknown> {
+    return Object.fromEntries(Object.entries(args).filter(([key]) => action.selections.some(s => s.name === key)));
+  }
+
+  /**
+   * Pass over the current pick when a held follow-up answered it (bound into
+   * `collectedArgs` before any client pick, see `GameRunner.bindFollowUpArgs`).
+   * Its value is the engine's: a client's value for it is not taken, so no
+   * later pick sees one (#662). Returns whether it passed one.
+   */
+  private passBoundPick(action: ActionDefinition, pendingState: PendingActionState): boolean {
+    const selection = action.selections[pendingState.currentSelectionIndex];
+    if (!selection || pendingState.repeating || !Object.hasOwn(pendingState.collectedArgs, selection.name)) return false;
+    pendingState.currentSelectionIndex++;
+    return true;
   }
 
   /**
@@ -1884,6 +1927,7 @@ export class ActionExecutor {
     pendingState: PendingActionState,
     value: unknown
   ): { done: boolean; nextChoices?: ChoiceWithRefs[]; error?: string; warnings?: WarningEntry[] } {
+    if (this.passBoundPick(action, pendingState)) return { done: true };
     const selection = action.selections[pendingState.currentSelectionIndex];
     if (!selection) {
       return { done: true, error: `Selection at index ${pendingState.currentSelectionIndex} not found` };
@@ -2077,6 +2121,7 @@ export class ActionExecutor {
     if (selectionIndex !== pendingState.currentSelectionIndex) {
       return { success: false, error: `Expected selection at index ${pendingState.currentSelectionIndex}, got ${selectionName} at index ${selectionIndex}` };
     }
+    if (this.passBoundPick(action, pendingState)) return { success: true };
 
     const selection = action.selections[selectionIndex];
 

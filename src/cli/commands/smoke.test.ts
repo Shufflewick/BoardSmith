@@ -23,6 +23,7 @@ import {
   aceGame,
   aceGameDealtSlowly,
   boardThatStarvesThePage,
+  boardThatHangsWhenPressed,
   boardWithAPointerlessControl,
   boardWithAControlAtItsFoot,
   boardWithATimidControl,
@@ -33,6 +34,8 @@ import {
   HUNG,
   boardThatReplacesItsFrame,
   boardThatKeepsReordering,
+  boardThatMovesUnderThePress,
+  MOVED_UNDER_THE_PRESS,
   boardThatTakesFocusUnderThePress,
   boardUnderTheHostsCover,
   boardWithDialogs,
@@ -545,6 +548,31 @@ describe('boardsmith verify: the smoke check', () => {
     expect(steps.filter((line) => /pressing the board's "(North|South|East)"/.test(line))).toHaveLength(3);
   });
 
+  it('#647: looks again when its click on a board control would land on another, because the board moved them as the pointer went down, and presses each control once', async () => {
+    const { outcome, steps, said } = await smokeOf(false, {
+      ...boardThatMovesUnderThePress({ always: false }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { echo: MOVED_UNDER_THE_PRESS }),
+    });
+
+    // The board moved its buttons under the walk's first press: without it, this test would not
+    // exercise the click that landed on another button.
+    expect(said.filter((line) => line.includes(MOVED_UNDER_THE_PRESS))).toHaveLength(1);
+    expect(outcome.summary).not.toContain('did not work');
+    expect(steps.filter((line) => /pressing the board's "(North|South|East)"/.test(line))).toHaveLength(3);
+    expect(outcome.passed, outcome.summary).toBe(true);
+  });
+
+  it('#647: gives up on a board control that moves every time its click goes down, and says it kept moving', async () => {
+    const { outcome, said } = await smokeOf(false, {
+      ...boardThatMovesUnderThePress({ always: true }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { echo: MOVED_UNDER_THE_PRESS }),
+    });
+
+    expect(said.filter((line) => line.includes(MOVED_UNDER_THE_PRESS)).length).toBeGreaterThan(1);
+    expect(outcome.summary).toContain('did not work: it kept moving out from under the pointer, so no click landed on it.');
+    expect(outcome.passed).toBe(false);
+  });
+
   it("#646: follows the active seat though the game's frame took focus and closed the seat menu while the pointer was down on \"Follow active seat\"", async () => {
     const { outcome } = await smokeOf(false, boardThatTakesFocusUnderThePress());
 
@@ -778,6 +806,16 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.passed).toBe(false);
     expect(outcome.summary).toMatch(/The walk could not go on: the page stopped answering for 60s/);
   });
+
+  it('#618: fails a board that hangs the page for good after a press, at the step that met the hang, on the page clock rather than the whole-run limit', async () => {
+    const { outcome, steps } = await smokeOf(false, boardThatHangsWhenPressed());
+
+    expect(steps).toContain('smoke step 1: pressing the board\'s "Spin"');
+    expect(outcome.passed).toBe(false);
+    // The walk's own frozen check ended the step that hung; the 600s limit on the whole run did not.
+    expect(outcome.summary, outcome.summary).toMatch(/The walk could not go on at step \d+ of the game dealt from seed "smoke": the page stopped answering for 60s/);
+    // Room for the whole run's 600s limit, so a walk that waits on the hung page reports that limit here.
+  }, 700_000);
 
   it('fails a spec that passes without walking the game', async () => {
     const { outcome } = await smokeOf(false, {

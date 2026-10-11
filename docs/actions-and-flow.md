@@ -1418,6 +1418,15 @@ them wherever the call sits, but a pick's callbacks are typed from the chain
 above them, so a later call would leave earlier picks typed without them. See [Common Pitfalls #15](./common-pitfalls.md) for which
 values arrive resolved to elements.
 
+A client sends an action's picks and nothing else. A follow-up's args come from
+the follow-up the seat holds, and the engine binds them on every path: a whole
+submission, a pick at a time, and a pick's choices. A key no pick declares is
+refused with a message naming it and the picks the action takes, whether or not
+a follow-up is held, so `.followUpArgs<...>()` keys can never be set by a client.
+A pick the held follow-up answered is the engine's too: a value a client sends
+for it is not used. Moves from `enumerateLegalMoves` carry only picks for the
+same reason (#662).
+
 ### Conditional Chaining
 
 Only chain to follow-up when a condition is met:

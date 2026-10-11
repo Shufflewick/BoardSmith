@@ -6,6 +6,7 @@
  */
 
 import type {
+  ActionContext,
   ActionDefinition,
   ChoiceSelection,
   ElementSelection,
@@ -229,7 +230,8 @@ export class PickHandler<G extends Game = Game> {
    * @param actionName Name of the action
    * @param selectionName Name of the pick to get choices for
    * @param playerPosition Player requesting choices
-   * @param currentArgs Arguments collected so far (for dependent picks)
+   * @param currentArgs The picks made so far (for dependent picks); a key that
+   *   names no pick is refused
    * @returns Choices/elements with display strings and board refs, plus multiSelect config
    */
   getPickChoices(
@@ -255,32 +257,34 @@ export class PickHandler<G extends Game = Game> {
     }
 
     const executor = this.#runner.game.getActionExecutor();
-    const resolvedArgs = executor.resolveArgs(action, currentArgs, player);
-
-    const ctx = { game: this.#runner.game, player, args: resolvedArgs };
+    const asked = this.#choiceContext(action, player, currentArgs);
+    if ('refusal' in asked) return asked.refusal;
+    const { ctx } = asked;
 
     // Aggregated structured warnings for this call's soft-fail sites
     // (boardRefs()/display()/boardRef() throwing) — attached to the response
     // as a top-level array. Never flips success:false (T-126-08).
     const warnings: WarningEntry[] = [];
 
-    switch (selection.type) {
-      case 'choice':
-      case 'element':
-      case 'elements':
-        return answerPick(executor, action, selection, player, ctx, warnings);
-
-      case 'number':
-      case 'text':
-        // These types don't have choices - return empty success
-        return { success: true };
-
-      default: {
-        // Exhaustive check - this should never happen
-        const _exhaustiveCheck: never = selection;
-        return { success: false, error: `Unsupported selection type: ${(_exhaustiveCheck as any).type}` };
-      }
-    }
+    // A number or text pick has no choices.
+    if (selection.type === 'number' || selection.type === 'text') return { success: true };
+    return answerPick(executor, action, selection, player, ctx, warnings);
   }
 
+  /**
+   * What a pick's choices see: the client's picks so far, with the seat's held
+   * follow-up's args bound over them, resolved. The client sends picks only, so
+   * any other key is refused (#662).
+   */
+  #choiceContext(
+    action: ActionDefinition,
+    player: Player,
+    currentArgs: Record<string, unknown>,
+  ): { ctx: ActionContext } | { refusal: PickChoicesResponse } {
+    const executor = this.#runner.game.getActionExecutor();
+    const refusal = executor.undeclaredArgsRefusal(action, currentArgs);
+    if (refusal) return { refusal: { success: false, error: refusal, errorCode: ErrorCode.INVALID_PICK } };
+    const bound = { ...currentArgs, ...this.#runner.followUpArgsFor(action.name, player.seat) };
+    return { ctx: { game: this.#runner.game, player, args: executor.resolveArgs(action, bound, player) } };
+  }
 }

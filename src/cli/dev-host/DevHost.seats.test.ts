@@ -169,12 +169,17 @@ describe('DevHost — seat switcher menu (presence + follow)', () => {
   });
 });
 
-describe('#610: the seat menu closes the way a menu does', () => {
+// Every dev-bar menu closes the same way: the seat menu (#610) and the phone
+// width … menu (#664).
+describe.each([
+  { name: 'seat menu', trigger: '[data-testid="seat-switcher"]', menu: '.seat-switcher-menu' },
+  { name: '… menu', trigger: '.dev-chrome__overflow-trigger', menu: '.dev-chrome__overflow-menu' },
+])('the $name closes the way a menu does', ({ trigger, menu }) => {
   async function openMenu(): Promise<VueWrapper> {
     const wrapper = await mountDevHost();
     await activateSeat(wrapper);
-    await wrapper.find('[data-testid="seat-switcher"]').trigger('click');
-    expect(wrapper.find('.seat-switcher-menu').exists()).toBe(true);
+    await wrapper.find(trigger).trigger('click');
+    expect(wrapper.find(menu).exists()).toBe(true);
     return wrapper;
   }
 
@@ -182,14 +187,14 @@ describe('#610: the seat menu closes the way a menu does', () => {
     const wrapper = await openMenu();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     await wrapper.vm.$nextTick();
-    expect(wrapper.find('.seat-switcher-menu').exists()).toBe(false);
+    expect(wrapper.find(menu).exists()).toBe(false);
     wrapper.unmount();
   });
 
   it('closes on a click outside it', async () => {
     const wrapper = await openMenu();
     await wrapper.find('.dev-chrome__brand').trigger('click');
-    expect(wrapper.find('.seat-switcher-menu').exists()).toBe(false);
+    expect(wrapper.find(menu).exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -197,9 +202,132 @@ describe('#610: the seat menu closes the way a menu does', () => {
     const wrapper = await openMenu();
     window.dispatchEvent(new Event('blur'));
     await wrapper.vm.$nextTick();
-    expect(wrapper.find('.seat-switcher-menu').exists()).toBe(false);
+    expect(wrapper.find(menu).exists()).toBe(false);
     wrapper.unmount();
   });
+
+  it('opens and closes again from its own button', async () => {
+    const wrapper = await openMenu();
+    await wrapper.find(trigger).trigger('click');
+    expect(wrapper.find(menu).exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  // #667: a keyboard user who presses Escape lands back where they opened it.
+  it('returns focus to its own button on Escape', async () => {
+    const wrapper = await openMenu();
+    (wrapper.find(`${menu} button`).element as HTMLElement).focus();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await wrapper.vm.$nextTick();
+    expect(document.activeElement).toBe(wrapper.find(trigger).element);
+    wrapper.unmount();
+  });
+
+  it('leaves focus where the user put it when closed by a click outside it', async () => {
+    const wrapper = await openMenu();
+    const outside = document.createElement('input');
+    document.body.appendChild(outside);
+    outside.focus();
+    outside.click();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find(menu).exists()).toBe(false);
+    expect(document.activeElement).toBe(outside);
+    outside.remove();
+    wrapper.unmount();
+  });
+
+  it('names the list it opens with aria-controls', async () => {
+    const wrapper = await openMenu();
+    const id = wrapper.find(menu).attributes('id');
+    expect(id).toBeTruthy();
+    expect(wrapper.find(trigger).attributes('aria-controls')).toBe(id);
+    wrapper.unmount();
+  });
+});
+
+// #664: at phone width the secondary controls live in the … menu, and choosing
+// one closes it so it no longer covers the game.
+describe('DevHost — choosing from the … menu closes it (#664)', () => {
+  const MENU = '.dev-chrome__overflow-menu';
+
+  async function openOverflow(): Promise<VueWrapper> {
+    const wrapper = await mountDevHost();
+    await activateSeat(wrapper);
+    const ws = mockWsInstance!;
+    ws.simulateMessage({ ...SEAT_LOBBY, debug: true });
+    ws.simulateMessage({ type: 'game_state', view: {}, isComplete: false, winners: [], isDraw: false, deadlineAt: 9_000, serverNow: 4_000 });
+    await wrapper.vm.$nextTick();
+    await wrapper.find('.dev-chrome__overflow-trigger').trigger('click');
+    expect(wrapper.find(MENU).exists()).toBe(true);
+    return wrapper;
+  }
+
+  it.each(['table-setup-toggle', 'debug-toggle', 'fire-deadline'])('choosing %s closes it', async (testid) => {
+    const wrapper = await openOverflow();
+    await wrapper.find(`${MENU} [data-testid="${testid}"]`).trigger('click');
+    expect(wrapper.find(MENU).exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('New game stays open to ask for confirmation, then closes once the restart is confirmed', async () => {
+    const wrapper = await openOverflow();
+    await wrapper.find(`${MENU} [data-testid="new-game"]`).trigger('click');
+    expect(wrapper.find(`${MENU} [data-testid="new-game"]`).text()).toContain('Confirm restart?');
+
+    mockWsInstance!.send.mockClear();
+    await wrapper.find(`${MENU} [data-testid="new-game"]`).trigger('click');
+    expect(wrapper.find(MENU).exists()).toBe(false);
+    const frames = mockWsInstance!.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    expect(frames.some((f) => f.type === 'restart')).toBe(true);
+    wrapper.unmount();
+  });
+
+  // #667: an armed New game must not survive the menu closing, or reopening
+  // the menu within 5 s would restart on one click.
+  it.each([
+    ['Escape', () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))],
+    ['a click outside it', () => document.querySelector<HTMLElement>('.dev-chrome__brand')!.click()],
+    ['focus leaving the page', () => window.dispatchEvent(new Event('blur'))],
+    ['its own button', () => document.querySelector<HTMLElement>('.dev-chrome__overflow-trigger')!.click()],
+    ['choosing Table setup', () => document.querySelector<HTMLElement>(`${MENU} [data-testid="table-setup-toggle"]`)!.click()],
+  ])('closing it by %s cancels an armed New game', async (_how, close) => {
+    const wrapper = await openOverflow();
+    await wrapper.find(`${MENU} [data-testid="new-game"]`).trigger('click');
+    close();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find(MENU).exists()).toBe(false);
+
+    await wrapper.find('.dev-chrome__overflow-trigger').trigger('click');
+    expect(wrapper.find(`${MENU} [data-testid="new-game"]`).text()).toContain('New game');
+    expect(wrapper.find(`${MENU} [data-testid="new-game"]`).text()).not.toContain('Confirm restart?');
+    wrapper.unmount();
+  });
+
+  it('an Escape while the … menu is closed leaves the bar\'s armed New game armed', async () => {
+    const wrapper = await mountDevHost();
+    await activateSeat(wrapper);
+    const barNewGame = '.dev-chrome__bar-wide [data-testid="new-game"]';
+    await wrapper.find(barNewGame).trigger('click');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find(barNewGame).text()).toContain('Confirm restart?');
+    wrapper.unmount();
+  });
+});
+
+// #667: Escape returns focus only from a menu that was open. Escape also closes
+// Table setup, and that must not pull focus to a menu's button.
+it('an Escape with no menu open leaves focus where it is', async () => {
+  const wrapper = await mountDevHost();
+  await activateSeat(wrapper);
+  const toggle = wrapper.find('.dev-chrome__bar-wide [data-testid="table-setup-toggle"]');
+  await toggle.trigger('click');
+  (toggle.element as HTMLElement).focus();
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  await wrapper.vm.$nextTick();
+  expect(toggle.attributes('aria-expanded')).toBe('false');
+  expect(document.activeElement).toBe(toggle.element);
+  wrapper.unmount();
 });
 
 describe('DevHost — seat switcher', () => {
