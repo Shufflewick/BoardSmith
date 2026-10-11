@@ -1205,6 +1205,7 @@ export class Game<
       _elementsById: new Map(),
       _stateVersion: 0,
       _changingDepth: 0,
+      _flowStateReads: 0,
       random,
     };
 
@@ -3954,6 +3955,7 @@ export class Game<
       throw new Error('Game has already started');
     }
     this.phase = 'started';
+    stateChanged(this._ctx);
   }
 
   /**
@@ -3979,6 +3981,7 @@ export class Game<
    */
   finish(winners?: P[]): void {
     this.phase = 'finished';
+    stateChanged(this._ctx);
     if (winners) {
       this.settings.winners = winners.map(p => p.seat);
     }
@@ -5148,6 +5151,10 @@ export class Game<
     // at the end of this method — so a restored game never shares mutable
     // state with the snapshot it was restored from (CR-02: a retained
     // checkpoint may be restored again; live mutations must not reach it).
+    // The tree is replaced whole, not through its tree methods, so the game is
+    // marked changed here, before the first write: a restore that throws part
+    // way leaves no answer from before it live (#631).
+    stateChanged(this._ctx);
     this.phase = json.phase;
     this.settings = json.settings;
 
@@ -5375,8 +5382,6 @@ export class Game<
     // Resolve element references in all restored elements
     // This converts { __elementRef: "path" } objects back to actual element references
     this.resolveElementReferences(this);
-    // The tree was replaced whole, not through its tree methods (#631).
-    stateChanged(this._ctx);
   }
 
   /**

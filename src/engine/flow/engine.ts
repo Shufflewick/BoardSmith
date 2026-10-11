@@ -1177,7 +1177,7 @@ export class FlowEngine<G extends Game = Game> {
    * Get the current flow state
    */
   getState(): FlowState {
-    flowStateRead();
+    flowStateRead(this.game._ctx);
     // `currentPlayer` and `availableActions` describe ONE seat's prompt, so they
     // are published only while an action step is the step awaiting input. The
     // private fields keep the last action step's values after the flow moves
@@ -1501,6 +1501,7 @@ export class FlowEngine<G extends Game = Game> {
    * is the one place that does.
    */
   getLastActionResult(): ActionResult | undefined {
+    flowStateRead(this.game._ctx);
     return this.lastActionResult;
   }
 

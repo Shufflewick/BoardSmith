@@ -16,17 +16,18 @@
  * Not reused: in development mode, which works every answer out afresh so a
  * test may write to a game directly between two questions; while game code
  * that may change the game is running (an `execute`, a flow step), which may
- * ask, write and ask again; in world mode,
- * where handing out an element is what marks its partition for the dirty-set
- * comparison, so every candidate must be found through the tree each time;
- * an answer whose own callbacks changed the game (moved an element or drew
- * from the random source), which is run again as it always was; and an answer
- * whose callbacks read the flow's state (`game.getFlowState()`), since the
- * flow asks for a step's choices before it has moved to that step.
+ * ask, write and ask again; in world mode, where handing out an element is
+ * what marks its partition for the dirty-set comparison, so every candidate
+ * must be found through the tree each time;
+ * an answer whose own callbacks changed the game in a way the state version
+ * sees (moved an element, drew from the random source, wrote through
+ * `actionTempState`), which is run again as it always was; and an answer
+ * whose callbacks read the flow's state (`game.getFlowState()`,
+ * `game.getLastActionResult()`), since the flow asks for a step's choices
+ * before it has moved to that step.
  */
 import { isDevMode } from '../../utils/dev.js';
 import { isElement } from '../element/game-element.js';
-import { flowStateReadCount } from '../element/state-version.js';
 import type { Game } from '../element/game.js';
 import type { ActionContext, Selection } from './types.js';
 
@@ -66,12 +67,12 @@ export function reusedCandidates<T>(
   if (found) return found.candidates as T[];
 
   const reading = readingArgs(context.args);
-  const flowReads = flowStateReadCount();
+  const flowReads = game._ctx._flowStateReads;
   const candidates = workOut({ ...context, args: reading.args });
   // An answer whose callbacks changed the game is filed under a version that
   // has passed, so it is never found. One that read the flow's position is not
   // filed at all: the version does not follow the flow.
-  if (flowStateReadCount() !== flowReads) return candidates;
+  if (game._ctx._flowStateReads !== flowReads) return candidates;
   const reads = reading.readsKey();
   if (reads !== undefined) known.push({ reads, candidates });
   return candidates;

@@ -1,41 +1,37 @@
 /**
- * The game's state version (#631): a number every change to the game
+ * The game's state version (#631): a number every change the engine can see
  * advances, so an answer worked out from the game (a pick's choices) can be
  * reused for as long as the number stands still.
  *
- * THE RULE: a game changes only through its elements' tree methods (create,
- * move, remove, shuffle and the rest, which pass through `childrenChanged`)
- * and inside the game code the engine runs to change it, which runs inside
- * {@link changing}: an action's `execute`, a pick's `onSelect`, `onCancel` and
- * `onEach`, the flow's `setup`, `execute` steps and phase hooks, a space's
- * `onEnter`/`onExit` handlers, a bot's `determinize` sampler and a tutorial's
- * `setup`. Besides those, a random draw, a restore of the tree and the engine's
- * own writes of `game.phase` advance it. An attribute is a bare property with
- * no write chokepoint, so a write from anywhere else (a describing callback
- * such as `filter`, or code outside the game holding it directly) is not seen.
- * Development mode reuses no answer, which is what lets a test write to a game
- * directly between two questions.
+ * WHAT ADVANCES IT: the elements' tree methods (create, move, remove, shuffle
+ * and the rest, which pass through `childrenChanged`); every call into game
+ * code that runs inside {@link changing} (an action's `execute`, a pick's
+ * `onSelect`, `onCancel` and `onEach`, the flow's `setup`, `execute` steps and
+ * phase hooks, a space's `onEnter`/`onExit` handlers, a bot's `determinize`
+ * sampler and a tutorial's `setup`); a random draw; a restore of the tree;
+ * every write of `game.phase` (`start()`, `finish()`, the flow starting and
+ * ending); and a write through `actionTempState`.
  *
- * The flow's own position is not part of what the version describes (the flow
- * asks for a step's choices before it publishes that step), so an answer that
- * reads it is not kept; see {@link flowStateRead}.
+ * WHAT IT DOES NOT SEE: an attribute is a bare property with no write
+ * chokepoint, so an attribute or `game.settings` write made anywhere else (a
+ * describing callback such as `choices` or `filter`, a flow condition such as
+ * a `while`, an `eachPlayer` `filter` or an `actionStep` `player`, or code
+ * outside the game holding it directly) is not seen until the next change that
+ * is. Development mode reuses no answer, which is what lets a test write to a
+ * game directly between two questions.
+ *
+ * The flow's position is not versioned at all; an answer that reads it is not
+ * kept (see {@link flowStateRead}).
  */
 import type { ElementContext } from './types.js';
 
-let flowStateReads = 0;
-
 /**
- * Note a read of a flow's state. The flow's position is not part of what the
- * version describes: the flow asks for a step's choices before it publishes
- * that step, so an answer that read the flow's state is not kept.
+ * Note a read of the flow's state (its position or its last action's result).
+ * The flow asks for a step's choices before it publishes that step, so an
+ * answer that read the flow's state is not kept.
  */
-export function flowStateRead(): void {
-  flowStateReads++;
-}
-
-/** How many reads of a flow's state there have been, to tell whether some code made one. */
-export function flowStateReadCount(): number {
-  return flowStateReads;
+export function flowStateRead(ctx: ElementContext): void {
+  ctx._flowStateReads++;
 }
 
 /** Mark the game changed: every answer worked out before now is stale. */

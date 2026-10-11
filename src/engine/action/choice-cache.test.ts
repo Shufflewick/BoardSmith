@@ -12,11 +12,12 @@
  * change.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { Game, Player, Piece, Space, Action, actionStep, execute, loop, phase, sequence, enumerateLegalMoves, type GameOptions } from '../index.js';
+import { Game, Player, Piece, Space, Action, actionTempState, actionStep, execute, loop, phase, sequence, enumerateLegalMoves, type GameOptions } from '../index.js';
 import { enumerateActionMoves } from '../utils/enumerate-moves.js';
 import { GameRunner } from '../../runtime/runner.js';
 import { createSnapshot } from '../utils/snapshot.js';
 import { Card, CardsGame, DuelGame, Pawn, type PawnMove } from './choice-cache-fixtures.test-helper.js';
+import { TEST_WORLD_ELEMENT_ID_KEY } from '../element/world-element-id-key.test-helper.js';
 
 const devMode = vi.hoisted(() => ({ override: null as boolean | null }));
 vi.mock('../../utils/dev.js', async (importOriginal) => {
@@ -118,6 +119,22 @@ class ProbeGame extends Game<ProbeGame, Player> {
     const before = this.peek();
     this.level++;
     this.probes.push(`${code}:${this.peek() === before + 1}`);
+  }
+}
+
+/** A game with no flow, whose one pick offers the game's phase. */
+class LifecycleGame extends Game<LifecycleGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(
+      Action.create<LifecycleGame>('look')
+        .chooseFrom('phase', { choices: (ctx) => [ctx.game.phase] })
+        .execute(() => ({ success: true })),
+    );
+  }
+
+  phaseOffered(): unknown {
+    return this.getActionExecutor().getChoices(this.getAction('look')!.selections[0], this.getPlayer(1)!, {}, 'look')[0].value;
   }
 }
 
@@ -400,4 +417,119 @@ describe('every change to the game is seen by the next question', () => {
     };
     expect(randomStateAfterAsking(false)).toBe(randomStateAfterAsking(true));
   });
+
+  it('the game\'s phase, written by start() and finish() outside the flow', () => {
+    devMode.override = false;
+    const game = new LifecycleGame({ playerCount: 1, seed: 'bs631' });
+    expect(game.phaseOffered()).toBe('setup');
+    game.start();
+    expect(game.phaseOffered()).toBe('started');
+    game.finish();
+    expect(game.phaseOffered()).toBe('finished');
+  });
+
+  it('the last action\'s result, which a restore of the flow clears', () => {
+    class NoteGame extends Game<NoteGame, Player> {
+      constructor(options: GameOptions) {
+        super(options);
+        this.registerAction(
+          Action.create<NoteGame>('note')
+            .chooseFrom('n', { choices: [1, 2] })
+            .execute((args) => ({ success: true, data: { n: args.n } })),
+        );
+        this.registerAction(
+          Action.create<NoteGame>('recall')
+            .chooseFrom('last', { choices: (ctx) => [ctx.game.getLastActionResult()?.data?.n ?? 'none'] })
+            .execute(() => ({ success: true })),
+        );
+        this.setFlow({ root: loop({ while: () => true, maxIterations: 10, do: actionStep({ actions: ['note', 'recall'] }) }) });
+      }
+    }
+    devMode.override = false;
+    const runner = start(NoteGame, 1);
+    const game = runner.game;
+    const opening = createSnapshot(game, 'bs631');
+    const recalled = () => game.getActionExecutor().getChoices(game.getAction('recall')!.selections[0], game.getPlayer(1)!, {}, 'recall')[0].value;
+    expect(runner.performAction('note', 1, { n: 2 }).success).toBe(true);
+    expect(recalled()).toBe(2);
+    game.restoreFlowState(opening.flowState!);
+    expect(recalled()).toBe('none');
+  });
+
+  it('a restore of the tree that fails part way', () => {
+    devMode.override = false;
+    const game = new LifecycleGame({ playerCount: 1, seed: 'bs631' });
+    expect(game.phaseOffered()).toBe('setup');
+    // The phase is restored first; the tree after it fails.
+    const json = game.toJSON();
+    const state = { ...json, phase: 'finished', children: [...json.children!, { className: 'NoSuchClass' }] } as typeof json;
+    expect(() => game.loadSerializedState(state)).toThrow();
+    expect(game.phase).toBe('finished');
+    expect(game.phaseOffered()).toBe('finished');
+  });
 });
+
+describe('what a candidate callback writes', () => {
+  it('temp state written by choices is the one execute reads, whichever earlier pick was asked about last', () => {
+    class OfferGame extends Game<OfferGame, Player> {
+      executedWith: unknown[] = [];
+      constructor(options: GameOptions) {
+        super(options);
+        this.registerAction(
+          Action.create<OfferGame>('trade')
+            .chooseFrom('target', { choices: [2, 3] })
+            .chooseFrom('offer', {
+              choices: (ctx) => {
+                const offer = (ctx.args.target as number) * 10;
+                actionTempState(ctx, 'trade').set('offer', offer);
+                return [offer];
+              },
+            })
+            .execute((_args, ctx) => {
+              this.executedWith.push(actionTempState(ctx, 'trade').get('offer'));
+              return { success: true };
+            }),
+        );
+        this.setFlow({ root: actionStep({ actions: ['trade'] }) });
+      }
+    }
+    devMode.override = false;
+    const runner = start(OfferGame, 1);
+    const game = runner.game;
+    const offer = game.getAction('trade')!.selections[1];
+    const ask = (target: number) => game.getActionExecutor().getChoices(offer, game.getPlayer(1)!, { target }, 'trade');
+    ask(2);
+    ask(3);
+    expect(runner.performAction('trade', 1, { target: 2, offer: 20 }).success).toBe(true);
+    expect(game.executedWith).toEqual([20]);
+  });
+});
+
+describe('world mode', () => {
+  it('marks the partition of every element a pick hands out, each time it is asked', () => {
+    class Token extends Piece<WorldGame> {}
+    class WorldGame extends Game<WorldGame, Player> {
+      constructor(options: GameOptions) {
+        super(options);
+        this.registerElements([Space, Token]);
+        this.registerAction(
+          Action.create<WorldGame>('take')
+            .chooseElement('token', { elements: (ctx) => ctx.game.all(Token) })
+            .execute(() => ({ success: true })),
+        );
+      }
+    }
+    devMode.override = false;
+    const game = new WorldGame({ playerCount: 1, seed: 'bs631', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    const room = game.create(Space, 'room');
+    room.create(Token, 'token');
+    game.definePartition(room.id);
+    const take = game.getAction('take')!;
+    const ask = () => game.getActionExecutor().getChoices(take.selections[0], game.getPlayer(1)!, {}, 'take');
+    ask();
+    game.takeTouchedPartitions();
+    ask();
+    expect([...game._ctx._reachedPartitions!.partitions]).toEqual([room.id]);
+  });
+});
+

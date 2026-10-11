@@ -67,6 +67,12 @@ export type ElementContext = {
    * one is. Not public API.
    */
   _changingDepth: number;
+  /**
+   * Internal (#631): how many reads of the flow's state there have been
+   * (`flowStateRead` in `state-version.ts`), to tell whether a pick's callbacks
+   * made one. Not public API.
+   */
+  _flowStateReads: number;
   /** Current player context (for "mine" queries) */
   player?: Player;
   /** Registry of element classes by name for deserialization and commands */
