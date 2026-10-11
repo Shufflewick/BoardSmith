@@ -2,9 +2,11 @@ import { Space, type ElementEventHandler } from './space.js';
 import { mintElementIdKey, opaqueElementIds, worldElementIds } from './element-ids.js';
 import {
   GameElement,
+  forEachInSubtree,
   hasZoneVisibility,
   isPlayerElement,
   isPlayerIdentityAttribute,
+  lookUpId,
   readDynamicAttribute,
   registerElementClass,
   registerCreatedElementClass,
@@ -184,31 +186,6 @@ function collectJsonIds(json: ElementJSON, into: number[]): void {
   if (json.children) {
     for (const child of json.children) collectJsonIds(child, into);
   }
-}
-
-/** Every element id currently in a live subtree, for `adoptSubtree`. */
-function collectResidentIds(element: GameElement, into: Set<number>): void {
-  into.add(element._t.id);
-  for (const child of element._t.children) collectResidentIds(child, into);
-}
-
-/**
- * An element by id, WITHOUT marking anything reached (ShufflewickPub #295).
- *
- * `GameElement.atId` is a door: it marks the partition it answers from,
- * because a command that looks an element up can write to it. The reference
- * harvest below is the engine talking to itself about bytes it has already
- * serialized, so it must not leave a mark behind -- a harvest that marked
- * would make every partition a candidate for the next command and undo the
- * whole scoping.
- */
-function findById(from: GameElement, id: number): GameElement | undefined {
-  if (from._t.id === id) return from;
-  for (const child of from._t.children) {
-    const found = findById(child, id);
-    if (found) return found;
-  }
-  return undefined;
 }
 
 /** The partition an element sits in: the nearest ancestor-or-self that is a
@@ -1187,6 +1164,7 @@ export class Game<
       ids: worldIds ?? opaqueElementIds(elementIdKey as string),
       ...(worldIds === undefined ? {} : { _worldIds: worldIds }),
       classRegistry: new Map(),
+      _elementsById: new Map(),
       random,
     };
 
@@ -1788,7 +1766,7 @@ export class Game<
     for (const id of referenced) {
       if (own.has(id)) continue;
       if (!resolved.has(id)) {
-        const target = findById(this, id) ?? findById(this.pile, id);
+        const target = lookUpId(this, id) ?? lookUpId(this.pile, id);
         resolved.set(id, target === undefined ? undefined : nearestPartition(target, roots));
       }
       const partition = resolved.get(id);
@@ -1879,10 +1857,10 @@ export class Game<
   /**
    * A partition root by id, without searching the tree.
    *
-   * `getElementById` is a depth-first walk of the whole resident world, so a
-   * caller that looks up one root per resident partition pays O(world) per
-   * lookup and O(world²) per pass. A partition root is the one element this
-   * engine already holds a direct reference to.
+   * `getElementById` was a depth-first walk of the whole resident world
+   * (before #632), so a caller that looked up one root per resident partition
+   * paid O(world) per lookup and O(world²) per pass. A partition root is the
+   * one element this engine already holds a direct reference to.
    */
   partitionRoot(id: number): GameElement | undefined {
     return this._ctx._partitionRoots?.get(id);
@@ -2085,8 +2063,8 @@ export class Game<
     const worldIds = this._ctx._worldIds!;
 
     const resident = new Set<number>();
-    collectResidentIds(this, resident);
-    collectResidentIds(this.pile, resident);
+    forEachInSubtree(this, (element) => resident.add(element._t.id));
+    forEachInSubtree(this.pile, (element) => resident.add(element._t.id));
     const clash = adoptedIds.find((id) => resident.has(id));
     if (clash !== undefined) {
       throw new Error(
@@ -2209,6 +2187,8 @@ export class Game<
     parent._t.children.splice(index, 1);
     element._t.parent = undefined;
 
+    // An evicted partition must not stay in memory through the id index.
+    forEachInSubtree(element, (evicted) => this._ctx._elementsById.delete(evicted._t.id));
     this._ctx._partitionRoots?.delete(id);
     this._ctx._partitionBaselines?.delete(id);
     this._ctx._partitionReferences?.delete(id);
@@ -5247,8 +5227,14 @@ export class Game<
       }
     }
 
-    // Clear existing children and rebuild the tree from JSON
+    // Clear existing children and rebuild the tree from JSON. The id index
+    // is rebuilt with it (#632): `fromJSON` files each rebuilt element, and the
+    // root and the pile, which a restore keeps, are filed again here. Nothing
+    // the restore discarded stays in it.
     this._t.children = [];
+    this._ctx._elementsById.clear();
+    this._ctx._elementsById.set(this._t.id, this);
+    forEachInSubtree(this.pile, (kept) => this._ctx._elementsById.set(kept._t.id, kept));
     if (json.children) {
       for (const childJson of json.children) {
         const child = GameElement.fromJSON(childJson, this._ctx, this._ctx.classRegistry);

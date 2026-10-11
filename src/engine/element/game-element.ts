@@ -240,6 +240,45 @@ function reachPartition<T extends GameElement | undefined>(from: T): T {
 }
 
 /**
+ * The element with this id in `from`'s subtree, WITHOUT marking anything
+ * reached: `atId` is the door that marks, and the engine's own reference
+ * harvest must not (ShufflewickPub #295).
+ *
+ * Looked up in the game's id index (#632) when the element filed there is in
+ * the game's tree under `from`: ids are unique in the game's tree, so that is
+ * the element a walk would find. Anything else -- a lookup in the pile, which
+ * can hold one id twice after a restore (#650), or an id the subtree does not
+ * hold -- walks the subtree, so the answer is always the walk's.
+ */
+export function lookUpId(from: GameElement, id: number): GameElement | undefined {
+  const indexed = from._ctx._elementsById.get(id);
+  let underFrom = false;
+  for (let el = indexed; el; el = el._t.parent) {
+    if (el === from) underFrom = true;
+    if (el === from._ctx.game) {
+      if (underFrom) return indexed;
+      break;
+    }
+  }
+  return walkForId(from, id);
+}
+
+function walkForId(from: GameElement, id: number): GameElement | undefined {
+  if (from._t.id === id) return from;
+  for (const child of from._t.children) {
+    const found = walkForId(child, id);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/** Visit `element` and everything under it, in tree order, marking nothing reached. */
+export function forEachInSubtree(element: GameElement, visit: (element: GameElement) => void): void {
+  visit(element);
+  for (const child of element._t.children) forEachInSubtree(child, visit);
+}
+
+/**
  * Every element a query answered with, marked at once.
  *
  * The residency check is hoisted OUT of the loop: a published board game has
@@ -527,6 +566,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       id,
       order: 'normal',
     };
+    this._ctx._elementsById.set(id, this);
   }
 
   /**
@@ -605,19 +645,11 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * Find an element by its immutable ID
+   * Find an element by its immutable ID, in this element's subtree. A lookup
+   * from the game's id index when it can be one (see {@link lookUpId}).
    */
   atId(id: number): GameElement | undefined {
-    if (this._t.id === id) return reachPartition(this);
-
-    for (const child of this._t.children) {
-      // Marked at the level that MATCHED, not here: the recursion hands the
-      // same element up every level, and one parent-chain walk is enough.
-      const found = child.atId(id);
-      if (found) return found;
-    }
-
-    return undefined;
+    return reachPartition(lookUpId(this, id));
   }
 
 
@@ -1817,7 +1849,10 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // the game's direct children get it in loadSerializedState), so e.g.
     // `piece.remove()` → `this.game.pile` throws after any restore.
     if (ctx.game) (element as GameElement).game = ctx.game;
+    // The stored id replaces the one construction minted, in the id index too.
+    ctx._elementsById.delete(element._t.id);
     element._t.id = json.id;
+    ctx._elementsById.set(json.id, element);
 
     if (json.name) {
       element.name = json.name;
