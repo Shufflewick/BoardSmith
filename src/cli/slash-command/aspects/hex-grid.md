@@ -4,14 +4,18 @@
 
 ## Element Setup (game.ts)
 
+<!-- typecheck: game src/rules/game.ts -->
 ```typescript
 import { Game, type GameOptions } from 'boardsmith';
 import { Board, Cell, Stone, MyPlayer } from './elements.js';
 
 export class MyGame extends Game<MyGame, MyPlayer> {
+  // Tells the engine to construct each player as a MyPlayer
+  static PlayerClass = MyPlayer;
+
   board!: Board;
 
-  constructor(options: MyGameOptions) {
+  constructor(options: GameOptions) {
     super(options);
 
     const boardSize = 7;  // Adjust as needed
@@ -34,6 +38,7 @@ export class MyGame extends Game<MyGame, MyPlayer> {
 
 ## Elements (elements.ts)
 
+<!-- typecheck: game src/rules/elements.ts -->
 ```typescript
 import { Space, Piece as BasePiece, Player } from 'boardsmith';
 import type { MyGame } from './game.js';
@@ -60,9 +65,8 @@ export class Cell extends Space<MyGame, MyPlayer> {
   }
 }
 
-export class Stone extends BasePiece<MyGame, MyPlayer> {
-  player!: MyPlayer;
-}
+// Its owner is `stone.player`, which every element already has.
+export class Stone extends BasePiece<MyGame, MyPlayer> {}
 
 export class MyPlayer extends Player {
   score: number = 0;
@@ -71,34 +75,28 @@ export class MyPlayer extends Player {
 
 ## Action Pattern (actions.ts)
 
+<!-- typecheck: game src/rules/actions.ts -->
 ```typescript
 import { Action, type ActionDefinition } from 'boardsmith';
 import { Cell, Stone } from './elements.js';
 import type { MyGame } from './game.js';
 
-export function createPlaceStoneAction(game: MyGame): ActionDefinition {
-  return Action.create('placeStone')
+export function createPlaceStoneAction(): ActionDefinition {
+  return Action.create<MyGame>('placeStone')
     .prompt('Place a stone')
-    .chooseElement<Cell>('cell', {
+    .chooseElement('cell', {
       prompt: 'Select a cell',
-      from: () => game.board.all(Cell),
+      elementClass: Cell,
+      from: (ctx) => ctx.game.board,
       filter: (cell) => cell.isEmpty(),
       boardRef: (cell) => ({
         id: cell.id,
         notation: cell.notation,
       }),
     })
-    .execute((args, ctx) => {
-      const currentGame = ctx.game as MyGame;
-      const cellArg = args.cell as { id: number };
-      const cell = currentGame.board.all(Cell).find(c => c.id === cellArg.id);
-      if (!cell) return { success: false };
-
-      cell.create(Stone, `stone-${ctx.player.seat}-${Date.now()}`, {
-        player: ctx.player,
-      });
-
-      currentGame.message(`${ctx.player.name} placed at ${cell.notation}`);
+    .execute(({ cell }, ctx) => {
+      cell.create(Stone, 'stone', { player: ctx.player });
+      ctx.game.message(`${ctx.player.name} placed at ${cell.notation}`);
       return { success: true };
     });
 }

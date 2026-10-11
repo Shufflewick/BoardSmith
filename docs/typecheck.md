@@ -99,7 +99,8 @@ in every game.
   when it is built. A board is marked `<!-- typecheck: board -->` instead, and
   `src/contract/aspect-boards-typecheck.test.ts` compiles it as a game's
   `.vue` board (#570). Leave a block unmarked only when it is deliberately
-  partial.
+  partial. The aspect templates `/design-game` copies game code from
+  (`src/cli/slash-command/aspects/*.md`) are read the same way (#645).
 - **Anything at runtime.** Types say nothing about a shape crossing a boundary
   the types do not describe.
 

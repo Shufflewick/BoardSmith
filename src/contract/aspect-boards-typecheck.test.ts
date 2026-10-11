@@ -79,7 +79,7 @@ describe('the aspect templates\' boards type-check against boardsmith\'s own typ
       root,
       'game.tsconfig.json',
       'the boards the docs mark with "<!-- typecheck: board -->" (src/<doc>-<n>/Board.vue is the ' +
-        'n-th marked block of docs/<doc>.md)',
+        'n-th marked block of <doc>.md)',
       'Fix the doc, not this test: a board reads only what TableBoardProps (src/ui/board-props.ts) ' +
         'declares, and imports each name from the entry point package.json "exports" gives it.',
     );
