@@ -222,7 +222,7 @@ describe('GameRunner', () => {
       expect(historyLabels(r.actionHistory)).toEqual(['scout:1', 'loot:1']);
     });
 
-    it(`${shape}: legal moves for the owner are its follow-up, with its args bound`, () => {
+    it(`${shape}: legal moves for the owner are its follow-up's picks; the engine binds its args`, () => {
       const r = runner(shape);
       r.performAction('scout', 1, {});
 
@@ -230,8 +230,10 @@ describe('GameRunner', () => {
       expect(moves).toHaveLength(4);
       for (const move of moves) {
         expect(move.action).toBe('loot');
-        expect(move.args.by).toBe(1);
+        expect(Object.keys(move.args).sort()).toEqual(['what', 'where']);
       }
+      // loot's execute throws unless it runs with the engine's `by`.
+      expect(r.performAction('loot', 1, moves[0].args).success).toBe(true);
       expect(enumerateLegalMoves(r.game, 2).some((m) => m.action === 'loot')).toBe(false);
     });
 
@@ -317,13 +319,13 @@ describe('live session host', () => {
     expect(two.followUp).toMatchObject({ action: 'loot', args: { by: 2 } });
 
     // Seat 3 is refused as seat 2, then seats 1 and 2 each take their own.
-    expect(await s.pick(3, 'where', 'north', 'loot', { by: 2 })).toMatchObject({
+    expect(await s.pick(3, 'where', 'north', 'loot')).toMatchObject({
       success: false,
       error: NOT_YOURS,
     });
-    expect((await s.pick(1, 'where', 'north', 'loot', { by: 1 })).success).toBe(true);
+    expect((await s.pick(1, 'where', 'north', 'loot')).success).toBe(true);
     expect(await s.pick(1, 'what', 'gold')).toMatchObject({ success: true, actionComplete: true });
-    expect((await s.pick(2, 'where', 'south', 'loot', { by: 2 })).success).toBe(true);
+    expect((await s.pick(2, 'where', 'south', 'loot')).success).toBe(true);
     expect(await s.pick(2, 'what', 'gems')).toMatchObject({ success: true, actionComplete: true });
     expect(s.table.readGame().looted).toEqual([1, 2]);
   });
@@ -371,7 +373,7 @@ describe('live session host', () => {
     }
     const s = await session(TwoMoveRaid);
     expect((await s.act(1, 'scout')).success).toBe(true);
-    expect((await s.pick(1, 'where', 'north', 'loot', { by: 1 })).success).toBe(true);
+    expect((await s.pick(1, 'where', 'north', 'loot')).success).toBe(true);
     expect(await s.pick(1, 'what', 'gold')).toMatchObject({ success: true, actionComplete: true });
     expect(s.table.host.flowState).toMatchObject({ currentPlayer: 1, moveCount: 2, movesRemaining: 1 });
 
@@ -388,7 +390,7 @@ describe('live session host', () => {
     expect((await s.act(1, 'scout')).success).toBe(true);
     expect(s.table.host.flowState?.currentPlayer).toBe(1);
 
-    expect((await s.pick(1, 'where', 'north', 'loot', { by: 1 })).success).toBe(true);
+    expect((await s.pick(1, 'where', 'north', 'loot')).success).toBe(true);
     expect(await s.pick(1, 'what', 'gold')).toMatchObject({ success: true, actionComplete: true });
     expect(s.table.host.flowState?.currentPlayer).toBe(2);
   });
@@ -405,15 +407,15 @@ describe('stateless ops', () => {
       last = moved;
       return moved;
     };
-    const loot = async (seat: number, by: number) => {
+    const loot = async (seat: number) => {
       const first = await executeOp(def, gameOptions, last.snapshot, null, {
         type: 'selectionStep', player: seat, selectionName: 'where', value: 'north', actionName: 'loot',
-        initialArgs: { by }, boundaryKey: boundaryKeyOf(last.snapshot),
+        boundaryKey: boundaryKeyOf(last.snapshot),
       });
       if (!first.success) return first;
       const second = succeeded(await executeOp(def, gameOptions, first.snapshot, first.pendingState, {
         type: 'selectionStep', player: seat, selectionName: 'what', value: 'gold', actionName: 'loot',
-        initialArgs: { by, where: 'north' }, boundaryKey: boundaryKeyOf(first.snapshot),
+        initialArgs: { where: 'north' }, boundaryKey: boundaryKeyOf(first.snapshot),
       }));
       last = second;
       return second;
@@ -430,9 +432,9 @@ describe('stateless ops', () => {
     expect(views[0]!.state.followUp).toMatchObject({ action: 'loot', args: { by: 1 } });
     expect(views[2]!.state.followUp).toBeUndefined();
 
-    expect(await g.loot(3, 1)).toMatchObject({ success: false, error: NOT_YOURS });
-    expect(await g.loot(1, 1)).toMatchObject({ success: true, actionComplete: true });
-    expect(await g.loot(2, 2)).toMatchObject({ success: true, actionComplete: true });
+    expect(await g.loot(3)).toMatchObject({ success: false, error: NOT_YOURS });
+    expect(await g.loot(1)).toMatchObject({ success: true, actionComplete: true });
+    expect(await g.loot(2)).toMatchObject({ success: true, actionComplete: true });
   });
 
   for (const shape of ['turn', 'simultaneous'] as const) {
@@ -455,7 +457,7 @@ describe('stateless ops', () => {
     await g.action(1, 'scout');
     expect((g.last.snapshot.flowState as FlowState).currentPlayer).toBe(1);
 
-    expect(await g.loot(1, 1)).toMatchObject({ success: true, actionComplete: true });
+    expect(await g.loot(1)).toMatchObject({ success: true, actionComplete: true });
     expect((g.last.snapshot.flowState as FlowState).currentPlayer).toBe(2);
   });
 });

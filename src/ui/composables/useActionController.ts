@@ -748,7 +748,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   /**
    * Build args for server requests from the controller's source of truth.
-   * Only includes args that the controller explicitly set via fill/startFollowUp.
+   * Only includes args that the controller explicitly set via fill/startFollowUp,
+   * and of those only the action's picks: the server refuses any other key, and
+   * binds a follow-up's other args itself (#662).
    */
   function buildServerArgs(): Record<string, unknown> {
     const args: Record<string, unknown> = {};
@@ -756,8 +758,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Use collectedPicks as the source of truth
     // Exclude skipped selections — server expects undefined (missing key) for skipped optional args
     if (actionSnapshot.value) {
+      const picks = actionSnapshot.value.metadata.selections.map((s) => s.name);
       for (const [name, collected] of actionSnapshot.value.collectedPicks) {
-        if (collected.skipped) continue;
+        if (collected.skipped || !picks.includes(name)) continue;
         args[name] = collected.value;
       }
     }

@@ -1260,11 +1260,12 @@ describe('Action Executor', () => {
           receivedCtx = ctx;
         });
 
-      const result = executor.executeAction(action, game.getPlayer(1)!, {
-        combatantId: 42,
-        sectorId: 7,
-        equipment: null,
-      });
+      const result = executor.executeAction(
+        action,
+        game.getPlayer(1)!,
+        { equipment: null },
+        { followUp: { action: 'test', args: { combatantId: 42, sectorId: 7 } } },
+      );
 
       expect(result.success).toBe(true);
       expect(receivedCtx!.args.combatantId).toBe(42);
@@ -1286,8 +1287,8 @@ describe('Action Executor', () => {
         });
 
         // Deliberately collide the bare-number followUp arg with a live element id.
-        const result = executor.executeAction(action, game.getPlayer(1)!, {
-          turnCount: card.id,
+        const result = executor.executeAction(action, game.getPlayer(1)!, {}, {
+          followUp: { action: 'test', args: { turnCount: card.id } },
         });
 
         expect(result.success).toBe(true);
@@ -1304,8 +1305,8 @@ describe('Action Executor', () => {
           receivedSectorId = ctx.args.sectorId;
         });
 
-        const result = executor.executeAction(action, game.getPlayer(1)!, {
-          sectorId: { id: card.id, className: 'Card' },
+        const result = executor.executeAction(action, game.getPlayer(1)!, {}, {
+          followUp: { action: 'test', args: { sectorId: { id: card.id, className: 'Card' } } },
         });
 
         expect(result.success).toBe(true);
@@ -1327,8 +1328,8 @@ describe('Action Executor', () => {
         });
 
         const claimed = { id: card.id, className: 'Sector' };
-        const result = executor.executeAction(action, game.getPlayer(1)!, {
-          sectorId: claimed,
+        const result = executor.executeAction(action, game.getPlayer(1)!, {}, {
+          followUp: { action: 'test', args: { sectorId: claimed } },
         });
 
         expect(result.success).toBe(true);

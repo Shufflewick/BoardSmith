@@ -229,7 +229,8 @@ export class PickHandler<G extends Game = Game> {
    * @param actionName Name of the action
    * @param selectionName Name of the pick to get choices for
    * @param playerPosition Player requesting choices
-   * @param currentArgs Arguments collected so far (for dependent picks)
+   * @param currentArgs The picks made so far (for dependent picks); a key that
+   *   names no pick is refused
    * @returns Choices/elements with display strings and board refs, plus multiSelect config
    */
   getPickChoices(
@@ -254,8 +255,12 @@ export class PickHandler<G extends Game = Game> {
       return { success: false, error: `Player not found at seat ${playerPosition}`, errorCode: ErrorCode.INVALID_PLAYER };
     }
 
+    // The client sends picks only (#662); a held follow-up's args are the engine's.
     const executor = this.#runner.game.getActionExecutor();
-    const resolvedArgs = executor.resolveArgs(action, currentArgs, player);
+    const refusal = executor.undeclaredArgsRefusal(action, currentArgs);
+    if (refusal) return { success: false, error: refusal, errorCode: ErrorCode.INVALID_PICK };
+    const boundArgs = { ...currentArgs, ...this.#runner.followUpArgsFor(actionName, playerPosition) };
+    const resolvedArgs = executor.resolveArgs(action, boundArgs, player);
 
     const ctx = { game: this.#runner.game, player, args: resolvedArgs };
 

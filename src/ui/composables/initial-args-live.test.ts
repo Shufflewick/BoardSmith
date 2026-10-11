@@ -38,7 +38,10 @@ class PayGame extends Game<PayGame, Player> {
 class Checker extends Piece<HopGame> {}
 class Board extends Space<HopGame> {}
 
-/** Checkers' multi-jump in small: a follow-up pre-fills the piece, the seat picks where it lands. */
+/**
+ * Checkers' multi-jump in small: a follow-up pre-fills the piece and carries a
+ * `hops` count no pick declares; the seat picks where it lands.
+ */
 class HopGame extends Game<HopGame, Player> {
   landed: string[] = [];
 
@@ -50,14 +53,18 @@ class HopGame extends Game<HopGame, Player> {
     this.registerActions(
       Action.create<HopGame>('jump')
         .prompt('Jump')
-        .execute(() => ({ success: true, followUp: { action: 'land', args: { piece: this.first(Checker, 'jumper')!.id } } })),
+        .execute(() => ({
+          success: true,
+          followUp: { action: 'land', args: { piece: this.first(Checker, 'jumper')!.id, hops: 2 } },
+        })),
       Action.create<HopGame>('land')
         .prompt('Land')
+        .followUpArgs<{ hops: number }>()
         .condition({ 'only as a follow-up': () => false })
         .chooseElement('piece', { elementClass: Checker })
         .chooseFrom('to', { choices: (ctx) => [`${ctx.args.piece?.name}-left`, `${ctx.args.piece?.name}-right`] })
         .execute((args) => {
-          this.landed.push(`${args.piece.name}:${args.to}`);
+          this.landed.push(`${args.piece.name}:${args.to}:${args.hops}`);
         }),
     );
     this.setFlow({ root: loop({ maxIterations: 4, do: eachPlayer({ do: actionStep({ actions: ['jump'] }) }) }) });
@@ -85,7 +92,9 @@ describe('locally collected picks travel as initialArgs (#658)', () => {
     expect(session.readGame().bought).toEqual(['blue:silver']);
   });
 
-  it("takes a follow-up's pre-filled pick from the engine and the seat's next pick through the step", async () => {
+  // The server refuses a key no pick declares (#662), so the controller sends
+  // the follow-up's picks only, and the engine binds `hops` itself.
+  it("takes a follow-up's pre-filled args from the engine and the seat's next pick through the step", async () => {
     const { session, wiring } = await mountLiveSeat(HopGame, 'initial-args-follow-up', mounted, { withPickStep: true });
     const { controller } = wiring;
 
@@ -97,6 +106,6 @@ describe('locally collected picks travel as initialArgs (#658)', () => {
 
     expect(controller.lastError.value).toBe(null);
     expect(controller.currentAction.value).toBe(null);
-    expect(session.readGame().landed).toEqual(['jumper:jumper-right']);
+    expect(session.readGame().landed).toEqual(['jumper:jumper-right:2']);
   });
 });

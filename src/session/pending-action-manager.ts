@@ -281,8 +281,8 @@ export class PendingActionManager<G extends Game = Game> {
    * new pending action: the picks it collected before `selectionName`, each
    * made as its own step would be, in order (#658). A pick a held follow-up
    * answered is the engine's and is not taken from the client, and an arg
-   * that names no pick is not taken at all. A refused pick cancels the
-   * action, running `onCancel` for any `onSelect` that ran.
+   * that names no pick is refused (#662). A refusal cancels the action,
+   * running `onCancel` for any `onSelect` that ran.
    */
   #makeInitialPicks(
     pendingState: PendingActionState,
@@ -321,7 +321,6 @@ export class PendingActionManager<G extends Game = Game> {
     // actions (single-step actions go through performAction), so recording here
     // neither double-records nor misses any path. We push only after a
     // successful execute (below) to avoid recording a failed action.
-    this.#runner.bindFollowUpArgs(pendingState, playerPosition);
     const serializedAction = this.#runner.serializeForHistory(
       action.name,
       player,

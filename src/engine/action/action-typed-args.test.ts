@@ -659,7 +659,8 @@ describe('ctx.args is typed from the chain (#626)', () => {
     const result = game.getActionExecutor().executeAction(
       game.getAction('collectRun')!,
       game.getPlayer(1)!,
-      { sector, equipment: loot },
+      { equipment: loot },
+      { followUp: { action: 'collectRun', args: { sector } } },
     );
     expect(result.success, result.error).toBe(true);
     expect(seen).toEqual({ filterSector: sector, executeSector: sector });
