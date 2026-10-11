@@ -114,7 +114,7 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
     const seat1AfterPick = child.flowState.awaitingPlayers.find((p: any) => p.playerIndex === 1);
     expect(seat1AfterPick.completed).toBe(true);
 
-    // BACKPROPAGATE: undo back to root state.
+    // BACKPROPAGATE: restore the root state.
     bot.backpropagateAndRestoreRoot(child, 0.5, [], []);
 
     // Second simulated branch at the SAME root: seat 1 picks 'y' (the next
@@ -198,7 +198,7 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
     expect((bot.searchGame as FinishGame).isFinished()).toBe(true);
     expect((bot.searchGame as any).settings.winners).toEqual([1]);
 
-    // BACKPROPAGATE: undo back to root state.
+    // BACKPROPAGATE: restore the root state.
     bot.backpropagateAndRestoreRoot(child, 1, [], []);
 
     // Root cause proof: `game.finish()` sets `phase`/`settings.winners` as
