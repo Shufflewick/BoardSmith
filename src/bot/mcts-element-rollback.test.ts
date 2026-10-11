@@ -86,7 +86,7 @@ describe('MCTS element-tree rollback (F-01)', () => {
     // After EXPAND the move must have actually mutated the search tree.
     expect((b.searchGame as DrawGame).handA.all(Piece).length).toBe(1);
 
-    b.backpropagateWithUndo(child, 0.5, [], []);
+    b.backpropagateAndRestoreRoot(child, 0.5, [], []);
 
     // After BACKPROPAGATE the searchGame MUST be back at ROOT state:
     // the drawn card is returned to the deck. Pre-fix this failed because

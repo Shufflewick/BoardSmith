@@ -22,7 +22,7 @@ import { MCTSBot } from './mcts-bot.js';
 // reset by a full restore of the root snapshot. Both fixtures below drive the
 // bot's low-level EXPAND/BACKPROPAGATE primitives directly (mirrors
 // mcts-redaction.test.ts fixture 2) so the check is isolated to exactly
-// `backpropagateWithUndo`, with no tree search nondeterminism involved.
+// `backpropagateAndRestoreRoot`, with no tree search nondeterminism involved.
 //
 // Fixture 1 deliberately avoids touching any GameElement (uses a plain
 // `picks` dict instead of pieces) so the flow-bookkeeping case is isolated
@@ -115,7 +115,7 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
     expect(seat1AfterPick.completed).toBe(true);
 
     // BACKPROPAGATE: undo back to root state.
-    bot.backpropagateWithUndo(child, 0.5, [], []);
+    bot.backpropagateAndRestoreRoot(child, 0.5, [], []);
 
     // Second simulated branch at the SAME root: seat 1 picks 'y' (the next
     // untried move). This must succeed exactly like the first branch did --
@@ -199,7 +199,7 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
     expect((bot.searchGame as any).settings.winners).toEqual([1]);
 
     // BACKPROPAGATE: undo back to root state.
-    bot.backpropagateWithUndo(child, 1, [], []);
+    bot.backpropagateAndRestoreRoot(child, 1, [], []);
 
     // Root cause proof: `game.finish()` sets `phase`/`settings.winners` as
     // plain properties -- the old command undo (element-tree only) never reverted

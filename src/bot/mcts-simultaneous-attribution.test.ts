@@ -17,7 +17,7 @@ import { MCTSBot } from './mcts-bot.js';
 // but that field NEVER advances inside a `simultaneousActionStep` -- the engine
 // tracks per-seat progress in `awaitingPlayers` instead. So every co-decider
 // node was attributed to the BOT's own seat, and `selectChild` (`isBotTurn`)
-// plus `backpropagateWithUndo` (`isOurPerspective`) then read the OPPONENT's
+// plus `backpropagateAndRestoreRoot` (`isOurPerspective`) then read the OPPONENT's
 // simultaneous decision as the bot's own. The search became max-max optimistic:
 // it assumed the opponent would pick whatever suited the bot, and never
 // explored the refutation. The fix resolves the awaiting seat via
