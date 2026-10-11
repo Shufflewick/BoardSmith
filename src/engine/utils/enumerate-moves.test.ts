@@ -380,3 +380,40 @@ describe('a follow-up that pre-fills an optional pick as null (#627)', () => {
     expect(moves.every((move) => move.a === null)).toBe(true);
   });
 });
+
+// #648: execution validates the resolved args, where the skipped pick is
+// absent, so enumeration must validate the same args or it drops a move the
+// engine accepts.
+describe('an action-level validate sees a pre-filled null pick as absent (#648)', () => {
+  class SkipValidateGame extends Game<SkipValidateGame, Player> {
+    constructor(options: GameOptions & { repeating?: boolean }) {
+      super(options);
+      const base = Action.create<SkipValidateGame>('chained').chooseFrom('a', { choices: [1, 2], optional: true });
+      this.registerAction(
+        (options.repeating
+          ? base.chooseFrom('b', { choices: ['x', 'y'], repeat: { until: () => true } })
+          : base.chooseFrom('b', { choices: ['x', 'y'] })
+        )
+          .validate((args) => args.a === undefined || (args.a as number) > 0)
+          .execute(() => ({ success: true })),
+      );
+    }
+  }
+
+  it.each([
+    ['an ordinary action', false],
+    ['an action with a repeating pick', true],
+  ])('enumerates the move execution accepts for %s', (_kind, repeating) => {
+    const game = new SkipValidateGame({ playerCount: 2, repeating });
+    const action = game.getAction('chained')!;
+    const player = game.getPlayer(1)!;
+    const moves = enumerateActionMoves(game, action, player, {
+      followUp: { action: 'chained', args: { a: null } },
+    });
+    expect(moves).toHaveLength(2);
+    for (const move of moves) {
+      expect(move.a).toBe(null);
+      expect(game.getActionExecutor().executeAction(action, player, move, { asFollowUp: true }).success).toBe(true);
+    }
+  });
+});

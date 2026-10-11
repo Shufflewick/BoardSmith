@@ -69,14 +69,14 @@ export type AddArg<A, K extends string, T, O = false> = A & ([O] extends [false]
  * receives is then every pick, in order, ending with the one that ended it --
  * which is why a selection given either option is typed as an array.
  */
-type RepeatingOptions<T> =
+type RepeatingOptions<G extends Game, T, C extends Record<string, unknown>> =
   | {
       /** Repeat until `until` says the last pick ended it; `onEach` runs once per pick. */
-      repeat: RepeatConfig<T>;
+      repeat: RepeatConfig<T, G, C>;
       /** Shorthand for a `repeat.until` that ends when this value is picked. */
       repeatUntil?: T;
     }
-  | { repeat?: RepeatConfig<T>; repeatUntil: T };
+  | { repeat?: RepeatConfig<T, G, C>; repeatUntil: T };
 
 /**
  * What `ctx.args` holds in a repeating pick's own callbacks: the picks before
@@ -84,6 +84,8 @@ type RepeatingOptions<T> =
  * rather than the pick's type because the pick's type is inferred from those
  * same callbacks (`choices`, `elements`); naming it there would leave nothing
  * to infer it from. Its `validate` gets the typed array in `args`.
+ * `repeat.until` and `repeat.onEach` run after a pick, so they get it as is,
+ * not partial (#652).
  */
 type RepeatContextArgs<A, K extends string> = AddArg<A, K, unknown[]>;
 
@@ -738,7 +740,7 @@ export class Action<
    */
   chooseFrom<K extends string, T, P = undefined, O extends boolean | string = false>(
     name: K,
-    options: ChooseFromOptions<G, AddArg<A, K, ChoiceValue<T>[]>, T, O, ChoiceValue<T>, RepeatContextArgs<A, K>> & DisabledOptions<G, RepeatContextArgs<A, K>, ChoiceValue<T>, P> & RepeatingOptions<ChoiceValue<T>>
+    options: ChooseFromOptions<G, AddArg<A, K, ChoiceValue<T>[]>, T, O, ChoiceValue<T>, RepeatContextArgs<A, K>> & DisabledOptions<G, RepeatContextArgs<A, K>, ChoiceValue<T>, P> & RepeatingOptions<G, ChoiceValue<T>, RepeatContextArgs<A, K>>
   ): Action<G, AddArg<A, K, ChoiceValue<T>[], O>>;
   chooseFrom<K extends string, T, P = undefined, O extends boolean | string = false>(
     name: K,
@@ -759,7 +761,7 @@ export class Action<
     name: K,
     // The implementation's validate args are the repeating overload's, the
     // narrowest of the overloads, so every overload's validate is accepted.
-    options: ChooseFromOptions<G, AddArg<A, K, ChoiceValue<T>[]>, T, O, ChoiceValue<T> | ChoiceValue<T>[], RepeatContextArgs<A, K>> & DisabledOptions<G, RepeatContextArgs<A, K>, ChoiceValue<T>, P> & Partial<RepeatingOptions<ChoiceValue<T>>>
+    options: ChooseFromOptions<G, AddArg<A, K, ChoiceValue<T>[]>, T, O, ChoiceValue<T> | ChoiceValue<T>[], RepeatContextArgs<A, K>> & DisabledOptions<G, RepeatContextArgs<A, K>, ChoiceValue<T>, P> & Partial<RepeatingOptions<G, ChoiceValue<T>, RepeatContextArgs<A, K>>>
   ): Action<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[], O>> {
     assertPrepareHasDisabled('chooseFrom', name, options);
     assertReadsEarlierPick('chooseFrom', name, this.definition.selections, options.dependsOn, 'depends on');
@@ -863,7 +865,7 @@ export class Action<
    */
   chooseElement<K extends string, T extends GameElement, P = undefined, O extends boolean | string = false>(
     name: K,
-    options: ChooseElementOptions<G, AddArg<A, K, T[]>, T, O, RepeatContextArgs<A, K>> & DisabledOptions<G, RepeatContextArgs<A, K>, T, P> & RepeatingOptions<T>
+    options: ChooseElementOptions<G, AddArg<A, K, T[]>, T, O, RepeatContextArgs<A, K>> & DisabledOptions<G, RepeatContextArgs<A, K>, T, P> & RepeatingOptions<G, T, RepeatContextArgs<A, K>>
   ): Action<G, AddArg<A, K, T[], O>>;
   chooseElement<K extends string, T extends GameElement, P = undefined, O extends boolean | string = false>(
     name: K,
@@ -872,7 +874,7 @@ export class Action<
   chooseElement<K extends string, T extends GameElement, P = undefined, O extends boolean | string = false>(
     name: K,
     // Validate args as the repeating overload's: the narrowest, so every overload's validate is accepted.
-    options: ChooseElementOptions<G, AddArg<A, K, T[]>, T, O, RepeatContextArgs<A, K>> & DisabledOptions<G, RepeatContextArgs<A, K>, T, P> & Partial<RepeatingOptions<T>> = {}
+    options: ChooseElementOptions<G, AddArg<A, K, T[]>, T, O, RepeatContextArgs<A, K>> & DisabledOptions<G, RepeatContextArgs<A, K>, T, P> & Partial<RepeatingOptions<G, T, RepeatContextArgs<A, K>>> = {}
   ): Action<G, AddArg<A, K, T, O>> | Action<G, AddArg<A, K, T[], O>> {
     assertPrepareHasDisabled('chooseElement', name, options);
     assertReadsEarlierPick('chooseElement', name, this.definition.selections, options.dependsOn, 'depends on');
@@ -973,7 +975,7 @@ export class Action<
        * When used, the selection value becomes an array of all elements selected.
        * Each selection round-trips to the server for state updates.
        */
-      repeat?: RepeatConfig<T>;
+      repeat?: RepeatConfig<T, G, RepeatContextArgs<A, K>>;
       /**
        * Shorthand for repeat.until that terminates when this element is selected.
        * Equivalent to: repeat: { until: (ctx, el) => el === repeatUntil }
