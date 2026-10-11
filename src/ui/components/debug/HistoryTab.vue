@@ -134,8 +134,8 @@ const emit = defineEmits<{
           >
             <div class="history-item-header">
               <span class="history-index">{{ index + 1 }}</span>
-              <span class="history-player" :class="`player-${action.player}`">
-                P{{ action.player + 1 }}
+              <span class="history-player" :style="{ '--badge-seat': `var(--bsg-seat-${action.player})` }">
+                P{{ action.player }}
               </span>
               <span class="history-action-name">{{ formatHistoryEntry(action) }}</span>
               <span v-if="action.timestamp" class="history-time">
