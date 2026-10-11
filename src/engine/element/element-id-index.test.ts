@@ -183,14 +183,19 @@ describe('atId never answers differently from a walk', () => {
       for (let step = 0; step < 200; step++) {
         const spaces = [...game.all(Zone)];
         const cards = [...game.all(Card)];
-        const roll = random();
-        if (roll < 0.2) pick(spaces).create(Card, `c${step}`);
-        else if (roll < 0.3) pick(spaces).create(Zone, `z${step}`);
-        else if (roll < 0.55 && cards.length > 0) pick(cards).putInto(pick(spaces));
-        else if (roll < 0.65 && cards.length > 0) pick(cards).remove();
-        else if (roll < 0.72) pick(spaces).shuffle();
-        else if (roll < 0.85) states.push(game.toJSON());
-        else if (states.length > 0) game.loadSerializedState(pick(states));
+        // Each operation, as often as it appears here.
+        const operations = [
+          () => pick(spaces).create(Card, `c${step}`),
+          () => pick(spaces).create(Card, `c${step}`),
+          () => pick(spaces).create(Zone, `z${step}`),
+          () => cards.length > 0 && pick(cards).putInto(pick(spaces)),
+          () => cards.length > 0 && pick(cards).putInto(pick(spaces)),
+          () => cards.length > 0 && pick(cards).remove(),
+          () => pick(spaces).shuffle(),
+          () => states.push(game.toJSON()),
+          () => states.length > 0 && game.loadSerializedState(pick(states)),
+        ];
+        pick(operations)();
 
         // The pile is gathered by hand: after a restore it can hold two
         // elements with one id (#650), which a query refuses.
