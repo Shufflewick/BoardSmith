@@ -1280,31 +1280,33 @@ export class SnapshotSessionHost {
    * returns fresh per-cell entries); for every other seat with a visible
    * heatmap, clear the now-stale entries while leaving the overlay toggled on.
    * Broadcasts once if anything changed.
+   *
+   * It runs outside the one-at-a-time section (#635), so the game can move
+   * while it computes. Heatmaps computed on a snapshot the game has since left
+   * are never stored: they are computed again on the snapshot it now stands on.
    */
   private async refreshVisibleHeatmaps(): Promise<void> {
-    let changed = false;
-    for (const [seat, transient] of this.transientTeachingState) {
-      if (!transient.heatmap?.visible) continue;
-      // The heatmap op recomputes only when `seat` can act; otherwise it returns
-      // a protocol error, which we treat as "not this seat's turn → clear".
-      const res = await this.adapters.executeOp(this.snapshot, null, {
-        type: 'heatmapToggle',
-        seat,
-        visible: true,
-      });
-      if (res.success && res.heatmapUpdate) {
-        this.transientTeachingState.set(seat, {
-          ...transient,
-          heatmap: { visible: true, entries: res.heatmapUpdate.entries },
-        });
-        changed = true;
-      } else if (transient.heatmap.entries.length > 0) {
-        this.transientTeachingState.set(seat, {
-          ...transient,
-          heatmap: { visible: true, entries: [] },
-        });
-        changed = true;
+    let at: GameStateSnapshot | null;
+    let computed: Array<[number, HeatmapEntry[]]>;
+    do {
+      at = this._snapshot;
+      computed = [];
+      for (const [seat, transient] of this.transientTeachingState) {
+        if (!transient.heatmap?.visible) continue;
+        // The heatmap op recomputes only when `seat` can act; otherwise it returns
+        // a protocol error, which we treat as "not this seat's turn → clear".
+        const res = await this.adapters.executeOp(at, null, { type: 'heatmapToggle', seat, visible: true });
+        computed.push([seat, res.success && res.heatmapUpdate ? res.heatmapUpdate.entries : []]);
       }
+    } while (this._snapshot !== at);
+    let changed = false;
+    for (const [seat, entries] of computed) {
+      // Read the seat's teaching state again: it may have changed while the heatmaps were computed.
+      const transient = this.transientTeachingState.get(seat);
+      if (!transient?.heatmap?.visible) continue;
+      if (entries.length === 0 && transient.heatmap.entries.length === 0) continue;
+      this.transientTeachingState.set(seat, { ...transient, heatmap: { visible: true, entries } });
+      changed = true;
     }
     if (changed) this.broadcastCurrent();
   }
@@ -1341,28 +1343,43 @@ export class SnapshotSessionHost {
   }
 
   /**
-   * Report a bot move the host could not make: the search was refused (no
-   * `seat`), or the game refused the move the bot chose for `seat`, which is
-   * then held back until the game state changes (#421).
+   * Report a bot search or move that was refused, and answer what the pump does
+   * next.
    *
-   * A FAILED bot turn is not the same as "no bot turn was due". Breaking on
-   * both without a word is how a bot seat silently stops driving the flow:
-   * every seat waits on a bot that will never move again, with nothing in the
-   * console on either side to say why. Fail loud — the bot produced a move the
-   * engine rejected, which is a bug in the game's action definition, its bot
-   * hooks, or move enumeration, and the developer needs to see it the moment
-   * it happens.
+   * Only the GAME's refusal of the move the bot chose for `seat` (category
+   * `bundle`) holds that seat back until the game state changes (#421): asked
+   * again at the same state, the bot makes the same move and is refused the
+   * same way. That is a bug in the game's action definition, its bot hooks or
+   * its move enumeration. The pump goes on to the other bot seats.
+   *
+   * Any other refusal (of the search, or of the move by the executor or by the
+   * host's own executeOp, such as a platform that could not store the result)
+   * says nothing about this game state, so nothing is held back: the pump
+   * stops, and the next wake asks again.
+   *
+   * Either way it is said out loud: a bot that silently stops moving leaves
+   * every seat waiting with nothing in the console to say why.
    */
-  private holdBackRefusedSeat(res: OpFailure, seats: Array<{ seat: number }>, seat?: number): void {
-    const who = seat === undefined ? `seat(s) ${seats.map((s) => s.seat).join(', ')}` : `seat ${seat}`;
-    const until = seat === undefined ? '' : ', and the bot will not try again until the game changes';
+  private reportRefusedBotMove(res: OpFailure, seats: Array<{ seat: number }>, seat?: number): BotStep {
+    const code = res.errorCode ? ` (${res.errorCode})` : '';
+    if (seat !== undefined && res.category === 'bundle') {
+      console.error(
+        `[SnapshotSessionHost] the game REJECTED the move the bot chose for seat ${seat}: ${res.error}${code}. ` +
+          `The bot will not try again until the game changes, so a step waiting on this seat will not ` +
+          `close. Check the action's selections and the bot's move enumeration for this seat.`,
+      );
+      this.holdBotSeatBack(seat);
+      return 'again';
+    }
+    const what = seat === undefined
+      ? `The bot search for seat(s) ${seats.map((s) => s.seat).join(', ')}`
+      : `The move the bot chose for seat ${seat}`;
     console.error(
-      `[SnapshotSessionHost] bot turn REJECTED for ${who}: ${res.error}` +
-        `${res.errorCode ? ` (${res.errorCode})` : ''}. The bot cannot act, so the game will ` +
-        `not advance past this step${until}. Check the action's selections and the bot's move ` +
-        `enumeration for this seat.`,
+      `[SnapshotSessionHost] ${what} was refused, not by the game's rules (${res.category}): ` +
+        `${res.error}${code}. The bots stop here and are asked again on the next move, ` +
+        `roster change or resume.`,
     );
-    if (seat !== undefined) this.holdBotSeatBack(seat);
+    return 'done';
   }
 
   /**
@@ -1448,22 +1465,20 @@ export class SnapshotSessionHost {
     const settle = async (): Promise<BotStep> => {
       if (this.disposed) return 'done';
       if (this._snapshot !== searched) return 'stale';
-      if (!found.success) {
-        this.holdBackRefusedSeat(found, seats);
-        return 'done';
-      }
+      if (!found.success) return this.reportRefusedBotMove(found, seats);
       if (found.botStalled) {
         this.holdBackStalledSeat(found.botStalled);
         return 'again';
       }
       if (found.botPlayer === undefined) return 'done';
+      // A human took the seat while the bot searched: ask the bot seats the table has now.
+      if (!this.botSeats.some((s) => s.seat === found.botPlayer)) return 'again';
       const made = await this.commitMutatingOp(
         found.botPlayer,
         botMoveOp(searched, found.botPlayer, found.suggestedAction, found.suggestedArgs),
       );
       if (made.success) return 'moved';
-      this.holdBackRefusedSeat(made, seats, found.botPlayer);
-      return 'again';
+      return this.reportRefusedBotMove(made, seats, found.botPlayer);
     };
     return inSection ? settle() : this.enqueue(settle);
   }

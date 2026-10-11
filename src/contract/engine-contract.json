@@ -1,7 +1,7 @@
 {
   "revision": 171,
   "bundleProtocol": 2,
-  "surfaceHash": "c8181d5d978dc5a6",
+  "surfaceHash": "430e5132fd6a4ad3",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1479,10 +1479,10 @@
       "revision": 171,
       "date": "2026-10-11",
       "bundleProtocol": 2,
-      "surfaceHash": "c8181d5d978dc5a6",
+      "surfaceHash": "430e5132fd6a4ad3",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "A bot's search no longer holds the table (#635): botSuggest is now an executor op (ExecutorOp, parseExecutorOp; same seats field as botTurn) that changes nothing and answers with the due bot seat's move (botPlayer, suggestedAction, suggestedArgs), botStalled when that seat could not choose, or neither when no bot seat is due, so its result fields are now optional; it no longer refuses a game without bot objectives and is refused in an order-entry session. SnapshotSessionHost searches with botSuggest outside its one-at-a-time section and makes the move as an ordinary action for the bot's seat only if the game still stands where the search began, so it never sends botTurn and every game-changing op result it receives is one it applies; a refused bot move fails as an action result, without botPlayer. botTurn is unchanged and still accepted. A human's move made during a search is published at once, though its handleOp still resolves after the bot run it wakes."
+      "summary": "A bot's search no longer holds the table, except after three stale searches in a row, when the next one does so it cannot go stale again (#635): botSuggest is now an executor op (ExecutorOp, parseExecutorOp; same seats field as botTurn) that changes nothing and answers with the due bot seat's move (botPlayer, suggestedAction, suggestedArgs), botStalled when that seat could not choose, or neither when no bot seat is due, so its result fields are now optional; it no longer refuses a game without bot objectives and is refused in an order-entry session. SnapshotSessionHost searches with botSuggest outside its one-at-a-time section and makes the move as an ordinary action for the bot's seat only if the game still stands where the search began, so it never sends botTurn and every game-changing op result it receives is one it applies; a refused bot move fails as an action result, without botPlayer; only the game's own refusal (category bundle) holds that bot seat back until the game changes, and any other refusal stops the bot pump without holding the seat, so the next wake asks again. botTurn is unchanged and still accepted. A human's move made during a search is published at once, though its handleOp still resolves after the bot run it wakes. BREAKING for a host that runs older engines: a runner before r171 refuses botSuggest for a game without bot objectives, refuses it when no bot seat is due, and reports a bot that found no move as a refusal rather than botStalled, so this host's bot pump misreads all three; a host must run r171 or later engines only."
     }
   ]
 }

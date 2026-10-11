@@ -8,7 +8,7 @@
  * searches again from where the game now is. Every search here is a held
  * promise the test releases, so nothing depends on how long anything takes.
  */
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { executeOp, isReadOnlyOp, type ExecutableOp, type GameDefinitionLike, type Op, type OpSuccess } from './stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
@@ -41,16 +41,25 @@ interface Search {
   release: (result: unknown) => void;
 }
 
+/** A heatmap computed from `v` = `from`, held until the test releases it. */
+interface HeatmapCompute {
+  from: number;
+  release: () => void;
+}
+
 /**
  * A two-seat table, seat 2 a bot. Every human op moves the game from `v` to
  * `v + 10` (to `complete` when `endsGame` says so), and a human action named
  * `slow` holds the section until the test releases it. A bot's move moves the
- * game from `v` to `v + 1`. Every bot search waits until the test releases it.
+ * game from `v` to `v + 1`, unless the test queued a refusal in `refuseBot`.
+ * Every bot search, and every heatmap computed, waits until the test releases it.
  */
 function table(endsGame = false) {
   const searches: Search[] = [];
   const humanReads: number[] = [];
   const botMoves: number[] = [];
+  const refuseBot: unknown[] = [];
+  const heatmaps: HeatmapCompute[] = [];
   const slow: Array<() => void> = [];
   const recorded: number[] = [];
   let roster = [2];
@@ -74,7 +83,11 @@ function table(endsGame = false) {
       if (op.type === 'botSuggest') return search(from, op.seats.map((s) => s.seat));
       if (op.type === 'action' && op.player === 2) {
         botMoves.push(from);
-        return answer(snap(from + 1));
+        return refuseBot.shift() ?? answer(snap(from + 1));
+      }
+      if (op.type === 'heatmapToggle') {
+        await new Promise<void>((release) => heatmaps.push({ from, release }));
+        return { success: true, heatmapUpdate: { seat: op.seat, visible: true, entries: [{ from }] } };
       }
       return humanOp(from, op);
     }),
@@ -88,7 +101,7 @@ function table(endsGame = false) {
     host.setBotSeats(seats.map((seat) => ({ seat })));
   };
   setRoster([2]);
-  return { host, searches, humanReads, botMoves, slow, recorded, setRoster };
+  return { host, searches, humanReads, botMoves, refuseBot, heatmaps, slow, recorded, setRoster };
 }
 
 type Table = ReturnType<typeof table>;
@@ -395,6 +408,105 @@ describe('a bot search runs outside the one-at-a-time section (#635)', () => {
 
     expect(await t.history()).toEqual([2]);
     t.expectEveryChangeAdopted();
+  });
+});
+
+describe('a refused bot move (#635)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const errorLog = () => vi.spyOn(console, 'error').mockImplementation(() => {});
+
+  it("the game's own refusal holds the seat back until the game changes, and says to check the bot's moves", async () => {
+    const errors = errorLog();
+    const t = table();
+    await t.host.start();
+    t.refuseBot.push({ success: false, error: 'Seat 2 may never move.', category: 'bundle' });
+    const first = t.host.runBotTurns();
+    await untilSearches(t, 1);
+    t.searches[0].release(moved(t.searches[0]));
+    await first;
+
+    expect(t.botMoves).toEqual([0]);
+    expect(String(errors.mock.calls.at(-1)?.[0])).toMatch(/Seat 2 may never move\..*move enumeration/);
+    // Nothing changed, so a wake does not ask the refused seat again.
+    await t.host.runBotTurns();
+    expect(t.searches).toHaveLength(1);
+  });
+
+  it("a refusal that is not the game's (the platform's, say) stops the bot without holding its seat, so the next wake moves it", async () => {
+    const errors = errorLog();
+    const t = table();
+    await t.host.start();
+    t.refuseBot.push({
+      success: false,
+      error: 'The platform was briefly unreachable. Nothing was lost -- take the same move again.',
+      category: 'executor',
+    });
+    const first = t.host.runBotTurns();
+    await untilSearches(t, 1);
+    t.searches[0].release(moved(t.searches[0]));
+    await first;
+
+    expect(t.botMoves).toEqual([0]);
+    expect(t.searches).toHaveLength(1);
+    const logged = errors.mock.calls.map((call) => String(call[0]));
+
+    // The game did not change, and a later wake (a resume, say) still moves the bot.
+    const second = t.host.runBotTurns();
+    await untilSearches(t, 2);
+    t.searches[1].release(moved(t.searches[1]));
+    await finish(t, second);
+    expect(t.botMoves).toEqual([0, 0]);
+    expect((t.host.snapshot as unknown as Snap).v).toBe(1);
+
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toMatch(/briefly unreachable/);
+    expect(logged[0]).not.toMatch(/selections|move enumeration/);
+  });
+
+  it('a move found for a seat a human has taken since the search began is never made', async () => {
+    const t = table();
+    await t.host.start();
+    const pump = t.host.runBotTurns();
+    await untilSearches(t, 1);
+
+    t.setRoster([]);
+    t.searches[0].release(moved(t.searches[0]));
+    await finish(t, pump);
+
+    expect(t.botMoves).toEqual([]);
+    expect((t.host.snapshot as unknown as Snap).v).toBe(0);
+  });
+});
+
+describe('a visible heatmap, refreshed after a move (#635)', () => {
+  it('never stores a heatmap computed on a position the game has left, and computes it again on the new one', async () => {
+    const t = table();
+    t.setRoster([]);
+    await t.host.start();
+    t.host.transientTeachingState.set(1, { heatmap: { visible: true, entries: [] } });
+
+    const a = humanMove(t.host);
+    await settle();
+    const b = humanMove(t.host);
+    await settle();
+    expect(t.heatmaps.map((h) => h.from)).toEqual([10, 20]);
+
+    // The refresh for the newer position finishes first; the older one after it.
+    t.heatmaps[1].release();
+    await settle();
+    expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([{ from: 20 }]);
+    t.heatmaps[0].release();
+    await settle();
+
+    // The heatmap from position 10 was thrown away, and computed again from 20.
+    expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([{ from: 20 }]);
+    expect(t.heatmaps.map((h) => h.from)).toEqual([10, 20, 20]);
+    t.heatmaps[2].release();
+    await Promise.all([a, b]);
+    expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([{ from: 20 }]);
   });
 });
 

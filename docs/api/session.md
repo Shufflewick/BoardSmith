@@ -211,9 +211,11 @@ changes nothing) does not hold the table: another seat's move or undo is made
 and published while the bot thinks, though the `send` that made it resolves only
 once the bot run it wakes has finished. The bot's move is then made as an
 ordinary `action` for its seat, and a move found for a position that has since
-changed is never made: the bot searches again (#635). `runBotTurns()` resolves
-once no bot has a move to make; a call while the bots are being asked joins that
-run. To hand a seat to the bot mid-game, call `session.makeSeatBot(seat, level)`
+changed is never made: the bot searches again (#635). After three such stale
+searches in a row, the next search does hold the table, so a table that keeps
+changing still sees the bot move; every other move waits for that one search.
+`runBotTurns()` resolves once no bot has a move to make; a call while the bots
+are being asked joins that run. To hand a seat to the bot mid-game, call `session.makeSeatBot(seat, level)`
 and then send
 `{ type: 'convertSeatToBot', seat }`: the first changes the roster, the second
 wakes the pump.

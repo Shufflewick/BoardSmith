@@ -255,6 +255,8 @@ The distinction that matters is **whose intent is being carried**.
   key, only if the game still stands on that same snapshot. Any change since (a
   commit by another seat, an expiry, an undo, a rules reload) makes it stale:
   the move is never sent, and the bot searches again from where the game now
-  is. That check is stricter than a key: it refuses a change inside the round
-  as well as a new round.
+  is. After three stale searches in a row, the next search runs inside the
+  section, so it cannot go stale and every other change waits for it. That
+  check is stricter than a key: it refuses a change inside the round as well
+  as a new round.
 
