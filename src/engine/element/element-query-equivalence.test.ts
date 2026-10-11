@@ -315,3 +315,45 @@ describe('element queries agree with the walk they replaced (#654)', () => {
     expect(checkAgreement('prod-654', 60, 120)).toBe(0);
   });
 });
+
+// The property test above cannot see a result that shares an array with the
+// tree: the oracle reads the same tree, so both would change together. A
+// query's answer is the caller's to sort, shuffle or splice.
+describe('a query answers with an array of its own (#654)', () => {
+  function table() {
+    const game = new QueryGame({ playerCount: 2, seed: 'own-array' });
+    const zone = game.create(Zone, 'zone');
+    const tokens = ['t1', 't2', 't3'].map((name) => zone.create(Token, name));
+    return { zone, order: () => zone._t.children.map((el) => el.name), tokens };
+  }
+
+  it.each([
+    ['all()', (zone: Zone) => zone.all()],
+    ['all(Token)', (zone: Zone) => zone.all(Token)],
+    ['firstN', (zone: Zone) => zone.firstN(3, Token)],
+    ['lastN', (zone: Zone) => zone.lastN(3, Token)],
+    ['children.all', (zone: Zone) => zone.children.all(Token)],
+    ['children.lastN', (zone: Zone) => zone.children.lastN(2, Token)],
+  ])('%s, mutated, leaves the children in order', (_label, query) => {
+    const { zone, order } = table();
+    const found = query(zone);
+    found.reverse();
+    found.push(found[0]);
+    found.splice(0, 1);
+    expect(order()).toEqual(['t1', 't2', 't3']);
+    expect(zone.first(Token)?.name).toBe('t1');
+  });
+
+  it('last answers the element, and the children keep their order', () => {
+    const { zone, order, tokens } = table();
+    expect(zone.last(Token)).toBe(tokens[2]);
+    expect(order()).toEqual(['t1', 't2', 't3']);
+  });
+
+  it('a backward walk answers a matching child before its matching parent', () => {
+    const game = new QueryGame({ playerCount: 2, seed: 'nested-last' });
+    const a = game.create(Zone, 'A');
+    const b = a.create(Zone, 'B');
+    expect(game.lastN(2, Zone)).toEqual([b, a]);
+  });
+});

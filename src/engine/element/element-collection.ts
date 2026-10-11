@@ -267,8 +267,9 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
   /**
    * The one element query: the elements under `roots` (each root, then its
    * subtree, depth first) that are of the class and match every finder, up to
-   * `limit` of them. `fromEnd` walks from the last root backwards and answers
-   * the LAST `limit` matches, still in tree order.
+   * `limit` of them. `fromEnd` walks from the last root backwards, each
+   * element before its children, and answers the first `limit` matches of
+   * that walk in reverse: a root A with a matching child B answers [B, A].
    *
    * `classNameOrFinder` is a query method's first argument, a class or the
    * first finder. The matches are collected into, and returned as, `result`:
@@ -305,8 +306,9 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
       fromEnd,
       result,
       // DEV: where each visited id was first seen, to detect tree corruption
-      // and name BOTH places a duplicate is reachable from. One childless root cannot be visited twice, and isDevMode() reads
-      // process.env, which costs more than the rest of such a query.
+      // and name BOTH places a duplicate is reachable from. One childless
+      // root cannot be visited twice, and isDevMode() reads process.env,
+      // which costs more than the rest of such a query.
       firstSeenUnder: (roots.length > 1 || roots[0]._t.children.length > 0) && isDevMode() ? new Map() : null,
       duplicates: [],
     };
