@@ -627,21 +627,13 @@ describe('ctx.args is typed from the chain (#626)', () => {
       });
   });
 
-  it('types follow-up args only for the picks declared after them', () => {
-    Action.create<TypedGame>('late')
-      .chooseFrom('n', {
-        choices: (ctx) => {
-          // @ts-expect-error - this pick is declared above followUpArgs.
-          void ctx.args.sector;
-          return [1];
-        },
-      })
-      .followUpArgs<{ sector: Coin }>()
-      .execute((args) => {
-        expectTypeOf(args.n).toEqualTypeOf<number>();
-        expectTypeOf(args.sector).toEqualTypeOf<Coin>();
-        return { success: true };
-      });
+  it('refuses followUpArgs after a pick, or a second time: it is declared first, once', () => {
+    const picked = Action.create<TypedGame>('late').chooseFrom('n', { choices: [1] });
+    // @ts-expect-error - follow-up args are declared before any pick.
+    picked.followUpArgs<{ sector: Coin }>();
+    const declared = Action.create<TypedGame>('twice').followUpArgs<{ sector: Coin }>();
+    // @ts-expect-error - one declaration says what the follow-up carries.
+    declared.followUpArgs<{ round: number }>();
   });
 
   it('passes the follow-up args to the picks and to execute at run time', () => {

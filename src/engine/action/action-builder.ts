@@ -332,8 +332,10 @@ export class Action<
    * follow-up args exist. Declare a key optional (`round?: number`) when the
    * action can also be taken without them.
    *
-   * Declare them before the picks that read them: a pick declared above this
-   * call does not see them, and reading one there is a type error.
+   * Declared first, before any pick, and once; the type checker refuses it
+   * anywhere else. At run time every pick receives the follow-up args, but a
+   * pick's callbacks are typed from the chain above them, so a pick declared
+   * before this call would be typed without them.
    *
    * @example
    * ```typescript
@@ -346,7 +348,11 @@ export class Action<
    *   .execute(({ sector, equipment }) => { ... });
    * ```
    */
-  followUpArgs<F extends Record<string, unknown>>(): Action<G, A & F> {
+  followUpArgs<F extends Record<string, unknown>>(
+    // Only an action with no args yet: a `this: Action<G, NoArgs>` alone would
+    // not refuse one with picks, because method parameters compare bivariantly.
+    this: [keyof A] extends [never] ? Action<G, A> : 'followUpArgs() goes before any pick, once',
+  ): Action<G, A & F> {
     // The same load-bearing re-type as the selection methods (see AddArg).
     return this as Action<G, A & F>;
   }

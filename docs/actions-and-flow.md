@@ -1403,8 +1403,10 @@ export function createCollectAction(): ActionDefinition {
 `.followUpArgs<...>()` is type-only. It makes the follow-up's args declared keys
 of `args` and `ctx.args`, so reading one needs no cast and a typo is caught where
 the action is defined. Declare a key optional (`round?: number`) when the action
-can also be taken without being chained into, and declare the args before the
-picks that read them. See [Common Pitfalls #15](./common-pitfalls.md) for which
+can also be taken without being chained into. Declare the args first, before any
+pick, and once; the type checker enforces it. At run time every pick receives
+them wherever the call sits, but a pick's callbacks are typed from the chain
+above them, so a later call would leave earlier picks typed without them. See [Common Pitfalls #15](./common-pitfalls.md) for which
 values arrive resolved to elements.
 
 ### Conditional Chaining

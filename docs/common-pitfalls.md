@@ -1444,8 +1444,10 @@ Action.create<MyGame>('collectEquipment')
 
 ### The Solution
 
-Declare the follow-up args on the action they start, with `.followUpArgs<...>()`,
-before the picks that read them, and pass elements in the `{id, className}` shape:
+Declare the follow-up args on the action they start, with `.followUpArgs<...>()`
+first, before any pick (the type checker enforces it: a pick's callbacks are typed
+from the chain above them, though at run time every pick receives the args), and
+pass elements in the `{id, className}` shape:
 
 ```typescript
 Action.create<MyGame>('collectEquipment')
