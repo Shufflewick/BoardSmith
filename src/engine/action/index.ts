@@ -1,5 +1,5 @@
 export { Action } from './action-builder.js';
-export { ActionExecutor, evaluateCondition } from './action.js';
+export { evaluateCondition } from './action.js';
 export { DEFAULT_TEXT_MAX_LENGTH, isSeatExpiry } from './types.js';
 export type { TextPattern } from './text-rules.js';
 export type {

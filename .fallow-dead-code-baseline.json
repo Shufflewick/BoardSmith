@@ -63,7 +63,6 @@
     "src/session/types.ts:TutorialAdvanceCondition",
     "src/session/types.ts:TutorialGateContext",
     "src/session/types.ts:TutorialProgress",
-    "src/session/types.ts:ChoiceWithRefs",
     "src/session/utils.ts:UndoFlowState",
     "src/ui/components/DebugPanel.vue:DebugPanelProps",
     "src/ui/components/auto-ui/ActionPanel.vue:ChoiceWithRefs",
@@ -94,7 +93,9 @@
   ],
   "unused_class_members": [
     "src/cli/commands/verify-enumerate.ts:QuoteVerifiedProvenance.covers",
-    "src/session/pending-action-manager.ts:PendingActionManager.clearAll"
+    "src/engine/action/action.ts:ActionExecutor.hasFollowUpChoices",
+    "src/engine/action/action.ts:ActionExecutor.repeatingPickCandidates",
+    "src/engine/action/action.ts:ActionExecutor.pendingActionRefusal"
   ],
   "unused_store_members": [],
   "unprovided_injects": [],
@@ -114,9 +115,7 @@
   "unlisted_dependencies": [],
   "duplicate_exports": [],
   "type_only_dependencies": [],
-  "test_only_dependencies": [
-    "package.json:fallow"
-  ],
+  "test_only_dependencies": [],
   "dev_dependencies_in_production": [],
   "boundary_violations": [],
   "boundary_coverage_violations": [],
