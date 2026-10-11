@@ -1,5 +1,5 @@
 {
-  "revision": 165,
+  "revision": 166,
   "bundleProtocol": 2,
   "surfaceHash": "3cd66e7b422f0cbf",
   "payloadHash": "3f10d70c457a15ba",
@@ -1429,6 +1429,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "Bot move enumeration shows later picks' choices, disabled and multiSelect callbacks a follow-up's null-skipped pick as absent, as execution does, so it offers exactly the moves the engine accepts (#659)"
+    },
+    {
+      "revision": 166,
+      "date": "2026-10-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "3cd66e7b422f0cbf",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A chooseFrom that takes one choice refuses a list of its choices with \"takes one choice\", and accepts a choice whose value is itself an array; only a multiSelect or orderedList pick is checked item by item (#660)"
     }
   ]
 }
