@@ -153,14 +153,6 @@
       ]
     },
     {
-      "content": "3ca55bc4cad7b4d6",
-      "lines": 17,
-      "files": [
-        "src/session/testing/fixtures/collect-fixture.ts",
-        "src/session/testing/fixtures/collect-turns-fixture.ts"
-      ]
-    },
-    {
       "content": "3e4d54a26324100d",
       "lines": 9,
       "files": [
@@ -518,6 +510,14 @@
       "files": [
         "src/ui/components/helpers/FlyingCardsOverlay.vue",
         "src/ui/components/helpers/ZoomPreviewOverlay.vue"
+      ]
+    },
+    {
+      "content": "f1de9c3d82c61083",
+      "lines": 18,
+      "files": [
+        "src/session/testing/fixtures/collect-fixture.ts",
+        "src/session/testing/fixtures/collect-turns-fixture.ts"
       ]
     },
     {

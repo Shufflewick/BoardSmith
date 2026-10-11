@@ -501,3 +501,167 @@ describe('builder types match what the engine passes (#627)', () => {
     expect(seen).toEqual({ validateHad: false, executeHad: false });
   });
 });
+
+/**
+ * #626: `ctx.args` is typed from the chain, as strictly as `args` is.
+ *
+ * - In every callback that runs while the action is being filled in (a pick's
+ *   `prompt`, `choices`, `filter`, `display`, `disabled`, `condition`, the
+ *   action's `disabled`), `ctx.args` holds the picks declared before it, each
+ *   possibly absent: the engine also evaluates them with nothing picked yet, to
+ *   decide whether the action is offered at all. A repeating pick sees its own
+ *   earlier values as an array.
+ * - In the action's `validate` and in `execute`, every pick is made, so
+ *   `ctx.args` is typed exactly as `args` is.
+ * - A key nothing declared is an error. Args a follow-up is started with
+ *   (`followUp.args`) are declared with `.followUpArgs<...>()`, where the action
+ *   is defined.
+ */
+describe('ctx.args is typed from the chain (#626)', () => {
+  it('types ctx.args in pick callbacks as the earlier picks, each possibly absent', () => {
+    Action.create<TypedGame>('ctx')
+      .chooseFrom('n', { choices: [1, 2] })
+      .chooseElement('coin', {
+        elementClass: Coin,
+        prompt: (ctx) => {
+          expectTypeOf(ctx.args.n).toEqualTypeOf<number | undefined>();
+          return 'Pick a coin';
+        },
+        filter: (_coin, ctx) => {
+          expectTypeOf(ctx.args.n).toEqualTypeOf<number | undefined>();
+          // @ts-expect-error - 'nn' was never declared.
+          void ctx.args.nn;
+          // @ts-expect-error - 'coin' is this pick, not an earlier one.
+          void ctx.args.coin;
+          return true;
+        },
+      })
+      .chooseFrom('runes', {
+        choices: (ctx) => {
+          // A repeating pick's own earlier values: an array, typed `unknown[]`
+          // because this callback is what the pick's type is inferred from.
+          expectTypeOf(ctx.args.runes).toEqualTypeOf<unknown[] | undefined>();
+          expectTypeOf(ctx.args.coin).toEqualTypeOf<Coin | undefined>();
+          return ['ice', 'stop'];
+        },
+        repeatUntil: 'stop',
+      })
+      .chooseFrom('m', {
+        choices: [1],
+        multiSelect: (ctx) => {
+          expectTypeOf(ctx.args.runes).toEqualTypeOf<string[] | undefined>();
+          return 1;
+        },
+        disabled: (_m, ctx) => {
+          expectTypeOf(ctx.args.n).toEqualTypeOf<number | undefined>();
+          return false;
+        },
+      })
+      .condition({
+        'reads the picks': (ctx) => {
+          expectTypeOf(ctx.args.m).toEqualTypeOf<number[] | undefined>();
+          // @ts-expect-error - 'mm' was never declared.
+          void ctx.args.mm;
+          return true;
+        },
+      })
+      .disabled((ctx) => {
+        expectTypeOf(ctx.args.n).toEqualTypeOf<number | undefined>();
+        return false;
+      });
+  });
+
+  it('types ctx.args in validate and execute as every pick, the same as args', () => {
+    Action.create<TypedGame>('whole')
+      .chooseFrom('n', { choices: [1, 2] })
+      .enterText('note', { optional: true })
+      .validate((args, ctx) => {
+        expectTypeOf(ctx.args).toEqualTypeOf(args);
+        expectTypeOf(ctx.args.n).toEqualTypeOf<number>();
+        return true;
+      })
+      .execute((args, ctx) => {
+        expectTypeOf(ctx.args).toEqualTypeOf(args);
+        expectTypeOf(ctx.args.note).toEqualTypeOf<string | undefined>();
+        // @ts-expect-error - 'nn' was never declared.
+        void ctx.args.nn;
+        return { success: true };
+      });
+  });
+
+  it('refuses a follow-up arg that is not declared', () => {
+    Action.create<TypedGame>('collect')
+      .chooseElement('equipment', {
+        elementClass: Coin,
+        filter: (_e, ctx) => {
+          // @ts-expect-error - the action never declared followUpArgs.
+          void ctx.args.sectorId;
+          return true;
+        },
+      });
+  });
+
+  it('types declared follow-up args in every callback and in execute args', () => {
+    Action.create<TypedGame>('collect')
+      .followUpArgs<{ sector: Coin; round?: number }>()
+      .chooseElement('equipment', {
+        elementClass: Coin,
+        prompt: (ctx) => `Select from ${ctx.args.sector?.name}`,
+        filter: (_e, ctx) => {
+          expectTypeOf(ctx.args.sector).toEqualTypeOf<Coin | undefined>();
+          expectTypeOf(ctx.args.round).toEqualTypeOf<number | undefined>();
+          // @ts-expect-error - 'sectorId' is not what the action declared.
+          void ctx.args.sectorId;
+          return true;
+        },
+        validate: (_e, args) => {
+          expectTypeOf(args.sector).toEqualTypeOf<Coin>();
+          return true;
+        },
+      })
+      .execute((args, ctx) => {
+        expectTypeOf(args.sector).toEqualTypeOf<Coin>();
+        expectTypeOf(ctx.args.sector).toEqualTypeOf<Coin>();
+        expectTypeOf(args.equipment).toEqualTypeOf<Coin>();
+        return { success: true };
+      });
+  });
+
+  it('refuses followUpArgs after a pick, or a second time: it is declared first, once', () => {
+    const picked = Action.create<TypedGame>('late').chooseFrom('n', { choices: [1] });
+    // @ts-expect-error - follow-up args are declared before any pick.
+    picked.followUpArgs<{ sector: Coin }>();
+    const declared = Action.create<TypedGame>('twice').followUpArgs<{ sector: Coin }>();
+    // @ts-expect-error - one declaration says what the follow-up carries.
+    declared.followUpArgs<{ round: number }>();
+  });
+
+  it('passes the follow-up args to the picks and to execute at run time', () => {
+    const seen: { filterSector?: unknown; executeSector?: unknown } = {};
+    const game = new TypedGame({ playerCount: 2 });
+    const sector = game.create(Coin, 'sector', { faceValue: 1 });
+    const loot = game.create(Coin, 'loot', { faceValue: 2 });
+    game.registerAction(
+      Action.create<TypedGame>('collectRun')
+        .followUpArgs<{ sector: Coin }>()
+        .chooseElement('equipment', {
+          elementClass: Coin,
+          filter: (coin, ctx) => {
+            seen.filterSector = ctx.args.sector;
+            return coin !== ctx.args.sector;
+          },
+        })
+        .execute((args) => {
+          seen.executeSector = args.sector;
+          return { success: true };
+        }),
+    );
+    const result = game.getActionExecutor().executeAction(
+      game.getAction('collectRun')!,
+      game.getPlayer(1)!,
+      { sector, equipment: loot },
+    );
+    expect(result.success, result.error).toBe(true);
+    expect(seen).toEqual({ filterSector: sector, executeSector: sector });
+  });
+});
