@@ -1209,6 +1209,44 @@ function pressIt(event: MouseEvent, name: string) {
   };
 }
 
+/**
+ * A BOARD THAT TAKES FOCUS UNDER THE WALK'S PRESS (#646): at the first event of the walk's press on
+ * the dev host's "Follow active seat" (the pointer going down, or the click), the board takes the
+ * keyboard focus, so the dev host's window loses it and closes the seat menu. That is what a game's
+ * frame does on a loaded machine when its focus lands, after a state it was sent, between the
+ * pointer pressing and lifting. A walk whose press needs the pointer to lift on the item finds the
+ * dev host never following.
+ */
+export function boardThatTakesFocusUnderThePress(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { onMounted, onUnmounted, ref } from 'vue';
+
+const board = ref<HTMLElement>();
+const host = window.parent.document;
+let taken = false;
+function takeFocus(event: Event) {
+  if (taken || !(event.target as Element).closest('[data-testid="follow-active-seat"]')) return;
+  taken = true;
+  board.value!.focus();
+}
+const PRESS_EVENTS = ['mousedown', 'click'];
+onMounted(() => PRESS_EVENTS.forEach((type) => host.addEventListener(type, takeFocus, true)));
+onUnmounted(() => PRESS_EVENTS.forEach((type) => host.removeEventListener(type, takeFocus, true)));
+</script>
+
+<template>
+  <div ref="board" class="board" tabindex="-1">A board</div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
 /** What `greet` and `wave` say when the name typed is not the other player's (#470). */
 export const NOBODY_CALLED_THAT = 'Nobody at the table is called that.';
 
