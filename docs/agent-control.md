@@ -231,7 +231,7 @@ you'll leak hidden information the agent isn't entitled to see.
 ```typescript
 interface PlayerStateView {
   player: number;
-  state: ReturnType<Game['toJSON']>;     // the game root as toJSONForPlayer writes it; hidden elements obscured
+  state: SeatViewJSON;     // the game root as toJSONForPlayer writes it; hidden elements obscured, restore-only fields removed
   flowState?: {
     awaitingInput: boolean;
     isMyTurn: boolean;
