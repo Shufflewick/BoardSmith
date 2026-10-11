@@ -211,7 +211,10 @@ describe('a Space in the pile when a restore runs keeps its handlers (#656)', ()
     warnSpy.mockRestore();
 
     expect(warnings).toHaveLength(2);
-    for (const warning of warnings) expect(warning).toContain(`Space "${destId}"`);
+    for (const warning of warnings) {
+      expect(warning).toContain(`Space "${destId}"`);
+      expect(warning).toContain('removed when the state was saved, this is expected');
+    }
   });
 });
 
