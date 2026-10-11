@@ -273,6 +273,11 @@
         "count": 1
       }
     },
+    "src/engine/element/element-query-equivalence.test.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
     "src/engine/element/game-element.ts": {
       "complexity_high": {
         "count": 3

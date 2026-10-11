@@ -39,7 +39,7 @@ function patch(object, name, wrap) {
   const original = object[name];
   if (typeof original !== 'function') {
     throw new Error(
-      `The bot benchmark times ${object.constructor.name}.${name}, which no longer exists. ` +
+      `The bot benchmark times ${typeof object === 'function' ? object.name : object.constructor.name}.${name}, which no longer exists. ` +
         'Update the method names in scripts/bench-bot/profile.mjs to match the code.',
     );
   }
@@ -52,7 +52,7 @@ function patch(object, name, wrap) {
 /**
  * Run `search` and measure it.
  *
- * @param targets `{ bot, collection }`: `MCTSBot.prototype` and `ElementCollection.prototype`.
+ * @param targets `{ bot, collection }`: `MCTSBot.prototype` and `ElementCollection` (whose `_finder` is static).
  * @param search the search to run, usually `() => bot.play()`.
  * @param options `profile` also splits the time into parts and times element
  *   lookups; that adds two clock reads per wrapped call, so leave it off where

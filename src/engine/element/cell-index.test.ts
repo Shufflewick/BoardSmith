@@ -80,7 +80,7 @@ describe('a grid looks a cell up by coordinate', () => {
     devMode.override = false;
     const game = new CellGame({ playerCount: 2 });
     game.board.first(Square, { file: 0, rank: 1 });
-    const searches = vi.spyOn(ElementCollection.prototype, '_finder');
+    const searches = vi.spyOn(ElementCollection, '_finder');
 
     expect(game.board.first(Square, { file: 3, rank: 4 })?.name).toBe('s34');
     expect(game.hexes.first(Hex, { q: 2, r: 1 })?.name).toBe('h21');
