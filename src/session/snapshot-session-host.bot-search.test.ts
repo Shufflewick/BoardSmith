@@ -9,7 +9,7 @@
  * promise the test releases, so nothing depends on how long anything takes.
  */
 import { describe, it, expect } from 'vitest';
-import { executeOp, isReadOnlyOp, type GameDefinitionLike, type Op, type OpSuccess } from './stateless-ops.js';
+import { executeOp, isReadOnlyOp, type ExecutableOp, type GameDefinitionLike, type Op, type OpSuccess } from './stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 import { simultaneousRoundsFixtureDefinition } from './testing/fixtures/simultaneous-rounds-fixture.js';
@@ -54,30 +54,29 @@ function table(endsGame = false) {
   const slow: Array<() => void> = [];
   const recorded: number[] = [];
   let roster = [2];
+  /** A bot search from `v` = `from`, held until the test releases it. */
+  const search = (from: number, asked: number[]) =>
+    new Promise((resolve) => {
+      const held: Search = { from, asked, roster, released: false, release: (r) => { held.released = true; resolve(r); } };
+      searches.push(held);
+    });
+  /** A human's op from `v` = `from`; an action named `slow` waits until the test releases it. */
+  const humanOp = async (from: number, op: ExecutableOp) => {
+    if (op.type === 'action' && op.actionName === 'slow') await new Promise<void>((resolve) => slow.push(resolve));
+    humanReads.push(from);
+    return answer(snap(from + 10, endsGame ? { complete: true } : {}));
+  };
   const adapters: SnapshotSessionAdapters = {
     playerCount: 2,
     executeOp: stubExecuteOp(async (snapshot, _pending, op) => {
       const from = (snapshot as Snap | null)?.v ?? -1;
       if (op.type === 'start') return answer(snap(0));
-      if (op.type === 'botSuggest') {
-        return new Promise((resolve) => {
-          const search: Search = {
-            from,
-            asked: op.seats.map((s) => s.seat),
-            roster,
-            released: false,
-            release: (r) => { search.released = true; resolve(r); },
-          };
-          searches.push(search);
-        });
-      }
+      if (op.type === 'botSuggest') return search(from, op.seats.map((s) => s.seat));
       if (op.type === 'action' && op.player === 2) {
         botMoves.push(from);
         return answer(snap(from + 1));
       }
-      if (op.type === 'action' && op.actionName === 'slow') await new Promise<void>((resolve) => slow.push(resolve));
-      humanReads.push(from);
-      return answer(snap(from + 10, endsGame ? { complete: true } : {}));
+      return humanOp(from, op);
     }),
     record: () => recorded.push((host.snapshot as unknown as Snap).v),
     push: () => {},
