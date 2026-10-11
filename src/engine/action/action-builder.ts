@@ -34,6 +34,9 @@ type NoArgs = Record<never, never>;
 /**
  * Accumulates a new named selection into the args record threaded through the
  * builder chain. `AddArg<A, 'card', Card>` produces `A & { card: Card }`.
+ * `O` is the selection's `optional` option: a pick declared optional can be
+ * skipped, and a skipped pick is absent, so `AddArg<A, 'card', Card, true>`
+ * (or any skip label) produces `A & { card?: Card }`.
  *
  * Every selection method mutates `this.definition` and then returns `this`
  * re-typed with the wider args record. That re-type is a LOAD-BEARING cast, and
@@ -45,7 +48,7 @@ type NoArgs = Record<never, never>;
  * two sides still have to be comparable: a change to the class's shape breaks
  * it instead of passing through.
  */
-type AddArg<A, K extends string, T> = A & { [P in K]: T };
+export type AddArg<A, K extends string, T, O = false> = A & ([O] extends [false] ? { [P in K]: T } : { [P in K]?: T });
 
 /**
  * The options that make a selection REPEAT (#325, #347): `repeat`,
@@ -134,9 +137,11 @@ function assertReadsEarlierPick(
  *
  * `T` is the type of one entry in `choices`; every callback after `choices`
  * receives `ChoiceValue<T>`, the value the engine delivers: a `{ value, label? }`
- * choice's `value`, and any other choice itself (#509).
+ * choice's `value`, and any other choice itself (#509). `validate` and
+ * `onSelect` judge the whole pick, so they receive `V`: the array, for a
+ * `multiSelect` or `orderedList` (#627). `O` is the declared `optional`.
  */
-type ChooseFromOptions<G extends Game, A extends Record<string, unknown>, T> = {
+type ChooseFromOptions<G extends Game, A extends Record<string, unknown>, T, O, V = ChoiceValue<T>> = {
   prompt?: string | ((context: ActionContext<G>) => string);
   /**
    * The choices: each a value, or `{ value, label }` to give a value its own
@@ -146,9 +151,9 @@ type ChooseFromOptions<G extends Game, A extends Record<string, unknown>, T> = {
   choices: T[] | ((context: ActionContext<G>) => T[]);
   /** The label for a choice that did not bring its own. */
   display?: (choice: ChoiceValue<T>) => string;
-  optional?: boolean | string;
+  optional?: O;
   /** `args` holds the picks declared before this one (on a repeating pick, also this pick's earlier values). */
-  validate?: (value: ChoiceValue<T>, args: A, context: ActionContext<G>) => boolean | string;
+  validate?: (value: V, args: A, context: ActionContext<G>) => boolean | string;
   /** Get board element references for highlighting (source/target) */
   boardRefs?: (choice: ChoiceValue<T>, context: ActionContext<G>) => ChoiceBoardRefs;
   /** Filter choices based on a previous selection value */
@@ -174,7 +179,7 @@ type ChooseFromOptions<G extends Game, A extends Record<string, unknown>, T> = {
    */
   orderedList?: CountOption<G, OrderedListConfig>;
   /** Called after this step is resolved. Receives the resolved value and a restricted context. */
-  onSelect?: (value: ChoiceValue<T>, context: OnSelectContext) => void;
+  onSelect?: (value: V, context: OnSelectContext) => void;
   /** Called if the action is cancelled after onSelect fired but before execute(). */
   onCancel?: (context: OnSelectContext) => void;
 };
@@ -191,7 +196,7 @@ type ManyOptions<G extends Game> =
 type OneOptions = { multiSelect?: undefined; orderedList?: undefined };
 
 /** Every `chooseElement` option except the repeat options ({@link RepeatingOptions}) and the disabled rule ({@link DisabledOptions}). */
-type ChooseElementOptions<G extends Game, A extends Record<string, unknown>, T extends GameElement> = {
+type ChooseElementOptions<G extends Game, A extends Record<string, unknown>, T extends GameElement, O> = {
   prompt?: string | ((context: ActionContext<G>) => string);
   elementClass?: ElementClass<T>;
   from?: GameElement | ((context: ActionContext<G>) => GameElement);
@@ -207,7 +212,7 @@ type ChooseElementOptions<G extends Game, A extends Record<string, unknown>, T e
    * Custom UIs send the element ID directly.
    */
   elements?: T[] | ((context: ActionContext<G>) => T[]);
-  optional?: boolean | string;
+  optional?: O;
   /** `args` holds the picks declared before this one (on a repeating pick, also this pick's earlier values). */
   validate?: (value: T, args: A, context: ActionContext<G>) => boolean | string;
   /**
@@ -668,31 +673,31 @@ export class Action<
    *   });
    * ```
    */
-  chooseFrom<K extends string, T, P = undefined>(
+  chooseFrom<K extends string, T, P = undefined, O extends boolean | string = false>(
     name: K,
-    options: ChooseFromOptions<G, AddArg<A, K, ChoiceValue<T>[]>, T> & DisabledOptions<G, ChoiceValue<T>, P> & RepeatingOptions<ChoiceValue<T>>
-  ): Action<G, AddArg<A, K, ChoiceValue<T>[]>>;
-  chooseFrom<K extends string, T, P = undefined>(
+    options: ChooseFromOptions<G, AddArg<A, K, ChoiceValue<T>[]>, T, O> & DisabledOptions<G, ChoiceValue<T>, P> & RepeatingOptions<ChoiceValue<T>>
+  ): Action<G, AddArg<A, K, ChoiceValue<T>[], O>>;
+  chooseFrom<K extends string, T, P = undefined, O extends boolean | string = false>(
     name: K,
-    options: ChooseFromOptions<G, A, T> & DisabledOptions<G, ChoiceValue<T>, P> & NonRepeatingOptions & ManyOptions<G>
-  ): Action<G, AddArg<A, K, ChoiceValue<T>[]>>;
-  chooseFrom<K extends string, T, P = undefined>(
+    options: ChooseFromOptions<G, A, T, O, ChoiceValue<T>[]> & DisabledOptions<G, ChoiceValue<T>, P> & NonRepeatingOptions & ManyOptions<G>
+  ): Action<G, AddArg<A, K, ChoiceValue<T>[], O>>;
+  chooseFrom<K extends string, T, P = undefined, O extends boolean | string = false>(
     name: K,
-    options: ChooseFromOptions<G, A, T> & DisabledOptions<G, ChoiceValue<T>, P> & NonRepeatingOptions & OneOptions
-  ): Action<G, AddArg<A, K, ChoiceValue<T>>>;
+    options: ChooseFromOptions<G, A, T, O> & DisabledOptions<G, ChoiceValue<T>, P> & NonRepeatingOptions & OneOptions
+  ): Action<G, AddArg<A, K, ChoiceValue<T>, O>>;
   // Whether it asks for one value or many is known only at run time (a caller
   // forwarding an optional count, as the world builder does), so the arg is
   // typed as either.
-  chooseFrom<K extends string, T, P = undefined>(
+  chooseFrom<K extends string, T, P = undefined, O extends boolean | string = false>(
     name: K,
-    options: ChooseFromOptions<G, A, T> & DisabledOptions<G, ChoiceValue<T>, P> & NonRepeatingOptions
-  ): Action<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[]>>;
-  chooseFrom<K extends string, T, P = undefined>(
+    options: ChooseFromOptions<G, A, T, O, ChoiceValue<T> | ChoiceValue<T>[]> & DisabledOptions<G, ChoiceValue<T>, P> & NonRepeatingOptions
+  ): Action<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[], O>>;
+  chooseFrom<K extends string, T, P = undefined, O extends boolean | string = false>(
     name: K,
     // The implementation's validate args are the repeating overload's, the
     // narrowest of the overloads, so every overload's validate is accepted.
-    options: ChooseFromOptions<G, AddArg<A, K, ChoiceValue<T>[]>, T> & DisabledOptions<G, ChoiceValue<T>, P> & Partial<RepeatingOptions<ChoiceValue<T>>>
-  ): Action<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[]>> {
+    options: ChooseFromOptions<G, AddArg<A, K, ChoiceValue<T>[]>, T, O, ChoiceValue<T> | ChoiceValue<T>[]> & DisabledOptions<G, ChoiceValue<T>, P> & Partial<RepeatingOptions<ChoiceValue<T>>>
+  ): Action<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[], O>> {
     assertPrepareHasDisabled('chooseFrom', name, options);
     assertReadsEarlierPick('chooseFrom', name, this.definition.selections, options.dependsOn, 'depends on');
     assertReadsEarlierPick('chooseFrom', name, this.definition.selections, options.filterBy?.selectionName, 'filters by');
@@ -730,7 +735,7 @@ export class Action<
       onCancel: options.onCancel,
     } as ChoiceSelection<ChoiceValue<T>>;
     this.definition.selections.push(selection as Selection);
-    return this as Action<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[]>>;
+    return this as Action<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[], O>>;
   }
 
   /**
@@ -793,19 +798,19 @@ export class Action<
    *   });
    * ```
    */
-  chooseElement<K extends string, T extends GameElement, P = undefined>(
+  chooseElement<K extends string, T extends GameElement, P = undefined, O extends boolean | string = false>(
     name: K,
-    options: ChooseElementOptions<G, AddArg<A, K, T[]>, T> & DisabledOptions<G, T, P> & RepeatingOptions<T>
-  ): Action<G, AddArg<A, K, T[]>>;
-  chooseElement<K extends string, T extends GameElement, P = undefined>(
+    options: ChooseElementOptions<G, AddArg<A, K, T[]>, T, O> & DisabledOptions<G, T, P> & RepeatingOptions<T>
+  ): Action<G, AddArg<A, K, T[], O>>;
+  chooseElement<K extends string, T extends GameElement, P = undefined, O extends boolean | string = false>(
     name: K,
-    options?: ChooseElementOptions<G, A, T> & DisabledOptions<G, T, P> & NonRepeatingOptions
-  ): Action<G, AddArg<A, K, T>>;
-  chooseElement<K extends string, T extends GameElement, P = undefined>(
+    options?: ChooseElementOptions<G, A, T, O> & DisabledOptions<G, T, P> & NonRepeatingOptions
+  ): Action<G, AddArg<A, K, T, O>>;
+  chooseElement<K extends string, T extends GameElement, P = undefined, O extends boolean | string = false>(
     name: K,
     // Validate args as the repeating overload's: the narrowest, so every overload's validate is accepted.
-    options: ChooseElementOptions<G, AddArg<A, K, T[]>, T> & DisabledOptions<G, T, P> & Partial<RepeatingOptions<T>> = {}
-  ): Action<G, AddArg<A, K, T>> | Action<G, AddArg<A, K, T[]>> {
+    options: ChooseElementOptions<G, AddArg<A, K, T[]>, T, O> & DisabledOptions<G, T, P> & Partial<RepeatingOptions<T>> = {}
+  ): Action<G, AddArg<A, K, T, O>> | Action<G, AddArg<A, K, T[], O>> {
     assertPrepareHasDisabled('chooseElement', name, options);
     assertReadsEarlierPick('chooseElement', name, this.definition.selections, options.dependsOn, 'depends on');
     const selection = {
@@ -830,7 +835,7 @@ export class Action<
       onCancel: options.onCancel,
     } as ElementSelection<T>;
     this.definition.selections.push(selection as Selection);
-    return this as Action<G, AddArg<A, K, T>>;
+    return this as Action<G, AddArg<A, K, T, O>>;
   }
 
   /**
@@ -871,7 +876,7 @@ export class Action<
    *   });
    * ```
    */
-  chooseElements<K extends string, T extends GameElement, P = undefined>(
+  chooseElements<K extends string, T extends GameElement, P = undefined, O extends boolean | string = false>(
     name: K,
     options: DisabledOptions<G, T, P> & {
       prompt?: string | ((context: ActionContext<G>) => string);
@@ -890,7 +895,7 @@ export class Action<
        * automatic disambiguation when multiple elements have the same name.
        */
       display?: (element: T, context: ActionContext<G>, allElements: T[]) => string;
-      optional?: boolean | string;
+      optional?: O;
       validate?: (value: T[], args: A, context: ActionContext<G>) => boolean | string;
       /** Get board element reference for highlighting */
       boardRef?: (element: T, context: ActionContext<G>) => ElementRef;
@@ -916,7 +921,7 @@ export class Action<
       /** Called if the action is cancelled after onSelect fired but before execute(). */
       onCancel?: (context: OnSelectContext) => void;
     }
-  ): Action<G, AddArg<A, K, T[]>> {
+  ): Action<G, AddArg<A, K, T[], O>> {
     assertPrepareHasDisabled('chooseElements', name, options);
     assertReadsEarlierPick('chooseElements', name, this.definition.selections, options.dependsOn, 'depends on');
     const selection = {
@@ -940,7 +945,7 @@ export class Action<
       onCancel: options.onCancel,
     } as ElementsSelection<T>;
     this.definition.selections.push(selection as Selection);
-    return this as Action<G, AddArg<A, K, T[]>>;
+    return this as Action<G, AddArg<A, K, T[], O>>;
   }
 
   /**
@@ -1011,7 +1016,7 @@ export class Action<
    *   });
    * ```
    */
-  enterText<K extends string>(
+  enterText<K extends string, O extends boolean | string = false>(
     name: K,
     options: {
       prompt?: string | ((context: ActionContext<G>) => string);
@@ -1020,14 +1025,14 @@ export class Action<
       maxLength?: number;
       maxBytes?: number;
       multiline?: boolean;
-      optional?: boolean | string;
+      optional?: O;
       validate?: (value: string, args: A, context: ActionContext<G>) => boolean | string;
       /** Called after this step is resolved. Receives the resolved value and a restricted context. */
       onSelect?: (value: string, context: OnSelectContext) => void;
       /** Called if the action is cancelled after onSelect fired but before execute(). */
       onCancel?: (context: OnSelectContext) => void;
     } = {}
-  ): Action<G, AddArg<A, K, string>> {
+  ): Action<G, AddArg<A, K, string, O>> {
     if (options.maxBytes !== undefined && !(Number.isInteger(options.maxBytes) && options.maxBytes > 0)) {
       throw new Error(
         `enterText('${name}') was given maxBytes ${String(options.maxBytes)}. maxBytes is the most ` +
@@ -1049,7 +1054,7 @@ export class Action<
       onCancel: options.onCancel,
     } as TextSelection;
     this.definition.selections.push(selection);
-    return this as Action<G, AddArg<A, K, string>>;
+    return this as Action<G, AddArg<A, K, string, O>>;
   }
 
   /**
@@ -1102,7 +1107,7 @@ export class Action<
    *   .execute(({ age }, ctx) => { ctx.player.age = age; });
    * ```
    */
-  enterNumber<K extends string>(
+  enterNumber<K extends string, O extends boolean | string = false>(
     name: K,
     options: {
       prompt?: string | ((context: ActionContext<G>) => string);
@@ -1111,14 +1116,14 @@ export class Action<
       integer?: boolean;
       initial?: number;
       display?: (value: number) => string;
-      optional?: boolean | string;
+      optional?: O;
       validate?: (value: number, args: A, context: ActionContext<G>) => boolean | string;
       /** Called after this step is resolved. Receives the resolved value and a restricted context. */
       onSelect?: (value: number, context: OnSelectContext) => void;
       /** Called if the action is cancelled after onSelect fired but before execute(). */
       onCancel?: (context: OnSelectContext) => void;
     } = {}
-  ): Action<G, AddArg<A, K, number>> {
+  ): Action<G, AddArg<A, K, number, O>> {
     // REFUSED WHEN THE ACTION IS WRITTEN, not when a player opens the panel
     // (#258). Both of these are about the declaration alone, so there is no
     // state to wait for -- and a field that opens on a refused value, or a
@@ -1142,7 +1147,7 @@ export class Action<
       onCancel: options.onCancel,
     } as NumberSelection;
     this.definition.selections.push(selection);
-    return this as Action<G, AddArg<A, K, number>>;
+    return this as Action<G, AddArg<A, K, number, O>>;
   }
 
   /**

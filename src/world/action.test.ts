@@ -11,7 +11,7 @@
 // the world is built once by a genesis game and then only ever reached through
 // serialized partitions, so adoption is exercised rather than skipped
 // (docs/TEST-FIXTURES.md).
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { BoardSmithWorldEngine } from "./engine.js";
 import {
   worldAction,
@@ -782,5 +782,44 @@ describe("#249 — a world action can ask for an ORDERED, REPEATABLE list", () =
     expect(selection).toBeDefined();
     expect((selection as { orderedList?: unknown }).orderedList).toEqual({ min: 1, max: 3 });
     expect((selection as { multiSelect?: unknown }).multiSelect).toBeUndefined();
+  });
+});
+
+describe("#627 — a world action's types say what the engine passes", () => {
+  // Checked by `boardsmith typecheck`. The world facade wraps the engine's
+  // builder, so its picks arrive as the engine's do: a multiSelect or
+  // orderedList is validated as the whole array, and a skipped optional pick
+  // is absent.
+  it("types a multiSelect or orderedList validate as the array, and an optional pick as possibly undefined", () => {
+    worldAction<VillageFixture>("typed")
+      .chooseFrom("set", {
+        choices: [1, 2],
+        multiSelect: 2,
+        validate: (value) => {
+          expectTypeOf(value).toEqualTypeOf<number[]>();
+          return true;
+        },
+      })
+      .chooseFrom("list", {
+        choices: ["a"],
+        orderedList: 2,
+        validate: (value) => {
+          expectTypeOf(value).toEqualTypeOf<string[]>();
+          return true;
+        },
+      })
+      .chooseFrom("maybe", { choices: [1], optional: "Not now" })
+      .chooseElement("holding", { ...neighbourPick, optional: true })
+      .chooseElements("holdings", { ...neighbourPick, optional: true })
+      .enterText("note", { optional: true })
+      .enterNumber("count", { optional: false })
+      .execute((args) => {
+        expectTypeOf(args.set).toEqualTypeOf<number[]>();
+        expectTypeOf(args.maybe).toEqualTypeOf<number | undefined>();
+        expectTypeOf(args.holding).toEqualTypeOf<Holding | undefined>();
+        expectTypeOf(args.holdings).toEqualTypeOf<Holding[] | undefined>();
+        expectTypeOf(args.note).toEqualTypeOf<string | undefined>();
+        expectTypeOf(args.count).toEqualTypeOf<number>();
+      });
   });
 });

@@ -83,6 +83,7 @@ import type {
 } from "../engine/index.js";
 import type { ChoiceValue, ConditionConfig, MultiSelectConfig, OrderedListConfig } from "../engine/action/types.js";
 import type { TextPattern } from "../engine/action/text-rules.js";
+import type { AddArg } from "../engine/action/action-builder.js";
 import type { WorldBudgets } from "./budgets.js";
 import type { ScheduleArm } from "./schedule-api.js";
 import type { DeclaredSeatActivity, SeatActivity, WorldNarrationLine } from "./contract.js";
@@ -414,16 +415,18 @@ export type WorldOrderedList<G extends Game = Game> =
  * argument is a value or an array and therefore have to live in the overloads.
  *
  * `T` is one entry of `choices`, a value or `{ value, label }`; every callback
- * receives `ChoiceValue<T>`, the value the engine delivers (#509).
+ * receives `ChoiceValue<T>`, the value the engine delivers (#509), except
+ * `validate`, which judges the whole pick and so receives `V`: the array, for a
+ * `multiSelect` or `orderedList` (#627). `O` is the declared `optional`.
  */
-export interface WorldChoiceOptions<G extends Game, T, P = undefined> {
+export interface WorldChoiceOptions<G extends Game, T, P = undefined, O = boolean | string, V = ChoiceValue<T>> {
   prompt?: WorldPrompt<G>;
   needs?: (context: WorldNeedsContext<G>) => readonly string[];
   choices: T[] | ((context: WorldActionContext<G>) => T[]);
   display?: (choice: ChoiceValue<T>) => string;
-  optional?: boolean | string;
+  optional?: O;
   validate?: (
-    value: ChoiceValue<T>,
+    value: V,
     args: Record<string, unknown>,
     context: WorldActionContext<G>,
   ) => boolean | string;
@@ -446,11 +449,11 @@ export interface WorldChoiceOptions<G extends Game, T, P = undefined> {
  * `multiSelect`. The same split `WorldChoiceOptions` makes, for the same
  * reason: what differs is exactly what decides the argument's type.
  */
-export interface WorldElementOptions<G extends Game, T extends GameElement, P = undefined> {
+export interface WorldElementOptions<G extends Game, T extends GameElement, P = undefined, O = boolean | string> {
   prompt?: WorldPrompt<G>;
   needs?: (context: WorldNeedsContext<G>) => readonly string[];
   elements: T[] | ((context: WorldActionContext<G>) => T[]);
-  optional?: boolean | string;
+  optional?: O;
   display?: (element: T, context: WorldActionContext<G>, all: T[]) => string;
   boardRef?: (element: T, context: WorldActionContext<G>) => ElementRef;
   /** Work every `disabled` call of one evaluation shares; see the engine's `chooseFrom` (#334). */
@@ -759,7 +762,6 @@ function withWorld<G extends Game>(context: AnyContext): WorldActionContext<G> {
 }
 
 type NoArgs = Record<never, never>;
-type AddArg<A, K extends string, T> = A & { [P in K]: T };
 
 /** A prompt as either half of the pair the core builder accepts, re-typed. */
 type WorldPrompt<G extends Game> = string | ((context: WorldActionContext<G>) => string);
@@ -780,8 +782,8 @@ function forwardPrompt<G extends Game>(
  * release was already drifting: `chooseElements` is where `multiSelect` had to
  * be remembered and `chooseElement` is where it must not appear.
  */
-function forwardElementOptions<G extends Game, T extends GameElement, P>(
-  options: WorldElementOptions<G, T, P>,
+function forwardElementOptions<G extends Game, T extends GameElement, P, O>(
+  options: WorldElementOptions<G, T, P, O>,
 ) {
   return {
     prompt: forwardPrompt<G>(options.prompt),
@@ -1086,36 +1088,36 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   // is a value or an array, and a handler should not have to be told which. Each
   // signature is a "member" to the dead-code pass and each is reached only by
   // games.
-  chooseFrom<K extends string, T, P = undefined>(
+  chooseFrom<K extends string, T, P = undefined, O extends boolean | string = false>(
     name: K,
-    options: WorldChoiceOptions<G, T, P> & {
+    options: WorldChoiceOptions<G, T, P, O, ChoiceValue<T>[]> & {
       multiSelect: WorldMultiSelect<G>;
       orderedList?: never;
     },
-  ): WorldAction<G, AddArg<A, K, ChoiceValue<T>[]>>;
+  ): WorldAction<G, AddArg<A, K, ChoiceValue<T>[], O>>;
   // A LIST IS A THIRD SIGNATURE AND NOT A FLAG (#249). `orderedList?: never` on
   // the other two is what makes "both" a compile error at the call site rather
   // than a refusal the author meets at the first submission that repeats.
-  chooseFrom<K extends string, T, P = undefined>(
+  chooseFrom<K extends string, T, P = undefined, O extends boolean | string = false>(
     name: K,
-    options: WorldChoiceOptions<G, T, P> & {
+    options: WorldChoiceOptions<G, T, P, O, ChoiceValue<T>[]> & {
       orderedList: WorldOrderedList<G>;
       multiSelect?: never;
     },
-  ): WorldAction<G, AddArg<A, K, ChoiceValue<T>[]>>;
-  chooseFrom<K extends string, T, P = undefined>(
+  ): WorldAction<G, AddArg<A, K, ChoiceValue<T>[], O>>;
+  chooseFrom<K extends string, T, P = undefined, O extends boolean | string = false>(
     name: K,
-    options: WorldChoiceOptions<G, T, P> & { multiSelect?: undefined; orderedList?: undefined },
-  ): WorldAction<G, AddArg<A, K, ChoiceValue<T>>>;
-  chooseFrom<K extends string, T, P = undefined>(
+    options: WorldChoiceOptions<G, T, P, O> & { multiSelect?: undefined; orderedList?: undefined },
+  ): WorldAction<G, AddArg<A, K, ChoiceValue<T>, O>>;
+  chooseFrom<K extends string, T, P = undefined, O extends boolean | string = false>(
     name: K,
-    options: WorldChoiceOptions<G, T, P> & {
+    options: WorldChoiceOptions<G, T, P, O, ChoiceValue<T> | ChoiceValue<T>[]> & {
       multiSelect?: WorldMultiSelect<G>;
       orderedList?: WorldOrderedList<G>;
     },
-  ): WorldAction<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[]>> {
+  ): WorldAction<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[], O>> {
     this.declareSelection(options.needs);
-    this.inner.chooseFrom<K, T, P>(name, {
+    this.inner.chooseFrom<K, T, P, O>(name, {
       // AN ORDINARY `ChoiceSelection` FIELD the facade had stopped passing on
       // (#376).
       multiSelect: forwardCount<G, number | MultiSelectConfig>(options.multiSelect),
@@ -1143,7 +1145,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
         : undefined,
       unavailable: forwardUnavailable<G>(options.unavailable),
     });
-    return this as unknown as WorldAction<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[]>>;
+    return this as unknown as WorldAction<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[], O>>;
   }
 
   /**
@@ -1155,24 +1157,24 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * candidates the declaration named rather than the five hundred a static
    * choice list would.
    */
-  chooseElement<K extends string, T extends GameElement, P = undefined>(
+  chooseElement<K extends string, T extends GameElement, P = undefined, O extends boolean | string = false>(
     name: K,
-    options: WorldElementOptions<G, T, P> & {
+    options: WorldElementOptions<G, T, P, O> & {
       validate?: (
         value: T,
         args: Record<string, unknown>,
         context: WorldActionContext<G>,
       ) => boolean | string;
     },
-  ): WorldAction<G, AddArg<A, K, T>> {
+  ): WorldAction<G, AddArg<A, K, T, O>> {
     this.declareSelection(options.needs);
-    this.inner.chooseElement<K, T, P>(name, {
-      ...forwardElementOptions<G, T, P>(options),
+    this.inner.chooseElement<K, T, P, O>(name, {
+      ...forwardElementOptions<G, T, P, O>(options),
       validate: options.validate
         ? (value, args, context) => options.validate!(value, args, withWorld<G>(context))
         : undefined,
     });
-    return this as unknown as WorldAction<G, AddArg<A, K, T>>;
+    return this as unknown as WorldAction<G, AddArg<A, K, T, O>>;
   }
 
   /**
@@ -1190,9 +1192,9 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * board SEARCH finds a set whose size is a fact about other players. The
    * candidates are authored; the count is `multiSelect`.
    */
-  chooseElements<K extends string, T extends GameElement, P = undefined>(
+  chooseElements<K extends string, T extends GameElement, P = undefined, O extends boolean | string = false>(
     name: K,
-    options: WorldElementOptions<G, T, P> & {
+    options: WorldElementOptions<G, T, P, O> & {
       multiSelect?: WorldMultiSelect<G>;
       validate?: (
         value: T[],
@@ -1200,16 +1202,16 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
         context: WorldActionContext<G>,
       ) => boolean | string;
     },
-  ): WorldAction<G, AddArg<A, K, T[]>> {
+  ): WorldAction<G, AddArg<A, K, T[], O>> {
     this.declareSelection(options.needs);
-    this.inner.chooseElements<K, T, P>(name, {
-      ...forwardElementOptions<G, T, P>(options),
+    this.inner.chooseElements<K, T, P, O>(name, {
+      ...forwardElementOptions<G, T, P, O>(options),
       multiSelect: forwardCount<G, number | MultiSelectConfig>(options.multiSelect),
       validate: options.validate
         ? (value, args, context) => options.validate!(value, args, withWorld<G>(context))
         : undefined,
     });
-    return this as unknown as WorldAction<G, AddArg<A, K, T[]>>;
+    return this as unknown as WorldAction<G, AddArg<A, K, T[], O>>;
   }
 
   /**
@@ -1223,7 +1225,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * fields live (an empire's description outlives any one session), so this is
    * the facade the option was asked for on.
    */
-  enterText<K extends string>(
+  enterText<K extends string, O extends boolean | string = false>(
     name: K,
     options: {
       prompt?: WorldPrompt<G>;
@@ -1233,16 +1235,16 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       maxBytes?: number;
       multiline?: boolean;
       pattern?: TextPattern;
-      optional?: boolean | string;
+      optional?: O;
       validate?: (
         value: string,
         args: Record<string, unknown>,
         context: WorldActionContext<G>,
       ) => boolean | string;
     } = {},
-  ): WorldAction<G, AddArg<A, K, string>> {
+  ): WorldAction<G, AddArg<A, K, string, O>> {
     this.declareSelection(options.needs);
-    this.inner.enterText<K>(name, {
+    this.inner.enterText<K, O>(name, {
       prompt: forwardPrompt<G>(options.prompt),
       minLength: options.minLength,
       maxLength: options.maxLength,
@@ -1254,7 +1256,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
         ? (value, args, context) => options.validate!(value, args, withWorld<G>(context))
         : undefined,
     });
-    return this as unknown as WorldAction<G, AddArg<A, K, string>>;
+    return this as unknown as WorldAction<G, AddArg<A, K, string, O>>;
   }
 
   /**
@@ -1266,7 +1268,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * built. A world offer is enumerated in one frame, so the labels travel with
    * the pick like every other static fact about it.
    */
-  enterNumber<K extends string>(
+  enterNumber<K extends string, O extends boolean | string = false>(
     name: K,
     options: {
       prompt?: WorldPrompt<G>;
@@ -1276,16 +1278,16 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       integer?: boolean;
       initial?: number;
       display?: (value: number) => string;
-      optional?: boolean | string;
+      optional?: O;
       validate?: (
         value: number,
         args: Record<string, unknown>,
         context: WorldActionContext<G>,
       ) => boolean | string;
     } = {},
-  ): WorldAction<G, AddArg<A, K, number>> {
+  ): WorldAction<G, AddArg<A, K, number, O>> {
     this.declareSelection(options.needs);
-    this.inner.enterNumber<K>(name, {
+    this.inner.enterNumber<K, O>(name, {
       prompt: forwardPrompt<G>(options.prompt),
       min: options.min,
       max: options.max,
@@ -1297,7 +1299,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
         ? (value, args, context) => options.validate!(value, args, withWorld<G>(context))
         : undefined,
     });
-    return this as unknown as WorldAction<G, AddArg<A, K, number>>;
+    return this as unknown as WorldAction<G, AddArg<A, K, number, O>>;
   }
 
   /** Record the declaration belonging to the selection about to be added. */
