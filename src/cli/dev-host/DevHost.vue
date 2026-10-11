@@ -444,6 +444,10 @@ function seatLabel(seat: SeatInfo): string {
 const seatSwitcherOpen = ref(false);
 const seatSwitcherRef = ref<HTMLElement | null>(null);
 
+// ── … menu: the phone-width home of the secondary controls ─────────────────────
+const overflowOpen = ref(false);
+const overflowRef = ref<HTMLElement | null>(null);
+
 // ── Table setup panel (read-only config display — DEV-04) ─────────────────────
 const tableSetupOpen = ref(false);
 
@@ -469,9 +473,10 @@ function toggleDebug(): void {
   postToGame({ type: 'dev-debug-toggle' });
 }
 
-// ── Dismissal: the seat switcher closes like any dev-bar menu (#610); Escape
-// also closes the table setup panel.
+// ── Dismissal: the seat switcher (#610) and the … menu (#664) close like any
+// dev-bar menu; Escape also closes the table setup panel.
 useMenuDismiss(seatSwitcherOpen, seatSwitcherRef);
+useMenuDismiss(overflowOpen, overflowRef);
 function handleChromeKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') tableSetupOpen.value = false;
 }
@@ -808,15 +813,24 @@ onUnmounted(() => {
               </select>
             </label>
             <!-- Secondary controls — always visible on wide screens; overflow to … on narrow -->
-            <details class="dev-chrome__overflow">
-              <summary class="dev-chrome__overflow-trigger btn" aria-label="More dev controls">…</summary>
-              <div class="dev-chrome__overflow-menu">
+            <div class="dev-chrome__overflow" ref="overflowRef">
+              <button
+                type="button"
+                class="dev-chrome__overflow-trigger btn"
+                aria-label="More dev controls"
+                aria-haspopup="true"
+                :aria-expanded="overflowOpen"
+                @click="overflowOpen = !overflowOpen"
+              >…</button>
+              <!-- New game's first click only arms its confirm, so the menu stays
+                   open for the second; every other choice closes it (#664). -->
+              <div v-if="overflowOpen" class="dev-chrome__overflow-menu">
                 <button
                   type="button"
                   class="btn btn--start"
                   data-testid="new-game"
                   :class="{ 'btn--confirming': restartConfirming }"
-                  @click="handleNewGameClick"
+                  @click="overflowOpen = !restartConfirming; handleNewGameClick()"
                 >
                   <span class="dev-chrome__btn-icon" aria-hidden="true">↺</span>
                   <span class="dev-chrome__btn-label">{{ restartConfirming ? 'Confirm restart?' : 'New game' }}</span>
@@ -827,7 +841,7 @@ onUnmounted(() => {
                   class="btn"
                   data-testid="fire-deadline"
                   title="Close the timed step now, as if its time ran out"
-                  @click="fireDeadline"
+                  @click="overflowOpen = false; fireDeadline()"
                 >
                   <span class="dev-chrome__btn-icon" aria-hidden="true">⏱</span>
                   <span class="dev-chrome__btn-label">End step</span>
@@ -838,7 +852,7 @@ onUnmounted(() => {
                   data-testid="table-setup-toggle"
                   :class="{ 'btn--on': tableSetupOpen }"
                   :aria-expanded="tableSetupOpen"
-                  @click="tableSetupOpen = !tableSetupOpen"
+                  @click="overflowOpen = false; tableSetupOpen = !tableSetupOpen"
                 >
                   <span class="dev-chrome__btn-icon" aria-hidden="true">⚙</span>
                   <span class="dev-chrome__btn-label">Table setup</span>
@@ -850,13 +864,13 @@ onUnmounted(() => {
                   data-testid="debug-toggle"
                   :class="{ 'btn--on': debugOpen }"
                   :aria-pressed="debugOpen"
-                  @click="toggleDebug"
+                  @click="overflowOpen = false; toggleDebug()"
                 >
                   <span class="dev-chrome__btn-icon" aria-hidden="true">⟨⟩</span>
                   <span class="dev-chrome__btn-label">Debug</span>
                 </button>
               </div>
-            </details>
+            </div>
             <!-- Wide-screen inline controls (hidden at narrow via CSS) -->
             <div class="dev-chrome__bar-wide">
               <button
@@ -1234,15 +1248,6 @@ onUnmounted(() => {
 .dev-chrome__overflow {
   position: relative;
   display: none; /* hidden on wide screens — wide controls used instead */
-}
-
-.dev-chrome__overflow-trigger {
-  list-style: none;
-  cursor: pointer;
-}
-
-.dev-chrome__overflow-trigger::-webkit-details-marker {
-  display: none;
 }
 
 .dev-chrome__overflow-menu {

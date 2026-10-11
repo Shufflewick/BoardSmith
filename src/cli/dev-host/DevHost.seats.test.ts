@@ -169,12 +169,17 @@ describe('DevHost — seat switcher menu (presence + follow)', () => {
   });
 });
 
-describe('#610: the seat menu closes the way a menu does', () => {
+// Every dev-bar menu closes the same way: the seat menu (#610) and the phone
+// width … menu (#664).
+describe.each([
+  { name: 'seat menu', trigger: '[data-testid="seat-switcher"]', menu: '.seat-switcher-menu' },
+  { name: '… menu', trigger: '.dev-chrome__overflow-trigger', menu: '.dev-chrome__overflow-menu' },
+])('the $name closes the way a menu does', ({ trigger, menu }) => {
   async function openMenu(): Promise<VueWrapper> {
     const wrapper = await mountDevHost();
     await activateSeat(wrapper);
-    await wrapper.find('[data-testid="seat-switcher"]').trigger('click');
-    expect(wrapper.find('.seat-switcher-menu').exists()).toBe(true);
+    await wrapper.find(trigger).trigger('click');
+    expect(wrapper.find(menu).exists()).toBe(true);
     return wrapper;
   }
 
@@ -182,14 +187,14 @@ describe('#610: the seat menu closes the way a menu does', () => {
     const wrapper = await openMenu();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     await wrapper.vm.$nextTick();
-    expect(wrapper.find('.seat-switcher-menu').exists()).toBe(false);
+    expect(wrapper.find(menu).exists()).toBe(false);
     wrapper.unmount();
   });
 
   it('closes on a click outside it', async () => {
     const wrapper = await openMenu();
     await wrapper.find('.dev-chrome__brand').trigger('click');
-    expect(wrapper.find('.seat-switcher-menu').exists()).toBe(false);
+    expect(wrapper.find(menu).exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -197,7 +202,52 @@ describe('#610: the seat menu closes the way a menu does', () => {
     const wrapper = await openMenu();
     window.dispatchEvent(new Event('blur'));
     await wrapper.vm.$nextTick();
-    expect(wrapper.find('.seat-switcher-menu').exists()).toBe(false);
+    expect(wrapper.find(menu).exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('opens and closes again from its own button', async () => {
+    const wrapper = await openMenu();
+    await wrapper.find(trigger).trigger('click');
+    expect(wrapper.find(menu).exists()).toBe(false);
+    wrapper.unmount();
+  });
+});
+
+// #664: at phone width the secondary controls live in the … menu, and choosing
+// one closes it so it no longer covers the game.
+describe('DevHost — choosing from the … menu closes it (#664)', () => {
+  const MENU = '.dev-chrome__overflow-menu';
+
+  async function openOverflow(): Promise<VueWrapper> {
+    const wrapper = await mountDevHost();
+    await activateSeat(wrapper);
+    const ws = mockWsInstance!;
+    ws.simulateMessage({ ...SEAT_LOBBY, debug: true });
+    ws.simulateMessage({ type: 'game_state', view: {}, isComplete: false, winners: [], isDraw: false, deadlineAt: 9_000, serverNow: 4_000 });
+    await wrapper.vm.$nextTick();
+    await wrapper.find('.dev-chrome__overflow-trigger').trigger('click');
+    expect(wrapper.find(MENU).exists()).toBe(true);
+    return wrapper;
+  }
+
+  it.each(['table-setup-toggle', 'debug-toggle', 'fire-deadline'])('choosing %s closes it', async (testid) => {
+    const wrapper = await openOverflow();
+    await wrapper.find(`${MENU} [data-testid="${testid}"]`).trigger('click');
+    expect(wrapper.find(MENU).exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('New game stays open to ask for confirmation, then closes once the restart is confirmed', async () => {
+    const wrapper = await openOverflow();
+    await wrapper.find(`${MENU} [data-testid="new-game"]`).trigger('click');
+    expect(wrapper.find(`${MENU} [data-testid="new-game"]`).text()).toContain('Confirm restart?');
+
+    mockWsInstance!.send.mockClear();
+    await wrapper.find(`${MENU} [data-testid="new-game"]`).trigger('click');
+    expect(wrapper.find(MENU).exists()).toBe(false);
+    const frames = mockWsInstance!.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    expect(frames.some((f) => f.type === 'restart')).toBe(true);
     wrapper.unmount();
   });
 });
