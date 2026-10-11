@@ -19,6 +19,13 @@ import { pickPositions, FIXED_STEPS } from './report.mjs';
 
 const SEED = 'bench-bot-630';
 
+/**
+ * The game's element id key, fixed so element ids are the same in every run.
+ * Left out, the engine mints a random one per game (#447), and a bot hook that
+ * orders by id (hex's move ordering does) then searches differently each run.
+ */
+const ELEMENT_ID_KEY = '0630063006300630';
+
 /** Where a game that has not ended is cut off. */
 const MAX_PLIES = 2000;
 
@@ -55,7 +62,7 @@ async function play(gameDefinition, setup, visit) {
   const runner = new GameRunner({
     GameClass: gameDefinition.gameClass,
     gameType: gameDefinition.gameType,
-    gameOptions: { ...setup.options, playerCount: setup.playerCount, seed: SEED },
+    gameOptions: { ...setup.options, playerCount: setup.playerCount, seed: SEED, elementIdKey: ELEMENT_ID_KEY },
   });
   runner.start();
   const rng = new SeededRandom(`${SEED}-moves`);
