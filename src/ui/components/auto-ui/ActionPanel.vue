@@ -13,7 +13,7 @@
  * Requires: ActionPanel must be used inside a GameShell context where the
  * action controller is provided via inject('actionController').
  */
-import { ref, computed, watch, inject, nextTick, useId } from 'vue';
+import { ref, computed, watch, inject, nextTick, useId, onMounted, onBeforeUnmount } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
 import { getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
@@ -716,14 +716,8 @@ const stepIdentity = computed(() => {
   return `${action}/${pick}/${accumulated}`;
 });
 
-/**
- * Focus is stranded when it is nowhere, on the body, or on a removed node, in a
- * document that has focus. A document without focus (the GameShell iframe while
- * the player uses the page around it, #649) has nothing to repair; placing focus
- * there would pull it out of the host page on every state update.
- */
+/** Focus is stranded when it is nowhere, on the body, or on a removed node. */
 function focusIsStranded(): boolean {
-  if (!document.hasFocus()) return false;
   const active = document.activeElement;
   return !active || active === document.body || !active.isConnected;
 }
@@ -780,14 +774,39 @@ function focusTargetFor(root: HTMLElement): HTMLElement | null {
 watch([stepIdentity, () => props.availableActions.join(',')], async () => {
   // Wait for the swap to actually land in the DOM before looking for a target.
   await nextTick();
+  repairStrandedFocus();
+});
+
+// A DOCUMENT WITHOUT FOCUS IS NOT REPAIRED UNTIL IT GETS FOCUS BACK (#649). The
+// GameShell iframe, while the player uses the page around it, has focus on its
+// body by definition; placing focus there would pull it out of the host page on
+// every state update. So the repair is put off, and made when the window regains
+// focus -- the player who tabbed away while waiting comes back to a control, not
+// the body. A window focus with no put-off repair moves nothing.
+let repairPutOff = false;
+
+function repairStrandedFocus(): void {
   if (!focusIsStranded()) return;
+  if (!document.hasFocus()) {
+    repairPutOff = true;
+    return;
+  }
   const root = panelRoot.value;
   if (!root || !root.isConnected) return;
   const target = focusTargetFor(root);
   // Focusing the container itself would be worse than the body — it is not
   // operable and announces nothing. Better to leave the player where they are.
   target?.focus();
-});
+}
+
+function repairPutOffFocus(): void {
+  if (!repairPutOff) return;
+  repairPutOff = false;
+  repairStrandedFocus();
+}
+
+onMounted(() => window.addEventListener('focus', repairPutOffFocus));
+onBeforeUnmount(() => window.removeEventListener('focus', repairPutOffFocus));
 
 
 // Note: Auto-fill is handled by the controller's internal watch
