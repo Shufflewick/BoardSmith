@@ -28,9 +28,10 @@ Pass your concrete game class to `Action.create<MyGame>(...)`. The builder then
   the engine also runs them with nothing picked to decide whether the action is
   offered at all. A repeating pick sees its own earlier picks there as an
   `unknown[]`; its `validate` gets them typed. A repeat's `until` and `onEach`
-  run after a pick, so there the earlier picks are present, not `undefined`,
-  and the repeating pick's values so far are an `unknown[]`. Args a follow-up starts with are
-  declared with `.followUpArgs<...>()` (see
+  run after a pick, so there the earlier picks are present, not `undefined`
+  (a skipped optional pick may be absent), and the repeating pick's values so
+  far are an `unknown[]`. Args a follow-up starts with are declared with
+  `.followUpArgs<...>()` (see
   [Action Chaining with `followUp`](#action-chaining-with-followup)).
 - A `chooseElement` given `elementClass: Cell` hands its `filter` a `Cell`, since
   every candidate is one: `filter: (cell) => cell.isEmpty()` needs no cast.

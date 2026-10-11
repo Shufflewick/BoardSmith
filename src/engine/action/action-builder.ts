@@ -80,11 +80,12 @@ type RepeatingOptions<G extends Game, T, C extends Record<string, unknown>> =
 
 /**
  * What `ctx.args` holds in a repeating pick's own callbacks: the picks before
- * it, and this pick's earlier values as an array. `repeat.until` and
- * `repeat.onEach` run after a pick, so they get it as is, not partial (#652). That array is `unknown[]`
+ * it, and this pick's earlier values as an array. That array is `unknown[]`
  * rather than the pick's type because the pick's type is inferred from those
  * same callbacks (`choices`, `elements`); naming it there would leave nothing
  * to infer it from. Its `validate` gets the typed array in `args`.
+ * `repeat.until` and `repeat.onEach` run after a pick, so they get it as is,
+ * not partial (#652).
  */
 type RepeatContextArgs<A, K extends string> = AddArg<A, K, unknown[]>;
 
