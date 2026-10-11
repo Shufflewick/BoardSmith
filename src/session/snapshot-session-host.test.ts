@@ -432,12 +432,10 @@ describe('SnapshotSessionHost', () => {
       expect((host.snapshot as unknown as { turn: number }).turn).toBe(1);
     });
 
-    it('serializes concurrent runBotTurns calls (opChain — no overlapping pump execution)', async () => {
+    it('a runBotTurns call during a run joins it (no overlapping pump execution)', async () => {
       // Two concurrent runBotTurns() calls must NOT run their pumps at the same
-      // time. Before the opChain fix, the botPumpRunning guard made the second
-      // call a silent no-op; now the chain serializes them so the second runs
-      // strictly AFTER the first completes. Either way the invariant the
-      // dev-host relies on holds: botTurn executions never overlap.
+      // time: the second joins the run under way (#635), so botTurn executions
+      // never overlap.
       let concurrentBotTurns = 0;
       let maxConcurrentBotTurns = 0;
       let resolveFirstBotCall!: (v: unknown) => void;
@@ -479,73 +477,12 @@ describe('SnapshotSessionHost', () => {
       await host.start();
 
       const pump1 = host.runBotTurns(); // stalls on the first botTurn
-      const pump2 = host.runBotTurns(); // queued behind pump1 on opChain
+      const pump2 = host.runBotTurns(); // joins pump1
       resolveFirstBotCall({ ...baseResult, botMoved: false });
       await Promise.all([pump1, pump2]);
 
       // The core guarantee: the two pumps never executed botTurn concurrently.
       expect(maxConcurrentBotTurns).toBe(1);
-    });
-
-    it('serializes a human op arriving during an in-flight bot pump (lost-update wedge fix)', async () => {
-      // Regression for the dev-host lost-update race (dev-host-bot-op-race #1):
-      // a human action op that arrives WHILE the bot pump is mid-flight must not
-      // read the same base snapshot and last-write-wins clobber the pump's move.
-      // The opChain must make the human op wait until the pump fully finishes.
-      const events: string[] = [];
-      let releaseBotTurn!: () => void;
-      const botTurnGate = new Promise<void>((res) => {
-        releaseBotTurn = res;
-      });
-
-      const baseResult = {
-        success: true,
-        snapshot: { v: 0, flowState: {}, winners: [], actionHistory: [] },
-        playerViews: [null, null],
-        botMoved: false,
-      };
-
-      let botCall = 0;
-      const adapters: SnapshotSessionAdapters = {
-        playerCount: 2,
-        executeOp: stubExecuteOp(async (snap, _pend, op) => {
-          if (op.type === 'start') return { ...baseResult, snapshot: { v: 0, flowState: {}, winners: [], actionHistory: [] } };
-          if (op.type === 'botTurn') {
-            botCall++;
-            if (botCall === 1) {
-              events.push('bot-read');
-              await botTurnGate; // hold the pump open
-              events.push('bot-write');
-              return { ...baseResult, snapshot: { v: 1, flowState: {}, winners: [], actionHistory: [] }, botMoved: true, botPlayer: 2 };
-            }
-            return { ...baseResult, snapshot: snap as object, botMoved: false };
-          }
-          if (op.type === 'action') {
-            // The human op MUST observe the snapshot the pump wrote (v:1), never
-            // the pre-pump base (v:0) — proving it did not run against stale state.
-            events.push(`human-read:v=${(snap as { v: number }).v}`);
-            return { ...baseResult, snapshot: { v: 2, flowState: { awaitingInput: true, currentPlayer: 1 }, winners: [], actionHistory: [] }, flowState: { awaitingInput: true, currentPlayer: 1 } };
-          }
-          return { ...baseResult };
-        }),
-        record: () => {}, push: () => {},
-      };
-
-      const host = new SnapshotSessionHost(adapters);
-      host.setBotSeats([{ seat: 2 }]);
-      await host.start();
-
-      const pump = host.runBotTurns(); // starts, blocks in the first botTurn
-      // Fire a human action while the pump is stalled mid-flight.
-      const human = host.handleOp(1, { type: 'action', actionName: 'x', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) } as unknown as Op);
-      // Let the pump finish; the human op should only then proceed.
-      releaseBotTurn();
-      await Promise.all([pump, human]);
-
-      // Order proves serialization: the pump fully wrote before the human read,
-      // and the human read the pump's result (v:1), not the stale base (v:0).
-      expect(events).toEqual(['bot-read', 'bot-write', 'human-read:v=1']);
-      expect((host.snapshot as unknown as { v: number }).v).toBe(2);
     });
 
     it('triggers runBotTurns automatically after a successful human action', async () => {

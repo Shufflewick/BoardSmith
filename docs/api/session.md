@@ -206,7 +206,11 @@ await session.send(1, { type: 'action', actionName: 'move', player: 1, args: { f
 ```
 
 `start()` does not run the bot pump. When a bot seat moves first, run it once
-with `await session.host.runBotTurns()`. To hand a seat to the bot mid-game,
+with `await session.host.runBotTurns()`. A bot's search does not hold the table:
+another seat's move, undo or view request runs while the bot thinks, and a move
+the bot found for a position that has since changed is thrown away and searched
+again (#635). `runBotTurns()` resolves once no bot has a move to make; a call
+while the bots are being asked joins that run. To hand a seat to the bot mid-game,
 call `session.makeSeatBot(seat, level)` and then send
 `{ type: 'convertSeatToBot', seat }`: the first changes the roster, the second
 wakes the pump.

@@ -244,8 +244,15 @@ The distinction that matters is **whose intent is being carried**.
 
 - A **player's** submission must echo the key it was rendered with. Stamping the
   current key on a player's behalf is the defect, not the fix.
-- A **server-composed op acting NOW** — the bot pump, a demo playback step, an
-  in-process headless driver — legitimately stamps the current key, because
-  there is no interval between composing and submitting for a round to close
-  in. Every such site says so in a comment at the site.
+- A **server-composed op acting NOW** — a demo playback step, an in-process
+  headless driver — legitimately stamps the current key, because there is no
+  interval between composing and submitting for a round to close in. Every such
+  site says so in a comment at the site.
+- The **bot pump** stamps no key at all. Its `botTurn` op searches and moves in
+  one step, outside the host's one-at-a-time section, against the snapshot the
+  game stood on when the search began (#635). The host adopts the result only
+  if the game still stands on that same snapshot; any change since (a commit by
+  another seat, an expiry, an undo) makes it stale, and the bot searches again
+  from where the game now is. That check is stricter than a key: it refuses a
+  change inside the round as well as a new round.
 

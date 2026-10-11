@@ -26,6 +26,20 @@ export { StatePushGate, type StatePushGateOptions } from './state-push-gate.js';
 const MAX_BOT_MOVES = 500;
 
 /**
+ * Bot searches thrown away as stale in a row before the next one runs inside
+ * the one-at-a-time section (#635). See {@link SnapshotSessionHost.runBotTurns}.
+ */
+const MAX_STALE_BOT_SEARCHES = 3;
+
+/** What became of one bot search: see {@link SnapshotSessionHost.runBotTurns}. */
+type BotStep = 'moved' | 'again' | 'stale' | 'done';
+
+/** Whether `op`, which `res` answered with success, ended the acting seat's move. */
+function completesAction(op: Op, res: OpResult): boolean {
+  return closesSeat(op) || ('actionComplete' in res && res.actionComplete === true);
+}
+
+/**
  * The ops that change the game and run through `executeOp`: every executable
  * op except the read-only ones and the teaching ops, which the host keeps as
  * its own state rather than as a move.
@@ -383,7 +397,11 @@ export class SnapshotSessionHost {
    * `isBot` on one side and writes `ai*` on the other is a regression.
    */
   private botSeats: BotSeat[] = [];
+  /** The run of {@link runBotTurns} under way, which every caller meanwhile joins. */
+  private botPump: Promise<void> = Promise.resolve();
   private botPumpRunning = false;
+  /** Counts calls to {@link runBotTurns}, so a run sees a wake that came while it searched. */
+  private botWakes = 0;
   /**
    * Bot seats that could not act at one game state: their move was refused, or
    * they found none (#421). Nothing about the game changes when that happens,
@@ -394,13 +412,12 @@ export class SnapshotSessionHost {
   private botSeatsHeldBack: { snapshot: unknown; seats: Set<number> } | null = null;
 
   /**
-   * Serialization chain for state-MUTATING op sequences (dev-host-bot-op-race #1
-   * fix). A human action/selection (executeOp → apply → trailing bot pump) and
-   * every externally-triggered runBotTurns run to completion before the next
-   * begins. Without this, a human op arriving during the bot pump's think-time
-   * reads the same base snapshot and last-write-wins silently clobbers the
-   * other's move — the intermittent dev-host lost-update wedge. Read-only and
-   * teaching ops stay off the chain (they never write the game snapshot).
+   * The one-at-a-time section: every change to the game snapshot (an op's
+   * execute and apply, a bot move's adoption, a rules reload, a demo move)
+   * runs to completion before the next begins. Without it, two ops would read
+   * the same base snapshot and the last write would silently clobber the other
+   * (dev-host-bot-op-race #1). Read-only and teaching ops stay off it, and so
+   * does a bot's search: only adopting its move is inside (#635).
    */
   private opChain: Promise<unknown> = Promise.resolve();
 
@@ -1004,11 +1021,9 @@ export class SnapshotSessionHost {
     }
 
     // convertSeatToBot: also a host lifecycle op — it needs the pump, which the
-    // stateless executor does not have. Unlike the demo ops it is ENQUEUED on
-    // opChain, because it drives the bot pump and must not interleave with an
-    // in-flight human op reading the same base snapshot.
+    // stateless executor does not have.
     if (op.type === 'convertSeatToBot') {
-      return this.enqueue(() => this.applyConvertSeatToBot(op.seat));
+      return this.applyConvertSeatToBot(op.seat);
     }
 
     // Teaching ops (hint / heatmapToggle): compute annotation, store in
@@ -1057,21 +1072,36 @@ export class SnapshotSessionHost {
       return res;
     }
 
-    // Every state-MUTATING op sequence runs serialized on opChain. Its trailing
-    // bot pump is part of the SAME critical section (runBotTurnsInner, not the
-    // public runBotTurns), so a follow-up human op waits for the whole
-    // human-move → bot-moves sequence to finish rather than reading the same base
-    // snapshot mid-pump and last-write-wins clobbering it (dev-host-bot-op-race #1).
-    return this.enqueue(() => this.applyMutatingOp(seat, op));
+    return this.applyMutatingOp(seat, op);
   }
 
   /**
-   * The state-mutating tail of handleOp, always run inside the opChain critical
-   * section (via enqueue). Executes the op, applies + broadcasts the result, and
-   * drives any bot turns the move handed off to — all before the next enqueued
-   * mutation can begin.
+   * A state-mutating op: made and published inside the one-at-a-time section.
+   * Then, with the section free again, the bot seats are asked whether the move
+   * handed them the turn, and the visible heatmaps are brought up to date.
+   * Resolves once no bot has a move left to make.
    */
   private async applyMutatingOp(seat: number, op: MutatingOp): Promise<OpResult> {
+    const res = await this.enqueue(() => this.commitMutatingOp(seat, op));
+    if (!res.success) return res;
+    const actionCompleted = completesAction(op, res);
+    // A restore can land the game on a bot seat's turn, and nothing else will
+    // ever wake it: the pump is driven by ops, and the only op that would
+    // arrive is a human action the bot seat is not going to take. The table
+    // just sits there. (Undo alone never showed this — it rewinds to the
+    // requesting seat's own turn start, so the pump would find no due bot seat
+    // anyway. A rewind can target ANY point, which is what made it reachable.)
+    if (actionCompleted || op.type === 'undo' || op.type === 'debugRewind') await this.runBotTurns();
+    // Keep any visible "Show move quality" heatmaps current as play proceeds:
+    // recompute for the seat whose turn it now is, drop stale chips for the rest.
+    // (The hint is cleared on each action; the heatmap must be refreshed the
+    // same way or it freezes at the position where it was first toggled on.)
+    if (actionCompleted) await this.refreshVisibleHeatmaps();
+    return res;
+  }
+
+  /** Execute `op`, then hold, publish and persist what it made. Runs inside the one-at-a-time section. */
+  private async commitMutatingOp(seat: number, op: MutatingOp): Promise<OpResult> {
     // An op that closes the seat (the seat's own action, or the host closing a
     // seat at a deadline) runs without the seat's in-progress selection: it does not
     // continue those picks. They are dropped only once the close SUCCEEDS. A
@@ -1084,11 +1114,10 @@ export class SnapshotSessionHost {
     if (closing) this.pendingStates.delete(seat);
     // Only a selection step leaves the seat mid-action; every other op ends it.
     const pending = 'pendingState' in res ? res.pendingState : null;
-    const actionCompleted = closing || ('actionComplete' in res && res.actionComplete === true);
 
     // Clear hint for the acting seat on successful action/selectionStep (completion):
     // a hint answers the position the seat was in, which its move just changed.
-    if (actionCompleted) {
+    if (completesAction(op, res)) {
       const seatTransient = this.transientTeachingState.get(seat);
       if (seatTransient?.hint) {
         const { hint: _h, ...rest } = seatTransient;
@@ -1113,40 +1142,18 @@ export class SnapshotSessionHost {
     }
 
     await this.apply(res, seat, pending);
-    // A restore can land the game on a bot seat's turn, and nothing else will
-    // ever wake it: the pump is driven by ops, and the only op that would
-    // arrive is a human action the bot seat is not going to take. The table
-    // just sits there. (Undo alone never showed this — it rewinds to the
-    // requesting seat's own turn start, so the pump would find no due bot seat
-    // anyway. A rewind can target ANY point, which is what made it reachable.)
-    const restored = op.type === 'undo' || op.type === 'debugRewind';
-    if (!this.isComplete && (actionCompleted || restored)) {
-      // Already inside the critical section — drive the pump directly rather
-      // than re-entering enqueue (which would deadlock on our own opChain link).
-      await this.runBotTurnsInner();
-    }
-    // Keep any visible "Show move quality" heatmaps current as play proceeds:
-    // recompute for the seat whose turn it now is, drop stale chips for the rest.
-    // (The hint is already cleared on each action above; the heatmap must be
-    // refreshed the same way or it freezes at the position where it was first
-    // toggled on.)
-    if (actionCompleted) {
-      await this.refreshVisibleHeatmaps();
-    }
     return res;
   }
 
   /**
    * Acknowledge that `seat` is now played by a bot, and WAKE THE PUMP.
    *
-   * Always run inside the opChain critical section (via `handleOp`'s enqueue).
-   *
    * ## Why this exists at all
    *
    * The pump reads the roster ({@link setBotSeats}) on every iteration, so a
    * roster that changed between moves is picked up on the next turn. What
-   * {@link setBotSeats} does not do is DRIVE the pump: `runBotTurnsInner` runs
-   * only off `applyMutatingOp` or the public `runBotTurns()`, so a conversion
+   * {@link setBotSeats} does not do is DRIVE the pump: {@link runBotTurns} runs
+   * only after an op that moved the game or when called, so a conversion
    * with no following op would park the table on a seat no human is going to
    * play. This op is the wake.
    *
@@ -1164,8 +1171,9 @@ export class SnapshotSessionHost {
    * silently doing nothing.
    *
    * Idempotent: it writes no state, so re-converting an
-   * already-converted seat is just another wake, and `botPumpRunning` plus the
-   * opChain keep that from doubling any work.
+   * already-converted seat is just another wake. A wake while the bots are
+   * already being asked joins that run and makes it look once more before it
+   * stops, so it never doubles the work and is never lost.
    */
   private async applyConvertSeatToBot(seat: number): Promise<OpResultFor<'convertSeatToBot'>> {
     if (this.isComplete) {
@@ -1187,12 +1195,8 @@ export class SnapshotSessionHost {
           `authority on which seats a bot may play; this op only acknowledges the change and runs the bot.`,
       };
     }
-    // `runBotTurnsInner`, not the public `runBotTurns()`: we are ALREADY inside
-    // our own opChain link, and `runBotTurns()` enqueues onto that same chain, so
-    // it would wait for a link that cannot settle until it returns — a deadlock.
-    // `applyMutatingOp`'s trailing pump calls the inner one for the same reason.
     // The bot's moves are published and persisted as they are made, like any move.
-    await this.runBotTurnsInner();
+    await this.runBotTurns();
     return { success: true, convertedSeat: seat };
   }
 
@@ -1203,7 +1207,8 @@ export class SnapshotSessionHost {
    * and `carry` re-derives the current snapshot under them (see `RulesReload`).
    * It runs ON THE OP CHAIN, like every mutation: an op already in flight
    * finishes on the old rules first, and nothing reads the snapshot between
-   * `carry` and the broadcast of what it produced.
+   * `carry` and the broadcast of what it produced. A bot search under way on
+   * the old rules is stale once this lands, and searches again on the new ones.
    *
    * What goes with the old rules:
    * - transient teaching state (a hint or a heatmap was computed by them);
@@ -1218,7 +1223,7 @@ export class SnapshotSessionHost {
    * running demo stops, since the game cannot go on under these rules.
    */
   async adoptReloadedRules(carry: (snapshot: unknown) => Promise<RulesReload>): Promise<RulesReload> {
-    return this.enqueue(async () => {
+    const adopted = await this.enqueue(async () => {
       const outcome = await carry(this._snapshot);
       if (outcome.kind === 'failed') {
         this.stopDemo();
@@ -1229,10 +1234,11 @@ export class SnapshotSessionHost {
       this.demoHistory = [];
       if (outcome.kind === 'replayed') this.pendingStates.clear();
       await this.apply(outcome.result);
-      // The new rules may hand the turn to a bot seat, and no op will wake it.
-      if (!this.isComplete) await this.runBotTurnsInner();
       return outcome;
     });
+    // The new rules may hand the turn to a bot seat, and no op will wake it.
+    if (adopted.kind !== 'failed') await this.runBotTurns();
+    return adopted;
   }
 
   /**
@@ -1286,14 +1292,25 @@ export class SnapshotSessionHost {
   }
 
   /**
-   * Public bot-pump entry. Serialized on opChain so an externally-triggered pump
-   * (follow-mode toggle, seat release, game start — multiplayer-host.ts) can
-   * never overlap an in-flight human op and clobber its snapshot. The trailing
-   * pump inside applyMutatingOp calls runBotTurnsInner directly (already inside
-   * the critical section) to avoid re-entering the chain.
+   * Ask the bot seats for their moves until none is due, and resolve then.
+   * Safe to call at any moment: a call while the bots are already being asked
+   * joins that run and makes it look once more before it stops, so a wake is
+   * never lost and two runs never overlap.
+   *
+   * A bot's search runs OUTSIDE the one-at-a-time section, against the
+   * snapshot the game stands on when the search starts, so a human's move,
+   * undo or view request never waits for a bot to think (#635). The move it
+   * found is adopted inside the section only if the game still stands on that
+   * snapshot. Otherwise it is stale: it is thrown away, and the bot searches
+   * again from where the game is now. After {@link MAX_STALE_BOT_SEARCHES}
+   * stale searches in a row, the next search runs inside the section, so a
+   * table that keeps changing still sees the bot move; everyone else waits for
+   * that one search.
    */
-  async runBotTurns(): Promise<void> {
-    await this.enqueue(() => this.runBotTurnsInner());
+  runBotTurns(): Promise<void> {
+    this.botWakes++;
+    if (!this.botPumpRunning) this.botPump = this.pumpBotTurns();
+    return this.botPump;
   }
 
   /** The bot seats the pump may ask now: every one not held back at this state (#421). */
@@ -1361,16 +1378,19 @@ export class SnapshotSessionHost {
     this.botSeatsHeldBack = held;
   }
 
-  private async runBotTurnsInner(): Promise<void> {
-    if (this.botPumpRunning || this.botSeats.length === 0) return;
+  private async pumpBotTurns(): Promise<void> {
     this.botPumpRunning = true;
     try {
       let moves = 0;
+      let staleInARow = 0;
       while (true) {
+        // A change already in the section lands first: a search begun before
+        // it would be stale before it started.
+        await this.enqueue(async () => {});
+        const seats = this.botSeatsToAsk();
+        if (this.disposed || this.isComplete || seats.length === 0) break;
         // A save landed while this chain ran (#388). The move under way when it
-        // landed has finished; the rest wait for the reload. The chain gives up
-        // its place on the op chain rather than waiting on it, because adopting
-        // the edited rules is queued there behind it.
+        // landed has finished; the rest wait for the reload.
         if (this.hostWork.reloadPending) {
           this.hostWork.hold(() => this.runBotTurns());
           break;
@@ -1379,25 +1399,43 @@ export class SnapshotSessionHost {
           console.error('[SnapshotSessionHost] bot pump hit MAX_BOT_MOVES cap (500); stopping to avoid runaway.');
           break;
         }
-        const seats = this.botSeatsToAsk();
-        if (seats.length === 0) break;
-        const res = await this.adapters.executeOp(this.snapshot, null, { type: 'botTurn', seats });
-        if (!res.success) {
-          if (this.holdBackRefusedSeat(res, seats)) continue;
-          break;
-        }
-        if (res.botStalled) {
-          this.holdBackStalledSeat(res.botStalled);
+        const wakes = this.botWakes;
+        const step = staleInARow < MAX_STALE_BOT_SEARCHES
+          ? await this.botStep(seats, false)
+          : await this.enqueue(() => this.botStep(seats, true));
+        if (step === 'stale') {
+          staleInARow++;
           continue;
         }
-        if (!res.botMoved) break;
-        moves++;
-        await this.apply(res);
-        if (this.isComplete) break;
+        staleInARow = 0;
+        if (step === 'moved') moves++;
+        else if (step === 'done' && this.botWakes === wakes) break;
       }
     } finally {
       this.botPumpRunning = false;
     }
+  }
+
+  /**
+   * One bot search, and its move adopted inside the one-at-a-time section when
+   * the game still stands where the search began. `inSection` says the caller
+   * already holds the section, so the game cannot move during the search.
+   */
+  private async botStep(seats: Array<{ seat: number; level?: string }>, inSection: boolean): Promise<BotStep> {
+    const searched = this._snapshot;
+    const res = await this.adapters.executeOp(searched, null, { type: 'botTurn', seats });
+    const settle = async (): Promise<BotStep> => {
+      if (this._snapshot !== searched) return 'stale';
+      if (!res.success) return this.holdBackRefusedSeat(res, seats) ? 'again' : 'done';
+      if (res.botStalled) {
+        this.holdBackStalledSeat(res.botStalled);
+        return 'again';
+      }
+      if (!res.botMoved) return 'done';
+      await this.apply(res);
+      return 'moved';
+    };
+    return inSection ? settle() : this.enqueue(settle);
   }
 
   /**
