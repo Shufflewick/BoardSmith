@@ -1,5 +1,5 @@
 {
-  "revision": 161,
+  "revision": 162,
   "bundleProtocol": 2,
   "surfaceHash": "3cd66e7b422f0cbf",
   "payloadHash": "3f10d70c457a15ba",
@@ -1393,6 +1393,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "An undo that brings back a removed Space keeps its onEnter/onExit handlers (#656): Game.loadSerializedState now saves handlers from Spaces in the pile as well as the tree before the restore, and re-attaches them to the restored tree, so an in-place restore agrees with a fresh one; a restored state without the Space warns on both paths, and the warning says that is expected when the Space was removed when the state was saved. No surface, payload or format change."
+    },
+    {
+      "revision": 162,
+      "date": "2026-10-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "3cd66e7b422f0cbf",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Enumeration validates a follow-up's null-skipped pick as absent, as execution does (#648): enumerateActionMoves passes an action-level validate the resolved args with the skipped key dropped, so a validate written to the new type no longer refuses a move the engine accepts; the move args still carry the null the runner binds. No surface, payload or format change."
     }
   ]
 }
