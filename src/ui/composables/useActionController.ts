@@ -92,7 +92,7 @@
 import { ref, readonly, computed, watch, nextTick, getCurrentScope, onScopeDispose } from 'vue';
 import { isDevMode, devWarn, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
-import { findMatchingChoice, oneChoiceListRefusal } from '../../engine/action/choice-matching.js';
+import { findMatchingChoice, oneChoiceListRefusal, oneElementListRefusal } from '../../engine/action/choice-matching.js';
 
 // Re-export all types from the types module for consumers
 export type {
@@ -711,15 +711,21 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // that choice displayed correctly and then refused when selected, while
     // the engine accepted the same object. `findMatchingChoice` is now the
     // engine's own matcher, imported rather than reimplemented.
+    //
+    // The engine's rules for a pick that takes one thing (#661): a chooseElement
+    // refuses any array; a chooseFrom's one choice may itself be an array, and a
+    // list of its choices is refused. Only a chooseElements, multiSelect or
+    // ordered list is checked item by item.
+    const elementRefusal = selection.type === 'element' ? oneElementListRefusal(selection.name, value) : undefined;
+    if (elementRefusal) return { valid: false, error: elementRefusal };
     const choices = getChoices(selection);
     if (choices.length > 0) {
-      // An element pick, multiSelect or ordered list is checked item by item. A chooseFrom that
-      // takes one choice follows the engine's rule (#661): its choice may itself
-      // be an array, and a list of its choices is refused.
-      const takesItems = selection.type !== 'choice'
+      const takesItems = selection.type === 'elements'
         || resolveMultiSelectConfig(selection) !== undefined
         || resolveOrderedListConfig(selection) !== undefined;
-      const listRefusal = takesItems ? undefined : oneChoiceListRefusal(selection.name, value, choices);
+      const listRefusal = selection.type === 'choice' && !takesItems
+        ? oneChoiceListRefusal(selection.name, value, choices)
+        : undefined;
       if (listRefusal) return { valid: false, error: listRefusal };
       if (Array.isArray(value) && takesItems) {
         for (const v of value) {

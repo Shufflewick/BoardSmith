@@ -31,7 +31,7 @@ import { isDevMode, devWarn, isDevThrowEnabled } from '../../utils/dev.js';
 import { Action } from './action-builder.js';
 import { PlayerFacingError, NotSimulableError } from '../errors.js';
 import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
-import { findMatchingChoice, isSerializedElement, oneChoiceListRefusal, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
+import { findMatchingChoice, isSerializedElement, oneChoiceListRefusal, oneElementListRefusal, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
 import { numberRuleErrors } from './number-rules.js';
 import { formatRepeatCandidates } from '../element/pick-candidates.js';
 import type { ChoiceWithRefs, WarningEntry } from '../../types/protocol.js';
@@ -834,15 +834,10 @@ export class ActionExecutor {
       // A single `element` selection is never multiSelect, so an array is
       // never a valid submission shape for it (WR-08): it would otherwise reach
       // execute() untouched.
-      if (Array.isArray(value) && selection.type === 'element') {
-        return {
-          valid: false,
-          errors: [
-            `Selection "${selection.name}" expects a single element, got an array of ${value.length}. ` +
-            `Submit one element or element ID; use chooseElements for multi-element selections.`,
-          ],
-        };
-      }
+      const elementRefusal = selection.type === 'element'
+        ? oneElementListRefusal(selection.name, value)
+        : undefined;
+      if (elementRefusal) return { valid: false, errors: [elementRefusal] };
       // A multiSelect or ordered list is checked item by item. Any other
       // chooseFrom takes one choice, which may itself be an array (#660); the
       // action controller applies the same rule through the same helper (#661).

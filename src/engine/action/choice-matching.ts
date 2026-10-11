@@ -157,6 +157,18 @@ export function findMatchingChoice<C extends MatchableChoice>(
 }
 
 /**
+ * The refusal for an array sent to a chooseElement that takes ONE element, or
+ * undefined when `value` is not an array. Such a pick is never multiSelect, so
+ * an array is never a valid submission for it (WR-08). The engine and the
+ * action controller both call this (#661).
+ */
+export function oneElementListRefusal(name: string, value: unknown): string | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return `Selection "${name}" expects a single element, got an array of ${value.length}. `
+    + 'Submit one element or element ID; use chooseElements for multi-element selections.';
+}
+
+/**
  * The refusal for a list sent to a chooseFrom that takes ONE choice (#660), or
  * undefined when `value` is not such a list. The one choice may itself be an
  * array, so an array that names a choice whole is that choice; and when the
