@@ -249,6 +249,8 @@ interface BotConfig {
 
 5. **Game complexity**: Simple games (Hex, Checkers) work well. Complex games (Cribbage with many scoring possibilities) may need custom objectives.
 
+6. **Saved copies**: Every search step restores the search game whole and then makes the moves down the tree path again, which is most of a step's time where moves are costly (checkers, chess). So the search keeps a saved copy of the game at the tree nodes it walks through, as the JSON of a snapshot, and a step restores from the deepest saved copy on its path instead of from the root (#633). The copies change only the speed: a seeded search chooses the same move with them as without. The budget is 32 MiB for each search (a quarter of a 128 MB Workers isolate), not per bot or per game: one search's copies are all dropped when it ends, before the next search starts. Past the budget, steps make the moves again from the deepest copy they have. A game with a `determinize` sampler keeps no copies at all, and every step starts from the root as before, because each step searches its own sampled world. In other games no copy is kept below a move that drew from the game's random source (the position depends on the draw) or inside a step every seat takes at once; steps there resume from the deepest copy saved above that point and make the moves below it again.
+
 ## Measuring bot speed
 
 `scripts/bench-bot/run.mjs` measures how fast the bot searches, and where its
@@ -279,12 +281,18 @@ ply where the seat to move has a choice), and at each one runs:
   same on every run and on every machine, and it must choose the same move each
   time. It runs twice. The first run gives its ms and steps per second. The
   second is profiled, and gives how its time splits into parts: rebuilding the
-  search game from the root snapshot, listing legal moves, applying moves,
+  search game from the root snapshot or a saved copy (and saving the copies),
+  listing legal moves, applying moves,
   re-applying moves down the tree path, scoring (objectives and end-of-game
   results) and the determinize hook, with the rest as "other". "lookup" is the
   share spent in element tree walks (`ElementCollection._finder`), which happen
   inside the other parts. The bench stops with an error if the two runs differ
   in steps or chosen move.
+
+Beside each step count, "scored" is how many of those steps were scored. The
+rest were thrown away because a move in them changed the game and then failed
+(see "Hidden information" below). A search whose scored count is far below its
+steps chose its move on almost nothing, however fast it ran (#669).
 
 It always measures in production mode, where `isDevMode()` is false, as in a
 worker child, whatever `NODE_ENV` the shell has. Development mode makes the bot
@@ -300,9 +308,9 @@ same machine, close together, and put both tables in the ticket. The fixed
 search's steps and chosen move must not change unless the ticket means to change
 the search; its ms, steps per second and part shares are the gain. Check the
 load average the report prints: every timed number moves with the machine's
-load. Two back-to-back runs on a shared machine (the committed baseline's run,
-at a load of 5 to 7, and the one before it, which started as the load fell from
-about 130) gave identical fixed searches, and preset step counts within 10% for
+load. Two back-to-back runs on a shared machine (#630's baseline run, at a load
+of 5 to 7, and the one before it, which started as the load fell from about
+130) gave identical fixed searches, and preset step counts within 10% for
 hex at both sizes and for the games that finish their budget, but 16% to 62%
 apart for chess and checkers, whose fixed search times also differed by up to 3
 times at single positions. So run both sides more than once when the machine
@@ -382,6 +390,19 @@ you doing either:
 - **Fabricating the missing state** so `execute()` succeeds makes the bot search
   a world that does not exist. It is the same mistake as deriving `choices` from
   state the caller cannot see, one layer later: the answer is no move, not a guess.
+
+A skipped move that changed the game before it failed costs the whole search
+step it was made in: the step is thrown away, unscored. That is what happens
+when a game's flow reads a card this seat cannot see after a move, as
+Cribbage's starter cut and Seven's discard reveal did (#669), and with no
+sampler nearly every step of such a search is thrown away. In development mode
+the bot warns, once per move, when at least half of its search steps were
+thrown away; a bot that splits its move into sub-searches (`parallel`) adds
+their steps up. The warning gives the count, quotes the first failure (usually
+a hidden read, "... is not known here"), says when no move at the root could be
+played through and the move was chosen at random, and points here. It changes nothing about which move is
+chosen, and production searches never warn. The bench's "scored" columns show
+the same count (see "Measuring bot speed").
 
 A bot that skips its unresolvable moves plays worse than one that could resolve
 them. Making it play WELL in a hidden-information game needs determinization,

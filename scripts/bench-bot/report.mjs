@@ -87,14 +87,14 @@ export function formatReport(meta, games) {
   const presetCells = ({ presets }) => ['easy', 'medium', 'hard']
     .map((level) => {
       const row = summarize(presets[level]);
-      return [row.steps, Math.round(row.ms), cell(row.stepsPerSecond)].join(' | ');
+      return [row.steps, presets[level].scored, Math.round(row.ms), cell(row.stepsPerSecond)].join(' | ');
     })
     .join(' | ');
   const fixedCells = ({ fixed, profile }) => {
     const row = summarize(fixed);
     const split = shares(profile);
     const percents = [...PART_NAMES, 'other', 'lookup'].map((part) => Math.round(split[part]));
-    return [row.steps, Math.round(row.ms), cell(row.stepsPerSecond), ...percents, `\`${fixed.move}\``].join(' | ');
+    return [row.steps, fixed.scored, Math.round(row.ms), cell(row.stepsPerSecond), ...percents, `\`${fixed.move}\``].join(' | ');
   };
 
   return [
@@ -113,10 +113,11 @@ export function formatReport(meta, games) {
     '',
     '## Difficulty presets',
     '',
-    'Each preset as a game plays it, with its timeout: search steps done, ms for the move, and steps per second.',
+    'Each preset as a game plays it, with its timeout: search steps done, how many of them were scored ' +
+      '(the rest were thrown away, #669), ms for the move, and steps per second.',
     '',
-    '| Game | Position | easy steps | easy ms | easy steps/s | medium steps | medium ms | medium steps/s | hard steps | hard ms | hard steps/s |',
-    '|---|---|---|---|---|---|---|---|---|---|---|',
+    '| Game | Position | easy steps | easy scored | easy ms | easy steps/s | medium steps | medium scored | medium ms | medium steps/s | hard steps | hard scored | hard ms | hard steps/s |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
     ...rows(presetCells),
     '',
     `## Fixed ${FIXED_STEPS}-step search`,
@@ -126,8 +127,8 @@ export function formatReport(meta, games) {
       'of a second, profiled run\'s time; "other" is the rest (selection and bookkeeping). ' +
       '"lookup" is element tree walks (`ElementCollection._finder`), which run inside the other parts.',
     '',
-    `| Game | Position | steps | ms | steps/s | ${PART_NAMES.map((part) => `${PART_HEADINGS[part]} %`).join(' | ')} | other % | lookup % | chosen move |`,
-    `|${'---|'.repeat(PART_NAMES.length + 8)}`,
+    `| Game | Position | steps | scored | ms | steps/s | ${PART_NAMES.map((part) => `${PART_HEADINGS[part]} %`).join(' | ')} | other % | lookup % | chosen move |`,
+    `|${'---|'.repeat(PART_NAMES.length + 9)}`,
     ...rows(fixedCells),
     '',
   ].join('\n');

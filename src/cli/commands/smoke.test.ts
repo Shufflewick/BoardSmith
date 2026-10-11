@@ -24,6 +24,7 @@ import {
   aceGameDealtSlowly,
   boardThatStarvesThePage,
   boardThatHangsWhenPressed,
+  boardThatHoldsItsFrames,
   boardWithAPointerlessControl,
   boardWithAControlAtItsFoot,
   boardWithATimidControl,
@@ -816,6 +817,16 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.summary, outcome.summary).toMatch(/The walk could not go on at step \d+ of the game dealt from seed "smoke": the page stopped answering for 60s/);
     // Room for the whole run's 600s limit, so a walk that waits on the hung page reports that limit here.
   }, 700_000);
+
+  it('#666: reports a call into a live page that ran past its page time as that call taking too long, not as a control that never became pressable', async () => {
+    const { outcome } = await smokeOf(false, boardThatHoldsItsFrames());
+
+    expect(outcome.summary).toContain('Pressing the board\'s "Hold" did not work: waiting for the page to paint was still not done after 5s');
+    expect(outcome.summary).not.toContain('did not become pressable');
+    expect(outcome.summary).not.toContain('replaced');
+    expect(outcome.summary).not.toContain('did not answer');
+    expect(outcome.passed).toBe(false);
+  });
 
   it('fails a spec that passes without walking the game', async () => {
     const { outcome } = await smokeOf(false, {

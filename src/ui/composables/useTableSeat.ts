@@ -21,7 +21,7 @@
 import { computed, provide, ref, type ComputedRef, type InjectionKey, type Ref } from 'vue';
 import type { GameState } from '../../client/types.js';
 import { dueSeats as dueSeatsOf } from '../../engine/flow/seat-activity.js';
-import type { GameViewElement } from '../types.js';
+import type { GameRootView } from '../types.js';
 import { BOARD_INTERACTION_KEY, type BoardInteraction } from './useBoardInteraction.js';
 import { ANIMATION_EVENTS_KEY, createAnimationEvents, animationTimeline, type UseAnimationEventsReturn } from './useAnimationEvents.js';
 import { ANNOUNCER_KEY, createAnnouncer, type UseAnnouncerReturn } from './useAnnouncer.js';
@@ -53,7 +53,7 @@ interface TableSeatOptions extends SeatTransport {
   /** This seat's latest frame, `{ flowState, state }` as a session publishes it; null before the first. */
   state: Ref<GameState | null>;
   /** The tree the board draws. The shell's follows time travel; otherwise it is `state.state.view`. */
-  gameView: ComputedRef<GameViewElement | null | undefined>;
+  gameView: ComputedRef<GameRootView | null>;
   /** The viewer's seat; -1 before one is assigned. */
   playerSeat: Ref<number>;
   /** Whether this seat may act now. */

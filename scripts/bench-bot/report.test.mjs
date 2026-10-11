@@ -76,11 +76,11 @@ describe('formatReport', () => {
     ply: 10,
     seat: 1,
     presets: {
-      easy: { steps: 100, ms: 500 },
-      medium: { steps: 300, ms: 1500 },
-      hard: { steps: 480, ms: 2000 },
+      easy: { steps: 100, scored: 90, ms: 500 },
+      medium: { steps: 300, scored: 280, ms: 1500 },
+      hard: { steps: 480, scored: 480, ms: 2000 },
     },
-    fixed: { steps: 300, ms: 3000, move: 'move {"to":4}' },
+    fixed: { steps: 300, scored: 12, ms: 3000, move: 'move {"to":4}' },
     profile: {
       ms: 6000,
       parts: { rebuild: 600, legalMoves: 600, apply: 600, reapply: 600, scoring: 600, determinize: 0 },
@@ -111,7 +111,12 @@ describe('formatReport', () => {
   });
 
   it('has a row per position for the presets, and for the fixed search with its time from the unwrapped run', () => {
-    expect(report).toContain('| hex-11 | early (ply 10, seat 1) | 100 | 500 | 200 | 300 | 1500 | 200 | 480 | 2000 | 240 |');
-    expect(report).toContain('| hex-11 | early (ply 10, seat 1) | 300 | 3000 | 100 | 10 | 10 | 10 | 10 | 10 | 0 | 50 | 20 | `move {"to":4}` |');
+    expect(report).toContain('| hex-11 | early (ply 10, seat 1) | 100 | 90 | 500 | 200 | 300 | 280 | 1500 | 200 | 480 | 480 | 2000 | 240 |');
+    expect(report).toContain('| hex-11 | early (ply 10, seat 1) | 300 | 12 | 3000 | 100 | 10 | 10 | 10 | 10 | 10 | 0 | 50 | 20 | `move {"to":4}` |');
+  });
+
+  it('heads a steps scored column beside each steps column (#669)', () => {
+    expect(report).toContain('| Game | Position | easy steps | easy scored | easy ms |');
+    expect(report).toContain('| Game | Position | steps | scored | ms |');
   });
 });

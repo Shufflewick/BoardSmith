@@ -2,7 +2,6 @@ import type { Game, MessageEntry } from '../element/game.js';
 import { Player } from '../player/player.js';
 import type { HistoryEntry } from '../action/types.js';
 import type { FlowState } from '../flow/types.js';
-import type { ElementJSON } from '../element/types.js';
 import type { TutorialStepView } from '../tutorial/types.js';
 import type { RandomState } from '../../utils/random.js';
 import { getActiveTutorialStepView } from '../tutorial/gate.js';
@@ -374,8 +373,8 @@ export interface PlayerStateView {
   /** Player position */
   player: number;
 
-  /** Filtered state (hidden elements obscured) */
-  state: ElementJSON;
+  /** Filtered state (hidden elements obscured): the game root as `toJSONForPlayer` writes it */
+  state: ReturnType<Game['toJSON']>;
 
   /** Flow state relevant to this player */
   flowState?: {

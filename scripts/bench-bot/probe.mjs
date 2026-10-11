@@ -104,8 +104,8 @@ async function searchPosition(gameDefinition, runner, seat) {
   const presets = {};
   for (const level of ['easy', 'medium', 'hard']) {
     const bot = presetBot(gameDefinition, runner, seat, level);
-    const { steps, ms } = await measureSearch(targets, () => bot.play(), { profile: false });
-    presets[level] = { steps, ms };
+    const { steps, scored, ms } = await measureSearch(targets, () => bot.play(), { profile: false });
+    presets[level] = { steps, scored, ms };
   }
   // The fixed search twice: counting steps only, for its time, then wrapped for where the
   // time goes. The wrappers cost time of their own, most of it on element
@@ -115,16 +115,16 @@ async function searchPosition(gameDefinition, runner, seat) {
     FIXED_STEPS, gameDefinition.bot, { seed: SEED },
   );
   const fixed = await measureSearch(targets, () => fixedBot().play(), { profile: false });
-  const { result, steps, ...profile } = await measureSearch(targets, () => fixedBot().play(), { profile: true });
+  const { result, steps, scored, ...profile } = await measureSearch(targets, () => fixedBot().play(), { profile: true });
   const move = describeMove(runner.game, fixed.result);
-  if (steps !== fixed.steps || describeMove(runner.game, result) !== move) {
+  if (steps !== fixed.steps || scored !== fixed.scored || describeMove(runner.game, result) !== move) {
     throw new Error(
-      `The seeded ${FIXED_STEPS}-step search did not repeat itself: it made ${fixed.steps} steps and chose ` +
-        `${move}, then ${steps} steps and ${describeMove(runner.game, result)}. Something in the search or the ` +
+      `The seeded ${FIXED_STEPS}-step search did not repeat itself: it made ${fixed.steps} steps (${fixed.scored} scored) and chose ` +
+        `${move}, then ${steps} steps (${scored} scored) and ${describeMove(runner.game, result)}. Something in the search or the ` +
         "game's bot hooks is not seeded, so this game's fixed numbers cannot be compared between runs.",
     );
   }
-  return { presets, fixed: { steps, ms: fixed.ms, move }, profile };
+  return { presets, fixed: { steps, scored: fixed.scored, ms: fixed.ms, move }, profile };
 }
 
 /**

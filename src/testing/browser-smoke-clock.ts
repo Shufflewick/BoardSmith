@@ -13,6 +13,9 @@
  * A page or host that stops answering altogether would stop the clock for good, so one that has
  * not answered for {@link FROZEN_MS} is {@link PageClock.frozen}, and the walk reports that.
  *
+ * The walk's waits on that clock live here too ({@link withinPageTime}, {@link actWithinPageTime}),
+ * keyed by the page whose clock they read ({@link clocks}).
+ *
  * Nothing here imports Playwright: `boardsmith dev` imports {@link DEV_HOST_ALIVE_PATH} from it.
  *
  * @module
@@ -45,6 +48,23 @@ export class PageFrozen extends Error {
   constructor() {
     super(FROZEN_SAYS);
     this.name = 'PageFrozen';
+  }
+}
+
+/**
+ * Thrown by a call into the page that was still not done after its budget of the page's time
+ * ({@link PageClock.now}), while the page kept answering: something in the page held that one call
+ * up. `what` names the call as the walk describes it ("looking for the control again"). Callers
+ * pass it on as it is: it is neither a control that never became pressable nor a page that was
+ * replaced or stopped answering (#666).
+ */
+export class PageTimeOverrun extends Error {
+  constructor(what: string, budgetMs: number) {
+    super(
+      `${what} was still not done after ${budgetMs / 1000}s, though the page kept answering the whole time, so something ` +
+        'in the page held that call up. Run `boardsmith smoke` to watch it.',
+    );
+    this.name = 'PageTimeOverrun';
   }
 }
 
@@ -90,5 +110,82 @@ export class PageClock {
       this.counted += Math.min(answered - asked, ANSWER_TICK_MS + ANSWER_SLACK_MS);
       this.lastAnswer = answered;
     }
+  }
+}
+
+/**
+ * How long one try at a wait gets on the wall clock before the walk reads the page's clock again: a
+ * wait is tried again until its time on the page's clock has passed.
+ */
+export const TRY_MS = 1_000;
+
+/** Each browser's clock, keyed by its page, started when it opens (`startClock` in `browser-smoke`). */
+export const clocks = new WeakMap<object, PageClock>();
+
+/**
+ * A stopwatch on `page`'s clock, started now: whether `budgetMs` of the page's time has passed. It
+ * throws {@link PageFrozen} once the page or the dev host has stopped answering altogether, which
+ * no wait outlasts.
+ */
+export function stopwatch(page: object): (budgetMs: number) => boolean {
+  const clock = clocks.get(page);
+  if (clock === undefined) throw new Error('The smoke walk opened a page without starting its clock (startClock).');
+  const since = clock.now();
+  return (budgetMs) => {
+    if (clock.frozen()) throw new PageFrozen();
+    return clock.now() - since > budgetMs;
+  };
+}
+
+/** Whether `error` is a wait running out of time. */
+export const ranOut = (error: unknown) => error instanceof Error && error.name === 'TimeoutError';
+
+/**
+ * Waits for what `attempt` waits for, given `timeout` ms of the wall clock a try, until `budgetMs`
+ * of `page`'s time has passed, and then throws the last try's timeout. `what` names the wait in the
+ * {@link PageTimeOverrun} a try that hangs throws ("waiting for the seat switcher"). Only for a wait that may be
+ * tried again: one that reads or waits, never one that presses. A try that hangs in the page, as a
+ * script Playwright runs once it has found the element does, is held to the page's time too (#618).
+ */
+export async function withinPageTime<T>(
+  page: object,
+  budgetMs: number,
+  what: string,
+  attempt: (timeout: number) => Promise<T>,
+): Promise<T> {
+  const over = stopwatch(page);
+  for (;;) {
+    try {
+      return await actWithinPageTime(page, budgetMs, what, () => attempt(TRY_MS));
+    } catch (error) {
+      if (!ranOut(error) || over(budgetMs)) throw error;
+    }
+  }
+}
+
+/**
+ * Does what `act` does once, with no timeout of its own (`timeout` 0), and returns what it gives.
+ * It throws {@link PageTimeOverrun}, naming `what`, when `act` has not finished in `budgetMs` of
+ * `page`'s time, and
+ * {@link PageFrozen} once the page has stopped answering, running `meanwhile` every tenth of a try
+ * while it waits. For a press, which is never tried again: one that ran out may still land, so the
+ * walk ends there (its set-up presses) or reports it and moves on, as `press` and closing a dialog
+ * with Escape do. And for every call into the page that takes no time limit of its own
+ * (`inPageTime` in `browser-smoke`).
+ */
+export async function actWithinPageTime<T>(
+  page: object,
+  budgetMs: number,
+  what: string,
+  act: (timeout: number) => Promise<T>,
+  meanwhile?: () => Promise<void>,
+): Promise<T> {
+  const over = stopwatch(page);
+  const acting = act(0);
+  acting.catch(() => undefined);
+  for (;;) {
+    if (await Promise.race([acting.then(() => true), new Promise<boolean>((tick) => setTimeout(() => tick(false), TRY_MS / 10))])) return acting;
+    if (over(budgetMs)) throw new PageTimeOverrun(what, budgetMs);
+    await meanwhile?.();
   }
 }

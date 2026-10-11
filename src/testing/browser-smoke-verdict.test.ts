@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { rulesErrorSentence } from '../engine/action/rules-error.js';
-import { PageFrozen } from './browser-smoke-clock.js';
+import { PageFrozen, PageTimeOverrun } from './browser-smoke-clock.js';
 import {
   actionFailed,
   answered,
@@ -420,6 +420,14 @@ describe('walkStopped: why a walk could not go on (#464)', () => {
     expect(walkStopped(timeout, 5, { step: 54, seed: 'smoke' })).toBe(
       'The walk could not go on at step 54 of the game dealt from seed "smoke": the page did not answer within 5s ' +
         '(locator.click: Timeout 5000ms exceeded.). Run `boardsmith smoke` to watch that step.',
+    );
+  });
+
+  it('says a call that ran past its page time on a live page took too long, naming it, not that the page did not answer (#666)', () => {
+    expect(walkStopped(new PageTimeOverrun('looking for the control again', 5_000), 5, { step: 4, seed: 'smoke' })).toBe(
+      'The walk could not go on at step 4 of the game dealt from seed "smoke": looking for the control again was still not done ' +
+        'after 5s, though the page kept answering the whole time, so something in the page held that call up. Run ' +
+        '`boardsmith smoke` to watch it.',
     );
   });
 

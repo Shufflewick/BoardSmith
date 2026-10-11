@@ -47,7 +47,7 @@ class HiddenHandGame extends Game<HiddenHandGame, Player> {
 
 function handCardInViewOf(viewerSeat: number, handOwnerSeat: number): ElementJSON {
   const game = createTestGame(HiddenHandGame, { playerCount: 2, seed: 'presentation-hidden' });
-  const root = game.getPlayerView(viewerSeat).state as ElementJSON;
+  const root = game.getPlayerView(viewerSeat).state;
   const hand = root.children?.find((c) => c.name === `hand-${handOwnerSeat}`);
   const card = hand?.children?.[0];
   if (!card) throw new Error(`seat ${viewerSeat}'s view has no card in hand-${handOwnerSeat}`);

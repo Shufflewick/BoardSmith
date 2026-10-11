@@ -12,8 +12,8 @@ import { MCTSBot } from './mcts-bot.js';
 //
 // A draw game: `draw` moves the chosen card from `deck` into `handA`. Multiple
 // cards -> multiple moves -> MCTS actually expands (no single-move short
-// circuit). After one EXPAND + BACKPROPAGATE the searchGame must be restored to
-// the ROOT position (handA empty, deck full).
+// circuit). After one EXPAND + BACKPROPAGATE the next step must restore the
+// searchGame to the ROOT position (handA empty, deck full).
 // ============================================================================
 
 class DrawGame extends Game<DrawGame, Player> {
@@ -57,7 +57,7 @@ function createDrawGame(): DrawGame {
 }
 
 describe('MCTS element-tree rollback (F-01)', () => {
-  it('rolls searchGame back to root after EXPAND + BACKPROPAGATE (element move undone)', () => {
+  it('rolls searchGame back to root for the step after EXPAND + BACKPROPAGATE (element move undone)', () => {
     const game = createDrawGame();
     expect(game.deck.all(Piece).length).toBe(3);
     expect(game.handA.all(Piece).length).toBe(0);
@@ -86,9 +86,10 @@ describe('MCTS element-tree rollback (F-01)', () => {
     // After EXPAND the move must have actually mutated the search tree.
     expect((b.searchGame as DrawGame).handA.all(Piece).length).toBe(1);
 
-    b.backpropagateAndRestoreRoot(child, 0.5, [], []);
+    b.backpropagate(child, 0.5, [], []);
+    b.selectWithPath(root);
 
-    // After BACKPROPAGATE the searchGame MUST be back at ROOT state:
+    // When the next step starts the searchGame MUST be back at ROOT state:
     // the drawn card is returned to the deck. Pre-fix this failed because
     // `putInto` records no command, so the old command undo never rolled it back.
     const restored = b.searchGame as DrawGame;

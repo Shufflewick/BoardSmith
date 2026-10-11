@@ -231,7 +231,7 @@ you'll leak hidden information the agent isn't entitled to see.
 ```typescript
 interface PlayerStateView {
   player: number;
-  state: ElementJSON;                    // UI-shaped state tree; hidden elements obscured
+  state: ReturnType<Game['toJSON']>;     // the game root as toJSONForPlayer writes it; hidden elements obscured
   flowState?: {
     awaitingInput: boolean;
     isMyTurn: boolean;
@@ -249,7 +249,7 @@ const view = testGame.getPlayerView(1);
 if (view.complete) console.log('winners:', view.winners);
 ```
 
-`view.state` is an `ElementJSON` tree shaped for the UI renderer — don't
+`view.state` is the game root as `toJSONForPlayer` writes it (an `ElementJSON` tree whose root also carries `phase`, `isFinished` and `settings`), shaped for the UI renderer. Don't
 parse it to read game-specific domain properties. In-process (headless or
 test) callers should read typed custom properties directly off the game
 instance instead:

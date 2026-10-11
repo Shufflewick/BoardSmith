@@ -37,8 +37,18 @@
  *
  * @module
  */
-import { errors, test, type Browser, type BrowserContext, type Frame, type Locator, type Page } from '@playwright/test';
-import { DEV_HOST_ALIVE_PATH, PageClock, PageFrozen } from './browser-smoke-clock.js';
+import { test, type Browser, type BrowserContext, type Frame, type Locator, type Page } from '@playwright/test';
+import {
+  actWithinPageTime,
+  clocks,
+  DEV_HOST_ALIVE_PATH,
+  PageClock,
+  PageFrozen,
+  ranOut,
+  stopwatch,
+  TRY_MS,
+  withinPageTime,
+} from './browser-smoke-clock.js';
 import { chooseFromMenu, reopening, type DevHostMenu, type PressWithin } from './browser-smoke-menu.js';
 import {
   clickArrived,
@@ -153,12 +163,6 @@ const TURN_WAIT_MS = 30_000;
 
 /** How long one press, or one read of an element, gets before it counts as not pressable (#464). */
 const PRESS_MS = 5_000;
-
-/**
- * How long one try at a wait gets on the wall clock before the walk reads the page's clock again: a
- * wait is tried again until its time on the page's clock has passed.
- */
-const TRY_MS = 1_000;
 
 /** How many actions the walk goes on taking after it has seen nothing new, before it stops. */
 const IDLE_STEPS = 5;
@@ -328,9 +332,6 @@ async function noteErrorToasts(frame: Frame, walk: SmokeWalk, memory: WalkMemory
 // The page's clock (#609)
 // -------------------------------------------------------------------------------------------
 
-/** Each browser's clock, started when it opens (`startClock`). */
-const clocks = new WeakMap<Page, PageClock>();
-
 /**
  * Starts `page`'s clock: every tick it asks each of the page's frames for nothing and `boardsmith
  * dev` for {@link DEV_HOST_ALIVE_PATH}, and counts the time only once all have answered.
@@ -345,71 +346,11 @@ function startClock(page: Page): void {
 }
 
 /**
- * A stopwatch on `page`'s clock, started now: whether `budgetMs` of the page's time has passed. It
- * throws {@link PageFrozen} once the page or the dev host has stopped answering altogether, which
- * no wait outlasts.
- */
-function stopwatch(page: Page): (budgetMs: number) => boolean {
-  const clock = clocks.get(page);
-  if (clock === undefined) throw new Error('The smoke walk opened a page without starting its clock (startClock).');
-  const since = clock.now();
-  return (budgetMs) => {
-    if (clock.frozen()) throw new PageFrozen();
-    return clock.now() - since > budgetMs;
-  };
-}
-
-/** Whether `error` is a wait running out of time. */
-const ranOut = (error: unknown) => error instanceof Error && error.name === 'TimeoutError';
-
-/**
- * Waits for what `attempt` waits for, given `timeout` ms of the wall clock a try, until `budgetMs`
- * of `page`'s time has passed, and then throws the last try's timeout. Only for a wait that may be
- * tried again: one that reads or waits, never one that presses. A try that hangs in the page, as a
- * script Playwright runs once it has found the element does, is held to the page's time too (#618).
- */
-async function withinPageTime<T>(page: Page, budgetMs: number, attempt: (timeout: number) => Promise<T>): Promise<T> {
-  const over = stopwatch(page);
-  for (;;) {
-    try {
-      return await actWithinPageTime(page, budgetMs, 'waiting on the page', () => attempt(TRY_MS));
-    } catch (error) {
-      if (!ranOut(error) || over(budgetMs)) throw error;
-    }
-  }
-}
-
-/**
- * Does what `act` does once, with no timeout of its own (`timeout` 0), and returns what it gives.
- * It throws a timeout when `act` has not finished in `budgetMs` of `page`'s time, and
- * {@link PageFrozen} once the page has stopped answering, running `meanwhile` every tenth of a try
- * while it waits. For a press, which is never tried again: one that ran out may still land, so the
- * walk ends there (its set-up presses) or reports it and moves on, as `press` and closing a dialog
- * with Escape do. And for every call into the page that takes no time limit of its own
- * ({@link inPageTime}).
- */
-async function actWithinPageTime<T>(
-  page: Page,
-  budgetMs: number,
-  what: string,
-  act: (timeout: number) => Promise<T>,
-  meanwhile?: () => Promise<void>,
-): Promise<T> {
-  const over = stopwatch(page);
-  const acting = act(0);
-  acting.catch(() => undefined);
-  for (;;) {
-    if (await Promise.race([acting.then(() => true), new Promise<boolean>((tick) => setTimeout(() => tick(false), TRY_MS / 10))])) return acting;
-    if (over(budgetMs)) throw new errors.TimeoutError(`${what}: not done in ${budgetMs / 1000}s of the page answering`);
-    await meanwhile?.();
-  }
-}
-
-/**
  * Runs `call`, one call into `page` that Playwright gives no time limit (a script run in the page, a
  * count of elements, a move of the mouse), within {@link PRESS_MS} of the page's time, so a board
  * that hangs during it fails the walk saying the page stopped answering, as any timed wait does,
- * rather than holding it until the limit on the whole run (#618). `what` names the call in the timeout.
+ * rather than holding it until the limit on the whole run (#618). `what` names the call in the
+ * {@link PageTimeOverrun} it throws.
  */
 function inPageTime<T>(page: Page, what: string, call: () => Promise<T>): Promise<T> {
   return actWithinPageTime(page, PRESS_MS, what, call);
@@ -436,7 +377,7 @@ function devHostMenu(page: Page, menu: { toggle: Locator; items: Locator; item: 
     pressToggle: () => menu.toggle.click({ timeout: 0 }),
     isOpen: async () => (await inPageTime(page, 'looking for the menu', () => menu.items.count())) > 0,
     isTaken: async () => (await inPageTime(page, 'looking for the choice taken', () => menu.taken.count())) > 0,
-    waitTaken: () => withinPageTime(page, TURN_WAIT_MS, (timeout) => menu.taken.waitFor({ timeout })).catch(saying(menu.late)),
+    waitTaken: () => withinPageTime(page, TURN_WAIT_MS, 'waiting for the choice to be taken', (timeout) => menu.taken.waitFor({ timeout })).catch(saying(menu.late)),
   };
 }
 
@@ -475,12 +416,12 @@ async function gameFrame(page: Page): Promise<Frame> {
 async function takeASeat(page: Page): Promise<void> {
   const lobbySeat = page.locator('button[aria-label^="Take seat"]').first();
   const frameShown = page.locator('iframe.dev-host__frame, iframe.world-dev__frame').first();
-  await withinPageTime(page, SHELL_WAIT_MS, (timeout) => Promise.race([lobbySeat.waitFor({ timeout }), frameShown.waitFor({ timeout })])).catch(
+  await withinPageTime(page, SHELL_WAIT_MS, 'waiting for a seat or the game', (timeout) => Promise.race([lobbySeat.waitFor({ timeout }), frameShown.waitFor({ timeout })])).catch(
     saying(`The dev host showed neither a seat nor the game after ${SHELL_WAIT_MS / 1000}s. Run \`boardsmith dev\` and open it to see what it shows instead.`),
   );
   if (await inPageTime(page, 'looking for "Take seat"', () => lobbySeat.isVisible())) await actWithinPageTime(page, PRESS_MS, 'pressing "Take seat"', (timeout) => lobbySeat.click({ timeout }));
   const frame = await gameFrame(page);
-  await withinPageTime(page, SHELL_WAIT_MS, (timeout) => frame.locator('[data-testid="bs-actionbar"]').waitFor({ state: 'attached', timeout })).catch(
+  await withinPageTime(page, SHELL_WAIT_MS, "waiting for the game's action bar", (timeout) => frame.locator('[data-testid="bs-actionbar"]').waitFor({ state: 'attached', timeout })).catch(
     saying(
       `The game frame never showed its action bar after ${SHELL_WAIT_MS / 1000}s, so the game did not render. ` +
         'The errors above say why; run `boardsmith dev` to see it.',
@@ -526,7 +467,7 @@ async function dealFrom(page: Page, seed: string): Promise<void> {
   await actWithinPageTime(page, PRESS_MS, 'opening "Table setup"', (timeout) => tableSetup(page).click({ timeout }));
   await actWithinPageTime(page, PRESS_MS, 'entering the seed to deal from', (timeout) => page.getByTestId('deal-seed').fill(seed, { timeout }));
   await actWithinPageTime(page, PRESS_MS, 'pressing "Deal"', (timeout) => page.getByTestId('deal').click({ timeout }));
-  await withinPageTime(page, TURN_WAIT_MS, (timeout) =>
+  await withinPageTime(page, TURN_WAIT_MS, 'waiting for the game to be dealt', (timeout) =>
     page.waitForFunction((dealt) => document.querySelector('[data-testid="game-seed"]')?.textContent === dealt, seed, { timeout }),
   ).catch(saying(`The dev host had not dealt a game from seed "${seed}" ${TURN_WAIT_MS / 1000}s after Deal was pressed.`));
   await actWithinPageTime(page, PRESS_MS, 'closing "Table setup"', (timeout) => tableSetup(page).click({ timeout }));
@@ -610,7 +551,7 @@ async function seatTheWorld(
 async function takeWorldSeat(page: Page, seat: number): Promise<void> {
   const switcher = page.getByTestId('world-seat-switcher');
   const holding = (held: number) => page.locator(`[data-testid="world-seat-switcher"][data-seat="${held}"]`);
-  await withinPageTime(page, TURN_WAIT_MS, (timeout) => page.locator('[data-testid="world-seat-switcher"][data-seat]').waitFor({ timeout })).catch(
+  await withinPageTime(page, TURN_WAIT_MS, 'waiting for the seat switcher', (timeout) => page.locator('[data-testid="world-seat-switcher"][data-seat]').waitFor({ timeout })).catch(
     saying(`The dev host had not seated the page ${TURN_WAIT_MS / 1000}s after it opened. Run \`boardsmith dev\` and open it to see why.`),
   );
   if ((await inPageTime(page, 'looking for the seat held', () => holding(seat).count())) > 0) return;
@@ -644,10 +585,10 @@ async function takeWorldSeat(page: Page, seat: number): Promise<void> {
  * between, the panel would seem to offer nothing (#474).
  */
 async function settle(frame: Frame): Promise<void> {
-  await withinPageTime(frame.page(), TURN_WAIT_MS, (timeout) => frame.locator('[data-bs-submitting]').waitFor({ state: 'detached', timeout })).catch(
+  await withinPageTime(frame.page(), TURN_WAIT_MS, 'waiting for the panel to send the last action', (timeout) => frame.locator('[data-bs-submitting]').waitFor({ state: 'detached', timeout })).catch(
     saying(`The panel was still sending the last action after ${TURN_WAIT_MS / 1000}s.`),
   );
-  await withinPageTime(frame.page(), TURN_WAIT_MS, (timeout) =>
+  await withinPageTime(frame.page(), TURN_WAIT_MS, 'waiting for the panel to load its actions', (timeout) =>
     frame.locator('[data-testid="bs-actions-pending"]').waitFor({ state: 'detached', timeout }),
   ).catch(saying(`The panel was still loading its actions after ${TURN_WAIT_MS / 1000}s.`));
   await framesPass(frame);
@@ -809,7 +750,7 @@ async function whyNotPressed(target: Locator, error: unknown): Promise<string> {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof UnderAToast || /intercepts pointer events/.test(message)) return COVERED;
   if (error instanceof Error && error.name === 'TimeoutError') return `it did not become pressable within ${PRESS_MS / 1000}s`;
-  return message.split('\n')[0];
+  return message.split('\n')[0].replace(/\.$/, '');
 }
 
 /** `error` as an {@link UnderAToast} when it is Playwright's click finding a toast on top of the control, else itself. */
@@ -869,9 +810,10 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
     return false;
   } finally {
     // The marks went with the page that was replaced; the press is reported once, whichever read saw it go.
-    // A page that stopped answering was not replaced, and ends the walk (#618).
+    // Any other failure, as a page that stopped answering (#618) or a call that ran past its page
+    // time (#666), was not a replaced page, and ends the walk.
     await unmark(control.frame).catch((error: unknown) => {
-      if (error instanceof PageFrozen) throw error;
+      if (!control.frame.isDetached()) throw error;
       noteIn(control.frame.page(), walk, replaced);
     });
   }
@@ -1115,7 +1057,7 @@ async function aimAndClick(control: Control): Promise<void> {
       continue;
     }
     reached = true;
-    const accepted = await withinPageTime(control.frame.page(), PRESS_MS, (timeout) =>
+    const accepted = await withinPageTime(control.frame.page(), PRESS_MS, 'reading whether the control accepts the point aimed at', (timeout) =>
       control.target.evaluate((element) => element.getAttribute('aria-disabled') !== 'true' && element.hasAttribute('data-bs-candidate'), undefined, {
         timeout,
       }),
@@ -1306,12 +1248,12 @@ async function fillAnEmptyField(answering: Answering): Promise<void> {
     '.action-config .text-input textarea',
     '.action-config .number-input input[type="number"]',
   ]);
-  if (field === undefined || (await withinPageTime(frame.page(), PRESS_MS, (timeout) => field.target.inputValue({ timeout }))) !== '') return;
+  if (field === undefined || (await withinPageTime(frame.page(), PRESS_MS, 'reading the field', (timeout) => field.target.inputValue({ timeout }))) !== '') return;
   const typed = await valueToType(answering, field);
   if (typed === undefined) return;
   memory.typed.set(name, [...(memory.typed.get(name) ?? []).filter((t) => t.field !== typed.field), typed]);
   narrate(step, `entering "${typed.value}" for "${name}"${typed.from === 'inputs' ? ', from `inputs`' : ''}`);
-  await withinPageTime(frame.page(), PRESS_MS, (timeout) => field.target.fill(typed.value, { timeout }));
+  await withinPageTime(frame.page(), PRESS_MS, 'typing into the field', (timeout) => field.target.fill(typed.value, { timeout }));
 }
 
 /**
@@ -1322,10 +1264,10 @@ async function fillAnEmptyField(answering: Answering): Promise<void> {
 async function valueToType(answering: Answering, field: Control): Promise<TypedValue | undefined> {
   const { frame, walk, memory, name, otherSeats } = answering;
   const page = frame.page();
-  const pick = await withinPageTime(page, PRESS_MS, (timeout) =>
+  const pick = await withinPageTime(page, PRESS_MS, 'reading which pick the field answers', (timeout) =>
     field.target.evaluate((input) => input.closest('[data-bs-pick]')?.getAttribute('data-bs-pick') ?? '', undefined, { timeout }),
   );
-  const kind = (await withinPageTime(page, PRESS_MS, (timeout) => field.target.getAttribute('type', { timeout }))) === 'number' ? 'number' : 'text';
+  const kind = (await withinPageTime(page, PRESS_MS, "reading the field's type", (timeout) => field.target.getAttribute('type', { timeout }))) === 'number' ? 'number' : 'text';
   walk.fieldsMet.get(name)?.set(pick, kind);
   const given = await inputFor(walk.inputs, name, pick, kind, inputView(frame, otherSeats));
   if (given !== undefined) {
@@ -1334,7 +1276,7 @@ async function valueToType(answering: Answering, field: Control): Promise<TypedV
     return undefined;
   }
   if (kind === 'text') return { field: pick, value: 'smoke test', from: 'walk', kind };
-  const value = await withinPageTime(page, PRESS_MS, (timeout) => field.target.evaluate(numberToEnter, memory.refused.get(name) ?? 0, { timeout }));
+  const value = await withinPageTime(page, PRESS_MS, 'choosing a number the field accepts', (timeout) => field.target.evaluate(numberToEnter, memory.refused.get(name) ?? 0, { timeout }));
   return { field: pick, value, from: 'walk', kind };
 }
 
@@ -1577,7 +1519,7 @@ async function closeTheDialog(
   await actWithinPageTime(dialog.target.page(), PRESS_MS, 'pressing Escape', (timeout) => dialog.target.press('Escape', { timeout })).catch((error: unknown) => {
     if (error instanceof PageFrozen) throw error;
   });
-  const closed = await withinPageTime(dialog.target.page(), PRESS_MS, (timeout) => dialog.target.waitFor({ state: 'hidden', timeout })).then(
+  const closed = await withinPageTime(dialog.target.page(), PRESS_MS, 'waiting for the dialog to close', (timeout) => dialog.target.waitFor({ state: 'hidden', timeout })).then(
     () => true,
     (error: unknown) => {
       if (error instanceof PageFrozen) throw error;
@@ -1669,7 +1611,7 @@ async function waitForATurn(frames: readonly Frame[]): Promise<boolean> {
     frame.locator('[data-bs-action]:not([aria-disabled="true"]), [data-bs-open-action], .game-over-card').first().waitFor({ timeout });
   // Counted on the first browser's clock: a world's browsers share the machine that starves them.
   const anyOffered = (timeout: number) => Promise.any(frames.map((frame) => offered(frame, timeout))).catch((none: AggregateError) => Promise.reject(none.errors.find(ranOut) ?? none.errors[0]));
-  return withinPageTime(frames[0].page(), TURN_WAIT_MS, anyOffered).then(
+  return withinPageTime(frames[0].page(), TURN_WAIT_MS, 'waiting for a turn', anyOffered).then(
     () => true,
     (error: unknown) => {
       if (error instanceof PageFrozen) throw error;
