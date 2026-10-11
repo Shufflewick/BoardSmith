@@ -178,43 +178,34 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
     expect(await actionHistory(session)).toEqual(historyAfterFirst);
   });
 
-  it('case 5b — a re-conversion arriving DURING an in-flight pump waits its turn instead of being swallowed', async () => {
-    // The sequential case above cannot see a double-run: with nothing due for
+  it('case 5b — a re-conversion arriving DURING an in-flight pump is never swallowed', async () => {
+    // The sequential case above cannot see a lost wake: with nothing due for
     // the bot, one pump and two pumps are indistinguishable. This one can.
     //
-    // The hazard is `botPumpRunning`. It is the right re-entrancy guard, but it
-    // makes a concurrent wake a SILENT no-op — so a conversion op that ran
-    // inline instead of on `opChain` would return success to a caller whose
-    // re-wake did nothing at all. That matters because "convert an
-    // already-converted seat" is precisely how a caller un-parks a table that
-    // is stalled on a seat which is already a bot, and a wake that is silently
-    // dropped whenever a pump happens to be in flight is not a wake.
+    // "Convert an already-converted seat" is how a caller un-parks a table that
+    // is stalled on a seat which is already a bot, so a wake that is dropped
+    // whenever a pump happens to be in flight is not a wake. A conversion that
+    // arrives while a search is under way joins that run (#635), and the run
+    // must look once more before it stops, even when the search it was in the
+    // middle of found nothing due.
     const base = {
       success: true,
       snapshot: { flowState: {}, winners: [], actionHistory: [] },
       playerViews: [],
-      botMoved: false,
     };
-    const events: string[] = [];
-    let botTurnCalls = 0;
-    let releaseFirstBotTurn = () => {};
-    const firstBotTurn = new Promise<void>((resolve) => {
-      releaseFirstBotTurn = resolve;
+    let searches = 0;
+    let releaseFirstSearch = () => {};
+    const firstSearch = new Promise<void>((resolve) => {
+      releaseFirstSearch = resolve;
     });
 
     const adapters: SnapshotSessionAdapters = {
       playerCount: 2,
       executeOp: stubExecuteOp(async (_snap, _pend, op) => {
-        if (op.type !== 'botTurn') return { ...base };
-        botTurnCalls++;
-        const n = botTurnCalls;
-        events.push(`read${n}`);
-        if (n === 1) {
-          await firstBotTurn; // hold the first pump open
-          events.push(`write${n}`);
-          return { ...base, botMoved: true, botPlayer: 2 };
-        }
-        return { ...base, botMoved: false };
+        if (op.type !== 'botSuggest') return { ...base };
+        searches++;
+        if (searches === 1) await firstSearch; // hold the first search open
+        return { ...base };
       }),
       record: () => {}, push: () => {},
     };
@@ -224,21 +215,17 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
     await host.start();
 
     const firstConversion = host.handleOp(2, { type: 'convertSeatToBot', seat: 2 });
-    // Fire the second while the first is stalled mid-pump.
+    await vi.waitFor(() => expect(searches).toBe(1));
+    // Fire the second while the first search is still under way.
     const secondConversion = host.handleOp(2, { type: 'convertSeatToBot', seat: 2 });
-    releaseFirstBotTurn();
+    releaseFirstSearch();
     const [first, second] = await Promise.all([firstConversion, secondConversion]);
 
     expect(first.success).toBe(true);
     expect(second.success).toBe(true);
-
-    // Pump 1 ran to exhaustion (moved once, then found nothing due) and pump 2
-    // ran AFTER it, not inside it. A conversion handled inline would have hit
-    // `botPumpRunning` and made no botTurn call at all — three calls, in this
-    // order, is what proves the op is serialized on opChain and that the
-    // re-wake really happened.
-    expect(events).toEqual(['read1', 'write1', 'read2', 'read3']);
-    expect(botTurnCalls).toBe(3);
+    // The first search found nothing due, and the run asked again for the wake
+    // that came during it: two searches, never overlapping.
+    expect(searches).toBe(2);
   });
 
   // ── 6. Terminal game ───────────────────────────────────────────────────────
@@ -266,24 +253,23 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
   // ── 7. The circuit breaker still holds ─────────────────────────────────────
 
   it('case 7 — a conversion-started pump is still capped at MAX_BOT_MOVES', async () => {
-    // Stub adapters: a bundle that always claims a move was made would loop
+    // Stub adapters: a bundle whose bot always finds a move would loop
     // forever if the conversion had its own pump instead of reusing the one
     // MAX_BOT_MOVES bounds. The exact cap AND the exact log line are what prove
-    // the conversion went through `runBotTurnsInner` and not a clone of it.
+    // the conversion went through `runBotTurns` and not a clone of it.
     const base = {
       success: true,
       snapshot: { flowState: {}, winners: [], actionHistory: [] },
       playerViews: [],
-      botMoved: true,
     };
     let botCallCount = 0;
     const adapters: SnapshotSessionAdapters = {
       playerCount: 2,
       executeOp: stubExecuteOp(async (_snap, _pend, op) => {
-        if (op.type === 'start') return { ...base, botMoved: false };
-        if (op.type === 'botTurn') {
+        if (op.type === 'botSuggest') return { ...base, botPlayer: 2, suggestedAction: 'go', suggestedArgs: {} };
+        if (op.type === 'action' && op.player === 2) {
           botCallCount++;
-          return { ...base, botMoved: true };
+          return { ...base };
         }
         return { ...base };
       }),

@@ -699,58 +699,6 @@ describe('executeOp', () => {
       expect(botResult.success).toBe(true);
       expect(botResult.botMoved).toBe(false);
     });
-
-    // Regression: botTurn used to build its bot WITHOUT def.bot, so every bot turn
-    // in production ran a hookless generic search. Games that use moveOrdering to
-    // keep concede-style actions out of the search (chess drops resign / offer
-    // draw) had that filter silently ignored, and at low iteration budgets the
-    // bot picked them — chess bots resigned on move one.
-    it("applies the game definition's bot hooks to the bot's move choice", async () => {
-      class ConcedeGame extends Game<ConcedeGame, Player> {
-        constructor(options: GameOptions) {
-          super(options);
-          this.registerAction(Action.create('advance').execute(() => ({ success: true })));
-          this.registerAction(Action.create('concede').execute(() => ({ success: true })));
-          this.setFlow({
-            root: loop({
-              maxIterations: 100,
-              do: actionStep({
-                actions: ['advance', 'concede'],
-                player: (ctx) => ctx.game.getPlayer(1)!,
-                repeatUntil: () => false,
-                turnScope: 'restart',
-              }),
-            }),
-          });
-        }
-      }
-
-      const moveOrdering = vi.fn((_game, _playerIndex, moves: Array<{ action: string }>) =>
-        moves.filter((m) => m.action !== 'concede'),
-      );
-      const concedeDef: GameDefinitionLike & { bot?: BotStrategy } = {
-        gameClass: ConcedeGame,
-        gameType: 'concede-game',
-        minPlayers: 1,
-        maxPlayers: 2,
-        bot: { moveOrdering } as unknown as BotStrategy,
-      };
-      const concedeOptions = { playerCount: 2, seed: 'concede-seed' };
-
-      const startResult = succeeded(await executeOp(concedeDef, concedeOptions, null, null, { type: 'start' }));
-      expect(startResult.success).toBe(true);
-
-      const botResult = succeeded(await executeOp(concedeDef, concedeOptions, startResult.snapshot, null, {
-        type: 'botTurn',
-        seats: [{ seat: 1, level: 'easy' }],
-      }));
-
-      expect(botResult.success).toBe(true);
-      expect(botResult.botMoved).toBe(true);
-      expect(moveOrdering).toHaveBeenCalled();
-      const history = (botResult.snapshot as { actionHistory: Array<{ name: string }> }).actionHistory;
-      expect(history.map((a) => a.name)).not.toContain('concede');
-    });
   });
 
   // ── startTutorial ─────────────────────────────────────────────────────────
@@ -1357,34 +1305,108 @@ describe('executeOp', () => {
       expect(flowState.availableActions).toContain('move');
     });
 
-    // ── fail-loud: no actable seat ────────────────────────────────────────
+    // ── what a search answers besides a move (#29, #421, #635) ───────────
 
-    it('botSuggest returns a protocol error when no seat among the given seats is awaiting input', async () => {
+    it('botSuggest answers with neither a move nor a stall when no given seat is due', async () => {
       const snapshot = await startBotSuggestGame();
       // Seat 2 never acts — only seat 1 does
-      const res = refused(await executeOp(botSuggestGameDef, botSuggestOpts, snapshot, null, {
+      const res = succeeded(await executeOp(botSuggestGameDef, botSuggestOpts, snapshot, null, {
         type: 'botSuggest',
         seats: [{ seat: 2 }],
       }));
 
-      expect(res.success).toBe(false);
-      expect(res.category).toBe('protocol');
-      expect(res.error).toBeDefined();
+      expect(res.botPlayer).toBeUndefined();
+      expect(res.botStalled).toBeUndefined();
     });
 
-    // ── fail-loud: no bot config ───────────────────────────────────────────
-
-    it('botSuggest returns a protocol error when no bot config is on the definition', async () => {
+    it('botSuggest searches a game with no bot configuration, as a bot seat plays it', async () => {
       const { bot: _bot, ...noBotDef } = botSuggestGameDef;
       const snapshot = await startBotSuggestGame();
-      const res = refused(await executeOp(noBotDef, botSuggestOpts, snapshot, null, {
+      const res = succeeded(await executeOp(noBotDef, botSuggestOpts, snapshot, null, {
         type: 'botSuggest',
         seats: [{ seat: 1 }],
       }));
 
-      expect(res.success).toBe(false);
+      expect(res.botPlayer).toBe(1);
+      expect(res.suggestedAction).toBe('move');
+    });
+
+    it('botSuggest reports the due seat as stalled, with why, when the bot fails while choosing (#29)', async () => {
+      const brokenDef: BotSuggestGameDef = {
+        ...botSuggestGameDef,
+        bot: { ...botSuggestFn, moveOrdering: () => { throw new Error('broken hook'); } },
+      };
+      const snapshot = await startBotSuggestGame();
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const res = succeeded(await executeOp(brokenDef, botSuggestOpts, snapshot, null, {
+        type: 'botSuggest',
+        seats: [{ seat: 1 }],
+      }));
+      errors.mockRestore();
+
+      expect(res.botPlayer).toBeUndefined();
+      expect(res.botStalled).toEqual({ seat: 1, reason: 'The bot failed while choosing a move.' });
+    });
+
+    it('botSuggest is refused up front in an order-entry session: bot playouts consume randomness', async () => {
+      const snapshot = await startBotSuggestGame();
+      const res = refused(await executeOp(botSuggestGameDef, botSuggestOpts, snapshot, null, {
+        type: 'botSuggest',
+        seats: [{ seat: 1 }],
+      }, { randomness: 'forbidden' }));
+
       expect(res.category).toBe('protocol');
-      expect(res.error).toMatch(/No bot configuration/i);
+      expect(res.error).toMatch(/order-entry session/);
+    });
+
+    // Regression: the bot search used to build its bot WITHOUT def.bot, so every bot turn
+    // in production ran a hookless generic search. Games that use moveOrdering to
+    // keep concede-style actions out of the search (chess drops resign / offer
+    // draw) had that filter silently ignored, and at low iteration budgets the
+    // bot picked them — chess bots resigned on move one.
+    it("applies the game definition's bot hooks to the bot's move choice", async () => {
+      class ConcedeGame extends Game<ConcedeGame, Player> {
+        constructor(options: GameOptions) {
+          super(options);
+          this.registerAction(Action.create('advance').execute(() => ({ success: true })));
+          this.registerAction(Action.create('concede').execute(() => ({ success: true })));
+          this.setFlow({
+            root: loop({
+              maxIterations: 100,
+              do: actionStep({
+                actions: ['advance', 'concede'],
+                player: (ctx) => ctx.game.getPlayer(1)!,
+                repeatUntil: () => false,
+                turnScope: 'restart',
+              }),
+            }),
+          });
+        }
+      }
+
+      const moveOrdering = vi.fn((_game, _playerIndex, moves: Array<{ action: string }>) =>
+        moves.filter((m) => m.action !== 'concede'),
+      );
+      const concedeDef: GameDefinitionLike & { bot?: BotStrategy } = {
+        gameClass: ConcedeGame,
+        gameType: 'concede-game',
+        minPlayers: 1,
+        maxPlayers: 2,
+        bot: { moveOrdering } as unknown as BotStrategy,
+      };
+      const concedeOptions = { playerCount: 2, seed: 'concede-seed' };
+
+      const startResult = succeeded(await executeOp(concedeDef, concedeOptions, null, null, { type: 'start' }));
+      expect(startResult.success).toBe(true);
+
+      const botResult = succeeded(await executeOp(concedeDef, concedeOptions, startResult.snapshot, null, {
+        type: 'botSuggest',
+        seats: [{ seat: 1, level: 'easy' }],
+      }));
+
+      expect(botResult.botPlayer).toBe(1);
+      expect(moveOrdering).toHaveBeenCalled();
+      expect(botResult.suggestedAction).toBe('advance');
     });
 
     // ── read-only classification ──────────────────────────────────────────

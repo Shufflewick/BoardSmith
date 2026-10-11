@@ -291,7 +291,7 @@ describe('SnapshotSessionHost', () => {
   // ── 4. bot pump ─────────────────────────────────────────────────────────────
 
   describe('bot pump', () => {
-    it('a REJECTED bot turn stops the pump LOUDLY — never a silent break that strands every seat', async () => {
+    it('a REJECTED bot move stops that seat LOUDLY — never a silent break that strands every seat', async () => {
       // The 1-2 Punch stall: the bot returned a move the engine rejected, the
       // pump did `if (!res.success || !res.botMoved) break` with no output, and
       // the game sat forever on a seat nothing would ever drive — no error on
@@ -300,7 +300,6 @@ describe('SnapshotSessionHost', () => {
         success: true,
         snapshot: { stubbed: true, flowState: {}, winners: [], actionHistory: [] },
         playerViews: [null, null],
-        botMoved: false,
       };
 
       let botCallCount = 0;
@@ -308,14 +307,10 @@ describe('SnapshotSessionHost', () => {
         playerCount: 2,
         executeOp: stubExecuteOp(async (_snap, _pend, op) => {
           if (op.type === 'start') return { ...baseResult, snapshot: { turn: 0, flowState: {}, winners: [], actionHistory: [] } };
-          if (op.type === 'botTurn') {
+          if (op.type === 'botSuggest') return { ...baseResult, botPlayer: 2, suggestedAction: 'name', suggestedArgs: {} };
+          if (op.type === 'action') {
             botCallCount++;
-            return {
-              success: false,
-              error: 'Missing required selection: namedType',
-              snapshot: null,
-              playerViews: [],
-            };
+            return { success: false, error: 'Missing required selection: namedType', category: 'bundle' };
           }
           return { ...baseResult };
         }),
@@ -339,7 +334,8 @@ describe('SnapshotSessionHost', () => {
       // developer can find the action definition at fault.
       expect(calls).toHaveLength(1);
       expect(calls[0]).toContain('Missing required selection: namedType');
-      expect(calls[0]).toMatch(/seat\(s\) 2/);
+      expect(calls[0]).toMatch(/seat 2: /);
+      expect(calls[0]).toMatch(/will not try again until the game changes/);
     });
 
     it.each(['undo', 'debugRewind'] as const)(
@@ -354,16 +350,15 @@ describe('SnapshotSessionHost', () => {
           success: true,
           snapshot: { stubbed: true, flowState: {}, winners: [], actionHistory: [] },
           playerViews: [],
-          botMoved: false,
         };
 
         let botCallCount = 0;
         const adapters: SnapshotSessionAdapters = {
           playerCount: 2,
           executeOp: stubExecuteOp(async (_snap, _pend, op) => {
-            if (op.type === 'botTurn') {
+            if (op.type === 'botSuggest') {
               botCallCount++;
-              return { ...baseResult, botMoved: false };
+              return { ...baseResult };
             }
             return { ...baseResult };
           }),
@@ -382,15 +377,13 @@ describe('SnapshotSessionHost', () => {
       },
     );
 
-    it('runBotTurns loops while botMoved:true then stops, applying each move', async () => {
-      // Use a stub executeOp that answers start normally, then returns botMoved:true
-      // once and botMoved:false on the next call.
+    it('runBotTurns makes each move a search finds, then stops when a search finds none', async () => {
+      // A stub executeOp whose first search finds a move and whose second finds none.
       const baseSnapshot = { stubbed: true, flowState: {}, winners: [], actionHistory: [] };
       const baseResult = {
         success: true,
         snapshot: baseSnapshot,
         playerViews: [null, null],
-        botMoved: false,
       };
 
       let botCallCount = 0;
@@ -402,12 +395,13 @@ describe('SnapshotSessionHost', () => {
           if (op.type === 'start') {
             return { ...baseResult, snapshot: { turn: 0, flowState: {}, winners: [], actionHistory: [] } };
           }
-          if (op.type === 'botTurn') {
+          if (op.type === 'botSuggest') {
             botCallCount++;
-            if (botCallCount === 1) {
-              return { ...baseResult, snapshot: { turn: 1, flowState: {}, winners: [], actionHistory: [] }, botMoved: true, botPlayer: 2 };
-            }
-            return { ...baseResult, snapshot: { turn: 1, flowState: {}, winners: [], actionHistory: [] }, botMoved: false };
+            if (botCallCount === 1) return { ...baseResult, botPlayer: 2, suggestedAction: 'go', suggestedArgs: {} };
+            return { ...baseResult };
+          }
+          if (op.type === 'action' && op.player === 2) {
+            return { ...baseResult, snapshot: { turn: 1, flowState: {}, winners: [], actionHistory: [] } };
           }
           return { ...baseResult };
         }),
@@ -421,8 +415,8 @@ describe('SnapshotSessionHost', () => {
       broadcastLog.length = 0;
       await host.runBotTurns();
 
-      // Loop should have called executeOp(botTurn) twice: once getting botMoved:true
-      // (applies move, broadcasts) and once getting botMoved:false (stops).
+      // Two searches: the first found a move (made and broadcast as an action),
+      // the second found none (stops).
       expect(botCallCount).toBe(2);
 
       // One broadcast from the applied bot move
@@ -432,12 +426,10 @@ describe('SnapshotSessionHost', () => {
       expect((host.snapshot as unknown as { turn: number }).turn).toBe(1);
     });
 
-    it('serializes concurrent runBotTurns calls (opChain — no overlapping pump execution)', async () => {
+    it('a runBotTurns call during a run joins it (no overlapping pump execution)', async () => {
       // Two concurrent runBotTurns() calls must NOT run their pumps at the same
-      // time. Before the opChain fix, the botPumpRunning guard made the second
-      // call a silent no-op; now the chain serializes them so the second runs
-      // strictly AFTER the first completes. Either way the invariant the
-      // dev-host relies on holds: botTurn executions never overlap.
+      // time: the second joins the run under way (#635), so bot searches never
+      // overlap.
       let concurrentBotTurns = 0;
       let maxConcurrentBotTurns = 0;
       let resolveFirstBotCall!: (v: unknown) => void;
@@ -456,15 +448,15 @@ describe('SnapshotSessionHost', () => {
         playerCount: 2,
         executeOp: stubExecuteOp(async (_snap, _pend, op) => {
           if (op.type === 'start') return { ...baseResult };
-          if (op.type === 'botTurn') {
+          if (op.type === 'botSuggest') {
             concurrentBotTurns++;
             maxConcurrentBotTurns = Math.max(maxConcurrentBotTurns, concurrentBotTurns);
             try {
               botCall++;
-              // First pump's first botTurn stalls until we release it, holding the
-              // critical section open while the second runBotTurns() is pending.
+              // First pump's first search stalls until we release it, while the
+              // second runBotTurns() is pending.
               if (botCall === 1) return await firstBotCallPromise;
-              return { ...baseResult, botMoved: false };
+              return { ...baseResult };
             } finally {
               concurrentBotTurns--;
             }
@@ -478,74 +470,13 @@ describe('SnapshotSessionHost', () => {
       host.setBotSeats([{ seat: 1 }]);
       await host.start();
 
-      const pump1 = host.runBotTurns(); // stalls on the first botTurn
-      const pump2 = host.runBotTurns(); // queued behind pump1 on opChain
-      resolveFirstBotCall({ ...baseResult, botMoved: false });
+      const pump1 = host.runBotTurns(); // stalls on the first search
+      const pump2 = host.runBotTurns(); // joins pump1
+      resolveFirstBotCall({ ...baseResult });
       await Promise.all([pump1, pump2]);
 
-      // The core guarantee: the two pumps never executed botTurn concurrently.
+      // The core guarantee: the two pumps never searched concurrently.
       expect(maxConcurrentBotTurns).toBe(1);
-    });
-
-    it('serializes a human op arriving during an in-flight bot pump (lost-update wedge fix)', async () => {
-      // Regression for the dev-host lost-update race (dev-host-bot-op-race #1):
-      // a human action op that arrives WHILE the bot pump is mid-flight must not
-      // read the same base snapshot and last-write-wins clobber the pump's move.
-      // The opChain must make the human op wait until the pump fully finishes.
-      const events: string[] = [];
-      let releaseBotTurn!: () => void;
-      const botTurnGate = new Promise<void>((res) => {
-        releaseBotTurn = res;
-      });
-
-      const baseResult = {
-        success: true,
-        snapshot: { v: 0, flowState: {}, winners: [], actionHistory: [] },
-        playerViews: [null, null],
-        botMoved: false,
-      };
-
-      let botCall = 0;
-      const adapters: SnapshotSessionAdapters = {
-        playerCount: 2,
-        executeOp: stubExecuteOp(async (snap, _pend, op) => {
-          if (op.type === 'start') return { ...baseResult, snapshot: { v: 0, flowState: {}, winners: [], actionHistory: [] } };
-          if (op.type === 'botTurn') {
-            botCall++;
-            if (botCall === 1) {
-              events.push('bot-read');
-              await botTurnGate; // hold the pump open
-              events.push('bot-write');
-              return { ...baseResult, snapshot: { v: 1, flowState: {}, winners: [], actionHistory: [] }, botMoved: true, botPlayer: 2 };
-            }
-            return { ...baseResult, snapshot: snap as object, botMoved: false };
-          }
-          if (op.type === 'action') {
-            // The human op MUST observe the snapshot the pump wrote (v:1), never
-            // the pre-pump base (v:0) — proving it did not run against stale state.
-            events.push(`human-read:v=${(snap as { v: number }).v}`);
-            return { ...baseResult, snapshot: { v: 2, flowState: { awaitingInput: true, currentPlayer: 1 }, winners: [], actionHistory: [] }, flowState: { awaitingInput: true, currentPlayer: 1 } };
-          }
-          return { ...baseResult };
-        }),
-        record: () => {}, push: () => {},
-      };
-
-      const host = new SnapshotSessionHost(adapters);
-      host.setBotSeats([{ seat: 2 }]);
-      await host.start();
-
-      const pump = host.runBotTurns(); // starts, blocks in the first botTurn
-      // Fire a human action while the pump is stalled mid-flight.
-      const human = host.handleOp(1, { type: 'action', actionName: 'x', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) } as unknown as Op);
-      // Let the pump finish; the human op should only then proceed.
-      releaseBotTurn();
-      await Promise.all([pump, human]);
-
-      // Order proves serialization: the pump fully wrote before the human read,
-      // and the human read the pump's result (v:1), not the stale base (v:0).
-      expect(events).toEqual(['bot-read', 'bot-write', 'human-read:v=1']);
-      expect((host.snapshot as unknown as { v: number }).v).toBe(2);
     });
 
     it('triggers runBotTurns automatically after a successful human action', async () => {
@@ -555,10 +486,7 @@ describe('SnapshotSessionHost', () => {
       let botCallCount = 0;
       const realExecOp = adapters.executeOp;
       adapters.executeOp = async (snap, pend, op) => {
-        if (op.type === 'botTurn') {
-          botCallCount++;
-          return { ...(await realExecOp(snap, pend, op)), botMoved: false };
-        }
+        if (op.type === 'botSuggest') botCallCount++;
         return realExecOp(snap, pend, op);
       };
 
@@ -569,7 +497,7 @@ describe('SnapshotSessionHost', () => {
 
       await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
 
-      // bot pump should have been triggered (at least one botTurn call)
+      // bot pump should have been triggered (at least one search)
       expect(botCallCount).toBeGreaterThanOrEqual(1);
     });
 
@@ -578,19 +506,18 @@ describe('SnapshotSessionHost', () => {
         success: true,
         snapshot: { flowState: {}, winners: [], actionHistory: [] },
         playerViews: [],
-        botMoved: true,
       };
 
       let botCallCount = 0;
       const adapters: SnapshotSessionAdapters = {
         playerCount: 2,
-        // A buggy bundle that ALWAYS reports a move was made — would loop forever
+        // A buggy bundle whose bot ALWAYS finds a move — would loop forever
         // without the cap.
         executeOp: stubExecuteOp(async (_snap, _pend, op) => {
-          if (op.type === 'start') return { ...base, botMoved: false };
-          if (op.type === 'botTurn') {
+          if (op.type === 'botSuggest') return { ...base, botPlayer: 2, suggestedAction: 'go', suggestedArgs: {} };
+          if (op.type === 'action' && op.player === 2) {
             botCallCount++;
-            return { ...base, botMoved: true };
+            return { ...base };
           }
           return { ...base };
         }),
@@ -713,7 +640,6 @@ describe('SnapshotSessionHost', () => {
         executeOp: stubExecuteOp(async (_snap, pend, op) => {
           calls.push({ type: op.type, pendingState: pend });
           if (op.type === 'selectionStep') return { ...base, actionComplete: false, pendingState: { step: 'mid' } };
-          if (op.type === 'botTurn') return { ...base, botMoved: false };
           return { ...base };
         }),
         record: () => {}, push: () => {},
@@ -736,7 +662,7 @@ describe('SnapshotSessionHost', () => {
       const closeCall = calls[startCalls + 1];
       expect(closeCall).toEqual({ type: 'expireSeat', pendingState: null });
       // The close ended the seat's part, so the bot seat was asked to move next.
-      expect(calls.slice(startCalls + 2).map((c) => c.type)).toContain('botTurn');
+      expect(calls.slice(startCalls + 2).map((c) => c.type)).toContain('botSuggest');
       // And the seat's half-made picks are gone for good.
       await host.handleOp(1, {
         type: 'selectionStep', player: 1, selectionName: 'where', value: 'south', actionName: 'loot',

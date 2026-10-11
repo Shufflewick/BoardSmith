@@ -52,9 +52,9 @@ function manualGate() {
 
 /**
  * A one-seat game whose only move adds `rules.step`. Bots move while the count
- * is below `botsStopAt`.
+ * is below `botsStopAt`, and always when it is not given (the demo).
  */
-function countingSession(options: { botSeats?: Array<{ seat: number }>; botsStopAt?: number; onBotTurn?: () => void }) {
+function countingSession(options: { botSeats?: Array<{ seat: number }>; botsStopAt?: number; onBotSearch?: () => void }) {
   const rules = { step: 1 };
   const gate = manualGate();
   const views: Count[] = [];
@@ -73,13 +73,11 @@ function countingSession(options: { botSeats?: Array<{ seat: number }>; botsStop
       case 'start':
         return result({ count: 0 });
       case 'botSuggest':
+        options.onBotSearch?.();
+        if (options.botsStopAt !== undefined && at.count >= options.botsStopAt) return result(at);
         return { ...result(at), botPlayer: 1, suggestedAction: 'bump', suggestedArgs: {} };
       case 'action':
         return result({ count: at.count + rules.step });
-      case 'botTurn':
-        options.onBotTurn?.();
-        if (at.count >= (options.botsStopAt ?? 0)) return { ...result(at), botMoved: false };
-        return { ...result({ count: at.count + rules.step }), botMoved: true };
       default:
         throw new Error(`this test's game does not answer ${op.type}`);
     }
@@ -175,13 +173,13 @@ describe('#388: a chain of bot moves running when a save lands', () => {
     { on: 'the edited rules once they are in place', edited: true, count: 11 },
     { on: 'the old rules when the edit does not build', edited: false, count: 3 },
   ])('yields to the reload between moves and goes on on $on', async ({ edited, count }) => {
-    let turns = 0;
+    let searches = 0;
     const table = countingSession({
       botSeats: [{ seat: 1 }],
       botsStopAt: 3,
-      // The save lands while the chain's first move is being made.
-      onBotTurn: () => {
-        if (++turns === 1) table.gate.saved();
+      // The save lands while the bot searches for the chain's first move.
+      onBotSearch: () => {
+        if (++searches === 1) table.gate.saved();
       },
     });
     await table.host.start();

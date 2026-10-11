@@ -1,7 +1,7 @@
 {
-  "revision": 171,
+  "revision": 172,
   "bundleProtocol": 2,
-  "surfaceHash": "e41fa2badef24819",
+  "surfaceHash": "fee7d0fbb7bd88a5",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1483,6 +1483,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A pick's choices are worked out once per game state and reused by the flow's offer, move enumeration, validation and the UI's request until the state version moves (#631). The version moves on every tree change (create, move, remove, shuffle), every random draw, every restore, every write of the game's phase, every write through actionTempState, and after every call into game code that may change the game (execute, onSelect, onCancel, onEach, the flow's setup, execute steps and phase hooks, a space's onEnter and onExit, a bot's determinize sampler, a tutorial's setup). An attribute or settings write anywhere else, including in a candidate callback or a flow condition (a while, an eachPlayer filter, an actionStep player), is not versioned and is not seen until the next change that is. Development mode and world mode reuse nothing, and an answer that read the flow's state is never kept."
+    },
+    {
+      "revision": 172,
+      "date": "2026-10-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "fee7d0fbb7bd88a5",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A bot's search no longer holds the table, except after three stale searches in a row, when the next one does so it cannot go stale again (#635): botSuggest is now an executor op (ExecutorOp, parseExecutorOp; same seats field as botTurn) that changes nothing and answers with the due bot seat's move (botPlayer, suggestedAction, suggestedArgs), botStalled when that seat could not choose, or neither when no bot seat is due, so its result fields are now optional; it no longer refuses a game without bot objectives and is refused in an order-entry session. SnapshotSessionHost searches with botSuggest outside its one-at-a-time section and makes the move as an ordinary action for the bot's seat only if the game still stands where the search began, so it never sends botTurn and every game-changing op result it receives is one it applies; a refused bot move fails as an action result, without botPlayer; only the game's own refusal (category bundle) holds that bot seat back until the game changes, and any other refusal stops the bot pump without holding the seat, so the next wake asks again. botTurn is unchanged and still accepted. A human's move made during a search is published at once, though its handleOp still resolves after the bot run it wakes. BREAKING for a host that runs older engines: a runner before r172 refuses botSuggest for a game without bot objectives, refuses it when no bot seat is due, and reports a bot that found no move as a refusal rather than botStalled, so this host's bot pump misreads all three; a host must run r172 or later engines only."
     }
   ]
 }

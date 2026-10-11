@@ -151,8 +151,8 @@ function makeHost(
     idleAction: { name: 'commit' },
     executeOp: async (gameOptions, snap, pend, op, hostOptions) => {
       // A bot that never moves: the pump asks with no seats, so it is told
-      // `botMoved: false` by the real engine rather than by a hand-built result.
-      const asked = stallBots && op.type === 'botTurn' ? { ...op, seats: [] } as typeof op : op;
+      // that no seat is due by the real engine rather than by a hand-built result.
+      const asked = stallBots && op.type === 'botSuggest' ? { ...op, seats: [] } as typeof op : op;
       const result = await executeOp(def, gameOptions, snap, pend, asked, hostOptions);
       executed.push({ op, result });
       return result;

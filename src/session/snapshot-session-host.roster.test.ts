@@ -33,7 +33,7 @@ function adapters(onRecord?: (meta: PublishMeta) => void) {
   const value: SnapshotSessionAdapters = {
     playerCount: options.playerCount,
     executeOp: (snap, pend, op) =>
-      executeOp(secretDeploymentDefinition, options, snap, pend, op.type === 'botTurn' ? { ...op, seats: [] } as typeof op : op),
+      executeOp(secretDeploymentDefinition, options, snap, pend, op.type === 'botSuggest' ? { ...op, seats: [] } as typeof op : op),
     record: (views, meta) => {
       records.push({ cause: meta.cause, views: views.players, spectator: views.spectator });
       onRecord?.(meta);
