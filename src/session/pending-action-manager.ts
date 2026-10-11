@@ -102,6 +102,9 @@ export class PendingActionManager<G extends Game = Game> {
 
     const executor = this.#runner.game.getActionExecutor();
     const pendingState = executor.createPendingActionState(actionName, playerPosition);
+    // A held follow-up's published args are the engine's, bound before any
+    // client pick, so every pick's callbacks see them.
+    this.#runner.bindFollowUpArgs(pendingState, playerPosition);
     this.#pendingActions.set(playerPosition, pendingState);
 
     return { success: true, pendingState };
@@ -111,7 +114,9 @@ export class PendingActionManager<G extends Game = Game> {
    * Process a selection step for a pending action.
    * Handles both regular selections and repeating selections.
    * Auto-creates the pending action if it doesn't exist.
-   * @param initialArgs - Pre-collected args from earlier selections (e.g., actingMerc before equipment)
+   * @param initialArgs - The picks the client made before this one, read only
+   *   when this step starts the pending action, and made as its own steps would be
+   *   (e.g., actingMerc before equipment)
    */
   async processSelectionStep(
     playerPosition: number,
@@ -131,27 +136,9 @@ export class PendingActionManager<G extends Game = Game> {
       if (!startResult.success) {
         return { success: false, error: startResult.error, errorCode: startResult.errorCode };
       }
-      pendingState = startResult.pendingState;
-      this.#pendingActions.set(playerPosition, pendingState!);
-
-      // If initialArgs provided, populate the pending state and advance to correct selection
-      if (initialArgs && Object.keys(initialArgs).length > 0) {
-        const action = this.#runner.game.getAction(actionName);
-        if (action) {
-          // Copy initialArgs to collectedArgs (filter out null/undefined)
-          for (const [key, val] of Object.entries(initialArgs)) {
-            if (val !== undefined && val !== null) {
-              pendingState!.collectedArgs[key] = val;
-            }
-          }
-
-          // Find the index of the selection we're about to process
-          const targetIndex = action.selections.findIndex(s => s.name === selectionName);
-          if (targetIndex > 0) {
-            pendingState!.currentSelectionIndex = targetIndex;
-          }
-        }
-      }
+      pendingState = startResult.pendingState!;
+      const refusal = this.#makeInitialPicks(pendingState, playerPosition, selectionName, initialArgs ?? {});
+      if (refusal) return refusal;
     }
 
     if (!pendingState) {
@@ -287,6 +274,29 @@ export class PendingActionManager<G extends Game = Game> {
     if (!name) return undefined;
     const refusal = this.#runner.refusalToPick(name, playerPosition, pendingState);
     return refusal && { success: false, error: refusal.error, errorCode: refusal.errorCode };
+  }
+
+  /**
+   * Make the picks a client sent as `initialArgs` with the first step of a
+   * new pending action: the picks it collected before `selectionName`, each
+   * made as its own step would be, in order (#658). A pick a held follow-up
+   * answered is the engine's and is not taken from the client, and an arg
+   * that names no pick is not taken at all. A refused pick cancels the
+   * action, running `onCancel` for any `onSelect` that ran.
+   */
+  #makeInitialPicks(
+    pendingState: PendingActionState,
+    playerPosition: number,
+    selectionName: string,
+    initialArgs: Record<string, unknown>,
+  ): PickStepResult | undefined {
+    const game = this.#runner.game;
+    const error = game.getActionExecutor().makePicksBefore(
+      game.getAction(pendingState.actionName)!, game.getPlayer(playerPosition)!, pendingState, selectionName, initialArgs,
+    );
+    if (error === undefined) return undefined;
+    this.cancelPendingAction(playerPosition);
+    return { success: false, error, errorCode: ErrorCode.INVALID_PICK };
   }
 
   /** The acting seat's state after a step, as the step result returns it. */

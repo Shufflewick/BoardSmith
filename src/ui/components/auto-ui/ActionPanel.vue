@@ -771,7 +771,12 @@ function focusTargetFor(root: HTMLElement): HTMLElement | null {
 // takes the focused one with it -- which is precisely the moment a player
 // standing in a group is most likely to be moved. `stepIdentity` cannot see it:
 // idle to idle is the same step.
-watch([stepIdentity, () => props.availableActions.join(',')], async () => {
+//
+// A STEP WHOSE CHOICES ARE STILL LOADING HAS NOTHING TO LAND ON YET (#653). Its
+// selection is drawn before the server's answer, so the only control in the
+// panel is cancel -- and focus parked there is no longer stranded, so it would
+// stay there once the choices arrived. The repair waits for them instead.
+watch([stepIdentity, () => props.availableActions.join(','), isLoadingChoices], async () => {
   // Wait for the swap to actually land in the DOM before looking for a target.
   await nextTick();
   repairStrandedFocus();
@@ -786,7 +791,7 @@ watch([stepIdentity, () => props.availableActions.join(',')], async () => {
 let repairPutOff = false;
 
 function repairStrandedFocus(): void {
-  if (!focusIsStranded()) return;
+  if (!focusIsStranded() || isLoadingChoices.value) return;
   if (!document.hasFocus()) {
     repairPutOff = true;
     return;

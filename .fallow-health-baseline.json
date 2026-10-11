@@ -384,7 +384,7 @@
       }
     },
     "src/session/pending-action-manager.ts": {
-      "complexity_high": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -715,18 +715,18 @@
     "src/engine/element/game.ts:complexity",
     "src/ui/components/auto-ui/ActionPanel.vue:complexity",
     "src/engine/action/action.ts:circular dependency",
-    "src/ui/components/debug/debug-format.ts:high impact",
     "src/engine/action/choice-matching.ts:high impact",
-    "src/engine/element/game-element.ts:complexity",
+    "src/ui/components/debug/debug-format.ts:high impact",
+    "src/engine/element/game-element.ts:circular dependency",
     "src/session/snapshot-session-host.ts:complexity",
     "src/session/stateless-ops.ts:complexity",
-    "src/session/utils.ts:complexity",
-    "src/ui/components/GameShell.vue:complexity",
     "src/testing/dom-leak.ts:complexity",
+    "src/ui/components/GameShell.vue:complexity",
     "src/ui/composables/useBoardActionBridge.ts:complexity",
-    "src/cli/commands/chunk-provenance.ts:complexity",
     "src/cli/commands/verify-example-replay.ts:complexity",
+    "src/cli/commands/chunk-provenance.ts:complexity",
     "src/bot/mcts-bot.ts:complexity",
+    "src/engine/element/cell-index.ts:circular dependency",
     "src/cli/commands/ingest-archive.ts:complexity",
     "src/engine/tutorial/gate.ts:circular dependency",
     "src/cli/commands/dev.ts:complexity",
@@ -742,13 +742,12 @@
     "src/cli/commands/verify-classify.ts:complexity",
     "src/ui/components/helpers/ZoomPreviewOverlay.vue:complexity",
     "src/testing/debug.ts:complexity",
-    "src/session/pending-action-manager.ts:complexity",
     "src/cli/commands/test-step-ast.ts:high impact",
     "src/cli/commands/test-step-sfc.ts:high impact",
+    "src/ui/components/debug/HistoryTab.vue:complexity",
     "src/testing/random-simulation.ts:complexity",
     "src/cli/commands/lint.ts:complexity",
     "src/ui/components/auto-ui/renderers/HandRenderer.vue:complexity",
-    "src/ui/components/debug/HistoryTab.vue:complexity",
     "src/ui/components/auto-ui/auto-ui-helpers.ts:complexity",
     "src/cli/commands/verify-enumerate.ts:complexity",
     "src/ui/components/PlayersPanel.vue:complexity",
