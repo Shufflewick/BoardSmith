@@ -344,6 +344,28 @@ describe('#680: the window starts after the last point undo cannot cross', () =>
     expect(await refusedUndo(simultaneous, table, 2)).toMatch(/commit is marked notUndoable/);
   });
 
+  it('a step made only of notUndoable actions keeps one checkpoint, and every seat is refused', async () => {
+    let table = await startTwoSeats(simultaneous);
+    table = await act(simultaneous, table, 'prepare');
+    table = await act(simultaneous, table, 'prepare');
+    for (const seat of [1, 2, 1, 2]) {
+      table = await order(table, seat, 'commit');
+      const window = table.snapshot.actionCheckpoints!;
+      // Every action in the step is a commit, so undo can restore only the present.
+      expect(window.baseIndex).toBe(table.snapshot.actionHistory.length);
+      expect(window.entries).toHaveLength(1);
+
+      // The seat that acted last is refused by its commit. The other seat is
+      // refused because only the last actor's run can be undone in a
+      // simultaneous step.
+      const other = seat === 1 ? 2 : 1;
+      expect(canUndo(table, seat)).toBe(false);
+      expect(await refusedUndo(simultaneous, table, seat)).toMatch(/commit is marked notUndoable/);
+      expect(canUndo(table, other)).toBe(false);
+      expect(await refusedUndo(simultaneous, table, other)).toBe('No actions to undo');
+    }
+  });
+
   it('a session with full history still keeps the checkpoints before a notUndoable action', async () => {
     let table = envelope(succeeded(await executeOp(commitTurns, options2, null, null, { type: 'start' }, { fullHistory: true })));
     for (const actionName of ['step', 'commit', 'step']) {
