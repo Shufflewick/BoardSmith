@@ -385,8 +385,9 @@ function liveElement(game: Game, selection: Selection, ref: { id: number }): unk
 }
 
 /**
- * An independent copy of a game that can be put back to the moment it was
- * copied, for trying picks whose callbacks change the game.
+ * An independent copy of a game that can be put back, tree and flow, to the
+ * moment it was copied, for trying picks whose callbacks change the game. The
+ * flow is restored with the tree so it holds that tree's elements (#682).
  */
 function scratchCopy(source: Game) {
   const GameClass = source.constructor as new (options: GameOptions) => Game;
@@ -401,9 +402,8 @@ function scratchCopy(source: Game) {
     game.loadSerializedState(state, { messageLog });
     game._ctx.sequence = sequence;
     game.setRandomState(randomState);
+    if (flowState) game.restoreFlowState(flowState);
   };
-  reset();
-  if (flowState) game.restoreFlowState(flowState);
 
   return {
     game,

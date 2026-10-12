@@ -1,5 +1,5 @@
 {
-  "revision": 183,
+  "revision": 184,
   "surfaceHash": "bf4d1ee853209039",
   "payloadHash": "7e563b9e75959ec4",
   "formatHash": "3aff5d1f34f52ec0",
@@ -1407,6 +1407,14 @@
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "buildActionArgs(..., { format: 'wire' }) now writes each element value, alone or in an array (players picked as elements included), as { id, className }, which runner.performAction resolves; before, it wrote history references ({ __elementRef } / { __playerRef }) that performAction refused. A player picked by seat stays a seat number. Nothing in the platform calls it (#681)."
+    },
+    {
+      "revision": 184,
+      "date": "2026-10-12",
+      "surfaceHash": "bf4d1ee853209039",
+      "payloadHash": "7e563b9e75959ec4",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "enumerateLegalMoves now restores the flow with the element tree before every replay of a repeating pick, so a flow variable or step data holds the current tree's element and an earlier replay's flow changes (such as an onEach calling refreshAwaitingActions) are undone; before, a game whose repeating pick reached the flow could be offered a wrong move or none. No API or format change (#682)."
     }
   ]
 }
