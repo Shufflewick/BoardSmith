@@ -28,16 +28,9 @@
  * its own, so an Add or a remove that cannot be tabbed to, named, or returned to
  * after it unmounts is a control those players do not have.
  *
- * ## Why this is not in `npx vitest run`
- *
- * It needs Chromium, and BoardSmith depends on no browser -- the suite stays
- * hermetic and this is run deliberately. It never skips: with no Playwright
- * reachable it says how to give it one and exits non-zero, because a browser
- * regression that quietly passes when it did not run is the thing it replaces.
- *
- *   node scripts/ordered-list-browser.mjs
- *   BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \
- *     node scripts/ordered-list-browser.mjs
+ * Runs under `boardsmith test --browser`, or by hand with
+ * `node scripts/ordered-list-browser.mjs`; a missing Chromium says to run
+ * `boardsmith install-browser`.
  *
  * ## The fixture is written here, not checked in
  *
@@ -56,6 +49,7 @@ import {
   summarise,
   surfaceOf,
   VIEW_FIELD_READER,
+  waitForAction,
   waitUntil,
 } from './browser-harness.mjs';
 
@@ -219,11 +213,6 @@ export default defineComponent({
 
 // ── Reading the surface ──────────────────────────────────────────────────────
 
-/** Wait for the panel to be offering the world's verb to a seated player. */
-async function seated(page) {
-  await surfaceOf(page).locator('[data-bs-action="repair"]').waitFor({ timeout: 30_000 });
-}
-
 /** Start `repair` from the action panel and wait for the Add buttons. */
 async function startRepair(page) {
   const surface = surfaceOf(page);
@@ -369,7 +358,7 @@ async function driveThrough({ launch, hostUrl }) {
       });
     });
     await page.goto(hostUrl);
-    await seated(page);
+    await waitForAction(page, 'repair');
     await startRepair(page);
 
     const surface = surfaceOf(page);

@@ -28,12 +28,9 @@
  *      reordered on the socket rather than mocked, so what is proven is the
  *      whole road: socket -> dev bar -> postMessage -> `useWorldHost` -> panel.
  *
- * It needs Chromium, and BoardSmith depends on no browser, so it is run
- * deliberately rather than by `npx vitest run` -- the same split #227 settled:
- *
- *   node scripts/world-offers-latch-browser.mjs
- *   BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \
- *     node scripts/world-offers-latch-browser.mjs
+ * Runs under `boardsmith test --browser`, or by hand with
+ * `node scripts/world-offers-latch-browser.mjs`; a missing Chromium says to run
+ * `boardsmith install-browser`.
  */
 import {
   assert,
