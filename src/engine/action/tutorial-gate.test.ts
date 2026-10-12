@@ -46,6 +46,7 @@ function makePassAction() {
 
 /** Tutorial definition: step 1 gates to `move` only (no per-selection restrictions). */
 const tutorialDef: TutorialDefinition = {
+  learnerSeat: 1,
   steps: [
     {
       id: 'step1',
@@ -215,6 +216,7 @@ describe('Tutorial gate — TUT-02', () => {
 
     /** Per-selection tutorial: gate piece to 'c3', destination to 'd4'. */
     const perSelectionDef: TutorialDefinition = {
+      learnerSeat: 1,
       steps: [{
         id: 'step-sel',
         gate: {
@@ -407,6 +409,7 @@ describe('Tutorial gate — TUT-02', () => {
     it('blocks all available actions when labeled predicate returns false', () => {
       const predicateGame = makeGame(false);
       predicateGame.tutorialDefinition = {
+        learnerSeat: 1,
         steps: [
           {
             id: 'pred-step',
@@ -426,6 +429,7 @@ describe('Tutorial gate — TUT-02', () => {
     it('permits all actions when labeled predicate returns true', () => {
       const predicateGame = makeGame(false);
       predicateGame.tutorialDefinition = {
+        learnerSeat: 1,
         steps: [
           {
             id: 'pred-step',
@@ -444,6 +448,7 @@ describe('Tutorial gate — TUT-02', () => {
     it('surfaces the failing label in the disabled reason', () => {
       const predicateGame = makeGame(false);
       predicateGame.tutorialDefinition = {
+        learnerSeat: 1,
         steps: [
           {
             id: 'pred-step',
@@ -463,6 +468,7 @@ describe('Tutorial gate — TUT-02', () => {
     it('does not apply per-value gating for labeled-condition gates', () => {
       const predicateGame = makeGame(false);
       predicateGame.tutorialDefinition = {
+        learnerSeat: 1,
         steps: [
           {
             id: 'pred-step',
@@ -524,6 +530,7 @@ describe('Tutorial gate — TUT-02', () => {
 describe('HR-01: Tutorial action-level gate enforced at execution', () => {
   /** Tutorial definition: step 1 allows only `move`. */
   const moveOnlyTutorial: TutorialDefinition = {
+    learnerSeat: 1,
     steps: [
       { id: 'step-move', gate: { action: 'move' } },
     ],
@@ -600,6 +607,7 @@ describe('HR-01: Tutorial action-level gate enforced at execution', () => {
 
   it('performAction unblocks `pass` once the tutorial step advances to pass', () => {
     const twoStepTutorial: TutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         { id: 'step-move', gate: { action: 'move' } },
         { id: 'step-pass', gate: { action: 'pass' } },

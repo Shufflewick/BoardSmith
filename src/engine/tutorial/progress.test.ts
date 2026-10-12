@@ -76,6 +76,7 @@ function makeRunner(seed = 'progress-test') {
 // ============================================================
 
 const THREE_STEP_DEF: TutorialDefinition = {
+  learnerSeat: 1,
   steps: [
     { id: 'step-1', gate: { action: 'pass' } },
     { id: 'step-2', gate: { action: 'pass' } },
@@ -84,6 +85,7 @@ const THREE_STEP_DEF: TutorialDefinition = {
 };
 
 const SINGLE_STEP_DEF: TutorialDefinition = {
+  learnerSeat: 1,
   steps: [
     { id: 'only', gate: { action: 'pass' } },
   ],
@@ -101,7 +103,7 @@ describe('initialProgress', () => {
   });
 
   it('throws an actionable error when steps is empty', () => {
-    expect(() => initialProgress({ steps: [] })).toThrow(/no steps/i);
+    expect(() => initialProgress({ learnerSeat: 1, steps: [] })).toThrow(/no steps/i);
   });
 });
 
@@ -136,6 +138,7 @@ describe('nextProgress', () => {
 
   it('is pure — does not mutate the definition', () => {
     const def: TutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         { id: 'a', gate: { action: 'pass' } },
         { id: 'b', gate: { action: 'pass' } },
@@ -181,6 +184,7 @@ describe('evaluateAdvanceWhen', () => {
   it('returns fired=false when step has no advanceWhen', () => {
     const runner = makeRunner('aw-no-cond');
     runner.game.tutorialDefinition = {
+      learnerSeat: 1,
       steps: [{ id: 'step-1', gate: { action: 'pass' } }],
     };
     runner.game.tutorialProgress.set(1, { stepId: 'step-1', status: 'running' });
@@ -192,6 +196,7 @@ describe('evaluateAdvanceWhen', () => {
   it('returns fired=true when advanceWhen predicates all return true', () => {
     const runner = makeRunner('aw-true');
     runner.game.tutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         {
           id: 'step-1',
@@ -209,6 +214,7 @@ describe('evaluateAdvanceWhen', () => {
   it('returns fired=false when any advanceWhen predicate returns false', () => {
     const runner = makeRunner('aw-false');
     runner.game.tutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         {
           id: 'step-1',
@@ -235,6 +241,7 @@ describe('evaluateAdvanceWhen', () => {
   it('returns details with label info', () => {
     const runner = makeRunner('aw-details');
     runner.game.tutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         {
           id: 'step-1',
@@ -264,6 +271,7 @@ describe('autoAdvanceTutorial', () => {
     //   step-3: no advanceWhen → pump stops here
     const runner = makeRunner('pump-chain');
     runner.game.tutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         {
           id: 'step-1',
@@ -306,6 +314,7 @@ describe('autoAdvanceTutorial', () => {
   it('terminates when the tutorial completes (all steps have always-true advanceWhen)', () => {
     const runner = makeRunner('pump-complete');
     runner.game.tutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         {
           id: 'step-1',
@@ -352,7 +361,7 @@ describe('autoAdvanceTutorial', () => {
       gate: { action: 'pass' as const },
       advanceWhen: { always: () => true },
     }));
-    runner.game.tutorialDefinition = { steps };
+    runner.game.tutorialDefinition = { learnerSeat: 1, steps };
     runner.game.tutorialProgress.set(1, { stepId: 'step-1', status: 'running' });
 
     const { advanced } = autoAdvanceTutorial(runner.game, 1);
@@ -376,6 +385,7 @@ describe('validateTutorialDefinition', () => {
 
   it('passes for a valid multi-step definition with advanceWhen', () => {
     expect(() => validateTutorialDefinition({
+      learnerSeat: 1,
       steps: [
         {
           id: 'step-1',
@@ -387,12 +397,18 @@ describe('validateTutorialDefinition', () => {
   });
 
   it('throws an actionable error when steps is empty', () => {
-    expect(() => validateTutorialDefinition({ steps: [] }))
+    expect(() => validateTutorialDefinition({ learnerSeat: 1, steps: [] }))
       .toThrow(/no steps|empty/i);
+  });
+
+  it.each([0, 1.5, Number.NaN])('throws an actionable error when learnerSeat is %s (#552)', (learnerSeat) => {
+    expect(() => validateTutorialDefinition({ ...SINGLE_STEP_DEF, learnerSeat }))
+      .toThrow(/learnerSeat must be a seat number of 1 or more.*for example learnerSeat: 1/s);
   });
 
   it('throws and names the step when advanceWhen is a bare function (not a record)', () => {
     expect(() => validateTutorialDefinition({
+      learnerSeat: 1,
       steps: [
         {
           id: 'capture-tip',
@@ -406,6 +422,7 @@ describe('validateTutorialDefinition', () => {
 
   it('throws and names the step when advanceWhen is a string (non-function value)', () => {
     expect(() => validateTutorialDefinition({
+      learnerSeat: 1,
       steps: [
         {
           id: 'intro',
@@ -419,6 +436,7 @@ describe('validateTutorialDefinition', () => {
 
   it('throws when a labeled-condition gate value is not a function', () => {
     expect(() => validateTutorialDefinition({
+      learnerSeat: 1,
       steps: [
         {
           id: 'bad-gate-step',
