@@ -20,10 +20,11 @@ import {
   simultaneousActionStep,
   enumerateLegalMoves,
   type GameOptions,
+  type FlowContext,
 } from './index.js';
 
 class Token extends Piece<ScratchFlowGame, Player> {
-  count = 0;
+  bumps = 0;
 }
 
 function seatTwoAwaited(game: Game): boolean {
@@ -43,9 +44,9 @@ class ScratchFlowGame extends Game<ScratchFlowGame, Player> {
           // A pick is named for whether seat 2 was awaited when it was made.
           choices: (ctx) => [seatTwoAwaited(ctx.game) ? 'after' : 'before'],
           repeat: {
-            until: (ctx) => ctx.game.first(Token)!.count >= 2,
+            until: (ctx) => ctx.game.first(Token)!.bumps >= 2,
             onEach: (ctx) => {
-              ctx.game.first(Token)!.count++;
+              ctx.game.first(Token)!.bumps++;
               ctx.game.refreshAwaitingActions();
             },
           },
@@ -55,12 +56,12 @@ class ScratchFlowGame extends Game<ScratchFlowGame, Player> {
 
     this.setFlow({
       root: sequence(
-        setVar<ScratchFlowGame>('token', (ctx) => ctx.game.first(Token)),
+        setVar<ScratchFlowGame>('token', (ctx: FlowContext<ScratchFlowGame>) => ctx.game.first(Token)),
         simultaneousActionStep({
           name: 'round',
           // Seat 2 joins once the token held by the flow has been bumped.
-          players: (ctx) =>
-            ctx.game.players.filter((p) => p.seat === 1 || ctx.get<Token>('token')!.count > 0),
+          players: (ctx: FlowContext<ScratchFlowGame>) =>
+            ctx.game.players.filter((p) => p.seat === 1 || ctx.get<Token>('token')!.bumps > 0),
           actions: ['bump'],
         }),
       ),
@@ -82,6 +83,6 @@ describe('enumerating a repeating pick whose onEach reaches the flow (#682)', ()
 
     const game = started();
     expect(game.continueFlow('bump', moves[0].args, 1).actionError).toBeUndefined();
-    expect(game.first(Token)!.count).toBe(2);
+    expect(game.first(Token)!.bumps).toBe(2);
   });
 });
