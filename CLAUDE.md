@@ -61,7 +61,7 @@ This library is developed alongside two sibling repos. When a BoardSmith change 
 
 # Shared Agent Rules
 
-The rules every Shufflewick repo shares, and which model and reasoning level each kind of work uses, live in the `Shufflewick/agent-policy` repo, installed as `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`. `.agent-policy.json` here lists the checks `agent-policy verify` runs before any agent may report done: `boardsmith audit --dupes-baseline --health-baseline --duplication`, then `boardsmith test`, then `boardsmith catalogue`. `agent-policy thread merge` runs the same checks on the merged tree.
+The rules every Shufflewick repo shares, and which model and reasoning level each kind of work uses, live in the `Shufflewick/agent-policy` repo, installed as `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`. `.agent-policy.json` here lists the checks `agent-policy verify` runs before any agent may report done: `boardsmith lint`, then `boardsmith audit --dupes-baseline --health-baseline --duplication`, then `boardsmith test`, then `boardsmith test --browser` (the browser regression scripts in `scripts/*-browser.mjs`, kept out of the default test run so it needs no Chromium), then `boardsmith catalogue`. `agent-policy thread merge` runs the same checks on the merged tree.
 
 # Hard Rules
 - **No Backward Compatibility**: Always pursue the cleanest implementation. No deprecation cycles—remove the bad thing and add the good thing. We're a library in active development, not a legacy system.
