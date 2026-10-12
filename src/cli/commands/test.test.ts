@@ -2,15 +2,15 @@ import { describe, it, expect, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { spawnCli } from '../spawn-cli.test-helper.js';
-import { generateVitestConfig, VITEST_CONFIG_FILE } from '../lib/test-run-scope.js';
+import { GAME_VITE_CONFIG } from '../lib/test-run-scope.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
+import { linkGameModules } from '../../testing/installed-modules.test-helper.js';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 /**
  * `boardsmith test` in a game project runs the main checkout's tests only (#298): the chunk
- * worktrees under `.boardsmith/worktrees/` are left out by the project's vitest config, and a
+ * worktrees under `.boardsmith/worktrees/` are left out by the project's config, and a
  * project whose config would collect them is refused before vitest starts.
  */
 async function gameProject(files: Record<string, string>): Promise<string> {
@@ -18,7 +18,9 @@ async function gameProject(files: Record<string, string>): Promise<string> {
   const project = join(tree, 'game');
   const all: Record<string, string> = {
     'boardsmith.json': '{"name":"game"}\n',
-    'vite.config.ts': 'export default {};\n',
+    // An ES module package, as `boardsmith init` writes it, so its config can import boardsmith.
+    'package.json': '{ "type": "module" }\n',
+    'vite.config.ts': GAME_VITE_CONFIG,
     'tests/ok.test.ts': "import { it } from 'vitest';\nit('holds', () => {});\n",
     '.boardsmith/worktrees/x/tests/wip.test.ts':
       "import { it, expect } from 'vitest';\nit('is still being built', () => { expect(1).toBe(2); });\n",
@@ -28,13 +30,13 @@ async function gameProject(files: Record<string, string>): Promise<string> {
     await fs.mkdir(join(project, path, '..'), { recursive: true });
     await fs.writeFile(join(project, path), content);
   }
-  await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');
+  linkGameModules(project);
   return project;
 }
 
 describe('boardsmith test', () => {
   it('runs the main checkout\'s tests and not the chunk worktrees\'', async () => {
-    const project = await gameProject({ [VITEST_CONFIG_FILE]: generateVitestConfig('vite.config.ts') });
+    const project = await gameProject({});
     const run = await spawnCli(['test'], project);
     expect(run.stdout).toContain('ok.test.ts');
     expect(run.stdout + run.stderr).not.toContain('wip.test.ts');
@@ -42,10 +44,10 @@ describe('boardsmith test', () => {
   });
 
   it('refuses a project whose vitest config would collect the chunk worktrees, and says how to fix it', async () => {
-    const project = await gameProject({});
+    const project = await gameProject({ 'vite.config.ts': 'export default {};\n' });
     const run = await spawnCli(['test'], project);
     expect(run.code).toBe(1);
-    expect(run.stderr).toMatch(/vite\.config\.ts does not leave \.boardsmith\/ out of test runs/);
+    expect(run.stderr).toMatch(/vite\.config\.ts does not build its config with defineGameViteConfig/);
     expect(run.stderr).toMatch(/boardsmith doctor --fix/);
     expect(run.stdout + run.stderr).not.toContain('wip.test.ts');
   });
@@ -59,7 +61,7 @@ describe('boardsmith test', () => {
   });
 
   it('refuses --browser in a game project, which has no browser regressions, and names the check that has', async () => {
-    const project = await gameProject({ [VITEST_CONFIG_FILE]: generateVitestConfig('vite.config.ts') });
+    const project = await gameProject({});
     const run = await spawnCli(['test', '--browser'], project);
     expect(run.code).toBe(1);
     expect(run.stderr).toMatch(/--browser runs BoardSmith's own browser regressions/);
@@ -101,7 +103,6 @@ const KILLS_VITEST_TEST = [
  * `boardsmith test` whose vitest really is killed, from inside the run.
  */
 describe('boardsmith test reports how a run ended when vitest does not finish it (#429)', () => {
-  const config = { [VITEST_CONFIG_FILE]: generateVitestConfig('vite.config.ts') };
 
   /**
    * The log a verdict points at, read back. A failed run keeps its record for
@@ -117,7 +118,6 @@ describe('boardsmith test reports how a run ended when vitest does not finish it
 
   it('names the signal, the files still running, and a log that holds the whole output, when vitest is killed', async () => {
     const project = await gameProject({
-      ...config,
       'tests/slow.test.ts': SLOW_TEST,
       'tests/kills-vitest.test.ts': KILLS_VITEST_TEST,
     });
@@ -137,7 +137,6 @@ describe('boardsmith test reports how a run ended when vitest does not finish it
 
   it('names a file whose worker died, although vitest itself finished', async () => {
     const project = await gameProject({
-      ...config,
       'tests/worker-dies.test.ts':
         "import { it } from 'vitest';\nit('ends its own worker', () => { process.kill(process.pid, 'SIGKILL'); });\n",
     });
@@ -151,7 +150,6 @@ describe('boardsmith test reports how a run ended when vitest does not finish it
 
   it('names the failing file of an ordinary failure, and writes the same verdict to --verdict-file', async () => {
     const project = await gameProject({
-      ...config,
       'tests/fails.test.ts': "import { it, expect } from 'vitest';\nit('fails', () => { expect(1).toBe(2); });\n",
     });
     const verdictFile = join(project, '..', 'verdict.txt');
@@ -166,7 +164,7 @@ describe('boardsmith test reports how a run ended when vitest does not finish it
   });
 
   it('leaves no record behind and writes no verdict when the run passes', async () => {
-    const project = await gameProject(config);
+    const project = await gameProject({});
     const verdictFile = join(project, '..', 'verdict.txt');
 
     const run = await spawnCli(['test', '--verdict-file', verdictFile], project);

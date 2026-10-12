@@ -539,9 +539,9 @@ const manifestPaths = (projectDir: string, testFiles: ChunkTestFile[]) =>
   new Set(testFiles.map((f) => relative(projectDir, f.absPath).split(sep).join('/')));
 
 /**
- * Where vitest never collects a test file in a game project: its own default exclusions, and the
- * two the project's config adds (`test-run-scope.ts`), the chunk worktrees under `.boardsmith/` and
- * the browser tests under `tests/browser/`, which only Playwright runs.
+ * Where vitest never collects a test file in a game project: its own default exclusions, and two
+ * that `defineGameViteConfig` adds (`src/vite-config/index.ts`), the chunk worktrees under
+ * `.boardsmith/` and the browser tests under `tests/browser/`, which only Playwright runs.
  */
 const NOT_COLLECTED = Object.freeze([
   /(^|\/)(node_modules|dist|cypress)\//,

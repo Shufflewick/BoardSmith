@@ -2,9 +2,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
+import { linkGameModules } from '../../testing/installed-modules.test-helper.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
-import { generateVitestConfig } from '../lib/test-run-scope.js';
+import { GAME_VITE_CONFIG } from '../lib/test-run-scope.js';
 import { readVerifyResult, verifiedProblem } from '../lib/verify-result.js';
 import { commitAll, git, initRepo, writeFiles as write } from '../lib/verify-result.test-helper.js';
 import { plantOtherRuns } from '../lib/command-build-dirs.test-helper.js';
@@ -133,15 +133,16 @@ async function gameOnBranch(breakBid: boolean): Promise<string> {
   const tree = tempTree('bs-verify-game-');
   const dir = await makeChunkProject(tree, [{ slug: 'deal' }]);
   await write(dir, {
-    // With no package.json, vitest keeps its cache in .vite/ at the project root.
-    '.gitignore': '.boardsmith/\nnode_modules\n.vite/\n',
+    '.gitignore': '.boardsmith/\nnode_modules\n',
+    // An ES module package, as `boardsmith init` writes it, so its config can import boardsmith.
+    'package.json': '{ "type": "module" }\n',
     'boardsmith.json': JSON.stringify({ name: 'fixture', backend: 'table' }),
-    'vitest.config.ts': generateVitestConfig(undefined),
+    'vite.config.ts': GAME_VITE_CONFIG,
     'tsconfig.json': TSCONFIG,
     'src/rules.ts': RULES,
     'tests/bid.test.ts': BID_TEST,
   });
-  await fs.symlink(INSTALLED_MODULES, join(dir, 'node_modules'), 'dir');
+  linkGameModules(dir);
   initRepo(dir);
   commitAll(dir, 'base');
   git(dir, 'checkout', '-q', '-b', 'chunk/deal');

@@ -58,6 +58,10 @@
       "types": "./src/eslint-plugin/index.ts",
       "import": "./src/eslint-plugin/index.ts"
     },
+    "./vite-config": {
+      "types": "./src/vite-config/index.d.ts",
+      "import": "./src/vite-config/index.js"
+    },
     "./bot": {
       "types": "./src/bot/index.ts",
       "import": "./src/bot/index.ts"

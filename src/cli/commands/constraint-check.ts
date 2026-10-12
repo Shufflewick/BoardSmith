@@ -366,8 +366,8 @@ async function reviewRefusals(projectDir: string, slug: string, constraints: Har
 /**
  * Runs the project's own vitest over the named files, or its whole suite when none are named.
  *
- * Refuses a project whose vitest config would also collect the chunk worktrees under
- * `.boardsmith/worktrees/`: that config is the one place the exclusion lives (`test-run-scope.ts`).
+ * Refuses a project whose config is not built with `defineGameViteConfig`, which is what leaves the
+ * chunk worktrees under `.boardsmith/worktrees/` out of the run (`test-run-scope.ts`).
  */
 export const runVitest: TestRunner = async (projectDir, files) => {
   const problem = await testRunScopeProblem(projectDir);

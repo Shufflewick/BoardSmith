@@ -14,7 +14,6 @@ import {
   generateScaffoldFiles,
   generateA11yExampleTestTs,
   generateTsConfig,
-  generateViteConfig,
   getDependencyPaths,
   getMonorepoRoot,
   type ProjectConfig,
@@ -456,13 +455,6 @@ describe('single-vue guarantee — the symlinked-boardsmith duplicate-vue trap',
       vue: ['./node_modules/vue'],
       '@vue/*': ['./node_modules/@vue/*'],
     });
-  });
-
-  it('dedupes vue in the vite config, so the RUNTIME graph gets one Vue too', () => {
-    // Types are only half of it: two Vue runtimes mean two reactivity systems
-    // and two provide/inject registries, silently breaking state shared across
-    // the game/library boundary.
-    expect(generateViteConfig()).toContain("dedupe: ['vue']");
   });
 
   it('the alias actually collapses two vue copies onto one (it is load-bearing)', () => {

@@ -3,14 +3,14 @@ import { promises as fs } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { generateScaffoldFiles, type ProjectConfig } from './project-scaffold.js';
-import { generateVitestConfig, testRunScopeProblem, VITEST_CONFIG_FILE } from './test-run-scope.js';
+import { GAME_VITE_CONFIG, testRunScopeProblem } from './test-run-scope.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
+import { INSTALLED_MODULES, linkGameModules } from '../../testing/installed-modules.test-helper.js';
 
 /**
  * #298: chunks built side by side live in git worktrees under `.boardsmith/worktrees/<slug>`,
- * inside the game project, and vitest's discovery walks into dot-directories. A game project's
- * own vitest config is the one place that keeps them out, so a plain `npx vitest run`, `boardsmith
+ * inside the game project, and vitest's discovery walks into dot-directories. The config a game
+ * builds with `defineGameViteConfig` (#528) keeps them out, so a plain `npx vitest run`, `boardsmith
  * test`, `constraint-check` and `chunk-merge` all run the main checkout's tests and nothing else.
  */
 
@@ -66,7 +66,7 @@ describe('a scaffolded project leaves chunk worktrees and the browser smoke test
         'tests/browser/smoke.spec.ts': WIP_TEST,
         '.worktrees/x/tests/browser/smoke.spec.ts': WIP_TEST,
       });
-      await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');
+      linkGameModules(project);
 
       expect(await testRunScopeProblem(project)).toBeUndefined();
       const run = spawnSync(join(INSTALLED_MODULES, '.bin', 'vitest'), ['run'], { cwd: project, encoding: 'utf-8' });
@@ -88,61 +88,42 @@ describe('testRunScopeProblem', () => {
     return dir;
   };
 
-  it('accepts the vitest config BoardSmith writes', async () => {
+  it('accepts a vite config built with defineGameViteConfig, with no vitest config (#528)', async () => {
+    const dir = await project({ 'vite.config.ts': GAME_VITE_CONFIG });
+    expect(await testRunScopeProblem(dir)).toBeUndefined();
+  });
+
+  it("accepts a game's own overrides passed to defineGameViteConfig", async () => {
     const dir = await project({
-      'vite.config.ts': 'export default {};\n',
-      [VITEST_CONFIG_FILE]: generateVitestConfig('vite.config.ts'),
+      'vite.config.ts':
+        "import { defineGameViteConfig } from 'boardsmith/vite-config';\n" +
+        "export default defineGameViteConfig({ test: { setupFiles: ['./tests/setup.ts'] } });\n",
     });
     expect(await testRunScopeProblem(dir)).toBeUndefined();
   });
 
-  it('accepts a vite config that carries the exclusion itself when there is no vitest config', async () => {
-    const dir = await project({ 'vite.config.mjs': "export default { test: { exclude: ['.boardsmith/**'] } };\n" });
-    expect(await testRunScopeProblem(dir)).toBeUndefined();
-  });
-
-  it('names a vitest config that does not leave .boardsmith/ out, and says how to fix it', async () => {
-    const dir = await project({
-      'vite.config.ts': "export default { test: { exclude: ['.boardsmith/**'] } };\n",
-      'vitest.config.ts': 'export default { test: { globals: true } };\n',
-    });
+  it('refuses a config that does not build with defineGameViteConfig, naming the import and doctor --fix', async () => {
+    const dir = await project({ 'vite.config.ts': "export default { test: { exclude: ['.boardsmith/**', '**/tests/browser/**'] } };\n" });
     const problem = await testRunScopeProblem(dir);
-    expect(problem).toMatch(/vitest\.config\.ts/);
-    expect(problem).toMatch(/\.boardsmith\/\*\*/);
-    expect(problem).toMatch(/configDefaults\.exclude/);
+    expect(problem).toMatch(/^vite\.config\.ts does not build its config with defineGameViteConfig/);
+    expect(problem).toContain("import { defineGameViteConfig } from 'boardsmith/vite-config';");
+    expect(problem).toMatch(/boardsmith doctor --fix/);
   });
 
-  it('names a vitest config that would collect the browser smoke test, once the project has one (#453)', async () => {
-    const carriesOnlyWorktrees = "export default { test: { exclude: ['.boardsmith/**'] } };\n";
-    const before = await project({ 'vitest.config.ts': carriesOnlyWorktrees });
-    expect(await testRunScopeProblem(before)).toBeUndefined();
-
-    const dir = await project({ 'vitest.config.ts': carriesOnlyWorktrees, 'tests/browser/smoke.spec.ts': '' });
-    const problem = await testRunScopeProblem(dir);
-    expect(problem).toMatch(/vitest\.config\.ts does not leave tests\/browser\/ out.*Playwright.*'\*\*\/tests\/browser\/\*\*'/s);
-
-    const fixed = await project({
-      'vite.config.ts': 'export default {};\n',
-      [VITEST_CONFIG_FILE]: generateVitestConfig('vite.config.ts'),
-      'tests/browser/smoke.spec.ts': '',
-    });
-    expect(await testRunScopeProblem(fixed)).toBeUndefined();
-  });
-
-  it('names a config that leaves out only the top-level tests/browser/, and gives the exact glob that replaces it', async () => {
+  it('is not fooled by the import written in a comment', async () => {
     const dir = await project({
-      'vitest.config.ts': "export default { test: { exclude: ['.boardsmith/**', 'tests/browser/**'] } };\n",
-      'tests/browser/smoke.spec.ts': '',
+      'vite.config.ts': `// ${GAME_VITE_CONFIG.replace(/\n/g, ' ')}\nexport default {};\n`,
     });
-    expect(await testRunScopeProblem(dir)).toBe(
-      "vitest.config.ts leaves out only the project's own tests/browser/, so vitest still collects the smoke test in a git " +
-        "worktree kept inside the project (.worktrees/<name>/tests/browser/). In its `test.exclude`, replace 'tests/browser/**' " +
-        "with '**/tests/browser/**', then run this again.",
-    );
+    expect(await testRunScopeProblem(dir)).toMatch(/does not build its config with defineGameViteConfig/);
   });
 
-  it('points a project with no exclusion anywhere at boardsmith doctor --fix', async () => {
-    const dir = await project({ 'vite.config.ts': 'export default {};\n' });
-    expect(await testRunScopeProblem(dir)).toMatch(/boardsmith doctor --fix/);
+  it('reads the config vitest loads, so a vitest config beside a good vite config is refused', async () => {
+    const dir = await project({ 'vite.config.ts': GAME_VITE_CONFIG, 'vitest.config.ts': 'export default {};\n' });
+    expect(await testRunScopeProblem(dir)).toMatch(/^vitest\.config\.ts does not build its config with defineGameViteConfig/);
+  });
+
+  it('refuses a project with no config at all', async () => {
+    const dir = await project({});
+    expect(await testRunScopeProblem(dir)).toMatch(/^This project has no vite\.config\.ts.*boardsmith doctor --fix/s);
   });
 });

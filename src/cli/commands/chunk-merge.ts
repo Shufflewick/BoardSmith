@@ -37,7 +37,7 @@
  *      if any fails, the merge is refused naming the check and the chunk. No designer is asked.
  *      A source file whose provisional ledger ids step 2 rewrote is code the merge itself changed
  *      after its chunks signed it off, so it is vouched for the same way (#435), and so is
- *      `vitest.config.ts` when its only edit since a verified chunk signed it off is to
+ *      `vite.config.ts` when its only edit since a verified chunk signed it off is to
  *      `test.include` or `test.exclude` and their values are plain data, for every chunk whose sign-off
  *      that edit would void (#479).
  *   4. It lists every reference between the merged chunk's changes and what the main line gained
