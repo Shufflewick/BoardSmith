@@ -10,10 +10,11 @@ import {
   SCRATCH_DIR,
 } from '../lib/project-paths.js';
 import {
-  VITEST_CONFIG_FILE,
-  findViteConfig,
-  findVitestConfig,
-  generateVitestConfig,
+  GAME_VITE_CONFIG,
+  GAME_VITE_CONFIG_FILE,
+  buildsWithGameConfig,
+  existingConfigs,
+  settingNotShipped,
   testRunScopeProblem,
 } from '../lib/test-run-scope.js';
 
@@ -39,12 +40,13 @@ import {
  * Bare `doctor` reports and exits non-zero when anything is out of place — a non-zero exit is the
  * signal that reliably gets acted on. `--fix` performs the moves.
  *
- * TEST RUNS COVER THIS CHECKOUT ONLY (#298). Chunk worktrees live under `.boardsmith/worktrees/`,
- * inside the project, and the project's vitest config is the one place that leaves them out of a
- * test run. A project with no vitest config gets the one `init` writes; a `vitest.config.*` the
- * designer wrote is reported with the line to add, never edited.
+ * TEST RUNS COVER THIS CHECKOUT ONLY (#298, #528). Chunk worktrees live under `.boardsmith/worktrees/`,
+ * inside the project, and the config a game builds with `defineGameViteConfig` leaves them out of a
+ * test run. A project whose config is not built with it gets the one `init` writes, in place of its
+ * vite and vitest configs, when they set nothing `defineGameViteConfig()` does not; a config with
+ * settings of its own is reported with what to carry over, never edited.
  *
- * NOTHING IS EVER DELETED. Stray scratch is MOVED into `.boardsmith/scratch/`, not removed: a file
+ * NOTHING ELSE IS EVER DELETED. Stray scratch is MOVED into `.boardsmith/scratch/`, not removed: a file
  * whose only evidence of value is that someone wrote it is not this command's to throw away. Moves
  * use `git mv` for tracked paths so history survives, and a plain rename otherwise. A move whose
  * destination already exists is reported as a conflict and skipped — `doctor` never clobbers.
@@ -58,9 +60,14 @@ export type DoctorFindingKind =
   | 'scratch-in-root'
   /** `.gitignore` does not ignore `.boardsmith/`, so scratch written there would be committed. */
   | 'scratch-dir-not-ignored'
-  /** Test runs would also collect the chunk worktrees under `.boardsmith/worktrees/`; `--fix` writes `vitest.config.ts`. */
+  /** There is no vite or vitest config; `--fix` writes the one-line `vite.config.ts`. */
+  | 'test-config-missing'
+  /**
+   * The config vitest reads is not built with `defineGameViteConfig`, and nothing would be lost
+   * without it; `--fix` deletes it, and writes the one-line `vite.config.ts` when no config is built with it.
+   */
   | 'test-run-collects-worktrees'
-  /** The project's own `vitest.config.*` does not leave `.boardsmith/` out; only a person should edit it. */
+  /** The config is not built with `defineGameViteConfig` and has settings of its own; only a person should carry them over. */
   | 'test-config-needs-edit'
   /** Both the root and the `design/` copy exist — a human has to decide which one is real. */
   | 'move-conflict';
@@ -258,14 +265,48 @@ async function gitignoreFindings(projectDir: string): Promise<DoctorFinding[]> {
 async function testScopeFindings(projectDir: string): Promise<DoctorFinding[]> {
   const problem = await testRunScopeProblem(projectDir);
   if (problem === undefined) return [];
-  const config = await findVitestConfig(projectDir);
-  // A vitest.config.* the designer wrote is theirs to edit; doctor only writes one where none exists.
-  if (config !== undefined && !config.startsWith('vite.config.')) {
-    return [{ kind: 'test-config-needs-edit', from: config, to: config, fixed: false, detail: problem }];
+  const { built, outdated } = await sortConfigs(projectDir);
+  const to = built ?? GAME_VITE_CONFIG_FILE;
+  // With nothing outdated, nothing is built either: vitest would read the built one and see no problem.
+  if (outdated.length === 0) return [{ kind: 'test-config-missing', from: to, to, fixed: false, detail: problem }];
+  const own = await ownSettingFinding(projectDir, outdated, built, problem);
+  if (own !== undefined) return [own];
+  const detail = built === undefined
+    ? problem
+    : `vitest reads ${outdated[0]} in place of ${built}, which is already built with defineGameViteConfig. ` +
+      `Delete ${outdated.join(' and ')} (--fix does), then run this again.`;
+  return [{ kind: 'test-run-collects-worktrees', from: outdated[0], to, fixed: false, detail }];
+}
+
+/** A hand edit for the first outdated config that sets more than `defineGameViteConfig()`, which --fix would lose. */
+async function ownSettingFinding(
+  projectDir: string,
+  outdated: string[],
+  built: string | undefined,
+  problem: string,
+): Promise<DoctorFinding | undefined> {
+  for (const config of outdated) {
+    const setting = settingNotShipped(await fs.readFile(join(projectDir, config), 'utf-8'));
+    if (setting === undefined) continue;
+    const found = `${config} sets more than defineGameViteConfig() does (${setting}), so --fix leaves it to you`;
+    const detail = built === undefined
+      ? `${found}. ${problem}`
+      : `${found}: vitest reads it in place of ${built}, which is already built with defineGameViteConfig. ` +
+        `If the game needs it, pass it to defineGameViteConfig in ${built}, then delete ${config}.`;
+    return { kind: 'test-config-needs-edit', from: config, to: built ?? GAME_VITE_CONFIG_FILE, fixed: false, detail };
   }
-  return [
-    { kind: 'test-run-collects-worktrees', from: VITEST_CONFIG_FILE, to: VITEST_CONFIG_FILE, fixed: false, detail: problem },
-  ];
+  return undefined;
+}
+
+/** The project's config built with `defineGameViteConfig`, if one is, and every other vite or vitest config. */
+async function sortConfigs(projectDir: string): Promise<{ built: string | undefined; outdated: string[] }> {
+  let built: string | undefined;
+  const outdated: string[] = [];
+  for (const config of await existingConfigs(projectDir)) {
+    if (built === undefined && buildsWithGameConfig(await fs.readFile(join(projectDir, config), 'utf-8'))) built = config;
+    else outdated.push(config);
+  }
+  return { built, outdated };
 }
 
 /**
@@ -282,8 +323,10 @@ async function fixAll(projectDir: string, findings: DoctorFinding[]): Promise<vo
 
 /** Resolve one finding `--fix` is allowed to resolve. */
 async function fix(projectDir: string, f: DoctorFinding): Promise<void> {
-  if (f.kind === 'test-run-collects-worktrees') {
-    await fs.writeFile(join(projectDir, VITEST_CONFIG_FILE), generateVitestConfig(await findViteConfig(projectDir)));
+  if (f.kind === 'test-config-missing' || f.kind === 'test-run-collects-worktrees') {
+    const { built, outdated } = await sortConfigs(projectDir);
+    for (const config of outdated) await fs.rm(join(projectDir, config));
+    if (built === undefined) await fs.writeFile(join(projectDir, GAME_VITE_CONFIG_FILE), GAME_VITE_CONFIG);
     return;
   }
   if (f.kind === 'scratch-dir-not-ignored') {
@@ -347,6 +390,13 @@ function summarize(projectDir: string, findings: DoctorFinding[]): DoctorResult 
   return { projectDir, findings, counts: { moved, pending, conflicts }, healthy: findings.length === 0 };
 }
 
+/** A config finding as a report line: what is missing or outdated, and until fixed, what to do. */
+function configLine(f: DoctorFinding, rel: (p: string) => string): string {
+  const where = `${rel(f.from)} ${chalk.dim('->')} ${rel(f.to)} built with defineGameViteConfig`;
+  if (f.fixed) return `${chalk.green('fixed   ')} ${where}`;
+  return `${chalk.yellow(f.kind === 'test-config-missing' ? 'missing ' : 'outdated')} ${where}\n          ${f.detail}`;
+}
+
 /** One finding as a report line; `rel` makes a project path relative to where doctor was run. */
 function reportLine(f: DoctorFinding, rel: (p: string) => string): string {
   switch (f.kind) {
@@ -354,8 +404,9 @@ function reportLine(f: DoctorFinding, rel: (p: string) => string): string {
       return `${chalk.red('conflict')} ${rel(f.from)}\n          ${f.detail}`;
     case 'test-config-needs-edit':
       return `${chalk.red('edit    ')} ${rel(f.from)}\n          ${f.detail}`;
+    case 'test-config-missing':
     case 'test-run-collects-worktrees':
-      return `${f.fixed ? chalk.green('wrote   ') : chalk.yellow('missing ')} ${rel(f.from)} ${chalk.dim('->')} leaves .boardsmith/ out of test runs`;
+      return configLine(f, rel);
     case 'scratch-dir-not-ignored':
       return `${f.fixed ? chalk.green('ignored ') : chalk.yellow('untracked')} ${rel(f.from)} ${chalk.dim('->')} adds ${GITIGNORE_ENTRY}`;
     default:

@@ -4,8 +4,8 @@ import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
 import { checkConstraints, constraintCheckCommand, runVitest, testFilesInReport, type TestRunner } from './constraint-check.js';
-import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
-import { generateVitestConfig, VITEST_CONFIG_FILE } from '../lib/test-run-scope.js';
+import { linkGameModules } from '../../testing/installed-modules.test-helper.js';
+import { GAME_VITE_CONFIG, GAME_VITE_CONFIG_FILE } from '../lib/test-run-scope.js';
 
 /**
  * #288: four sotf chunks closed with state that grew without limit against a 512 KiB partition
@@ -334,8 +334,8 @@ describe('provisional ids on a parallel branch, and ids used twice', () => {
 
 /**
  * #294/#298: chunks built at the same time live in worktrees under `.boardsmith/worktrees/<slug>`,
- * inside the project, and vitest's discovery walks into dot-directories. The project's own vitest
- * config leaves them out (`test-run-scope.ts`), and runVitest refuses a project whose config does not.
+ * inside the project, and vitest's discovery walks into dot-directories. The project's config, built
+ * with defineGameViteConfig, leaves them out (`test-run-scope.ts`), and runVitest refuses a project whose config is not.
  */
 /**
  * #479: chunk-merge trusts a vouching run only when vitest's JSON report says which files ran. A
@@ -361,6 +361,8 @@ describe('testFilesInReport', () => {
 });
 
 describe('runVitest leaves chunk worktrees out of the run', () => {
+  // A game is an ES module package, as `boardsmith init` writes it, so its config can import boardsmith.
+  const GAME = { [GAME_VITE_CONFIG_FILE]: GAME_VITE_CONFIG, 'package.json': '{ "type": "module" }\n' };
   const WIP = {
     'tests/ok.test.ts': "import { it } from 'vitest';\nit('holds', () => {});\n",
     '.boardsmith/worktrees/quests/tests/wip.test.ts':
@@ -368,8 +370,8 @@ describe('runVitest leaves chunk worktrees out of the run', () => {
   };
 
   it('passes a project whose only failing test is inside .boardsmith/worktrees', async () => {
-    const project = await makeProject({ ...WIP, [VITEST_CONFIG_FILE]: generateVitestConfig(undefined) });
-    await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');
+    const project = await makeProject({ ...WIP, ...GAME });
+    linkGameModules(project);
     const run = await runVitest(project, []);
     expect(run).toMatchObject({ ok: true, ran: ['tests/ok.test.ts'] });
     const { output } = run as { output: string };
@@ -378,27 +380,28 @@ describe('runVitest leaves chunk worktrees out of the run', () => {
   }, 60_000);
 
   it('reports which named files ran, since vitest skips one its config excludes and still passes (#479)', async () => {
-    const config = generateVitestConfig(undefined).replace('test: { exclude: [', 'test: { exclude: ["tests/skipped.test.ts", ');
+    const config = GAME_VITE_CONFIG.replace('defineGameViteConfig()', "defineGameViteConfig({ test: { exclude: ['tests/skipped.test.ts'] } })");
     const project = await makeProject({
       'tests/ok.test.ts': WIP['tests/ok.test.ts'],
       'tests/skipped.test.ts': WIP['tests/ok.test.ts'],
-      [VITEST_CONFIG_FILE]: config,
+      ...GAME,
+      [GAME_VITE_CONFIG_FILE]: config,
     });
-    await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');
+    linkGameModules(project);
     const run = await runVitest(project, ['tests/ok.test.ts', 'tests/skipped.test.ts']);
     expect(run).toMatchObject({ ok: true, ran: ['tests/ok.test.ts'] });
   }, 60_000);
 
   it('refuses a project with no vitest of its own, naming the install command, and never runs npx (#595)', async () => {
-    const project = await makeProject({ ...WIP, [VITEST_CONFIG_FILE]: generateVitestConfig(undefined) });
+    const project = await makeProject({ ...WIP, ...GAME });
     const run = await runVitest(project, []);
     expect(run).toEqual({ refused: 'vitest is not installed in this project.\nInstall it with: npm install -D vitest' });
   });
 
   it('refuses to run a project whose vitest config would collect the worktrees', async () => {
     const project = await makeProject({ ...WIP, 'vitest.config.mjs': 'export default { test: {} };\n' });
-    await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');
+    linkGameModules(project);
     const run = await runVitest(project, []);
-    expect(run).toEqual({ refused: expect.stringMatching(/vitest\.config\.mjs does not leave \.boardsmith\/ out of test runs/) });
+    expect(run).toEqual({ refused: expect.stringMatching(/vitest\.config\.mjs does not build its config with defineGameViteConfig/) });
   });
 });

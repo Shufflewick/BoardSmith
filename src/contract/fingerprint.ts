@@ -966,7 +966,7 @@ function assertCoversFlowLayer(views: unknown[]): void {
  *
  * What this catches: `getPosition` dropping the general serializer for
  * `variables` or for `frameData`. What it does NOT catch: a change confined to
- * a frame-data field this fixture never writes, or to `relinkFlowVariables`'s
+ * a frame-data field this fixture never writes, or to `relinkFlowValue`'s
  * resolution rules — both hashes see the SERIALIZED form only, because nothing
  * here restores. The restore half is covered by
  * `src/engine/flow/flow-state-clone.test.ts`, and 68-10 adds a
@@ -995,7 +995,7 @@ function assertPositionIsCloneable(position: unknown): void {
       "The engine-contract fixture's flow position is no longer structured-cloneable.\n"
       + 'A live GameElement/Player is reaching the serialized position, which in production '
       + 'throws DataCloneError out of the broadcast (BSMITH-04). `getPosition` must run BOTH '
-      + '`variables` and every frame\'s `data` through `serializeFlowVariables`.\n'
+      + '`variables` and every frame\'s `data` through `encodeFlowValue`.\n'
       + 'See src/engine/flow/engine.ts getPosition, and '
       + 'src/engine/flow/flow-state-clone.test.ts for the general test.',
       { cause },
@@ -1928,7 +1928,7 @@ export async function computePayloadHash(): Promise<string> {
       //   - the `player:` override makes the engine save the PREVIOUS current
       //     player into that action step's `frame.data`, which lands in
       //     `position.frameData`.
-      // Both are serialized by `serializeFlowVariables` (BSMITH-04). If either
+      // Both are serialized by `encodeFlowValue` (BSMITH-04). If either
       // side regresses to a raw spread, the marker disappears from the
       // fingerprinted position and `payloadHash` moves — which is the whole
       // point of fingerprinting the position at all. The override deliberately
@@ -2201,7 +2201,7 @@ function assertSeatThatCannotAct(views: unknown[]): void {
  * `alone` hydrates the ledger WITHOUT the vault, so the ledger's reference into
  * the vault is a reference into a partition that is not resident. That
  * survives adoption as a bare `{ __elementId }` and must survive
- * re-serialization unchanged (`Game#adoptSubtree`, `GameElement.deserializeValue`).
+ * re-serialization unchanged (`Game#adoptSubtree`, `decodeValue`).
  * A reader that resolved it to `undefined` would silently delete a live world's
  * cross-room links, and no single-partition fixture can see that.
  *
@@ -2264,7 +2264,7 @@ const FORMAT_FIXTURE_ORDER: readonly string[] = [FORMAT_FIXTURE_VAULT, FORMAT_FI
  * helper is reshaped by whoever is writing tests and an example game by its
  * designer, and this hash must move for engine reasons alone.
  *
- * Every encoding `GameElement.serializeValue` has a branch for is present, and
+ * Every encoding `encodeValue` has a branch for is present, and
  * `assertCoversFormat` proves it rather than trusting this comment.
  */
 async function formatFixtureWorld(options: {

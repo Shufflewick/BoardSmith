@@ -443,7 +443,8 @@ export class ActionExecutor {
       // element of a different class than the caller claimed, resolving by id alone
       // would hand the handler a wrong-class element (the corruption class ENG-05
       // removed, one step removed). On mismatch, leave the arg unresolved so it
-      // fails loudly downstream -- mirroring relinkFlowVariables (flow/engine.ts).
+      // fails loudly downstream. A flow marker that does not resolve throws on
+      // restore instead (relinkFlowValue, flow/engine.ts).
       if (isSerializedElement(value)) {
         const serialized = value as { id: number; className: string };
         const element = game.getElementById(serialized.id);

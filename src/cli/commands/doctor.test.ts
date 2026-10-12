@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { doctorCommand } from './doctor.js';
 import { DESIGN_DIR, SCRATCH_DIR } from '../lib/project-paths.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { generateVitestConfig, VITEST_CONFIG_FILE } from '../lib/test-run-scope.js';
+import { GAME_VITE_CONFIG, GAME_VITE_CONFIG_FILE } from '../lib/test-run-scope.js';
 
 /**
  * `doctor` is issue #6's migration path: design artifacts belong under `design/`, throwaway
@@ -34,7 +34,7 @@ afterEach(async () => {
 /**
  * A minimal project: just enough for `doctor` to accept it.
  *
- * It gets a `.gitignore` that already covers `.boardsmith/`, and the vitest config `init` writes,
+ * It gets a `.gitignore` that already covers `.boardsmith/`, and the vite config `init` writes,
  * by default, so neither finding shows up as noise in every other test. The tests that exercise
  * those rules pass their own files (or `{ gitignore: false }` / `{ testConfig: false }` for none).
  */
@@ -48,8 +48,8 @@ async function project(
   if (opts.gitignore !== false && !('.gitignore' in files)) {
     await fs.writeFile(join(projectDir, '.gitignore'), 'node_modules/\n.boardsmith/\n');
   }
-  if (opts.testConfig !== false && !(VITEST_CONFIG_FILE in files)) {
-    await fs.writeFile(join(projectDir, VITEST_CONFIG_FILE), generateVitestConfig(undefined));
+  if (opts.testConfig !== false && !(GAME_VITE_CONFIG_FILE in files)) {
+    await fs.writeFile(join(projectDir, GAME_VITE_CONFIG_FILE), GAME_VITE_CONFIG);
   }
   for (const [path, content] of Object.entries(files)) {
     await fs.mkdir(join(projectDir, path, '..'), { recursive: true });
@@ -69,6 +69,13 @@ function commitAll(projectDir: string): void {
 }
 
 const read = (p: string) => fs.readFile(p, 'utf-8');
+
+/** Everything the human report printed, with colour codes stripped. */
+const printed = () =>
+  logSpy.mock.calls
+    .map((c) => String(c[0]))
+    .join('\n')
+    .replace(/\u001b\[[0-9;]*m/g, '');
 const exists = (p: string) =>
   fs.stat(p).then(
     () => true,
@@ -179,7 +186,7 @@ describe('boardsmith doctor', () => {
 
   it('does not treat an ordinary root script as scratch', async () => {
     const projectDir = await project({
-      'vite.config.ts': 'export default {}\n',
+      [GAME_VITE_CONFIG_FILE]: GAME_VITE_CONFIG,
       'build.mjs': 'export {}\n',
       '_dbg.mjs': 'console.log(1)\n',
     });
@@ -319,11 +326,34 @@ describe('boardsmith doctor', () => {
     );
   });
 
-  // #298: chunk worktrees live under .boardsmith/worktrees/, inside the project, and a test run
-  // that does not leave that directory out runs their unfinished tests too.
-  it('reports and writes a vitest config for a project whose test runs would collect chunk worktrees', async () => {
-    const viteConfig = "import { defineConfig } from 'vite';\nexport default defineConfig({});\n";
-    const projectDir = await project({ 'vite.config.ts': viteConfig }, { testConfig: false });
+  // #298, #528: chunk worktrees live under .boardsmith/worktrees/, inside the project, and a test run
+  // that does not leave that directory out runs their unfinished tests too. The exclusions ship in
+  // defineGameViteConfig, and --fix moves a project onto it.
+  const OLD_VITE_CONFIG = [
+    "import { defineConfig } from 'vite';",
+    "import vue from '@vitejs/plugin-vue';",
+    '',
+    'export default defineConfig({',
+    '  // One Vue runtime across the game/library boundary.',
+    "  resolve: { dedupe: [\"vue\"] },",
+    '  plugins: [vue()],',
+    '});',
+    '',
+  ].join('\n');
+  const OLD_VITEST_CONFIG = [
+    "import { configDefaults, defineConfig, mergeConfig } from 'vitest/config';",
+    "import base from './vite.config.ts';",
+    '',
+    'export default defineConfig(async (env) =>',
+    "  mergeConfig(typeof base === 'function' ? await base(env) : base, {",
+    '    test: { exclude: [...configDefaults.exclude, ".boardsmith/**", \'.worktrees/**\', "**/tests/browser/**"] },',
+    '  }),',
+    ');',
+    '',
+  ].join('\n');
+
+  it('rewrites a config that sets nothing defineGameViteConfig does not to the one-line config, removing its vitest config', async () => {
+    const projectDir = await project({ 'vite.config.ts': OLD_VITE_CONFIG, 'vitest.config.ts': OLD_VITEST_CONFIG });
 
     const before = await doctorCommand({ project: projectDir });
     expect(before.findings.map((f) => f.kind)).toEqual(['test-run-collects-worktrees']);
@@ -334,33 +364,72 @@ describe('boardsmith doctor', () => {
     expect(fixed.counts).toEqual({ moved: 1, pending: 0, conflicts: 0 });
     expect(process.exitCode).toBeUndefined();
 
-    expect(await read(join(projectDir, VITEST_CONFIG_FILE))).toBe(generateVitestConfig('vite.config.ts'));
-    // The vite config the dev server and build read is left exactly as it was.
-    expect(await read(join(projectDir, 'vite.config.ts'))).toBe(viteConfig);
+    expect(await read(join(projectDir, GAME_VITE_CONFIG_FILE))).toBe(GAME_VITE_CONFIG);
+    await expect(fs.stat(join(projectDir, 'vitest.config.ts'))).rejects.toThrow();
     expect((await doctorCommand({ project: projectDir })).healthy).toBe(true);
   });
 
-  it('asks for a hand edit, and changes nothing, when an existing vitest config lacks the exclusion', async () => {
-    const own = 'export default { test: { globals: true } };\n';
-    const projectDir = await project({ [VITEST_CONFIG_FILE]: own });
+  it('reports a project with no config as missing one, and writes the one-line config', async () => {
+    const projectDir = await project({}, { testConfig: false });
+
+    const before = await doctorCommand({ project: projectDir });
+    expect(before.findings).toMatchObject([{ kind: 'test-config-missing', from: GAME_VITE_CONFIG_FILE }]);
+    expect(printed()).toMatch(/missing +\S*vite\.config\.ts/);
+    expect(printed()).not.toMatch(/outdated/);
+
+    await doctorCommand({ project: projectDir, fix: true });
+    expect(await read(join(projectDir, GAME_VITE_CONFIG_FILE))).toBe(GAME_VITE_CONFIG);
+  });
+
+  it('says to delete a leftover vitest config that vitest reads in place of a vite config already built with defineGameViteConfig, and keeps that vite config', async () => {
+    const own = GAME_VITE_CONFIG.replace('defineGameViteConfig()', "defineGameViteConfig({ test: { setupFiles: ['./tests/setup.ts'] } })");
+    const projectDir = await project({ [GAME_VITE_CONFIG_FILE]: own, 'vitest.config.ts': OLD_VITEST_CONFIG });
+
+    const before = await doctorCommand({ project: projectDir });
+    expect(before.findings).toMatchObject([{ kind: 'test-run-collects-worktrees', from: 'vitest.config.ts' }]);
+    expect(before.findings[0].detail).toMatch(/vitest reads vitest\.config\.ts in place of vite\.config\.ts.*Delete vitest\.config\.ts/);
+    expect(before.findings[0].detail).not.toMatch(/vite\.config\.ts sets more/);
+
+    await doctorCommand({ project: projectDir, fix: true });
+    expect(await read(join(projectDir, GAME_VITE_CONFIG_FILE))).toBe(own);
+    await expect(fs.stat(join(projectDir, 'vitest.config.ts'))).rejects.toThrow();
+    expect((await doctorCommand({ project: projectDir })).healthy).toBe(true);
+  });
+
+  it('asks for a hand edit when a leftover vitest config has settings of its own, beside a vite config already built with defineGameViteConfig', async () => {
+    const vitest = OLD_VITEST_CONFIG.replace('test: { exclude', "test: { setupFiles: ['./tests/setup.ts'], exclude");
+    const projectDir = await project({ [GAME_VITE_CONFIG_FILE]: GAME_VITE_CONFIG, 'vitest.config.ts': vitest });
 
     const result = await doctorCommand({ project: projectDir, fix: true });
 
-    expect(result.findings).toMatchObject([
-      { kind: 'test-config-needs-edit', from: VITEST_CONFIG_FILE, fixed: false, detail: expect.stringMatching(/configDefaults\.exclude, '\.boardsmith\/\*\*'/) },
-    ]);
+    expect(result.findings).toMatchObject([{ kind: 'test-config-needs-edit', from: 'vitest.config.ts', fixed: false }]);
+    expect(result.findings[0].detail).toMatch(/vitest\.config\.ts sets more than defineGameViteConfig\(\) does \(test\.setupFiles\).*pass it to defineGameViteConfig in vite\.config\.ts.*then delete vitest\.config\.ts/s);
+    expect(await read(join(projectDir, 'vitest.config.ts'))).toBe(vitest);
+  });
+
+  it.each([
+    ['a setting of its own', OLD_VITE_CONFIG.replace('  plugins: [vue()],', "  plugins: [vue()],\n  test: { setupFiles: ['./tests/setup.ts'] },"), 'test.setupFiles'],
+    ['an exclude of its own', OLD_VITE_CONFIG.replace('  plugins: [vue()],', "  plugins: [vue()],\n  test: { exclude: ['tests/tdd/**'] },"), 'test.exclude'],
+    ['a plugin of its own', OLD_VITE_CONFIG.replace('[vue()]', '[vue(), inspect()]'), 'plugins'],
+    ['code of its own', `const tdd = process.env.TDD === '1';\n${OLD_VITE_CONFIG}`, "const tdd = process.env.TDD === '1';"],
+    ['settings imported from a file of its own', `import shared from './vite.shared';\n${OLD_VITE_CONFIG}`, "import shared from './vite.shared';"],
+    ['a side-effect import', `import './tests/patch-env';\n${OLD_VITE_CONFIG}`, "import './tests/patch-env';"],
+  ])('asks for a hand edit naming it, and changes nothing, when a config has %s', async (_what, viteConfig, named) => {
+    const projectDir = await project({ 'vite.config.ts': viteConfig, 'vitest.config.ts': OLD_VITEST_CONFIG });
+
+    const result = await doctorCommand({ project: projectDir, fix: true });
+
+    expect(result.findings).toMatchObject([{ kind: 'test-config-needs-edit', from: 'vite.config.ts', fixed: false }]);
+    expect(result.findings[0].detail).toContain(`vite.config.ts sets more than defineGameViteConfig() does (${named})`);
+    expect(result.findings[0].detail).toContain("import { defineGameViteConfig } from 'boardsmith/vite-config';");
     expect(result.counts).toEqual({ moved: 0, pending: 0, conflicts: 1 });
     expect(process.exitCode).toBe(1);
-    expect(await read(join(projectDir, VITEST_CONFIG_FILE))).toBe(own);
+    expect(await read(join(projectDir, 'vite.config.ts'))).toBe(viteConfig);
+    expect(await read(join(projectDir, 'vitest.config.ts'))).toBe(OLD_VITEST_CONFIG);
   });
+
   describe('closing advice (#299)', () => {
-    /** Everything the human report printed, with colour codes stripped. */
-    const printed = () =>
-      logSpy.mock.calls
-        .map((c) => String(c[0]))
-        .join('\n')
-        .replace(/\u001b\[[0-9;]*m/g, '');
-    const ownConfig = { [VITEST_CONFIG_FILE]: 'export default { test: { globals: true } };\n' };
+    const ownConfig = { [GAME_VITE_CONFIG_FILE]: 'export default { test: { globals: true } };\n' };
 
     it('offers --fix when every finding is fixable', async () => {
       const projectDir = await project({ 'SKETCH.md': 'x\n' });

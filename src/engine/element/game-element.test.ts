@@ -917,7 +917,7 @@ describe('Serialization safety (F7)', () => {
   });
 });
 
-// #149: `serializeValue` answered "is this element a player?" with a numeric
+// #149: `encodeValue` answered "is this element a player?" with a numeric
 // `seat`, so a per-seat board held in a game field serialized as a
 // `__playerRef` to that seat number. Restoring it then resolved the field to
 // the PLAYER at that seat, or to `undefined` when no such seat exists -- the

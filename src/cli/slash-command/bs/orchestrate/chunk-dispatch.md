@@ -104,7 +104,7 @@ five; the last two are dispatches it is never asked about:
    chunks' own tests, `chunk-check` and `claim-quote-check` on the combined tree, then records it
    in `design/MERGE-SIGNOFFS.md` (the file, both chunks, the merge), which the sign-off check
    accepts. A source file whose provisional ledger citations the merge renumbered to real numbers
-   is vouched for the same way, and so is `vitest.config.ts` when the only edit since a verified
+   is vouched for the same way, and so is `vite.config.ts` when the only edit since a verified
    chunk signed it off is to `test.include` or `test.exclude`, each a plain list of strings (and
    spreads of vitest's `configDefaults` lists): that chunk's own checks must pass on the combined
    tree with every one of its test files run, and no other file run with them. Any other edit to

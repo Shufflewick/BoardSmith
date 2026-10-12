@@ -234,8 +234,6 @@ export type {
 export {
   buildActionArgs,
   enumerateLegalMoves,
-  serializeValue,
-  deserializeValue,
   serializeAction,
   deserializeAction,
   isSerializedReference,
@@ -250,7 +248,6 @@ export {
 export type {
   BuildActionArgsOptions,
   SerializedReference,
-  SerializeOptions,
   GameStateSnapshot,
   ActionCheckpoint,
   ActionCheckpointWindow,
