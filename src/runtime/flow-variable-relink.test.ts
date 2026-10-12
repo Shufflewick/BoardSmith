@@ -11,9 +11,7 @@ import {
   execute,
   type FlowContext,
 } from '../engine/index.js';
-import type {
-  GameStateSnapshot,
-} from '../engine/utils/index.js';
+import type { GameStateSnapshot } from '../engine/utils/index.js';
 import { GameRunner } from './runner.js';
 
 /**

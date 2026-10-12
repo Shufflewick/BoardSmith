@@ -35,9 +35,7 @@ import type {
   SerializedAction,
   HistoryEntry,
 } from '../engine/action/types.js';
-import type {
-  RandomnessPolicy,
-} from '../engine/element/game.js';
+import type { RandomnessPolicy } from '../engine/element/game.js';
 import { ErrorCode } from '../types/protocol.js';
 import { PlayerFacingError } from '../engine/errors.js';
 import { constructGame, animationFloorOf, type AnimationFloor } from '../engine/element/game.js';

@@ -12,9 +12,7 @@ import {
   type FlowContext,
   type GameOptions,
 } from '../index.js';
-import type {
-  GameStateSnapshot,
-} from '../utils/index.js';
+import type { GameStateSnapshot } from '../utils/index.js';
 import { EachPlayerGame } from '../../session/testing/fixtures/each-player-fixture.js';
 import type { GameDefinitionLike } from '../../session/stateless-ops.js';
 import type { FlowState } from './types.js';

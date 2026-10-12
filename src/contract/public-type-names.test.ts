@@ -251,7 +251,7 @@ describe('the checks themselves', () => {
       { 'pkg/a': '/virtual/a.ts', 'pkg/b': '/virtual/b.ts' },
       '/virtual',
     );
-    console.log(JSON.stringify([...found.shared]));expect([...found.shared]).toEqual([['a.ts:shared', ['pkg/a', 'pkg/b']]]);
+    expect([...found.shared]).toEqual([['a.ts:shared', ['pkg/a', 'pkg/b']]]);
     expect(found.underscored).toEqual(['pkg/a:_resetForTests']);
   });
 

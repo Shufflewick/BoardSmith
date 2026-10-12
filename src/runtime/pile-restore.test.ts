@@ -32,9 +32,7 @@ import {
   createSnapshot,
   type GameStateSnapshot,
 } from '../engine/utils/index.js';
-import type {
-  SerializedAction,
-} from '../engine/action/types.js';
+import type { SerializedAction } from '../engine/action/types.js';
 import { GameRunner } from './runner.js';
 
 class Card extends Piece<PileGame, Player> {

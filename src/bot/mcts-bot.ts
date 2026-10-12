@@ -6,12 +6,8 @@ import type {
   Selection,
   FollowUpAction,
 } from '../engine/index.js';
-import type {
-  HistoryEntry,
-} from '../engine/action/types.js';
-import type {
-  GameStateSnapshot,
-} from '../engine/utils/index.js';
+import type { HistoryEntry } from '../engine/action/types.js';
+import type { GameStateSnapshot } from '../engine/utils/index.js';
 import { canSeatAct, dueSeats, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
 import { createSnapshot } from '../engine/utils/index.js';
 import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';

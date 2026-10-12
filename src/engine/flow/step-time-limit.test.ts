@@ -6,9 +6,7 @@ import {
   simultaneousActionStep,
   type GameOptions,
 } from '../index.js';
-import {
-  createSnapshot,
-} from '../utils/index.js';
+import { createSnapshot } from '../utils/index.js';
 import { GameRunner } from '../../runtime/runner.js';
 import { MCTSBot } from '../../bot/mcts-bot.js';
 import {
