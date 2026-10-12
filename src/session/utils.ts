@@ -553,7 +553,7 @@ export function assertUndoAllowed(args: {
       `Cannot undo: this game fences undo across random draws, so it needs ` +
       `the retained checkpoint at the point being restored to tell whether a ` +
       `draw was consumed — but ` +
-      `${describeCheckpointAbsence(runner.checkpointWindow(), turnStartActionIndex, 'seat')}`,
+      `${describeCheckpointAbsence(runner.checkpointWindow(), turnStartActionIndex, 'seat', runner.checkpointPolicy.history)}`,
       'random-fence',
     );
   }
@@ -628,7 +628,7 @@ export function decideUndo(runner: GameRunner, seat: number): UndoDecision {
     throw err;
   }
 
-  const absence = describeCheckpointAbsence(runner.checkpointWindow(), turnStartActionIndex, 'seat');
+  const absence = describeCheckpointAbsence(runner.checkpointWindow(), turnStartActionIndex, 'seat', runner.checkpointPolicy.history);
   if (absence) {
     return {
       allowed: false,

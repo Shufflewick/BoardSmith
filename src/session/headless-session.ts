@@ -58,6 +58,12 @@ export interface HeadlessGameOptions {
    * the host and the executor refuse them, and every seat is told.
    */
   teachingDisabled?: boolean;
+  /**
+   * Keep every per-action checkpoint, as `boardsmith dev` does, so debug time
+   * travel and rewind reach the first action. Off by default: the session
+   * keeps checkpoints back to the turn start, as a hosted table does (#504).
+   */
+  fullHistory?: boolean;
 }
 
 /**
@@ -99,7 +105,7 @@ export function createHeadlessSession<G extends Game = Game>(
   tableOptions: HeadlessGameOptions,
   botSeats: BotSeat[] = [],
 ) {
-  const { options, teachingDisabled, ...table } = tableOptions;
+  const { options, teachingDisabled, fullHistory, ...table } = tableOptions;
   // The players' choice first and the table's own fields after it, so a
   // selection cannot name the seat count, the names or the seed.
   const gameOptions = { ...options, ...table };
@@ -118,7 +124,7 @@ export function createHeadlessSession<G extends Game = Game>(
     // seat-view debug op still answers only for the seat `send` names.
     debug: true,
     teachingDisabled,
-    executeOp: (snap, pend, op) => executeOp(def, gameOptions, snap, pend, op, { debug: true, teachingDisabled }),
+    executeOp: (snap, pend, op) => executeOp(def, gameOptions, snap, pend, op, { debug: true, teachingDisabled, fullHistory }),
     record: (views, meta) => {
       // structuredClone here mirrors the production postMessage boundary: a
       // broadcast carrying a live game object would throw a DataCloneError.

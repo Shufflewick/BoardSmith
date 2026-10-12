@@ -140,7 +140,8 @@ describe('UNDO-02: a bookkeeping (unmarked) execute() does not fence undo', () =
   it('debugRewind crosses it, and the state it wrote is restored', async () => {
     const session = createHeadlessSession(
       { ...bookkeepingExecuteFixtureDefinition, gameClass: BookkeepingExecuteGame },
-      gameOptions,
+      // Full history: the rewind reaches behind the current turn.
+      { ...gameOptions, fullHistory: true },
     );
     await session.start();
 

@@ -48,6 +48,8 @@ function played(actions: number): GameRunner<ChattyGame> {
     GameClass: ChattyGame,
     gameType: 'chatty',
     gameOptions: { playerCount: 2, playerNames: ['A', 'B'], seed: 'chat' },
+    // Full history: the restores below reach checkpoints older than the turn start.
+    checkpoints: { history: 'full' },
   });
   runner.start();
   for (let i = 0; i < actions; i++) {

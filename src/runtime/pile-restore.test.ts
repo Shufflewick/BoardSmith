@@ -112,7 +112,8 @@ function roundTrip<T>(value: T): T {
 }
 
 function startedRunner(): GameRunner<PileGame> {
-  const runner = new GameRunner({ GameClass: PileGame, gameType: 'pile', gameOptions: options });
+  // Full history: the restore below reaches checkpoint 0 after the turn has passed on.
+  const runner = new GameRunner({ GameClass: PileGame, gameType: 'pile', gameOptions: options, checkpoints: { history: 'full' } });
   runner.start();
   return runner;
 }
