@@ -640,6 +640,7 @@ describe('SnapshotSessionHost', () => {
         executeOp: stubExecuteOp(async (_snap, pend, op) => {
           calls.push({ type: op.type, pendingState: pend });
           if (op.type === 'selectionStep') return { ...base, actionComplete: false, pendingState: { step: 'mid' } };
+          if (op.type === 'botSuggest') return { success: true };
           return { ...base };
         }),
         record: () => {}, push: () => {},
