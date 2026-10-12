@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 
 import { diffContract, nextContract, recordable } from './contract.js';
+import { createProgram } from '../cli.js';
 import type { EngineContract } from '../../contract/index.js';
 
 const BASE: EngineContract = {
   revision: 4,
-  bundleProtocol: 2,
   surfaceHash: 'aaaa',
   payloadHash: 'bbbb',
   formatHash: 'ffff',
@@ -13,7 +13,6 @@ const BASE: EngineContract = {
     {
       revision: 4,
       date: '2026-01-01',
-      bundleProtocol: 2,
       surfaceHash: 'aaaa',
       payloadHash: 'bbbb',
       formatHash: 'ffff',
@@ -67,29 +66,16 @@ describe('diffContract', () => {
 describe('nextContract', () => {
   const computed = { surfaceHash: 'cccc', payloadHash: 'dddd', formatHash: 'eeee' };
 
-  it('bumps the revision and appends history without touching bundleProtocol', () => {
+  it('bumps the revision and appends history', () => {
     const next = nextContract(BASE, computed, {
       summary: 'a normal engine change that keeps old bundles running',
-      breaking: false,
       date: '2026-02-02',
     });
 
     expect(next.revision).toBe(5);
-    expect(next.bundleProtocol).toBe(2);
     expect(next.surfaceHash).toBe('cccc');
     expect(next.history).toHaveLength(2);
-    expect(next.history[1]).toMatchObject({ revision: 5, date: '2026-02-02', bundleProtocol: 2 });
-  });
-
-  it('bumps bundleProtocol only when the change is declared breaking', () => {
-    const next = nextContract(BASE, computed, {
-      summary: 'an ABI change that stops already-built bundles from running',
-      breaking: true,
-      date: '2026-02-02',
-    });
-
-    expect(next.bundleProtocol).toBe(3);
-    expect(next.history[1]!.bundleProtocol).toBe(3);
+    expect(next.history[1]).toMatchObject({ revision: 5, date: '2026-02-02' });
   });
 
   it('keeps the head of history in sync with the top-level fields', () => {
@@ -98,20 +84,17 @@ describe('nextContract', () => {
     // changelog entry describing a different engine.
     const next = nextContract(BASE, computed, {
       summary: 'a change whose head entry must mirror the top-level fields',
-      breaking: true,
       date: '2026-02-02',
     });
     const head = next.history[next.history.length - 1]!;
 
     expect({
       revision: head.revision,
-      bundleProtocol: head.bundleProtocol,
       surfaceHash: head.surfaceHash,
       payloadHash: head.payloadHash,
       formatHash: head.formatHash,
     }).toEqual({
       revision: next.revision,
-      bundleProtocol: next.bundleProtocol,
       surfaceHash: next.surfaceHash,
       payloadHash: next.payloadHash,
       formatHash: next.formatHash,
@@ -121,7 +104,6 @@ describe('nextContract', () => {
   it('never rewrites earlier history entries', () => {
     const next = nextContract(BASE, computed, {
       summary: 'a change that must leave the historical record alone',
-      breaking: true,
       date: '2026-02-02',
     });
 
@@ -134,13 +116,13 @@ describe('recordable', () => {
   const moved = { surfaceChanged: true, payloadChanged: false, formatChanged: false, drifted: true };
 
   it('records a revision whenever a fingerprint moved', () => {
-    expect(recordable(moved, { breaking: false, adopt: false })).toEqual({ record: true, reason: 'drift' });
+    expect(recordable(moved, { adopt: false })).toEqual({ record: true, reason: 'drift' });
   });
 
   it('refuses a revision that would mean nothing', () => {
     // A revision nobody can read a change out of trains the platform team to
     // stop reading them, which is the whole system defeated.
-    expect(recordable(still, { breaking: false, adopt: false })).toEqual({
+    expect(recordable(still, { adopt: false })).toEqual({
       record: false,
       reason: 'nothing',
     });
@@ -153,7 +135,7 @@ describe('recordable', () => {
     // performance fix, which by definition alters no surface, no payload and no
     // stored byte -- cannot reach a live world at all unless it can be given a
     // number of its own.
-    expect(recordable(still, { breaking: false, adopt: true })).toEqual({
+    expect(recordable(still, { adopt: true })).toEqual({
       record: true,
       reason: 'adopt',
     });
@@ -163,16 +145,16 @@ describe('recordable', () => {
     // Then it is an ordinary revision and says so in its hashes. Accepting the
     // flag anyway would let "the platform must adopt this" become the sentence
     // every revision carries, which is how it would come to mean nothing.
-    expect(recordable(moved, { breaking: false, adopt: true })).toEqual({
+    expect(recordable(moved, { adopt: true })).toEqual({
       record: false,
       reason: 'adopt-not-needed',
     });
   });
+});
 
-  it('records a breaking bump with no drift, because the protocol IS the change', () => {
-    expect(recordable(still, { breaking: true, adopt: false })).toEqual({
-      record: true,
-      reason: 'breaking',
-    });
+describe('boardsmith contract options (#524)', () => {
+  it('has no --breaking: a true ABI break is an ordinary revision the platform answers by raising its minimum', () => {
+    const contract = createProgram().commands.find((c) => c.name() === 'contract')!;
+    expect(contract.options.map((o) => o.long)).not.toContain('--breaking');
   });
 });

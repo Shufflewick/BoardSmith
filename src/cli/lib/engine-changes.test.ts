@@ -12,7 +12,6 @@ import { ENGINE_CONTRACT, type EngineContractRevision } from '../../contract/ind
 const revision = (n: number, summary: string): EngineContractRevision => ({
   revision: n,
   date: `2026-09-${String(n).padStart(2, '0')}`,
-  bundleProtocol: 2,
   surfaceHash: 'x',
   payloadHash: 'y',
   summary,

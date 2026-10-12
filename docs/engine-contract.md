@@ -29,28 +29,28 @@ when the platform **re-vendors**. Two failure modes follow, and both are silent:
    BoardSmith uses an API the vendored engine does not have. It publishes fine
    and breaks at runtime, usually as something baffling like a blank action bar.
 
-`BUNDLE_PROTOCOL_VERSION` already existed but cannot catch either: by design it
-bumps only when an already-built `rules.js` stops running at all, which is rare
-and is a different question from "should the platform re-vendor?"
-
 ---
 
-## The three numbers, and what each one means
+## The one number, and what it means
 
 | Number | Lives in | Bumped when | Who reads it |
 |---|---|---|---|
 | `revision` | `src/contract/engine-contract.json` | the platform-reachable API surface, the player-view payload, or the world serialization format changes | the platform's `vendor:check`; stamped into every manifest as `engineRevision` |
-| `bundleProtocol` | same file | an already-built `rules.js` would stop working — a true ABI break | the games worker, which rejects mismatched bundles outright |
 | package `version` | `package.json` | never, in practice | nobody; it is not a release channel |
 
-`revision` is the everyday one. `bundleProtocol` is the emergency one. They are
-deliberately separate: conflating them would either force every game to be
-rebuilt for a harmless change, or let a real break slip through unannounced.
+`revision` is the only compatibility number. The platform routes each game to a
+runner built from the exact engine revision it was published on, and refuses
+any build below its minimum revision. The JSON file is its single source of
+truth; `ENGINE_REVISION` reads it rather than declaring a literal.
 
-The JSON file is the **single source of truth for both**.
-`src/engine/protocol-version.ts` reads `bundleProtocol` from it rather than
-declaring a literal, so the constant the engine exports and the number the
-platform's tooling reads cannot drift apart.
+### A true ABI break
+
+A change that stops an already-built `rules.js` from running is recorded like
+any other revision. Its summary says so plainly: every published game must be
+rebuilt. The platform answers it by raising its minimum revision to the new
+one, which refuses every older build. There is no second number for this:
+every revision would map to exactly one value of it, so it could say nothing
+the revision does not.
 
 ---
 
@@ -180,7 +180,8 @@ over-trust is worse than one they understand.
 
    `--summary` is required. It is the text the platform maintainer reads when
    deciding whether to re-vendor, so write it for them, not for yourself.
-   For a true ABI break add `--breaking`, which also bumps `bundleProtocol`.
+   For a true ABI break, say in the summary that every published game must be
+   rebuilt (see "A true ABI break" above).
 4. Commit `src/contract/engine-contract.json` with your change.
 
 The command refuses to bump when nothing actually moved, so revisions stay
@@ -220,22 +221,23 @@ made from a changelog rather than a hash. It classifies the result:
 - **in sync** — nothing to do.
 - **behind** — re-vendor when convenient; game behaviour on the platform is
   frozen at the older engine until you do.
-- **behind, ABI break** — re-vendor *and* rebuild/republish every game; already
-  published bundles are invalid.
+- **behind, with a revision whose summary says games must be rebuilt** —
+  re-vendor, raise the platform's minimum revision, and rebuild/republish every
+  game; older published bundles are refused.
 
 See `docs/BOARDSMITH-VENDORING.md` in the ShufflewickPub repo for the full
 platform-side runbook.
 
 ## Protocol: publishing a game
 
-`boardsmith build` stamps both `engineProtocol` and `engineRevision` into the
-manifest automatically — game authors never set them, and a hand-edited value
-in `boardsmith.json` is overwritten rather than merged.
+`boardsmith build` stamps `engineRevision` into the manifest automatically —
+game authors never set it, and a hand-edited value in `boardsmith.json` is
+overwritten rather than merged.
 
 The games worker rejects an upload whose `engineRevision` **exceeds** the
 platform's own. That is the asymmetry that matters: a game built on an older
-engine is fine (the newer engine still runs it, and `bundleProtocol` guards the
-case where it would not), but a game built on a *newer* engine may call
+engine is fine (the newer engine still runs it, and the platform's minimum
+revision refuses the case where it would not), but a game built on a *newer* engine may call
 something the vendored engine does not have. The rejection message names both
 revisions and says to re-vendor.
 

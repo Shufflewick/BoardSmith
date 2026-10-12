@@ -19,7 +19,6 @@ import type { EngineContract } from '../../contract/index.js';
 export interface ContractOptions {
   update?: boolean;
   summary?: string;
-  breaking?: boolean;
   adopt?: boolean;
   regenerateFormat?: boolean;
 }
@@ -91,15 +90,14 @@ export function diffContract(
  */
 export function recordable(
   diff: { drifted: boolean },
-  options: { breaking: boolean; adopt: boolean },
-): { record: boolean; reason: "drift" | "breaking" | "adopt" | "nothing" | "adopt-not-needed" } {
+  options: { adopt: boolean },
+): { record: boolean; reason: "drift" | "adopt" | "nothing" | "adopt-not-needed" } {
   if (diff.drifted) {
     return options.adopt
       ? { record: false, reason: "adopt-not-needed" }
       : { record: true, reason: "drift" };
   }
   if (options.adopt) return { record: true, reason: "adopt" };
-  if (options.breaking) return { record: true, reason: "breaking" };
   return { record: false, reason: "nothing" };
 }
 
@@ -110,14 +108,12 @@ export function recordable(
 export function nextContract(
   current: EngineContract,
   computed: { surfaceHash: string; payloadHash: string; formatHash: string },
-  options: { summary: string; breaking: boolean; date: string },
+  options: { summary: string; date: string },
 ): EngineContract {
   const revision = current.revision + 1;
-  const bundleProtocol = options.breaking ? current.bundleProtocol + 1 : current.bundleProtocol;
 
   return {
     revision,
-    bundleProtocol,
     surfaceHash: computed.surfaceHash,
     payloadHash: computed.payloadHash,
     formatHash: computed.formatHash,
@@ -126,7 +122,6 @@ export function nextContract(
       {
         revision,
         date: options.date,
-        bundleProtocol,
         surfaceHash: computed.surfaceHash,
         payloadHash: computed.payloadHash,
         formatHash: computed.formatHash,
@@ -139,7 +134,6 @@ export function nextContract(
 function reportCheck(contract: EngineContract, diff: ReturnType<typeof diffContract>): void {
   console.log(chalk.cyan('\nEngine contract\n'));
   console.log(`  revision        ${contract.revision}`);
-  console.log(`  bundleProtocol  ${contract.bundleProtocol}`);
   console.log(`  surfaceHash     ${contract.surfaceHash}`);
   console.log(`  payloadHash     ${contract.payloadHash}`);
   console.log(`  formatHash      ${contract.formatHash ?? chalk.red('none declared')}`);
@@ -210,10 +204,7 @@ export async function contractCommand(options: ContractOptions): Promise<void> {
     return;
   }
 
-  const verdict = recordable(diff, {
-    breaking: options.breaking === true,
-    adopt: options.adopt === true,
-  });
+  const verdict = recordable(diff, { adopt: options.adopt === true });
   if (verdict.reason === 'nothing') {
     console.error(chalk.yellow('\nNothing to record — the API surface, the player-view payload and the world serialization format are all unchanged.\n'));
     console.error('If your change affects the platform in a way neither fingerprint can see');
@@ -239,7 +230,6 @@ export async function contractCommand(options: ContractOptions): Promise<void> {
 
   const updated = nextContract(contract, computed, {
     summary,
-    breaking: options.breaking === true,
     date: new Date().toISOString().slice(0, 10),
   });
 
@@ -252,7 +242,6 @@ export async function contractCommand(options: ContractOptions): Promise<void> {
       'world serialization format (a live world may not cross this)',
     ),
     verdict.reason === 'adopt' && 'nothing a fingerprint can see — recorded so the platform can archive and run this build',
-    options.breaking && chalk.red('bundle protocol (BREAKING — every published game must be rebuilt)'),
   ].filter(Boolean);
 
   console.log(chalk.green(`\n✓ Engine contract revision ${contract.revision} → ${updated.revision}`));

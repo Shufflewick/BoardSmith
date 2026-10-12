@@ -1,10 +1,6 @@
 /// <reference path="../types/node-globals.d.ts" />
 /// <reference path="../ui/global.d.ts" />
 
-// Bundle protocol (game↔engine ABI) version — stamped into manifests at build,
-// enforced by the executor. See protocol-version.ts.
-export { BUNDLE_PROTOCOL_VERSION } from './protocol-version.js';
-
 // The engine contract: ENGINE_REVISION moves whenever the platform-reachable
 // surface or the player-view payload changes, so the platform can detect an
 // engine it has not vendored yet. See docs/engine-contract.md.

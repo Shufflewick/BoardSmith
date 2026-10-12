@@ -28,7 +28,7 @@ describe('uploadBundle error reporting', () => {
 
   it('surfaces the games worker { error } body verbatim', async () => {
     const workerMessage =
-      'boardsmith.json is missing engineProtocol -- this bundle predates protocol versioning. '
+      'This bundle was built against engine revision 120, below the platform minimum of 129. '
       + 'Rebuild and republish with the current BoardSmith CLI.';
     mockFetchResponse(400, { error: workerMessage });
 
