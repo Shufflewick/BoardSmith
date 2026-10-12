@@ -18,18 +18,9 @@
  * is asserted includes the frames on that socket, because "received WebSocket
  * frames contain no pick reply" is how the defect was actually found.
  *
- * ## Why this is not in `npx vitest run`
- *
- * It needs Chromium, and BoardSmith depends on no browser -- the suite stays
- * hermetic and this is run deliberately, the same split ShufflewickPub keeps
- * between `npm test` and its Playwright specs. It never skips: with no
- * Playwright reachable it says how to give it one and exits non-zero, because a
- * browser regression that quietly passes when it did not run is the thing it
- * exists to replace.
- *
- *   node scripts/world-pick-bridge-browser.mjs
- *   BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \
- *     node scripts/world-pick-bridge-browser.mjs
+ * Runs under `boardsmith test --browser`, or by hand with
+ * `node scripts/world-pick-bridge-browser.mjs`; a missing Chromium says to run
+ * `boardsmith install-browser`.
  *
  * ## The fixture is written here, not checked in
  *

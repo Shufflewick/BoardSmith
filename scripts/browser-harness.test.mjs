@@ -160,6 +160,10 @@ describe('#533: every browser regression runs automatically', () => {
     expect(policy.verify).toContainEqual({ name: 'browser', run: 'node bin/boardsmith.js test --browser' });
   });
 
+  it('lists the browser suite without an error', () => {
+    expect(listed.status, browserSuiteCases).toBe(0);
+  });
+
   it.each(browserScripts())('%s is a case of the browser suite', (name) => {
     expect(browserSuiteCases, `${name} has no case in \`boardsmith test --browser\``).toContain(name);
   });

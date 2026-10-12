@@ -27,16 +27,9 @@
  * in this repo shares: real Chromium, the real `boardsmith dev` world chrome,
  * the real `world.html` in the real iframe, a real WebSocket to a real host.
  *
- * ## Why this is not in `npx vitest run`
- *
- * It needs Chromium, and BoardSmith depends on no browser -- the suite stays
- * hermetic and this is run deliberately. It never skips: with no Playwright
- * reachable it says how to give it one and exits non-zero, because a browser
- * regression that quietly passes when it did not run is the thing it replaces.
- *
- *   node scripts/multiline-text-browser.mjs
- *   BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \
- *     node scripts/multiline-text-browser.mjs
+ * Runs under `boardsmith test --browser`, or by hand with
+ * `node scripts/multiline-text-browser.mjs`; a missing Chromium says to run
+ * `boardsmith install-browser`.
  */
 
 import {

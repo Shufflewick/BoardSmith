@@ -34,12 +34,11 @@
  * Real Chromium, the real dev chrome, the real `world.html` in the real iframe,
  * a real WebSocket to a real `LocalWorldHost` over a real store, and two seats
  * open at once. The precedent and the mechanics are #227's
- * `world-pick-bridge-browser.mjs`; the reasons it is not in `npx vitest run`
- * are that one's reasons.
+ * `world-pick-bridge-browser.mjs`.
  *
- *   node scripts/action-menu-browser.mjs
- *   BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \
- *     node scripts/action-menu-browser.mjs
+ * Runs under `boardsmith test --browser`, or by hand with
+ * `node scripts/action-menu-browser.mjs`; a missing Chromium says to run
+ * `boardsmith install-browser`.
  *
  * The fixture world is written to a temp directory per run and removed
  * afterwards, for the reasons #227's script gives.

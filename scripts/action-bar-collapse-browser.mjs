@@ -36,17 +36,9 @@
  *      choice, at 375x812 and 844x390, keeps the bar's top at or below the
  *      strip the board reserves, with nothing scrolling inside the bar.
  *
- * ## Why this is not in `npx vitest run`
- *
- * It needs Chromium, and BoardSmith depends on no browser -- the suite stays
- * hermetic and this is run deliberately, the same split #227 made. It never
- * skips: with no Playwright reachable it says how to give it one and exits
- * non-zero, because a browser regression that quietly passes when it did not run
- * is the thing it exists to replace.
- *
- *   node scripts/action-bar-collapse-browser.mjs
- *   BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \
- *     node scripts/action-bar-collapse-browser.mjs
+ * Runs under `boardsmith test --browser`, or by hand with
+ * `node scripts/action-bar-collapse-browser.mjs`; a missing Chromium says to run
+ * `boardsmith install-browser`.
  *
  * The world it drives is written into a temp directory per run and removed
  * afterwards, for the reason #227 gives: a checked-in game project inside the

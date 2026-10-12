@@ -28,16 +28,9 @@
  * its own, so an Add or a remove that cannot be tabbed to, named, or returned to
  * after it unmounts is a control those players do not have.
  *
- * ## Why this is not in `npx vitest run`
- *
- * It needs Chromium, and BoardSmith depends on no browser -- the suite stays
- * hermetic and this is run deliberately. It never skips: with no Playwright
- * reachable it says how to give it one and exits non-zero, because a browser
- * regression that quietly passes when it did not run is the thing it replaces.
- *
- *   node scripts/ordered-list-browser.mjs
- *   BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \
- *     node scripts/ordered-list-browser.mjs
+ * Runs under `boardsmith test --browser`, or by hand with
+ * `node scripts/ordered-list-browser.mjs`; a missing Chromium says to run
+ * `boardsmith install-browser`.
  *
  * ## The fixture is written here, not checked in
  *

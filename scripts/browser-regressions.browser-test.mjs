@@ -9,7 +9,7 @@
  * This is `boardsmith test --browser` (`vitest.browser.config.ts`), not part of the
  * default suite: it needs Chromium, installed by `boardsmith install-browser`.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, onTestFinished } from 'vitest';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { dirname, join } from 'node:path';
@@ -24,6 +24,11 @@ const HANG_GUARD_MS = 600_000;
 describe('the browser regressions', () => {
   it.each(browserScripts())('%s passes in Chromium', async (name) => {
     const child = spawn(process.execPath, [join(SCRIPTS, name)], { cwd: join(SCRIPTS, '..') });
+    // A script still running when the case ends hung past the guard: stop it, and the dev
+    // server it holds in-process, by its own pid, so nothing is left running.
+    onTestFinished(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    });
     let output = '';
     child.stdout.on('data', (chunk) => (output += chunk));
     child.stderr.on('data', (chunk) => (output += chunk));

@@ -35,10 +35,10 @@ interface TestOptions {
  * `boardsmith test mcts` runs only test files matching "mcts".
  *
  * `--browser`, in the BoardSmith repository only, runs the browser regressions in Chromium
- * (`BROWSER_SUITE_CONFIG`, #533) instead of the default suite.
+ * (`BROWSER_SUITE_CONFIG`, #533) instead of the default suite, without the type check.
  *
  * In the BoardSmith repository it type-checks first and runs no test if that
- * fails (#312). In a game project it refuses to start when the project's vitest config would
+ * fails (#312), except under `--browser`. In a game project it refuses to start when the project's vitest config would
  * also collect the chunk worktrees under `.boardsmith/worktrees/` (#298).
  *
  * A run that does not pass ends with a verdict that says why (#429): the files
@@ -55,17 +55,7 @@ export async function testCommand(patterns: string[], options: TestOptions): Pro
   if (context === 'standalone') {
     await refuseGameProjectThatCannotRun(cwd, options);
   } else {
-    // THE BOARDSMITH REPOSITORY TYPE-CHECKS BEFORE IT TESTS (#312), so a type
-    // error stops the run, and the merge that runs it, before a test starts.
-    const typecheck = await runTypecheck(cwd);
-    if (typecheck !== 0) {
-      fail(
-        `The type check failed (vue-tsc exited with code ${typecheck}), so no test ran. ` +
-          "Its errors are above; run 'boardsmith typecheck' to see them again.",
-        typecheck,
-        options,
-      );
-    }
+    await typecheckFirst(cwd, options);
   }
 
   const label = context === 'monorepo' ? 'BoardSmith' : 'game';
@@ -93,6 +83,24 @@ function vitestArgs(patterns: string[], options: TestOptions): string[] {
   if (options.browser) args.push('--config', BROWSER_SUITE_CONFIG);
   if (options.coverage) args.push('--coverage');
   return [...args, ...patterns];
+}
+
+/**
+ * THE BOARDSMITH REPOSITORY TYPE-CHECKS BEFORE IT TESTS (#312), so a type error stops the run,
+ * and the merge that runs it, before a test starts. `--browser` does not: it runs after the
+ * default suite (in `agent-policy verify`, on the same commit), which has type-checked already.
+ */
+async function typecheckFirst(cwd: string, options: TestOptions): Promise<void> {
+  if (options.browser) return;
+  const typecheck = await runTypecheck(cwd);
+  if (typecheck !== 0) {
+    fail(
+      `The type check failed (vue-tsc exited with code ${typecheck}), so no test ran. ` +
+        "Its errors are above; run 'boardsmith typecheck' to see them again.",
+      typecheck,
+      options,
+    );
+  }
 }
 
 /** Ends a run that did not pass: prints why, hands the same text to `--verdict-file`, and exits. */

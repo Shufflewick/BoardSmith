@@ -25,14 +25,9 @@
  * checks measure where each line ends against the bar's own content edge, with
  * a whole conditions sentence and one unbroken reference in the quote.
  *
- * ## Why this is not in `npx vitest run`
- *
- * It needs Chromium, and BoardSmith depends on no browser. It never skips: with
- * no Playwright reachable it says how to give it one and exits non-zero.
- *
- *   node scripts/draft-quote-browser.mjs
- *   BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \
- *     node scripts/draft-quote-browser.mjs
+ * Runs under `boardsmith test --browser`, or by hand with
+ * `node scripts/draft-quote-browser.mjs`; a missing Chromium says to run
+ * `boardsmith install-browser`.
  */
 // One line rather than the pick harness's stacked list, so two scripts importing
 // the same six helpers are not a clone group the duplication gate has to hold.

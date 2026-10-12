@@ -323,7 +323,9 @@ node scripts/ordered-list-browser.mjs    # one, with its checks printed as it go
 `boardsmith test --browser` (`vitest.browser.config.ts`, #533) runs one case per
 `scripts/*-browser.mjs`, found by name, that runs the script and expects it to
 exit 0; `agent-policy verify` runs it as its `browser` check. They are **not**
-part of a plain `boardsmith test`, so the default suite needs no Chromium. They use
+part of a plain `boardsmith test`, so the default suite needs no Chromium, and
+`--browser` skips the type check a plain run does first, since verify's `test`
+check has done it on the same commit. They use
 BoardSmith's own Playwright and the Chromium `boardsmith install-browser` puts on
 the machine, found the same way as the smoke check below. They never skip: with
 that Chromium missing one says to run `boardsmith install-browser` and exits
