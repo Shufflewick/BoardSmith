@@ -33,9 +33,11 @@ import {
   type GameOptions,
 } from '../engine/index.js';
 import type { GameStateSnapshot } from '../runtime/index.js';
+import { runnerFromSnapshot } from './runner-from-snapshot.js';
 import { executeOp, type ExecuteOpHostOptions, type GameDefinitionLike } from './stateless-ops.js';
 import type { PlayerGameState } from './types.js';
 import { succeeded } from './op-result.test-helper.js';
+import { UndoRefusedError, assertUndoAllowed } from './utils.js';
 
 const ACTIONS_PER_TURN = 3;
 const SEATS = 3;
@@ -379,6 +381,66 @@ describe('#680: the window starts after the last point undo cannot cross', () =>
     }
     expect(table.snapshot.actionCheckpoints!.baseIndex).toBe(0);
     expect(table.snapshot.actionCheckpoints!.entries).toHaveLength(4);
+  });
+});
+
+describe('#683: the retained window and the undo refusal agree on the floor', () => {
+  /**
+   * The oldest point in the current step that `assertUndoAllowed` lets an undo
+   * restore. Under turn-anchored retention this must be exactly where the
+   * window starts: one later and an allowed undo finds no checkpoint, one
+   * earlier and the window keeps checkpoints nothing can reach.
+   */
+  function smallestAllowedTarget(def: GameDefinitionLike, table: Table): number {
+    // 'allowed' is what executeOp runs with when the host sets no policy.
+    const runner = runnerFromSnapshot(table.snapshot, { ...def, randomness: 'allowed' });
+    const length = runner.actionHistory.length;
+    for (let target = length - moveCountOf(table); target < length; target++) {
+      try {
+        assertUndoAllowed({ runner, turnStartActionIndex: target, fenceRandomRewind: false });
+        return target;
+      } catch (err) {
+        if (!(err instanceof UndoRefusedError)) throw err;
+      }
+    }
+    return length;
+  }
+
+  /** A small seeded generator, so a failing history can be replayed. */
+  function picker(seed: number): (choices: readonly string[]) => string {
+    let state = seed;
+    return (choices) => {
+      state = (state * 1103515245 + 12345) % 2147483648;
+      return choices[(state >>> 16) % choices.length];
+    };
+  }
+
+  it('across generated turns of steps, notUndoable commits and irreversible reveals', async () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const pick = picker(seed);
+      let table = await startTwoSeats(commitTurns);
+      for (let i = 0; i < 12; i++) {
+        table = await act(commitTurns, table, pick(['step', 'step', 'commit', 'reveal', 'end']));
+        expect(smallestAllowedTarget(commitTurns, table), `seed ${seed}, action ${i}`).toBe(
+          table.snapshot.actionCheckpoints!.baseIndex,
+        );
+      }
+    }
+  });
+
+  it('across generated simultaneous steps, including steps of only notUndoable actions', async () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const pick = picker(seed);
+      let table = await startTwoSeats(simultaneous);
+      table = await act(simultaneous, table, 'prepare');
+      table = await act(simultaneous, table, 'prepare');
+      for (let i = 0; i < 10; i++) {
+        table = await order(table, Number(pick(['1', '2'])), pick(['order', 'commit']));
+        expect(smallestAllowedTarget(simultaneous, table), `seed ${seed}, action ${i}`).toBe(
+          table.snapshot.actionCheckpoints!.baseIndex,
+        );
+      }
+    }
   });
 });
 
