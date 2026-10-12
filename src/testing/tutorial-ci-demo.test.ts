@@ -174,6 +174,7 @@ class DemoGameNoCaptureRule extends Game<DemoGameNoCaptureRule, Player> {
  *   third turn (the `capture` action counts as a turn).
  */
 const DEMO_TUTORIAL: TutorialDefinition = {
+  learnerSeat: 1,
   steps: [
     {
       id: 'intro',
@@ -240,7 +241,6 @@ describe('Tutorial CI Demo — criterion #3 proof', () => {
     });
 
     const result = simulateTutorial(testGame, DEMO_TUTORIAL, {
-      seat: 1,
       scenario: WALKTHROUGH,
       seed: 'tutorial-ci-demo-intact',
     });
@@ -271,6 +271,7 @@ describe('Tutorial CI Demo — criterion #3 proof', () => {
     // Broken tutorial: intro step requires `capture` instead of `move`.
     // `move` is now tutorial-disabled on the intro step.
     const brokenGateDef: TutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         {
           id: 'intro',
@@ -300,7 +301,6 @@ describe('Tutorial CI Demo — criterion #3 proof', () => {
     // `move` is gated out by the broken tutorial definition.
     expect(() =>
       simulateTutorial(brokenGame, brokenGateDef, {
-        seat: 1,
         scenario: WALKTHROUGH,
       }),
     ).toThrow(/Tutorial drift \(gate\)/);
@@ -331,7 +331,6 @@ describe('Tutorial CI Demo — criterion #3 proof', () => {
     // has no game rule backing it.
     expect(() =>
       simulateTutorial(brokenGame, DEMO_TUTORIAL, {
-        seat: 1,
         scenario: WALKTHROUGH,
       }),
     ).toThrow(/Tutorial drift \(predicate\)/);

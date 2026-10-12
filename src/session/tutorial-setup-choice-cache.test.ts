@@ -51,6 +51,7 @@ const lockedDef: GameDefinitionLike & { tutorial: TutorialDefinition } = {
     setup: (game) => {
       (game as LockedGame).unlocked = true;
     },
+    learnerSeat: 1,
     steps: [{ id: 'open', gate: { action: 'open' }, content: [{ text: 'Open the door.' }] }],
   },
 };

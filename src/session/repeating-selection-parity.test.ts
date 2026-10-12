@@ -131,7 +131,7 @@ describe('a repeating selection is one protocol on every path (#325)', () => {
     const host = makeHost();
     await host.start();
     const found = succeeded(await host.handleOp(1, { type: 'botSuggest', seats: [{ seat: 1, level: 'easy' }] }));
-    succeeded(await host.handleOp(1, suggestedMoveOp(found)));
+    succeeded(await host.handleOp(1, suggestedMoveOp(host.snapshot, found)));
 
     const after = outcome(host);
     expect(Array.isArray(after.collected)).toBe(true);

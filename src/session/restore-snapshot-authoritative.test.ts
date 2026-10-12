@@ -231,6 +231,7 @@ class TutorialRestoreGame extends Game<TutorialRestoreGame, Player> {
 }
 
 const RESTORE_TUTORIAL: TutorialDefinition = {
+  learnerSeat: 1,
   steps: [
     {
       id: 'step-1',

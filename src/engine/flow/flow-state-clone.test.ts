@@ -138,7 +138,7 @@ async function driveFixture(def: GameDefinitionLike) {
     if (!flowState || flowState.complete) break;
     const found = await session.host.handleOp(1, { type: 'botSuggest', seats });
     if (!found.success || found.botPlayer === undefined) break;
-    const result = await session.host.handleOp(found.botPlayer, suggestedMoveOp(found));
+    const result = await session.host.handleOp(found.botPlayer, suggestedMoveOp(session.host.snapshot, found));
     if (!result.success) break;
     steps++;
   }

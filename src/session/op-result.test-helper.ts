@@ -30,11 +30,12 @@ export function refused<R extends { success: boolean }>(result: R): Extract<R, {
 
 /**
  * The move a successful `botSuggest` found, as the `action` op the table host
- * makes it with (#635): for the bot's seat, stamped with the boundary of the
- * game the search ran on. Throws when the search found no move, naming the
- * stalled seat if one stalled.
+ * makes it with (#635): for the bot's seat, stamped with the boundary of
+ * `searched`, the snapshot the search ran on. Throws when the search found no
+ * move, naming the stalled seat if one stalled.
  */
 export function suggestedMoveOp(
+  searched: unknown,
   found: Extract<OpResultFor<'botSuggest'>, { success: true }>,
 ): Extract<ExecutorOp, { type: 'action' }> {
   if (found.botPlayer === undefined) {
@@ -49,7 +50,7 @@ export function suggestedMoveOp(
     player: found.botPlayer,
     actionName: found.suggestedAction,
     args: found.suggestedArgs,
-    boundaryKey: boundaryKeyOf(found.snapshot),
+    boundaryKey: boundaryKeyOf(searched),
   };
 }
 

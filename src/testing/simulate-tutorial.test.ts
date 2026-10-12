@@ -76,6 +76,7 @@ class TutSimGame extends Game<TutSimGame, Player> {
 
 /** Two-step tutorial where both steps complete via advanceWhen predicates. */
 const HAPPY_TUTORIAL: TutorialDefinition = {
+  learnerSeat: 1,
   steps: [
     {
       id: 'step-move',
@@ -96,6 +97,7 @@ const HAPPY_TUTORIAL: TutorialDefinition = {
 
 /** Two-step tutorial with no advanceWhen — used for non-completion tests. */
 const NO_AUTO_ADVANCE_TUTORIAL: TutorialDefinition = {
+  learnerSeat: 1,
   steps: [
     { id: 'step-1', gate: { action: 'move' } },
     { id: 'step-2', gate: { action: 'pass' } },
@@ -112,7 +114,6 @@ describe('simulateTutorial', () => {
       // Single-player: tutorial seat always has the next turn.
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'happy-seed' });
       const result = simulateTutorial(testGame, HAPPY_TUTORIAL, {
-        seat: 1,
         scenario: [
           { action: 'move', expectStep: 'step-pass' },
           { action: 'pass' },
@@ -124,10 +125,19 @@ describe('simulateTutorial', () => {
       expect(result.stepsVisited).toContain('step-pass');
     });
 
+    it("runs for the tutorial's learnerSeat (#552)", () => {
+      const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'happy-seed' });
+
+      const result = simulateTutorial(testGame, { ...HAPPY_TUTORIAL, learnerSeat: 2 }, { scenario: [] });
+
+      expect(testGame.game.tutorialProgress.get(2)).toEqual({ stepId: 'step-move', status: 'running' });
+      expect(testGame.game.tutorialProgress.has(1)).toBe(false);
+      expect(result.stepsVisited).toEqual(['step-move']);
+    });
+
     it('assertTutorialCompletes does not throw when tutorial completed', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'happy-seed' });
       const result = simulateTutorial(testGame, HAPPY_TUTORIAL, {
-        seat: 1,
         scenario: [
           { action: 'move' },
           { action: 'pass' },
@@ -140,7 +150,6 @@ describe('simulateTutorial', () => {
     it('records the effective game seed in the result (seed traceability)', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'happy-seed' });
       const result = simulateTutorial(testGame, HAPPY_TUTORIAL, {
-        seat: 1,
         scenario: [{ action: 'move' }, { action: 'pass' }],
       });
 
@@ -153,7 +162,6 @@ describe('simulateTutorial', () => {
 
       expect(() =>
         simulateTutorial(testGame, HAPPY_TUTORIAL, {
-          seat: 1,
           scenario: [{ action: 'move' }, { action: 'pass' }],
           seed: 'different-seed',
         }),
@@ -164,7 +172,6 @@ describe('simulateTutorial', () => {
       const run1 = () => {
         const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'pinned' });
         return simulateTutorial(testGame, HAPPY_TUTORIAL, {
-          seat: 1,
           scenario: [{ action: 'move' }, { action: 'pass' }],
           seed: 'pinned',
         });
@@ -173,7 +180,6 @@ describe('simulateTutorial', () => {
       const run2 = () => {
         const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'pinned' });
         return simulateTutorial(testGame, HAPPY_TUTORIAL, {
-          seat: 1,
           scenario: [{ action: 'move' }, { action: 'pass' }],
           seed: 'pinned',
         });
@@ -191,6 +197,7 @@ describe('simulateTutorial', () => {
     it('throws when scenario action is blocked by the current step gate', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'drift-a' });
       const def: TutorialDefinition = {
+        learnerSeat: 1,
         steps: [
           { id: 'step-1', gate: { action: 'move' } }, // 'pass' is blocked
         ],
@@ -198,7 +205,6 @@ describe('simulateTutorial', () => {
 
       expect(() =>
         simulateTutorial(testGame, def, {
-          seat: 1,
           scenario: [{ action: 'pass' }], // 'pass' is blocked on step-1
         })
       ).toThrow(/gate|disabled|step-1|pass/i);
@@ -207,6 +213,7 @@ describe('simulateTutorial', () => {
     it('error message names the blocked action and the step id', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'drift-a' });
       const def: TutorialDefinition = {
+        learnerSeat: 1,
         steps: [
           { id: 'gated-step', gate: { action: 'move' } },
         ],
@@ -215,7 +222,6 @@ describe('simulateTutorial', () => {
       let message = '';
       try {
         simulateTutorial(testGame, def, {
-          seat: 1,
           scenario: [{ action: 'pass' }],
         });
       } catch (err) {
@@ -231,6 +237,7 @@ describe('simulateTutorial', () => {
     it('throws when expectStep is set but predicate does not fire', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'drift-b' });
       const def: TutorialDefinition = {
+        learnerSeat: 1,
         steps: [
           {
             id: 'step-1',
@@ -246,7 +253,6 @@ describe('simulateTutorial', () => {
 
       expect(() =>
         simulateTutorial(testGame, def, {
-          seat: 1,
           scenario: [
             { action: 'move', expectStep: 'step-2' }, // predicate won't fire after 1 move
           ],
@@ -259,7 +265,6 @@ describe('simulateTutorial', () => {
     it('result.completed is false when scenario ends before last step', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'non-complete' });
       const result = simulateTutorial(testGame, NO_AUTO_ADVANCE_TUTORIAL, {
-        seat: 1,
         scenario: [
           { action: 'move' }, // gate on step-1 allows this, but no advanceWhen to move to step-2
         ],
@@ -271,7 +276,6 @@ describe('simulateTutorial', () => {
     it('assertTutorialCompletes throws when tutorial is not complete', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'non-complete' });
       const result = simulateTutorial(testGame, NO_AUTO_ADVANCE_TUTORIAL, {
-        seat: 1,
         scenario: [
           { action: 'move' },
         ],
@@ -284,11 +288,10 @@ describe('simulateTutorial', () => {
   describe('validateTutorialDefinition surfaces on call', () => {
     it('throws synchronously when tutorial definition has no steps', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'validate' });
-      const emptyDef: TutorialDefinition = { steps: [] };
+      const emptyDef: TutorialDefinition = { learnerSeat: 1, steps: [] };
 
       expect(() =>
         simulateTutorial(testGame, emptyDef, {
-          seat: 1,
           scenario: [],
         })
       ).toThrow(/no steps|empty/i);
@@ -303,6 +306,7 @@ describe('simulateTutorial', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'wr02' });
 
       const def: TutorialDefinition = {
+        learnerSeat: 1,
         steps: [
           { id: 'step-1', gate: { action: 'move' } }, // 'pass' is blocked on step-1
         ],
@@ -311,7 +315,6 @@ describe('simulateTutorial', () => {
       // Move from seat 1 is fine (gate allows 'move'). Then seat 2 tries 'pass', which is gated.
       expect(() =>
         simulateTutorial(testGame, def, {
-          seat: 1,
           scenario: [
             { action: 'move' },           // seat 1 moves — OK
             { action: 'pass', seat: 2 },  // seat 2 passes — should throw (gate blocks 'pass')
@@ -328,6 +331,7 @@ describe('simulateTutorial', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'wr02-init' });
 
       const def: TutorialDefinition = {
+        learnerSeat: 1,
         steps: [
           // No advanceWhen — gate check only. Both seats remain on this step.
           { id: 'step-move', gate: { action: 'move' } },
@@ -339,7 +343,6 @@ describe('simulateTutorial', () => {
       // not throw even though seat 2 is a non-primary seat.
       expect(() =>
         simulateTutorial(testGame, def, {
-          seat: 1,
           scenario: [
             { action: 'move' },           // seat 1 moves — allowed on step-move
             { action: 'move', seat: 2 },  // seat 2 moves — seat 2 must be initialized with progress

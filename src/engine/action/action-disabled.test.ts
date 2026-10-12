@@ -105,6 +105,7 @@ describe('action-level .disabled()', () => {
 
 describe('action-level .disabled() alongside a tutorial gate', () => {
   const tutorialDef: TutorialDefinition = {
+    learnerSeat: 1,
     steps: [{ id: 'step1', gate: { action: 'pass' } }],
   };
 

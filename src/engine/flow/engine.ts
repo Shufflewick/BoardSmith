@@ -423,8 +423,12 @@ export class FlowEngine<G extends Game = Game> {
    * a commitment happen since I last checked".
    */
   irreversibleCommitCount = 0;
-  /** True only inside `restartWithoutOpening`'s run: `execute` nodes are passed over. */
-  private skipOpeningExecutes = false;
+  /**
+   * Set only inside `restartWithoutOpening`'s run, to the seat the restart
+   * hands the turn to: `execute` nodes are passed over, and every round the
+   * run enters is joined at this seat's place in it.
+   */
+  private restartSeat: number | undefined;
 
   constructor(game: G, definition: FlowDefinition<G>) {
     this.game = game;
@@ -459,16 +463,25 @@ export class FlowEngine<G extends Game = Game> {
    * entered before the first step that needs input, and the phase the game
    * was in when it restarted is abandoned without its `onExitPhase`.
    *
+   * The turn goes to `seat`: it is the flow's current seat at the root, and
+   * every `eachPlayer` round entered before the first step that needs input
+   * is built in its usual order (its own direction, starting player and
+   * filter) and joined at `seat`'s place in it, skipping the seats before
+   * it, so the round after runs in its usual order. A round whose filter
+   * leaves `seat` out is joined at its start instead, and a step that names
+   * its own player still prompts that player.
+   *
    * Used by a tutorial start (`Game.restartFlowForTutorial`) to hand the turn
-   * back to the first seat the flow prompts.
+   * to the tutorial's learner seat.
    */
-  restartWithoutOpening(): FlowState {
+  restartWithoutOpening(seat: number): FlowState {
     this.resetToRoot(this.variables);
-    this.skipOpeningExecutes = true;
+    this.currentPlayer = this.game.getPlayer(seat) as PlayerOf<G> | undefined;
+    this.restartSeat = seat;
     try {
       return this.run();
     } finally {
-      this.skipOpeningExecutes = false;
+      this.restartSeat = undefined;
     }
   }
 
@@ -1816,10 +1829,14 @@ export class FlowEngine<G extends Game = Game> {
         rotated = rotated.filter((p) => config.filter!(p, context));
       }
 
+      const eligibleSeats = rotated.map(p => p.seat);
+      // A restart joins the round at its seat's place, skipping the seats
+      // before it, so the next round runs in its usual order.
+      const joinIndex = this.restartSeat === undefined ? -1 : eligibleSeats.indexOf(this.restartSeat);
       frame.data = {
         ...frame.data,
-        eligibleSeats: rotated.map(p => p.seat),
-        nextIndex: 0,
+        eligibleSeats,
+        nextIndex: Math.max(joinIndex, 0),
       };
     }
 
@@ -2316,7 +2333,7 @@ export class FlowEngine<G extends Game = Game> {
     config: ExecuteConfig<G>,
     context: FlowContext<G>
   ): StepResult {
-    if (this.skipOpeningExecutes) {
+    if (this.restartSeat !== undefined) {
       frame.completed = true;
       return { awaitingInput: false };
     }

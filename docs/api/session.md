@@ -353,10 +353,12 @@ op's result says what it carries. A success that ran the game carries one
 state envelope: `snapshot` (which holds the flow state and winners; read them
 with `flowStateOf`, `isCompleteOf` and `winnersOf`), `playerViews`,
 `spectatorView`, `flowDebugInfo` and `persistCommit`, plus the op's own fields
-(`followUp`, `data` and `message` on an `action`; `botPlayer`, `suggestedAction`
-and `suggestedArgs` on a `botSuggest` that found a move, `botStalled` on one whose due bot seat could
-not choose, and neither when no bot seat is due). A `resolveChoices` success
-carries only its answer and no envelope, because a query changes nothing and answers one seat:
+(`followUp`, `data` and `message` on an `action`). A `resolveChoices` or
+`botSuggest` success carries only its answer and no envelope, because neither
+changes anything and each answers one caller: `choices` and the rest of a pick's
+answer for `resolveChoices`; for `botSuggest`, `botPlayer`, `suggestedAction` and
+`suggestedArgs` when a due bot seat found a move, `botStalled` when it could not
+choose, and neither when no bot seat is due (#675):
 
 ```typescript
 function reply(result: OpResultFor<'resolveChoices'>) {

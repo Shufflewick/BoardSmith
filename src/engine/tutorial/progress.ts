@@ -176,6 +176,12 @@ export function autoAdvanceTutorial(
  * @throws {Error} with an actionable message naming the step and field.
  */
 export function validateTutorialDefinition(def: TutorialDefinition): void {
+  if (!Number.isInteger(def.learnerSeat) || def.learnerSeat < 1) {
+    throw new Error(
+      `Tutorial definition learnerSeat must be a seat number of 1 or more, got ${String(def.learnerSeat)}. ` +
+      'Set TutorialDefinition.learnerSeat to the seat the learner plays, for example learnerSeat: 1.'
+    );
+  }
   if (def.steps.length === 0) {
     throw new Error(
       'Tutorial definition has no steps. ' +

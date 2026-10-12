@@ -252,6 +252,7 @@ class TutorialParityGame extends Game<TutorialParityGame, Player> {
 class ParitySpace extends Space<TutorialParityGame> {}
 
 const PARITY_TUTORIAL: TutorialDefinition = {
+  learnerSeat: 1,
   steps: [
     { id: 'intro', gate: { action: 'move' }, suppressAutoFill: true },
     { id: 'next', gate: { action: 'pass' } },
@@ -259,6 +260,7 @@ const PARITY_TUTORIAL: TutorialDefinition = {
 };
 
 const SUPPRESS_TUTORIAL: TutorialDefinition = {
+  learnerSeat: 1,
   steps: [
     { id: 'teach-move', gate: { action: 'move' }, suppressAutoFill: true },
   ],
@@ -416,6 +418,7 @@ describe('tutorial projection parity (buildPlayerState vs createPlayerView)', ()
 
 /** PARITY_TUTORIAL's steps, with the first one advancing once a piece has moved. */
 const CROSS_LAYER_TUTORIAL: TutorialDefinition = {
+  learnerSeat: 1,
   steps: [
     {
       id: 'intro',

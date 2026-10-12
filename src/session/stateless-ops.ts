@@ -469,11 +469,11 @@ export interface OpSuccessFields {
 }
 
 /**
- * The ops whose success carries no {@link StateEnvelope}: a choices query
- * changes nothing and answers one seat (#450), and the host's lifecycle ops
- * publish through the host itself.
+ * The ops whose success carries no {@link StateEnvelope}: a choices query and a
+ * bot's search change nothing and answer one caller (#450, #675), and the
+ * host's lifecycle ops publish through the host itself.
  */
-type StatelessOpType = 'resolveChoices' | HostOp['type'];
+type StatelessOpType = 'resolveChoices' | 'botSuggest' | HostOp['type'];
 
 /**
  * What every success shares. `error` and `errorCode` are named only to say they
@@ -1182,11 +1182,29 @@ async function handleHeatmapToggle(
 }
 
 /**
+ * Why `player` cannot start a tutorial for `learnerSeat` on a table of
+ * `playerCount` seats, or `undefined` when it can. Only the learner seat starts
+ * a tutorial, and the learner seat must be one the table has.
+ */
+function learnerSeatRefusal(learnerSeat: number, player: number, playerCount: number): string | undefined {
+  if (learnerSeat > playerCount) {
+    return `This tutorial is for seat ${learnerSeat}, but this table has ${playerCount} seats, so no one can start it. ` +
+      `Start it on a table of at least ${learnerSeat} players, or set the tutorial's learnerSeat to a seat this table has.`;
+  }
+  if (player !== learnerSeat) {
+    return `This tutorial is for seat ${learnerSeat}, so seat ${player} cannot start it. Start it from seat ${learnerSeat}.`;
+  }
+  return undefined;
+}
+
+/**
  * Start a tutorial for `op.player`: apply the tutorial's setup, put the flow
- * back at its beginning (#546), activate the first step and run the
- * auto-advance pump. Refused, with the game left as it was, when the restarted
- * flow would not prompt the learner: a tutorial the learner cannot act in is a
- * dead table.
+ * back at its beginning with the tutorial's learner seat to move (#546, #552),
+ * activate the first step and run the auto-advance pump. Refused, with the
+ * game left as it was, when `op.player` is not the learner seat or the table
+ * has no such seat, when the game is over, or when the restarted flow still
+ * would not prompt the learner: a tutorial the learner cannot act in is a dead
+ * table.
  */
 function handleStartTutorial(
   def: RunnerDef,
@@ -1203,31 +1221,36 @@ function handleStartTutorial(
   if (!def.tutorial) {
     return errorResult('No tutorial definition on this game.', 'protocol');
   }
-  // WR-01: validate seat range before touching any state, as handleDebugActionTraces does.
-  if (op.player < 1 || op.player > gameOptions.playerCount) {
+  // IN-01: validate definition BEFORE constructing the runner (fail-loud before expensive work).
+  validateTutorialDefinition(def.tutorial);
+  const { learnerSeat } = def.tutorial;
+  const seatRefusal = learnerSeatRefusal(learnerSeat, op.player, gameOptions.playerCount);
+  if (seatRefusal) return errorResult(seatRefusal, 'protocol');
+  const runner = runnerFromSnapshot(snapshot, def);
+  // #552: a finished game stays finished. The restart below could bring its
+  // flow back to life while its phase still read 'finished'.
+  if (runner.game.phase === 'finished') {
     return errorResult(
-      `Invalid player seat ${op.player}: must be between 1 and ${gameOptions.playerCount}.`,
+      'The tutorial cannot start because this game is over. Start a new game, then start the tutorial.',
       'protocol',
     );
   }
-  // IN-01: validate definition BEFORE constructing the runner (fail-loud before expensive work).
-  validateTutorialDefinition(def.tutorial);
-  const runner = runnerFromSnapshot(snapshot, def);
   // R-01: apply the tutorial's setup callback before setting initial progress so
   // the board is in the deterministic tutorial position before any advanceWhen
   // predicates fire. setup is optional; games without a preset omit it.
   const setup = def.tutorial.setup;
   if (setup) changing(runner.game._ctx, () => setup(runner.game as Game));
-  // #546: a tutorial begins on the learner's turn, so hand the turn back
-  // to the flow's first seat. This runs none of the game's opening again.
-  runner.game.restartFlowForTutorial();
+  // #546, #552: a tutorial begins on the learner's turn, so restart the flow
+  // with the learner seat to move. This runs none of the game's opening again.
+  runner.game.restartFlowForTutorial(learnerSeat);
   // A refusal discards this runner, so the caller's snapshot is untouched.
   const due = dueSeats(runner.getFlowState());
   if (!due.includes(op.player)) {
     const toMove = due.length > 0 ? `seat ${due.join(', ')} is` : 'no seat is';
     return errorResult(
-      `The tutorial cannot start for seat ${op.player}: it opens at the start of the game, where ` +
-        `${toMove} to move, not seat ${op.player}. Start the tutorial from the seat that moves first.`,
+      `The tutorial cannot start for seat ${op.player}: when the game restarts for the tutorial, ` +
+        `${toMove} to move, not seat ${op.player}. The game's flow gives the opening turn to a set seat, ` +
+        `so set the tutorial's learnerSeat to the seat that moves first.`,
       'protocol',
     );
   }
@@ -1245,22 +1268,20 @@ function handleStartTutorial(
 
 /**
  * Search for the move a due bot seat among `op.seats` would make, WITHOUT
- * making it: the snapshot is returned as it came. The table host's bot pump
- * and its demo both search this way and then make the move as an `action` op,
- * so a move is only ever made against the game it was searched on.
+ * making it, and answer with the move alone, no state (#675). The table host's
+ * bot pump and its demo both search this way and then make the move as an
+ * `action` op, so a move is only ever made against the game it was searched on.
  */
 async function handleBotSuggest(
   def: RunnerDef,
-  gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'botSuggest' }>,
 ): Promise<OpResultFor<'botSuggest'>> {
   const runner = runnerFromSnapshot(snapshot, def);
-  const envelope = { success: true as const, ...stateEnvelope(runner, gameOptions.playerCount) };
   const flowState = runner.getFlowState() as BotFlowState | undefined;
-  if (!flowState?.awaitingInput || flowState.complete) return envelope;
+  if (!flowState?.awaitingInput || flowState.complete) return { success: true };
   const botPlayer = selectDueBotSeat(flowState, new Set(op.seats.map((s) => s.seat)));
-  if (botPlayer === undefined) return envelope;
+  if (botPlayer === undefined) return { success: true };
 
   const seatLevel = op.seats.find((s) => s.seat === botPlayer)?.level;
   // `def.bot` MUST be threaded through — it carries the game's MCTS hooks
@@ -1288,11 +1309,11 @@ async function handleBotSuggest(
     move = await bot.play();
   } catch (error) {
     console.error(`[BoardSmith] Bot for seat ${botPlayer} failed to choose a move:`, error);
-    return { ...envelope, botStalled: { seat: botPlayer, reason: 'The bot failed while choosing a move.' } };
+    return { success: true, botStalled: { seat: botPlayer, reason: 'The bot failed while choosing a move.' } };
   }
   if (!move) {
     return {
-      ...envelope,
+      success: true,
       botStalled: {
         seat: botPlayer,
         reason: bot.lastStallReason ?? 'The bot had no move it could search from this seat\'s view.',
@@ -1300,7 +1321,7 @@ async function handleBotSuggest(
     };
   }
   return {
-    ...envelope,
+    success: true,
     botPlayer,
     suggestedAction: move.action,
     suggestedArgs: move.args as Record<string, unknown>,
@@ -1742,7 +1763,7 @@ async function runOp(
             'protocol',
           );
         }
-        return handleBotSuggest(def, gameOptions, snap, op);
+        return handleBotSuggest(def, snap, op);
       case 'startTutorial':
         return handleStartTutorial(def, gameOptions, snap, op, teachingDisabled);
       case 'exitTutorial': {

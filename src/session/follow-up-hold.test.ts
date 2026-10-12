@@ -447,7 +447,7 @@ describe('stateless ops', () => {
 
       const found = succeeded(await executeOp(def, gameOptions, scouted.snapshot, null, { type: 'botSuggest', seats: [{ seat: 1, level: '8' }] }));
       expect(found.botPlayer).toBe(1);
-      const turn = succeeded(await executeOp(def, gameOptions, scouted.snapshot, null, suggestedMoveOp(found)));
+      const turn = succeeded(await executeOp(def, gameOptions, scouted.snapshot, null, suggestedMoveOp(scouted.snapshot, found)));
 
       expect((turn.snapshot.flowState as FlowState).followUps).toBeUndefined();
     });

@@ -121,16 +121,16 @@ async function untilSearches(t: Table, n: number): Promise<void> {
   expect(t.searches.length).toBe(n);
 }
 
-const moved = (search: Search) =>
-  answer(snap(search.from), { botPlayer: 2, suggestedAction: 'botMove', suggestedArgs: {} });
-const nothingDue = (search: Search) => answer(snap(search.from));
+/** A search's answers: a move for seat 2, or nothing due. A search returns no state (#675). */
+const moved = { success: true, botPlayer: 2, suggestedAction: 'botMove', suggestedArgs: {} };
+const nothingDue = { success: true };
 
 /** Answer every search still held with "nothing due", and let every slow move go, until `work` settles. */
 async function finish(t: Table, ...work: Promise<unknown>[]): Promise<void> {
   let done = false;
   const all = Promise.all(work).finally(() => { done = true; });
   while (!done) {
-    for (const search of t.searches) if (!search.released) search.release(nothingDue(search));
+    for (const search of t.searches) if (!search.released) search.release(nothingDue);
     t.slow.splice(0).forEach((release) => release());
     await settle();
   }
@@ -193,11 +193,11 @@ describe('a bot search runs outside the one-at-a-time section (#635)', () => {
 
       const human = t.host.handleOp(1, op(t.host));
       await settle();
-      t.searches[0].release(moved(t.searches[0])); // chosen from v0, which is gone
+      t.searches[0].release(moved); // chosen from v0, which is gone
       await untilSearches(t, 2);
 
       expect(t.searches[1].from).toBe(10);
-      t.searches[1].release(moved(t.searches[1]));
+      t.searches[1].release(moved);
       await finish(t, pump, human);
 
       // The stale move, chosen at v0, was never made; the fresh one was.
@@ -215,7 +215,7 @@ describe('a bot search runs outside the one-at-a-time section (#635)', () => {
 
     const human = humanMove(t.host);
     await settle();
-    t.searches[0].release(moved(t.searches[0]));
+    t.searches[0].release(moved);
     await Promise.all([pump, human]);
 
     expect(t.host.isComplete).toBe(true);
@@ -234,7 +234,7 @@ describe('a bot search runs outside the one-at-a-time section (#635)', () => {
       await untilSearches(t, i + 1);
       humans.push(humanMove(t.host));
       await settle();
-      t.searches[i].release(moved(t.searches[i]));
+      t.searches[i].release(moved);
     }
 
     // The fourth search runs inside the section: a human move sent now waits.
@@ -244,7 +244,7 @@ describe('a bot search runs outside the one-at-a-time section (#635)', () => {
     await settle();
     expect(t.humanReads).toEqual([0, 10, 20]);
 
-    t.searches[3].release(moved(t.searches[3]));
+    t.searches[3].release(moved);
     await settle();
     // The bot's move (v31) was made first, and the human then moved from it.
     expect(t.humanReads).toEqual([0, 10, 20, 31]);
@@ -261,7 +261,7 @@ describe('a bot search runs outside the one-at-a-time section (#635)', () => {
       await untilSearches(t, i + 1);
       humans.push(humanMove(t.host));
       await settle();
-      t.searches[i].release(moved(t.searches[i]));
+      t.searches[i].release(moved);
     }
     await untilSearches(t, 3);
 
@@ -269,7 +269,7 @@ describe('a bot search runs outside the one-at-a-time section (#635)', () => {
     // queue for the section, so the next search waits its turn for it.
     humans.push(humanMove(t.host, 'slow'));
     await settle();
-    t.searches[2].release(moved(t.searches[2]));
+    t.searches[2].release(moved);
     await settle();
     humans.push(humanMove(t.host, 'slow'));
     await settle();
@@ -298,11 +298,11 @@ describe('a bot search runs outside the one-at-a-time section (#635)', () => {
       result: answer(snap(100)) as unknown as OpSuccess<'start'>,
     }));
     await settle();
-    t.searches[0].release(moved(t.searches[0])); // chosen on the old rules
+    t.searches[0].release(moved); // chosen on the old rules
     await untilSearches(t, 2);
 
     expect(t.searches[1].from).toBe(100);
-    t.searches[1].release(moved(t.searches[1]));
+    t.searches[1].release(moved);
     await finish(t, pump, reload);
     expect(t.botMoves).toEqual([100]);
     expect((t.host.snapshot as unknown as Snap).v).toBe(101);
@@ -316,7 +316,7 @@ describe('a bot search runs outside the one-at-a-time section (#635)', () => {
 
     // A second wake (a roster change and its convertSeatToBot, say) arrives mid-search.
     const second = t.host.runBotTurns();
-    t.searches[0].release(nothingDue(t.searches[0]));
+    t.searches[0].release(nothingDue);
     await untilSearches(t, 2);
 
     await finish(t, first, second);
@@ -331,7 +331,7 @@ describe('a bot search runs outside the one-at-a-time section (#635)', () => {
     const published = t.recorded.length;
 
     t.host.dispose();
-    t.searches[0].release(moved(t.searches[0]));
+    t.searches[0].release(moved);
     await pump;
 
     expect(t.recorded).toHaveLength(published);
@@ -430,7 +430,7 @@ describe('a refused bot move (#635)', () => {
     t.refuseBot.push({ success: false, error: 'Seat 2 may never move.', category: 'bundle' });
     const first = t.host.runBotTurns();
     await untilSearches(t, 1);
-    t.searches[0].release(moved(t.searches[0]));
+    t.searches[0].release(moved);
     await first;
 
     expect(t.botMoves).toEqual([0]);
@@ -451,7 +451,7 @@ describe('a refused bot move (#635)', () => {
     });
     const first = t.host.runBotTurns();
     await untilSearches(t, 1);
-    t.searches[0].release(moved(t.searches[0]));
+    t.searches[0].release(moved);
     await first;
 
     expect(t.botMoves).toEqual([0]);
@@ -461,7 +461,7 @@ describe('a refused bot move (#635)', () => {
     // The game did not change, and a later wake (a resume, say) still moves the bot.
     const second = t.host.runBotTurns();
     await untilSearches(t, 2);
-    t.searches[1].release(moved(t.searches[1]));
+    t.searches[1].release(moved);
     await finish(t, second);
     expect(t.botMoves).toEqual([0, 0]);
     expect((t.host.snapshot as unknown as Snap).v).toBe(1);
@@ -496,7 +496,7 @@ describe('a refused bot move (#635)', () => {
     await untilSearches(t, 1);
 
     t.setRoster([]);
-    t.searches[0].release(moved(t.searches[0]));
+    t.searches[0].release(moved);
     await finish(t, pump);
 
     expect(t.botMoves).toEqual([]);

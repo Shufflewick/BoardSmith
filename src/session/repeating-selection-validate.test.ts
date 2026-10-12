@@ -201,7 +201,7 @@ describe("a repeating selection's validate runs per pick, on every path (#352)",
       const host = makeHost(strictDef, seed);
       await host.start();
       const found = succeeded(await host.handleOp(1, { type: 'botSuggest', seats: [{ seat: 1, level: 'easy' }] }));
-      succeeded(await host.handleOp(1, suggestedMoveOp(found)));
+      succeeded(await host.handleOp(1, suggestedMoveOp(host.snapshot, found)));
       const played = GameRunner.fromSnapshot(host.snapshot as GameStateSnapshot, StrictRuneGame).game;
       expect(played.cast).toEqual(['fire', 'ice', 'stop']);
     }

@@ -157,7 +157,7 @@ describe('#421: an all-bot table of a hidden-hand game', () => {
     let moves = 0;
     while (!snapshot.flowState?.complete) {
       const found = succeeded(await executeOp(definition, gameOptions, snapshot, null, { type: 'botSuggest', seats }));
-      const res = succeeded(await executeOp(definition, gameOptions, snapshot, null, suggestedMoveOp(found)));
+      const res = succeeded(await executeOp(definition, gameOptions, snapshot, null, suggestedMoveOp(snapshot, found)));
       snapshot = res.snapshot;
       moves++;
       expect(moves).toBeLessThan(300);
