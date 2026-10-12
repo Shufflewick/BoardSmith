@@ -16,7 +16,7 @@ import {
   type FlowContext,
 } from '../engine/index.js';
 import type { GameStateSnapshot } from '../engine/index.js';
-import { GameRunner, describeCheckpointAbsence } from './runner.js';
+import { GameRunner, describeCheckpointAbsence, type RunnerCheckpointPolicy } from './runner.js';
 import { ErrorCode } from '../types/protocol.js';
 import { createHeadlessSession } from '../session/headless-session.js';
 import {
@@ -659,6 +659,7 @@ describe('GameRunner', () => {
         GameClass: TestGame,
         gameType: 'test-game',
         gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'f17' },
+        checkpoints: { history: 'full' },
       });
       runner.start();
 
@@ -700,6 +701,8 @@ describe('GameRunner', () => {
         GameClass: TestGame,
         gameType: 'test-game',
         gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'f17b' },
+        // Full history: this restores at every earlier index, not only the turn start.
+        checkpoints: { history: 'full' },
       });
       runner.start();
 
@@ -730,8 +733,12 @@ describe('GameRunner', () => {
   // ==========================================================================
 
   describe('checkpoint retention policy', () => {
-    /** A runner `actions` actions in, under the given retention policy. */
-    function playedRunner(actions: number, checkpoints?: { max?: number; enabled?: boolean }) {
+    /**
+     * A runner `actions` actions in, under the given retention policy. LongGame
+     * turns are one action long, so the default keeps only the current turn
+     * start; the window mechanics below are exercised with full history.
+     */
+    function playedRunner(actions: number, checkpoints: RunnerCheckpointPolicy = { history: 'full' }) {
       const runner = new GameRunner({
         GameClass: LongGame,
         gameType: 'long-game',
@@ -746,7 +753,15 @@ describe('GameRunner', () => {
       return runner;
     }
 
-    it('retains one checkpoint per action by default — the growth this policy exists to bound', () => {
+    it('keeps only the checkpoints back to the current turn start by default (#504)', () => {
+      const snapshot = playedRunner(12, {}).getSnapshot();
+      // The new seat has not acted yet, so its turn start is the only point any
+      // undo can restore.
+      expect(snapshot.actionCheckpoints!.baseIndex).toBe(12);
+      expect(snapshot.actionCheckpoints!.entries).toHaveLength(1);
+    });
+
+    it('retains one checkpoint per action with full history — the growth the default bounds', () => {
       const snapshot = playedRunner(12).getSnapshot();
       expect(snapshot.actionCheckpoints).toBeDefined();
       expect(snapshot.actionCheckpoints!.baseIndex).toBe(0);
@@ -754,7 +769,7 @@ describe('GameRunner', () => {
     });
 
     it('keeps only the most recent `max`, dropping the oldest first', () => {
-      const snapshot = playedRunner(12, { max: 4 }).getSnapshot();
+      const snapshot = playedRunner(12, { history: 'full', max: 4 }).getSnapshot();
       const window = snapshot.actionCheckpoints!;
       expect(window.entries).toHaveLength(4);
       // The retained window ENDS at the current action count: the entries are
@@ -763,8 +778,8 @@ describe('GameRunner', () => {
     });
 
     it('holds the snapshot flat as the game runs long — the actual fix', () => {
-      const short = JSON.stringify(playedRunner(10, { max: 5 }).getSnapshot()).length;
-      const long = JSON.stringify(playedRunner(60, { max: 5 }).getSnapshot()).length;
+      const short = JSON.stringify(playedRunner(10, { history: 'full', max: 5 }).getSnapshot()).length;
+      const long = JSON.stringify(playedRunner(60, { history: 'full', max: 5 }).getSnapshot()).length;
       // Not identical: actionHistory still grows by one entry per action. But
       // the tree-sized term is capped, so 6x the actions must not cost
       // anything like 6x the bytes.
@@ -776,14 +791,14 @@ describe('GameRunner', () => {
     });
 
     it('pays nothing for the dropped range — no holes, no nulls', () => {
-      const serialized = JSON.stringify(playedRunner(40, { max: 3 }).getSnapshot());
+      const serialized = JSON.stringify(playedRunner(40, { history: 'full', max: 3 }).getSnapshot());
       const window = JSON.parse(serialized).actionCheckpoints;
       expect(window.entries).toHaveLength(3);
       expect(window.entries.every((e: unknown) => e !== null)).toBe(true);
     });
 
     it('restores within the retained window and refuses below it, with an actionable reason', () => {
-      const snapshot = playedRunner(12, { max: 4 }).getSnapshot();
+      const snapshot = playedRunner(12, { history: 'full', max: 4 }).getSnapshot();
 
       // Inside the window: a real authoritative restore.
       const restored = GameRunner.fromCheckpoint(snapshot, 10, LongGame, { checkpoints: { max: 4 } });
@@ -793,23 +808,34 @@ describe('GameRunner', () => {
       // Below it: refused, and the message says the policy dropped it (not that
       // something is broken) and how to reach further back.
       expect(GameRunner.fromCheckpoint(snapshot, 2, LongGame)).toBeNull();
-      const why = describeCheckpointAbsence(snapshot.actionCheckpoints, 2, 'debug');
+      const why = describeCheckpointAbsence(snapshot.actionCheckpoints, 2, 'debug', 'full');
       expect(why).toContain('older than');
       expect(why).toContain('checkpoints: { max }');
       expect(why).toContain('action 2');
+      // The window kept full history, so only `max` dropped it: the turn window
+      // is not named as a cause it was not.
+      expect(why).not.toContain('start of the current turn');
+
+      // Under turn-start retention the turn window is a cause, and is named.
+      const turn = describeCheckpointAbsence(snapshot.actionCheckpoints, 2, 'debug', 'turn');
+      expect(turn).toContain('start of the current turn');
+      expect(turn).toContain('fullHistory');
 
       // Above it: a different absence, with a different fix.
-      const never = describeCheckpointAbsence(snapshot.actionCheckpoints, 999, 'debug');
+      const never = describeCheckpointAbsence(snapshot.actionCheckpoints, 999, 'debug', 'full');
       expect(never).toContain('no checkpoint was captured');
       expect(never).not.toContain('older than');
     });
 
     it('tells a seat the same cause and fix with no action index or count in it (#449)', () => {
-      const snapshot = playedRunner(12, { max: 4 }).getSnapshot();
-      const pruned = describeCheckpointAbsence(snapshot.actionCheckpoints, 2, 'seat');
+      const snapshot = playedRunner(12, { history: 'full', max: 4 }).getSnapshot();
+      const pruned = describeCheckpointAbsence(snapshot.actionCheckpoints, 2, 'seat', 'turn');
       expect(pruned).toContain('older than');
       expect(pruned).toContain('checkpoints: { max }');
-      const never = describeCheckpointAbsence(snapshot.actionCheckpoints, 999, 'seat');
+      // A seat's undo target is its own turn start, which the turn window
+      // always keeps, so the turn window is never its cause.
+      expect(pruned).not.toContain('start of the current turn');
+      const never = describeCheckpointAbsence(snapshot.actionCheckpoints, 999, 'seat', 'turn');
       expect(never).toContain('no checkpoint was captured');
       for (const text of [pruned, never]) expect(text).not.toMatch(/\d/);
     });
@@ -819,9 +845,9 @@ describe('GameRunner', () => {
       // restore that drops it silently reverts the game to unbounded retention
       // from that point on, which is the defect reintroduced one call site at
       // a time.
-      let snapshot = playedRunner(12, { max: 4 }).getSnapshot();
+      let snapshot = playedRunner(12, { history: 'full', max: 4 }).getSnapshot();
       for (let round = 0; round < 3; round++) {
-        const runner = GameRunner.fromSnapshot(snapshot, LongGame, { checkpoints: { max: 4 } });
+        const runner = GameRunner.fromSnapshot(snapshot, LongGame, { checkpoints: { history: 'full', max: 4 } });
         expect(runner.performAction('pass', (runner.actionHistory.length % 2) + 1, {}).success).toBe(true);
         snapshot = runner.getSnapshot();
         expect(snapshot.actionCheckpoints!.entries).toHaveLength(4);
@@ -832,7 +858,7 @@ describe('GameRunner', () => {
       const snapshot = playedRunner(8, { enabled: false }).getSnapshot();
       expect(snapshot.actionCheckpoints!.entries).toHaveLength(0);
       expect(GameRunner.fromCheckpoint(snapshot, 4, LongGame)).toBeNull();
-      expect(describeCheckpointAbsence(snapshot.actionCheckpoints, 4, 'debug')).toContain('enabled: false');
+      expect(describeCheckpointAbsence(snapshot.actionCheckpoints, 4, 'debug', 'turn')).toContain('enabled: false');
     });
 
     it('still advances the execute() barrier with checkpointing disabled', () => {
@@ -900,7 +926,7 @@ describe('GameRunner', () => {
       // that has NOT disabled checkpoints must keep the entries undo depends
       // on across every rehydration.
       const grown = playedRunner(12).getSnapshot();
-      const restored = GameRunner.fromSnapshot(grown, LongGame);
+      const restored = GameRunner.fromSnapshot(grown, LongGame, { checkpoints: { history: 'full' } });
       expect(restored.getSnapshot().actionCheckpoints!.entries).toHaveLength(13);
     });
   });

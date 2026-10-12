@@ -22,6 +22,7 @@ export {
   restoreEarlierSnapshot,
   type GameRunnerOptions,
   type CheckpointPolicy,
+  type RunnerCheckpointPolicy,
   type UndoPolicy,
   type RandomnessPolicy,
   type ActionExecutionResult,

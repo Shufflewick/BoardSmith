@@ -375,7 +375,7 @@
     },
     "src/runtime/runner.ts": {
       "complexity_moderate": {
-        "count": 4
+        "count": 5
       }
     },
     "src/session/move-summary.ts": {

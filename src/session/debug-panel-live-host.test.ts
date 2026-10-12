@@ -40,8 +40,9 @@ class DebugGame extends Game<DebugGame, Player> {
 const def: GameDefinitionLike = { gameClass: DebugGame, gameType: 'debug-panel-live', minPlayers: 2, maxPlayers: 2 };
 const gameOptions = { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'debug-panel-live' };
 
+/** A debug table that keeps every checkpoint, as `boardsmith dev` does. */
 function table() {
-  return createHeadlessSession(def, gameOptions);
+  return createHeadlessSession(def, { ...gameOptions, fullHistory: true });
 }
 
 /** A live host with debugging off, as the platform runs it. */

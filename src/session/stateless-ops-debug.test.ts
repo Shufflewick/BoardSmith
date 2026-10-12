@@ -32,9 +32,13 @@ const passDef: GameDefinitionLike = {
 };
 const passOptions = { playerCount: 2, seed: 'debug-seed' };
 
-/** Start a PassGame and apply N pass actions; return the latest snapshot. */
+/**
+ * `n` passes in a debug session that keeps every checkpoint, as `boardsmith
+ * dev` does, so time travel reaches the first action; returns the snapshot.
+ */
 async function passNTimes(n: number): Promise<unknown> {
-  let snapshot = succeeded(await executeOp(passDef, passOptions, null, null, { type: 'start' })).snapshot;
+  const debug = { debug: true, fullHistory: true };
+  let snapshot = succeeded(await executeOp(passDef, passOptions, null, null, { type: 'start' }, debug)).snapshot;
   for (let i = 0; i < n; i++) {
     const res = succeeded(await executeOp(passDef, passOptions, snapshot, null, {
       type: 'action',
@@ -42,7 +46,7 @@ async function passNTimes(n: number): Promise<unknown> {
       player: 1,
       args: {},
       boundaryKey: boundaryKeyOf(snapshot),
-    }));
+    }, debug));
     expect(res.success).toBe(true);
     snapshot = res.snapshot;
   }
@@ -92,7 +96,7 @@ describe('executeOp debug ops', () => {
   describe('debugHistory', () => {
     it('returns the full action history', async () => {
       const snapshot = await passNTimes(3);
-      const res = succeeded(await executeOp(passDef, passOptions, snapshot, null, { type: 'debugHistory' }, { debug: true }));
+      const res = succeeded(await executeOp(passDef, passOptions, snapshot, null, { type: 'debugHistory' }, { debug: true, fullHistory: true }));
       expect(res.success).toBe(true);
       expect(res.actionHistory).toHaveLength(3);
     });
@@ -106,7 +110,7 @@ describe('executeOp debug ops', () => {
           type: 'debugStateAt',
           actionIndex,
           player: 1,
-        }, { debug: true }));
+        }, { debug: true, fullHistory: true }));
         expect(res.success).toBe(true);
         expect(res.historicalState).toBeTruthy();
         expect((res.historicalState as { view: unknown }).view).toBeTruthy();
@@ -119,7 +123,7 @@ describe('executeOp debug ops', () => {
         type: 'debugStateAt',
         actionIndex: 99,
         player: 1,
-      }, { debug: true }));
+      }, { debug: true, fullHistory: true }));
       expect(res.success).toBe(false);
     });
   });
@@ -132,7 +136,7 @@ describe('executeOp debug ops', () => {
         fromIndex: 0,
         toIndex: 2,
         player: 1,
-      }, { debug: true }));
+      }, { debug: true, fullHistory: true }));
       expect(res.success).toBe(true);
       const diff = res.diff as { added: number[]; removed: number[]; changed: number[] };
       expect(Array.isArray(diff.added)).toBe(true);
@@ -147,7 +151,7 @@ describe('executeOp debug ops', () => {
       const res = succeeded(await executeOp(passDef, passOptions, snapshot, null, {
         type: 'debugActionTraces',
         player: 1,
-      }, { debug: true }));
+      }, { debug: true, fullHistory: true }));
       expect(res.success).toBe(true);
       expect(Array.isArray(res.traces)).toBe(true);
       const flow = res.flowContext as { currentPlayer?: number; isMyTurn: boolean };
@@ -162,10 +166,10 @@ describe('executeOp debug ops', () => {
       const rewind = succeeded(await executeOp(passDef, passOptions, snapshot, null, {
         type: 'debugRewind',
         actionIndex: 1,
-      }, { debug: true }));
+      }, { debug: true, fullHistory: true }));
       expect(rewind.success).toBe(true);
 
-      const history = succeeded(await executeOp(passDef, passOptions, rewind.snapshot, null, { type: 'debugHistory' }, { debug: true }));
+      const history = succeeded(await executeOp(passDef, passOptions, rewind.snapshot, null, { type: 'debugHistory' }, { debug: true, fullHistory: true }));
       expect(history.actionHistory).toHaveLength(1);
     });
 
@@ -174,7 +178,7 @@ describe('executeOp debug ops', () => {
       const res = await executeOp(passDef, passOptions, snapshot, null, {
         type: 'debugRewind',
         actionIndex: 99,
-      }, { debug: true });
+      }, { debug: true, fullHistory: true });
       expect(res.success).toBe(false);
     });
   });
@@ -193,7 +197,7 @@ describe('executeOp debug ops', () => {
         type: 'debugReorder',
         cardId: movedId,
         targetIndex: stash.children!.length - 1,
-      }, { debug: true }));
+      }, { debug: true, fullHistory: true }));
       expect(res.success).toBe(true);
 
       const newStash = findById(view(res), stash.id!)!;
@@ -211,7 +215,7 @@ describe('executeOp debug ops', () => {
         cardId: movedId,
         targetDeckId: held.id!,
         position: 'last',
-      }, { debug: true }));
+      }, { debug: true, fullHistory: true }));
       expect(res.success).toBe(true);
 
       const newHeld = findById(view(res), held.id!)!;
@@ -225,13 +229,13 @@ describe('executeOp debug ops', () => {
       const ok = await executeOp(collectFixtureDefinition, collectOptions, start.snapshot, null, {
         type: 'debugShuffle',
         deckId: stash.id!,
-      }, { debug: true });
+      }, { debug: true, fullHistory: true });
       expect(ok.success).toBe(true);
 
       const bad = await executeOp(collectFixtureDefinition, collectOptions, start.snapshot, null, {
         type: 'debugShuffle',
         deckId: 999999,
-      }, { debug: true });
+      }, { debug: true, fullHistory: true });
       expect(bad.success).toBe(false);
     });
   });
@@ -288,7 +292,7 @@ describe('#481 debug op gate', () => {
 
     it('runs a debug op when the host turns debugging on', async () => {
       const snapshot = await passNTimes(2);
-      const res = succeeded(await executeOp(passDef, passOptions, snapshot, null, { type: 'debugHistory' }, { debug: true }));
+      const res = succeeded(await executeOp(passDef, passOptions, snapshot, null, { type: 'debugHistory' }, { debug: true, fullHistory: true }));
       expect(res.success).toBe(true);
       expect(res.actionHistory).toHaveLength(2);
     });
@@ -303,7 +307,7 @@ describe('#481 debug op gate', () => {
         debug,
         executeOp: (snap, pend, op) => {
           executed.push(op.type);
-          return executeOp(passDef, op.type === 'start' ? passOptions : { playerCount: 2 }, snap, pend, op, { debug: true });
+          return executeOp(passDef, op.type === 'start' ? passOptions : { playerCount: 2 }, snap, pend, op, { debug: true, fullHistory: true });
         },
         record: () => {}, push: () => {},
       });
@@ -343,7 +347,7 @@ describe('#481 debug op gate', () => {
       const adapters = (debug: boolean | undefined): SnapshotSessionAdapters => ({
         playerCount: 2,
         debug,
-        executeOp: (snap, pend, op) => executeOp(passDef, { playerCount: 2 }, snap, pend, op, { debug: true }),
+        executeOp: (snap, pend, op) => executeOp(passDef, { playerCount: 2 }, snap, pend, op, { debug: true, fullHistory: true }),
         record: () => {}, push: () => {},
       });
 

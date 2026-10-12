@@ -50,6 +50,8 @@ async function startAndCollect(): Promise<{ session: HeadlessTable; collectedId:
     playerCount: 2,
     playerNames: ['A', 'B'],
     seed: 't',
+    // Full history: time travel reaches behind the current turn.
+    fullHistory: true,
   });
   await session.start();
 

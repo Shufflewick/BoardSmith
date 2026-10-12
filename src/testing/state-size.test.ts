@@ -11,7 +11,7 @@ import {
   type GameOptions,
 } from '../engine/index.js';
 import { GameRunner } from '../runtime/index.js';
-import { measureSnapshotSize, projectSnapshotSize } from './state-size.js';
+import { assertStateBudget, measureSnapshotSize, projectSnapshotSize } from './state-size.js';
 import { createTestGame } from './test-game.js';
 
 class Token extends Piece<BudgetGame> {}
@@ -36,12 +36,16 @@ class BudgetGame extends Game<BudgetGame, Player> {
   }
 }
 
+/**
+ * `actions` one-action turns with full history, so every checkpoint is kept and
+ * the multiplier is there to measure. The default keeps only the turn start.
+ */
 function play(actions: number, checkpoints?: { max?: number }) {
   const runner = new GameRunner({
     GameClass: BudgetGame,
     gameType: 'budget-game',
     gameOptions: { playerCount: 2, seed: 'budget' },
-    checkpoints,
+    checkpoints: { ...checkpoints, history: 'full' },
   });
   runner.start();
   for (let i = 0; i < actions; i++) {
@@ -87,6 +91,7 @@ describe('measureSnapshotSize — sparse checkpoint windows (issue 143)', () => 
       GameClass: BudgetGame,
       gameType: 'budget-game',
       gameOptions: { playerCount: 2, seed: 'budget' },
+      checkpoints: { history: 'full' },
     });
     runner.start();
     for (let i = 0; i < actions; i++) {
@@ -131,7 +136,8 @@ describe('createTestGame checkpoints policy (issue 143)', () => {
       game.runner.getSnapshot();
     }
     const size = measureSnapshotSize(game.runner.getSnapshot());
-    expect(size.checkpointCount).toBe(3);
+    // One-action turns: the default keeps only the turn start, inside the cap.
+    expect(size.checkpointCount).toBe(1);
     expect(game.runner.checkpointPolicy.max).toBe(3);
     // The policy must NOT have leaked into the game's constructor options.
     expect(game.game.getConstructorOptions().checkpoints).toBeUndefined();
@@ -172,5 +178,38 @@ describe('projectSnapshotSize', () => {
     // per action, which is orders of magnitude more.
     expect(uncapped).toBeGreaterThan(at1000 * 10);
     expect(at1000).toBeLessThan(at100 * 5);
+  });
+});
+
+describe('assertStateBudget (#504)', () => {
+  const size = measureSnapshotSize(play(20));
+
+  it('passes a game under the budget', () => {
+    expect(() => assertStateBudget(size, size.totalBytes)).not.toThrow();
+  });
+
+  it('fails a game over the budget, naming the measured size and the budget', () => {
+    const budget = size.totalBytes - 1;
+    expect(() => assertStateBudget(size, budget)).toThrow(
+      new RegExp(`${size.totalBytes.toLocaleString('en-US')} bytes.*${budget.toLocaleString('en-US')} bytes`),
+    );
+  });
+
+  it('says where the bytes went, so the failure points at the fix', () => {
+    let message = '';
+    try {
+      assertStateBudget(size, 1000);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain(`${size.checkpointCount} checkpoints`);
+    expect(message).toContain('message log');
+    expect(message).toContain('checkpoints: { max }');
+  });
+
+  it('refuses a budget that is not a positive whole number of bytes', () => {
+    for (const budget of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 1.5]) {
+      expect(() => assertStateBudget(size, budget)).toThrow(/budget/);
+    }
   });
 });

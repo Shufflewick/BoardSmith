@@ -50,6 +50,23 @@ import type { MessageEntry } from '../engine/index.js';
 export type { CheckpointPolicy, UndoPolicy, RandomnessPolicy };
 
 /**
+ * A game's `CheckpointPolicy` plus the one retention choice that belongs to the
+ * HOST, never to the game: how much history to keep below the hard cap.
+ *
+ * - `'turn'` (the default): keep checkpoints back to the start of the current
+ *   action-step frame, the oldest point any seat's undo can restore, and drop
+ *   everything older. A saved game then stops growing with the action count.
+ * - `'full'`: keep every checkpoint, so debug time travel and rewind reach the
+ *   first action. `boardsmith dev` runs this way
+ *   (`ExecuteOpHostOptions.fullHistory`).
+ *
+ * A game's `max` caps either.
+ */
+export interface RunnerCheckpointPolicy extends CheckpointPolicy {
+  history?: 'turn' | 'full';
+}
+
+/**
  * Options for creating a game runner.
  *
  * `O` is the OPTIONS TYPE THE GAME CLASS ITSELF DECLARES, inferred from
@@ -82,8 +99,8 @@ export interface GameRunnerOptions<G extends Game, O extends GameOptions = GameO
   gameType: string;
   /** Options passed to game constructor */
   gameOptions: NoInfer<O>;
-  /** Per-action undo checkpoint retention. Default: retain everything. */
-  checkpoints?: CheckpointPolicy;
+  /** Per-action undo checkpoint retention. Default: back to the turn start. */
+  checkpoints?: RunnerCheckpointPolicy;
   /**
    * Whether this session may consume randomness at all. Default: `'allowed'`.
    *
@@ -215,8 +232,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   private checkpointBaseIndex = 0;
 
-  /** This game's checkpoint retention policy. Default: retain everything. */
-  private readonly checkpointPolicy_: Required<CheckpointPolicy>;
+  /** This game's checkpoint retention policy. Default: back to the turn start. */
+  private readonly checkpointPolicy_: Required<RunnerCheckpointPolicy>;
 
   /** This game's declared undo policy. Default: no random fence. */
   private readonly undoPolicy_: Required<UndoPolicy>;
@@ -330,6 +347,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     this.checkpointPolicy_ = {
       max: options.checkpoints?.max ?? Number.POSITIVE_INFINITY,
       enabled: options.checkpoints?.enabled ?? true,
+      history: options.checkpoints?.history ?? 'turn',
     };
     this.undoPolicy_ = {
       fenceRandomRewind: options.undo?.fenceRandomRewind ?? false,
@@ -393,9 +411,10 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * every pick that changes the game. Build a seat's state only after it
    * has run for the op: `canUndo` reads the window it leaves (#385).
    *
-   * Then the window is trimmed to `checkpoints.max` (default: unbounded),
-   * oldest first — so what remains is the most recent range, which is the
-   * range undo can reach. See `CheckpointPolicy` and `docs/state-size.md`.
+   * Then the window is trimmed oldest first: back to the turn start unless
+   * the host keeps full history, and to `checkpoints.max` when the game sets
+   * one. What remains is the range undo can reach. See
+   * `RunnerCheckpointPolicy` and `docs/state-size.md`.
    */
   captureCheckpoint(): void {
     // UNDO-02: the chokepoint for detecting an execute()-barrier advance --
@@ -422,10 +441,18 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     this.actionCheckpoints = this.actionCheckpoints.slice(0, headOffset);
     this.actionCheckpoints[headOffset] = createActionCheckpoint(this.game);
 
-    // Then drop from the FRONT down to the retention limit. Oldest-first is
-    // what makes the retained window the most recent actions -- the ones undo
-    // can actually reach.
-    const excess = this.actionCheckpoints.length - this.checkpointPolicy_.max;
+    // Then drop from the FRONT. Oldest-first is what makes the retained window
+    // the most recent actions -- the ones undo can actually reach. Under
+    // `'turn'` history everything before the current action-step frame goes:
+    // no seat's undo restores further back than the frame's start
+    // (`computeUndoInfo`, `simultaneousUndoBoundary` in session/utils.ts),
+    // and with no frame open no undo is possible at all. `max` caps either.
+    const frameStart = len - (this.getFlowState()?.moveCount ?? 0);
+    const keepFrom = this.checkpointPolicy_.history === 'full' ? this.checkpointBaseIndex : frameStart;
+    const excess = Math.max(
+      keepFrom - this.checkpointBaseIndex,
+      this.actionCheckpoints.length - this.checkpointPolicy_.max,
+    );
     if (excess > 0) {
       this.actionCheckpoints = this.actionCheckpoints.slice(excess);
       this.checkpointBaseIndex += excess;
@@ -438,11 +465,11 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * Exposed so every host path that builds a REPLACEMENT runner (undo, rewind,
    * HMR reload, new-game reset) can carry the same policy forward by reading it
    * off the runner it is replacing, instead of re-threading it from the game
-   * definition at each call site. A path that forgets silently reverts that
-   * game to unbounded retention from that point on -- the whole failure this
-   * policy exists to prevent, reintroduced one call site at a time.
+   * definition at each call site. A path that forgets silently drops the
+   * game's cap or the host's history choice from that point on, one call site
+   * at a time.
    */
-  get checkpointPolicy(): Required<CheckpointPolicy> {
+  get checkpointPolicy(): Required<RunnerCheckpointPolicy> {
     return this.checkpointPolicy_;
   }
 
@@ -1149,7 +1176,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     GameClass: new (options: GameOptions) => G,
     options?: {
       animationFloor?: AnimationFloor;
-      checkpoints?: CheckpointPolicy;
+      checkpoints?: RunnerCheckpointPolicy;
       randomness?: RandomnessPolicy;
       undo?: UndoPolicy;
     }
@@ -1169,9 +1196,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       gameType: snapshot.gameType,
       gameOptions: gameOptions as GameOptions,
       // The retention policy is NOT carried in the snapshot -- it is declared on
-      // the game definition, so every restore must re-supply it. A restore that
-      // forgets it silently reverts that game to unbounded retention on the very
-      // next op, which is the defect this policy exists to prevent.
+      // the game definition and the host, so every restore must re-supply it. A
+      // restore that forgets it silently drops the game's cap or the host's
+      // history choice on the very next op.
       checkpoints: options?.checkpoints,
       // Session policy is NOT carried in the snapshot (same reason as the
       // retention policy above): every stateless op rebuilds its runner, so the
@@ -1323,7 +1350,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     snapshot: GameStateSnapshot,
     actionIndex: number,
     GameClass: new (options: GameOptions) => G,
-    options?: { checkpoints?: CheckpointPolicy; randomness?: RandomnessPolicy; undo?: UndoPolicy }
+    options?: { checkpoints?: RunnerCheckpointPolicy; randomness?: RandomnessPolicy; undo?: UndoPolicy }
   ): GameRunner<G> | null {
     const window = snapshot.actionCheckpoints;
     const found = checkpointAt(window, actionIndex);
@@ -1424,7 +1451,7 @@ export function restoreEarlierSnapshot<G extends Game>(
   live: GameStateSnapshot,
   earlier: GameStateSnapshot,
   GameClass: new (options: GameOptions) => G,
-  options?: { checkpoints?: CheckpointPolicy; randomness?: RandomnessPolicy; undo?: UndoPolicy }
+  options?: { checkpoints?: RunnerCheckpointPolicy; randomness?: RandomnessPolicy; undo?: UndoPolicy }
 ): GameRunner<G> {
   if (earlier.gameInstanceId !== live.gameInstanceId) {
     throw new Error(
@@ -1463,11 +1490,16 @@ export function restoreEarlierSnapshot<G extends Game>(
  * index) gets the index and the window's size. `'seat'` (an undo refusal a
  * player reads) gets neither: both count every seat's actions, so a seat could
  * count another seat's secret ones (#449).
+ *
+ * `history` is the retention the window was kept under
+ * (`RunnerCheckpointPolicy.history`), so the turn window is named as a cause
+ * only when it applied.
  */
 export function describeCheckpointAbsence(
   window: ActionCheckpointWindow | undefined,
   actionIndex: number,
   audience: 'seat' | 'debug',
+  history: 'turn' | 'full',
 ): string {
   const found = checkpointAt(window, actionIndex);
   if (found.checkpoint) return '';
@@ -1477,7 +1509,13 @@ export function describeCheckpointAbsence(
       ? `action ${actionIndex} is older than this game's retained undo window ` +
         `(it keeps ${checkpointCount(window)} checkpoint(s), back to action ${window!.baseIndex}). `
       : `the point being restored is older than this game's retained undo window. `;
-    return where + `Raise or remove \`checkpoints: { max }\` on the game definition to reach further back.`;
+    // A seat's undo target is its own turn start, which the turn window always
+    // keeps, so only `max` prunes it. A debug read may name any index.
+    const turn = debug && history === 'turn'
+      ? `This session keeps checkpoints only back to the start of the current turn; a host that ` +
+        `passes \`fullHistory\` (as boardsmith dev does) keeps them all. `
+      : '';
+    return where + turn + `Raise or remove \`checkpoints: { max }\` on the game definition to reach further back.`;
   }
   const where = debug
     ? `no checkpoint was captured at action ${actionIndex} (the retained window carries ${checkpointCount(window)}). `

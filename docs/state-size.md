@@ -19,43 +19,41 @@ and time-travel restore any point authoritatively instead of replaying history
 (replay cannot reproduce selection-step mutations, so it is not an option; see
 [agent-control.md](./agent-control.md)).
 
-So:
+So, if every checkpoint were kept:
 
 ```
 saved size  ≈  tree size  ×  actions in the game
 ```
 
-The tree never grows. The saved game grows on every single action, forever.
+The tree never grows; the saved game would grow on every single action. A 9 KB
+tree is 9 KB at action 1 and 9 KB at action 1000, and nothing you can observe
+while playing suggests a problem, yet keeping every checkpoint makes the
+snapshot at action 1000 9 MB.
 
-That asymmetry is why this is easy to miss. A 9 KB tree is 9 KB at action 1 and
-9 KB at action 1000 — nothing you can observe while playing suggests a problem.
-The snapshot at action 1000 is 9 MB.
+That is why a hosted table does not keep them all. **By default a game keeps
+checkpoints only back to the start of the current turn** — the oldest point any
+seat's undo can restore — and drops everything older. So:
 
-| Tree size | Actions until ~7 MB |
-|---|---|
-| 2 KB | ~3,600 |
-| 4 KB | ~1,800 |
-| 10 KB | ~720 |
-| 30 KB | ~240 |
+```
+saved size  ≈  tree size  ×  (actions in the longest turn + 1)  +  history  +  log
+```
+
+flat in the length of the game. Measured on the real engine, a 15x15 grid
+modelled as 225 elements with one action per keystroke reached 5.19 MB after
+190 actions when every checkpoint was kept, which is what the default was
+before #504.
+
+`boardsmith dev` keeps every checkpoint (it passes the `fullHistory` host
+option), because time travel and rewind read them. Turning debugging on does
+not do that by itself: a debug read behind the turn start is refused with the
+reason. A game played there grows as the first formula says; that
+is a development convenience, not what players' saved games weigh.
 
 Hosts cap how large a saved game may be. **The number is the host's to publish,
 not this page's to restate** — ShufflewickPub's is
-[`docs/GAME-STATE-BUDGET.md`](https://github.com/Shufflewick/ShufflewickPub/blob/main/docs/GAME-STATE-BUDGET.md),
-which as of this writing budgets 7,274,496 bytes for the snapshot and derives it
-from what is left of the executor's request after the bundle and the envelope
-reserve. The table above is scaled to that figure; check the host's document for
-the current one rather than trusting a second copy here, because a second copy
-of a limit is how this page previously came to state a ceiling that had moved by
-a factor of four.
-
-A game with a high action count — 18xx, campaign and legacy games, worker
-placement with many small actions, anything async and multi-round — reaches that
-cap on ordinary play. **The lever is `checkpoints: { max: N }`**, described
-below: measured on the real engine, a 15x15 grid modelled as 225 elements with
-one action per keystroke reaches 5.19 MB after 190 actions under the default
-unbounded retention, and 117 KB at `checkpoints: { max: 3 }`. If your game's
-realistic action count runs into the hundreds, reach for it while you are
-designing rather than after a host refuses a session.
+[`docs/GAME-STATE-BUDGET.md`](https://github.com/Shufflewick/ShufflewickPub/blob/main/docs/GAME-STATE-BUDGET.md).
+A second copy of a limit is how this page, and nine games' tests, once came to
+state a ceiling that had moved by a factor of four.
 
 ## Three costs that are invisible until measured
 
@@ -132,9 +130,18 @@ Two things the engine will not let you do silently:
 - A typed array is encoded **little-endian regardless of host**, so a snapshot
   written by the executor, the dev host and the browser is byte-identical.
 
-## Bounding it: `checkpoints`
+## Retention: what is kept, and `checkpoints`
 
-Declare a retention policy on the game definition:
+Most games declare nothing. The default keeps the current turn's checkpoints,
+which is exactly what undo needs: undo restores the checkpoint at the start of
+the acting seat's turn, and nothing older is ever restored by a player. In a
+simultaneous step undo restores the start of the asking seat's last run of
+actions, which is never before the step's start, and the window keeps from the
+step's start. The remaining growth is the action
+history, which is bytes per action rather than a tree per action, and the
+message log.
+
+Two settings on the game definition change that:
 
 ```ts
 export const gameDefinition = {
@@ -146,12 +153,8 @@ export const gameDefinition = {
 };
 ```
 
-The 20 most recent checkpoints are kept; older ones are dropped oldest-first,
-and the saved game stops growing with the tree. The remaining growth is the
-action history, which is bytes per action rather than a tree per action.
-
-To turn checkpointing off entirely — no undo, no debug time-travel, saved size
-independent of action count:
+`max` is a hard cap: never more than 20 checkpoints, whatever the turn. To turn
+checkpointing off entirely — no undo, no debug time-travel:
 
 ```ts
 checkpoints: { enabled: false }
@@ -159,10 +162,13 @@ checkpoints: { enabled: false }
 
 ### Choosing `max`
 
-**`max` must exceed the most actions one seat takes in a single turn.** Undo
-restores the checkpoint at that seat's turn-start action count; a `max` smaller
-than a long turn means a player cannot undo their own move. An undo that reaches
-past the retained window is refused with a message naming the policy:
+**You usually do not need it.** Do not derive one from your game's turn length
+to bound the saved size: the default already keeps exactly the current turn.
+Reach for `max` only when a single turn can run long enough that the turn alone
+threatens the host's budget — a turn of hundreds of small actions over a large
+tree — and you would rather give up undo to the start of such a turn than
+shrink the tree. An undo that reaches past the retained window is refused with
+a message naming the policy:
 
 ```
 Cannot undo to the start of this turn: action 4 is older than this game's
@@ -182,63 +188,47 @@ produced it is recorded, including the state returned to the seat that just
 made a pick, so `canUndo` reads the window as the op left it, not as it was one
 step earlier (#385).
 
-The default is unbounded — every checkpoint retained, forever. That is the right
-default for the ordinary game, which never comes near the ceiling, and it is a
-cliff for a high-action-count one: the 15x15 grid above is 44x smaller at
-`max: 3` than at the default. Reach for `max` when a realistic game runs to
-hundreds of actions, or when `projectSnapshotSize` (below) puts your projected
-size within a factor of two of the host's budget.
-
 ## Measuring your own game
 
-Do not infer. Assert it in CI:
+Do not infer. Assert it in CI, against the budget your host publishes:
 
 ```ts
-import { createTestGame, measureSnapshotSize, projectSnapshotSize } from 'boardsmith/testing';
-
-const EXPECTED_ACTIONS_PER_GAME = 325;   // your longest realistic game
-const HOST_BUDGET_BYTES = 7_000_000;  // read your host's published budget; ShufflewickPub's is 7,274,496
+import { createTestGame, measureSnapshotSize, assertStateBudget } from 'boardsmith/testing';
 
 it('fits the host state budget for a full game', () => {
-  const game = createTestGame(MyGame, {
-    playerCount: 8,
-    // The policy the game actually ships. Without it the test measures the
-    // unbounded default and says nothing about what players will run.
-    checkpoints: { max: 20 },
-  });
+  const game = createTestGame(MyGame, { playerCount: 8 });
 
-  // Play a representative position: full board, hands dealt, log populated.
-  // Snapshot after EVERY action — that is what captures the checkpoints.
+  // Play a representative game to its end: full board, hands dealt, log
+  // populated. Snapshot after EVERY action, as a host does, and check each one:
+  // the largest saved state is usually mid-turn, not at the end.
   while (!game.isComplete()) {
     game.doAction(seat, 'play', args);
-    game.runner.getSnapshot();
+    assertStateBudget(measureSnapshotSize(game.runner.getSnapshot()), hostBudgetBytes);
   }
-
-  const size = measureSnapshotSize(game.runner.getSnapshot());
-  expect(projectSnapshotSize(size, EXPECTED_ACTIONS_PER_GAME, { maxCheckpoints: 20 }))
-    .toBeLessThan(HOST_BUDGET_BYTES);
 });
 ```
 
-`measureSnapshotSize` splits a snapshot into tree, checkpoints, and action
-history, and reports `bytesPerCheckpoint` — the multiplier itself.
-`projectSnapshotSize` extrapolates to a full game from a measurement taken at
-any point, which is the number to compare against a host limit. Measuring only
-what you have played is exactly how the ceiling stays invisible.
+`hostBudgetBytes` is read from where your host publishes it, never typed into
+the test. `assertStateBudget` takes it as a required argument for that reason,
+and its failure names the measured size, the budget, and where the bytes went.
 
-Pass `{ maxCheckpoints }` to project under a retention policy; the result goes
-flat in the action count, which is the point of setting one.
+`measureSnapshotSize` splits a snapshot into tree, checkpoints, action history
+and message log, and reports `bytesPerCheckpoint` — the multiplier itself.
+`projectSnapshotSize` extrapolates to a longer game from a measurement taken at
+any point. With no options it projects full history (what `boardsmith dev`
+keeps); pass `{ maxCheckpoints }` with your longest turn plus one, or your
+`max`, to project what a hosted table keeps.
 
 ### Why the snapshot call belongs inside the loop
 
 Checkpoints are captured through the SNAPSHOT funnel, not by `performAction`.
 `GameRunner.getSnapshot()` calls `captureCheckpoint()`, and `executeOp` calls
 it after every op it runs (every op answers with a fresh snapshot) — which is
-why a host has a checkpoint per action. A driver that performs 300 actions and snapshots once at
-the end leaves every slot between them uncaptured. They still count toward the
-window's length, so `bytesPerCheckpoint` comes out one to two orders of
-magnitude too small (measured at 17x to 219x across six games), and the budget
-assertion passes green while measuring nothing.
+why a host has a checkpoint per action. A driver that performs a whole turn of
+actions and snapshots once at the end leaves every slot between them
+uncaptured. They still count toward the window's length, so
+`bytesPerCheckpoint` comes out too small and the budget assertion passes green
+while measuring nothing.
 
 `measureSnapshotSize` refuses such a snapshot rather than reporting the wrong
 number, naming the uncaptured count and the fix. If you see that error, move

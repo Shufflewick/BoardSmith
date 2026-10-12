@@ -271,7 +271,7 @@ export interface MultiplayerHostOptions {
     snapshot: unknown,
     pendingState: Record<string, unknown> | null,
     op: OpOfType<T>,
-    hostOptions?: { teachingDisabled?: boolean; seedSnapshot?: GameStateSnapshot; debug?: boolean },
+    hostOptions?: { teachingDisabled?: boolean; seedSnapshot?: GameStateSnapshot; debug?: boolean; fullHistory?: boolean },
   ) => Promise<OpResultFor<T>>;
   /** Deliver a message to one client (the WS layer maps clientId → socket). */
   send: (clientId: string, message: HostOutbound) => void;
@@ -1241,7 +1241,13 @@ export class MultiplayerHost {
     // `teachingDisabled` game option that must not collide with this flag.
     // FEAT-01/168-02: seedSnapshot rides here too (never gameOptions) so a
     // `--seed` restart still starts from the seed, not a fresh game.
-    const hostOptions = { teachingDisabled: this.opts.teachingDisabled, seedSnapshot: this.opts.seedSnapshot };
+    // fullHistory (#504): dev keeps every checkpoint for time travel, whether
+    // or not debugging is on right now, so the history is there when it is.
+    const hostOptions = {
+      teachingDisabled: this.opts.teachingDisabled,
+      seedSnapshot: this.opts.seedSnapshot,
+      fullHistory: true,
+    };
     const executeOp: ExecuteOpAdapter = async (snapshot, pendingState, op) => {
       const raw = await this.executeOp(
         op.type === 'start' ? startGameOptions : baseOptions,

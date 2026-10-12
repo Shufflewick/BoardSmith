@@ -140,6 +140,7 @@ export {
 // multiplied by its action count. These make that assertable in CI instead of
 // discoverable in production. See docs/state-size.md.
 export {
+  assertStateBudget,
   measureSnapshotSize,
   projectSnapshotSize,
   type SnapshotSizeMeasurement,

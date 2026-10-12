@@ -62,6 +62,8 @@ function startedRunner(): GameRunner<CounterGame> {
     GameClass: CounterGame,
     gameType: 'counter',
     gameOptions: { playerCount: 1, playerNames: ['Solo'], seed: 'counter', elementIdKey: '00000000000000b2' },
+    // Full history: the rewind below reaches checkpoint 0, older than the turn start.
+    checkpoints: { history: 'full' },
   });
   runner.start();
   return runner;
