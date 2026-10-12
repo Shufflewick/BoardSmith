@@ -32,10 +32,11 @@ snapshot at action 1000 9 MB.
 
 That is why a hosted table does not keep them all. **By default a game keeps
 checkpoints only back to the start of the current turn** — the oldest point any
-seat's undo can restore — and drops everything older. So:
+seat's undo can restore, which is later when an action that cannot be undone
+happened since — and drops everything older. So:
 
 ```
-saved size  ≈  tree size  ×  (actions in the longest turn + 1)  +  history  +  log
+saved size  ≈  tree size  ×  (undoable actions in the longest turn + 1)  +  history  +  log
 ```
 
 flat in the length of the game. Measured on the real engine, a 15x15 grid
@@ -137,9 +138,17 @@ which is exactly what undo needs: undo restores the checkpoint at the start of
 the acting seat's turn, and nothing older is ever restored by a player. In a
 simultaneous step undo restores the start of the asking seat's last run of
 actions, which is never before the step's start, and the window keeps from the
-step's start. The remaining growth is the action
-history, which is bytes per action rather than a tree per action, and the
-message log.
+step's start.
+
+Undo never crosses an action marked `.notUndoable()`, or an
+`execute({ irreversible: true })` step, so once one happens part way through a
+turn or step, the window starts just after it: the checkpoints before it are
+ones no seat can restore. A step made only of not-undoable actions (a
+deployment of hundreds of placements, say) therefore keeps one checkpoint, not
+one per action. A `fullHistory` host keeps them all as before.
+
+The remaining growth is the action history, which is bytes per action rather
+than a tree per action, and the message log.
 
 Two settings on the game definition change that:
 

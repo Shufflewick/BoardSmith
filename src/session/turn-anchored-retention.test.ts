@@ -25,6 +25,7 @@ import {
   eachPlayer,
   execute,
   flowBoundaryKey,
+  ifThen,
   loop,
   sequence,
   simultaneousActionStep,
@@ -270,19 +271,190 @@ describe('#504: turn-anchored checkpoint retention', () => {
   });
 });
 
+describe('#680: the window starts after the last point undo cannot cross', () => {
+  /** The refusal `seat` gets when it asks to undo in `table`. */
+  async function refusedUndo(def: GameDefinitionLike, table: Table, seat: number): Promise<string> {
+    const result = await executeOp(def, options2, table.snapshot, null, { type: 'undo', player: seat });
+    expect(result.success).toBe(false);
+    return result.success ? '' : result.error;
+  }
+
+  async function actAll(def: GameDefinitionLike, table: Table, actions: string[]): Promise<Table> {
+    for (const actionName of actions) table = await act(def, table, actionName);
+    return table;
+  }
+
+  it('a notUndoable action part way through a turn drops the checkpoints before it, and undo is still refused across it', async () => {
+    let table = await actAll(commitTurns, await startTwoSeats(commitTurns), ['step', 'step', 'commit', 'step']);
+    expect(currentSeat(table)).toBe(1);
+    expect(moveCountOf(table)).toBe(4);
+    const window = table.snapshot.actionCheckpoints!;
+    // The commit is action 2, so no undo restores anything before action 3.
+    expect(window.baseIndex).toBe(3);
+    expect(window.entries).toHaveLength(2);
+    expect(canUndo(table, 1)).toBe(false);
+    expect(await refusedUndo(commitTurns, table, 1)).toMatch(/commit is marked notUndoable/);
+
+    // The next turn's undo reaches its own start.
+    table = await actAll(commitTurns, table, ['end', 'step', 'step']);
+    expect(currentSeat(table)).toBe(2);
+    expect(table.snapshot.actionCheckpoints!.baseIndex).toBe(5);
+    expect(canUndo(table, 2)).toBe(true);
+    table = await undo(commitTurns, table, 2);
+    expect(table.snapshot.actionHistory).toHaveLength(5);
+    expect(currentSeat(table)).toBe(2);
+  });
+
+  it('an irreversible execute part way through a turn drops the checkpoints before it, and undo is still refused across it', async () => {
+    let table = await actAll(commitTurns, await startTwoSeats(commitTurns), ['step', 'reveal', 'step']);
+    expect(currentSeat(table)).toBe(1);
+    expect(moveCountOf(table)).toBe(3);
+    const window = table.snapshot.actionCheckpoints!;
+    // The irreversible execute ran after action 1, so the window starts at 2.
+    expect(window.baseIndex).toBe(2);
+    expect(window.entries).toHaveLength(2);
+    expect(canUndo(table, 1)).toBe(false);
+    expect(await refusedUndo(commitTurns, table, 1)).toMatch(/irreversible/);
+
+    table = await actAll(commitTurns, table, ['end', 'step']);
+    expect(currentSeat(table)).toBe(2);
+    expect(table.snapshot.actionCheckpoints!.baseIndex).toBe(4);
+    table = await undo(commitTurns, table, 2);
+    expect(table.snapshot.actionHistory).toHaveLength(4);
+    expect(currentSeat(table)).toBe(2);
+  });
+
+  it('a simultaneous step drops the checkpoints before a notUndoable action, and the seat after it still undoes to its run', async () => {
+    let table = await startTwoSeats(simultaneous);
+    table = await act(simultaneous, table, 'prepare');
+    table = await act(simultaneous, table, 'prepare');
+    table = await order(table, 1);
+    table = await order(table, 2, 'commit');
+    table = await order(table, 1);
+    table = await order(table, 1);
+    const window = table.snapshot.actionCheckpoints!;
+    // The step starts at action 2 and the commit is action 3.
+    expect(window.baseIndex).toBe(4);
+    expect(window.entries).toHaveLength(3);
+
+    expect(canUndo(table, 1)).toBe(true);
+    table = await undo(simultaneous, table, 1);
+    expect(table.snapshot.actionHistory.map((entry) => entry.player)).toEqual([1, 2, 1, 2]);
+    expect(canUndo(table, 2)).toBe(false);
+    expect(await refusedUndo(simultaneous, table, 2)).toMatch(/commit is marked notUndoable/);
+  });
+
+  it('a step made only of notUndoable actions keeps one checkpoint, and every seat is refused', async () => {
+    let table = await startTwoSeats(simultaneous);
+    table = await act(simultaneous, table, 'prepare');
+    table = await act(simultaneous, table, 'prepare');
+    for (const seat of [1, 2, 1, 2]) {
+      table = await order(table, seat, 'commit');
+      const window = table.snapshot.actionCheckpoints!;
+      // Every action in the step is a commit, so undo can restore only the present.
+      expect(window.baseIndex).toBe(table.snapshot.actionHistory.length);
+      expect(window.entries).toHaveLength(1);
+
+      // The seat that acted last is refused by its commit. The other seat is
+      // refused because only the last actor's run can be undone in a
+      // simultaneous step.
+      const other = seat === 1 ? 2 : 1;
+      expect(canUndo(table, seat)).toBe(false);
+      expect(await refusedUndo(simultaneous, table, seat)).toMatch(/commit is marked notUndoable/);
+      expect(canUndo(table, other)).toBe(false);
+      expect(await refusedUndo(simultaneous, table, other)).toBe('No actions to undo');
+    }
+  });
+
+  it('a session with full history still keeps the checkpoints before a notUndoable action', async () => {
+    let table = envelope(succeeded(await executeOp(commitTurns, options2, null, null, { type: 'start' }, { fullHistory: true })));
+    for (const actionName of ['step', 'commit', 'step']) {
+      table = envelope(succeeded(await executeOp(commitTurns, options2, table.snapshot, null, {
+        type: 'action',
+        actionName,
+        player: currentSeat(table),
+        args: {},
+        boundaryKey: flowBoundaryKey(table.snapshot.flowState as BoundaryKeyState),
+      }, { fullHistory: true })));
+    }
+    expect(table.snapshot.actionCheckpoints!.baseIndex).toBe(0);
+    expect(table.snapshot.actionCheckpoints!.entries).toHaveLength(4);
+  });
+});
+
+/**
+ * A turn of re-entered steps ended by `end`. `commit` cannot be undone, and
+ * `reveal` is followed by an irreversible `execute()`, both part way through
+ * the turn.
+ */
+class CommitTurnGame extends Game<CommitTurnGame, Player> {
+  turnEnded = false;
+  revealPending = false;
+
+  constructor(gameOptions: GameOptions) {
+    super(gameOptions);
+    this.registerAction(Action.create('step').execute(() => {}));
+    this.registerAction(Action.create('commit').notUndoable().execute(() => {}));
+    this.registerAction(
+      Action.create('reveal').execute(() => {
+        this.revealPending = true;
+      }),
+    );
+    this.registerAction(
+      Action.create('end').execute(() => {
+        this.turnEnded = true;
+      }),
+    );
+    this.setFlow({
+      root: loop({
+        while: () => true,
+        maxIterations: 100,
+        do: eachPlayer({
+          do: sequence(
+            execute(() => {
+              this.turnEnded = false;
+            }),
+            loop({
+              while: () => !this.turnEnded,
+              maxIterations: 20,
+              do: sequence(
+                actionStep({ name: 'act', actions: ['step', 'commit', 'reveal', 'end'], turnScope: 'continue' }),
+                ifThen({
+                  condition: () => this.revealPending,
+                  then: execute(() => {
+                    this.revealPending = false;
+                  }, { irreversible: true }),
+                }),
+              ),
+            }),
+          ),
+        }),
+      }),
+    });
+  }
+}
+
+const commitTurns: GameDefinitionLike = {
+  gameClass: CommitTurnGame,
+  gameType: 'commit-turns',
+  minPlayers: 2,
+  maxPlayers: 2,
+};
+
 /** Each seat prepares in turn, then both order in one simultaneous step that never closes. */
 class OrdersGame extends Game<OrdersGame, Player> {
   constructor(gameOptions: GameOptions) {
     super(gameOptions);
     this.registerAction(Action.create('prepare').execute(() => {}));
     this.registerAction(Action.create('order').execute(() => {}));
+    this.registerAction(Action.create('commit').notUndoable().execute(() => {}));
     this.setFlow({
       root: sequence(
         eachPlayer({ do: actionStep({ actions: ['prepare'] }) }),
         simultaneousActionStep({
           name: 'orders',
           players: () => this.players,
-          actions: ['order'],
+          actions: ['order', 'commit'],
           playerDone: () => false,
           allDone: () => false,
         }),
@@ -353,10 +525,10 @@ async function act(def: GameDefinitionLike, table: Table, actionName: string): P
   })));
 }
 
-async function order(table: Table, seat: number): Promise<Table> {
+async function order(table: Table, seat: number, actionName = 'order'): Promise<Table> {
   return envelope(succeeded(await executeOp(simultaneous, options2, table.snapshot, null, {
     type: 'action',
-    actionName: 'order',
+    actionName,
     player: seat,
     args: {},
     boundaryKey: flowBoundaryKey(table.snapshot.flowState as BoundaryKeyState),
