@@ -1,7 +1,7 @@
 {
-  "revision": 173,
+  "revision": 174,
   "bundleProtocol": 2,
-  "surfaceHash": "0e7ed0ef8f3ed2b0",
+  "surfaceHash": "05e7976f41efe42e",
   "payloadHash": "3f10d70c457a15ba",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1497,10 +1497,19 @@
       "revision": 173,
       "date": "2026-10-12",
       "bundleProtocol": 2,
-      "surfaceHash": "0e7ed0ef8f3ed2b0",
+      "surfaceHash": "1a4c5a5616989429",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "A tutorial names its learner seat (#552): TutorialDefinition.learnerSeat is required, startTutorial is refused for any other seat and on a finished game (whose phase stays finished), and it restarts the flow with the learner seat to move (Game.restartFlowForTutorial(seat), FlowEngine.restartWithoutOpening(seat)) instead of the flow's first prompted seat. A game bundle built before r173 whose tutorial has no learnerSeat can no longer start its tutorial on this engine (the definition is refused as invalid); the rest of the game is unaffected, and republishing it with learnerSeat set fixes it. The shipped checkers and go-fish tutorials name seat 1."
+      "summary": "A table host's heatmap refresh after a move joins the one already running, so at most one heatmap compute runs at a time instead of one per move landing during a compute (#676)"
+    },
+    {
+      "revision": 174,
+      "date": "2026-10-12",
+      "bundleProtocol": 2,
+      "surfaceHash": "05e7976f41efe42e",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A tutorial names its learner seat (#552): TutorialDefinition.learnerSeat is required, startTutorial is refused for any other seat and on a finished game (whose phase stays finished), and it restarts the flow with the learner seat to move (Game.restartFlowForTutorial(seat), FlowEngine.restartWithoutOpening(seat)) instead of the flow's first prompted seat. A game bundle built before r174 whose tutorial has no learnerSeat can no longer start its tutorial on this engine (the definition is refused as invalid); the rest of the game is unaffected, and republishing it with learnerSeat set fixes it. The shipped checkers and go-fish tutorials name seat 1."
     }
   ]
 }
