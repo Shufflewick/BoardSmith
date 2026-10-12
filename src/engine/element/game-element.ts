@@ -224,6 +224,9 @@ export function reachPartition<T extends GameElement | undefined>(from: T): T {
   return from;
 }
 
+/** The first segment of the branch path of an element in `game.pile` (#655). */
+export const PILE_BRANCH = 'pile';
+
 /**
  * The element with this id in `from`'s subtree, WITHOUT marking anything
  * reached: `atId` is the door that marks, and the engine's own reference
@@ -595,18 +598,20 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * Get the branch path from root to this element (e.g., "0/2/1")
+   * Get the branch path from root to this element (e.g., "0/2/1"). An element
+   * in `game.pile` has a path under `pile` (e.g., "pile/1"), so it can never be
+   * read as the path of an element in the tree (#655).
    */
   branch(): string {
-    const path: number[] = [];
-    let current: GameElement | undefined = this as GameElement;
+    const path: (number | string)[] = [];
+    let current: GameElement = this as GameElement;
 
-    while (current?._t.parent) {
+    while (current._t.parent) {
       const parent: GameElement = current._t.parent;
-      const index = parent._t.children.indexOf(current);
-      path.unshift(index);
+      path.unshift(parent._t.children.indexOf(current));
       current = parent;
     }
+    if (current === this.game?.pile) path.unshift(PILE_BRANCH);
 
     return path.join('/');
   }

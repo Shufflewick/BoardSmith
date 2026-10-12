@@ -193,28 +193,42 @@ describe('a Space in the pile when a restore runs keeps its handlers (#656)', ()
     expect([restored.enterCount, restored.exitCount]).toEqual([1, 1]);
   });
 
-  // A snapshot does not hold the pile, and every restore empties it (#650), so
-  // a state taken after the removal has no Space to give the handlers to. Both
-  // restores say so, rather than one dropping them silently.
-  it('in-place and fresh restores of a state without the Space both warn that its handlers were dropped', () => {
+  // A saved state holds the pile (#655), so restoring a state taken after the
+  // removal keeps the Space, handlers and all, in the pile; restoring an
+  // earlier state then brings it back to the tree with them.
+  it('keeps the handlers across an undo to after the removal and then to before it, in place, without a warning', () => {
     const runner = buildRunner();
-    const destId = runner.game.dest.id;
+    const beforeRemoval = roundTripJson(runner.game.toJSON());
     runner.game.dest.remove();
-    const snapshot = roundTripJson(runner.getSnapshot());
+    const afterRemoval = roundTripJson(runner.game.toJSON());
 
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     _clearShownWarnings();
-    runner.game.loadSerializedState(snapshot.state);
-    _clearShownWarnings();
-    GameRunner.fromSnapshot<HandlerGame>(snapshot, HandlerGame);
+    runner.game.loadSerializedState(afterRemoval);
+    runner.game.loadSerializedState(beforeRemoval);
     const warnings = warnSpy.mock.calls.map((call) => String(call[0]));
     warnSpy.mockRestore();
 
-    expect(warnings).toHaveLength(2);
-    for (const warning of warnings) {
-      expect(warning).toContain(`Space "${destId}"`);
-      expect(warning).toContain('removed when the state was saved, this is expected');
-    }
+    const game = runner.game;
+    game.source.first(Token)!.putInto(game.dest);
+    game.dest.first(Token)!.putInto(game.source);
+    expect(warnings).toEqual([]);
+    expect([game.enterCount, game.exitCount]).toEqual([1, 1]);
+  });
+
+  it('keeps them when a fresh restore of the state after the removal is then restored in place to before it', () => {
+    const runner = buildRunner();
+    const beforeRemoval = roundTripJson(runner.game.toJSON());
+    runner.game.dest.remove();
+    const snapshot = roundTripJson(runner.getSnapshot());
+
+    const game = GameRunner.fromSnapshot<HandlerGame>(snapshot, HandlerGame).game;
+    expect(game.pile.first(Dest)).toBeDefined();
+    game.loadSerializedState(beforeRemoval);
+    game.source.first(Token)!.putInto(game.dest);
+    game.dest.first(Token)!.putInto(game.source);
+
+    expect([game.enterCount, game.exitCount]).toEqual([1, 1]);
   });
 });
 

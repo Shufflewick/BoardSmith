@@ -122,6 +122,19 @@ describe('world mode: element references are id-based, not positional', () => {
     expect(b2Json.attributes.link).toEqual({ __elementId: b1.id });
   });
 
+  // A world saves its partitions, never the game's toJSON, so the pile is not
+  // written there; a reference to a removed element is still its id (#655).
+  it('refers to a removed element by id, and leaves the pile out of the game root', () => {
+    const game = new WorldGame({ playerCount: 2, seed: 'world-pile', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    const { roomB, b1, b2 } = buildWorld(game);
+    b2.link = b1;
+    b1.remove();
+
+    const b2Json = (roomB.toJSON() as ElementJSON).children!.find((c) => c.name === 'b2')!;
+    expect(b2Json.attributes.link).toEqual({ __elementId: b1.id });
+    expect(game.toJSON()).not.toHaveProperty('pile');
+  });
+
   it('negative control: snapshot mode still serializes refs as __elementRef branch paths', () => {
     const game = new WorldGame({ playerCount: 2, seed: 'snapshot-refs' });
     const { roomB, b1, b2 } = buildWorld(game);
