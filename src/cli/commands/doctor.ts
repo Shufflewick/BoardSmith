@@ -266,9 +266,25 @@ async function testScopeFindings(projectDir: string): Promise<DoctorFinding[]> {
   const problem = await testRunScopeProblem(projectDir);
   if (problem === undefined) return [];
   const { built, outdated } = await sortConfigs(projectDir);
-  if (built === undefined && outdated.length === 0) {
-    return [{ kind: 'test-config-missing', from: GAME_VITE_CONFIG_FILE, to: GAME_VITE_CONFIG_FILE, fixed: false, detail: problem }];
-  }
+  const to = built ?? GAME_VITE_CONFIG_FILE;
+  // With nothing outdated, nothing is built either: vitest would read the built one and see no problem.
+  if (outdated.length === 0) return [{ kind: 'test-config-missing', from: to, to, fixed: false, detail: problem }];
+  const own = await ownSettingFinding(projectDir, outdated, built, problem);
+  if (own !== undefined) return [own];
+  const detail = built === undefined
+    ? problem
+    : `vitest reads ${outdated[0]} in place of ${built}, which is already built with defineGameViteConfig. ` +
+      `Delete ${outdated.join(' and ')} (--fix does), then run this again.`;
+  return [{ kind: 'test-run-collects-worktrees', from: outdated[0], to, fixed: false, detail }];
+}
+
+/** A hand edit for the first outdated config that sets more than `defineGameViteConfig()`, which --fix would lose. */
+async function ownSettingFinding(
+  projectDir: string,
+  outdated: string[],
+  built: string | undefined,
+  problem: string,
+): Promise<DoctorFinding | undefined> {
   for (const config of outdated) {
     const setting = settingNotShipped(await fs.readFile(join(projectDir, config), 'utf-8'));
     if (setting === undefined) continue;
@@ -277,13 +293,9 @@ async function testScopeFindings(projectDir: string): Promise<DoctorFinding[]> {
       ? `${found}. ${problem}`
       : `${found}: vitest reads it in place of ${built}, which is already built with defineGameViteConfig. ` +
         `If the game needs it, pass it to defineGameViteConfig in ${built}, then delete ${config}.`;
-    return [{ kind: 'test-config-needs-edit', from: config, to: built ?? GAME_VITE_CONFIG_FILE, fixed: false, detail }];
+    return { kind: 'test-config-needs-edit', from: config, to: built ?? GAME_VITE_CONFIG_FILE, fixed: false, detail };
   }
-  const detail = built === undefined
-    ? problem
-    : `vitest reads ${outdated[0]} in place of ${built}, which is already built with defineGameViteConfig. ` +
-      `Delete ${outdated.join(' and ')} (--fix does), then run this again.`;
-  return [{ kind: 'test-run-collects-worktrees', from: outdated[0], to: built ?? GAME_VITE_CONFIG_FILE, fixed: false, detail }];
+  return undefined;
 }
 
 /** The project's config built with `defineGameViteConfig`, if one is, and every other vite or vitest config. */
@@ -378,6 +390,13 @@ function summarize(projectDir: string, findings: DoctorFinding[]): DoctorResult 
   return { projectDir, findings, counts: { moved, pending, conflicts }, healthy: findings.length === 0 };
 }
 
+/** A config finding as a report line: what is missing or outdated, and until fixed, what to do. */
+function configLine(f: DoctorFinding, rel: (p: string) => string): string {
+  const where = `${rel(f.from)} ${chalk.dim('->')} ${rel(f.to)} built with defineGameViteConfig`;
+  if (f.fixed) return `${chalk.green('fixed   ')} ${where}`;
+  return `${chalk.yellow(f.kind === 'test-config-missing' ? 'missing ' : 'outdated')} ${where}\n          ${f.detail}`;
+}
+
 /** One finding as a report line; `rel` makes a project path relative to where doctor was run. */
 function reportLine(f: DoctorFinding, rel: (p: string) => string): string {
   switch (f.kind) {
@@ -386,11 +405,8 @@ function reportLine(f: DoctorFinding, rel: (p: string) => string): string {
     case 'test-config-needs-edit':
       return `${chalk.red('edit    ')} ${rel(f.from)}\n          ${f.detail}`;
     case 'test-config-missing':
-      return `${f.fixed ? chalk.green('wrote   ') : chalk.yellow('missing ')} ${rel(f.from)} ${chalk.dim('->')} built with defineGameViteConfig`;
     case 'test-run-collects-worktrees':
-      return f.fixed
-        ? `${chalk.green('replaced')} ${rel(f.from)} ${chalk.dim('->')} ${rel(f.to)} built with defineGameViteConfig`
-        : `${chalk.yellow('outdated')} ${rel(f.from)}\n          ${f.detail}`;
+      return configLine(f, rel);
     case 'scratch-dir-not-ignored':
       return `${f.fixed ? chalk.green('ignored ') : chalk.yellow('untracked')} ${rel(f.from)} ${chalk.dim('->')} adds ${GITIGNORE_ENTRY}`;
     default:
