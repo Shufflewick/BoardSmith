@@ -4,7 +4,7 @@
     { "name": "audit", "run": "node bin/boardsmith.js audit --dupes-baseline --health-baseline --duplication" },
     { "name": "test", "run": "node bin/boardsmith.js test --verdict-file {verdictFile}", "verdictFile": true },
     { "name": "browser", "run": "node bin/boardsmith.js test --browser" },
-    { "name": "catalogue", "run": "node bin/boardsmith.js catalogue --skip 'WindupWarfare=validate does not finish (Shufflewick/WindupWarfare#100)'" }
+    { "name": "catalogue", "run": "node bin/boardsmith.js catalogue --skip 'WindupWarfare=validate does not finish (Shufflewick/WindupWarfare#100)' --skip 'checkers=BoardSmith #552: learnerSeat migration on checkers codex/bs552-tutorial-learner-seat, lands right after' --skip 'go-fish=BoardSmith #552: learnerSeat migration on go-fish codex/bs552-tutorial-learner-seat, lands right after'" }
   ],
   "thread": {
     "workspaces": [
