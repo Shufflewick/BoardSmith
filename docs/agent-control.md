@@ -172,16 +172,23 @@ selection is missing.
 
 By default (`format: 'in-process'`), element-object values pass through
 unchanged — the result is ready for `testGame.doAction` /
-`runner.performAction` in the same process. Pass `{ format: 'wire' }` to
-convert element/player values to the references action history records
-(`{ __elementRef }`, `{ __elementId }` in world mode, `{ __playerRef }`)
-for cross-process transmission (e.g. a remote agent submitting
-an action over WebSocket):
+`runner.performAction` in the same process. Pass `{ format: 'wire' }` for
+cross-process transmission (e.g. a remote agent submitting an action over
+WebSocket): each element value, alone or in an array, is written as
+`{ id, className }`, and everything else is left as given. That is exactly
+what `runner.performAction` resolves back to the elements, so the wire
+args, after a JSON round trip, can be submitted as they are:
 
 ```typescript
 const wireArgs = buildActionArgs('move', { target: token }, game, 1, { format: 'wire' });
-// JSON.stringify-safe — send this over the wire, not the in-process form
+// { target: { id: 42, className: 'Token' } } -- JSON.stringify-safe
+runner.performAction('move', 1, JSON.parse(JSON.stringify(wireArgs)));
 ```
+
+A player is an element too, so a `chooseElement` over players gets
+`{ id, className }` like any other. A `chooseFrom` over
+`game.playerChoices()` takes the player's seat number, so pass the seat,
+not the `Player`.
 
 ### `enumerateLegalMoves(game, seat, options?)`
 
@@ -203,7 +210,8 @@ testGame.doAction(1, move.action, move.args);
 
 Args are returned in **in-process** format (element objects, not IDs) —
 pass them straight to `doAction`/`performAction`, or run them through
-`buildActionArgs(..., { format: 'wire' })` for cross-process use.
+`buildActionArgs(..., { format: 'wire' })` for cross-process use; the
+wire form is accepted by `performAction` as well.
 
 By default enumeration is exhaustive. `text`/`number` selections and
 function-based `multiSelect` configs cannot be statically enumerated —
