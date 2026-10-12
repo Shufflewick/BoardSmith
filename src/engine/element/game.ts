@@ -398,6 +398,17 @@ function withoutRestoreOnlyFields(root: ReturnType<Game['toJSON']>) {
 }
 
 /**
+ * The removed elements as `toJSON()` writes them, so a reference to one
+ * restores to it (#655): absent when the pile is empty, and in a world (which
+ * saves its partitions, never `toJSON()`) and a seat's serialization.
+ */
+function savedPile(game: Game): { pile?: ElementJSON[] } {
+  const piled = game.pile._t.children;
+  if (game._ctx._worldMode || game._ctx._seatView || piled.length === 0) return {};
+  return { pile: piled.map((child) => child.toJSON()) };
+}
+
+/**
  * Run a serialization whose result goes to a seat, so a reference into the
  * pile is written without its position and the pile itself is left out
  * (#655). The saved state keeps both.
@@ -4568,12 +4579,7 @@ export class Game<
       // resumed game still resolves an old checkpoint's watermark correctly.
       // One number for the whole game, not a field on every line.
       ...(this._messagesEvicted > 0 && { messagesEvicted: this._messagesEvicted }),
-      // The removed elements, so a reference to one restores to it (#655). A
-      // world saves its partitions, never this payload, and no seat's view
-      // carries them, so both leave them out.
-      ...(!this._ctx._worldMode && !this._ctx._seatView && this.pile._t.children.length > 0 && {
-        pile: this.pile._t.children.map((child) => child.toJSON()),
-      }),
+      ...savedPile(this),
       // Only include the events array if the buffer is non-empty (avoid
       // cluttering empty snapshots with an empty array).
       ...(this._animationEvents.length > 0 && {
