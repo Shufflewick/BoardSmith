@@ -82,6 +82,7 @@ class AutoAdvanceGame extends Game<AutoAdvanceGame, Player> {
  * (the first action of ANY player triggers it).
  */
 const ADVANCE_AFTER_ONE_ACTION: TutorialDefinition = {
+  learnerSeat: 1,
   steps: [
     {
       id: 'intro',
@@ -102,6 +103,7 @@ const ADVANCE_AFTER_ONE_ACTION: TutorialDefinition = {
  * (requires two total actions — one learner + one opponent).
  */
 const ADVANCE_AFTER_OPPONENT: TutorialDefinition = {
+  learnerSeat: 1,
   steps: [
     {
       id: 'wait-for-opponent',
@@ -120,7 +122,7 @@ const ADVANCE_AFTER_OPPONENT: TutorialDefinition = {
 /**
  * Tutorial with zero steps — used for MR-03 test.
  */
-const ZERO_STEPS: TutorialDefinition = { steps: [] };
+const ZERO_STEPS: TutorialDefinition = { learnerSeat: 1, steps: [] };
 
 /** A started two-seat table on the given tutorial; seat 1 is the learner. */
 async function makeSession(tutorial: TutorialDefinition) {

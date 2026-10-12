@@ -228,6 +228,7 @@ describe('afterTurns(n)', () => {
     const runner = makeRunner();
 
     const tutorialDef: TutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         {
           id: 'intro',
