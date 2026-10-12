@@ -1758,9 +1758,9 @@ export function withheldFromSeat(element: GameElement): boolean {
  * history, the game's settings or message log. The one codec for all of them
  * (#497), so a shape one of them keeps, every one keeps.
  *
- * - A player becomes `{ __playerRef, seat, color, name }` (detected with
- *   {@link isPlayerElement}, never a class check, which fails across bundled
- *   copies of the class).
+ * - A player becomes `{ __playerRef, seat, color, name }`. Elements and players
+ *   are recognised with {@link isElement} and {@link isPlayerElement}, never a
+ *   class check, which fails across bundled copies of the engine.
  * - Any other element becomes `{ __elementRef: branch }`, or `{ __elementId }`
  *   in world mode, where non-resident partitions shift every branch index. A
  *   seat's view writes an element in the pile as `WITHHELD_PILE_BRANCH`.
@@ -1794,8 +1794,10 @@ function encodeAt(
     return value;
   }
 
-  // An element becomes a reference, so it carries no cycle risk.
-  if (value instanceof GameElement) {
+  // An element becomes a reference, so it carries no cycle risk. Recognised
+  // with `isElement`, not `instanceof`: an action argument can come from a
+  // game bundled with its own copy of the engine.
+  if (isElement(value)) {
     // #149: the one shared structural answer to "is this a player?" -- a
     // numeric `seat` is not it, because a per-seat board carries one too and
     // would then serialize as a `__playerRef` to a seat with no such player.
@@ -1905,7 +1907,7 @@ export function decodeValue(value: unknown, game: Game): unknown {
   // A PersistentMap is a VIEW onto `game.settings`: rebuilding it as a plain
   // object made the first call after a restore throw "<name>.get is not a
   // function" (#139). Its contents are decoded once, with `settings` itself.
-  if (value instanceof GameElement || value instanceof PersistentMap || ArrayBuffer.isView(value)) {
+  if (isElement(value) || value instanceof PersistentMap || ArrayBuffer.isView(value)) {
     return value;
   }
   if ('__map' in value) {

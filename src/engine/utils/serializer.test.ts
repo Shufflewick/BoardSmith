@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   Game,
   Space,
@@ -114,6 +114,25 @@ describe('Action Serialization', () => {
       expect(() => serializeAction('plan', game.getPlayer(1)!, { plan }, game)).toThrowError(
         /Cannot serialize action 'plan': circular reference detected at property 'args\.plan\.self'/,
       );
+    });
+
+    // A game bundled with its own copy of the engine hands the host's runner
+    // elements of a different GameElement class, so `instanceof` cannot be
+    // how the codec recognises one.
+    it('writes an element from another copy of the engine as a reference, not as its object graph', async () => {
+      vi.resetModules();
+      // Dynamic import: after vi.resetModules(), a second copy of the engine, as a bundled game carries.
+      const other = await import('../index.js');
+      class OtherGame extends other.Game<OtherGame, Player> {}
+      class OtherCard extends other.Piece<OtherGame> {}
+      const otherGame = new OtherGame({ playerCount: 2, playerNames: ['Alice', 'Bob'] });
+      const otherCard = otherGame.create(OtherCard, 'card');
+
+      const saved = serializeAction('play', otherGame.getPlayer(1)!, { card: otherCard, by: otherGame.getPlayer(2)! }, otherGame);
+
+      expect(otherCard).not.toBeInstanceOf(Piece);
+      expect(saved.args.card).toEqual({ __elementRef: otherCard.branch() });
+      expect(saved.args.by).toMatchObject({ __playerRef: 2 });
     });
 
     it('in world mode writes an element by id, and keeps an id that is not resident verbatim', () => {
