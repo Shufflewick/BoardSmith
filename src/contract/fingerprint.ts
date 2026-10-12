@@ -2013,6 +2013,12 @@ export async function computePayloadHash(): Promise<string> {
   game.persist = { entries: [{ key: 'hall-of-fame', value: 'Alice' }] };
   game.persistPrivate = { entries: [{ key: 'player:alice/sheet', value: { hp: 3 } }] };
 
+  // A removed card a public attribute still refers to (#655). Every view
+  // carries the reference as a path under `pile`, and none carries the pile.
+  const cut = game.create(FixtureCard, 'cut-0', { suit: 'S', rank: 'Q' });
+  cut.remove();
+  game.lastCut = cut;
+
   // Start the flow so the views carry real flow state. Without this every view
   // reports `flowState: undefined` and the hash covers only board
   // serialization — which is exactly how the flow layer stayed invisible in the

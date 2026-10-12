@@ -1,8 +1,8 @@
 {
-  "revision": 174,
+  "revision": 175,
   "bundleProtocol": 2,
   "surfaceHash": "1a4c5a5616989429",
-  "payloadHash": "3f10d70c457a15ba",
+  "payloadHash": "d2d173feccde63e6",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1510,6 +1510,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A botSuggest success no longer carries the state envelope (#675): it has no snapshot, playerViews, spectatorView, flowDebugInfo or persistCommit, only success and its own fields (botPlayer, suggestedAction and suggestedArgs when a due bot seat found a move; botStalled when that seat could not choose; neither when no bot seat is due), as resolveChoices does (#450). A search changes nothing, so each bot move no longer sends a whole extra state back from the executor. The platform's result bridge must stop reading snapshot or views from a botSuggest result and forward only those fields; SnapshotSessionHost never read them. A host must run r174 or later engines with a bridge that does not expect them."
+    },
+    {
+      "revision": 175,
+      "date": "2026-10-12",
+      "bundleProtocol": 2,
+      "surfaceHash": "1a4c5a5616989429",
+      "payloadHash": "d2d173feccde63e6",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A saved state now holds the pile (#655): game.toJSON() carries the removed elements as a 'pile' array when there are any, and every restore (reload, undo, failed-action rollback, bot search) puts them back instead of emptying the pile (#650), so a reference to a removed element in an attribute, an action arg or a flow variable restores to that same element. A reference to an element in the pile is the path 'pile/<i>/...' instead of a bare position, which was read as a root child. No seat's view carries the pile. World mode is unchanged: a world never saves game.toJSON(). Snapshots grow by the removed elements in every checkpoint. States saved by older engines restore with an empty pile, and a saved reference to a removed element in them still points at the wrong element."
     }
   ]
 }
