@@ -82,8 +82,30 @@ describe('startTutorial mid-game (#546)', () => {
     expect(learner.availableActions).toEqual(['pass']);
     expect(learner.tutorial?.stepId).toBe('pass');
     expect(session.readGame().openings).toBe(1);
-    expect((await session.send(2, { type: 'action', actionName: 'pass', player: 2, args: {} })).success).toBe(true);
-    expect(session.host.flowState?.currentPlayer).toBe(1);
+
+    // Two full rounds: the round was joined at seat 2, so the next keeps its order.
+    const seats: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      const seat = session.host.flowState!.currentPlayer!;
+      seats.push(seat);
+      expect((await session.send(seat, { type: 'action', actionName: 'pass', player: seat, args: {} })).success).toBe(true);
+    }
+    expect(seats).toEqual([2, 1, 2, 1]);
+  });
+
+  it.each([1, 3])('refuses a learner seat the table does not have, asked from seat %s (#552)', async (seat) => {
+    const session = createHeadlessSession(
+      { ...def, tutorial: { ...tutorial, learnerSeat: 3 } },
+      { playerCount: 2, seed: 'tutorial-restart' },
+    );
+    await session.start();
+    const before = structuredClone(session.host.snapshot);
+
+    const result = await session.send(1, { type: 'startTutorial', player: seat });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/This tutorial is for seat 3, but this table has 2 seats/);
+    expect(session.host.snapshot).toEqual(before);
   });
 
   it("refuses a seat that is not the tutorial's learner, and leaves the game as it was (#552)", async () => {

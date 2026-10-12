@@ -1208,12 +1208,29 @@ async function handleHeatmapToggle(
 }
 
 /**
+ * Why `player` cannot start a tutorial for `learnerSeat` on a table of
+ * `playerCount` seats, or `undefined` when it can. Only the learner seat starts
+ * a tutorial, and the learner seat must be one the table has.
+ */
+function learnerSeatRefusal(learnerSeat: number, player: number, playerCount: number): string | undefined {
+  if (learnerSeat > playerCount) {
+    return `This tutorial is for seat ${learnerSeat}, but this table has ${playerCount} seats, so no one can start it. ` +
+      `Start it on a table of at least ${learnerSeat} players, or set the tutorial's learnerSeat to a seat this table has.`;
+  }
+  if (player !== learnerSeat) {
+    return `This tutorial is for seat ${learnerSeat}, so seat ${player} cannot start it. Start it from seat ${learnerSeat}.`;
+  }
+  return undefined;
+}
+
+/**
  * Start a tutorial for `op.player`: apply the tutorial's setup, put the flow
  * back at its beginning with the tutorial's learner seat to move (#546, #552),
  * activate the first step and run the auto-advance pump. Refused, with the
- * game left as it was, when `op.player` is not the learner seat, when the game
- * is over, or when the restarted flow still would not prompt the learner: a
- * tutorial the learner cannot act in is a dead table.
+ * game left as it was, when `op.player` is not the learner seat or the table
+ * has no such seat, when the game is over, or when the restarted flow still
+ * would not prompt the learner: a tutorial the learner cannot act in is a dead
+ * table.
  */
 function handleStartTutorial(
   def: RunnerDef,
@@ -1232,15 +1249,9 @@ function handleStartTutorial(
   }
   // IN-01: validate definition BEFORE constructing the runner (fail-loud before expensive work).
   validateTutorialDefinition(def.tutorial);
-  // Only the learner seat starts the tutorial, which also refuses a seat the
-  // table does not have before any state is touched.
   const { learnerSeat } = def.tutorial;
-  if (op.player !== learnerSeat) {
-    return errorResult(
-      `This tutorial is for seat ${learnerSeat}, so seat ${op.player} cannot start it. Start it from seat ${learnerSeat}.`,
-      'protocol',
-    );
-  }
+  const seatRefusal = learnerSeatRefusal(learnerSeat, op.player, gameOptions.playerCount);
+  if (seatRefusal) return errorResult(seatRefusal, 'protocol');
   const runner = runnerFromSnapshot(snapshot, def);
   // #552: a finished game stays finished. The restart below could bring its
   // flow back to life while its phase still read 'finished'.

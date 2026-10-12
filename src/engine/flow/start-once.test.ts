@@ -101,25 +101,27 @@ describe('restartFlowForTutorial (#546)', () => {
     expect(() => tg.game.restartFlowForTutorial(1)).toThrow(/has not started/);
   });
 
-  it('puts the turn on the seat it names, and the round carries on around the table from there (#552)', () => {
-    const tg = createTestGame(OpeningGame, { playerCount: 3, seed: 'tutorial' });
+  it.each([
+    { players: 2, turns: [2, 1, 2, 1] },
+    { players: 3, turns: [2, 3, 1, 2, 3, 1] },
+  ])('joins the round at the seat it names, so the next round keeps its order ($players players) (#552)', ({ players, turns }) => {
+    const tg = createTestGame(OpeningGame, { playerCount: players, seed: 'tutorial' });
 
     const state = tg.game.restartFlowForTutorial(2);
 
-    expect(state.currentPlayer).toBe(2);
     expect(state.availableActions).toEqual(['pass']);
     expect(tg.game.openings).toBe(1);
-    tg.doAction(2, 'pass', {});
-    expect(tg.game.getFlowState()?.currentPlayer).toBe(3);
-    tg.doAction(3, 'pass', {});
-    expect(tg.game.getFlowState()?.currentPlayer).toBe(1);
+    expect(seatsToMove(tg, turns.length)).toEqual(turns);
   });
 
-  it("starts on the named seat over the round's own starting player (#552)", () => {
-    const tg = createTestGame(StartingPlayerGame, { playerCount: 2, seed: 'tutorial' });
-    expect(tg.game.getFlowState()?.currentPlayer).toBe(1);
+  it("joins a round that has its own starting player at the named seat's place in it (#552)", () => {
+    // The round runs 2, 3, 1; joining it at seat 3 skips only seat 2.
+    const tg = createTestGame(StartingPlayerGame, { playerCount: 3, seed: 'tutorial' });
+    expect(tg.game.getFlowState()?.currentPlayer).toBe(2);
 
-    expect(tg.game.restartFlowForTutorial(2).currentPlayer).toBe(2);
+    tg.game.restartFlowForTutorial(3);
+
+    expect(seatsToMove(tg, 5)).toEqual([3, 1, 2, 3, 1]);
   });
 
   it('gives the named seat a step that is not inside an eachPlayer (#552)', () => {
@@ -130,7 +132,18 @@ describe('restartFlowForTutorial (#546)', () => {
   });
 });
 
-/** A round that always starts at seat 1, whatever turn the game is on. */
+/** The seat to move before each of the next `count` passes, each seat passing in turn. */
+function seatsToMove(tg: ReturnType<typeof createTestGame<OpeningGame | StartingPlayerGame>>, count: number): number[] {
+  const seats: number[] = [];
+  for (let i = 0; i < count; i++) {
+    const seat = tg.game.getFlowState()!.currentPlayer!;
+    seats.push(seat);
+    tg.doAction(seat, 'pass', {});
+  }
+  return seats;
+}
+
+/** A round that always starts at seat 2, whatever turn the game is on. */
 class StartingPlayerGame extends Game<StartingPlayerGame, Player> {
   constructor(options: GameOptions) {
     super(options);
@@ -138,7 +151,7 @@ class StartingPlayerGame extends Game<StartingPlayerGame, Player> {
     this.setFlow({
       root: loop({
         maxIterations: 20,
-        do: eachPlayer({ ...TurnOrder.DEFAULT, startingPlayer: (ctx) => ctx.game.getPlayer(1)!, do: actionStep({ actions: ['pass'] }) }),
+        do: eachPlayer({ ...TurnOrder.DEFAULT, startingPlayer: (ctx) => ctx.game.getPlayer(2)!, do: actionStep({ actions: ['pass'] }) }),
       }),
     });
   }

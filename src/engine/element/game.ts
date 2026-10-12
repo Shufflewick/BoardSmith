@@ -3161,9 +3161,10 @@ export class Game<
 
   /**
    * Put the flow back at its beginning so a tutorial opens on its learner's
-   * turn, whatever turn the live game was on: `seat`, the tutorial's
-   * `learnerSeat`, is the seat every round entered on the way starts at
-   * (see `FlowEngine.restartWithoutOpening`). Runs none of the game's opening:
+   * turn, whatever turn the live game was on: every round entered on the way
+   * is joined at `seat`, the tutorial's `learnerSeat`, skipping the seats
+   * before it in that round, so later rounds keep their usual order (see
+   * `FlowEngine.restartWithoutOpening`). Runs none of the game's opening:
    * not the flow's `setup`, and not the `execute` nodes before the first step
    * that needs input. The flow's variables are kept.
    * Phase hooks are not skipped: `onEnterPhase` runs again for each phase

@@ -241,7 +241,6 @@ describe('Tutorial CI Demo — criterion #3 proof', () => {
     });
 
     const result = simulateTutorial(testGame, DEMO_TUTORIAL, {
-      seat: 1,
       scenario: WALKTHROUGH,
       seed: 'tutorial-ci-demo-intact',
     });
@@ -302,7 +301,6 @@ describe('Tutorial CI Demo — criterion #3 proof', () => {
     // `move` is gated out by the broken tutorial definition.
     expect(() =>
       simulateTutorial(brokenGame, brokenGateDef, {
-        seat: 1,
         scenario: WALKTHROUGH,
       }),
     ).toThrow(/Tutorial drift \(gate\)/);
@@ -333,7 +331,6 @@ describe('Tutorial CI Demo — criterion #3 proof', () => {
     // has no game rule backing it.
     expect(() =>
       simulateTutorial(brokenGame, DEMO_TUTORIAL, {
-        seat: 1,
         scenario: WALKTHROUGH,
       }),
     ).toThrow(/Tutorial drift \(predicate\)/);

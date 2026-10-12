@@ -426,7 +426,7 @@ export class FlowEngine<G extends Game = Game> {
   /**
    * Set only inside `restartWithoutOpening`'s run, to the seat the restart
    * hands the turn to: `execute` nodes are passed over, and every round the
-   * run enters starts at this seat.
+   * run enters is joined at this seat's place in it.
    */
   private restartSeat: number | undefined;
 
@@ -465,8 +465,11 @@ export class FlowEngine<G extends Game = Game> {
    *
    * The turn goes to `seat`: it is the flow's current seat at the root, and
    * every `eachPlayer` round entered before the first step that needs input
-   * starts at it, in place of the round's own starting player. A step that
-   * names its own player still prompts that player.
+   * is built in its usual order (its own direction, starting player and
+   * filter) and joined at `seat`'s place in it, skipping the seats before
+   * it, so the round after runs in its usual order. A round whose filter
+   * leaves `seat` out is joined at its start instead, and a step that names
+   * its own player still prompts that player.
    *
    * Used by a tutorial start (`Game.restartFlowForTutorial`) to hand the turn
    * to the tutorial's learner seat.
@@ -1814,9 +1817,9 @@ export class FlowEngine<G extends Game = Game> {
       // must start from the next eligible seat AFTER the starting player —
       // not silently fall back to the first seat of the filtered list.
       let startIndex = 0;
-      const startSeat = this.restartSeat ?? config.startingPlayer?.(context).seat;
-      if (startSeat !== undefined) {
-        const foundIndex = players.findIndex((p) => p.seat === startSeat);
+      if (config.startingPlayer) {
+        const startPlayer = config.startingPlayer(context);
+        const foundIndex = players.findIndex((p) => p.seat === startPlayer.seat);
         startIndex = foundIndex >= 0 ? foundIndex : 0;
       }
 
@@ -1826,10 +1829,14 @@ export class FlowEngine<G extends Game = Game> {
         rotated = rotated.filter((p) => config.filter!(p, context));
       }
 
+      const eligibleSeats = rotated.map(p => p.seat);
+      // A restart joins the round at its seat's place, skipping the seats
+      // before it, so the next round runs in its usual order.
+      const joinIndex = this.restartSeat === undefined ? -1 : eligibleSeats.indexOf(this.restartSeat);
       frame.data = {
         ...frame.data,
-        eligibleSeats: rotated.map(p => p.seat),
-        nextIndex: 0,
+        eligibleSeats,
+        nextIndex: Math.max(joinIndex, 0),
       };
     }
 

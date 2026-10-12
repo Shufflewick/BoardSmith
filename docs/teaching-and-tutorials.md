@@ -21,9 +21,9 @@ export interface TutorialDefinition {
 }
 ```
 
-`learnerSeat` is the seat the learner plays (1-indexed). It is required, because a tutorial's preset, gates and predicates are all written for one seat. Only that seat can start the tutorial: a request from any other seat is refused with an error naming the learner seat. `steps` is the ordered sequence of teaching beats. `setup` is an optional callback called by `startTutorial` immediately before the first step activates — use it to put the board into a deterministic preset so the teaching beats are always meaningful regardless of what game was running before the learner opened the tutorial.
+`learnerSeat` is the seat the learner plays (1-indexed). It is required, because a tutorial's preset, gates and predicates are all written for one seat. Only that seat can start the tutorial: a request from any other seat is refused with an error naming the learner seat, and a table without that seat (a `learnerSeat` of 3 at a two-player table) refuses the tutorial for every seat. `steps` is the ordered sequence of teaching beats. `setup` is an optional callback called by `startTutorial` immediately before the first step activates — use it to put the board into a deterministic preset so the teaching beats are always meaningful regardless of what game was running before the learner opened the tutorial.
 
-After `setup`, `startTutorial` puts the flow back at its beginning with the learner seat to move (`Game.restartFlowForTutorial(learnerSeat)`), even when the learner opened it during another seat's turn. The learner seat is the flow's current seat at its root, and every `eachPlayer` round entered before the first step that needs input starts at the learner seat in place of its own starting player; the round then carries on around the table from there. That restart runs none of the game's opening: not the flow's `setup`, and not the `execute` nodes before the first step that needs input, so an opening that deals or rolls does not do it again. Flow variables keep their values. Phase hooks are not skipped: `onEnterPhase` runs again for each phase entered before the first step that needs input, and the phase the game was in when the tutorial started is abandoned without its `onExitPhase`. A step that names its own player (`actionStep({ player })`) still prompts that player, and an `eachPlayer` filter can leave the learner seat out: when the restarted flow does not prompt the learner seat, `startTutorial` is refused with an error naming the seat that would move, and the game is left exactly as it was. A finished game is refused too, and stays finished: start a new game, then the tutorial. A game starts once: a second `startFlow()` is refused, and this restart is the one way to put a running flow back at its start.
+After `setup`, `startTutorial` puts the flow back at its beginning with the learner seat to move (`Game.restartFlowForTutorial(learnerSeat)`), even when the learner opened it during another seat's turn. The learner seat is the flow's current seat at its root, and every `eachPlayer` round entered before the first step that needs input is joined at the learner's place in it. The round is built in its usual order, with its own direction, starting player and filter, and the seats before the learner in that order are skipped, so the next round runs in its usual order. For example, with three seats and a round that starts at seat 1, a tutorial for seat 2 plays 2, 3, then 1, 2, 3 from the next round on. A round whose filter leaves the learner out is joined at its start, and the tutorial is then refused as below. That restart runs none of the game's opening: not the flow's `setup`, and not the `execute` nodes before the first step that needs input, so an opening that deals or rolls does not do it again. Flow variables keep their values. Phase hooks are not skipped: `onEnterPhase` runs again for each phase entered before the first step that needs input, and the phase the game was in when the tutorial started is abandoned without its `onExitPhase`. A step that names its own player (`actionStep({ player })`) still prompts that player, and an `eachPlayer` filter can leave the learner seat out: when the restarted flow does not prompt the learner seat, `startTutorial` is refused with an error naming the seat that would move, and the game is left exactly as it was. A finished game is refused too, and stays finished: start a new game, then the tutorial. A game starts once: a second `startFlow()` is refused, and this restart is the one way to put a running flow back at its start.
 
 ```typescript
 // ~/BoardSmithGames/checkers/src/rules/tutorial.ts
@@ -273,7 +273,6 @@ const scenario: TutorialScenarioMove[] = [
 ];
 
 const result = simulateTutorial(testGame, MY_TUTORIAL, {
-  seat: 1,
   scenario,
   seed: 'pinned-seed',
 });
@@ -285,7 +284,7 @@ expect(result.stepsVisited).toContain('step-1-id');
 expect(result.stepsVisited).toContain('step-2-id');
 ```
 
-`simulateTutorial` runs the scripted scenario through the engine's own `autoAdvanceTutorial` pump and `getDisabledActions` gate — no second evaluator. Three drift dimensions are detected:
+`simulateTutorial` runs the tutorial for its `learnerSeat`: each scripted move is made by that seat unless the move names its own `seat`. It runs the scripted scenario through the engine's own `autoAdvanceTutorial` pump and `getDisabledActions` gate — no second evaluator. Three drift dimensions are detected:
 
 1. **Gate drift** — a scripted action excluded by the active step's gate throws with the step id and gate reason.
 2. **Predicate drift** — a move with `expectStep` set throws `"Tutorial drift (predicate): ..."` if `advanceWhen` did not advance to that step.
@@ -312,7 +311,7 @@ it('break: playerHasCaptures patched to false → tutorial stalls at capture-tip
   testGame.game.playerHasCaptures = () => false;
 
   expect(() =>
-    simulateTutorial(testGame, CHECKERS_TUTORIAL, { seat: 1, scenario: WALKTHROUGH }),
+    simulateTutorial(testGame, CHECKERS_TUTORIAL, { scenario: WALKTHROUGH }),
   ).toThrow(/Tutorial drift/);
 });
 ```
@@ -334,7 +333,6 @@ it('break (primary): checkForBooks patched to never score → tutorial stalls at
 
   expect(() => {
     const result = simulateTutorial(testGame, GO_FISH_TUTORIAL, {
-      seat: 1,
       scenario: /* two-ask walkthrough */,
     });
     // book-formed.advanceWhen (bookCount > 0) never fires → stalls.

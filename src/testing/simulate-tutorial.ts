@@ -26,7 +26,7 @@ export interface TutorialScenarioMove {
   /**
    * Seat override for this move.
    *
-   * Defaults to the top-level `seat` in `SimulateTutorialOptions`.
+   * Defaults to the tutorial's `learnerSeat`.
    */
   seat?: number;
 
@@ -58,13 +58,6 @@ export interface TutorialScenarioMove {
  * Options for `simulateTutorial`.
  */
 export interface SimulateTutorialOptions {
-  /**
-   * Default seat number (1-indexed) for the tutorial learner.
-   *
-   * Individual moves may override this via `TutorialScenarioMove.seat`.
-   */
-  seat: number;
-
   /** Ordered list of scripted moves. */
   scenario: TutorialScenarioMove[];
 
@@ -87,7 +80,7 @@ export interface SimulateTutorialOptions {
  */
 export interface SimulateTutorialResult {
   /**
-   * Whether the tutorial for the primary `seat` reached `status: 'completed'`.
+   * Whether the tutorial for the learner seat reached `status: 'completed'`.
    *
    * `true` only when the last step's `advanceWhen` fired and the engine
    * advanced past it. A tutorial with no `advanceWhen` on the last step
@@ -97,14 +90,14 @@ export interface SimulateTutorialResult {
   completed: boolean;
 
   /**
-   * The step id the tutorial rested on for the primary `seat` at the end of the
+   * The step id the tutorial rested on for the learner seat at the end of the
    * run. `null` only when no tutorial definition is attached (should not happen
    * in normal usage since `simulateTutorial` attaches the definition).
    */
   finalStepId: string | null;
 
   /**
-   * Step ids visited by the primary `seat` during the run, in visit order,
+   * Step ids visited by the learner seat during the run, in visit order,
    * deduplicated. Each step appears at most once (tutorials are forward-only).
    */
   stepsVisited: string[];
@@ -150,9 +143,9 @@ export interface SimulateTutorialResult {
  * different seed than the one you named.
  *
  * @param testGame - A started `TestGame` instance. The tutorial definition will
- *   be attached to `testGame.game` and tutorial progress initialized for `seat`.
+ *   be attached to `testGame.game` and tutorial progress initialized for its `learnerSeat`.
  * @param tutorialDef - The tutorial definition to run.
- * @param options - Seat, scenario moves, and optional declared seed.
+ * @param options - Scenario moves and optional declared seed.
  * @returns `{ completed, finalStepId, stepsVisited, seed }` after the scenario.
  *
  * @throws {Error} on gate drift, predicate drift, action failure, or a
@@ -162,7 +155,6 @@ export interface SimulateTutorialResult {
  * ```typescript
  * const testGame = TestGame.create(CheckersGame, { playerCount: 2, seed: 'pinned' });
  * const result = simulateTutorial(testGame, TUTORIAL_DEF, {
- *   seat: 1,
  *   scenario: [
  *     { action: 'move', args: { from: 'c3', to: 'd4' }, expectStep: 'capture-intro' },
  *     { action: 'move', args: { from: 'd4', to: 'f6' } },
@@ -176,7 +168,7 @@ export function simulateTutorial<G extends Game>(
   tutorialDef: TutorialDefinition,
   options: SimulateTutorialOptions,
 ): SimulateTutorialResult {
-  const { seat, scenario } = options;
+  const { scenario } = options;
 
   // 0. Seed-expectation check (fail-loud): an already-started game cannot be
   //    reseeded, so a mismatched options.seed means the run would NOT be
@@ -191,6 +183,7 @@ export function simulateTutorial<G extends Game>(
 
   // 1. Fail-loud validation (MR-03): surfaces structural problems at call time.
   validateTutorialDefinition(tutorialDef);
+  const seat = tutorialDef.learnerSeat;
 
   // 2. Attach the tutorial definition to the game instance.
   testGame.game.tutorialDefinition = tutorialDef;
