@@ -778,7 +778,7 @@ describe('executeOp', () => {
       ));
 
       expect(result.success).toBe(false);
-      expect(result.error).toMatch(/Invalid player seat/);
+      expect(result.error).toMatch(/This tutorial is for seat 1, so seat 0 cannot start it/);
       expect(result.category).toBe('protocol');
     });
   });

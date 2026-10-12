@@ -1230,15 +1230,10 @@ function handleStartTutorial(
   if (!def.tutorial) {
     return errorResult('No tutorial definition on this game.', 'protocol');
   }
-  // WR-01: validate seat range before touching any state, as handleDebugActionTraces does.
-  if (op.player < 1 || op.player > gameOptions.playerCount) {
-    return errorResult(
-      `Invalid player seat ${op.player}: must be between 1 and ${gameOptions.playerCount}.`,
-      'protocol',
-    );
-  }
   // IN-01: validate definition BEFORE constructing the runner (fail-loud before expensive work).
   validateTutorialDefinition(def.tutorial);
+  // Only the learner seat starts the tutorial, which also refuses a seat the
+  // table does not have before any state is touched.
   const { learnerSeat } = def.tutorial;
   if (op.player !== learnerSeat) {
     return errorResult(
