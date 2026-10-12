@@ -903,7 +903,7 @@ const heatmapSupportedProp = computed<boolean>(
   () => selectArchetype(gameView.value?.children ?? []) === 'grid-board'
 );
 
-// Show Tutorial group when the game definition has a tutorial attached.
+// Show Tutorial group when this seat is the learner seat of the game's tutorial.
 // Reads from broadcast state (hasTutorial is set by buildPlayerState).
 const hasTutorialProp = computed<boolean>(
   () => (state.value?.state as any)?.hasTutorial ?? false
