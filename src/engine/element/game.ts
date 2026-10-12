@@ -7,6 +7,8 @@ import {
   isPlayerElement,
   isPlayerIdentityAttribute,
   lookUpId,
+  PILE_BRANCH,
+  WITHHELD_PILE_BRANCH,
   readDynamicAttribute,
   registerElementClass,
   registerCreatedElementClass,
@@ -378,6 +380,11 @@ export function animationFloorOf(state: unknown): AnimationFloor {
  *   so a seat watching it rise would learn another seat played a private
  *   animation, and be pushed a changed view when nothing it may see changed
  *   (#487). `animationSeqBySeat` holds every seat's own counter (#489).
+ * - `pile`, the removed elements (#655), is hidden from every seat, count
+ *   included: a card a game cut from a hidden deck must stay unseen. A seat's
+ *   serialization already leaves it out (`serializeForSeat`); it is listed
+ *   here so no view type has it. A reference to an element in the pile reaches
+ *   a seat without its position, as `WITHHELD_PILE_BRANCH`.
  *
  * This destructure is the one list of those fields: `SeatViewJSON` and
  * `RestoreOnlyRootField` are derived from it. The object is rebuilt rather
@@ -386,8 +393,34 @@ export function animationFloorOf(state: unknown): AnimationFloor {
  * here is measurable in bot search time.
  */
 function withoutRestoreOnlyFields(root: ReturnType<Game['toJSON']>) {
-  const { messagesEvicted: _evicted, animationEventSeq: _seq, animationSeqBySeat: _seqBySeat, ...seatView } = root;
+  const { messagesEvicted: _evicted, animationEventSeq: _seq, animationSeqBySeat: _seqBySeat, pile: _pile, ...seatView } = root;
   return seatView;
+}
+
+/**
+ * The removed elements as `toJSON()` writes them, so a reference to one
+ * restores to it (#655): absent when the pile is empty, and in a world (which
+ * saves its partitions, never `toJSON()`) and a seat's serialization.
+ */
+function savedPile(game: Game): { pile?: ElementJSON[] } {
+  const piled = game.pile._t.children;
+  if (game._ctx._worldMode || game._ctx._seatView || piled.length === 0) return {};
+  return { pile: piled.map((child) => child.toJSON()) };
+}
+
+/**
+ * Run a serialization whose result goes to a seat, so a reference into the
+ * pile is written without its position and the pile itself is left out
+ * (#655). The saved state keeps both.
+ */
+function serializeForSeat<T>(ctx: ElementContext, write: () => T): T {
+  const outer = ctx._seatView;
+  ctx._seatView = true;
+  try {
+    return write();
+  } finally {
+    ctx._seatView = outer;
+  }
 }
 
 /** A seat's view of the game: the root as `toJSONForPlayer` writes it, without the restore-only fields. */
@@ -1498,6 +1531,18 @@ export class Game<
   // ============================================
   // Element Lookup
   // ============================================
+
+  /**
+   * Find an element by its branch path, in the tree or, for a path under
+   * `pile`, in the pile (#655). The reference a seat's view writes for an
+   * element in the pile finds nothing.
+   */
+  override atBranch(branch: string): GameElement | undefined {
+    if (branch === WITHHELD_PILE_BRANCH) return undefined;
+    const [first, ...rest] = branch.split('/');
+    if (first === PILE_BRANCH) return this.pile.atBranch(rest.join('/'));
+    return super.atBranch(branch);
+  }
 
   /**
    * Find an element by its ID anywhere in the game tree
@@ -4479,6 +4524,8 @@ export class Game<
     animationSeqBySeat?: Record<string, number>;
     /** Message-log front-eviction offset (#25) — see Game#messagesEvicted. */
     messagesEvicted?: number;
+    /** The elements in `game.pile`, when there are any (#655). Never in a seat's view. */
+    pile?: ElementJSON[];
   } {
     // CR-02: the top-level fields below MUST be copies, never live references.
     // `createActionCheckpoint`/`createSnapshot` store this result as-is, and
@@ -4533,6 +4580,7 @@ export class Game<
       // resumed game still resolves an old checkpoint's watermark correctly.
       // One number for the whole game, not a field on every line.
       ...(this._messagesEvicted > 0 && { messagesEvicted: this._messagesEvicted }),
+      ...savedPile(this),
       // Only include the events array if the buffer is non-empty (avoid
       // cluttering empty snapshots with an empty array).
       ...(this._animationEvents.length > 0 && {
@@ -4564,10 +4612,9 @@ export class Game<
    *   destroys other seats' history.
    */
   serializeMessageLog(forSeat?: number | null): MessageEntry[] {
-    const source = forSeat === undefined
-      ? this.messages
-      : this.messages.filter((m) => this.canSeeMessage(m, forSeat));
-    return this.serializeValue(source, 'messages') as MessageEntry[];
+    if (forSeat === undefined) return this.serializeValue(this.messages, 'messages') as MessageEntry[];
+    const source = this.messages.filter((m) => this.canSeeMessage(m, forSeat));
+    return serializeForSeat(this._ctx, () => this.serializeValue(source, 'messages')) as MessageEntry[];
   }
 
   /**
@@ -4584,7 +4631,7 @@ export class Game<
    *   this comment) keep their real id already, so they need no remap entry.
    */
   toJSONForPlayer(player: P | number | null, idRemap?: Map<number, number>): SeatViewJSON {
-    return this.redactTreeForSeat(this.toJSON(), player, idRemap);
+    return this.redactTreeForSeat(serializeForSeat(this._ctx, () => this.toJSON()), player, idRemap);
   }
 
   /**
@@ -4722,7 +4769,7 @@ export class Game<
     if (GameClass.playerView !== undefined) {
       return players.map((player) => this.toJSONForPlayer(player));
     }
-    const fullJson = this.toJSON();
+    const fullJson = serializeForSeat(this._ctx, () => this.toJSON());
     return players.map((player) => this.redactTreeForSeat(fullJson, player));
   }
 
@@ -5120,8 +5167,9 @@ export class Game<
   /**
    * Load a serialized state payload (a `game.toJSON()` result) into THIS existing
    * game instance, replacing the element tree, phase, messages, settings and
-   * animation buffer with the serialized values. The pile is not in the state,
-   * so it is emptied (#650).
+   * animation buffer with the serialized values. The pile is replaced too: it
+   * is part of the state, so a removed element a reference points at is still
+   * there (#655), and one the state holds in the tree is not also in the pile.
    *
    * The game's registered actions, flow definition and seeded RNG live on the
    * instance (not in the JSON) and are preserved. This is the authoritative way
@@ -5265,9 +5313,9 @@ export class Game<
     // Spaces ever have handlers to capture, and those are exactly the Spaces
     // whose ids round-trip.)
     //
-    // Handlers are saved from Spaces in the pile as well as the tree (#656): a
-    // removed Space keeps its handlers, and the state being restored may hold it
-    // in the tree again, as an undo of its removal does.
+    // Handlers are saved from, and given back to, Spaces in the pile as well as
+    // the tree (#656, #655): a removed Space keeps its handlers, and the state
+    // being restored may hold it in either place.
     const spaceHandlerKey = (space: Space): string => String(space.id);
     type CapturedHandlers = { enter: ElementEventHandler<GameElement>[]; exit: ElementEventHandler<GameElement>[] };
     const capturedHandlers = new Map<string, CapturedHandlers>();
@@ -5278,21 +5326,16 @@ export class Game<
       }
     }
 
-    // Empty the pile: it is not in the state, and an element removed after the
-    // state was taken comes back in the tree below, so a copy left here would
-    // share its id (#650). Every restore, in place or fresh, starts it empty.
-    this.pile._t.children = [];
-
-    // Clear existing children and rebuild the tree from JSON, then rebuild the
-    // id index from the finished tree (#632), so nothing the restore discarded
-    // stays in it and every rebuilt element is in it.
-    this._t.children = [];
-    if (json.children) {
-      for (const childJson of json.children) {
+    // Rebuild the tree and the pile from JSON (#655), then rebuild the id index
+    // from the finished tree (#632), so nothing the restore discarded stays in
+    // it and every rebuilt element is in it.
+    for (const [container, children] of [[this, json.children], [this.pile, json.pile]] as const) {
+      container._t.children = [];
+      for (const childJson of children ?? []) {
         const child = GameElement.fromJSON(childJson, this._ctx, this._ctx.classRegistry);
-        child._t.parent = this;
-        (child as GameElement).game = this;
-        this._t.children.push(child);
+        child._t.parent = container;
+        child.game = this;
+        container._t.children.push(child);
       }
     }
     this._ctx._elementsById.clear();
@@ -5303,7 +5346,7 @@ export class Game<
     // via devWarn — never silently, since a dropped handler is silent
     // game-logic loss (e.g. a scoring trigger that stops firing).
     if (capturedHandlers.size > 0) {
-      for (const space of this.all(Space)) {
+      for (const space of [...this.all(Space), ...this.pile.all(Space)]) {
         const key = spaceHandlerKey(space);
         const handlers = capturedHandlers.get(key);
         if (handlers) {
@@ -5316,12 +5359,10 @@ export class Game<
           `unbound-event-handlers:${key}`,
           `Space "${key}" had onEnter/onExit handlers registered before a snapshot ` +
           `restore, but the restored state has no Space with that element id, so these ` +
-          `handlers were dropped. If that Space had been removed when the state was ` +
-          `saved, this is expected: a removed Space is not part of a saved state, and ` +
-          `there is nothing to fix. Otherwise the Space structure changed between save ` +
-          `and restore (for example, a Space created only under some condition in the ` +
-          `constructor): create every Space that has onEnter/onExit handlers in the ` +
-          `constructor, always, and in the same order.`
+          `handlers were dropped. The Space structure changed between save and restore ` +
+          `(for example, a Space created only under some condition in the constructor): ` +
+          `create every Space that has onEnter/onExit handlers in the constructor, always, ` +
+          `and in the same order.`
         );
       }
     }
@@ -5383,9 +5424,10 @@ export class Game<
       );
     }
 
-    // Resolve element references in all restored elements
+    // Resolve element references in all restored elements, the pile's included.
     // This converts { __elementRef: "path" } objects back to actual element references
     this.resolveElementReferences(this);
+    this.pile.resolveElementReferences(this);
   }
 
   /**

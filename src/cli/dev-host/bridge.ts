@@ -352,7 +352,6 @@ const SHAPERS: { [T in Op['type']]: (result: OpResultFor<T>) => Reply } = {
       : refusal(r),
   cancelAction: outcomeOnly,
   undo: outcomeOnly,
-  botTurn: outcomeOnly,
   startTutorial: outcomeOnly,
   exitTutorial: outcomeOnly,
   hint: outcomeOnly,

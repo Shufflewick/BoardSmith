@@ -349,7 +349,7 @@ describe('dev host bridge', () => {
         debug: () => true,
         playerCount: 2,
         executeOp: (snap, pend, op) =>
-          executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op, { debug: true }),
+          executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op, { debug: true, fullHistory: true }),
         postGameState: () => {
           stateBroadcasts++;
         },
@@ -386,7 +386,7 @@ describe('dev host bridge', () => {
         debug: () => true,
         playerCount: 2,
         executeOp: (snap, pend, op) =>
-          executeOp(debugDataGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op, { debug: true }),
+          executeOp(debugDataGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op, { debug: true, fullHistory: true }),
         postGameState: (_seat, state) => pushed.push(state),
         postServerResponse: (seat, _requestId, result) => responses.push({ seat, result }),
       });
@@ -540,7 +540,7 @@ describe('dev host bridge', () => {
         playerCount: 2,
         debug: () => debug,
         executeOp: (snap, pend, op) =>
-          executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op, { debug }),
+          executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op, { debug, fullHistory: true }),
         postGameState: () => {},
         postServerResponse: (seat, _requestId, result) => responses.push({ seat, result }),
       });
@@ -573,7 +573,7 @@ describe('dev host bridge', () => {
         playerCount: 2,
         debug: () => debug,
         executeOp: (snap, pend, op) =>
-          executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op, { debug }),
+          executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op, { debug, fullHistory: true }),
         postGameState: () => {},
         postServerResponse: (_seat, _requestId, result) => responses.push(result),
       });
@@ -664,7 +664,7 @@ describe('dev host bridge', () => {
       debug: () => true,
       playerCount: 2,
       executeOp: (snap, pend, op) =>
-        executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op, { debug: true }),
+        executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op, { debug: true, fullHistory: true }),
       postGameState: () => {},
       postServerResponse: (seat, _requestId, result) => responses.push({ seat, result }),
     });

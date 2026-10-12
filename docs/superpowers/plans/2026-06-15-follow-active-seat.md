@@ -4,8 +4,9 @@
 > done, and its code snippets, identifiers and `git commit` lines are quoted as
 > they were on the day. The automaton has since been renamed from AI to BOT
 > everywhere (ShufflewickPub #28, engine contract r16), so `aiSeats` is now
-> `botSeats`, `aiLevel` is `botLevel`, `runAITurns()` is `runBotTurns()`, and
-> `aiTurn` is `botTurn`. Read the names below as history, never as current API.
+> `botSeats`, `aiLevel` is `botLevel` and `runAITurns()` is `runBotTurns()`;
+> the `aiTurn` op is gone (#677: a host searches with `botSuggest` and makes the
+> move as an `action`). Read the names below as history, never as current API.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

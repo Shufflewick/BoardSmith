@@ -2,15 +2,15 @@ import type { Game, GameClass, TutorialDefinition } from '../engine/index.js';
 import {
   GameRunner,
   type GameStateSnapshot,
-  type CheckpointPolicy,
+  type RunnerCheckpointPolicy,
   type UndoPolicy,
   type RandomnessPolicy,
 } from '../runtime/index.js';
 
-/** What rebuilding a runner reads off a game definition, with the host's randomness policy resolved. */
+/** What rebuilding a runner reads off a game definition, with the host's randomness and history policies resolved. */
 interface RunnerPolicies {
   gameClass: GameClass;
-  checkpoints?: CheckpointPolicy;
+  checkpoints?: RunnerCheckpointPolicy;
   undo?: UndoPolicy;
   tutorial?: TutorialDefinition;
   readonly randomness: RandomnessPolicy;

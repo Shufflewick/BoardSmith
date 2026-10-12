@@ -7,7 +7,8 @@
 > **ARCHIVED, PRE-RENAME.** The names below are quoted as they stood on
 > 2026-06-15. The automaton has since been renamed from AI to BOT everywhere
 > (ShufflewickPub #28, engine contract r16): `aiSeats` is now `botSeats`,
-> `aiLevel` is `botLevel`, `aiTurn` is `botTurn`. Read them as history.
+> `aiLevel` is `botLevel`, and the `aiTurn` op is gone (#677: a host searches
+> with `botSuggest` and makes the move as an `action`). Read them as history.
 
 ## Problem
 

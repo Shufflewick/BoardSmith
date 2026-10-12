@@ -121,6 +121,12 @@ export type ElementContext = {
    */
   _worldMode?: boolean;
   /**
+   * Internal: true while `Game` serializes for a seat (a view, or a seat's
+   * message log), so a reference into the pile is written without its
+   * position (#655). Not public API.
+   */
+  _seatView?: boolean;
+  /**
    * Internal: the elements the platform has declared partition roots
    * (`Game#definePartition`, which `Game#adoptSubtree` calls for every graft),
    * BY ID. A map rather than a set of ids because every pass over the roots
