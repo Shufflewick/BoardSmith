@@ -1279,30 +1279,17 @@ describe('executeOp', () => {
 
     // ── success path ──────────────────────────────────────────────────────
 
-    it('botSuggest returns success with suggestedAction + suggestedArgs + botPlayer, snapshot unchanged', async () => {
+    it('botSuggest answers with the move alone: no snapshot and no seat views (#675)', async () => {
       const snapshot = await startBotSuggestGame();
       const res = succeeded(await executeOp(botSuggestGameDef, botSuggestOpts, snapshot, null, {
         type: 'botSuggest',
         seats: [{ seat: 1 }],
       }));
 
-      expect(res.success).toBe(true);
-      expect(res.suggestedAction).toBeDefined();
+      expect(Object.keys(res).sort()).toEqual(['botPlayer', 'success', 'suggestedAction', 'suggestedArgs']);
+      expect(res.botPlayer).toBe(1);
       expect(typeof res.suggestedAction).toBe('string');
       expect(res.suggestedArgs).toBeDefined();
-      expect(res.botPlayer).toBe(1);
-
-      // Read-only: no action was executed — actionHistory is still empty.
-      // (MCTS simulation may update internal flow counters on the runner, but
-      // no game-logical move was recorded. The invariant is "no performAction",
-      // not "zero internal state mutation during MCTS".)
-      const snapObj = res.snapshot as { actionHistory?: unknown[] };
-      expect(snapObj.actionHistory ?? []).toHaveLength(0);
-
-      // Game is still awaiting the same player (seat 1) for the same actions.
-      const flowState = res.snapshot.flowState as { currentPlayer?: number; availableActions?: string[] };
-      expect(flowState.currentPlayer).toBe(1);
-      expect(flowState.availableActions).toContain('move');
     });
 
     // ── what a search answers besides a move (#29, #421, #635) ───────────
@@ -1315,8 +1302,7 @@ describe('executeOp', () => {
         seats: [{ seat: 2 }],
       }));
 
-      expect(res.botPlayer).toBeUndefined();
-      expect(res.botStalled).toBeUndefined();
+      expect(res).toEqual({ success: true });
     });
 
     it('botSuggest searches a game with no bot configuration, as a bot seat plays it', async () => {

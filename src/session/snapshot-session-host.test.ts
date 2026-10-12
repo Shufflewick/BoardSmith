@@ -307,7 +307,7 @@ describe('SnapshotSessionHost', () => {
         playerCount: 2,
         executeOp: stubExecuteOp(async (_snap, _pend, op) => {
           if (op.type === 'start') return { ...baseResult, snapshot: { turn: 0, flowState: {}, winners: [], actionHistory: [] } };
-          if (op.type === 'botSuggest') return { ...baseResult, botPlayer: 2, suggestedAction: 'name', suggestedArgs: {} };
+          if (op.type === 'botSuggest') return { success: true, botPlayer: 2, suggestedAction: 'name', suggestedArgs: {} };
           if (op.type === 'action') {
             botCallCount++;
             return { success: false, error: 'Missing required selection: namedType', category: 'bundle' };
@@ -358,7 +358,7 @@ describe('SnapshotSessionHost', () => {
           executeOp: stubExecuteOp(async (_snap, _pend, op) => {
             if (op.type === 'botSuggest') {
               botCallCount++;
-              return { ...baseResult };
+              return { success: true };
             }
             return { ...baseResult };
           }),
@@ -397,8 +397,8 @@ describe('SnapshotSessionHost', () => {
           }
           if (op.type === 'botSuggest') {
             botCallCount++;
-            if (botCallCount === 1) return { ...baseResult, botPlayer: 2, suggestedAction: 'go', suggestedArgs: {} };
-            return { ...baseResult };
+            if (botCallCount === 1) return { success: true, botPlayer: 2, suggestedAction: 'go', suggestedArgs: {} };
+            return { success: true };
           }
           if (op.type === 'action' && op.player === 2) {
             return { ...baseResult, snapshot: { turn: 1, flowState: {}, winners: [], actionHistory: [] } };
@@ -456,7 +456,7 @@ describe('SnapshotSessionHost', () => {
               // First pump's first search stalls until we release it, while the
               // second runBotTurns() is pending.
               if (botCall === 1) return await firstBotCallPromise;
-              return { ...baseResult };
+              return { success: true };
             } finally {
               concurrentBotTurns--;
             }
@@ -472,7 +472,7 @@ describe('SnapshotSessionHost', () => {
 
       const pump1 = host.runBotTurns(); // stalls on the first search
       const pump2 = host.runBotTurns(); // joins pump1
-      resolveFirstBotCall({ ...baseResult });
+      resolveFirstBotCall({ success: true });
       await Promise.all([pump1, pump2]);
 
       // The core guarantee: the two pumps never searched concurrently.
@@ -514,7 +514,7 @@ describe('SnapshotSessionHost', () => {
         // A buggy bundle whose bot ALWAYS finds a move — would loop forever
         // without the cap.
         executeOp: stubExecuteOp(async (_snap, _pend, op) => {
-          if (op.type === 'botSuggest') return { ...base, botPlayer: 2, suggestedAction: 'go', suggestedArgs: {} };
+          if (op.type === 'botSuggest') return { success: true, botPlayer: 2, suggestedAction: 'go', suggestedArgs: {} };
           if (op.type === 'action' && op.player === 2) {
             botCallCount++;
             return { ...base };
@@ -1173,15 +1173,11 @@ describe('SnapshotSessionHost', () => {
                 success: false,
                 error: 'No actable seat (simulated game-over)',
                 category: 'protocol' as const,
-                snapshot: snap,
-                playerViews: [],
               };
             }
             // Return a deterministic canned move (direction='left')
             return {
               success: true,
-              snapshot: snap,
-              playerViews: [],
               botPlayer: 1,
               suggestedAction: 'move',
               suggestedArgs: { direction: 'left' } as Record<string, unknown>,
