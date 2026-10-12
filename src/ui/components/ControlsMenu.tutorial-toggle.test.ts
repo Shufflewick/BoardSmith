@@ -14,6 +14,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import ControlsMenu from './ControlsMenu.vue';
+import { Game, Player, Action, actionStep, type GameOptions } from '../../engine/index.js';
+import { executeOp } from '../../session/stateless-ops.js';
+import { succeeded } from '../../session/op-result.test-helper.js';
 
 // jsdom lacks matchMedia
 vi.stubGlobal('matchMedia', vi.fn(() => ({
@@ -107,6 +110,63 @@ describe('ControlsMenu — Tutorial group toggle (R-02)', () => {
 
     const btn = findTutorialButton();
     expect(btn).toBeUndefined();
+    wrapper.unmount();
+  });
+});
+
+// ── Session to menu: only the learner seat is offered the tutorial (#678) ───
+//
+// The menu's hasTutorial prop is GameShell's read of the seat's broadcast
+// `state.hasTutorial`. These tests start a real game with a seat-1 tutorial,
+// take each seat's broadcast, and mount the menu with what GameShell would pass.
+
+class OneSeatTurnGame extends Game<OneSeatTurnGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(Action.create('pass').execute(() => ({ success: true })));
+    this.setFlow({ root: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! }) });
+  }
+}
+
+async function broadcastHasTutorial(seat: number): Promise<boolean> {
+  const started = succeeded(await executeOp(
+    {
+      gameClass: OneSeatTurnGame,
+      gameType: 'one-seat-turn',
+      minPlayers: 2,
+      maxPlayers: 2,
+      tutorial: {
+        learnerSeat: 1,
+        steps: [{ id: 'intro', gate: { action: 'pass' }, content: [{ text: 'Take a pass action.' }] }],
+      },
+    },
+    { playerCount: 2, seed: 'learner-seat-menu' },
+    null,
+    null,
+    { type: 'start' },
+  ));
+  const views = started.playerViews as Array<{ state: { hasTutorial?: boolean } }>;
+  return views[seat - 1].state.hasTutorial ?? false;
+}
+
+describe('ControlsMenu: Start tutorial is offered only to the learner seat (#678)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('seat 1 sees "Start tutorial" on a seat-1 tutorial', async () => {
+    const wrapper = mountMenu({ hasTutorial: await broadcastHasTutorial(1) });
+    await wrapper.find('button.menubtn').trigger('click');
+
+    expect(findTutorialButton()?.textContent?.trim()).toBe('Start tutorial');
+    wrapper.unmount();
+  });
+
+  it('seat 2 does not see "Start tutorial" on a seat-1 tutorial', async () => {
+    const wrapper = mountMenu({ hasTutorial: await broadcastHasTutorial(2) });
+    await wrapper.find('button.menubtn').trigger('click');
+
+    expect(findTutorialButton()).toBeUndefined();
     wrapper.unmount();
   });
 });
