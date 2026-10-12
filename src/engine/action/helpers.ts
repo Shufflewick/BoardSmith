@@ -58,7 +58,7 @@ export function wrapFilterWithHelpfulErrors<T>(
 }
 
 // ============================================
-// Action Temp State (for choices → execute)
+// Action Temp State (carried from one step to a later one)
 // ============================================
 
 /**
@@ -68,7 +68,7 @@ export function wrapFilterWithHelpfulErrors<T>(
 export interface ActionTempState {
   /**
    * Store a value in temporary state.
-   * Values persist between choices() and execute() calls.
+   * Values stay in game state until `clear()`.
    */
   set(key: string, value: unknown): void;
 
@@ -78,44 +78,47 @@ export interface ActionTempState {
   get<T>(key: string): T | undefined;
 
   /**
-   * Clear all temporary state for this action/player.
-   * Call this in execute() after you're done with the temp state.
+   * Clear all temporary state for this name and player.
+   * Call this once the value has been used.
    */
   clear(): void;
 }
 
 /**
- * Creates a helper for storing temporary state between choices() and execute().
+ * Creates a helper for keeping a value that is not an element in game state,
+ * so a later step can read it: from one action's `execute` to a later action,
+ * or from a pick's `onSelect` to `execute`.
  *
- * **CRITICAL**: Module-level variables (Maps, arrays, etc.) do NOT persist
- * between choices() and execute() because they run in different contexts.
+ * **CRITICAL**: Module-level variables (Maps, arrays, etc.) do NOT carry a
+ * value between actions, because they may run in different contexts.
  * Always use this helper for temporary action state.
  *
- * Writing through it (`set`, `clear`) marks the game changed, so a `choices`
- * callback that writes temp state is run again on every question instead of
- * having its answer reused (#631), and what `execute` reads is what the last
- * run for the submitted picks wrote. A direct write to `game.settings` is not
- * seen that way.
+ * Write it only from game code that changes the game (an `execute`, an
+ * `onSelect`, a flow step). Never write it from a candidate callback
+ * (`choices`, `elements`, `from`, `filter`): those run on every question about
+ * a pick, so the write happens again each time (#674).
  *
  * @example
  * ```typescript
  * import { actionTempState } from 'boardsmith';
  *
- * Action.create('armsDealer')
- *   .chooseFrom('equipment', {
- *     choices: (ctx) => {
- *       const temp = actionTempState(ctx, 'armsDealer');
- *       const equipment = ctx.game.equipmentDeck.draw();
- *       temp.set('drawnEquipment', equipment.id);
- *       return [equipment, { value: 'skip', label: 'Skip' }];
+ * Action.create('explore')
+ *   .chooseElement('sector', { elementClass: Sector })
+ *   .execute((args, ctx) => {
+ *     actionTempState(ctx, 'explore').set('sectorId', args.sector.id);
+ *   });
+ *
+ * Action.create('collectLoot')
+ *   .chooseElement('loot', {
+ *     elements: (ctx) => {
+ *       const sectorId = actionTempState(ctx, 'explore').get<number>('sectorId');
+ *       if (sectorId === undefined) return [];
+ *       return ctx.game.getElementById(sectorId)!.all(Equipment);
  *     },
  *   })
  *   .execute((args, ctx) => {
- *     const temp = actionTempState(ctx, 'armsDealer');
- *     const equipmentId = temp.get<number>('drawnEquipment');
- *     const equipment = ctx.game.getElementById(equipmentId);
- *     temp.clear(); // Clean up
- *     // ... use equipment
+ *     args.loot.putInto(ctx.player.stash);
+ *     actionTempState(ctx, 'explore').clear(); // Clean up
  *   });
  * ```
  *

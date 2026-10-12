@@ -700,52 +700,56 @@ always calling `registerElements([...])` up front still matters.
 
 ### The Problem
 
-Choice callbacks in `chooseFrom` are evaluated when building action metadata, **before the player acts**. This causes issues when your choices have side effects:
+A candidate callback (`choices`, `elements`, `from`, `filter`) runs every time
+the engine or the UI asks about a pick: the flow's offer, move enumeration, the
+UI's request, and validating the submission. A side effect in one happens on
+every run:
 
 ```typescript
-// WRONG - Draws cards every time action metadata is built!
+// WRONG - Draws 3 more cards every time anything asks about the pick!
 Action.create('hireFirstMerc')
-  .chooseFrom('merc', {
-    choices: (ctx) => {
-      // This runs on EVERY state update, not when player clicks
-      const drawn = ctx.game.mercDeck.drawCards(3);  // Side effect!
-      return drawn;
-    },
+  .chooseElement('merc', {
+    elements: (ctx) => ctx.game.mercDeck.drawTo(ctx.game.mercOffer, 3),  // Side effect!
   })
 ```
 
 This causes:
-- Cards drawn before player intends to act
-- Cards drawn multiple times during the same turn
-- Deck state corruption
+- Cards drawn before the player acts, and again on every question
+- The submission refused: validating it runs the callback again, which draws
+  different cards, so the card the player picked is no longer offered
+- Cards drawn by earlier runs never returned to the deck
 
 ### The Solution
 
-Choices are now always evaluated on-demand when the player needs to make the selection. This is the default behavior - no special configuration needed:
+Draw in an earlier step, into a space, and have the pick offer what is in that
+space. The candidate callback then only reads the game, so every question gets
+the same answer:
 
 ```typescript
-// CORRECT - Choices evaluated when player clicks
+// CORRECT - The flow draws once; the pick offers what was drawn
 Action.create('hireFirstMerc')
-  .chooseFrom('merc', {
-    choices: (ctx) => {
-      // This runs when player needs to make the selection
-      const drawn = ctx.game.mercDeck.drawCards(3);
-      return drawn;
-    },
+  .chooseElement('merc', {
+    elementClass: Merc,
+    from: (ctx) => ctx.game.mercOffer,
   })
+  .execute((args, ctx) => {
+    args.merc.putInto(ctx.player.team);
+    for (const merc of ctx.game.mercOffer.all(Merc)) {
+      merc.putInto(ctx.game.mercDeck, { position: 'last' });
+    }
+  });
+
+// flow.ts
+sequence(
+  execute((ctx) => ctx.game.mercDeck.drawTo(ctx.game.mercOffer, 3), { irreversible: true }),
+  actionStep({ actions: ['hireFirstMerc'] }),
+)
 ```
 
-A callback with side effects still runs on every question about the pick
-(the offer, move enumeration, validating the submission), so its effects
-happen each time. Only some writes are seen by the engine: creating, moving or
-removing an element, drawing from `game.random`, and writing through
-`actionTempState()`. A callback that makes one of those is run again on every
-question. Any other write (a game or element attribute, `game.settings`
-directly) is not seen, the callback is not run again for the same picks, and
-`execute` may read a value written for different picks. Keep state that
-`execute` needs in `actionTempState()`.
+The same goes for rolling dice, moving elements and writing temp state: do it
+in an `execute`, an `onSelect` or a flow step, never in a candidate callback.
 
-See [On-Demand Choices](./actions-and-flow.md#on-demand-choices) in the Actions & Flow documentation for full details.
+See [Full Example: Draw, Then Pick](./actions-and-flow.md#full-example-draw-then-pick) in the Actions & Flow documentation for full details.
 
 ---
 
@@ -753,33 +757,31 @@ See [On-Demand Choices](./actions-and-flow.md#on-demand-choices) in the Actions 
 
 ### The Problem
 
-You try to cache data in a module-level variable to share between `choices()` and `execute()`, but the data is missing when `execute()` runs:
+You try to keep a value in a module-level variable so a later action can read
+it, but the value is missing when the later action runs:
 
 ```typescript
 // ❌ WRONG - Module-level caching will NOT work!
-const drawnEquipmentCache = new Map<string, Equipment>();
+let exploredSectorId: number | undefined;
 
-Action.create('armsDealer')
-  .chooseFrom('equipment', {
-    choices: (ctx) => {
-      const equipment = ctx.game.equipmentDeck.draw();
-      drawnEquipmentCache.set(`player_${ctx.player.seat}`, equipment);  // Set here...
-      return [equipment, { value: 'skip', label: 'Skip' }];
-    },
-  })
-  .execute((args, ctx) => {
-    const key = `player_${ctx.player.seat}`;
-    const equipment = drawnEquipmentCache.get(key);  // ...undefined here!
-    console.log('Equipment from cache:', equipment);  // "NONE"
+Action.create('explore')
+  .chooseElement('sector', { elementClass: Sector })
+  .execute((args) => {
+    exploredSectorId = args.sector.id;  // Set here...
+  });
+
+Action.create('collectLoot')
+  .chooseElement('loot', {
+    elements: (ctx) => ctx.game.getElementById(exploredSectorId!)!.all(Equipment),  // ...undefined here!
   });
 ```
 
 ### Why This Happens
 
-The `choices()` and `execute()` callbacks run in **different contexts**:
-- `choices()` runs when building the UI/validating
-- `execute()` runs when the player submits their choice
+The two actions may run in **different contexts**:
+- Each action runs on its own request from the player
 - With network play, these may be completely different server instances
+- A restore (undo, reload, a bot's search) puts the game back without the variable
 
 Module-level variables don't survive across these boundaries.
 
@@ -788,33 +790,31 @@ Module-level variables don't survive across these boundaries.
 ```typescript
 import { Action, actionTempState } from 'boardsmith';
 
-Action.create('armsDealer')
-  .chooseFrom('equipment', {
-    choices: (ctx) => {
-      const temp = actionTempState(ctx, 'armsDealer');
-      const equipment = ctx.game.equipmentDeck.draw();
-      temp.set('drawnEquipment', equipment.id);  // Store in game state
-      return [equipment, { value: 'skip', label: 'Skip' }];
+Action.create('explore')
+  .chooseElement('sector', { elementClass: Sector })
+  .execute((args, ctx) => {
+    actionTempState(ctx, 'explore').set('sectorId', args.sector.id);  // Store in game state
+  });
+
+Action.create('collectLoot')
+  .chooseElement('loot', {
+    elements: (ctx) => {
+      const sectorId = actionTempState(ctx, 'explore').get<number>('sectorId');  // ✓ Works!
+      if (sectorId === undefined) return [];
+      return ctx.game.getElementById(sectorId)!.all(Equipment);
     },
   })
   .execute((args, ctx) => {
-    const temp = actionTempState(ctx, 'armsDealer');
-    const equipmentId = temp.get<number>('drawnEquipment');  // ✓ Works!
-    const equipment = ctx.game.getElementById(equipmentId) as Equipment;
-    temp.clear();  // Always clean up
-
-    if (args.equipment === 'skip') {
-      sector.addToStash(equipment);
-    } else {
-      // Equip to merc...
-    }
+    args.loot.putInto(ctx.player.stash);
+    actionTempState(ctx, 'explore').clear();  // Always clean up
   });
 ```
 
 **Key points:**
 - `actionTempState()` stores data in `game.settings` which persists correctly
-- Automatically namespaced by action name and player
-- Always call `temp.clear()` in `execute()` to clean up
+- Namespaced by the name you pass and the player
+- Write it from an `execute`, an `onSelect` or a flow step, never from a candidate callback
+- Always call `temp.clear()` once the value has been used
 
 See [Using actionTempState()](./actions-and-flow.md#using-actiontempstate-for-temp-state) for full documentation.
 
@@ -2082,7 +2082,7 @@ class MyGame extends Game<MyGame, MyPlayer> {
 | Loop safety | No `maxIterations` (now a construction-time throw) | `loop({ maxIterations: 100, ... })` |
 | Class registration | Forget to register a custom class | `registerElements([MyClass])` (built-ins like `Die`/`Card` are auto-registered) |
 | Action reachability | Typo in `actionStep({ actions: [...] })` | Fixed name; `startFlow()` throws on a genuine typo in the static array form |
-| Side effects in choices | N/A (no longer an issue) | Choices always evaluated on-demand |
+| Side effects in choices | Draw cards in `choices` | Draw in an earlier step; offer that space with `from` |
 | **Module-level caching** | `const cache = new Map()` | `actionTempState(ctx, 'action')` |
 | **Element storage** | `stash: Equipment[] = []` | `stashZone.all(Equipment)` |
 | **Action debugging** | Guessing why action unavailable | `game.debugActionAvailability(name, player)` |

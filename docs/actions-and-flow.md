@@ -299,37 +299,37 @@ worked out once.
 
 #### On-Demand Choices
 
-Choices are always evaluated on-demand when the player needs to make a selection. This means the `choices` callback runs at the moment the player is presented with the selection, not when the action metadata is built.
+Choices are always evaluated on-demand when the player needs to make a selection. This means the `choices` callback runs at the moment the player is presented with the selection, not when the action metadata is built, so choices can depend on the current game state.
 
-**This enables:**
-- Choices that depend on the current game state
-- Choice computation with side effects, such as drawing cards from a deck and
-  recording them with `actionTempState()`
-
-A callback with side effects runs on every question about the pick (the offer,
-move enumeration, validating the submission), not once, so its effects happen
-each time. Only the writes listed in
-[A pick's candidates are worked out once per game state](#a-picks-candidates-are-worked-out-once-per-game-state)
-are seen; make every write in a callback one of those.
+A candidate callback (`choices`, `elements`, `from`, `filter`) answers a
+question; it does not make a move. It runs whenever something asks about the
+pick: the flow's offer, move enumeration, the UI's request, and validating the
+submission. **Keep it free of side effects.** Do not draw cards, move elements,
+roll dice or write temp state in one. Every run does it again, so the cards the
+player was shown are gone by the time the submission is checked, the
+submission is refused, and the cards drawn by earlier runs are never returned.
+Make the change in an earlier step instead, into a space the pick offers from;
+see [Full Example: Draw, Then Pick](#full-example-draw-then-pick).
 
 > ⚠️ **CRITICAL: Module-Level Variables Don't Work**
 >
-> The `choices()` and `execute()` callbacks run in **different contexts**. Module-level variables (Maps, arrays, objects outside the action) will NOT persist between them:
+> One action's `execute` and a later action may run in **different contexts**
+> (another server process, or after a restore). Module-level variables (Maps,
+> arrays, objects outside the action) will NOT carry a value between them:
 >
 > ```typescript
 > // ❌ WRONG - This will NOT work!
-> const drawnCache = new Map<string, Equipment>();
+> let exploredSectorId: number | undefined;
 >
-> Action.create('armsDealer')
->   .chooseFrom('equipment', {
->     choices: (ctx) => {
->       const equipment = deck.draw();
->       drawnCache.set('drawn', equipment);  // Set in choices...
->       return [equipment];
->     },
->   })
->   .execute((args, ctx) => {
->     const equipment = drawnCache.get('drawn');  // ...empty in execute!
+> Action.create('explore')
+>   .chooseElement('sector', { elementClass: Sector })
+>   .execute((args) => {
+>     exploredSectorId = args.sector.id;  // Set in one action...
+>   });
+>
+> Action.create('collectLoot')
+>   .chooseElement('loot', {
+>     elements: (ctx) => ctx.game.getElementById(exploredSectorId!)!.all(Equipment),  // ...unset in the next
 >   });
 > ```
 >
@@ -337,107 +337,104 @@ are seen; make every write in a callback one of those.
 
 #### Using `actionTempState()` for Temp State
 
-The `actionTempState()` helper provides a clean API for storing state between `choices()` and `execute()`:
+The `actionTempState()` helper keeps a value that is not an element in the
+game's state, so a later step can read it: from one action's `execute` to a
+later action, or from a pick's `onSelect` to `execute`. Write it only from game
+code that changes the game (an `execute`, an `onSelect`, a flow step), never
+from a candidate callback.
 
 ```typescript
 import { Action, actionTempState } from 'boardsmith';
 
-Action.create('armsDealer')
-  .chooseFrom('equipment', {
-    choices: (ctx) => {
-      const temp = actionTempState(ctx, 'armsDealer');
-      const equipment = ctx.game.equipmentDeck.draw();
-      temp.set('drawnEquipment', equipment.id);
-      return [equipment, { value: 'skip', label: 'Skip (add to stash)' }];
+Action.create('explore')
+  .chooseElement('sector', { elementClass: Sector })
+  .execute((args, ctx) => {
+    actionTempState(ctx, 'explore').set('sectorId', args.sector.id);
+  });
+
+Action.create('collectLoot')
+  .chooseElement('loot', {
+    elements: (ctx) => {
+      const sectorId = actionTempState(ctx, 'explore').get<number>('sectorId');
+      if (sectorId === undefined) return [];  // Asked before anything was explored
+      return ctx.game.getElementById(sectorId)!.all(Equipment);
     },
   })
   .execute((args, ctx) => {
-    const temp = actionTempState(ctx, 'armsDealer');
-    const equipmentId = temp.get<number>('drawnEquipment');
-    const equipment = ctx.game.getElementById(equipmentId) as Equipment;
-    temp.clear();  // Always clean up!
-
-    if (args.equipment === 'skip') {
-      sector.addToStash(equipment);
-    } else {
-      // Equip to merc...
-    }
+    args.loot.putInto(ctx.player.stash);
+    actionTempState(ctx, 'explore').clear();  // Always clean up!
   });
 ```
 
 **API:**
 - `temp.set(key, value)` - Store a value
 - `temp.get<T>(key)` - Retrieve a value (typed)
-- `temp.clear()` - Remove all temp state for this action/player
+- `temp.clear()` - Remove all temp state for this name and player
 
-The helper automatically namespaces by action name and player, so multiple players or actions won't conflict.
+The helper namespaces by the name you pass and the player, so multiple players
+or actions won't conflict. Both actions above pass `'explore'`, so the second
+reads what the first wrote for the same player.
 
-Writing through `temp.set` or `temp.clear` marks the game changed, so a
-`choices` callback that writes temp state runs on every question and is never
-answered from an earlier run: `execute` reads what the run for the submitted
-picks wrote. Write temp state only through this helper. A direct
-`game.settings` write from `choices` is not seen, and `execute` could read a
-value written for a different earlier pick.
+If what you want to remember is where elements are (cards drawn, loot set
+aside), put the elements in a space instead. The space is the record, and the
+UI already shows it.
 
-#### Full On-Demand Choices Example
+#### Full Example: Draw, Then Pick
 
 ```typescript
+// game.ts
+mercDeck = this.create(Deck, 'mercDeck');
+mercOffer = this.create(Space, 'mercOffer');
+
 Action.create('hireFirstMerc')
   .prompt('Choose a MERC to hire')
-  .condition({
-    'player has no team yet': (ctx) => ctx.player.team.length === 0,
-  })
-  .chooseFrom('merc', {
-    choices: (ctx) => {
-      const temp = actionTempState(ctx, 'hireFirstMerc');
-      const drawn = ctx.game.mercDeck.drawCards(3);
-      temp.set('drawnIds', drawn.map(m => m.id));
-      return drawn;
-    },
-    display: (merc) => merc.displayName,
+  .chooseElement('merc', {
+    elementClass: Merc,
+    from: (ctx) => ctx.game.mercOffer,
   })
   .execute((args, ctx) => {
-    const temp = actionTempState(ctx, 'hireFirstMerc');
-    const merc = args.merc;
-    ctx.player.team.push(merc);
-
-    // Return unused mercs to deck
-    const drawnIds = temp.get<number[]>('drawnIds') ?? [];
-    for (const id of drawnIds) {
-      if (id !== merc.id) {
-        const card = ctx.game.getElementById(id);
-        if (card) ctx.game.mercDeck.addToBottom(card);
-      }
+    args.merc.putInto(ctx.player.team);
+    // Return unused mercs to the bottom of the deck
+    for (const merc of ctx.game.mercOffer.all(Merc)) {
+      merc.putInto(ctx.game.mercDeck, { position: 'last' });
     }
-
-    temp.clear();
-    return { success: true };
   });
+
+// flow.ts
+sequence(
+  // The player now sees these cards, so undo must not reach back and redraw.
+  execute((ctx) => ctx.game.mercDeck.drawTo(ctx.game.mercOffer, 3), { irreversible: true }),
+  actionStep({ actions: ['hireFirstMerc'] }),
+)
 ```
 
 **How it works:**
-1. Player sees "Hire First MERC" button
-2. Player clicks button
-3. Server evaluates choices callback NOW (draws 3 cards, stores IDs)
-4. UI receives choices and shows selection dropdown
-5. Player picks one, `execute()` runs with temp state available
+1. The flow's `execute` step draws 3 MERCs from the deck into `mercOffer`.
+2. The flow offers `hireFirstMerc`. Its pick offers the MERCs in `mercOffer`:
+   the Action Panel lists them as buttons, and a custom UI shows the space and
+   sends the id of the MERC the player clicks. Nothing in the pick changes the
+   game, so every question about it gets the same three MERCs.
+3. The player picks one. The engine checks it against the same three, and
+   `execute` moves it to the team and returns the other two to the deck.
 
-> **Important: UI Sync Limitation**
+If the player should choose when to draw (a button that reveals the cards),
+make the draw its own action with the same `drawTo` in its `execute`, and put
+the two actions in a sequence, as below.
+
+> **Important: The UI sees changes when a step ends**
 >
-> State changes made in `choices()` or `elements()` callbacks happen **server-side only**. The client's `gameView` is NOT updated until the entire action completes (after `execute()` runs).
+> The client's `gameView` is updated after an action's `execute` or a flow step
+> finishes, not part way through an action. That is why the draw belongs in an
+> earlier step: by the time the pick is offered, the drawn cards are in a space
+> the UI already shows.
 >
-> This means:
-> - The UI won't show the drawn cards, updated counts, or state changes immediately
-> - Custom game boards must read from `game.settings` to see mid-action state
-> - If your UI needs to reflect state changes before selection, consider splitting into two actions in your flow
->
-> **Example: Two-Action Pattern for UI Updates**
+> **Example: Two-Action Pattern**
 > ```typescript
 > // flow.ts - Split exploration into two actions
 > phase('explore', {
 >   do: sequence(
 >     actionStep({ actions: ['explore'] }),       // Draws equipment, updates state
->     actionStep({ actions: ['collectLoot'] }),   // UI now shows updated state
+>     actionStep({ actions: ['collectLoot'], turnScope: 'continue' }),  // UI now shows updated state
 >   ),
 > })
 > ```

@@ -76,7 +76,7 @@ import {
 
 ### Action State
 
-- `actionTempState()` - Persist state between choices and execute
+- `actionTempState()` - Carry a value from one step to a later one (never written from `choices`)
 
 ### Flow System
 
