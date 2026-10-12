@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { onlyTestCollectionChanged } from './test-config-edit.js';
-import { generateVitestConfig } from './test-run-scope.js';
 
 /**
  * #479: chunk-merge vouches for a vitest config edit with the signed chunks' own tests only when the
@@ -15,9 +14,11 @@ describe('onlyTestCollectionChanged', () => {
     expect(onlyTestCollectionChanged(config(" include: ['x'], globals: true "), config(" globals: true "))).toBe(true);
   });
 
-  it('accepts the exclusion edit doctor makes to the config BoardSmith writes', () => {
-    const written = generateVitestConfig(undefined);
-    expect(onlyTestCollectionChanged(written, written.replace('test: { exclude: [', 'test: { exclude: ["dist/**", '))).toBe(true);
+  it("accepts an edit to the excludes a game passes to BoardSmith's config (#528)", () => {
+    const game = (exclude: string) =>
+      `import { defineGameViteConfig } from 'boardsmith/vite-config';\nexport default defineGameViteConfig({ test: { exclude: ${exclude} } });\n`;
+    expect(onlyTestCollectionChanged(game("['tests/tdd/**']"), game("['tests/tdd/**', 'dist/**']"))).toBe(true);
+    expect(onlyTestCollectionChanged(game("['a']"), game("['a']").replace('test: {', "test: { setupFiles: ['s.ts'],"))).toBe(false);
   });
 
   it('refuses any other edit: setup files, aliases, environment, or an include outside test', () => {
@@ -88,11 +89,6 @@ describe('onlyTestCollectionChanged', () => {
       const local = (exclude: string) =>
         `const defineConfig = (c) => c;\nexport default defineConfig({ test: { exclude: ${exclude} } });\n`;
       expect(onlyTestCollectionChanged(local("['a']"), local("['a', 'b']"))).toBe(false);
-    });
-
-    it('accepts the config BoardSmith writes, merged over a base config', () => {
-      const written = generateVitestConfig('vite.config.ts');
-      expect(onlyTestCollectionChanged(written, written.replace('test: { exclude: [', 'test: { exclude: ["dist/**", '))).toBe(true);
     });
 
     it('refuses a config that does not parse', () => {
