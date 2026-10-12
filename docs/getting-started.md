@@ -39,7 +39,7 @@ my-game/
 ├── boardsmith.json          # Game configuration
 ├── package.json             # Dependencies
 ├── tsconfig.json            # TypeScript config
-├── vite.config.ts           # Vite bundler config
+├── vite.config.ts           # Vite and vitest config: defineGameViteConfig() from boardsmith/vite-config
 ├── index.html               # Entry HTML
 ├── public/                  # Static assets
 ├── src/
@@ -268,10 +268,11 @@ action no walk from a fresh game can reach whatever the deal is also named in
 A game with no actions yet lists none and still has to load and seat a player
 without an error.
 
-The smoke test runs only under Playwright. The project's `vitest.config.ts`
+The smoke test runs only under Playwright. The project's `vite.config.ts` builds
+its config with `defineGameViteConfig` from `boardsmith/vite-config`, which
 leaves `'**/tests/browser/**'` out of vitest runs, at any depth, so a copy of the
 spec in a git worktree kept inside the project is left out too. `boardsmith test`
-refuses a config without it and says the exact line to change. The run
+refuses a config not built with it, and `boardsmith doctor --fix` rewrites one. The run
 stops every process it started, and removes its copy, whether it passed, failed
 or was interrupted. `boardsmith smoke` runs this check alone, on the files as
 they stand, while you work.

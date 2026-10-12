@@ -24,9 +24,9 @@ export function onlyTestCollectionChanged(before: string, after: string): boolea
 
 const COLLECTION_KEYS = new Set(['include', 'exclude']);
 
-/** The vitest and vite helpers whose object argument is a config, and where they come from. */
-const CONFIG_MODULES = new Set(['vitest/config', 'vite']);
-const CONFIG_HELPERS = new Set(['defineConfig', 'mergeConfig', 'defineProject']);
+/** The vitest, vite and BoardSmith helpers whose object argument is a config, and where they come from. */
+const CONFIG_MODULES = new Set(['vitest/config', 'vite', 'boardsmith/vite-config']);
+const CONFIG_HELPERS = new Set(['defineConfig', 'mergeConfig', 'defineProject', 'defineGameViteConfig']);
 
 function keyName(name: ts.PropertyName): string | undefined {
   return ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : undefined;
@@ -61,7 +61,7 @@ function declarationCounts(source: ts.SourceFile): Map<string, number> {
   return declared;
 }
 
-/** The value imports `statement` binds from vitest or vite, as `[local name, exported name]`. */
+/** The value imports `statement` binds from vitest, vite or BoardSmith's config, as `[local name, exported name]`. */
 function configModuleImports(statement: ts.Statement): Array<[string, string]> {
   if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) return [];
   const bindings = statement.importClause?.namedBindings;
@@ -71,7 +71,7 @@ function configModuleImports(statement: ts.Statement): Array<[string, string]> {
 }
 
 /**
- * Each local name bound by a value import from vitest or vite, with the name it was exported as,
+ * Each local name bound by a value import from a config module, with the name it was exported as,
  * but only when nothing else in the file declares the same name (a parameter or variable that
  * could shadow it where the config is written).
  */
@@ -80,7 +80,7 @@ function trustedImports(source: ts.SourceFile): Map<string, string> {
   return new Map(source.statements.flatMap(configModuleImports).filter(([local]) => declared.get(local) === 1));
 }
 
-/** Whether `object` is a vitest config: the default export, or the argument of vitest's or vite's config helpers. */
+/** Whether `object` is a vitest config: the default export, or the argument of a config helper. */
 function isConfigObject(object: ts.ObjectLiteralExpression, imports: Map<string, string>): boolean {
   const parent = object.parent;
   if (ts.isExportAssignment(parent)) return !parent.isExportEquals;

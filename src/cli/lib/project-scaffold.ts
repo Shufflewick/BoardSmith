@@ -6,7 +6,7 @@
  */
 
 import { DESIGN_DIR, SCRATCH_DIR } from './project-paths.js';
-import { generateVitestConfig, VITEST_CONFIG_FILE } from './test-run-scope.js';
+import { GAME_VITE_CONFIG, GAME_VITE_CONFIG_FILE } from './test-run-scope.js';
 import { existsSync } from 'node:fs';
 import { join, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -306,31 +306,6 @@ export function generateTsConfig(): string {
     exclude: ['node_modules', 'dist'],
   };
   return JSON.stringify(config, null, 2);
-}
-
-/**
- * Generate vite.config.ts
- */
-export function generateViteConfig(): string {
-  return `import { defineConfig } from 'vite';
-import vue from '@vitejs/plugin-vue';
-
-export default defineConfig({
-  plugins: [vue()],
-  resolve: {
-    // \`boardsmith\` installs as a symlink to a checkout carrying its own copy of
-    // vue, so without this the bundle can contain two Vue runtimes — two
-    // separate reactivity systems and provide/inject registries, which silently
-    // breaks state shared across the game/library boundary.
-    //
-    // A SINGLE-COPY guarantee, not a version pin: it never constrains which vue
-    // you install, so upgrade freely. Types are handled separately —
-    // \`boardsmith validate\` runs vue-tsc, which resolves each file's vue from
-    // that file's own location.
-    dedupe: ['vue'],
-  },
-});
-`;
 }
 
 /**
@@ -729,8 +704,7 @@ export function generateScaffoldFiles(config: ProjectConfig, projectPath: string
     { path: 'boardsmith.json', content: generateBoardsmithJson(config) },
     { path: 'package.json', content: generatePackageJson(config, projectPath) },
     { path: 'tsconfig.json', content: generateTsConfig() },
-    { path: 'vite.config.ts', content: generateViteConfig() },
-    { path: VITEST_CONFIG_FILE, content: generateVitestConfig('vite.config.ts') },
+    { path: GAME_VITE_CONFIG_FILE, content: GAME_VITE_CONFIG },
     { path: '.gitignore', content: generateGitignore() },
   ];
 
