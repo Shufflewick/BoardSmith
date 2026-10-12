@@ -1,5 +1,5 @@
 {
-  "revision": 178,
+  "revision": 179,
   "bundleProtocol": 2,
   "surfaceHash": "05e7976f41efe42e",
   "payloadHash": "7e563b9e75959ec4",
@@ -1546,6 +1546,15 @@
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "Hosted play now keeps per-action checkpoints only back to the start of the current turn (the oldest point any seat's undo restores), so a saved snapshot no longer grows with the action count and a window with baseIndex > 0 is the normal case; checkpoints.max is an optional extra cap. ExecuteOpHostOptions gains fullHistory, which keeps every checkpoint for debug time travel (boardsmith dev passes it; debug does not imply it). Re-vendor to get bounded state; update GAME-STATE-BUDGET.md's retention advice to match (BoardSmith #504)."
+    },
+    {
+      "revision": 179,
+      "date": "2026-10-12",
+      "bundleProtocol": 2,
+      "surfaceHash": "05e7976f41efe42e",
+      "payloadHash": "7e563b9e75959ec4",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Hosted play's checkpoint window now starts after the last .notUndoable() action or irreversible execute() in the current turn or step, when that is later than the turn start, so it holds only checkpoints some seat's undo can still restore; a step of not-undoable actions keeps one checkpoint instead of one per action. Undo itself is unchanged. Re-vendor to get the smaller saved games (BoardSmith #680)."
     }
   ]
 }
