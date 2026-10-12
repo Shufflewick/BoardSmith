@@ -290,8 +290,8 @@ The fixture world's lifetime (write, serve, stop, remove) is
 `withFixtureWorld` in `src/cli/commands/fixture-world.test-helper.ts`, not in
 the harness. It is TypeScript so `boardsmith typecheck` compiles its call to the
 world dev host, and `src/cli/commands/fixture-world.test.ts` starts and stops one
-in the ordinary suite with no browser. Nothing runs the scripts themselves, so
-before #357 a change to that call broke all of them and nobody noticed. `scripts/*-browser.mjs` is the set — no list here, because a count in
+in the ordinary suite with no browser. Before #357 nothing ran the scripts
+themselves, so a change to that call broke all of them and nobody noticed. `scripts/*-browser.mjs` is the set, with no list here, because a count in
 a doc goes stale the next time one is added.
 
 Two of them read as the worked examples:
@@ -316,19 +316,22 @@ Two of them read as the worked examples:
   when an entry unmounts.
 
 ```sh
-node scripts/ordered-list-browser.mjs
-# or, pointing it at a Playwright you already have installed elsewhere:
-BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \
-  node scripts/ordered-list-browser.mjs
+boardsmith test --browser                # every one, as `agent-policy verify` runs them
+node scripts/ordered-list-browser.mjs    # one, with its checks printed as it goes
 ```
 
-They are **not** part of `npx vitest run`. The suite drives Chromium only through
-the smoke check below (`src/cli/commands/smoke.test.ts` and the end-to-end
-`boardsmith verify` tests), with the browser `boardsmith install-browser` puts on
-the machine. They never skip — with no Playwright reachable one says
-how to give it one and exits non-zero, because a browser regression that silently
-passes when it did not run is the failure it exists to replace. Each starts and
-stops its own dev server, on its own port, inside the one process.
+`boardsmith test --browser` (`vitest.browser.config.ts`, #533) runs one case per
+`scripts/*-browser.mjs`, found by name, that runs the script and expects it to
+exit 0; `agent-policy verify` runs it as its `browser` check. They are **not**
+part of a plain `boardsmith test`, so the default suite needs no Chromium, and
+`--browser` skips the type check a plain run does first, since verify's `test`
+check has done it on the same commit. They use
+BoardSmith's own Playwright and the Chromium `boardsmith install-browser` puts on
+the machine, found the same way as the smoke check below. They never skip: with
+that Chromium missing one says to run `boardsmith install-browser` and exits
+non-zero, because a browser regression that silently passes when it did not run
+is the failure it exists to replace. Each starts and stops its own dev server,
+on its own port, inside the one process.
 
 ## The smoke test every game has: `tests/browser/smoke.spec.ts`
 

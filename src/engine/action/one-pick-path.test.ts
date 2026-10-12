@@ -255,6 +255,7 @@ describe('every entry point resolves a pick the same way (#507)', () => {
 
 describe('a repeating pick is checked by the same rule as any other pick (#507)', () => {
   const gatedTutorial: TutorialDefinition = {
+    learnerSeat: 1,
     steps: [{ id: 'first', gate: { action: 'place', selections: { piece: { value: 'a' } } } }],
   };
 

@@ -293,6 +293,7 @@ export interface TutorialStep {
  *   minPlayers: 2,
  *   maxPlayers: 2,
  *   tutorial: {
+ *     learnerSeat: 1,
  *     steps: [
  *       { id: 'intro', gate: { action: 'move', from: 'c3', to: 'd4' } },
  *       { id: 'capture', gate: { action: 'move', from: 'd4', to: 'f6' } },
@@ -302,6 +303,14 @@ export interface TutorialStep {
  * ```
  */
 export interface TutorialDefinition {
+  /**
+   * The seat the learner plays (1-indexed). Only this seat can start the
+   * tutorial, and `startTutorial` restarts the flow with this seat to move.
+   * Required: the presets, gates and predicates a tutorial is written against
+   * all assume one seat, so the tutorial names it.
+   */
+  learnerSeat: number;
+
   /** Ordered list of tutorial steps. */
   steps: TutorialStep[];
 

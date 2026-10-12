@@ -16,7 +16,8 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { REPO_ROOT } from '../spawn-cli.test-helper.js';
 import { writeFiles } from '../lib/verify-result.test-helper.js';
 import { SMOKE_SEEDS_ENV } from '../../testing/browser-smoke-verdict.js';
-import { browserProblem, playwrightConfig, runSmoke } from './smoke.js';
+import { browserProblem, playwrightChromium, playwrightConfig, runSmoke } from './smoke.js';
+import { chromium as boardsmithChromium } from '@playwright/test';
 import { isRunning, smokeProject } from './smoke-project.test-helper.js';
 import {
   ACE_SEEDS,
@@ -895,6 +896,14 @@ describe('playwrightConfig (#464)', () => {
     };
     expect(config.use.actionTimeout).toBe(15_000);
     expect(config.use.navigationTimeout).toBe(90_000);
+  });
+});
+
+describe('playwrightChromium', () => {
+  it("is BoardSmith's own Playwright Chromium, the one the browser regressions launch (#533)", async () => {
+    const found = await playwrightChromium();
+    expect(found.chromium).toBe(boardsmithChromium);
+    expect(found.executable).toBe(boardsmithChromium.executablePath());
   });
 });
 
