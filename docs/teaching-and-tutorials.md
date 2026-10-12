@@ -155,7 +155,7 @@ when its `advanceWhen` predicate is true.
 
 `TutorialProgress.status` progresses through: `'running'` → `'completed'` (all steps passed) or `'exited'` (learner quit early). Gate enforcement is active only when `status === 'running'`.
 
-The ControlsMenu shows a **"Start tutorial"** option automatically whenever `gameDefinition.tutorial` exists. No extra UI wiring is needed — the substrate handles it.
+The ControlsMenu shows a **"Start tutorial"** option automatically whenever `gameDefinition.tutorial` exists, to the tutorial's `learnerSeat` only, since no other seat can start it. No extra UI wiring is needed — the substrate handles it.
 
 ### Annotation overlay targets
 
