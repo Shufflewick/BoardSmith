@@ -414,11 +414,12 @@ function savedPile(game: Game): { pile?: ElementJSON[] } {
  * (#655). The saved state keeps both.
  */
 function serializeForSeat<T>(ctx: ElementContext, write: () => T): T {
+  const outer = ctx._seatView;
   ctx._seatView = true;
   try {
     return write();
   } finally {
-    ctx._seatView = false;
+    ctx._seatView = outer;
   }
 }
 
