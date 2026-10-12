@@ -421,7 +421,7 @@ function createCardGame(): CardGame {
 /** Seat 1's sandbox, exactly as the bot builds it. */
 function sandboxForSeat1(): CardGame {
   const sandbox = new CardGame({ playerCount: 2, playerNames: ['Asker', 'Holder'], seed: 'cards', elementIdKey: '00000000000000b4' });
-  sandbox.loadSerializedState(createCardGame().toJSONForPlayer(1) as ReturnType<Game['toJSON']>);
+  sandbox.loadSerializedState(createCardGame().toJSONForPlayer(1));
   return sandbox;
 }
 

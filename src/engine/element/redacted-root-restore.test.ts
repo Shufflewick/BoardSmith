@@ -36,7 +36,7 @@ class RootGame extends Game<RootGame, Player> {
 
 function restoreForSeat(game: RootGame, seat: number | null): RootGame {
   const restored = new RootGame({ playerCount: 2, elementIdKey: ID_KEY });
-  restored.loadSerializedState(game.toJSONForPlayer(seat) as ReturnType<Game['toJSON']>);
+  restored.loadSerializedState(game.toJSONForPlayer(seat));
   return restored;
 }
 
@@ -126,7 +126,7 @@ describe('#148: a withheld game-root attribute restores as unknown', () => {
     const open = new OpenGame({ playerCount: 2, elementIdKey: ID_KEY });
     open.seedValue = 'still-open';
     const restored = new OpenGame({ playerCount: 2, elementIdKey: ID_KEY });
-    restored.loadSerializedState(open.toJSONForPlayer(1) as ReturnType<Game['toJSON']>);
+    restored.loadSerializedState(open.toJSONForPlayer(1));
 
     expect(restored.seedValue).toBe('still-open');
     expect(restored.redactedAttributes).toEqual([]);

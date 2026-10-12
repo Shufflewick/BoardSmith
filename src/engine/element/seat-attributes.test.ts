@@ -187,7 +187,7 @@ describe('static seatAttributes (#269)', () => {
     // derived attribute must come back derived, not as an own property that
     // could then go stale inside the sandbox.
     const restored = new TestGame({ playerCount: 2, elementIdKey: ID_KEY });
-    restored.loadSerializedState(game.toJSONForPlayer(1) as ReturnType<Game['toJSON']>);
+    restored.loadSerializedState(game.toJSONForPlayer(1));
     const restoredCharacter = restored.first(Character, 'hero')!;
     expect(Object.prototype.hasOwnProperty.call(restoredCharacter, 'coordinates')).toBe(false);
     expect(findByName(restored.toJSONForPlayer(1).children, 'hero').attributes.coordinates).toBe('AB-2');
