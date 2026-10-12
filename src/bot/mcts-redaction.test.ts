@@ -641,9 +641,9 @@ describe('MCTSBot flow-variable relinking on redacted restore (bot-02 / CR-02)',
 
     // Pre-fix: `currentCard`'s original id no longer resolves in the redacted
     // tree (its zone-level redaction anonymized it to a synthetic negative
-    // id) -- relinkFlowVariables leaves the raw `{__flowElementId,className}`
-    // marker object in place, so `currentCard` is a plain object, not a
-    // GameElement. Post-fix: the id remap relinks it to the correct redacted
+    // id) -- the flow relink of the time left the raw
+    // `{__flowElementId,className}` marker object in place, so `currentCard`
+    // was a plain object, not a GameElement. Post-fix: the id remap relinks it to the correct redacted
     // placeholder GameElement.
     expect(currentCard).toBeInstanceOf(GameElement);
 
@@ -742,8 +742,9 @@ describe('MCTSBot flow-variable relinking over a TRUE-hidden zone (WR-01 / 163-R
     const currentCard = (restored as any)._flowEngine.variables.currentCard;
 
     // Pre-fix (WR-01): no idRemap entry exists for a 'hidden'-mode zone child,
-    // so relinkFlowVariables falls through to `return value` -- `currentCard`
-    // stays the raw `{__flowElementId, className}` marker, not a GameElement.
+    // so the flow relink of the time fell through to `return value` --
+    // `currentCard` stayed the raw `{__flowElementId, className}` marker, not
+    // a GameElement.
     // Post-fix: it relinks to a live, already-disclosed element -- the hidden
     // zone's own CONTAINER (`restored.secretZone`), never a per-child
     // synthetic placeholder (there is none, and none may be manufactured

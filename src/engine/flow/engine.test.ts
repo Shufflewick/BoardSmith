@@ -679,32 +679,31 @@ describe('FlowEngine', () => {
       expect(visitedIds).not.toContain(lateCard.id);
     });
 
-    it('should throw when a snapshotted element has been permanently deleted mid-loop', () => {
+    it('throws on restore when a snapshotted item no longer exists, naming it', () => {
+      game.registerAction(Action.create('step').execute(() => ({ success: true })));
       const deck = game.create(Deck, 'deck');
       const [, card2] = deck.createMany(2, Card, 'card', (i) => ({
         suit: 'H',
         rank: String(i + 1),
         value: i + 1,
       }));
-
       const flow: FlowDefinition = {
         root: forEach({
           collection: (ctx) => [...ctx.game.all(Card)],
           as: 'card',
-          do: execute(() => {
-            // Surgically detach card2 from the tree entirely (not moved to the
-            // pile, so getElementById cannot find it anywhere).
-            const index = deck._t.children.indexOf(card2);
-            if (index !== -1) {
-              deck._t.children.splice(index, 1);
-              card2._t.parent = undefined;
-            }
-          }),
+          do: actionStep({ actions: ['step'] }),
         }),
       };
+      const state = new FlowEngine(game, flow).start();
 
-      const engine = new FlowEngine(game, flow);
-      expect(() => engine.start()).toThrow(/no longer exists in the game tree/);
+      // Detach card2 from the tree entirely (not into the pile), so no lookup
+      // can find it.
+      deck._t.children.splice(deck._t.children.indexOf(card2), 1);
+      card2._t.parent = undefined;
+
+      expect(() => new FlowEngine(game, flow).restoreFullState(state)).toThrowError(
+        new RegExp(`Flow step data 'forEachItems\\[1\\]' references element id ${card2.id} \\(Card\\), but it no longer exists`),
+      );
     });
 
     it('should throw on collection items that are neither GameElements nor JSON primitives', () => {
@@ -1168,6 +1167,27 @@ describe('FlowEngine', () => {
 
       const resumed = restored.resume('elseAction', {});
       expect(resumed.complete).toBe(true);
+    });
+
+    // #497: a flow variable whose element is gone from the game must not come
+    // back as a marker object the rules then read as if it were the element.
+    it('throws on restore when a flow variable holds an element that no longer exists, naming the variable', () => {
+      game.registerAction(Action.create('wait').execute(() => ({ success: true })));
+      const deck = game.create(Deck, 'deck');
+      const card = deck.create(Card, 'card', { suit: 'H', rank: '1', value: 1 });
+      const flow: FlowDefinition = {
+        root: sequence(setVar('target', () => card), actionStep({ actions: ['wait'] })),
+      };
+      const state = new FlowEngine(game, flow).start();
+
+      // Detach the card from the tree entirely (not into the pile), so no
+      // lookup can find it.
+      deck._t.children.splice(deck._t.children.indexOf(card), 1);
+      card._t.parent = undefined;
+
+      expect(() => new FlowEngine(game, flow).restoreFullState(state)).toThrowError(
+        new RegExp(`Flow variable 'target' references element id ${card.id} \\(Card\\), but it no longer exists`),
+      );
     });
 
     it('should preserve move counts across full-state restore', () => {

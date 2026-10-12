@@ -1,4 +1,4 @@
-import type { Game, MessageEntry, SeatViewJSON } from '../element/game.js';
+import { serializeForSeat, type Game, type MessageEntry, type SeatViewJSON } from '../element/game.js';
 import { Player } from '../player/player.js';
 import type { HistoryEntry } from '../action/types.js';
 import type { FlowState } from '../flow/types.js';
@@ -421,6 +421,14 @@ export interface PlayerStateView {
 }
 
 /**
+ * The flow state a snapshot holds. A seat's is written for the seat, as its
+ * tree is, so an element the flow holds in the pile is withheld (#655, #497).
+ */
+function snapshotFlowState(game: Game, opts: { forSeat?: number | null } | undefined): FlowState | undefined {
+  return opts?.forSeat === undefined ? game.getFlowState() : serializeForSeat(game._ctx, () => game.getFlowState());
+}
+
+/**
  * Create a complete game state snapshot
  */
 export function createSnapshot(
@@ -432,7 +440,7 @@ export function createSnapshot(
    *  (public information only). Omit for the unfiltered authoritative truth. */
   opts?: { forSeat?: number | null }
 ): GameStateSnapshot {
-  const flowState = game.getFlowState();
+  const flowState = snapshotFlowState(game, opts);
 
   // CR-02 (159): only populated on the `forSeat` redacted path — collects the
   // originalId -> syntheticId remap `toJSONForPlayer` produces for anonymized

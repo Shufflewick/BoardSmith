@@ -173,8 +173,9 @@ selection is missing.
 By default (`format: 'in-process'`), element-object values pass through
 unchanged — the result is ready for `testGame.doAction` /
 `runner.performAction` in the same process. Pass `{ format: 'wire' }` to
-convert element/player values to `{ __elementId }` / `{ __playerRef }`
-references for cross-process transmission (e.g. a remote agent submitting
+convert element/player values to the references action history records
+(`{ __elementRef }`, `{ __elementId }` in world mode, `{ __playerRef }`)
+for cross-process transmission (e.g. a remote agent submitting
 an action over WebSocket):
 
 ```typescript

@@ -1,7 +1,5 @@
 // Serialization utilities
 export {
-  serializeValue,
-  deserializeValue,
   serializeAction,
   deserializeAction,
   isSerializedReference,
@@ -9,7 +7,6 @@ export {
 
 export type {
   SerializedReference,
-  SerializeOptions,
 } from './serializer.js';
 
 // State snapshots

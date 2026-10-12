@@ -1,12 +1,9 @@
 // Serialization utilities
 export {
-  serializeValue,
-  deserializeValue,
   serializeAction,
   deserializeAction,
   isSerializedReference,
   type SerializedReference,
-  type SerializeOptions,
 } from '../engine/utils/serializer.js';
 
 // State snapshots

@@ -29,7 +29,7 @@ interface TestOptions {
  * Works in both BoardSmith workspaces so there is one way to run tests
  * everywhere: `boardsmith test` in the library runs the library's suite, and in
  * a game project runs that game's suite. Either way it is vitest driven by the
- * workspace's own `vitest.config.ts`.
+ * workspace's own config: the library's `vitest.config.ts`, a game's `vite.config.ts`.
  *
  * `patterns` are forwarded to vitest as filename filters, e.g.
  * `boardsmith test mcts` runs only test files matching "mcts".

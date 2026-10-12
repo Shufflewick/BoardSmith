@@ -343,7 +343,7 @@ export interface TutorialDefinition {
  *
  * Stored in `Game.tutorialProgress: Map<number, TutorialProgress>` (seat →
  * progress). The Map encoding preserves numeric seat keys (via `__map`
- * tagging in `serializeValue`) unlike a plain `Record<number, …>`.
+ * tagging in `encodeValue`) unlike a plain `Record<number, …>`.
  */
 export interface TutorialProgress {
   /**

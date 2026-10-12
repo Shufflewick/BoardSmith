@@ -9,7 +9,7 @@ import { serializedRoundTrip } from './serialized-round-trip.test-helper.js';
  * a fog-of-war mask, a visited-sector bitmap) — exactly what an author does after
  * reading the state-size guidance. Before this was handled, a `Uint8Array` was
  * not `Array.isArray`, not a `Map` and not a `Set`, so it fell into the plain
- * object branch of `serializeValue` and corrupted twice, silently:
+ * object branch of `encodeValue` and corrupted twice, silently:
  *
  *   1. size — `Object.entries(new Uint8Array([1,2,3]))` is `[['0',1],…]`, so it
  *      serialized as `{"0":1,"1":0,…}`: 6-8 JSON bytes per byte of data,

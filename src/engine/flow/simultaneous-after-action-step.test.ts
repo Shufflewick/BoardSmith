@@ -9,8 +9,12 @@ import { PlayThenAcknowledgeGame } from '../../session/testing/fixtures/play-the
  * the previous action step's `currentPlayer` / `availableActions`. The
  * fixture is cribbage's play-then-score hand reduced to its bones.
  */
+// One element id key, so a game restored from another's flow state holds the
+// same element ids the state names.
+const options = { playerCount: 2, seed: 'x', elementIdKey: '0000000000000321' };
+
 function atScoring(): PlayThenAcknowledgeGame {
-  const game = new PlayThenAcknowledgeGame({ playerCount: 2, seed: 'x' });
+  const game = new PlayThenAcknowledgeGame(options);
   game.startFlow();
   game.continueFlow('playCard', { card: 1 });
   game.continueFlow('playCard', { card: 2 });
@@ -19,7 +23,7 @@ function atScoring(): PlayThenAcknowledgeGame {
 
 describe('#321: a simultaneous step entered after an action step', () => {
   it('the action step before it still reports its own seat and actions', () => {
-    const game = new PlayThenAcknowledgeGame({ playerCount: 2, seed: 'x' });
+    const game = new PlayThenAcknowledgeGame(options);
     const state = game.startFlow();
 
     expect(state.currentPlayer).toBe(1);
@@ -52,7 +56,7 @@ describe('#321: a simultaneous step entered after an action step', () => {
     const live = atScoring();
     const captured = live.getFlowState()!;
 
-    const restored = new PlayThenAcknowledgeGame({ playerCount: 2, seed: 'x' });
+    const restored = new PlayThenAcknowledgeGame(options);
     restored.startFlow();
     restored.restoreFlowState(captured);
 
@@ -69,7 +73,7 @@ describe('#321: a simultaneous step entered after an action step', () => {
     // awaiting, not by whatever the stored object happened to carry.
     const captured = { ...atScoring().getFlowState()!, currentPlayer: 2, availableActions: ['playCard'] };
 
-    const restored = new PlayThenAcknowledgeGame({ playerCount: 2, seed: 'x' });
+    const restored = new PlayThenAcknowledgeGame(options);
     restored.startFlow();
     restored.restoreFlowState(captured);
 

@@ -28,7 +28,6 @@ import {
   createSnapshot,
   createPlayerView,
   createAllPlayerViews,
-  type SerializeOptions,
   type GameStateSnapshot,
   type PlayerStateView,
 } from '../engine/utils/index.js';
@@ -106,8 +105,6 @@ export interface GameRunnerOptions<G extends Game, O extends GameOptions = GameO
   gameType: string;
   /** Options passed to game constructor */
   gameOptions: NoInfer<O>;
-  /** Serialization options */
-  serializeOptions?: SerializeOptions;
   /** Per-action undo checkpoint retention. Default: back to the turn start. */
   checkpoints?: RunnerCheckpointPolicy;
   /**
@@ -351,12 +348,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   readonly seed?: string;
 
-  /** Serialization options */
-  private readonly serializeOptions: SerializeOptions;
-
   constructor(options: GameRunnerOptions<G, O>) {
     this.gameType = options.gameType;
-    this.serializeOptions = options.serializeOptions ?? { useBranchPaths: true };
     this.checkpointPolicy_ = {
       max: options.checkpoints?.max ?? Number.POSITIVE_INFINITY,
       enabled: options.checkpoints?.enabled ?? true,
@@ -456,12 +449,14 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
     // Then drop from the FRONT. Oldest-first is what makes the retained window
     // the most recent actions -- the ones undo can actually reach. Under
-    // `'turn'` history everything before the current action-step frame goes:
-    // no seat's undo restores further back than the frame's start
-    // (`computeUndoInfo`, `simultaneousUndoBoundary` in session/utils.ts),
-    // and with no frame open no undo is possible at all. `max` caps either.
-    const frameStart = len - (this.getFlowState()?.moveCount ?? 0);
-    const keepFrom = this.checkpointPolicy_.history === 'full' ? this.checkpointBaseIndex : frameStart;
+    // `'turn'` history everything before the oldest point a seat's undo can
+    // still restore goes. No undo restores further back than the current
+    // action-step frame's start (`computeUndoInfo`, `simultaneousUndoBoundary`
+    // in session/utils.ts), and with no frame open no undo is possible at all.
+    // Nor does any undo cross a `.notUndoable()` action or an irreversible
+    // `execute()` (`assertUndoAllowed`), so the window starts after the last
+    // of those when it lies inside the frame. `max` caps either policy.
+    const keepFrom = this.checkpointPolicy_.history === 'full' ? this.checkpointBaseIndex : this.undoFloor();
     const excess = Math.max(
       keepFrom - this.checkpointBaseIndex,
       this.actionCheckpoints.length - this.checkpointPolicy_.max,
@@ -470,6 +465,25 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       this.actionCheckpoints = this.actionCheckpoints.slice(excess);
       this.checkpointBaseIndex += excess;
     }
+  }
+
+  /**
+   * The oldest action count any seat's undo can still restore: the later of
+   * the current action-step frame's start, the action after the frame's last
+   * `.notUndoable()` entry, and `executeBarrierIndex`. Mirrors the fences in
+   * `assertUndoAllowed` (session/utils.ts); a change to either must change both.
+   */
+  private undoFloor(): number {
+    const len = this.actionHistory.length;
+    const frameStart = len - (this.getFlowState()?.moveCount ?? 0);
+    let floor = frameStart;
+    for (let i = len - 1; i >= frameStart; i--) {
+      if (this.actionHistory[i].undoable === false) {
+        floor = i + 1;
+        break;
+      }
+    }
+    return Math.max(floor, this.executeBarrierIndex);
   }
 
   /**
@@ -531,6 +545,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * extra serialization is needed for this. Only the element tree, sequence
    * counter, RNG position and message log are restored — the flow engine
    * deliberately stayed put on the failure, and its position is already right.
+   * The elements it holds are pointed at the rebuilt tree (#679).
    *
    * @returns undefined when the rollback succeeded, or a sentence to append to
    *   the player-facing error when there was no checkpoint to restore. A game
@@ -549,6 +564,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     this.game.loadSerializedState(checkpoint.state, {
       messageLog: messagesUpTo(this.game.messages ?? [], checkpoint.messageCount, this.game.messagesEvicted),
     });
+    this.game.relinkFlowElements();
     if (checkpoint.sequence !== undefined) {
       this.game._ctx.sequence = checkpoint.sequence;
     }
@@ -701,7 +717,6 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       player,
       argsToSerialize,
       this.game,
-      this.serializeOptions,
       isUndoable
     );
   }
@@ -1521,10 +1536,11 @@ export function describeCheckpointAbsence(
       ? `action ${actionIndex} is older than this game's retained undo window ` +
         `(it keeps ${checkpointCount(window)} checkpoint(s), back to action ${window!.baseIndex}). `
       : `the point being restored is older than this game's retained undo window. `;
-    // A seat's undo target is its own turn start, which the turn window always
-    // keeps, so only `max` prunes it. A debug read may name any index.
+    // The turn window keeps every target a seat's undo is not fenced from, so
+    // only `max` prunes one. A debug read may name any index.
     const turn = debug && history === 'turn'
-      ? `This session keeps checkpoints only back to the start of the current turn; a host that ` +
+      ? `This session keeps checkpoints only back to the start of the current turn, or to the ` +
+        `last action or step since then that cannot be undone; a host that ` +
         `passes \`fullHistory\` (as boardsmith dev does) keeps them all. `
       : '';
     return where + turn + `Raise or remove \`checkpoints: { max }\` on the game definition to reach further back.`;

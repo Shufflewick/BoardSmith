@@ -26,8 +26,6 @@ import {
 
 ### Serialization
 
-- `serializeValue()` - Serialize game values for transfer
-- `deserializeValue()` - Deserialize game values
 - `serializeAction()` - Serialize an action with arguments
 - `deserializeAction()` - Deserialize an action
 - `isSerializedReference()` - Check if value is an element reference
@@ -43,7 +41,6 @@ import {
 - `GameRunnerOptions` - Runner configuration
 - `ActionExecutionResult` - Action execution result
 - `SerializedReference` - Serialized element reference
-- `SerializeOptions` - Serialization options
 - `GameStateSnapshot` - Full game state snapshot
 - `PlayerStateView` - Player-specific view
 
@@ -90,7 +87,7 @@ const serialized = serializeAction('play', player, {
   card: cardElement, // GameElement reference
   target: spaceElement,
 }, game);
-// { name: 'play', player: 1, args: { card: { _ref: 'card-123' }, target: { _ref: 'space-456' } }, timestamp: 1234567890 }
+// { name: 'play', player: 1, args: { card: { __elementRef: '0/2/5' }, target: { __elementRef: '0/1' } } }
 
 // Send over WebSocket
 ws.send(JSON.stringify(serialized));
@@ -126,28 +123,26 @@ console.log(player1View.state);
 
 ### Serialization Details
 
+Action arguments are written by the same codec as element attributes, so an
+argument keeps every shape an attribute keeps:
+
+- A `GameElement` becomes `{ __elementRef: '<branch>' }`, or `{ __elementId }`
+  in world mode. A player becomes `{ __playerRef, seat, color, name }`.
+- A `Map`, `Set` or typed array round-trips with its contents and type.
+- A circular value, or one nested past `GameElement.MAX_SERIALIZE_DEPTH`, is
+  refused with an error naming the property path.
+
 ```typescript
-import { serializeValue, deserializeValue, isSerializedReference } from 'boardsmith/runtime';
+import { serializeAction, deserializeAction, isSerializedReference } from 'boardsmith/runtime';
 
-// Serialize various value types
-serializeValue(42); // 42
-serializeValue('hello'); // 'hello'
-serializeValue(true); // true
-serializeValue(null); // null
-serializeValue([1, 2, 3]); // [1, 2, 3]
-serializeValue({ x: 1, y: 2 }); // { x: 1, y: 2 }
+const saved = JSON.parse(JSON.stringify(
+  serializeAction('bid', player, { bids: new Map([['ace', card]]), seats: new Set([1, 2]) }, game),
+));
+deserializeAction(saved, game).args;
+// { bids: Map { 'ace' => <Card element> }, seats: Set { 1, 2 } }
 
-// GameElements become references
-serializeValue(cardElement, game);
-// { _ref: 'card-123' }
-
-// Check for references
-isSerializedReference({ _ref: 'card-123' }); // true
+isSerializedReference({ __elementRef: '0/1' }); // true
 isSerializedReference({ x: 1 }); // false
-
-// Deserialize back
-const card = deserializeValue({ _ref: 'card-123' }, game);
-// Returns the actual Card element
 ```
 
 ### Runner with Action History

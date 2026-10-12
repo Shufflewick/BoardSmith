@@ -342,7 +342,7 @@ export interface OpFailure {
  * query). It holds the state ONCE: the flow state and the winners the game
  * declared are read out of `snapshot` (`snapshot.flowState`,
  * `snapshot.winners`, or `flowStateOf`/`isCompleteOf`/`winnersOf` from
- * `boardsmith/session-host`), never reported a second time beside it (#536).
+ * `boardsmith/session`), never reported a second time beside it (#536).
  *
  * `playerViews` (indexed by seat - 1) and `spectatorView` are for the host to
  * publish. Neither is a reply to the seat that sent the op: a host shapes its

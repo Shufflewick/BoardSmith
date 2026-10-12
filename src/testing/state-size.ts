@@ -5,7 +5,7 @@
  * the element tree per retained checkpoint. A hosted table retains them back
  * to the start of the current turn, so:
  *
- *     saved size  ~=  tree size  x  (actions in the longest turn + 1)  +  history  +  log
+ *     saved size  ~=  tree size  x  (undoable actions in the longest turn + 1)  +  history  +  log
  *
  * `boardsmith dev` retains one per action (full history), so there the tree is
  * multiplied by the whole game's action count.

@@ -25,7 +25,7 @@ import { suggestedMoveOp } from '../../session/op-result.test-helper.js';
  * as an instance.
  *
  * `getPosition()` serializes `variables` with the general recursive
- * `serializeFlowVariables`, so a live `GameElement`/`Player` bound by
+ * `encodeFlowValue`, so a live `GameElement`/`Player` bound by
  * `eachPlayer`/`forEach` survives the structured-clone boundary (postMessage in
  * the iframe host, the executor RPC, the DO's storage envelope). This file
  * asserts the SAME property for the whole `FlowState` — including
@@ -73,7 +73,7 @@ const FIXTURE_FILES = new Set(Object.keys(fixtureModules).map((f) => f.split('/'
  *  bind their loop variable and for a sequence to advance past its first child. */
 const STEPS = 8;
 
-/** A serialized element marker, as `serializeFlowVariables` writes it. */
+/** A serialized element marker, as `encodeFlowValue` writes it. */
 interface Marker {
   __flowElementId: number;
   className: string;

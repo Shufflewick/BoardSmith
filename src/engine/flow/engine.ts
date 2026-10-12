@@ -1,5 +1,5 @@
 import type { Game, PlayerOf } from '../element/game.js';
-import { GameElement, hasZoneVisibility } from '../element/game-element.js';
+import { GameElement, hasZoneVisibility, withheldFromSeat, WITHHELD_PILE_BRANCH } from '../element/game-element.js';
 import { Player } from '../player/player.js';
 import { devWarn, isDevMode } from '../../utils/dev.js';
 import { PlayerFacingError } from '../errors.js';
@@ -42,13 +42,15 @@ interface StepResult {
 const DEFAULT_MAX_ITERATIONS = 10000;
 
 /**
- * Marker for a serialized element-valued flow variable. Flow variables can hold
- * live `GameElement`/`Player` values (e.g. `eachPlayer`'s `currentPlayer`, a
- * `forEach` `as` binding). A live element is NOT structured-cloneable, so a flow
- * state carrying one throws `DataCloneError` when broadcast over postMessage or
- * sent across the executor RPC boundary. `serializeFlowVariables` replaces such
- * values with this marker on the way out (in `getPosition`); `relinkFlowVariables`
- * resolves it back to the live element on the way in (in `restore`).
+ * Marker for an element held in flow state: a flow variable (e.g.
+ * `eachPlayer`'s `currentPlayer`, a `forEach` `as` binding), or frame data
+ * (`forEach`'s snapshot of its collection, `previousPlayer`). A live element is
+ * NOT structured-cloneable, so a flow state carrying one throws
+ * `DataCloneError` when broadcast over postMessage or sent across the executor
+ * RPC boundary. `encodeFlowValue` writes this marker on the way out (in
+ * `getPosition`); `relinkFlowValue` resolves it back to the live element on
+ * the way in (in `restore`). Ids, not branches, so a redacted clone can relink
+ * through `idRemap`.
  */
 interface SerializedFlowElement {
   __flowElementId: number;
@@ -68,23 +70,15 @@ interface SerializedFlowElement {
   __hiddenContainerId?: number;
 }
 
-/**
- * One entry in `executeForEach`'s snapshot-on-first-entry collection (stored in
- * `frame.data.forEachItems`). Tagging `GameElement` items by `elementId` (rather than
- * storing a bare number) keeps them unambiguous from a JSON-primitive `number` item —
- * the same coercion ambiguity class as ENG-05/resolveArgs — and keeps `frame.data`
- * JSON-plain for checkpoint/restore.
- */
-type ForEachSnapshotItem =
-  | { elementId: number; hiddenContainerId?: number }
-  | { value: string | number | boolean | null };
+/** How flow state written for a seat holds an element in the pile (#655): as
+ *  attributes do, without its id or place, and it restores to nothing. */
+const WITHHELD_FLOW_ELEMENT = { __elementRef: WITHHELD_PILE_BRANCH } as const;
 
 /** WR-01 (163-REVIEW): the id of `element`'s immediate container, but ONLY
- *  when that container is a zone-`'hidden'` Space (D24 true concealment).
- *  Shared by `serializeFlowVariables` and `executeForEach`'s snapshot so both
- *  relink paths degrade the same way on a redacted-clone restore -- to the
- *  (already-disclosed) container, never a per-child structure whose size
- *  would leak the hidden zone's exact child count. */
+ *  when that container is a zone-`'hidden'` Space (D24 true concealment), so a
+ *  redacted-clone restore degrades to the (already-disclosed) container, never
+ *  a per-child structure whose size would leak the hidden zone's exact child
+ *  count. */
 function hiddenContainerIdOf(element: GameElement): number | undefined {
   const container = element.parent;
   if (hasZoneVisibility(container)) {
@@ -107,87 +101,93 @@ function isSerializedFlowElement(value: unknown): value is SerializedFlowElement
 
 /** Replace live `GameElement` values (anywhere in the structure) with a
  *  structured-cloneable marker. Non-element values pass through unchanged. */
-function serializeFlowVariables(value: unknown): unknown {
+function encodeFlowValue(value: unknown): unknown {
   if (value instanceof GameElement) {
+    if (withheldFromSeat(value)) return WITHHELD_FLOW_ELEMENT;
     const marker: SerializedFlowElement = { __flowElementId: value.id, className: value.constructor.name };
-    // WR-01: record the immediate container's real id when it is a
-    // zone-`'hidden'` Space, so a redacted-clone restore can relink this
-    // marker to that (already-disclosed) container instead of leaving a
-    // dead marker in place.
     const hiddenContainerId = hiddenContainerIdOf(value);
     if (hiddenContainerId !== undefined) {
       marker.__hiddenContainerId = hiddenContainerId;
     }
-    return marker satisfies SerializedFlowElement;
+    return marker;
   }
   if (value === null || typeof value !== 'object') {
     return value;
   }
   if (Array.isArray(value)) {
-    return value.map(serializeFlowVariables);
+    return value.map(encodeFlowValue);
   }
   const result: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
-    result[key] = serializeFlowVariables(entry);
+    result[key] = encodeFlowValue(entry);
   }
   return result;
 }
 
-/** Inverse of `serializeFlowVariables`: resolve element markers back to live
- *  elements of `game` by id. A marker whose id no longer resolves is left as-is
- *  so the staleness surfaces loudly rather than silently becoming null. A live
- *  element (in-process, never serialized) is passed through unchanged.
+/**
+ * The live element of `game` a flow marker names.
  *
- *  @param idRemap - CR-02 (159): optional `originalId -> syntheticId` map, produced
- *    by `Game.toJSONForPlayer` when building a per-seat REDACTED clone (e.g. the
- *    MCTS bot's search sandbox). A fungible hidden-zone child is anonymized to a
- *    synthetic negative id in the redacted tree, so a flow variable that points at
- *    it by its ORIGINAL id can no longer resolve via a direct `getElementById`
- *    lookup — that is not staleness, it is the redaction working as designed. When
- *    the direct lookup fails and `idRemap` has an entry for this marker's original
- *    id, resolve via the synthetic id instead: this relinks the variable to the
- *    correct (still-redacted, still-`__hidden`) placeholder element rather than
- *    leaving a dead marker object in the flow state. If `idRemap` is absent or has
- *    no entry, behavior is unchanged (marker left as-is — genuine staleness). */
-function relinkFlowVariables(value: unknown, game: Game, idRemap?: Map<number, number>): unknown {
-  if (value instanceof GameElement) {
+ * @param idRemap - CR-02 (159): the `originalId -> syntheticId` map
+ *   `Game.toJSONForPlayer` produces for a per-seat REDACTED clone (e.g. the MCTS
+ *   bot's search sandbox). A fungible hidden-zone child is anonymized to a
+ *   synthetic id there, so a marker holding its ORIGINAL id resolves through the
+ *   remap to the (still-redacted) placeholder. Failing that, a marker that
+ *   recorded a zone-`'hidden'` container (WR-01) resolves to that container,
+ *   which every viewer already sees.
+ * @param name - The flow slot holding the marker, for the error.
+ * @throws When nothing resolves: the element is gone from the game, and handing
+ *   the rules a marker object where they expect an element would fail later
+ *   and far from the cause.
+ */
+function resolveFlowElement(
+  marker: SerializedFlowElement,
+  game: Game,
+  idRemap: Map<number, number> | undefined,
+  name: string,
+): GameElement {
+  const live = game.getElementById(marker.__flowElementId);
+  if (live && live.constructor.name === marker.className) return live;
+  const syntheticId = idRemap?.get(marker.__flowElementId);
+  const resolved =
+    (syntheticId !== undefined ? game.getElementById(syntheticId) : undefined) ??
+    (marker.__hiddenContainerId !== undefined ? game.getElementById(marker.__hiddenContainerId) : undefined);
+  if (resolved) return resolved;
+  throw new Error(
+    `Flow ${name} references element id ${marker.__flowElementId} (${marker.className}), but it no longer ` +
+    `exists in the game: it is neither in the tree nor in game.pile. An element the flow holds must stay in ` +
+    `the game; remove() it or move it instead of detaching it, or restore the flow with the state it was saved with.`
+  );
+}
+
+/** Inverse of `encodeFlowValue`: resolve every marker in `value` to a live
+ *  element of `game` (see `resolveFlowElement`). A marker withheld from a seat
+ *  becomes `undefined`, as a withheld attribute does. A live element
+ *  (in-process, never serialized) is passed through unchanged.
+ *
+ *  @param kind - What `value` is, for the error: `variable` or `step data`.
+ *  @param path - Where in it the recursion is; omitted for the record itself. */
+function relinkFlowValue(
+  value: unknown,
+  game: Game,
+  idRemap: Map<number, number> | undefined,
+  kind: string,
+  path?: string,
+): unknown {
+  if (value === null || typeof value !== 'object' || value instanceof GameElement) {
     return value;
   }
   if (isSerializedFlowElement(value)) {
-    const live = game.getElementById(value.__flowElementId);
-    if (live && live.constructor.name === value.className) {
-      return live;
-    }
-    const syntheticId = idRemap?.get(value.__flowElementId);
-    if (syntheticId !== undefined) {
-      const redactedPlaceholder = game.getElementById(syntheticId);
-      if (redactedPlaceholder) {
-        return redactedPlaceholder;
-      }
-    }
-    // WR-01 (163-REVIEW): no idRemap entry (zone-`'hidden'` mode registers
-    // none, by design -- see D24). Fall back to the marker's own recorded
-    // container id, if any: the container is a live, already-disclosed
-    // element (only its children are concealed), so relinking to it reveals
-    // no new information and keeps the flow variable resolvable instead of
-    // leaving a dead marker in place.
-    if (value.__hiddenContainerId !== undefined) {
-      const container = game.getElementById(value.__hiddenContainerId);
-      if (container) {
-        return container;
-      }
-    }
-    return value;
+    return resolveFlowElement(value, game, idRemap, `${kind} '${path}'`);
   }
-  if (value === null || typeof value !== 'object') {
-    return value;
+  if ((value as { __elementRef?: unknown }).__elementRef === WITHHELD_PILE_BRANCH) {
+    return undefined;
   }
   if (Array.isArray(value)) {
-    return value.map((entry) => relinkFlowVariables(entry, game, idRemap));
+    return value.map((entry, i) => relinkFlowValue(entry, game, idRemap, kind, `${path}[${i}]`));
   }
   const result: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
-    result[key] = relinkFlowVariables(entry, game, idRemap);
+    result[key] = relinkFlowValue(entry, game, idRemap, kind, path === undefined ? key : `${path}.${key}`);
   }
   return result;
 }
@@ -294,19 +294,6 @@ export class FlowEngine<G extends Game = Game> {
   private definition: FlowDefinition<G>;
   private stack: ExecutionFrame<G>[] = [];
   private variables: Record<string, unknown> = {};
-  /**
-   * CR-02 (159): `originalId -> syntheticId` remap for fungible hidden-zone
-   * children anonymized by `Game.toJSONForPlayer` on a redacted (`forSeat`)
-   * clone. Set once by `restoreFullState` and held for the FlowEngine
-   * instance's lifetime -- not just the top-level flow VARIABLES
-   * (`relinkFlowVariables`) need it, but also `executeForEach`'s per-iteration
-   * `frame.data.forEachItems` resolution, which re-resolves an element by its
-   * ORIGINAL id on every iteration for as long as the loop runs (including
-   * iterations that happen well after the initial restore, deep in an MCTS
-   * search). `undefined` on the default (un-redacted) restore path — behavior
-   * there is unchanged.
-   */
-  private hiddenIdRemap?: Map<number, number>;
   private currentPlayer?: PlayerOf<G>;
   private awaitingInput = false;
   private availableActions: string[] = [];
@@ -831,7 +818,7 @@ export class FlowEngine<G extends Game = Game> {
     if (frame.data?.playerSaved) {
       // Always a live Player (or a deliberate `undefined`, when no player was
       // current at save time): `getPosition`/`restore` round-trip frame data
-      // through serializeFlowVariables/relinkFlowVariables, so there is no
+      // through encodeFlowValue/relinkFlowValue, so there is no
       // serialized form to decode here.
       this.currentPlayer = frame.data.previousPlayer as PlayerOf<G> | undefined;
     }
@@ -1306,17 +1293,19 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   /**
-   * Restore flow from a serialized position
+   * Restore flow from a serialized position.
+   *
+   * @param idRemap - CR-02 (159): set only when restoring into a redacted
+   *   (`forSeat`) clone; see `resolveFlowElement`.
+   * @throws When an element the position holds no longer resolves, naming the
+   *   flow variable or step data that holds it.
    */
-  restore(position: FlowPosition): void {
+  restore(position: FlowPosition, idRemap?: Map<number, number>): void {
     // Relink serialized element-valued flow variables back to live elements of
-    // this game (inverse of getPosition's serializeFlowVariables). Doing it here
+    // this game (inverse of getPosition's encodeFlowValue). Doing it here
     // means every restore path — runner.fromSnapshot, MCTS clone, and a rules
     // reload in the dev host — is covered without each caller relinking.
-    // `this.hiddenIdRemap` (CR-02, 159) is only ever set by a redacted-clone
-    // restore (`restoreFullState`); plain position-only restores leave it
-    // `undefined`, matching prior behavior exactly.
-    this.variables = relinkFlowVariables({ ...position.variables }, this.game, this.hiddenIdRemap) as Record<string, unknown>;
+    this.variables = relinkFlowValue({ ...position.variables }, this.game, idRemap, 'variable') as Record<string, unknown>;
     this.stack = [];
 
     // Rebuild stack from path
@@ -1324,13 +1313,14 @@ export class FlowEngine<G extends Game = Game> {
     for (let i = 0; i < position.path.length; i++) {
       const index = position.path[i];
       const iterationKey = `__iter_${i}`;
-      // Inverse of getPosition's serializeFlowVariables on frame data: an
-      // element-valued entry comes back as a LIVE element of this game, under
-      // whatever field name the engine wrote it to.
-      const restoredFrameData = relinkFlowVariables(
+      // Inverse of getPosition's encodeFlowValue on frame data: an
+      // element-valued entry (a `forEach` item included) comes back as a LIVE
+      // element of this game, under whatever field name the engine wrote it to.
+      const restoredFrameData = relinkFlowValue(
         { ...(position.frameData?.[`__frame_${i}`] ?? {}) },
         this.game,
-        this.hiddenIdRemap,
+        idRemap,
+        'step data',
       ) as Record<string, unknown>;
       if (restoredFrameData.iteration === undefined) {
         restoredFrameData.iteration = position.iterations[iterationKey] ?? 0;
@@ -1361,14 +1351,36 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   /**
+   * Point every element the flow holds (variables, frame data, the current
+   * player) at the same element of the game's current tree, after the tree was
+   * rebuilt in place under a flow that stays where it is: a failed action
+   * rolled back (#679). The position does not change.
+   *
+   * @throws When an element the flow holds is not in the rebuilt tree, naming
+   *   the flow variable or step data that holds it.
+   */
+  relinkElements(): void {
+    this.variables = relinkFlowValue(encodeFlowValue(this.variables), this.game, undefined, 'variable') as Record<string, unknown>;
+    for (const frame of this.stack) {
+      if (frame.data) {
+        frame.data = relinkFlowValue(encodeFlowValue(frame.data), this.game, undefined, 'step data') as Record<string, unknown>;
+      }
+    }
+    if (this.currentPlayer) {
+      this.currentPlayer = this.game.getPlayer(this.currentPlayer.seat) as PlayerOf<G>;
+    }
+  }
+
+  /**
    * Try to restore flow from a serialized position with bounds checking.
    * Unlike restore(), this method validates the path and returns failure info
    * instead of throwing or accessing invalid indices.
    *
    * @param position - The flow position to restore
+   * @param idRemap - See {@link restore}.
    * @returns Success or failure with the last valid path
    */
-  tryRestore(position: FlowPosition): { success: true } | { success: false; error: string; validPath: number[] } {
+  tryRestore(position: FlowPosition, idRemap?: Map<number, number>): { success: true } | { success: false; error: string; validPath: number[] } {
     // Validate path before attempting restore
     const validationResult = this.validatePath(position.path, position.frameData);
 
@@ -1381,7 +1393,7 @@ export class FlowEngine<G extends Game = Game> {
     }
 
     // Path is valid, perform the restore
-    this.restore(position);
+    this.restore(position, idRemap);
     return { success: true };
   }
 
@@ -1390,15 +1402,8 @@ export class FlowEngine<G extends Game = Game> {
    * This should be used for HMR where we want to restore exactly where we were.
    */
   restoreFullState(state: FlowState, idRemap?: Map<number, number>): { success: true } | { success: false; error: string; validPath: number[] } {
-    // CR-02 (159): stash the remap on the instance BEFORE restoring -- it must
-    // outlive this single call so `executeForEach`'s per-iteration element
-    // resolution (which can run long after this restore, deep in an MCTS
-    // search) can also fall back to it. See the field doc for why this can't
-    // just be a one-shot parameter.
-    this.hiddenIdRemap = idRemap;
-
     // First restore the position (stack structure)
-    const result = this.tryRestore(state.position);
+    const result = this.tryRestore(state.position, idRemap);
     if (!result.success) {
       return result;
     }
@@ -1542,14 +1547,14 @@ export class FlowEngine<G extends Game = Game> {
         // as `variables` below (BSMITH-04). The engine writes `frame.data` from
         // more than a dozen sites and any of them can put a live
         // `GameElement`/`Player` there -- `executeActionStep`'s `previousPlayer`
-        // does today -- so a hand-written special case per field name is a hole
-        // waiting for the fourteenth site. Plain values (`moveCount`,
-        // `iteration`, `eligibleSeats: number[]`, `branchIndex`, the
-        // deliberately pre-tagged `forEachItems`) pass through untouched, which
+        // and `executeForEach`'s `forEachItems` do today -- so a hand-written
+        // special case per field name is a hole waiting for the fourteenth
+        // site. Plain values (`moveCount`, `iteration`,
+        // `eligibleSeats: number[]`, `branchIndex`) pass through untouched, which
         // is what `turnSequence`/`dueSeats` (seat-activity.ts) and
         // `resolveFlowChild` read back out. Do NOT "simplify" this to a
         // spread: that is the asymmetry this replaced.
-        const serializedData = serializeFlowVariables({ ...frame.data }) as Record<string, unknown>;
+        const serializedData = encodeFlowValue({ ...frame.data }) as Record<string, unknown>;
         frameData[`__frame_${i}`] = serializedData;
         if (serializedData.iteration !== undefined) {
           iterations[`__iter_${i}`] = serializedData.iteration as number;
@@ -1564,7 +1569,7 @@ export class FlowEngine<G extends Game = Game> {
       playerIndex: this.currentPlayer?.seat,
       // Serialize element-valued flow variables (e.g. eachPlayer's currentPlayer)
       // so the position is structured-cloneable across the broadcast/RPC boundary.
-      variables: serializeFlowVariables({ ...this.variables }) as Record<string, unknown>,
+      variables: encodeFlowValue({ ...this.variables }) as Record<string, unknown>,
       // Plain seat number and count, so it needs no relinking on the way back.
       turnRun: this.turnRun ? { ...this.turnRun } : undefined,
     };
@@ -1877,42 +1882,33 @@ export class FlowEngine<G extends Game = Game> {
   ): StepResult {
     // Snapshot the collection exactly once on first entry (mirrors executeEachPlayer's
     // eligibleSeats pattern) so a loop body that mutates the source collection (removes
-    // or moves items) still visits every original item. GameElements are stored tagged
-    // by JSON-plain id (re-resolved via getElementById each iteration) so a bare-number
-    // primitive item is never mistaken for an element id on re-resolution (the same
-    // ambiguity class as ENG-05/resolveArgs); non-element JSON primitives are stored
-    // as-is. This also keeps frame.data checkpoint-safe (no object refs).
+    // or moves items) still visits every original item. The snapshot is frame data, so
+    // `getPosition` writes its elements as flow markers and `restore` relinks them, as it
+    // does every element the flow holds.
     if (frame.data?.forEachItems === undefined) {
       const items = typeof config.collection === 'function'
         ? config.collection(context)
         : config.collection;
 
-      const snapshot = items.map((item): ForEachSnapshotItem => {
-        if (item instanceof GameElement) {
-          const hiddenContainerId = hiddenContainerIdOf(item);
-          return hiddenContainerId !== undefined
-            ? { elementId: item.id, hiddenContainerId }
-            : { elementId: item.id };
-        }
+      for (const item of items) {
         const type = typeof item;
-        if (type === 'string' || type === 'number' || type === 'boolean' || item === null) {
-          return { value: item as string | number | boolean | null };
+        if (!(item instanceof GameElement) && type !== 'string' && type !== 'number' && type !== 'boolean' && item !== null) {
+          throw new Error(
+            `forEach() collection item is not a GameElement or JSON primitive (got ${type}). ` +
+            `Only GameElement instances and string/number/boolean values are supported, ` +
+            `so the loop's per-item snapshot can round-trip through checkpoint/restore.`
+          );
         }
-        throw new Error(
-          `forEach() collection item is not a GameElement or JSON primitive (got ${type}). ` +
-          `Only GameElement instances and string/number/boolean values are supported, ` +
-          `so the loop's per-item snapshot can round-trip through checkpoint/restore.`
-        );
-      });
+      }
 
       frame.data = {
         ...frame.data,
-        forEachItems: snapshot,
+        forEachItems: [...items],
         itemIndex: 0,
       };
     }
 
-    const items = (frame.data.forEachItems as ForEachSnapshotItem[]) ?? [];
+    const items = frame.data.forEachItems as unknown[];
     const itemIndex = (frame.data.itemIndex as number) ?? 0;
 
     if (itemIndex >= items.length) {
@@ -1920,39 +1916,7 @@ export class FlowEngine<G extends Game = Game> {
       return { awaitingInput: false };
     }
 
-    const rawItem = items[itemIndex];
-    if ('elementId' in rawItem) {
-      // CR-02 (159): the forEach snapshot stores the ORIGINAL element id.
-      // On a redacted clone, a fungible hidden-zone child was anonymized to a
-      // synthetic id by `toJSONForPlayer` -- the direct lookup below won't
-      // find it there, so fall back to `hiddenIdRemap` (same remap
-      // `relinkFlowVariables` uses) before concluding the element is
-      // genuinely gone.
-      let element = this.game.getElementById(rawItem.elementId);
-      if (!element && this.hiddenIdRemap) {
-        const syntheticId = this.hiddenIdRemap.get(rawItem.elementId);
-        if (syntheticId !== undefined) {
-          element = this.game.getElementById(syntheticId);
-        }
-      }
-      // WR-01 (163-REVIEW): no idRemap entry for a zone-`'hidden'` item
-      // (none is ever registered -- see D24/hiddenContainerIdOf). Fall back
-      // to the snapshot's own recorded container id: a live, already-
-      // disclosed element, so relinking to it reveals nothing new.
-      if (!element && rawItem.hiddenContainerId !== undefined) {
-        element = this.game.getElementById(rawItem.hiddenContainerId);
-      }
-      if (!element) {
-        throw new Error(
-          `forEach() snapshot references element id ${rawItem.elementId}, but it no longer ` +
-          `exists in the game tree (it may have been permanently removed, not just moved). ` +
-          `A loop body must not delete elements it iterates over; move them instead.`
-        );
-      }
-      this.variables[config.as] = element;
-    } else {
-      this.variables[config.as] = rawItem.value;
-    }
+    this.variables[config.as] = items[itemIndex];
 
     this.stack.push({ node: config.do, index: 0, completed: false });
     frame.data = { ...frame.data, itemIndex: itemIndex + 1 };
