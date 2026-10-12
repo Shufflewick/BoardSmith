@@ -18,18 +18,9 @@
  * is asserted includes the frames on that socket, because "received WebSocket
  * frames contain no pick reply" is how the defect was actually found.
  *
- * ## Why this is not in `npx vitest run`
- *
- * It needs Chromium, and BoardSmith depends on no browser -- the suite stays
- * hermetic and this is run deliberately, the same split ShufflewickPub keeps
- * between `npm test` and its Playwright specs. It never skips: with no
- * Playwright reachable it says how to give it one and exits non-zero, because a
- * browser regression that quietly passes when it did not run is the thing it
- * exists to replace.
- *
- *   node scripts/world-pick-bridge-browser.mjs
- *   BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \
- *     node scripts/world-pick-bridge-browser.mjs
+ * Runs under `boardsmith test --browser`, or by hand with
+ * `node scripts/world-pick-bridge-browser.mjs`; a missing Chromium says to run
+ * `boardsmith install-browser`.
  *
  * ## The fixture is written here, not checked in
  *
@@ -46,6 +37,7 @@ import {
   runBrowserRegression,
   summarise,
   surfaceOf,
+  waitForAction,
   waitUntil,
 } from './browser-harness.mjs';
 
@@ -194,11 +186,6 @@ export default defineComponent({
 });
 `;
 
-/** Wait for the panel to be offering the world's verbs to a seated player. */
-async function seated(page) {
-  await surfaceOf(page).locator('[data-bs-action="deploy"]').waitFor({ timeout: 30_000 });
-}
-
 /** Start `deploy` from the ACTION PANEL and bind `ship` there. */
 async function panelDeploy(page, ship) {
   const surface = surfaceOf(page);
@@ -274,7 +261,7 @@ async function driveThrough({ launch, hostUrl }) {
         });
       });
       await page.goto(hostUrl);
-      await seated(page);
+      await waitForAction(page, 'deploy');
       await panelDeploy(page, 'dory');
 
       await check('the action panel resolves the cap the chosen ship decides', async () => {
@@ -340,7 +327,7 @@ async function driveThrough({ launch, hostUrl }) {
       const context = await browser.newContext();
       const page = await context.newPage();
       await page.goto(hostUrl);
-      await seated(page);
+      await waitForAction(page, 'deploy');
 
       await check('a custom UI that prefills the ship lands on the resolved cap', async () => {
         await surfaceOf(page).locator('[data-fixture="prefill-dory"]').click();
@@ -383,7 +370,7 @@ async function driveThrough({ launch, hostUrl }) {
         });
       });
       await page.goto(hostUrl);
-      await seated(page);
+      await waitForAction(page, 'deploy');
       await panelDeploy(page, 'dory');
 
       await check('a dropped reply times out and says so, rather than showing a cap', async () => {

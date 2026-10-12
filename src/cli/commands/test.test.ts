@@ -49,6 +49,23 @@ describe('boardsmith test', () => {
     expect(run.stderr).toMatch(/boardsmith doctor --fix/);
     expect(run.stdout + run.stderr).not.toContain('wip.test.ts');
   });
+
+  it('runs the browser suite under --browser without type-checking again, since the default run did', async () => {
+    // A filter matching no browser regression, so no Chromium starts: what is
+    // asserted is that vitest was handed the browser config and no type check ran first.
+    const run = await spawnCli(['test', '--browser', 'no-such-browser-regression']);
+    expect(run.stdout).not.toContain('Type-checking');
+    expect(run.stdout + run.stderr).toContain('scripts/browser-regressions.browser-test.mjs');
+  });
+
+  it('refuses --browser in a game project, which has no browser regressions, and names the check that has', async () => {
+    const project = await gameProject({ [VITEST_CONFIG_FILE]: generateVitestConfig('vite.config.ts') });
+    const run = await spawnCli(['test', '--browser'], project);
+    expect(run.code).toBe(1);
+    expect(run.stderr).toMatch(/--browser runs BoardSmith's own browser regressions/);
+    expect(run.stderr).toMatch(/boardsmith smoke/);
+    expect(run.stdout).not.toContain('ok.test.ts');
+  });
 });
 
 /** Starts, says so, and outlives nothing: once vitest is gone it ends its own worker. */

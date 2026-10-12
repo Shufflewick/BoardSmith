@@ -27,16 +27,9 @@
  * in this repo shares: real Chromium, the real `boardsmith dev` world chrome,
  * the real `world.html` in the real iframe, a real WebSocket to a real host.
  *
- * ## Why this is not in `npx vitest run`
- *
- * It needs Chromium, and BoardSmith depends on no browser -- the suite stays
- * hermetic and this is run deliberately. It never skips: with no Playwright
- * reachable it says how to give it one and exits non-zero, because a browser
- * regression that quietly passes when it did not run is the thing it replaces.
- *
- *   node scripts/multiline-text-browser.mjs
- *   BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \
- *     node scripts/multiline-text-browser.mjs
+ * Runs under `boardsmith test --browser`, or by hand with
+ * `node scripts/multiline-text-browser.mjs`; a missing Chromium says to run
+ * `boardsmith install-browser`.
  */
 
 import {
@@ -48,6 +41,7 @@ import {
   summarise,
   surfaceOf,
   VIEW_FIELD_READER,
+  waitForAction,
   waitUntil,
 } from './browser-harness.mjs';
 
@@ -187,13 +181,6 @@ export default defineComponent({
 });
 `;
 
-/** Wait for the panel to be offering the world's verbs to a seated player. */
-async function seated(page) {
-  await surfaceOf(page)
-    .locator('[data-bs-action="setDescription"]')
-    .waitFor({ timeout: 30_000 });
-}
-
 async function startAction(page, name, editor = '.text-input') {
   const surface = surfaceOf(page);
   await surface.locator(`[data-bs-action="${name}"]`).click();
@@ -226,7 +213,7 @@ async function driveThrough({ launch, hostUrl }) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const page = await context.newPage();
     await page.goto(hostUrl);
-    await seated(page);
+    await waitForAction(page, 'setDescription');
     await startAction(page, 'setDescription');
 
     const surface = surfaceOf(page);
@@ -552,7 +539,7 @@ function screens() {
 
 async function onASmallerScreen(browser, hostUrl, viewport) {
   const size = `${viewport.width}x${viewport.height}`;
-  await onFreshPage(browser, hostUrl, { viewport }, seated, async (page, surface) => {
+  await onFreshPage(browser, hostUrl, { viewport }, (page) => waitForAction(page, 'setDescription'), async (page, surface) => {
     await check(`${size}: at rest the bar sits inside the strip the board reserves, without scrolling`, async () => {
       const bar = await barGeometry(surface);
       assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}`);

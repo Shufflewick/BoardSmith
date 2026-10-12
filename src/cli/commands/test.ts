@@ -8,8 +8,16 @@ import { requireGameProject } from '../lib/game-project.js';
 import { testRunScopeProblem } from '../lib/test-run-scope.js';
 import { runTypecheck } from './typecheck.js';
 
+/**
+ * The vitest config of BoardSmith's browser regressions (`scripts/*-browser.mjs`), which
+ * `boardsmith test --browser` runs in place of the default suite, so the default needs no Chromium.
+ */
+export const BROWSER_SUITE_CONFIG = 'vitest.browser.config.ts';
+
 interface TestOptions {
   watch?: boolean;
+  /** Run BoardSmith's browser regressions (`BROWSER_SUITE_CONFIG`) instead of the default suite. */
+  browser?: boolean;
   coverage?: boolean;
   /** A file to write the verdict of a failed run into, for a script to repeat (such as a merge gate). */
   verdictFile?: string;
@@ -26,8 +34,11 @@ interface TestOptions {
  * `patterns` are forwarded to vitest as filename filters, e.g.
  * `boardsmith test mcts` runs only test files matching "mcts".
  *
+ * `--browser`, in the BoardSmith repository only, runs the browser regressions in Chromium
+ * (`BROWSER_SUITE_CONFIG`, #533) instead of the default suite, without the type check.
+ *
  * In the BoardSmith repository it type-checks first and runs no test if that
- * fails (#312). In a game project it refuses to start when the project's vitest config would
+ * fails (#312), except under `--browser`. In a game project it refuses to start when the project's vitest config would
  * also collect the chunk worktrees under `.boardsmith/worktrees/` (#298).
  *
  * A run that does not pass ends with a verdict that says why (#429): the files
@@ -42,27 +53,15 @@ export async function testCommand(patterns: string[], options: TestOptions): Pro
   const context = getProjectContext(cwd);
 
   if (context === 'standalone') {
-    await refuseGameProjectThatCannotRun(cwd);
+    await refuseGameProjectThatCannotRun(cwd, options);
   } else {
-    // THE BOARDSMITH REPOSITORY TYPE-CHECKS BEFORE IT TESTS (#312), so a type
-    // error stops the run, and the merge that runs it, before a test starts.
-    const typecheck = await runTypecheck(cwd);
-    if (typecheck !== 0) {
-      fail(
-        `The type check failed (vue-tsc exited with code ${typecheck}), so no test ran. ` +
-          "Its errors are above; run 'boardsmith typecheck' to see them again.",
-        typecheck,
-        options,
-      );
-    }
+    await typecheckFirst(cwd, options);
   }
 
   const label = context === 'monorepo' ? 'BoardSmith' : 'game';
   console.log(chalk.cyan(`\nRunning ${label} tests...\n`));
 
-  const args: string[] = [];
-  if (options.coverage) args.push('--coverage');
-  args.push(...patterns);
+  const args = vitestArgs(patterns, options);
 
   if (options.watch) {
     process.exit(await runTool('vitest', ['watch', ...args], { cwd }));
@@ -78,6 +77,32 @@ export async function testCommand(patterns: string[], options: TestOptions): Pro
   console.log(chalk.green('\nAll tests passed!\n'));
 }
 
+/** What vitest is handed after its own subcommand: the options asked for, then the filename filters. */
+function vitestArgs(patterns: string[], options: TestOptions): string[] {
+  const args: string[] = [];
+  if (options.browser) args.push('--config', BROWSER_SUITE_CONFIG);
+  if (options.coverage) args.push('--coverage');
+  return [...args, ...patterns];
+}
+
+/**
+ * THE BOARDSMITH REPOSITORY TYPE-CHECKS BEFORE IT TESTS (#312), so a type error stops the run,
+ * and the merge that runs it, before a test starts. `--browser` does not: it runs after the
+ * default suite (in `agent-policy verify`, on the same commit), which has type-checked already.
+ */
+async function typecheckFirst(cwd: string, options: TestOptions): Promise<void> {
+  if (options.browser) return;
+  const typecheck = await runTypecheck(cwd);
+  if (typecheck !== 0) {
+    fail(
+      `The type check failed (vue-tsc exited with code ${typecheck}), so no test ran. ` +
+        "Its errors are above; run 'boardsmith typecheck' to see them again.",
+      typecheck,
+      options,
+    );
+  }
+}
+
 /** Ends a run that did not pass: prints why, hands the same text to `--verdict-file`, and exits. */
 function fail(verdict: string, code: number, options: TestOptions): never {
   console.error(chalk.red(`\n${verdict}\n`));
@@ -86,11 +111,18 @@ function fail(verdict: string, code: number, options: TestOptions): never {
 }
 
 /**
- * Stop before vitest starts when a game project has no tests, or when its
- * vitest config would also collect the chunk worktrees (#298).
+ * Stop before vitest starts when a game project is asked for `--browser`, has no
+ * tests, or has a vitest config that would also collect the chunk worktrees (#298).
  */
-async function refuseGameProjectThatCannotRun(cwd: string): Promise<void> {
+async function refuseGameProjectThatCannotRun(cwd: string, options: TestOptions): Promise<void> {
   requireGameProject(cwd);
+
+  if (options.browser) {
+    throw new Error(
+      "--browser runs BoardSmith's own browser regressions, and a game has none. " +
+        'To open this game in a browser, run `boardsmith smoke`.',
+    );
+  }
 
   if (!existsSync(join(cwd, 'tests'))) {
     console.log(chalk.yellow('No tests directory found.'));

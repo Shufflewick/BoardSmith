@@ -67,27 +67,37 @@ function playwrightTestDir(): string {
   return dirname(require.resolve('@playwright/test/package.json'));
 }
 
-/** The Playwright version, and where it looks for the Chromium it drives. */
-async function playwrightChromium(): Promise<{ version: string; executable: string }> {
+/** The Chromium BoardSmith's Playwright drives, its version, and where it looks for the browser. */
+interface PlaywrightChromium {
+  version: string;
+  executable: string;
+  chromium: typeof import('@playwright/test').chromium;
+}
+
+/**
+ * BoardSmith's own Playwright Chromium, as the smoke check and the browser regressions in
+ * `scripts/*-browser.mjs` both find it. Check `browserProblem` before launching it.
+ */
+export async function playwrightChromium(): Promise<PlaywrightChromium> {
   const dir = playwrightTestDir();
   const { version } = JSON.parse(await fs.readFile(join(dir, 'package.json'), 'utf-8')) as { version: string };
   // Dynamic import: Playwright is loaded only by a command that drives a browser.
   const { chromium } = (await import(pathToFileURL(join(dir, 'index.mjs')).href)) as typeof import('@playwright/test');
-  return { version, executable: chromium.executablePath() };
+  return { version, executable: chromium.executablePath(), chromium };
 }
 
 /**
- * Why the smoke check cannot run a browser, or undefined when it can: the Chromium this
- * Playwright drives is not installed at `executable`.
+ * Why no browser check can run, or undefined when one can: the Chromium this Playwright drives is
+ * not installed at `executable`.
  */
 export function browserProblem(browser: { version: string; executable: string }): SmokeOutcome | undefined {
   if (existsSync(browser.executable)) return undefined;
   return {
     passed: false,
     summary:
-      `The browser the smoke test runs in is not installed: Playwright ${browser.version} looks for Chromium at ` +
+      `The Chromium BoardSmith's browser checks run in is not installed: Playwright ${browser.version} looks for Chromium at ` +
       `${browser.executable}, and nothing is there.`,
-    next: `Run ${INSTALL_BROWSER} (a one-time download of about 150 MB), then run \`boardsmith verify\` again.`,
+    next: `Run ${INSTALL_BROWSER} (a one-time download of about 150 MB), then run the check again.`,
   };
 }
 

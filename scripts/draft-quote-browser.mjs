@@ -25,18 +25,13 @@
  * checks measure where each line ends against the bar's own content edge, with
  * a whole conditions sentence and one unbroken reference in the quote.
  *
- * ## Why this is not in `npx vitest run`
- *
- * It needs Chromium, and BoardSmith depends on no browser. It never skips: with
- * no Playwright reachable it says how to give it one and exits non-zero.
- *
- *   node scripts/draft-quote-browser.mjs
- *   BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \
- *     node scripts/draft-quote-browser.mjs
+ * Runs under `boardsmith test --browser`, or by hand with
+ * `node scripts/draft-quote-browser.mjs`; a missing Chromium says to run
+ * `boardsmith install-browser`.
  */
 // One line rather than the pick harness's stacked list, so two scripts importing
 // the same six helpers are not a clone group the duplication gate has to hold.
-import { assert, check, runBrowserRegression, summarise, surfaceOf, waitUntil } from './browser-harness.mjs';
+import { assert, check, runBrowserRegression, summarise, surfaceOf, waitForAction, waitUntil } from './browser-harness.mjs';
 
 // ── The fixture world ────────────────────────────────────────────────────────
 
@@ -216,11 +211,6 @@ export default defineComponent({
 
 // ── Reading the bar ──────────────────────────────────────────────────────────
 
-/** Wait for the panel to be offering the world's verbs to a seated player. */
-async function seated(page) {
-  await surfaceOf(page).locator('[data-bs-action="boost"]').waitFor({ timeout: 30_000 });
-}
-
 /** What the bar currently says the draft costs. */
 async function quoteText(page) {
   const quote = surfaceOf(page).locator('[data-bs-quote]');
@@ -339,7 +329,7 @@ async function driveThrough({ launch, hostUrl }) {
     const page = await context.newPage();
     const { asked, answered, commands } = recordFrames(page);
     await page.goto(hostUrl);
-    await seated(page);
+    await waitForAction(page, 'boost');
 
     // ── 1. The price of a TYPED, UNSUBMITTED quantity, on the bar ───────────
     await check('the standard panel shows the price of a typed draft before Done', async () => {

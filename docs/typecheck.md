@@ -14,7 +14,8 @@ it there.
 
 1. **`boardsmith test`** runs it first in this repository and runs no test at
    all if it fails. So a type error is found while you are still working, not
-   at merge.
+   at merge. `boardsmith test --browser` (the browser regressions) does not:
+   verify runs it after the plain run has type-checked the same commit.
 2. **At merge.** Maintainers merge a branch into `main` only through a gate
    that runs `boardsmith test` on the merged tree, and the gate refuses the
    branch if it fails. Because it checks
