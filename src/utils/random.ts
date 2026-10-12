@@ -11,7 +11,7 @@
  *
  * @example
  * ```typescript
- * import { SeededRandom } from 'boardsmith/utils';
+ * import { SeededRandom } from '../utils/random.js';
  *
  * const rng = new SeededRandom('my-seed');
  * const value = rng.next();        // 0-1 float

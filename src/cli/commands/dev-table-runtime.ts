@@ -15,7 +15,7 @@
  */
 import chalk from 'chalk';
 
-import type { GameStateSnapshot } from '../../engine/index.js';
+import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import type { executeOp as sessionExecuteOp, GameDefinition, RulesReload } from '../../session/index.js';
 import type { MultiplayerHost, TableRules } from '../dev-host/multiplayer-host.js';
 import { createRulesReloadQueue, type RulesReloadQueue } from '../dev-host/rules-reload-queue.js';

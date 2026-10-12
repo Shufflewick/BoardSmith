@@ -5,10 +5,12 @@ import {
   Piece,
   Player,
   Action,
+} from '../index.js';
+import {
   serializeAction,
   deserializeAction,
   isSerializedReference,
-} from '../index.js';
+} from './index.js';
 import { TEST_WORLD_ELEMENT_ID_KEY } from '../element/world-element-id-key.test-helper.js';
 
 // Test game classes

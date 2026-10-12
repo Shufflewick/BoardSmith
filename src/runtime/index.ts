@@ -1,19 +1,19 @@
-// Re-export serialization utilities from engine
+// Serialization utilities
 export {
   serializeAction,
   deserializeAction,
   isSerializedReference,
   type SerializedReference,
-} from '../engine/index.js';
+} from '../engine/utils/serializer.js';
 
-// Re-export state snapshots from engine
+// State snapshots
 export {
   createSnapshot,
   createPlayerView,
   createAllPlayerViews,
   type GameStateSnapshot,
   type PlayerStateView,
-} from '../engine/index.js';
+} from '../engine/utils/snapshot.js';
 
 // Game runner (runtime-specific)
 export {
@@ -30,4 +30,4 @@ export {
 } from './runner.js';
 
 // History entry types (used by callers that invoke GameRunner.replay)
-export type { SerializedAction, SerializedSeatExpiry, HistoryEntry } from '../engine/index.js';
+export type { SerializedAction, SerializedSeatExpiry, HistoryEntry } from '../engine/action/types.js';

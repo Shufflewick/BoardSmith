@@ -86,8 +86,8 @@ in every game.
   Cloudflare's types declare `crypto` and `console` as `const`, which
   `typeof globalThis` does not carry. `src/contract/workers-typecheck.test.ts`
   compiles every entry point the platform imports (`boardsmith`,
-  `boardsmith/session`, `boardsmith/session-host`, `boardsmith/world`,
-  `boardsmith/persistence` and `boardsmith/runtime`) with only ES2022 and
+  `boardsmith/session`, `boardsmith/world`, `boardsmith/persistence` and
+  `boardsmith/runtime`) with only ES2022 and
   Workers-shaped declarations (#488). Read a runtime
   global by its bare name, never as a property of `globalThis`.
 - **The code blocks in `docs/*.md`.** A Markdown file is not compiled. A

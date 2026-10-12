@@ -2,11 +2,12 @@
  * Shared types for game hosting.
  *
  * Protocol-level types (lobby, game options, WebSocket messages) are owned by
- * '../types/protocol.js' (boardsmith/types) and re-exported here for the
+ * '../types/protocol.js' and re-exported here for the
  * session surface — they are defined once, in one place.
  */
 
-import type { FlowState, Game, GameClass, AnimationEvent, PendingActionState, PlayerStateView } from '../engine/index.js';
+import type { FlowState, Game, GameClass, AnimationEvent, PendingActionState } from '../engine/index.js';
+import type { PlayerStateView } from '../engine/utils/index.js';
 import type { BotStrategy } from '../bot/index.js';
 import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
 import type { CheckpointPolicy, UndoPolicy } from '../engine/index.js';
@@ -36,7 +37,7 @@ import type {
 /**
  * Standard error codes for programmatic error handling.
  *
- * Re-exported from the protocol layer (`boardsmith/types`), which is the single
+ * Re-exported from the protocol layer (`types/protocol.ts`), which is the single
  * source of truth so that lower layers (runtime) can emit codes at the point an
  * error originates and higher layers pass them through unchanged.
  */

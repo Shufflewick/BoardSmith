@@ -63,7 +63,6 @@ describe('engine contract', () => {
     expect(PLATFORM_ENTRYPOINTS.map((e) => e.specifier)).toEqual([
       'boardsmith',
       'boardsmith/session',
-      'boardsmith/session-host',
       'boardsmith/persistence',
       'boardsmith/world',
     ]);

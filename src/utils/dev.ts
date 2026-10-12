@@ -6,7 +6,7 @@
  *
  * @example
  * ```typescript
- * import { isDevMode, devWarn } from 'boardsmith/utils';
+ * import { isDevMode, devWarn } from '../utils/dev.js';
  *
  * if (isDevMode()) {
  *   devWarn('my-feature', 'This feature is experimental');

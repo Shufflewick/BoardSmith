@@ -10,10 +10,10 @@ import {
   simultaneousActionStep,
   forEach,
   loop,
-  createSnapshot,
   type GameOptions,
   type ElementJSON,
 } from '../engine/index.js';
+import { createSnapshot } from '../engine/utils/index.js';
 import { MCTSBot } from './mcts-bot.js';
 
 // ============================================================================

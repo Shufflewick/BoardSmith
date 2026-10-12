@@ -260,7 +260,7 @@ testGame.game.score;      // typed as your Game subclass property
 testGame.game.deckSize;   // no JSON parsing, full IDE autocomplete
 ```
 
-`createPlayerView(game, seat)` (from `'boardsmith'`) is the lower-level
+`createPlayerView(game, seat)` (from `'boardsmith/runtime'`) is the lower-level
 function `getPlayerView` delegates to, for callers that only have a raw
 `Game` instance and not a `TestGame`/`GameRunner`.
 

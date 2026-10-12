@@ -23,7 +23,7 @@ import {
   type OpFailure,
   type OpResultFor,
 } from './stateless-ops.js';
-import type { GameStateSnapshot } from '../engine/index.js';
+import type { GameStateSnapshot } from '../engine/utils/index.js';
 import { simultaneousRoundsFixtureDefinition } from './testing/fixtures/simultaneous-rounds-fixture.js';
 import { collectTurnsFixtureDefinition } from './testing/fixtures/collect-turns-fixture.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';

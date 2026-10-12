@@ -21,7 +21,7 @@
  * `executeOp` that comes out of the same bundle (`loadTableRuntime`).
  */
 import { GameRunner } from '../../runtime/index.js';
-import type { GameStateSnapshot } from '../../engine/index.js';
+import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import { executeOp, type GameDefinitionLike, type OpResultFor, type RulesReload } from '../../session/index.js';
 
 type HostOptions = { teachingDisabled?: boolean };

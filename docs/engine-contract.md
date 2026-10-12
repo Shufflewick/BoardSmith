@@ -61,10 +61,10 @@ every test run:
 
 - **`surfaceHash`** — the runtime API of the entrypoints the platform can
   reach (`PLATFORM_ENTRYPOINTS`): `boardsmith` and `boardsmith/session`
-  (supplied to game rules by the executor's `sandboxedRequire`), and
-  `boardsmith/session-host`, `boardsmith/persistence` and `boardsmith/world`
-  (imported directly by the games worker). For each export it records the name
-  and, each with its kind: for a class or function, its prototype methods and
+  (supplied to game rules by the executor's `sandboxedRequire`, and imported
+  by the games worker to host a session), and `boardsmith/persistence` and
+  `boardsmith/world` (imported directly by the games worker). For each export
+  it records the name and, each with its kind: for a class or function, its prototype methods and
   accessors, statics, instance fields and symbol-keyed members such as
   `[Symbol.iterator]`, inherited ones included; for a plain object or an enum,
   its own keys (`TurnOrder.DEFAULT`, `ErrorCode.NOT_YOUR_TURN`) (#575).

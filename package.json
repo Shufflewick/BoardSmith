@@ -38,10 +38,6 @@
       "types": "./src/persistence/index.ts",
       "import": "./src/persistence/index.ts"
     },
-    "./session-host": {
-      "types": "./src/session/snapshot-session-host.ts",
-      "import": "./src/session/snapshot-session-host.ts"
-    },
     "./testing": {
       "types": "./src/testing/index.ts",
       "import": "./src/testing/index.ts"
@@ -77,14 +73,6 @@
     "./runtime": {
       "types": "./src/runtime/index.ts",
       "import": "./src/runtime/index.ts"
-    },
-    "./utils": {
-      "types": "./src/utils/index.ts",
-      "import": "./src/utils/index.ts"
-    },
-    "./types": {
-      "types": "./src/types/index.ts",
-      "import": "./src/types/index.ts"
     },
     "./world": {
       "types": "./src/world/index.ts",

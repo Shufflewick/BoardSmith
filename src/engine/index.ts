@@ -55,7 +55,6 @@ export type {
   Sorter,
   GameOptions,
   GameClass,
-  RandomnessPolicy,
   GamePhase,
   PlayerViewFunction,
   // The type of `Game.random`, which rules and tests may replace -- a game that
@@ -146,9 +145,6 @@ export type {
   ActionResult,
   FollowUpAction,
   FollowUpOffer,
-  SerializedAction,
-  SerializedSeatExpiry,
-  HistoryEntry,
   ValidationResult,
   RefWithRole,
   ChoiceBoardRefs,
@@ -230,31 +226,22 @@ export type {
   PublicFlowState,
 } from './flow/index.js';
 
-// Utilities (serialization, snapshots, replays, action helpers, dev state)
+// Utilities (action helpers, checkpoints)
 export {
   buildActionArgs,
   enumerateLegalMoves,
-  serializeAction,
-  deserializeAction,
-  isSerializedReference,
-  createSnapshot,
   createActionCheckpoint,
   checkpointAt,
   checkpointCount,
-  createPlayerView,
-  createAllPlayerViews,
 } from './utils/index.js';
 
 export type {
   BuildActionArgsOptions,
-  SerializedReference,
-  GameStateSnapshot,
   ActionCheckpoint,
   ActionCheckpointWindow,
   CheckpointAbsence,
   CheckpointPolicy,
   UndoPolicy,
-  PlayerStateView,
 } from './utils/index.js';
 
 // Tutorial predicate helpers (TUT-03)

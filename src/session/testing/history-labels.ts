@@ -7,7 +7,8 @@
  * inspects an action's args wants to say so and fail loudly if the entry is
  * not one, rather than cast past the difference.
  */
-import { isSeatExpiry, type HistoryEntry, type SerializedAction } from '../../engine/index.js';
+import { isSeatExpiry } from '../../engine/index.js';
+import type { HistoryEntry, SerializedAction } from '../../engine/action/types.js';
 
 /** `name:seat` for an action, `seatExpiry:seat` for a seat the host closed at a deadline, in order. */
 export function historyLabels(history: readonly HistoryEntry[]): string[] {

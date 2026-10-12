@@ -28,8 +28,8 @@ import {
   type FlowNode,
   type FlowState,
   type GameOptions,
-  type GameStateSnapshot,
 } from '../engine/index.js';
+import type { GameStateSnapshot } from '../engine/utils/index.js';
 import { _clearShownWarnings } from '../utils/dev.js';
 import { GameRunner } from '../runtime/runner.js';
 import { MCTSBot } from '../bot/mcts-bot.js';

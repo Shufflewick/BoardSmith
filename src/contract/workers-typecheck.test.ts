@@ -11,8 +11,8 @@
  * That shipped in r118 and stopped the platform adopting it.
  *
  * So this gate compiles the platform-reachable entry points -- `boardsmith`,
- * `boardsmith/session`, `boardsmith/session-host`, `boardsmith/world`,
- * `boardsmith/persistence` and `boardsmith/runtime` -- from a consumer's
+ * `boardsmith/session`, `boardsmith/world`, `boardsmith/persistence` and
+ * `boardsmith/runtime` -- from a consumer's
  * install with no DOM lib, no Node types, and only the Workers-shaped
  * declarations below. The declarations copy the SHAPE of Cloudflare's
  * (`declare const` where it says `const`), trimmed to the members the engine
@@ -34,7 +34,6 @@ import { expectCleanCompile } from './vue-tsc-run.test-helper.js';
 const PLATFORM_ENTRY_POINTS = [
   'src/engine/index.ts',
   'src/session/index.ts',
-  'src/session/snapshot-session-host.ts',
   'src/world/index.ts',
   'src/persistence/index.ts',
   'src/runtime/index.ts',

@@ -8,10 +8,10 @@ import {
   dueSeats,
   canSeatAct,
   availableActionsForSeat,
-  createPlayerView,
   type GameOptions,
   type FlowState,
 } from '../engine/index.js';
+import { createPlayerView } from '../engine/utils/index.js';
 import { isPlayersTurn } from './utils.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { succeeded } from './op-result.test-helper.js';

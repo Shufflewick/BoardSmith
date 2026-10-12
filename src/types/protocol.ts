@@ -6,7 +6,7 @@
  *
  * Import from here rather than defining these types elsewhere:
  * ```typescript
- * import type { LobbyState, WebSocketMessage, ElementRef } from 'boardsmith/types';
+ * import type { LobbyState, WebSocketMessage, ElementRef } from '../types/protocol.js';
  * ```
  */
 
@@ -300,79 +300,6 @@ export interface JoinLobbyResponse {
   seat?: number;
 }
 
-/**
- * Generic lobby response (setReady, addSlot, removeSlot, setSlotBot, leavePosition,
- * kickPlayer, updatePlayerOptions, updateSlotPlayerOptions, updateGameOptions).
- */
-export interface LobbyResponse {
-  success: boolean;
-  error?: string;
-  /** Updated lobby info */
-  lobby?: LobbyInfo;
-}
-
-/**
- * Request to set ready state.
- */
-export interface SetReadyRequest {
-  /** Player's unique ID */
-  playerId: string;
-  /** Ready state */
-  ready: boolean;
-}
-
-/**
- * Request to add a player slot (host only).
- */
-export interface AddSlotRequest {
-  /** Player's unique ID */
-  playerId: string;
-}
-
-/**
- * Request to remove a player slot (host only).
- */
-export interface RemoveSlotRequest {
-  /** Player's unique ID */
-  playerId: string;
-  /** Seat to remove (1-indexed) */
-  seat: number;
-}
-
-/**
- * Request to set a slot to bot or open (host only).
- */
-export interface SetSlotBotRequest {
-  /** Player's unique ID */
-  playerId: string;
-  /** Seat to target (1-indexed) */
-  seat: number;
-  /** Whether the slot should be bot */
-  isBot: boolean;
-  /** bot difficulty level (when isBot is true) */
-  botLevel?: string;
-}
-
-/**
- * Request to update game options (host only).
- */
-export interface UpdateGameOptionsRequest {
-  /** Player's unique ID */
-  playerId: string;
-  /** The game options to set */
-  gameOptions: Record<string, unknown>;
-}
-
-/**
- * Request to update player options.
- */
-export interface UpdatePlayerOptionsRequest {
-  /** Player's unique ID */
-  playerId: string;
-  /** The options to set */
-  playerOptions: Record<string, unknown>;
-}
-
 // ============================================
 // WebSocket Message Types
 // ============================================
@@ -545,8 +472,8 @@ export type WebSocketMessage =
  * Used in action selections and UI highlighting.
  *
  * THIS IS THE ONLY DECLARATION (#263). The UI layer and the engine's tutorial
- * types re-export it rather than restating it, so `boardsmith`, `boardsmith/ui`
- * and `boardsmith/types` all hand a game the same type under the same name.
+ * types re-export it rather than restating it, so `boardsmith` and
+ * `boardsmith/ui` hand a game the same type under the same name.
  *
  * Matching is precedence-based wherever a ref is resolved (`matchesRef` in
  * useBoardInteraction, and the tutorial overlay): id wins, else notation, else

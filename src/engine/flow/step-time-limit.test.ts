@@ -4,9 +4,9 @@ import {
   MIN_STEP_TIME_LIMIT_MS,
   actionStep,
   simultaneousActionStep,
-  createSnapshot,
   type GameOptions,
 } from '../index.js';
+import { createSnapshot } from '../utils/index.js';
 import { GameRunner } from '../../runtime/runner.js';
 import { MCTSBot } from '../../bot/mcts-bot.js';
 import {

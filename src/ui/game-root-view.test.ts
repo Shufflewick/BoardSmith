@@ -21,7 +21,8 @@
  */
 import { describe, it, expectTypeOf } from 'vitest';
 import type { ComputedRef } from 'vue';
-import type { Game, ElementJSON, PlayerStateView, RestoreOnlyRootField, SeatViewJSON } from '../engine/index.js';
+import type { Game, ElementJSON, RestoreOnlyRootField, SeatViewJSON } from '../engine/index.js';
+import type { PlayerStateView } from '../engine/utils/index.js';
 import type { PlayerGameState } from '../session/index.js';
 import type { PlayerState } from '../client/types.js';
 import type { SeatProjection, WorldSeatView } from '../testing/index.js';

@@ -10,7 +10,9 @@ import type {
   StateEnvelope,
 } from './stateless-ops.js';
 import { closesSeat, debugOpRefusal, isReadOnlyOp, type DebugHistoryEntry } from './stateless-ops.js';
-import type { Annotation, FlowState, GameStateSnapshot, HistoryEntry } from '../engine/index.js';
+import type { Annotation, FlowState } from '../engine/index.js';
+import type { GameStateSnapshot } from '../engine/utils/index.js';
+import type { HistoryEntry } from '../engine/action/types.js';
 import { dueSeats, type SeatActivityState } from '../engine/flow/seat-activity.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
 import { stepTimeLimitMs, type StepTimeLimitState } from '../engine/flow/step-time-limit.js';

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Game, Player, Action, actionStep, loop, type FollowUpOffer, type GameOptions, type GameStateSnapshot } from '../../engine/index.js';
+import { Game, Player, Action, actionStep, loop, type FollowUpOffer, type GameOptions } from '../../engine/index.js';
+import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import {
   executeOp,
   type ExecutableOp,

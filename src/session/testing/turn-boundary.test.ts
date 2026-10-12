@@ -18,7 +18,7 @@ import { describe, it, expect } from 'vitest';
 import { createHeadlessSession } from '../headless-session.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from '../snapshot-session-host.js';
 import { executeOp, type OpResult } from '../stateless-ops.js';
-import type { GameStateSnapshot } from '../../engine/index.js';
+import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../../engine/flow/boundary-key.js';
 import { dueSeats, type SeatActivityState } from '../../engine/flow/seat-activity.js';
 import { simultaneousFixtureDefinition } from './fixtures/simultaneous-fixture.js';

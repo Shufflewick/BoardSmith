@@ -501,10 +501,10 @@ element class that was never registered, it throws with the exact
 
 ### State Snapshots
 
-Use utility functions from `boardsmith` for state snapshots:
+Use utility functions from `boardsmith/runtime` for state snapshots:
 
 ```typescript
-import { createSnapshot, createPlayerView } from 'boardsmith';
+import { createSnapshot, createPlayerView } from 'boardsmith/runtime';
 
 // Get complete state snapshot
 const snapshot = createSnapshot(game, 'my-game');

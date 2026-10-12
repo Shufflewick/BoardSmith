@@ -45,7 +45,8 @@
  * long turn's checkpoints instead of shrinking the tree.
  */
 
-import { checkpointCount, type GameStateSnapshot } from '../engine/index.js';
+import { checkpointCount } from '../engine/index.js';
+import type { GameStateSnapshot } from '../engine/utils/index.js';
 
 /** Byte length of a value's JSON encoding (UTF-8 bytes, not UTF-16 units). */
 function jsonByteLength(value: unknown): number {

@@ -1,4 +1,5 @@
-import type { Game, GameClass, HistoryEntry } from '../engine/index.js';
+import type { Game, GameClass } from '../engine/index.js';
+import type { HistoryEntry } from '../engine/action/types.js';
 import { MCTSBot } from './mcts-bot.js';
 import type { BotConfig, BotStrategy, DifficultyLevel } from './types.js';
 import { DIFFICULTY_PRESETS } from './types.js';

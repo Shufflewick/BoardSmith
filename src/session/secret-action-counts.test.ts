@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { executeOp, type OpResult, type StateEnvelope } from './stateless-ops.js';
-import { flowBoundaryKey, type BoundaryKeyState, type GameStateSnapshot } from '../engine/index.js';
+import { flowBoundaryKey, type BoundaryKeyState } from '../engine/index.js';
+import type { GameStateSnapshot } from '../engine/utils/index.js';
 import { secretDeploymentDefinition } from './testing/fixtures/secret-deployment-fixture.js';
 import { succeeded } from './op-result.test-helper.js';
 

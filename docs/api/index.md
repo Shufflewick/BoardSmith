@@ -98,14 +98,11 @@ import {
 - `turnLoop()` - Standard turn-based loop
 - `TurnOrder` - Turn order utilities
 
-### Utilities
+### Serialization and snapshots
 
-- `serializeAction()` - Serialize an action
-- `deserializeAction()` - Deserialize an action
-- `isSerializedReference()` - Check if value is reference
-- `createSnapshot()` - Create game state snapshot
-- `createPlayerView()` - Create player-specific view
-- `createAllPlayerViews()` - Create all player views
+`serializeAction()`, `deserializeAction()`, `isSerializedReference()`,
+`createSnapshot()`, `createPlayerView()` and `createAllPlayerViews()` are not in
+the root entry. Import them from `boardsmith/runtime`; see [Runtime](./runtime.md).
 
 ### Types
 
