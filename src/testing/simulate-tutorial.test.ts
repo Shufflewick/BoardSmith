@@ -76,6 +76,7 @@ class TutSimGame extends Game<TutSimGame, Player> {
 
 /** Two-step tutorial where both steps complete via advanceWhen predicates. */
 const HAPPY_TUTORIAL: TutorialDefinition = {
+  learnerSeat: 1,
   steps: [
     {
       id: 'step-move',
@@ -96,6 +97,7 @@ const HAPPY_TUTORIAL: TutorialDefinition = {
 
 /** Two-step tutorial with no advanceWhen — used for non-completion tests. */
 const NO_AUTO_ADVANCE_TUTORIAL: TutorialDefinition = {
+  learnerSeat: 1,
   steps: [
     { id: 'step-1', gate: { action: 'move' } },
     { id: 'step-2', gate: { action: 'pass' } },
@@ -191,6 +193,7 @@ describe('simulateTutorial', () => {
     it('throws when scenario action is blocked by the current step gate', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'drift-a' });
       const def: TutorialDefinition = {
+        learnerSeat: 1,
         steps: [
           { id: 'step-1', gate: { action: 'move' } }, // 'pass' is blocked
         ],
@@ -207,6 +210,7 @@ describe('simulateTutorial', () => {
     it('error message names the blocked action and the step id', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'drift-a' });
       const def: TutorialDefinition = {
+        learnerSeat: 1,
         steps: [
           { id: 'gated-step', gate: { action: 'move' } },
         ],
@@ -231,6 +235,7 @@ describe('simulateTutorial', () => {
     it('throws when expectStep is set but predicate does not fire', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'drift-b' });
       const def: TutorialDefinition = {
+        learnerSeat: 1,
         steps: [
           {
             id: 'step-1',
@@ -284,7 +289,7 @@ describe('simulateTutorial', () => {
   describe('validateTutorialDefinition surfaces on call', () => {
     it('throws synchronously when tutorial definition has no steps', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'validate' });
-      const emptyDef: TutorialDefinition = { steps: [] };
+      const emptyDef: TutorialDefinition = { learnerSeat: 1, steps: [] };
 
       expect(() =>
         simulateTutorial(testGame, emptyDef, {
@@ -303,6 +308,7 @@ describe('simulateTutorial', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'wr02' });
 
       const def: TutorialDefinition = {
+        learnerSeat: 1,
         steps: [
           { id: 'step-1', gate: { action: 'move' } }, // 'pass' is blocked on step-1
         ],
@@ -328,6 +334,7 @@ describe('simulateTutorial', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'wr02-init' });
 
       const def: TutorialDefinition = {
+        learnerSeat: 1,
         steps: [
           // No advanceWhen — gate check only. Both seats remain on this step.
           { id: 'step-move', gate: { action: 'move' } },

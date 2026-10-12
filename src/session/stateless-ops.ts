@@ -1209,10 +1209,11 @@ async function handleHeatmapToggle(
 
 /**
  * Start a tutorial for `op.player`: apply the tutorial's setup, put the flow
- * back at its beginning (#546), activate the first step and run the
- * auto-advance pump. Refused, with the game left as it was, when the restarted
- * flow would not prompt the learner: a tutorial the learner cannot act in is a
- * dead table.
+ * back at its beginning with the tutorial's learner seat to move (#546, #552),
+ * activate the first step and run the auto-advance pump. Refused, with the
+ * game left as it was, when `op.player` is not the learner seat, when the game
+ * is over, or when the restarted flow still would not prompt the learner: a
+ * tutorial the learner cannot act in is a dead table.
  */
 function handleStartTutorial(
   def: RunnerDef,
@@ -1238,22 +1239,38 @@ function handleStartTutorial(
   }
   // IN-01: validate definition BEFORE constructing the runner (fail-loud before expensive work).
   validateTutorialDefinition(def.tutorial);
+  const { learnerSeat } = def.tutorial;
+  if (op.player !== learnerSeat) {
+    return errorResult(
+      `This tutorial is for seat ${learnerSeat}, so seat ${op.player} cannot start it. Start it from seat ${learnerSeat}.`,
+      'protocol',
+    );
+  }
   const runner = runnerFromSnapshot(snapshot, def);
+  // #552: a finished game stays finished. The restart below could bring its
+  // flow back to life while its phase still read 'finished'.
+  if (runner.game.phase === 'finished') {
+    return errorResult(
+      'The tutorial cannot start because this game is over. Start a new game, then start the tutorial.',
+      'protocol',
+    );
+  }
   // R-01: apply the tutorial's setup callback before setting initial progress so
   // the board is in the deterministic tutorial position before any advanceWhen
   // predicates fire. setup is optional; games without a preset omit it.
   const setup = def.tutorial.setup;
   if (setup) changing(runner.game._ctx, () => setup(runner.game as Game));
-  // #546: a tutorial begins on the learner's turn, so hand the turn back
-  // to the flow's first seat. This runs none of the game's opening again.
-  runner.game.restartFlowForTutorial();
+  // #546, #552: a tutorial begins on the learner's turn, so restart the flow
+  // with the learner seat to move. This runs none of the game's opening again.
+  runner.game.restartFlowForTutorial(learnerSeat);
   // A refusal discards this runner, so the caller's snapshot is untouched.
   const due = dueSeats(runner.getFlowState());
   if (!due.includes(op.player)) {
     const toMove = due.length > 0 ? `seat ${due.join(', ')} is` : 'no seat is';
     return errorResult(
-      `The tutorial cannot start for seat ${op.player}: it opens at the start of the game, where ` +
-        `${toMove} to move, not seat ${op.player}. Start the tutorial from the seat that moves first.`,
+      `The tutorial cannot start for seat ${op.player}: when the game restarts for the tutorial, ` +
+        `${toMove} to move, not seat ${op.player}. The game's flow gives the opening turn to a set seat, ` +
+        `so set the tutorial's learnerSeat to the seat that moves first.`,
       'protocol',
     );
   }

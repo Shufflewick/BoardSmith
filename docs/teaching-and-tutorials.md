@@ -15,24 +15,27 @@ Attach a tutorial to your game definition via the `tutorial` field. It takes a `
 ```typescript
 // src/engine/tutorial/types.ts
 export interface TutorialDefinition {
+  learnerSeat: number;
   steps: TutorialStep[];
   setup?: (game: Game) => void;
 }
 ```
 
-`steps` is the ordered sequence of teaching beats. `setup` is an optional callback called by `startTutorial` immediately before the first step activates — use it to put the board into a deterministic preset so the teaching beats are always meaningful regardless of what game was running before the learner opened the tutorial.
+`learnerSeat` is the seat the learner plays (1-indexed). It is required, because a tutorial's preset, gates and predicates are all written for one seat. Only that seat can start the tutorial: a request from any other seat is refused with an error naming the learner seat. `steps` is the ordered sequence of teaching beats. `setup` is an optional callback called by `startTutorial` immediately before the first step activates — use it to put the board into a deterministic preset so the teaching beats are always meaningful regardless of what game was running before the learner opened the tutorial.
 
-After `setup`, `startTutorial` puts the flow back at its beginning (`Game.restartFlowForTutorial()`), so the tutorial opens on the turn of the first seat the flow prompts, even when the learner opened it during another seat's turn. That restart runs none of the game's opening: not the flow's `setup`, and not the `execute` nodes before the first step that needs input, so an opening that deals or rolls does not do it again. Flow variables keep their values. Phase hooks are not skipped: `onEnterPhase` runs again for each phase entered before the first step that needs input, and the phase the game was in when the tutorial started is abandoned without its `onExitPhase`. The learner must be a seat the restarted flow prompts, the same assumption `afterTurns` makes: when it is not (for example seat 2 asks while seat 1 moves first), `startTutorial` is refused with an error naming the seat that moves first, and the game is left exactly as it was. A game starts once: a second `startFlow()` is refused, and this restart is the one way to put a running flow back at its start.
+After `setup`, `startTutorial` puts the flow back at its beginning with the learner seat to move (`Game.restartFlowForTutorial(learnerSeat)`), even when the learner opened it during another seat's turn. The learner seat is the flow's current seat at its root, and every `eachPlayer` round entered before the first step that needs input starts at the learner seat in place of its own starting player; the round then carries on around the table from there. That restart runs none of the game's opening: not the flow's `setup`, and not the `execute` nodes before the first step that needs input, so an opening that deals or rolls does not do it again. Flow variables keep their values. Phase hooks are not skipped: `onEnterPhase` runs again for each phase entered before the first step that needs input, and the phase the game was in when the tutorial started is abandoned without its `onExitPhase`. A step that names its own player (`actionStep({ player })`) still prompts that player, and an `eachPlayer` filter can leave the learner seat out: when the restarted flow does not prompt the learner seat, `startTutorial` is refused with an error naming the seat that would move, and the game is left exactly as it was. A finished game is refused too, and stays finished: start a new game, then the tutorial. A game starts once: a second `startFlow()` is refused, and this restart is the one way to put a running flow back at its start.
 
 ```typescript
 // ~/BoardSmithGames/checkers/src/rules/tutorial.ts
 export const CHECKERS_TUTORIAL: TutorialDefinition = {
+  learnerSeat: 1,
   setup: (game) => (game as CheckersGame).resetToTutorialPreset(),
   steps: [ /* ... */ ],
 };
 
 // ~/BoardSmithGames/go-fish/src/rules/tutorial.ts
 export const GO_FISH_TUTORIAL: TutorialDefinition = {
+  learnerSeat: 1,
   setup: (game) => (game as GoFishGame).resetToTutorialPreset(),
   steps: [ /* ... */ ],
 };
@@ -142,7 +145,7 @@ A tutorial is started and left with two ops, which a host sends through
 `SnapshotSessionHost.handleOp` and `executeOp` runs (`src/session/stateless-ops.ts`):
 
 ```typescript
-{ type: 'startTutorial', player: seat } // runs the tutorial's setup, restarts the flow, activates step 1, runs the auto-advance pump
+{ type: 'startTutorial', player: seat } // seat must be the tutorial's learnerSeat; runs the tutorial's setup, restarts the flow with that seat to move, activates step 1, runs the auto-advance pump
 { type: 'exitTutorial', player: seat }  // sets status 'exited'; gate enforcement is lifted
 ```
 

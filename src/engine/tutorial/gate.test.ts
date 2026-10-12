@@ -79,6 +79,7 @@ describe('labeled-predicate condition gate (MR-02)', () => {
   it('blocks all available actions when a labeled predicate returns false', () => {
     const runner = makeRunner();
     runner.game.tutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         {
           id: 'step-1',
@@ -97,6 +98,7 @@ describe('labeled-predicate condition gate (MR-02)', () => {
   it('includes the failing label in the reason string', () => {
     const runner = makeRunner({ seed: 'failing-label' });
     runner.game.tutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         {
           id: 'step-1',
@@ -115,6 +117,7 @@ describe('labeled-predicate condition gate (MR-02)', () => {
   it('passes all actions when all labeled predicates return true', () => {
     const runner = makeRunner({ seed: 'all-pass' });
     runner.game.tutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         {
           id: 'step-1',
@@ -132,6 +135,7 @@ describe('labeled-predicate condition gate (MR-02)', () => {
   it('surfaces the first failing label when multiple predicates fail', () => {
     const runner = makeRunner({ seed: 'multi-fail' });
     runner.game.tutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         {
           id: 'step-1',
@@ -153,6 +157,7 @@ describe('labeled-predicate condition gate (MR-02)', () => {
   it('does not apply per-value gating for labeled-condition gates', () => {
     const runner = makeRunner({ seed: 'no-per-value' });
     runner.game.tutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         {
           id: 'step-1',
@@ -177,6 +182,7 @@ describe('allow-list gate — unchanged by MR-02 refactor', () => {
   it('blocks actions not in the allow list', () => {
     const runner = makeRunner({ seed: 'allow-list' });
     runner.game.tutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         {
           id: 'step-1',
@@ -195,6 +201,7 @@ describe('allow-list gate — unchanged by MR-02 refactor', () => {
   it('permits only the allowed action', () => {
     const runner = makeRunner({ seed: 'allow-list-permit' });
     runner.game.tutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         {
           id: 'step-1',

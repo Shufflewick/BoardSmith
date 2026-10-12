@@ -174,6 +174,7 @@ class DemoGameNoCaptureRule extends Game<DemoGameNoCaptureRule, Player> {
  *   third turn (the `capture` action counts as a turn).
  */
 const DEMO_TUTORIAL: TutorialDefinition = {
+  learnerSeat: 1,
   steps: [
     {
       id: 'intro',
@@ -271,6 +272,7 @@ describe('Tutorial CI Demo — criterion #3 proof', () => {
     // Broken tutorial: intro step requires `capture` instead of `move`.
     // `move` is now tutorial-disabled on the intro step.
     const brokenGateDef: TutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         {
           id: 'intro',

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, actionStep, eachPlayer, loop, sequence, execute, type GameOptions } from '../index.js';
+import { Game, Player, Action, actionStep, eachPlayer, loop, sequence, execute, TurnOrder, type GameOptions } from '../index.js';
 import { createTestGame } from '../../testing/test-game.js';
 
 /**
@@ -75,7 +75,7 @@ describe('restartFlowForTutorial (#546)', () => {
     tg.doAction(1, 'pass', {});
     expect(tg.game.getFlowState()?.currentPlayer).toBe(2);
 
-    const state = tg.game.restartFlowForTutorial();
+    const state = tg.game.restartFlowForTutorial(1);
 
     expect(state.currentPlayer).toBe(1);
     expect(state.awaitingInput).toBe(true);
@@ -88,7 +88,7 @@ describe('restartFlowForTutorial (#546)', () => {
   it('stops passing over execute nodes at the first step that needs input', () => {
     const tg = createTestGame(OpeningGame, { playerCount: 2, seed: 'tutorial' });
     tg.doAction(1, 'pass', {});
-    tg.game.restartFlowForTutorial();
+    tg.game.restartFlowForTutorial(1);
 
     tg.doAction(1, 'pass', {});
 
@@ -98,6 +98,57 @@ describe('restartFlowForTutorial (#546)', () => {
 
   it('refuses a game whose flow never started', () => {
     const tg = createTestGame(OpeningGame, { playerCount: 2, seed: 'tutorial', autoStart: false });
-    expect(() => tg.game.restartFlowForTutorial()).toThrow(/has not started/);
+    expect(() => tg.game.restartFlowForTutorial(1)).toThrow(/has not started/);
+  });
+
+  it('puts the turn on the seat it names, and the round carries on around the table from there (#552)', () => {
+    const tg = createTestGame(OpeningGame, { playerCount: 3, seed: 'tutorial' });
+
+    const state = tg.game.restartFlowForTutorial(2);
+
+    expect(state.currentPlayer).toBe(2);
+    expect(state.availableActions).toEqual(['pass']);
+    expect(tg.game.openings).toBe(1);
+    tg.doAction(2, 'pass', {});
+    expect(tg.game.getFlowState()?.currentPlayer).toBe(3);
+    tg.doAction(3, 'pass', {});
+    expect(tg.game.getFlowState()?.currentPlayer).toBe(1);
+  });
+
+  it("starts on the named seat over the round's own starting player (#552)", () => {
+    const tg = createTestGame(StartingPlayerGame, { playerCount: 2, seed: 'tutorial' });
+    expect(tg.game.getFlowState()?.currentPlayer).toBe(1);
+
+    expect(tg.game.restartFlowForTutorial(2).currentPlayer).toBe(2);
+  });
+
+  it('gives the named seat a step that is not inside an eachPlayer (#552)', () => {
+    const tg = createTestGame(BareStepGame, { playerCount: 2, seed: 'tutorial' });
+    expect(tg.game.getFlowState()?.currentPlayer).toBe(1);
+
+    expect(tg.game.restartFlowForTutorial(2).currentPlayer).toBe(2);
   });
 });
+
+/** A round that always starts at seat 1, whatever turn the game is on. */
+class StartingPlayerGame extends Game<StartingPlayerGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(Action.create('pass').execute(() => ({ success: true })));
+    this.setFlow({
+      root: loop({
+        maxIterations: 20,
+        do: eachPlayer({ ...TurnOrder.DEFAULT, startingPlayer: (ctx) => ctx.game.getPlayer(1)!, do: actionStep({ actions: ['pass'] }) }),
+      }),
+    });
+  }
+}
+
+/** An action step reached without an eachPlayer: it prompts the flow's current seat. */
+class BareStepGame extends Game<BareStepGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(Action.create('pass').execute(() => ({ success: true })));
+    this.setFlow({ root: loop({ maxIterations: 20, do: actionStep({ actions: ['pass'] }) }) });
+  }
+}

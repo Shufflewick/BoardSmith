@@ -98,6 +98,7 @@ const CONTENT_ANNOTATIONS: Annotation[] = [
 ];
 
 const ANNOTATION_TUTORIAL: TutorialDefinition = {
+  learnerSeat: 1,
   steps: [
     {
       id: 'step-with-content',
@@ -168,6 +169,7 @@ describe('annotation content model — projection round-trip', () => {
 
   it('all three AnnotationTarget kinds survive the projection', () => {
     const allKindsTutorial: TutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         {
           id: 'all-kinds',

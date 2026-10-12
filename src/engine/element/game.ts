@@ -3161,7 +3161,9 @@ export class Game<
 
   /**
    * Put the flow back at its beginning so a tutorial opens on its learner's
-   * turn, whatever turn the live game was on. Runs none of the game's opening:
+   * turn, whatever turn the live game was on: `seat`, the tutorial's
+   * `learnerSeat`, is the seat every round entered on the way starts at
+   * (see `FlowEngine.restartWithoutOpening`). Runs none of the game's opening:
    * not the flow's `setup`, and not the `execute` nodes before the first step
    * that needs input. The flow's variables are kept.
    * Phase hooks are not skipped: `onEnterPhase` runs again for each phase
@@ -3170,13 +3172,14 @@ export class Game<
    *
    * The `startTutorial` op calls this after the tutorial's own `setup` has set
    * the board (#546), and refuses the tutorial, keeping the game as it was,
-   * when the restarted flow does not prompt the learner's seat.
+   * when the restarted flow still does not prompt the learner's seat (a step
+   * that names its own player, or a round filter that leaves the seat out).
    */
-  restartFlowForTutorial(): FlowState {
+  restartFlowForTutorial(seat: number): FlowState {
     if (!this._flowEngine) {
       throw new Error('This game has not started yet, so there is no turn to hand back to a tutorial. Start the game first.');
     }
-    const state = this._flowEngine.restartWithoutOpening();
+    const state = this._flowEngine.restartWithoutOpening(seat);
     this.#applyFlowCompletion(state);
     return state;
   }

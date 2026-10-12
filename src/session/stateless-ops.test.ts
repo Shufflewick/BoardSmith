@@ -705,6 +705,7 @@ describe('executeOp', () => {
 
   describe('startTutorial', () => {
     const SIMPLE_TUTORIAL: TutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         {
           id: 'intro',
@@ -817,6 +818,7 @@ describe('executeOp', () => {
     }
 
     const TWO_STEP_TUTORIAL: TutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         {
           id: 'step-1',
@@ -1098,6 +1100,7 @@ describe('executeOp', () => {
       maxPlayers: 2,
       bot: lockBot,
       tutorial: {
+        learnerSeat: 1,
         steps: [{ id: 'step-1', gate: { action: 'move' }, content: [{ text: 'Make a move.' }] }],
       },
     };
@@ -1445,6 +1448,7 @@ describe('executeOp', () => {
 
     const SETUP_TUTORIAL: TutorialDefinition = {
       setup: (game) => { (game as MarkerGame).markerSet = true; },
+      learnerSeat: 1,
       steps: [{ id: 'step-1', gate: { action: 'pass' } }],
     };
 
@@ -1463,6 +1467,7 @@ describe('executeOp', () => {
       // to step-2 (which does not exist → status becomes 'completed').
       const SETUP_ADVANCE_TUTORIAL: TutorialDefinition = {
         setup: (game) => { (game as MarkerGame).markerSet = true; },
+        learnerSeat: 1,
         steps: [
           {
             id: 'step-1',
@@ -1499,6 +1504,7 @@ describe('executeOp', () => {
 
     it('startTutorial without a setup callback leaves game state unchanged', async () => {
       const NO_SETUP_TUTORIAL: TutorialDefinition = {
+        learnerSeat: 1,
         steps: [{ id: 'only', gate: { action: 'pass' } }],
       };
       const noSetupDef: GameDefinitionLike = {
@@ -1525,6 +1531,7 @@ describe('executeOp', () => {
 
   describe('exitTutorial', () => {
     const EXIT_TUTORIAL: TutorialDefinition = {
+      learnerSeat: 1,
       steps: [
         { id: 'step-1', gate: { action: 'pass' } },
         { id: 'step-2', gate: { action: 'pass' } },
