@@ -285,11 +285,12 @@ existed. See `GameRunner.fromSnapshot`'s docstring in
 `src/runtime/runner.ts` for the full rationale.
 
 The direct consequence is a cost that surprises people: a saved game is
-the tree **plus one tree copy per retained action**, so it grows on every
-action while the tree itself does not. Bound it with
-`checkpoints: { max }` on the game definition. Read
-[state-size.md](./state-size.md) before shipping anything with a high
-action count — an undo that reaches past the retained window is refused
+the tree **plus one tree copy per retained action**. A hosted table keeps
+only the current turn's checkpoints, back to the oldest point any seat's
+undo restores; `boardsmith dev` and debug sessions keep every one, which is
+what time travel reads. `checkpoints: { max }` on the game definition caps
+either. Read [state-size.md](./state-size.md) before shipping a game with
+long turns — an undo that reaches past the retained window is refused
 with a message naming the policy, rather than approximated.
 
 A session reaches undo and time travel through five ops, sent to the

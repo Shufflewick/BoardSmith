@@ -2,39 +2,35 @@
  * State-size measurement for CI.
  *
  * A game's saved state is not its board. It is the board PLUS one full copy of
- * the element tree per action taken (the per-action undo checkpoints), so:
+ * the element tree per retained checkpoint. A hosted table retains them back
+ * to the start of the current turn, so:
  *
- *     saved size  ~=  tree size  x  total actions in the game
+ *     saved size  ~=  tree size  x  (actions in the longest turn + 1)  +  history  +  log
  *
- * Every byte on the game tree is multiplied by the game's action count. A tree
- * that looks small — 9 KB — is 2.7 MB of saved state after 300 actions, and
- * hosts cap how large a saved game may be. Nothing about playing the game
- * reveals this: the tree never grows, so a game that plays fine for 40 rounds
- * can hit the ceiling at round 41.
+ * `boardsmith dev` and debug sessions retain one per action, so there the tree
+ * is multiplied by the whole game's action count.
  *
  * These helpers make that measurable, so a game can assert its own budget in
  * CI instead of discovering it in production:
  *
  * ```ts
- * import { createTestGame, measureSnapshotSize, projectSnapshotSize } from 'boardsmith/testing';
+ * import { createTestGame, measureSnapshotSize, assertStateBudget } from 'boardsmith/testing';
  *
- * it('fits the platform state budget for a full game', () => {
+ * it('fits the host state budget for a full game', () => {
  *   const game = createTestGame(MyGame, { playerCount: 8 });
- *   // Play a representative position, snapshotting after EVERY action — that
- *   // is what captures the checkpoints, and what a host does.
+ *   // Snapshot after EVERY action — that is what captures the checkpoints,
+ *   // and what a host does.
  *   while (!game.isComplete()) {
  *     game.doAction(seat, 'play', args);
- *     game.runner.getSnapshot();
+ *     assertStateBudget(measureSnapshotSize(game.runner.getSnapshot()), hostBudgetBytes);
  *   }
- *   const size = measureSnapshotSize(game.runner.getSnapshot());
- *   expect(projectSnapshotSize(size, EXPECTED_ACTIONS_PER_GAME)).toBeLessThan(1_800_000);
  * });
  * ```
  *
- * Snapshotting only at the end leaves the checkpoint window sparse, which
- * understates the multiplier by one to two orders of magnitude.
- * `measureSnapshotSize` refuses such a snapshot rather than reporting the
- * wrong number.
+ * `hostBudgetBytes` is the host's published budget, read from where the host
+ * publishes it. Snapshotting only at the end of a turn leaves the checkpoint
+ * window sparse, which understates the multiplier. `measureSnapshotSize`
+ * refuses such a snapshot rather than reporting the wrong number.
  *
  * The two costs that dominate in practice, and that neither shows up until
  * measured:
@@ -45,8 +41,8 @@
  *   - Named-key objects cost roughly 6x positional arrays
  *     (`{beastLore: 3, ...}` = 137 bytes vs `[3, ...]` = 23).
  *
- * See `docs/state-size.md`, and `GameDefinition.checkpoints` for bounding the
- * multiplier instead of shrinking the tree.
+ * See `docs/state-size.md`, and `GameDefinition.checkpoints` for capping a
+ * long turn's checkpoints instead of shrinking the tree.
  */
 
 import { checkpointCount, type GameStateSnapshot } from '../engine/index.js';
@@ -175,9 +171,11 @@ export function measureSnapshotSize(snapshot: GameStateSnapshot): SnapshotSizeMe
  * measuring during development has historically missed the problem.
  *
  * Assumes the tree stays roughly the size it is now (true for most games:
- * pieces move rather than multiply). Under a `checkpoints: { max }` policy the
- * retained count is capped, so the CHECKPOINT term is capped with it — that is
- * the whole point of setting one.
+ * pieces move rather than multiply). With no `maxCheckpoints` it projects full
+ * history, one checkpoint per action, which is what `boardsmith dev` keeps.
+ * Pass the most checkpoints the game retains (a hosted table: the longest turn
+ * plus one, or the game's `checkpoints.max`) and the CHECKPOINT term is capped
+ * with it.
  *
  * The result is NOT flat in `actionCount` even then. Two terms still grow
  * linearly: the action history, and the message log. Capping checkpoints
@@ -225,4 +223,37 @@ export function projectSnapshotSize(
     options?.messageLogBytes ?? (measurement.messageLogBytes / observed) * actionCount;
 
   return Math.round(fixed + retained * perCheckpoint + actionCount * historyPerAction + logBytes);
+}
+
+/**
+ * Fail unless the measured snapshot fits `budgetBytes`, the most a host lets a
+ * saved game weigh.
+ *
+ * The budget is the host's to publish, so it is a required argument: read it
+ * from where your host publishes it rather than copying the number into the
+ * test, where it goes stale when the host changes it. The failure names the
+ * measured size, the budget, and where the bytes went.
+ *
+ * ```ts
+ * assertStateBudget(measureSnapshotSize(runner.getSnapshot()), hostBudgetBytes);
+ * ```
+ */
+export function assertStateBudget(measurement: SnapshotSizeMeasurement, budgetBytes: number): void {
+  if (!Number.isSafeInteger(budgetBytes) || budgetBytes <= 0) {
+    throw new Error(
+      `assertStateBudget needs the host's state budget as a positive whole number of bytes, but was given ${budgetBytes}. ` +
+        'Check where the test reads the budget from.',
+    );
+  }
+  if (measurement.totalBytes <= budgetBytes) return;
+  const bytes = (n: number) => `${n.toLocaleString('en-US')} bytes`;
+  throw new Error(
+    `The saved game state is ${bytes(measurement.totalBytes)}, over the host's budget of ${bytes(budgetBytes)}.\n` +
+      `  game tree:      ${bytes(measurement.treeBytes)}\n` +
+      `  checkpoints:    ${measurement.checkpointCount} checkpoints, ${bytes(measurement.checkpointBytes)}\n` +
+      `  action history: ${bytes(measurement.actionHistoryBytes)}\n` +
+      `  message log:    ${bytes(measurement.messageLogBytes)}\n` +
+      'Shrink the game state (an uncapped message log and named-key objects are the usual causes), ' +
+      'or cap a long turn\'s checkpoints with `checkpoints: { max }` on the game definition. See docs/state-size.md.',
+  );
 }

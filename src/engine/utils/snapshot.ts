@@ -171,14 +171,14 @@ export interface GameStateSnapshot {
 /**
  * How many per-action undo checkpoints a game retains.
  *
- * Each checkpoint is a full copy of the element tree, so the default —
- * retain everything — makes a snapshot grow by one tree per action for the
- * life of the game. The tree stops growing; the snapshot does not. A game
- * with a high action count (18xx, campaign/legacy, worker placement with
- * many small actions) will eventually exceed whatever its host allows a
- * saved game to be.
+ * Each checkpoint is a full copy of the element tree. By default a hosted
+ * game keeps them only back to the start of the current turn, the oldest
+ * point any seat's undo can restore, so its saved size does not grow with
+ * the action count. `boardsmith dev` and debug sessions keep every one, for
+ * time travel (`RunnerCheckpointPolicy` in `boardsmith/runtime`).
  *
- * Declare a policy on the game definition to bound it:
+ * Most games declare nothing. `max` is a hard cap on top of that, for a game
+ * whose single turns are long enough to matter:
  *
  * ```ts
  * import type { CheckpointPolicy } from 'boardsmith';
@@ -189,10 +189,9 @@ export interface GameStateSnapshot {
  * };
  * ```
  *
- * `max` must exceed the most actions ONE SEAT takes in a single turn: undo
- * restores the checkpoint at that seat's turn-start action count, and an undo
- * reaching past the retained window is refused (with a message naming the
- * policy) rather than silently replaying or approximating.
+ * A turn longer than `max` actions cannot be undone back to its start: an
+ * undo reaching past the retained window is refused (with a message naming
+ * the policy) rather than silently replaying or approximating.
  *
  * Defined here — in the engine — rather than next to `GameRunner`, because
  * `GameDefinition.checkpoints` is a field GAMES set, and a published bundle
@@ -201,7 +200,7 @@ export interface GameStateSnapshot {
 export interface CheckpointPolicy {
   /**
    * Maximum checkpoints retained; the oldest are dropped first.
-   * Default: unbounded — retain one per action, forever.
+   * Default: no cap beyond the turn-start retention.
    */
   max?: number;
   /**
@@ -311,10 +310,10 @@ export interface ActionCheckpoint {
  *
  * A checkpoint is a full copy of the element tree, so keeping one per action for
  * the life of a game makes the snapshot `O(actions x treeSize)`: the tree stops
- * growing, the snapshot never does. That is unbounded by default and bounded by
- * a game's `checkpoints: { max }` policy (`GameRunnerOptions`) — the window is
- * how the bound is REPRESENTED, so a pruned snapshot pays nothing at all for the
- * dropped range rather than carrying a hole per action.
+ * growing, the snapshot never does. By default only the current turn is kept,
+ * and a game's `checkpoints: { max }` caps it further (`GameRunnerOptions`) —
+ * the window is how the bound is REPRESENTED, so a pruned snapshot pays nothing
+ * at all for the dropped range rather than carrying a hole per action.
  *
  * The window is why `baseIndex` exists instead of a plain array: keeping the
  * array and deleting old slots would leave sparse holes that serialize as
@@ -331,7 +330,7 @@ export interface ActionCheckpointWindow {
 
 /** Why a checkpoint lookup found nothing — the two cases need different errors. */
 export type CheckpointAbsence =
-  /** Older than the retained window: dropped by the game's `checkpoints.max`. */
+  /** Older than the retained window: dropped as older than the turn start, or by `checkpoints.max`. */
   | 'pruned'
   /** Never captured: ahead of the window, or checkpointing is disabled. */
   | 'uncaptured';

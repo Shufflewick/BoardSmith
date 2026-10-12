@@ -42,10 +42,10 @@ export interface TestGameOptions {
    * Per-action checkpoint retention policy for this game's runner — the same
    * `checkpoints` block a `GameDefinition` declares.
    *
-   * Applied to the RUNNER, not passed to the game constructor. Without it a
-   * test always runs under the unbounded default, so a state-size budget test
-   * cannot exercise the retention policy the game actually ships (see
-   * `docs/state-size.md`).
+   * Applied to the RUNNER, not passed to the game constructor, so a state-size
+   * budget test runs under the policy the game actually ships (see
+   * `docs/state-size.md`). Without it the runner keeps checkpoints back to the
+   * turn start, as a hosted table does.
    */
   checkpoints?: CheckpointPolicy;
   /**

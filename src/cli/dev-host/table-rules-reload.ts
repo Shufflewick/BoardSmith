@@ -34,9 +34,14 @@ export async function reloadTableRules(
   hostOptions: HostOptions,
 ): Promise<RulesReload> {
   // The `start` op given a seed snapshot IS "this state, restored under these
-  // rules, as a table's envelope" -- the same restore every op makes.
+  // rules, as a table's envelope" -- the same restore every op makes. With the
+  // full checkpoint history every dev op keeps (#504).
   const restore = (state: GameStateSnapshot): Promise<OpResultFor<'start'>> =>
-    executeOp(definition, gameOptions, null, null, { type: 'start' }, { ...hostOptions, seedSnapshot: state });
+    executeOp(definition, gameOptions, null, null, { type: 'start' }, {
+      ...hostOptions,
+      seedSnapshot: state,
+      fullHistory: true,
+    });
 
   const restored = await restore(snapshot);
   if (restored.success) return { kind: 'restored', result: restored };
@@ -60,7 +65,8 @@ export async function reloadTableRules(
         GameClass: definition.gameClass,
         gameType: definition.gameType,
         gameOptions: snapshot.gameOptions as { playerCount: number },
-        checkpoints: definition.checkpoints,
+        // The dev host keeps full history (#504), so the replayed game does too.
+        checkpoints: { ...definition.checkpoints, history: 'full' },
         undo: definition.undo,
       },
       snapshot.actionHistory,

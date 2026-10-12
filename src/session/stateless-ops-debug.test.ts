@@ -33,8 +33,10 @@ const passDef: GameDefinitionLike = {
 const passOptions = { playerCount: 2, seed: 'debug-seed' };
 
 /** Start a PassGame and apply N pass actions; return the latest snapshot. */
+/** `n` passes in a debug session, which keeps every checkpoint for time travel. */
 async function passNTimes(n: number): Promise<unknown> {
-  let snapshot = succeeded(await executeOp(passDef, passOptions, null, null, { type: 'start' })).snapshot;
+  const debug = { debug: true };
+  let snapshot = succeeded(await executeOp(passDef, passOptions, null, null, { type: 'start' }, debug)).snapshot;
   for (let i = 0; i < n; i++) {
     const res = succeeded(await executeOp(passDef, passOptions, snapshot, null, {
       type: 'action',
@@ -42,7 +44,7 @@ async function passNTimes(n: number): Promise<unknown> {
       player: 1,
       args: {},
       boundaryKey: boundaryKeyOf(snapshot),
-    }));
+    }, debug));
     expect(res.success).toBe(true);
     snapshot = res.snapshot;
   }

@@ -66,7 +66,8 @@ class PileGame extends Game<PileGame, Player> {
 const options = { playerCount: 2, playerNames: ['A', 'B'], seed: 'pile', elementIdKey: '0000000000000650' };
 
 function startedRunner(): GameRunner<PileGame> {
-  const runner = new GameRunner({ GameClass: PileGame, gameType: 'pile', gameOptions: options });
+  // Full history: the restore below reaches checkpoint 0 after the turn has passed on.
+  const runner = new GameRunner({ GameClass: PileGame, gameType: 'pile', gameOptions: options, checkpoints: { history: 'full' } });
   runner.start();
   return runner;
 }

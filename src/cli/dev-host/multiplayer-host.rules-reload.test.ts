@@ -148,6 +148,21 @@ describe('#343: a table dev host reloads its rules on the server', () => {
     expect(shownCount(table.frames())).toBe(11);
   }, 30_000);
 
+  it('keeps the full checkpoint history across a reload (#504)', async () => {
+    // Every bump starts a new turn, so a hosted table would keep one checkpoint.
+    const project = counterProject({ step: 1, flow: FLOWS.looped });
+    const table = await openCounterTable(await project.load());
+    for (let i = 0; i < 3; i++) await table.bump();
+
+    project.save({ step: 10, flow: FLOWS.looped });
+    const outcome = await table.host.reloadRules((await project.load()).rules);
+
+    expect(outcome?.kind).toBe('restored');
+    const window = outcome?.kind === 'restored' && outcome.result.success ? outcome.result.snapshot.actionCheckpoints : undefined;
+    expect(window?.baseIndex).toBe(0);
+    expect(window?.entries).toHaveLength(4);
+  }, 30_000);
+
   it('rebuilds the game by replaying its moves when the saved position no longer fits the flow', async () => {
     const project = counterProject({ step: 1, flow: FLOWS.three });
     const table = await openCounterTable(await project.load());
