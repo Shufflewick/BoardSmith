@@ -90,7 +90,8 @@
     "./ui/animation/card-flip.css": "./src/ui/animation/card-flip.css"
   },
   "scripts": {
-    "setup": "npm link"
+    "setup": "npm link",
+    "test:browser": "vitest run --config vitest.browser.config.ts"
   },
   "files": [
     "dist",

@@ -48,6 +48,7 @@ import {
   summarise,
   surfaceOf,
   VIEW_FIELD_READER,
+  waitForAction,
   waitUntil,
 } from './browser-harness.mjs';
 
@@ -187,13 +188,6 @@ export default defineComponent({
 });
 `;
 
-/** Wait for the panel to be offering the world's verbs to a seated player. */
-async function seated(page) {
-  await surfaceOf(page)
-    .locator('[data-bs-action="setDescription"]')
-    .waitFor({ timeout: 30_000 });
-}
-
 async function startAction(page, name, editor = '.text-input') {
   const surface = surfaceOf(page);
   await surface.locator(`[data-bs-action="${name}"]`).click();
@@ -226,7 +220,7 @@ async function driveThrough({ launch, hostUrl }) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const page = await context.newPage();
     await page.goto(hostUrl);
-    await seated(page);
+    await waitForAction(page, 'setDescription');
     await startAction(page, 'setDescription');
 
     const surface = surfaceOf(page);
@@ -552,7 +546,7 @@ function screens() {
 
 async function onASmallerScreen(browser, hostUrl, viewport) {
   const size = `${viewport.width}x${viewport.height}`;
-  await onFreshPage(browser, hostUrl, { viewport }, seated, async (page, surface) => {
+  await onFreshPage(browser, hostUrl, { viewport }, (page) => waitForAction(page, 'setDescription'), async (page, surface) => {
     await check(`${size}: at rest the bar sits inside the strip the board reserves, without scrolling`, async () => {
       const bar = await barGeometry(surface);
       assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}`);

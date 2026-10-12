@@ -505,9 +505,9 @@ touch a barrel.
 
 ## The browser regressions are entry points, not dead files (#230)
 
-`scripts/*-browser.mjs` are deliberate runs: BoardSmith depends on no browser,
-so they are not in `npx vitest run` and nothing imports them. Static analysis is
-right that they are unreachable, and the first one was recorded in
+`scripts/*-browser.mjs` are run as scripts: `npm run test:browser` spawns each
+one (#533), and nothing imports them. Static analysis is right that they are
+unreachable, and the first one was recorded in
 `.fallow-dead-code-baseline.json` for that reason.
 
 That stopped working the moment there were two of them. #230 added a second, and

@@ -1,21 +1,15 @@
 /**
  * THE PLUMBING EVERY BROWSER REGRESSION SHARES.
  *
- * These browser regressions are deliberate runs rather than part of
- * `npx vitest run` (#227 settled that); the suite's one browser run is
- * `boardsmith verify`'s smoke check (#453). What each of
- * them then has to do first is identical and none of it is the behaviour under
- * test: find a Playwright somebody already installed, serve a throwaway world
- * project through the CLI's own dev host (`withFixtureWorld`, in
+ * These browser regressions run as their own suite, `npm run test:browser`,
+ * which `agent-policy verify` runs (#533) and the default `boardsmith test`
+ * leaves out, so the ordinary suite needs no Chromium. What each of them has to
+ * do first is identical and none of it is the behaviour under test: find
+ * BoardSmith's own Chromium the way the smoke check does, serve a throwaway
+ * world project through the CLI's own dev host (`withFixtureWorld`, in
  * `src/cli/commands/fixture-world.test-helper.ts`, where it is type-checked and
  * run by the ordinary suite, #357), and report checks in a form a human can
  * read at the end.
- *
- * That was ~200 duplicated lines across two scripts by the time #230 added the
- * second one, which is a real cost and not a cosmetic one: the pick-bridge
- * script's `playwrightCandidates` ordering carries a reason (Node will not
- * import a folder) that the copy in the second script had already lost. One
- * definition, so the reason cannot be dropped again.
  *
  * It also owns the whole RUN rather than just the pieces of it (#231), because
  * the order those pieces go in is the part a script got wrong every time it
@@ -28,73 +22,42 @@
  *
  * @module
  */
-import { dirname, join, resolve } from 'node:path';
+import { readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const SCRIPTS = dirname(fileURLToPath(import.meta.url));
+
 /** This checkout, whose own TypeScript the fixture world is served by. */
-const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const REPO = join(SCRIPTS, '..');
 
-// ── Playwright, or an actionable refusal ─────────────────────────────────────
-
-/**
- * Every way of naming one Playwright, since what a person has to hand is a
- * DIRECTORY as often as an entry file -- `.../node_modules/playwright` is what
- * the #227 reporter's own harness was pointed at, and Node will not import a
- * folder. The entry files come first for that reason.
- */
-function playwrightCandidates(named) {
-  if (!named) return ['playwright', 'playwright-core'];
-  return [join(named, 'index.mjs'), join(named, 'index.js'), named];
-}
-
-/** ESM and CJS interop both, since a Playwright arrives either way. */
-const chromiumIn = (module) => module.chromium ?? module.default?.chromium;
-
-/** Why one candidate yielded nothing, in a sentence a person can act on. */
-const reason = (thrown) => (thrown instanceof Error ? thrown.message : String(thrown));
+// ── Chromium, or an actionable refusal ─────────────────────────────────────
 
 /**
- * One candidate's chromium, or `null` with the reason recorded.
- *
- * "Loaded but exports no chromium" is raised rather than pushed, so that both
- * ways of failing leave by the same door and the reason is written once.
- */
-async function chromiumFrom(specifier, failures) {
-  try {
-    const chromium = chromiumIn(await import(specifier));
-    if (!chromium) throw new Error('loaded, but exports no chromium');
-    return chromium;
-  } catch (thrown) {
-    failures.push(`${specifier}: ${reason(thrown)}`);
-    return null;
-  }
-}
-
-/**
- * A real Chromium, or an exit that says how to give this run one.
+ * BoardSmith's own Playwright Chromium, found exactly as `boardsmith verify`'s
+ * smoke check finds it (`playwrightChromium` in `src/cli/commands/smoke.ts`),
+ * or an exit that says to run `boardsmith install-browser`.
  *
  * It never skips. A browser regression that quietly passes when it did not run
- * is the thing these scripts exist to replace.
- *
- * @param script the script's own filename, for the copy-pasteable command line
+ * is the thing these scripts exist to replace. Reached only after
+ * `loadFixtureWorld`, which has loaded `tsx`.
  */
-async function loadChromium(script) {
-  const failures = [];
-  for (const candidate of playwrightCandidates(process.env.BOARDSMITH_PLAYWRIGHT_MODULE)) {
-    const chromium = await chromiumFrom(candidate, failures);
-    if (chromium) return chromium;
+async function loadChromium() {
+  const { playwrightChromium, browserProblem } = await import(join(REPO, 'src/cli/commands/smoke.ts'));
+  const browser = await playwrightChromium();
+  const problem = browserProblem(browser);
+  if (problem) {
+    console.error(`${problem.summary}\n  ${problem.next}`);
+    process.exit(1);
   }
-  console.error(
-    'No Playwright chromium is reachable, so this cannot be checked in a browser at all.\n' +
-      '  Point this run at one you already have:\n\n' +
-      '    BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \\\n' +
-      `      node scripts/${script}\n\n` +
-      '  Tried:\n' + failures.map((line) => `    ${line}`).join('\n') + '\n\n' +
-      '  BoardSmith deliberately does not depend on a browser; any Playwright already\n' +
-      '  installed will do, and there is no need to add one here.',
-  );
-  process.exit(1);
+  return browser.chromium;
 }
+
+/** Every browser regression in `scripts/`, found by name rather than listed. */
+export const browserScripts = () =>
+  readdirSync(SCRIPTS)
+    .filter((name) => name.endsWith('-browser.mjs'))
+    .sort();
 
 /**
  * The world surface inside the dev chrome's iframe.
@@ -102,6 +65,11 @@ async function loadChromium(script) {
  * Everything a player touches is in there: the outer page is the dev bar.
  */
 export const surfaceOf = (page) => page.frameLocator('.world-dev__frame');
+
+/** Wait for the panel to be offering the action `name` to a seated player. */
+export async function waitForAction(page, name) {
+  await surfaceOf(page).locator(`[data-bs-action="${name}"]`).waitFor({ timeout: 30_000 });
+}
 
 /**
  * Open the world in a fresh browser context and run `body` against it.
@@ -279,7 +247,7 @@ async function loadFixtureWorld(script) {
   } catch (thrown) {
     console.error(
       'BoardSmith\'s packages cannot be found from this checkout, so the fixture world cannot be served.\n' +
-        `  ${reason(thrown)}\n\n` +
+        `  ${thrown instanceof Error ? thrown.message : String(thrown)}\n\n` +
         '  Run `npm install` in the BoardSmith checkout (for a worktree, in the main\n' +
         '  checkout it was made from), then:\n\n' +
         `    node scripts/${script}`,
@@ -310,7 +278,7 @@ async function loadFixtureWorld(script) {
  */
 export async function runBrowserRegression(run, body) {
   const withFixtureWorld = await loadFixtureWorld(run.script);
-  const chromium = await loadChromium(run.script);
+  const chromium = await loadChromium();
   process.exit(
     await withFixtureWorld(run.fixture, ({ hostUrl }) => body({ launch: () => launchChromium(chromium), hostUrl })),
   );

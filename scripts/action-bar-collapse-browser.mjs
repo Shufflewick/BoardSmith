@@ -60,6 +60,7 @@ import {
   runBrowserRegression,
   summarise,
   surfaceOf,
+  waitForAction,
 } from './browser-harness.mjs';
 
 // ── The fixture world ────────────────────────────────────────────────────────
@@ -185,11 +186,6 @@ export default defineComponent({
 });
 `;
 
-/** Wait for the panel to be offering the world's verb to a seated player. */
-async function seated(page) {
-  await surfaceOf(page).locator('[data-bs-action="tend"]').waitFor({ timeout: 30_000 });
-}
-
 /**
  * Every measurement this script reasons about, taken inside the frame in one
  * pass so no two of them can describe different layouts.
@@ -260,7 +256,7 @@ async function drive({ launch, hostUrl }) {
       const context = await browser.newContext({ viewport });
       const page = await context.newPage();
       await page.goto(hostUrl);
-      await seated(page);
+      await waitForAction(page, 'tend');
       await page.waitForTimeout(300);
 
       const open = await measure(page);
@@ -386,7 +382,7 @@ const PICK_PARTS = [
 
 async function pickAfterAChoice(browser, hostUrl, viewport, colorScheme) {
   const size = `${viewport.width}x${viewport.height} ${colorScheme}`;
-  await onFreshPage(browser, hostUrl, { viewport, colorScheme }, seated, async (page, surface) => {
+  await onFreshPage(browser, hostUrl, { viewport, colorScheme }, (page) => waitForAction(page, 'tend'), async (page, surface) => {
     await check(`${size}: an element pick after an earlier choice sits inside the strip, without scrolling`, async () => {
       await surface.locator('[data-bs-action="plant"]').click();
       await surface.locator('.action-config .choice-btn', { hasText: 'Scuttlers' }).click();

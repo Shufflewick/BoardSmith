@@ -1,6 +1,7 @@
 {
   "entry": [
     "scripts/*-browser.mjs",
+    "scripts/browser-regressions.browser-test.mjs",
     "scripts/bench-bot/run.mjs",
     "scripts/bench-bot/probe.mjs",
     "src/**/*.node.ts",

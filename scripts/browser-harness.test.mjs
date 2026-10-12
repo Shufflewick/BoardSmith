@@ -23,20 +23,27 @@
  */
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { browserScripts } from './browser-harness.mjs';
 
 const SCRIPTS = dirname(fileURLToPath(import.meta.url));
 const REPO = join(SCRIPTS, '..');
 
-/** Every browser regression, found rather than listed. */
-const browserScripts = () =>
-  readdirSync(SCRIPTS)
-    .filter((name) => name.endsWith('-browser.mjs'))
-    .sort();
-
 const read = (name) => readFileSync(join(SCRIPTS, name), 'utf8');
+
+/**
+ * The case names `npm run test:browser` would run, collected without running
+ * them. Listed here at the top because collecting starts a vitest.
+ */
+const vitest = join(dirname(createRequire(import.meta.url).resolve('vitest/package.json')), 'vitest.mjs');
+const listed = spawnSync(process.execPath, [vitest, 'list', '--config', 'vitest.browser.config.ts'], {
+  cwd: REPO,
+  encoding: 'utf8',
+});
+const browserSuiteCases = `${listed.stdout}${listed.stderr}`;
 
 describe('#231: the fixture world has one owner', () => {
   it('finds the browser regressions to check', () => {
@@ -129,17 +136,33 @@ describe('#358: a browser regression finds the packages where Node does', () => 
     // A worktree has no `node_modules` of its own: Node resolves its packages
     // from the main checkout's install. The harness used to look for
     // `<checkout>/node_modules/vue` and refused every run in a worktree. With
-    // no Playwright reachable, a run that got past the install check stops at
-    // the Playwright refusal, before any fixture or browser exists.
+    // Playwright pointed at an empty browser directory, a run that got past the
+    // install check stops at the missing-Chromium refusal (#533), before any
+    // fixture or browser exists.
     const run = spawnSync(process.execPath, [join(SCRIPTS, 'world-offers-latch-browser.mjs')], {
       cwd: REPO,
       encoding: 'utf8',
-      env: { ...process.env, BOARDSMITH_PLAYWRIGHT_MODULE: join(REPO, 'no-playwright-here') },
+      env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: join(REPO, 'no-browsers-here') },
     });
     const output = `${run.stdout}${run.stderr}`;
     expect(run.status).toBe(1);
     expect(output).not.toContain('no node_modules/vue');
-    expect(output).toContain('No Playwright chromium is reachable');
+    expect(output).toContain('Run `boardsmith install-browser`');
+    expect(output).not.toContain('does not depend on a browser');
+  });
+});
+
+describe('#533: every browser regression runs automatically', () => {
+  const policy = JSON.parse(readFileSync(join(REPO, '.agent-policy.json'), 'utf8'));
+  const scripts = JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8')).scripts;
+
+  it('runs the browser suite as its own verify check', () => {
+    expect(scripts['test:browser']).toBe('vitest run --config vitest.browser.config.ts');
+    expect(policy.verify).toContainEqual({ name: 'browser', run: 'npm run test:browser' });
+  });
+
+  it.each(browserScripts())('%s is a case of the browser suite', (name) => {
+    expect(browserSuiteCases, `${name} has no case in \`npm run test:browser\``).toContain(name);
   });
 });
 

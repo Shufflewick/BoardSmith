@@ -50,6 +50,7 @@ import {
   runBrowserRegression,
   summarise,
   surfaceOf,
+  waitForAction,
   waitUntil,
 } from './browser-harness.mjs';
 
@@ -238,11 +239,6 @@ async function frameOf(page) {
   return frame;
 }
 
-/** Wait for the panel to be offering the world's verbs to a seated player. */
-async function seated(page) {
-  await surfaceOf(page).locator('[data-bs-action="construct"]').waitFor({ timeout: 30_000 });
-}
-
 /** The action names the panel is currently drawing, in order. */
 async function shownActions(page) {
   return (await frameOf(page)).evaluate(() =>
@@ -373,7 +369,7 @@ async function oneSeatWalksTheMenu({ browser, hostUrl }) {
     ws.on('framesent', ({ payload }) => sent.push(String(payload)));
   });
   await page.goto(hostUrl);
-  await seated(page);
+  await waitForAction(page, 'construct');
   // THE HANDSHAKE IS NOT NAVIGATION. `hello` goes up when the frame
   // connects, before any of this, so the baseline is taken here and every
   // "nothing was sent" assertion below is measured against it.
@@ -498,9 +494,9 @@ async function anotherSeatMovesTheLevel({ browser, hostUrl }) {
   const page = await watcher.newPage();
   const second = await other.newPage();
   await page.goto(hostUrl);
-  await seated(page);
+  await waitForAction(page, 'construct');
   await second.goto(hostUrl);
-  await seated(second);
+  await waitForAction(second, 'construct');
 
   await check('a leaf with a selection walks the ordinary controller', async () => {
     await surfaceOf(page).locator('[data-bs-action-group="More"]').click();
@@ -552,7 +548,7 @@ async function theMenuOnANarrowScreen({ browser, hostUrl }) {
   const context = await browser.newContext({ viewport: { width: 360, height: 640 } });
   const page = await context.newPage();
   await page.goto(hostUrl);
-  await seated(page);
+  await waitForAction(page, 'construct');
 
   await check('the menu is usable at 360px: the group button is hittable', async () => {
     const group = surfaceOf(page).locator('[data-bs-action-group="More"]');
@@ -610,7 +606,7 @@ async function theMenuInsideTheCollapsibleBar({ browser, hostUrl }) {
   const context = await browser.newContext({ viewport: { width: 420, height: 720 } });
   const page = await context.newPage();
   await page.goto(hostUrl);
-  await seated(page);
+  await waitForAction(page, 'construct');
 
   /**
    * The bar, its ceiling, and every control the open level is drawing.

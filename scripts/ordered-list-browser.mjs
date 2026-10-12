@@ -56,6 +56,7 @@ import {
   summarise,
   surfaceOf,
   VIEW_FIELD_READER,
+  waitForAction,
   waitUntil,
 } from './browser-harness.mjs';
 
@@ -219,11 +220,6 @@ export default defineComponent({
 
 // ── Reading the surface ──────────────────────────────────────────────────────
 
-/** Wait for the panel to be offering the world's verb to a seated player. */
-async function seated(page) {
-  await surfaceOf(page).locator('[data-bs-action="repair"]').waitFor({ timeout: 30_000 });
-}
-
 /** Start `repair` from the action panel and wait for the Add buttons. */
 async function startRepair(page) {
   const surface = surfaceOf(page);
@@ -369,7 +365,7 @@ async function driveThrough({ launch, hostUrl }) {
       });
     });
     await page.goto(hostUrl);
-    await seated(page);
+    await waitForAction(page, 'repair');
     await startRepair(page);
 
     const surface = surfaceOf(page);
