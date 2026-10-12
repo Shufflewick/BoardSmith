@@ -205,7 +205,7 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
         if (op.type !== 'botSuggest') return { ...base };
         searches++;
         if (searches === 1) await firstSearch; // hold the first search open
-        return { ...base };
+        return { success: true };
       }),
       record: () => {}, push: () => {},
     };
@@ -266,7 +266,7 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
     const adapters: SnapshotSessionAdapters = {
       playerCount: 2,
       executeOp: stubExecuteOp(async (_snap, _pend, op) => {
-        if (op.type === 'botSuggest') return { ...base, botPlayer: 2, suggestedAction: 'go', suggestedArgs: {} };
+        if (op.type === 'botSuggest') return { success: true, botPlayer: 2, suggestedAction: 'go', suggestedArgs: {} };
         if (op.type === 'action' && op.player === 2) {
           botCallCount++;
           return { ...base };

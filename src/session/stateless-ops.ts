@@ -495,11 +495,11 @@ export interface OpSuccessFields {
 }
 
 /**
- * The ops whose success carries no {@link StateEnvelope}: a choices query
- * changes nothing and answers one seat (#450), and the host's lifecycle ops
- * publish through the host itself.
+ * The ops whose success carries no {@link StateEnvelope}: a choices query and a
+ * bot's search change nothing and answer one caller (#450, #675), and the
+ * host's lifecycle ops publish through the host itself.
  */
-type StatelessOpType = 'resolveChoices' | HostOp['type'];
+type StatelessOpType = 'resolveChoices' | 'botSuggest' | HostOp['type'];
 
 /**
  * What every success shares. `error` and `errorCode` are named only to say they
@@ -1353,23 +1353,20 @@ async function searchBotMove(
 
 /**
  * Search for the move a due bot seat among `op.seats` would make, WITHOUT
- * making it: the snapshot is returned as it came. The table host's bot pump
- * and its demo both search this way and then make the move as an `action` op,
- * so a move is only ever made against the game it was searched on.
+ * making it, and answer with the move alone, no state (#675). The table host's
+ * bot pump and its demo both search this way and then make the move as an
+ * `action` op, so a move is only ever made against the game it was searched on.
  */
 async function handleBotSuggest(
   def: RunnerDef,
-  gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'botSuggest' }>,
 ): Promise<OpResultFor<'botSuggest'>> {
-  const runner = runnerFromSnapshot(snapshot, def);
-  const searched = await searchBotMove(def, runner, op.seats);
-  const envelope = { success: true as const, ...stateEnvelope(runner, gameOptions.playerCount) };
-  if (searched === null) return envelope;
-  if ('botStalled' in searched) return { ...envelope, botStalled: searched.botStalled };
+  const searched = await searchBotMove(def, runnerFromSnapshot(snapshot, def), op.seats);
+  if (searched === null) return { success: true };
+  if ('botStalled' in searched) return { success: true, botStalled: searched.botStalled };
   return {
-    ...envelope,
+    success: true,
     botPlayer: searched.botPlayer,
     suggestedAction: searched.move.action,
     suggestedArgs: searched.move.args as Record<string, unknown>,
@@ -1837,7 +1834,7 @@ async function runOp(
             'protocol',
           );
         }
-        return op.type === 'botTurn' ? handleBotTurn(def, gameOptions, snap, op) : handleBotSuggest(def, gameOptions, snap, op);
+        return op.type === 'botTurn' ? handleBotTurn(def, gameOptions, snap, op) : handleBotSuggest(def, snap, op);
       case 'startTutorial':
         return handleStartTutorial(def, gameOptions, snap, op, teachingDisabled);
       case 'exitTutorial': {

@@ -74,8 +74,8 @@ function countingSession(options: { botSeats?: Array<{ seat: number }>; botsStop
         return result({ count: 0 });
       case 'botSuggest':
         options.onBotSearch?.();
-        if (options.botsStopAt !== undefined && at.count >= options.botsStopAt) return result(at);
-        return { ...result(at), botPlayer: 1, suggestedAction: 'bump', suggestedArgs: {} };
+        if (options.botsStopAt !== undefined && at.count >= options.botsStopAt) return { success: true };
+        return { success: true, botPlayer: 1, suggestedAction: 'bump', suggestedArgs: {} };
       case 'action':
         return result({ count: at.count + rules.step });
       default:
