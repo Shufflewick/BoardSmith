@@ -567,7 +567,7 @@ export interface GameDefinitionLike {
   /**
    * Optional tutorial definition — threaded un-serialized into each runner
    * this module builds (`handleStart`, `runnerFromSnapshot`, `runnerFromCheckpoint`).
-   * When present, `buildPlayerState` emits `hasTutorial: true` in every broadcast.
+   * When present, `buildPlayerState` emits `hasTutorial: true` in the learner seat's broadcast.
    */
   tutorial?: TutorialDefinition;
   /**

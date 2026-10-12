@@ -442,12 +442,12 @@ export interface PlayerGameState {
    */
   isDemoRunning?: boolean;
   /**
-   * Whether the current game definition has a tutorial attached.
+   * Whether this seat has a tutorial: the game defines one and this seat is its
+   * `learnerSeat`, the only seat that can start it.
    *
-   * Set by `buildPlayerState` when `runner.game.tutorialDefinition` is defined.
-   * Consumers (GameShell, ControlsMenu) use this to show the "Start tutorial"
-   * menu item. Undefined when no tutorial is defined — omitted to keep the
-   * wire shape lean (not `false`, just absent).
+   * Set by `buildPlayerState`. Consumers (GameShell, ControlsMenu) use this to
+   * show the "Start tutorial" menu item. Absent (not `false`) for every other
+   * seat, for spectators, and when no tutorial is defined.
    */
   hasTutorial?: boolean;
   /**

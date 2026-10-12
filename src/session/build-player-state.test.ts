@@ -607,9 +607,10 @@ describe('buildPlayerState - hasTutorial field', () => {
     runner.start();
   });
 
-  it('hasTutorial is true when runner.game has a tutorialDefinition', () => {
+  it('hasTutorial is true for the learner seat when runner.game has a tutorialDefinition', () => {
     // Simulate threading the tutorial definition (mirrors runnerFromSnapshot behavior)
     (runner.game as any).tutorialDefinition = {
+      learnerSeat: 1,
       steps: [{ id: 'intro', gate: { action: 'pass' }, content: [{ text: 'Test.' }] }],
     };
 
@@ -625,17 +626,15 @@ describe('buildPlayerState - hasTutorial field', () => {
     expect(state.hasTutorial).toBeUndefined();
   });
 
-  it('hasTutorial is present for all seats, including spectator (position 0)', () => {
+  it('hasTutorial is absent for every seat but the learner seat, and for spectators (#678)', () => {
     (runner.game as any).tutorialDefinition = {
+      learnerSeat: 2,
       steps: [{ id: 'intro', gate: { action: 'pass' }, content: [{ text: 'Test.' }] }],
     };
 
-    // Seat 1 (active player)
-    expect(buildPlayerState(runner, ['Alice', 'Bob'], 1).hasTutorial).toBe(true);
-    // Seat 2 (non-active player)
     expect(buildPlayerState(runner, ['Alice', 'Bob'], 2).hasTutorial).toBe(true);
-    // Position 0 (spectator)
-    expect(buildPlayerState(runner, ['Alice', 'Bob'], 0).hasTutorial).toBe(true);
+    expect(buildPlayerState(runner, ['Alice', 'Bob'], 1).hasTutorial).toBeUndefined();
+    expect(buildPlayerState(runner, ['Alice', 'Bob'], 0).hasTutorial).toBeUndefined();
   });
 
   it('sends no seat or spectator a global action count or history index (#449)', () => {
