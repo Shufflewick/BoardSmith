@@ -70,7 +70,7 @@ class TestGame extends Game<TestGame, Player> {
 /** Restore a fresh game from seat `seat`'s redacted view of `game`. */
 function restoreForSeat(game: TestGame, seat: number | null): TestGame {
   const restored = new TestGame({ playerCount: 2, elementIdKey: ID_KEY });
-  restored.loadSerializedState(game.toJSONForPlayer(seat) as ReturnType<Game['toJSON']>);
+  restored.loadSerializedState(game.toJSONForPlayer(seat));
   return restored;
 }
 
