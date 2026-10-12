@@ -1556,7 +1556,6 @@ function handleDebugRewind(
   try {
     assertUndoAllowed({
       runner: current,
-      actionHistory: current.actionHistory,
       turnStartActionIndex: op.actionIndex,
       // Deliberately UNFENCED against random draws: debug rewind is dev-time
       // travel (`boardsmith dev`), the debug ops never run in a deployed

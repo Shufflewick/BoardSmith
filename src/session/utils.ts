@@ -3,7 +3,6 @@
  */
 
 import { Player, canSeatAct, availableActionsForSeat, followUpForSeat, isSeatExpiry, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState, type FollowUpAction, type FollowUpOffer } from '../engine/index.js';
-import type { HistoryEntry } from '../engine/action/types.js';
 import { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
 import { devWarn } from '../utils/dev.js';
@@ -457,27 +456,24 @@ export class UndoRefusedError extends Error {
  * and UNDO-02 (the `finished`-phase fence AND the durable execute()-barrier
  * fence).
  *
- * Four independent, composable checks (order does not matter -- Open
+ * Three independent, composable checks (order does not matter -- Open
  * Question 2, 155-RESEARCH.md -- each is O(1)/O(k) and evaluates against the
  * SAME inputs regardless of what ran before it):
  *  1. Phase fence: refuse up front once `game.isFinished()` (D-04) --
  *     checked before any checkpoint lookup, never by silently rolling the
  *     phase back via a pre-finish checkpoint.
- *  2. Non-undoable fence: scan `actionHistory[turnStartActionIndex..end)`
- *     for an entry recorded with `undoable === false`
- *     (`.notUndoable()` -> `action-builder.ts`) and refuse, naming the
- *     blocking action.
- *  3. Commitment fence (155-02): refuse when
- *     `turnStartActionIndex < executeBarrierIndex` -- the target would rewind
- *     through a completed `execute({ irreversible: true })` node, taking back
- *     something a state restore cannot honestly take back (above all,
- *     information a human has already seen: a dealt hand, a revealed role).
- *     An ordinary bookkeeping `execute()` does NOT fence undo -- its effects
- *     are state, and state restores. `executeBarrierIndex` is `GameRunner`'s durable
- *     replacement for the transient `frame.completed` flag (see
- *     `runner.ts`'s doc comments) -- callers pass `runner.executeBarrierIndex`
- *     directly; there is nothing else to compute.
- *  4. Random fence (#18): opt-in per game via
+ *  2. Floor fence: refuse when `runner.undoFloor(turnStartActionIndex)` lies
+ *     past the target -- the same floor the runner's turn-anchored checkpoint
+ *     window starts at, so the two cannot disagree. The floor is raised by an
+ *     entry recorded with `undoable === false` (`.notUndoable()` ->
+ *     `action-builder.ts`), refused naming the first such action since the
+ *     target, and by `executeBarrierIndex`: a completed
+ *     `execute({ irreversible: true })` node, taking back something a state
+ *     restore cannot honestly take back (above all, information a human has
+ *     already seen: a dealt hand, a revealed role). An ordinary bookkeeping
+ *     `execute()` does NOT fence undo -- its effects are state, and state
+ *     restores.
+ *  3. Random fence (#18): opt-in per game via
  *     `GameDefinition.undo: { fenceRandomRewind: true }` and passed here as
  *     `fenceRandomRewind`. Refuse when the seeded RNG position at the target
  *     checkpoint differs from the live one -- i.e. a random draw was consumed
@@ -504,32 +500,29 @@ const FINISHED_UNDO_REFUSAL = 'Cannot undo: the game is finished.';
 
 export function assertUndoAllowed(args: {
   runner: GameRunner;
-  actionHistory: readonly HistoryEntry[];
   turnStartActionIndex: number;
   fenceRandomRewind: boolean;
 }): void {
-  const { runner, actionHistory, turnStartActionIndex, fenceRandomRewind } = args;
+  const { runner, turnStartActionIndex, fenceRandomRewind } = args;
   const game = runner.game;
-  const executeBarrierIndex = runner.executeBarrierIndex;
 
   if (game.isFinished()) {
     throw new UndoRefusedError(FINISHED_UNDO_REFUSAL, 'finished-phase');
   }
 
-  for (let i = turnStartActionIndex; i < actionHistory.length; i++) {
-    const entry = actionHistory[i];
-    if (entry.undoable !== false) continue;
+  if (runner.undoFloor(turnStartActionIndex) > turnStartActionIndex) {
+    // The floor decides; the history is read only to name what blocks the undo.
+    const blocking = runner.actionHistory.slice(turnStartActionIndex).find((entry) => entry.undoable === false);
     // A seat the host closed at a deadline is not the seat's own move to take back.
-    if (isSeatExpiry(entry)) {
+    if (blocking && isSeatExpiry(blocking)) {
       throw new UndoRefusedError(
-        `Cannot undo: seat ${entry.player}'s time ran out and the host closed its part of the step, which cannot be taken back.`,
+        `Cannot undo: seat ${blocking.player}'s time ran out and the host closed its part of the step, which cannot be taken back.`,
         'non-undoable',
       );
     }
-    throw new UndoRefusedError(`Cannot undo: ${entry.name} is marked notUndoable.`, 'non-undoable');
-  }
-
-  if (turnStartActionIndex < executeBarrierIndex) {
+    if (blocking) {
+      throw new UndoRefusedError(`Cannot undo: ${blocking.name} is marked notUndoable.`, 'non-undoable');
+    }
     throw new UndoRefusedError(
       `Cannot undo: a step marked execute({ irreversible: true }) has ` +
       `committed since the point being restored. If that step only ` +
@@ -618,7 +611,6 @@ export function decideUndo(runner: GameRunner, seat: number): UndoDecision {
   try {
     assertUndoAllowed({
       runner,
-      actionHistory: runner.actionHistory,
       turnStartActionIndex,
       fenceRandomRewind: runner.undoPolicy.fenceRandomRewind,
     });

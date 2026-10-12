@@ -452,9 +452,11 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // action-step frame's start (`computeUndoInfo`, `simultaneousUndoBoundary`
     // in session/utils.ts), and with no frame open no undo is possible at all.
     // Nor does any undo cross a `.notUndoable()` action or an irreversible
-    // `execute()` (`assertUndoAllowed`), so the window starts after the last
+    // `execute()` (`undoFloor`, which `assertUndoAllowed` refuses by), so the window starts after the last
     // of those when it lies inside the frame. `max` caps either policy.
-    const keepFrom = this.checkpointPolicy_.history === 'full' ? this.checkpointBaseIndex : this.undoFloor();
+    const keepFrom = this.checkpointPolicy_.history === 'full'
+      ? this.checkpointBaseIndex
+      : this.undoFloor(len - (this.getFlowState()?.moveCount ?? 0));
     const excess = Math.max(
       keepFrom - this.checkpointBaseIndex,
       this.actionCheckpoints.length - this.checkpointPolicy_.max,
@@ -466,22 +468,18 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   }
 
   /**
-   * The oldest action count any seat's undo can still restore: the later of
-   * the current action-step frame's start, the action after the frame's last
-   * `.notUndoable()` entry, and `executeBarrierIndex`. Mirrors the fences in
-   * `assertUndoAllowed` (session/utils.ts); a change to either must change both.
+   * The oldest action count at or after `from` that an undo may restore: the
+   * action after the last `.notUndoable()` entry since `from`, or
+   * `executeBarrierIndex`, whichever is later, and never before `from`. The one
+   * definition of what undo cannot cross: under `'turn'` history the retained
+   * window starts at `undoFloor(frame start)`, and `assertUndoAllowed`
+   * (session/utils.ts) refuses any target below `undoFloor(target)`.
    */
-  private undoFloor(): number {
-    const len = this.actionHistory.length;
-    const frameStart = len - (this.getFlowState()?.moveCount ?? 0);
-    let floor = frameStart;
-    for (let i = len - 1; i >= frameStart; i--) {
-      if (this.actionHistory[i].undoable === false) {
-        floor = i + 1;
-        break;
-      }
+  undoFloor(from: number): number {
+    for (let i = this.actionHistory.length - 1; i >= from; i--) {
+      if (this.actionHistory[i].undoable === false) return Math.max(i + 1, this.executeBarrierIndex);
     }
-    return Math.max(floor, this.executeBarrierIndex);
+    return Math.max(from, this.executeBarrierIndex);
   }
 
   /**
