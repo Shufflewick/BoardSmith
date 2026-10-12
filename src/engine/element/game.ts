@@ -3396,6 +3396,16 @@ export class Game<
   }
 
   /**
+   * Point every element the running flow holds at the same element of the
+   * current tree, after `loadSerializedState` rebuilt the tree in place under a
+   * flow that stays where it is (a failed action's rollback, #679). A flow
+   * restored with `restoreFlowState` relinks itself.
+   */
+  relinkFlowElements(): void {
+    this._flowEngine?.relinkElements();
+  }
+
+  /**
    * Read the seeded RNG's state so it can be captured in a snapshot. It is a
    * {@link RandomState} string; restoring it makes the next `game.random()` draw
    * identical to the live game's (see setRandomState).

@@ -1351,6 +1351,27 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   /**
+   * Point every element the flow holds (variables, frame data, the current
+   * player) at the same element of the game's current tree, after the tree was
+   * rebuilt in place under a flow that stays where it is: a failed action
+   * rolled back (#679). The position does not change.
+   *
+   * @throws When an element the flow holds is not in the rebuilt tree, naming
+   *   the flow variable or step data that holds it.
+   */
+  relinkElements(): void {
+    this.variables = relinkFlowValue(encodeFlowValue(this.variables), this.game, undefined, 'variable') as Record<string, unknown>;
+    for (const frame of this.stack) {
+      if (frame.data) {
+        frame.data = relinkFlowValue(encodeFlowValue(frame.data), this.game, undefined, 'step data') as Record<string, unknown>;
+      }
+    }
+    if (this.currentPlayer) {
+      this.currentPlayer = this.game.getPlayer(this.currentPlayer.seat) as PlayerOf<G>;
+    }
+  }
+
+  /**
    * Try to restore flow from a serialized position with bounds checking.
    * Unlike restore(), this method validates the path and returns failure info
    * instead of throwing or accessing invalid indices.

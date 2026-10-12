@@ -1,7 +1,7 @@
 {
-  "revision": 178,
+  "revision": 179,
   "bundleProtocol": 2,
-  "surfaceHash": "b228941c5186c850",
+  "surfaceHash": "c7a1e99e3221ebe1",
   "payloadHash": "7e563b9e75959ec4",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1546,6 +1546,15 @@
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "Element and player references use one codec (#497). serializeValue, deserializeValue and the SerializeOptions type are no longer exported, and GameRunnerOptions.serializeOptions is gone: action arguments in history are written by the attribute codec, so an element arg is { __elementRef: branch } ({ __elementId } in world mode, where an unresolved id is kept verbatim), a player arg is { __playerRef, seat, color, name }, a Map, Set or typed array round-trips with its contents, and a cyclic arg is refused with an error naming the path. buildActionArgs's wire format writes the same references. Flow state: a forEach snapshot is saved as flow element markers ({ __flowElementId, className }) instead of { elementId } / { value } entries; a flow variable or forEach item whose element no longer exists makes the restore throw, naming it, instead of leaving a marker object; and a seat's snapshot (createSnapshot forSeat) writes a flow element in the pile as { __elementRef: 'pile/removed' }, which restores to undefined, as attributes do."
+    },
+    {
+      "revision": 179,
+      "date": "2026-10-12",
+      "bundleProtocol": 2,
+      "surfaceHash": "c7a1e99e3221ebe1",
+      "payloadHash": "7e563b9e75959ec4",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "After a failed action is rolled back in place, the elements the flow holds (flow variables, frame data such as a forEach snapshot, the current player) are relinked to the restored tree, as a reload does, instead of keeping the discarded element objects; this covers removed elements in game.pile too. New Game.relinkFlowElements() does it (#679)."
     }
   ]
 }

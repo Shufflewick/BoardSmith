@@ -2288,9 +2288,9 @@ loop({
 ```
 
 A flow variable that holds an element (or a player) is saved by that
-element's id and comes back as the same element after a reload or an undo.
-A removed element is still in `game.pile`, so it comes back
-too. In a seat's view, and so in a bot's search, a removed element reads as
+element's id and comes back as the same element after a reload, an undo or
+a failed action's rollback. A removed element is still in `game.pile`, so it
+comes back too. In a seat's view, and so in a bot's search, a removed element reads as
 `undefined`, as an attribute holding one does. If the element is not in the
 game at all when the flow is restored, the restore throws an error naming
 the variable.

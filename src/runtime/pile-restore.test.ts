@@ -187,11 +187,7 @@ describe.each(restores)('a reference to a removed element after %s (#655)', (_pa
   });
 });
 
-// The in-place rollback is left out: it keeps the flow engine's live
-// variables, which point at the elements it discarded, in the tree as much as
-// in the pile (#679).
-const [freshRestore, undo] = restores;
-describe.each([freshRestore!, undo!])('a flow variable holding a removed element after %s (#655)', (_path, restore) => {
+describe.each(restores)('a flow variable holding a removed element after %s (#655, #679)', (_path, restore) => {
   it('is the same element, in the pile', () => {
     const played = playedRunner();
     const restored = restore(played);
