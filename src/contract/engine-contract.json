@@ -1,5 +1,5 @@
 {
-  "revision": 173,
+  "revision": 174,
   "bundleProtocol": 2,
   "surfaceHash": "1a4c5a5616989429",
   "payloadHash": "3f10d70c457a15ba",
@@ -1501,6 +1501,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A table host's heatmap refresh after a move joins the one already running, so at most one heatmap compute runs at a time instead of one per move landing during a compute (#676)"
+    },
+    {
+      "revision": 174,
+      "date": "2026-10-12",
+      "bundleProtocol": 2,
+      "surfaceHash": "1a4c5a5616989429",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "The botTurn op is removed (#677): ExecutorOp, parseExecutorOp and executeOp no longer accept it (parseExecutorOp refuses it as an unknown type), and OpFailure no longer carries botPlayer. Hosts must not send botTurn: search with botSuggest and make the move it finds as an ordinary action for the bot's seat, stamped with the boundary of the snapshot that was searched, as SnapshotSessionHost has done since r172. No fingerprint sees the op set, so this revision is adopted. ShufflewickPub's executor and tests move off botTurn in the same re-vendor."
     }
   ]
 }

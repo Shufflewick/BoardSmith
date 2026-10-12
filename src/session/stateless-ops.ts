@@ -131,13 +131,6 @@ export type ExecutorOp =
   | { type: 'cancelAction'; player: number }
   | { type: 'undo'; player: number }
   /**
-   * A bot's search and move in one op: the due bot seat among `seats` searches
-   * and its move is made. The table host does not use it, because a move made
-   * here before the host has checked the game still stands where the search
-   * began cannot be taken back (#635); it searches with `botSuggest` instead.
-   */
-  | { type: 'botTurn'; seats: Array<{ seat: number; level?: string }> }
-  /**
    * A bot's search: the move one due bot seat among `seats` would make, found
    * WITHOUT making it. Read-only: the game is left as it was. A host makes the
    * move as an ordinary `action` op for that seat, once it has checked the game
@@ -339,12 +332,6 @@ export interface OpFailure {
    */
   errorCode?: ErrorCode;
   category: OpFailureCategory;
-  /**
-   * Set only by a refused `botTurn`: the bot seat whose move the game refused,
-   * so a caller can hold that seat back until the game changes instead of
-   * asking it for the same move again (#421).
-   */
-  botPlayer?: number;
 }
 
 /**
@@ -433,19 +420,6 @@ export interface OpSuccessFields {
   };
   cancelAction: Record<never, never>;
   undo: Record<never, never>;
-  botTurn: {
-    /** The bot seat that moved. */
-    botPlayer?: number;
-    /** Whether a bot seat moved. False when none was due, or one was due and stalled. */
-    botMoved: boolean;
-    /**
-     * A bot seat that was due but could not move (#29). `botMoved` is false
-     * both when no bot seat was due and when one could not act; this tells
-     * the second apart, as a stalled seat a caller should report. Present only
-     * in the second case.
-     */
-    botStalled?: { seat: number; reason: string };
-  };
   /** The game's action history, oldest first. */
   debugHistory: { actionHistory: DebugHistoryEntry[] };
   debugStateAt: { historicalState: unknown };
@@ -570,7 +544,7 @@ export interface GameDefinitionLike {
   tutorial?: TutorialDefinition;
   /**
    * Optional bot configuration — passed to `createBot` by EVERY op that builds a
-   * bot: botTurn, botSuggest, hint, and heatmapToggle. Provides the MCTS hooks
+   * bot: botSuggest, hint, and heatmapToggle. Provides the MCTS hooks
    * (`objectives`, `moveOrdering`, `playoutPolicy`, `threatResponseMoves`,
    * `uctConstant`) plus `hintTargetFromMove` for per-game board-highlight
    * extraction. A bot built without it searches with generic defaults, so any op
@@ -1270,26 +1244,25 @@ function handleStartTutorial(
 // ---------------------------------------------------------------------------
 
 /**
- * What one bot search came to: the due bot seat among `seats` and the move
- * its bot chose, that seat stalled (#29), or `null` when no bot seat is due.
+ * Search for the move a due bot seat among `op.seats` would make, WITHOUT
+ * making it: the snapshot is returned as it came. The table host's bot pump
+ * and its demo both search this way and then make the move as an `action` op,
+ * so a move is only ever made against the game it was searched on.
  */
-type BotSearch =
-  | { botPlayer: number; move: BotMove }
-  | { botStalled: { seat: number; reason: string } }
-  | null;
-
-/** Search for the move a due bot seat among `seats` would make on `runner`'s game, without making it. */
-async function searchBotMove(
+async function handleBotSuggest(
   def: RunnerDef,
-  runner: GameRunner,
-  seats: Array<{ seat: number; level?: string }>,
-): Promise<BotSearch> {
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+  op: Extract<Op, { type: 'botSuggest' }>,
+): Promise<OpResultFor<'botSuggest'>> {
+  const runner = runnerFromSnapshot(snapshot, def);
+  const envelope = { success: true as const, ...stateEnvelope(runner, gameOptions.playerCount) };
   const flowState = runner.getFlowState() as BotFlowState | undefined;
-  if (!flowState?.awaitingInput || flowState.complete) return null;
-  const botPlayer = selectDueBotSeat(flowState, new Set(seats.map((s) => s.seat)));
-  if (botPlayer === undefined) return null;
+  if (!flowState?.awaitingInput || flowState.complete) return envelope;
+  const botPlayer = selectDueBotSeat(flowState, new Set(op.seats.map((s) => s.seat)));
+  if (botPlayer === undefined) return envelope;
 
-  const seatLevel = seats.find((s) => s.seat === botPlayer)?.level;
+  const seatLevel = op.seats.find((s) => s.seat === botPlayer)?.level;
   // `def.bot` MUST be threaded through — it carries the game's MCTS hooks
   // (objectives, moveOrdering, playoutPolicy, threatResponseMoves, uctConstant).
   // Omitting it silently downgrades every bot move to a hookless generic search
@@ -1315,67 +1288,23 @@ async function searchBotMove(
     move = await bot.play();
   } catch (error) {
     console.error(`[BoardSmith] Bot for seat ${botPlayer} failed to choose a move:`, error);
-    return { botStalled: { seat: botPlayer, reason: 'The bot failed while choosing a move.' } };
+    return { ...envelope, botStalled: { seat: botPlayer, reason: 'The bot failed while choosing a move.' } };
   }
   if (!move) {
     return {
+      ...envelope,
       botStalled: {
         seat: botPlayer,
         reason: bot.lastStallReason ?? 'The bot had no move it could search from this seat\'s view.',
       },
     };
   }
-  return { botPlayer, move };
-}
-
-/**
- * Search for the move a due bot seat among `op.seats` would make, WITHOUT
- * making it: the snapshot is returned as it came. The table host's bot pump
- * and its demo both search this way and then make the move as an `action` op,
- * so a move is only ever made against the game it was searched on.
- */
-async function handleBotSuggest(
-  def: RunnerDef,
-  gameOptions: { playerCount: number; [key: string]: unknown },
-  snapshot: GameStateSnapshot,
-  op: Extract<Op, { type: 'botSuggest' }>,
-): Promise<OpResultFor<'botSuggest'>> {
-  const runner = runnerFromSnapshot(snapshot, def);
-  const searched = await searchBotMove(def, runner, op.seats);
-  const envelope = { success: true as const, ...stateEnvelope(runner, gameOptions.playerCount) };
-  if (searched === null) return envelope;
-  if ('botStalled' in searched) return { ...envelope, botStalled: searched.botStalled };
   return {
     ...envelope,
-    botPlayer: searched.botPlayer,
-    suggestedAction: searched.move.action,
-    suggestedArgs: searched.move.args as Record<string, unknown>,
+    botPlayer,
+    suggestedAction: move.action,
+    suggestedArgs: move.args as Record<string, unknown>,
   };
-}
-
-/** Search for a due bot seat's move among `op.seats`, and make it. */
-async function handleBotTurn(
-  def: RunnerDef,
-  gameOptions: { playerCount: number; [key: string]: unknown },
-  snapshot: GameStateSnapshot,
-  op: Extract<Op, { type: 'botTurn' }>,
-): Promise<OpResultFor<'botTurn'>> {
-  const runner = runnerFromSnapshot(snapshot, def);
-  const searched = await searchBotMove(def, runner, op.seats);
-  if (searched === null || 'botStalled' in searched) {
-    return { success: true, ...stateEnvelope(runner, gameOptions.playerCount), botMoved: false, ...searched };
-  }
-  const { botPlayer, move } = searched;
-  const actionResult = runner.performAction(move.action, botPlayer, move.args);
-  if (!actionResult.success) {
-    // Names the seat, so a caller can hold that seat back until the game
-    // changes instead of asking it for the same refused move again (#421).
-    return {
-      ...errorResult(actionResult.error ?? 'bot action failed', 'bundle', actionResult.errorCode),
-      botPlayer,
-    };
-  }
-  return { success: true, ...stateEnvelope(runner, gameOptions.playerCount), botMoved: true, botPlayer };
 }
 
 // ---------------------------------------------------------------------------
@@ -1802,7 +1731,6 @@ async function runOp(
         return handleHint(def, gameOptions, snap, op, teachingDisabled);
       case 'heatmapToggle':
         return handleHeatmapToggle(def, gameOptions, snap, op, teachingDisabled);
-      case 'botTurn':
       case 'botSuggest':
         // Refused up front, not left to throw from inside the search: an MCTS
         // playout draws thousands of times, and an order-entry session has no
@@ -1814,7 +1742,7 @@ async function runOp(
             'protocol',
           );
         }
-        return op.type === 'botTurn' ? handleBotTurn(def, gameOptions, snap, op) : handleBotSuggest(def, gameOptions, snap, op);
+        return handleBotSuggest(def, gameOptions, snap, op);
       case 'startTutorial':
         return handleStartTutorial(def, gameOptions, snap, op, teachingDisabled);
       case 'exitTutorial': {

@@ -16,7 +16,7 @@ import {
 import { executeOp, type GameDefinitionLike } from '../session/index.js';
 import { MCTSBot } from './mcts-bot.js';
 import type { DeterminizeSampler } from './types.js';
-import { succeeded } from '../session/op-result.test-helper.js';
+import { succeeded, suggestedMoveOp } from '../session/op-result.test-helper.js';
 
 // ============================================================================
 // #421: a search node's seat-to-move is a fact about ONE world.
@@ -156,9 +156,8 @@ describe('#421: an all-bot table of a hidden-hand game', () => {
     let snapshot = succeeded(await executeOp(definition, gameOptions, null, null, { type: 'start' })).snapshot;
     let moves = 0;
     while (!snapshot.flowState?.complete) {
-      const res = succeeded(await executeOp(definition, gameOptions, snapshot, null, { type: 'botTurn', seats }));
-      expect(res.botStalled).toBeUndefined();
-      expect(res.botMoved).toBe(true);
+      const found = succeeded(await executeOp(definition, gameOptions, snapshot, null, { type: 'botSuggest', seats }));
+      const res = succeeded(await executeOp(definition, gameOptions, snapshot, null, suggestedMoveOp(found)));
       snapshot = res.snapshot;
       moves++;
       expect(moves).toBeLessThan(300);

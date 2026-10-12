@@ -11,7 +11,7 @@ import { stubExecuteOp, succeeded, refused } from '../op-result.test-helper.js';
 /**
  * BSMITH-03 — a seat converted to bot MID-GAME is actually played by a bot.
  *
- * `handleBotTurn` takes its seat list as a per-call argument and the bot pump
+ * `botSuggest` takes its seat list as a per-call argument and the bot pump
  * reads the roster the host was last given (`setBotSeats`) on every iteration,
  * so a roster that changes mid-game is honoured from the next move. What a
  * conversion also needs is (a) an engine-side ACKNOWLEDGEMENT, the

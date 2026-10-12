@@ -38,7 +38,7 @@ import { executeOp, type GameDefinitionLike, type StateEnvelope } from './statel
 import { ErrorCode } from '../types/protocol.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { historyLabels } from './testing/history-labels.js';
-import { succeeded } from './op-result.test-helper.js';
+import { succeeded, suggestedMoveOp } from './op-result.test-helper.js';
 
 type Shape = 'turn' | 'simultaneous';
 
@@ -438,16 +438,17 @@ describe('stateless ops', () => {
   });
 
   for (const shape of ['turn', 'simultaneous'] as const) {
-    it(`${shape}: a bot seat holding a follow-up takes it through the botTurn op`, async () => {
+    it(`${shape}: a bot seat holding a follow-up takes it through the move botSuggest finds`, async () => {
       const def: GameDefinitionLike = { gameClass: raidClass(shape, false), gameType: 'raid', minPlayers: 2, maxPlayers: 3 };
       const started = succeeded(await executeOp(def, gameOptions, null, {}, { type: 'start' }));
       const scouted = succeeded(await executeOp(def, gameOptions, started.snapshot, null, {
         type: 'action', actionName: 'scout', player: 1, args: {}, boundaryKey: boundaryKeyOf(started.snapshot),
       }));
 
-      const turn = succeeded(await executeOp(def, gameOptions, scouted.snapshot, null, { type: 'botTurn', seats: [{ seat: 1, level: '8' }] }));
+      const found = succeeded(await executeOp(def, gameOptions, scouted.snapshot, null, { type: 'botSuggest', seats: [{ seat: 1, level: '8' }] }));
+      expect(found.botPlayer).toBe(1);
+      const turn = succeeded(await executeOp(def, gameOptions, scouted.snapshot, null, suggestedMoveOp(found)));
 
-      expect(turn).toMatchObject({ success: true, botMoved: true, botPlayer: 1 });
       expect((turn.snapshot.flowState as FlowState).followUps).toBeUndefined();
     });
   }
