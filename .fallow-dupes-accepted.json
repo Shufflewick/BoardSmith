@@ -64,13 +64,6 @@
       ]
     },
     {
-      "content": "1b22e6143492b9ef",
-      "lines": 11,
-      "files": [
-        "src/engine/element/game-element.ts"
-      ]
-    },
-    {
       "content": "1d1430b9a8c002a8",
       "lines": 18,
       "files": [
@@ -332,14 +325,6 @@
       "files": [
         "src/cli/commands/verify-classify.ts",
         "src/cli/commands/verify-run.ts"
-      ]
-    },
-    {
-      "content": "a0831d9751b7ebfa",
-      "lines": 16,
-      "files": [
-        "src/engine/element/game-element.ts",
-        "src/engine/utils/serializer.ts"
       ]
     },
     {

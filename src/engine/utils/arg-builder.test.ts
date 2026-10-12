@@ -4,7 +4,7 @@
  * Covers:
  *   1. In-process (default format) — element objects pass through unchanged;
  *      result is accepted by runner.performAction end-to-end.
- *   2. Wire format — element objects become { __elementId } refs; result is
+ *   2. Wire format — element objects become { __elementRef } refs; result is
  *      JSON.stringify-safe.
  *   3. Primitive passthrough — string/number values survive both formats.
  *   4. Validation — unknown selection names are rejected with an actionable error
@@ -150,11 +150,11 @@ describe('buildActionArgs', () => {
   // ── 2. Wire format ───────────────────────────────────────────────────────
 
   describe('wire format', () => {
-    it('converts element objects to { __elementId } references', () => {
+    it('converts element objects to the { __elementRef } references action history records', () => {
       const token = game.board.first(Token)!;
       const result = buildActionArgs('pick', { target: token }, game, 1, { format: 'wire' });
 
-      expect(result.target).toEqual({ __elementId: token.id });
+      expect(result.target).toEqual({ __elementRef: token.branch() });
     });
 
     it('result is JSON.stringify-safe (no circular refs or non-serialisable values)', () => {
@@ -163,7 +163,7 @@ describe('buildActionArgs', () => {
 
       expect(() => JSON.stringify(result)).not.toThrow();
       const parsed = JSON.parse(JSON.stringify(result));
-      expect(parsed.target).toEqual({ __elementId: token.id });
+      expect(parsed.target).toEqual({ __elementRef: token.branch() });
     });
 
     it('passes primitives through unchanged in wire format', () => {

@@ -3537,7 +3537,7 @@ function pruneUnnamedPartitions(
  * the partitioned model exists to delete, paid on the read path by everybody.
  *
  * NOTHING DANGLES WHEN THEY GO. A player-valued attribute does not serialize as
- * a pointer at a node: `GameElement.serializeValue` writes
+ * a pointer at a node: `encodeValue` writes
  * `{ __playerRef, seat, color, name }` for one, which resolves BY SEAT and
  * carries the three facts a board reads inline. So example-rts's
  * `holding.player` is answered in full by the holding's own bytes, and the

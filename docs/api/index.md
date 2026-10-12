@@ -100,8 +100,6 @@ import {
 
 ### Utilities
 
-- `serializeValue()` - Serialize game values
-- `deserializeValue()` - Deserialize game values
 - `serializeAction()` - Serialize an action
 - `deserializeAction()` - Deserialize an action
 - `isSerializedReference()` - Check if value is reference

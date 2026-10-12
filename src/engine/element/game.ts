@@ -2,6 +2,7 @@ import { Space, type ElementEventHandler } from './space.js';
 import { mintElementIdKey, opaqueElementIds, worldElementIds } from './element-ids.js';
 import {
   GameElement,
+  encodeValue,
   forEachInSubtree,
   hasZoneVisibility,
   isPlayerElement,
@@ -413,7 +414,7 @@ function savedPile(game: Game): { pile?: ElementJSON[] } {
  * pile is written without its position and the pile itself is left out
  * (#655). The saved state keeps both.
  */
-function serializeForSeat<T>(ctx: ElementContext, write: () => T): T {
+export function serializeForSeat<T>(ctx: ElementContext, write: () => T): T {
   const outer = ctx._seatView;
   ctx._seatView = true;
   try {
@@ -1160,8 +1161,8 @@ export class Game<
    * present as an own-enumerable key even before any tutorial is started.
    *
    * Keys are seat numbers (1-indexed integers). `Map<number, …>` is chosen
-   * over `Record<number, …>` so `serializeValue` encodes it as
-   * `{ __map: [[1, …]] }` and `deserializeValue` restores numeric keys
+   * over `Record<number, …>` so `encodeValue` encodes it as
+   * `{ __map: [[1, …]] }` and `decodeValue` restores numeric keys
    * intact — JSON object-key coercion would turn `1` into `"1"`.
    */
   tutorialProgress: Map<number, TutorialProgress> = new Map();
@@ -1812,7 +1813,7 @@ export class Game<
    * Which partitions one partition's serialized form points INTO.
    *
    * In world mode an element reference serializes as `{ __elementId }`
-   * (`GameElement.serializeValue`), so the JSON the comparison just built
+   * (`encodeValue`), so the JSON the comparison just built
    * carries every reference the partition holds. Ids belonging to this
    * partition's own subtree are dropped -- following one of those reaches
    * nothing new.
@@ -2115,7 +2116,7 @@ export class Game<
    *   holds live objects. References pointing OUT of the graft into a
    *   partition that is not resident stay as `{ __elementId }` ref objects
    *   rather than becoming `undefined`, so they survive to the next
-   *   checkpoint (see `GameElement.deserializeValue`).
+   *   checkpoint (see `decodeValue`).
    *
    * @returns the grafted subtree's root, now a partition root.
    */
@@ -3395,6 +3396,16 @@ export class Game<
   }
 
   /**
+   * Point every element the running flow holds at the same element of the
+   * current tree, after `loadSerializedState` rebuilt the tree in place under a
+   * flow that stays where it is (a failed action's rollback, #679). A flow
+   * restored with `restoreFlowState` relinks itself.
+   */
+  relinkFlowElements(): void {
+    this._flowEngine?.relinkElements();
+  }
+
+  /**
    * Read the seeded RNG's state so it can be captured in a snapshot. It is a
    * {@link RandomState} string; restoring it makes the next `game.random()` draw
    * identical to the live game's (see setRandomState).
@@ -4533,7 +4544,7 @@ export class Game<
     // Emitting `this.settings` by reference meant every retained checkpoint
     // shared ONE settings object with the live game: post-checkpoint mutations
     // retroactively corrupted checkpoints, and undo could never roll back
-    // `actionTempState()`/`persistentMap()` state. `serializeValue` deep-copies
+    // `actionTempState()`/`persistentMap()` state. `encodeValue` deep-copies
     // and also tags element/player references so they survive cold storage.
     //
     // The MESSAGE LOG is deliberately absent from this payload — it is a
@@ -4560,7 +4571,7 @@ export class Game<
       ...base,
       phase: this.phase,
       isFinished: this.isFinished(),
-      settings: this.serializeValue(this.settings, 'settings') as Record<string, unknown>,
+      settings: encodeValue(this.settings, this._ctx, this.constructor.name, 'settings') as Record<string, unknown>,
       // The seq must survive a snapshot round-trip on its OWN, independent of
       // whether the CURRENT buffer happens to be empty (the buffer clears at
       // the start of every performAction -- see `:1130`). Gating it on
@@ -4612,9 +4623,9 @@ export class Game<
    *   destroys other seats' history.
    */
   serializeMessageLog(forSeat?: number | null): MessageEntry[] {
-    if (forSeat === undefined) return this.serializeValue(this.messages, 'messages') as MessageEntry[];
+    if (forSeat === undefined) return encodeValue(this.messages, this._ctx, this.constructor.name, 'messages') as MessageEntry[];
     const source = this.messages.filter((m) => this.canSeeMessage(m, forSeat));
-    return serializeForSeat(this._ctx, () => this.serializeValue(source, 'messages')) as MessageEntry[];
+    return serializeForSeat(this._ctx, () => encodeValue(source, this._ctx, this.constructor.name, 'messages')) as MessageEntry[];
   }
 
   /**
@@ -4626,7 +4637,7 @@ export class Game<
    *   anonymized negative id (the `hidden`/`count-only`/`owner`-zone branches below).
    *   Lets a caller that also holds the ORIGINAL (un-redacted) flow state relink an
    *   element-typed flow variable pointing at a now-hidden element to its correct
-   *   redacted placeholder instead of losing it — see `relinkFlowVariables` in
+   *   redacted placeholder instead of losing it — see `relinkFlowValue` in
    *   `flow/engine.ts`. Individually-hidden single elements (the two branches above
    *   this comment) keep their real id already, so they need no remap entry.
    */
@@ -5113,13 +5124,13 @@ export class Game<
     //
     // Rebuilt by re-serializing a filtered Map from the live source rather than
     // by editing the tagged `{__map: [...]}` encoding in place — the redaction
-    // must not have to know how `serializeValue` spells a Map.
+    // must not have to know how `encodeValue` spells a Map.
     if (view.attributes.tutorialProgress !== undefined) {
       const own = playerSeat === null ? undefined : this.tutorialProgress.get(playerSeat);
       const scoped = own === undefined ? new Map() : new Map([[playerSeat, own]]);
       view.attributes = {
         ...view.attributes,
-        tutorialProgress: this.serializeValue(scoped, 'tutorialProgress'),
+        tutorialProgress: encodeValue(scoped, this._ctx, this.constructor.name, 'tutorialProgress'),
       };
     }
 

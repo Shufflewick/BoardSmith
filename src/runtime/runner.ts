@@ -22,7 +22,6 @@ import {
   type ActionResult,
   type FlowState,
   type FlowDebugInfo,
-  type SerializeOptions,
   type GameStateSnapshot,
   type ActionCheckpoint,
   type ActionCheckpointWindow,
@@ -100,8 +99,6 @@ export interface GameRunnerOptions<G extends Game, O extends GameOptions = GameO
   gameType: string;
   /** Options passed to game constructor */
   gameOptions: NoInfer<O>;
-  /** Serialization options */
-  serializeOptions?: SerializeOptions;
   /** Per-action undo checkpoint retention. Default: back to the turn start. */
   checkpoints?: RunnerCheckpointPolicy;
   /**
@@ -345,12 +342,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   readonly seed?: string;
 
-  /** Serialization options */
-  private readonly serializeOptions: SerializeOptions;
-
   constructor(options: GameRunnerOptions<G, O>) {
     this.gameType = options.gameType;
-    this.serializeOptions = options.serializeOptions ?? { useBranchPaths: true };
     this.checkpointPolicy_ = {
       max: options.checkpoints?.max ?? Number.POSITIVE_INFINITY,
       enabled: options.checkpoints?.enabled ?? true,
@@ -525,6 +518,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * extra serialization is needed for this. Only the element tree, sequence
    * counter, RNG position and message log are restored — the flow engine
    * deliberately stayed put on the failure, and its position is already right.
+   * The elements it holds are pointed at the rebuilt tree (#679).
    *
    * @returns undefined when the rollback succeeded, or a sentence to append to
    *   the player-facing error when there was no checkpoint to restore. A game
@@ -543,6 +537,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     this.game.loadSerializedState(checkpoint.state, {
       messageLog: messagesUpTo(this.game.messages ?? [], checkpoint.messageCount, this.game.messagesEvicted),
     });
+    this.game.relinkFlowElements();
     if (checkpoint.sequence !== undefined) {
       this.game._ctx.sequence = checkpoint.sequence;
     }
@@ -695,7 +690,6 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       player,
       argsToSerialize,
       this.game,
-      this.serializeOptions,
       isUndoable
     );
   }

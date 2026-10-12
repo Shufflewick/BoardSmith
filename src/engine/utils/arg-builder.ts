@@ -1,5 +1,5 @@
 import type { Game } from '../element/game.js';
-import { serializeValue } from './serializer.js';
+import { encodeValue } from '../element/game-element.js';
 
 /**
  * Options for buildActionArgs.
@@ -10,8 +10,9 @@ export interface BuildActionArgsOptions {
    *
    * - `'in-process'` (default): returns element objects as-is; suitable for
    *   passing directly to `runner.performAction` in the same process.
-   * - `'wire'`: converts element objects to `{ __elementId }` (or
-   *   `{ __elementRef }` / `{ __playerRef }`) references; suitable for
+   * - `'wire'`: converts element and player objects to the references
+   *   action history records (`encodeValue`): `{ __elementRef }`
+   *   (`{ __elementId }` in world mode) and `{ __playerRef }`; suitable for
    *   JSON serialisation and cross-process transmission.
    */
   format?: 'in-process' | 'wire';
@@ -28,8 +29,8 @@ export interface BuildActionArgsOptions {
  * **In-process (default)**: element objects are returned as-is. The result can
  * be passed directly to `runner.performAction`.
  *
- * **Wire format**: element objects are converted to `{ __elementId }` / `{
- * __playerRef }` references via `serializeValue`. The result is
+ * **Wire format**: element and player objects are converted to the references
+ * action history records, via `encodeValue`. The result is
  * JSON.stringify-safe.
  *
  * @param actionName    - Registered action name on the game.
@@ -101,9 +102,5 @@ export function buildActionArgs(
   }
 
   // Wire format: convert element/player objects to serialised references.
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(selectionValues)) {
-    result[key] = serializeValue(value, game, { useBranchPaths: false });
-  }
-  return result;
+  return encodeValue(selectionValues, game._ctx, `action '${actionName}'`, 'args') as Record<string, unknown>;
 }
