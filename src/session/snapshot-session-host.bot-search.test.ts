@@ -503,31 +503,30 @@ describe('a refused bot move (#635)', () => {
 });
 
 describe('a visible heatmap, refreshed after a move (#635)', () => {
-  it('never stores a heatmap computed on a position the game has left, and computes it again on the new one', async () => {
+  it('moves made while a heatmap computes join that refresh: it computes once more, on the newest position, and stores only that (#676)', async () => {
     const t = table();
     t.setRoster([]);
     await t.host.start();
     t.host.transientTeachingState.set(1, { heatmap: { visible: true, entries: [] } });
 
-    const a = humanMove(t.host);
+    const first = humanMove(t.host);
     await settle();
-    const b = humanMove(t.host);
+    expect(t.heatmaps.map((h) => h.from)).toEqual([10]);
+    // Three more moves land while that heatmap computes. None starts a compute of its own.
+    const more = [humanMove(t.host), humanMove(t.host), humanMove(t.host)];
     await settle();
-    expect(t.heatmaps.map((h) => h.from)).toEqual([10, 20]);
+    expect((t.host.snapshot as unknown as Snap).v).toBe(40);
+    expect(t.heatmaps.map((h) => h.from)).toEqual([10]);
 
-    // The refresh for the newer position finishes first; the older one after it.
-    t.heatmaps[1].release();
-    await settle();
-    expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([{ from: 20 }]);
+    // The heatmap from position 10 is thrown away, and computed once more, from 40.
     t.heatmaps[0].release();
     await settle();
-
-    // The heatmap from position 10 was thrown away, and computed again from 20.
-    expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([{ from: 20 }]);
-    expect(t.heatmaps.map((h) => h.from)).toEqual([10, 20, 20]);
-    t.heatmaps[2].release();
-    await Promise.all([a, b]);
-    expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([{ from: 20 }]);
+    expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([]);
+    expect(t.heatmaps.map((h) => h.from)).toEqual([10, 40]);
+    t.heatmaps[1].release();
+    await Promise.all([first, ...more]);
+    expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([{ from: 40 }]);
+    expect(t.heatmaps).toHaveLength(2);
   });
 
   it('a heatmap turned off while it is being refreshed stays off, and nothing is published for it', async () => {
