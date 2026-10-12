@@ -175,7 +175,8 @@ unchanged — the result is ready for `testGame.doAction` /
 `runner.performAction` in the same process. Pass `{ format: 'wire' }` for
 cross-process transmission (e.g. a remote agent submitting an action over
 WebSocket): each element value, alone or in an array, is written as
-`{ id, className }`, and everything else is left as given. That is exactly
+`{ id, className }`, and everything else is left as given (an element nested
+inside a plain object is not converted). That is exactly
 what `runner.performAction` resolves back to the elements, so the wire
 args, after a JSON round trip, can be submitted as they are:
 
