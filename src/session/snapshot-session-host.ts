@@ -420,6 +420,8 @@ export class SnapshotSessionHost {
   private botPumpRunning = false;
   /** Counts calls to {@link runBotTurns}, so a run sees a wake that came while it searched. */
   private botWakes = 0;
+  /** The refresh of the visible heatmaps under way, which every caller meanwhile joins (#676). */
+  private heatmapRefresh: Promise<void> | null = null;
   /**
    * Bot seats that could not act at one game state: their move was refused, or
    * they found none (#421). Nothing about the game changes when that happens,
@@ -1284,14 +1286,28 @@ export class SnapshotSessionHost {
    * It runs outside the one-at-a-time section (#635), so the game can move
    * while it computes. Heatmaps computed on a snapshot the game has since left
    * are never stored: they are computed again on the snapshot it now stands on.
+   * A call while a refresh runs joins it (#676): however many moves land during
+   * one compute, the refresh computes once more, on the newest snapshot, so at
+   * most one compute runs at a time.
    */
-  private async refreshVisibleHeatmaps(): Promise<void> {
+  private refreshVisibleHeatmaps(): Promise<void> {
+    this.heatmapRefresh ??= this.computeUntilStillThenStore();
+    return this.heatmapRefresh;
+  }
+
+  /** The one running refresh of {@link refreshVisibleHeatmaps}. */
+  private async computeUntilStillThenStore(): Promise<void> {
     let at: GameStateSnapshot | null;
     let computed: Array<[number, HeatmapEntry[]]>;
-    do {
-      at = this._snapshot;
-      computed = await this.computeVisibleHeatmaps(at);
-    } while (this._snapshot !== at);
+    try {
+      do {
+        at = this._snapshot;
+        computed = await this.computeVisibleHeatmaps(at);
+      } while (this._snapshot !== at);
+    } finally {
+      // Cleared in the same turn as the last look at the snapshot, so a move made after it starts a new refresh.
+      this.heatmapRefresh = null;
+    }
     let changed = false;
     for (const [seat, entries] of computed) {
       // Read the seat's teaching state again: it may have changed while the heatmaps were computed.

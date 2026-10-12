@@ -45,6 +45,8 @@ interface Search {
 interface HeatmapCompute {
   from: number;
   release: () => void;
+  /** Make the compute fail, as an executor call that throws does. */
+  fail: (error: Error) => void;
 }
 
 /**
@@ -78,7 +80,7 @@ function table(endsGame = false) {
   };
   /** A heatmap computed from `v` = `from`, held until the test releases it; turning it off answers at once. */
   const heatmap = async (from: number, op: Extract<ExecutableOp, { type: 'heatmapToggle' }>) => {
-    if (op.visible) await new Promise<void>((release) => heatmaps.push({ from, release }));
+    if (op.visible) await new Promise<void>((release, fail) => heatmaps.push({ from, release, fail }));
     return { success: true, heatmapUpdate: { seat: op.seat, visible: op.visible, entries: op.visible ? [{ from }] : [] } };
   };
   const adapters: SnapshotSessionAdapters = {
@@ -503,30 +505,49 @@ describe('a refused bot move (#635)', () => {
 });
 
 describe('a visible heatmap, refreshed after a move (#635)', () => {
-  it('never stores a heatmap computed on a position the game has left, and computes it again on the new one', async () => {
+  it('moves made while a heatmap computes join that refresh: it computes once more, on the newest position, and stores only that (#676)', async () => {
     const t = table();
     t.setRoster([]);
     await t.host.start();
     t.host.transientTeachingState.set(1, { heatmap: { visible: true, entries: [] } });
 
-    const a = humanMove(t.host);
+    const first = humanMove(t.host);
     await settle();
-    const b = humanMove(t.host);
+    expect(t.heatmaps.map((h) => h.from)).toEqual([10]);
+    // Three more moves land while that heatmap computes. None starts a compute of its own.
+    const more = [humanMove(t.host), humanMove(t.host), humanMove(t.host)];
     await settle();
-    expect(t.heatmaps.map((h) => h.from)).toEqual([10, 20]);
+    expect((t.host.snapshot as unknown as Snap).v).toBe(40);
+    expect(t.heatmaps.map((h) => h.from)).toEqual([10]);
 
-    // The refresh for the newer position finishes first; the older one after it.
-    t.heatmaps[1].release();
-    await settle();
-    expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([{ from: 20 }]);
+    // The heatmap from position 10 is thrown away, and computed once more, from 40.
     t.heatmaps[0].release();
     await settle();
+    expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([]);
+    expect(t.heatmaps.map((h) => h.from)).toEqual([10, 40]);
+    t.heatmaps[1].release();
+    await Promise.all([first, ...more]);
+    expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([{ from: 40 }]);
+    expect(t.heatmaps).toHaveLength(2);
+  });
 
-    // The heatmap from position 10 was thrown away, and computed again from 20.
-    expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([{ from: 20 }]);
-    expect(t.heatmaps.map((h) => h.from)).toEqual([10, 20, 20]);
-    t.heatmaps[2].release();
-    await Promise.all([a, b]);
+  it('a heatmap compute that fails rejects the move that started it, and the next move starts a new compute (#676)', async () => {
+    const t = table();
+    t.setRoster([]);
+    await t.host.start();
+    t.host.transientTeachingState.set(1, { heatmap: { visible: true, entries: [] } });
+
+    const first = humanMove(t.host);
+    await settle();
+    expect(t.heatmaps.map((h) => h.from)).toEqual([10]);
+    t.heatmaps[0].fail(new Error('executor unavailable'));
+    await expect(first).rejects.toThrow('executor unavailable');
+
+    const next = humanMove(t.host);
+    await settle();
+    expect(t.heatmaps.map((h) => h.from)).toEqual([10, 20]);
+    t.heatmaps[1].release();
+    succeeded(await next);
     expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([{ from: 20 }]);
   });
 
