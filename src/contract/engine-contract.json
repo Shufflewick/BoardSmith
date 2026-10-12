@@ -1,14 +1,12 @@
 {
-  "revision": 181,
-  "bundleProtocol": 2,
-  "surfaceHash": "6e812c69d069df6a",
+  "revision": 182,
+  "surfaceHash": "bf4d1ee853209039",
   "payloadHash": "7e563b9e75959ec4",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
       "revision": 1,
       "date": "2026-08-03",
-      "bundleProtocol": 1,
       "surfaceHash": "601ab669855fe0d5",
       "payloadHash": "39a105d8db41ec25",
       "summary": "Baseline, taken at the state following the UI-registry work: Deck defaults to count-only so draw piles report their size again, AutoUI and Die3D moved off the boardsmith/ui barrel, and the board-side ValidElement became BoardTarget. Also introduces the contract itself — ENGINE_CONTRACT and ENGINE_REVISION are exported from the boardsmith root so the platform can read the vendored engine's revision at runtime."
@@ -16,7 +14,6 @@
     {
       "revision": 2,
       "date": "2026-08-04",
-      "bundleProtocol": 1,
       "surfaceHash": "966f014fca003487",
       "payloadHash": "4e482261ddc4a6e9",
       "summary": "Contract fingerprints widened after an adversarial review found them narrower than claimed: surfaceHash now includes prototype members (games call methods, and renaming one used to move neither hash), and the payload fixture now boots through GameRunner with a simultaneous opening step so flow state, isMyTurn and availableActions are covered — the blank-action-bar layer, previously invisible."
@@ -24,7 +21,6 @@
     {
       "revision": 3,
       "date": "2026-08-05",
-      "bundleProtocol": 1,
       "surfaceHash": "a88e1e1ac6b840fc",
       "payloadHash": "4e482261ddc4a6e9",
       "summary": "Checkpoint retention: games can bound per-action undo checkpoints with checkpoints:{max|enabled}; snapshot.actionCheckpoints is now a {baseIndex,entries} window, and a pruned undo target is refused with a message naming the policy"
@@ -32,7 +28,6 @@
     {
       "revision": 4,
       "date": "2026-08-05",
-      "bundleProtocol": 1,
       "surfaceHash": "a88e1e1ac6b840fc",
       "payloadHash": "b6cc2b20433e3a3e",
       "summary": "Player-facing state changes: the default player palette now has 16 colors instead of 8 (the first 8 are unchanged, so existing games keep their colors) so a game can seat up to the platform's 16-player maximum without shipping its own palette; separately, a typed array (Uint8Array etc.) in game state now serializes as a compact {__typedArray,data} base64 shape and restores as its real type instead of silently inflating ~7x into a plain object, and an ArrayBuffer or DataView in state is now refused at serialization time rather than silently becoming {}."
@@ -40,7 +35,6 @@
     {
       "revision": 5,
       "date": "2026-08-05",
-      "bundleProtocol": 1,
       "surfaceHash": "db988455880ea279",
       "payloadHash": "bf22b8c168ab229d",
       "summary": "Player gains a first-class status field ('active' | 'dormant' | 'eliminated', default 'active') plus an isActive getter — it serializes into the tree and is visible in every seat's player view, so hosts can read seat liveness directly, and TurnOrder.ACTIVE_ONLY now filters on it instead of an undeclared 'eliminated' property. Also: every enterText selection is now length-bounded (DEFAULT_TEXT_MAX_LENGTH = 256 when a game sets no maxLength), and CheckpointPolicy is exported from the boardsmith root and boardsmith/session so a published bundle can name the type for GameDefinition.checkpoints."
@@ -48,7 +42,6 @@
     {
       "revision": 6,
       "date": "2026-08-06",
-      "bundleProtocol": 1,
       "surfaceHash": "aa0e6cb3e2aac241",
       "payloadHash": "bf22b8c168ab229d",
       "summary": "Action builder gains .validate(fn): a submit-time, whole-submission gate returning true | false | a message string, enforced on both the one-shot and incremental execute paths."
@@ -56,7 +49,6 @@
     {
       "revision": 7,
       "date": "2026-08-06",
-      "bundleProtocol": 1,
       "surfaceHash": "dfee85770a7d895d",
       "payloadHash": "bf22b8c168ab229d",
       "summary": "Engine exports turnSequence() and orderSeatsByTurn(): recover the running order eachPlayer already resolved, and arrange seats for display without dropping or duplicating any."
@@ -64,7 +56,6 @@
     {
       "revision": 8,
       "date": "2026-08-06",
-      "bundleProtocol": 1,
       "surfaceHash": "62514e31d9da2b2a",
       "payloadHash": "bf22b8c168ab229d",
       "summary": "Renamed ActionBuilder.suppressFromDock() to .suppressFromActionPanel() and its actionMetadata field to match: 'Action Panel' is now the single name for the control surface (the 'dock' synonym is retired everywhere, including the --dock-h CSS custom property, now --action-panel-h)."
@@ -72,7 +63,6 @@
     {
       "revision": 9,
       "date": "2026-08-06",
-      "bundleProtocol": 1,
       "surfaceHash": "0c412c9ef9bdcc11",
       "payloadHash": "bf22b8c168ab229d",
       "summary": "Added Game.messageTo(audience, text, data): a per-seat game-log channel for hidden-information games, withheld server-side in toJSONForPlayer and createPlayerView so an unaddressed seat never receives the message. game.messages gains an optional 'to' audience field (absent = public). Also removed GameShell's showHistory prop: a game can no longer suppress the log."
@@ -80,7 +70,6 @@
     {
       "revision": 10,
       "date": "2026-08-06",
-      "bundleProtocol": 1,
       "surfaceHash": "0c412c9ef9bdcc11",
       "payloadHash": "19a9c87d8050374e",
       "summary": "Game.toJSON() no longer duplicates phase/messages/settings into the generic attributes bag; they are top-level fields only. Fixes a messageTo leak where attributes.messages shipped every seat's private log unredacted."
@@ -88,7 +77,6 @@
     {
       "revision": 11,
       "date": "2026-08-06",
-      "bundleProtocol": 1,
       "surfaceHash": "595c287a2855fb30",
       "payloadHash": "7d7e5e0a4de161cb",
       "summary": "The message log moved out of the serialized game tree into GameStateSnapshot.messageLog, stored once per snapshot with an ActionCheckpoint.messageCount watermark for undo. Persisted state is now flat in checkpoints.max instead of multiplying the log by it."
@@ -96,7 +84,6 @@
     {
       "revision": 12,
       "date": "2026-08-06",
-      "bundleProtocol": 1,
       "surfaceHash": "0e99b42ef64c4229",
       "payloadHash": "7d7e5e0a4de161cb",
       "summary": "Actions gain .disabled(ctx) => string|false; Game.getTutorialDisabledActions renamed to getDisabledActions and now merges action-level disabled reasons with tutorial gate reasons; disabledActions is projected outside tutorials."
@@ -104,7 +91,6 @@
     {
       "revision": 13,
       "date": "2026-08-07",
-      "bundleProtocol": 1,
       "surfaceHash": "b543aaa74731df1e",
       "payloadHash": "7d7e5e0a4de161cb",
       "summary": "execute() flow nodes are undo-transparent by default; only execute(fn, { irreversible: true }) fences undo/rewind (Game.getExecuteNodeCompletions renamed to getIrreversibleCommitCount). PlayerGameState also gains restoreEpoch, a per-seat counter of checkpoint restores clients use to invalidate element ids held from the replaced runner."
@@ -112,7 +98,6 @@
     {
       "revision": 14,
       "date": "2026-08-07",
-      "bundleProtocol": 1,
       "surfaceHash": "715e016e6f9a9d57",
       "payloadHash": "7d7e5e0a4de161cb",
       "summary": "Epic #24 engine changes, landed together: (1) a flow that completes inside startFlow() now publishes its winners, so a game that ends during setup reports a result instead of none; (2) checkpoints:{enabled:false} sheds an inherited checkpoint window rather than silently keeping it; (3) randomness policy moved to GameOptions.randomness, applied inside Game's own constructor, so 'forbidden' forbids draws from the game's FIRST instruction (subclass constructors included) and is stripped from _constructorOptions so no host policy persists into a snapshot — RandomnessPolicy is exported from boardsmith/runtime, forbidRandomness() is private, an undo random fence closes RNG scumming, and GameRunner.checkpointWindow() is public so the fence reports the real cause of a missing checkpoint; (4) an action's ActionResult.data now reaches its caller across engine/runtime/session/cli and the board on every transport, via useActionController.lastActionResult (BUG-017)."
@@ -120,7 +105,6 @@
     {
       "revision": 15,
       "date": "2026-08-25",
-      "bundleProtocol": 1,
       "surfaceHash": "41abffd19a6e961c",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "Phase 68 async/simultaneous play support. FOUR surface changes a consumer must react to: (1) SnapshotSessionAdapters.broadcast meta gains a REQUIRED turnBoundary { key, dueSeats } — an un-updated adapter is a COMPILE ERROR, deliberately, because the host is what must publish the round identity to each seat. (2) The action and selectionStep ops gain a REQUIRED boundaryKey naming the round a submission was composed against; ONE comparison site refuses a submission that names a closed round, with \"The round you acted in has closed; reload to see the current round.\" REQUIRED is a TYPE requirement only: at runtime the guard keys on the PRESENCE of the field, so an op that omits boundaryKey is passed through UNGUARDED. The guard is therefore INERT until the host stamps the key, and the host is where it must be stamped — echo back the key you sent on game_state. New exports flowBoundaryKey (boardsmith) and STALE_SUBMISSION_MESSAGE / SUBMISSION_OP_TYPES (boardsmith/session) are the pieces a host needs. (3) A new convertSeatToBot host lifecycle op converts a seat mid-game, acknowledges it as OpResult.convertedSeat and drives the existing bot pump; it is idempotent on re-wake and REFUSES a finished game rather than silently no-opping. It carries no difficulty level, on purpose: a host-held seat-to-bot level map is a privilege-escalation surface. (4) position.frameData is now serialized and relinked by the SAME general flow-variable serializer as position.variables; the previousPlayer / previousPlayerSeat special case is gone, so a live element in frame data survives a broadcast instead of throwing DataCloneError — and previousPlayerSeat no longer appears in the payload. That is what moved payloadHash. COMPATIBILITY, measured rather than assumed: revision, NOT bundleProtocol. Diffing the runtime export names of all three platform entrypoints against r14 shows ADDITIONS ONLY — nothing removed, nothing renamed. A published rules.js never composes an op (the executor builds ops from the wire body), so every already-built bundle keeps running. The two REQUIRED fields are a wire change for whatever COMPOSES an op or a broadcast — the games worker, and a published bundle own GameShell UI — not for the rules; and because an absent boundaryKey is unguarded, an un-updated host also keeps working and merely forfeits the protection until it stamps the key."
@@ -128,7 +112,6 @@
     {
       "revision": 16,
       "date": "2026-08-26",
-      "bundleProtocol": 1,
       "surfaceHash": "a784c64a27bcb0e1",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "The automaton is a BOT, not an AI, across the whole engine surface (ShufflewickPub #28). adapters.aiSeats -> botSeats; the aiTurn/aiSuggest ops -> botTurn/botSuggest; playerOptions.aiLevel -> botLevel; the gameDefinition/manifest 'ai' block -> 'bot'; the boardsmith/ai and boardsmith/ai-trainer subpaths -> boardsmith/bot and boardsmith/bot-trainer; the --ai and --ai-level dev flags -> --bot and --bot-level; SlotStatus 'ai' -> 'bot'; AIController -> BotController. Three types that were all spelled AIConfig were disambiguated first: the game's strategy hooks are BotStrategy, which seats are bots is BotSeatConfig, and the alias that existed only to tell them apart is gone. RENAMES, so this is a BREAKING surface change: every consumer and every published bundle must be rebuilt against it."
@@ -136,7 +119,6 @@
     {
       "revision": 17,
       "date": "2026-08-26",
-      "bundleProtocol": 1,
       "surfaceHash": "e1b57cd06ab9dc45",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "World mode, step one (ShufflewickPub #35 item 2): Game gains enableWorldMode/worldMode, definePartition, adoptSubtree, evictSubtree, touchedPartitions and clearTouchedPartitions, so a resident engine can hold only the partitions a command names and pay O(room) per action instead of O(world). ADDITIONS ONLY -- nothing removed or renamed, and snapshot mode (every published board game) is behaviourally unchanged. World mode changes exactly one thing when it is switched on: an element reference in an attribute serializes as { __elementId } instead of the positional { __elementRef: branch }, because a non-resident partition shifts every later sibling index and a branch path recorded against the full world resolves against a partial one to a DIFFERENT element. In world mode an __elementId that cannot resolve is kept verbatim rather than becoming undefined, so a reference into a non-resident partition survives the next checkpoint. moveToInternal -- the one shared re-parent path -- now marks BOTH endpoints' partitions after its existing throws, so a rejected move marks nothing and a cross-partition move still reports the destination the command never read."
@@ -144,7 +126,6 @@
     {
       "revision": 18,
       "date": "2026-08-26",
-      "bundleProtocol": 1,
       "surfaceHash": "0b9c7505ca54e63e",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "r18: fail-loud authoring errors — ReservedAttributeError, ConditionEvaluationError and PlayerFacingError are exported; a crashing condition, an unknown flow action and detected tree corruption now throw; a failed execute() rolls back and its raw message no longer reaches players."
@@ -152,7 +133,6 @@
     {
       "revision": 19,
       "date": "2026-08-26",
-      "bundleProtocol": 1,
       "surfaceHash": "304b3829682dd75e",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "r18: fail-loud authoring errors — ReservedAttributeError, ConditionEvaluationError and PlayerFacingError are exported; a crashing condition, an unknown flow action and detected tree corruption now throw; a failed execute() rolls back and its raw message no longer reaches players (a PlayerFacingError's does)."
@@ -160,7 +140,6 @@
     {
       "revision": 20,
       "date": "2026-08-26",
-      "bundleProtocol": 1,
       "surfaceHash": "1ece3a23909d425b",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "r19: isEngineRootField / engineRootFieldAudience / GAME_ROOT_FIELD_AUDIENCE are exported so a game can defer to the engine's root-field audiences; enumerateLegalMoves throws on a bad seat instead of returning []; MCTSBot.play resolves to null (with lastStallReason) when a seat's own information state offers no searchable move, instead of throwing and locking the table."
@@ -168,7 +147,6 @@
     {
       "revision": 21,
       "date": "2026-08-26",
-      "bundleProtocol": 1,
       "surfaceHash": "86ce199cd47f2874",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "r20: message() and messageTo() take a game-supplied per-line type that survives to the client, so a log can classify its own entries; animateTo() gives animation events the same server-enforced audience messageTo() has."
@@ -176,7 +154,6 @@
     {
       "revision": 22,
       "date": "2026-08-26",
-      "bundleProtocol": 1,
       "surfaceHash": "3f0a3da60e37898a",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "r21: game.refreshAwaitingActions() lets a simultaneous step's awaiting set grow for a seat that becomes eligible mid-step; game.pruneMessages() caps the log safely now that each MessageEntry carries a seq identity and ActionCheckpoint records messageSeq instead of a prefix length."
@@ -184,7 +161,6 @@
     {
       "revision": 23,
       "date": "2026-08-26",
-      "bundleProtocol": 1,
       "surfaceHash": "46be1aab855efb2e",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "r21: game.refreshAwaitingActions() lets a simultaneous step's awaiting set grow for a seat that becomes eligible mid-step; game.pruneMessages() caps the log safely — ActionCheckpoint.messageCount is now the log's ABSOLUTE length and the game tracks how many entries were evicted, so pruning no longer corrupts earlier checkpoints."
@@ -192,7 +168,6 @@
     {
       "revision": 24,
       "date": "2026-08-27",
-      "bundleProtocol": 1,
       "surfaceHash": "6848a30448bd2096",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "r23: NotSimulableError lets a game say a move is legal but unresolvable from a bot's redacted information state, so MCTS drops it from the search instead of logging a stack per rollout; enumerateLegalMoves re-checks condition and validate rather than trusting the flow state's frozen availableActions."
@@ -200,7 +175,6 @@
     {
       "revision": 25,
       "date": "2026-08-28",
-      "bundleProtocol": 1,
       "surfaceHash": "63d698a6f5d7552b",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "r25: boardsmith/persistence is a new platform entrypoint carrying the persistence validation core -- the reserved persist/persistPrivate channel names, PERSIST_MAX_COMMIT_BYTES, readPersistCommit, toStartPayload, drainResolutionInputs, the session-kind vocabulary and a pure cross-session store. ShufflewickPub's games worker now re-exports it from games/src/persistence.ts instead of restating it, so boardsmith dev's MultiplayerHost runs the SAME validators the platform's Durable Object does (ShufflewickPub #41)."
@@ -208,7 +182,6 @@
     {
       "revision": 26,
       "date": "2026-08-28",
-      "bundleProtocol": 1,
       "surfaceHash": "0790c85715b5879d",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "Tracker sweep, two surface changes recorded together (they were originally r25 and r26 on the pre-rebase branch, renumbered because that branch forked before boardsmith/persistence existed): (1) a withheld attribute now restores as unknown and throws on read (RedactedAttributeError, GameElement.isAttributeRedacted / redactedAttributes) instead of silently holding its class-field default; (2) actionStep gains turnScope, and FlowPosition/FlowState gain turnRun/turnScopeUndeclared, so undo reach can span the frame boundary a loop iteration or a sibling action step creates."
@@ -216,7 +189,6 @@
     {
       "revision": 27,
       "date": "2026-08-28",
-      "bundleProtocol": 1,
       "surfaceHash": "ba3e5efa9cccf76e",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "World mode is declared at construction: GameOptions.worldMode replaces Game#enableWorldMode(), so a world is what a game IS rather than something switched on afterwards, and a world's seats are no longer capped by the size of the player palette."
@@ -224,7 +196,6 @@
     {
       "revision": 28,
       "date": "2026-08-28",
-      "bundleProtocol": 1,
       "surfaceHash": "06dcb0a6b6a5fdcb",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "The session-kind vocabulary is match | world, and a refusal that names no error is a refusal (ShufflewickPub #47 and #90). BREAKING, by deletion: the two round-era kinds are gone, and so is everything that existed only for them -- seatsHumans; the store's order routing, roster and enrol; ResolutionInputs / drainResolutionInputs / RESOLUTION_SEAT and the two reserved resolve-action argument keys; MultiplayerHost.resolveRound; and the --kind / --resolve-action dev flags, which after the deletion selected no behaviour at all. store.commit and store.readForSession no longer take a kind, because neither reads one any more. The sealed-key rule for world is allow:'seated', the same as a match: the resolver's write-any-player's-key bypass was a consequence of SEATLESSNESS, not of authority, and a resident world is seated at every write, so there is nothing for a bypass to rescue. Separately, acceptExecuteResult now REFUSES a { success: false } carrying no error (an empty string counts as none) instead of inverting it into a success -- a game that refused a move without saying why used to have the refusal silently become an accepted move."
@@ -232,7 +203,6 @@
     {
       "revision": 29,
       "date": "2026-08-31",
-      "bundleProtocol": 1,
       "surfaceHash": "b5c60e0e62fa5544",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "The dev host's persistPrivate strip now refuses a divergent per-player secret with the same actionable error production's executor throws (previously it silently committed the first defined value), and in world mode Game#touchedPartitions now reports attribute-level changes to resident partitions -- detected by comparing each partition's serialized form against a baseline captured at definePartition/adoptSubtree/clearTouchedPartitions -- so a write reached through an element.game or element.parent walk into an undeclared partition is checkpointed instead of silently reverting on eviction; clearTouchedPartitions re-baselines, and evictSubtree preserves a not-yet-checkpointed content change as a kept touch-mark."
@@ -240,7 +210,6 @@
     {
       "revision": 30,
       "date": "2026-08-31",
-      "bundleProtocol": 1,
       "surfaceHash": "b5c60e0e62fa5544",
       "payloadHash": "32f56b0af8269931",
       "summary": "The world wire's world_state message now carries presence: number[] | null -- the platform-composed live present-seat set, per seat, derived and never stored, empty after a park, null when the host page has no live claim (left vs reconnecting not distinguished) -- and WorldShell/useWorldHost hand it to a bundle's world UI as the presence prop and useWorld().presence. Host pages must include the field when composing world_state; the whole wire is now part of payloadHash."
@@ -248,7 +217,6 @@
     {
       "revision": 31,
       "date": "2026-09-02",
-      "bundleProtocol": 1,
       "surfaceHash": "30f72b732a0ae15d",
       "payloadHash": "32f56b0af8269931",
       "summary": "Element-level visibility lives on GameElement rather than only on Piece (issue #162): setVisibility, showToAll, showToOwner, hideFromAll, addVisibleTo, showOnlyTo, hideFrom and clearVisibility moved up from Piece, which keeps every one of them by inheritance. Purely additive -- no behaviour changes for any existing game -- and a Space now has both halves: hideFromAll/showOnlyTo govern THE SPACE ITSELF, contentsHidden/addZoneVisibleTo govern its CONTENTS. A game modelling occupancy as a room's own visibility no longer has to hand-write a VisibilityState literal against setVisibilityInternal."
@@ -256,7 +224,6 @@
     {
       "revision": 32,
       "date": "2026-09-03",
-      "bundleProtocol": 1,
       "surfaceHash": "859b13166e9ec1bf",
       "payloadHash": "32f56b0af8269931",
       "summary": "World mode's dirty-set pass is one serialization per resident partition per command, not three, and no longer searches the tree for each root (ShufflewickPub #316). Game#touchedPartitions (an idempotent getter that serialized every resident partition) and Game#clearTouchedPartitions (which serialized them again to re-baseline) are REPLACED by a single consuming Game#takeTouchedPartitions(), which reports what changed and re-baselines from the fingerprints it just computed. Game#partitionBaseline(id) hands back the pre-command bytes and parent id the platform used to obtain by serializing the whole resident set a third time for its rollback copy, and Game#partitionRoot(id) returns a declared root without the depth-first getElementById walk that made every O(resident) pass O(resident squared). Behaviour of the dirty set is unchanged -- moves and attribute changes are reported exactly as before -- and snapshot mode is untouched."
@@ -264,7 +231,6 @@
     {
       "revision": 33,
       "date": "2026-09-03",
-      "bundleProtocol": 1,
       "surfaceHash": "82c8538fdca5837c",
       "payloadHash": "32f56b0af8269931",
       "summary": "The world-mode dirty-set comparison is scoped to the partitions a command REACHED, so per-command CPU is the room and not the resident world (ShufflewickPub #295). The engine marks every door it owns -- Game#getElementById and an element's all/first/firstN/last/lastN/atId/atBranch/parent/children -- the new Game#reachPartition lets the platform mark the one door it owns (the root a command's partition(name) answers with), and the new Game#readingOnly turns marking off for a read the platform guarantees cannot write, which is what a declaration and a view are. A partition nothing handed out keeps its baseline and is not serialized. Measured at 256 resident partitions of ~10 KB: 12.8 ms per command down to 0.28 ms."
@@ -272,7 +238,6 @@
     {
       "revision": 34,
       "date": "2026-09-03",
-      "bundleProtocol": 1,
       "surfaceHash": "82c8538fdca5837c",
       "payloadHash": "a6ec38d2eb2ae3cd",
       "summary": "The world wire gains a world_events message and WorldShell hands its payloads to a game's UI (ShufflewickPub #331). A world's narration is its routed events, and until now they reached no screen: the platform routed them per audience and put them on the socket, and the host page answered the frame with a view request and dropped the payloads, so anything a world narrated that left no residue in its tree -- an emote, combat text, a line somebody said -- was undeliverable and a game had to write it into its own stored state to show it. The host now sends { source: 'shufflewick-world', type: 'world_events', events: [{ scope, payload }] }, a SECOND message rather than a field on world_state, because state is re-pushed whenever any part of it moves and a line carried on it would be redelivered on every later push. useWorldHost appends each delivery into a new events ref, bounded at the new exported WORLD_NARRATION_KEPT (200, oldest dropped) and deliberately NOT counted as heardFromHost, since narration carries no view, seat or commands; WorldShell passes it as an events prop and through useWorld().events, and WorldNarration is exported from boardsmith/ui for a UI to declare the prop with. Purely additive to every existing message: a host that never sends world_events leaves the log empty, and a UI that ignores the prop is unchanged. Host pages must send the new message for a world's narration to be deliverable at all; the whole wire is part of payloadHash, which is what moved."
@@ -280,7 +245,6 @@
     {
       "revision": 35,
       "date": "2026-09-06",
-      "bundleProtocol": 1,
       "surfaceHash": "faa6a2ffe25a9784",
       "payloadHash": "a6ec38d2eb2ae3cd",
       "summary": "boardsmith/world ships the world runner core: residency, rollback baselines, dirty-set accumulation, per-seat view, event routing, schedule semantics, the partition-store interface, the refusals and the declaration types. The platform runs this instead of its own copy, and a launched world pins the revision that carries it."
@@ -288,7 +252,6 @@
     {
       "revision": 36,
       "date": "2026-09-06",
-      "bundleProtocol": 1,
       "surfaceHash": "475a587c20948b74",
       "payloadHash": "1d3a21bebd77753c",
       "summary": "A world's verbs are Actions. worldAction() and worldClockAction() replace the flat command table; the seat's offer is its enumerated actions as ActionMetadata; ActionDefinition gains an optional world block carrying needs and seatless; ScheduleRequest names an action rather than a command and takes scalar args only. The world command contract types are deleted."
@@ -296,7 +259,6 @@
     {
       "revision": 37,
       "date": "2026-09-06",
-      "bundleProtocol": 1,
       "surfaceHash": "6bcfaf5333f02205",
       "payloadHash": "1d3a21bebd77753c",
       "summary": "A world action can take back a keyed timer with ctx.world.cancel(key), and boardsmith/world exports resumeDueOf() -- the inverse of catchUpPlan's fold, which a host stamps a failed occurrence's retry with so the fold is not lost."
@@ -304,7 +266,6 @@
     {
       "revision": 38,
       "date": "2026-09-06",
-      "bundleProtocol": 1,
       "surfaceHash": "cff09a3012ba8835",
       "payloadHash": "1d3a21bebd77753c",
       "summary": "One backend interface with a declared capability set. boardsmith.json declares backend: table or world; the manifest carries a resolved capabilities object whose members (table, world, undo, spectators, bots, asyncPlay, joinInProgress, crossSessionState) replace the per-flag fields. GameDefinition.minPlayers and maxPlayers are optional and a world-only bundle carries no playerCount."
@@ -312,7 +273,6 @@
     {
       "revision": 39,
       "date": "2026-09-06",
-      "bundleProtocol": 1,
       "surfaceHash": "cff09a3012ba8835",
       "payloadHash": "197ca272284235c1",
       "summary": "One shell for tables and worlds: PlayShell owns the shared chrome (sidebar, board region, action bar) and WorldShell mounts the action controller over it, so a world is drawn by the bundle's shell rather than by a generic surface. WorldNarration carries text and type, world_state carries players, and a world resolves its own pick choices locally. The world.ui manifest field is gone: boardsmith build always emits the world entry, and a world backend that built no world surface is refused."
@@ -320,7 +280,6 @@
     {
       "revision": 40,
       "date": "2026-09-06",
-      "bundleProtocol": 2,
       "surfaceHash": "cff09a3012ba8835",
       "payloadHash": "197ca272284235c1",
       "summary": "ABI break, recorded late: r38 made world.maxPlayers required inside the world block, so readWorldDefinition refuses every world bundle built before it. That invalidates published world bundles, which is exactly what bundleProtocol exists to signal, and r38 left the number alone. Bundle protocol 1 becomes 2 here. Every world bundle must be rebuilt and republished."
@@ -328,7 +287,6 @@
     {
       "revision": 41,
       "date": "2026-09-06",
-      "bundleProtocol": 2,
       "surfaceHash": "cff09a3012ba8835",
       "payloadHash": "46b8052956779cd6",
       "summary": "The payload fixture now projects a world view: one seat's {player, state, phase} from a five-seat village whose declaration names a subset of its partitions with one resident partition it does not name, so a world view's two prunes, the partitions a seat declared and the game root's roster, are fingerprinted rather than invisible. Carries #181 and #186 themselves: a seat's view no longer ships the whole roster, and emit(scope, payload, narration?) gives a world a log line the shared shell renders."
@@ -336,7 +294,6 @@
     {
       "revision": 42,
       "date": "2026-09-06",
-      "bundleProtocol": 2,
       "surfaceHash": "cea0ff4b43a08441",
       "payloadHash": "67a7a5d320b9ce2b",
       "summary": "A world's OFFER is fingerprinted alongside its view. offersFor has decided which verbs every seat is given since #169 and no fixture reached it, so #187's fix (a disabled action whose every candidate is greyed is offered with its reason, while an enabled one with no answerable question is still dropped) changed what every seat in every world sees and moved neither hash. The payload fixture now projects one seat's offer over four verbs covering every decision the enumerator makes, and a coverage table plus test makes any platform-facing world verb the fixture does not drive fail the suite instead of being described in a comment."
@@ -344,7 +301,6 @@
     {
       "revision": 43,
       "date": "2026-09-07",
-      "bundleProtocol": 2,
       "surfaceHash": "50aca0e8b24c7afd",
       "payloadHash": "67a7a5d320b9ce2b",
       "summary": "worlds: player commands carry a durable order identity and hosts answer a repeat from its receipt (#195); world.stateVersion is declared in the rules and derived into the manifest (#194)"
@@ -352,7 +308,6 @@
     {
       "revision": 44,
       "date": "2026-09-07",
-      "bundleProtocol": 2,
       "surfaceHash": "666dc78358c83dca",
       "payloadHash": "67a7a5d320b9ce2b",
       "summary": "worlds: a bundle may declare world.migration, moving a live world one stateVersion forward (partitions and queued event arguments, all-or-nothing); WorldEngine gains migratePartition (#200)"
@@ -360,7 +315,6 @@
     {
       "revision": 45,
       "date": "2026-09-07",
-      "bundleProtocol": 2,
       "surfaceHash": "35beccf9c0e3cf5b",
       "payloadHash": "67a7a5d320b9ce2b",
       "summary": "worlds and tables agree on choice identity: the engine's choice matcher moved to src/engine/action/choice-matching.ts, which the browser action controller now imports instead of reimplementing, and it resolves a string id shorthand and an identifying-subset object everywhere the engine already did (#219)"
@@ -368,7 +322,6 @@
     {
       "revision": 46,
       "date": "2026-09-07",
-      "bundleProtocol": 2,
       "surfaceHash": "6a7db7a4e757880f",
       "payloadHash": "67a7a5d320b9ce2b",
       "summary": "worlds can grow: world.migration.create adds durable partition roots in the same durable step as an upgrade, world.createPartition builds a root the first time a declaration names it, and a world's own elements are minted above a reserved id floor so world.maxPlayers can change on a live world (#218)"
@@ -376,7 +329,6 @@
     {
       "revision": 47,
       "date": "2026-09-08",
-      "bundleProtocol": 2,
       "surfaceHash": "025c0bc463474eb1",
       "payloadHash": "67a7a5d320b9ce2b",
       "summary": "a world written before the construction-id floor is lifted onto it once, at its next start: one offset across every partition and every queued event, so a pre-floor world's seat count can change without its stored roots colliding with the wider construction (#223)"
@@ -384,7 +336,6 @@
     {
       "revision": 48,
       "date": "2026-09-08",
-      "bundleProtocol": 2,
       "surfaceHash": "025c0bc463474eb1",
       "payloadHash": "eb472de70ccc7f01",
       "summary": "A step's needs() context now carries world -- the indexed, read-only WorldResidency that execute and a bundle's view(seat, world) already receive -- so a later round reaches a root an earlier round declared by name instead of searching the resident tree for it; readOnlyProjection also stopped wrapping its own output, which restores the identity a projected element had lost and takes a 500-root finder from 80x the live tree to 17x. The offer fixture now hashes the declaration WALK and not only its answer, which is why this revision exists at all: the walk was claimed as covered from r-#187 onward and was not (ShufflewickPub#374)"
@@ -392,7 +343,6 @@
     {
       "revision": 49,
       "date": "2026-09-08",
-      "bundleProtocol": 2,
       "surfaceHash": "b78d133b1a9ffd82",
       "payloadHash": "eb472de70ccc7f01",
       "summary": "WorldAction gains chooseElements -- the plural of chooseElement, which two of the world's own refusals already told authors to reach for and which was not on the facade -- and chooseFrom now forwards multiSelect, so a world action can ask for a GROUP rather than one of a thing. A world's multiSelect always resolves to an array (the engine's form may return undefined to mean single; this one may not), so the argument type is knowable from the call. dependsOn stays refused: it is a cross-product in a single-shot protocol, and a dynamic BOUND does not need it (ShufflewickPub#376)"
@@ -400,7 +350,6 @@
     {
       "revision": 50,
       "date": "2026-09-08",
-      "bundleProtocol": 2,
       "surfaceHash": "d1181c951837fd52",
       "payloadHash": "eb472de70ccc7f01",
       "summary": "A declaration is stamped: commandPartitions and offerPartitions now take the instant the dispatch is happening at -- a command's stamped arrival, a scheduled event's due, an offer's own now -- and a needs() context reaches it as world.now, the same instant execute is about to be given. Without it a world whose partitions are TIMED could not tell a due one from a future one and had to declare every active one, which is O(world) in the mode whose argument is that a command costs O(room). No presence, deliberately: residency that depended on who is connected would differ between two watchers of one world. The runner's declare and declareOffers take the stamp through, so the parent must send it (ShufflewickPub#375)"
@@ -408,7 +357,6 @@
     {
       "revision": 51,
       "date": "2026-09-08",
-      "bundleProtocol": 2,
       "surfaceHash": "1c64faefb4918717",
       "payloadHash": "eb472de70ccc7f01",
       "summary": "A world's element-id allocation is durable state a host persists and hands back (ShufflewickPub #377). Game#worldIdAllocation()/#adoptWorldIdAllocation() expose the counter; WorldEngine#nextElementId() reports it; runner.genesis(), runner.createPartition() and runner.migrateCreate() now answer { ...bytes, nextElementId } so a host cannot write a minted root without the stamp that produced it; createWorld() takes it back as options.nextElementId. A cold world built without one REFUSES to create a partition on demand (new platform refusal allocation-undeclared) instead of minting an id a stored, unloaded root already owns, and adoptSubtree() refuses bytes that prove a declared stamp is stale. worldIdAllocationOf() derives the stamp once from stored bytes as the supported repair. Read-only world.partition(name) now reads the indexed root table instead of walking the resident tree (ShufflewickPub #381)."
@@ -416,7 +364,6 @@
     {
       "revision": 52,
       "date": "2026-09-08",
-      "bundleProtocol": 2,
       "surfaceHash": "0a1b5438b6ce23ef",
       "payloadHash": "eb472de70ccc7f01",
       "summary": "A world's panel can re-ask ONE pick with the arguments bound so far (ShufflewickPub #378). New WorldEngine verbs pickPartitions() and resolvePick(), and runner.declarePick()/resolvePick() beside them: a world's offer is enumerated in one frame with nothing bound, so a selection whose multiSelect bounds or choices callback read an earlier selection's value resolved to the unbounded fallback and reached the browser as a cap it could not use. An unbounded multiSelect now OMITS max on a world offer instead of serializing Infinity, which JSON writes as null and the action panel read as a cap of zero. The world wire gains the world_pick request and world_pick_result answer; a host that does not implement them leaves a world's later picks answered from the one-shot offer, as before."
@@ -424,7 +371,6 @@
     {
       "revision": 53,
       "date": "2026-09-08",
-      "bundleProtocol": 2,
       "surfaceHash": "a0391cda70e33b1f",
       "payloadHash": "eb472de70ccc7f01",
       "summary": "A world's OFFER cannot write to the world it is describing (ShufflewickPub #384). Everything the offer path runs -- an action's condition, its disabled rule, a choices/elements callback, a prompt, a display, a multiSelect -- now receives the same read-only projection (world-readonly.ts, #219) that a declaration and world.view already receive, for both ctx.game and ctx.world.partition, and runs with reach-marking suspended (Game#readingOnly) the way viewFor does. Game#getActionDisabledReason and ActionExecutor#getChoices take an optional trailing 'reading' game so the rule stays ONE function evaluated one way: enforcement passes nothing and still sees the live game. An offer-time write was previously accepted, appeared in every watcher's next frame, was never checkpointed, and was reverted at the next hibernation with nobody told."
@@ -432,7 +378,6 @@
     {
       "revision": 54,
       "date": "2026-09-08",
-      "bundleProtocol": 2,
       "surfaceHash": "2e223463212e2ce8",
       "payloadHash": "eb472de70ccc7f01",
       "summary": "A migration is one atomic step that can read across roots (ShufflewickPub #379). The runner's migratePartition() and migrateCreate() are REPLACED by a single migrateAll(stored, ctx): every stored root is adopted before any hook runs, the per-root partition hook normalizes each one, create() adds this version's new roots, the new world.migration.finalize(game, { partition, names, from, to }) hook reads and writes across every root -- transformed and newly created alike -- and only then is anything serialized. So an existing root whose new value is derived from another existing root is expressible, and the answer does not depend on the order a host listed its keys in. WorldEngine gains migrateFinalize(). Everything still lands in the host's one transaction; a hook that throws leaves every original byte and the stored version untouched."
@@ -440,7 +385,6 @@
     {
       "revision": 55,
       "date": "2026-09-08",
-      "bundleProtocol": 2,
       "surfaceHash": "833f0bcefd6e4aef",
       "payloadHash": "eb472de70ccc7f01",
       "summary": "A world may declare that its player commands are CHRONOLOGICAL (ShufflewickPub #380). New WorldDefinition.ordering: 'arrival' (the default, and what every world did before this) or 'chronological', which gates each player command behind every event already due at that player's arrival instant, run in nominal order. It is for a chain that cannot be predeclared -- an event that creates a contract and schedules the next decision cannot name that decision's partitions until the earlier one commits. Bounded and yielding: one drainBatch at a time, at most the new catchUpRounds budget (default 8), with a turn for the runtime between each; running out, or meeting an event that refuses, applies the command over a world still behind rather than refusing it. The player's arrival instant, order identity and receipt are untouched, and a replayed order is answered from its receipt without running the clock. An unrecognised world.ordering is refused as bundle-not-a-world at construction."
@@ -448,7 +392,6 @@
     {
       "revision": 56,
       "date": "2026-09-08",
-      "bundleProtocol": 2,
       "surfaceHash": "833f0bcefd6e4aef",
       "payloadHash": "f548bb3ffbfaeec0",
       "summary": "A world's host now stamps every dispatch with the acting seat's DURABLE activity watermark (ShufflewickPub #383). ctx.world.activity carries {seat, at, since, inactiveSince}: at is the arrival instant of this seat's last ACCEPTED command, as of BEFORE the command carrying it, and inactiveSince is at ?? since -- the one number a gameplay inactivity deadline is written against. since is when the world began recording, so an occupied world upgraded into this feature reports its seats as idle since the upgrade rather than since 1970. A seat-owned scheduled event is handed its OWNER's watermark, which is what lets an irreversible cleanup deadline recheck whether the player came back; the world's own events carry null. Refusals, drained events, presence hooks and migrations never move a watermark, and it never moves backwards. WorldCommandStamp, WorldEventStamp and WorldOfferStamp all carry activity and a host must supply it; the local store keeps it per seat and fixes its recording epoch on first open."
@@ -456,7 +399,6 @@
     {
       "revision": 57,
       "date": "2026-09-08",
-      "bundleProtocol": 2,
       "surfaceHash": "9103e0232966ca04",
       "payloadHash": "f548bb3ffbfaeec0",
       "summary": "A world may ask the platform to convert PLATFORM CREDITS into the game's own currency, and is told it cannot yet (ShufflewickPub #382). ctx.world.convertCredits({credits}) is declared and refuses every time with the new caller-owned code credit-conversion-unavailable, whose message states plainly that nothing was charged and nothing was granted and that the command has been unwound. It is shipped as a declared hole on purpose: ShufflewickPub has no currency system yet and the rate, bounds, quantum and reversal policy are undecided, and a game with no boundary to call writes its own payments -- running checkout, holding card details, trusting a browser about a debit and granting a paid reward twice. The signature commits to nothing but whole-number credits and one-way conversion; there is deliberately no method converting game currency back. Separately, the surface fingerprint now covers the WORLD_REFUSALS registry's codes and owners, which it never did: the park ladder branches on them (platform parks after two, game dead-letters, caller does neither), so adding a code or moving one between owners changes what the platform does to a live world and must mint a revision."
@@ -464,7 +406,6 @@
     {
       "revision": 58,
       "date": "2026-09-09",
-      "bundleProtocol": 2,
       "surfaceHash": "d8a046d3f4de8b4c",
       "payloadHash": "cfc73cbe2a62c55b",
       "summary": "A checkpoint carries the allocation stamp its command minted under (#224). runner.serialize() answers { partitions, nextElementId } and WorldPartitionWriter.writeCheckpoint takes that whole checkpoint, so a host cannot store a grown partition without its stamp. #377 made the stamp durable and named three roads that move it -- genesis, on-demand creation, migration -- and left out the one every game takes: room.create() inside an action advances the same counter, so the next fresh runner was built below its own store and adoptSubtree refused the bytes that host had itself just written. A stale stamp is now the coded, platform-owned refusal allocation-stale instead of a bare Error charged to the game, so a park ladder can act on it; boardsmith dev repairs such a world off that refusal with worldIdAllocationOf. New WORLD_DURABILITY_FIXTURE puts the four shapes a host must persist into payloadHash, because they are types and surfaceHash cannot see them."
@@ -472,7 +413,6 @@
     {
       "revision": 59,
       "date": "2026-09-09",
-      "bundleProtocol": 2,
       "surfaceHash": "d8b77fe9472c61e3",
       "payloadHash": "cfc73cbe2a62c55b",
       "summary": "A new caller-owned refusal, world-catching-up (ShufflewickPub #395). A world declaring ordering: chronological asked not to be overtaken, and the platform implemented that as a four-times-larger drain budget -- which is an ordering guarantee only while the world is less than one budget behind. Past that the command was applied over a world still behind, silently, which is exactly the overtaken state the declaration exists to prevent, and no signal reached the handler, the client or the log. The command is now refused instead, and the refusal is CALLER-owned like rate-limited and for the same reason: well-formed traffic, world untouched, and a park ladder must never read a world that is merely behind as a world in trouble. Sending it again is safe -- an order's durable identity (#368) makes the repeat run exactly once -- and the platform re-arms before answering, so the catch-up is already continuing."
@@ -480,7 +420,6 @@
     {
       "revision": 60,
       "date": "2026-09-09",
-      "bundleProtocol": 2,
       "surfaceHash": "d8b77fe9472c61e3",
       "payloadHash": "bf527d30019ee1ba",
       "summary": "A migration may be run a page at a time when it need not see every root (ShufflewickPub #402). runner.migrationNeedsEveryRoot() answers whether the bundle declares finalize -- the hook #379 added so a migration can derive one root's value from another in either direction -- and the presence of it is the whole declaration of whether paging is safe, so no new authoring surface exists. migrateAll's context gains allNames (every root the WORLD holds, since create must know which names are taken and a refusal is about the world rather than the page) and runCreate (which single page adds this version's new roots). A page transforms and answers only the roots it was handed; paging a migration that declares finalize is refused by name rather than run against a half-migrated world. WORLD_DURABILITY_FIXTURE gains both context shapes, because they are types and surfaceHash cannot see one."
@@ -488,7 +427,6 @@
     {
       "revision": 61,
       "date": "2026-09-09",
-      "bundleProtocol": 2,
       "surfaceHash": "d8b77fe9472c61e3",
       "payloadHash": "bf527d30019ee1ba",
       "formatHash": "0058593e7cc80205",
@@ -497,7 +435,6 @@
     {
       "revision": 62,
       "date": "2026-09-09",
-      "bundleProtocol": 2,
       "surfaceHash": "0702a98066cae1b6",
       "payloadHash": "bf527d30019ee1ba",
       "formatHash": "0058593e7cc80205",
@@ -506,7 +443,6 @@
     {
       "revision": 63,
       "date": "2026-09-09",
-      "bundleProtocol": 2,
       "surfaceHash": "0e5f2a70c23f96b2",
       "payloadHash": "851ea625b2e514b8",
       "formatHash": "0058593e7cc80205",
@@ -515,7 +451,6 @@
     {
       "revision": 64,
       "date": "2026-09-09",
-      "bundleProtocol": 2,
       "surfaceHash": "ee424fb06b1c618c",
       "payloadHash": "d7a2574c8a6571a5",
       "formatHash": "0058593e7cc80205",
@@ -524,7 +459,6 @@
     {
       "revision": 65,
       "date": "2026-09-09",
-      "bundleProtocol": 2,
       "surfaceHash": "96b88a0be8dac5ec",
       "payloadHash": "fcb67168b7207856",
       "formatHash": "0058593e7cc80205",
@@ -533,7 +467,6 @@
     {
       "revision": 66,
       "date": "2026-09-09",
-      "bundleProtocol": 2,
       "surfaceHash": "96b88a0be8dac5ec",
       "payloadHash": "fcb67168b7207856",
       "formatHash": "0058593e7cc80205",
@@ -542,7 +475,6 @@
     {
       "revision": 67,
       "date": "2026-09-09",
-      "bundleProtocol": 2,
       "surfaceHash": "9468fac6c565014b",
       "payloadHash": "fcb67168b7207856",
       "formatHash": "0058593e7cc80205",
@@ -551,7 +483,6 @@
     {
       "revision": 68,
       "date": "2026-09-09",
-      "bundleProtocol": 2,
       "surfaceHash": "9468fac6c565014b",
       "payloadHash": "a809d36d1341bd7a",
       "formatHash": "0058593e7cc80205",
@@ -560,7 +491,6 @@
     {
       "revision": 69,
       "date": "2026-09-09",
-      "bundleProtocol": 2,
       "surfaceHash": "f41ef69743af086b",
       "payloadHash": "a809d36d1341bd7a",
       "formatHash": "0058593e7cc80205",
@@ -569,7 +499,6 @@
     {
       "revision": 70,
       "date": "2026-09-10",
-      "bundleProtocol": 2,
       "surfaceHash": "9dfde0c4824961cc",
       "payloadHash": "a809d36d1341bd7a",
       "formatHash": "0058593e7cc80205",
@@ -578,7 +507,6 @@
     {
       "revision": 71,
       "date": "2026-09-10",
-      "bundleProtocol": 2,
       "surfaceHash": "9dfde0c4824961cc",
       "payloadHash": "e7e05e54c3e990f3",
       "formatHash": "0058593e7cc80205",
@@ -587,7 +515,6 @@
     {
       "revision": 72,
       "date": "2026-09-10",
-      "bundleProtocol": 2,
       "surfaceHash": "1feb60c2051e0c9b",
       "payloadHash": "eaab9ade0d133677",
       "formatHash": "0058593e7cc80205",
@@ -596,7 +523,6 @@
     {
       "revision": 73,
       "date": "2026-09-10",
-      "bundleProtocol": 2,
       "surfaceHash": "1feb60c2051e0c9b",
       "payloadHash": "eaab9ade0d133677",
       "formatHash": "0058593e7cc80205",
@@ -605,7 +531,6 @@
     {
       "revision": 74,
       "date": "2026-09-10",
-      "bundleProtocol": 2,
       "surfaceHash": "1feb60c2051e0c9b",
       "payloadHash": "eaab9ade0d133677",
       "formatHash": "0058593e7cc80205",
@@ -614,7 +539,6 @@
     {
       "revision": 75,
       "date": "2026-09-10",
-      "bundleProtocol": 2,
       "surfaceHash": "1feb60c2051e0c9b",
       "payloadHash": "eaab9ade0d133677",
       "formatHash": "0058593e7cc80205",
@@ -623,7 +547,6 @@
     {
       "revision": 76,
       "date": "2026-09-10",
-      "bundleProtocol": 2,
       "surfaceHash": "1feb60c2051e0c9b",
       "payloadHash": "eaab9ade0d133677",
       "formatHash": "0058593e7cc80205",
@@ -632,7 +555,6 @@
     {
       "revision": 77,
       "date": "2026-09-11",
-      "bundleProtocol": 2,
       "surfaceHash": "1feb60c2051e0c9b",
       "payloadHash": "16d4740f61b838bc",
       "formatHash": "0058593e7cc80205",
@@ -641,7 +563,6 @@
     {
       "revision": 78,
       "date": "2026-09-12",
-      "bundleProtocol": 2,
       "surfaceHash": "e0977b9d39c96165",
       "payloadHash": "b66e751ab92f9508",
       "formatHash": "0058593e7cc80205",
@@ -650,7 +571,6 @@
     {
       "revision": 79,
       "date": "2026-09-13",
-      "bundleProtocol": 2,
       "surfaceHash": "c6b43b71f3b363c7",
       "payloadHash": "b66e751ab92f9508",
       "formatHash": "0058593e7cc80205",
@@ -659,7 +579,6 @@
     {
       "revision": 80,
       "date": "2026-09-14",
-      "bundleProtocol": 2,
       "surfaceHash": "0cdd059b44b2d573",
       "payloadHash": "b66e751ab92f9508",
       "formatHash": "0058593e7cc80205",
@@ -668,7 +587,6 @@
     {
       "revision": 81,
       "date": "2026-09-14",
-      "bundleProtocol": 2,
       "surfaceHash": "0cdd059b44b2d573",
       "payloadHash": "7d88d174839e99b4",
       "formatHash": "0058593e7cc80205",
@@ -677,7 +595,6 @@
     {
       "revision": 82,
       "date": "2026-09-14",
-      "bundleProtocol": 2,
       "surfaceHash": "05714c9ba827ab52",
       "payloadHash": "7d88d174839e99b4",
       "formatHash": "0058593e7cc80205",
@@ -686,7 +603,6 @@
     {
       "revision": 83,
       "date": "2026-09-17",
-      "bundleProtocol": 2,
       "surfaceHash": "3adf1fca658f625e",
       "payloadHash": "7d88d174839e99b4",
       "formatHash": "0058593e7cc80205",
@@ -695,7 +611,6 @@
     {
       "revision": 84,
       "date": "2026-09-17",
-      "bundleProtocol": 2,
       "surfaceHash": "cc09b4ff188a3d24",
       "payloadHash": "adb9e8ed9a9dbcdd",
       "formatHash": "0058593e7cc80205",
@@ -704,7 +619,6 @@
     {
       "revision": 85,
       "date": "2026-09-17",
-      "bundleProtocol": 2,
       "surfaceHash": "8acbc2ae3015d0b7",
       "payloadHash": "adb9e8ed9a9dbcdd",
       "formatHash": "0058593e7cc80205",
@@ -713,7 +627,6 @@
     {
       "revision": 86,
       "date": "2026-09-17",
-      "bundleProtocol": 2,
       "surfaceHash": "0c3611ed469d90ae",
       "payloadHash": "adb9e8ed9a9dbcdd",
       "formatHash": "0058593e7cc80205",
@@ -722,7 +635,6 @@
     {
       "revision": 87,
       "date": "2026-09-17",
-      "bundleProtocol": 2,
       "surfaceHash": "3f83f0f42f3cf6b1",
       "payloadHash": "adb9e8ed9a9dbcdd",
       "formatHash": "0058593e7cc80205",
@@ -731,7 +643,6 @@
     {
       "revision": 88,
       "date": "2026-09-18",
-      "bundleProtocol": 2,
       "surfaceHash": "3f83f0f42f3cf6b1",
       "payloadHash": "f4ff9f1c56b72ceb",
       "formatHash": "0058593e7cc80205",
@@ -740,7 +651,6 @@
     {
       "revision": 89,
       "date": "2026-09-18",
-      "bundleProtocol": 2,
       "surfaceHash": "3f83f0f42f3cf6b1",
       "payloadHash": "c6eff75ba31c903a",
       "formatHash": "0058593e7cc80205",
@@ -749,7 +659,6 @@
     {
       "revision": 90,
       "date": "2026-09-19",
-      "bundleProtocol": 2,
       "surfaceHash": "3f83f0f42f3cf6b1",
       "payloadHash": "c6eff75ba31c903a",
       "formatHash": "0058593e7cc80205",
@@ -758,7 +667,6 @@
     {
       "revision": 91,
       "date": "2026-09-22",
-      "bundleProtocol": 2,
       "surfaceHash": "3f83f0f42f3cf6b1",
       "payloadHash": "c6eff75ba31c903a",
       "formatHash": "0058593e7cc80205",
@@ -767,7 +675,6 @@
     {
       "revision": 92,
       "date": "2026-09-23",
-      "bundleProtocol": 2,
       "surfaceHash": "dcaf23b8b8aeaeca",
       "payloadHash": "c6eff75ba31c903a",
       "formatHash": "0058593e7cc80205",
@@ -776,7 +683,6 @@
     {
       "revision": 93,
       "date": "2026-09-23",
-      "bundleProtocol": 2,
       "surfaceHash": "dcaf23b8b8aeaeca",
       "payloadHash": "c6eff75ba31c903a",
       "formatHash": "0058593e7cc80205",
@@ -785,7 +691,6 @@
     {
       "revision": 94,
       "date": "2026-09-24",
-      "bundleProtocol": 2,
       "surfaceHash": "b86dd32bdce805ae",
       "payloadHash": "9721d8a867285784",
       "formatHash": "0058593e7cc80205",
@@ -794,7 +699,6 @@
     {
       "revision": 95,
       "date": "2026-09-24",
-      "bundleProtocol": 2,
       "surfaceHash": "9bf56c556e696f03",
       "payloadHash": "9721d8a867285784",
       "formatHash": "0058593e7cc80205",
@@ -803,7 +707,6 @@
     {
       "revision": 96,
       "date": "2026-09-24",
-      "bundleProtocol": 2,
       "surfaceHash": "9bf56c556e696f03",
       "payloadHash": "6b3277c32a0ec8d0",
       "formatHash": "0058593e7cc80205",
@@ -812,7 +715,6 @@
     {
       "revision": 97,
       "date": "2026-09-24",
-      "bundleProtocol": 2,
       "surfaceHash": "04a06b3cf015340d",
       "payloadHash": "6b3277c32a0ec8d0",
       "formatHash": "0058593e7cc80205",
@@ -821,7 +723,6 @@
     {
       "revision": 98,
       "date": "2026-09-24",
-      "bundleProtocol": 2,
       "surfaceHash": "04a06b3cf015340d",
       "payloadHash": "80aba5002803deaa",
       "formatHash": "0058593e7cc80205",
@@ -830,7 +731,6 @@
     {
       "revision": 99,
       "date": "2026-09-24",
-      "bundleProtocol": 2,
       "surfaceHash": "94910dd64381f024",
       "payloadHash": "80aba5002803deaa",
       "formatHash": "0058593e7cc80205",
@@ -839,7 +739,6 @@
     {
       "revision": 100,
       "date": "2026-09-24",
-      "bundleProtocol": 2,
       "surfaceHash": "4d2a0af2b2a62394",
       "payloadHash": "80aba5002803deaa",
       "formatHash": "0058593e7cc80205",
@@ -848,7 +747,6 @@
     {
       "revision": 101,
       "date": "2026-09-24",
-      "bundleProtocol": 2,
       "surfaceHash": "b6a7dd54c9cc1432",
       "payloadHash": "80aba5002803deaa",
       "formatHash": "0058593e7cc80205",
@@ -857,7 +755,6 @@
     {
       "revision": 102,
       "date": "2026-09-24",
-      "bundleProtocol": 2,
       "surfaceHash": "263276230a5e853a",
       "payloadHash": "80aba5002803deaa",
       "formatHash": "0058593e7cc80205",
@@ -866,7 +763,6 @@
     {
       "revision": 103,
       "date": "2026-09-24",
-      "bundleProtocol": 2,
       "surfaceHash": "35bc796118b2edfa",
       "payloadHash": "8052a5ba1e4f48d4",
       "formatHash": "0058593e7cc80205",
@@ -875,7 +771,6 @@
     {
       "revision": 104,
       "date": "2026-09-24",
-      "bundleProtocol": 2,
       "surfaceHash": "422710ae33cff3b6",
       "payloadHash": "8052a5ba1e4f48d4",
       "formatHash": "0058593e7cc80205",
@@ -884,7 +779,6 @@
     {
       "revision": 105,
       "date": "2026-09-24",
-      "bundleProtocol": 2,
       "surfaceHash": "027e9a92e73de675",
       "payloadHash": "8052a5ba1e4f48d4",
       "formatHash": "0058593e7cc80205",
@@ -893,7 +787,6 @@
     {
       "revision": 106,
       "date": "2026-09-24",
-      "bundleProtocol": 2,
       "surfaceHash": "027e9a92e73de675",
       "payloadHash": "5bfe87a6bf117444",
       "formatHash": "0058593e7cc80205",
@@ -902,7 +795,6 @@
     {
       "revision": 107,
       "date": "2026-09-25",
-      "bundleProtocol": 2,
       "surfaceHash": "7abda4be9833ab31",
       "payloadHash": "5bfe87a6bf117444",
       "formatHash": "0058593e7cc80205",
@@ -911,7 +803,6 @@
     {
       "revision": 108,
       "date": "2026-09-26",
-      "bundleProtocol": 2,
       "surfaceHash": "3fc4e9fcecb3b9fe",
       "payloadHash": "5bfe87a6bf117444",
       "formatHash": "0058593e7cc80205",
@@ -920,7 +811,6 @@
     {
       "revision": 109,
       "date": "2026-09-26",
-      "bundleProtocol": 2,
       "surfaceHash": "3fc4e9fcecb3b9fe",
       "payloadHash": "cae65bbab7213c58",
       "formatHash": "0058593e7cc80205",
@@ -929,7 +819,6 @@
     {
       "revision": 110,
       "date": "2026-09-26",
-      "bundleProtocol": 2,
       "surfaceHash": "58f45cbb3ddaaac7",
       "payloadHash": "cae65bbab7213c58",
       "formatHash": "0058593e7cc80205",
@@ -938,7 +827,6 @@
     {
       "revision": 111,
       "date": "2026-09-26",
-      "bundleProtocol": 2,
       "surfaceHash": "32b341536b489ef5",
       "payloadHash": "cae65bbab7213c58",
       "formatHash": "0058593e7cc80205",
@@ -947,7 +835,6 @@
     {
       "revision": 112,
       "date": "2026-09-26",
-      "bundleProtocol": 2,
       "surfaceHash": "71a6fad70c6dbed9",
       "payloadHash": "cae65bbab7213c58",
       "formatHash": "0058593e7cc80205",
@@ -956,7 +843,6 @@
     {
       "revision": 113,
       "date": "2026-09-26",
-      "bundleProtocol": 2,
       "surfaceHash": "3d6d28a5d3c36fcd",
       "payloadHash": "cae65bbab7213c58",
       "formatHash": "0058593e7cc80205",
@@ -965,7 +851,6 @@
     {
       "revision": 114,
       "date": "2026-09-27",
-      "bundleProtocol": 2,
       "surfaceHash": "3d6d28a5d3c36fcd",
       "payloadHash": "cae65bbab7213c58",
       "formatHash": "0058593e7cc80205",
@@ -974,7 +859,6 @@
     {
       "revision": 115,
       "date": "2026-09-27",
-      "bundleProtocol": 2,
       "surfaceHash": "3d6d28a5d3c36fcd",
       "payloadHash": "cae65bbab7213c58",
       "formatHash": "0058593e7cc80205",
@@ -983,7 +867,6 @@
     {
       "revision": 116,
       "date": "2026-10-02",
-      "bundleProtocol": 2,
       "surfaceHash": "6259bc3d9c287fc2",
       "payloadHash": "031fd82f9f0a2642",
       "formatHash": "0058593e7cc80205",
@@ -992,7 +875,6 @@
     {
       "revision": 117,
       "date": "2026-10-02",
-      "bundleProtocol": 2,
       "surfaceHash": "6259bc3d9c287fc2",
       "payloadHash": "0c3d1f7b4fc3bb43",
       "formatHash": "0058593e7cc80205",
@@ -1001,7 +883,6 @@
     {
       "revision": 118,
       "date": "2026-10-02",
-      "bundleProtocol": 2,
       "surfaceHash": "6259bc3d9c287fc2",
       "payloadHash": "3a98bc2f204eba00",
       "formatHash": "0058593e7cc80205",
@@ -1010,7 +891,6 @@
     {
       "revision": 119,
       "date": "2026-10-02",
-      "bundleProtocol": 2,
       "surfaceHash": "74bd1caffd7ea896",
       "payloadHash": "3a98bc2f204eba00",
       "formatHash": "0058593e7cc80205",
@@ -1019,7 +899,6 @@
     {
       "revision": 120,
       "date": "2026-10-03",
-      "bundleProtocol": 2,
       "surfaceHash": "74bd1caffd7ea896",
       "payloadHash": "3a98bc2f204eba00",
       "formatHash": "0058593e7cc80205",
@@ -1028,7 +907,6 @@
     {
       "revision": 121,
       "date": "2026-10-03",
-      "bundleProtocol": 2,
       "surfaceHash": "a5e66c593812b04b",
       "payloadHash": "3a98bc2f204eba00",
       "formatHash": "0058593e7cc80205",
@@ -1037,7 +915,6 @@
     {
       "revision": 122,
       "date": "2026-10-03",
-      "bundleProtocol": 2,
       "surfaceHash": "a5e66c593812b04b",
       "payloadHash": "f4cad95eb3f47e1f",
       "formatHash": "0058593e7cc80205",
@@ -1046,7 +923,6 @@
     {
       "revision": 123,
       "date": "2026-10-03",
-      "bundleProtocol": 2,
       "surfaceHash": "a5e66c593812b04b",
       "payloadHash": "f4cad95eb3f47e1f",
       "formatHash": "0058593e7cc80205",
@@ -1055,7 +931,6 @@
     {
       "revision": 124,
       "date": "2026-10-03",
-      "bundleProtocol": 2,
       "surfaceHash": "f7e59da26973c116",
       "payloadHash": "06cfffd56c7bef19",
       "formatHash": "0058593e7cc80205",
@@ -1064,7 +939,6 @@
     {
       "revision": 125,
       "date": "2026-10-03",
-      "bundleProtocol": 2,
       "surfaceHash": "e868c2e60348f66b",
       "payloadHash": "a6dc5ab68fb08599",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1073,7 +947,6 @@
     {
       "revision": 126,
       "date": "2026-10-03",
-      "bundleProtocol": 2,
       "surfaceHash": "95159a004e1f493f",
       "payloadHash": "a6dc5ab68fb08599",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1082,7 +955,6 @@
     {
       "revision": 127,
       "date": "2026-10-04",
-      "bundleProtocol": 2,
       "surfaceHash": "6cf4146f749f7e86",
       "payloadHash": "40d5b63bde8d6007",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1091,7 +963,6 @@
     {
       "revision": 128,
       "date": "2026-10-04",
-      "bundleProtocol": 2,
       "surfaceHash": "6cf4146f749f7e86",
       "payloadHash": "40d5b63bde8d6007",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1100,7 +971,6 @@
     {
       "revision": 129,
       "date": "2026-10-05",
-      "bundleProtocol": 2,
       "surfaceHash": "6cf4146f749f7e86",
       "payloadHash": "40d5b63bde8d6007",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1109,7 +979,6 @@
     {
       "revision": 130,
       "date": "2026-10-05",
-      "bundleProtocol": 2,
       "surfaceHash": "1e84ac6f1cc2b806",
       "payloadHash": "40d5b63bde8d6007",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1118,7 +987,6 @@
     {
       "revision": 131,
       "date": "2026-10-05",
-      "bundleProtocol": 2,
       "surfaceHash": "44d3dc2d962030d8",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1127,7 +995,6 @@
     {
       "revision": 132,
       "date": "2026-10-06",
-      "bundleProtocol": 2,
       "surfaceHash": "85d9346b723d035e",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1136,7 +1003,6 @@
     {
       "revision": 133,
       "date": "2026-10-08",
-      "bundleProtocol": 2,
       "surfaceHash": "85d9346b723d035e",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1145,7 +1011,6 @@
     {
       "revision": 134,
       "date": "2026-10-08",
-      "bundleProtocol": 2,
       "surfaceHash": "69d383663e693961",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1154,7 +1019,6 @@
     {
       "revision": 135,
       "date": "2026-10-08",
-      "bundleProtocol": 2,
       "surfaceHash": "69d383663e693961",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1163,7 +1027,6 @@
     {
       "revision": 136,
       "date": "2026-10-08",
-      "bundleProtocol": 2,
       "surfaceHash": "f176256bba0c2e04",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1172,7 +1035,6 @@
     {
       "revision": 137,
       "date": "2026-10-09",
-      "bundleProtocol": 2,
       "surfaceHash": "4fd5ab5e85ca0dd6",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1181,7 +1043,6 @@
     {
       "revision": 138,
       "date": "2026-10-09",
-      "bundleProtocol": 2,
       "surfaceHash": "79d735d3b524457f",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1190,7 +1051,6 @@
     {
       "revision": 139,
       "date": "2026-10-09",
-      "bundleProtocol": 2,
       "surfaceHash": "79d735d3b524457f",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1199,7 +1059,6 @@
     {
       "revision": 140,
       "date": "2026-10-09",
-      "bundleProtocol": 2,
       "surfaceHash": "a0b49707971a4b63",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1208,7 +1067,6 @@
     {
       "revision": 141,
       "date": "2026-10-09",
-      "bundleProtocol": 2,
       "surfaceHash": "c89b5911c71dfb48",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1217,7 +1075,6 @@
     {
       "revision": 142,
       "date": "2026-10-09",
-      "bundleProtocol": 2,
       "surfaceHash": "bbb639d4800619db",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1226,7 +1083,6 @@
     {
       "revision": 143,
       "date": "2026-10-09",
-      "bundleProtocol": 2,
       "surfaceHash": "e949c8726719a502",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1235,7 +1091,6 @@
     {
       "revision": 144,
       "date": "2026-10-10",
-      "bundleProtocol": 2,
       "surfaceHash": "e949c8726719a502",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1244,7 +1099,6 @@
     {
       "revision": 145,
       "date": "2026-10-10",
-      "bundleProtocol": 2,
       "surfaceHash": "e949c8726719a502",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1253,7 +1107,6 @@
     {
       "revision": 146,
       "date": "2026-10-10",
-      "bundleProtocol": 2,
       "surfaceHash": "e949c8726719a502",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1262,7 +1115,6 @@
     {
       "revision": 147,
       "date": "2026-10-10",
-      "bundleProtocol": 2,
       "surfaceHash": "e949c8726719a502",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1271,7 +1123,6 @@
     {
       "revision": 148,
       "date": "2026-10-10",
-      "bundleProtocol": 2,
       "surfaceHash": "bc041041e4ac2e6d",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1280,7 +1131,6 @@
     {
       "revision": 149,
       "date": "2026-10-10",
-      "bundleProtocol": 2,
       "surfaceHash": "b10378da0e3dad03",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1289,7 +1139,6 @@
     {
       "revision": 150,
       "date": "2026-10-10",
-      "bundleProtocol": 2,
       "surfaceHash": "dbd85fd9d4fcb20e",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1298,7 +1147,6 @@
     {
       "revision": 151,
       "date": "2026-10-10",
-      "bundleProtocol": 2,
       "surfaceHash": "dbd85fd9d4fcb20e",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1307,7 +1155,6 @@
     {
       "revision": 152,
       "date": "2026-10-10",
-      "bundleProtocol": 2,
       "surfaceHash": "89ccecd62d942a97",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1316,7 +1163,6 @@
     {
       "revision": 153,
       "date": "2026-10-10",
-      "bundleProtocol": 2,
       "surfaceHash": "89ccecd62d942a97",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1325,7 +1171,6 @@
     {
       "revision": 154,
       "date": "2026-10-10",
-      "bundleProtocol": 2,
       "surfaceHash": "89ccecd62d942a97",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1334,7 +1179,6 @@
     {
       "revision": 155,
       "date": "2026-10-10",
-      "bundleProtocol": 2,
       "surfaceHash": "5697b01dd28b73de",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1343,7 +1187,6 @@
     {
       "revision": 156,
       "date": "2026-10-10",
-      "bundleProtocol": 2,
       "surfaceHash": "0641cdb95e5251e7",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1352,7 +1195,6 @@
     {
       "revision": 157,
       "date": "2026-10-11",
-      "bundleProtocol": 2,
       "surfaceHash": "0641cdb95e5251e7",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1361,7 +1203,6 @@
     {
       "revision": 158,
       "date": "2026-10-11",
-      "bundleProtocol": 2,
       "surfaceHash": "3cd66e7b422f0cbf",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1370,7 +1211,6 @@
     {
       "revision": 159,
       "date": "2026-10-11",
-      "bundleProtocol": 2,
       "surfaceHash": "3cd66e7b422f0cbf",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1379,7 +1219,6 @@
     {
       "revision": 160,
       "date": "2026-10-11",
-      "bundleProtocol": 2,
       "surfaceHash": "3cd66e7b422f0cbf",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1388,7 +1227,6 @@
     {
       "revision": 161,
       "date": "2026-10-11",
-      "bundleProtocol": 2,
       "surfaceHash": "3cd66e7b422f0cbf",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1397,7 +1235,6 @@
     {
       "revision": 162,
       "date": "2026-10-11",
-      "bundleProtocol": 2,
       "surfaceHash": "3cd66e7b422f0cbf",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1406,7 +1243,6 @@
     {
       "revision": 163,
       "date": "2026-10-11",
-      "bundleProtocol": 2,
       "surfaceHash": "3cd66e7b422f0cbf",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1415,7 +1251,6 @@
     {
       "revision": 164,
       "date": "2026-10-11",
-      "bundleProtocol": 2,
       "surfaceHash": "3cd66e7b422f0cbf",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1424,7 +1259,6 @@
     {
       "revision": 165,
       "date": "2026-10-11",
-      "bundleProtocol": 2,
       "surfaceHash": "3cd66e7b422f0cbf",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1433,7 +1267,6 @@
     {
       "revision": 166,
       "date": "2026-10-11",
-      "bundleProtocol": 2,
       "surfaceHash": "3cd66e7b422f0cbf",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1442,7 +1275,6 @@
     {
       "revision": 167,
       "date": "2026-10-11",
-      "bundleProtocol": 2,
       "surfaceHash": "3cd66e7b422f0cbf",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1451,7 +1283,6 @@
     {
       "revision": 168,
       "date": "2026-10-11",
-      "bundleProtocol": 2,
       "surfaceHash": "3cd66e7b422f0cbf",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1460,7 +1291,6 @@
     {
       "revision": 169,
       "date": "2026-10-11",
-      "bundleProtocol": 2,
       "surfaceHash": "a8e02fb25f517721",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1469,7 +1299,6 @@
     {
       "revision": 170,
       "date": "2026-10-11",
-      "bundleProtocol": 2,
       "surfaceHash": "e41fa2badef24819",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1478,7 +1307,6 @@
     {
       "revision": 171,
       "date": "2026-10-11",
-      "bundleProtocol": 2,
       "surfaceHash": "e41fa2badef24819",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1487,7 +1315,6 @@
     {
       "revision": 172,
       "date": "2026-10-11",
-      "bundleProtocol": 2,
       "surfaceHash": "fee7d0fbb7bd88a5",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1496,7 +1323,6 @@
     {
       "revision": 173,
       "date": "2026-10-12",
-      "bundleProtocol": 2,
       "surfaceHash": "1a4c5a5616989429",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1505,7 +1331,6 @@
     {
       "revision": 174,
       "date": "2026-10-12",
-      "bundleProtocol": 2,
       "surfaceHash": "1a4c5a5616989429",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1514,7 +1339,6 @@
     {
       "revision": 175,
       "date": "2026-10-12",
-      "bundleProtocol": 2,
       "surfaceHash": "05e7976f41efe42e",
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1523,7 +1347,6 @@
     {
       "revision": 176,
       "date": "2026-10-12",
-      "bundleProtocol": 2,
       "surfaceHash": "05e7976f41efe42e",
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1532,7 +1355,6 @@
     {
       "revision": 177,
       "date": "2026-10-12",
-      "bundleProtocol": 2,
       "surfaceHash": "05e7976f41efe42e",
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1541,7 +1363,6 @@
     {
       "revision": 178,
       "date": "2026-10-12",
-      "bundleProtocol": 2,
       "surfaceHash": "05e7976f41efe42e",
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1550,7 +1371,6 @@
     {
       "revision": 179,
       "date": "2026-10-12",
-      "bundleProtocol": 2,
       "surfaceHash": "c7a1e99e3221ebe1",
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1559,7 +1379,6 @@
     {
       "revision": 180,
       "date": "2026-10-12",
-      "bundleProtocol": 2,
       "surfaceHash": "c7a1e99e3221ebe1",
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
@@ -1568,11 +1387,18 @@
     {
       "revision": 181,
       "date": "2026-10-12",
-      "bundleProtocol": 2,
       "surfaceHash": "6e812c69d069df6a",
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "Fewer entry points, one entry per name (#526). boardsmith/session-host is gone: import SnapshotSessionHost, StatePushGate, flowStateOf, isCompleteOf, winnersOf and the host types from boardsmith/session (point games/src session-storage.ts, executor-timeouts.ts, executor-op-body.ts, game-session.ts and their two tests at it). boardsmith/types and boardsmith/utils are gone. The root boardsmith entry no longer exports serializeAction, deserializeAction, isSerializedReference, createSnapshot, createPlayerView, createAllPlayerViews or the types SerializedAction, SerializedSeatExpiry, SerializedReference, GameStateSnapshot, HistoryEntry, RandomnessPolicy and PlayerStateView: import them from boardsmith/runtime. CheckpointPolicy and UndoPolicy stay at the root. boardsmith/ui no longer exports the animation test hooks; boardsmith/testing does."
+    },
+    {
+      "revision": 182,
+      "date": "2026-10-12",
+      "surfaceHash": "bf4d1ee853209039",
+      "payloadHash": "7e563b9e75959ec4",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "BUNDLE_PROTOCOL_VERSION is no longer exported, bundleProtocol is gone from the contract (top level and every history entry), boardsmith contract has no --breaking, and boardsmith build no longer stamps engineProtocol into the manifest: the revision (engineRevision) is the one compatibility number. A true ABI break is now recorded as a normal revision whose summary says every published game must be rebuilt, and the platform answers it by raising its minimum revision. ShufflewickPub must stop reading BUNDLE_PROTOCOL_VERSION and engineProtocol in the same re-vendor (Shufflewick/ShufflewickPub#637). (#524)"
     }
   ]
 }

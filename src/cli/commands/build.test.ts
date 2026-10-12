@@ -55,7 +55,7 @@ function derive(
     { backend: 'table', ...config },
     PKG,
     gameDefinition,
-    { protocol: 1, revision: 7 },
+    7,
     { tableUi: true, worldUi: false },
   );
 }
@@ -137,7 +137,7 @@ describe('deriveManifest', () => {
         { name: 'fixture' },
         PKG,
         makeGameDefinition(2, 4),
-        { protocol: 1, revision: 7 },
+        7,
         { tableUi: true, worldUi: false },
       ),
     ).toThrow(/"backend".*"table".*"world"/s);
@@ -157,7 +157,7 @@ describe('deriveManifest', () => {
         { name: 'fixture', backend: 'world' },
         PKG,
         makeGameDefinition(2, 4),
-        { protocol: 1, revision: 7 },
+        7,
         { tableUi: true, worldUi: false },
       ),
     ).toThrow(/"backend": "world"/);
@@ -170,7 +170,7 @@ describe('deriveManifest', () => {
           { name: 'fixture', backend: 'world', [key]: true },
           PKG,
           makeWorldDefinition(),
-          { protocol: 1, revision: 7 },
+          7,
           { tableUi: false, worldUi: true },
         ),
       ).toThrow(/world backend already answers/);
@@ -188,7 +188,7 @@ describe('deriveManifest', () => {
     expect(manifest.playerCount).not.toEqual({ min: 9, max: 9 });
   });
 
-  it('preserves buildTime/engineProtocol and other passthrough config keys', () => {
+  it('preserves buildTime/engineRevision and other passthrough config keys', () => {
     const config = {
       name: 'fixture',
       backend: 'table',
@@ -197,29 +197,31 @@ describe('deriveManifest', () => {
     };
     const gameDefinition = makeGameDefinition(1, 8);
 
-    const manifest = deriveManifest(config, { version: '2.0.0' }, gameDefinition, { protocol: 3, revision: 7 }, { tableUi: true, worldUi: false });
+    const manifest = deriveManifest(config, { version: '2.0.0' }, gameDefinition, 7, { tableUi: true, worldUi: false });
 
     expect(manifest.name).toBe('fixture');
     expect(manifest.displayName).toBe('Fixture Game');
     expect(manifest.description).toBe('A test game');
     expect(manifest.version).toBe('2.0.0');
-    expect(manifest.engineProtocol).toBe(3);
     expect(manifest.engineRevision).toBe(7);
     expect(typeof manifest.buildTime).toBe('string');
     expect(() => new Date(manifest.buildTime as string).toISOString()).not.toThrow();
   });
 
   it('stamps engineRevision even when boardsmith.json tries to set its own', () => {
-    // Both engine stamps are the BUILDING BoardSmith's to declare. If a hand
+    // The engine stamp is the BUILDING BoardSmith's to declare. If a hand
     // edited value could ride through the `...config` spread, a game could
     // claim an older revision than it was built against and defeat the
-    // platform's skew check — so the derived values must overwrite, not merge.
-    const config = { name: 'fixture', engineProtocol: 99, engineRevision: 99 };
+    // platform's skew check — so the derived value must overwrite, not merge.
+    const config = { name: 'fixture', engineRevision: 99 };
 
     const manifest = derive(config, makeGameDefinition(2, 2));
 
-    expect(manifest.engineProtocol).toBe(1);
     expect(manifest.engineRevision).toBe(7);
+  });
+
+  it('stamps no engineProtocol: the engine revision is the one compatibility number (#524)', () => {
+    expect(derive({ name: 'fixture' })).not.toHaveProperty('engineProtocol');
   });
 
   it('passes the taxonomy fields (audience/tags/playtime/cooperative) through to the manifest', () => {
@@ -264,7 +266,7 @@ describe('deriveManifest — a world-only bundle', () => {
     config: Record<string, unknown> = worldConfig,
     definition: GameDefinition = makeWorldDefinition(),
     artifacts = { tableUi: false, worldUi: true },
-  ) => deriveManifest(config, PKG, definition, { protocol: 1, revision: 7 }, artifacts);
+  ) => deriveManifest(config, PKG, definition, 7, artifacts);
 
   it('omits playerCount entirely rather than inventing a seat range', () => {
     expect(deriveWorld()).not.toHaveProperty('playerCount');
@@ -375,7 +377,7 @@ describe('deriveManifest - the game version', () => {
       { name: 'fixture', backend: 'table' },
       { name: 'fixture', version: '1.1.12' },
       makeGameDefinition(2, 2),
-      { protocol: 1, revision: 7 },
+      7,
       { tableUi: true, worldUi: false },
     );
 
@@ -388,7 +390,7 @@ describe('deriveManifest - the game version', () => {
         { name: 'fixture', backend: 'table' },
         { name: 'fixture' },
         makeGameDefinition(2, 2),
-        { protocol: 1, revision: 7 },
+        7,
         { tableUi: true, worldUi: false },
       ),
     ).toThrow(/package\.json.*"version"/s);
@@ -401,7 +403,7 @@ describe('deriveManifest - the game version', () => {
         { name: 'fixture', backend: 'table' },
         { name: 'fixture' },
         makeGameDefinition(2, 2),
-        { protocol: 1, revision: 7 },
+        7,
         { tableUi: true, worldUi: false },
       );
     } catch {
@@ -416,7 +418,7 @@ describe('deriveManifest - the game version', () => {
         { name: 'fixture', backend: 'table' },
         { name: 'fixture', version: '  ' },
         makeGameDefinition(2, 2),
-        { protocol: 1, revision: 7 },
+        7,
         { tableUi: true, worldUi: false },
       ),
     ).toThrow(/package\.json.*"version"/s);
@@ -430,7 +432,7 @@ describe('deriveManifest - the game version', () => {
         { name: 'fixture', backend: 'table', version: '1.1.12' },
         { name: 'fixture', version: '1.1.12' },
         makeGameDefinition(2, 2),
-        { protocol: 1, revision: 7 },
+        7,
         { tableUi: true, worldUi: false },
       ),
     ).toThrow(/boardsmith\.json.*"version".*package\.json/s);
@@ -488,7 +490,7 @@ describe('deriveManifest — the world surface', () => {
   const worldDef = makeWorldDefinition();
 
   const derive = (worldUi: boolean) =>
-    deriveManifest(worldConfig, PKG, worldDef, { protocol: 1, revision: 7 }, {
+    deriveManifest(worldConfig, PKG, worldDef, 7, {
       tableUi: false,
       worldUi,
     });
@@ -511,7 +513,7 @@ describe('deriveManifest — the world surface', () => {
       { name: 'fixture', backend: 'table' },
       PKG,
       makeGameDefinition(2, 4),
-      { protocol: 1, revision: 7 },
+      7,
       { tableUi: true, worldUi: false },
     );
     expect(manifest.world).toBeUndefined();
@@ -523,7 +525,7 @@ describe('deriveManifest — the world surface', () => {
         { name: 'fixture', backend: 'table' },
         PKG,
         makeGameDefinition(2, 4),
-        { protocol: 1, revision: 7 },
+        7,
         { tableUi: true, worldUi: true },
       ),
     ).toThrow(/world\.html/);
@@ -535,7 +537,7 @@ describe('deriveManifest — the world surface', () => {
         { name: 'fixture', backend: 'table' },
         PKG,
         makeGameDefinition(2, 4),
-        { protocol: 1, revision: 7 },
+        7,
         { tableUi: false, worldUi: false },
       ),
     ).toThrow(/index\.html/);

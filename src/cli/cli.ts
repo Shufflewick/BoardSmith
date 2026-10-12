@@ -269,7 +269,6 @@ export function createProgram(): Command {
     .description("Check (or record) the engine contract the game platform vendors against")
     .option('--update', 'Record a new contract revision from the current engine')
     .option('--summary <text>', 'One sentence describing the change, for the platform team (required with --update)')
-    .option('--breaking', 'Also bump bundleProtocol — invalidates every published bundle')
     .option(
       '--adopt',
       'Record a revision for a change no fingerprint can see — a performance fix the platform must still archive and run',

@@ -138,18 +138,23 @@ describe('engine contract', () => {
     });
   });
 
+  it('carries no bundleProtocol: the revision is the one compatibility number (#524)', () => {
+    expect(ENGINE_CONTRACT).not.toHaveProperty('bundleProtocol');
+    for (const entry of ENGINE_CONTRACT.history) {
+      expect(entry, `r${entry.revision}`).not.toHaveProperty('bundleProtocol');
+    }
+  });
+
   it('agrees with the head of its own history', async () => {
     const head = ENGINE_CONTRACT.history[ENGINE_CONTRACT.history.length - 1]!;
     expect({
       surfaceHash: head.surfaceHash,
       payloadHash: head.payloadHash,
       formatHash: head.formatHash,
-      bundleProtocol: head.bundleProtocol,
     }).toEqual({
       surfaceHash: ENGINE_CONTRACT.surfaceHash,
       payloadHash: ENGINE_CONTRACT.payloadHash,
       formatHash: ENGINE_CONTRACT.formatHash,
-      bundleProtocol: ENGINE_CONTRACT.bundleProtocol,
     });
   });
 

@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import { build as viteBuild } from 'vite';
 import chalk from 'chalk';
 import ora from 'ora';
-import { BUNDLE_PROTOCOL_VERSION } from '../../engine/protocol-version.js';
 import { ENGINE_REVISION } from '../../contract/index.js';
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 import { buildCli, CLI_ENTRY, CLI_OUTFILE } from '../lib/build-cli.js';
@@ -163,7 +162,7 @@ export function deriveManifest(
     GameDefinition,
     'gameClass' | 'minPlayers' | 'maxPlayers' | 'bot' | 'persistence' | 'world'
   >,
-  engine: { protocol: number; revision: number },
+  engineRevision: number,
   artifacts: { tableUi: boolean; worldUi: boolean },
 ): Record<string, unknown> {
   const backend = readBackend(config);
@@ -245,16 +244,11 @@ export function deriveManifest(
     ...(backend === 'world' ? { world: deriveWorldBlock(gameDefinition.world!) } : {}),
     buildTime: new Date().toISOString(),
     version,
-    // Stamp the engine ABI version so the executor can reject a bundle built
-    // against an incompatible BoardSmith (INFRA-04). Automatic — authors never
-    // set this; it comes from the BoardSmith building the bundle.
-    engineProtocol: engine.protocol,
-    // Stamp the engine contract revision too. `engineProtocol` only moves on a
-    // breaking ABI change, so it cannot express the far more common "this game
-    // was built against a newer engine than the platform vendored" — which is
-    // the skew that produces mystery runtime bugs. The platform rejects a
-    // bundle whose revision exceeds its own. Also automatic.
-    engineRevision: engine.revision,
+    // The engine contract revision this bundle was built against, the one
+    // compatibility number the platform reads: it routes the game to a runner
+    // of that revision and refuses one below its minimum. Automatic — authors
+    // never set it; it comes from the BoardSmith building the bundle.
+    engineRevision,
     // Derived — never copied from the raw config spread. Absent entirely for a
     // world-only bundle, which is how the manifest says "this game has no
     // table".
@@ -517,10 +511,7 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
       config,
       pkg,
       gameDefinition,
-      {
-        protocol: BUNDLE_PROTOCOL_VERSION,
-        revision: ENGINE_REVISION,
-      },
+      ENGINE_REVISION,
       { tableUi: hasTableUi, worldUi: hasWorldUi },
     );
 
