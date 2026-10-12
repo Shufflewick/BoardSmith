@@ -45,6 +45,8 @@ interface Search {
 interface HeatmapCompute {
   from: number;
   release: () => void;
+  /** Make the compute fail, as an executor call that throws does. */
+  fail: (error: Error) => void;
 }
 
 /**
@@ -78,7 +80,7 @@ function table(endsGame = false) {
   };
   /** A heatmap computed from `v` = `from`, held until the test releases it; turning it off answers at once. */
   const heatmap = async (from: number, op: Extract<ExecutableOp, { type: 'heatmapToggle' }>) => {
-    if (op.visible) await new Promise<void>((release) => heatmaps.push({ from, release }));
+    if (op.visible) await new Promise<void>((release, fail) => heatmaps.push({ from, release, fail }));
     return { success: true, heatmapUpdate: { seat: op.seat, visible: op.visible, entries: op.visible ? [{ from }] : [] } };
   };
   const adapters: SnapshotSessionAdapters = {
@@ -527,6 +529,26 @@ describe('a visible heatmap, refreshed after a move (#635)', () => {
     await Promise.all([first, ...more]);
     expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([{ from: 40 }]);
     expect(t.heatmaps).toHaveLength(2);
+  });
+
+  it('a heatmap compute that fails rejects the move that started it, and the next move starts a new compute (#676)', async () => {
+    const t = table();
+    t.setRoster([]);
+    await t.host.start();
+    t.host.transientTeachingState.set(1, { heatmap: { visible: true, entries: [] } });
+
+    const first = humanMove(t.host);
+    await settle();
+    expect(t.heatmaps.map((h) => h.from)).toEqual([10]);
+    t.heatmaps[0].fail(new Error('executor unavailable'));
+    await expect(first).rejects.toThrow('executor unavailable');
+
+    const next = humanMove(t.host);
+    await settle();
+    expect(t.heatmaps.map((h) => h.from)).toEqual([10, 20]);
+    t.heatmaps[1].release();
+    succeeded(await next);
+    expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([{ from: 20 }]);
   });
 
   it('a heatmap turned off while it is being refreshed stays off, and nothing is published for it', async () => {
