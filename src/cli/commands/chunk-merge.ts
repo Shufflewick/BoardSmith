@@ -468,14 +468,15 @@ async function sharedSourceFiles(ctx: MergeContext, touched: string[], renumbere
 }
 
 /**
- * Test-runner config (#479): it decides which test files run and how, and nothing the game does.
- * An edit that changes only which files it collects (`test.include` / `test.exclude`) cannot change
- * what a chunk's tests prove about the files that still run, and the merge checks that every one of
- * the chunk's own test files still ran, and no other (`ownTestsFailure`). Any other edit to it can (an alias that
- * stubs a module, a setup file that mocks one), and so can other tooling (the build config,
- * tsconfig, package.json), so those void the sign-off as any code edit does.
+ * Test-runner config (#479): a game's `vite.config.ts` (built with `defineGameViteConfig`, #528), or a
+ * `vitest.config.*`. An edit that changes only which files it collects (`test.include` /
+ * `test.exclude`, checked by `onlyTestCollectionChanged`) cannot change what a chunk's tests prove
+ * about the files that still run, and the merge checks that every one of the chunk's own test files
+ * still ran, and no other (`ownTestsFailure`). Any other edit to it can (an alias that stubs a module,
+ * a setup file that mocks one, a build setting), and so can other tooling (tsconfig, package.json),
+ * so those void the sign-off as any code edit does.
  */
-const TEST_RUNNER_CONFIG = /^vitest\.config\.[cm]?[jt]s$/;
+const TEST_RUNNER_CONFIG = /^vite(st)?\.config\.[cm]?[jt]s$/;
 
 /** The text `path` had when it hashed to `signed`, found in the history of either side, or undefined. */
 async function signedText(ctx: MergeContext, path: string, signed: string): Promise<string | undefined> {

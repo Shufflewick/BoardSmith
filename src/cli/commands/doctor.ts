@@ -12,6 +12,7 @@ import {
 import {
   GAME_VITE_CONFIG,
   GAME_VITE_CONFIG_FILE,
+  buildsWithGameConfig,
   existingConfigs,
   settingNotShipped,
   testRunScopeProblem,
@@ -59,7 +60,12 @@ export type DoctorFindingKind =
   | 'scratch-in-root'
   /** `.gitignore` does not ignore `.boardsmith/`, so scratch written there would be committed. */
   | 'scratch-dir-not-ignored'
-  /** The config is not built with `defineGameViteConfig`; `--fix` writes the one-line `vite.config.ts` in place of it. */
+  /** There is no vite or vitest config; `--fix` writes the one-line `vite.config.ts`. */
+  | 'test-config-missing'
+  /**
+   * The config vitest reads is not built with `defineGameViteConfig`, and nothing would be lost
+   * without it; `--fix` deletes it, and writes the one-line `vite.config.ts` when no config is built with it.
+   */
   | 'test-run-collects-worktrees'
   /** The config is not built with `defineGameViteConfig` and has settings of its own; only a person should carry them over. */
   | 'test-config-needs-edit'
@@ -259,16 +265,36 @@ async function gitignoreFindings(projectDir: string): Promise<DoctorFinding[]> {
 async function testScopeFindings(projectDir: string): Promise<DoctorFinding[]> {
   const problem = await testRunScopeProblem(projectDir);
   if (problem === undefined) return [];
-  for (const config of await existingConfigs(projectDir)) {
-    const setting = settingNotShipped(await fs.readFile(join(projectDir, config), 'utf-8'));
-    if (setting !== undefined) {
-      const detail = `${config} sets more than defineGameViteConfig() does (${setting}), so --fix leaves it to you. ${problem}`;
-      return [{ kind: 'test-config-needs-edit', from: config, to: GAME_VITE_CONFIG_FILE, fixed: false, detail }];
-    }
+  const { built, outdated } = await sortConfigs(projectDir);
+  if (built === undefined && outdated.length === 0) {
+    return [{ kind: 'test-config-missing', from: GAME_VITE_CONFIG_FILE, to: GAME_VITE_CONFIG_FILE, fixed: false, detail: problem }];
   }
-  return [
-    { kind: 'test-run-collects-worktrees', from: GAME_VITE_CONFIG_FILE, to: GAME_VITE_CONFIG_FILE, fixed: false, detail: problem },
-  ];
+  for (const config of outdated) {
+    const setting = settingNotShipped(await fs.readFile(join(projectDir, config), 'utf-8'));
+    if (setting === undefined) continue;
+    const found = `${config} sets more than defineGameViteConfig() does (${setting}), so --fix leaves it to you`;
+    const detail = built === undefined
+      ? `${found}. ${problem}`
+      : `${found}: vitest reads it in place of ${built}, which is already built with defineGameViteConfig. ` +
+        `If the game needs it, pass it to defineGameViteConfig in ${built}, then delete ${config}.`;
+    return [{ kind: 'test-config-needs-edit', from: config, to: built ?? GAME_VITE_CONFIG_FILE, fixed: false, detail }];
+  }
+  const detail = built === undefined
+    ? problem
+    : `vitest reads ${outdated[0]} in place of ${built}, which is already built with defineGameViteConfig. ` +
+      `Delete ${outdated.join(' and ')} (--fix does), then run this again.`;
+  return [{ kind: 'test-run-collects-worktrees', from: outdated[0], to: built ?? GAME_VITE_CONFIG_FILE, fixed: false, detail }];
+}
+
+/** The project's config built with `defineGameViteConfig`, if one is, and every other vite or vitest config. */
+async function sortConfigs(projectDir: string): Promise<{ built: string | undefined; outdated: string[] }> {
+  let built: string | undefined;
+  const outdated: string[] = [];
+  for (const config of await existingConfigs(projectDir)) {
+    if (built === undefined && buildsWithGameConfig(await fs.readFile(join(projectDir, config), 'utf-8'))) built = config;
+    else outdated.push(config);
+  }
+  return { built, outdated };
 }
 
 /**
@@ -285,9 +311,10 @@ async function fixAll(projectDir: string, findings: DoctorFinding[]): Promise<vo
 
 /** Resolve one finding `--fix` is allowed to resolve. */
 async function fix(projectDir: string, f: DoctorFinding): Promise<void> {
-  if (f.kind === 'test-run-collects-worktrees') {
-    for (const config of await existingConfigs(projectDir)) await fs.rm(join(projectDir, config));
-    await fs.writeFile(join(projectDir, GAME_VITE_CONFIG_FILE), GAME_VITE_CONFIG);
+  if (f.kind === 'test-config-missing' || f.kind === 'test-run-collects-worktrees') {
+    const { built, outdated } = await sortConfigs(projectDir);
+    for (const config of outdated) await fs.rm(join(projectDir, config));
+    if (built === undefined) await fs.writeFile(join(projectDir, GAME_VITE_CONFIG_FILE), GAME_VITE_CONFIG);
     return;
   }
   if (f.kind === 'scratch-dir-not-ignored') {
@@ -358,8 +385,12 @@ function reportLine(f: DoctorFinding, rel: (p: string) => string): string {
       return `${chalk.red('conflict')} ${rel(f.from)}\n          ${f.detail}`;
     case 'test-config-needs-edit':
       return `${chalk.red('edit    ')} ${rel(f.from)}\n          ${f.detail}`;
+    case 'test-config-missing':
+      return `${f.fixed ? chalk.green('wrote   ') : chalk.yellow('missing ')} ${rel(f.from)} ${chalk.dim('->')} built with defineGameViteConfig`;
     case 'test-run-collects-worktrees':
-      return `${f.fixed ? chalk.green('wrote   ') : chalk.yellow('outdated')} ${rel(f.from)} ${chalk.dim('->')} builds with defineGameViteConfig`;
+      return f.fixed
+        ? `${chalk.green('replaced')} ${rel(f.from)} ${chalk.dim('->')} ${rel(f.to)} built with defineGameViteConfig`
+        : `${chalk.yellow('outdated')} ${rel(f.from)}\n          ${f.detail}`;
     case 'scratch-dir-not-ignored':
       return `${f.fixed ? chalk.green('ignored ') : chalk.yellow('untracked')} ${rel(f.from)} ${chalk.dim('->')} adds ${GITIGNORE_ENTRY}`;
     default:

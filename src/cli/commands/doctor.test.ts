@@ -69,6 +69,13 @@ function commitAll(projectDir: string): void {
 }
 
 const read = (p: string) => fs.readFile(p, 'utf-8');
+
+/** Everything the human report printed, with colour codes stripped. */
+const printed = () =>
+  logSpy.mock.calls
+    .map((c) => String(c[0]))
+    .join('\n')
+    .replace(/\u001b\[[0-9;]*m/g, '');
 const exists = (p: string) =>
   fs.stat(p).then(
     () => true,
@@ -362,10 +369,42 @@ describe('boardsmith doctor', () => {
     expect((await doctorCommand({ project: projectDir })).healthy).toBe(true);
   });
 
-  it('writes the one-line config for a project with no config at all', async () => {
+  it('reports a project with no config as missing one, and writes the one-line config', async () => {
     const projectDir = await project({}, { testConfig: false });
+
+    const before = await doctorCommand({ project: projectDir });
+    expect(before.findings).toMatchObject([{ kind: 'test-config-missing', from: GAME_VITE_CONFIG_FILE }]);
+    expect(printed()).toMatch(/missing +\S*vite\.config\.ts/);
+    expect(printed()).not.toMatch(/outdated/);
+
     await doctorCommand({ project: projectDir, fix: true });
     expect(await read(join(projectDir, GAME_VITE_CONFIG_FILE))).toBe(GAME_VITE_CONFIG);
+  });
+
+  it('says to delete a leftover vitest config that vitest reads in place of a vite config already built with defineGameViteConfig, and keeps that vite config', async () => {
+    const own = GAME_VITE_CONFIG.replace('defineGameViteConfig()', "defineGameViteConfig({ test: { setupFiles: ['./tests/setup.ts'] } })");
+    const projectDir = await project({ [GAME_VITE_CONFIG_FILE]: own, 'vitest.config.ts': OLD_VITEST_CONFIG });
+
+    const before = await doctorCommand({ project: projectDir });
+    expect(before.findings).toMatchObject([{ kind: 'test-run-collects-worktrees', from: 'vitest.config.ts' }]);
+    expect(before.findings[0].detail).toMatch(/vitest reads vitest\.config\.ts in place of vite\.config\.ts.*Delete vitest\.config\.ts/);
+    expect(before.findings[0].detail).not.toMatch(/vite\.config\.ts sets more/);
+
+    await doctorCommand({ project: projectDir, fix: true });
+    expect(await read(join(projectDir, GAME_VITE_CONFIG_FILE))).toBe(own);
+    await expect(fs.stat(join(projectDir, 'vitest.config.ts'))).rejects.toThrow();
+    expect((await doctorCommand({ project: projectDir })).healthy).toBe(true);
+  });
+
+  it('asks for a hand edit when a leftover vitest config has settings of its own, beside a vite config already built with defineGameViteConfig', async () => {
+    const vitest = OLD_VITEST_CONFIG.replace('test: { exclude', "test: { setupFiles: ['./tests/setup.ts'], exclude");
+    const projectDir = await project({ [GAME_VITE_CONFIG_FILE]: GAME_VITE_CONFIG, 'vitest.config.ts': vitest });
+
+    const result = await doctorCommand({ project: projectDir, fix: true });
+
+    expect(result.findings).toMatchObject([{ kind: 'test-config-needs-edit', from: 'vitest.config.ts', fixed: false }]);
+    expect(result.findings[0].detail).toMatch(/vitest\.config\.ts sets more than defineGameViteConfig\(\) does \(test\.setupFiles\).*pass it to defineGameViteConfig in vite\.config\.ts.*then delete vitest\.config\.ts/s);
+    expect(await read(join(projectDir, 'vitest.config.ts'))).toBe(vitest);
   });
 
   it.each([
@@ -373,6 +412,8 @@ describe('boardsmith doctor', () => {
     ['an exclude of its own', OLD_VITE_CONFIG.replace('  plugins: [vue()],', "  plugins: [vue()],\n  test: { exclude: ['tests/tdd/**'] },"), 'test.exclude'],
     ['a plugin of its own', OLD_VITE_CONFIG.replace('[vue()]', '[vue(), inspect()]'), 'plugins'],
     ['code of its own', `const tdd = process.env.TDD === '1';\n${OLD_VITE_CONFIG}`, "const tdd = process.env.TDD === '1';"],
+    ['settings imported from a file of its own', `import shared from './vite.shared';\n${OLD_VITE_CONFIG}`, "import shared from './vite.shared';"],
+    ['a side-effect import', `import './tests/patch-env';\n${OLD_VITE_CONFIG}`, "import './tests/patch-env';"],
   ])('asks for a hand edit naming it, and changes nothing, when a config has %s', async (_what, viteConfig, named) => {
     const projectDir = await project({ 'vite.config.ts': viteConfig, 'vitest.config.ts': OLD_VITEST_CONFIG });
 
@@ -388,12 +429,6 @@ describe('boardsmith doctor', () => {
   });
 
   describe('closing advice (#299)', () => {
-    /** Everything the human report printed, with colour codes stripped. */
-    const printed = () =>
-      logSpy.mock.calls
-        .map((c) => String(c[0]))
-        .join('\n')
-        .replace(/\u001b\[[0-9;]*m/g, '');
     const ownConfig = { [GAME_VITE_CONFIG_FILE]: 'export default { test: { globals: true } };\n' };
 
     it('offers --fix when every finding is fixable', async () => {

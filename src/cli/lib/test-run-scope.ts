@@ -52,7 +52,7 @@ function parse(text: string): ts.SourceFile {
 }
 
 /** Whether the config default-exports a call of `defineGameViteConfig` imported from `boardsmith/vite-config`. */
-function buildsWithGameConfig(text: string): boolean {
+export function buildsWithGameConfig(text: string): boolean {
   const source = parse(text);
   const helper = new Set(
     source.statements.flatMap((s) => {
@@ -96,6 +96,16 @@ export async function testRunScopeProblem(projectDir: string): Promise<string | 
 /** The excludes `defineGameViteConfig` adds to vitest's defaults. */
 const SHIPPED_EXCLUDES = new Set(['.boardsmith/**', '.worktrees/**', '**/tests/browser/**']);
 
+/** What a config BoardSmith wrote imports: vite, vitest, the Vue plugin, and the project's own vite config. */
+const SHIPPED_IMPORT = /^(vite|vitest\/config|@vitejs\/plugin-vue|\.\/vite\.config(\.[cm]?[jt]s)?)$/;
+
+/** Whether `statement` is an import of names from one of the modules a config BoardSmith wrote imports. */
+const shippedImport = (statement: ts.Statement) =>
+  ts.isImportDeclaration(statement) &&
+  statement.importClause !== undefined &&
+  ts.isStringLiteral(statement.moduleSpecifier) &&
+  SHIPPED_IMPORT.test(statement.moduleSpecifier.text);
+
 const sameText = (node: ts.Node, expected: string) => node.getText().replace(/"/g, "'").replace(/\s/g, '') === expected;
 
 /** Whether the property at `path` holds only what `defineGameViteConfig()` sets there. */
@@ -123,12 +133,14 @@ function shipped(path: string, value: ts.Expression): boolean {
 /**
  * The first thing a project's vite or vitest config does that `defineGameViteConfig()` does not, or
  * undefined when it does nothing more, so `boardsmith doctor --fix` can replace it with
- * `GAME_VITE_CONFIG` and lose nothing. Read from the syntax: a file may hold imports and its default
- * export, and its config objects only the Vue plugin, the vue dedupe and the shipped excludes.
+ * `GAME_VITE_CONFIG` and lose nothing. Read from the syntax: a file may hold imports from vite, vitest,
+ * the Vue plugin and its own vite config, and its default export, and its config objects only the Vue
+ * plugin, the vue dedupe and the shipped excludes. Any other import (settings from a file of the
+ * game's own, a side-effect import) is named, since replacing the file would drop what it brings in.
  */
 export function settingNotShipped(text: string): string | undefined {
   const source = parse(text);
-  const statement = source.statements.find((s) => !ts.isImportDeclaration(s) && !ts.isExportAssignment(s));
+  const statement = source.statements.find((s) => !shippedImport(s) && !ts.isExportAssignment(s));
   if (statement) return statement.getText().split('\n')[0];
   let found: string | undefined;
   const visit = (node: ts.Node): void => {

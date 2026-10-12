@@ -1,6 +1,5 @@
 import vue from '@vitejs/plugin-vue';
-import { mergeConfig } from 'vite';
-import { configDefaults } from 'vitest/config';
+import { configDefaults, mergeConfig } from 'vitest/config';
 
 /**
  * A game's whole vite and vitest config. A game's `vite.config.ts` is
