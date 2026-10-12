@@ -541,11 +541,11 @@ describe('chunkMerge: preconditions', () => {
     expect(status()).toBe('');
   });
 
-  it('refuses, before any test runs, a project whose vitest config would collect the chunk worktrees (#298)', async () => {
+  it('refuses, before any test runs, a project whose config would collect the chunk worktrees (#298)', async () => {
     await buildOnBranch('trading', 100);
     const before = head();
     const { refusals } = await chunkMerge(main, 'trading');
-    expect(refusals).toEqual([expect.stringMatching(/has no vitest config[\s\S]*boardsmith doctor --fix/)]);
+    expect(refusals).toEqual([expect.stringMatching(/has no vite\.config\.ts[\s\S]*boardsmith doctor --fix/)]);
     expect([head(), status()]).toEqual([before, '']);
   });
 });
