@@ -16,6 +16,7 @@ import {
 import { EachPlayerGame } from '../../session/testing/fixtures/each-player-fixture.js';
 import type { GameDefinitionLike } from '../../session/stateless-ops.js';
 import type { FlowState } from './types.js';
+import { suggestedMoveOp } from '../../session/op-result.test-helper.js';
 
 /**
  * BSMITH-04, second half: the `eachPlayer` clone bug is closed as a CLASS, not
@@ -126,16 +127,18 @@ async function driveFixture(def: GameDefinitionLike) {
   const playerCount = def.minPlayers ?? 2;
   const seats = Array.from({ length: playerCount }, (_, i) => ({ seat: i + 1, level: 'easy' }));
   // botSeats is deliberately EMPTY: a bot roster makes the host's pump run the
-  // whole game (minutes, for the MCTS fixtures). Sending `botTurn` by hand plays
-  // exactly one due seat per call, which is the bounded "several steps" this
-  // test needs.
+  // whole game (minutes, for the MCTS fixtures). A `botSuggest` and the move it
+  // finds, sent by hand, play exactly one due seat per step, which is the
+  // bounded "several steps" this test needs.
   const session = createHeadlessSession(def, { playerCount, seed: 'flow-state-clone' }, []);
   await session.start();
   let steps = 0;
   for (let i = 0; i < STEPS; i++) {
     const flowState = session.host.flowState as FlowState | null;
     if (!flowState || flowState.complete) break;
-    const result = await session.host.handleOp(1, { type: 'botTurn', seats });
+    const found = await session.host.handleOp(1, { type: 'botSuggest', seats });
+    if (!found.success || found.botPlayer === undefined) break;
+    const result = await session.host.handleOp(found.botPlayer, suggestedMoveOp(session.host.snapshot, found));
     if (!result.success) break;
     steps++;
   }

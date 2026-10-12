@@ -284,7 +284,7 @@ describe("#18 order-entry sessions (hostOptions.randomness: 'forbidden')", () =>
     const s = statelessSession(unfencedScumDefinition, soloOptions, forbidden);
     expect((await s.send({ type: 'start' })).success).toBe(true);
 
-    const bot = await s.send({ type: 'botTurn', seats: [{ seat: 1, level: 'easy' }] });
+    const bot = await s.send({ type: 'botSuggest', seats: [{ seat: 1, level: 'easy' }] });
     expect(bot.success).toBe(false);
     expect(bot.error).toMatch(/order-entry session/);
     expect(bot.error).toMatch(/randomness/);

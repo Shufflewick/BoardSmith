@@ -55,7 +55,7 @@ not this page's to restate** — ShufflewickPub's is
 A second copy of a limit is how this page, and nine games' tests, once came to
 state a ceiling that had moved by a factor of four.
 
-## Two costs that are invisible until measured
+## Three costs that are invisible until measured
 
 - **The message log grows for the life of the game.** `game.messages` is stored
   once per snapshot (`GameStateSnapshot.messageLog`), so it is no longer
@@ -94,6 +94,14 @@ state a ceiling that had moved by a factor of four.
   the corruption this design exists to prevent. "The most recent N" and
   "everything before round K" are front evictions; "only the interesting lines"
   is not, and there is no way to ask for it.
+- **A removed element is still in the saved state.** `remove()` moves an element to
+  `game.pile`, and the pile is saved with the game (#655) so a reference to a
+  captured piece or a discarded card survives undo and reload. So every
+  removed element is copied into every checkpoint, like any element on the
+  board. A game that creates elements as it goes (a token per action, a card
+  drawn from an endless supply) and removes them later still pays for them on
+  every checkpoint; reuse a fixed set of elements instead, putting them back
+  into a supply space when they leave play.
 - **Named-key objects cost about 6× positional arrays.** `{beastLore: 3, …}` is
   137 bytes where `[3, …]` is 23. Across 8 seats and 325 actions, that single
   stylistic choice is ~579 KB of saved state.

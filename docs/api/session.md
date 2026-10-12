@@ -67,7 +67,7 @@ import {
 - `executeOp(definition, gameOptions, snapshot, pendingState, op, hostOptions?)` - Run one op against a snapshot, statelessly
 - `parseExecutorOp(value)` - Check a value read off a wire is an `ExecutorOp`; returns `{ ok: true, op }` or `{ ok: false, error }`
 - `ParsedExecutorOp` - What `parseExecutorOp` returns
-- `ExecutorOp` - The ops a platform executor runs: `start`, `action`, `expireSeat`, `selectionStep`, `resolveChoices`, `cancelAction`, `undo`, `botTurn`, `botSuggest`
+- `ExecutorOp` - The ops a platform executor runs: `start`, `action`, `expireSeat`, `selectionStep`, `resolveChoices`, `cancelAction`, `undo`, `botSuggest`
 - `DevOp` - Ops `executeOp` runs only inside `boardsmith dev` (the `debug*` family, `restoreEarlier`, tutorial, `hint`, `heatmapToggle`)
 - `HostOp` - Lifecycle ops `SnapshotSessionHost.handleOp` handles itself and `executeOp` never sees (`demoStart`, `demoStop`, `demoControl`, `convertSeatToBot`)
 - `Op` - `ExecutorOp | DevOp | HostOp`, what `handleOp` takes
@@ -353,11 +353,10 @@ op's result says what it carries. A success that ran the game carries one
 state envelope: `snapshot` (which holds the flow state and winners; read them
 with `flowStateOf`, `isCompleteOf` and `winnersOf`), `playerViews`,
 `spectatorView`, `flowDebugInfo` and `persistCommit`, plus the op's own fields
-(`followUp`, `data` and `message` on an `action`; `botMoved`, `botPlayer` and
-`botStalled` on a `botTurn`). A `resolveChoices` or `botSuggest` success carries
-only its answer and no envelope, because neither changes anything and each
-answers one caller: `choices` and the rest of a pick's answer for
-`resolveChoices`; for `botSuggest`, `botPlayer`, `suggestedAction` and
+(`followUp`, `data` and `message` on an `action`). A `resolveChoices` or
+`botSuggest` success carries only its answer and no envelope, because neither
+changes anything and each answers one caller: `choices` and the rest of a pick's
+answer for `resolveChoices`; for `botSuggest`, `botPlayer`, `suggestedAction` and
 `suggestedArgs` when a due bot seat found a move, `botStalled` when it could not
 choose, and neither when no bot seat is due (#675):
 

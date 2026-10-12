@@ -8,7 +8,7 @@
  * nothing while the authoritative game offers a full move list.
  *
  * That used to `throw new Error('No available moves')`, and the throw escaped
- * all the way out: `handleBotTurn` did not guard it, so it left `executeOp` as a
+ * all the way out: the bot op's handler did not guard it, so it left `executeOp` as a
  * raw exception; the dev host logged it and returned; the covered seat never
  * acted; and a simultaneousActionStep could not close its round, so every other
  * seat at the table waited forever. Bot cover is not opt-in — a page reload in
