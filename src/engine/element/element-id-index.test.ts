@@ -115,8 +115,8 @@ describe('atId after an in-place restore (the undo path)', () => {
     expect(game.getElementById(later.id)).toBeUndefined();
   });
 
-  it('finds a card removed after the state it went back to in the tree, and not in the emptied pile', () => {
-    // A restore empties the pile (#650), so the card is only where the state put it.
+  it('finds a card removed after the state it went back to in the tree, and not in the pile', () => {
+    // A restore puts the pile back as the state saved it (#655), so the card is only where the state put it.
     const { game, deck } = table();
     const state = game.toJSON();
     const card = deck._t.children[0] as Card;

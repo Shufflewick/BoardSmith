@@ -816,9 +816,9 @@ export function buildPlayerState(
     state.lastAnimationEventId = animationEvents[animationEvents.length - 1].id;
   }
 
-  // Signal whether the game has a tutorial definition (for ControlsMenu gating).
-  // No seat guard — the menu item shows for any connected player or spectator.
-  if (runner.game.tutorialDefinition) {
+  // Signal that this seat can start the game's tutorial (for ControlsMenu gating).
+  // Only the tutorial's learner seat can, so only its state carries the flag (#678).
+  if (runner.game.tutorialDefinition?.learnerSeat === playerPosition) {
     state.hasTutorial = true;
   }
 

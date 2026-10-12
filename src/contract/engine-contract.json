@@ -1,8 +1,8 @@
 {
-  "revision": 176,
+  "revision": 177,
   "bundleProtocol": 2,
   "surfaceHash": "05e7976f41efe42e",
-  "payloadHash": "3f10d70c457a15ba",
+  "payloadHash": "7e563b9e75959ec4",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1525,7 +1525,16 @@
       "date": "2026-10-12",
       "bundleProtocol": 2,
       "surfaceHash": "05e7976f41efe42e",
-      "payloadHash": "3f10d70c457a15ba",
+      "payloadHash": "7e563b9e75959ec4",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A saved state now holds the pile (#655): game.toJSON() carries the removed elements as a 'pile' array when there are any, and every restore (reload, undo, failed-action rollback, bot search) puts them back instead of emptying the pile (#650), so a reference to a removed element in an attribute, an action arg or a flow variable restores to that same element. In the saved state a reference to an element in the pile is the path 'pile/<i>/...' instead of a bare position, which was read as a root child. No seat's view, and no seat's message log, carries the pile or a position in it: a reference to a removed element is written there as the fixed path 'pile/removed', which resolves to undefined, so in a seat's view and a bot's search it reads as undefined. World mode is unchanged: a world never saves game.toJSON(). Snapshots grow by the removed elements in every checkpoint. States saved by older engines restore with an empty pile, and a saved reference to a removed element in them still points at the wrong element."
+    },
+    {
+      "revision": 177,
+      "date": "2026-10-12",
+      "bundleProtocol": 2,
+      "surfaceHash": "05e7976f41efe42e",
+      "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "The botTurn op is removed (#677): ExecutorOp, parseExecutorOp and executeOp no longer accept it (parseExecutorOp refuses it as an unknown type), and OpFailure no longer carries botPlayer. Hosts must not send botTurn: search with botSuggest and make the move it finds as an ordinary action for the bot's seat, stamped with the boundary of the snapshot that was searched, as SnapshotSessionHost has done since r172. No fingerprint sees the op set, so this revision is adopted. ShufflewickPub's executor and tests move off botTurn in the same re-vendor."
     }

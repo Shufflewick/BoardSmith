@@ -717,13 +717,17 @@ describe('executeOp', () => {
       expect(result.category).toBe('protocol');
     });
 
-    it('broadcasts hasTutorial: true in state when tutorial definition is present', async () => {
+    it('broadcasts hasTutorial only to the learner seat, from the first broadcast (#678)', async () => {
       const startResult = succeeded(await startGame(simpleGameWithTutorialDef, simpleGameOptions));
       expect(startResult.success).toBe(true);
 
-      // hasTutorial must be present in the initial broadcast (not just after startTutorial)
-      const view = (startResult.playerViews as Array<{ state: { hasTutorial?: boolean } }>)?.[0];
-      expect(view?.state?.hasTutorial).toBe(true);
+      // Present in the initial broadcast (not just after startTutorial), and only
+      // for seat 1: no other seat or spectator can start a seat-1 tutorial.
+      const views = startResult.playerViews as Array<{ state: { hasTutorial?: boolean } }>;
+      expect(views[0].state.hasTutorial).toBe(true);
+      expect(views[1].state.hasTutorial).toBeUndefined();
+      const spectator = startResult.spectatorView as { state: { hasTutorial?: boolean } };
+      expect(spectator.state.hasTutorial).toBeUndefined();
     });
 
     it('rejects invalid seat (0) with a protocol error', async () => {
