@@ -1,5 +1,5 @@
 {
-  "revision": 173,
+  "revision": 174,
   "bundleProtocol": 2,
   "surfaceHash": "1a4c5a5616989429",
   "payloadHash": "3f10d70c457a15ba",
@@ -1501,6 +1501,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A table host's heatmap refresh after a move joins the one already running, so at most one heatmap compute runs at a time instead of one per move landing during a compute (#676)"
+    },
+    {
+      "revision": 174,
+      "date": "2026-10-12",
+      "bundleProtocol": 2,
+      "surfaceHash": "1a4c5a5616989429",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A botSuggest success no longer carries the state envelope (#675): it has no snapshot, playerViews, spectatorView, flowDebugInfo or persistCommit, only success and its own fields (botPlayer, suggestedAction and suggestedArgs when a due bot seat found a move; botStalled when that seat could not choose; neither when no bot seat is due), as resolveChoices does (#450). A search changes nothing, so each bot move no longer sends a whole extra state back from the executor. The platform's result bridge must stop reading snapshot or views from a botSuggest result and forward only those fields; SnapshotSessionHost never read them. A host must run r174 or later engines with a bridge that does not expect them."
     }
   ]
 }
