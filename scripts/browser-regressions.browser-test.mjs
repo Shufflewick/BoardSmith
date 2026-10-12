@@ -6,7 +6,7 @@
  * person would and passes when it exits 0; on failure the script's own report
  * (which checks failed, or why it could not start) is the message.
  *
- * This is `npm run test:browser` (`vitest.browser.config.ts`), not part of the
+ * This is `boardsmith test --browser` (`vitest.browser.config.ts`), not part of the
  * default suite: it needs Chromium, installed by `boardsmith install-browser`.
  */
 import { describe, it, expect } from 'vitest';

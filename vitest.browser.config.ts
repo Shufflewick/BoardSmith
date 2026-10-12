@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config';
 
 /**
- * `npm run test:browser`: every browser regression in `scripts/*-browser.mjs`, each run in
+ * `boardsmith test --browser`: every browser regression in `scripts/*-browser.mjs`, each run in
  * Chromium (#533). Kept apart from `vitest.config.ts` so the default suite needs no browser;
  * `agent-policy verify` runs both.
  */

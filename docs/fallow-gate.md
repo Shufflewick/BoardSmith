@@ -505,7 +505,7 @@ touch a barrel.
 
 ## The browser regressions are entry points, not dead files (#230)
 
-`scripts/*-browser.mjs` are run as scripts: `npm run test:browser` spawns each
+`scripts/*-browser.mjs` are run as scripts: `boardsmith test --browser` spawns each
 one (#533), and nothing imports them. Static analysis is right that they are
 unreachable, and the first one was recorded in
 `.fallow-dead-code-baseline.json` for that reason.

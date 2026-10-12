@@ -28,6 +28,7 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { browserScripts } from './browser-harness.mjs';
+import { BROWSER_SUITE_CONFIG } from '../src/cli/commands/test.ts';
 
 const SCRIPTS = dirname(fileURLToPath(import.meta.url));
 const REPO = join(SCRIPTS, '..');
@@ -35,11 +36,11 @@ const REPO = join(SCRIPTS, '..');
 const read = (name) => readFileSync(join(SCRIPTS, name), 'utf8');
 
 /**
- * The case names `npm run test:browser` would run, collected without running
- * them. Listed here at the top because collecting starts a vitest.
+ * The case names `boardsmith test --browser` would run, collected without
+ * running them. Listed here at the top because collecting starts a vitest.
  */
 const vitest = join(dirname(createRequire(import.meta.url).resolve('vitest/package.json')), 'vitest.mjs');
-const listed = spawnSync(process.execPath, [vitest, 'list', '--config', 'vitest.browser.config.ts'], {
+const listed = spawnSync(process.execPath, [vitest, 'list', '--config', BROWSER_SUITE_CONFIG], {
   cwd: REPO,
   encoding: 'utf8',
 });
@@ -154,15 +155,13 @@ describe('#358: a browser regression finds the packages where Node does', () => 
 
 describe('#533: every browser regression runs automatically', () => {
   const policy = JSON.parse(readFileSync(join(REPO, '.agent-policy.json'), 'utf8'));
-  const scripts = JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8')).scripts;
 
   it('runs the browser suite as its own verify check', () => {
-    expect(scripts['test:browser']).toBe('vitest run --config vitest.browser.config.ts');
-    expect(policy.verify).toContainEqual({ name: 'browser', run: 'npm run test:browser' });
+    expect(policy.verify).toContainEqual({ name: 'browser', run: 'node bin/boardsmith.js test --browser' });
   });
 
   it.each(browserScripts())('%s is a case of the browser suite', (name) => {
-    expect(browserSuiteCases, `${name} has no case in \`npm run test:browser\``).toContain(name);
+    expect(browserSuiteCases, `${name} has no case in \`boardsmith test --browser\``).toContain(name);
   });
 });
 

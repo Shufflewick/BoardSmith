@@ -1,7 +1,7 @@
 /**
  * THE PLUMBING EVERY BROWSER REGRESSION SHARES.
  *
- * These browser regressions run as their own suite, `npm run test:browser`,
+ * These browser regressions run as their own suite, `boardsmith test --browser`,
  * which `agent-policy verify` runs (#533) and the default `boardsmith test`
  * leaves out, so the ordinary suite needs no Chromium. What each of them has to
  * do first is identical and none of it is the behaviour under test: find

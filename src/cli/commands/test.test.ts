@@ -49,6 +49,15 @@ describe('boardsmith test', () => {
     expect(run.stderr).toMatch(/boardsmith doctor --fix/);
     expect(run.stdout + run.stderr).not.toContain('wip.test.ts');
   });
+
+  it('refuses --browser in a game project, which has no browser regressions, and names the check that has', async () => {
+    const project = await gameProject({ [VITEST_CONFIG_FILE]: generateVitestConfig('vite.config.ts') });
+    const run = await spawnCli(['test', '--browser'], project);
+    expect(run.code).toBe(1);
+    expect(run.stderr).toMatch(/--browser runs BoardSmith's own browser regressions/);
+    expect(run.stderr).toMatch(/boardsmith smoke/);
+    expect(run.stdout).not.toContain('ok.test.ts');
+  });
 });
 
 /** Starts, says so, and outlives nothing: once vitest is gone it ends its own worker. */
