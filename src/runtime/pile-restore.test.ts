@@ -26,6 +26,7 @@ import {
   execute,
   actionStep,
   deserializeAction,
+  createSnapshot,
   type GameOptions,
   type GameStateSnapshot,
   type SerializedAction,
@@ -287,5 +288,25 @@ describe('the pile in a saved state (#655)', () => {
 
     expect(sandbox.lastGone).toBeUndefined();
     expect(sandbox.pile.all(Card)).toHaveLength(0);
+  });
+
+  // #497: a bot plays from its seat's snapshot, whose flow state is written
+  // for the seat as its view is. A flow variable holding a removed element is
+  // withheld there exactly as an attribute is, and restores to nothing rather
+  // than failing the restore.
+  it('writes a flow variable holding a removed element into a seat snapshot without its id, and restores it to nothing', () => {
+    const { runner, goneId } = playedRunner();
+    const seatSnapshot = createSnapshot(runner.game, 'pile', [], undefined, { forSeat: 1 });
+
+    expect(seatSnapshot.flowState!.position.variables.gone).toEqual({ __elementRef: 'pile/removed' });
+    expect(JSON.stringify(seatSnapshot.flowState)).not.toContain(String(goneId));
+
+    const sandbox = new PileGame(options);
+    sandbox.loadSerializedState(seatSnapshot.state as ReturnType<Game['toJSON']>);
+    sandbox.restoreFlowState(roundTrip(seatSnapshot.flowState!), seatSnapshot.hiddenIdRemap);
+
+    expect(sandbox.getFlowState()!.position.variables.gone).toBeUndefined();
+    // The authoritative flow state still names the element.
+    expect(runner.game.getFlowState()!.position.variables.gone).toEqual({ __flowElementId: goneId, className: 'Card' });
   });
 });

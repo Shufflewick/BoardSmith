@@ -1396,28 +1396,16 @@ export class MCTSBot<G extends Game = Game> {
     // Restore the seeded RNG position so the next draw matches the live game.
     game.setRandomState(snapshot.randomState);
 
-    // Restore the authoritative flow position. Element-valued flow variables were
-    // serialized to markers by getPosition; restoreFlowState relinks them to the
-    // freshly loaded tree internally. `hiddenIdRemap` (CR-02, 159) is only ever
-    // present on a redacted (`forSeat`) snapshot — it lets a flow variable that
-    // pointed at a now-anonymized hidden-zone child relink to its correct
-    // redacted placeholder instead of being left as a dead serialized marker.
-    //
-    // `snapshot.hiddenIdRemap ?? this.rootSnapshot?.hiddenIdRemap`: a
-    // DESCENDANT clone of an already-redacted searchGame (`cloneSearchGame`'s
-    // T-159-07 simultaneous baseline) calls `createSnapshot` WITHOUT `forSeat`
-    // (the source game is already redacted, so `toJSON()` is correct and no
-    // fresh remap is collected) -- but `frame.data.forEachItems` entries
-    // referencing an ORIGINAL (pre-redaction) id are copied forward verbatim
-    // through every subsequent position serialize/restore cycle for as long
-    // as that forEach loop is active, so those descendants still need the
-    // SAME remap the root redaction produced. The remap is a static snapshot
-    // of "which original id got anonymized to which synthetic id at root
-    // capture time" and stays valid for the whole search: nothing after root
-    // capture ever introduces a NEW original-id reference (all further
-    // mutation happens on already-redacted/synthetic ids).
+    // Restore the authoritative flow position. Every element the flow holds
+    // (flow variables and frame data, `forEach` items included) was written as
+    // a marker by getPosition; restoreFlowState relinks it to the freshly
+    // loaded tree. `hiddenIdRemap` (CR-02, 159) is only ever present on a
+    // redacted (`forSeat`) snapshot: it lets a marker that pointed at a
+    // now-anonymized hidden-zone child relink to its redacted placeholder. A
+    // DESCENDANT clone's snapshot is written from the already-redacted search
+    // game, whose markers hold its own ids, so it needs no remap.
     if (snapshot.flowState) {
-      game.restoreFlowState(snapshot.flowState, snapshot.hiddenIdRemap ?? this.rootSnapshot?.hiddenIdRemap);
+      game.restoreFlowState(snapshot.flowState, snapshot.hiddenIdRemap);
     }
 
     return game;

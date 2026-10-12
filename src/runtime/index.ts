@@ -1,12 +1,9 @@
 // Re-export serialization utilities from engine
 export {
-  serializeValue,
-  deserializeValue,
   serializeAction,
   deserializeAction,
   isSerializedReference,
   type SerializedReference,
-  type SerializeOptions,
 } from '../engine/index.js';
 
 // Re-export state snapshots from engine

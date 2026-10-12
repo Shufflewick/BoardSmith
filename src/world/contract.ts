@@ -178,7 +178,7 @@
  *
  * Found while surveying the restore path, and it decides part of the design
  * rather than merely complicating it. An element attribute holding another
- * element does NOT serialize as that element's id. `serializeValue` emits
+ * element does NOT serialize as that element's id. `encodeValue` emits
  * `{ __elementRef: value.branch() }` (`game-element.ts:1034`), and `branch()`
  * (`:275-287`) is a `/`-joined chain of `parent._t.children.indexOf(current)`
  * walked from the ROOT. `atBranch` (`:292-305`) indexes straight back down it.

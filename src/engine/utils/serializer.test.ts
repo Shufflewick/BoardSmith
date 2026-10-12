@@ -5,12 +5,11 @@ import {
   Piece,
   Player,
   Action,
-  serializeValue,
-  deserializeValue,
   serializeAction,
   deserializeAction,
   isSerializedReference,
 } from '../index.js';
+import { TEST_WORLD_ELEMENT_ID_KEY } from '../element/world-element-id-key.test-helper.js';
 
 // Test game classes
 class TestGame extends Game<TestGame, Player> {}
@@ -21,134 +20,6 @@ class Card extends Piece<TestGame> {
 }
 
 class Hand extends Space<TestGame> {}
-
-describe('Value Serialization', () => {
-  let game: TestGame;
-  let hand: Hand;
-  let card: Card;
-
-  beforeEach(() => {
-    game = new TestGame({ playerCount: 2, playerNames: ['Alice', 'Bob'] });
-    hand = game.create(Hand, 'hand');
-    card = hand.create(Card, 'ace-spades', { suit: 'S', rank: 'A' });
-  });
-
-  describe('serializeValue', () => {
-    it('should serialize primitives unchanged', () => {
-      expect(serializeValue('hello', game)).toBe('hello');
-      expect(serializeValue(42, game)).toBe(42);
-      expect(serializeValue(true, game)).toBe(true);
-      expect(serializeValue(null, game)).toBe(null);
-      expect(serializeValue(undefined, game)).toBe(undefined);
-    });
-
-    it('should serialize elements with branch paths', () => {
-      const serialized = serializeValue(card, game, { useBranchPaths: true });
-      expect(serialized).toEqual({ __elementRef: card.branch() });
-    });
-
-    it('should serialize elements with IDs by default', () => {
-      const serialized = serializeValue(card, game);
-      expect(serialized).toEqual({ __elementId: card.id });
-    });
-
-    it('should serialize players', () => {
-      const player = game.getPlayer(1)!;
-      const serialized = serializeValue(player, game);
-      expect(serialized).toEqual({ __playerRef: 1 });
-    });
-
-    it('should serialize arrays', () => {
-      const arr = [card, 'test', 123];
-      const serialized = serializeValue(arr, game);
-      expect(serialized).toEqual([
-        { __elementId: card.id },
-        'test',
-        123,
-      ]);
-    });
-
-    it('should serialize nested objects', () => {
-      const obj = {
-        target: game.getPlayer(2)!,
-        card: card,
-        value: 'test',
-      };
-      const serialized = serializeValue(obj, game);
-      expect(serialized).toEqual({
-        target: { __playerRef: 2 },
-        card: { __elementId: card.id },
-        value: 'test',
-      });
-    });
-  });
-
-  describe('deserializeValue', () => {
-    it('should deserialize primitives unchanged', () => {
-      expect(deserializeValue('hello', game)).toBe('hello');
-      expect(deserializeValue(42, game)).toBe(42);
-      expect(deserializeValue(null, game)).toBe(null);
-    });
-
-    it('should deserialize element refs by branch', () => {
-      const ref = { __elementRef: card.branch() };
-      const deserialized = deserializeValue(ref, game);
-      expect(deserialized).toBe(card);
-    });
-
-    it('should deserialize element refs by ID', () => {
-      const ref = { __elementId: card.id };
-      const deserialized = deserializeValue(ref, game);
-      expect(deserialized).toBe(card);
-    });
-
-    it('should deserialize player refs', () => {
-      const ref = { __playerRef: 1 };
-      const deserialized = deserializeValue(ref, game);
-      expect(deserialized).toBe(game.getPlayer(1)!);
-    });
-
-    it('should deserialize arrays', () => {
-      const arr = [
-        { __elementId: card.id },
-        'test',
-        { __playerRef: 1 },
-      ];
-      const deserialized = deserializeValue(arr, game) as unknown[];
-      expect(deserialized[0]).toBe(card);
-      expect(deserialized[1]).toBe('test');
-      expect(deserialized[2]).toBe(game.getPlayer(1)!);
-    });
-
-    it('should deserialize nested objects', () => {
-      const obj = {
-        target: { __playerRef: 1 },
-        card: { __elementId: card.id },
-        value: 'test',
-      };
-      const deserialized = deserializeValue(obj, game) as Record<string, unknown>;
-      expect(deserialized.target).toBe(game.getPlayer(1)!);
-      expect(deserialized.card).toBe(card);
-      expect(deserialized.value).toBe('test');
-    });
-  });
-
-  describe('round-trip', () => {
-    it('should preserve values through serialize/deserialize', () => {
-      const original = {
-        player: game.getPlayer(1)!,
-        cards: [card],
-        rank: 'A',
-        count: 3,
-      };
-
-      const serialized = serializeValue(original, game);
-      const deserialized = deserializeValue(serialized, game);
-
-      expect(deserialized).toEqual(original);
-    });
-  });
-});
 
 describe('Action Serialization', () => {
   let game: TestGame;
@@ -172,7 +43,7 @@ describe('Action Serialization', () => {
 
       expect(serialized.name).toBe('play');
       expect(serialized.player).toBe(1);  // 1-indexed position
-      expect(serialized.args.card).toEqual({ __elementId: card.id });
+      expect(serialized.args.card).toEqual({ __elementRef: card.branch() });
       // No timestamp: this entry goes into engine-owned actionHistory, which a
       // snapshot serializes and a replay compares byte-for-byte (#54). The
       // session host keeps arrival times beside it (#547).
@@ -187,7 +58,7 @@ describe('Action Serialization', () => {
         game
       );
 
-      expect(serialized.args.target).toEqual({ __playerRef: 2 });
+      expect(serialized.args.target).toEqual({ __playerRef: 2, seat: 2, color: game.getPlayer(2)!.color, name: 'Bob' });
     });
   });
 
@@ -214,6 +85,46 @@ describe('Action Serialization', () => {
       };
 
       expect(() => deserializeAction(serialized, game)).toThrow('Player at position 99 not found.');
+    });
+  });
+
+  // #497: action arguments are written by the same codec as element
+  // attributes, so every shape an attribute keeps, an argument keeps too.
+  describe('argument shapes', () => {
+    it('round trips a Map and a Set with their contents', () => {
+      const args = {
+        bids: new Map<string, unknown>([['ace', card], ['score', 3]]),
+        seats: new Set([1, 2]),
+      };
+
+      const saved = JSON.parse(JSON.stringify(serializeAction('bid', game.getPlayer(1)!, args, game)));
+      const restored = deserializeAction(saved, game).args;
+
+      expect(restored.bids).toBeInstanceOf(Map);
+      expect([...(restored.bids as Map<string, unknown>).entries()]).toEqual([['ace', card], ['score', 3]]);
+      expect((restored.bids as Map<string, unknown>).get('ace')).toBe(card);
+      expect(restored.seats).toBeInstanceOf(Set);
+      expect([...(restored.seats as Set<number>)]).toEqual([1, 2]);
+    });
+
+    it('refuses a cyclic argument with a message naming where the cycle is', () => {
+      const plan: Record<string, unknown> = { step: 1 };
+      plan.self = plan;
+
+      expect(() => serializeAction('plan', game.getPlayer(1)!, { plan }, game)).toThrowError(
+        /Cannot serialize action 'plan': circular reference detected at property 'args\.plan\.self'/,
+      );
+    });
+
+    it('in world mode writes an element by id, and keeps an id that is not resident verbatim', () => {
+      const world = new TestGame({ playerCount: 2, seed: 'args-world', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+      const piece = world.create(Hand, 'hand').create(Card, 'card', { suit: 'S', rank: 'A' });
+
+      const saved = serializeAction('play', world.getPlayer(1)!, { card: piece }, world);
+      expect(saved.args.card).toEqual({ __elementId: piece.id });
+
+      const elsewhere = { __elementId: piece.id + 1000 };
+      expect(deserializeAction({ ...saved, args: { card: elsewhere } }, world).args.card).toEqual(elsewhere);
     });
   });
 

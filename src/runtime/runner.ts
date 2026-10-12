@@ -22,7 +22,6 @@ import {
   type ActionResult,
   type FlowState,
   type FlowDebugInfo,
-  type SerializeOptions,
   type GameStateSnapshot,
   type ActionCheckpoint,
   type ActionCheckpointWindow,
@@ -83,8 +82,6 @@ export interface GameRunnerOptions<G extends Game, O extends GameOptions = GameO
   gameType: string;
   /** Options passed to game constructor */
   gameOptions: NoInfer<O>;
-  /** Serialization options */
-  serializeOptions?: SerializeOptions;
   /** Per-action undo checkpoint retention. Default: retain everything. */
   checkpoints?: CheckpointPolicy;
   /**
@@ -328,12 +325,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   readonly seed?: string;
 
-  /** Serialization options */
-  private readonly serializeOptions: SerializeOptions;
-
   constructor(options: GameRunnerOptions<G, O>) {
     this.gameType = options.gameType;
-    this.serializeOptions = options.serializeOptions ?? { useBranchPaths: true };
     this.checkpointPolicy_ = {
       max: options.checkpoints?.max ?? Number.POSITIVE_INFINITY,
       enabled: options.checkpoints?.enabled ?? true,
@@ -668,7 +661,6 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       player,
       argsToSerialize,
       this.game,
-      this.serializeOptions,
       isUndoable
     );
   }

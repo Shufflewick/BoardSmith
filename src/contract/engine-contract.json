@@ -1,7 +1,7 @@
 {
-  "revision": 177,
+  "revision": 178,
   "bundleProtocol": 2,
-  "surfaceHash": "05e7976f41efe42e",
+  "surfaceHash": "b228941c5186c850",
   "payloadHash": "7e563b9e75959ec4",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1537,6 +1537,15 @@
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "The botTurn op is removed (#677): ExecutorOp, parseExecutorOp and executeOp no longer accept it (parseExecutorOp refuses it as an unknown type), and OpFailure no longer carries botPlayer. Hosts must not send botTurn: search with botSuggest and make the move it finds as an ordinary action for the bot's seat, stamped with the boundary of the snapshot that was searched, as SnapshotSessionHost has done since r172. No fingerprint sees the op set, so this revision is adopted. ShufflewickPub's executor and tests move off botTurn in the same re-vendor."
+    },
+    {
+      "revision": 178,
+      "date": "2026-10-12",
+      "bundleProtocol": 2,
+      "surfaceHash": "b228941c5186c850",
+      "payloadHash": "7e563b9e75959ec4",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Element and player references use one codec (#497). serializeValue, deserializeValue and the SerializeOptions type are no longer exported, and GameRunnerOptions.serializeOptions is gone: action arguments in history are written by the attribute codec, so an element arg is { __elementRef: branch } ({ __elementId } in world mode, where an unresolved id is kept verbatim), a player arg is { __playerRef, seat, color, name }, a Map, Set or typed array round-trips with its contents, and a cyclic arg is refused with an error naming the path. buildActionArgs's wire format writes the same references. Flow state: a forEach snapshot is saved as flow element markers ({ __flowElementId, className }) instead of { elementId } / { value } entries; a flow variable or forEach item whose element no longer exists makes the restore throw, naming it, instead of leaving a marker object; and a seat's snapshot (createSnapshot forSeat) writes a flow element in the pile as { __elementRef: 'pile/removed' }, which restores to undefined, as attributes do."
     }
   ]
 }

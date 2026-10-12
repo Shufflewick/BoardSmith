@@ -1318,7 +1318,7 @@ describe('Action Executor', () => {
         // id points at an element of a different class than the caller claimed,
         // resolving by id alone would hand the handler a wrong-class element -- the
         // same corruption class ENG-05 removed. The arg must survive unresolved so
-        // the mismatch fails loudly downstream (mirrors relinkFlowVariables).
+        // the mismatch fails loudly downstream.
         const deck = game.create(Deck, 'deck');
         const card = deck.create(Card, 'card', { rank: 'A', suit: 'spades', value: 10 });
 

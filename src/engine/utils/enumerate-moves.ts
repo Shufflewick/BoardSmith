@@ -34,8 +34,8 @@ import { devWarn } from '../../utils/dev.js';
  * state.
  *
  * Each move is an `{ action, args }` pair where `args` contains in-process
- * element objects (not serialized IDs). Callers that need wire IDs should
- * convert via `serializeValue` from the engine utilities.
+ * element objects (not serialized IDs). Callers that need wire references
+ * should convert via `buildActionArgs(..., { format: 'wire' })`.
  *
  * Throws rather than returning `[]` for a bad seat, a non-numeric seat, or a
  * game with no flow state (#26) — an empty enumeration must only ever mean

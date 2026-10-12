@@ -370,7 +370,7 @@ function assertSeatAttributeName(element: GameElement, name: string, className: 
 /**
  * Refuse a derived value JSON cannot carry, naming the exact path inside it.
  *
- * `serializeValue` already refuses cycles, over-deep shapes and raw buffers.
+ * `encodeValue` already refuses cycles, over-deep shapes and raw buffers.
  * What it passes through untouched is the set of values `JSON.stringify` drops
  * or chokes on silently -- a function, a symbol, a bigint -- and a derived
  * attribute that vanishes between the engine and the wire is precisely the
@@ -1480,7 +1480,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       // seat's view entirely.
       if (value === undefined) continue;
 
-      const serialized = this.serializeValue(value, name);
+      const serialized = encodeValue(value, this._ctx, className, name);
       assertSeatAttributeSerializable(serialized, name, describe);
       derived[name] = serialized;
     }
@@ -1488,23 +1488,25 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
+   * The attributes `toJSON` saves and `resolveElementReferences` decodes: own
+   * keys that are not `_`-prefixed engine state or one of the class's
+   * `unserializableAttributes`, and whose value is not `undefined`.
+   */
+  private savedAttributeKeys(): string[] {
+    const unserializable = (this.constructor as typeof GameElement).unserializableAttributes;
+    return Object.keys(this).filter(
+      (key) => !key.startsWith('_') && !unserializable.includes(key) && (this as Record<string, unknown>)[key] !== undefined,
+    );
+  }
+
+  /**
    * Serialize this element and its descendants to JSON
    */
   toJSON(): ElementJSON {
     const className = this.constructor.name;
-    const unserializable = new Set(
-      (this.constructor as typeof GameElement).unserializableAttributes
-    );
-
-    // Collect serializable attributes
     const attributes: Record<string, unknown> = {};
-    for (const key of Object.keys(this)) {
-      if (!unserializable.has(key) && !key.startsWith('_')) {
-        const value = (this as Record<string, unknown>)[key];
-        if (value !== undefined) {
-          attributes[key] = this.serializeValue(value, key);
-        }
-      }
+    for (const key of this.savedAttributeKeys()) {
+      attributes[key] = encodeValue((this as Record<string, unknown>)[key], this._ctx, className, key);
     }
 
     // Serialize a `notation` getter into attributes. `notation` is a
@@ -1568,257 +1570,19 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * Serialize a value for JSON.
-   *
-   * Fails loud on values that cannot be represented as JSON: a circular
-   * reference (an object that contains itself, directly or via a back-reference)
-   * or a structure nested past {@link GameElement.MAX_SERIALIZE_DEPTH} levels
-   * throws an actionable error naming the offending property path. Silently
-   * dropping the subtree would partially corrupt every snapshot/undo/network
-   * payload built from it, so we surface the problem at serialization time.
-   *
-   * @param value - The value to serialize.
-   * @param path - Dotted property path to `value` (for error messages).
-   * @param ancestors - Objects currently open on the recursion stack, used to
-   *   detect true cycles. Shared (non-cyclic) nodes are serialized normally.
-   * @param depth - Current recursion depth (safety limit).
-   */
-  protected serializeValue(
-    value: unknown,
-    path: string,
-    ancestors: Set<object> = new Set(),
-    depth = 0
-  ): unknown {
-    // Handle primitives and null/undefined first
-    if (value === null || value === undefined || typeof value !== 'object') {
-      return value;
-    }
-
-    // GameElement references get special handling (no cycle risk - they become refs)
-    if (value instanceof GameElement) {
-      // #149: the one shared structural answer to "is this a player?" --
-      // a numeric `seat` is not it, because a per-seat board carries one too
-      // and would then serialize as a `__playerRef` to a seat that has no
-      // such player on the other end.
-      if (isPlayerElement(value)) {
-        const player: Player = value;
-        // Include useful properties for UI while maintaining deserializability via __playerRef
-        return {
-          __playerRef: player.seat,
-          seat: player.seat,
-          color: player.color,
-          name: player.name,
-        };
-      }
-      // World mode serializes by id, snapshot mode by branch path.
-      //
-      // A branch is `parent._t.children.indexOf(child)` joined from the root,
-      // so every index is a position among the siblings that are PRESENT. In a
-      // world the non-resident partitions are absent, so a path recorded
-      // against the full world resolves against a partial one to a different
-      // element, silently. Ids do not move.
-      if (this._ctx?._worldMode) {
-        return { __elementId: value.id };
-      }
-      const branch = value.branch();
-      if (this._ctx?._seatView && branch.startsWith(PILE_BRANCH)) {
-        return { __elementRef: WITHHELD_PILE_BRANCH };
-      }
-      return { __elementRef: branch };
-    }
-
-    // Detect true circular references: a value that is an ancestor of itself on
-    // the current recursion path can never be represented as JSON.
-    if (ancestors.has(value)) {
-      throw new Error(
-        `Cannot serialize ${this.constructor.name}: circular reference detected at property '${path}'. ` +
-          `Element attributes must be a tree of serializable values, not an object graph with back-references. ` +
-          `Store an element reference (a GameElement, which serializes to a stable ref) or a plain serializable shape instead.`
-      );
-    }
-
-    // Safety limit against pathologically deep structures.
-    if (depth > GameElement.MAX_SERIALIZE_DEPTH) {
-      throw new Error(
-        `Cannot serialize ${this.constructor.name}: nesting exceeded ${GameElement.MAX_SERIALIZE_DEPTH} levels at property '${path}'. ` +
-          `Use element children or a flatter serializable shape instead of deeply nested objects.`
-      );
-    }
-
-    ancestors.add(value);
-    try {
-      if (Array.isArray(value)) {
-        return value.map((v, i) => this.serializeValue(v, `${path}[${i}]`, ancestors, depth + 1));
-      }
-
-      // Map / Set: Object.entries() returns [] for these, so a naive "plain
-      // object" pass would silently serialize them to {} — losing every entry and
-      // their methods on restore. Encode as tagged shapes that deserializeValue
-      // rebuilds back into a real Map/Set. Keys and values recurse so element /
-      // player references inside them still resolve.
-      if (value instanceof Map) {
-        return {
-          __map: [...value.entries()].map(([k, v], i) => [
-            this.serializeValue(k, `${path}.<key:${i}>`, ancestors, depth + 1),
-            this.serializeValue(v, `${path}.<val:${i}>`, ancestors, depth + 1),
-          ]),
-        };
-      }
-      if (value instanceof Set) {
-        return {
-          __set: [...value].map((v, i) => this.serializeValue(v, `${path}.<item:${i}>`, ancestors, depth + 1)),
-        };
-      }
-
-      // Typed arrays: the natural way to pack bulk data (a terrain map, a
-      // fog-of-war mask) into state. Object.entries() yields one entry per
-      // element, so a naive "plain object" pass would both inflate the payload
-      // ~7x AND restore a plain object with none of the typed-array methods.
-      // Encode compactly and rebuild the exact type on restore.
-      if (isEncodableTypedArray(value)) {
-        return encodeTypedArray(value as ArrayBufferView, path);
-      }
-
-      // ArrayBuffer / DataView are raw memory, not values: Object.entries() is
-      // empty for them, so a plain-object pass would silently serialize them to
-      // {} and lose every byte. Refuse loudly and name the representation that
-      // does round-trip.
-      if (value instanceof ArrayBuffer || value instanceof DataView) {
-        const kind = value instanceof ArrayBuffer ? 'ArrayBuffer' : 'DataView';
-        throw new Error(
-          `Cannot serialize ${this.constructor.name}: ${kind} at property '${path}' has no serializable form. ` +
-            `Store a typed array over the buffer instead (e.g. new Uint8Array(buffer)), which round-trips with its type intact.`
-        );
-      }
-
-      // Plain object
-      const result: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(value)) {
-        result[k] = this.serializeValue(v, `${path}.${k}`, ancestors, depth + 1);
-      }
-      return result;
-    } finally {
-      // Remove on the way back up so shared (non-cyclic) siblings serialize fine.
-      ancestors.delete(value);
-    }
-  }
-
-  /**
    * Resolve element references in this element's attributes after deserialization.
    * Called after the entire element tree is restored to convert
    * { __elementRef: "path" } objects back to actual element references.
    */
   resolveElementReferences(game: Game): void {
-    const unserializable = new Set(
-      (this.constructor as typeof GameElement).unserializableAttributes
-    );
-
-    // Resolve references in own attributes
-    for (const key of Object.keys(this)) {
-      if (!unserializable.has(key) && !key.startsWith('_')) {
-        const value = (this as Record<string, unknown>)[key];
-        if (value !== undefined) {
-          (this as Record<string, unknown>)[key] = this.deserializeValue(value, game);
-        }
-      }
+    for (const key of this.savedAttributeKeys()) {
+      (this as Record<string, unknown>)[key] = decodeValue((this as Record<string, unknown>)[key], game);
     }
 
     // Recursively resolve references in children
     for (const child of this._t.children) {
       child.resolveElementReferences(game);
     }
-  }
-
-  /**
-   * Deserialize a value that may contain element references.
-   * Converts { __elementRef: path } back to GameElement references.
-   */
-  protected deserializeValue(value: unknown, game: Game): unknown {
-    if (value === null || value === undefined) {
-      return value;
-    }
-
-    // Handle element reference by branch path
-    if (typeof value === 'object' && value !== null && '__elementRef' in value) {
-      const ref = value as { __elementRef: string };
-      return game.atBranch(ref.__elementRef);
-    }
-
-    // Handle element reference by ID
-    if (typeof value === 'object' && value !== null && '__elementId' in value) {
-      const ref = value as { __elementId: number };
-      const resolved = game.getElementById(ref.__elementId);
-      // In world mode an unresolvable id is NORMAL, not a fault: it points
-      // into a partition that is not resident. Returning `undefined` would
-      // erase the id, and the next checkpoint of this partition would write
-      // the attribute away for good. Keeping the ref verbatim is lossless —
-      // it re-serializes to the same `{ __elementId }` — and a game that
-      // reads the attribute sees a ref object rather than an element, which
-      // is the author's signal that the command did not hydrate what it used.
-      if (!resolved && game._ctx._worldMode) return value;
-      return resolved;
-    }
-
-    // Handle player reference (stored as 1-indexed position)
-    if (typeof value === 'object' && value !== null && '__playerRef' in value) {
-      const ref = value as { __playerRef: number };
-      return game.getPlayer(ref.__playerRef);
-    }
-
-    // Handle already-resolved GameElements (return as-is, don't walk their properties)
-    if (value instanceof GameElement) {
-      return value;
-    }
-
-    // A live PersistentMap is a VIEW onto `game.settings`, not a value to
-    // rebuild: the plain-object branch below flattened it to `{}` (its state
-    // lives in private fields) and `resolveElementReferences` wrote that back
-    // over the field, so the first call after a restore threw
-    // "<name>.get is not a function" (#139). Its contents are resolved once,
-    // with `settings` itself.
-    if (value instanceof PersistentMap) {
-      return value;
-    }
-
-    // Rebuild Map / Set from the tagged shapes serializeValue produced.
-    if (typeof value === 'object' && value !== null && '__map' in value) {
-      const entries = (value as { __map: [unknown, unknown][] }).__map;
-      return new Map(
-        entries.map(([k, v]) => [this.deserializeValue(k, game), this.deserializeValue(v, game)]),
-      );
-    }
-    if (typeof value === 'object' && value !== null && '__set' in value) {
-      const items = (value as { __set: unknown[] }).__set;
-      return new Set(items.map((item) => this.deserializeValue(item, game)));
-    }
-
-    // Rebuild the exact typed-array type serializeValue recorded.
-    if (typeof value === 'object' && value !== null && isSerializedTypedArray(value)) {
-      return decodeTypedArray(value);
-    }
-
-    // A live typed array (a restore that never went through JSON, e.g. an
-    // in-process snapshot) is already the right value — returning it here keeps
-    // the plain-object branch below from flattening it to {"0":n,…}.
-    if (ArrayBuffer.isView(value)) {
-      return value;
-    }
-
-    // Handle arrays
-    if (Array.isArray(value)) {
-      return value.map((item) => this.deserializeValue(item, game));
-    }
-
-    // Handle plain objects (but not element references)
-    if (typeof value === 'object' && value !== null) {
-      const result: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(value)) {
-        result[k] = this.deserializeValue(v, game);
-      }
-      return result;
-    }
-
-    return value;
   }
 
   /**
@@ -1977,6 +1741,190 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   hasId(id: number): boolean {
     return this._t.id === id;
   }
+}
+
+/**
+ * Whether a reference to `element` is withheld from what is being written: a
+ * seat's view never carries an element's place in the pile (#655), so every
+ * codec writes such a reference as `WITHHELD_PILE_BRANCH`, which resolves to
+ * nothing.
+ */
+export function withheldFromSeat(element: GameElement): boolean {
+  return element._ctx?._seatView === true && element.branch().startsWith(PILE_BRANCH);
+}
+
+/**
+ * Encode a value for saved state: an element attribute, an action argument in
+ * history, the game's settings or message log. The one codec for all of them
+ * (#497), so a shape one of them keeps, every one keeps.
+ *
+ * - A player becomes `{ __playerRef, seat, color, name }` (detected with
+ *   {@link isPlayerElement}, never a class check, which fails across bundled
+ *   copies of the class).
+ * - Any other element becomes `{ __elementRef: branch }`, or `{ __elementId }`
+ *   in world mode, where non-resident partitions shift every branch index. A
+ *   seat's view writes an element in the pile as `WITHHELD_PILE_BRANCH`.
+ * - A Map, Set or typed array becomes a tagged shape {@link decodeValue}
+ *   rebuilds.
+ *
+ * Fails loud, naming `subject` and the property path, on a circular reference,
+ * nesting past {@link GameElement.MAX_SERIALIZE_DEPTH}, or a raw `ArrayBuffer`
+ * or `DataView`: dropping the value silently would corrupt every snapshot,
+ * undo and network payload built from it.
+ *
+ * @param ctx - The context of the game the value belongs to; decides world
+ *   mode and whether a seat's view is being written.
+ * @param subject - What holds the value, for error messages (a class name, or
+ *   `action 'play'`).
+ * @param path - The property path to `value`, for error messages.
+ */
+export function encodeValue(value: unknown, ctx: ElementContext | undefined, subject: string, path: string): unknown {
+  return encodeAt(value, ctx, subject, path, new Set(), 0);
+}
+
+function encodeAt(
+  value: unknown,
+  ctx: ElementContext | undefined,
+  subject: string,
+  path: string,
+  ancestors: Set<object>,
+  depth: number,
+): unknown {
+  if (value === null || value === undefined || typeof value !== 'object') {
+    return value;
+  }
+
+  // An element becomes a reference, so it carries no cycle risk.
+  if (value instanceof GameElement) {
+    // #149: the one shared structural answer to "is this a player?" -- a
+    // numeric `seat` is not it, because a per-seat board carries one too and
+    // would then serialize as a `__playerRef` to a seat with no such player.
+    if (isPlayerElement(value)) {
+      const player: Player = value;
+      // The UI reads seat, color and name; `__playerRef` is what resolves.
+      return { __playerRef: player.seat, seat: player.seat, color: player.color, name: player.name };
+    }
+    // A branch is the position among the siblings that are PRESENT, so in a
+    // world, where non-resident partitions are absent, a path recorded against
+    // the full world resolves against a partial one to a different element,
+    // silently. Ids do not move.
+    if (ctx?._worldMode) {
+      return { __elementId: value.id };
+    }
+    if (withheldFromSeat(value)) {
+      return { __elementRef: WITHHELD_PILE_BRANCH };
+    }
+    return { __elementRef: value.branch() };
+  }
+
+  if (ancestors.has(value)) {
+    throw new Error(
+      `Cannot serialize ${subject}: circular reference detected at property '${path}'. ` +
+        `Saved state must be a tree of serializable values, not an object graph with back-references. ` +
+        `Store an element reference (a GameElement, which serializes to a stable ref) or a plain serializable shape instead.`
+    );
+  }
+  if (depth > GameElement.MAX_SERIALIZE_DEPTH) {
+    throw new Error(
+      `Cannot serialize ${subject}: nesting exceeded ${GameElement.MAX_SERIALIZE_DEPTH} levels at property '${path}'. ` +
+        `Use element children or a flatter serializable shape instead of deeply nested objects.`
+    );
+  }
+
+  const encode = (child: unknown, childPath: string) => encodeAt(child, ctx, subject, childPath, ancestors, depth + 1);
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((v, i) => encode(v, `${path}[${i}]`));
+    }
+
+    // Object.entries() is empty for a Map or Set, so a plain-object pass
+    // would write {} and lose every entry.
+    if (value instanceof Map) {
+      return {
+        __map: [...value.entries()].map(([k, v], i) => [encode(k, `${path}.<key:${i}>`), encode(v, `${path}.<val:${i}>`)]),
+      };
+    }
+    if (value instanceof Set) {
+      return { __set: [...value].map((v, i) => encode(v, `${path}.<item:${i}>`)) };
+    }
+
+    // A plain-object pass would inflate a typed array ~7x and restore it
+    // without its methods.
+    if (isEncodableTypedArray(value)) {
+      return encodeTypedArray(value as ArrayBufferView, path);
+    }
+
+    // Raw memory, not a value: a plain-object pass would write {} and lose
+    // every byte.
+    if (value instanceof ArrayBuffer || value instanceof DataView) {
+      const kind = value instanceof ArrayBuffer ? 'ArrayBuffer' : 'DataView';
+      throw new Error(
+        `Cannot serialize ${subject}: ${kind} at property '${path}' has no serializable form. ` +
+          `Store a typed array over the buffer instead (e.g. new Uint8Array(buffer)), which round-trips with its type intact.`
+      );
+    }
+
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      result[k] = encode(v, `${path}.${k}`);
+    }
+    return result;
+  } finally {
+    // Removed on the way back up, so a shared (non-cyclic) node encodes fine.
+    ancestors.delete(value);
+  }
+}
+
+/**
+ * Decode a value {@link encodeValue} wrote, resolving its references against
+ * `game`.
+ *
+ * In world mode an id that does not resolve is NORMAL, not a fault: it points
+ * into a partition that is not resident. It is kept verbatim, so it re-encodes
+ * to the same `{ __elementId }` instead of being written away, and a rule that
+ * reads it sees a ref object rather than an element, which tells the author the
+ * command did not hydrate what it used. A live element, `PersistentMap` or
+ * typed array (a restore that never went through JSON) is returned as it is.
+ */
+export function decodeValue(value: unknown, game: Game): unknown {
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+  if ('__elementRef' in value) {
+    return game.atBranch((value as { __elementRef: string }).__elementRef);
+  }
+  if ('__elementId' in value) {
+    const resolved = game.getElementById((value as { __elementId: number }).__elementId);
+    if (!resolved && game._ctx._worldMode) return value;
+    return resolved;
+  }
+  if ('__playerRef' in value) {
+    return game.getPlayer((value as { __playerRef: number }).__playerRef);
+  }
+  // A PersistentMap is a VIEW onto `game.settings`: rebuilding it as a plain
+  // object made the first call after a restore throw "<name>.get is not a
+  // function" (#139). Its contents are decoded once, with `settings` itself.
+  if (value instanceof GameElement || value instanceof PersistentMap || ArrayBuffer.isView(value)) {
+    return value;
+  }
+  if ('__map' in value) {
+    return new Map((value as { __map: [unknown, unknown][] }).__map.map(([k, v]) => [decodeValue(k, game), decodeValue(v, game)]));
+  }
+  if ('__set' in value) {
+    return new Set((value as { __set: unknown[] }).__set.map((item) => decodeValue(item, game)));
+  }
+  if (isSerializedTypedArray(value)) {
+    return decodeTypedArray(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => decodeValue(item, game));
+  }
+  const result: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value)) {
+    result[k] = decodeValue(v, game);
+  }
+  return result;
 }
 
 /**
