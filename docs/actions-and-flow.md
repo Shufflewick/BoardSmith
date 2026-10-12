@@ -338,10 +338,9 @@ see [Full Example: Draw, Then Pick](#full-example-draw-then-pick).
 #### Using `actionTempState()` for Temp State
 
 The `actionTempState()` helper keeps a value that is not an element in the
-game's state, so a later step can read it: from one action's `execute` to a
-later action, or from a pick's `onSelect` to `execute`. Write it only from game
-code that changes the game (an `execute`, an `onSelect`, a flow step), never
-from a candidate callback.
+game's state, so a later step can read it, such as from one action's `execute`
+to a later action. Write it only from an action's `execute` or a flow step,
+never from a candidate callback.
 
 ```typescript
 import { Action, actionTempState } from 'boardsmith';
@@ -419,7 +418,11 @@ sequence(
 
 If the player should choose when to draw (a button that reveals the cards),
 make the draw its own action with the same `drawTo` in its `execute`, and put
-the two actions in a sequence, as below.
+the two actions in a sequence, as below. With `turnScope: 'continue'`, undo can
+reach back over that draw, so a player could see the cards, undo and draw
+again. If that must not happen, keep the draw in an irreversible flow step as
+above; see [`execute` - Run code](#execute---run-code) for how irreversible
+steps fence undo.
 
 > **Important: The UI sees changes when a step ends**
 >

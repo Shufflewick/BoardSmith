@@ -86,17 +86,17 @@ export interface ActionTempState {
 
 /**
  * Creates a helper for keeping a value that is not an element in game state,
- * so a later step can read it: from one action's `execute` to a later action,
- * or from a pick's `onSelect` to `execute`.
+ * so a later step can read it, such as from one action's `execute` to a later
+ * action.
  *
  * **CRITICAL**: Module-level variables (Maps, arrays, etc.) do NOT carry a
  * value between actions, because they may run in different contexts.
  * Always use this helper for temporary action state.
  *
- * Write it only from game code that changes the game (an `execute`, an
- * `onSelect`, a flow step). Never write it from a candidate callback
- * (`choices`, `elements`, `from`, `filter`): those run on every question about
- * a pick, so the write happens again each time (#674).
+ * Write it only from an action's `execute` or a flow step. Never write it
+ * from a candidate callback (`choices`, `elements`, `from`, `filter`): those
+ * run on every question about a pick, so the write happens again each time
+ * (#674).
  *
  * @example
  * ```typescript

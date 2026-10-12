@@ -747,7 +747,7 @@ sequence(
 ```
 
 The same goes for rolling dice, moving elements and writing temp state: do it
-in an `execute`, an `onSelect` or a flow step, never in a candidate callback.
+in an action's `execute` or a flow step, never in a candidate callback.
 
 See [Full Example: Draw, Then Pick](./actions-and-flow.md#full-example-draw-then-pick) in the Actions & Flow documentation for full details.
 
@@ -813,7 +813,7 @@ Action.create('collectLoot')
 **Key points:**
 - `actionTempState()` stores data in `game.settings` which persists correctly
 - Namespaced by the name you pass and the player
-- Write it from an `execute`, an `onSelect` or a flow step, never from a candidate callback
+- Write it from an action's `execute` or a flow step, never from a candidate callback
 - Always call `temp.clear()` once the value has been used
 
 See [Using actionTempState()](./actions-and-flow.md#using-actiontempstate-for-temp-state) for full documentation.
