@@ -97,8 +97,8 @@ export class Piece<G extends Game = any, P extends Player = any> extends GameEle
    *
    * The piece is moved to `game.pile`, a hidden container for removed elements.
    * Use this for captured pieces, discarded cards, or any element taken out of play.
-   * The pile is not saved: every restore (undo, reload, bot search) empties it,
-   * so keep anything the rules read later in a space of your own.
+   * The pile is saved with the game, so a reference to a removed piece still
+   * finds it after an undo or a reload. No seat's view shows the pile.
    *
    * @example
    * ```typescript

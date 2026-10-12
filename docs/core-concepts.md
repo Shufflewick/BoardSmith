@@ -21,9 +21,19 @@ Game (root)
 └── Pile (removed elements)
 ```
 
-The pile sits outside the tree and is not saved: every restore (undo, reload,
-a bot's search) empties it. Keep anything your rules read later, such as a
-discard pile, in a space of your own.
+The pile sits outside the tree. It is saved with the game, so a removed card
+or captured piece is still there after an undo or a reload, and a reference to
+it (an attribute, an action's choice, a flow variable) finds the same element.
+No seat's view shows the pile, not even how many elements it holds, so a card
+cut from a hidden deck stays unseen. A reference to a removed element is written
+into a view without its place in the pile, so it does not tell a seat how many
+elements were removed before it either.
+
+So in a seat's view, and in a bot's search, which plays from its seat's view, a
+reference to a removed element reads as `undefined`. Rules a bot runs must not
+read a removed element through a reference, or must handle `undefined`. Keep
+anything players should see, such as a face-up discard pile, in a space of your
+own.
 
 ### Element Types
 
