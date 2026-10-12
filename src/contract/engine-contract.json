@@ -1,5 +1,5 @@
 {
-  "revision": 182,
+  "revision": 183,
   "surfaceHash": "bf4d1ee853209039",
   "payloadHash": "7e563b9e75959ec4",
   "formatHash": "3aff5d1f34f52ec0",
@@ -1399,6 +1399,14 @@
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "BUNDLE_PROTOCOL_VERSION is no longer exported, bundleProtocol is gone from the contract (top level and every history entry), boardsmith contract has no --breaking, and boardsmith build no longer stamps engineProtocol into the manifest: the revision (engineRevision) is the one compatibility number. A true ABI break is now recorded as a normal revision whose summary says every published game must be rebuilt, and the platform answers it by raising its minimum revision. ShufflewickPub must stop reading BUNDLE_PROTOCOL_VERSION and engineProtocol in the same re-vendor (Shufflewick/ShufflewickPub#637). (#524)"
+    },
+    {
+      "revision": 183,
+      "date": "2026-10-12",
+      "surfaceHash": "bf4d1ee853209039",
+      "payloadHash": "7e563b9e75959ec4",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "buildActionArgs(..., { format: 'wire' }) now writes each element value, alone or in an array (players picked as elements included), as { id, className }, which runner.performAction resolves; before, it wrote history references ({ __elementRef } / { __playerRef }) that performAction refused. A player picked by seat stays a seat number. Nothing in the platform calls it (#681)."
     }
   ]
 }

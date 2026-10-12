@@ -1,5 +1,5 @@
 import type { Game } from '../element/game.js';
-import { encodeValue } from '../element/game-element.js';
+import { isElement } from '../element/game-element.js';
 
 /**
  * Options for buildActionArgs.
@@ -10,10 +10,9 @@ export interface BuildActionArgsOptions {
    *
    * - `'in-process'` (default): returns element objects as-is; suitable for
    *   passing directly to `runner.performAction` in the same process.
-   * - `'wire'`: converts element and player objects to the references
-   *   action history records (`encodeValue`): `{ __elementRef }`
-   *   (`{ __elementId }` in world mode) and `{ __playerRef }`; suitable for
-   *   JSON serialisation and cross-process transmission.
+   * - `'wire'`: writes each element (a player is one too), alone or in an
+   *   array, as `{ id, className }`, the form `runner.performAction` resolves;
+   *   suitable for JSON serialisation and cross-process transmission.
    */
   format?: 'in-process' | 'wire';
 }
@@ -29,9 +28,9 @@ export interface BuildActionArgsOptions {
  * **In-process (default)**: element objects are returned as-is. The result can
  * be passed directly to `runner.performAction`.
  *
- * **Wire format**: element and player objects are converted to the references
- * action history records, via `encodeValue`. The result is
- * JSON.stringify-safe.
+ * **Wire format**: elements are written as `{ id, className }` (see
+ * {@link elementsAsIds}), which `runner.performAction` resolves back to the
+ * elements. The result is JSON.stringify-safe.
  *
  * @param actionName    - Registered action name on the game.
  * @param selectionValues - Record of selection name → plain JS value.
@@ -101,6 +100,15 @@ export function buildActionArgs(
     return { ...selectionValues };
   }
 
-  // Wire format: convert element/player objects to serialised references.
-  return encodeValue(selectionValues, game._ctx, `action '${actionName}'`, 'args') as Record<string, unknown>;
+  return Object.fromEntries(Object.entries(selectionValues).map(([key, value]) => [key, elementsAsIds(value)]));
+}
+
+/**
+ * An element (or a list of them) as `{ id, className }`: what a selection step
+ * and `runner.performAction` resolve by id. Any other value is returned as is.
+ */
+export function elementsAsIds(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(elementsAsIds);
+  if (isElement(value)) return { id: value.id, className: value.constructor.name };
+  return value;
 }

@@ -21,9 +21,9 @@
 import { constructGame, type Game, type GameOptions } from '../element/game.js';
 import type { Player } from '../player/player.js';
 import type { ActionDefinition, FollowUpAction, PendingActionState, Selection } from '../action/types.js';
-import { isElement } from '../element/game-element.js';
 import { availableActionsForSeat, followUpForSeat } from '../flow/seat-activity.js';
 import { resolveMultiSelect, resolveOrderedList } from './resolve-multiselect.js';
+import { elementsAsIds } from './arg-builder.js';
 import { NotSimulableError } from '../errors.js';
 import { devWarn } from '../../utils/dev.js';
 
@@ -34,7 +34,7 @@ import { devWarn } from '../../utils/dev.js';
  * state.
  *
  * Each move is an `{ action, args }` pair where `args` contains in-process
- * element objects (not serialized IDs). Callers that need wire references
+ * element objects (not serialized IDs). Callers that need JSON-safe args
  * should convert via `buildActionArgs(..., { format: 'wire' })`.
  *
  * Throws rather than returning `[]` for a bad seat, a non-numeric seat, or a
@@ -304,7 +304,7 @@ function enumerateThroughSelectionSteps(
       ? executor.repeatingPickCandidates(action, seatPlayer, pending)
       : nextStepValues(scratch.game, action, seatPlayer, pending, selection);
     for (const value of values) {
-      queue.push([...steps, { selection, value: stableValue(value) }]);
+      queue.push([...steps, { selection, value: elementsAsIds(value) }]);
     }
   }
 
@@ -339,13 +339,6 @@ function nextStepValues(
   const choices = _getChoices(game, action.name, selection, player, args);
   if (choices.length === 0) return selection.optional ? [null] : [];
   return _valuesToTry(game, action, player, selection, choices, args);
-}
-
-/** An element (or a list of them) as `{ id, className }`, which a selection step resolves by id. */
-function stableValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stableValue);
-  if (isElement(value)) return { id: value.id, className: value.constructor.name };
-  return value;
 }
 
 /**

@@ -4,13 +4,11 @@
  * Covers:
  *   1. In-process (default format) — element objects pass through unchanged;
  *      result is accepted by runner.performAction end-to-end.
- *   2. Wire format — element objects become { __elementRef } refs; result is
- *      JSON.stringify-safe.
+ *   2. Wire format — element objects become { id, className }; the result
+ *      survives JSON and is accepted by runner.performAction (#681).
  *   3. Primitive passthrough — string/number values survive both formats.
  *   4. Validation — unknown selection names are rejected with an actionable error
  *      that names the action AND the offending selection.
- *
- * This is the RED phase: buildActionArgs does not exist yet, so all imports will fail.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
@@ -37,6 +35,7 @@ class Board extends Space<ArgBuilderGame> {}
 class ArgBuilderGame extends Game<ArgBuilderGame, Player> {
   board!: Board;
   token!: Token;
+  lastPicked: unknown[] = [];
 
   constructor(options: GameOptions) {
     super(options);
@@ -54,7 +53,9 @@ class ArgBuilderGame extends Game<ArgBuilderGame, Player> {
           prompt: 'Choose a token',
           elementClass: Token,
         })
-        .execute(() => ({ success: true })),
+        .execute((args) => {
+          this.lastPicked = [args.target as Token];
+        }),
     );
 
     // 'guess': two primitive (choice) selections
@@ -65,11 +66,38 @@ class ArgBuilderGame extends Game<ArgBuilderGame, Player> {
         .execute(() => ({ success: true })),
     );
 
+    // 'pickMany': a multi-element selection
+    this.registerAction(
+      Action.create<ArgBuilderGame>('pickMany')
+        .chooseElements('targets', { elements: () => [...this.board.all(Token)], multiSelect: { min: 1, max: 2 } })
+        .execute((args) => {
+          this.lastPicked = args.targets as Token[];
+        }),
+    );
+
+    // 'pickPlayer': a player picked as an element (players are elements)
+    this.registerAction(
+      Action.create<ArgBuilderGame>('pickPlayer')
+        .chooseElement('who', { elementClass: Player })
+        .execute((args) => {
+          this.lastPicked = [args.who as Player];
+        }),
+    );
+
+    // 'attack': a player picked by seat, the playerChoices() form
+    this.registerAction(
+      Action.create<ArgBuilderGame>('attack')
+        .chooseFrom('victim', { choices: (ctx) => this.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }) })
+        .execute((args) => {
+          this.lastPicked = [args.victim as number];
+        }),
+    );
+
     this.setFlow({
       root: loop({
         maxIterations: 10,
         do: eachPlayer({
-          do: actionStep({ actions: ['pick', 'guess'] }),
+          do: actionStep({ actions: ['pick', 'guess', 'pickMany', 'pickPlayer', 'attack'] }),
         }),
       }),
     });
@@ -150,20 +178,73 @@ describe('buildActionArgs', () => {
   // ── 2. Wire format ───────────────────────────────────────────────────────
 
   describe('wire format', () => {
-    it('converts element objects to the { __elementRef } references action history records', () => {
+    function startRunner(): GameRunner<ArgBuilderGame> {
+      const runner = new GameRunner({
+        GameClass: ArgBuilderGame,
+        gameType: 'arg-builder-test',
+        gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'wire-test' },
+      });
+      runner.start();
+      return runner;
+    }
+
+    /** The wire args as they arrive on the far side of a JSON hop. */
+    function overTheWire(action: string, values: Record<string, unknown>, runner: GameRunner<ArgBuilderGame>) {
+      return JSON.parse(JSON.stringify(buildActionArgs(action, values, runner.game, 1, { format: 'wire' })));
+    }
+
+    it('writes an element as { id, className }', () => {
       const token = game.board.first(Token)!;
       const result = buildActionArgs('pick', { target: token }, game, 1, { format: 'wire' });
 
-      expect(result.target).toEqual({ __elementRef: token.branch() });
+      expect(result.target).toEqual({ id: token.id, className: 'Token' });
     });
 
-    it('result is JSON.stringify-safe (no circular refs or non-serialisable values)', () => {
-      const token = game.board.first(Token)!;
-      const result = buildActionArgs('pick', { target: token }, game, 1, { format: 'wire' });
+    it('writes each element of a multi-element pick as { id, className }', () => {
+      const [a, b] = game.board.all(Token);
+      const result = buildActionArgs('pickMany', { targets: [a, b] }, game, 1, { format: 'wire' });
 
-      expect(() => JSON.stringify(result)).not.toThrow();
-      const parsed = JSON.parse(JSON.stringify(result));
-      expect(parsed.target).toEqual({ __elementRef: token.branch() });
+      expect(result.targets).toEqual([{ id: a.id, className: 'Token' }, { id: b.id, className: 'Token' }]);
+    });
+
+    it('an element pick survives JSON and is accepted by runner.performAction', () => {
+      const runner = startRunner();
+      const token = runner.game.board.all(Token)[1];
+
+      const outcome = runner.performAction('pick', 1, overTheWire('pick', { target: token }, runner));
+
+      expect(outcome.error).toBeUndefined();
+      expect(outcome.success).toBe(true);
+      expect(runner.game.lastPicked).toEqual([token]);
+    });
+
+    it('a multi-element pick survives JSON and is accepted by runner.performAction', () => {
+      const runner = startRunner();
+      const tokens = runner.game.board.all(Token);
+
+      const outcome = runner.performAction('pickMany', 1, overTheWire('pickMany', { targets: [...tokens] }, runner));
+
+      expect(outcome.error).toBeUndefined();
+      expect(runner.game.lastPicked).toEqual([...tokens]);
+    });
+
+    it('a player picked as an element survives JSON and is accepted by runner.performAction', () => {
+      const runner = startRunner();
+      const bob = runner.game.getPlayer(2)!;
+
+      const outcome = runner.performAction('pickPlayer', 1, overTheWire('pickPlayer', { who: bob }, runner));
+
+      expect(outcome.error).toBeUndefined();
+      expect(runner.game.lastPicked).toEqual([bob]);
+    });
+
+    it('a player picked by seat (playerChoices) survives JSON and is accepted by runner.performAction', () => {
+      const runner = startRunner();
+
+      const outcome = runner.performAction('attack', 1, overTheWire('attack', { victim: 2 }, runner));
+
+      expect(outcome.error).toBeUndefined();
+      expect(runner.game.lastPicked).toEqual([2]);
     });
 
     it('passes primitives through unchanged in wire format', () => {
