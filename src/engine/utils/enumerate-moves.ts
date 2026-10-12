@@ -404,7 +404,6 @@ function scratchCopy(source: Game) {
     game.setRandomState(randomState);
     if (flowState) game.restoreFlowState(flowState);
   };
-  reset();
 
   return {
     game,
