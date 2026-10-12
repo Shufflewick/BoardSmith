@@ -62,7 +62,7 @@ const props = withDefaults(defineProps<{
   hasActionHelp?: boolean;
   /**
    * When true, renders the Tutorial group showing the "Start tutorial" item.
-   * Absent/false hides the group (game has no tutorial definition).
+   * Absent/false hides the group (no tutorial, or this seat is not its learner seat).
    */
   hasTutorial?: boolean;
   /**
