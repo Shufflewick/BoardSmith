@@ -174,8 +174,8 @@ export interface GameStateSnapshot {
  * Each checkpoint is a full copy of the element tree. By default a hosted
  * game keeps them only back to the start of the current turn, the oldest
  * point any seat's undo can restore, so its saved size does not grow with
- * the action count. `boardsmith dev` and debug sessions keep every one, for
- * time travel (`RunnerCheckpointPolicy` in `boardsmith/runtime`).
+ * the action count. `boardsmith dev` keeps every one, for time travel
+ * (`RunnerCheckpointPolicy` in `boardsmith/runtime`).
  *
  * Most games declare nothing. `max` is a hard cap on top of that, for a game
  * whose single turns are long enough to matter:

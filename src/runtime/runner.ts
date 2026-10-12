@@ -58,8 +58,8 @@ export type { CheckpointPolicy, UndoPolicy, RandomnessPolicy };
  *   action-step frame, the oldest point any seat's undo can restore, and drop
  *   everything older. A saved game then stops growing with the action count.
  * - `'full'`: keep every checkpoint, so debug time travel and rewind reach the
- *   first action. `boardsmith dev` and debug sessions run this way
- *   (`ExecuteOpHostOptions.fullHistory`, `ExecuteOpHostOptions.debug`).
+ *   first action. `boardsmith dev` runs this way
+ *   (`ExecuteOpHostOptions.fullHistory`).
  *
  * A game's `max` caps either.
  */
@@ -1496,11 +1496,16 @@ export function restoreEarlierSnapshot<G extends Game>(
  * index) gets the index and the window's size. `'seat'` (an undo refusal a
  * player reads) gets neither: both count every seat's actions, so a seat could
  * count another seat's secret ones (#449).
+ *
+ * `history` is the retention the window was kept under
+ * (`RunnerCheckpointPolicy.history`), so the turn window is named as a cause
+ * only when it applied.
  */
 export function describeCheckpointAbsence(
   window: ActionCheckpointWindow | undefined,
   actionIndex: number,
   audience: 'seat' | 'debug',
+  history: 'turn' | 'full',
 ): string {
   const found = checkpointAt(window, actionIndex);
   if (found.checkpoint) return '';
@@ -1510,11 +1515,11 @@ export function describeCheckpointAbsence(
       ? `action ${actionIndex} is older than this game's retained undo window ` +
         `(it keeps ${checkpointCount(window)} checkpoint(s), back to action ${window!.baseIndex}). `
       : `the point being restored is older than this game's retained undo window. `;
-    // A seat's undo target is never older than its turn start, which the
-    // default keeps, so only `max` prunes it. A debug read may name any index,
-    // and a snapshot from a hosted table holds only the current turn.
-    const turn = debug
-      ? `A hosted table keeps checkpoints only back to the start of the current turn; boardsmith dev keeps them all. `
+    // A seat's undo target is its own turn start, which the turn window always
+    // keeps, so only `max` prunes it. A debug read may name any index.
+    const turn = debug && history === 'turn'
+      ? `This session keeps checkpoints only back to the start of the current turn; a host that ` +
+        `passes \`fullHistory\` (as boardsmith dev does) keeps them all. `
       : '';
     return where + turn + `Raise or remove \`checkpoints: { max }\` on the game definition to reach further back.`;
   }

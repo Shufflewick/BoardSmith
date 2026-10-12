@@ -19,6 +19,7 @@ import { executeDebugCommand, type GameCommand } from './debug-command.js';
 import {
   GameRunner,
   restoreEarlierSnapshot,
+  describeCheckpointAbsence,
   type GameStateSnapshot,
   type CheckpointPolicy,
   type RunnerCheckpointPolicy,
@@ -615,7 +616,7 @@ export interface GameDefinitionLike {
  */
 type RunnerDef = GameDefinitionLike & {
   readonly randomness: RandomnessPolicy;
-  readonly checkpoints: RunnerCheckpointPolicy;
+  readonly checkpoints: RunnerCheckpointPolicy & { readonly history: 'turn' | 'full' };
 };
 
 // ---------------------------------------------------------------------------
@@ -1430,6 +1431,12 @@ function runnerFromCheckpoint(
   return runner;
 }
 
+/** A debug op's refusal when `snapshot` holds no checkpoint at `actionIndex`, naming why. */
+function missingCheckpoint(def: RunnerDef, snapshot: GameStateSnapshot, actionIndex: number): OpFailure {
+  const why = describeCheckpointAbsence(snapshot.actionCheckpoints, actionIndex, 'debug', def.checkpoints.history);
+  return errorResult(`No checkpoint at action index ${actionIndex}: ${why}`, 'executor');
+}
+
 function handleRestoreEarlier(
   def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
@@ -1475,9 +1482,7 @@ function handleDebugStateAt(
     );
   }
   const at = runnerFromCheckpoint(def, snapshot, op.actionIndex);
-  if (!at) {
-    return errorResult(`No checkpoint at action index ${op.actionIndex}.`, 'executor');
-  }
+  if (!at) return missingCheckpoint(def, snapshot, op.actionIndex);
   return {
     success: true,
     ...stateEnvelope(current, gameOptions.playerCount),
@@ -1500,10 +1505,9 @@ function handleDebugStateDiff(
     return errorResult(`Invalid toIndex: ${op.toIndex}`, 'protocol');
   }
   const fromRunner = runnerFromCheckpoint(def, snapshot, op.fromIndex);
+  if (!fromRunner) return missingCheckpoint(def, snapshot, op.fromIndex);
   const toRunner = runnerFromCheckpoint(def, snapshot, op.toIndex);
-  if (!fromRunner || !toRunner) {
-    return errorResult('Missing checkpoint for state diff.', 'executor');
-  }
+  if (!toRunner) return missingCheckpoint(def, snapshot, op.toIndex);
   const fromView = buildPlayerState(fromRunner, [], op.player, { includeActionMetadata: false }).view;
   const toView = buildPlayerState(toRunner, [], op.player, { includeActionMetadata: false }).view;
 
@@ -1636,9 +1640,7 @@ function handleDebugRewind(
   }
 
   const restored = runnerFromCheckpoint(def, snapshot, op.actionIndex);
-  if (!restored) {
-    return errorResult(`No checkpoint at action index ${op.actionIndex}.`, 'executor');
-  }
+  if (!restored) return missingCheckpoint(def, snapshot, op.actionIndex);
   return { success: true, ...stateEnvelope(restored, gameOptions.playerCount) };
 }
 
@@ -1722,8 +1724,10 @@ export interface ExecuteOpHostOptions {
   debug?: boolean;
   /**
    * Keep every per-action checkpoint instead of only those back to the turn
-   * start, so time travel reaches the first action. `boardsmith dev` sets it on
-   * every op; `debug: true` implies it. A hosted table leaves it off.
+   * start, so debug time travel and rewind reach the first action.
+   * `boardsmith dev` sets it on every op. A hosted table leaves it off, and
+   * `debug` does not imply it: a debug op asking for an index older than the
+   * turn start is refused with the reason.
    */
   fullHistory?: boolean;
 }
@@ -1747,10 +1751,10 @@ async function runOp(
     // host is the sole authority on whether this session may draw, and every
     // handler below builds its runner from this `def`.
     const randomness: RandomnessPolicy = hostOptions?.randomness ?? 'allowed';
-    // How much checkpoint history to keep is the host's call too (#504): a
-    // debug or dev session keeps it all for time travel, a hosted table keeps
-    // back to the turn start.
-    const history = hostOptions?.debug === true || hostOptions?.fullHistory === true ? 'full' : 'turn';
+    // How much checkpoint history to keep is the host's call too (#504):
+    // `boardsmith dev` keeps it all for time travel, a hosted table keeps back
+    // to the turn start.
+    const history = hostOptions?.fullHistory === true ? 'full' : 'turn';
     const def: RunnerDef = { ...definition, randomness, checkpoints: { ...definition.checkpoints, history } };
     const { playerCount } = gameOptions;
     // A BUNDLE WITH NO SEAT RANGE HAS NO TABLE, and is refused by name rather

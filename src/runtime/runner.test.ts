@@ -808,24 +808,34 @@ describe('GameRunner', () => {
       // Below it: refused, and the message says the policy dropped it (not that
       // something is broken) and how to reach further back.
       expect(GameRunner.fromCheckpoint(snapshot, 2, LongGame)).toBeNull();
-      const why = describeCheckpointAbsence(snapshot.actionCheckpoints, 2, 'debug');
+      const why = describeCheckpointAbsence(snapshot.actionCheckpoints, 2, 'debug', 'full');
       expect(why).toContain('older than');
       expect(why).toContain('checkpoints: { max }');
-      expect(why).toContain('start of the current turn');
       expect(why).toContain('action 2');
+      // The window kept full history, so only `max` dropped it: the turn window
+      // is not named as a cause it was not.
+      expect(why).not.toContain('start of the current turn');
+
+      // Under turn-start retention the turn window is a cause, and is named.
+      const turn = describeCheckpointAbsence(snapshot.actionCheckpoints, 2, 'debug', 'turn');
+      expect(turn).toContain('start of the current turn');
+      expect(turn).toContain('fullHistory');
 
       // Above it: a different absence, with a different fix.
-      const never = describeCheckpointAbsence(snapshot.actionCheckpoints, 999, 'debug');
+      const never = describeCheckpointAbsence(snapshot.actionCheckpoints, 999, 'debug', 'full');
       expect(never).toContain('no checkpoint was captured');
       expect(never).not.toContain('older than');
     });
 
     it('tells a seat the same cause and fix with no action index or count in it (#449)', () => {
       const snapshot = playedRunner(12, { history: 'full', max: 4 }).getSnapshot();
-      const pruned = describeCheckpointAbsence(snapshot.actionCheckpoints, 2, 'seat');
+      const pruned = describeCheckpointAbsence(snapshot.actionCheckpoints, 2, 'seat', 'turn');
       expect(pruned).toContain('older than');
       expect(pruned).toContain('checkpoints: { max }');
-      const never = describeCheckpointAbsence(snapshot.actionCheckpoints, 999, 'seat');
+      // A seat's undo target is its own turn start, which the turn window
+      // always keeps, so the turn window is never its cause.
+      expect(pruned).not.toContain('start of the current turn');
+      const never = describeCheckpointAbsence(snapshot.actionCheckpoints, 999, 'seat', 'turn');
       expect(never).toContain('no checkpoint was captured');
       for (const text of [pruned, never]) expect(text).not.toMatch(/\d/);
     });
@@ -848,7 +858,7 @@ describe('GameRunner', () => {
       const snapshot = playedRunner(8, { enabled: false }).getSnapshot();
       expect(snapshot.actionCheckpoints!.entries).toHaveLength(0);
       expect(GameRunner.fromCheckpoint(snapshot, 4, LongGame)).toBeNull();
-      expect(describeCheckpointAbsence(snapshot.actionCheckpoints, 4, 'debug')).toContain('enabled: false');
+      expect(describeCheckpointAbsence(snapshot.actionCheckpoints, 4, 'debug', 'turn')).toContain('enabled: false');
     });
 
     it('still advances the execute() barrier with checkpointing disabled', () => {

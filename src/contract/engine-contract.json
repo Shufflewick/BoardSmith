@@ -1,5 +1,5 @@
 {
-  "revision": 175,
+  "revision": 176,
   "bundleProtocol": 2,
   "surfaceHash": "05e7976f41efe42e",
   "payloadHash": "3f10d70c457a15ba",
@@ -1519,6 +1519,15 @@
       "payloadHash": "3f10d70c457a15ba",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A tutorial names its learner seat (#552): TutorialDefinition.learnerSeat is required, startTutorial is refused for any other seat, for a learner seat the table does not have, and on a finished game (whose phase stays finished), and it restarts the flow with the learner seat to move by joining each round at the learner's place (Game.restartFlowForTutorial(seat), FlowEngine.restartWithoutOpening(seat)) instead of the flow's first prompted seat. simulateTutorial takes the seat from learnerSeat and has no seat option. A game bundle built before r175 whose tutorial has no learnerSeat can no longer start its tutorial on this engine (the definition is refused as invalid); the rest of the game is unaffected, and republishing it with learnerSeat set fixes it. The shipped checkers and go-fish tutorials name seat 1."
+    },
+    {
+      "revision": 176,
+      "date": "2026-10-12",
+      "bundleProtocol": 2,
+      "surfaceHash": "05e7976f41efe42e",
+      "payloadHash": "3f10d70c457a15ba",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Hosted play now keeps per-action checkpoints only back to the start of the current turn (the oldest point any seat's undo restores), so a saved snapshot no longer grows with the action count and a window with baseIndex > 0 is the normal case; checkpoints.max is an optional extra cap. ExecuteOpHostOptions gains fullHistory, which keeps every checkpoint for debug time travel (boardsmith dev passes it; debug does not imply it). Re-vendor to get bounded state; update GAME-STATE-BUDGET.md's retention advice to match (BoardSmith #504)."
     }
   ]
 }

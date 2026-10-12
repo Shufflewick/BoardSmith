@@ -23,8 +23,11 @@ import {
   Space,
   actionStep,
   eachPlayer,
+  execute,
   flowBoundaryKey,
   loop,
+  sequence,
+  simultaneousActionStep,
   type BoundaryKeyState,
   type GameOptions,
 } from '../engine/index.js';
@@ -203,14 +206,22 @@ describe('#504: turn-anchored checkpoint retention', () => {
     expect(window.entries).toHaveLength(21);
   });
 
-  it('a debug session keeps every checkpoint, so time travel reaches the first action', async () => {
+  it('debugging alone does not keep full history: time travel behind the turn is refused with the reason', async () => {
     const debug = { debug: true };
     const table = await play(shortTurns, 20, debug);
+    expect(table.snapshot.actionCheckpoints!.baseIndex).toBe(18);
+    const at = await executeOp(shortTurns, options, table.snapshot, null, { type: 'debugStateAt', actionIndex: 1, player: 1 }, debug);
+    expect(at.success).toBe(false);
+    expect(at.success ? '' : at.error).toMatch(/action 1 is older than .*start of the current turn.*fullHistory/);
+  });
+
+  it('a debug session with full history reaches the first action', async () => {
+    const dev = { debug: true, fullHistory: true };
+    const table = await play(shortTurns, 20, dev);
     expect(table.snapshot.actionCheckpoints!.entries).toHaveLength(21);
-    const at = succeeded(
-      await executeOp(shortTurns, options, table.snapshot, null, { type: 'debugStateAt', actionIndex: 1, player: 1 }, debug),
+    succeeded(
+      await executeOp(shortTurns, options, table.snapshot, null, { type: 'debugStateAt', actionIndex: 1, player: 1 }, dev),
     );
-    expect(at.success).toBe(true);
   });
 
   it('`max` still caps a full-history session', async () => {
@@ -218,4 +229,130 @@ describe('#504: turn-anchored checkpoint retention', () => {
     const table = await play(capped, 20, { fullHistory: true });
     expect(table.snapshot.actionCheckpoints!.entries).toHaveLength(4);
   });
+
+  it('a simultaneous step keeps the whole step: seat A undoes, then seat B undoes', async () => {
+    // Undo in a simultaneous step restores the start of the asking seat's
+    // trailing run, which is never before the step's start. The window keeps
+    // from the step's start, so each undo in turn finds its checkpoint.
+    let table = await startTwoSeats(simultaneous);
+    table = await order(table, 2);
+    table = await order(table, 1);
+    table = await order(table, 1);
+    expect(table.snapshot.actionCheckpoints!.baseIndex).toBe(0);
+
+    table = await undo(simultaneous, table, 1);
+    expect(table.snapshot.actionHistory.map((entry) => entry.player)).toEqual([2]);
+    table = await undo(simultaneous, table, 2);
+    expect(table.snapshot.actionHistory).toHaveLength(0);
+  });
+
+  it("a turnScope: 'continue' run keeps the whole turn across re-entered steps", async () => {
+    let table = await startTwoSeats(continuedTurns);
+    // Seat 1 ends its turn at once; seat 2 takes three steps, each in a newly
+    // entered action step that continues the same turn.
+    table = await act(continuedTurns, table, 'end');
+    for (let i = 0; i < 3; i++) table = await act(continuedTurns, table, 'step');
+    expect(currentSeat(table)).toBe(2);
+    const window = table.snapshot.actionCheckpoints!;
+    expect(window.baseIndex).toBe(1);
+    expect(window.entries).toHaveLength(4);
+    expect(canUndo(table, 2)).toBe(true);
+
+    table = await undo(continuedTurns, table, 2);
+    expect(table.snapshot.actionHistory).toHaveLength(1);
+    expect(currentSeat(table)).toBe(2);
+  });
 });
+
+/** Two seats ordering in one simultaneous step that never closes. */
+class OrdersGame extends Game<OrdersGame, Player> {
+  constructor(gameOptions: GameOptions) {
+    super(gameOptions);
+    this.registerAction(Action.create('order').execute(() => {}));
+    this.setFlow({
+      root: simultaneousActionStep({
+        name: 'orders',
+        players: () => this.players,
+        actions: ['order'],
+        playerDone: () => false,
+        allDone: () => false,
+      }),
+    });
+  }
+}
+
+const simultaneous: GameDefinitionLike = { gameClass: OrdersGame, gameType: 'orders', minPlayers: 2, maxPlayers: 2 };
+
+/** A turn of `step`s ended by `end`, each action in a newly entered step that continues the turn. */
+class ContinuedTurnGame extends Game<ContinuedTurnGame, Player> {
+  turnEnded = false;
+
+  constructor(gameOptions: GameOptions) {
+    super(gameOptions);
+    this.registerAction(Action.create('step').execute(() => {}));
+    this.registerAction(
+      Action.create('end').execute(() => {
+        this.turnEnded = true;
+      }),
+    );
+    this.setFlow({
+      root: loop({
+        while: () => true,
+        maxIterations: 100,
+        do: eachPlayer({
+          do: sequence(
+            execute(() => {
+              this.turnEnded = false;
+            }),
+            loop({
+              while: () => !this.turnEnded,
+              maxIterations: 20,
+              do: actionStep({ name: 'act', actions: ['step', 'end'], turnScope: 'continue' }),
+            }),
+          ),
+        }),
+      }),
+    });
+  }
+}
+
+const continuedTurns: GameDefinitionLike = {
+  gameClass: ContinuedTurnGame,
+  gameType: 'continued-turns',
+  minPlayers: 2,
+  maxPlayers: 2,
+};
+
+const options2 = { playerCount: 2, seed: 'turn-anchored' };
+
+async function startTwoSeats(def: GameDefinitionLike): Promise<Table> {
+  return envelope(succeeded(await executeOp(def, options2, null, null, { type: 'start' })));
+}
+
+function envelope(result: { snapshot: GameStateSnapshot; playerViews: unknown[] }): Table {
+  return { snapshot: result.snapshot, views: result.playerViews };
+}
+
+async function act(def: GameDefinitionLike, table: Table, actionName: string): Promise<Table> {
+  return envelope(succeeded(await executeOp(def, options2, table.snapshot, null, {
+    type: 'action',
+    actionName,
+    player: currentSeat(table),
+    args: {},
+    boundaryKey: flowBoundaryKey(table.snapshot.flowState as BoundaryKeyState),
+  })));
+}
+
+async function order(table: Table, seat: number): Promise<Table> {
+  return envelope(succeeded(await executeOp(simultaneous, options2, table.snapshot, null, {
+    type: 'action',
+    actionName: 'order',
+    player: seat,
+    args: {},
+    boundaryKey: flowBoundaryKey(table.snapshot.flowState as BoundaryKeyState),
+  })));
+}
+
+async function undo(def: GameDefinitionLike, table: Table, seat: number): Promise<Table> {
+  return envelope(succeeded(await executeOp(def, options2, table.snapshot, null, { type: 'undo', player: seat })));
+}

@@ -7,8 +7,8 @@
  *
  *     saved size  ~=  tree size  x  (actions in the longest turn + 1)  +  history  +  log
  *
- * `boardsmith dev` and debug sessions retain one per action, so there the tree
- * is multiplied by the whole game's action count.
+ * `boardsmith dev` retains one per action (full history), so there the tree is
+ * multiplied by the whole game's action count.
  *
  * These helpers make that measurable, so a game can assert its own budget in
  * CI instead of discovering it in production:

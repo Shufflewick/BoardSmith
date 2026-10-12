@@ -165,7 +165,7 @@ export interface GameDefinition {
    * A checkpoint is a full copy of the element tree, one per action. Left
    * unset, a hosted table keeps them back to the start of the current turn,
    * the oldest point any seat's undo restores, so the saved game does not grow
-   * with the action count. `boardsmith dev` and debug sessions keep them all.
+   * with the action count. `boardsmith dev` keeps them all.
    *
    * ```ts
    * checkpoints: { max: 20 }   // also never more than 20; a longer turn's undo is refused

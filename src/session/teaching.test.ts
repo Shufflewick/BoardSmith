@@ -34,7 +34,8 @@ const def = {
 };
 
 async function table() {
-  const session = createHeadlessSession(def, { playerCount: 2, seed: 'teaching', playerNames: ['Alice', 'Bob'] });
+  // Full history: a test below rewinds behind the current turn.
+  const session = createHeadlessSession(def, { playerCount: 2, seed: 'teaching', playerNames: ['Alice', 'Bob'], fullHistory: true });
   await session.start();
   return session;
 }

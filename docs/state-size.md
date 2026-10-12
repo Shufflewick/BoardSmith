@@ -43,8 +43,10 @@ modelled as 225 elements with one action per keystroke reached 5.19 MB after
 190 actions when every checkpoint was kept, which is what the default was
 before #504.
 
-`boardsmith dev` and debug sessions keep every checkpoint, because time travel
-and rewind read them. A game played there grows as the first formula says; that
+`boardsmith dev` keeps every checkpoint (it passes the `fullHistory` host
+option), because time travel and rewind read them. Turning debugging on does
+not do that by itself: a debug read behind the turn start is refused with the
+reason. A game played there grows as the first formula says; that
 is a development convenience, not what players' saved games weigh.
 
 Hosts cap how large a saved game may be. **The number is the host's to publish,
@@ -124,8 +126,10 @@ Two things the engine will not let you do silently:
 
 Most games declare nothing. The default keeps the current turn's checkpoints,
 which is exactly what undo needs: undo restores the checkpoint at the start of
-the acting seat's turn (in a simultaneous step, the start of the step), and
-nothing older is ever restored by a player. The remaining growth is the action
+the acting seat's turn, and nothing older is ever restored by a player. In a
+simultaneous step undo restores the start of the asking seat's last run of
+actions, which is never before the step's start, and the window keeps from the
+step's start. The remaining growth is the action
 history, which is bytes per action rather than a tree per action, and the
 message log.
 

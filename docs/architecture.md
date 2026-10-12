@@ -195,8 +195,8 @@ snapshot.actionCheckpoints  // { baseIndex, entries[] } — a RETAINED WINDOW,
 The cost follows directly from that: a saved game is the tree **plus one tree
 copy per retained action**. A hosted table retains only the current turn (back
 to the oldest point any seat's undo restores), so its saved size does not grow
-with the action count; `boardsmith dev` and debug sessions retain every action
-for time travel. `checkpoints: { max }` on the game definition caps either; an
+with the action count; `boardsmith dev` retains every action for time travel
+(the `fullHistory` host option). `checkpoints: { max }` on the game definition caps either; an
 undo reaching past the retained window is refused with a message naming the
 policy.
 See **[state-size.md](./state-size.md)** — a reader who assumes replay will not

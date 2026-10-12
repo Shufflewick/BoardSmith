@@ -287,8 +287,8 @@ existed. See `GameRunner.fromSnapshot`'s docstring in
 The direct consequence is a cost that surprises people: a saved game is
 the tree **plus one tree copy per retained action**. A hosted table keeps
 only the current turn's checkpoints, back to the oldest point any seat's
-undo restores; `boardsmith dev` and debug sessions keep every one, which is
-what time travel reads. `checkpoints: { max }` on the game definition caps
+undo restores; `boardsmith dev` keeps every one (the `fullHistory` host
+option), which is what time travel reads. `checkpoints: { max }` on the game definition caps
 either. Read [state-size.md](./state-size.md) before shipping a game with
 long turns — an undo that reaches past the retained window is refused
 with a message naming the policy, rather than approximated.

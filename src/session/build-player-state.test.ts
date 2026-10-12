@@ -434,7 +434,8 @@ describe('cross-layer integration: engine progress → live session host → pro
   async function newSession() {
     const session = createHeadlessSession(
       { gameClass: TutorialParityGame, gameType: 'parity-test', minPlayers: 2, maxPlayers: 2, tutorial: CROSS_LAYER_TUTORIAL },
-      { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'cross-layer' },
+      // Full history: the rewind below reaches behind the current turn.
+      { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'cross-layer', fullHistory: true },
     );
     await session.start();
     expect((await session.send(1, { type: 'startTutorial', player: 1 })).success).toBe(true);
