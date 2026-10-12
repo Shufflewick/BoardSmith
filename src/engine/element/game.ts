@@ -8,6 +8,7 @@ import {
   isPlayerIdentityAttribute,
   lookUpId,
   PILE_BRANCH,
+  WITHHELD_PILE_BRANCH,
   readDynamicAttribute,
   registerElementClass,
   registerCreatedElementClass,
@@ -380,7 +381,10 @@ export function animationFloorOf(state: unknown): AnimationFloor {
  *   animation, and be pushed a changed view when nothing it may see changed
  *   (#487). `animationSeqBySeat` holds every seat's own counter (#489).
  * - `pile`, the removed elements (#655), is hidden from every seat, count
- *   included: a card a game cut from a hidden deck must stay unseen.
+ *   included: a card a game cut from a hidden deck must stay unseen. A seat's
+ *   serialization already leaves it out (`serializeForSeat`); it is listed
+ *   here so no view type has it. A reference to an element in the pile reaches
+ *   a seat without its position, as `WITHHELD_PILE_BRANCH`.
  *
  * This destructure is the one list of those fields: `SeatViewJSON` and
  * `RestoreOnlyRootField` are derived from it. The object is rebuilt rather
@@ -391,6 +395,20 @@ export function animationFloorOf(state: unknown): AnimationFloor {
 function withoutRestoreOnlyFields(root: ReturnType<Game['toJSON']>) {
   const { messagesEvicted: _evicted, animationEventSeq: _seq, animationSeqBySeat: _seqBySeat, pile: _pile, ...seatView } = root;
   return seatView;
+}
+
+/**
+ * Run a serialization whose result goes to a seat, so a reference into the
+ * pile is written without its position and the pile itself is left out
+ * (#655). The saved state keeps both.
+ */
+function serializeForSeat<T>(ctx: ElementContext, write: () => T): T {
+  ctx._seatView = true;
+  try {
+    return write();
+  } finally {
+    ctx._seatView = false;
+  }
 }
 
 /** A seat's view of the game: the root as `toJSONForPlayer` writes it, without the restore-only fields. */
@@ -1504,9 +1522,11 @@ export class Game<
 
   /**
    * Find an element by its branch path, in the tree or, for a path under
-   * `pile`, in the pile (#655).
+   * `pile`, in the pile (#655). The reference a seat's view writes for an
+   * element in the pile finds nothing.
    */
   override atBranch(branch: string): GameElement | undefined {
+    if (branch === WITHHELD_PILE_BRANCH) return undefined;
     const [first, ...rest] = branch.split('/');
     if (first === PILE_BRANCH) return this.pile.atBranch(rest.join('/'));
     return super.atBranch(branch);
@@ -4549,8 +4569,9 @@ export class Game<
       // One number for the whole game, not a field on every line.
       ...(this._messagesEvicted > 0 && { messagesEvicted: this._messagesEvicted }),
       // The removed elements, so a reference to one restores to it (#655). A
-      // world saves its partitions, never this payload, so it leaves them out.
-      ...(!this._ctx._worldMode && this.pile._t.children.length > 0 && {
+      // world saves its partitions, never this payload, and no seat's view
+      // carries them, so both leave them out.
+      ...(!this._ctx._worldMode && !this._ctx._seatView && this.pile._t.children.length > 0 && {
         pile: this.pile._t.children.map((child) => child.toJSON()),
       }),
       // Only include the events array if the buffer is non-empty (avoid
@@ -4584,10 +4605,9 @@ export class Game<
    *   destroys other seats' history.
    */
   serializeMessageLog(forSeat?: number | null): MessageEntry[] {
-    const source = forSeat === undefined
-      ? this.messages
-      : this.messages.filter((m) => this.canSeeMessage(m, forSeat));
-    return this.serializeValue(source, 'messages') as MessageEntry[];
+    if (forSeat === undefined) return this.serializeValue(this.messages, 'messages') as MessageEntry[];
+    const source = this.messages.filter((m) => this.canSeeMessage(m, forSeat));
+    return serializeForSeat(this._ctx, () => this.serializeValue(source, 'messages')) as MessageEntry[];
   }
 
   /**
@@ -4604,7 +4624,7 @@ export class Game<
    *   this comment) keep their real id already, so they need no remap entry.
    */
   toJSONForPlayer(player: P | number | null, idRemap?: Map<number, number>): SeatViewJSON {
-    return this.redactTreeForSeat(this.toJSON(), player, idRemap);
+    return this.redactTreeForSeat(serializeForSeat(this._ctx, () => this.toJSON()), player, idRemap);
   }
 
   /**
@@ -4742,7 +4762,7 @@ export class Game<
     if (GameClass.playerView !== undefined) {
       return players.map((player) => this.toJSONForPlayer(player));
     }
-    const fullJson = this.toJSON();
+    const fullJson = serializeForSeat(this._ctx, () => this.toJSON());
     return players.map((player) => this.redactTreeForSeat(fullJson, player));
   }
 

@@ -96,7 +96,7 @@ designing rather than after a host refuses a session.
   the corruption this design exists to prevent. "The most recent N" and
   "everything before round K" are front evictions; "only the interesting lines"
   is not, and there is no way to ask for it.
-- **A removed element is still on the tree.** `remove()` moves an element to
+- **A removed element is still in the saved state.** `remove()` moves an element to
   `game.pile`, and the pile is saved with the game (#655) so a reference to a
   captured piece or a discarded card survives undo and reload. So every
   removed element is copied into every checkpoint, like any element on the

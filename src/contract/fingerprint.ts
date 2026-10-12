@@ -2014,7 +2014,8 @@ export async function computePayloadHash(): Promise<string> {
   game.persistPrivate = { entries: [{ key: 'player:alice/sheet', value: { hp: 3 } }] };
 
   // A removed card a public attribute still refers to (#655). Every view
-  // carries the reference as a path under `pile`, and none carries the pile.
+  // carries the reference without its position in the pile, and none carries
+  // the pile.
   const cut = game.create(FixtureCard, 'cut-0', { suit: 'S', rank: 'Q' });
   cut.remove();
   game.lastCut = cut;

@@ -228,6 +228,13 @@ export function reachPartition<T extends GameElement | undefined>(from: T): T {
 export const PILE_BRANCH = 'pile';
 
 /**
+ * How a seat's view writes a reference to any element in the pile (#655): its
+ * position would tell the seat how many elements were removed before it, and
+ * in what order. It resolves to nothing.
+ */
+export const WITHHELD_PILE_BRANCH = `${PILE_BRANCH}/removed`;
+
+/**
  * The element with this id in `from`'s subtree, WITHOUT marking anything
  * reached: `atId` is the door that marks, and the engine's own reference
  * harvest must not (ShufflewickPub #295).
@@ -1613,7 +1620,11 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       if (this._ctx?._worldMode) {
         return { __elementId: value.id };
       }
-      return { __elementRef: value.branch() };
+      const branch = value.branch();
+      if (this._ctx?._seatView && branch.startsWith(PILE_BRANCH)) {
+        return { __elementRef: WITHHELD_PILE_BRANCH };
+      }
+      return { __elementRef: branch };
     }
 
     // Detect true circular references: a value that is an ancestor of itself on

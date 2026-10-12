@@ -32,7 +32,11 @@ import {
 } from '../engine/index.js';
 import { GameRunner } from './runner.js';
 
-class Card extends Piece<PileGame, Player> {}
+class Card extends Piece<PileGame, Player> {
+  /** Element- and player-valued attributes a removed card carries into the pile. */
+  next: Card | null = null;
+  heldBy: Player | null = null;
+}
 class Zone extends Space<PileGame, Player> {}
 
 class PileGame extends Game<PileGame, Player> {
@@ -58,7 +62,10 @@ class PileGame extends Game<PileGame, Player> {
         .execute((_args, ctx) => {
           const card = ctx.game.deck.first(Card)!;
           card.remove();
+          card.next = ctx.game.deck.first(Card)!;
+          card.heldBy = ctx.player;
           ctx.game.lastGone = card;
+          ctx.game.message('{{card}} is gone', { card });
         }),
       // An action arg that is a removed element.
       Action.create<PileGame>('inspect')
@@ -161,13 +168,22 @@ describe.each(restores)('a reference to a removed element after %s (#655)', (_pa
     expect(game.inspected).toBe(game.pile.atId(played.cutId));
   });
 
+  it('held by a removed element is the restored element or player', () => {
+    const played = playedRunner();
+    const { game } = restore(played);
+    const gone = game.pile.atId(played.goneId) as Card;
+
+    expect(gone.next).toBe(game.deck.first(Card));
+    expect(gone.next!.name).toBe('card-c');
+    expect(gone.heldBy).toBe(game.getPlayer(1));
+  });
+
   it('in an action arg in history is the same element, in the pile', () => {
     const played = playedRunner();
     const { game } = restore(played);
 
     expect(deserializeAction(roundTrip(played.inspectEntry), game).args.card).toBe(game.pile.atId(played.cutId));
   });
-
 });
 
 // The in-place rollback is left out: it keeps the flow engine's live
@@ -240,6 +256,27 @@ describe('the pile in a saved state (#655)', () => {
       expect(JSON.stringify(view)).not.toContain('card-b');
       expect(JSON.stringify(view)).not.toContain(String(goneId));
     }
+  });
+
+  // The position in the pile would tell a seat how many elements were removed
+  // before this one, and in what order.
+  it('writes no pile position into any seat view or seat message log, and keeps it in the saved state', () => {
+    const { runner } = playedRunner();
+    const pilePosition = /"__elementRef":"pile\/\d/;
+    const views = [
+      ...[1, 2, null].map((seat) => runner.game.toJSONForPlayer(seat)),
+      ...runner.game.toJSONForPlayers([1, 2, null]),
+    ];
+    for (const view of views) {
+      expect(JSON.stringify(view)).not.toMatch(pilePosition);
+      expect(view.attributes.lastGone).toEqual({ __elementRef: 'pile/removed' });
+    }
+    for (const seat of [1, 2, null]) {
+      expect(JSON.stringify(runner.game.serializeMessageLog(seat))).not.toMatch(pilePosition);
+    }
+
+    expect(JSON.stringify(runner.game.toJSON())).toMatch(pilePosition);
+    expect(JSON.stringify(runner.game.serializeMessageLog())).toMatch(pilePosition);
   });
 
   it('restores a reference to a removed element in a seat view to nothing, not to an element in the tree', () => {
