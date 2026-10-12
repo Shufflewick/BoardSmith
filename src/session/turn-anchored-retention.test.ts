@@ -233,17 +233,23 @@ describe('#504: turn-anchored checkpoint retention', () => {
   it('a simultaneous step keeps the whole step: seat A undoes, then seat B undoes', async () => {
     // Undo in a simultaneous step restores the start of the asking seat's
     // trailing run, which is never before the step's start. The window keeps
-    // from the step's start, so each undo in turn finds its checkpoint.
+    // from the step's start and drops the turns before it, so each undo in
+    // turn finds its checkpoint.
     let table = await startTwoSeats(simultaneous);
+    table = await act(simultaneous, table, 'prepare');
+    table = await act(simultaneous, table, 'prepare');
     table = await order(table, 2);
     table = await order(table, 1);
     table = await order(table, 1);
-    expect(table.snapshot.actionCheckpoints!.baseIndex).toBe(0);
+    const window = table.snapshot.actionCheckpoints!;
+    // The step starts at action 2: the checkpoints at 0 and 1 are gone.
+    expect(window.baseIndex).toBe(2);
+    expect(window.entries).toHaveLength(4);
 
     table = await undo(simultaneous, table, 1);
-    expect(table.snapshot.actionHistory.map((entry) => entry.player)).toEqual([2]);
+    expect(table.snapshot.actionHistory.map((entry) => entry.player)).toEqual([1, 2, 2]);
     table = await undo(simultaneous, table, 2);
-    expect(table.snapshot.actionHistory).toHaveLength(0);
+    expect(table.snapshot.actionHistory).toHaveLength(2);
   });
 
   it("a turnScope: 'continue' run keeps the whole turn across re-entered steps", async () => {
@@ -264,19 +270,23 @@ describe('#504: turn-anchored checkpoint retention', () => {
   });
 });
 
-/** Two seats ordering in one simultaneous step that never closes. */
+/** Each seat prepares in turn, then both order in one simultaneous step that never closes. */
 class OrdersGame extends Game<OrdersGame, Player> {
   constructor(gameOptions: GameOptions) {
     super(gameOptions);
+    this.registerAction(Action.create('prepare').execute(() => {}));
     this.registerAction(Action.create('order').execute(() => {}));
     this.setFlow({
-      root: simultaneousActionStep({
-        name: 'orders',
-        players: () => this.players,
-        actions: ['order'],
-        playerDone: () => false,
-        allDone: () => false,
-      }),
+      root: sequence(
+        eachPlayer({ do: actionStep({ actions: ['prepare'] }) }),
+        simultaneousActionStep({
+          name: 'orders',
+          players: () => this.players,
+          actions: ['order'],
+          playerDone: () => false,
+          allDone: () => false,
+        }),
+      ),
     });
   }
 }
