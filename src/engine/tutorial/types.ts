@@ -27,8 +27,7 @@ import type { ElementRef } from '../../types/protocol.js';
 // copy of it (#263). The engine must not import upward from the UI layer, and it
 // does not have to: `types/protocol.ts` is a standalone wire-format module that
 // imports nothing, which the engine already depends on elsewhere. Re-exported
-// here so `boardsmith` hands a game the same `ElementRef` as `boardsmith/ui` and
-// `boardsmith/types`.
+// here so `boardsmith` hands a game the same `ElementRef` as `boardsmith/ui`.
 //
 // Match precedence (parity contract, mirrors `matchesRef` in useBoardInteraction):
 //   id wins, else notation, else name.

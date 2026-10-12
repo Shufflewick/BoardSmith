@@ -2,13 +2,18 @@ import type {
   Game,
   GameOptions,
   FlowState,
-  HistoryEntry,
   ActionDefinition,
   Selection,
-  GameStateSnapshot,
   FollowUpAction,
 } from '../engine/index.js';
-import { createSnapshot, canSeatAct, dueSeats, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
+import type {
+  HistoryEntry,
+} from '../engine/action/types.js';
+import type {
+  GameStateSnapshot,
+} from '../engine/utils/index.js';
+import { canSeatAct, dueSeats, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
+import { createSnapshot } from '../engine/utils/index.js';
 import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
 import { constructGame } from '../engine/element/game.js';
 import type {

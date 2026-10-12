@@ -25,11 +25,15 @@ import {
   setVar,
   execute,
   actionStep,
-  deserializeAction,
   type GameOptions,
-  type GameStateSnapshot,
-  type SerializedAction,
 } from '../engine/index.js';
+import {
+  deserializeAction,
+  type GameStateSnapshot,
+} from '../engine/utils/index.js';
+import type {
+  SerializedAction,
+} from '../engine/action/types.js';
 import { GameRunner } from './runner.js';
 
 class Card extends Piece<PileGame, Player> {

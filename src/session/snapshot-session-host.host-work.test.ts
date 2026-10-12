@@ -15,7 +15,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { OpSuccess } from './stateless-ops.js';
-import type { GameStateSnapshot } from '../engine/index.js';
+import type { GameStateSnapshot } from '../engine/utils/index.js';
 import type { SerializedFlowDebugInfo } from './types.js';
 import type { HostWorkGate } from './host-work-gate.js';
 import { SnapshotSessionHost, type RulesReload } from './snapshot-session-host.js';

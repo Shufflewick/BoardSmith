@@ -22,7 +22,8 @@ import {
   repeatingCollectDefinition as collectDef,
 } from './testing/fixtures/repeating-collect-fixture.js';
 import { GameRunner } from '../runtime/runner.js';
-import { enumerateLegalMoves, type GameStateSnapshot } from '../engine/index.js';
+import { enumerateLegalMoves } from '../engine/index.js';
+import type { GameStateSnapshot } from '../engine/utils/index.js';
 import { createTestGame } from '../testing/test-game.js';
 import { simulateRandomGames } from '../testing/random-simulation.js';
 import { succeeded, suggestedMoveOp } from './op-result.test-helper.js';

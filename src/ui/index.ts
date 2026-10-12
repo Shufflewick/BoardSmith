@@ -188,17 +188,6 @@ export {
   type FocusTrapOptions,
 } from './composables/useFocusTrap.js';
 
-// Animation test-mode + trace recorder (ANIM-01) — Vue-free, also re-exported from boardsmith/testing
-export {
-  enableAnimationTestMode,
-  disableAnimationTestMode,
-  isAnimationTestModeEnabled,
-  recordTrace,
-  getAnimationTrace,
-  clearAnimationTrace,
-  type AnimationTrace,
-} from './composables/useAnimationTestMode.js';
-
 // Consolidated FLIP animation API
 export {
   useFLIP,

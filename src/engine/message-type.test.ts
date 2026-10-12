@@ -13,7 +13,8 @@
  * recorded as rules rather than decoration.
  */
 import { describe, it, expect } from 'vitest';
-import { Game, Piece, Player, createPlayerView, type GameOptions } from './index.js';
+import { Game, Piece, Player, type GameOptions } from './index.js';
+import { createPlayerView } from './utils/index.js';
 
 class LogGame extends Game<LogGame, Player> {
   constructor(options: GameOptions) {

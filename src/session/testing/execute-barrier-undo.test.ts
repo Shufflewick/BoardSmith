@@ -3,7 +3,7 @@ import { createHeadlessSession, type HeadlessOp } from '../headless-session.js';
 import { executeBarrierFixtureDefinition } from './fixtures/execute-barrier-fixture.js';
 import { bookkeepingExecuteFixtureDefinition, BookkeepingExecuteGame } from './fixtures/bookkeeping-execute-fixture.js';
 import type { Op } from '../stateless-ops.js';
-import { ErrorCode } from '../../types/index.js';
+import { ErrorCode } from '../../types/protocol.js';
 
 /**
  * UNDO-02 regression: an undo/rewind must not cross a completed `execute()`

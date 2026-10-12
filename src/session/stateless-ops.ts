@@ -9,7 +9,8 @@
  * no memory between calls.
  */
 
-import type { Game, GameClass, TutorialDefinition, Annotation, FlowState, FollowUpOffer, HistoryEntry } from '../engine/index.js';
+import type { Game, GameClass, TutorialDefinition, Annotation, FlowState, FollowUpOffer } from '../engine/index.js';
+import type { HistoryEntry } from '../engine/action/types.js';
 import { ErrorCode, type ChoiceWithRefs, type ValidElement } from '../types/protocol.js';
 import { dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState } from '../engine/index.js';
 import type { BoundaryKeyState } from '../engine/index.js';

@@ -27,8 +27,10 @@ import {
   actionStep,
   enumerateLegalMoves,
   type GameOptions,
-  type GameStateSnapshot,
 } from '../engine/index.js';
+import type {
+  GameStateSnapshot,
+} from '../engine/utils/index.js';
 import { succeeded, suggestedMoveOp } from './op-result.test-helper.js';
 
 class Rune extends Piece<RuneGame> {}

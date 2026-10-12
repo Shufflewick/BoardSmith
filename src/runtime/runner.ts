@@ -1,14 +1,9 @@
 import { rulesErrorSentence } from '../engine/action/rules-error.js';
 import { ActionExecutor, evaluateConditionWithTrace } from '../engine/action/action.js';
 import {
-  serializeAction,
-  deserializeAction,
-  createSnapshot,
   createActionCheckpoint,
   checkpointAt,
   checkpointCount,
-  createPlayerView,
-  createAllPlayerViews,
   FlowHaltedError,
   canSeatAct,
   availableActionsForSeat,
@@ -16,23 +11,34 @@ import {
   type Game,
   type GameOptions,
   type Player,
-  type SerializedAction,
-  type HistoryEntry,
   isSeatExpiry,
   type ActionResult,
   type FlowState,
   type FlowDebugInfo,
-  type SerializeOptions,
-  type GameStateSnapshot,
   type ActionCheckpoint,
   type ActionCheckpointWindow,
-  type PlayerStateView,
   type PendingActionState,
   type ActionDefinition,
   type CheckpointPolicy,
   type UndoPolicy,
-  type RandomnessPolicy,
 } from '../engine/index.js';
+import {
+  serializeAction,
+  deserializeAction,
+  createSnapshot,
+  createPlayerView,
+  createAllPlayerViews,
+  type SerializeOptions,
+  type GameStateSnapshot,
+  type PlayerStateView,
+} from '../engine/utils/index.js';
+import type {
+  SerializedAction,
+  HistoryEntry,
+} from '../engine/action/types.js';
+import type {
+  RandomnessPolicy,
+} from '../engine/element/game.js';
 import { ErrorCode } from '../types/protocol.js';
 import { PlayerFacingError } from '../engine/errors.js';
 import { constructGame, animationFloorOf, type AnimationFloor } from '../engine/element/game.js';

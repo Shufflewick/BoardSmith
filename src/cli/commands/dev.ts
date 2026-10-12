@@ -7,7 +7,8 @@ import chalk from 'chalk';
 import open from 'open';
 
 import type { GameDefinition } from '../../session/index.js';
-import { DEFAULT_COLOR_PALETTE, type GameStateSnapshot } from '../../engine/index.js';
+import { DEFAULT_COLOR_PALETTE } from '../../engine/index.js';
+import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import { MultiplayerHost, type TableRules } from '../dev-host/multiplayer-host.js';
 import { claimDevHostSocket } from '../dev-host/connection-handler.js';
 import { devStorePath, loadDevStore } from '../dev-host/persistence-file-store.js';

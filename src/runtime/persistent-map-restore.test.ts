@@ -7,8 +7,10 @@ import {
   eachPlayer,
   actionStep,
   PersistentMap,
-  type GameStateSnapshot,
 } from '../engine/index.js';
+import type {
+  GameStateSnapshot,
+} from '../engine/utils/index.js';
 import { GameRunner } from './runner.js';
 
 /**

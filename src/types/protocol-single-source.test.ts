@@ -20,9 +20,9 @@
  * `ElementRef` IS THE SHAPE EVERY BARREL HANDS OUT (#263).
  *
  * One declaration in the tree is only half of it. `ElementRef` was declared
- * three times — here in `protocol.ts` (reached from `boardsmith/types`), again
- * in `ui/composables/useBoardInteraction.ts` (re-exported from `boardsmith/ui`)
- * and again in `engine/tutorial/types.ts` (re-exported from `boardsmith`) — so a
+ * three times — here in `protocol.ts`, again in
+ * `ui/composables/useBoardInteraction.ts` (re-exported from `boardsmith/ui`) and
+ * again in `engine/tutorial/types.ts` (re-exported from `boardsmith`) — so a
  * game importing it from two barrels got two different types under one name,
  * with nothing in the compiler to say which one it had: the protocol copy
  * carried a `className` field the other two did not. Checking that both barrels
@@ -64,7 +64,6 @@ const PICK_SHAPE = [
 const BARRELS = {
   boardsmith: path.join(SRC, 'engine', 'index.ts'),
   'boardsmith/ui': path.join(SRC, 'ui', 'index.ts'),
-  'boardsmith/types': path.join(SRC, 'types', 'index.ts'),
 } as const;
 
 function sourceFiles(dir: string): string[] {

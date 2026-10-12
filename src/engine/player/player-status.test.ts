@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, createSnapshot, createPlayerView } from '../index.js';
+import { Game, Player } from '../index.js';
+import { createSnapshot, createPlayerView } from '../utils/index.js';
 import { GameRunner } from '../../runtime/index.js';
 
 class StatusGame extends Game<StatusGame, Player> {}

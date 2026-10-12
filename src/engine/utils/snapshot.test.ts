@@ -8,11 +8,13 @@ import {
   loop,
   eachPlayer,
   actionStep,
-  createSnapshot,
   createActionCheckpoint,
+} from '../index.js';
+import {
+  createSnapshot,
   createPlayerView,
   createAllPlayerViews,
-} from '../index.js';
+} from './index.js';
 
 // Test game classes
 class TestGame extends Game<TestGame, Player> {}

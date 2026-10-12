@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Piece, Space, Action, actionStep, deserializeAction, type GameOptions } from '../engine/index.js';
+import { Game, Player, Piece, Space, Action, actionStep, type GameOptions } from '../engine/index.js';
+import { deserializeAction } from '../engine/utils/index.js';
 import { recordedAction } from './testing/history-labels.js';
 import { GameRunner } from '../runtime/index.js';
 import { PendingActionManager } from './pending-action-manager.js';

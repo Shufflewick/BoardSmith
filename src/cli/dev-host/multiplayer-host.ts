@@ -32,7 +32,8 @@ import {
 import { createNodeWorldClock, type WorldHostClock } from './node-world-clock.js';
 import { runsAtOnce, type HostWorkGate } from '../../session/host-work-gate.js';
 import { heldClock, type RulesReloadNotice } from './rules-reload-queue.js';
-import { dueSeats, type SeatActivityState, type GameStateSnapshot } from '../../engine/index.js';
+import { dueSeats, type SeatActivityState } from '../../engine/index.js';
+import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import { selectGameOptions, type GameOptionSelection } from '../../session/game-option-selection.js';
 import type { GameOptionDefinition } from '../../session/types.js';
 import {

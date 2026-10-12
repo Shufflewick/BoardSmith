@@ -5,12 +5,14 @@ import {
   Piece,
   Player,
   Action,
+} from '../index.js';
+import {
   serializeValue,
   deserializeValue,
   serializeAction,
   deserializeAction,
   isSerializedReference,
-} from '../index.js';
+} from './index.js';
 
 // Test game classes
 class TestGame extends Game<TestGame, Player> {}

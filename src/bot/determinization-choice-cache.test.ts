@@ -8,7 +8,8 @@
  * value once it is written.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { Game, Player, Action, actionStep, createSnapshot, type GameOptions } from '../engine/index.js';
+import { Game, Player, Action, actionStep, type GameOptions } from '../engine/index.js';
+import { createSnapshot } from '../engine/utils/index.js';
 import { applyDeterminization } from './determinization.js';
 
 const devMode = vi.hoisted(() => ({ override: null as boolean | null }));

@@ -245,8 +245,7 @@ message saying what to store instead.
 
 ### `SnapshotSessionHost` compares for you
 
-`SnapshotSessionHost` (from `boardsmith/session`, and from
-`boardsmith/session-host`) hands its adapter two things after every change,
+`SnapshotSessionHost` (from `boardsmith/session`) hands its adapter two things after every change,
 and decides itself which seats changed. It never pushes a seat a view
 identical to the last one it pushed it: in a simultaneous step where a seat
 acts in secret, that push would tell everyone else the seat acted, so a seat
@@ -296,16 +295,15 @@ and nothing when nothing does.
 
 The snapshot carries the flow state and the winners the game declared, so read
 them through `flowStateOf(state)`, `isCompleteOf(state)` and `winnersOf(state)`
-(all from `boardsmith/session-host`) instead of storing copies beside it.
+(all from `boardsmith/session`) instead of storing copies beside it.
 
 ### Pushing state from your own host
 
 A host that builds frames outside `SnapshotSessionHost`'s `push` keeps a `StatePushGate` and
-asks it before every push. It is exported from `boardsmith/session` and from
-`boardsmith/session-host`.
+asks it before every push. It is exported from `boardsmith/session`.
 
 ```typescript
-import { StatePushGate } from 'boardsmith/session-host';
+import { StatePushGate } from 'boardsmith/session';
 
 const gate = new StatePushGate<string, Frame>({
   // Where the PlayerGameState sits in your frame.

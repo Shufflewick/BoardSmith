@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Piece, Space, Action, loop, actionStep, createSnapshot, type GameOptions } from '../engine/index.js';
+import { Game, Player, Piece, Space, Action, loop, actionStep, type GameOptions } from '../engine/index.js';
+import { createSnapshot } from '../engine/utils/index.js';
 import { MCTSBot } from './mcts-bot.js';
 
 // ============================================================================
