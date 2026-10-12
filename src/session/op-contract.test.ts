@@ -53,7 +53,6 @@ const EVERY_EXECUTOR_OP: ExecutorOp[] = [
   { type: 'resolveChoices', actionName: 'play', player: 1, selectionName: 'card', args: {} },
   { type: 'cancelAction', player: 1 },
   { type: 'undo', player: 2 },
-  { type: 'botTurn', seats: [{ seat: 1 }, { seat: 2, level: 'hard' }] },
   { type: 'botSuggest', seats: [{ seat: 1 }, { seat: 2, level: 'hard' }] },
 ];
 
@@ -62,7 +61,7 @@ describe('the op kinds (#530)', () => {
     expectTypeOf<Op>().toEqualTypeOf<ExecutorOp | DevOp | HostOp>();
     expectTypeOf<ExecutableOp>().toEqualTypeOf<ExecutorOp | DevOp>();
     expectTypeOf<ExecutorOp['type']>().toEqualTypeOf<
-      'start' | 'action' | 'expireSeat' | 'selectionStep' | 'resolveChoices' | 'cancelAction' | 'undo' | 'botTurn' | 'botSuggest'
+      'start' | 'action' | 'expireSeat' | 'selectionStep' | 'resolveChoices' | 'cancelAction' | 'undo' | 'botSuggest'
     >();
     expectTypeOf<HostOp['type']>().toEqualTypeOf<'demoStart' | 'demoStop' | 'demoControl' | 'convertSeatToBot'>();
     // A bot's search is an executor op, so a table host can search without changing the game (#635).
@@ -101,7 +100,7 @@ describe('parseExecutorOp (#530)', () => {
       ok: false,
       error:
         'An executor op has type "demoStart", which an executor does not run. An executor op\'s type ' +
-        'is one of: start, action, expireSeat, selectionStep, resolveChoices, cancelAction, undo, botTurn, botSuggest.',
+        'is one of: start, action, expireSeat, selectionStep, resolveChoices, cancelAction, undo, botSuggest.',
     });
     expect(parseExecutorOp({}).ok).toBe(false);
     expect(parseExecutorOp({ type: 7 }).ok).toBe(false);
@@ -143,9 +142,9 @@ describe('parseExecutorOp (#530)', () => {
       [{ type: 'action', actionName: 'go', player: 1, args: {}, boundaryKey: 42 }, /"boundaryKey" must be a non-empty string/],
       [{ type: 'selectionStep', player: 1, selectionName: 's', boundaryKey: KEY }, /has no "value"/],
       [{ type: 'selectionStep', player: 1, selectionName: 's', value: 1, initialArgs: 3, boundaryKey: KEY }, /"initialArgs" must be an object/],
-      [{ type: 'botTurn', seats: 'all' }, /"seats" must be a list of \{ seat, level\? \}/],
-      [{ type: 'botTurn', seats: [{ seat: 1, extra: true }] }, /"seats" must be a list of \{ seat, level\? \}/],
-      [{ type: 'botTurn', seats: [{ seat: 1, level: 3 }] }, /"seats" must be a list of \{ seat, level\? \}/],
+      [{ type: 'botSuggest', seats: 'all' }, /"seats" must be a list of \{ seat, level\? \}/],
+      [{ type: 'botSuggest', seats: [{ seat: 1, extra: true }] }, /"seats" must be a list of \{ seat, level\? \}/],
+      [{ type: 'botSuggest', seats: [{ seat: 1, level: 3 }] }, /"seats" must be a list of \{ seat, level\? \}/],
     ];
     for (const [value, message] of cases) {
       const parsed = parseExecutorOp(value);
@@ -155,7 +154,7 @@ describe('parseExecutorOp (#530)', () => {
   });
 
   it('accepts optional fields left out, and any value for a selection', () => {
-    expect(parseExecutorOp({ type: 'botTurn', seats: [{ seat: 2 }] }).ok).toBe(true);
+    expect(parseExecutorOp({ type: 'botSuggest', seats: [{ seat: 2 }] }).ok).toBe(true);
     expect(parseExecutorOp({ type: 'selectionStep', player: 1, selectionName: 's', value: null, boundaryKey: KEY }).ok).toBe(true);
   });
 
@@ -164,7 +163,7 @@ describe('parseExecutorOp (#530)', () => {
     const inProcess: ExecutorOp[] = [
       { type: 'selectionStep', player: 1, selectionName: 's', value: 1, actionName: undefined, boundaryKey: KEY },
       { type: 'selectionStep', player: 1, selectionName: 's', value: 1, initialArgs: undefined, boundaryKey: KEY },
-      { type: 'botTurn', seats: [{ seat: 1, level: undefined }] },
+      { type: 'botSuggest', seats: [{ seat: 1, level: undefined }] },
     ];
     for (const op of inProcess) {
       const parsed = parseExecutorOp(op);
@@ -217,16 +216,12 @@ describe('the result of each op (#530, #536)', () => {
     expectTypeOf<Succeeded<'botSuggest'>>().not.toHaveProperty('snapshot');
     expectTypeOf<Succeeded<'botSuggest'>>().not.toHaveProperty('playerViews');
     expectTypeOf<Succeeded<'botSuggest'>>().not.toHaveProperty('spectatorView');
-    expectTypeOf<Succeeded<'botTurn'>['botMoved']>().toEqualTypeOf<boolean>();
-    expectTypeOf<Succeeded<'action'>>().not.toHaveProperty('botMoved');
     // The host's lifecycle ops publish through the host; their answer carries no state.
     expectTypeOf<Succeeded<'demoStart'>>().not.toHaveProperty('snapshot');
     expectTypeOf<Succeeded<'convertSeatToBot'>['convertedSeat']>().toEqualTypeOf<number>();
     // Every failure has the one shape, and carries no state.
     expectTypeOf<Extract<OpResultFor<'undo'>, { success: false }>>().toEqualTypeOf<OpFailure>();
     expectTypeOf<OpFailure>().not.toHaveProperty('snapshot');
-    // A refused bot move names the seat whose move was refused (#421).
-    expectTypeOf<Extract<OpResultFor<'botTurn'>, { success: false }>['botPlayer']>().toEqualTypeOf<number | undefined>();
   });
 
   it('returns a move with its state once, inside the snapshot', async () => {

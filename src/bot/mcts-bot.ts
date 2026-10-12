@@ -183,7 +183,7 @@ export class MCTSBot<G extends Game = Game> {
    * REDACTED payload — which is right, a bot must search what it can actually
    * know — so per-seat redaction can empty the very choice list the seat's only
    * action draws from, while the authoritative game offers that seat a full move
-   * list. Throwing there escaped through `handleBotTurn` and `executeOp`, the
+   * list. Throwing there escaped through `executeOp` as a raw exception, the
    * dev host logged it and returned, the covered seat never acted, and a
    * simultaneous step could not close its round: one seat's blind spot locked
    * the whole table. A `null` stalls that seat alone, and {@link lastStallReason}

@@ -6,8 +6,9 @@
  * `succeeded(...)`: it fails with the refusal's own message when the op was
  * refused, and hands back the success typed for that op.
  */
-import type { ExecutableOp, OpFailure } from './stateless-ops.js';
+import type { ExecutableOp, ExecutorOp, OpFailure, OpResultFor } from './stateless-ops.js';
 import type { ExecuteOpAdapter } from './snapshot-session-host.js';
+import { boundaryKeyOf } from './testing/boundary-stamp.js';
 
 /** `result` as a success, or a thrown error naming why the op was refused. */
 export function succeeded<R extends { success: boolean }>(result: R): Extract<R, { success: true }> {
@@ -25,6 +26,32 @@ export function succeeded<R extends { success: boolean }>(result: R): Extract<R,
 export function refused<R extends { success: boolean }>(result: R): Extract<R, { success: false }> {
   if (result.success) throw new Error('Expected the op to be refused, but it succeeded.');
   return result as Extract<R, { success: false }>;
+}
+
+/**
+ * The move a successful `botSuggest` found, as the `action` op the table host
+ * makes it with (#635): for the bot's seat, stamped with the boundary of
+ * `searched`, the snapshot the search ran on. Throws when the search found no
+ * move, naming the stalled seat if one stalled.
+ */
+export function suggestedMoveOp(
+  searched: unknown,
+  found: Extract<OpResultFor<'botSuggest'>, { success: true }>,
+): Extract<ExecutorOp, { type: 'action' }> {
+  if (found.botPlayer === undefined) {
+    throw new Error(
+      found.botStalled
+        ? `Expected a bot move, but seat ${found.botStalled.seat} stalled: ${found.botStalled.reason}`
+        : 'Expected a bot move, but no bot seat was due.',
+    );
+  }
+  return {
+    type: 'action',
+    player: found.botPlayer,
+    actionName: found.suggestedAction,
+    args: found.suggestedArgs,
+    boundaryKey: boundaryKeyOf(searched),
+  };
 }
 
 /**

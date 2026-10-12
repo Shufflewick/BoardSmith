@@ -662,45 +662,6 @@ describe('executeOp', () => {
     });
   });
 
-  // ── botTurn ────────────────────────────────────────────────────────────────
-
-  describe('botTurn', () => {
-    it('returns botMoved:true when a flagged bot seat is due to act', async () => {
-      const startResult = succeeded(await startGame(simpleGameDef, simpleGameOptions));
-      expect(startResult.success).toBe(true);
-
-      // Player 1 is the current player; flag seat 1 as bot.
-      const botResult = succeeded(await executeOp(
-        simpleGameDef,
-        simpleGameOptions,
-        startResult.snapshot,
-        null,
-        { type: 'botTurn', seats: [{ seat: 1, level: 'easy' }] },
-      ));
-
-      expect(botResult.success).toBe(true);
-      expect(botResult.botMoved).toBe(true);
-      expect(botResult.botPlayer).toBe(1);
-    });
-
-    it('returns botMoved:false when no flagged bot seat is currently due', async () => {
-      const startResult = succeeded(await startGame(simpleGameDef, simpleGameOptions));
-      expect(startResult.success).toBe(true);
-
-      // Seat 2 is flagged but player 1 is due to act — bot should not move.
-      const botResult = succeeded(await executeOp(
-        simpleGameDef,
-        simpleGameOptions,
-        startResult.snapshot,
-        null,
-        { type: 'botTurn', seats: [{ seat: 2, level: 'easy' }] },
-      ));
-
-      expect(botResult.success).toBe(true);
-      expect(botResult.botMoved).toBe(false);
-    });
-  });
-
   // ── startTutorial ─────────────────────────────────────────────────────────
 
   describe('startTutorial', () => {
