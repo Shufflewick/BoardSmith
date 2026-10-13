@@ -60,7 +60,7 @@ import { refuseUnknownFlowKeys } from '../flow/flow-definition-keys.js';
 import { describeFlowPosition } from '../flow/describe-flow-position.js';
 import { buildActionMetadata, buildPickMetadata } from './action-metadata.js';
 import type { ActionMetadata, PickMetadata } from '../../types/protocol.js';
-import { devWarn } from '../../utils/dev.js';
+import { devWarn, isDevMode } from '../../utils/dev.js';
 import { SeededRandom, mintSeed, type RandomState } from '../../utils/random.js';
 import { PlayerFacingError } from '../errors.js';
 
@@ -1432,7 +1432,7 @@ export class Game<
 
     // Schedule HMR warning check after subclass constructor completes
     // Uses queueMicrotask so it runs after the full constructor chain
-    if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
+    if (isDevMode()) {
       queueMicrotask(() => {
         try {
           checkForVolatileState(this);
