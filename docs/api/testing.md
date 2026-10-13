@@ -630,40 +630,52 @@ await session.send(1, { type: 'action', actionName: 'ask', player: 1, args: { ta
 ```
 
 For a project-level CI check with no test file to write at all, use the
-`boardsmith simulate` CLI — it runs many randomized playthroughs of your
-project's game and reports pass/stuck/error:
+`boardsmith simulate` CLI. It plays many seeded games of your project's game
+at each player count and reports, per player count, completion, win share by
+seat, tie rate and game length in actions:
 
 ```bash
-boardsmith simulate --games 50 --seed ci-run-1 --players 2 --json
+boardsmith simulate --games 50 --seed ci-run-1 --players 2,4 --json
 ```
 
-- `--games` — number of games to simulate (default `10`)
+- `--games` — games per player count (default `10`)
+- `--players` — player counts, comma-separated (default: every count from the
+  game's `minPlayers` to its `maxPlayers`)
+- `--policy` — who plays the seats (repeatable): a name for every seat
+  (`--policy greedy`) or `seat=name` for one seat (`--policy 2=random`).
+  `random` and `mcts:<level>` (`easy`, `medium`, `hard` or an iteration count)
+  are built in; any other name is one of the policies your project's
+  `src/sim/index.ts` exports (see [boardsmith/sim](./sim.md)). Seats no flag
+  names play `random`.
 - `--seed` — base seed; re-running with the same seed reproduces the same
   set of per-game seeds
 - `--replay` — one game's own seed (as a failing game reports it): plays
   exactly that game instead of a batch, so it cannot be combined with
-  `--games` or `--seed`
-- `--players` — player count for each simulated game (default `2`)
+  `--games` or `--seed`, and `--players` must name its one player count
 - `--game-option` — a declared game option as `key=value` (repeatable)
-- `--json` — machine-readable output (array of `{ index, seed, status, turns, winner, error? }`)
+- `--json` — machine-readable output: `{ run, games, report }`, where `games`
+  lists only the games that did not finish (`{ index, seed, players, status,
+  turns, winner, error? }`) and `report` is one entry per player count, or
+  `null` when any game did not finish
 
-Exit code is `0` only if every game reaches `status: 'complete'`; any
-`'stuck'` or `'error'` game sets a non-zero exit code, so `boardsmith
-simulate` can gate CI directly. The command has no `isResting`: a game whose
-ending is not built yet never reports a game complete here. Gate such a game with a
-`simulateRandomGames` test that declares its rest, and use this command once
-the game can end. A failing game's output includes a replay
-line:
+A game stops as hung after 10,000 actions; there is no per-game time limit.
+Exit code is `0` only if every game finishes. Any game that does not prints
+its failure and a replay line, sets exit code `1`, and the run prints no
+statistics, so `boardsmith simulate` can gate CI directly. The command has no
+`isResting`: a game whose ending is not built yet never reports a game
+complete here. Gate such a game with a `simulateRandomGames` test that
+declares its rest, and use this command once the game can end.
 
 ```
-Game 3 stuck (seed ci-run-1-2-3).
-Replay: boardsmith simulate --replay ci-run-1-2-3 --players 2
+Game 3 stuck (seed ci-run-1-2-3) after 14 action(s).
+  No playable move for player 2. ...
+  Replay: boardsmith simulate --replay ci-run-1-2-3 --players 2
 ```
 
 A per-game seed is not a base seed: `--seed ci-run-1-2-3` would derive new
 games from it. The replay line names the game's own seed with `--replay`,
-its seat count, and every `--game-option` the run used, so running it as
-printed reproduces the exact failure deterministically — see [Determinism & Seeding](../agent-control.md#determinism--seeding)
+its seat count, every `--game-option` and every `--policy` the run used, so
+running it as printed reproduces the exact failure deterministically — see [Determinism & Seeding](../agent-control.md#determinism--seeding)
 for why the same seed always replays identically.
 
 ### Flow-Position Debugging (FLOW)

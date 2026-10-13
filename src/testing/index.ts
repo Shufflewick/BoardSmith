@@ -38,11 +38,10 @@ export {
   replayRandomGame,
   type SimulateRandomGamesOptions,
   type ReplayRandomGameOptions,
-  type SingleGameResult,
   type SimulationResults,
-  type SelectionChoicesObservation,
-  type IsResting,
 } from './random-simulation.js';
+export type { SingleGameResult, IsResting } from '../sim/play-game.js';
+export type { SelectionChoicesObservation } from '../sim/policies.js';
 
 // Assertion helpers
 export {

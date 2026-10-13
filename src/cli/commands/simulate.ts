@@ -1,13 +1,11 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import chalk from 'chalk';
 
-import type { Game, GameOptions } from '../../engine/index.js';
-import {
-  simulateRandomGames,
-  replayRandomGame,
-  type SingleGameResult,
-} from '../../testing/random-simulation.js';
-import { getProjectContext, loadGameDefinition } from './game-runtime.js';
+import { playGame, gameSeed, type SingleGameResult } from '../../sim/play-game.js';
+import { random, mcts, type Policy, type SimulatedGame } from '../../sim/policies.js';
+import { parseBotLevel } from '../../bot/index.js';
+import { getProjectContext, importRuntimeBundle, toPosix } from './game-runtime.js';
 import { parseGameOptionFlags } from './dev.js';
 import { selectGameOptions, type GameOptionSelection } from '../../session/game-option-selection.js';
 import type { GameOptionDefinition } from '../../session/types.js';
@@ -16,14 +14,18 @@ import { simulateReplayCommand } from '../lib/replay-command.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 
 interface SimulateOptions {
+  /** Games per player count. */
   games: string;
   seed?: string;
   /** One game's own seed, as a failing game reports it: plays exactly that game. */
   replay?: string;
-  players: string;
+  /** Comma-separated player counts; every count the game declares when omitted. */
+  players?: string;
   json?: boolean;
   /** Repeatable `--game-option key=value`, mirroring `boardsmith dev`. */
   gameOption?: string[];
+  /** Repeatable `--policy name` (every seat) or `--policy seat=name` (one seat). */
+  policy?: string[];
 }
 
 interface BoardSmithConfig {
@@ -31,6 +33,9 @@ interface BoardSmithConfig {
     rules?: string;
   };
 }
+
+/** A game stops as hung after this many actions; a report run has no wall-clock limit. */
+const MAX_ACTIONS = 10000;
 
 /**
  * Resolve repeatable `--game-option key=value` flags against the game's own
@@ -49,24 +54,137 @@ export function resolveSimulationGameOptions(
   return selectGameOptions(declaredOptions, parseGameOptionFlags(rawFlags));
 }
 
+/**
+ * The player counts `--players` names (`2,4,6`), or every count from the
+ * game's `minPlayers` to its `maxPlayers` when it is omitted. Throws on a
+ * count that is not a positive whole number or is outside the declared range.
+ */
+export function parsePlayerCounts(
+  raw: string | undefined,
+  game: { minPlayers?: number; maxPlayers?: number },
+): number[] {
+  const { minPlayers, maxPlayers } = game;
+  if (raw === undefined) {
+    if (minPlayers === undefined || maxPlayers === undefined) {
+      throw new Error('This game declares no minPlayers and maxPlayers, so name the player counts with --players (e.g. --players 2,4).');
+    }
+    return Array.from({ length: maxPlayers - minPlayers + 1 }, (_, i) => minPlayers + i);
+  }
+  return raw.split(',').map((part) => {
+    if (!/^\d+$/.test(part) || Number(part) < 1) {
+      throw new Error(`--players takes positive whole numbers separated by commas (e.g. 2,4,6), got "${raw}".`);
+    }
+    const count = Number(part);
+    if ((minPlayers !== undefined && count < minPlayers) || (maxPlayers !== undefined && count > maxPlayers)) {
+      throw new Error(`--players ${count} is outside this game's range of ${minPlayers} to ${maxPlayers} players.`);
+    }
+    return count;
+  });
+}
+
+const BUILT_IN_POLICIES = 'random, mcts:<level>';
+
+/** The policy a `--policy` name stands for: a built-in, or one of the project's. */
+function policyNamed(name: string, project: Record<string, Policy>): Policy {
+  if (name === 'random') return random();
+  if (name.startsWith('mcts:')) return mcts(parseBotLevel(name.slice('mcts:'.length)));
+  if (Object.hasOwn(project, name)) return project[name];
+  const names = [BUILT_IN_POLICIES, ...Object.keys(project)].join(', ');
+  throw new Error(
+    `Unknown policy "${name}". Use one of: ${names}; or add it to the policies src/sim/index.ts exports.`,
+  );
+}
+
+/** Refuse a project policy list entry that is not a policy or that takes a built-in name. */
+function checkProjectPolicies(project: Record<string, unknown>): Record<string, Policy> {
+  for (const [name, policy] of Object.entries(project)) {
+    if (name === 'random' || name.startsWith('mcts:')) {
+      throw new Error(`src/sim/index.ts names a policy "${name}", which is a built-in policy's name. Rename it.`);
+    }
+    const candidate = policy as Partial<Policy> | null;
+    if (typeof candidate?.name !== 'string' || typeof candidate.choose !== 'function') {
+      throw new Error(
+        `src/sim/index.ts's policy "${name}" is not a policy. Build it with greedy, random or mcts from boardsmith/sim.`,
+      );
+    }
+  }
+  return project as Record<string, Policy>;
+}
+
+/**
+ * One policy per seat of a `playerCount` game, from the `--policy` flags: a
+ * bare name sets every seat, `seat=name` sets one, and seats no flag names
+ * play `random`. `project` is the policies the project's `src/sim/index.ts`
+ * exports. Throws on an unknown name, a seat the game does not have, or a seat
+ * named twice.
+ */
+export function seatPolicies(
+  flags: readonly string[] | undefined,
+  project: Record<string, Policy> | undefined,
+  playerCount: number,
+): Policy[] {
+  const known = checkProjectPolicies(project ?? {});
+  let everySeat: string | undefined;
+  const bySeat = new Map<number, string>();
+  for (const flag of flags ?? []) {
+    const seatFlag = /^(\d+)=(.+)$/.exec(flag);
+    if (!seatFlag) {
+      if (everySeat !== undefined) {
+        throw new Error(`--policy ${everySeat} and --policy ${flag} give more than one policy for every seat. Give one, and set single seats with seat=name.`);
+      }
+      everySeat = flag;
+      continue;
+    }
+    const seat = Number(seatFlag[1]);
+    if (seat < 1 || seat > playerCount) {
+      throw new Error(`--policy ${flag} names seat ${seat}, which a ${playerCount}-player game does not have. Seats are 1 to ${playerCount}.`);
+    }
+    if (bySeat.has(seat)) throw new Error(`--policy names seat ${seat} more than once.`);
+    bySeat.set(seat, seatFlag[2]);
+  }
+  return Array.from({ length: playerCount }, (_, i) => policyNamed(bySeat.get(i + 1) ?? everySeat ?? 'random', known));
+}
+
 /** Stable per-game status enum for the CLI's `--json` output. */
 type GameStatus = 'complete' | 'stuck' | 'error';
 
-/** Stable per-game report shape (CONTEXT: {index, seed, status, turns, winner, error?}). */
+/** One game as the CLI reports it. */
 export interface PerGameReport {
   index: number;
   seed: string;
+  players: number;
   status: GameStatus;
   turns: number;
   winner: number[] | null;
   error?: string;
 }
 
-export interface RunSimulationOptions {
-  count: number;
+/** The statistics of one player count, reported only when every game finished. */
+export interface PlayerCountReport {
   players: number;
+  games: number;
+  completed: number;
+  /** Seat -> share of games that seat won alone. */
+  winShare: Record<number, number>;
+  /** Share of games won by no seat or shared by several. */
+  tieRate: number;
+  /** Game length in actions. */
+  length: { mean: number; min: number; max: number };
+}
+
+/** A run's games: those that did not finish, and the report, which is `null` when any did not. */
+export interface RunSimulationResult {
+  baseSeed: string;
+  failing: PerGameReport[];
+  report: PlayerCountReport[] | null;
+}
+
+export interface RunSimulationOptions {
+  gamesPerCount: number;
+  playerCounts: number[];
   seed?: string;
-  timeout?: number;
+  /** One policy per seat for a game of that many players. */
+  policiesFor: (playerCount: number) => Policy[];
   maxActions?: number;
   /**
    * Game-specific options forwarded to every simulated game (`--game-option
@@ -75,11 +193,6 @@ export interface RunSimulationOptions {
    * by an option gets a green result that says nothing about that mode.
    */
   gameOptions?: Record<string, unknown>;
-}
-
-export interface RunSimulationResult {
-  games: PerGameReport[];
-  baseSeed: string;
 }
 
 /** Map one simulated game to the CLI's stable per-game report shape. */
@@ -92,6 +205,7 @@ function toPerGameReport(g: SingleGameResult, index: number): PerGameReport {
   return {
     index,
     seed: g.seed,
+    players: g.playerCount,
     status,
     turns: g.actionCount,
     winner: g.winners ?? null,
@@ -99,34 +213,72 @@ function toPerGameReport(g: SingleGameResult, index: number): PerGameReport {
   };
 }
 
+/** The statistics of one player count's finished games. */
+function playerCountReport(players: number, games: PerGameReport[]): PlayerCountReport {
+  const wins = new Map<number, number>();
+  for (const g of games) if (g.winner?.length === 1) wins.set(g.winner[0], (wins.get(g.winner[0]) ?? 0) + 1);
+  const turns = games.map((g) => g.turns);
+  return {
+    players,
+    games: games.length,
+    completed: games.length,
+    winShare: Object.fromEntries(Array.from({ length: players }, (_, i) => [i + 1, (wins.get(i + 1) ?? 0) / games.length])),
+    tieRate: games.filter((g) => g.winner?.length !== 1).length / games.length,
+    length: {
+      mean: turns.reduce((sum, t) => sum + t, 0) / games.length,
+      min: Math.min(...turns),
+      max: Math.max(...turns),
+    },
+  };
+}
+
+/** Play `games` in order and report them. */
+async function playAndReport(
+  definition: SimulatedGame,
+  baseSeed: string,
+  games: Array<{ seed: string; players: number }>,
+  options: Pick<RunSimulationOptions, 'policiesFor' | 'maxActions' | 'gameOptions'>,
+): Promise<RunSimulationResult> {
+  const played: PerGameReport[] = [];
+  for (const [index, game] of games.entries()) {
+    const result = await playGame(definition, {
+      playerCount: game.players,
+      seed: game.seed,
+      policies: options.policiesFor(game.players),
+      maxActions: options.maxActions ?? MAX_ACTIONS,
+      gameOptions: options.gameOptions,
+    });
+    played.push(toPerGameReport(result, index));
+  }
+  const failing = played.filter((g) => g.status !== 'complete');
+  const counts = [...new Set(games.map((g) => g.players))];
+  const report = failing.length > 0
+    ? null
+    : counts.map((players) => playerCountReport(players, played.filter((g) => g.players === players)));
+  return { baseSeed, failing, report };
+}
+
 /**
- * Run a seeded batch of random games against `gameClass` and map results to
- * the CLI's stable per-game report shape. Testable in isolation (no esbuild,
- * no child process) — pass a bare game class constructor directly.
+ * Play `gamesPerCount` seeded games at each player count and report them.
+ * Testable in isolation (no esbuild, no child process): pass a game
+ * definition directly.
  */
-export async function runSimulation<G extends Game>(
-  gameClass: new (options: GameOptions) => G,
+export async function runSimulation(
+  definition: SimulatedGame,
   options: RunSimulationOptions,
 ): Promise<RunSimulationResult> {
-  const results = await simulateRandomGames(gameClass, {
-    count: options.count,
-    playerCounts: [options.players],
-    seed: options.seed,
-    timeout: options.timeout,
-    maxActions: options.maxActions,
-    gameOptions: options.gameOptions,
-  });
-
-  return {
-    games: results.games.map(toPerGameReport),
-    baseSeed: results.seed,
-  };
+  const baseSeed = options.seed ?? crypto.randomUUID();
+  const games = options.playerCounts.flatMap((players) =>
+    Array.from({ length: options.gamesPerCount }, (_, i) => ({ seed: gameSeed(baseSeed, players, i), players })),
+  );
+  return playAndReport(definition, baseSeed, games, options);
 }
 
 interface RunReplayOptions {
   /** The game's own seed, as {@link PerGameReport.seed} reports it. */
   seed: string;
   players: number;
+  policies: Policy[];
   gameOptions?: Record<string, unknown>;
 }
 
@@ -134,57 +286,67 @@ interface RunReplayOptions {
  * Play one game again by its own seed (`--replay`), with the same limits a
  * batch run gives every game, so a failure a batch reported replays the same.
  */
-export async function runReplay<G extends Game>(
-  gameClass: new (options: GameOptions) => G,
-  options: RunReplayOptions,
-): Promise<PerGameReport> {
-  const result = await replayRandomGame(gameClass, {
-    seed: options.seed,
-    playerCount: options.players,
+export async function runReplay(definition: SimulatedGame, options: RunReplayOptions): Promise<RunSimulationResult> {
+  return playAndReport(definition, options.seed, [{ seed: options.seed, players: options.players }], {
+    policiesFor: () => options.policies,
     gameOptions: options.gameOptions,
   });
-  return toPerGameReport(result, 0);
 }
 
-const STATUS_ICON: Record<GameStatus, string> = {
-  complete: chalk.green('✓'),
-  stuck: chalk.red('✗'),
-  error: chalk.red('✗'),
-};
+const percent = (share: number) => `${Math.round(share * 1000) / 10}%`;
 
 function printHumanReport(
   heading: string,
-  games: PerGameReport[],
-  players: number,
+  result: RunSimulationResult,
   gameOptions: Record<string, unknown>,
+  policyFlags: readonly string[],
 ): void {
   console.log(chalk.cyan(`\n${heading}\n`));
 
-  for (const g of games) {
-    const icon = STATUS_ICON[g.status];
-    console.log(`  ${icon} Game ${g.index} (seed ${g.seed}): ${g.status} — ${g.turns} turn(s)`);
+  for (const g of result.failing) {
+    console.log(chalk.red(`Game ${g.index} ${g.status} (seed ${g.seed}) after ${g.turns} action(s).`));
+    if (g.error) console.log(chalk.dim(`  ${g.error}`));
+    console.log(chalk.dim(`  Replay: ${simulateReplayCommand({ seed: g.seed, playerCount: g.players }, gameOptions, policyFlags)}`));
+  }
+  if (result.report === null) {
+    console.log(chalk.bold(`\n${result.failing.length} game(s) did not finish, so no statistics are reported.\n`));
+    return;
   }
 
-  const total = games.length;
-  const completeCount = games.filter(g => g.status === 'complete').length;
-  const stuckCount = games.filter(g => g.status === 'stuck').length;
-  const errorCount = games.filter(g => g.status === 'error').length;
-
-  console.log('');
-  console.log(chalk.bold(`${completeCount}/${total} complete, ${stuckCount} stuck, ${errorCount} errored`));
-
-  const failing = games.filter(g => g.status !== 'complete');
-  if (failing.length > 0) {
-    console.log('');
-    for (const g of failing) {
-      console.log(chalk.red(`Game ${g.index} ${g.status} (seed ${g.seed}).`));
-      if (g.error) {
-        console.log(chalk.dim(`  ${g.error}`));
-      }
-      console.log(chalk.dim(`  Replay: ${simulateReplayCommand({ seed: g.seed, playerCount: players }, gameOptions)}`));
-    }
+  for (const r of result.report) {
+    console.log(chalk.bold(`${r.players} players: ${r.completed}/${r.games} complete`));
+    const shares = Object.entries(r.winShare).map(([seat, share]) => `seat ${seat} ${percent(share)}`);
+    console.log(`  Win share: ${shares.join(', ')}`);
+    console.log(`  Ties: ${percent(r.tieRate)}`);
+    console.log(`  Length: mean ${Math.round(r.length.mean * 10) / 10}, min ${r.length.min}, max ${r.length.max} actions`);
   }
   console.log('');
+}
+
+/** The rules' game definition and the project's own policies, bundled together so they share one engine. */
+async function loadSimulation(
+  cwd: string,
+  rulesPath: string,
+  tempDir: string,
+): Promise<{ gameDefinition: SimulatedGame & { gameOptions?: Record<string, GameOptionDefinition> }; policies: Record<string, Policy> | undefined }> {
+  const simIndex = join(cwd, 'src', 'sim', 'index.ts');
+  const hasSim = existsSync(simIndex);
+  try {
+    const module = await importRuntimeBundle({
+      rulesPath,
+      tempDir,
+      name: 'simulate',
+      context: getProjectContext(cwd),
+      exports: hasSim ? [`export { policies } from ${JSON.stringify(toPosix(simIndex))};`] : [],
+    });
+    return { gameDefinition: module.gameDefinition, policies: module.policies as Record<string, Policy> | undefined };
+  } catch (error) {
+    // THROWN, NOT PRINTED (#240): `cli.ts`'s handler renders it as one line,
+    // where the error object printed its whole stack and internal paths.
+    throw new Error(
+      `Failed to load this game's rules${hasSim ? ' and src/sim/index.ts' : ''}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 export async function simulateCommand(options: SimulateOptions): Promise<void> {
@@ -197,66 +359,64 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
   requireRulesIndex(rulesPath);
 
   const gamesCount = Number(options.games);
-  const playersCount = Number(options.players);
   if (!Number.isInteger(gamesCount) || gamesCount < 1) {
     console.error(chalk.red(`Error: --games must be a positive integer, got "${options.games}"`));
     process.exitCode = 1;
     return;
   }
-  if (!Number.isInteger(playersCount) || playersCount < 1) {
-    console.error(chalk.red(`Error: --players must be a positive integer, got "${options.players}"`));
-    process.exitCode = 1;
-    return;
-  }
-
-  const context = getProjectContext(cwd);
+  const policyFlags = options.policy ?? [];
 
   // This run's own build directory (#543), removed once the games have run; never `.boardsmith/`
   // itself (#391).
   const outcome = await withCommandBuildDir(cwd, 'simulate', async (tempDir) => {
-    let gameDefinition;
-    try {
-      ({ gameDefinition } = await loadGameDefinition(rulesPath, tempDir, context));
-    } catch (error) {
-      // THROWN, NOT PRINTED (#240): `cli.ts`'s handler renders it as one line,
-      // where the error object printed its whole stack and internal paths.
-      throw new Error(
-        `Failed to load this game's rules: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
+    const { gameDefinition, policies } = await loadSimulation(cwd, rulesPath, tempDir);
 
     let gameOptions: Record<string, unknown>;
+    let playerCounts: number[];
     try {
       gameOptions = resolveSimulationGameOptions(gameDefinition.gameOptions, options.gameOption);
+      playerCounts = parsePlayerCounts(options.players, gameDefinition);
+      if (options.replay !== undefined && playerCounts.length !== 1) {
+        throw new Error(`--replay plays one game, so --players must name its one player count, got "${options.players ?? ''}".`);
+      }
+      // Every player count's seats are checked before the first game is played.
+      for (const count of playerCounts) seatPolicies(policyFlags, policies, count);
     } catch (error) {
       console.error(chalk.red((error as Error).message));
       return undefined;
     }
 
-    const gameClass = gameDefinition.gameClass as new (options: GameOptions) => Game;
+    const policiesFor = (count: number) => seatPolicies(policyFlags, policies, count);
     if (options.replay !== undefined) {
-      const games = [await runReplay(gameClass, { seed: options.replay, players: playersCount, gameOptions })];
-      return { heading: `Replay of game seed ${options.replay}:`, games, gameOptions };
+      const result = await runReplay(gameDefinition, {
+        seed: options.replay,
+        players: playerCounts[0],
+        policies: policiesFor(playerCounts[0]),
+        gameOptions,
+      });
+      return { heading: `Replay of game seed ${options.replay}:`, result, gameOptions, playerCounts };
     }
-    const report = await runSimulation(gameClass, {
-      count: gamesCount,
-      players: playersCount,
+    const result = await runSimulation(gameDefinition, {
+      gamesPerCount: gamesCount,
+      playerCounts,
       seed: options.seed,
+      policiesFor,
       gameOptions,
     });
-    return { heading: `Simulation Results (seed: ${report.baseSeed}):`, games: report.games, gameOptions };
+    return { heading: `Simulation Results (seed: ${result.baseSeed}):`, result, gameOptions, playerCounts };
   });
   if (outcome === undefined) {
     process.exitCode = 1;
     return;
   }
-  const { heading, games, gameOptions } = outcome;
+  const { heading, result, gameOptions, playerCounts } = outcome;
 
   if (options.json) {
-    console.log(JSON.stringify(games, null, 2));
+    const run = { seed: result.baseSeed, gamesPerCount: options.replay === undefined ? gamesCount : 1, players: playerCounts, policies: policyFlags, gameOptions };
+    console.log(JSON.stringify({ run, games: result.failing, report: result.report }, null, 2));
   } else {
-    printHumanReport(heading, games, playersCount, gameOptions);
+    printHumanReport(heading, result, gameOptions, policyFlags);
   }
 
-  process.exitCode = games.some(g => g.status !== 'complete') ? 1 : 0;
+  process.exitCode = result.failing.length > 0 ? 1 : 0;
 }

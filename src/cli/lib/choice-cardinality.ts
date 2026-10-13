@@ -21,7 +21,8 @@
  * the correct shape, not the bug.
  */
 import type { ActionDefinition, Game, GameOptions } from '../../engine/index.js';
-import { noSeatHasEnabledAction, simulateRandomGames } from '../../testing/random-simulation.js';
+import { simulateRandomGames } from '../../testing/random-simulation.js';
+import { noSeatHasEnabledAction } from '../../sim/play-game.js';
 import { createTestWorld, type TestWorld, type TestWorldOptions } from '../../testing/test-world.js';
 import { MAX_FLAT_CHOICE_CANDIDATES } from '../../engine/element/action-metadata.js';
 import { WorldRefusal, type WorldActionOffer } from '../../world/index.js';
@@ -214,7 +215,7 @@ export async function auditChoiceCardinality<G extends Game>(
     throw new Error(
       `the random simulator ${what} after ${unplayed.actionCount} move(s) in the game with seed ${unplayed.seed}: ` +
         `${unplayed.error?.replace(/\.$/, '')}. ` +
-        `"${simulateReplayCommand(unplayed, options.gameOptions ?? {})}" shows the same failure`,
+        `"${simulateReplayCommand(unplayed, options.gameOptions ?? {}, [])}" shows the same failure`,
     );
   }
 

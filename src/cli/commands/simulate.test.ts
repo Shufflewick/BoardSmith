@@ -12,7 +12,14 @@ import {
   type GameOptions,
   type FlowContext,
 } from '../../engine/index.js';
-import { runSimulation, runReplay, simulateCommand, resolveSimulationGameOptions } from './simulate.js';
+import {
+  runSimulation,
+  runReplay,
+  simulateCommand,
+  resolveSimulationGameOptions,
+  seatPolicies,
+  parsePlayerCounts,
+} from './simulate.js';
 import { DeadEndGame } from './simulate.fixture.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { scratchDir } from '../lib/project-paths.js';
@@ -83,68 +90,144 @@ class TargetGame extends Game<TargetGame, Player> {
 }
 
 describe('runSimulation', () => {
+  const pick = { gameClass: PickGame, minPlayers: 2, maxPlayers: 3 };
+  const randomSeats = (playerCount: number) => seatPolicies(undefined, undefined, playerCount);
+
   it('issue 141: forwards gameOptions so an option-gated configuration is reachable', async () => {
-    const base = await runSimulation(TargetGame, { count: 1, players: 2, seed: 'gated' });
-    const gated = await runSimulation(TargetGame, {
-      count: 1,
-      players: 2,
-      seed: 'gated',
-      gameOptions: { target: 25 },
+    const run = { gamesPerCount: 1, playerCounts: [2], seed: 'gated', policiesFor: randomSeats };
+    const base = await runSimulation({ gameClass: TargetGame }, run);
+    const gated = await runSimulation({ gameClass: TargetGame }, { ...run, gameOptions: { target: 25 } });
+
+    expect(base.report?.[0].length).toEqual({ mean: 6, min: 6, max: 6 });
+    expect(gated.report?.[0].length).toEqual({ mean: 26, min: 26, max: 26 });
+  });
+
+  it('is deterministic: same seed twice produces identical reports', async () => {
+    const run = { gamesPerCount: 3, playerCounts: [2, 3], seed: 'fixed', policiesFor: randomSeats };
+    const run1 = await runSimulation(pick, run);
+    const run2 = await runSimulation(pick, run);
+
+    expect(run1).toEqual(run2);
+  });
+
+  it('reports each player count: games, completion, win share by seat, tie rate and length (#556)', async () => {
+    const result = await runSimulation(pick, {
+      gamesPerCount: 4,
+      playerCounts: [2, 3],
+      seed: 'shape-check',
+      policiesFor: randomSeats,
     });
 
-    expect(base.games[0].turns).toBe(6);
-    expect(gated.games[0].turns).toBe(26);
+    expect(result.failing).toEqual([]);
+    expect(result.report!.map((r) => [r.players, r.games, r.completed])).toEqual([[2, 4, 4], [3, 4, 4]]);
+    for (const count of result.report!) {
+      // PickGame declares no winner, so every game is a tie.
+      expect(count.tieRate).toBe(1);
+      expect(Object.keys(count.winShare).map(Number)).toEqual(
+        Array.from({ length: count.players }, (_, i) => i + 1),
+      );
+      expect(count.length.min).toBeLessThanOrEqual(count.length.mean);
+      expect(count.length.mean).toBeLessThanOrEqual(count.length.max);
+    }
   });
 
-  it('is deterministic: same seed twice produces identical per-game reports', async () => {
-    const run1 = await runSimulation(PickGame, { count: 3, players: 2, seed: 'fixed' });
-    const run2 = await runSimulation(PickGame, { count: 3, players: 2, seed: 'fixed' });
-
-    expect(run1.games).toEqual(run2.games);
-    expect(run1.baseSeed).toBe(run2.baseSeed);
-  });
-
-  it('maps results to the stable {index, seed, status, turns} shape with sequential index', async () => {
-    const report = await runSimulation(PickGame, { count: 4, players: 2, seed: 'shape-check' });
-
-    expect(report.games).toHaveLength(4);
-    report.games.forEach((g, i) => {
-      expect(g.index).toBe(i);
-      expect(typeof g.seed).toBe('string');
-      expect(['complete', 'stuck', 'error']).toContain(g.status);
-      expect(typeof g.turns).toBe('number');
-    });
-  });
-
-  it('WR-03: synthesizes an actionable error message when a game exceeds maxActions', async () => {
+  it('WR-03: a game cut off at maxActions fails the run with an actionable message and no report', async () => {
     // PickGame needs several actions to reach its completion threshold (total >= 6);
     // capping maxActions at 1 guarantees the game is cut off mid-flight, exercising
     // the `exceededMaxActions` branch (not `stuck`, not `crashed`).
-    const report = await runSimulation(PickGame, {
-      count: 1,
-      players: 2,
+    const result = await runSimulation(pick, {
+      gamesPerCount: 1,
+      playerCounts: [2],
       seed: 'max-actions-cutoff',
+      policiesFor: randomSeats,
       maxActions: 1,
     });
 
-    expect(report.games).toHaveLength(1);
-    const [g] = report.games;
+    expect(result.report).toBeNull();
+    expect(result.failing).toHaveLength(1);
+    const [g] = result.failing;
     expect(g.status).toBe('error');
     expect(g.error).toBe('Game exceeded the maximum action count.');
   });
 });
 
 describe('runReplay (#322)', () => {
-  it("plays a batch game again from that game's own seed, seat count and options", async () => {
+  it("plays a batch game again from that game's own seed, seat count, options and policies", async () => {
     const gameOptions = { deadEnd: 7 };
-    const batch = await runSimulation(DeadEndGame, { count: 6, players: 3, seed: 'batch', gameOptions });
-    const failing = batch.games.filter((g) => g.status !== 'complete' && g.index > 0);
+    const deadEnd = { gameClass: DeadEndGame, minPlayers: 3, maxPlayers: 4 };
+    const policiesFor = (playerCount: number) => seatPolicies(undefined, undefined, playerCount);
+    const batch = await runSimulation(deadEnd, { gamesPerCount: 6, playerCounts: [3], seed: 'batch', gameOptions, policiesFor });
+    const failing = batch.failing.filter((g) => g.index > 0);
     expect(failing.length).toBeGreaterThan(0);
 
     for (const g of failing) {
-      const replayed = await runReplay(DeadEndGame, { seed: g.seed, players: 3, gameOptions });
-      expect(replayed).toEqual({ ...g, index: 0 });
+      const replayed = await runReplay(deadEnd, { seed: g.seed, players: 3, gameOptions, policies: policiesFor(3) });
+      expect(replayed.failing).toEqual([{ ...g, index: 0 }]);
     }
+  });
+});
+
+describe('seatPolicies: --policy flags (#556)', () => {
+  const project = { cautious: { name: 'cautious', choose: () => ({ noMove: 'never' }) } };
+
+  it('plays random at every seat when no flag is given', () => {
+    expect(seatPolicies(undefined, undefined, 3).map((p) => p.name)).toEqual(['random', 'random', 'random']);
+  });
+
+  it('a bare name sets every seat, and seat=name sets one seat', () => {
+    expect(seatPolicies(['cautious', '2=random'], project, 3).map((p) => p.name)).toEqual([
+      'cautious',
+      'random',
+      'cautious',
+    ]);
+  });
+
+  it('reads mcts:<level> with the bot level names', () => {
+    expect(seatPolicies(['1=mcts:easy', '2=mcts:300'], undefined, 2).map((p) => p.name)).toEqual([
+      'mcts:easy',
+      'mcts:300',
+    ]);
+    expect(() => seatPolicies(['mcts:brutal'], undefined, 2)).toThrow(/Unknown bot level "brutal"/);
+  });
+
+  it('refuses an unknown policy, naming the ones there are', () => {
+    expect(() => seatPolicies(['greedy'], project, 2)).toThrow(/Unknown policy "greedy".*random, mcts:<level>, cautious/);
+  });
+
+  it('refuses a seat the game does not have, and a seat named twice', () => {
+    expect(() => seatPolicies(['3=random'], undefined, 2)).toThrow(/seat 3.*2-player game/);
+    expect(() => seatPolicies(['0=random'], undefined, 2)).toThrow(/seat 0/);
+    expect(() => seatPolicies(['1=random', '1=cautious'], project, 2)).toThrow(/seat 1 more than once/);
+    expect(() => seatPolicies(['random', 'cautious'], project, 2)).toThrow(/more than one policy for every seat/);
+  });
+
+  it('refuses a project policy that shadows a built-in name or is not a policy', () => {
+    expect(() => seatPolicies(undefined, { random: project.cautious }, 2)).toThrow(/src\/sim\/index.ts.*"random"/);
+    expect(() => seatPolicies(undefined, { odd: 42 } as never, 2)).toThrow(/src\/sim\/index.ts.*"odd".*greedy/);
+  });
+});
+
+describe('parsePlayerCounts: --players (#556)', () => {
+  const game = { minPlayers: 2, maxPlayers: 5 };
+
+  it('defaults to every count the game declares', () => {
+    expect(parsePlayerCounts(undefined, game)).toEqual([2, 3, 4, 5]);
+  });
+
+  it('takes a comma-separated list', () => {
+    expect(parsePlayerCounts('2,4', game)).toEqual([2, 4]);
+  });
+
+  it('refuses a count outside the declared range, or one that is not a whole number', () => {
+    expect(() => parsePlayerCounts('2,6', game)).toThrow(/6.*2 to 5/);
+    expect(() => parsePlayerCounts('two', game)).toThrow(/--players.*"two"/);
+    expect(() => parsePlayerCounts('2,,3', game)).toThrow(/--players/);
+    expect(() => parsePlayerCounts('0', {})).toThrow(/--players/);
+  });
+
+  it('needs a list when the game declares no player range', () => {
+    expect(() => parsePlayerCounts(undefined, {})).toThrow(/minPlayers.*--players/);
+    expect(parsePlayerCounts('1', {})).toEqual([1]);
   });
 });
 
@@ -289,5 +372,78 @@ describe('simulateCommand leaves the rest of .boardsmith alone (#391)', () => {
     expect(brokenRulesError).toBeInstanceOf(Error);
     expect((brokenRulesError as Error).message).toContain("Failed to load this game's rules");
     afterBrokenRules.expectAuthorFilesKept();
+  });
+});
+
+/**
+ * #556: the command end to end. A project's own policies come from its
+ * `src/sim/index.ts`, bundled with its rules; every run reports per player
+ * count; and a run with an unfinished game prints the failure and its replay
+ * command, exits 1, and prints no statistics. Each run bundles the rules, so
+ * both run while the file is collected (#363).
+ */
+const simIndex = resolve(dirname(fileURLToPath(import.meta.url)), '../../sim/index.ts');
+
+/** Runs simulate in `dir`, returning everything it printed and the exit code it set. */
+async function simulateOutput(dir: string, options: Parameters<typeof simulateCommand>[0]): Promise<{ output: string; exitCode: unknown }> {
+  const originalCwd = process.cwd();
+  const originalExitCode = process.exitCode;
+  const printed: string[] = [];
+  const capture = (...parts: unknown[]) => void printed.push(parts.map(String).join(' '));
+  const log = vi.spyOn(console, 'log').mockImplementation(capture);
+  const error = vi.spyOn(console, 'error').mockImplementation(capture);
+  process.chdir(dir);
+  try {
+    await simulateCommand(options);
+    return { output: printed.join('\n'), exitCode: process.exitCode };
+  } finally {
+    process.chdir(originalCwd);
+    process.exitCode = originalExitCode;
+    log.mockRestore();
+    error.mockRestore();
+  }
+}
+
+const policyProject = projectWithAuthorFiles(
+  [
+    `import { DeadEndGame } from ${JSON.stringify(deadEndFixture)};`,
+    `export const gameDefinition = { gameClass: DeadEndGame, gameType: 'fixture', displayName: 'Fixture',`,
+    `  minPlayers: 3, maxPlayers: 4, gameOptions: { deadEnd: { type: 'number', label: 'Dead end' } } };`,
+  ].join('\n'),
+);
+mkdirSync(join(policyProject.dir, 'src', 'sim'), { recursive: true });
+writeFileSync(
+  join(policyProject.dir, 'src', 'sim', 'index.ts'),
+  [
+    `import { greedy } from ${JSON.stringify(simIndex)};`,
+    `export const policies = { biggest: greedy((_game, move) => Number(move.args.amount)) };`,
+  ].join('\n'),
+);
+const greedyRun = await simulateOutput(policyProject.dir, {
+  games: '3', seed: 'greedy', json: true, policy: ['biggest'], gameOption: ['deadEnd=100'],
+});
+const failingRun = await simulateOutput(afterRun.dir, { games: '4', players: '3', seed: 'fails', gameOption: ['deadEnd=7'] });
+
+describe('boardsmith simulate reports per player count (#556)', () => {
+  it("plays the project's own policy from src/sim/index.ts at every declared player count", () => {
+    expect(greedyRun.exitCode, greedyRun.output).toBe(0);
+    const { run, games, report } = JSON.parse(greedyRun.output);
+    expect(run).toMatchObject({ seed: 'greedy', gamesPerCount: 3, players: [3, 4], policies: ['biggest'] });
+    expect(games).toEqual([]);
+    // Every seat adds 3 and the loop checks the total of 12 after each full round: two rounds of
+    // three seats, or one of four.
+    expect(report.map((r: { players: number; completed: number; length: unknown }) => [r.players, r.completed, r.length])).toEqual([
+      [3, 3, { mean: 6, min: 6, max: 6 }],
+      [4, 3, { mean: 4, min: 4, max: 4 }],
+    ]);
+  });
+
+  it('a run with an unfinished game prints the failure and its replay, exits 1, and prints no statistics', () => {
+    expect(failingRun.exitCode).toBe(1);
+    expect(failingRun.output).toMatch(/Game \d+ stuck \(seed fails-3-\d\) after \d+ action\(s\)\./);
+    expect(failingRun.output).toContain('Replay: boardsmith simulate --replay fails-3-');
+    expect(failingRun.output).not.toMatch(/Win share|Ties|Length/);
+    // Only failing games are listed.
+    expect(failingRun.output).not.toMatch(/complete after/);
   });
 });

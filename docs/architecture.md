@@ -267,6 +267,7 @@ Runtime Isolation below).
 | `bot-trainer` | Bot weight evolution | `WeightEvolver`, `readObjectiveWeights`, `updateBotWeights` |
 | `cli` | Dev tools | Commands (init, dev, build, etc.) |
 | `testing` | Test utilities | `createTestGame`, assertions |
+| `sim` | Balance simulator policies | `random`, `greedy`, `mcts` |
 | `eslint-plugin` | Linting rules | Sandbox security rules |
 
 ## Element Residency: Snapshot Mode vs World Mode

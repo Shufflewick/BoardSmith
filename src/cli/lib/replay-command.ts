@@ -3,10 +3,11 @@
  *
  * `boardsmith simulate` prints it under each failing game, and `boardsmith
  * validate`'s choice cardinality check prints it when it could not play a
- * game. A random game is fixed by three things: its own per-game seed (not the
- * run's base seed, which `simulate --seed` derives new seeds from), its seat
- * count, and the game options it ran with. The command carries all three and
- * replays through `simulate --replay`, which plays exactly that one game.
+ * game. A simulated game is fixed by four things: its own per-game seed (not
+ * the run's base seed, which `simulate --seed` derives new seeds from), its
+ * seat count, the game options it ran with, and the `--policy` flags that
+ * played its seats (#556). The command carries all four and replays through
+ * `simulate --replay`, which plays exactly that one game.
  */
 
 /** The facts that fix one random game, as the simulator reports them. */
@@ -26,10 +27,12 @@ function shellArg(arg: string): string {
  * The `boardsmith simulate --replay` command that plays `game` again, ready to
  * paste into a shell. `gameOptions` is the resolved option bundle the game ran
  * with; each value must be one a `--game-option key=value` flag can express.
+ * `policies` are the run's `--policy` flags as given (none for random play).
  */
 export function simulateReplayCommand(
   game: ReplayableGame,
   gameOptions: Record<string, unknown>,
+  policies: readonly string[],
 ): string {
   const args = ['--replay', game.seed, '--players', String(game.playerCount)];
   for (const [key, value] of Object.entries(gameOptions)) {
@@ -41,5 +44,6 @@ export function simulateReplayCommand(
     }
     args.push('--game-option', `${key}=${String(value)}`);
   }
+  for (const policy of policies) args.push('--policy', policy);
   return ['boardsmith', 'simulate', ...args.map(shellArg)].join(' ');
 }

@@ -23,9 +23,10 @@ import { validateChoiceCardinality } from './validate.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = resolve(here, 'simulate.fixture.ts');
+const simIndex = resolve(here, '../../sim/index.ts');
 const cli = resolve(here, '../../../bin/boardsmith.js');
 
-/** A table-game project whose rules are the dead-end fixture game. */
+/** A table-game project whose rules are the dead-end fixture game, with a greedy policy named `biggest`. */
 function deadEndProject(): string {
   const cwd = tempTree('bs-simulate-replay-');
   writeFileSync(join(cwd, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table' }));
@@ -36,6 +37,14 @@ function deadEndProject(): string {
       `import { DeadEndGame } from ${JSON.stringify(fixture)};`,
       `export const gameDefinition = { gameClass: DeadEndGame, gameType: 'fixture', displayName: 'Fixture',`,
       `  minPlayers: 3, maxPlayers: 4, gameOptions: { deadEnd: { type: 'number', label: 'Dead end' } } };`,
+    ].join('\n'),
+  );
+  mkdirSync(join(cwd, 'src', 'sim'), { recursive: true });
+  writeFileSync(
+    join(cwd, 'src', 'sim', 'index.ts'),
+    [
+      `import { greedy } from ${JSON.stringify(simIndex)};`,
+      `export const policies = { biggest: greedy((_game, move) => Number(move.args.amount)) };`,
     ].join('\n'),
   );
   return cwd;
@@ -104,16 +113,9 @@ interface ReportedFailure {
 }
 
 function failuresIn(output: string): ReportedFailure[] {
-  const turnsBySeed = new Map(
-    [...output.matchAll(/Game \d+ \(seed (.+)\): (\w+) \S+ (\d+) turn\(s\)/g)].map((m) => [m[1], m[3]]),
+  return [...output.matchAll(/^Game \d+ (\w+) \(seed (.+?)\) after (\d+) action\(s\)\.\n {2}(.+)\n {2}Replay: (.+)$/gm)].map(
+    (m) => ({ status: m[1], seed: m[2], turns: m[3], error: m[4], replay: m[5] }),
   );
-  return [...output.matchAll(/^Game \d+ (\w+) \(seed (.+)\)\.\n {2}(.+)\n {2}Replay: (.+)$/gm)].map((m) => ({
-    status: m[1],
-    seed: m[2],
-    turns: turnsBySeed.get(m[2]) ?? 'missing',
-    error: m[3],
-    replay: m[4],
-  }));
 }
 
 describe('a printed replay command plays the game that failed (#322)', () => {
@@ -129,6 +131,23 @@ describe('a printed replay command plays the game that failed (#322)', () => {
     expect(failures.filter((f) => !f.seed.endsWith('-0')).length, output).toBeGreaterThan(0);
 
     for (const failure of failures) {
+      const replayed = failuresIn(await runPrinted(cwd, failure.replay));
+      expect(replayed, failure.replay).toEqual([failure]);
+    }
+  }, 60_000);
+
+  it('boardsmith simulate: a failing game played by other policies replays with them (#556)', async () => {
+    const cwd = deadEndProject();
+
+    const output = await runPrinted(
+      cwd,
+      `boardsmith simulate --games 6 --players 3 --seed 'greedy replay' --game-option deadEnd=7 --policy 2=biggest`,
+    );
+    const failures = failuresIn(output);
+    expect(failures.length, output).toBeGreaterThan(0);
+
+    for (const failure of failures) {
+      expect(failure.replay).toContain('--policy 2=biggest');
       const replayed = failuresIn(await runPrinted(cwd, failure.replay));
       expect(replayed, failure.replay).toEqual([failure]);
     }
