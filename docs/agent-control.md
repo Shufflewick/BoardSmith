@@ -223,10 +223,18 @@ function-based `multiSelect` configs cannot be statically enumerated —
 optional ones are skipped, required ones block the whole action from
 appearing (you'll need `doAction` directly for those). An action its own
 `.disabled()` rule or the active tutorial step turns off has no moves, since
-the server would refuse them. Pass
-`{ maxPerAction: N }` to cap the number of moves returned per action name
-(useful when an action's combinatorics are large and you only need a
-sample):
+the server would refuse them.
+
+An action's moves are the product of its selections: 13 number inputs of 1 to
+7 are 7^13 moves. So enumeration tries at most 10,000 values for one action,
+counting each value of each selection under every pick before it, whether its
+rules accept it or not, and stops there (#691). Rather than return a list that
+is not every move, it throws `MoveListTooLargeError` (exported from
+`'boardsmith'`), naming the action. Catch it to drive that action another way, such as picking each
+selection at random, or narrow the action's choices or split it in two.
+
+Pass `{ maxPerAction: N }` to keep only the first N moves of each action. It
+cuts a complete list, so it does not lift the 10,000 budget:
 
 ```typescript
 enumerateLegalMoves(testGame.game, 1, { maxPerAction: 20 });

@@ -284,7 +284,7 @@ export type {
  * A game extends it when its error text is the actionable next step; a plain
  * `Error` is sanitized at the action boundary instead.
  */
-export { PlayerFacingError, NotSimulableError, RedactedAttributeError } from './errors.js';
+export { PlayerFacingError, NotSimulableError, RedactedAttributeError, MoveListTooLargeError } from './errors.js';
 
 /**
  * The engine's one diagnostic channel: a warning an author sees in development

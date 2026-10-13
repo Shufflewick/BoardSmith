@@ -1229,7 +1229,10 @@ export class MCTSBot<G extends Game = Game> {
 
     const moves: BotMove[] = [];
     const add = (actionDef: ActionDefinition, followUp?: FollowUpAction) => {
-      const serialized = enumerateActionMoves(enumerationGame, actionDef, player, { followUp })
+      // An action with more moves than enumeration lists gives a random
+      // sample of them, drawn from the bot's own seeded source (#691).
+      const sampleAboveBudget = { count: MAX_SAMPLED_ARGS, random: this.rng };
+      const serialized = enumerateActionMoves(enumerationGame, actionDef, player, { followUp, sampleAboveBudget })
         .map((args) => this.serializeArgs(args, actionDef.selections));
       const kept = options.sample && serialized.length > MAX_SAMPLED_ARGS
         ? this.rng.shuffle(serialized).slice(0, MAX_SAMPLED_ARGS)

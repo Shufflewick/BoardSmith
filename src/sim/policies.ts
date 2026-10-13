@@ -23,7 +23,7 @@ import type {
   FollowUpAction,
   GameMetrics,
 } from '../engine/index.js';
-import { followUpForSeat } from '../engine/index.js';
+import { followUpForSeat, MoveListTooLargeError } from '../engine/index.js';
 import { enumerateActionMoves, enumerateLegalMoves, numberInputValues } from '../engine/utils/enumerate-moves.js';
 import { createBot } from '../bot/index.js';
 import type { BotStrategy, DifficultyLevel } from '../bot/types.js';
@@ -138,7 +138,9 @@ export function random(
  * finite number and only read the game. A number input is listed only when it
  * declares min, max and `integer: true` within enumeration's cap (#689), so
  * greedy refuses a seat offered any other, as an action or as a held follow-up
- * whose args do not already answer it.
+ * whose args do not already answer it. It refuses a seat with an action whose
+ * moves enumeration will not list for being too many (#691), too: scoring a
+ * sample would not be greedy.
  */
 export function greedy<G extends Game>(score: (game: G, move: PolicyMove, seat: number) => number): Policy {
   return {
@@ -147,9 +149,16 @@ export function greedy<G extends Game>(score: (game: G, move: PolicyMove, seat: 
       const followUp = followUpForSeat(game.getFlowState(), seat);
       const unlistable = unlistableNumberInput(game, actions, followUp);
       if (unlistable) return { noMove: unlistable };
+      let moves: PolicyMove[];
+      try {
+        moves = enumerateLegalMoves(game, seat);
+      } catch (error) {
+        if (!(error instanceof MoveListTooLargeError)) throw error;
+        return { noMove: `greedy cannot list player ${seat}'s moves: ${error.message} Or play this seat with random.` };
+      }
       let best: PolicyMove[] = [];
       let bestScore = -Infinity;
-      for (const move of enumerateLegalMoves(game, seat)) {
+      for (const move of moves) {
         const value = score(game as G, move, seat);
         if (!Number.isFinite(value)) {
           throw new Error(`greedy's score returned ${value} for player ${seat}'s '${move.action}'. Return a finite number.`);

@@ -142,3 +142,18 @@ export class RedactedAttributeError extends NotSimulableError {
     this.name = 'RedactedAttributeError';
   }
 }
+
+/**
+ * Thrown by `enumerateLegalMoves` when one action has more moves than
+ * enumeration will build (#691). An action's moves are the product of its
+ * selections, so a few listable selections in a row can hold billions of
+ * moves; enumeration stops at its budget rather than build them, and says so
+ * rather than return a list that is not all of them. Catch it to drive that
+ * action another way, such as picking each selection at random.
+ */
+export class MoveListTooLargeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MoveListTooLargeError';
+  }
+}
