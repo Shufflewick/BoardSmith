@@ -307,8 +307,7 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
       result,
       // DEV: where each visited id was first seen, to detect tree corruption
       // and name BOTH places a duplicate is reachable from. One childless
-      // root cannot be visited twice, and isDevMode() reads process.env,
-      // which costs more than the rest of such a query.
+      // root cannot be visited twice, so it needs no map.
       firstSeenUnder: (roots.length > 1 || roots[0]._t.children.length > 0) && isDevMode() ? new Map() : null,
       duplicates: [],
     };

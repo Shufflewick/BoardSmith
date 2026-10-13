@@ -101,7 +101,7 @@ function selectGames(games) {
 
 async function main() {
   // Production mode, as in a worker child, where `isDevMode()` is false. The
-  // engine reads it when asked, so it holds for the bundles loaded below; the
+  // engine reads it when it loads, so it holds for the bundles loaded below; the
   // bundles report what the engine saw, and the report refuses anything else.
   process.env.NODE_ENV = 'production';
   const { out, games } = parseArgs(process.argv.slice(2));

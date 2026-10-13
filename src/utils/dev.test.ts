@@ -16,7 +16,39 @@
  * and avoids fighting that.
  */
 import { describe, it, expect } from 'vitest';
+import { Worker } from 'node:worker_threads';
+import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
 import { isDevMode, isDevThrowEnabled, _resolveDevThrowEnabled } from './dev.js';
+
+// dev.ts as a rules bundle carries it: an esbuild ESM bundle, where `import.meta.env` is unset
+// and the mode comes from NODE_ENV, as in a `boardsmith simulate` worker.
+const devBundle = (await build({
+  entryPoints: [fileURLToPath(new URL('./dev.ts', import.meta.url))],
+  bundle: true,
+  format: 'esm',
+  platform: 'node',
+  write: false,
+})).outputFiles[0].text;
+
+/** Loads the bundle in a worker whose env is `env`, calls isDevMode() 1000 times, and counts NODE_ENV reads. */
+function devModeInWorker(env: NodeJS.ProcessEnv): Promise<{ answers: boolean[]; nodeEnvReads: number }> {
+  const source = `
+    const { parentPort, workerData } = require('node:worker_threads');
+    const real = process.env;
+    let nodeEnvReads = 0;
+    process.env = new Proxy(real, { get: (t, k) => { if (k === 'NODE_ENV') nodeEnvReads++; return t[k]; } });
+    import('data:text/javascript;base64,' + workerData.bundle).then(({ isDevMode }) => {
+      const answers = Array.from({ length: 1000 }, () => isDevMode());
+      parentPort.postMessage({ answers, nodeEnvReads });
+    });
+  `;
+  const worker = new Worker(source, { eval: true, env, workerData: { bundle: Buffer.from(devBundle).toString('base64') } });
+  return new Promise((resolve, reject) => {
+    worker.once('message', (result) => { void worker.terminate(); resolve(result); });
+    worker.once('error', reject);
+  });
+}
 
 describe('_resolveDevThrowEnabled (pure decision logic)', () => {
   it('labeled-dev (Vite DEV: true) returns true', () => {
@@ -69,5 +101,25 @@ describe('isDevThrowEnabled (live integration sanity check)', () => {
 describe('isDevMode() semantics are unchanged (CR-04 must not touch existing devWarn consumers)', () => {
   it('is a boolean and does not throw when called with the real environment', () => {
     expect(typeof isDevMode()).toBe('boolean');
+  });
+});
+
+describe('isDevMode() in a Node worker (#688)', () => {
+  const { NODE_ENV: _unset, ...withoutNodeEnv } = process.env;
+
+  it.each([
+    ['production', false],
+    ['development', true],
+    ['test', true],
+  ])('answers from NODE_ENV=%s, reading it once however often it is asked', async (mode, dev) => {
+    const { answers, nodeEnvReads } = await devModeInWorker({ ...withoutNodeEnv, NODE_ENV: mode });
+    expect(new Set(answers)).toEqual(new Set([dev]));
+    expect(nodeEnvReads).toBe(1);
+  });
+
+  it('is development mode when NODE_ENV is unset', async () => {
+    const { answers, nodeEnvReads } = await devModeInWorker(withoutNodeEnv);
+    expect(new Set(answers)).toEqual(new Set([true]));
+    expect(nodeEnvReads).toBe(1);
   });
 });
