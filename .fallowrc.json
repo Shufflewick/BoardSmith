@@ -6,7 +6,9 @@
     "scripts/bench-bot/run.mjs",
     "scripts/bench-bot/probe.mjs",
     "src/**/*.node.ts",
-    "src/cli/lib/test-progress-reporter.ts"
+    "src/cli/lib/test-progress-reporter.ts",
+    "src/cli/lib/sim-shard.ts",
+    "src/cli/commands/simulate.fixture.ts"
   ],
   "ignoreDependencies": [
     "postcss-html",

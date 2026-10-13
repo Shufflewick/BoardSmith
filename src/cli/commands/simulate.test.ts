@@ -3,16 +3,6 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  Game,
-  Player,
-  Action,
-  loop,
-  eachPlayer,
-  actionStep,
-  type GameOptions,
-  type FlowContext,
-} from '../../engine/index.js';
-import {
   runSimulation,
   runReplay,
   simulateCommand,
@@ -20,182 +10,101 @@ import {
   parsePlayerCounts,
   loadSimulation,
 } from './simulate.js';
-import { seatPolicies, playShard } from '../lib/sim-shard.js';
-import { greedy, random, type Policy, type PolicyTurn, type SimulatedGame } from '../../sim/policies.js';
+import { seatPolicies } from '../lib/sim-shard.js';
+import { playOnWorkers } from '../lib/sim-workers.js';
+import { greedy } from '../../sim/policies.js';
 import { SeededRandom } from '../../utils/random.js';
 import { scoreProject } from './simulate-project.test-helper.js';
-import { DeadEndGame, ScoreGame, scoreMetrics } from './simulate.fixture.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { scratchDir } from '../lib/project-paths.js';
 import { commandBuildDirs } from '../lib/command-build-dirs.test-helper.js';
 
 /**
- * Every simulation worker thread started in this file: the games each was handed, and how many
- * have stopped. The tests count work, never time it.
+ * Every simulation worker thread started in this file: the mode it plays in and how many games
+ * it was handed, and how many have stopped. The tests count work, never time it.
  */
-const workerLog = vi.hoisted(() => ({ slices: [] as number[], started: 0, exited: 0 }));
+const workerLog = vi.hoisted(() => ({ slices: [] as Array<{ mode: string; games: number }>, started: 0, exited: 0 }));
 vi.mock('node:worker_threads', async (importOriginal) => {
   const real = await importOriginal<typeof import('node:worker_threads')>();
   class CountedWorker extends real.Worker {
     constructor(...args: ConstructorParameters<typeof real.Worker>) {
       super(...args);
       workerLog.started++;
-      workerLog.slices.push((args[1]?.workerData as { request: { games: unknown[] } }).request.games.length);
+      const options = args[1] as { workerData: { request: { games: unknown[] } }; env: { NODE_ENV: string } };
+      workerLog.slices.push({ mode: options.env.NODE_ENV, games: options.workerData.request.games.length });
       this.once('exit', () => void workerLog.exited++);
     }
   }
   return { ...real, Worker: CountedWorker };
 });
-/** The slices of the workers started since the last call. */
-const takeSlices = () => workerLog.slices.splice(0);
+/** The games each worker of `mode` started since the last call was handed; forgets every worker started so far. */
+const takeSlices = (mode = 'production') => workerLog.slices.splice(0).filter((s) => s.mode === mode).map((s) => s.games);
 
 /**
- * Minimal always-completing game (mirrors the fixture used by
- * random-simulation.test.ts): one arg-taking action, terminates once the
- * running total reaches a threshold. Used here to unit-test the CLI's
- * result-mapping layer without esbuild or a child process.
+ * A bundle of the score project (see `simulate-project.test-helper.ts`), built while the file is
+ * collected (#363), for the tests that call the runner directly.
  */
-class PickGame extends Game<PickGame, Player> {
-  total = 0;
-
-  constructor(options: GameOptions) {
-    super(options);
-
-    this.registerAction(
-      Action.create<PickGame>('pick')
-        .chooseFrom('value', { choices: [1, 2, 3] })
-        .execute((args, ctx) => {
-          ctx.game.total += args.value as number;
-          return { success: true };
-        }),
-    );
-
-    this.setFlow({
-      root: loop({
-        while: (ctx) => ctx.game.total < 6,
-        maxIterations: 100,
-        do: eachPlayer({
-          do: actionStep({ actions: ['pick'] }),
-        }),
-      }),
-    });
-  }
-}
-
-/** A game whose length is gated by a game option, not by player count. */
-class TargetGame extends Game<TargetGame, Player> {
-  total = 0;
-  readonly target: number;
-
-  constructor(options: GameOptions) {
-    super(options);
-    this.target = (options as { target?: number }).target ?? 6;
-
-    this.registerAction(
-      Action.create<TargetGame>('pick')
-        .chooseFrom('value', { choices: [1] })
-        .execute((args, ctx) => {
-          ctx.game.total += args.value as number;
-          return { success: true };
-        }),
-    );
-
-    this.setFlow({
-      root: loop({
-        while: (ctx) =>
-          ctx.game.total < ctx.game.target,
-        maxIterations: 200,
-        do: eachPlayer({
-          do: actionStep({ actions: ['pick'] }),
-        }),
-      }),
-    });
-  }
-}
-
-/** Rules as a loaded bundle gives them, built from a definition in this file, to play in-process. */
-const rulesOf = (gameDefinition: SimulatedGame, policies?: Record<string, Policy>) => ({ gameDefinition, policies, playShard });
+const shardProject = scoreProject();
+const shardRules = await loadSimulation(shardProject, join(shardProject, 'src', 'rules'), tempTree('boardsmith-simulate-shards-'));
 
 describe('runSimulation', () => {
-  const pick = rulesOf({ gameClass: PickGame, minPlayers: 2, maxPlayers: 3 });
+  const run = { gamesPerCount: 3, playerCounts: [2, 3], seed: 'fixed', jobs: 2 };
 
   it('issue 141: forwards gameOptions so an option-gated configuration is reachable', async () => {
-    const run = { gamesPerCount: 1, playerCounts: [2], seed: 'gated' };
-    const base = await runSimulation(rulesOf({ gameClass: TargetGame }), run);
-    const gated = await runSimulation(rulesOf({ gameClass: TargetGame }), { ...run, gameOptions: { target: 25 } });
+    const biggest = { ...run, playerCounts: [2], policyFlags: ['biggest'] };
+    const base = await runSimulation(shardRules, biggest);
+    const gated = await runSimulation(shardRules, { ...biggest, gameOptions: { target: 9 } });
 
-    expect(base.report?.[0].length).toMatchObject({ mean: 6, min: 6, max: 6 });
-    expect(gated.report?.[0].length).toMatchObject({ mean: 26, min: 26, max: 26 });
-  });
-
-  it('is deterministic: same seed twice produces identical reports', async () => {
-    const run = { gamesPerCount: 3, playerCounts: [2, 3], seed: 'fixed' };
-    const run1 = await runSimulation(pick, run);
-    const run2 = await runSimulation(pick, run);
-
-    expect(run1).toEqual(run2);
-  });
+    expect(base.report?.[0].length).toMatchObject({ mean: 4, min: 4, max: 4 });
+    expect(gated.report?.[0].length).toMatchObject({ mean: 6, min: 6, max: 6 });
+  }, 60_000);
 
   it('is deterministic with author metrics: same seed, same report (#556)', async () => {
-    const scored = rulesOf({ gameClass: ScoreGame, minPlayers: 2, maxPlayers: 3, metrics: scoreMetrics });
-    const run = { gamesPerCount: 5, playerCounts: [2, 3], seed: 'metrics' };
-    const run1 = await runSimulation(scored, run);
-    expect(run1.report?.[0].scores.score.n).toBe(10);
-    expect(await runSimulation(scored, run)).toEqual(run1);
-  });
+    const run1 = await runSimulation(shardRules, run);
+    expect(run1.report?.[0].scores.score.n).toBe(6);
+    expect(await runSimulation(shardRules, run)).toEqual(run1);
+  }, 60_000);
 
-  it('reports each player count: games, completion, win share by seat, tie rate and length (#556)', async () => {
-    const result = await runSimulation(pick, {
-      gamesPerCount: 4,
-      playerCounts: [2, 3],
-      seed: 'shape-check',
-    });
+  it('reports each player count: games, win share by seat, tie rate and length (#556)', async () => {
+    const result = await runSimulation(shardRules, run);
 
     expect(result.failing).toEqual([]);
-    expect(result.report!.map((r) => [r.players, r.games])).toEqual([[2, 4], [3, 4]]);
+    expect(result.report!.map((r) => [r.players, r.games])).toEqual([[2, 3], [3, 3]]);
     for (const count of result.report!) {
-      // PickGame declares no winner, so every game is a tie.
-      expect(count.tieRate.share).toBe(1);
-      expect(Object.keys(count.winShare).map(Number)).toEqual(
-        Array.from({ length: count.players }, (_, i) => i + 1),
-      );
+      expect(Object.keys(count.winShare).map(Number)).toEqual(Array.from({ length: count.players }, (_, i) => i + 1));
       expect(count.length.min).toBeLessThanOrEqual(count.length.mean);
       expect(count.length.mean).toBeLessThanOrEqual(count.length.max);
     }
-  });
+  }, 60_000);
 
   it('WR-03: a game cut off at maxActions fails the run with an actionable message and no report', async () => {
-    // PickGame needs several actions to reach its completion threshold (total >= 6);
-    // capping maxActions at 1 guarantees the game is cut off mid-flight, exercising
-    // the `exceededMaxActions` branch (not `stuck`, not `crashed`).
-    const result = await runSimulation(pick, {
-      gamesPerCount: 1,
-      playerCounts: [2],
-      seed: 'max-actions-cutoff',
-      maxActions: 1,
-    });
+    // A game needs at least four actions to reach its target, so one action cuts it off mid-flight.
+    const result = await runSimulation(shardRules, { ...run, gamesPerCount: 1, playerCounts: [2], maxActions: 1 });
 
     expect(result.report).toBeNull();
     expect(result.failing).toHaveLength(1);
     const [g] = result.failing;
     expect(g.status).toBe('error');
     expect(g.error).toBe('Game exceeded the maximum action count.');
-  });
+  }, 60_000);
+
+  it('plays a project policy written as a class, keeping its prototype and `this`', async () => {
+    const result = await runSimulation(shardRules, { ...run, policyFlags: ['steady'] });
+    expect(result.failing).toEqual([]);
+  }, 60_000);
 });
 
 describe('runReplay (#322)', () => {
   it("plays a batch game again from that game's own seed, seat count, options and policies", async () => {
-    const gameOptions = { deadEnd: 7 };
-    const deadEnd = rulesOf({ gameClass: DeadEndGame, minPlayers: 3, maxPlayers: 4 });
-    const batch = await runSimulation(deadEnd, { gamesPerCount: 6, playerCounts: [3], seed: 'batch', gameOptions });
-    const failing = batch.failing.filter((g) => g.index > 0);
-    expect(failing.length).toBeGreaterThan(0);
+    const gameOptions = { limit: 4 };
+    const batch = await runSimulation(shardRules, { gamesPerCount: 3, playerCounts: [2], seed: 'batch', gameOptions, policyFlags: ['2=biggest'], jobs: 2 });
+    expect(batch.failing).toHaveLength(3);
 
-    for (const g of failing) {
-      const replayed = await runReplay(deadEnd, { seed: g.seed, players: 3, gameOptions });
+    for (const g of batch.failing) {
+      const replayed = await runReplay(shardRules, { seed: g.seed, players: 2, gameOptions, policyFlags: ['2=biggest'] });
       expect(replayed.failing).toEqual([{ ...g, index: 0 }]);
     }
-  });
+  }, 60_000);
 });
 
 describe('seatPolicies: --policy flags (#556)', () => {
@@ -223,28 +132,6 @@ describe('seatPolicies: --policy flags (#556)', () => {
 
   it("names a project policy by its key in the project's policies, so errors name it", () => {
     expect(seatPolicies(['meddle'], { meddle: greedy(() => 0) }, 2).map((p) => p.name)).toEqual(['meddle', 'meddle']);
-  });
-
-  it('plays a project policy written as a class, keeping its prototype and `this`', async () => {
-    class Counting implements Policy {
-      name = 'counting';
-      turns = 0;
-      private inner = random();
-      choose(turn: PolicyTurn) {
-        this.turns += 1;
-        return this.inner.choose(turn);
-      }
-    }
-    const counting = new Counting();
-    const result = await runSimulation(rulesOf({ gameClass: PickGame, minPlayers: 2, maxPlayers: 2 }, { counting }), {
-      gamesPerCount: 2,
-      playerCounts: [2],
-      seed: 'class-policy',
-      policyFlags: ['counting'],
-    });
-
-    expect(result.failing).toEqual([]);
-    expect(counting.turns).toBeGreaterThan(0);
   });
 
   it('refuses an unknown policy, naming the ones there are', () => {
@@ -560,7 +447,7 @@ describe("boardsmith simulate reports the game's author metrics (#556)", () => {
 
   it('a game that records metrics gameDefinition.metrics does not declare fails, naming the metric', () => {
     expect(forgotMetrics.exitCode).toBe(1);
-    expect(forgotMetrics.output).toContain("Metric 'added' was refused: it is not in gameDefinition.metrics");
+    expect(forgotMetrics.output).toContain("Metric 'mode' was refused: it is not in gameDefinition.metrics");
   });
 
   it('--csv with an unfinished game prints the failure, no rows, and exits 1', () => {
@@ -571,15 +458,12 @@ describe("boardsmith simulate reports the game's author metrics (#556)", () => {
 });
 
 /**
- * #556: `--jobs` plays a run's games on worker threads, each importing the same bundle and
- * playing one slice, and combines them in game order, so the result is the same whatever the
- * worker count. The bundle is built while the file is collected (#363).
+ * #556: a run's games are always played on worker threads, each importing the same bundle and
+ * playing a round-robin share, combined in game order, so the result is the same whatever the
+ * worker count.
  */
-const shardProject = scoreProject();
-const shardRules = await loadSimulation(shardProject, join(shardProject, 'src', 'rules'), tempTree('boardsmith-simulate-shards-'));
-
 describe('--jobs: games played on worker threads (#556)', () => {
-  it('gives the same result as one in-process run for any worker count, in even slices in game order', async () => {
+  it('gives the same result for any worker count, dealing the games round-robin', async () => {
     const random = new SeededRandom('jobs-property');
     for (let run = 0; run < 5; run++) {
       const options = {
@@ -589,37 +473,39 @@ describe('--jobs: games played on worker threads (#556)', () => {
         policyFlags: random.nextInt(2) === 0 ? [] : ['2=biggest'],
       };
       const jobs = 2 + random.nextInt(3);
-      takeSlices();
-      const inProcess = await runSimulation(shardRules, options);
-      expect(takeSlices()).toEqual([]);
-      const onWorkers = await runSimulation(shardRules, { ...options, workers: { bundlePath: shardRules.bundlePath, jobs } });
-      expect(JSON.stringify(onWorkers)).toBe(JSON.stringify(inProcess));
-
       const games = options.gamesPerCount * options.playerCounts.length;
-      const slices = takeSlices();
-      // A single game is played in this process.
-      expect(slices).toHaveLength(games > 1 ? Math.min(jobs, games) : 0);
-      if (games === 1) continue;
-      expect(slices.reduce((sum, n) => sum + n, 0)).toBe(games);
-      expect(Math.max(...slices) - Math.min(...slices)).toBeLessThanOrEqual(1);
+      takeSlices();
+      const one = await runSimulation(shardRules, { ...options, jobs: 1 });
+      expect(takeSlices()).toEqual([games]);
+      const several = await runSimulation(shardRules, { ...options, jobs });
+      expect(JSON.stringify(several)).toBe(JSON.stringify(one));
+
+      const count = Math.min(jobs, games);
+      expect(takeSlices()).toEqual(Array.from({ length: count }, (_, w) => Math.ceil((games - w) / count)));
     }
     // Every worker has stopped by the time its run returns.
     expect(workerLog.exited).toBe(workerLog.started);
   }, 120_000);
 
-  it('stops every worker when one fails, and says why', async () => {
+  it('stops a worker still playing when another fails, and says why', async () => {
+    // A stand-in bundle: its first game fails at once, and its second never ends.
+    const dir = tempTree('boardsmith-simulate-stuck-worker-');
+    const bundlePath = join(dir, 'bundle.mjs');
+    writeFileSync(
+      bundlePath,
+      [
+        'export async function playShard(_bundle, request) {',
+        "  if (request.games[0].seed === 'fails') throw new Error('this slice failed');",
+        '  setInterval(() => {}, 1000);',
+        '  return new Promise(() => {});',
+        '}',
+      ].join('\n'),
+    );
     takeSlices();
     const exitedBefore = workerLog.exited;
-    await expect(
-      runSimulation(shardRules, {
-        gamesPerCount: 4,
-        playerCounts: [2],
-        seed: 'broken',
-        policyFlags: ['nobody'],
-        workers: { bundlePath: shardRules.bundlePath, jobs: 2 },
-      }),
-    ).rejects.toThrow(/Unknown policy "nobody"/);
-    expect(takeSlices()).toEqual([2, 2]);
+    const request = { games: [{ seed: 'fails', players: 2 }, { seed: 'never ends', players: 2 }], policyFlags: [], gameOptions: {}, maxActions: 10 };
+    await expect(playOnWorkers(bundlePath, request, 2, 'production')).rejects.toThrow('this slice failed');
+    expect(takeSlices()).toEqual([1, 1]);
     expect(workerLog.exited - exitedBefore).toBe(2);
     expect(workerLog.exited).toBe(workerLog.started);
   }, 60_000);
@@ -649,14 +535,30 @@ const undeclared = await simulateOutput(scoreDir, { games: '1', players: '2', co
 takeSlices();
 const failingInWorker = await simulateOutput(scoreDir, { games: '2', players: '2', seed: 'w', jobs: '2', compare: ['limit=100,4'] });
 const failingInWorkerSlices = takeSlices();
+const productionOnly = await simulateOutput(scoreDir, { games: '2', players: '2', seed: 'p', gameOption: ['breakInProduction=true'] });
+const policyClash = await simulateOutput(scoreDir, { games: '1', players: '2', policy: ['biggest'], compare: ['policy=random,steady'] });
 
 describe('boardsmith simulate --jobs (#556)', () => {
   it('prints byte-identical --json whatever the worker count', () => {
     expect(jobsOne.exitCode, jobsOne.output).toBe(0);
     expect(jobsThree.output).toBe(jobsOne.output);
-    expect(jobsOneSlices).toEqual([]);
-    // Ten games (five at each of 2 and 3 players) in three slices.
-    expect(jobsThreeSlices).toEqual([3, 3, 4]);
+    // Ten games (five at each of 2 and 3 players): one worker, or three dealt round-robin.
+    expect(jobsOneSlices).toEqual([10]);
+    expect(jobsThreeSlices).toEqual([4, 3, 3]);
+  });
+
+  it('plays in production mode whatever the worker count', () => {
+    for (const { output } of [jobsOne, jobsThree]) {
+      for (const count of JSON.parse(output).report) expect(count.categories.mode.production.share).toBe(1);
+    }
+  });
+
+  it('says plainly when a game fails only in production mode, and prints no replay that would finish', () => {
+    expect(productionOnly.exitCode).toBe(1);
+    expect(productionOnly.output).toMatch(/^Game 0 error \(seed p-2-0\)|^Game 0 stuck \(seed p-2-0\)/m);
+    expect(productionOnly.output).toContain('This game fails only in production mode');
+    expect(productionOnly.output).toContain('a choices, condition or filter callback');
+    expect(productionOnly.output).not.toContain('Replay:');
   });
 
   it("reports a failing game's real message, replayed in dev mode, and a replay command carrying its variant", () => {
@@ -704,7 +606,13 @@ describe('boardsmith simulate --compare (#556)', () => {
 
   it('refuses a data file the rules never import', () => {
     expect(neverImported.exitCode).toBe(1);
-    expect(neverImported.output).toContain('The rules never import src/rules/data/unused.csv');
+    expect(neverImported.output).toContain('--compare src/rules/data/unused.csv: the rules never import it');
+    expect(neverImported.output).not.toContain("Failed to load this game's rules");
+  });
+
+  it('names --compare when a policy it gives clashes with a --policy flag', () => {
+    expect(policyClash.exitCode).toBe(1);
+    expect(policyClash.output).toContain('--compare policy=random sets every seat, which --policy biggest already sets');
   });
 
   it('refuses more than 12 variants', () => {

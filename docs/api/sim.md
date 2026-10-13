@@ -290,13 +290,20 @@ one-value `--compare`, such as
 ## Parallel runs
 
 `--jobs <n>` plays the games on `n` worker threads; it defaults to the number
-of cores. Each worker loads the same rules bundle and plays an even, unbroken
-slice of the games, and the results are put back in game order, so the output
-is byte for byte the same whatever `--jobs` is. `--jobs 1` plays in the
-`boardsmith` process itself, with no workers.
+of cores, and `--jobs 1` plays them on one. Each worker loads the same rules
+bundle. The games are dealt round-robin, game `i` to worker `i % n`, so a run
+over several player counts gives every worker some of each, and the results
+are put back in game order, so the output is byte for byte the same whatever
+`--jobs` is.
 
 Games are played in production mode, as the published game plays them,
 whatever `--jobs` is. Production mode leaves the text of an error the rules
 throw out of the game's message, so each game that does not finish is played
-again in dev mode to report its real message. `--replay` plays in dev mode.
+again in development mode to report its real message. `--replay` plays in
+development mode.
 
+A game that fails in production mode but finishes in development mode is
+reported as failing only in production mode, with no replay line, since
+`--replay` would finish it. That usually means game code changes state inside
+a callback that only describes the game (a `choices`, condition or filter
+callback), which production mode caches.

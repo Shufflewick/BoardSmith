@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve, dirname, relative } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
 import { build, type Plugin as EsbuildPlugin } from 'esbuild';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 
@@ -149,6 +149,13 @@ const rawImportPlugin: EsbuildPlugin = {
   },
 };
 
+/** {@link importRuntimeBundle} was asked to replace files the rules never import; `files` are their absolute paths. */
+export class UnimportedRedirectError extends Error {
+  constructor(readonly files: string[]) {
+    super(`The rules never import ${files.join(' or ')}, so replacing it would change nothing.`);
+  }
+}
+
 /** Marks the inner resolve of {@link redirectPlugin}, so it does not answer itself. */
 const REDIRECTING = Symbol('boardsmith-redirecting');
 
@@ -292,12 +299,7 @@ export async function importRuntimeBundle(args: {
     ],
   });
   const unused = [...redirects.keys()].filter((path) => !redirected.has(path));
-  if (unused.length > 0) {
-    throw new Error(
-      `The rules never import ${unused.map((path) => toPosix(relative(process.cwd(), path))).join(' or ')}, ` +
-        'so replacing it would change nothing. Name a data file the rules import (a CSV through ?raw, for example).',
-    );
-  }
+  if (unused.length > 0) throw new UnimportedRedirectError(unused);
 
   const moduleUrl = pathToFileURL(bundlePath).href;
   // The cache-bust is `load`, not `t`: Vite strips a `t=` query as its own HMR

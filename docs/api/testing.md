@@ -662,7 +662,7 @@ boardsmith simulate --games 50 --seed ci-run-1 --players 2,4 --json
   every combination, at most 12 (see
   [comparing variants](./sim.md#comparing-variants))
 - `--jobs` — worker threads to play on (default: the number of cores); the
-  output is the same whatever the count, and `--jobs 1` plays in-process (see
+  output is the same whatever the count (see
   [parallel runs](./sim.md#parallel-runs))
 - `--json` — machine-readable output: `{ run, games, report }`, where `games`
   lists only the games that did not finish (`{ index, seed, players, status,

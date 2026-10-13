@@ -1,14 +1,14 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 
 import { availableParallelism } from 'node:os';
 import { gameSeed, type SingleGameResult } from '../../sim/play-game.js';
 import type { SimulatedGame } from '../../sim/policies.js';
 import { buildReport, formatReport, formatComparison, reportCsv, type PlayerCountReport } from '../../sim/report.js';
-import { cliSourceFile, getProjectContext, importRuntimeBundle, runtimeBundlePath, toPosix } from './game-runtime.js';
+import { cliSourceFile, getProjectContext, importRuntimeBundle, runtimeBundlePath, toPosix, UnimportedRedirectError } from './game-runtime.js';
 import { seatPolicies, type ShardRequest, type SimulationBundle } from '../lib/sim-shard.js';
-import { playInDevMode, playInProductionMode } from '../lib/sim-workers.js';
+import { playOnWorkers } from '../lib/sim-workers.js';
 import { buildVariants, parseCompare, type CompareDimension, type Variant } from '../lib/sim-variants.js';
 import { parseGameOptionFlags } from './dev.js';
 import { selectGameOptions, type GameOptionSelection } from '../../session/game-option-selection.js';
@@ -106,6 +106,11 @@ export interface PerGameReport {
   turns: number;
   winner: number[] | null;
   error?: string;
+  /**
+   * The game failed in production mode and finished when played again in
+   * development mode, which `--replay` plays in, so no replay command can show it.
+   */
+  productionOnly?: true;
 }
 
 /** A run's games: those that did not finish, and the report, which is `null` when any did not. */
@@ -129,14 +134,30 @@ export interface RunSimulationOptions {
    * by an option gets a green result that says nothing about that mode.
    */
   gameOptions?: Record<string, unknown>;
-  /** Play on `jobs` worker threads, each importing the bundle at `bundlePath`. In this process when omitted. */
-  workers?: { bundlePath: string; jobs: number };
+  /** Worker threads to play on. */
+  jobs: number;
 }
 
-/** Map one simulated game to the CLI's stable per-game report shape. */
-function toPerGameReport(g: SingleGameResult, index: number): PerGameReport {
+/** What a production-only failure says, after the production failure's own text. */
+const PRODUCTION_ONLY =
+  'This game fails only in production mode: played again in development mode, it finished, so --replay cannot show it. ' +
+  'That usually means game code changes state inside a callback that only describes the game ' +
+  '(a choices, condition or filter callback), which production mode caches.';
+
+/**
+ * Why a game did not finish: the development-mode replay's message when there is one, or, when
+ * the replay finished, the production message and that it fails only in production mode.
+ */
+function failure(g: SingleGameResult, inDevMode: SingleGameResult | undefined): Pick<PerGameReport, 'error' | 'productionOnly'> {
+  const own = g.error ?? (g.exceededMaxActions ? 'Game exceeded the maximum action count.' : undefined);
+  if (inDevMode?.completed) return { error: [own, PRODUCTION_ONLY].filter(Boolean).join(' '), productionOnly: true };
+  const error = inDevMode?.error ?? own;
+  return error === undefined ? {} : { error };
+}
+
+/** Map one simulated game, and its development-mode replay when it failed, to the CLI's stable per-game report shape. */
+function toPerGameReport(g: SingleGameResult, index: number, inDevMode?: SingleGameResult): PerGameReport {
   const status: GameStatus = g.completed ? 'complete' : g.stuck ? 'stuck' : 'error';
-  const error = g.error ?? (g.exceededMaxActions ? 'Game exceeded the maximum action count.' : undefined);
   return {
     index,
     seed: g.seed,
@@ -144,14 +165,8 @@ function toPerGameReport(g: SingleGameResult, index: number): PerGameReport {
     status,
     turns: g.actionCount,
     winner: g.winners ?? null,
-    ...(error !== undefined ? { error } : {}),
+    ...failure(g, inDevMode),
   };
-}
-
-/** The games that did not finish, and the report, which is `null` when any did not. */
-function reportOf(rules: SimulationBundle, played: SingleGameResult[], baseSeed: string): RunSimulationResult {
-  const failing = played.map(toPerGameReport).filter((g) => g.status !== 'complete');
-  return { baseSeed, failing, report: failing.length > 0 ? null : buildReport(rules.gameDefinition.metrics, played) };
 }
 
 /** The request that plays `games` with the run's policies, options and limit. */
@@ -163,22 +178,20 @@ function shardRequest(
 }
 
 /**
- * Play `gamesPerCount` seeded games at each player count and report them.
- * `rules` is a loaded simulation bundle, or for a test, a definition with
- * {@link playShard} beside it.
+ * Play `gamesPerCount` seeded games at each player count on worker threads in
+ * production mode, play each failing game again in development mode for the
+ * rules error's real text, and report them.
  */
-export async function runSimulation(rules: SimulationBundle, options: RunSimulationOptions): Promise<RunSimulationResult> {
+export async function runSimulation(rules: LoadedSimulation, options: RunSimulationOptions): Promise<RunSimulationResult> {
   const baseSeed = options.seed ?? crypto.randomUUID();
   const games = options.playerCounts.flatMap((players) =>
     Array.from({ length: options.gamesPerCount }, (_, i) => ({ seed: gameSeed(baseSeed, players, i), players })),
   );
-  const played = await playInProductionMode(rules, shardRequest(games, options), options.workers);
-  for (const [i, game] of played.entries()) {
-    if (game.completed) continue;
-    const [inDevMode] = await playInDevMode(rules, shardRequest([games[i]], options));
-    played[i] = { ...game, error: inDevMode.error ?? game.error };
-  }
-  return reportOf(rules, played, baseSeed);
+  const played = await playOnWorkers(rules.bundlePath, shardRequest(games, options), options.jobs, 'production');
+  const failed = [...played.keys()].filter((i) => !played[i].completed);
+  const inDevMode = await playOnWorkers(rules.bundlePath, shardRequest(failed.map((i) => games[i]), options), options.jobs, 'development');
+  const failing = failed.map((i, n) => toPerGameReport(played[i], i, inDevMode[n]));
+  return { baseSeed, failing, report: failing.length > 0 ? null : buildReport(rules.gameDefinition.metrics, played) };
 }
 
 interface RunReplayOptions {
@@ -190,13 +203,14 @@ interface RunReplayOptions {
 }
 
 /**
- * Play one game again by its own seed (`--replay`), in dev mode and with the
- * same limits a batch run gives every game, so a failure a batch reported
- * replays the same, with the same message.
+ * Play one game again by its own seed (`--replay`), in development mode and
+ * with the same limits a batch run gives every game, so a failure a batch
+ * reported replays the same, with the same message.
  */
-export async function runReplay(rules: SimulationBundle, options: RunReplayOptions): Promise<RunSimulationResult> {
-  const played = await playInDevMode(rules, shardRequest([{ seed: options.seed, players: options.players }], options));
-  return reportOf(rules, played, options.seed);
+export async function runReplay(rules: LoadedSimulation, options: RunReplayOptions): Promise<RunSimulationResult> {
+  const [game] = await playOnWorkers(rules.bundlePath, shardRequest([{ seed: options.seed, players: options.players }], options), 1, 'development');
+  const failing = game.completed ? [] : [toPerGameReport(game, 0)];
+  return { baseSeed: options.seed, failing, report: failing.length > 0 ? null : buildReport(rules.gameDefinition.metrics, [game]) };
 }
 
 /** A loaded simulation bundle, and the file it was loaded from, which worker threads import. */
@@ -233,6 +247,13 @@ export async function loadSimulation(
     });
     return { ...(module as unknown as LoadedSimulation), bundlePath: runtimeBundlePath(tempDir, name) };
   } catch (error) {
+    if (error instanceof UnimportedRedirectError) {
+      const files = error.files.map((file) => toPosix(relative(cwd, file))).join(' and ');
+      throw new Error(
+        `--compare ${files}: the rules never import it, so playing another file in its place would change nothing. ` +
+          'Name a data file the rules import (a CSV through ?raw, for example).',
+      );
+    }
     // THROWN, NOT PRINTED (#240): `cli.ts`'s handler renders it as one line,
     // where the error object printed its whole stack and internal paths.
     throw new Error(
@@ -343,7 +364,7 @@ function runVariant(variant: PlannedVariant, options: SimulateOptions, flags: Ru
     seed: flags.seed,
     policyFlags,
     gameOptions,
-    workers: { bundlePath: rules.bundlePath, jobs: flags.jobs },
+    jobs: flags.jobs,
   });
 }
 
@@ -420,6 +441,7 @@ function printFailures(print: (line: string) => void, { variant, result }: Varia
   for (const g of result.failing) {
     print(chalk.red(`Game ${g.index} ${g.status} (seed ${g.seed}) after ${g.turns} action(s).`));
     if (g.error) print(chalk.dim(`  ${g.error}`));
+    if (g.productionOnly) continue;
     const replay = simulateReplayCommand({ seed: g.seed, playerCount: g.players }, variant.gameOptions, variant.policyFlags, variant.data);
     print(chalk.dim(`  Replay: ${replay}`));
   }

@@ -81,6 +81,25 @@ function dimensionKind(
   );
 }
 
+/** The seats a `--policy` flag sets: `seat N` for `N=name`, or every seat for a bare name. */
+const seatsOf = (flag: string) => {
+  const seat = /^(\d+)=/.exec(flag)?.[1];
+  return seat === undefined ? 'every seat' : `seat ${seat}`;
+};
+
+/** Refuse a `--compare policy=` value that sets seats a `--policy` flag already sets. */
+function refusePolicyClash(values: readonly string[], policyFlags: readonly string[]): void {
+  for (const value of values) {
+    const clash = policyFlags.find((flag) => seatsOf(flag) === seatsOf(value));
+    if (clash !== undefined) {
+      throw new Error(
+        `--compare policy=${value} sets ${seatsOf(value)}, which --policy ${clash} already sets. ` +
+          `Give that seat's policies in --compare only.`,
+      );
+    }
+  }
+}
+
 /**
  * Every combination of the dimensions' values, first dimension slowest, applied over the run's own
  * `--policy` and `--game-option` flags. Without dimensions, the one variant is the run itself.
@@ -94,6 +113,7 @@ export function buildVariants(
   let variants: Variant[] = [{ label: '', policyFlags: [...run.policyFlags], gameOptionFlags: [...run.gameOptionFlags], data: {} }];
   for (const { dimension, values } of dimensions) {
     const kind = dimensionKind(dimension, declaredOptions, run.gameOptionFlags);
+    if (kind === 'policy') refusePolicyClash(values, run.policyFlags);
     if (kind === 'data') {
       const missing = values.find((value) => !existsSync(resolve(run.cwd, value)));
       if (missing !== undefined) throw new Error(`--compare ${dimension}: ${missing} does not exist.`);
