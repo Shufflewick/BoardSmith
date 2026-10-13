@@ -363,7 +363,9 @@ export class MCTSBot<G extends Game = Game> {
       ?? this.config.uctC
       ?? Math.sqrt(2);
 
-    // Get ALL available moves first (without sampling) for threat response analysis
+    // Get every available move first (without sampling) for threat response
+    // analysis; an action with more moves than enumeration lists gives a
+    // random sample of them instead (#691).
     const allMoves = this.movesFor(this.searchGame, flowState, this.playerIndex, { sample: false });
     if (allMoves.length === 0) {
       // See play()'s doc comment: a stall for this seat, not a session lock.
@@ -1200,7 +1202,9 @@ export class MCTSBot<G extends Game = Game> {
    * Every move `seat` may make in `flowState`: its listed actions with every
    * legal set of args, then the follow-up it holds, if any. Args are in wire
    * form (element ids). With `sample`, each action contributes at most 20 arg
-   * sets, drawn from the bot's own random source, to bound the branching.
+   * sets, drawn from the bot's own random source, to bound the branching. An
+   * action with more moves than enumeration lists contributes 20 drawn at
+   * random, with or without `sample` (#691).
    *
    * This is the bot's only enumerator, and the seat it is given is the seat
    * the moves are later made for (#522). Each action's args come from the
@@ -1229,7 +1233,10 @@ export class MCTSBot<G extends Game = Game> {
 
     const moves: BotMove[] = [];
     const add = (actionDef: ActionDefinition, followUp?: FollowUpAction) => {
-      const serialized = enumerateActionMoves(enumerationGame, actionDef, player, { followUp })
+      // An action with more moves than enumeration lists gives a random
+      // sample of them, drawn from the bot's own seeded source (#691).
+      const sampleAboveBudget = { count: MAX_SAMPLED_ARGS, random: this.rng };
+      const serialized = enumerateActionMoves(enumerationGame, actionDef, player, { followUp, sampleAboveBudget })
         .map((args) => this.serializeArgs(args, actionDef.selections));
       const kept = options.sample && serialized.length > MAX_SAMPLED_ARGS
         ? this.rng.shuffle(serialized).slice(0, MAX_SAMPLED_ARGS)

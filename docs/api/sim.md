@@ -54,7 +54,11 @@ shares the game's engine. Its options are described in
   finite number. A number input is listed only when it has `min`, `max` and
   `integer: true` and at most 10,000 values (#689); greedy reports a seat
   offered any other number input as stuck and names the input. A held
-  follow-up whose args already answer the number is played as normal.
+  follow-up whose args already answer the number is played as normal. An
+  action with more moves than enumeration lists (it tries at most 10,000
+  values for one action, counting each value of each selection under every
+  pick before it, #691) is reported as stuck too, naming the
+  action: greedy scores every move or none.
 - `mcts(level)` - Plays the game's own MCTS bot (`gameDefinition.bot`) at a
   difficulty name or an iteration count. Each search is seeded from the seat's
   generator and runs its full iterations with no time limit, so a seeded run

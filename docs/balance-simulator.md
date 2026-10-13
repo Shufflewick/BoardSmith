@@ -465,6 +465,11 @@ or bots, and `boardsmith simulate` keeps working exactly as before.
   most 10,000 values. Any other number input cannot be listed, so greedy
   reports that seat as stuck and names the input. Use `random` or a policy of
   your own for such a game.
+- **Greedy refuses an action with too many moves to list** (#691). An action's
+  moves are the product of its selections, and enumeration tries at most
+  10,000 values for one action: each value of each selection, under every pick
+  before it, refused ones too. Greedy reports a seat offered a larger action as stuck and names
+  the action; `random` and `mcts` still play it.
 
 ## How fast it is
 
