@@ -77,7 +77,7 @@ function setupFor(arg) {
 }
 
 /** The checkout `dir` is in: its short commit and whether it has uncommitted changes, or nothing outside git. */
-function checkout(dir) {
+export function checkout(dir) {
   const git = (...args) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: 'pipe' }).trim();
   try {
     return { commit: git('rev-parse', '--short', 'HEAD'), dirty: git('status', '--porcelain') !== '' };
@@ -156,9 +156,12 @@ async function main() {
   process.stdout.write(report);
 }
 
-try {
-  await main();
-} catch (error) {
-  process.stderr.write(`bench-bot: ${error instanceof Error ? error.message : String(error)}\n`);
-  process.exitCode = 1;
+// Run only as a script: scripts/bench-sim/run.mjs imports checkout from here.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  try {
+    await main();
+  } catch (error) {
+    process.stderr.write(`bench-bot: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  }
 }

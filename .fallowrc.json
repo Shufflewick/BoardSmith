@@ -5,6 +5,7 @@
     "vitest.browser.config.ts",
     "scripts/bench-bot/run.mjs",
     "scripts/bench-bot/probe.mjs",
+    "scripts/bench-sim/run.mjs",
     "src/**/*.node.ts",
     "src/cli/lib/test-progress-reporter.ts",
     "src/cli/lib/sim-shard.ts",

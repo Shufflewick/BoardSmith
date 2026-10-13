@@ -17,6 +17,9 @@ with the greedy policy through `playGame`. `boardsmith init <name> --sim`
 writes the project with no UI at all, and `boardsmith add-ui` adds it later
 (see [Getting started](../getting-started.md#starting-as-a-simulator-with-no-ui-yet)).
 
+[The balance simulator worked example](../balance-simulator.md) walks through
+all of it on one small drafting game, from the first report to a playable game.
+
 ## Usage
 
 ```typescript
