@@ -26,8 +26,8 @@
  * `game.getLastActionResult()`), since the flow asks for a step's choices
  * before it has moved to that step.
  */
-import { isDevMode } from '../../utils/dev.js';
 import { isElement } from '../element/game-element.js';
+import { answersReusable } from '../element/state-version.js';
 import type { Game } from '../element/game.js';
 import type { ActionContext, Selection } from './types.js';
 
@@ -60,7 +60,7 @@ export function reusedCandidates<T>(
   workOut: (context: ActionContext) => T[],
 ): T[] {
   const { game } = context;
-  if (isDevMode() || game.worldMode || game._ctx._changingDepth > 0) return workOut(context);
+  if (!answersReusable(game._ctx)) return workOut(context);
 
   const known = answersFor(game, selection, context.player?.seat);
   const found = known.find((answer) => answerFits(answer, context.args));

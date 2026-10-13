@@ -22,7 +22,11 @@
  *
  * The flow's position is not versioned at all; an answer that reads it is not
  * kept (see {@link flowStateRead}).
+ *
+ * Two things reuse answers by it: a pick's candidates (`../action/choice-cache.ts`)
+ * and the facts a game remembers with `game.oncePerState` ({@link oncePerState}).
  */
+import { isDevMode } from '../../utils/dev.js';
 import type { ElementContext } from './types.js';
 
 /**
@@ -32,6 +36,37 @@ import type { ElementContext } from './types.js';
  */
 export function flowStateRead(ctx: ElementContext): void {
   ctx._flowStateReads++;
+}
+
+/**
+ * Whether an answer worked out earlier in this state version may be given
+ * again now. Development mode works every answer out afresh, so a test may
+ * write to a game directly between two questions; world mode must find every
+ * element through the tree, since handing one out is what marks its partition;
+ * and game code that may change the game may ask, write, and ask again.
+ */
+export function answersReusable(ctx: ElementContext): boolean {
+  return !isDevMode() && ctx._worldMode !== true && ctx._changingDepth === 0;
+}
+
+/** The facts remembered with {@link oncePerState} in one state version, by key. */
+const remembered = new WeakMap<ElementContext, { version: number; values: Map<string, unknown> }>();
+
+/**
+ * `workOut()`'s value for `key`, from an earlier run in the same state version
+ * when there is one (`Game.oncePerState` says how a game uses it).
+ */
+export function oncePerState<T>(ctx: ElementContext, key: string, workOut: () => T): T {
+  if (!answersReusable(ctx)) return workOut();
+  let kept = remembered.get(ctx);
+  if (kept?.version !== ctx._stateVersion) remembered.set(ctx, (kept = { version: ctx._stateVersion, values: new Map() }));
+  if (kept.values.has(key)) return kept.values.get(key) as T;
+  const flowReads = ctx._flowStateReads;
+  const value = workOut();
+  // A value whose work changed the game is filed under a version that has
+  // passed, so it is never found. One that read the flow's state is not filed.
+  if (ctx._flowStateReads === flowReads) kept.values.set(key, value);
+  return value;
 }
 
 /** Mark the game changed: every answer worked out before now is stale. */

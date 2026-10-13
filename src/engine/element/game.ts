@@ -16,7 +16,7 @@ import {
 } from './game-element.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE } from './hidden-placeholder.js';
 import { childrenChanged } from './cell-index.js';
-import { stateChanged } from './state-version.js';
+import { oncePerState, stateChanged } from './state-version.js';
 import { Piece } from './piece.js';
 import { Card } from './card.js';
 import { Hand } from './hand.js';
@@ -2299,6 +2299,44 @@ export class Game<
         `once a partition is not resident. It is a construction option and not a switch ` +
         `because a subclass constructor builds the game's furniture before any switch could run.`
     );
+  }
+
+  /**
+   * Work out a fact about the position once per game state, however many
+   * callers ask for it (#673).
+   *
+   * The first call in a state runs `workOut` and keeps its value under `key`;
+   * every later call with the same key, until the game changes, is answered
+   * with that value without running `workOut`. Use it for a whole-position
+   * fact that several rules read, such as every legal move, which a pick's
+   * `filter` would otherwise work out once per candidate:
+   *
+   * ```typescript
+   * legalMoves(player: ChessPlayer): Move[] {
+   *   return this.oncePerState(`legalMoves:${player.seat}`, () => this.workOutLegalMoves(player));
+   * }
+   * ```
+   *
+   * - **The key names everything the value depends on besides the game's
+   *   state**, such as the seat it is for. Two calls with one key in one state
+   *   get one value.
+   * - **The game changing drops every kept value.** It is the same game state
+   *   version that a pick's candidates are kept by (docs/actions-and-flow.md,
+   *   "A pick's candidates are worked out once per game state"), so the same
+   *   writes are seen: element changes, random draws, restores, and everything
+   *   game code writes in an `execute`, `onSelect` or flow step. An attribute
+   *   written anywhere else is not seen until one of those happens.
+   * - **Nothing is reused** in development mode, in world mode, or while game
+   *   code that may change the game is running (an `execute`, a flow step);
+   *   `workOut` runs on every call there. A value whose `workOut` read the
+   *   flow's state (`getFlowState()`, `getLastActionResult()`) or changed the
+   *   game is not kept.
+   * - **The value is shared** by every caller in the state. Do not change it.
+   * - **Nothing kept is part of the game's state**: it is never serialized and
+   *   is not shared with any other game, including a bot's copies.
+   */
+  oncePerState<T>(key: string, workOut: () => T): T {
+    return oncePerState(this._ctx, key, workOut);
   }
 
   // ============================================

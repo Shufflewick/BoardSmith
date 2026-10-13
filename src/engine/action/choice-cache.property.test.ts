@@ -13,7 +13,7 @@ import { Game, enumerateLegalMoves, dueSeats, type GameOptions } from '../index.
 import { GameRunner } from '../../runtime/runner.js';
 import { SeededRandom } from '../../utils/random.js';
 import { isElement } from '../element/game-element.js';
-import { CardsGame, DuelGame } from './choice-cache-fixtures.test-helper.js';
+import { CardsGame, DuelGame, RememberingDuelGame } from './choice-cache-fixtures.test-helper.js';
 
 const devMode = vi.hoisted(() => ({ override: null as boolean | null }));
 vi.mock('../../utils/dev.js', async (importOriginal) => {
@@ -92,6 +92,10 @@ describe('a reused answer always equals a fresh one (#631)', () => {
 
   it.each(seeds)('in a duel of pawns, seed %s', (seed) => {
     expect(playChecked(DuelGame, 2, seed)).toBeGreaterThan(10);
+  });
+
+  it.each(seeds)('in a duel of pawns whose legal moves are remembered per state (#673), seed %s', (seed) => {
+    expect(playChecked(RememberingDuelGame, 2, seed)).toBeGreaterThan(10);
   });
 
   it.each(seeds)('in a game of cards, seed %s', (seed) => {

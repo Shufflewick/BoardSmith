@@ -13,6 +13,8 @@
  *   `choices` callback that reads an earlier pick, a deep attribute write
  *   (`asked.push`) in `execute`, and a repeating pick whose `onEach` moves
  *   cards.
+ * - {@link RememberingDuelGame} is {@link DuelGame} with its whole-position
+ *   computation remembered per game state through `oncePerState` (#673).
  */
 import {
   Game,
@@ -133,6 +135,13 @@ export class DuelGame extends Game<DuelGame, Player> {
       moves.push({ pieceId: pawn.id, from, to });
     }
     return moves;
+  }
+}
+
+/** {@link DuelGame} with each seat's legal moves worked out once per game state (#673). */
+export class RememberingDuelGame extends DuelGame {
+  override legalMoves(player: Player): PawnMove[] {
+    return this.oncePerState(`legalMoves:${player.seat}`, () => super.legalMoves(player));
   }
 }
 

@@ -291,11 +291,36 @@ Nothing in the game has to change to get this.
 `disabled` and `prepare` are not part of the reused answer: they run on every
 evaluation, as above.
 
-A `filter` still runs once per candidate in each state. If it reads a fact
-about the whole position, such as a list of every legal move, that fact is
-worked out once per candidate. Give such a pick its candidates whole instead,
-with `chooseElement`'s `elements: (ctx) => ...`, so the whole-position fact is
-worked out once.
+#### A fact several rules read is worked out once per game state
+
+A `filter` still runs once per candidate in each state, and the same fact is
+often read by several rules: a list of every legal move is read by the piece
+pick's `filter` for each piece, by the destination pick, by the outcome check
+and by the bot. Work such a fact out with `game.oncePerState(key, workOut)`,
+and every caller in the same state shares one run (#673):
+
+```typescript
+class ChessGame extends Game<ChessGame, ChessPlayer> {
+  legalMoves(player: ChessPlayer): Move[] {
+    return this.oncePerState(`legalMoves:${player.seat}`, () => this.workOutLegalMoves(player));
+  }
+}
+```
+
+The rules read `game.legalMoves(player)` as before; the `filter` can stay the
+obvious one-candidate-at-a-time code.
+
+- **The key names everything the value depends on besides the game's state**,
+  such as the seat it is for. Two calls with one key in one state get one value.
+- **It is kept by the same state version as a pick's candidates** (above), so
+  it is dropped by the same changes, and an attribute written outside game
+  code that may change the game is not seen until one of those changes happens.
+- **Nothing is reused** in development mode, in world mode, or while game code
+  that may change the game is running (an `execute`, a flow step), so an
+  `execute` that reads the fact, writes, and reads it again sees its own write.
+  A value whose work read the flow's state or changed the game is not kept.
+- **The value is shared**: do not change it. It is never serialized and is
+  never shared with another game, including a bot's copies.
 
 #### On-Demand Choices
 

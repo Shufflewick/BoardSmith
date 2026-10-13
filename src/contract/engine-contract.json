@@ -1,6 +1,6 @@
 {
-  "revision": 184,
-  "surfaceHash": "bf4d1ee853209039",
+  "revision": 185,
+  "surfaceHash": "4ee11bee5cce21da",
   "payloadHash": "7e563b9e75959ec4",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1415,6 +1415,14 @@
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "enumerateLegalMoves now restores the flow with the element tree before every replay of a repeating pick, so a flow variable or step data holds the current tree's element and an earlier replay's flow changes (such as an onEach calling refreshAwaitingActions) are undone; before, a game whose repeating pick reached the flow could be offered a wrong move or none. No API or format change (#682)."
+    },
+    {
+      "revision": 185,
+      "date": "2026-10-13",
+      "surfaceHash": "4ee11bee5cce21da",
+      "payloadHash": "7e563b9e75959ec4",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Game gains oncePerState(key, workOut) (#673): a game works out a whole-position fact (such as every legal move) once per game state and every caller in that state shares the value, kept by the same state version as a pick's candidates (#631) and reused under the same rules: never in development or world mode or while game code that may change the game runs, and never kept when it read the flow's state or changed the game. Nothing kept is serialized or shared between games; no format or payload change."
     }
   ]
 }
