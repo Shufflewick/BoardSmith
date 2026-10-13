@@ -42,6 +42,10 @@
       "types": "./src/testing/index.ts",
       "import": "./src/testing/index.ts"
     },
+    "./sim": {
+      "types": "./src/sim/index.ts",
+      "import": "./src/sim/index.ts"
+    },
     "./testing/browser": {
       "types": "./src/testing/browser-smoke.ts",
       "import": "./src/testing/browser-smoke.ts"

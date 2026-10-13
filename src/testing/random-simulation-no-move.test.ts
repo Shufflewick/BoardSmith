@@ -10,7 +10,8 @@ import {
   simultaneousActionStep,
   type GameOptions,
 } from '../engine/index.js';
-import { simulateRandomGames, replayRandomGame, noSeatHasEnabledAction } from './random-simulation.js';
+import { simulateRandomGames, replayRandomGame } from './random-simulation.js';
+import { noSeatHasEnabledAction } from '../sim/play-game.js';
 
 /**
  * Both seats spend coins in one simultaneous step that never ends on its own,

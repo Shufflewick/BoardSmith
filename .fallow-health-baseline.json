@@ -412,6 +412,16 @@
         "count": 1
       }
     },
+    "src/sim/play-game.ts": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "src/sim/policies.ts": {
+      "complexity_critical": {
+        "count": 1
+      }
+    },
     "src/testing/debug.ts": {
       "complexity_high": {
         "count": 1
@@ -426,14 +436,6 @@
       },
       "complexity_moderate": {
         "count": 3
-      }
-    },
-    "src/testing/random-simulation.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "complexity_high": {
-        "count": 1
       }
     },
     "src/testing/simulate-tutorial.ts": {

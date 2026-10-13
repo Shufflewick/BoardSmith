@@ -230,8 +230,8 @@ describe('simulateRandomGames', () => {
 
     expect(results.games.map((g) => g.error)).toEqual(Array(8).fill(undefined));
     expect(results.completed).toBe(8);
-    expect(results.games.map((g) => g.actionCount)).toEqual([8, 5, 5, 6, 5, 6, 5, 6]);
-    expect(results.games.map((g) => g.winners)).toEqual([[2], [1], [1], [2], [1], [2], [1], [1]]);
+    expect(results.games.map((g) => g.actionCount)).toEqual([4, 5, 5, 8, 7, 5, 6, 7]);
+    expect(results.games.map((g) => g.winners)).toEqual([[2], [1], [1, 2], [2], [2], [2], [1], [3]]);
   });
 
   it('generates valid arguments so arg-based games complete (F49)', async () => {

@@ -65,16 +65,25 @@ export function oncePerState<T>(ctx: ElementContext, key: string, workOut: () =>
   const version = ctx._stateVersion;
   const flowReads = ctx._flowStateReads;
   const value = workOut();
-  if (ctx._stateVersion !== version) {
-    throw new Error(
-      `oncePerState("${key}"): its work changed the game (created, moved or removed an element, drew from game.random, ` +
-        'or wrote through actionTempState). It must only read the game; make the change in an action or a flow step.',
-    );
-  }
+  refuseChangeSince(ctx, version, `oncePerState("${key}")`, 'make the change in an action or a flow step.');
   if (Array.isArray(value) || isPlainObject(value)) Object.freeze(value);
   // The flow's state is not versioned, so a value that read it is not kept.
   if (kept && ctx._flowStateReads === flowReads) kept.values.set(key, value);
   return value;
+}
+
+/**
+ * Throw, naming `who`, when the game changed in a way the state version sees
+ * since `version` was read from `ctx._stateVersion`: `who` was meant only to
+ * read the game, and `advice` says where the change belongs. `oncePerState`
+ * checks its work with it, and the simulator its policies (`src/sim`).
+ */
+export function refuseChangeSince(ctx: ElementContext, version: number, who: string, advice: string): void {
+  if (ctx._stateVersion === version) return;
+  throw new Error(
+    `${who}: its work changed the game (created, moved or removed an element, drew from game.random, ` +
+      `or wrote through actionTempState). It must only read the game; ${advice}`,
+  );
 }
 
 /** The values kept in the current state version, dropping any older ones. */
