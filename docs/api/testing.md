@@ -652,8 +652,18 @@ boardsmith simulate --games 50 --seed ci-run-1 --players 2,4 --json
   set of per-game seeds
 - `--replay` — one game's own seed (as a failing game reports it): plays
   exactly that game instead of a batch, so it cannot be combined with
-  `--games` or `--seed`, and `--players` must name its one player count
+  `--games`, `--seed` or `--jobs`, `--players` must name its one player
+  count, and each `--compare` must give one value
 - `--game-option` — a declared game option as `key=value` (repeatable)
+- `--compare` — play variants side by side on the same seeds:
+  `policy=<a>,<b>`, a declared game option (`hand=5,7`) or a data file the
+  rules import and the files to play in its place
+  (`src/rules/data/loot.csv=data/loot-75.csv,data/loot-85.csv`). Repeat it for
+  every combination, at most 12 (see
+  [comparing variants](./sim.md#comparing-variants))
+- `--jobs` — worker threads to play on (default: the number of cores); the
+  output is the same whatever the count (see
+  [parallel runs](./sim.md#parallel-runs))
 - `--json` — machine-readable output: `{ run, games, report }`, where `games`
   lists only the games that did not finish (`{ index, seed, players, status,
   turns, winner, error? }`) and `report` is one entry per player count, or

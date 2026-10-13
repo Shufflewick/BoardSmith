@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { defineMetrics } from '../engine/index.js';
 import type { GameMetricSummary, SingleGameResult } from './play-game.js';
-import { buildReport, reportCsv, formatReport } from './report.js';
+import { buildReport, reportCsv, formatReport, formatComparison } from './report.js';
 
 const metrics = defineMetrics(({ count, ratio, sample, category, segment, finalScore }) => ({
   held: count({ by: 'element' }),
@@ -82,7 +82,7 @@ describe('the balance report (#556)', () => {
 
   it('reports an unkeyed count and ratio nothing recorded: 0 per game, and nothing to divide by', () => {
     expect(report.counts.neverCounted['']).toMatchObject({ n: 2, mean: 0, max: 0 });
-    const lines = reportCsv([report]).split('\n');
+    const lines = reportCsv([{ variant: '', report: [report] }]).split('\n');
     expect(lines).toContain(',2,count,neverCounted,,mean,0');
     expect(lines).toContain(',2,ratio,neverRate,,ratio,');
   });
@@ -103,7 +103,7 @@ describe('the balance report (#556)', () => {
   });
 
   it('writes long CSV rows: variant,players,section,metric,key,stat,value', () => {
-    const lines = reportCsv(buildReport(metrics, games)).trim().split('\n');
+    const lines = reportCsv([{ variant: '', report: buildReport(metrics, games) }]).trim().split('\n');
     expect(lines[0]).toBe('variant,players,section,metric,key,stat,value');
     expect(lines).toContain(',2,games,,,count,2');
     expect(lines).toContain(',2,winShare,,1,share,0.5');
@@ -127,5 +127,25 @@ describe('the balance report (#556)', () => {
     expect(text).toContain('Win share by tool');
     expect(text).toContain('Score: score');
     expect(text).toMatch(/Per element\n\s+element\s+held\s+built\s+buildRate\n\s+opal\s+0\.5\s+0\.5\s+1\n\s+ruby\s+2\s+1\s+0\.5/);
+  });
+
+  it('labels each row with its variant when a run compares several', () => {
+    const report = buildReport(metrics, games);
+    const lines = reportCsv([{ variant: 'policy=random', report }, { variant: 'policy=greedy', report }]).split('\n');
+    expect(lines.filter((line) => line.startsWith('variant,'))).toHaveLength(1);
+    expect(lines).toContain('policy=random,2,length,,,mean,15');
+    expect(lines).toContain('policy=greedy,2,length,,,mean,15');
+  });
+
+  it('compares variants in a column each, with each difference from the first', () => {
+    const longer = buildReport(metrics, games.map((g) => ({ ...g, actionCount: g.actionCount + 4, winners: [2] })));
+    const text = formatComparison([
+      { variant: 'a', report: buildReport(metrics, games) },
+      { variant: 'b', report: longer },
+    ]);
+    expect(text).toContain('2 players: 2 games per variant');
+    expect(text).toMatch(/Game length \(actions\)\n\s+1\s+2\n\s+n\s+2\s+2 \(0\)\n\s+mean\s+15\s+19 \(\+4\)/);
+    // A share's difference is in percentage points.
+    expect(text).toMatch(/\n\s+2\s+share\s+0\.0%\s+100\.0% \(\+100\.0 pts\)/);
   });
 });

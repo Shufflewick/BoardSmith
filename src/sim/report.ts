@@ -234,16 +234,25 @@ function reportRows(report: PlayerCountReport): ReportRow[] {
 
 const csvField = (field: string) => (/[",\n]/.test(field) ? `"${field.replaceAll('"', '""')}"` : field);
 
+/** One variant's report, under the label a comparison gives it ('' when the run compares nothing). */
+export interface VariantReport {
+  variant: string;
+  report: PlayerCountReport[];
+}
+
 /**
- * The report as CSV, one statistic per row:
- * `variant,players,section,metric,key,stat,value`. `variant` is empty until a
- * run compares variants; a value with nothing to divide by is empty.
+ * The reports as CSV, one statistic per row:
+ * `variant,players,section,metric,key,stat,value`. `variant` is the variant's
+ * label, empty when the run compares nothing; a value with nothing to divide
+ * by is empty.
  */
-export function reportCsv(reports: PlayerCountReport[]): string {
+export function reportCsv(variants: VariantReport[]): string {
   const lines = ['variant,players,section,metric,key,stat,value'];
-  for (const row of reports.flatMap(reportRows)) {
-    const value = Number.isFinite(row.value) ? String(row.value) : '';
-    lines.push(['', String(row.players), row.section, row.metric, row.key, row.stat, value].map(csvField).join(','));
+  for (const { variant, report } of variants) {
+    for (const row of report.flatMap(reportRows)) {
+      const value = Number.isFinite(row.value) ? String(row.value) : '';
+      lines.push([variant, String(row.players), row.section, row.metric, row.key, row.stat, value].map(csvField).join(','));
+    }
   }
   return lines.join('\n');
 }
@@ -264,10 +273,27 @@ const HEADINGS: Record<string, (metric: string) => { title: string; keyName: str
 
 const SHARE_SECTIONS = new Set(['winShare', 'ties', 'segment', 'category']);
 
+const isShare = (row: ReportRow) => SHARE_SECTIONS.has(row.section) && row.stat !== 'players';
+
 function formatValue(row: ReportRow): string {
   if (!Number.isFinite(row.value)) return '-';
-  if (SHARE_SECTIONS.has(row.section) && row.stat !== 'players') return `${(row.value * 100).toFixed(1)}%`;
+  if (isShare(row)) return `${(row.value * 100).toFixed(1)}%`;
   return String(Number(row.value.toFixed(3)));
+}
+
+/** `row`'s value with its difference from `base`'s; a share's difference is in percentage points. */
+function formatWithDifference(row: ReportRow, base: ReportRow | undefined): string {
+  const diff = base === undefined ? NaN : row.value - base.value;
+  if (!Number.isFinite(diff)) return formatValue(row);
+  const sign = diff > 0 ? '+' : '';
+  const shown = isShare(row) ? `${sign}${(diff * 100).toFixed(1)} pts` : `${sign}${Number(diff.toFixed(3))}`;
+  return `${formatValue(row)} (${shown})`;
+}
+
+/** Pad each column to its widest cell, two spaces between columns. */
+function alignColumns(table: string[][]): string[] {
+  const widths = table[0].map((_, i) => Math.max(...table.map((line) => line[i].length)));
+  return table.map((line) => `  ${line.map((cell, i) => cell.padEnd(widths[i])).join('  ').trimEnd()}`);
 }
 
 /** One table: a key column (left out when every key is empty) and a column per statistic. */
@@ -281,8 +307,18 @@ function formatTable(rows: ReportRow[]): string[] {
     const cells = stats.map((stat) => rows.find((r) => r.key === key && r.stat === stat));
     table.push([...(withKey ? [key] : []), ...cells.map((cell) => (cell ? formatValue(cell) : ''))]);
   }
-  const widths = table[0].map((_, i) => Math.max(...table.map((line) => line[i].length)));
-  return [title, ...table.map((line) => `  ${line.map((cell, i) => cell.padEnd(widths[i])).join('  ').trimEnd()}`)];
+  return [title, ...alignColumns(table)];
+}
+
+/** `rows` grouped by section and metric, in order. The game count is the heading, not a table. */
+function tablesOf(rows: ReportRow[]): ReportRow[][] {
+  const groups = new Map<string, ReportRow[]>();
+  for (const row of rows.filter((r) => r.section !== 'games')) {
+    const group = `${row.section}\n${row.metric}`;
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group)!.push(row);
+  }
+  return [...groups.values()];
 }
 
 /** The report as text: per player count, a table per section and metric. */
@@ -290,13 +326,41 @@ export function formatReport(reports: PlayerCountReport[]): string {
   const lines: string[] = [];
   for (const report of reports) {
     lines.push(`${report.players} players: ${report.games} games`);
-    const groups = new Map<string, ReportRow[]>();
-    for (const row of reportRows(report).filter((r) => r.section !== 'games')) {
-      const group = `${row.section}\n${row.metric}`;
-      if (!groups.has(group)) groups.set(group, []);
-      groups.get(group)!.push(row);
-    }
-    for (const rows of groups.values()) lines.push(...formatTable(rows), '');
+    for (const rows of tablesOf(reportRows(report))) lines.push(...formatTable(rows), '');
   }
+  return lines.join('\n');
+}
+
+/**
+ * Variants side by side, as text: per player count, a table per section and
+ * metric with a row per key and statistic and a column per variant, numbered
+ * in order. Each variant after the first shows its difference from the first.
+ * Every variant must have reported the same player counts.
+ */
+export function formatComparison(variants: VariantReport[]): string {
+  const lines: string[] = [];
+  variants[0].report.forEach((first, i) => {
+    lines.push(`${first.players} players: ${first.games} games per variant`);
+    const byVariant = variants.map(({ report }) => reportRows(report[i]));
+    const rowId = (row: ReportRow) => `${row.section}\n${row.metric}\n${row.key}\n${row.stat}`;
+    const cells = byVariant.map((rows) => new Map(rows.map((row) => [rowId(row), row])));
+    // Every row any variant has, in the order the variants first give it.
+    const union = [...new Map(byVariant.flat().map((row) => [rowId(row), row])).values()];
+    for (const rows of tablesOf(union)) {
+      const { title, keyName } = HEADINGS[rows[0].section](rows[0].metric);
+      const withKey = rows.some((row) => row.key !== '');
+      const table = [[...(withKey ? [keyName] : []), '', ...variants.map((_, v) => String(v + 1))]];
+      for (const row of rows) {
+        const base = cells[0].get(rowId(row));
+        const values = cells.map((variant, v) => {
+          const cell = variant.get(rowId(row));
+          if (cell === undefined) return '';
+          return v === 0 ? formatValue(cell) : formatWithDifference(cell, base);
+        });
+        table.push([...(withKey ? [row.key] : []), row.stat, ...values]);
+      }
+      lines.push(title, ...alignColumns(table), '');
+    }
+  });
   return lines.join('\n');
 }

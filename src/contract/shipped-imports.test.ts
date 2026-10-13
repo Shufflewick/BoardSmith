@@ -148,8 +148,21 @@ if (builtPack.status !== 0) {
 }
 const PUBLISHED_BUILD = (JSON.parse(builtPack.stdout) as { files: { path: string }[] }[])[0].files.map((f) => f.path);
 
-/** Shipped source files that start a worker thread. */
-const WORKER_HOSTS = SHIPPED_SOURCE.filter((file) => /\bnew Worker\(/.test(readFileSync(join(REPO_ROOT, file), 'utf8')));
+/** How many times `source` starts a worker thread, and how many of those run inline source (`eval: true`) rather than a file. */
+const workerStarts = (source: string) => ({
+  all: source.match(/\bnew Worker\(/g)?.length ?? 0,
+  inline: source.match(/\beval: true\b/g)?.length ?? 0,
+});
+
+/**
+ * Shipped source files that start a worker thread from a file. A worker that
+ * runs inline source needs no file of its own (`boardsmith simulate`'s workers
+ * import the rules bundle the run builds, #556).
+ */
+const WORKER_HOSTS = SHIPPED_SOURCE.filter((file) => {
+  const starts = workerStarts(readFileSync(join(REPO_ROOT, file), 'utf8'));
+  return starts.all > starts.inline;
+});
 
 const BUNDLE_EXTERNALS = Object.values(bundle.metafile.outputs).flatMap((output) =>
   output.imports.filter((imported) => imported.external).map((imported) => imported.path),
@@ -264,6 +277,8 @@ describe('the published package carries every worker the CLI starts (#401)', () 
 
   it('starts only workers the build emits', () => {
     expect(WORKER_HOSTS).toContain('src/bot-trainer/parallel-benchmark.ts');
+    expect(WORKER_HOSTS).not.toContain('src/cli/lib/sim-workers.ts');
+    expect(workerStarts(readFileSync(join(REPO_ROOT, 'src/cli/lib/sim-workers.ts'), 'utf8'))).toEqual({ all: 1, inline: 1 });
     const unbuilt = WORKER_HOSTS.filter(
       (host) =>
         !WORKER_ENTRIES.some((entry) => readFileSync(join(REPO_ROOT, host), 'utf8').includes(basename(entry, extname(entry)))),
