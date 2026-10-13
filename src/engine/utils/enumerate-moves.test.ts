@@ -17,6 +17,8 @@ import {
   type GameOptions,
 } from '../index.js';
 import { MCTSBot } from '../../bot/mcts-bot.js';
+import { GameRunner } from '../../runtime/runner.js';
+import { followUpForSeat } from '../flow/seat-activity.js';
 import { enumerateActionMoves, enumerateLegalMoves } from './enumerate-moves.js';
 
 // ============================================================================
@@ -528,5 +530,42 @@ describe('enumeration leaves out actions the game refuses (#690)', () => {
     game.tutorialDefinition = { learnerSeat: 1, steps: [{ id: 'step-1', gate: { action: 'move' } }] };
     game.tutorialProgress.set(1, { stepId: 'step-1', status: 'running' });
     expect(enumerateLegalMoves(game, 1).map((m) => m.action)).toEqual(['move', 'move']);
+  });
+});
+
+class FollowUpGatedGame extends Game<FollowUpGatedGame, Player> {
+  collectBlocked = false;
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerActions(
+      Action.create<FollowUpGatedGame>('start').execute(() => ({ success: true, followUp: { action: 'collect', args: {} } })),
+      Action.create<FollowUpGatedGame>('collect')
+        .chooseFrom('item', { choices: ['gem', 'coin'] })
+        .disabled((ctx) => (ctx.game.collectBlocked ? 'Your bag is full.' : false))
+        .execute(() => ({ success: true })),
+    );
+    this.setFlow({ root: loop({ maxIterations: 10, do: eachPlayer({ do: actionStep({ actions: ['start'] }) }) }) });
+  }
+}
+
+describe('a held follow-up the game refuses (#690)', () => {
+  it('has no moves while its .disabled() rule turns it off, and performAction refuses it', () => {
+    const runner = new GameRunner<FollowUpGatedGame>({
+      GameClass: FollowUpGatedGame,
+      gameType: 'follow-up-gated',
+      gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'follow-up-gated' },
+    });
+    runner.start();
+    expect(runner.performAction('start', 1, {}).success).toBe(true);
+    const { game } = runner;
+    const followUp = followUpForSeat(game.getFlowState(), 1)!;
+    expect(followUp.action).toBe('collect');
+    const collectMoves = () => enumerateLegalMoves(game, 1).filter((m) => m.action === 'collect');
+    expect(collectMoves()).toHaveLength(2);
+
+    game.collectBlocked = true;
+    expect(collectMoves()).toEqual([]);
+    expect(game.performAction('collect', game.getPlayer(1)!, { item: 'gem' }, { followUp }).error)
+      .toMatch(/is disabled: Your bag is full/);
   });
 });
