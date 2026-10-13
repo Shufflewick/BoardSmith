@@ -256,14 +256,15 @@ function buildRandomArgs(
   // A repeating selection's picks change the game (`onEach`) as they are made,
   // so what each pick may be is only known by making them. The engine's move
   // enumerator does exactly that on a scratch copy (#325); one of its moves is
-  // the random move. Its selections are not reported to `onSelectionChoices`:
-  // their candidates exist only on that copy.
+  // the random move; above enumeration's budget (#692) it draws one at random
+  // instead. Its selections are not reported to `onSelectionChoices`: their
+  // candidates exist only on that copy.
   if (game.getActionExecutor().hasRepeatingSelections(actionDef)) {
-    const moves = enumerateActionMoves(game, actionDef, player);
+    const moves = enumerateActionMoves(game, actionDef, player, { sampleAboveBudget: { count: 1, random: rng } });
     if (moves.length === 0) {
       return {
         ok: false,
-        reason: `action '${actionDef.name}' has a repeating selection and no sequence of picks that ends it`,
+        reason: `action '${actionDef.name}' has a repeating selection and no sequence of picks found that ends it`,
       };
     }
     return { ok: true, args: rng.pick(moves) };

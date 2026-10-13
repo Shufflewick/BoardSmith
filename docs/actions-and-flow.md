@@ -201,9 +201,11 @@ then `onEach` runs for it, and `until` is tested.
   submission is refused after `onEach` has run for some of its picks, the
   runner rolls the game back, so a refused move changed nothing.
 - **Bots and the simulator find repeats by making the picks** on a scratch copy
-  of the game, shortest sequences first, up to 500 partial moves (a warning
-  names the action when that budget runs out). The game being searched is
-  never touched.
+  of the game, shortest sequences first, within enumeration's budget of 10,000
+  values for one action (see [agent control](./agent-control.md)). The game
+  being searched is never touched. Past the budget, `enumerateLegalMoves` and
+  the greedy policy refuse the action by name, while MCTS bots and random play
+  draw moves one random pick at a time (#692).
 
 `onEach` runs once per pick, so it is the wrong place for a once-per-action cost
 (see [common pitfalls](./common-pitfalls.md)). An `onEach` may not create an
