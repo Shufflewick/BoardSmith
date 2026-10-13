@@ -26,6 +26,7 @@ import { join } from 'node:path';
  * `test-step-check` for the mutation checks' generated vitest config, mutants and reports.
  */
 type BuildingCommand =
+  | 'add-ui'
   | 'dev'
   | 'simulate'
   | 'build'

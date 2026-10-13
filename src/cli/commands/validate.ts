@@ -21,7 +21,7 @@ import {
   encodedRulesBytes,
 } from '../lib/bundle-limits.js';
 import { readDistDir, createZip } from '../lib/zip.js';
-import { requireGameProject, resolveRulesDir } from '../lib/game-project.js';
+import { requireGameProject, requireTableUi, resolveRulesDir } from '../lib/game-project.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { runToolCapturingStdout } from '../lib/run-tool.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
@@ -90,9 +90,9 @@ async function runValidation(
   // Which BACKEND this game declares, read once. `backend` is the single
   // declaration (#171), and what it changes below is which entry point the
   // project must have.
-  const worldMode = resolveWorldMode(
-    JSON.parse(readFileSync(configPath, 'utf-8')) as { backend?: unknown },
-  );
+  const config = JSON.parse(readFileSync(configPath, 'utf-8')) as { backend?: unknown };
+  requireTableUi(cwd, config);
+  const worldMode = resolveWorldMode(config);
 
   // 1. Check metadata completeness
   results.push(await validateMetadata(cwd));

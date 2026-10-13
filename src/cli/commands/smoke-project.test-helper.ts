@@ -13,15 +13,20 @@ import { join } from 'node:path';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 import { commitAll, writeFiles } from '../lib/verify-result.test-helper.js';
 import { devProject } from './dev-project.test-helper.js';
+import type { InitOptions } from './init.js';
 
 /**
- * Scaffolds a table (or a world when `world` is true), writes `files` over it, and commits it all
- * on `main`, ready for `boardsmith verify` or `runSmoke`.
+ * Scaffolds a table (or a world when `world` is true, or a simulator-only table with `init.sim`),
+ * writes `files` over it, and commits it all on `main`, ready for `boardsmith verify` or `runSmoke`.
  *
  * @returns the project directory
  */
-export async function smokeProject(world: boolean, files: Record<string, string> = {}): Promise<string> {
-  const dir = await devProject(world);
+export async function smokeProject(
+  world: boolean,
+  files: Record<string, string> = {},
+  init: Pick<InitOptions, 'sim'> = {},
+): Promise<string> {
+  const dir = await devProject(world, init);
   const modules = join(dir, 'node_modules');
   await fs.mkdir(join(modules, '.bin'), { recursive: true });
   await fs.mkdir(join(modules, '@vue'), { recursive: true });
@@ -30,7 +35,7 @@ export async function smokeProject(world: boolean, files: Record<string, string>
   }
   await fs.symlink('../vue-tsc/bin/vue-tsc.js', join(modules, '.bin', 'vue-tsc'));
   await fs.symlink('../vitest/vitest.mjs', join(modules, '.bin', 'vitest'));
-  await fs.rm(join(dir, 'tests', 'a11y.example.test.ts'));
+  await fs.rm(join(dir, 'tests', 'a11y.example.test.ts'), { force: true });
   await writeFiles(dir, files);
   commitAll(dir, 'fixture: the scaffolded game');
   return dir;

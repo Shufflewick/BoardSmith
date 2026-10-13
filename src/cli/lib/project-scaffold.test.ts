@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, dirname, basename, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { describe, it, expect } from 'vitest';
 import ts from 'typescript';
 import {
@@ -11,7 +12,7 @@ import {
   generateRulesIndexTs,
   generateUiIndexTs,
   generatePackageJson,
-  generateScaffoldFiles,
+  tableUiFiles,
   generateA11yExampleTestTs,
   generateTsConfig,
   getDependencyPaths,
@@ -23,6 +24,8 @@ import {
   generateElementsTs,
   generateActionsTs,
   generateFlowTs,
+  generateMetricsTs,
+  generateCardsCsv,
   generateTestTs,
 } from '../commands/init.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
@@ -40,7 +43,7 @@ const config: ProjectConfig = {
 
 describe('generateAppVue', () => {
   it('renders the board from the UI registry, never a board slot', () => {
-    const out = generateAppVue(config);
+    const out = generateAppVue();
     expect(out).toContain("import { GameShell } from 'boardsmith/ui'");
     expect(out).toContain("import uis from './uis.js'");
     expect(out).toContain('<GameShell :uis="uis">');
@@ -52,21 +55,13 @@ describe('generateAppVue', () => {
   });
 
   it('does not import any board component directly — the registry owns that', () => {
-    const out = generateAppVue(config);
+    const out = generateAppVue();
     expect(out).not.toContain('AutoUI');
     expect(out).not.toContain('GameTable');
   });
 
-  it('is identical whether or not a custom ui path was chosen (only uis.ts differs)', () => {
-    // App.vue is now board-agnostic. Which board ships is decided in uis.ts,
-    // so the scaffold no longer forks App.vue on the init-time answer.
-    expect(generateAppVue({ ...config, ui: './ui/components/GameTable.vue' })).toBe(
-      generateAppVue(config),
-    );
-  });
-
   it('has no split-screen markup', () => {
-    const out = generateAppVue(config);
+    const out = generateAppVue();
     expect(out).not.toContain('board-comparison');
     expect(out).not.toContain('board-section');
     expect(out).not.toContain('Auto-Generated UI');
@@ -217,11 +212,16 @@ describe('generateRulesIndexTs', () => {
     writeFileSync(join(rulesDir, 'elements.ts'), generateElementsTs());
     writeFileSync(join(rulesDir, 'actions.ts'), generateActionsTs('MyGame'));
     writeFileSync(join(rulesDir, 'flow.ts'), generateFlowTs('MyGame'));
+    writeFileSync(join(rulesDir, 'metrics.ts'), generateMetricsTs('MyGame'));
+    mkdirSync(join(rulesDir, 'data'));
+    writeFileSync(join(rulesDir, 'data', 'cards.csv'), generateCardsCsv());
 
     // 'boardsmith' resolves to the same entry the package.json "." export
     // points at (src/engine/index.ts), matching a real scaffolded project.
     const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-    const program = ts.createProgram([join(rulesDir, 'index.ts')], {
+    // vite/client is the scaffold tsconfig's one `types` entry, which types the `?raw` import.
+    const viteClient = join(dirname(createRequire(import.meta.url).resolve('vite/package.json')), 'client.d.ts');
+    const program = ts.createProgram([join(rulesDir, 'index.ts'), viteClient], {
       // Mirrors the scaffold's generateTsConfig() compiler options.
       strict: true,
       noEmit: true,
@@ -366,21 +366,21 @@ describe('generatePackageJson — axe-core scaffold devDependency', () => {
   });
 });
 
-describe('generateScaffoldFiles — a11y example test harness', () => {
+describe('tableUiFiles — a11y example test harness', () => {
   it('includes tests/a11y.example.test.ts', () => {
-    const files = generateScaffoldFiles(config, PROJECT_PATH);
+    const files = tableUiFiles(config, ['draw']);
     expect(files.some((f) => f.path === 'tests/a11y.example.test.ts')).toBe(true);
   });
 
   it('the a11y example harness imports axe-core and calls axe.run(', () => {
-    const files = generateScaffoldFiles(config, PROJECT_PATH);
+    const files = tableUiFiles(config, ['draw']);
     const entry = files.find((f) => f.path === 'tests/a11y.example.test.ts');
     expect(entry).toBeDefined();
     expect(entry!.content).toContain("from 'axe-core'");
     expect(entry!.content).toContain('axe.run(');
   });
 
-  it('generateA11yExampleTestTs output matches the generateScaffoldFiles entry', () => {
+  it('generateA11yExampleTestTs output matches the tableUiFiles entry', () => {
     expect(generateA11yExampleTestTs()).toContain('axe.run(');
   });
 
@@ -420,9 +420,9 @@ describe('generateGameTableVue', () => {
   });
 });
 
-describe('generateScaffoldFiles — AssetImage comes from boardsmith/ui (issue #81)', () => {
+describe('tableUiFiles — AssetImage comes from boardsmith/ui (issue #81)', () => {
   it('stamps no per-project AssetImage.vue', () => {
-    const files = generateScaffoldFiles(config, PROJECT_PATH);
+    const files = tableUiFiles(config, ['draw']);
     // A scaffold-stamped copy is a copy that drifts. The load/error state machine
     // lives in the library exactly once, as `AssetImage` on the boardsmith/ui barrel.
     expect(files.find((f) => f.path === 'src/ui/components/AssetImage.vue')).toBeUndefined();

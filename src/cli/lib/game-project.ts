@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveUserPath } from './user-path.js';
+import { resolveWorldMode } from './world-project.js';
 
 /**
  * A game's `boardsmith.json`, as far as the CLI commands that read it care.
@@ -117,4 +118,25 @@ export function requireRulesIndex(rulesPath: string): string {
     );
   }
   return rulesIndexPath;
+}
+
+/** The page a table's UI is served from. A project has a UI exactly when it has this file. */
+export const TABLE_UI_ENTRY = 'index.html';
+
+/**
+ * Does this project have a table UI? `boardsmith init --sim` writes a table with none, and
+ * `boardsmith add-ui` adds it. Nothing else records it: the page is the answer.
+ */
+export function hasTableUi(cwd: string): boolean {
+  return existsSync(join(cwd, TABLE_UI_ENTRY));
+}
+
+/**
+ * THE ONE PLACE A COMMAND CHECKS IT HAS A UI TO SERVE, BUILD OR WALK (`dev`, `build`, `validate`,
+ * `smoke`). A world always has one (`build` and `dev` write its entry when it is missing), so only
+ * a table without `index.html` is refused.
+ */
+export function requireTableUi(cwd: string, config: { backend?: unknown }): void {
+  if (resolveWorldMode(config) || hasTableUi(cwd)) return;
+  throw new Error('This project has no UI yet. Run `boardsmith add-ui`.');
 }

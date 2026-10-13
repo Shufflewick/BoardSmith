@@ -76,7 +76,22 @@ export type {
 export type { RandomState } from '../utils/random.js';
 
 // Author metrics for the balance simulator (#556).
-export { defineMetrics, type GameMetrics } from './metrics.js';
+// The kind types are exported so a game's declaration output can name them (TS2742).
+export {
+  defineMetrics,
+  type GameMetrics,
+  type Metric,
+  type MetricKinds,
+  type CountMetric,
+  type ElementCountMetric,
+  type CategoryCountMetric,
+  type RatioMetric,
+  type SampleMetric,
+  type EndSampleMetric,
+  type CategoryMetric,
+  type SegmentMetric,
+  type FinalScoreMetric,
+} from './metrics.js';
 export { parseCsv, type CsvColumnType, type CsvValue, type CsvRow } from './utils/csv.js';
 
 

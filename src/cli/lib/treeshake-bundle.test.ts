@@ -45,7 +45,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build as viteBuild } from 'vite';
 import vue from '@vitejs/plugin-vue';
-import { generateScaffoldFiles } from './project-scaffold.js';
+import { generateScaffoldFiles, tableUiFiles } from './project-scaffold.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // src/cli/lib/ → go up 3 dirs to reach the BoardSmith repo root
@@ -101,20 +101,18 @@ function readBundleFiles(dir: string, ext: string): string {
  *            If a relative path → custom component (no AutoUI import).
  *            Use './components/GameTable.vue' for the custom case — this path
  *            resolves correctly from App.vue (src/ui/App.vue) to the GameTable
- *            stub that generateScaffoldFiles creates at src/ui/components/GameTable.vue.
+ *            stub that tableUiFiles creates at src/ui/components/GameTable.vue.
  */
 function writeFixtureFiles(dir: string, ui?: string): void {
-  const files = generateScaffoldFiles(
-    {
-      name: 'treeshake-test',
-      backend: 'table' as const,
-      displayName: 'TreeShake Test',
-      description: 'Test fixture for tree-shaking verification',
-      playerCount: { min: 2, max: 2 },
-      ui,
-    },
-    dir,
-  );
+  const config = {
+    name: 'treeshake-test',
+    backend: 'table' as const,
+    displayName: 'TreeShake Test',
+    description: 'Test fixture for tree-shaking verification',
+    playerCount: { min: 2, max: 2 },
+    ui,
+  };
+  const files = [...generateScaffoldFiles(config, dir), ...tableUiFiles(config, ['draw', 'play'])];
   for (const { path: relPath, content } of files) {
     const fullPath = join(dir, relPath);
     mkdirSync(dirname(fullPath), { recursive: true });
@@ -227,7 +225,7 @@ describe('tree-shaking bundle proof (real Vite/Rollup build)', () => {
       mkdirSync(fixtureDir, { recursive: true });
 
       // './components/GameTable.vue' resolves from src/ui/App.vue to
-      // src/ui/components/GameTable.vue — the stub that generateScaffoldFiles creates.
+      // src/ui/components/GameTable.vue — the stub that tableUiFiles creates.
       writeFixtureFiles(fixtureDir, './components/GameTable.vue');
       const distUi = await buildFixtureUi(fixtureDir);
       const bundle = readBundleJs(distUi);

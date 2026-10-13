@@ -1133,6 +1133,7 @@ describe('validateProject stops by throwing, so a command running it stops too (
   it('rejects with the failure line after printing each check, instead of ending the process', async () => {
     const dir = tempTree('bs-validate-throws-');
     writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table', playerCount: { min: 2, max: 4 } }));
+    writeFileSync(join(dir, 'index.html'), '<div id="app"></div>\n');
     const printed: string[] = [];
     const log = vi.spyOn(console, 'log').mockImplementation((line?: unknown) => void printed.push(String(line)));
     try {
@@ -1151,6 +1152,7 @@ describe('a project with no vitest is told to install it, never to run npx (#595
     const dir = tempTree('bs-validate-no-vitest-');
     writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table' }));
     mkdirSync(join(dir, 'tests'));
+    writeFileSync(join(dir, 'index.html'), '<div id="app"></div>\n');
     const printed: string[] = [];
     const log = vi.spyOn(console, 'log').mockImplementation((line?: unknown) => void printed.push(String(line)));
     try {

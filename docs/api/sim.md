@@ -10,6 +10,13 @@ Import from `boardsmith/sim` in your project's `src/sim/index.ts` to give
 `boardsmith simulate --policy <name>` policies of your own. `random` and
 `mcts:<level>` need no file: they are always available by name.
 
+Every project `boardsmith init` scaffolds starts as a simulator: a greedy
+policy in `src/sim/index.ts`, metrics in `src/rules/metrics.ts`, card data in
+`src/rules/data/cards.csv`, and `tests/sim.test.ts`, which plays seeded games
+with the greedy policy through `playGame`. `boardsmith init <name> --sim`
+writes the project with no UI at all, and `boardsmith add-ui` adds it later
+(see [Getting started](../getting-started.md#starting-as-a-simulator-with-no-ui-yet)).
+
 ## Usage
 
 ```typescript
@@ -48,13 +55,28 @@ shares the game's engine. Its options are described in
   difficulty name or an iteration count. Each search is seeded from the seat's
   generator and runs its full iterations with no time limit, so a seeded run
   plays the same moves every time. It needs the definition's `gameType`.
+- `playGame(definition, { playerCount, seed, policies, maxActions })` - Plays
+  one seeded game to its end, one policy per seat (seat 1 first), and resolves
+  with its result: `completed`, or why not (`error`). It is the loop
+  `boardsmith simulate` plays each game with, for a test of your own:
+
+  ```typescript
+  const result = await playGame(gameDefinition, {
+    playerCount: 2,
+    seed: 'one',
+    policies: [policies.greedy, policies.greedy],
+    maxActions: 1000,
+  });
+  expect(result.completed).toBe(true);
+  ```
+
 - `Policy` - `{ name, choose(turn) }`. `choose` returns a move
   (`{ action, args }`), or `{ noMove: reason }` when its seat has none it can
   play; it may return a promise.
 - `PolicyTurn` - What `choose` is handed: the live `game`, the `seat` to move,
   its enabled `actions`, its own seeded `random` generator and the game
   `definition`.
-- `PolicyMove`, `PolicyChoice`, `SimulatedGame` - The shapes above.
+- `PolicyMove`, `PolicyChoice`, `SimulatedGame`, `PlayGameConfig` - The shapes above.
 
 ## Rules a policy plays by
 

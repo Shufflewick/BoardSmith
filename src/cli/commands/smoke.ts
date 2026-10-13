@@ -23,7 +23,7 @@
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync, promises as fs } from 'node:fs';
+import { existsSync, promises as fs, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve as pathResolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -33,6 +33,7 @@ import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
 import { collectOutput } from '../lib/child-output.js';
 import { freePort } from '../lib/free-port.js';
 import { gitOutput as git } from '../lib/git-output.js';
+import { requireTableUi } from '../lib/game-project.js';
 import type { VerifyCheckResult } from '../lib/verify-result.js';
 import { SMOKE_ANNOTATION, SMOKE_SEEDS_ENV, SMOKE_SPEC_PATH, smokeSummary, type SmokeRecord } from '../../testing/browser-smoke-verdict.js';
 
@@ -484,9 +485,11 @@ export async function runSmoke(options: { projectDir: string; log: (line: string
  */
 export async function smokeCommand(options: { project?: string; seed?: string[] }): Promise<void> {
   const projectDir = pathResolve(options.project ?? process.cwd());
-  if (!existsSync(join(projectDir, 'boardsmith.json'))) {
+  const configPath = join(projectDir, 'boardsmith.json');
+  if (!existsSync(configPath)) {
     throw new Error(`boardsmith smoke runs a game project, and ${projectDir} has no boardsmith.json. Run it in the game's directory, or pass --project <dir>.`);
   }
+  requireTableUi(projectDir, JSON.parse(readFileSync(configPath, 'utf-8')));
   const { outcome } = await runSmoke({ projectDir, log: (line) => console.error(chalk.dim(line)), seeds: options.seed });
   if (outcome.passed) {
     console.log(chalk.green(outcome.summary));

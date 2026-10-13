@@ -27,3 +27,4 @@ export {
   type PolicyChoice,
   type SimulatedGame,
 } from './policies.js';
+export { playGame, type PlayGameConfig } from './play-game.js';

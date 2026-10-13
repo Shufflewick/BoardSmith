@@ -1,6 +1,7 @@
 import { Command, Option } from 'commander';
 import { readBoardsmithVersion } from './lib/boardsmith-version.js';
 import { initCommand } from './commands/init.js';
+import { addUiCommand } from './commands/add-ui.js';
 import { devCommand } from './commands/dev.js';
 import { buildCommand } from './commands/build.js';
 import { testCommand } from './commands/test.js';
@@ -112,7 +113,13 @@ export function createProgram(): Command {
     .option('--without-rulebook', 'Explicitly declare no rulebook exists (the interview path supplies rulebook/ content)')
     .option('--world', 'Scaffold a persistent world (named partitions, a clock, no turn order) instead of a table game')
     .option('--into-existing', 'Scaffold into the git repository you run this from instead of creating <name>/ (refuses to overwrite any file)')
+    .option('--sim', 'Scaffold a table game with no UI yet, to balance with `boardsmith simulate` first; `boardsmith add-ui` adds the UI later')
     .action(initCommand);
+
+  program
+    .command('add-ui')
+    .description('Add the UI to a game started with `boardsmith init --sim` (refuses if any UI file already exists)')
+    .action(addUiCommand);
 
   // Development
   program

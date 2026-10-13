@@ -8,7 +8,7 @@ import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 import { buildCli, CLI_ENTRY, CLI_OUTFILE } from '../lib/build-cli.js';
 import { resolveUserPath } from '../lib/user-path.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
-import { requireGameProjectManifests, requireRulesIndex, resolveRulesDir } from '../lib/game-project.js';
+import { hasTableUi, requireGameProjectManifests, requireRulesIndex, requireTableUi, resolveRulesDir } from '../lib/game-project.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import { readWorldDefinition, type WorldDefinition } from '../../world/index.js';
 import type { GameBackend, GameDefinition } from '../../session/index.js';
@@ -414,6 +414,7 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
   // `dev`, `simulate` and `validate` test.
   const rulesPath = resolveRulesDir(cwd, config);
   const rulesIndexPath = requireRulesIndex(rulesPath);
+  requireTableUi(cwd, config);
 
   console.log(chalk.cyan(`\nBuilding ${config.displayName || config.name}...\n`));
 
@@ -468,12 +469,11 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
     // rather than conjured at build time, so what `boardsmith dev` serves is
     // what production loads. `world.ui` is gone from the manifest with the
     // branch it fed; see `deriveManifest`.
-    const tableEntry = join(cwd, 'index.html');
     const worldEntry = join(cwd, WORLD_ENTRY_HTML);
-    const hasTableUi = existsSync(tableEntry);
+    const tableUi = hasTableUi(cwd);
     await writeWorldEntryIfMissing(cwd, config);
     const hasWorldUi = existsSync(worldEntry);
-    const ui = resolveUiBuild(cwd, hasTableUi, hasWorldUi);
+    const ui = resolveUiBuild(cwd, tableUi, hasWorldUi);
     spinner.start(`Building UI${ui.surfaces === '' ? '' : ` (${ui.surfaces})`}...`);
     await viteBuild({
       root: cwd,
@@ -512,7 +512,7 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
       pkg,
       gameDefinition,
       ENGINE_REVISION,
-      { tableUi: hasTableUi, worldUi: hasWorldUi },
+      { tableUi, worldUi: hasWorldUi },
     );
 
     mkdirSync(outDir, { recursive: true });
@@ -528,7 +528,7 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
     console.log(chalk.dim(`    rules/  - Game logic bundle`));
     console.log(chalk.dim(`    ui/     - User interface bundle`));
     if (hasWorldUi) {
-      if (hasTableUi) {
+      if (tableUi) {
         console.log(chalk.dim(`      index.html - the table surface (GameShell)`));
       }
       console.log(chalk.dim(`      world.html - the resident-world surface (WorldShell)`));
