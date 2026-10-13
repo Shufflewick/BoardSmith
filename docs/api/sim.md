@@ -56,9 +56,12 @@ shares the game's engine. Its options are described in
 ## Rules a policy plays by
 
 - **Read the game, never change it.** A policy is handed the real game. One
-  whose work changes it (creates, moves or removes an element, draws from
-  `game.random`, or writes through `actionTempState`) ends that game as
-  crashed, with an error that names the policy.
+  whose work changes it in a way the engine tracks (creates, moves or removes
+  an element, draws from `game.random`, or writes through `actionTempState`)
+  ends that game as crashed, with an error that names the policy. A write to a
+  plain attribute or to `game.settings` is NOT detected: the engine cannot see
+  it, so the game plays on from the changed state and the results are silently
+  wrong. A policy must only read.
 - **It can see hidden cards.** Nothing redacts the game a policy reads, so a
   policy that should play fair must not read what its seat cannot see.
 - **Draw only from `turn.random`.** The game, the choice of which due seat

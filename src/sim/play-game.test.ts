@@ -54,6 +54,28 @@ class BidGame extends Game<BidGame, Player> {
   }
 }
 
+/** RaceGame plus a 'leap' worth 5 that is always disabled, so a policy that plays it is refused. */
+class LeapRaceGame extends RaceGame {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(
+      Action.create<LeapRaceGame>('leap')
+        .disabled(() => 'Leaping is not allowed.')
+        .execute((_args, ctx) => {
+          ctx.game.scores[ctx.player.seat] += 5;
+          return { success: true };
+        }),
+    );
+    this.setFlow({
+      root: loop({
+        while: (ctx) => !ctx.game.isFinished(),
+        maxIterations: 100,
+        do: eachPlayer({ do: actionStep({ actions: ['take', 'leap'] }) }),
+      }),
+    });
+  }
+}
+
 const race = { gameClass: RaceGame, gameType: 'race', minPlayers: 2, maxPlayers: 4 };
 
 /** The fixture greedy policy: take the largest step. */
@@ -141,6 +163,30 @@ describe('playGame with policies (#556)', () => {
     );
     expect(result.completed).toBe(false);
     expect(result.error).toMatch(/greedy.*'bid'.*number input 'amount'/);
+  });
+
+  it('greedy never plays a disabled action, however well it scores', async () => {
+    const leapFirst = greedy((_game, move) => (move.action === 'leap' ? 100 : (move.args.value as number)));
+    const result = await playGame(
+      { gameClass: LeapRaceGame },
+      { playerCount: 2, seed: 'leap', policies: [leapFirst, leapFirst], maxActions: 200 },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.completed).toBe(true);
+    expect(result.actionCount).toBe(7);
+  });
+
+  it("breaks greedy's ties with the seat's seeded generator: the same seed plays the same game", async () => {
+    const indifferent = greedy(() => 0);
+    const lengths = [];
+    for (let i = 0; i < 10; i++) {
+      const first = await play([indifferent, indifferent], `tie-${i}`);
+      const second = await play([indifferent, indifferent], `tie-${i}`);
+      expect({ ...second, duration: 0 }).toEqual({ ...first, duration: 0 });
+      lengths.push(first.actionCount);
+    }
+    // Ties are not always broken the same way: different seeds play different games.
+    expect(new Set(lengths).size).toBeGreaterThan(1);
   });
 
   it('refuses a player count the game does not declare', async () => {

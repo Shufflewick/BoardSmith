@@ -20,6 +20,7 @@ import {
   seatPolicies,
   parsePlayerCounts,
 } from './simulate.js';
+import { greedy } from '../../sim/policies.js';
 import { DeadEndGame } from './simulate.fixture.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { scratchDir } from '../lib/project-paths.js';
@@ -119,7 +120,7 @@ describe('runSimulation', () => {
     });
 
     expect(result.failing).toEqual([]);
-    expect(result.report!.map((r) => [r.players, r.games, r.completed])).toEqual([[2, 4, 4], [3, 4, 4]]);
+    expect(result.report!.map((r) => [r.players, r.games])).toEqual([[2, 4], [3, 4]]);
     for (const count of result.report!) {
       // PickGame declares no winner, so every game is a tie.
       expect(count.tieRate).toBe(1);
@@ -190,6 +191,10 @@ describe('seatPolicies: --policy flags (#556)', () => {
     expect(() => seatPolicies(['mcts:brutal'], undefined, 2)).toThrow(/Unknown bot level "brutal"/);
   });
 
+  it("names a project policy by its key in the project's policies, so errors name it", () => {
+    expect(seatPolicies(['meddle'], { meddle: greedy(() => 0) }, 2).map((p) => p.name)).toEqual(['meddle', 'meddle']);
+  });
+
   it('refuses an unknown policy, naming the ones there are', () => {
     expect(() => seatPolicies(['greedy'], project, 2)).toThrow(/Unknown policy "greedy".*random, mcts:<level>, cautious/);
   });
@@ -223,6 +228,7 @@ describe('parsePlayerCounts: --players (#556)', () => {
     expect(() => parsePlayerCounts('two', game)).toThrow(/--players.*"two"/);
     expect(() => parsePlayerCounts('2,,3', game)).toThrow(/--players/);
     expect(() => parsePlayerCounts('0', {})).toThrow(/--players/);
+    expect(() => parsePlayerCounts('2,3,2', game)).toThrow(/--players names 2 more than once/);
   });
 
   it('needs a list when the game declares no player range', () => {
@@ -432,7 +438,7 @@ describe('boardsmith simulate reports per player count (#556)', () => {
     expect(games).toEqual([]);
     // Every seat adds 3 and the loop checks the total of 12 after each full round: two rounds of
     // three seats, or one of four.
-    expect(report.map((r: { players: number; completed: number; length: unknown }) => [r.players, r.completed, r.length])).toEqual([
+    expect(report.map((r: { players: number; games: number; length: unknown }) => [r.players, r.games, r.length])).toEqual([
       [3, 3, { mean: 6, min: 6, max: 6 }],
       [4, 3, { mean: 4, min: 4, max: 4 }],
     ]);

@@ -70,7 +70,7 @@ export function parsePlayerCounts(
     }
     return Array.from({ length: maxPlayers - minPlayers + 1 }, (_, i) => minPlayers + i);
   }
-  return raw.split(',').map((part) => {
+  const counts = raw.split(',').map((part) => {
     if (!/^\d+$/.test(part) || Number(part) < 1) {
       throw new Error(`--players takes positive whole numbers separated by commas (e.g. 2,4,6), got "${raw}".`);
     }
@@ -80,6 +80,9 @@ export function parsePlayerCounts(
     }
     return count;
   });
+  const repeated = counts.find((count, i) => counts.indexOf(count) !== i);
+  if (repeated !== undefined) throw new Error(`--players names ${repeated} more than once, got "${raw}".`);
+  return counts;
 }
 
 const BUILT_IN_POLICIES = 'random, mcts:<level>';
@@ -88,7 +91,8 @@ const BUILT_IN_POLICIES = 'random, mcts:<level>';
 function policyNamed(name: string, project: Record<string, Policy>): Policy {
   if (name === 'random') return random();
   if (name.startsWith('mcts:')) return mcts(parseBotLevel(name.slice('mcts:'.length)));
-  if (Object.hasOwn(project, name)) return project[name];
+  // Named by its key, so an error names the policy the author listed, not the builder it came from.
+  if (Object.hasOwn(project, name)) return { ...project[name], name };
   const names = [BUILT_IN_POLICIES, ...Object.keys(project)].join(', ');
   throw new Error(
     `Unknown policy "${name}". Use one of: ${names}; or add it to the policies src/sim/index.ts exports.`,
@@ -163,7 +167,6 @@ export interface PerGameReport {
 export interface PlayerCountReport {
   players: number;
   games: number;
-  completed: number;
   /** Seat -> share of games that seat won alone. */
   winShare: Record<number, number>;
   /** Share of games won by no seat or shared by several. */
@@ -198,10 +201,7 @@ export interface RunSimulationOptions {
 /** Map one simulated game to the CLI's stable per-game report shape. */
 function toPerGameReport(g: SingleGameResult, index: number): PerGameReport {
   const status: GameStatus = g.completed ? 'complete' : g.stuck ? 'stuck' : 'error';
-  const error = g.error
-    ?? (g.timedOut ? 'Game exceeded the simulation timeout.'
-      : g.exceededMaxActions ? 'Game exceeded the maximum action count.'
-      : undefined);
+  const error = g.error ?? (g.exceededMaxActions ? 'Game exceeded the maximum action count.' : undefined);
   return {
     index,
     seed: g.seed,
@@ -217,18 +217,19 @@ function toPerGameReport(g: SingleGameResult, index: number): PerGameReport {
 function playerCountReport(players: number, games: PerGameReport[]): PlayerCountReport {
   const wins = new Map<number, number>();
   for (const g of games) if (g.winner?.length === 1) wins.set(g.winner[0], (wins.get(g.winner[0]) ?? 0) + 1);
-  const turns = games.map((g) => g.turns);
+  // One pass, not Math.min(...turns): spreading a large run overflows the stack.
+  const length = { sum: 0, min: Infinity, max: -Infinity };
+  for (const { turns } of games) {
+    length.sum += turns;
+    length.min = Math.min(length.min, turns);
+    length.max = Math.max(length.max, turns);
+  }
   return {
     players,
     games: games.length,
-    completed: games.length,
     winShare: Object.fromEntries(Array.from({ length: players }, (_, i) => [i + 1, (wins.get(i + 1) ?? 0) / games.length])),
     tieRate: games.filter((g) => g.winner?.length !== 1).length / games.length,
-    length: {
-      mean: turns.reduce((sum, t) => sum + t, 0) / games.length,
-      min: Math.min(...turns),
-      max: Math.max(...turns),
-    },
+    length: { mean: length.sum / games.length, min: length.min, max: length.max },
   };
 }
 
@@ -314,7 +315,7 @@ function printHumanReport(
   }
 
   for (const r of result.report) {
-    console.log(chalk.bold(`${r.players} players: ${r.completed}/${r.games} complete`));
+    console.log(chalk.bold(`${r.players} players: all ${r.games} games complete`));
     const shares = Object.entries(r.winShare).map(([seat, share]) => `seat ${seat} ${percent(share)}`);
     console.log(`  Win share: ${shares.join(', ')}`);
     console.log(`  Ties: ${percent(r.tieRate)}`);

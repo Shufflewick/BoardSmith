@@ -21,6 +21,7 @@ import type {
   Player,
   GameClass,
 } from '../engine/index.js';
+import { followUpForSeat } from '../engine/index.js';
 import { enumerateActionMoves, enumerateLegalMoves } from '../engine/utils/enumerate-moves.js';
 import { createBot } from '../bot/index.js';
 import type { BotStrategy, DifficultyLevel } from '../bot/types.js';
@@ -61,7 +62,10 @@ export interface PolicyTurn {
   definition: SimulatedGame;
 }
 
-/** Decides a seat's moves. `name` is how errors and replay commands refer to it. */
+/**
+ * Decides a seat's moves. `name` is how errors refer to it; `boardsmith
+ * simulate` names a project's policy by its key in the project's `policies`.
+ */
 export interface Policy {
   readonly name: string;
   choose(turn: PolicyTurn): PolicyChoice | Promise<PolicyChoice>;
@@ -127,8 +131,9 @@ export function random(
 /**
  * Scores every legal move of the seat (`enumerateLegalMoves`) and plays the
  * highest, breaking a tie with the seat's own generator. `score` must return a
- * finite number and only read the game. A move that takes a number input
- * cannot be listed (#689), so greedy refuses a seat offered one.
+ * finite number and only read the game. Only the seat's enabled actions and
+ * its held follow-up are scored. A move that takes a number input cannot be
+ * listed (#689), so greedy refuses a seat offered one.
  */
 export function greedy<G extends Game>(score: (game: G, move: PolicyMove, seat: number) => number): Policy {
   return {
@@ -144,9 +149,17 @@ export function greedy<G extends Game>(score: (game: G, move: PolicyMove, seat: 
           };
         }
       }
+      // enumerateLegalMoves does not apply an action's `.disabled()` rule or a tutorial gate, so
+      // only the seat's enabled actions and its held follow-up are scored.
+      const legal = enumerateLegalMoves(game, seat);
+      // enumerateLegalMoves has already refused a game with no flow state.
+      const followUp = followUpForSeat(game.getFlowState()!, seat)?.action;
+      const playable = legal.filter(
+        (move) => actions.includes(move.action) || move.action === followUp,
+      );
       let best: PolicyMove[] = [];
       let bestScore = -Infinity;
-      for (const move of enumerateLegalMoves(game, seat)) {
+      for (const move of playable) {
         const value = score(game as G, move, seat);
         if (!Number.isFinite(value)) {
           throw new Error(`greedy's score returned ${value} for player ${seat}'s '${move.action}'. Return a finite number.`);
