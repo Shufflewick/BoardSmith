@@ -1430,7 +1430,7 @@
       "surfaceHash": "43605924b1a82471",
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "boardsmith exports defineMetrics and GameMetrics, and gameDefinition gains an optional metrics field (#556): a game declares the balance simulator's metrics (count, ratio, sample, category, segment, finalScore) and records them from game code; recording does nothing unless the simulator attaches a sink to the one game it plays, so real play, bots and snapshots are unchanged; no format or payload change."
+      "summary": "boardsmith exports defineMetrics and GameMetrics, and gameDefinition gains an optional metrics field (#556): a game declares the balance simulator's metrics (count, ratio, sample, category, segment, finalScore) and records them from game code; recording does nothing unless the simulator attaches a sink to the one game it plays, so real play, bots and snapshots are unchanged; no format or payload change. GameOptions gains the internal metricSink (set by the simulator, applied before the subclass constructor, never kept in constructor options or snapshots); metricSink is an engine-owned option key, so a game declaring a game option named metricSink is refused when it loads and a player selection naming it is refused."
     }
   ]
 }
