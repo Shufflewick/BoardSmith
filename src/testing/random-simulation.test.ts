@@ -116,8 +116,9 @@ class Gem extends Piece<GemDraftGame> {
 class Pile extends Space<GemDraftGame> {}
 
 /**
- * A draft whose moves are an element pick (`take`) and a multi-element pick
- * (`discard`), so the simulator's element args reach the engine. Each execute
+ * A draft whose moves are an element pick (`take`), a multi-element pick
+ * (`discard`) and a repeating element pick (`hoard`), so the simulator's
+ * element args reach the engine on both of its paths. Each execute
  * refuses an arg that is not the live game's own element, and the winner
  * depends on which gems were taken, so a seeded run's outcome pins the picks.
  */
@@ -157,11 +158,32 @@ class GemDraftGame extends Game<GemDraftGame, Player> {
         }),
     );
 
+    this.registerAction(
+      Action.create<GemDraftGame>('hoard')
+        .chooseElement('picks', {
+          elementClass: Gem,
+          from: (ctx) => ctx.game.gems,
+          repeat: {
+            until: (ctx, gem) => gem.value >= 5 || ctx.game.gems.count(Gem) === 0,
+            onEach: (ctx, gem) => {
+              if (!isLive(ctx.game, gem)) throw new Error('hoard was handed a gem that is not the live element');
+              gem.putInto(ctx.game.handOf(ctx.player));
+            },
+          },
+        })
+        .execute((args, ctx) => {
+          if (!args.picks.every((g) => isLive(ctx.game, g))) {
+            throw new Error('hoard was handed a gem that is not the live element');
+          }
+          return { success: true };
+        }),
+    );
+
     this.setFlow({
       root: loop({
         while: (ctx) => ctx.game.gems.count(Gem) > 0,
         maxIterations: 100,
-        do: eachPlayer({ do: actionStep({ actions: ['take', 'discard'] }) }),
+        do: eachPlayer({ do: actionStep({ actions: ['take', 'discard', 'hoard'] }) }),
       }),
     });
   }
@@ -198,7 +220,7 @@ describe('simulateRandomGames', () => {
     expect(results.games[0]!.error).toContain("requires text input 'text'");
   });
 
-  it('submits element and multi-element picks the engine plays as live elements, with a pinned seeded outcome (#686)', async () => {
+  it('submits element, multi-element and repeating element picks the engine plays as live elements, with a pinned seeded outcome (#686)', async () => {
     const results = await simulateRandomGames(GemDraftGame, {
       count: 8,
       playerCounts: [2, 3],
@@ -208,8 +230,8 @@ describe('simulateRandomGames', () => {
 
     expect(results.games.map((g) => g.error)).toEqual(Array(8).fill(undefined));
     expect(results.completed).toBe(8);
-    expect(results.games.map((g) => g.actionCount)).toEqual([9, 8, 7, 6, 8, 8, 7, 7]);
-    expect(results.games.map((g) => g.winners)).toEqual([[2], [2], [2], [1], [1], [1], [2], [2]]);
+    expect(results.games.map((g) => g.actionCount)).toEqual([8, 5, 5, 6, 5, 6, 5, 6]);
+    expect(results.games.map((g) => g.winners)).toEqual([[2], [1], [1], [2], [1], [2], [1], [1]]);
   });
 
   it('generates valid arguments so arg-based games complete (F49)', async () => {
