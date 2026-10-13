@@ -10,7 +10,7 @@ import type { FlowState, Game, GameClass, AnimationEvent, PendingActionState } f
 import type { PlayerStateView } from '../engine/utils/index.js';
 import type { BotStrategy } from '../bot/index.js';
 import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
-import type { CheckpointPolicy, UndoPolicy } from '../engine/index.js';
+import type { CheckpointPolicy, UndoPolicy, GameMetrics } from '../engine/index.js';
 import type { WorldDefinition } from '../world/definition.js';
 import type {
   LobbyState,
@@ -98,6 +98,11 @@ export interface GameDefinition {
   displayName?: string;
   /** bot configuration (objectives and threat response hooks) */
   bot?: BotStrategy;
+  /**
+   * The game's author metrics, from `defineMetrics`: what `boardsmith simulate`
+   * records and reports. Recording does nothing in real play.
+   */
+  metrics?: GameMetrics;
   /**
    * Whether this game keeps CROSS-SESSION state -- a hall of fame, a campaign's
    * character sheets, a persistent world's board between rounds.

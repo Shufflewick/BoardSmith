@@ -291,7 +291,7 @@ export function createProgram(): Command {
   // Headless simulation
   program
     .command('simulate')
-    .description('Play seeded headless games and report completion, win share by seat, ties and game length per player count')
+    .description("Play seeded headless games and report, per player count, win share, ties, game length, scores and the game's own metrics")
     .option('--games <count>', 'Games per player count', '10')
     .option('--seed <seed>', 'Base seed (per-game seeds derived and recorded in output)')
     .addOption(
@@ -301,7 +301,8 @@ export function createProgram(): Command {
     .option('--players <counts>', 'Player counts, comma-separated (e.g. 2,4,6); every count the game declares when omitted')
     .option('--policy <spec...>', 'Who plays the seats: a name for every seat (e.g. --policy greedy) or seat=name for one (e.g. --policy 2=random). Names: random, mcts:<level> (easy, medium, hard or an iteration count), or a policy src/sim/index.ts exports. Default: random')
     .option('--game-option <kv...>', 'Select a declared game option as key=value (repeatable, e.g. --game-option difficulty=hard) so option-gated configurations are simulated too')
-    .option('--json', 'Output results as JSON')
+    .addOption(new Option('--json', 'Output the run, the unfinished games and the report as JSON').conflicts('csv'))
+    .option('--csv', 'Output the report as CSV, one statistic per row: variant,players,section,metric,key,stat,value')
     .action(simulateCommand);
 
   // Bot Weight Evolution (new focused command)

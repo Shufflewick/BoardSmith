@@ -771,6 +771,7 @@ export const gameDefinition = {
   bot: {
     objectives: getMyGameObjectives,  // Optional bot support
   },
+  metrics,                            // Optional balance metrics (defineMetrics, see api/sim.md)
   presets: [ /* ... */ ],             // Optional quick-start presets
 };
 ```

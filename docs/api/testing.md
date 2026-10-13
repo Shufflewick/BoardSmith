@@ -631,8 +631,9 @@ await session.send(1, { type: 'action', actionName: 'ask', player: 1, args: { ta
 
 For a project-level CI check with no test file to write at all, use the
 `boardsmith simulate` CLI. It plays many seeded games of your project's game
-at each player count and reports, per player count, completion, win share by
-seat, tie rate and game length in actions:
+at each player count and reports, per player count, win share by seat, tie
+rate, game length in actions and the game's own metrics (see
+[the balance report](./sim.md#the-balance-report)):
 
 ```bash
 boardsmith simulate --games 50 --seed ci-run-1 --players 2,4 --json
@@ -657,6 +658,10 @@ boardsmith simulate --games 50 --seed ci-run-1 --players 2,4 --json
   lists only the games that did not finish (`{ index, seed, players, status,
   turns, winner, error? }`) and `report` is one entry per player count, or
   `null` when any game did not finish
+- `--csv` — the report as CSV, one statistic per row (see
+  [the balance report](./sim.md#the-balance-report)); cannot be combined with
+  `--json`. A run with an unfinished game writes no rows and prints its
+  failures to stderr
 
 A game stops as hung after 10,000 actions; there is no per-game time limit.
 Exit code is `0` only if every game finishes. Any game that does not prints

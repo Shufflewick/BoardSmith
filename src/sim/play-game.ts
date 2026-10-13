@@ -8,6 +8,7 @@
 import type { Game, FlowState } from '../engine/index.js';
 import { dueSeats, availableActionsForSeat } from '../engine/index.js';
 import { refuseChangeSince } from '../engine/element/state-version.js';
+import { endOfGameRecords, type GameMetrics, type MetricRecord, type MetricSink } from '../engine/metrics.js';
 import { createTestGame, type TestGame } from '../testing/test-game.js';
 import { SeededRandom } from '../utils/random.js';
 import type { Policy, SimulatedGame } from './policies.js';
@@ -67,6 +68,12 @@ export interface SingleGameResult {
   seed: string;
   /** Winner indices (if completed) */
   winners?: number[];
+  /**
+   * The game's author metric records, in the order they were kept: those of
+   * the flow's start, each committed action, and (when the game completed)
+   * the end-of-game reads, once per player.
+   */
+  metrics: MetricRecord[];
 }
 
 
@@ -172,6 +179,42 @@ export function gameSeed(baseSeed: string, playerCount: number, index: number): 
   return `${baseSeed}-${playerCount}-${index}`;
 }
 
+/**
+ * The author metric records of one simulated game. Only the live game gets
+ * the sink (`attach`): the copies policies make are games of their own. A
+ * definition with no metrics (`simulateRandomGames`) records nothing, as in
+ * real play.
+ */
+function metricRecorder(metrics: GameMetrics | undefined) {
+  const sink: MetricSink = { declared: metrics ?? {}, pending: [] };
+  const records: MetricRecord[] = [];
+  /** A refused record ends the game, even when game code caught the throw. */
+  const check = () => {
+    if (sink.refused) throw sink.refused;
+  };
+  return {
+    records,
+    attach: (game: Game) => {
+      if (metrics) game._ctx._metricSink = sink;
+    },
+    check,
+    /** Drop records not made by a committed step. */
+    discard: () => {
+      sink.pending = [];
+    },
+    /** Keep the records of the step that just committed. */
+    keep: () => {
+      check();
+      records.push(...sink.pending);
+      sink.pending = [];
+    },
+    /** Add the end-of-game reads. */
+    end: (game: Game) => {
+      if (metrics) records.push(...endOfGameRecords(metrics, game));
+    },
+  };
+}
+
 /** What one simulated game is played with. */
 export interface PlayGameConfig<G extends Game> {
   playerCount: number;
@@ -235,6 +278,7 @@ export async function playGame<G extends Game>(
   let stuckReason: string | undefined;
   let restReason: string | undefined;
   let consecutiveFailures = 0;
+  const recorder = metricRecorder(definition.metrics);
 
   try {
     testGame = createTestGame(definition.gameClass, {
@@ -243,8 +287,11 @@ export async function playGame<G extends Game>(
       ...gameOptions,
       playerCount,
       seed,
-      autoStart: true,
+      autoStart: false,
     });
+    recorder.attach(testGame.game);
+    testGame.start();
+    recorder.keep();
 
     // Run game until complete or limits reached
     while (!testGame.isComplete()) {
@@ -293,6 +340,7 @@ export async function playGame<G extends Game>(
         random: seatRandom[actor.seat - 1],
         definition,
       });
+      recorder.check();
       refuseChangeSince(
         testGame.game._ctx,
         version,
@@ -307,9 +355,12 @@ export async function playGame<G extends Game>(
 
       // Uses tryAction (not doAction) so the consecutiveFailures retry branch
       // below keeps working as a normal control-flow branch, not a throw.
+      recorder.discard();
       const result = testGame.tryAction(actor.seat, choice.action, choice.args);
+      recorder.check();
 
       if (result.success) {
+        recorder.keep();
         actionCount++;
         consecutiveFailures = 0;
         if (!testGame.isComplete()) {
@@ -335,6 +386,7 @@ export async function playGame<G extends Game>(
 
     const duration = Date.now() - startTime;
     const completed = testGame.isComplete();
+    if (completed) recorder.end(testGame.game);
 
     return {
       completed,
@@ -350,6 +402,7 @@ export async function playGame<G extends Game>(
       playerCount,
       seed,
       winners: completed ? testGame.getWinners().map(p => p.seat) : undefined,
+      metrics: recorder.records,
     };
   } catch (error) {
     return {
@@ -364,6 +417,7 @@ export async function playGame<G extends Game>(
       duration: Date.now() - startTime,
       playerCount,
       seed,
+      metrics: recorder.records,
     };
   }
 }

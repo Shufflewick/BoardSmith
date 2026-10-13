@@ -75,6 +75,9 @@ export type {
 // What `GameRandom.getState` returns and `Game.setRandomState` takes (#483).
 export type { RandomState } from '../utils/random.js';
 
+// Author metrics for the balance simulator (#556).
+export { defineMetrics, type GameMetrics } from './metrics.js';
+
 
 // Player system
 export {

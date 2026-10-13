@@ -4,6 +4,7 @@ import chalk from 'chalk';
 
 import { playGame, gameSeed, type SingleGameResult } from '../../sim/play-game.js';
 import { random, mcts, type Policy, type SimulatedGame } from '../../sim/policies.js';
+import { buildReport, formatReport, reportCsv, type PlayerCountReport } from '../../sim/report.js';
 import { parseBotLevel } from '../../bot/index.js';
 import { getProjectContext, importRuntimeBundle, toPosix } from './game-runtime.js';
 import { parseGameOptionFlags } from './dev.js';
@@ -22,6 +23,7 @@ interface SimulateOptions {
   /** Comma-separated player counts; every count the game declares when omitted. */
   players?: string;
   json?: boolean;
+  csv?: boolean;
   /** Repeatable `--game-option key=value`, mirroring `boardsmith dev`. */
   gameOption?: string[];
   /** Repeatable `--policy name` (every seat) or `--policy seat=name` (one seat). */
@@ -167,18 +169,6 @@ export interface PerGameReport {
   error?: string;
 }
 
-/** The statistics of one player count, reported only when every game finished. */
-export interface PlayerCountReport {
-  players: number;
-  games: number;
-  /** Seat -> share of games that seat won alone. */
-  winShare: Record<number, number>;
-  /** Share of games won by no seat or shared by several. */
-  tieRate: number;
-  /** Game length in actions. */
-  length: { mean: number; min: number; max: number };
-}
-
 /** A run's games: those that did not finish, and the report, which is `null` when any did not. */
 export interface RunSimulationResult {
   baseSeed: string;
@@ -217,26 +207,6 @@ function toPerGameReport(g: SingleGameResult, index: number): PerGameReport {
   };
 }
 
-/** The statistics of one player count's finished games. */
-function playerCountReport(players: number, games: PerGameReport[]): PlayerCountReport {
-  const wins = new Map<number, number>();
-  for (const g of games) if (g.winner?.length === 1) wins.set(g.winner[0], (wins.get(g.winner[0]) ?? 0) + 1);
-  // One pass, not Math.min(...turns): spreading a large run overflows the stack.
-  const length = { sum: 0, min: Infinity, max: -Infinity };
-  for (const { turns } of games) {
-    length.sum += turns;
-    length.min = Math.min(length.min, turns);
-    length.max = Math.max(length.max, turns);
-  }
-  return {
-    players,
-    games: games.length,
-    winShare: Object.fromEntries(Array.from({ length: players }, (_, i) => [i + 1, (wins.get(i + 1) ?? 0) / games.length])),
-    tieRate: games.filter((g) => g.winner?.length !== 1).length / games.length,
-    length: { mean: length.sum / games.length, min: length.min, max: length.max },
-  };
-}
-
 /** Play `games` in order and report them. */
 async function playAndReport(
   definition: SimulatedGame,
@@ -244,22 +214,18 @@ async function playAndReport(
   games: Array<{ seed: string; players: number }>,
   options: Pick<RunSimulationOptions, 'policiesFor' | 'maxActions' | 'gameOptions'>,
 ): Promise<RunSimulationResult> {
-  const played: PerGameReport[] = [];
-  for (const [index, game] of games.entries()) {
-    const result = await playGame(definition, {
+  const played: SingleGameResult[] = [];
+  for (const game of games) {
+    played.push(await playGame(definition, {
       playerCount: game.players,
       seed: game.seed,
       policies: options.policiesFor(game.players),
       maxActions: options.maxActions ?? MAX_ACTIONS,
       gameOptions: options.gameOptions,
-    });
-    played.push(toPerGameReport(result, index));
+    }));
   }
-  const failing = played.filter((g) => g.status !== 'complete');
-  const counts = [...new Set(games.map((g) => g.players))];
-  const report = failing.length > 0
-    ? null
-    : counts.map((players) => playerCountReport(players, played.filter((g) => g.players === players)));
+  const failing = played.map(toPerGameReport).filter((g) => g.status !== 'complete');
+  const report = failing.length > 0 ? null : buildReport(definition.metrics, played);
   return { baseSeed, failing, report };
 }
 
@@ -298,34 +264,21 @@ export async function runReplay(definition: SimulatedGame, options: RunReplayOpt
   });
 }
 
-const percent = (share: number) => `${Math.round(share * 1000) / 10}%`;
-
-function printHumanReport(
-  heading: string,
+/** Print the games that did not finish, each with its replay command. */
+function printFailures(
+  print: (line: string) => void,
   result: RunSimulationResult,
   gameOptions: Record<string, unknown>,
   policyFlags: readonly string[],
 ): void {
-  console.log(chalk.cyan(`\n${heading}\n`));
-
   for (const g of result.failing) {
-    console.log(chalk.red(`Game ${g.index} ${g.status} (seed ${g.seed}) after ${g.turns} action(s).`));
-    if (g.error) console.log(chalk.dim(`  ${g.error}`));
-    console.log(chalk.dim(`  Replay: ${simulateReplayCommand({ seed: g.seed, playerCount: g.players }, gameOptions, policyFlags)}`));
+    print(chalk.red(`Game ${g.index} ${g.status} (seed ${g.seed}) after ${g.turns} action(s).`));
+    if (g.error) print(chalk.dim(`  ${g.error}`));
+    print(chalk.dim(`  Replay: ${simulateReplayCommand({ seed: g.seed, playerCount: g.players }, gameOptions, policyFlags)}`));
   }
   if (result.report === null) {
-    console.log(chalk.bold(`\n${result.failing.length} game(s) did not finish, so no statistics are reported.\n`));
-    return;
+    print(chalk.bold(`\n${result.failing.length} game(s) did not finish, so no statistics are reported.\n`));
   }
-
-  for (const r of result.report) {
-    console.log(chalk.bold(`${r.players} players: all ${r.games} games complete`));
-    const shares = Object.entries(r.winShare).map(([seat, share]) => `seat ${seat} ${percent(share)}`);
-    console.log(`  Win share: ${shares.join(', ')}`);
-    console.log(`  Ties: ${percent(r.tieRate)}`);
-    console.log(`  Length: mean ${Math.round(r.length.mean * 10) / 10}, min ${r.length.min}, max ${r.length.max} actions`);
-  }
-  console.log('');
 }
 
 /** The rules' game definition and the project's own policies, bundled together so they share one engine. */
@@ -415,13 +368,28 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
     return;
   }
   const { heading, result, gameOptions, playerCounts } = outcome;
-
   if (options.json) {
     const run = { seed: result.baseSeed, gamesPerCount: options.replay === undefined ? gamesCount : 1, players: playerCounts, policies: policyFlags, gameOptions };
     console.log(JSON.stringify({ run, games: result.failing, report: result.report }, null, 2));
   } else {
-    printHumanReport(heading, result, gameOptions, policyFlags);
+    printResult(heading, result, gameOptions, policyFlags, options.csv === true);
   }
-
   process.exitCode = result.failing.length > 0 ? 1 : 0;
+}
+
+/** Print a run as tables, or as CSV. Only CSV goes to stdout then: a run with an unfinished game has none, and says why on stderr. */
+function printResult(
+  heading: string,
+  result: RunSimulationResult,
+  gameOptions: Record<string, unknown>,
+  policyFlags: readonly string[],
+  csv: boolean,
+): void {
+  if (csv && result.report !== null) {
+    console.log(reportCsv(result.report));
+    return;
+  }
+  if (!csv) console.log(chalk.cyan(`\n${heading}\n`));
+  printFailures(csv ? console.error : console.log, result, gameOptions, policyFlags);
+  if (result.report !== null) console.log(formatReport(result.report));
 }
