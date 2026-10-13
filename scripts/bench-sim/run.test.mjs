@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseArgs } from './run.mjs';
+import { parseArgs } from './args.mjs';
 
 const RUN = join(dirname(fileURLToPath(import.meta.url)), 'run.mjs');
 

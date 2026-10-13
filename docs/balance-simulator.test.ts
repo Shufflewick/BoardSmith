@@ -40,6 +40,8 @@ interface Report {
 
 const project = await smokeProject(false, {}, { sim: true });
 const simulates: SimulateRun[] = [];
+// Stage 1's tables at 4 players, for the report excerpt the page shows.
+let tables: Awaited<ReturnType<typeof spawnCli>> | undefined;
 let addUi: Awaited<ReturnType<typeof spawnCli>> | undefined;
 let typecheck: Awaited<ReturnType<typeof spawnCli>> | undefined;
 let projectTests: Awaited<ReturnType<typeof spawnCli>> | undefined;
@@ -57,6 +59,9 @@ for (const step of steps) {
       const games = args.indexOf('--games');
       if (games !== -1) args.splice(games, 2);
       const ran = await spawnCli([...args, '--games', '30', '--seed', 'doc', '--jobs', '1', '--json'], project);
+      if (simulates.length === 0) {
+        tables = await spawnCli(['simulate', '--policy', 'greedy', '--players', '4', '--games', '30', '--seed', 'doc', '--jobs', '1'], project);
+      }
       simulates.push({ command: line, code: ran.code, stderr: ran.stderr, json: ran.code === 0 ? JSON.parse(ran.stdout) : {} });
     } else if (command === 'boardsmith' && args.join(' ') === 'add-ui') {
       addUi = await spawnCli(['add-ui'], project);
@@ -76,9 +81,36 @@ const reportsOf = (run: SimulateRun): Report[] =>
 
 const ELEMENT_METRICS = ['offered', 'picked', 'pickRate'];
 
+/** Each fenced block on the page: its language, whether a doc-test marker sits on the line before it, and its text. */
+const blocks = [...DOC.matchAll(/(.*)\n```(\w*)\n([\s\S]*?)```/g)].map(([, before, lang, body]) => ({
+  lang,
+  marked: before.startsWith('<!-- doc-test: '),
+  body,
+}));
+
+/** A line's words, so a column that grows wider still matches; numbers count only as numbers. */
+const words = (line: string) => line.trim().split(/\s+/).map((word) => word.replace(/\d+/g, 'N')).join(' ');
+
 describe('docs/balance-simulator.md, run block by block (#556)', () => {
   it('starts from boardsmith init --sim, which the project here was scaffolded with', () => {
     expect(DOC).toMatch(/npx boardsmith init bazaar --sim/);
+  });
+
+  it('marks every TypeScript, CSV and command block, leaving out only the shell setup and the report excerpt', () => {
+    const unmarked = blocks.filter((block) => !block.marked);
+    expect(unmarked.map((block) => block.lang)).toEqual(['bash', '']);
+    expect(unmarked[0].body).toMatch(/^npx boardsmith init bazaar --sim\n/);
+    expect(unmarked[1].body).toMatch(/^4 players: /);
+  });
+
+  it("shows the report excerpt's headings and column headers as boardsmith simulate prints them", () => {
+    expect(tables?.code).toBe(0);
+    const printed = new Set((tables?.stdout ?? '').split('\n').map(words));
+    // The layout lines are the ones with no digit, and the player count's heading.
+    const excerpt = blocks.find((block) => block.lang === '' && !block.marked)?.body ?? '';
+    const layout = excerpt.split('\n').filter((line) => line.trim() !== '' && (!/\d/.test(line) || /^\d+ players:/.test(line)));
+    expect(layout.length).toBeGreaterThan(5);
+    for (const line of layout) expect(printed, line).toContain(words(line));
   });
 
   it('runs every stage: five simulations, then add-ui', () => {
@@ -115,7 +147,7 @@ describe('docs/balance-simulator.md, run block by block (#556)', () => {
   it('becomes a playable game with add-ui, unchanged rules type-checking and passing their tests', () => {
     expect(addUi?.stderr).toBe('');
     expect(addUi?.code).toBe(0);
-    expect(typecheck?.stdout + '' + typecheck?.stderr).not.toMatch(/error TS/);
+    expect(`${typecheck?.stdout}${typecheck?.stderr}`).not.toMatch(/error TS/);
     expect(typecheck?.code).toBe(0);
     expect(projectTests?.code).toBe(0);
   });

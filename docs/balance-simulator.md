@@ -312,7 +312,7 @@ Per element
 
 Reading it: per element, `offered` and `picked` are totals per game, and
 `pickRate` is how often a card is kept when it is in a hand. Vanilla is kept
-almost every time it is seen, which says it is underpriced. The Merchant is
+most of the time it is seen, which says it is underpriced. The Merchant is
 rarely kept, which is expected: it does nothing yet. Add `--json` or `--csv`
 to feed the numbers to a spreadsheet.
 
@@ -450,7 +450,11 @@ or bots, and `boardsmith simulate` keeps working exactly as before.
 
 - **A policy sees the real game and must only read it.** It is handed the live
   game, not a copy: it can see every hidden card (the greedy policy above only
-  reads its own tableau), and a policy that changes the game spoils the run.
+  reads its own tableau). A policy that moves, creates or removes an element,
+  or draws from the game's random generator, stops that game with an error
+  naming the policy. A write to a plain attribute or to `game.settings` is
+  not detected: the game plays on from the changed state and the results are
+  silently wrong.
   See [the rules a policy plays by](./api/sim.md#rules-a-policy-plays-by).
 - **The same seeds are not the same deals once a variant draws differently.**
   Every variant plays game `i` from the same seed, but a variant that shuffles

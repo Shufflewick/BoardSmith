@@ -18,8 +18,10 @@
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { cpus, loadavg, tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { checkout } from '../bench-bot/run.mjs';
+import { parseArgs } from './args.mjs';
 import { formatSpeedReport } from './report.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -27,22 +29,6 @@ const REPO = join(HERE, '..', '..');
 const CLI = join(REPO, 'bin', 'boardsmith.js');
 const POLICIES = ['random', 'greedy'];
 const PLAYER_COUNTS = [2, 4, 6];
-
-export function parseArgs(args) {
-  const valueOf = (flag) => {
-    const at = args.indexOf(flag);
-    if (at === -1) return undefined;
-    if (args[at + 1] === undefined) throw new Error(`${flag} needs a value.`);
-    return args[at + 1];
-  };
-  const known = new Set(['--games', '--out']);
-  const unknown = args.filter((arg, at) => arg.startsWith('--') && !known.has(arg) && !known.has(args[at - 1]));
-  if (unknown.length > 0) throw new Error(`Unknown option ${unknown[0]}. Use --games <n> and --out <file>.`);
-  const games = Number(valueOf('--games') ?? 3000);
-  if (!Number.isInteger(games) || games < 1) throw new Error('--games must be a whole number of games, 1 or more.');
-  const out = valueOf('--out');
-  return { games, out: out === undefined ? undefined : resolve(out) };
-}
 
 /** Runs the CLI in `cwd`, failing loudly with its output when it fails. */
 function cli(cwd, args) {
@@ -82,11 +68,6 @@ function timeRun(dir, policy, players, games) {
   return { policy, players, games: games * players.split(',').length, seconds };
 }
 
-function checkout() {
-  const git = (...args) => spawnSync('git', ['-C', REPO, ...args], { encoding: 'utf8' }).stdout.trim();
-  return { commit: git('rev-parse', '--short', 'HEAD'), dirty: git('status', '--porcelain') !== '' };
-}
-
 async function main() {
   const { games, out } = parseArgs(process.argv.slice(2));
   const parent = mkdtempSync(join(tmpdir(), 'bench-sim-'));
@@ -105,7 +86,7 @@ async function main() {
     const report = formatSpeedReport(
       {
         date: new Date().toISOString(),
-        ...checkout(),
+        ...checkout(REPO),
         node: process.version,
         cpus: cpus().length,
         cpuModel: cpus()[0]?.model ?? 'unknown CPU',
@@ -122,11 +103,9 @@ async function main() {
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  try {
-    await main();
-  } catch (error) {
-    process.stderr.write(`bench-sim: ${error instanceof Error ? error.message : String(error)}\n`);
-    process.exitCode = 1;
-  }
+try {
+  await main();
+} catch (error) {
+  process.stderr.write(`bench-sim: ${error instanceof Error ? error.message : String(error)}\n`);
+  process.exitCode = 1;
 }
