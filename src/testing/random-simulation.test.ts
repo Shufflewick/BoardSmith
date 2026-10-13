@@ -3,6 +3,8 @@ import {
   Game,
   Player,
   Action,
+  Piece,
+  Space,
   loop,
   eachPlayer,
   actionStep,
@@ -107,6 +109,104 @@ class EmptyLabelTextGame extends Game<EmptyLabelTextGame, Player> {
   }
 }
 
+class Gem extends Piece<GemDraftGame> {
+  value!: number;
+}
+
+class Pile extends Space<GemDraftGame> {}
+
+/**
+ * A draft whose moves are an element pick (`take`), a multi-element pick
+ * (`discard`) and a repeating element pick (`hoard`), so the simulator's
+ * element args reach the engine on both of its paths. Each execute
+ * refuses an arg that is not the live game's own element, and the winner
+ * depends on which gems were taken, so a seeded run's outcome pins the picks.
+ */
+class GemDraftGame extends Game<GemDraftGame, Player> {
+  gems!: Pile;
+  discards!: Pile;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.gems = this.create(Pile, 'gems');
+    this.discards = this.create(Pile, 'discards');
+    for (let v = 1; v <= 9; v++) this.gems.create(Gem, `gem-${v}`, { value: v });
+    for (const p of this.all(Player)) this.create(Pile, `hand-${p.seat}`);
+
+    const isLive = (game: GemDraftGame, gem: unknown) =>
+      gem instanceof Gem && game.getElementById(gem.id) === gem;
+
+    this.registerAction(
+      Action.create<GemDraftGame>('take')
+        .chooseElement('gem', { elementClass: Gem, from: (ctx) => ctx.game.gems })
+        .execute((args, ctx) => {
+          if (!isLive(ctx.game, args.gem)) throw new Error('take was handed a gem that is not the live element');
+          args.gem.putInto(ctx.game.handOf(ctx.player));
+          return { success: true };
+        }),
+    );
+
+    this.registerAction(
+      Action.create<GemDraftGame>('discard')
+        .chooseElements('gems', { elements: (ctx) => [...ctx.game.gems.all(Gem)], multiSelect: 2 })
+        .execute((args, ctx) => {
+          if (!args.gems.every((g) => isLive(ctx.game, g))) {
+            throw new Error('discard was handed a gem that is not the live element');
+          }
+          for (const g of args.gems) g.putInto(ctx.game.discards);
+          return { success: true };
+        }),
+    );
+
+    this.registerAction(
+      Action.create<GemDraftGame>('hoard')
+        .chooseElement('picks', {
+          elementClass: Gem,
+          from: (ctx) => ctx.game.gems,
+          repeat: {
+            until: (ctx, gem) => gem.value >= 5 || ctx.game.gems.count(Gem) === 0,
+            onEach: (ctx, gem) => {
+              if (!isLive(ctx.game, gem)) throw new Error('hoard was handed a gem that is not the live element');
+              gem.putInto(ctx.game.handOf(ctx.player));
+            },
+          },
+        })
+        .execute((args, ctx) => {
+          if (!args.picks.every((g) => isLive(ctx.game, g))) {
+            throw new Error('hoard was handed a gem that is not the live element');
+          }
+          return { success: true };
+        }),
+    );
+
+    this.setFlow({
+      root: loop({
+        while: (ctx) => ctx.game.gems.count(Gem) > 0,
+        maxIterations: 100,
+        do: eachPlayer({ do: actionStep({ actions: ['take', 'discard', 'hoard'] }) }),
+      }),
+    });
+  }
+
+  handOf(player: Player): Pile {
+    return this.first(Pile, `hand-${player.seat}`)!;
+  }
+
+  scoreOf(player: Player): number {
+    return this.handOf(player).all(Gem).reduce((sum, g) => sum + g.value, 0);
+  }
+
+  override isFinished(): boolean {
+    return this.gems.count(Gem) === 0;
+  }
+
+  override getWinners(): Player[] {
+    if (!this.isFinished()) return [];
+    const best = Math.max(...this.all(Player).map((p) => this.scoreOf(p)));
+    return [...this.all(Player)].filter((p) => this.scoreOf(p) === best);
+  }
+}
+
 describe('simulateRandomGames', () => {
   it("treats an empty-string `optional` as required, as the engine does (#476)", async () => {
     const results = await simulateRandomGames(EmptyLabelTextGame, {
@@ -118,6 +218,20 @@ describe('simulateRandomGames', () => {
 
     expect(results.stuck).toBe(1);
     expect(results.games[0]!.error).toContain("requires text input 'text'");
+  });
+
+  it('submits element, multi-element and repeating element picks the engine plays as live elements, with a pinned seeded outcome (#686)', async () => {
+    const results = await simulateRandomGames(GemDraftGame, {
+      count: 8,
+      playerCounts: [2, 3],
+      seed: 'bs686',
+      timeout: 5000,
+    });
+
+    expect(results.games.map((g) => g.error)).toEqual(Array(8).fill(undefined));
+    expect(results.completed).toBe(8);
+    expect(results.games.map((g) => g.actionCount)).toEqual([8, 5, 5, 6, 5, 6, 5, 6]);
+    expect(results.games.map((g) => g.winners)).toEqual([[2], [1], [1], [2], [1], [2], [1], [1]]);
   });
 
   it('generates valid arguments so arg-based games complete (F49)', async () => {

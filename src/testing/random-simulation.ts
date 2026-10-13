@@ -17,7 +17,6 @@ import type {
   ChoiceSelection,
   ElementsSelection,
   Player,
-  GameElement,
 } from '../engine/index.js';
 import { dueSeats, availableActionsForSeat } from '../engine/index.js';
 import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
@@ -270,30 +269,6 @@ function resolveBounds(
 }
 
 /**
- * Convert in-progress arg values (element objects kept for dependent filters)
- * into the wire form the engine expects (element IDs).
- * @internal
- */
-function serializeArgs(
-  working: Record<string, unknown>,
-  selections: Selection[]
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(working)) {
-    const sel = selections.find(s => s.name === key);
-    if (sel?.type === 'element' || sel?.type === 'elements') {
-      // An array is a chooseElements pick or a repeating selection's picks.
-      out[key] = Array.isArray(value)
-        ? (value as GameElement[]).map(e => e.id)
-        : (value as GameElement).id;
-    } else {
-      out[key] = value;
-    }
-  }
-  return out;
-}
-
-/**
  * Build one random, valid set of arguments for an action using the engine's
  * own choice introspection. Returns the buildable args, or a reason the action
  * cannot be randomly driven (so the caller can surface it instead of spinning).
@@ -319,11 +294,11 @@ function buildRandomArgs(
         reason: `action '${actionDef.name}' has a repeating selection and no sequence of picks that ends it`,
       };
     }
-    return { ok: true, args: serializeArgs(rng.pick(moves), actionDef.selections) };
+    return { ok: true, args: rng.pick(moves) };
   }
 
-  // Keep element objects in `working` so dependent selections receive proper
-  // objects; serialize to IDs only at the end.
+  // Picks are kept as the elements and values offered, and submitted as they
+  // are: performAction resolves an element by its id against the live game.
   const working: Record<string, unknown> = {};
 
   for (const sel of actionDef.selections) {
@@ -426,7 +401,7 @@ function buildRandomArgs(
     working[sel.name] = rng.pick(choices);
   }
 
-  return { ok: true, args: serializeArgs(working, actionDef.selections) };
+  return { ok: true, args: working };
 }
 
 /**
