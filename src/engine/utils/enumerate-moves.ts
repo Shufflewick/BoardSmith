@@ -24,6 +24,7 @@ import type { ActionDefinition, FollowUpAction, NumberSelection, PendingActionSt
 import { availableActionsForSeat, followUpForSeat } from '../flow/seat-activity.js';
 import { resolveMultiSelect, resolveOrderedList } from './resolve-multiselect.js';
 import { elementsAsIds } from './arg-builder.js';
+import { numberRangeValues } from '../action/number-labels.js';
 import { NotSimulableError } from '../errors.js';
 import { devWarn } from '../../utils/dev.js';
 
@@ -339,10 +340,8 @@ function nextStepValues(
 ): unknown[] {
   const args = game.getActionExecutor().resolveArgs(action, pending.collectedArgs, player);
   if (selection.type === 'text') return selection.optional ? [null] : [];
-  // The step itself applies the input's rules and `validate` to each value.
   if (selection.type === 'number') {
-    const listed = numberInputValues(selection);
-    return 'values' in listed ? listed.values : selection.optional ? [null] : [];
+    return numberInputPicks(game, action, player, selection, args) ?? (selection.optional ? [null] : []);
   }
   const choices = _getChoices(game, action.name, selection, player, args);
   if (choices.length === 0) return selection.optional ? [null] : [];
@@ -591,8 +590,7 @@ function _enumerateRecursive(
 /**
  * The values `_enumerateRecursive` tries for one selection, or `null` when it
  * has nothing to offer: no enabled choice, a text input, or a number input
- * that cannot be listed (#689). A required number input that cannot be listed
- * says why, once.
+ * with no value to offer (see {@link numberInputPicks}).
  */
 function selectionValues(
   game: Game,
@@ -602,56 +600,65 @@ function selectionValues(
   seen: Record<string, unknown>,
 ): unknown[] | null {
   if (selection.type === 'text') return null;
-  if (selection.type === 'number') {
-    const listed = numberInputValues(selection);
-    if ('unlistable' in listed) {
-      if (!selection.optional) {
-        devWarn(
-          `number-input-unlistable:${actionDef.name}:${selection.name}`,
-          `Action "${actionDef.name}" contributed no moves because its number input "${selection.name}" ` +
-            `cannot be listed: ${listed.unlistable}`,
-        );
-      }
-      return null;
-    }
-    // The input's own rules and `validate`, exactly as a submission is judged.
-    const executor = game.getActionExecutor();
-    return listed.values.filter(
-      (value) => executor.validateSelection(selection, value, player, seen, actionDef.name).valid,
-    );
-  }
+  if (selection.type === 'number') return numberInputPicks(game, actionDef, player, selection, seen);
   const choices = _getChoices(game, actionDef.name, selection, player, seen);
   if (choices.length === 0) return null;
   return _valuesToTry(game, actionDef, player, selection, choices, seen);
 }
 
 /**
+ * The values a number input offers a move (#689), or `null` when it offers
+ * none: it cannot be listed (see {@link numberInputValues}), or its rules and
+ * `validate` refuse every value, judged as a submission is. Both enumeration
+ * paths use it. A required input that cannot be listed says why, once.
+ */
+function numberInputPicks(
+  game: Game,
+  actionDef: ActionDefinition,
+  player: Player,
+  selection: NumberSelection,
+  args: Record<string, unknown>,
+): number[] | null {
+  const listed = numberInputValues(selection);
+  if ('unlistable' in listed) {
+    if (!selection.optional) {
+      devWarn(
+        `number-input-unlistable:${actionDef.name}:${selection.name}`,
+        `Action "${actionDef.name}" contributed no moves because its number input "${selection.name}" ` +
+          `cannot be listed: ${listed.unlistable}`,
+      );
+    }
+    return null;
+  }
+  const executor = game.getActionExecutor();
+  const accepted = listed.values.filter(
+    (value) => executor.validateSelection(selection, value, player, args, actionDef.name).valid,
+  );
+  return accepted.length > 0 ? accepted : null;
+}
+
+/**
  * The values enumeration lists for a number input (#689): every whole number
- * from `min` to `max`, when the input declares both and `integer: true`. A
- * range with more than {@link MAX_MULTISELECT_COMBINATIONS} values (the same
- * ceiling a multiSelect's combinations have) is not listed at all rather than
- * cut short, since a prefix of it is one corner of the range, not a sample.
- * An input that is not listed comes back with the reason, worded for the game
- * author.
+ * in its range ({@link numberRangeValues}), when it declares `min`, `max` and
+ * `integer: true`. A range with more than {@link MAX_MULTISELECT_COMBINATIONS}
+ * values (the same ceiling a multiSelect's combinations have) is not listed at
+ * all rather than cut short, since a prefix of it is one corner of the range,
+ * not a sample. An input that is not listed comes back with the reason, worded
+ * for the game author.
  */
 export function numberInputValues(selection: NumberSelection): { values: number[] } | { unlistable: string } {
-  const { min, max, integer } = selection;
-  if (min === undefined || max === undefined || integer !== true) {
-    return {
-      unlistable: 'it needs min, max and integer: true to be listed. Give it all three.',
-    };
+  const values = numberRangeValues(selection, MAX_MULTISELECT_COMBINATIONS);
+  if (values === null) {
+    return { unlistable: 'it needs min, max and integer: true to be listed. Give it all three.' };
   }
-  const first = Math.ceil(min);
-  const last = Math.floor(max);
-  const count = Math.max(0, last - first + 1);
-  if (count > MAX_MULTISELECT_COMBINATIONS) {
+  if ('tooMany' in values) {
     return {
       unlistable:
-        `its range ${min} to ${max} holds ${count} values, and at most ${MAX_MULTISELECT_COMBINATIONS} ` +
-        'may be listed. Narrow the range.',
+        `its range ${selection.min} to ${selection.max} holds ${values.tooMany} values, and at most ` +
+        `${MAX_MULTISELECT_COMBINATIONS} may be listed. Narrow the range.`,
     };
   }
-  return { values: Array.from({ length: count }, (_, i) => first + i) };
+  return { values };
 }
 
 /**

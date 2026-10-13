@@ -43,7 +43,7 @@ import { numberRuleErrors } from './number-rules.js';
  */
 export const MAX_LABELLED_NUMBER_VALUES = 200;
 
-/** A number pick's range, as the builder and the metadata builder both see it. */
+/** A number pick's range, as the builder, the metadata builder and move enumeration see it. */
 interface NumberRange {
   min?: number;
   max?: number;
@@ -51,19 +51,22 @@ interface NumberRange {
 }
 
 /**
- * Every value the field can hold, in order -- or `null` when the range is not
- * enumerable at all.
+ * Every value a number pick can hold, in order: each whole number from
+ * `ceil(min)` to `floor(max)`, the values a submission accepts. `null` when the
+ * range is not enumerable (it lacks `min`, `max` or `integer: true`), and
+ * `{ tooMany }` with the count when it holds more than `limit` values; the
+ * count is known before any list is built.
  *
- * The one walk of a number pick's range. `assertLabellableRange` refuses
- * everything this would return `null` for, so by the time labels are built the
- * array is guaranteed.
+ * The one walk of a number pick's range: labels (#258) and move enumeration
+ * (#689) both use it, so they cannot disagree about which values exist.
  */
-function labellableValues(range: NumberRange): number[] | null {
+export function numberRangeValues(range: NumberRange, limit: number): number[] | { tooMany: number } | null {
   const { min, max, integer } = range;
   if (min === undefined || max === undefined || integer !== true) return null;
-  const values: number[] = [];
-  for (let value = min; value <= max; value++) values.push(value);
-  return values;
+  const first = Math.ceil(min);
+  const count = Math.max(0, Math.floor(max) - first + 1);
+  if (count > limit) return { tooMany: count };
+  return Array.from({ length: count }, (_, i) => first + i);
 }
 
 /**
@@ -74,7 +77,7 @@ function labellableValues(range: NumberRange): number[] | null {
  * declaration.
  */
 export function assertLabellableRange(name: string, range: NumberRange): void {
-  const values = labellableValues(range);
+  const values = numberRangeValues(range, MAX_LABELLED_NUMBER_VALUES);
   if (values === null) {
     const missing: string[] = [];
     if (range.min === undefined) missing.push('min');
@@ -88,9 +91,9 @@ export function assertLabellableRange(name: string, range: NumberRange): void {
         `say the meaning in the prompt.`,
     );
   }
-  if (values.length > MAX_LABELLED_NUMBER_VALUES) {
+  if ('tooMany' in values) {
     throw new Error(
-      `enterNumber('${name}') declares display() over ${values.length} values ` +
+      `enterNumber('${name}') declares display() over ${values.tooMany} values ` +
         `(${range.min} to ${range.max}), and at most ${MAX_LABELLED_NUMBER_VALUES} may be ` +
         `labelled: every label is sent with the pick, to every seat. Narrow the range, or ` +
         `drop display() and ask for the band with chooseFrom() instead.`,
@@ -127,11 +130,11 @@ export function numberValueLabels(
   range: NumberRange,
   display: (value: number) => string,
 ): Record<string, string> {
-  const values = labellableValues(range);
-  if (values === null) {
+  const values = numberRangeValues(range, MAX_LABELLED_NUMBER_VALUES);
+  if (!Array.isArray(values)) {
     // Unreachable through the builder, which refuses this at declaration time.
     throw new Error(
-      `enterNumber('${name}') has a display() but no enumerable range. This is a BoardSmith ` +
+      `enterNumber('${name}') has a display() over a range it cannot label. This is a BoardSmith ` +
         `bug: the range is checked when the action is declared.`,
     );
   }

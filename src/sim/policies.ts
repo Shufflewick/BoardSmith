@@ -174,8 +174,10 @@ function unlistableNumberInput(game: Game, actions: string[], followUp: FollowUp
     ...(followUp ? [{ action: followUp.action, args: followUp.args ?? {} }] : []),
   ];
   for (const { action, args } of offered) {
-    const unanswered = game.getAction(action)?.selections.filter((s) => s.type === 'number' && !(s.name in args)) ?? [];
-    for (const input of unanswered as NumberSelection[]) {
+    const unanswered = (game.getAction(action)?.selections ?? []).filter(
+      (s): s is NumberSelection => s.type === 'number' && !(s.name in args),
+    );
+    for (const input of unanswered) {
       const listed = numberInputValues(input);
       if ('unlistable' in listed) {
         return (

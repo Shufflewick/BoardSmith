@@ -3,7 +3,7 @@
  *
  * INTRO-04: Full enumeration + in-process element objects + maxPerAction + bot parity.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   Game,
   Player,
@@ -19,6 +19,7 @@ import {
 import { MCTSBot } from '../../bot/mcts-bot.js';
 import { GameRunner } from '../../runtime/runner.js';
 import { followUpForSeat } from '../flow/seat-activity.js';
+import { _clearShownWarnings } from '../../utils/dev.js';
 import {
   enumerateActionMoves,
   enumerateLegalMoves,
@@ -606,6 +607,17 @@ class NumberInputGame extends Game<NumberInputGame, Player> {
       Action.create<NumberInputGame>('maybe')
         .enterNumber('tip', { min: 1, integer: true, optional: true })
         .execute(() => ({ success: true })),
+      Action.create<NumberInputGame>('refused')
+        .enterNumber('n', { min: 1, max: 3, integer: true, optional: true, validate: () => 'Your hand is empty.' })
+        .execute(() => ({ success: true })),
+      Action.create<NumberInputGame>('markRefused')
+        .chooseFrom('symbol', { choices: ['x'], repeat: { until: () => true } })
+        .enterNumber('n', { min: 1, max: 3, integer: true, optional: true, validate: () => 'Your hand is empty.' })
+        .execute(() => ({ success: true })),
+      Action.create<NumberInputGame>('markHuge')
+        .chooseFrom('symbol', { choices: ['x'], repeat: { until: () => true } })
+        .enterNumber('credits', { min: 0, max: MAX_MULTISELECT_COMBINATIONS, integer: true })
+        .execute(() => ({ success: true })),
     );
     this.setFlow({ root: loop({ maxIterations: 10, do: eachPlayer({ do: actionStep({ actions: ['bid'] }) }) }) });
   }
@@ -646,6 +658,32 @@ describe('enumeration lists a bounded whole-number input (#689)', () => {
 
   it('skips an optional input it cannot list, as a player may', () => {
     expect(movesOf('maybe')).toEqual([{}]);
+  });
+
+  it('skips an optional input whose validate refuses every value, after a repeating selection too', () => {
+    expect(game.performAction('refused', game.getPlayer(1)!, {}).success).toBe(true);
+    expect(movesOf('refused')).toEqual([{}]);
+    expect(movesOf('markRefused')).toEqual([{ symbol: ['x'] }]);
+  });
+
+  it('says once why a required input it cannot list contributes no moves, after a repeating selection too', () => {
+    _clearShownWarnings();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      movesOf('huge');
+      movesOf('huge');
+      movesOf('markHuge');
+      expect(warn.mock.calls.map(([message]) => message)).toEqual([
+        `[BoardSmith] Action "huge" contributed no moves because its number input "credits" cannot be listed: ` +
+          `its range 0 to ${MAX_MULTISELECT_COMBINATIONS} holds ${MAX_MULTISELECT_COMBINATIONS + 1} values, ` +
+          `and at most ${MAX_MULTISELECT_COMBINATIONS} may be listed. Narrow the range.`,
+        `[BoardSmith] Action "markHuge" contributed no moves because its number input "credits" cannot be listed: ` +
+          `its range 0 to ${MAX_MULTISELECT_COMBINATIONS} holds ${MAX_MULTISELECT_COMBINATIONS + 1} values, ` +
+          `and at most ${MAX_MULTISELECT_COMBINATIONS} may be listed. Narrow the range.`,
+      ]);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 

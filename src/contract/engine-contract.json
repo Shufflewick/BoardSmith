@@ -1454,7 +1454,7 @@
       "surfaceHash": "3d680540447b1338",
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "enumerateLegalMoves, enumerateActionMoves, MCTS bots and the greedy simulator policy now list a number input that declares min, max and integer: true, as each whole number in the range its own validate accepts, up to 10,000 values; any other number input stays unlisted (#689). Re-vendor so platform bots can play moves that take a bounded number; no format or payload change."
+      "summary": "enumerateLegalMoves, enumerateActionMoves, MCTS bots and the greedy simulator policy now list a number input that declares min, max and integer: true, as each whole number in the range its own validate accepts, up to 10,000 values; any other number input stays unlisted, and an optional one whose validate refuses every value is skipped (#689). A number display() whose min is fractional now labels only the whole numbers in the range, the values a submission accepts, not min, min+1, .... Re-vendor so platform bots can play moves that take a bounded number; no format change."
     }
   ]
 }
