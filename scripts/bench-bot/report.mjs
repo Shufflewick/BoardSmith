@@ -61,10 +61,11 @@ function cell(value) {
 }
 
 /** A checkout's commit, and whether it had uncommitted changes. A directory outside git has no commit. */
-const checkout = ({ commit, dirty }) =>
+export const checkout = ({ commit, dirty }) =>
   commit === undefined ? 'no git commit' : `\`${commit}\`${dirty ? ' with uncommitted changes' : ''}`;
 
-const loads = (load) => load.map((value) => value.toFixed(2)).join(', ');
+/** A load average as the three numbers, two decimal places each. */
+export const loads = (load) => load.map((value) => value.toFixed(2)).join(', ');
 
 /**
  * The baseline as Markdown.

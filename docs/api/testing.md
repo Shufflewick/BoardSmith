@@ -666,8 +666,10 @@ boardsmith simulate --games 50 --seed ci-run-1 --players 2,4 --json
   [parallel runs](./sim.md#parallel-runs))
 - `--json` — machine-readable output: `{ run, games, report }`, where `games`
   lists only the games that did not finish (`{ index, seed, players, status,
-  turns, winner, error? }`) and `report` is one entry per player count, or
-  `null` when any game did not finish
+  turns, winner, error?, productionOnly? }`, where `productionOnly: true`
+  marks a game that failed in production mode but finished when played again
+  in development mode, so it has no replay line) and `report` is one entry per
+  player count, or `null` when any game did not finish
 - `--csv` — the report as CSV, one statistic per row (see
   [the balance report](./sim.md#the-balance-report)); cannot be combined with
   `--json`. A run with an unfinished game writes no rows and prints its

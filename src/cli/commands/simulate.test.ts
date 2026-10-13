@@ -536,6 +536,7 @@ takeSlices();
 const failingInWorker = await simulateOutput(scoreDir, { games: '2', players: '2', seed: 'w', jobs: '2', compare: ['limit=100,4'] });
 const failingInWorkerSlices = takeSlices();
 const productionOnly = await simulateOutput(scoreDir, { games: '2', players: '2', seed: 'p', gameOption: ['breakInProduction=true'] });
+const productionOnlyJson = await simulateOutput(scoreDir, { games: '2', players: '2', seed: 'p', json: true, gameOption: ['breakInProduction=true'] });
 const policyClash = await simulateOutput(scoreDir, { games: '1', players: '2', policy: ['biggest'], compare: ['policy=random,steady'] });
 
 describe('boardsmith simulate --jobs (#556)', () => {
@@ -559,6 +560,11 @@ describe('boardsmith simulate --jobs (#556)', () => {
     expect(productionOnly.output).toContain('This game fails only in production mode');
     expect(productionOnly.output).toContain('a choices, condition or filter callback');
     expect(productionOnly.output).not.toContain('Replay:');
+  });
+
+  it('marks such a game productionOnly in --json', () => {
+    expect(productionOnlyJson.exitCode).toBe(1);
+    expect(JSON.parse(productionOnlyJson.output).games[0]).toMatchObject({ index: 0, productionOnly: true });
   });
 
   it("reports a failing game's real message, replayed in dev mode, and a replay command carrying its variant", () => {

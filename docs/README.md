@@ -26,6 +26,7 @@ written.
 | [Actions & Flow](./actions-and-flow.md) | Action builder API and declarative flow system |
 | [Dice & Scoring](./dice-and-scoring.md) | Dice elements, 3D rendering, abilities, and scoring tracks |
 | [UI Components](./ui-components.md) | Vue components and composables |
+| [Balance Simulator](./balance-simulator.md) | A worked example: a drafting game grown from a simulator with no abilities to a playable game, with `boardsmith simulate` reports and variant comparisons |
 | [Bot System](./bot-system.md) | MCTS bot and bot integration |
 | [Game Examples](./game-examples.md) | Analysis of example games with patterns |
 | [Teaching & Tutorials](./teaching-and-tutorials.md) | Tutorial authoring, bot hints, narrated demo, heatmap, action help, and host lockout |

@@ -69,7 +69,9 @@ my-game/
 
 Every game starts as a simulator: `boardsmith simulate --policy greedy` plays
 seeded games of the scaffold's rules and reports their balance from the
-metrics in `src/rules/metrics.ts`. See [boardsmith/sim](./api/sim.md).
+metrics in `src/rules/metrics.ts`. See [boardsmith/sim](./api/sim.md), and
+[the balance simulator worked example](./balance-simulator.md) for a game grown
+from a simulator to a playable game one stage at a time.
 
 #### Starting as a simulator, with no UI yet
 
