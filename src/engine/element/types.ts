@@ -3,6 +3,7 @@ import type { Game } from './game.js';
 import type { Player } from '../player/player.js';
 import type { VisibilityState } from './visibility.js';
 import type { ElementIds, WorldElementIds } from './element-ids.js';
+import type { MetricSink } from '../metrics.js';
 
 /**
  * Reference to an image for rendering game elements.
@@ -73,6 +74,12 @@ export type ElementContext = {
    * made one. Not public API.
    */
   _flowStateReads: number;
+  /**
+   * Internal (#556): where author metrics go. Only the balance simulator sets
+   * it, on the one game it plays; without it recording does nothing. Never
+   * serialized, and never on a copy of the game. Not public API.
+   */
+  _metricSink?: MetricSink;
   /** Current player context (for "mine" queries) */
   player?: Player;
   /** Registry of element classes by name for deserialization and commands */

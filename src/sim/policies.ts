@@ -21,6 +21,7 @@ import type {
   Player,
   GameClass,
   FollowUpAction,
+  GameMetrics,
 } from '../engine/index.js';
 import { followUpForSeat } from '../engine/index.js';
 import { enumerateActionMoves, enumerateLegalMoves } from '../engine/utils/enumerate-moves.js';
@@ -38,6 +39,8 @@ export interface SimulatedGame<G extends Game = Game> {
   maxPlayers?: number;
   /** The game's bot strategy, which {@link mcts} searches with. */
   bot?: BotStrategy;
+  /** The game's author metrics (`defineMetrics`), which the simulator records and reports. */
+  metrics?: GameMetrics;
 }
 
 /** A move as a seat submits it. */

@@ -52,6 +52,7 @@ import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, Act
 import { ActionExecutor, type PerformOptions } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowDebugInfo } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
+import type { MetricSink } from '../metrics.js';
 import { getActionLevelDisabledReasons } from '../tutorial/gate.js';
 import { availableActionsForSeat } from '../flow/index.js';
 import { walkFlowNodes } from '../flow/walk-flow-nodes.js';
@@ -305,6 +306,17 @@ export type GameOptions = {
    * resident.
    */
   worldMode?: boolean;
+  /**
+   * Internal (#556): where this game's author metrics go. Only the balance
+   * simulator sets it, for the one game it plays, and never declarable by a
+   * game or a player.
+   *
+   * It arrives through the CONSTRUCTOR for the same reason `randomness` does:
+   * games deal in their constructor, and a record made there must reach the
+   * simulator. It is kept out of the constructor options, like `randomness`,
+   * so no snapshot, restore, MCTS clone or scratch copy inherits it.
+   */
+  metricSink?: MetricSink;
 };
 
 /**
@@ -326,6 +338,7 @@ export const ENGINE_OWNED_GAME_OPTION_KEYS = [
   'tutorial',
   'randomness',
   'worldMode',
+  'metricSink',
 ] as const satisfies readonly (keyof GameOptions)[];
 
 type UnlistedGameOption = Exclude<keyof GameOptions, (typeof ENGINE_OWNED_GAME_OPTION_KEYS)[number]>;
@@ -1269,8 +1282,11 @@ export class Game<
     // element reference it writes serializes as a positional branch path.
     if (options.worldMode === true) this._ctx._worldMode = true;
 
+    // The simulator's metric sink, before the subclass body deals (see `GameOptions.metricSink`).
+    if (options.metricSink) this._ctx._metricSink = options.metricSink;
+
     // Store all constructor options for snapshot restoration, EXCLUDING
-    // tutorial and randomness. This enables MCTS clones and other restores to
+    // tutorial, randomness and the metric sink. This enables MCTS clones and other restores to
     // receive full options.
     //
     // `tutorial` is intentionally excluded: it is static config (like _actions /
@@ -1287,6 +1303,7 @@ export class Game<
     const {
       tutorial: _tutorialOption,
       randomness: _randomnessOption,
+      metricSink: _metricSinkOption,
       elementIdKey: _elementIdKeyOption,
       ...restOptions
     } = options;

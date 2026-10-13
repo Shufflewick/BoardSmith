@@ -99,6 +99,11 @@ import {
 - `turnLoop()` - Standard turn-based loop
 - `TurnOrder` - Turn order utilities
 
+### Balance Metrics
+
+- `defineMetrics(kinds => ({ ... }))` - Declare what the balance simulator measures, wired once as `gameDefinition.metrics`. Recording does nothing in real play. See [boardsmith/sim](./sim.md#author-metrics)
+- `GameMetrics` - The type `gameDefinition.metrics` holds
+
 ### Serialization and snapshots
 
 `serializeAction()`, `deserializeAction()`, `isSerializedReference()`,

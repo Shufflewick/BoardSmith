@@ -21,7 +21,7 @@ import {
   parsePlayerCounts,
 } from './simulate.js';
 import { greedy, random, type Policy, type PolicyTurn } from '../../sim/policies.js';
-import { DeadEndGame } from './simulate.fixture.js';
+import { DeadEndGame, ScoreGame, scoreMetrics } from './simulate.fixture.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { scratchDir } from '../lib/project-paths.js';
 import { commandBuildDirs } from '../lib/command-build-dirs.test-helper.js';
@@ -99,8 +99,8 @@ describe('runSimulation', () => {
     const base = await runSimulation({ gameClass: TargetGame }, run);
     const gated = await runSimulation({ gameClass: TargetGame }, { ...run, gameOptions: { target: 25 } });
 
-    expect(base.report?.[0].length).toEqual({ mean: 6, min: 6, max: 6 });
-    expect(gated.report?.[0].length).toEqual({ mean: 26, min: 26, max: 26 });
+    expect(base.report?.[0].length).toMatchObject({ mean: 6, min: 6, max: 6 });
+    expect(gated.report?.[0].length).toMatchObject({ mean: 26, min: 26, max: 26 });
   });
 
   it('is deterministic: same seed twice produces identical reports', async () => {
@@ -109,6 +109,14 @@ describe('runSimulation', () => {
     const run2 = await runSimulation(pick, run);
 
     expect(run1).toEqual(run2);
+  });
+
+  it('is deterministic with author metrics: same seed, same report (#556)', async () => {
+    const scored = { gameClass: ScoreGame, minPlayers: 2, maxPlayers: 3, metrics: scoreMetrics };
+    const run = { gamesPerCount: 5, playerCounts: [2, 3], seed: 'metrics', policiesFor: randomSeats };
+    const run1 = await runSimulation(scored, run);
+    expect(run1.report?.[0].scores.score.n).toBe(10);
+    expect(await runSimulation(scored, run)).toEqual(run1);
   });
 
   it('reports each player count: games, completion, win share by seat, tie rate and length (#556)', async () => {
@@ -123,7 +131,7 @@ describe('runSimulation', () => {
     expect(result.report!.map((r) => [r.players, r.games])).toEqual([[2, 4], [3, 4]]);
     for (const count of result.report!) {
       // PickGame declares no winner, so every game is a tie.
-      expect(count.tieRate).toBe(1);
+      expect(count.tieRate.share).toBe(1);
       expect(Object.keys(count.winShare).map(Number)).toEqual(
         Array.from({ length: count.players }, (_, i) => i + 1),
       );
@@ -463,9 +471,10 @@ describe('boardsmith simulate reports per player count (#556)', () => {
     expect(games).toEqual([]);
     // Every seat adds 3 and the loop checks the total of 12 after each full round: two rounds of
     // three seats, or one of four.
-    expect(report.map((r: { players: number; games: number; length: unknown }) => [r.players, r.games, r.length])).toEqual([
-      [3, 3, { mean: 6, min: 6, max: 6 }],
-      [4, 3, { mean: 4, min: 4, max: 4 }],
+    expect(report.map((r: { players: number; games: number; length: { mean: number; min: number; max: number } }) =>
+      [r.players, r.games, r.length.mean, r.length.min, r.length.max])).toEqual([
+      [3, 3, 6, 6, 6],
+      [4, 3, 4, 4, 4],
     ]);
   });
 
@@ -476,5 +485,68 @@ describe('boardsmith simulate reports per player count (#556)', () => {
     expect(failingRun.output).not.toMatch(/Win share|Ties|Length/);
     // Only failing games are listed.
     expect(failingRun.output).not.toMatch(/complete after/);
+  });
+});
+
+/**
+ * #556: a game's author metrics reach every output of `boardsmith simulate`
+ * with nothing but `gameDefinition.metrics` declared. Each run bundles the
+ * rules, so they run while the file is collected (#363).
+ */
+const metricsProject = projectWithAuthorFiles(
+  [
+    `import { ScoreGame, scoreMetrics } from ${JSON.stringify(deadEndFixture)};`,
+    `export const gameDefinition = { gameClass: ScoreGame, gameType: 'score', displayName: 'Score',`,
+    `  minPlayers: 2, maxPlayers: 3, metrics: scoreMetrics };`,
+  ].join('\n'),
+);
+const metricsHuman = await simulateOutput(metricsProject.dir, { games: '4', seed: 'metrics' });
+const metricsJson = await simulateOutput(metricsProject.dir, { games: '4', seed: 'metrics', json: true });
+const metricsCsv = await simulateOutput(metricsProject.dir, { games: '4', seed: 'metrics', csv: true });
+const forgotMetricsProject = projectWithAuthorFiles(
+  [
+    `import { ScoreGame } from ${JSON.stringify(deadEndFixture)};`,
+    `export const gameDefinition = { gameClass: ScoreGame, gameType: 'score', displayName: 'Score', minPlayers: 2, maxPlayers: 2 };`,
+  ].join('\n'),
+);
+const forgotMetrics = await simulateOutput(forgotMetricsProject.dir, { games: '1', seed: 'forgot' });
+const failingCsv = await simulateOutput(afterRun.dir, { games: '4', players: '3', seed: 'fails', gameOption: ['deadEnd=7'], csv: true });
+
+describe("boardsmith simulate reports the game's author metrics (#556)", () => {
+  it('prints a table per metric beside the built-in ones', () => {
+    expect(metricsHuman.exitCode, metricsHuman.output).toBe(0);
+    for (const title of ['2 players: 4 games', '3 players: 4 games', 'Win share by seat', 'Ties', 'Game length (actions)', 'Count per game: added', 'Score: score']) {
+      expect(metricsHuman.output).toContain(title);
+    }
+  });
+
+  it('--json gives { run, games, report } with the metrics in each player count', () => {
+    const { run, games, report } = JSON.parse(metricsJson.output);
+    expect(run).toMatchObject({ seed: 'metrics', gamesPerCount: 4, players: [2, 3] });
+    expect(games).toEqual([]);
+    expect(report.map((r: { players: number }) => r.players)).toEqual([2, 3]);
+    expect(report[0].scores.score).toMatchObject({ n: 8 });
+    expect(Object.keys(report[0].counts.added).every((key) => ['1', '2', '3'].includes(key))).toBe(true);
+    expect(report[0].tieRate).toEqual({ share: expect.any(Number), low: expect.any(Number), high: expect.any(Number) });
+  });
+
+  it('--csv gives one statistic per row, the same numbers as --json', () => {
+    expect(metricsCsv.exitCode).toBe(0);
+    const lines = metricsCsv.output.trim().split('\n');
+    expect(lines[0]).toBe('variant,players,section,metric,key,stat,value');
+    const { report } = JSON.parse(metricsJson.output);
+    expect(lines).toContain(`,2,score,score,,mean,${report[0].scores.score.mean}`);
+    expect(lines).toContain(`,3,length,,,max,${report[1].length.max}`);
+  });
+
+  it('a game that records metrics gameDefinition.metrics does not declare fails, naming the metric', () => {
+    expect(forgotMetrics.exitCode).toBe(1);
+    expect(forgotMetrics.output).toContain("Metric 'added' was refused: it is not in gameDefinition.metrics");
+  });
+
+  it('--csv with an unfinished game prints the failure, no rows, and exits 1', () => {
+    expect(failingCsv.exitCode).toBe(1);
+    expect(failingCsv.output).toContain('Replay: boardsmith simulate --replay fails-3-');
+    expect(failingCsv.output).not.toContain('variant,players');
   });
 });

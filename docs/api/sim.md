@@ -1,6 +1,8 @@
 # boardsmith/sim
 
 > Policies for the balance simulator: what plays each seat in `boardsmith simulate`.
+> The game's own metrics, declared with `defineMetrics` from `boardsmith`, and the
+> report `boardsmith simulate` prints are described below.
 
 ## When to Use
 
@@ -69,3 +71,133 @@ shares the game's engine. Its options are described in
   moves, and each seat's policy draw from separate generators derived from the
   game's seed, so the same seed replays the same game, and changing one seat's
   policy does not change another seat's draws.
+
+## Author metrics
+
+A game declares what the simulator measures with `defineMetrics` from
+`boardsmith`, and wires it once as `gameDefinition.metrics`. Nothing else is
+needed for `boardsmith simulate` to report it.
+
+```typescript
+// src/rules/metrics.ts
+import { defineMetrics } from 'boardsmith';
+import type { MyGame } from './game.js';
+
+export const metrics = defineMetrics(({ count, ratio, sample, category, segment, finalScore }) => ({
+  held: count({ by: 'element' }),
+  built: count({ by: 'element' }),
+  buildRate: ratio('built', 'held'),
+  shortOf: count({ by: 'category' }),
+  draftChoice: category(['neither', 'one', 'both']),
+  buildsPerRound: sample(),
+  leftOver: sample({ atEnd: (game: MyGame, player) => player.resources }),
+  startingTool: segment((game: MyGame, player) => player.tool.name),
+  score: finalScore((game: MyGame, player) => player.score),
+}));
+
+// src/rules/index.ts
+export const gameDefinition = { gameClass: MyGame, /* ... */ metrics };
+
+// in the game's constructor, an action's execute, a pick's onSelect or onEach, or a flow step:
+metrics.built.add(game, card);              // count by element: keyed by the element's name
+metrics.shortOf.add(game, 'wood', 2);       // count by category, adding 2
+metrics.draftChoice.record(game, 'both');   // one of the declared values
+metrics.buildsPerRound.add(game, built);    // one number
+```
+
+The kinds:
+
+- `count()` - `add(game, amount = 1)`. `count({ by: 'element' })` -
+  `add(game, element, amount = 1)`, keyed by the element's `name` (an element
+  with no name is refused). `count({ by: 'category' })` -
+  `add(game, category, amount = 1)`.
+- `ratio(numerator, denominator)` - the keys of two counts in the same
+  `defineMetrics`, declared with the same `by`. Nothing records it: the report
+  divides the numerator's total by the denominator's, over every game.
+- `sample()` - `add(game, value)`, a distribution of numbers.
+  `sample({ atEnd: (game, player) => number })` is read instead, once per
+  player when the game ends, and has no `add`.
+- `category([...values])` - `record(game, value)`, one of the declared values.
+- `segment((game, player) => label)` - read once per player when the game
+  ends; the report gives the win share of each label (a starting tool, a
+  faction, a seat's opening).
+- `finalScore((game, player) => number)` - read once per player when the game
+  ends.
+
+### Where records go
+
+- **Real play records nothing.** Without the simulator, every `add` and
+  `record` returns at once and changes neither the game nor its snapshot.
+- **Only the game the simulator plays records.** The games an MCTS seat
+  searches, and the scratch copies used to list a repeating pick's moves, are
+  games of their own and record nothing.
+- **Only committed actions count.** An action's records are kept when it
+  commits; an action that is refused or rolled back (its `execute` threw)
+  leaves none. Records made in the game's constructor (a deal), while the flow
+  starts and in flow steps are kept.
+- **Record only in code that builds or changes the game**: the game's
+  constructor, an action's `execute`, a pick's `onSelect` or `onEach`, or a
+  flow step. In a simulation, a record made anywhere else (a `choices` or
+  `filter` callback, a condition, a policy), of a metric
+  `gameDefinition.metrics` does not declare (or with no `gameDefinition.metrics`
+  at all), with a number that is not finite, a category not declared or an
+  element with no name, ends the game as crashed with an error naming the
+  metric, even if game code caught the throw. So does a `segment` that gives
+  an empty label, or a `finalScore` or `sample({ atEnd })` that gives a number
+  that is not finite. `simulateRandomGames` has no metrics to check against,
+  so there a game records nothing, as in real play.
+
+## The balance report
+
+`boardsmith simulate` reports each player count once every game has finished
+(a run with an unfinished game reports no statistics). Each player count has:
+
+- **games** - how many games were played.
+- **Win share by seat** - the share of games each seat won alone, and **Ties**,
+  the share won by no seat or by several.
+- **Game length** in actions.
+- **Win share by each `segment`** - per label, how many player-games had it
+  and the share of those won alone.
+- **Each `finalScore`** - its distribution over every player of every game,
+  and `spread`, the mean gap between the highest and lowest score in a game.
+- **Each `count`** not by element - per key, the total per game.
+- **Each `sample`** - every value recorded.
+- **Each `category`** - each declared value's share of the records.
+- **Each `ratio`** not by element - per key, the pooled ratio.
+- **Per element** - one row per element name, with a column per count by
+  element (its total per game) and per ratio of counts by element (pooled).
+
+A distribution gives `n`, `mean` with its 95% interval (`low`, `high`, from the
+standard error), `sd`, `p10`, `p50`, `p90`, `min` and `max`. A share gives
+`share` with its 95% Wilson interval (`low`, `high`). A ratio whose
+denominator totals 0, or a sample with no values, has nothing to divide by:
+`-` in the tables, `null` in JSON and empty in CSV. A count nothing recorded
+is still reported, as 0 per game.
+
+The intervals on category shares, sample means, segment win shares and score
+means treat every record (or player) as independent. Records from one game are
+not (one player's builds in a game depend on each other, and one game's scores
+move together), so those intervals are optimistic: read them as a lower bound
+on the uncertainty. Win share by seat, ties, game length and counts per game
+have one value per game, so their intervals are sound. Games are
+combined in game order, so the same seed gives the same report.
+
+- **Tables** (the default) - one table per section and metric.
+- **`--json`** - `{ run, games, report }`: `games` lists only the games that
+  did not finish, and `report` is an array with one entry per player count
+  holding `players`, `games`, `winShare`, `tieRate`, `length`, `segments`,
+  `scores`, `counts`, `samples`, `categories`, `ratios` and `elements`, or
+  `null` when any game did not finish.
+- **`--csv`** - one statistic per row:
+  `variant,players,section,metric,key,stat,value`. `variant` is empty (a later
+  release compares variants in one run). `section` is `games`, `winShare`,
+  `ties`, `length`, `segment`, `score`, `count`, `sample`, `category`, `ratio`
+  or `element`; `metric` is empty for the built-in sections; `key` is the seat,
+  label, category, count key or element name. In an `element` row, `stat` is
+  the column's metric name.
+
+```
+,2,winShare,,1,share,0.512
+,2,score,score,,mean,41.3
+,2,element,,Forge,buildRate,0.27
+```

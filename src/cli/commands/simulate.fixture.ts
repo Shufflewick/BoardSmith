@@ -15,6 +15,7 @@ import {
   loop,
   eachPlayer,
   actionStep,
+  defineMetrics,
   type GameOptions,
 } from '../../engine/index.js';
 
@@ -58,6 +59,37 @@ export class DeadEndGame extends Game<DeadEndGame, Player> {
         while: (ctx) => ctx.game.total < 12,
         maxIterations: 50,
         do: eachPlayer({ do: actionStep({ actions: ['add', 'sign'] }) }),
+      }),
+    });
+  }
+}
+
+/** The metrics of {@link ScoreGame}, which a test project wires as `gameDefinition.metrics` (#556). */
+export const scoreMetrics = defineMetrics(({ count, finalScore }) => ({
+  added: count({ by: 'category' }),
+  score: finalScore((game: ScoreGame, player) => game.scores[player.seat]),
+}));
+
+/** Each seat adds 1 to 3 to its own score, recording the amount, until a round ends with someone at 6 or more. */
+export class ScoreGame extends Game<ScoreGame, Player> {
+  scores: Record<number, number> = {};
+
+  constructor(options: GameOptions) {
+    super(options);
+    for (const player of this.players) this.scores[player.seat] = 0;
+    this.registerAction(
+      Action.create<ScoreGame>('add')
+        .chooseFrom('amount', { choices: [1, 2, 3] })
+        .execute((args, ctx) => {
+          ctx.game.scores[ctx.player.seat] += args.amount as number;
+          scoreMetrics.added.add(ctx.game, String(args.amount));
+        }),
+    );
+    this.setFlow({
+      root: loop({
+        while: (ctx) => Math.max(...Object.values(ctx.game.scores)) < 6,
+        maxIterations: 50,
+        do: eachPlayer({ do: actionStep({ actions: ['add'] }) }),
       }),
     });
   }
