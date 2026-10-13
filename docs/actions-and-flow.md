@@ -311,7 +311,9 @@ The rules read `game.legalMoves(player)` as before; the `filter` can stay the
 obvious one-candidate-at-a-time code.
 
 - **The key names everything the value depends on besides the game's state**,
-  such as the seat it is for. Two calls with one key in one state get one value.
+  such as the seat it is for. A `mine` query reads the player context, so a
+  value that makes one depends on that seat too. Two calls with one key in one
+  state get one value.
 - **It is kept by the same state version as a pick's candidates** (above), so
   it is dropped by the same changes, and an attribute written outside game
   code that may change the game is not seen until one of those changes happens.

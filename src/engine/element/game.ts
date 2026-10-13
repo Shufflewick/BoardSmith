@@ -2318,8 +2318,9 @@ export class Game<
    * ```
    *
    * - **The key names everything the value depends on besides the game's
-   *   state**, such as the seat it is for. Two calls with one key in one state
-   *   get one value.
+   *   state**, such as the seat it is for. A `mine` query reads the player
+   *   context, so a value that makes one depends on that seat too. Two calls
+   *   with one key in one state get one value.
    * - **The game changing drops every kept value.** It is the same game state
    *   version that a pick's candidates are kept by (docs/actions-and-flow.md,
    *   "A pick's candidates are worked out once per game state"), so the same
