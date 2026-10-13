@@ -20,7 +20,7 @@ import {
   seatPolicies,
   parsePlayerCounts,
 } from './simulate.js';
-import { greedy } from '../../sim/policies.js';
+import { greedy, random, type Policy, type PolicyTurn } from '../../sim/policies.js';
 import { DeadEndGame } from './simulate.fixture.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { scratchDir } from '../lib/project-paths.js';
@@ -193,6 +193,31 @@ describe('seatPolicies: --policy flags (#556)', () => {
 
   it("names a project policy by its key in the project's policies, so errors name it", () => {
     expect(seatPolicies(['meddle'], { meddle: greedy(() => 0) }, 2).map((p) => p.name)).toEqual(['meddle', 'meddle']);
+  });
+
+  it('plays a project policy written as a class, keeping its prototype and `this`', async () => {
+    class Counting implements Policy {
+      name = 'counting';
+      turns = 0;
+      private inner = random();
+      choose(turn: PolicyTurn) {
+        this.turns += 1;
+        return this.inner.choose(turn);
+      }
+    }
+    const counting = new Counting();
+    const result = await runSimulation(
+      { gameClass: PickGame, minPlayers: 2, maxPlayers: 2 },
+      {
+        gamesPerCount: 2,
+        playerCounts: [2],
+        seed: 'class-policy',
+        policiesFor: (playerCount) => seatPolicies(['counting'], { counting }, playerCount),
+      },
+    );
+
+    expect(result.failing).toEqual([]);
+    expect(counting.turns).toBeGreaterThan(0);
   });
 
   it('refuses an unknown policy, naming the ones there are', () => {

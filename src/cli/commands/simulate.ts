@@ -92,7 +92,11 @@ function policyNamed(name: string, project: Record<string, Policy>): Policy {
   if (name === 'random') return random();
   if (name.startsWith('mcts:')) return mcts(parseBotLevel(name.slice('mcts:'.length)));
   // Named by its key, so an error names the policy the author listed, not the builder it came from.
-  if (Object.hasOwn(project, name)) return { ...project[name], name };
+  // `choose` is called on the policy itself, so a class policy keeps its prototype and `this`.
+  if (Object.hasOwn(project, name)) {
+    const policy = project[name];
+    return { name, choose: (turn) => policy.choose(turn) };
+  }
   const names = [BUILT_IN_POLICIES, ...Object.keys(project)].join(', ');
   throw new Error(
     `Unknown policy "${name}". Use one of: ${names}; or add it to the policies src/sim/index.ts exports.`,

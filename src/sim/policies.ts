@@ -20,6 +20,7 @@ import type {
   ElementsSelection,
   Player,
   GameClass,
+  FollowUpAction,
 } from '../engine/index.js';
 import { followUpForSeat } from '../engine/index.js';
 import { enumerateActionMoves, enumerateLegalMoves } from '../engine/utils/enumerate-moves.js';
@@ -133,29 +134,21 @@ export function random(
  * highest, breaking a tie with the seat's own generator. `score` must return a
  * finite number and only read the game. Only the seat's enabled actions and
  * its held follow-up are scored. A move that takes a number input cannot be
- * listed (#689), so greedy refuses a seat offered one.
+ * listed (#689), so greedy refuses a seat offered one, as an action or as a
+ * held follow-up whose args do not already answer it.
  */
 export function greedy<G extends Game>(score: (game: G, move: PolicyMove, seat: number) => number): Policy {
   return {
     name: 'greedy',
     choose({ game, seat, actions, random: rng }) {
-      for (const action of actions) {
-        const numberInput = game.getAction(action)?.selections.find((s) => s.type === 'number');
-        if (numberInput) {
-          return {
-            noMove:
-              `greedy cannot play action '${action}': its number input '${numberInput.name}' has no list of values ` +
-              'to score (enumerateLegalMoves skips number inputs, #689). Play this seat with random or mcts.',
-          };
-        }
-      }
+      const followUp = followUpForSeat(game.getFlowState(), seat);
+      const unlistable = unlistableNumberInput(game, actions, followUp);
+      if (unlistable) return { noMove: unlistable };
       // enumerateLegalMoves does not apply an action's `.disabled()` rule or a tutorial gate, so
       // only the seat's enabled actions and its held follow-up are scored.
       const legal = enumerateLegalMoves(game, seat);
-      // enumerateLegalMoves has already refused a game with no flow state.
-      const followUp = followUpForSeat(game.getFlowState()!, seat)?.action;
       const playable = legal.filter(
-        (move) => actions.includes(move.action) || move.action === followUp,
+        (move) => actions.includes(move.action) || move.action === followUp?.action,
       );
       let best: PolicyMove[] = [];
       let bestScore = -Infinity;
@@ -171,6 +164,28 @@ export function greedy<G extends Game>(score: (game: G, move: PolicyMove, seat: 
       return rng.pick(best);
     },
   };
+}
+
+/**
+ * Why greedy cannot list one of the seat's offered moves, or `undefined`: an
+ * enabled action, or the held follow-up, with a number input its args do not
+ * already answer (enumerateLegalMoves skips number inputs, #689).
+ */
+function unlistableNumberInput(game: Game, actions: string[], followUp: FollowUpAction | undefined): string | undefined {
+  const offered = [
+    ...actions.map((action) => ({ action, args: {} })),
+    ...(followUp ? [{ action: followUp.action, args: followUp.args ?? {} }] : []),
+  ];
+  for (const { action, args } of offered) {
+    const numberInput = game.getAction(action)?.selections.find((s) => s.type === 'number' && !(s.name in args));
+    if (numberInput) {
+      return (
+        `greedy cannot play action '${action}': its number input '${numberInput.name}' has no list of values ` +
+        'to score (enumerateLegalMoves skips number inputs, #689). Play this seat with random or mcts.'
+      );
+    }
+  }
+  return undefined;
 }
 
 /**

@@ -54,6 +54,27 @@ class BidGame extends Game<BidGame, Player> {
   }
 }
 
+/**
+ * A game whose only move, 'open', holds a follow-up 'bid' that takes a number;
+ * the `amount` game option, when set, answers that number in the follow-up's args.
+ */
+class OpenThenBidGame extends BidGame {
+  constructor(options: GameOptions & { amount?: number }) {
+    super(options);
+    const args = options.amount === undefined ? {} : { amount: options.amount };
+    this.registerAction(
+      Action.create<OpenThenBidGame>('open').execute(() => ({ success: true, followUp: { action: 'bid', args } })),
+    );
+    this.setFlow({
+      root: loop({
+        while: (ctx) => !ctx.game.isFinished(),
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: ['open'] }) }),
+      }),
+    });
+  }
+}
+
 /** RaceGame plus a 'leap' worth 5 that is always disabled, so a policy that plays it is refused. */
 class LeapRaceGame extends RaceGame {
   constructor(options: GameOptions) {
@@ -163,6 +184,26 @@ describe('playGame with policies (#556)', () => {
     );
     expect(result.completed).toBe(false);
     expect(result.error).toMatch(/greedy.*'bid'.*number input 'amount'/);
+  });
+
+  it("greedy refuses a held follow-up that takes a number, saying why", async () => {
+    const result = await playGame(
+      { gameClass: OpenThenBidGame },
+      { playerCount: 2, seed: 'open-bid', policies: [greedy(() => 0), greedy(() => 0)], maxActions: 10 },
+    );
+    expect(result.completed).toBe(false);
+    expect(result.error).toMatch(/greedy.*'bid'.*number input 'amount'/);
+  });
+
+  it("greedy plays a held follow-up whose args already answer its number input", async () => {
+    const bidFirst = greedy((_game, move) => (move.action === 'bid' ? 1 : 0));
+    const result = await playGame(
+      { gameClass: OpenThenBidGame },
+      { playerCount: 2, seed: 'open-set-bid', gameOptions: { amount: 3 }, policies: [bidFirst, bidFirst], maxActions: 10 },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.completed).toBe(true);
+    expect(result.actionCount).toBe(2);
   });
 
   it('greedy never plays a disabled action, however well it scores', async () => {

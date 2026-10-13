@@ -40,7 +40,8 @@ shares the game's engine. Its options are described in
   (`enumerateLegalMoves`) with `score(game, move, seat)` and plays the highest,
   breaking a tie with the seat's own seeded generator. `score` must return a
   finite number. A move that takes a number input cannot be listed (#689), so
-  greedy reports a seat offered one as stuck and names the input.
+  greedy reports a seat offered one as stuck and names the input; a held
+  follow-up whose args already answer the number is played as normal.
 - `mcts(level)` - Plays the game's own MCTS bot (`gameDefinition.bot`) at a
   difficulty name or an iteration count. Each search is seeded from the seat's
   generator and runs its full iterations with no time limit, so a seeded run
