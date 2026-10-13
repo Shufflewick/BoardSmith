@@ -41,7 +41,7 @@ class BudgetGame extends Game<BudgetGame, Player> {
     const actions: Record<string, () => Parameters<BudgetGame['registerAction']>[0]> = {
       species: () =>
         numbers('species', AFFINITIES)
-          .validate((args) => sumOf(args) % 2 === 0 || 'The affinities must add up to an even number.')
+          .validate((args) => sumOf(args) % 7 !== 0 || 'The affinities must not add up to a multiple of 7.')
           .execute((_args, ctx) => {
             ctx.game.finish([]);
             return { success: true };
@@ -55,6 +55,12 @@ class BudgetGame extends Game<BudgetGame, Player> {
         Action.create<BudgetGame>('refused')
           .chooseFrom('first', { choices: range(100) })
           .enterNumber('n', { min: 1, max: 1000, integer: true, validate: () => (countCall(), 'Never.') })
+          .execute(() => ({ success: true })),
+      // 10 picks, each with 15 choices whose 1,940 combinations of up to 4 are what cross the budget.
+      hand: () =>
+        Action.create<BudgetGame>('hand')
+          .chooseFrom('first', { choices: range(10) })
+          .chooseFrom('cards', { choices: range(15), multiSelect: { min: 1, max: 4 } })
           .execute(() => ({ success: true })),
       // A first selection that alone judges the whole budget, so one draw of a sample costs that much.
       wide: () =>
@@ -102,20 +108,30 @@ describe('enumeration budget across an action\'s selections (#691)', () => {
 
   it('refuses, naming the action, one row of values over the budget', () => {
     expect(() => enumerateLegalMoves(started('gridOver'), 1)).toThrow(MoveListTooLargeError);
-    expect(() => enumerateLegalMoves(started('gridOver'), 1)).toThrow(/Action "gridOver" has too many moves to list/);
+    expect(() => enumerateLegalMoves(started('gridOver'), 1)).toThrow(
+      'Action "gridOver" has too many moves to list: its selections multiply past the 10,000 values ' +
+        'enumeration tries for one action (each value of each selection, under every pick before it, refused ' +
+        'ones too), and the count crossed it at selection "col". Narrow the choices or ranges of its ' +
+        'selections, or split it into two actions.',
+    );
+  });
+
+  it("counts a multiSelect's combinations, not only its choices", () => {
+    expect(() => enumerateLegalMoves(started('hand'), 1)).toThrow(/Action "hand" has too many moves.*at selection "cards"/);
   });
 
   it('stops at the budget instead of building 7^13 moves', () => {
     const game = started('species');
     expect(() => enumerateLegalMoves(game, 1)).toThrow(/Action "species" has too many moves to list/);
-    // Each partial move judges the next input's 7 values; one more for the walk's start.
-    expect(game.validateCalls).toBeLessThanOrEqual(7 * (MAX_MULTISELECT_COMBINATIONS + 1));
+    // Every value judged is counted, so the rules run at most the budget, plus
+    // the one input (7 values) judged before the count crossed it.
+    expect(game.validateCalls).toBeLessThanOrEqual(MAX_MULTISELECT_COMBINATIONS + 7);
   });
 
   it('counts partial moves, so selections that dead-end late cannot walk forever', () => {
     const game = started('deadEnd');
     expect(() => enumerateLegalMoves(game, 1)).toThrow(/Action "deadEnd" has too many moves to list/);
-    expect(game.validateCalls).toBeLessThanOrEqual(7 * (MAX_MULTISELECT_COMBINATIONS + 1));
+    expect(game.validateCalls).toBeLessThanOrEqual(MAX_MULTISELECT_COMBINATIONS + 7);
   });
 
   it('counts the values its rules refuse, so judging them cannot run on unbounded either', () => {
@@ -143,9 +159,10 @@ describe('enumeration budget across an action\'s selections (#691)', () => {
       expect(moves).toHaveLength(20);
       for (const args of moves) {
         expect(AFFINITIES.every((key) => Number.isInteger(args[key]))).toBe(true);
-        expect(sumOf(args) % 2).toBe(0);
+        expect(sumOf(args) % 7).not.toBe(0);
       }
-      expect(game.validateCalls).toBeLessThanOrEqual(2 * 7 * (MAX_MULTISELECT_COMBINATIONS + 1));
+      // The full walk, then at most 2 draws per move asked for, each judging 7 values for each of 13 inputs.
+      expect(game.validateCalls).toBeLessThanOrEqual(MAX_MULTISELECT_COMBINATIONS + 7 + 2 * 20 * 13 * 7);
       const fresh = started('species');
       expect(fresh.performAction('species', fresh.getPlayer(1)!, moves[0]).success).toBe(true);
     });
@@ -158,14 +175,14 @@ describe('enumeration budget across an action\'s selections (#691)', () => {
       expect(moves).toHaveLength(20);
     });
 
-    it('stops drawing when every draw is refused, having judged at most the budget once per move asked for', () => {
+    it('stops drawing when every draw is refused, after 2 draws per move asked for', () => {
       const game = started('deadEnd');
       const moves = enumerateActionMoves(game, game.getAction('deadEnd')!, game.getPlayer(1)!, {
         sampleAboveBudget: { count: 20, random: new SeededRandom('dead') },
       });
       expect(moves).toEqual([]);
-      // The full walk, then 20 budgets' worth of draws, plus the one draw that crossed the line.
-      expect(game.validateCalls).toBeLessThanOrEqual(7 * (MAX_MULTISELECT_COMBINATIONS + 1) + 20 * MAX_MULTISELECT_COMBINATIONS + 7 * 12);
+      // The full walk, then 40 draws, each judging 7 values for each of 12 inputs.
+      expect(game.validateCalls).toBeLessThanOrEqual(MAX_MULTISELECT_COMBINATIONS + 7 + 2 * 20 * 12 * 7);
     });
 
     it('draws the same moves from the same seed, and others from another', () => {

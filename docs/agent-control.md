@@ -214,10 +214,10 @@ pass them straight to `doAction`/`performAction`, or run them through
 `buildActionArgs(..., { format: 'wire' })` for cross-process use; the
 wire form is accepted by `performAction` as well.
 
-By default enumeration is exhaustive. A `number` selection with `min`, `max`
-and `integer: true` is listed like a choice: each whole number in the range
-that its own `validate` accepts (#689), as long as the range holds at most
-10,000 values (`MAX_MULTISELECT_COMBINATIONS`, the cap a `multiSelect`'s
+By default enumeration lists every move, within the limits below. A `number`
+selection with `min`, `max` and `integer: true` is listed like a choice: each
+whole number in the range that its own `validate` accepts (#689), as long as
+the range holds at most 10,000 values (`MAX_MULTISELECT_COMBINATIONS`, the cap a `multiSelect`'s
 combinations have). `text` selections, any other `number` selection and
 function-based `multiSelect` configs cannot be statically enumerated —
 optional ones are skipped, required ones block the whole action from
@@ -230,8 +230,15 @@ An action's moves are the product of its selections: 13 number inputs of 1 to
 counting each value of each selection under every pick before it, whether its
 rules accept it or not, and stops there (#691). Rather than return a list that
 is not every move, it throws `MoveListTooLargeError` (exported from
-`'boardsmith'`), naming the action. Catch it to drive that action another way, such as picking each
+`'boardsmith'`), naming the action and the selection where the count crossed
+10,000. Catch it to drive that action another way, such as picking each
 selection at random, or narrow the action's choices or split it in two.
+
+Two older caps still return a list that is cut short, with a development
+warning, instead of throwing ([#692](https://github.com/Shufflewick/BoardSmith/issues/692)):
+a `multiSelect` whose combinations reach 10,000 offers only the first 10,000,
+and an action with a repeating selection offers only its shortest moves once
+500 partial moves have been tried.
 
 Pass `{ maxPerAction: N }` to keep only the first N moves of each action. It
 cuts a complete list, so it does not lift the 10,000 budget:

@@ -1462,7 +1462,7 @@
       "surfaceHash": "cde7780e73e735f3",
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "Enumeration tries at most 10,000 values for one action, counting each value of each selection under every pick before it, refused ones too (#691): above that, enumerateLegalMoves throws the new exported MoveListTooLargeError naming the action, the greedy simulator policy reports the seat stuck, and MCTS bots search 20 moves drawn by picking each selection at random from their own seeded source instead of listing every move. Re-vendor so platform bots cannot hang listing an action whose selections multiply into millions of moves; no format or payload change."
+      "summary": "Enumeration tries at most 10,000 values for one action, counting each value of each selection under every pick before it, refused ones too (#691): above that, enumerateLegalMoves throws the new exported MoveListTooLargeError naming the action and the selection where the count crossed the cap, the greedy simulator policy reports the seat stuck, and MCTS bots search 20 moves drawn by picking each selection at random from their own seeded source, in at most 40 draws, instead of listing every move. Re-vendor so platform bots cannot hang listing an action whose selections multiply into millions of moves; no format or payload change."
     }
   ]
 }

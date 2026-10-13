@@ -149,7 +149,10 @@ export class RedactedAttributeError extends NotSimulableError {
  * selections, so a few listable selections in a row can hold billions of
  * moves; enumeration stops at its budget rather than build them, and says so
  * rather than return a list that is not all of them. Catch it to drive that
- * action another way, such as picking each selection at random.
+ * action another way, such as picking each selection at random. Two older
+ * caps still cut a list short with a warning instead of throwing (#692): a
+ * multiSelect past 10,000 combinations, and an action with a repeating
+ * selection past 500 partial moves.
  */
 export class MoveListTooLargeError extends Error {
   constructor(message: string) {
