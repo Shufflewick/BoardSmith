@@ -2774,9 +2774,9 @@ notice-box read about a different seat, or not at all).
 built on a different copy of the BoardSmith engine than the world runner it
 imported: typically a rules bundle with the engine inlined, driven by a host that
 brought its own. Build the rules and the world runner into one bundle so they
-share one engine; `boardsmith dev` and the platform both do. If you meet it
-running `boardsmith dev`, the `boardsmith` your project's `node_modules`
-resolves is not the one the command is running from.
+share one engine; `boardsmith dev` and the platform both do. `boardsmith dev`
+refuses to start when the `boardsmith` your project's `node_modules` resolves
+is not the one the command is running from, and names both.
 
 `world-state-unreadable` is the one of those a host raises about its own durable
 state rather than its bookkeeping: a value it keeps beside a world was written in

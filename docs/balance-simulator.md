@@ -316,6 +316,12 @@ most of the time it is seen, which says it is underpriced. The Merchant is
 rarely kept, which is expected: it does nothing yet. Add `--json` or `--csv`
 to feed the numbers to a spreadsheet.
 
+Run `simulate` with the `boardsmith` your game installs (`npx boardsmith` in
+the game's directory). It builds its own game loop into your rules' bundle, so
+a `boardsmith` from anywhere else (a global install, another checkout) would
+put two copies of the engine in one bundle; it refuses that run and names both
+installs.
+
 ## 2. Compare variants on the same seeds
 
 Try Vanilla at 3 points instead of 4. Put a copy of the card data with that one
