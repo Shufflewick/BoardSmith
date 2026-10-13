@@ -14,6 +14,8 @@ describe('parseCsv (#556)', () => {
     ]);
     const first: { name: string; cost: number; tags: string[] } = rows[0];
     expect(first.name).toBe('Goblin');
+    // @ts-expect-error a number column is typed number, so CsvRow is derived from the columns, not any
+    expect(() => rows[0].cost.toUpperCase()).toThrow(TypeError);
   });
 
   it('reads quoted fields with doubled quotes, commas and newlines', () => {
@@ -72,6 +74,12 @@ describe('parseCsv refuses bad data, naming the file, row and column (#556)', ()
     expect(refuse('name,cots\nA,1\n', { name: 'string' })).toThrow(/data\/cards\.csv row 1: column "cots" is not declared/);
   });
 
+  it('a header named after an inherited object property', () => {
+    for (const name of ['constructor', '__proto__', 'toString']) {
+      expect(refuse(`name,${name}\nA,1\n`, { name: 'string' })).toThrow(`data/cards.csv row 1: column "${name}" is not declared`);
+    }
+  });
+
   it('a column named twice', () => {
     expect(refuse('name,name\nA,B\n', { name: 'string' })).toThrow(/data\/cards\.csv row 1: column "name" appears twice/);
   });
@@ -83,7 +91,18 @@ describe('parseCsv refuses bad data, naming the file, row and column (#556)', ()
     expect(refuse('name,cost\nA,\n', { name: 'string', cost: 'number' })).toThrow(/row 2, column "cost": "" is not a number/);
   });
 
+  it('a number too large to hold', () => {
+    expect(refuse('name,cost\nA,1e999\n', { name: 'string', cost: 'number' })).toThrow(
+      /data\/cards\.csv row 2, column "cost": "1e999" is too large/,
+    );
+  });
+
   it('a bad boolean', () => {
+    for (const cell of ['constructor', '__proto__', 'hasOwnProperty']) {
+      expect(refuse(`name,rare\nA,${cell}\n`, { name: 'string', rare: 'boolean' })).toThrow(
+        `data/cards.csv row 2, column "rare": "${cell}" is not a boolean`,
+      );
+    }
     expect(refuse('name,rare\nA,maybe\n', { name: 'string', rare: 'boolean' })).toThrow(
       /data\/cards\.csv row 2, column "rare": "maybe" is not a boolean.*true\/false, yes\/no or 1\/0/,
     );
@@ -104,6 +123,9 @@ describe('parseCsv refuses bad data, naming the file, row and column (#556)', ()
 
   it('a stray quote in an unquoted field, or text after a closing quote', () => {
     expect(refuse('name\nab"c\n', { name: 'string' })).toThrow(/data\/cards\.csv row 2, column "name": a quote inside/);
+    expect(refuse('name,text\nA, "y"\n', { name: 'string', text: 'string' })).toThrow(
+      /data\/cards\.csv row 2, column "text": a space before the opening quote.*Remove the space/,
+    );
     expect(refuse('name\n"ab"c\n', { name: 'string' })).toThrow(/data\/cards\.csv row 2, column "name": text after the closing quote/);
   });
 

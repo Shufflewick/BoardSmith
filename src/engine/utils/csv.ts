@@ -23,8 +23,8 @@ export type CsvValue<T extends CsvColumnType> = T extends 'number'
 /** One row, typed from the declared columns. */
 export type CsvRow<C extends Record<string, CsvColumnType>> = { -readonly [K in keyof C]: CsvValue<C[K]> };
 
-const NUMBER = /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/;
-const BOOLEANS: Record<string, boolean> = { true: true, false: false, yes: true, no: false, '1': true, '0': false };
+const NUMBER = /^[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?$/;
+const BOOLEANS = new Map([['true', true], ['false', false], ['yes', true], ['no', false], ['1', true], ['0', false]]);
 
 interface CsvRecord {
   fields: string[];
@@ -59,7 +59,7 @@ export function parseCsv<const C extends Record<string, CsvColumnType>>(
   const header = records[0].fields;
   const declared = Object.keys(columns);
   header.forEach((name, index) => {
-    if (!(name in columns)) {
+    if (!Object.hasOwn(columns, name)) {
       throw new Error(
         `${source} row 1: column "${name}" is not declared. Declared columns: ${declared.join(', ')}. ` +
           'Fix the header, or add the column to the columns passed to parseCsv.',
@@ -99,10 +99,9 @@ function readValue(cell: string, type: CsvColumnType, at: string): unknown {
     case 'string':
       return cell;
     case 'number':
-      if (!NUMBER.test(trimmed)) throw new Error(`${at}: "${cell}" is not a number. Write a number such as 3 or -2.5.`);
-      return Number(trimmed);
+      return readNumber(cell, at);
     case 'boolean': {
-      const value = BOOLEANS[trimmed.toLowerCase()];
+      const value = BOOLEANS.get(trimmed.toLowerCase());
       if (value === undefined) throw new Error(`${at}: "${cell}" is not a boolean. Write true/false, yes/no or 1/0.`);
       return value;
     }
@@ -121,8 +120,18 @@ function readValue(cell: string, type: CsvColumnType, at: string): unknown {
  * match means a malformed quote.
  */
 const FIELD = /(?:"((?:[^"]|"")*)"|([^",\r\n]*))(,|\r\n|\r|\n|$)/y;
+/** Spaces then a quote: a quoted field written with a space after the comma. */
+const SPACED_QUOTE = /[ \t]+"/y;
 /** A closed quoted field. */
 const QUOTED = /"(?:[^"]|"")*"(?!")/y;
+
+function readNumber(cell: string, at: string): number {
+  const trimmed = cell.trim();
+  if (!NUMBER.test(trimmed)) throw new Error(`${at}: "${cell}" is not a number. Write a number such as 3 or -2.5.`);
+  const value = Number(trimmed);
+  if (!Number.isFinite(value)) throw new Error(`${at}: "${cell}" is too large to hold as a number. Write a smaller number.`);
+  return value;
+}
 
 /** Splits CSV text into records, refusing a malformed quote at the row and column it is in. */
 function readRecords(text: string, source: string): CsvRecord[] {
@@ -146,6 +155,10 @@ function readRecords(text: string, source: string): CsvRecord[] {
 function quoteError(text: string, start: number, source: string, records: CsvRecord[], fields: string[]): Error {
   const name = records[0]?.fields[fields.length];
   const at = `${source} row ${records.length + 1}, column ${name === undefined ? fields.length + 1 : `"${name}"`}`;
+  SPACED_QUOTE.lastIndex = start;
+  if (SPACED_QUOTE.test(text)) {
+    return new Error(`${at}: a space before the opening quote, so the quote is read as part of the value. Remove the space after the comma.`);
+  }
   if (text[start] !== '"') {
     return new Error(`${at}: a quote inside an unquoted field. Put quotes around the whole field and write each quote in it as "".`);
   }
