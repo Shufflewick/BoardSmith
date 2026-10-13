@@ -1,6 +1,6 @@
 {
-  "revision": 186,
-  "surfaceHash": "43605924b1a82471",
+  "revision": 187,
+  "surfaceHash": "42d2e3c735aa73ac",
   "payloadHash": "7e563b9e75959ec4",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1431,6 +1431,14 @@
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "boardsmith exports defineMetrics and GameMetrics, and gameDefinition gains an optional metrics field (#556): a game declares the balance simulator's metrics (count, ratio, sample, category, segment, finalScore) and records them from game code; recording does nothing unless the simulator attaches a sink to the one game it plays, so real play, bots and snapshots are unchanged; no format or payload change. GameOptions gains the internal metricSink (set by the simulator, applied before the subclass constructor, never kept in constructor options or snapshots); metricSink is an engine-owned option key, so a game declaring a game option named metricSink is refused when it loads and a player selection naming it is refused."
+    },
+    {
+      "revision": 187,
+      "date": "2026-10-13",
+      "surfaceHash": "42d2e3c735aa73ac",
+      "payloadHash": "7e563b9e75959ec4",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "boardsmith exports parseCsv and its types CsvColumnType, CsvValue and CsvRow (#556): a game reads card data from a CSV file imported with ?raw into typed rows, failing at load with the file, row and column of a bad cell; it runs only in the game's own code, so nothing is added to snapshots or the player view; no format or payload change."
     }
   ]
 }

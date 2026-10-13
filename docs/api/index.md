@@ -104,6 +104,15 @@ import {
 - `defineMetrics(kinds => ({ ... }))` - Declare what the balance simulator measures, wired once as `gameDefinition.metrics`. Recording does nothing in real play. See [boardsmith/sim](./sim.md#author-metrics)
 - `GameMetrics` - The type `gameDefinition.metrics` holds
 
+### Card data from CSV
+
+- `parseCsv(text, columns, { source })` - Reads the text of a CSV file into one typed object per row. Import the file with `?raw` (`import cardsCsv from './data/cards.csv?raw'`) so its text is bundled with the rules; `boardsmith dev`, `build`, `simulate`, `validate` and vitest all load it. `columns` maps each header to `'string'`, `'number'`, `'boolean'` or `'list'`, and the rows are typed from it. `source` is the file's name, used in errors. See [boardsmith/sim](./sim.md#card-data-from-csv) for an example.
+  - Quoted fields, `""` for a quote, commas and newlines inside quotes, CRLF, a byte-order mark and blank lines at the end are all read.
+  - `number`: a decimal such as `3`, `-2.5` or `1e3`. `boolean`: `true`/`false`, `yes`/`no` or `1`/`0`, in any case. `list`: items separated by `;`, each trimmed; an empty cell is `[]`. Numbers and booleans may have spaces around them; strings are kept as written.
+  - Every header must be a declared column and every declared column must be in the header, in any order, so a misspelt header fails instead of reading as missing data.
+  - The first problem throws, naming the file, the row (the header is row 1, as in a spreadsheet) and the column: a missing or undeclared column, a bad number, boolean or list item, an unclosed quote, or a row with too few or too many fields. It never returns part of a file.
+- `CsvColumnType`, `CsvValue`, `CsvRow` - The column types and the row type `parseCsv` returns
+
 ### Serialization and snapshots
 
 `serializeAction()`, `deserializeAction()`, `isSerializedReference()`,
