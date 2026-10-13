@@ -300,8 +300,8 @@ function warnSampled(actionDef: ActionDefinition, count: number): void {
   devWarn(
     `move-list-sampled:${actionDef.name}`,
     `Action "${actionDef.name}" has more moves than enumeration lists (it tries at most ` +
-      `${BUDGET_TEXT} values for one action), so the bot searches ${count} of them ` +
-      `drawn at random instead of every one. Narrow the choices or ranges of its selections, or split it ` +
+      `${BUDGET_TEXT} values for one action), so only ${count} of them, drawn at random, are offered ` +
+      `instead of every one. Narrow the choices or ranges of its selections, or split it ` +
       `into two actions, so every move can be weighed.`,
   );
 }
@@ -343,9 +343,12 @@ interface EnumerationStep {
  *
  * The walk spends the same budget as any other ({@link ActionWalk}): each
  * value a partial move's next selection judges is counted before the partial
- * moves it leads to are built, so at most that many are ever replayed. A
- * repeat whose picks rarely end it is an unbounded space, and it throws
- * {@link MoveListTooLargeError} rather than offer only its shortest moves.
+ * moves it leads to are built, and each pick a partial move replays to reach
+ * where it stands is counted before it is replayed. So the picks made and the
+ * values judged together stay within the budget, however deep the repeat: a
+ * partial move of 100 picks costs 100. A repeat whose picks rarely end it is
+ * an unbounded space, and it throws {@link MoveListTooLargeError} rather than
+ * offer only its shortest moves.
  */
 function enumerateThroughSelectionSteps(
   game: Game,
@@ -355,29 +358,41 @@ function enumerateThroughSelectionSteps(
   sample: { count: number; random: SeededRandom } | undefined,
 ): Record<string, unknown>[] {
   const scratch = scratchCopy(game);
-  const walk: ActionWalk = { left: MAX_MULTISELECT_COMBINATIONS };
-  const moves: Record<string, unknown>[] = [];
-  const queue: EnumerationStep[][] = [[]];
   try {
-    // An index, not shift(): the queue holds up to the budget's partial moves.
-    for (let next = 0; next < queue.length; next++) {
-      const steps = queue[next];
-      // A value the selection offered can still be refused by its own
-      // `validate`: that path is simply not a move.
-      const at = scratch.replay(actionDef.name, player.seat, steps, bound);
-      if (!at) continue;
-      const step = nextStep(scratch.game, actionDef, at, walk);
-      if ('accepted' in step) {
-        if (step.accepted) moves.push({ ...bound, ...liveArgs(game, steps) });
-        continue;
-      }
-      for (const value of step.values) {
-        queue.push([...steps, { selection: step.selection, value: elementsAsIds(value) }]);
-      }
-    }
+    return listSelectionSteps(game, scratch, actionDef, player, bound);
   } catch (error) {
     if (!(error instanceof MoveListTooLargeError) || !sample) throw error;
     return sampleThroughSelectionSteps(game, scratch, actionDef, player, bound, sample);
+  }
+}
+
+/** The breadth-first walk of {@link enumerateThroughSelectionSteps}, on one budget. */
+function listSelectionSteps(
+  game: Game,
+  scratch: ReturnType<typeof scratchCopy>,
+  actionDef: ActionDefinition,
+  player: Player,
+  bound: Record<string, unknown>,
+): Record<string, unknown>[] {
+  const walk: ActionWalk = { left: MAX_MULTISELECT_COMBINATIONS };
+  const moves: Record<string, unknown>[] = [];
+  const queue: EnumerationStep[][] = [[]];
+  // An index, not shift(): the queue holds up to the budget's partial moves.
+  for (let next = 0; next < queue.length; next++) {
+    const steps = queue[next];
+    if (steps.length > 0) charge(walk, actionDef, steps[steps.length - 1].selection, steps.length);
+    // A value the selection offered can still be refused by its own
+    // `validate`: that path is simply not a move.
+    const at = scratch.replay(actionDef.name, player.seat, steps, bound);
+    if (!at) continue;
+    const step = nextStep(scratch.game, actionDef, at, walk);
+    if ('accepted' in step) {
+      if (step.accepted) moves.push({ ...bound, ...liveArgs(game, steps) });
+      continue;
+    }
+    for (const value of step.values) {
+      queue.push([...steps, { selection: step.selection, value: elementsAsIds(value) }]);
+    }
   }
   return moves;
 }
@@ -388,9 +403,11 @@ function enumerateThroughSelectionSteps(
  * the caller's own random source, until the move is complete, so a seeded bot
  * draws the same moves every time. As in {@link sampleSelections}, each pick is
  * uniform over what is offered at that point, and the sample makes at most 2
- * draws per move asked for. A repeat's draw has no fixed length, so the whole
- * sample also spends one budget of values judged, and a sample that spends it
- * keeps the moves drawn so far.
+ * draws per move asked for. A draw makes its picks one after another on the
+ * scratch copy, never replaying them, so its picks are bounded by the values it
+ * judges. A repeat's draw has no fixed length, so the whole sample also spends
+ * one budget of values judged, and a sample that spends it keeps the moves
+ * drawn so far: none, for a repeat that never ends.
  */
 function sampleThroughSelectionSteps(
   game: Game,
@@ -620,7 +637,8 @@ function enumerateSelections(
  * A multiSelect counts each of its combinations, and is refused before any
  * is built when they are more than the budget (#692). An action with a
  * repeating selection is walked through {@link enumerateThroughSelectionSteps}
- * on the same budget, each partial move's next values counted.
+ * on the same budget, each partial move's next values and replayed picks
+ * counted.
  *
  * Going over throws {@link MoveListTooLargeError}, which `enumerateLegalMoves`
  * and greedy pass on rather than cut the list short. A caller that samples
@@ -636,11 +654,14 @@ interface ActionWalk {
 }
 
 function tooManyMoves(actionDef: ActionDefinition, selection: Selection): MoveListTooLargeError {
+  const { repeat, repeatUntil } = selection as { repeat?: unknown; repeatUntil?: unknown };
+  const advice = repeat !== undefined || repeatUntil !== undefined
+    ? 'Give its `until` a pick that ends it sooner, or offer fewer choices per pick.'
+    : 'Narrow the choices or ranges of its selections, or split it into two actions.';
   return new MoveListTooLargeError(
     `Action "${actionDef.name}" has too many moves to list: its selections multiply past the ` +
       `${BUDGET_TEXT} values enumeration tries for one action (each value of each selection, under every ` +
-      `pick before it, refused ones too), and the count crossed it at selection "${selection.name}". ` +
-      `Narrow the choices or ranges of its selections, or split it into two actions.`,
+      `pick before it, refused ones too), and the count crossed it at selection "${selection.name}". ${advice}`,
   );
 }
 
@@ -778,10 +799,15 @@ function spend(
   selection: Selection,
   offer: SelectionOffer,
 ): unknown[] | null {
-  if (offer.judged > walk.left) throw tooManyMoves(actionDef, selection);
-  walk.left -= offer.judged;
+  charge(walk, actionDef, selection, offer.judged);
   if (offer.values === null || !walk.random) return offer.values;
   return offer.values.length > 0 ? [walk.random.pick(offer.values)] : [];
+}
+
+/** Take `judged` values from the walk's budget, or throw when it has fewer left. */
+function charge(walk: ActionWalk, actionDef: ActionDefinition, selection: Selection, judged: number): void {
+  if (judged > walk.left) throw tooManyMoves(actionDef, selection);
+  walk.left -= judged;
 }
 
 /**

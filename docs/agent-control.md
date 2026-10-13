@@ -236,7 +236,9 @@ selection at random, or narrow the action's choices or split it in two.
 
 The same budget covers every shape of selection: each combination of a
 `multiSelect` counts as one value, and an action with a repeating selection
-counts the values offered for each next pick of every partial move (#692).
+counts the values offered for each next pick of every partial move, and each
+pick replayed to reach that partial move (#692), so a deep repeat costs no more
+than a wide one.
 Enumeration never returns a list that is cut short.
 
 Pass `{ maxPerAction: N }` to keep only the first N moves of each action. It

@@ -264,7 +264,9 @@ function buildRandomArgs(
     if (moves.length === 0) {
       return {
         ok: false,
-        reason: `action '${actionDef.name}' has a repeating selection and no sequence of picks found that ends it`,
+        reason:
+          `action '${actionDef.name}' has a repeating selection and no sequence of picks found that ends it ` +
+          `(above enumeration's budget, the sequences tried are a few drawn at random)`,
       };
     }
     return { ok: true, args: rng.pick(moves) };
