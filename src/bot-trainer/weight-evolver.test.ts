@@ -81,7 +81,8 @@ describe('WeightEvolver.evolve', () => {
   });
 
   it('refuses, in this process and before benchmarking, a bundle built without the benchmark (#697)', async () => {
-    const bundlePath = join(tempTree('bs-weight-evolver-697-'), 'rules.mjs');
+    const dir = tempTree('bs-weight-evolver-697-');
+    const bundlePath = join(dir, 'rules.mjs');
     writeFileSync(bundlePath, 'export const gameDefinition = { gameClass: class {} };\n');
     vi.mocked(loadTrainingBundle).mockImplementationOnce(realLoader.loadTrainingBundle);
     await expect(new WeightEvolver(bundlePath, 'evolve-game').evolve(objectives(5))).rejects.toThrow(
