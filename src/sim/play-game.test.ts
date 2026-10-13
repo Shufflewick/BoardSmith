@@ -38,13 +38,16 @@ class RaceGame extends Game<RaceGame, Player> {
   }
 }
 
-/** A game whose only move takes a number, which greedy cannot list. */
+/**
+ * A game whose only move takes a number from 1 up: up to the `maxBid` game
+ * option, which greedy can list, or with no upper bound, which it cannot.
+ */
 class BidGame extends Game<BidGame, Player> {
-  constructor(options: GameOptions) {
+  constructor(options: GameOptions & { maxBid?: number }) {
     super(options);
     this.registerAction(
       Action.create<BidGame>('bid')
-        .enterNumber('amount', { min: 1, max: 5, integer: true })
+        .enterNumber('amount', { min: 1, max: options.maxBid, integer: true })
         .execute((_args, ctx) => {
           ctx.game.finish([]);
           return { success: true };
@@ -177,22 +180,54 @@ describe('playGame with policies (#556)', () => {
     expect(result.error).toMatch(/policy 'meddler'.*changed the game/);
   });
 
-  it('greedy refuses a move that takes a number, saying why', async () => {
+  it('greedy scores every value of a bounded whole-number input and plays one (#689)', async () => {
+    const scored = new Set<unknown>();
+    const result = await playGame(
+      { gameClass: BidGame },
+      {
+        playerCount: 2,
+        seed: 'bounded-bid',
+        gameOptions: { maxBid: 5 },
+        policies: [
+          greedy((_game, move) => {
+            scored.add(move.args.amount);
+            return 0;
+          }),
+          greedy(() => 0),
+        ],
+        maxActions: 10,
+      },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.completed).toBe(true);
+    expect([...scored].sort()).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('an MCTS seat plays a bounded whole-number input (#689)', async () => {
+    const result = await playGame(
+      { gameClass: BidGame, gameType: 'bid' },
+      { playerCount: 2, seed: 'mcts-bid', gameOptions: { maxBid: 5 }, policies: [mcts(10), mcts(10)], maxActions: 10 },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.completed).toBe(true);
+  });
+
+  it('greedy refuses a move whose number input has no upper bound, saying why', async () => {
     const result = await playGame(
       { gameClass: BidGame },
       { playerCount: 2, seed: 'bid', policies: [biggestStep, biggestStep], maxActions: 10 },
     );
     expect(result.completed).toBe(false);
-    expect(result.error).toMatch(/greedy.*'bid'.*number input 'amount'/);
+    expect(result.error).toMatch(/greedy cannot play action 'bid': its number input 'amount' cannot be listed: it needs min, max and integer: true/);
   });
 
-  it("greedy refuses a held follow-up that takes a number, saying why", async () => {
+  it("greedy refuses a held follow-up whose number input has no upper bound, saying why", async () => {
     const result = await playGame(
       { gameClass: OpenThenBidGame },
       { playerCount: 2, seed: 'open-bid', policies: [greedy(() => 0), greedy(() => 0)], maxActions: 10 },
     );
     expect(result.completed).toBe(false);
-    expect(result.error).toMatch(/greedy.*'bid'.*number input 'amount'/);
+    expect(result.error).toMatch(/greedy cannot play action 'bid': its number input 'amount' cannot be listed: it needs min, max and integer: true/);
   });
 
   it("greedy plays a held follow-up whose args already answer its number input", async () => {

@@ -214,7 +214,11 @@ pass them straight to `doAction`/`performAction`, or run them through
 `buildActionArgs(..., { format: 'wire' })` for cross-process use; the
 wire form is accepted by `performAction` as well.
 
-By default enumeration is exhaustive. `text`/`number` selections and
+By default enumeration is exhaustive. A `number` selection with `min`, `max`
+and `integer: true` is listed like a choice: each whole number in the range
+that its own `validate` accepts (#689), as long as the range holds at most
+10,000 values (`MAX_MULTISELECT_COMBINATIONS`, the cap a `multiSelect`'s
+combinations have). `text` selections, any other `number` selection and
 function-based `multiSelect` configs cannot be statically enumerated —
 optional ones are skipped, required ones block the whole action from
 appearing (you'll need `doAction` directly for those). An action its own

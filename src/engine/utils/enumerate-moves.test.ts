@@ -19,7 +19,12 @@ import {
 import { MCTSBot } from '../../bot/mcts-bot.js';
 import { GameRunner } from '../../runtime/runner.js';
 import { followUpForSeat } from '../flow/seat-activity.js';
-import { enumerateActionMoves, enumerateLegalMoves } from './enumerate-moves.js';
+import {
+  enumerateActionMoves,
+  enumerateLegalMoves,
+  numberInputValues,
+  MAX_MULTISELECT_COMBINATIONS,
+} from './enumerate-moves.js';
 
 // ============================================================================
 // Test game: 3 Piece tokens on a board, action picks one via chooseElement.
@@ -567,5 +572,102 @@ describe('a held follow-up the game refuses (#690)', () => {
     expect(collectMoves()).toEqual([]);
     expect(game.performAction('collect', game.getPlayer(1)!, { item: 'gem' }, { followUp }).error)
       .toMatch(/is disabled: Your bag is full/);
+  });
+});
+
+// ============================================================================
+// #689 — a bounded whole-number input is listed like a choice
+// ============================================================================
+
+class NumberInputGame extends Game<NumberInputGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerActions(
+      Action.create<NumberInputGame>('bid')
+        .enterNumber('amount', { min: 1, max: 6, integer: true, validate: (amount) => amount % 2 === 0 || 'Bid an even amount.' })
+        .execute(() => ({ success: true })),
+      Action.create<NumberInputGame>('draw')
+        .enterNumber('count', { min: 1, max: 3, integer: true })
+        .chooseFrom('pile', { choices: (ctx) => Array.from({ length: ctx.args.count ?? 0 }, (_, i) => i) })
+        .execute(() => ({ success: true })),
+      Action.create<NumberInputGame>('mark')
+        .chooseFrom('symbol', { choices: ['x', 'o'], repeat: { until: () => true } })
+        .enterNumber('weight', { min: 1, max: 2, integer: true })
+        .execute(() => ({ success: true })),
+      Action.create<NumberInputGame>('unbounded')
+        .enterNumber('page', { min: 1, integer: true })
+        .execute(() => ({ success: true })),
+      Action.create<NumberInputGame>('fraction')
+        .enterNumber('share', { min: 0, max: 1 })
+        .execute(() => ({ success: true })),
+      Action.create<NumberInputGame>('huge')
+        .enterNumber('credits', { min: 0, max: MAX_MULTISELECT_COMBINATIONS, integer: true })
+        .execute(() => ({ success: true })),
+      Action.create<NumberInputGame>('maybe')
+        .enterNumber('tip', { min: 1, integer: true, optional: true })
+        .execute(() => ({ success: true })),
+    );
+    this.setFlow({ root: loop({ maxIterations: 10, do: eachPlayer({ do: actionStep({ actions: ['bid'] }) }) }) });
+  }
+}
+
+describe('enumeration lists a bounded whole-number input (#689)', () => {
+  let game: NumberInputGame;
+  const movesOf = (action: string) => enumerateActionMoves(game, game.getAction(action)!, game.getPlayer(1)!);
+  beforeEach(() => {
+    game = new NumberInputGame({ playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'numbers' });
+    game.startFlow();
+  });
+
+  it("lists each whole number from min to max that the input's own validate accepts", () => {
+    expect(enumerateLegalMoves(game, 1)).toEqual([2, 4, 6].map((amount) => ({ action: 'bid', args: { amount } })));
+  });
+
+  it('enumerates a selection that depends on the number picked before it', () => {
+    expect(movesOf('draw')).toEqual([
+      { count: 1, pile: 0 },
+      { count: 2, pile: 0 }, { count: 2, pile: 1 },
+      { count: 3, pile: 0 }, { count: 3, pile: 1 }, { count: 3, pile: 2 },
+    ]);
+  });
+
+  it('lists a number input that follows a repeating selection', () => {
+    expect(movesOf('mark')).toEqual([
+      { symbol: ['x'], weight: 1 }, { symbol: ['x'], weight: 2 },
+      { symbol: ['o'], weight: 1 }, { symbol: ['o'], weight: 2 },
+    ]);
+  });
+
+  it('lists no move for a required input without both bounds, a whole-number rule, or with more values than the cap', () => {
+    expect(movesOf('unbounded')).toEqual([]);
+    expect(movesOf('fraction')).toEqual([]);
+    expect(movesOf('huge')).toEqual([]);
+  });
+
+  it('skips an optional input it cannot list, as a player may', () => {
+    expect(movesOf('maybe')).toEqual([{}]);
+  });
+});
+
+describe('numberInputValues (#689)', () => {
+  const values = (range: { min?: number; max?: number; integer?: boolean }) =>
+    numberInputValues({ type: 'number', name: 'n', ...range });
+
+  it('is every whole number in the range', () => {
+    expect(values({ min: -1, max: 2, integer: true })).toEqual({ values: [-1, 0, 1, 2] });
+    expect(values({ min: 0.5, max: 3.5, integer: true })).toEqual({ values: [1, 2, 3] });
+  });
+
+  it('says what an input it cannot list is missing', () => {
+    expect(values({ min: 1, integer: true })).toEqual({ unlistable: expect.stringMatching(/needs min, max and integer: true/) });
+    expect(values({ min: 0, max: 1 })).toEqual({ unlistable: expect.stringMatching(/needs min, max and integer: true/) });
+  });
+
+  it('refuses a range with more values than the cap, naming it', () => {
+    expect(values({ min: 1, max: MAX_MULTISELECT_COMBINATIONS, integer: true })).toEqual({ values: expect.any(Array) });
+    expect(values({ min: 0, max: MAX_MULTISELECT_COMBINATIONS, integer: true })).toEqual({
+      unlistable: expect.stringMatching(new RegExp(`${MAX_MULTISELECT_COMBINATIONS + 1} values.*at most ${MAX_MULTISELECT_COMBINATIONS}`)),
+    });
+    expect(values({ min: 0, max: 1e12, integer: true })).toEqual({ unlistable: expect.any(String) });
   });
 });
