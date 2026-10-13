@@ -6,20 +6,20 @@ Written by `node scripts/bench-sim/run.mjs` (#556). It plays the final game of
 as `boardsmith simulate` always plays. Seconds are wall time for the whole command,
 bundling the rules and starting the workers included.
 
-- Date: 2026-10-13T13:00:05.225Z
-- BoardSmith commit: `bef1f349`
+- Date: 2026-10-13T13:11:27.676Z
+- BoardSmith commit: `e3f8dc97`
 - Node: v22.23.3
 - Machine: 18 x Apple M5 Max
-- Load average (1, 5, 15 min): 2.99, 8.06, 10.37 at the start; 17.11, 11.44, 11.43 at the end
+- Load average (1, 5, 15 min): 2.83, 6.72, 9.03 at the start; 18.27, 11.22, 10.55 at the end
 - Target (#556): 3,000 games at each of 2, 4 and 6 players in under 60 seconds per policy (the "2,4,6" rows)
 
 | Policy | Players | Games | Seconds | Games/s |
 |---|---|---|---|---|
-| random | 2 | 3000 | 2.9 | 1022 |
-| random | 4 | 3000 | 6.7 | 445 |
-| random | 6 | 3000 | 14.5 | 207 |
-| random | 2,4,6 | 9000 | 21.2 | 424 |
-| greedy | 2 | 3000 | 2.9 | 1046 |
-| greedy | 4 | 3000 | 6.5 | 462 |
-| greedy | 6 | 3000 | 14.4 | 208 |
-| greedy | 2,4,6 | 9000 | 21.2 | 424 |
+| random | 2 | 3000 | 2.8 | 1079 |
+| random | 4 | 3000 | 7.0 | 427 |
+| random | 6 | 3000 | 14.5 | 208 |
+| random | 2,4,6 | 9000 | 22.6 | 399 |
+| greedy | 2 | 3000 | 3.1 | 962 |
+| greedy | 4 | 3000 | 7.2 | 417 |
+| greedy | 6 | 3000 | 15.0 | 200 |
+| greedy | 2,4,6 | 9000 | 22.0 | 409 |
