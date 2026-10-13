@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import chalk from 'chalk';
 
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
+import { constructGame } from '../../engine/element/game.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { requireGameProjectManifests, requireRulesIndex, resolveRulesDir } from '../lib/game-project.js';
 import { tableUiFiles } from '../lib/project-scaffold.js';
@@ -43,7 +44,7 @@ export async function addUiCommand(): Promise<void> {
   const { gameDefinition } = await withCommandBuildDir(cwd, 'add-ui', (buildDir) =>
     loadGameDefinition(rulesPath, buildDir, getProjectContext(cwd)),
   );
-  const game = new gameDefinition.gameClass({ playerCount: gameDefinition.minPlayers ?? 1, seed: 'add-ui' });
+  const game = constructGame(gameDefinition.gameClass, { playerCount: gameDefinition.minPlayers ?? 1, seed: 'add-ui' });
   const files = tableUiFiles(uiConfig, game.getActionNames());
 
   for (const file of files) {

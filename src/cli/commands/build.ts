@@ -327,21 +327,21 @@ async function writeWorldEntryIfMissing(
 
 export function resolveUiBuild(
   cwd: string,
-  hasTableUi: boolean,
+  tableUi: boolean,
   hasWorldUi: boolean,
 ): { surfaces: string; input?: Record<string, string> } {
-  if (!hasTableUi && !hasWorldUi) {
+  if (!tableUi && !hasWorldUi) {
     throw new Error(
       `This project has no UI entry point: neither index.html nor ${WORLD_ENTRY_HTML} exists, so ` +
         'there is no surface for a player to load. A table game mounts GameShell from ' +
         `index.html; a persistent world mounts WorldShell from ${WORLD_ENTRY_HTML}.`,
     );
   }
-  if (hasTableUi && !hasWorldUi) return { surfaces: '' };
+  if (tableUi && !hasWorldUi) return { surfaces: '' };
   return {
-    surfaces: hasTableUi ? 'table and world' : 'world',
+    surfaces: tableUi ? 'table and world' : 'world',
     input: {
-      ...(hasTableUi ? { index: join(cwd, 'index.html') } : {}),
+      ...(tableUi ? { index: join(cwd, 'index.html') } : {}),
       ...(hasWorldUi ? { world: join(cwd, WORLD_ENTRY_HTML) } : {}),
     },
   };
