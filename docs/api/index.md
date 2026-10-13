@@ -42,6 +42,7 @@ import {
 - `HexGrid` - Hexagonal grid layout
 - `HexCell` - Individual cell in a HexGrid
 - `Game` - Base class for game definitions
+  - `game.oncePerState(key, workOut)` - Work out a whole-position fact once per game state, shared by every rule that reads it (see [Actions & Flow](../actions-and-flow.md#a-fact-several-rules-read-is-worked-out-once-per-game-state))
 - `ElementCollection` - Queryable collection of elements
 - `PersistentMap` - Map that survives serialization
 
