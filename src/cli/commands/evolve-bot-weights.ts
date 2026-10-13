@@ -3,11 +3,11 @@ import { join } from 'node:path';
 import { cpus } from 'node:os';
 import chalk from 'chalk';
 import ora from 'ora';
-import type { ObjectiveWeight, TrainingProgress } from '../../bot-trainer/index.js';
+import type { ObjectiveWeight, TrainingBundle, TrainingProgress } from '../../bot-trainer/index.js';
 import type { BotStrategy } from '../../bot/index.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
-import { getProjectContext, loadGameDefinition } from './game-runtime.js';
+import { cliSourceFile, getProjectContext, importRuntimeBundle, runtimeBundlePath, toPosix } from './game-runtime.js';
 
 interface EvolveBotWeightsOptions {
   generations?: string;
@@ -61,18 +61,23 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
   // itself (#391). The rules are bundled from source here rather than read from
   // some earlier build, so the weights are tuned against the rules as they are
   // now (#399). The bundle stays until the evolution ends: the worker threads
-  // load the game from it.
+  // load the game from it. The benchmark is built into it beside the rules, so
+  // the bot plays on the engine the rules are built with (#697).
   await withCommandBuildDir(cwd, 'evolve-bot-weights', async (tempDir) => {
     try {
-      const { gameDefinition, bundlePath: modulePath } = await loadGameDefinition(
-        rulesDir,
+      const bundle = (await importRuntimeBundle({
+        rulesPath: rulesDir,
         tempDir,
-        getProjectContext(cwd),
-      );
+        name: 'evolve',
+        context: getProjectContext(cwd),
+        exports: [
+          `export { benchmarkBot, weightedBot } from ${JSON.stringify(toPosix(cliSourceFile('../bot-trainer/benchmark.ts')))};`,
+        ],
+      })) as unknown as TrainingBundle & { gameDefinition: { gameType?: string } };
+      const modulePath = runtimeBundlePath(tempDir, 'evolve');
 
-      const GameClass = gameDefinition.gameClass;
-      const gameType = gameDefinition.gameType || config.name;
-      const bot = requireBotObjectives(gameDefinition.bot);
+      const gameType = bundle.gameDefinition.gameType || config.name;
+      requireBotObjectives(bundle.gameDefinition.bot);
 
       spinner.succeed('Game rules bundled');
 
@@ -101,7 +106,7 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
       spinner.start(`Evolving weights (${generations} generations x ${population} population)...`);
       const startTime = Date.now();
 
-      const evolver = new WeightEvolver(GameClass, gameType, modulePath, bot, {
+      const evolver = new WeightEvolver(bundle, gameType, modulePath, {
         workerCount,
         evolutionGenerations: generations,
         evolutionLambda: population,
@@ -152,17 +157,16 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
 }
 
 /**
- * The game's bot strategy, refused unless it wires up objectives: the weights
+ * Refuse a game whose bot wires up no objectives: the weights
  * tuned are those of the objectives the game's bot plays with (#523).
  */
-function requireBotObjectives(bot: BotStrategy | undefined): BotStrategy {
+function requireBotObjectives(bot: BotStrategy | undefined): void {
   if (!bot?.objectives) {
     throw new Error(
       "the game's gameDefinition has no bot.objectives, so there are no objectives to weigh. " +
         'Set gameDefinition.bot.objectives to the objectives function bot.ts exports.',
     );
   }
-  return bot;
 }
 
 /** The run's settings, from the flags or their defaults. */

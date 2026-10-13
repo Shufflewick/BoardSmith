@@ -36,19 +36,42 @@ const ENGINE = join(REPO_ROOT, 'src/engine/index.ts');
  * Both seats pick 1 or 2 once, and the higher total wins. Small enough that a
  * benchmark of a few hundred games finishes quickly, and decided by the moves,
  * so every game reaches an outcome.
+ *
+ * Each seat may pick only a value it holds a card for, in a hand no other seat
+ * sees (#697). A bot searching from one seat's view cannot see the other
+ * seat's hand, so the engine drops that seat's moves from the search rather
+ * than guess them. That works only when the bot's code and the game's elements
+ * come from one copy of the engine: with two, the bot does not recognise the
+ * game's "this copy cannot know that" error, and every benchmark game crashes.
  */
 const RULES = `
-import { Game, Player, Action, eachPlayer, actionStep, type GameOptions } from ${JSON.stringify(ENGINE)};
+import { Game, Player, Piece, Space, Action, eachPlayer, actionStep, type GameOptions } from ${JSON.stringify(ENGINE)};
 import { objectives } from './bot.js';
+
+class Card extends Piece<HighCardGame> {
+  rank!: number;
+}
+
+class Hand extends Space<HighCardGame> {}
 
 class HighCardGame extends Game<HighCardGame, Player> {
   picks: number[] = [];
 
   constructor(options: GameOptions) {
     super(options);
+    this.registerElements([Card, Hand]);
+    for (const player of this.all(Player)) {
+      const hand = this.create(Hand, \`hand-\${player.seat}\`);
+      hand.player = player;
+      hand.contentsVisibleToOwner();
+      for (const rank of [1, 2]) hand.create(Card, \`card-\${player.seat}-\${rank}\`, { rank });
+    }
     this.registerAction(
       Action.create<HighCardGame>('pick')
         .chooseFrom('value', { choices: [1, 2] })
+        .validate((args, ctx) =>
+          this.first(Hand, \`hand-\${ctx.player.seat}\`)!.all(Card).some((card) => card.rank === args.value),
+        )
         .execute((args, ctx) => {
           const game = ctx.game as HighCardGame;
           game.picks.push(args.value as number);
@@ -110,7 +133,7 @@ await build(cliBuildOptions(INSTALLED));
 function evolveWith(bin: string): { status: number | null; output: string } {
   const run = spawnSync(
     process.execPath,
-    [bin, 'evolve-bot-weights', '--generations', '1', '--population', '2', '--mcts', '1', '--workers', '1'],
+    [bin, 'evolve-bot-weights', '--generations', '1', '--population', '2', '--mcts', '5', '--workers', '1'],
     { cwd: gameProject(), encoding: 'utf-8', env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' } },
   );
   return { status: run.status, output: stripVTControlCharacters(`${run.stdout}${run.stderr}`) };
@@ -128,7 +151,7 @@ function expectEvolvedInRealWorkers({ status, output }: { status: number | null;
   expect(output).toContain('Initial win rate:');
 }
 
-describe('evolve-bot-weights starts real benchmark workers (#401)', () => {
+describe('evolve-bot-weights benchmarks in real workers, on the engine the game is built with (#401, #697)', () => {
   it('from this checkout, where the CLI runs the TypeScript sources', () => {
     expectEvolvedInRealWorkers(evolveWith(join(REPO_ROOT, 'bin', 'boardsmith.js')));
   }, 180_000);

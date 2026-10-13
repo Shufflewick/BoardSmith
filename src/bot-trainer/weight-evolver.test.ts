@@ -9,6 +9,7 @@ import type { ObjectiveWeight, TrainingProgress } from './types.js';
 import type { WeightEvolverConfig } from './weight-evolver.js';
 import { Game, Player, Action, actionStep, type GameOptions } from '../engine/index.js';
 import type { BotStrategy } from '../bot/index.js';
+import { benchmarkBot, weightedBot } from './benchmark.js';
 
 /** Fitness for each benchmarked population, controlled per test. */
 let fitnessOf: (objectives: ObjectiveWeight[]) => number;
@@ -46,7 +47,7 @@ const objectives = (...weights: number[]): ObjectiveWeight[] =>
   weights.map((weight, i) => ({ id: `f${i}`, weight }));
 
 const evolver = (config: Partial<WeightEvolverConfig> = {}) =>
-  new WeightEvolver(EvolveGame, 'evolve-game', '/tmp/game.js', bot, {
+  new WeightEvolver({ gameDefinition: { gameClass: EvolveGame, bot }, benchmarkBot, weightedBot }, 'evolve-game', '/tmp/game.js', {
     evolutionGenerations: 2,
     evolutionMu: 2,
     evolutionLambda: 3,

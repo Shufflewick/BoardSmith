@@ -34,6 +34,9 @@ import {
 - `updateBotWeights(source, weights, options?)` - The bot.ts source with those
   weights written back, every other byte unchanged. Refuses an id the source
   has no objective for
+- `benchmarkBot` and `weightedBot` - The benchmark each candidate is scored
+  with, and the check of its weights. They are built into the game's training
+  bundle (see below), not called directly
 
 `readObjectiveWeights` and `updateBotWeights` share one parser: an objective is
 a property whose value is an object literal with both a `checker` and a
@@ -43,14 +46,17 @@ a property whose value is an object literal with both a `checker` and a
 
 - `ObjectiveWeight` - `{ id, weight }` for one objective
 - `TrainingProgress` - What `onProgress` receives
+- `TrainingBundle` - A rules module built together with `benchmarkBot` and
+  `weightedBot`
 - `WeightEvolverConfig` - Weight evolver config
 - `WeightEvolutionResult` - The evolved weights and the starting and best win rates
 - `UpdateWeightsOptions` - Options for `updateBotWeights`
 
 ## Training from the CLI
 
-Run `evolve-bot-weights` from the game project. It bundles the rules from source
-into a fresh `.boardsmith/evolve-bot-weights-tmp-<run>/` (removed when it ends), reads the
+Run `evolve-bot-weights` from the game project. It bundles the rules from source,
+together with the benchmark, into a fresh `.boardsmith/evolve-bot-weights-tmp-<run>/`
+(removed when it ends), reads the
 weights of the objectives in the rules directory's `bot.ts`, evolves them by
 benchmarking the game's own bot in parallel, and writes the new weights back into
 that `bot.ts`:
@@ -64,22 +70,31 @@ The game's `gameDefinition` must set `bot.objectives` to the objectives function
 
 ## From a Script
 
+The bot must play on the same copy of the engine as the game's elements, or it
+does not recognise the game's own errors and every benchmark game fails (#697).
+So the evolver takes a training bundle: one module, built from an entry that
+exports the rules beside the benchmark.
+
+```typescript
+// src/training.ts, built to dist/training.js
+export { gameDefinition } from './rules/index.js';
+export { benchmarkBot, weightedBot } from 'boardsmith/bot-trainer';
+```
+
 ```typescript
 import { readFileSync, writeFileSync } from 'node:fs';
 import { WeightEvolver, readObjectiveWeights, updateBotWeights } from 'boardsmith/bot-trainer';
-import { gameDefinition } from './dist/rules.js';
 
 const botPath = './src/rules/bot.ts';
 const source = readFileSync(botPath, 'utf-8');
 
-// The workers load the game from the compiled module at this path.
-const evolver = new WeightEvolver(
-  gameDefinition.gameClass,
-  gameDefinition.gameType,
-  new URL('./dist/rules.js', import.meta.url).pathname,
-  gameDefinition.bot,
-  { evolutionGenerations: 5, evolutionLambda: 20 },
-);
+// The workers load the same bundle from this path.
+const bundlePath = new URL('./dist/training.js', import.meta.url).pathname;
+const bundle = await import(bundlePath);
+const evolver = new WeightEvolver(bundle, bundle.gameDefinition.gameType, bundlePath, {
+  evolutionGenerations: 5,
+  evolutionLambda: 20,
+});
 
 const result = await evolver.evolve(readObjectiveWeights(source));
 writeFileSync(botPath, updateBotWeights(source, result.objectives));

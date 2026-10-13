@@ -36,7 +36,7 @@ vi.mock('../../bot-trainer/index.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../bot-trainer/index.js')>();
   class RecordingEvolver {
     constructor(
-      _gameClass: unknown,
+      _bundle: unknown,
       private readonly gameType: string,
       private readonly modulePath: string,
     ) {}
