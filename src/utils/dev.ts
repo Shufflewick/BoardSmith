@@ -14,9 +14,19 @@
  * ```
  */
 
+// Decided once, when this module loads: Vite's `import.meta.env` first, else NODE_ENV, which a
+// rules bundle reads in Node (and each simulate worker in its own `env`). Reading process.env on
+// every call cost about 6% of a simulation (#688). Set NODE_ENV before importing; a test that
+// needs the other mode mocks isDevMode.
+const devMode: boolean =
+  typeof import.meta !== 'undefined' && (import.meta as any).env
+    ? (import.meta as any).env.DEV === true || (import.meta as any).env.MODE !== 'production'
+    : typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
+
 /**
  * Check if running in development mode.
- * Works in both browser (Vite) and Node.js environments.
+ * Works in both browser (Vite) and Node.js environments. The mode is fixed
+ * when this module loads.
  *
  * @returns true if in development mode, false in production
  *
@@ -28,13 +38,7 @@
  * ```
  */
 export function isDevMode(): boolean {
-  // Browser (Vite) - check import.meta.env first
-  if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
-    const env = (import.meta as any).env;
-    return env.DEV === true || env.MODE !== 'production';
-  }
-  // Node.js fallback
-  return typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
+  return devMode;
 }
 
 /**
