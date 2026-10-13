@@ -147,13 +147,11 @@ export interface ActionExecutionResult {
   serializedAction?: SerializedAction;
   /** Updated flow state */
   flowState?: FlowState;
-  /** Player views after the action */
-  playerViews?: PlayerStateView[];
   /**
    * `ActionResult.data` returned by the action's `execute()` (BUG-017) — the
    * only channel by which an action returns a computed value to the seat that
    * took it. Private to that seat: it is returned to this op's caller and is
-   * NOT part of `flowState`/`playerViews`, which fan out to the whole table.
+   * NOT part of `flowState` or the seats' views, which fan out to the whole table.
    */
   data?: Record<string, unknown>;
   /** `ActionResult.message` returned by the action's `execute()` (BUG-012). */
@@ -669,7 +667,6 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       success: true,
       serializedAction,
       flowState,
-      playerViews: createAllPlayerViews(this.game),
       data: actionResult?.data,
       message: actionResult?.message,
     };

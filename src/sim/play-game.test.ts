@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   Game,
   Player,
@@ -118,6 +118,18 @@ describe('playGame with policies (#556)', () => {
       // Both seats always take 3: seat 1 reaches 12 first and wins alone.
       expect(result.actionCount).toBe(7);
       expect(result.winners).toEqual([1]);
+    }
+  });
+
+  // #695: no seat sees a simulated game, so building seat views each move was wasted work.
+  it('builds no seat view while it plays a game', async () => {
+    const seatViews = vi.spyOn(RaceGame.prototype, 'toJSONForPlayer');
+    try {
+      const result = await play([biggestStep, biggestStep], 'g1');
+      expect(result.completed).toBe(true);
+      expect(seatViews).not.toHaveBeenCalled();
+    } finally {
+      seatViews.mockRestore();
     }
   });
 
