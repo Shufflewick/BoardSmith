@@ -7,7 +7,7 @@ import type { Game } from './game.js';
 /**
  * Dev-only "volatile state" plumbing for {@link Game}.
  *
- * During development (NODE_ENV !== 'production') a game is scanned after
+ * In dev mode (`isDevMode()` in utils/dev.ts) a game is scanned after
  * construction for state that would silently reset across Hot Module Replacement
  * (HMR). Native `Map`/`Set` properties produce actionable warnings, because
  * `toJSON` cannot serialize them, so their contents are lost on a hot reload (or
