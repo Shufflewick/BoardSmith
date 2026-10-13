@@ -499,7 +499,7 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
     // Build's own build directory (WR-02, #391): `.boardsmith` is SHARED with
     // pack's tarballs, the scratch directory, chunk worktrees and the other
     // runs' build directories. Only ever create and delete what this run owns (#543).
-    const { gameDefinition } = await withCommandBuildDir(cwd, 'build', (tempDir) =>
+    const gameDefinition = await withCommandBuildDir(cwd, 'build', (tempDir) =>
       loadGameDefinition(rulesPath, tempDir, context),
     );
 

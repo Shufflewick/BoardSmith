@@ -5,8 +5,9 @@
  * so the bot plays on the engine the game is built with (#697).
  */
 import { parentPort } from 'worker_threads';
-import type { ObjectiveWeight, TrainingBundle } from './types.js';
+import type { ObjectiveWeight } from './types.js';
 import type { BenchmarkConfig } from './benchmark.js';
+import { loadTrainingBundle } from './training-bundle.js';
 
 if (!parentPort) {
   throw new Error('benchmark-worker.ts must be run as a worker thread');
@@ -68,18 +69,7 @@ parentPort.on('message', async (request: BenchmarkRequest) => {
   const { individualIndex, gameModulePath, gameType, weights, config } = request;
 
   try {
-    // Dynamically import the game module (need file:// URL for local imports in workers)
-    const modulePath = gameModulePath.startsWith('file://')
-      ? gameModulePath
-      : `file://${gameModulePath}`;
-    const bundle = (await import(modulePath)) as Partial<TrainingBundle>;
-    if (!bundle.gameDefinition?.gameClass || typeof bundle.benchmarkBot !== 'function') {
-      throw new Error(
-        `${gameModulePath} must export the game's gameDefinition and benchmarkBot, built into one module ` +
-          "so the bot plays on the game's own engine. Add `export { benchmarkBot, weightedBot } from " +
-          "'boardsmith/bot-trainer';` to the entry it is built from."
-      );
-    }
+    const bundle = await loadTrainingBundle(gameModulePath);
 
     // The game's own bot, so its own objective checkers are what is scored.
     const result = await bundle.benchmarkBot(

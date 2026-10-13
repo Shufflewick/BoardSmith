@@ -3,11 +3,11 @@ import { join } from 'node:path';
 import { cpus } from 'node:os';
 import chalk from 'chalk';
 import ora from 'ora';
-import type { ObjectiveWeight, TrainingBundle, TrainingProgress } from '../../bot-trainer/index.js';
+import type { ObjectiveWeight, TrainingProgress } from '../../bot-trainer/index.js';
 import type { BotStrategy } from '../../bot/index.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
-import { cliSourceFile, getProjectContext, importRuntimeBundle, runtimeBundlePath, toPosix } from './game-runtime.js';
+import { packageSourceFile, getProjectContext, importRuntimeBundle, runtimeBundlePath, toPosix } from './game-runtime.js';
 
 interface EvolveBotWeightsOptions {
   generations?: string;
@@ -65,19 +65,19 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
   // the bot plays on the engine the rules are built with (#697).
   await withCommandBuildDir(cwd, 'evolve-bot-weights', async (tempDir) => {
     try {
-      const bundle = (await importRuntimeBundle({
+      const { gameDefinition } = await importRuntimeBundle({
         rulesPath: rulesDir,
         tempDir,
         name: 'evolve',
         context: getProjectContext(cwd),
         exports: [
-          `export { benchmarkBot, weightedBot } from ${JSON.stringify(toPosix(cliSourceFile('../bot-trainer/benchmark.ts')))};`,
+          `export { benchmarkBot, weightedBot } from ${JSON.stringify(toPosix(packageSourceFile('bot-trainer/benchmark.ts')))};`,
         ],
-      })) as unknown as TrainingBundle & { gameDefinition: { gameType?: string } };
+      });
       const modulePath = runtimeBundlePath(tempDir, 'evolve');
 
-      const gameType = bundle.gameDefinition.gameType || config.name;
-      requireBotObjectives(bundle.gameDefinition.bot);
+      const gameType = gameDefinition.gameType || config.name;
+      requireBotObjectives(gameDefinition.bot);
 
       spinner.succeed('Game rules bundled');
 
@@ -106,7 +106,7 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
       spinner.start(`Evolving weights (${generations} generations x ${population} population)...`);
       const startTime = Date.now();
 
-      const evolver = new WeightEvolver(bundle, gameType, modulePath, {
+      const evolver = new WeightEvolver(modulePath, gameType, {
         workerCount,
         evolutionGenerations: generations,
         evolutionLambda: population,

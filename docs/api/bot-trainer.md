@@ -72,8 +72,10 @@ The game's `gameDefinition` must set `bot.objectives` to the objectives function
 
 The bot must play on the same copy of the engine as the game's elements, or it
 does not recognise the game's own errors and every benchmark game fails (#697).
-So the evolver takes a training bundle: one module, built from an entry that
-exports the rules beside the benchmark.
+So the evolver takes the path of a training bundle: one module, built from an
+entry that exports the rules beside the benchmark. It imports the bundle itself
+and refuses one that does not export `gameDefinition`, `benchmarkBot` and
+`weightedBot`, before any benchmark runs; each worker imports the same path.
 
 ```typescript
 // src/training.ts, built to dist/training.js
@@ -88,10 +90,8 @@ import { WeightEvolver, readObjectiveWeights, updateBotWeights } from 'boardsmit
 const botPath = './src/rules/bot.ts';
 const source = readFileSync(botPath, 'utf-8');
 
-// The workers load the same bundle from this path.
 const bundlePath = new URL('./dist/training.js', import.meta.url).pathname;
-const bundle = await import(bundlePath);
-const evolver = new WeightEvolver(bundle, bundle.gameDefinition.gameType, bundlePath, {
+const evolver = new WeightEvolver(bundlePath, 'my-game', {
   evolutionGenerations: 5,
   evolutionLambda: 20,
 });
