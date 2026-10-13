@@ -106,9 +106,11 @@ describe('docs/balance-simulator.md, run block by block (#556)', () => {
   it("shows the report excerpt's headings and column headers as boardsmith simulate prints them", () => {
     expect(tables?.code).toBe(0);
     const printed = new Set((tables?.stdout ?? '').split('\n').map(words));
-    // The layout lines are the ones with no digit, and the player count's heading.
+    // The layout lines are the ones with no plain-number word (headers such as
+    // `p10` keep their place), and the player count's heading.
     const excerpt = blocks.find((block) => block.lang === '' && !block.marked)?.body ?? '';
-    const layout = excerpt.split('\n').filter((line) => line.trim() !== '' && (!/\d/.test(line) || /^\d+ players:/.test(line)));
+    const isDataRow = (line: string) => line.trim().split(/\s+/).some((word) => /^[\d.%+-]+$/.test(word));
+    const layout = excerpt.split('\n').filter((line) => line.trim() !== '' && (!isDataRow(line) || /^\d+ players:/.test(line)));
     expect(layout.length).toBeGreaterThan(5);
     for (const line of layout) expect(printed, line).toContain(words(line));
   });
