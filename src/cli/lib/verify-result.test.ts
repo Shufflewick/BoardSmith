@@ -54,9 +54,16 @@ describe('buildVerifyResult', () => {
       commit: HEAD,
       cleanTree: true,
       base: { ref: 'main', commit: HEAD },
-      checks: VERIFY_CHECK_NAMES.map((n) => (n === 'build' ? { ...passing(n), passed: false } : passing(n))),
+      checks: VERIFY_CHECK_NAMES.map((n) => (n === 'build' ? { name: n, passed: false, summary: 'build failed' } : passing(n))),
     });
     expect(failed.passed).toBe(false);
+  });
+
+  it('cannot hold a check that was skipped and failed: a skipped check never fails (#556)', () => {
+    const skipped: VerifyCheckResult = { name: 'build', passed: true, skipped: true, summary: 'Skipped: no UI yet.' };
+    // @ts-expect-error A skipped check has passed: true.
+    const failedSkip: VerifyCheckResult = { name: 'build', passed: false, skipped: true, summary: 'Skipped: no UI yet.' };
+    expect([skipped.passed, failedSkip.skipped]).toEqual([true, true]);
   });
 });
 

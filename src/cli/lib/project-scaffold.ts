@@ -7,7 +7,7 @@
 
 import { DESIGN_DIR, SCRATCH_DIR } from './project-paths.js';
 import { GAME_VITE_CONFIG, GAME_VITE_CONFIG_FILE } from './test-run-scope.js';
-import { TABLE_UI_ENTRY } from './game-project.js';
+import { TABLE_UI_ENTRY, TABLE_UI_PATHS } from './game-project.js';
 import { SMOKE_SPEC_PATH } from '../../testing/browser-smoke-verdict.js';
 import { existsSync } from 'node:fs';
 import { join, dirname, relative, resolve } from 'node:path';
@@ -725,21 +725,22 @@ export function generateScaffoldFiles(config: ProjectConfig, projectPath: string
 type TableUiConfig = Pick<ProjectConfigBase, 'displayName' | 'ui'>;
 
 /**
- * A table's UI: the page and its entry point, the game shell and the board registry, the a11y
- * example and the in-browser smoke test, which lists `actions`, every action the game's rules
- * register. Whether a project has a UI is whether it has `index.html` (`hasTableUi`).
+ * A table's UI, one file for each of {@link TABLE_UI_PATHS}: the page and its entry point, the game
+ * shell and the board registry, the a11y example and the in-browser smoke test, which lists
+ * `actions`, every action the game's rules register.
  */
 export function tableUiFiles(config: TableUiConfig, actions: readonly string[]): GeneratedFile[] {
-  return [
-    { path: TABLE_UI_ENTRY, content: generateIndexHtml(config) },
-    { path: 'src/main.ts', content: generateMainTs() },
-    { path: 'src/ui/index.ts', content: generateUiIndexTs() },
-    { path: 'src/ui/uis.ts', content: generateUisTs(config) },
-    { path: 'src/ui/App.vue', content: generateAppVue() },
-    { path: 'src/ui/components/GameTable.vue', content: generateGameTableVue() },
-    { path: 'tests/a11y.example.test.ts', content: generateA11yExampleTestTs() },
-    { path: SMOKE_SPEC_PATH, content: generateSmokeSpecTs(actions) },
-  ];
+  const content: Record<(typeof TABLE_UI_PATHS)[number], string> = {
+    [TABLE_UI_ENTRY]: generateIndexHtml(config),
+    'src/main.ts': generateMainTs(),
+    'src/ui/index.ts': generateUiIndexTs(),
+    'src/ui/uis.ts': generateUisTs(config),
+    'src/ui/App.vue': generateAppVue(),
+    'src/ui/components/GameTable.vue': generateGameTableVue(),
+    'tests/a11y.example.test.ts': generateA11yExampleTestTs(),
+    [SMOKE_SPEC_PATH]: generateSmokeSpecTs(actions),
+  };
+  return TABLE_UI_PATHS.map((path) => ({ path, content: content[path] }));
 }
 
 /**

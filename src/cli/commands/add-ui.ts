@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import chalk from 'chalk';
@@ -6,7 +5,7 @@ import chalk from 'chalk';
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 import { constructGame } from '../../engine/element/game.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
-import { requireGameProjectManifests, requireRulesIndex, resolveRulesDir } from '../lib/game-project.js';
+import { requireGameProjectManifests, requireRulesIndex, resolveRulesDir, tableUiState } from '../lib/game-project.js';
 import { tableUiFiles } from '../lib/project-scaffold.js';
 import { resolveWorldMode } from '../lib/world-project.js';
 
@@ -28,13 +27,11 @@ export async function addUiCommand(): Promise<void> {
   const uiConfig = { displayName: String(config.displayName || config.name) };
 
   // Refused before the rules load: which files the UI is does not depend on the game's actions.
-  const existing = tableUiFiles(uiConfig, [])
-    .map((file) => file.path)
-    .filter((path) => existsSync(join(cwd, path)));
-  if (existing.length > 0) {
+  const existing = tableUiState(cwd);
+  if (existing.state !== 'none') {
     throw new Error(
       'This project already has some of the UI files `boardsmith add-ui` writes, so nothing was changed:\n' +
-        existing.map((path) => `  ${path}`).join('\n') +
+        existing.files.map((path) => `  ${path}`).join('\n') +
         '\nMove or rename them, run add-ui again, then merge anything you still need back in.',
     );
   }

@@ -8,7 +8,7 @@ import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 import { buildCli, CLI_ENTRY, CLI_OUTFILE } from '../lib/build-cli.js';
 import { resolveUserPath } from '../lib/user-path.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
-import { hasTableUi, requireGameProjectManifests, requireRulesIndex, requireTableUi, resolveRulesDir } from '../lib/game-project.js';
+import { requireGameProjectManifests, requireRulesIndex, requireTableUi, resolveRulesDir, tableUiState } from '../lib/game-project.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import { readWorldDefinition, type WorldDefinition } from '../../world/index.js';
 import type { GameBackend, GameDefinition } from '../../session/index.js';
@@ -466,7 +466,7 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
     // what production loads. `world.ui` is gone from the manifest with the
     // branch it fed; see `deriveManifest`.
     const worldEntry = join(cwd, WORLD_ENTRY_HTML);
-    const tableUi = hasTableUi(cwd);
+    const tableUi = tableUiState(cwd).state === 'present';
     await writeWorldEntryIfMissing(cwd, config);
     const hasWorldUi = existsSync(worldEntry);
     const ui = resolveUiBuild(cwd, tableUi, hasWorldUi);

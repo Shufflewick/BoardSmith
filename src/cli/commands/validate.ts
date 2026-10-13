@@ -21,7 +21,7 @@ import {
   encodedRulesBytes,
 } from '../lib/bundle-limits.js';
 import { readDistDir, createZip } from '../lib/zip.js';
-import { hasTableUi, requireGameProject, resolveRulesDir } from '../lib/game-project.js';
+import { requireGameProject, resolveRulesDir, tableUiState, TABLE_UI_ENTRY } from '../lib/game-project.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { runToolCapturingStdout } from '../lib/run-tool.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
@@ -1106,10 +1106,13 @@ function assetPathMessage(
   return sentence.charAt(0).toUpperCase() + sentence.slice(1);
 }
 
-/** The UI files a project must have: a world's entry, a table's shell, or none for a table with no UI yet. */
+/**
+ * The UI files a project must have: a world's entry, a table's page and shell, or none for a table
+ * with no UI yet. A table that has any UI file has a UI, so it needs all three.
+ */
 function uiFilesRequired(cwd: string, isWorld: boolean): string[] {
   if (isWorld) return ['src/ui/uis.ts', 'world.html', 'src/world-main.ts', 'src/rules/world.ts'];
-  return hasTableUi(cwd) ? ['src/ui/uis.ts', 'src/ui/App.vue'] : [];
+  return tableUiState(cwd).state === 'none' ? [] : [TABLE_UI_ENTRY, 'src/ui/uis.ts', 'src/ui/App.vue'];
 }
 
 export async function validateRequiredFiles(cwd: string, isWorld: boolean): Promise<ValidationResult> {
@@ -1131,8 +1134,8 @@ export async function validateRequiredFiles(cwd: string, isWorld: boolean): Prom
     // AutoUI a world's default board with no new renderer at all -- a world's
     // view IS the serialized element tree a table's is.
     //
-    // A TABLE WITH NO UI YET (`boardsmith init --sim`, no index.html) is asked only for its rules:
-    // `boardsmith add-ui` writes the UI files when it is time.
+    // A TABLE WITH NO UI YET (`boardsmith init --sim`, none of the UI files) is asked only for its
+    // rules: `boardsmith add-ui` writes the UI files when it is time.
     ...uiFilesRequired(cwd, isWorld),
   ];
 

@@ -40,7 +40,7 @@ my-game/
 ├── package.json             # Dependencies
 ├── tsconfig.json            # TypeScript config
 ├── vite.config.ts           # Vite and vitest config: defineGameViteConfig() from boardsmith/vite-config
-├── index.html               # Entry HTML (a project has a UI exactly when it has this file)
+├── index.html               # Entry HTML
 ├── public/                  # Static assets
 ├── src/
 │   ├── main.ts              # App entry point
@@ -89,8 +89,10 @@ usual (validate's Required Files check asks only for the rules). `dev`, `build`,
 `smoke` and `publish` stop with "This project has no UI yet. Run
 `boardsmith add-ui`." `boardsmith verify` runs test, typecheck, validate and
 mutation, and records build and smoke as skipped for that reason; its closing
-line and `verify --check` name the skipped checks. `--sim` cannot be combined
-with `--world`.
+line and `verify --check` name the skipped checks. A table that loses
+`index.html` but keeps any other UI file is broken, not a simulator: those
+commands stop and name the files, and `verify` fails build and smoke. `--sim`
+cannot be combined with `--world`.
 
 When you want to play it, run `boardsmith add-ui` in the project. It writes
 the UI files the table scaffold has, with the smoke spec listing the actions

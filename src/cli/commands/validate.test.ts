@@ -967,6 +967,13 @@ describe('validateRequiredFiles — a world has a different entry point (#168)',
     expect(result.details).toEqual(['src/ui/uis.ts', 'src/ui/App.vue']);
   });
 
+  it('asks a table that lost index.html but kept other UI files for its page and shell (#556)', async () => {
+    writeFileSync(join(dir, 'src', 'ui', 'uis.ts'), '');
+    const result = await validateRequiredFiles(dir, false);
+    expect(result.passed).toBe(false);
+    expect(result.details).toEqual(['index.html', 'src/ui/App.vue']);
+  });
+
   it('asks a table with no UI yet (no index.html, #556) only for its rules', async () => {
     expect(await validateRequiredFiles(dir, false)).toMatchObject({ passed: true, details: [] });
     rmSync(join(dir, 'src', 'rules', 'game.ts'));

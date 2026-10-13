@@ -34,11 +34,8 @@ import { collectOutput } from '../lib/child-output.js';
 import { freePort } from '../lib/free-port.js';
 import { gitOutput as git } from '../lib/git-output.js';
 import { requireTableUi } from '../lib/game-project.js';
-import type { VerifyCheckResult } from '../lib/verify-result.js';
+import type { VerifyCheckOutcome } from '../lib/verify-result.js';
 import { SMOKE_ANNOTATION, SMOKE_SEEDS_ENV, SMOKE_SPEC_PATH, smokeSummary, type SmokeRecord } from '../../testing/browser-smoke-verdict.js';
-
-/** A check's outcome, as `boardsmith verify` records it. */
-type SmokeOutcome = Omit<VerifyCheckResult, 'name'>;
 
 /** Where each run's copy of the project lives, inside the project's own `.boardsmith/`. */
 const SMOKE_DIR = join('.boardsmith', 'smoke');
@@ -91,7 +88,7 @@ export async function playwrightChromium(): Promise<PlaywrightChromium> {
  * Why no browser check can run, or undefined when one can: the Chromium this Playwright drives is
  * not installed at `executable`.
  */
-export function browserProblem(browser: { version: string; executable: string }): SmokeOutcome | undefined {
+export function browserProblem(browser: { version: string; executable: string }): VerifyCheckOutcome | undefined {
   if (existsSync(browser.executable)) return undefined;
   return {
     passed: false,
@@ -233,7 +230,7 @@ async function removeCopy(projectDir: string, copy: string): Promise<void> {
  * Bundles the spec with BoardSmith's walk, which it imports, into `<work>/smoke.spec.mjs`. The
  * walk's `@playwright/test` is left an import of BoardSmith's own copy, the one the runner loads.
  */
-async function bundleSpec(copy: string, work: string): Promise<string | SmokeOutcome> {
+async function bundleSpec(copy: string, work: string): Promise<string | VerifyCheckOutcome> {
   const entry = pathToFileURL(join(playwrightTestDir(), 'index.mjs')).href;
   try {
     await build({
@@ -270,7 +267,7 @@ const tail = (output: string, lines = 12) => output.trim().split('\n').slice(-li
  * Starts `boardsmith dev` in the copy and resolves with its URL once it says it is ready, or with
  * a failed outcome carrying its last output when it stops or hangs first.
  */
-async function startDev(started: Started, copy: string): Promise<string | SmokeOutcome> {
+async function startDev(started: Started, copy: string): Promise<string | VerifyCheckOutcome> {
   const bin = join(boardsmithPackageRoot(), 'bin', 'boardsmith.js');
   for (let attempt = 1; ; attempt++) {
     const port = await freePort();
@@ -374,7 +371,7 @@ function firstTest(suites: PlaywrightSuite[]): PlaywrightTest | undefined {
 }
 
 /** A passing test's outcome, from what the walk recorded on it: a spec that never walked fails. */
-function passedTest(test: PlaywrightTest): SmokeOutcome {
+function passedTest(test: PlaywrightTest): VerifyCheckOutcome {
   const recorded = test.annotations?.find((a) => a.type === SMOKE_ANNOTATION)?.description;
   if (recorded === undefined) {
     return {
@@ -388,7 +385,7 @@ function passedTest(test: PlaywrightTest): SmokeOutcome {
 }
 
 /** A failed walk's outcome: what the test said, else how Playwright exited. */
-function failedWalk(said: string[], code: number | null, output: string): SmokeOutcome {
+function failedWalk(said: string[], code: number | null, output: string): VerifyCheckOutcome {
   return {
     passed: false,
     summary: said.length > 0 ? said.join(' ').replace(/\s*\n\s*/g, ' ') : `Playwright exited with code ${code}: ${tail(plainText(output), 6)}`,
@@ -403,7 +400,7 @@ function saidByTheRun(report: PlaywrightReport, test: PlaywrightTest | undefined
 }
 
 /** The outcome Playwright's report and exit code describe. */
-function verdict(report: PlaywrightReport | undefined, code: number | null, output: string): SmokeOutcome {
+function verdict(report: PlaywrightReport | undefined, code: number | null, output: string): VerifyCheckOutcome {
   if (report === undefined) return failedWalk([], code, output);
   const test = firstTest(report.suites);
   if (test !== undefined && code === 0 && test.results[0]?.status === 'passed') return passedTest(test);
@@ -418,7 +415,7 @@ async function runWalk(
   baseURL: string,
   log: (line: string) => void,
   seeds: readonly string[] | undefined,
-): Promise<SmokeOutcome> {
+): Promise<VerifyCheckOutcome> {
   const configPath = join(work, 'playwright.config.mjs');
   await fs.writeFile(configPath, playwrightConfig(work, baseURL));
   // The walk reads its seeds from this variable alone, so a run with none to hand it must not let it
@@ -435,7 +432,7 @@ async function runWalk(
 }
 
 /** Why the project has no smoke test to run, or undefined when it has one. */
-function specMissing(projectDir: string): SmokeOutcome | undefined {
+function specMissing(projectDir: string): VerifyCheckOutcome | undefined {
   if (existsSync(join(projectDir, SMOKE_SPEC_PATH))) return undefined;
   return {
     passed: false,
@@ -448,7 +445,7 @@ function specMissing(projectDir: string): SmokeOutcome | undefined {
 
 /** What a finished run reports, and the processes it started (all stopped by then). */
 interface SmokeRun {
-  outcome: SmokeOutcome;
+  outcome: VerifyCheckOutcome;
   pids: number[];
 }
 

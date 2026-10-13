@@ -506,7 +506,7 @@ describe('the boardsmith verify command, as a user runs it', () => {
   it('runs all six real checks, writes the result and exits non-zero when one fails', async () => {
     // The fixture has a page but no app, rules entry or smoke test, so the real build, validate and
     // smoke fail; the run still goes on through every check rather than stopping at the first
-    // failure. (With no index.html at all, build and smoke would be skipped instead, #556.)
+    // failure. (With none of the UI files, build and smoke would be skipped instead, #556.)
     const dir = await gameOnBranch(false);
     await write(dir, { 'index.html': '<div id="app"></div>\n' });
     commitAll(dir, 'a page');

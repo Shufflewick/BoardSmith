@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveUserPath } from './user-path.js';
 import { resolveWorldMode } from './world-project.js';
+import { SMOKE_SPEC_PATH } from '../../testing/browser-smoke-verdict.js';
 
 /**
  * A game's `boardsmith.json`, as far as the CLI commands that read it care.
@@ -120,29 +121,65 @@ export function requireRulesIndex(rulesPath: string): string {
   return rulesIndexPath;
 }
 
-/** The page a table's UI is served from. A project has a UI exactly when it has this file. */
+/** The page a table's UI is served from. */
 export const TABLE_UI_ENTRY = 'index.html';
 
 /**
- * Does this project have a table UI? `boardsmith init --sim` writes a table with none, and
- * `boardsmith add-ui` adds it. Nothing else records it: the page is the answer.
+ * Every file of a table's UI, in the order `boardsmith add-ui` writes them (`tableUiFiles`).
+ * `boardsmith init --sim` writes none of them.
  */
-export function hasTableUi(cwd: string): boolean {
-  return existsSync(join(cwd, TABLE_UI_ENTRY));
+export const TABLE_UI_PATHS = [
+  TABLE_UI_ENTRY,
+  'src/main.ts',
+  'src/ui/index.ts',
+  'src/ui/uis.ts',
+  'src/ui/App.vue',
+  'src/ui/components/GameTable.vue',
+  'tests/a11y.example.test.ts',
+  SMOKE_SPEC_PATH,
+] as const;
+
+/**
+ * THE ONE PLACE A TABLE'S UI STATE IS DECIDED, from which of {@link TABLE_UI_PATHS} it has.
+ * `none`: no UI yet (`boardsmith init --sim`). `present`: it has `index.html`. `broken`: it lost
+ * `index.html` but kept other UI files, which every command treats as a failure, never as no UI.
+ * `files` lists the UI files present.
+ */
+export type TableUiState = { state: 'none' } | { state: 'present' | 'broken'; files: string[] };
+
+export function tableUiState(cwd: string): TableUiState {
+  const files = TABLE_UI_PATHS.filter((path) => existsSync(join(cwd, path)));
+  if (files.length === 0) return { state: 'none' };
+  return { state: files[0] === TABLE_UI_ENTRY ? 'present' : 'broken', files };
 }
 
 /**
- * Does this project have a UI to serve, build or walk? A world always has one (`build` and `dev`
- * write its entry when it is missing), so only a table without `index.html` has none.
+ * Why this project has no UI to serve, build or walk, or undefined when it has one: `none` for a
+ * table with no UI yet, `broken` for one that lost `index.html`. A world always has one (`build`
+ * and `dev` write its entry when it is missing).
  */
-export function projectHasUi(cwd: string, config: { backend?: unknown }): boolean {
-  return resolveWorldMode(config) || hasTableUi(cwd);
+export function projectUiProblem(
+  cwd: string,
+  config: { backend?: unknown },
+): { state: 'none' | 'broken'; problem: string } | undefined {
+  if (resolveWorldMode(config)) return undefined;
+  const ui = tableUiState(cwd);
+  if (ui.state === 'none') return { state: 'none', problem: 'This project has no UI yet. Run `boardsmith add-ui`.' };
+  if (ui.state === 'present') return undefined;
+  return {
+    state: 'broken',
+    problem:
+      `${TABLE_UI_ENTRY} is missing, but this project has UI files (${ui.files.join(', ')}); ` +
+      `restore ${TABLE_UI_ENTRY}, or remove them and run \`boardsmith add-ui\`.`,
+  };
 }
 
 /**
  * THE ONE PLACE A COMMAND REFUSES A PROJECT WITH NO UI (`dev`, `build`, `smoke`, `publish`).
- * `boardsmith verify` skips its build and smoke checks for one instead (`projectHasUi`).
+ * `boardsmith verify` skips its build and smoke checks for a table with none yet instead, and
+ * fails them for a broken one (`projectUiProblem`).
  */
 export function requireTableUi(cwd: string, config: { backend?: unknown }): void {
-  if (!projectHasUi(cwd, config)) throw new Error('This project has no UI yet. Run `boardsmith add-ui`.');
+  const ui = projectUiProblem(cwd, config);
+  if (ui !== undefined) throw new Error(ui.problem);
 }

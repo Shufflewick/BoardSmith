@@ -130,6 +130,25 @@ describe('boardsmith verify on a whole game, as a user runs it', () => {
     expect(checked.code).toBe(0);
   });
 
+  it('fails build and smoke, never skipping them, on a table that lost index.html but kept its other UI files (#556)', async () => {
+    const dir = await scaffoldedTableOnBranch();
+    git(dir, 'rm', '-q', 'index.html');
+    commitAll(dir, 'lose the page');
+    const { run, result } = await verifyAsAUser(dir);
+    // smokeProject leaves out the a11y example, which needs axe-core.
+    const broken =
+      'index.html is missing, but this project has UI files (src/main.ts, src/ui/index.ts, src/ui/uis.ts, ' +
+      'src/ui/App.vue, src/ui/components/GameTable.vue, tests/browser/smoke.spec.ts); ' +
+      'restore index.html, or remove them and run `boardsmith add-ui`.';
+    for (const name of ['build', 'smoke']) {
+      expect(check(result, name)).toMatchObject({ passed: false, summary: broken });
+      expect(check(result, name).skipped).toBeUndefined();
+    }
+    expect(result.passed).toBe(false);
+    expect(run.stdout).not.toMatch(/skipped because this project has no UI yet/);
+    expect(run.code).toBe(1);
+  });
+
   it('fails a world whose board reads a table-only context key, though its unit test with a hand-built stub passes (#453)', async () => {
     const dir = await smokeProject(true, {
       'src/ui/components/WorldBoard.vue': TABLE_KEY_WORLD_BOARD,
