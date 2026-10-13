@@ -251,7 +251,7 @@ export function cliSourceFile(pathUnderCli: string): string {
 function installedBoardsmith(rulesPath: string): string | undefined {
   for (let dir = rulesPath; ; dir = dirname(dir)) {
     const candidate = join(dir, 'node_modules', 'boardsmith');
-    if (existsSync(candidate)) return realpathSync(candidate);
+    if (existsSync(candidate)) return realpathSync.native(candidate);
     if (dirname(dir) === dir) return undefined;
   }
 }
@@ -264,13 +264,16 @@ function installedBoardsmith(rulesPath: string): string | undefined {
  */
 function requireOneBoardsmith(rulesPath: string, inputs: readonly string[]): void {
   const game = installedBoardsmith(rulesPath);
-  const cli = realpathSync(resolve(dirname(cliSourceFile('cli.ts')), '..', '..'));
-  if (game === undefined || game === cli || !inputs.some((input) => input.startsWith(cli + sep))) return;
+  // As esbuild names the CLI's files: the letter case this process was started with.
+  const cliAsBundled = realpathSync(resolve(dirname(cliSourceFile('cli.ts')), '..', '..'));
+  // The case on disk, so a link or a command typed in other case on macOS is still the same install.
+  const cli = realpathSync.native(cliAsBundled);
+  if (game === undefined || game === cli || !inputs.some((input) => input.startsWith(cliAsBundled + sep))) return;
   throw new Error(
     `This game's rules import boardsmith from ${game}, but this boardsmith command runs from ${cli}. ` +
       'The command builds its own code into the rules bundle, so the bundle would hold two copies of the engine ' +
       "that do not recognise each other's elements. Run the game's own boardsmith from the game's directory " +
-      "(npx boardsmith ...), or install this boardsmith into the game.",
+      `(npx boardsmith ...), or install this boardsmith into the game (npm install ${cli}).`,
   );
 }
 

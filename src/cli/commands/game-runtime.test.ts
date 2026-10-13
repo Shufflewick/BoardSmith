@@ -3,7 +3,7 @@
  * table-reload hook) into the rules bundle. That is one engine only when the CLI and the
  * game's `boardsmith` are the same install (#696).
  */
-import { cpSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -41,6 +41,11 @@ cpSync(join(REPO, 'src'), join(otherInstall, 'src'), {
 
 const linkedToThisCheckout = game((target) => symlinkSync(REPO, target, 'dir'));
 const linkedToOtherInstall = game((target) => symlinkSync(otherInstall, target, 'dir'));
+// The same checkout, named in other letter case (`file:../../boardsmith`), which a
+// case-insensitive file system (macOS by default) resolves to the same directory.
+const miscasedRepo = REPO.toLowerCase() === REPO ? REPO.toUpperCase() : REPO.toLowerCase();
+const caseInsensitive = existsSync(miscasedRepo);
+const linkedToThisCheckoutMiscased = game((target) => symlinkSync(miscasedRepo, target, 'dir'));
 
 const simShard = `export { playShard } from ${JSON.stringify(toPosix(cliSourceFile('lib/sim-shard.ts')))};`;
 
@@ -60,9 +65,16 @@ describe('importRuntimeBundle: one boardsmith per bundle (#696)', () => {
     expect(typeof module.playShard).toBe('function');
   });
 
+  it.skipIf(!caseInsensitive)('treats a link to this checkout in other letter case as this same install', async () => {
+    const module = await bundle(linkedToThisCheckoutMiscased, [simShard]);
+    expect(typeof module.playShard).toBe('function');
+  });
+
   it("refuses to build CLI-side source with rules that use another install, naming both", async () => {
     await expect(bundle(linkedToOtherInstall, [simShard])).rejects.toThrow(
       `This game's rules import boardsmith from ${otherInstall}, but this boardsmith command runs from ${REPO}`,
+    );
+    await expect(bundle(linkedToOtherInstall, [simShard])).rejects.toThrow(`npm install ${REPO}`,
     );
   });
 
