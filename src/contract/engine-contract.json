@@ -1,6 +1,6 @@
 {
-  "revision": 187,
-  "surfaceHash": "42d2e3c735aa73ac",
+  "revision": 188,
+  "surfaceHash": "3d680540447b1338",
   "payloadHash": "7e563b9e75959ec4",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1439,6 +1439,14 @@
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "boardsmith exports parseCsv and its types CsvColumnType, CsvValue and CsvRow (#556): a game reads card data from a CSV file imported with ?raw into typed rows, failing at load with the file, row and column of a bad cell; it runs only in the game's own code, so nothing is added to snapshots or the player view; no format or payload change."
+    },
+    {
+      "revision": 188,
+      "date": "2026-10-13",
+      "surfaceHash": "3d680540447b1338",
+      "payloadHash": "7e563b9e75959ec4",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "enumerateLegalMoves, enumerateActionMoves, MCTS bots and the greedy simulator policy no longer offer an action its own .disabled() rule or the active tutorial step turns off, which performAction refuses (#690); Game gains getActionRefusalReason(action, player), the one check both use. Re-vendor so platform bots stop choosing a move the server refuses; no format or payload change."
     }
   ]
 }

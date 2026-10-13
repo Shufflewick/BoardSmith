@@ -2552,6 +2552,22 @@ export class Game<
   }
 
   /**
+   * Why `player` may not take `action` at all right now, or `null` when it may:
+   * the active tutorial step's gate (which wins) or the action's own
+   * `.disabled(ctx)` rule. A bare `{ action: 'move' }` gate refuses 'pass' and
+   * 'endTurn' here, not just annotates them for the UI.
+   *
+   * The one check of a disabled action for a move: `performAction` refuses with
+   * it and `enumerateActionMoves` leaves out what it refuses (#690), so an
+   * enumerated move is never answered "Action X is disabled". Both evaluators
+   * are the ones `getDisabledActions` projects for the panel.
+   */
+  getActionRefusalReason(action: ActionDefinition, player: P): string | null {
+    return getActionLevelDisabledReasons(this, player.seat, [action.name])[action.name]
+      ?? this.getActionDisabledReason(action, player);
+  }
+
+  /**
    * Get the action executor (for advanced usage like building action metadata)
    */
   getActionExecutor(): ActionExecutor {
@@ -2685,15 +2701,8 @@ export class Game<
     }
 
     // Enforce action-level disabling at execution, not just in the projection
-    // layer: a greyed-out button must also be a closed door. Covers both the
-    // action's own `.disabled()` rule and the tutorial gate — a bare
-    // { action: 'move' } gate must prevent execution of 'pass'/'endTurn', not
-    // just annotate them for the UI (HR-01). Both reuse the same evaluators the
-    // projection consults (getActionDisabledReason / getActionLevelDisabledReasons),
-    // so there is no parallel validator to drift.
-    const disabledReason =
-      getActionLevelDisabledReasons(this, player.seat, [actionName])[actionName]
-      ?? this.getActionDisabledReason(action, player);
+    // layer: a greyed-out button must also be a closed door (HR-01).
+    const disabledReason = this.getActionRefusalReason(action, player);
     if (disabledReason) {
       return {
         success: false,
