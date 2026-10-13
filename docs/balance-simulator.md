@@ -111,6 +111,8 @@ export interface BazaarOptions extends GameOptions {
 export class BazaarPlayer extends Player<BazaarGame, BazaarPlayer> {
   hand!: Hand;
   tableau!: Tableau;
+  /** Shown beside the player's name; the pick action keeps it up to date. */
+  score = 0;
 }
 
 export class BazaarGame extends Game<BazaarGame, BazaarPlayer> {
@@ -163,7 +165,8 @@ export class BazaarGame extends Game<BazaarGame, BazaarPlayer> {
 ### The draft: one action and the flow
 
 The action records two metrics as it runs: every card a player was offered,
-and the card they kept.
+and the card they kept. It also updates the player's `score`, which the
+player panel shows once the game has a UI.
 
 <!-- doc-test: file src/rules/actions.ts -->
 ```typescript
@@ -171,6 +174,7 @@ import { Action, type ActionDefinition } from 'boardsmith';
 import { Card } from './elements.js';
 import type { BazaarGame } from './game.js';
 import { metrics } from './metrics.js';
+import { scoreOf } from './scoring.js';
 
 export function createPickAction(): ActionDefinition {
   return Action.create<BazaarGame>('pick')
@@ -180,6 +184,7 @@ export function createPickAction(): ActionDefinition {
       for (const offered of ctx.player.hand.all(Card)) metrics.offered.add(ctx.game, offered);
       metrics.picked.add(ctx.game, card);
       card.putInto(ctx.player.tableau);
+      ctx.player.score = scoreOf(ctx.player);
     });
 }
 ```
@@ -384,6 +389,7 @@ import { Action, type ActionDefinition } from 'boardsmith';
 import { Card } from './elements.js';
 import type { BazaarGame } from './game.js';
 import { metrics } from './metrics.js';
+import { scoreOf } from './scoring.js';
 
 export function createPickAction(): ActionDefinition {
   return Action.create<BazaarGame>('pick')
@@ -399,6 +405,7 @@ export function createPickAction(): ActionDefinition {
         extra.putInto(ctx.player.tableau);
         metrics.caravanBrought.add(ctx.game, extra);
       }
+      ctx.player.score = scoreOf(ctx.player);
     });
 }
 ```
