@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -927,6 +927,7 @@ describe('validateRequiredFiles — a world has a different entry point (#168)',
 
 
   function writeTableUi(): void {
+    writeFileSync(join(dir, 'index.html'), '');
     writeFileSync(join(dir, 'src', 'ui', 'App.vue'), '');
     writeFileSync(join(dir, 'src', 'ui', 'uis.ts'), '');
   }
@@ -960,9 +961,16 @@ describe('validateRequiredFiles — a world has a different entry point (#168)',
   });
 
   it('still fails a table game missing its UI registry', async () => {
+    writeFileSync(join(dir, 'index.html'), '');
     const result = await validateRequiredFiles(dir, false);
     expect(result.passed).toBe(false);
-    expect(result.details).toContain('src/ui/uis.ts');
+    expect(result.details).toEqual(['src/ui/uis.ts', 'src/ui/App.vue']);
+  });
+
+  it('asks a table with no UI yet (no index.html, #556) only for its rules', async () => {
+    expect(await validateRequiredFiles(dir, false)).toMatchObject({ passed: true, details: [] });
+    rmSync(join(dir, 'src', 'rules', 'game.ts'));
+    expect((await validateRequiredFiles(dir, false)).details).toEqual(['src/rules/game.ts']);
   });
 });
 
@@ -1133,7 +1141,6 @@ describe('validateProject stops by throwing, so a command running it stops too (
   it('rejects with the failure line after printing each check, instead of ending the process', async () => {
     const dir = tempTree('bs-validate-throws-');
     writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table', playerCount: { min: 2, max: 4 } }));
-    writeFileSync(join(dir, 'index.html'), '<div id="app"></div>\n');
     const printed: string[] = [];
     const log = vi.spyOn(console, 'log').mockImplementation((line?: unknown) => void printed.push(String(line)));
     try {
@@ -1152,7 +1159,6 @@ describe('a project with no vitest is told to install it, never to run npx (#595
     const dir = tempTree('bs-validate-no-vitest-');
     writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table' }));
     mkdirSync(join(dir, 'tests'));
-    writeFileSync(join(dir, 'index.html'), '<div id="app"></div>\n');
     const printed: string[] = [];
     const log = vi.spyOn(console, 'log').mockImplementation((line?: unknown) => void printed.push(String(line)));
     try {

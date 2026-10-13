@@ -78,10 +78,13 @@ const simDir = await scaffold('demo', { withoutRulebook: true, sim: true });
 const sim = await smokeProject(false, {}, { sim: true });
 const simTest = await spawnCli(['test'], sim);
 const simulate = await spawnCli(['simulate', '--games', '3', '--policy', 'greedy', '--jobs', '1'], sim);
+const simLint = await spawnCli(['lint'], sim);
+const simValidate = await spawnCli(['validate'], sim);
 const noUi = {
   build: await spawnCli(['build'], sim),
-  validate: await spawnCli(['validate'], sim),
   smoke: await spawnCli(['smoke'], sim),
+  // Refused before any key or network: `--dev` names a target, and no key is needed to get here.
+  publish: await spawnCli(['publish', '--dev'], sim),
   dev: await spawnDev(sim, await freePort()).ended,
 };
 
@@ -101,6 +104,7 @@ const grownBuild = await spawnCli(['build'], grown);
 // The table scaffold as before, with the sample files.
 const table = await smokeProject(false);
 const tableTest = await spawnCli(['test'], table);
+const tableLint = await spawnCli(['lint'], table);
 
 describe('boardsmith init --sim (#556)', () => {
   it('writes the table scaffold without its UI files, and nothing else differs', () => {
@@ -141,7 +145,18 @@ describe('boardsmith init --sim (#556)', () => {
     expect(simulate.code).toBe(0);
   });
 
-  it.each(['build', 'validate', 'smoke'] as const)('stops boardsmith %s with the no-UI message', (command) => {
+  it('passes boardsmith lint', () => {
+    expect(simLint.stdout + simLint.stderr).toMatch(/Lint passed/);
+    expect(simLint.code).toBe(0);
+  });
+
+  it('passes boardsmith validate, its Required Files check asking only for the rules', () => {
+    expect(simValidate.stdout).toMatch(/Required Files: PASS/);
+    expect(simValidate.stdout + simValidate.stderr).not.toMatch(/FAIL/);
+    expect(simValidate.code).toBe(0);
+  });
+
+  it.each(['build', 'smoke', 'publish'] as const)('stops boardsmith %s with the no-UI message', (command) => {
     expect(noUi[command].stdout + noUi[command].stderr).toContain(NO_UI);
     expect(noUi[command].code).not.toBe(0);
   });
@@ -209,6 +224,11 @@ describe('boardsmith add-ui (#556)', () => {
 describe('the table scaffold (#556)', () => {
   it('writes the simulator sample files too', () => {
     for (const file of SIM_SAMPLE_FILES) expect(tableFiles).toContain(file);
+  });
+
+  it('passes boardsmith lint', () => {
+    expect(tableLint.stdout + tableLint.stderr).toMatch(/Lint passed/);
+    expect(tableLint.code).toBe(0);
   });
 
   it("lists the scaffold game's actions in its smoke spec", () => {

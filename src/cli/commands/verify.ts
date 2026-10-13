@@ -41,13 +41,14 @@
  * which mutates nothing, cannot stand in for it. `chunk-signoff <slug>` asks that question, and
  * `chunk-gate-transition`, which builds no chunk, the plain one (`verifiedProblem`).
  */
-import { existsSync, promises as fs } from 'node:fs';
+import { existsSync, promises as fs, readFileSync } from 'node:fs';
 import { join, relative, resolve as pathResolve } from 'node:path';
 import chalk from 'chalk';
 import { chunkVerifyBase } from '../lib/chunk-commits.js';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { type MutantCache, openMutantCache } from '../lib/mutant-cache.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
+import { projectHasUi } from '../lib/game-project.js';
 import { testRunScopeProblem } from '../lib/test-run-scope.js';
 import { discardRecord, runVitestRecorded, testRunVerdict } from '../lib/vitest-run.js';
 import {
@@ -320,6 +321,8 @@ async function typecheckCheck(ctx: VerifyContext): Promise<CheckOutcome> {
 
 /** 3. `boardsmith build`, run in this process. */
 async function buildCheck(ctx: VerifyContext): Promise<CheckOutcome> {
+  const skip = noUiSkip(ctx.projectDir);
+  if (skip) return skip;
   try {
     await buildProject(ctx.projectDir, {});
     return { passed: true, summary: '`boardsmith build` passed.' };
@@ -422,7 +425,27 @@ async function mutationCheck(ctx: VerifyContext): Promise<CheckOutcome> {
 
 /** 5. The game in Chromium, served by `boardsmith dev` from a fresh copy (`smoke.ts`). */
 async function smokeCheck(ctx: VerifyContext): Promise<CheckOutcome> {
-  return (await runSmoke({ projectDir: ctx.projectDir, log: ctx.log })).outcome;
+  return noUiSkip(ctx.projectDir) ?? (await runSmoke({ projectDir: ctx.projectDir, log: ctx.log })).outcome;
+}
+
+/**
+ * `build` and `smoke` need a UI, so in a project with none yet (`boardsmith init --sim`) they are
+ * skipped rather than failed, and the result says so. Undefined when the project has a UI.
+ */
+function noUiSkip(projectDir: string): CheckOutcome | undefined {
+  const config = JSON.parse(readFileSync(join(projectDir, 'boardsmith.json'), 'utf-8')) as { backend?: unknown };
+  if (projectHasUi(projectDir, config)) return undefined;
+  return {
+    passed: true,
+    skipped: true,
+    summary: 'Skipped: this project has no UI yet (no index.html); run `boardsmith add-ui`.',
+  };
+}
+
+/** The checks a result skipped, as a clause for a closing line, or '' when none was. */
+function skippedClause(result: VerifyResult): string {
+  const skipped = result.checks.filter((c) => c.skipped).map((c) => c.name);
+  return skipped.length === 0 ? '' : `, except ${skipped.join(' and ')}, skipped because this project has no UI yet`;
 }
 
 /** Every check, by name. Adding a name to `VERIFY_CHECK_NAMES` requires its runner here. */
@@ -571,6 +594,8 @@ function printVerdict(result: VerifyResult): void {
           'Commit or remove the changes (`git status` lists them), then run `boardsmith verify` again.',
       ),
     );
+  } else if (result.passed && skippedClause(result) !== '') {
+    console.log(chalk.yellow(`\nPassed for ${short(result.commit)}${skippedClause(result)}.`));
   } else if (result.passed) {
     console.log(chalk.green(`\nEvery check passed for ${short(result.commit)}.`));
   } else {
@@ -582,7 +607,7 @@ function printVerdict(result: VerifyResult): void {
 function printResult(result: VerifyResult, path: string | undefined, projectDir: string): void {
   console.log(`\nboardsmith verify for ${short(result.commit)} (changes since ${result.base.ref} at ${short(result.base.commit)})`);
   for (const check of result.checks) {
-    const mark = check.passed ? chalk.green('pass') : chalk.red('FAIL');
+    const mark = check.skipped ? chalk.yellow('skip') : check.passed ? chalk.green('pass') : chalk.red('FAIL');
     console.log(`  ${mark}  ${check.name.padEnd(10)} ${check.summary}`);
     for (const f of check.findings ?? []) console.log(`          ${f.file}:${f.line}  ${f.detail}`);
     if (!check.passed && check.next) console.log(`          ${check.next}`);
@@ -593,6 +618,22 @@ function printResult(result: VerifyResult, path: string | undefined, projectDir:
       : `Result: ${relative(projectDir, path)}`,
   );
   printVerdict(result);
+}
+
+/** `--check`: says whether HEAD has a passing result, naming any check it skipped. */
+async function checkVerified(projectDir: string, chunk: string | undefined): Promise<void> {
+  const problem = await verifiedProblem(projectDir, chunk);
+  if (problem !== undefined) {
+    console.error(chalk.red(problem));
+    process.exitCode = 1;
+    return;
+  }
+  const state = await checkoutState(projectDir);
+  const head = 'commit' in state ? short(state.commit) : 'HEAD';
+  const covering = chunk === undefined ? '' : `, covering chunk "${chunk}"'s change`;
+  const onFile = 'commit' in state ? await readVerifyResult(projectDir, state.commit) : undefined;
+  const skipped = onFile === undefined || onFile === 'unreadable' ? '' : skippedClause(onFile);
+  console.log(chalk.green(`${head} passed \`boardsmith verify\` on a clean tree${covering}${skipped}.`));
 }
 
 /**
@@ -612,16 +653,7 @@ export async function verifyCommand(
           'Run `boardsmith verify --check`, with `--chunk <slug>` for a chunk.',
       );
     }
-    const problem = await verifiedProblem(projectDir, options.chunk);
-    if (problem !== undefined) {
-      console.error(chalk.red(problem));
-      process.exitCode = 1;
-      return;
-    }
-    const state = await checkoutState(projectDir);
-    const head = 'commit' in state ? short(state.commit) : 'HEAD';
-    const covering = options.chunk === undefined ? '' : `, covering chunk "${options.chunk}"'s change`;
-    console.log(chalk.green(`${head} passed \`boardsmith verify\` on a clean tree${covering}.`));
+    await checkVerified(projectDir, options.chunk);
     return;
   }
 

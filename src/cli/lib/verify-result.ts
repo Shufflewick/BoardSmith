@@ -55,6 +55,11 @@ export interface VerifyCheckResult {
   /** What the check counted: tests run, passed and failed; mutants tried, killed and survived. */
   counts?: Record<string, number>;
   findings?: VerifyFinding[];
+  /**
+   * The check did not run, and `summary` says why: `build` and `smoke` in a project with no UI yet.
+   * A skipped check does not fail the result, and every report of the result names it.
+   */
+  skipped?: true;
 }
 
 export interface VerifyResult {

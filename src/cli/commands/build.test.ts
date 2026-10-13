@@ -572,11 +572,6 @@ describe('resolveUiBuild — which surfaces a project has (#168)', () => {
       input: { world: join('/game', 'world.html') },
     });
   });
-
-  it('refuses a project with no surface at all, in a sentence naming both entries', () => {
-    expect(() => resolveUiBuild('/game', false, false)).toThrow(/index\.html/);
-    expect(() => resolveUiBuild('/game', false, false)).toThrow(/world\.html/);
-  });
 });
 
 /**

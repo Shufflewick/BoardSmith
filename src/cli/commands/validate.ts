@@ -21,7 +21,7 @@ import {
   encodedRulesBytes,
 } from '../lib/bundle-limits.js';
 import { readDistDir, createZip } from '../lib/zip.js';
-import { requireGameProject, requireTableUi, resolveRulesDir } from '../lib/game-project.js';
+import { hasTableUi, requireGameProject, resolveRulesDir } from '../lib/game-project.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { runToolCapturingStdout } from '../lib/run-tool.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
@@ -90,9 +90,9 @@ async function runValidation(
   // Which BACKEND this game declares, read once. `backend` is the single
   // declaration (#171), and what it changes below is which entry point the
   // project must have.
-  const config = JSON.parse(readFileSync(configPath, 'utf-8')) as { backend?: unknown };
-  requireTableUi(cwd, config);
-  const worldMode = resolveWorldMode(config);
+  const worldMode = resolveWorldMode(
+    JSON.parse(readFileSync(configPath, 'utf-8')) as { backend?: unknown },
+  );
 
   // 1. Check metadata completeness
   results.push(await validateMetadata(cwd));
@@ -1106,6 +1106,12 @@ function assetPathMessage(
   return sentence.charAt(0).toUpperCase() + sentence.slice(1);
 }
 
+/** The UI files a project must have: a world's entry, a table's shell, or none for a table with no UI yet. */
+function uiFilesRequired(cwd: string, isWorld: boolean): string[] {
+  if (isWorld) return ['src/ui/uis.ts', 'world.html', 'src/world-main.ts', 'src/rules/world.ts'];
+  return hasTableUi(cwd) ? ['src/ui/uis.ts', 'src/ui/App.vue'] : [];
+}
+
 export async function validateRequiredFiles(cwd: string, isWorld: boolean): Promise<ValidationResult> {
   const required = [
     'boardsmith.json',
@@ -1124,10 +1130,10 @@ export async function validateRequiredFiles(cwd: string, isWorld: boolean): Prom
     // for a world now, and `devUI(() => import('boardsmith/ui/auto-ui'))` makes
     // AutoUI a world's default board with no new renderer at all -- a world's
     // view IS the serialized element tree a table's is.
-    'src/ui/uis.ts',
-    ...(isWorld
-      ? ['world.html', 'src/world-main.ts', 'src/rules/world.ts']
-      : ['src/ui/App.vue']),
+    //
+    // A TABLE WITH NO UI YET (`boardsmith init --sim`, no index.html) is asked only for its rules:
+    // `boardsmith add-ui` writes the UI files when it is time.
+    ...uiFilesRequired(cwd, isWorld),
   ];
 
   const missing: string[] = [];

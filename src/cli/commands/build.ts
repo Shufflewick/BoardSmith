@@ -301,6 +301,9 @@ async function buildLibrary(repoRoot: string): Promise<void> {
  *
  * `input` is left undefined for a table alone, which is Vite's own default and
  * the case that must keep behaving identically.
+ *
+ * A project with neither never gets here: `requireTableUi` refuses a table with
+ * no index.html, and a world's entry is written when it is missing.
  */
 /**
  * Give a world project its entry if it has none, and say so.
@@ -330,13 +333,6 @@ export function resolveUiBuild(
   tableUi: boolean,
   hasWorldUi: boolean,
 ): { surfaces: string; input?: Record<string, string> } {
-  if (!tableUi && !hasWorldUi) {
-    throw new Error(
-      `This project has no UI entry point: neither index.html nor ${WORLD_ENTRY_HTML} exists, so ` +
-        'there is no surface for a player to load. A table game mounts GameShell from ' +
-        `index.html; a persistent world mounts WorldShell from ${WORLD_ENTRY_HTML}.`,
-    );
-  }
   if (tableUi && !hasWorldUi) return { surfaces: '' };
   return {
     surfaces: tableUi ? 'table and world' : 'world',

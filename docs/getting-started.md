@@ -84,10 +84,13 @@ boardsmith simulate --policy greedy
 
 That writes the same project without its UI: no `index.html`, `src/main.ts`,
 `src/ui/`, `tests/a11y.example.test.ts` or `tests/browser/smoke.spec.ts`.
-`boardsmith test`, `lint`, `typecheck` and `simulate` work as usual; `dev`,
-`build`, `validate` and `smoke` (and so `verify` and `publish`) stop with
-"This project has no UI yet. Run `boardsmith add-ui`." `--sim` cannot be
-combined with `--world`.
+`boardsmith test`, `lint`, `typecheck`, `validate` and `simulate` work as
+usual (validate's Required Files check asks only for the rules). `dev`, `build`,
+`smoke` and `publish` stop with "This project has no UI yet. Run
+`boardsmith add-ui`." `boardsmith verify` runs test, typecheck, validate and
+mutation, and records build and smoke as skipped for that reason; its closing
+line and `verify --check` name the skipped checks. `--sim` cannot be combined
+with `--world`.
 
 When you want to play it, run `boardsmith add-ui` in the project. It writes
 the UI files the table scaffold has, with the smoke spec listing the actions

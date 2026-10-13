@@ -132,11 +132,17 @@ export function hasTableUi(cwd: string): boolean {
 }
 
 /**
- * THE ONE PLACE A COMMAND CHECKS IT HAS A UI TO SERVE, BUILD OR WALK (`dev`, `build`, `validate`,
- * `smoke`). A world always has one (`build` and `dev` write its entry when it is missing), so only
- * a table without `index.html` is refused.
+ * Does this project have a UI to serve, build or walk? A world always has one (`build` and `dev`
+ * write its entry when it is missing), so only a table without `index.html` has none.
+ */
+export function projectHasUi(cwd: string, config: { backend?: unknown }): boolean {
+  return resolveWorldMode(config) || hasTableUi(cwd);
+}
+
+/**
+ * THE ONE PLACE A COMMAND REFUSES A PROJECT WITH NO UI (`dev`, `build`, `smoke`, `publish`).
+ * `boardsmith verify` skips its build and smoke checks for one instead (`projectHasUi`).
  */
 export function requireTableUi(cwd: string, config: { backend?: unknown }): void {
-  if (resolveWorldMode(config) || hasTableUi(cwd)) return;
-  throw new Error('This project has no UI yet. Run `boardsmith add-ui`.');
+  if (!projectHasUi(cwd, config)) throw new Error('This project has no UI yet. Run `boardsmith add-ui`.');
 }
