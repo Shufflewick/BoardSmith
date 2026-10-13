@@ -218,10 +218,11 @@ By default enumeration lists every move, within the limits below. A `number`
 selection with `min`, `max` and `integer: true` is listed like a choice: each
 whole number in the range that its own `validate` accepts (#689), as long as
 the range holds at most 10,000 values (`MAX_MULTISELECT_COMBINATIONS`, the cap a `multiSelect`'s
-combinations have). `text` selections, any other `number` selection and
-function-based `multiSelect` configs cannot be statically enumerated —
-optional ones are skipped, required ones block the whole action from
-appearing (you'll need `doAction` directly for those). An action its own
+combinations have). A `multiSelect` is listed combination by combination,
+whether its config is fixed or a function of the picks so far. `text`
+selections and any other `number` selection cannot be listed: optional ones
+are skipped, required ones block the whole action from appearing (you'll need
+`doAction` directly for those). An action its own
 `.disabled()` rule or the active tutorial step turns off has no moves, since
 the server would refuse them.
 
