@@ -322,17 +322,20 @@ describe('GameRunner', () => {
       expect(result.errorCode).toBe(ErrorCode.INVALID_PLAYER);
     });
 
-    // #695: building every seat's view on each action was a quarter of a simulation's
-    // time, and no caller read it. A caller that wants views asks getAllPlayerViews().
+    // #695: building every seat's view on each action was about two thirds of a
+    // simulation's time, and no caller read it. A caller that wants views asks getAllPlayerViews().
     it('builds no player view when it performs an action', () => {
       runner.start();
       const seatViews = vi.spyOn(runner.game, 'toJSONForPlayer');
+      try {
+        const result = runner.performAction('draw', 1, {});
 
-      const result = runner.performAction('draw', 1, {});
-
-      expect(result.success).toBe(true);
-      expect(result).not.toHaveProperty('playerViews');
-      expect(seatViews).not.toHaveBeenCalled();
+        expect(result.success).toBe(true);
+        expect(result).not.toHaveProperty('playerViews');
+        expect(seatViews).not.toHaveBeenCalled();
+      } finally {
+        seatViews.mockRestore();
+      }
     });
 
     it('should report ENGINE_ERROR when continueFlow throws', () => {

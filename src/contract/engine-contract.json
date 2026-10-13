@@ -1478,7 +1478,7 @@
       "surfaceHash": "cde7780e73e735f3",
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "GameRunner.performAction no longer builds every seat's view on each action (#695): ActionExecutionResult.playerViews is gone (call runner.getAllPlayerViews() when views are needed). The executor's action op already built its views separately, so each action op did that work twice; re-vendor to drop the duplicate. No format, payload or surface change."
+      "summary": "GameRunner.performAction no longer builds every seat's view on each action (#695): ActionExecutionResult.playerViews is gone (call runner.getAllPlayerViews() when views are needed). The executor's action op already built its views separately, so each action op did that work twice; re-vendor to drop the duplicate. The public type ActionExecutionResult lost its playerViews field, a change the surface hash cannot see (types are not hashed), hence an adopted revision; no format or payload change."
     }
   ]
 }
