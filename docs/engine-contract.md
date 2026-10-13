@@ -11,23 +11,27 @@ big changes" convention with a mechanism that runs on every test.
 A published game does not carry an engine. `boardsmith build` marks
 `boardsmith` and all its subpaths as `external`, so `dist/rules/rules.js`
 contains only game code. At runtime the ShufflewickPub executor supplies the
-engine from **its own vendored copy** of BoardSmith.
+engine.
 
-The consequence is unintuitive and worth stating plainly:
+The platform keeps an archive of the engines it has vendored, one per
+revision, and runs each table game on the revision stamped into its manifest as
+`engineRevision`. It refuses a game below its minimum revision, and one whose
+revision it has no engine for. A persistent world is routed by what it needs
+instead: the newest archived engine that reads its stored partitions
+(`formatHash`), has the API its rules were built against (`surfaceHash`), and
+is no older than the engine they were built on.
 
-> A game's rules run on the engine **the platform vendored**, not the engine
-> the game was built against.
+So "we changed BoardSmith" does not mean "the platform changed". A new engine
+reaches the platform only when the platform **re-vendors**, and it reaches a
+table game only when that game is rebuilt and republished. Two things follow:
 
-So "we changed BoardSmith" does not mean "the platform changed". And "a game
-re-published" does not mean "it picked up the new engine". Those only happen
-when the platform **re-vendors**. Two failure modes follow, and both are silent:
-
-1. **The platform lags.** An engine fix or behaviour change never reaches
-   production because nobody re-vendored. This is how the `Deck` default
-   stopped reporting draw-pile counts for months without anyone noticing.
-2. **The platform lags *and* a game moves ahead.** A game built against a newer
-   BoardSmith uses an API the vendored engine does not have. It publishes fine
-   and breaks at runtime, usually as something baffling like a blank action bar.
+1. **The platform lags.** An engine fix never reaches production because
+   nobody re-vendored. This is how the `Deck` default stopped reporting
+   draw-pile counts for months without anyone noticing.
+2. **A game moves ahead of the platform.** A game built against a revision
+   the platform has not vendored has no engine to run on. The revision is
+   what lets the platform refuse it at upload instead of breaking at play
+   time, usually as something baffling like a blank action bar.
 
 ---
 
@@ -38,10 +42,10 @@ when the platform **re-vendors**. Two failure modes follow, and both are silent:
 | `revision` | `src/contract/engine-contract.json` | the platform-reachable API surface, the player-view payload, or the world serialization format changes | the platform's `vendor:check`; stamped into every manifest as `engineRevision` |
 | package `version` | `package.json` | never, in practice | nobody; it is not a release channel |
 
-`revision` is the only compatibility number. The platform routes each game to a
-runner built from the exact engine revision it was published on, and refuses
-any build below its minimum revision. The JSON file is its single source of
-truth; `ENGINE_REVISION` reads it rather than declaring a literal.
+`revision` is the only compatibility number. The platform routes each table
+game to a runner built from the exact engine revision it was published on,
+and refuses any build below its minimum revision. The JSON file is its single
+source of truth; `ENGINE_REVISION` reads it rather than declaring a literal.
 
 ### A true ABI break
 
@@ -211,19 +215,28 @@ On ShufflewickPub:
 
 ```
 npm run vendor:check       # is our vendored engine behind? what changed?
-npm run vendor:boardsmith  # re-pack, install into games/ and executor/, verify
+npm run vendor:boardsmith  # re-pack, install, verify, archive
 ```
+
+`vendor:boardsmith` refuses a BoardSmith checkout that is dirty or whose
+contract is out of date, installs one tarball into both workspaces, checks the
+installed contract is the checkout's, and snapshots the engine into the
+platform's archive under its revision.
 
 `vendor:check` compares the installed engine's contract against BoardSmith's
 current one and prints every intervening revision summary, so the decision is
-made from a changelog rather than a hash. It classifies the result:
+made from a changelog rather than a hash. Its main answers:
 
-- **in sync** — nothing to do.
-- **behind** — re-vendor when convenient; game behaviour on the platform is
-  frozen at the older engine until you do.
-- **behind, with a revision whose summary says games must be rebuilt** —
-  re-vendor, raise the platform's minimum revision, and rebuild/republish every
-  game; older published bundles are refused.
+- **in sync**: nothing to do.
+- **behind**: re-vendor when convenient; new uploads stay capped at the older
+  engine until you do.
+- **same revision, different engine**: BoardSmith changed without minting a
+  revision, or its contract history was rewritten. Fix BoardSmith first.
+
+No script can tell from a summary that games must be rebuilt. The person
+reading the summaries does. When one says every published game must be
+rebuilt, re-vendor, raise the platform's minimum revision to that revision, and
+rebuild and republish every game; older published bundles are refused.
 
 See `docs/BOARDSMITH-VENDORING.md` in the ShufflewickPub repo for the full
 platform-side runbook.
@@ -234,12 +247,12 @@ platform-side runbook.
 game authors never set it, and a hand-edited value in `boardsmith.json` is
 overwritten rather than merged.
 
-The games worker rejects an upload whose `engineRevision` **exceeds** the
-platform's own. That is the asymmetry that matters: a game built on an older
-engine is fine (the newer engine still runs it, and the platform's minimum
-revision refuses the case where it would not), but a game built on a *newer* engine may call
-something the vendored engine does not have. The rejection message names both
-revisions and says to re-vendor.
+The games worker rejects an upload whose `engineRevision` is below the
+platform's minimum revision, **exceeds** the revision it vendored, or names a
+revision the executor has no archived engine for. Being older is not a reason
+to refuse: an older game keeps running on its own archived engine until the
+platform raises its minimum above it. A game built on a *newer* engine has no
+engine to run on; that rejection names both revisions and says to re-vendor.
 
 So the ordering rule is simply: **re-vendor the platform before publishing
 games built against a newer BoardSmith.**
