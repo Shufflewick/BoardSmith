@@ -52,9 +52,8 @@ import type { SeededRandom } from '../../utils/random.js';
  * @throws MoveListTooLargeError when one action has more moves than enumeration
  *   lists (see `ActionWalk`), rather than return a list that is not all of
  *   them (#691). `maxPerAction` truncates a complete list, so it does not
- *   lift that budget. Two older caps still return a cut-short list, with a
- *   warning (#692): a multiSelect past 10,000 combinations, and an action with
- *   a repeating selection past 500 partial moves.
+ *   lift that budget. The budget covers every selection, a multiSelect's
+ *   combinations and a repeating selection's picks included (#692).
  *
  * @returns Array of `{ action, args }` pairs (element args are GameElement
  *   objects, not numeric IDs)
@@ -197,7 +196,7 @@ export function enumerateActionMoves(
     // #325: a repeating selection's picks change the game (`onEach`) while
     // they are being made, so its moves can only be found by making them.
     const legal = executor.hasRepeatingSelections(actionDef)
-      ? enumerateThroughSelectionSteps(game, actionDef, player, bound)
+      ? enumerateThroughSelectionSteps(game, actionDef, player, bound, sampleAboveBudget)
       : enumerateGatedSelections(game, actionDef, player, bound, followUp, sampleAboveBudget);
     const moves = legal.map((args) => executor.picksOf(actionDef, args));
 
@@ -287,19 +286,24 @@ function sampleSelections(
   sample: { count: number; random: SeededRandom },
   accepts: (args: Record<string, unknown>) => boolean,
 ): Record<string, unknown>[] {
-  const walk: ActionWalk = { left: Infinity, pick: (values) => [sample.random.pick(values)] };
+  const walk: ActionWalk = { left: Infinity, random: sample.random };
   const moves: Record<string, unknown>[] = [];
   for (let draw = 0; draw < 2 * sample.count && moves.length < sample.count; draw++) {
     moves.push(...enumerateSelections(game, actionDef, player, start, walk).filter(accepts));
   }
+  warnSampled(actionDef, moves.length);
+  return moves;
+}
+
+/** Says once, in development, that an action's moves are a sample. */
+function warnSampled(actionDef: ActionDefinition, count: number): void {
   devWarn(
     `move-list-sampled:${actionDef.name}`,
     `Action "${actionDef.name}" has more moves than enumeration lists (it tries at most ` +
-      `${BUDGET_TEXT} values for one action), so the bot searches ${moves.length} of them ` +
-      `drawn at random instead of every one. Narrow the choices or ranges of its selections, or split it ` +
+      `${BUDGET_TEXT} values for one action), so only ${count} of them, drawn at random, are offered ` +
+      `instead of every one. Narrow the choices or ranges of its selections, or split it ` +
       `into two actions, so every move can be weighed.`,
   );
-  return moves;
 }
 
 /**
@@ -318,15 +322,6 @@ function argsCallbacksSee(actionDef: ActionDefinition, args: Record<string, unkn
 
 // ─── Repeating selections ────────────────────────────────────────────────────
 
-/**
- * How many partial moves enumeration of an action with a repeating selection
- * will build before it stops (#325). Each one restores a scratch copy of the
- * game and replays its picks, because a pick's `onEach` changes what the next
- * pick may be. A repeat whose picks rarely end it is an unbounded space, so the
- * shortest moves are found first and the walk stops, loudly, at this budget.
- */
-const MAX_REPEAT_ENUMERATION_STEPS = 500;
-
 /** One answer on the way to a move, in a form that survives a tree rebuild. */
 interface EnumerationStep {
   selection: Selection;
@@ -336,85 +331,150 @@ interface EnumerationStep {
 
 /**
  * Every legal move of an action that has a repeating selection, found by
- * making its picks on a scratch copy of the game (#325).
+ * making its picks on a scratch copy of the game (#325), or, above the budget,
+ * `sample.count` of them drawn at random when the caller asked for a sample.
  *
  * A repeat's value is its picks in order, ending with the one that ends it, and
  * what each pick may be depends on what the previous pick's `onEach` did. So
  * the moves are found through the executor's own selection steps
  * (`processSelectionStep`, `processRepeatingStep`), the same ones a whole
  * submission and a player's picks go through, and never on the game that was
- * asked about: its state is untouched. Moves are breadth-first, shortest first,
- * and bounded by {@link MAX_REPEAT_ENUMERATION_STEPS}.
+ * asked about: its state is untouched. Moves are breadth-first, shortest first.
+ *
+ * The walk spends the same budget as any other ({@link ActionWalk}): each
+ * value a partial move's next selection judges is counted before the partial
+ * moves it leads to are built, and each pick a partial move replays to reach
+ * where it stands is counted before it is replayed. So the picks made and the
+ * values judged together stay within the budget, however deep the repeat: a
+ * partial move of 100 picks costs 100. A repeat whose picks rarely end it is
+ * an unbounded space, and it throws {@link MoveListTooLargeError} rather than
+ * offer only its shortest moves.
  */
 function enumerateThroughSelectionSteps(
   game: Game,
   actionDef: ActionDefinition,
   player: Player,
   bound: Record<string, unknown>,
+  sample: { count: number; random: SeededRandom } | undefined,
 ): Record<string, unknown>[] {
   const scratch = scratchCopy(game);
+  try {
+    return listSelectionSteps(game, scratch, actionDef, player, bound);
+  } catch (error) {
+    if (!(error instanceof MoveListTooLargeError) || !sample) throw error;
+    return sampleThroughSelectionSteps(game, scratch, actionDef, player, bound, sample);
+  }
+}
+
+/** The breadth-first walk of {@link enumerateThroughSelectionSteps}, on one budget. */
+function listSelectionSteps(
+  game: Game,
+  scratch: ReturnType<typeof scratchCopy>,
+  actionDef: ActionDefinition,
+  player: Player,
+  bound: Record<string, unknown>,
+): Record<string, unknown>[] {
+  const walk: ActionWalk = { left: MAX_MULTISELECT_COMBINATIONS };
   const moves: Record<string, unknown>[] = [];
   const queue: EnumerationStep[][] = [[]];
-  let built = 0;
-
-  while (queue.length > 0 && built < MAX_REPEAT_ENUMERATION_STEPS) {
-    const steps = queue.shift()!;
-    built++;
-    const at = scratch.replay(actionDef.name, player.seat, steps, bound);
+  // An index, not shift(): the queue holds up to the budget's partial moves.
+  for (let next = 0; next < queue.length; next++) {
+    const steps = queue[next];
+    if (steps.length > 0) charge(walk, actionDef, steps[steps.length - 1].selection, steps.length);
     // A value the selection offered can still be refused by its own
     // `validate`: that path is simply not a move.
+    const at = scratch.replay(actionDef.name, player.seat, steps, bound);
     if (!at) continue;
-    const { action, seatPlayer, pending } = at;
-    const executor = scratch.game.getActionExecutor();
-
-    if (executor.isPendingActionComplete(action, pending)) {
-      if (executor.pendingActionRefusal(action, seatPlayer, pending) === null) {
-        moves.push({ ...bound, ...liveArgs(game, steps) });
-      }
+    const step = nextStep(scratch.game, actionDef, at, walk);
+    if ('accepted' in step) {
+      if (step.accepted) moves.push({ ...bound, ...liveArgs(game, steps) });
       continue;
     }
-
-    const selection = action.selections[pending.currentSelectionIndex];
-    const values = executor.isRepeatingSelection(selection)
-      ? executor.repeatingPickCandidates(action, seatPlayer, pending)
-      : nextStepValues(scratch.game, action, seatPlayer, pending, selection);
-    for (const value of values) {
-      queue.push([...steps, { selection, value: elementsAsIds(value) }]);
+    for (const value of step.values) {
+      queue.push([...steps, { selection: step.selection, value: elementsAsIds(value) }]);
     }
-  }
-
-  if (queue.length > 0) {
-    devWarn(
-      `repeat-enumeration-capped:${actionDef.name}`,
-      `Enumerating action "${actionDef.name}" built ${MAX_REPEAT_ENUMERATION_STEPS} partial moves ` +
-        `and stopped with more unexplored, so only its ${moves.length} shortest move(s) are offered. ` +
-        `Its repeating selection rarely ends: give its \`until\` a pick that ends it sooner, or offer ` +
-        `fewer choices per pick, so the moves stay tractable.`,
-    );
   }
   return moves;
 }
 
 /**
- * The values a non-repeating selection may take at this point of a pending
- * action: the same candidates, by the same rules, as {@link _enumerateRecursive}
- * tries. An optional selection with nothing to offer is skipped (`null`).
+ * `sample.count` moves of an action with a repeating selection and more moves
+ * than enumeration lists, each drawn by making one pick at a time, chosen with
+ * the caller's own random source, until the move is complete, so a seeded bot
+ * draws the same moves every time. As in {@link sampleSelections}, each pick is
+ * uniform over what is offered at that point, and the sample makes at most 2
+ * draws per move asked for. A draw makes its picks one after another on the
+ * scratch copy, never replaying them, so its picks are bounded by the values it
+ * judges. A repeat's draw has no fixed length, so the whole sample also spends
+ * one budget of values judged, and a sample that spends it keeps the moves
+ * drawn so far: none, for a repeat that never ends.
  */
-function nextStepValues(
+function sampleThroughSelectionSteps(
   game: Game,
-  action: ActionDefinition,
+  scratch: ReturnType<typeof scratchCopy>,
+  actionDef: ActionDefinition,
   player: Player,
-  pending: PendingActionState,
-  selection: Selection,
-): unknown[] {
-  const args = game.getActionExecutor().resolveArgs(action, pending.collectedArgs, player);
-  if (selection.type === 'text') return selection.optional ? [null] : [];
-  if (selection.type === 'number') {
-    return numberInputPicks(game, action, player, selection, args).values ?? (selection.optional ? [null] : []);
+  bound: Record<string, unknown>,
+  sample: { count: number; random: SeededRandom },
+): Record<string, unknown>[] {
+  const walk: ActionWalk = { left: MAX_MULTISELECT_COMBINATIONS, random: sample.random };
+  const moves: Record<string, unknown>[] = [];
+  try {
+    for (let draw = 0; draw < 2 * sample.count && moves.length < sample.count; draw++) {
+      const steps = drawSelectionSteps(scratch, actionDef, player, bound, walk);
+      if (steps) moves.push({ ...bound, ...liveArgs(game, steps) });
+    }
+  } catch (error) {
+    if (!(error instanceof MoveListTooLargeError)) throw error;
   }
-  const choices = _getChoices(game, action.name, selection, player, args).values;
-  if (choices.length === 0) return selection.optional ? [null] : [];
-  return _valuesToTry(game, action, player, selection, choices, args);
+  warnSampled(actionDef, moves.length);
+  return moves;
+}
+
+/** The picks of one move drawn with `walk.random`, or `null` when the rules refuse where the draw led. */
+function drawSelectionSteps(
+  scratch: ReturnType<typeof scratchCopy>,
+  actionDef: ActionDefinition,
+  player: Player,
+  bound: Record<string, unknown>,
+  walk: ActionWalk,
+): EnumerationStep[] | null {
+  const at = scratch.start(actionDef.name, player.seat, bound);
+  const steps: EnumerationStep[] = [];
+  for (;;) {
+    const step = nextStep(scratch.game, actionDef, at, walk);
+    if ('accepted' in step) return step.accepted ? steps : null;
+    if (step.values.length === 0) return null;
+    const pick = { selection: step.selection, value: elementsAsIds(step.values[0]) };
+    if (!scratch.apply(at, pick)) return null;
+    steps.push(pick);
+  }
+}
+
+/**
+ * Where a pending action stands: complete, and whether its rules accept the
+ * move, or the next selection and the values `walk` tries for it, charged to
+ * the walk as {@link spend} charges any selection. An optional selection with
+ * nothing to offer is skipped (`null`).
+ */
+function nextStep(
+  game: Game,
+  actionDef: ActionDefinition,
+  { action, seatPlayer, pending }: PendingAt,
+  walk: ActionWalk,
+): { accepted: boolean } | { selection: Selection; values: unknown[] } {
+  const executor = game.getActionExecutor();
+  if (executor.isPendingActionComplete(action, pending)) {
+    return { accepted: executor.pendingActionRefusal(action, seatPlayer, pending) === null };
+  }
+  const selection = action.selections[pending.currentSelectionIndex];
+  if (executor.isRepeatingSelection(selection)) {
+    const candidates = executor.repeatingPickCandidates(action, seatPlayer, pending);
+    return { selection, values: spend(walk, actionDef, selection, { values: candidates, judged: candidates.length }) ?? [] };
+  }
+  const args = executor.resolveArgs(action, pending.collectedArgs, seatPlayer);
+  const offer = selectionValues(game, action, seatPlayer, selection, args, walk.random);
+  return { selection, values: spend(walk, actionDef, selection, offer) ?? (selection.optional ? [null] : []) };
 }
 
 /**
@@ -481,36 +541,51 @@ function scratchCopy(source: Game) {
     if (flowState) game.restoreFlowState(flowState);
   };
 
+  /** Put the copy back and open the action for `seat`, with no picks made. */
+  const start = (actionName: string, seat: number, bound: Record<string, unknown>): PendingAt => {
+    reset();
+    const action = game.getAction(actionName)!;
+    const pending = game.getActionExecutor().createPendingActionState(actionName, seat);
+    // A follow-up's pre-filled args, as a seat's pending follow-up starts.
+    Object.assign(pending.collectedArgs, bound);
+    while (
+      pending.currentSelectionIndex < action.selections.length
+      && Object.prototype.hasOwnProperty.call(bound, action.selections[pending.currentSelectionIndex].name)
+    ) {
+      pending.currentSelectionIndex++;
+    }
+    return { action, seatPlayer: game.getPlayer(seat)!, pending };
+  };
+
+  /** Make one pick as a player would; `false` if it was refused. */
+  const apply = ({ action, seatPlayer, pending }: PendingAt, { selection, value }: EnumerationStep): boolean => {
+    const executor = game.getActionExecutor();
+    if (executor.isRepeatingSelection(selection)) {
+      return !executor.processRepeatingStep(action, seatPlayer, pending, value).error;
+    }
+    return executor.processSelectionStep(action, seatPlayer, pending, selection.name, value).success;
+  };
+
   return {
     game,
+    start,
+    apply,
     /**
      * Put the copy back, then make `steps` as a player would. Returns where
      * that left the pending action, or `null` if a step was refused.
      */
-    replay(actionName: string, seat: number, steps: EnumerationStep[], bound: Record<string, unknown>) {
-      reset();
-      const action = game.getAction(actionName)!;
-      const seatPlayer = game.getPlayer(seat)!;
-      const executor = game.getActionExecutor();
-      const pending = executor.createPendingActionState(actionName, seat);
-      // A follow-up's pre-filled args, as a seat's pending follow-up starts.
-      Object.assign(pending.collectedArgs, bound);
-      while (
-        pending.currentSelectionIndex < action.selections.length
-        && Object.prototype.hasOwnProperty.call(bound, action.selections[pending.currentSelectionIndex].name)
-      ) {
-        pending.currentSelectionIndex++;
-      }
-      for (const { selection, value } of steps) {
-        if (executor.isRepeatingSelection(selection)) {
-          if (executor.processRepeatingStep(action, seatPlayer, pending, value).error) return null;
-        } else if (!executor.processSelectionStep(action, seatPlayer, pending, selection.name, value).success) {
-          return null;
-        }
-      }
-      return { action, seatPlayer, pending };
+    replay(actionName: string, seat: number, steps: EnumerationStep[], bound: Record<string, unknown>): PendingAt | null {
+      const at = start(actionName, seat, bound);
+      return steps.every((step) => apply(at, step)) ? at : null;
     },
   };
+}
+
+/** A pending action on a scratch copy, and the seat making it. */
+interface PendingAt {
+  action: ActionDefinition;
+  seatPlayer: Player;
+  pending: PendingActionState;
 }
 
 // ─── Selection combinatorics ─────────────────────────────────────────────────
@@ -559,29 +634,34 @@ function enumerateSelections(
  * per-selection one because it already answers the same question: how much
  * one action may cost to list, when a bot samples 20 and greedy scores each.
  *
+ * A multiSelect counts each of its combinations, and is refused before any
+ * is built when they are more than the budget (#692). An action with a
+ * repeating selection is walked through {@link enumerateThroughSelectionSteps}
+ * on the same budget, each partial move's next values and replayed picks
+ * counted.
+ *
  * Going over throws {@link MoveListTooLargeError}, which `enumerateLegalMoves`
- * and greedy pass on rather than cut the list short. Two older caps still cut
- * a list short, with a warning, and are not part of this budget (#692): a
- * multiSelect whose combinations reach {@link MAX_MULTISELECT_COMBINATIONS}
- * offers only the first that many, and an action with a repeating selection
- * is listed through {@link enumerateThroughSelectionSteps}, which offers its
- * shortest moves after {@link MAX_REPEAT_ENUMERATION_STEPS} partial ones. A
- * caller that samples anyway (the MCTS bot) walks again with `pick` choosing
- * one value per selection at random (see {@link sampleSelections}).
+ * and greedy pass on rather than cut the list short. A caller that samples
+ * anyway (the MCTS bot, random play) walks again with `random` choosing one
+ * value per selection (see {@link sampleSelections} and
+ * {@link sampleThroughSelectionSteps}).
  */
 interface ActionWalk {
   /** Values this walk may still try. */
   left: number;
-  /** The values tried for a selection, out of those it offers: all, when absent. */
-  pick?: (values: unknown[]) => unknown[];
+  /** When present, the walk tries one value per selection, drawn with this. */
+  random?: SeededRandom;
 }
 
 function tooManyMoves(actionDef: ActionDefinition, selection: Selection): MoveListTooLargeError {
+  const { repeat, repeatUntil } = selection as { repeat?: unknown; repeatUntil?: unknown };
+  const advice = repeat !== undefined || repeatUntil !== undefined
+    ? 'Give its `until` a pick that ends it sooner, or offer fewer choices per pick.'
+    : 'Narrow the choices or ranges of its selections, or split it into two actions.';
   return new MoveListTooLargeError(
     `Action "${actionDef.name}" has too many moves to list: its selections multiply past the ` +
       `${BUDGET_TEXT} values enumeration tries for one action (each value of each selection, under every ` +
-      `pick before it, refused ones too), and the count crossed it at selection "${selection.name}". ` +
-      `Narrow the choices or ranges of its selections, or split it into two actions.`,
+      `pick before it, refused ones too), and the count crossed it at selection "${selection.name}". ${advice}`,
   );
 }
 
@@ -593,9 +673,10 @@ function tooManyMoves(actionDef: ActionDefinition, selection: Selection): MoveLi
  * `multiSelect: { min: 1 }`, max defaulting to Infinity) over an N-item choice
  * set is 2^N−1 combinations — N=25 is 33M objects (multi-GB), N=30 hangs/OOMs.
  * The bot samples down to a handful of moves per node ANYWAY, so materializing
- * the full power set first is both a DoS and pointless. Callers that hit the
- * cap get a bounded prefix (and should warn — see `_enumerateRecursive`).
- * A number input with more values than this is not listed (#689, see
+ * the full power set first is both a DoS and pointless. It is also
+ * enumeration's budget for one action (see `ActionWalk`): a multiSelect with
+ * more combinations than this is refused before any is built (#692). A number
+ * input with more values than this is not listed (#689, see
  * `numberInputValues`).
  */
 export const MAX_MULTISELECT_COMBINATIONS = 10000;
@@ -682,7 +763,7 @@ function _enumerateRecursive(
     return _enumerateRecursive(game, actionDef, player, index + 1, currentArgs, walk);
   }
   const seen = argsCallbacksSee(actionDef, currentArgs);
-  const tried = spend(walk, actionDef, selection, selectionValues(game, actionDef, player, selection, seen));
+  const tried = spend(walk, actionDef, selection, selectionValues(game, actionDef, player, selection, seen, walk.random));
 
   // Nothing to offer (no enabled choice, a text input, a number input that
   // cannot be listed): skip an optional selection, block a required one.
@@ -709,7 +790,8 @@ function _enumerateRecursive(
 
 /**
  * Charge a walk for what one selection judged, before any arg set is built
- * (#691), and return the values it will try: all it offers, or `walk.pick`'s.
+ * (#691), and return the values it will try: all it offers, or one drawn
+ * with `walk.random`.
  */
 function spend(
   walk: ActionWalk,
@@ -717,10 +799,15 @@ function spend(
   selection: Selection,
   offer: SelectionOffer,
 ): unknown[] | null {
-  if (offer.judged > walk.left) throw tooManyMoves(actionDef, selection);
-  walk.left -= offer.judged;
-  if (offer.values === null || !walk.pick) return offer.values;
-  return walk.pick(offer.values);
+  charge(walk, actionDef, selection, offer.judged);
+  if (offer.values === null || !walk.random) return offer.values;
+  return offer.values.length > 0 ? [walk.random.pick(offer.values)] : [];
+}
+
+/** Take `judged` values from the walk's budget, or throw when it has fewer left. */
+function charge(walk: ActionWalk, actionDef: ActionDefinition, selection: Selection, judged: number): void {
+  if (judged > walk.left) throw tooManyMoves(actionDef, selection);
+  walk.left -= judged;
 }
 
 /**
@@ -734,9 +821,10 @@ interface SelectionOffer<T = unknown> {
 }
 
 /**
- * The values `_enumerateRecursive` tries for one selection, or `null` when it
+ * The values both enumeration paths try for one selection, or `null` when it
  * has nothing to offer: no enabled choice, a text input, or a number input
- * with no value to offer (see {@link numberInputPicks}).
+ * with no value to offer (see {@link numberInputPicks}). With `random` (a
+ * sampling walk), a multiSelect offers one combination drawn with it.
  */
 function selectionValues(
   game: Game,
@@ -744,14 +832,13 @@ function selectionValues(
   player: Player,
   selection: Selection,
   seen: Record<string, unknown>,
+  random: SeededRandom | undefined,
 ): SelectionOffer {
   if (selection.type === 'text') return { values: null, judged: 0 };
   if (selection.type === 'number') return numberInputPicks(game, actionDef, player, selection, seen);
   const choices = _getChoices(game, actionDef.name, selection, player, seen);
   if (choices.values.length === 0) return { values: null, judged: choices.judged };
-  const values = _valuesToTry(game, actionDef, player, selection, choices.values, seen);
-  // A multiSelect offers its combinations, which can outnumber its choices.
-  return { values, judged: Math.max(choices.judged, values.length) };
+  return _valuesToTry(game, player, selection, choices, seen, random);
 }
 
 /**
@@ -810,56 +897,73 @@ export function numberInputValues(selection: NumberSelection): { values: number[
 }
 
 /**
- * Every value this selection could be given, in enumeration order.
+ * Every value this selection could be given, in enumeration order, and how
+ * many values that judged.
  *
  * A single-select yields each choice; a `multiSelect` yields each combination
- * within its bounds (capped, loudly); an `orderedList` yields the lists
- * `orderedListsToTry` describes.
+ * within its bounds, and judges each one; an `orderedList` yields the lists
+ * `orderedListsToTry` describes. With `random`, a multiSelect yields one
+ * combination drawn with it.
  */
 function _valuesToTry(
   game: Game,
-  actionDef: ActionDefinition,
   player: Player,
   selection: Selection,
-  choices: unknown[],
+  choices: { values: unknown[]; judged: number },
   currentArgs: Record<string, unknown>,
-): unknown[] {
+  random: SeededRandom | undefined,
+): SelectionOffer {
   const ctx = { game, player, args: currentArgs };
 
   // AN ORDERED, REPEATABLE LIST IS ENUMERATED ONE ENTRY AT A TIME (#249) -- see
   // `orderedListsToTry` for why that is the honest answer rather than a
   // truncated walk of an unbounded space.
   const orderedList = resolveOrderedList(selection, ctx);
-  if (orderedList) return orderedListsToTry(orderedList, choices);
+  if (orderedList) return { values: orderedListsToTry(orderedList, choices.values), judged: choices.judged };
 
   // Static OR function-valued multiSelect through the single shared helper
   // (bot-01 / D9). Concrete config -> real combinations; `undefined` ->
   // single-select; a thrown error propagates (fail loud, never a silent skip).
   const resolved = resolveMultiSelect(selection, ctx);
   if (!resolved) return choices;
+  const max = Math.min(resolved.max ?? Infinity, choices.values.length);
 
-  const combinations = generateCombinations(
-    choices,
-    resolved.min,
-    resolved.max ?? Infinity,
-    MAX_MULTISELECT_COMBINATIONS,
-  );
-
-  // F-08: surface the truncation loudly rather than silently searching a partial
-  // move set. Hitting the cap means the multiSelect's combinatorics are
-  // unbounded/huge relative to the choice set — the game likely wants a tighter
-  // `max` so the bot (and UI) enumerate a tractable space.
-  if (combinations.length >= MAX_MULTISELECT_COMBINATIONS) {
-    devWarn(
-      `multiselect-enumeration-capped:${actionDef.name}:${selection.name}`,
-      `Enumerating multiSelect "${selection.name}" of action "${actionDef.name}" over ` +
-        `${choices.length} choices hit the ${MAX_MULTISELECT_COMBINATIONS}-combination safety cap ` +
-        `and was truncated. An unbounded multiSelect (no max, or a very large one) explodes as ` +
-        `2^N combinations. Set a tighter multiSelect max so enumeration stays tractable.`,
-    );
+  if (random) {
+    const combination = randomCombination(choices.values, resolved.min, max, random);
+    return { values: combination ? [combination] : [], judged: choices.judged };
   }
+  // More combinations than the budget: `spend` refuses on `judged` alone, so none is built (#692).
+  const count = combinationCount(choices.values.length, resolved.min, max);
+  const values = count > MAX_MULTISELECT_COMBINATIONS ? [] : generateCombinations(choices.values, resolved.min, max);
+  return { values, judged: Math.max(choices.judged, count) };
+}
 
-  return combinations;
+/**
+ * How many combinations of `min` to `max` of `n` choices there are, exactly
+ * up to {@link MAX_MULTISELECT_COMBINATIONS}; past it, some larger number.
+ */
+function combinationCount(n: number, min: number, max: number): number {
+  let count = 0;
+  for (let size = min; size <= max && count <= MAX_MULTISELECT_COMBINATIONS; size++) {
+    const k = Math.min(size, n - size);
+    let ways = 1;
+    // C(n - k + i, i) at each step, so every product is a whole number.
+    for (let i = 1; i <= k && ways <= MAX_MULTISELECT_COMBINATIONS; i++) ways = (ways * (n - k + i)) / i;
+    count += ways;
+  }
+  return count;
+}
+
+/**
+ * One combination of `min` to `max` choices, in choice order, drawn with
+ * `random` (#692): each size is equally likely, then each combination of that
+ * size. `null` when there is none.
+ */
+function randomCombination(choices: unknown[], min: number, max: number, random: SeededRandom): unknown[] | null {
+  if (max < min) return null;
+  const size = min + random.nextInt(max - min + 1);
+  const picked = random.shuffle(choices.map((_, i) => i)).slice(0, size).sort((a, b) => a - b);
+  return picked.map((i) => choices[i]);
 }
 
 /**

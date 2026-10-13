@@ -13,7 +13,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { Game, Player, Action, loop, eachPlayer, actionStep, MoveListTooLargeError, type GameOptions } from '../index.js';
 import { MCTSBot } from '../../bot/mcts-bot.js';
 import { playGame } from '../../sim/play-game.js';
-import { greedy } from '../../sim/index.js';
+import { greedy, random } from '../../sim/index.js';
 import { SeededRandom } from '../../utils/random.js';
 import { _clearShownWarnings } from '../../utils/dev.js';
 import { enumerateActionMoves, enumerateLegalMoves, MAX_MULTISELECT_COMBINATIONS } from './enumerate-moves.js';
@@ -21,6 +21,42 @@ import { enumerateActionMoves, enumerateLegalMoves, MAX_MULTISELECT_COMBINATIONS
 const AFFINITIES = Array.from({ length: 13 }, (_, i) => `affinity${i}`);
 const range = (n: number) => Array.from({ length: n }, (_, i) => i);
 const sumOf = (args: Record<string, unknown>) => AFFINITIES.reduce((sum, key) => sum + ((args[key] as number) ?? 0), 0);
+
+/**
+ * Distinct picks from `lower` + `upper` numbers, one at a time, ending with the
+ * first pick of one of the top `upper`. 5 + 3 is 978 moves, found through 1,304
+ * partial moves holding 6,198 picks; 6 + 6 is 11,742 moves.
+ */
+function chain(name: string, lower: number, upper: number) {
+  return Action.create<BudgetGame>(name)
+    .chooseFrom('symbols', {
+      choices: (ctx) => range(lower + upper).filter((v) => !((ctx.args.symbols as number[] | undefined) ?? []).includes(v)),
+      repeat: { until: (_ctx, v: number) => v >= lower },
+    })
+    .execute((_args, ctx) => {
+      ctx.game.finish([]);
+      return { success: true };
+    });
+}
+
+/** A chain move: distinct picks, every one but the last below `lower`. */
+function isChainMove(picks: unknown, lower: number): boolean {
+  if (!Array.isArray(picks) || new Set(picks).size !== picks.length) return false;
+  return picks.every((v, i) => Number.isInteger(v) && (v >= lower) === (i === picks.length - 1));
+}
+
+/** Every repeat pick made by a `climb` or `endless` action, on any copy of the game. */
+let repeatPicks = 0;
+
+/** `inc` any number of times, then `done`: one move per length, and partial moves as long as the walk goes. */
+function climb(name: string, ends: boolean) {
+  return Action.create<BudgetGame>(name)
+    .chooseFrom('steps', {
+      choices: ['inc', 'done'],
+      repeat: { until: (_ctx, last: string) => (repeatPicks++, ends && last === 'done') },
+    })
+    .execute(() => ({ success: true }));
+}
 
 /** Offers one action, named by the `offer` option (`species` by default). Counts every number-input validate call. */
 class BudgetGame extends Game<BudgetGame, Player> {
@@ -74,6 +110,23 @@ class BudgetGame extends Game<BudgetGame, Player> {
           .chooseFrom('row', { choices: range(100) })
           .chooseFrom('col', { choices: range(99) })
           .execute(() => ({ success: true })),
+      // 14 choices and no max: 16,383 combinations, past the budget on their own.
+      pile: () =>
+        Action.create<BudgetGame>('pile')
+          .chooseFrom('tokens', { choices: range(14), multiSelect: { min: 1 } })
+          .execute(() => ({ success: true })),
+      // 13 choices and no max: 8,191 combinations, every one listed.
+      smallPile: () =>
+        Action.create<BudgetGame>('smallPile')
+          .chooseFrom('tokens', { choices: range(13), multiSelect: { min: 1 } })
+          .execute(() => ({ success: true })),
+      // 978 moves, found through 1,304 partial ones: past the old 500, within the budget.
+      chain10: () => chain('chain10', 5, 3),
+      // 11,742 moves: past the budget.
+      chain12: () => chain('chain12', 6, 6),
+      // A repeat that ends at any pick, and one that never ends.
+      climb: () => climb('climb', true),
+      endless: () => climb('endless', false),
       gridOver: () =>
         Action.create<BudgetGame>('gridOver')
           .chooseFrom('row', { choices: range(100) })
@@ -153,7 +206,7 @@ describe('enumeration budget across an action\'s selections (#691)', () => {
       const game = started('species');
       const moves = sample(game, 'one');
       expect(warn.mock.calls.map(([message]) => message)).toEqual([
-        expect.stringMatching(/Action "species" has more moves than enumeration lists .* searches 20 of them drawn at random/),
+        expect.stringMatching(/Action "species" has more moves than enumeration lists .* so only 20 of them, drawn at random, are offered/),
       ]);
       warn.mockRestore();
       expect(moves).toHaveLength(20);
@@ -221,5 +274,115 @@ describe('enumeration budget across an action\'s selections (#691)', () => {
     );
     expect(result.completed).toBe(false);
     expect(result.error).toMatch(/greedy cannot list player 1's moves: Action "species" has too many moves to list/);
+  });
+});
+
+describe('the two older caps go through the same budget (#692)', () => {
+  const sampleOf = (game: BudgetGame, action: string, seed: string) =>
+    enumerateActionMoves(game, game.getAction(action)!, game.getPlayer(1)!, {
+      sampleAboveBudget: { count: 20, random: new SeededRandom(seed) },
+    });
+
+  it('lists every combination of a multiSelect within the budget', () => {
+    expect(enumerateLegalMoves(started('smallPile'), 1)).toHaveLength(8191);
+  });
+
+  it('refuses a multiSelect whose combinations pass the budget, rather than offer the first 10,000', () => {
+    expect(() => enumerateLegalMoves(started('pile'), 1)).toThrow(
+      /Action "pile" has too many moves to list: .* at selection "tokens"/,
+    );
+  });
+
+  it('samples combinations of that multiSelect for the bot, drawn from the whole set', () => {
+    const moves = sampleOf(started('pile'), 'pile', 'pile');
+    expect(moves).toHaveLength(20);
+    for (const { tokens } of moves) {
+      expect(Array.isArray(tokens) && tokens.length >= 1 && new Set(tokens).size === tokens.length).toBe(true);
+    }
+    // The first 10,000 combinations in order hold at most 5 of the 14 tokens; a draw from all of them holds about 7.
+    expect(moves.some(({ tokens }) => (tokens as number[]).length > 5)).toBe(true);
+    expect(sampleOf(started('pile'), 'pile', 'pile')).toEqual(moves);
+  });
+
+  it('lists every move of a repeating selection within the budget, past the old 500 partial moves', () => {
+    const moves = enumerateLegalMoves(started('chain10'), 1);
+    expect(moves).toHaveLength(978);
+    expect(moves.every(({ args }) => isChainMove(args.symbols, 5))).toBe(true);
+    // Shortest first, as before.
+    expect(moves.slice(0, 4).map(({ args }) => args.symbols)).toEqual([[5], [6], [7], [0, 5]]);
+  });
+
+  it('refuses a repeating selection whose moves pass the budget, naming it, without the old warning', () => {
+    _clearShownWarnings();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(() => enumerateLegalMoves(started('chain12'), 1)).toThrow(
+      /Action "chain12" has too many moves to list: .* at selection "symbols"/,
+    );
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('samples moves of that repeating selection for the bot, the same for the same seed', () => {
+    const moves = sampleOf(started('chain12'), 'chain12', 'one');
+    expect(moves).toHaveLength(20);
+    expect(moves.every(({ symbols }) => isChainMove(symbols, 6))).toBe(true);
+    expect(sampleOf(started('chain12'), 'chain12', 'one')).toEqual(moves);
+    expect(sampleOf(started('chain12'), 'chain12', 'two')).not.toEqual(moves);
+    const fresh = started('chain12');
+    expect(fresh.performAction('chain12', fresh.getPlayer(1)!, moves[0]).success).toBe(true);
+  });
+
+  it('the MCTS bot plays a sampled repeating move, the same for the same seed', async () => {
+    const play = () =>
+      new MCTSBot(started('chain12'), BudgetGame, 'budget', 1, [], { iterations: 5, playoutDepth: 1, seed: 'chain-bot' }).play();
+    const move = await play();
+    expect(move?.action).toBe('chain12');
+    expect(await play()).toEqual(move);
+  });
+
+  it('random play draws a repeating move past the budget instead of stopping', async () => {
+    const result = await playGame(
+      { gameClass: BudgetGame },
+      { playerCount: 2, seed: 'random-chain', gameOptions: { offer: 'chain12' }, policies: [random(), random()], maxActions: 5 },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.completed).toBe(true);
+  });
+
+  it('greedy refuses a repeating selection past the budget, naming it', async () => {
+    const result = await playGame(
+      { gameClass: BudgetGame },
+      { playerCount: 2, seed: 'greedy-chain', gameOptions: { offer: 'chain12' }, policies: [greedy(() => 0), greedy(() => 0)], maxActions: 5 },
+    );
+    expect(result.error).toMatch(/greedy cannot list player 1's moves: Action "chain12" has too many moves to list/);
+  });
+
+  it('counts each pick it replays, so a deep repeat costs at most the budget in picks', () => {
+    repeatPicks = 0;
+    expect(() => enumerateLegalMoves(started('climb'), 1)).toThrow(
+      /Action "climb" has too many moves to list: .* at selection "steps"\. Give its `until` a pick that ends it sooner/,
+    );
+    // Each partial move replays its picks from the start, and each replayed pick is counted.
+    expect(repeatPicks).toBeLessThanOrEqual(MAX_MULTISELECT_COMBINATIONS + 200);
+  });
+
+  it('samples a deep repeat for the bot within one budget of picks for the walk and one for the sample', () => {
+    repeatPicks = 0;
+    const moves = sampleOf(started('climb'), 'climb', 'climb');
+    expect(moves).toHaveLength(20);
+    expect(moves.every(({ steps }) => Array.isArray(steps) && steps.at(-1) === 'done')).toBe(true);
+    expect(repeatPicks).toBeLessThanOrEqual(2 * MAX_MULTISELECT_COMBINATIONS + 200);
+  });
+
+  it('samples no move of a repeat that never ends, and stops when the sample has spent its budget', () => {
+    repeatPicks = 0;
+    _clearShownWarnings();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(sampleOf(started('endless'), 'endless', 'endless')).toEqual([]);
+    expect(warn.mock.calls.map(([message]) => message)).toEqual([
+      expect.stringMatching(/Action "endless" has more moves than enumeration lists .* so only 0 of them, drawn at random, are offered/),
+    ]);
+    warn.mockRestore();
+    expect(repeatPicks).toBeLessThanOrEqual(2 * MAX_MULTISELECT_COMBINATIONS + 200);
   });
 });

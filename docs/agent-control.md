@@ -234,11 +234,12 @@ is not every move, it throws `MoveListTooLargeError` (exported from
 10,000. Catch it to drive that action another way, such as picking each
 selection at random, or narrow the action's choices or split it in two.
 
-Two older caps still return a list that is cut short, with a development
-warning, instead of throwing ([#692](https://github.com/Shufflewick/BoardSmith/issues/692)):
-a `multiSelect` whose combinations reach 10,000 offers only the first 10,000,
-and an action with a repeating selection offers only its shortest moves once
-500 partial moves have been tried.
+The same budget covers every shape of selection: each combination of a
+`multiSelect` counts as one value, and an action with a repeating selection
+counts the values offered for each next pick of every partial move, and each
+pick replayed to reach that partial move (#692), so a deep repeat costs no more
+than a wide one.
+Enumeration never returns a list that is cut short.
 
 Pass `{ maxPerAction: N }` to keep only the first N moves of each action. It
 cuts a complete list, so it does not lift the 10,000 budget:
