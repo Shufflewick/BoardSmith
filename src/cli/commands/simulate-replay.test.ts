@@ -20,6 +20,7 @@ import { CommanderError } from 'commander';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { createProgram } from '../cli.js';
 import { validateChoiceCardinality } from './validate.js';
+import { scoreProject } from './simulate-project.test-helper.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = resolve(here, 'simulate.fixture.ts');
@@ -153,11 +154,31 @@ describe('a printed replay command plays the game that failed (#322)', () => {
     }
   }, 60_000);
 
+  it('boardsmith simulate --compare: a failing variant replays with its data file swapped (#556)', async () => {
+    const cwd = scoreProject();
+
+    const output = await runPrinted(
+      cwd,
+      'boardsmith simulate --games 2 --players 2 --seed swap --game-option limit=4 --compare src/rules/data/amounts.csv=data/one.csv,data/three.csv',
+    );
+    // A limit of 4 stops every game short of the target of 6, whichever amounts it plays.
+    const failures = failuresIn(output);
+    expect(failures, output).toHaveLength(4);
+    expect(failures.filter((f) => f.replay.includes('--compare src/rules/data/amounts.csv=data/three.csv'))).toHaveLength(2);
+
+    for (const failure of failures) {
+      expect(failure.replay).toContain('--game-option limit=4');
+      const replayed = failuresIn(await runPrinted(cwd, failure.replay));
+      expect(replayed, failure.replay).toEqual([failure]);
+    }
+  }, 60_000);
+
   it('boardsmith simulate refuses --replay alongside a batch flag, which it would ignore', async () => {
     const cwd = deadEndProject();
 
     expect(await runPrinted(cwd, 'boardsmith simulate --replay x-3-0 --seed x')).toMatch(/--replay.*cannot be used with.*--seed/);
     expect(await runPrinted(cwd, 'boardsmith simulate --replay x-3-0 --games 2')).toMatch(/--replay.*cannot be used with.*--games/);
+    expect(await runPrinted(cwd, 'boardsmith simulate --replay x-3-0 --jobs 2')).toMatch(/--replay.*cannot be used with.*--jobs/);
   });
 
   it('boardsmith validate: the choice cardinality check names a command that replays its failure', async () => {

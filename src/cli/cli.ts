@@ -296,11 +296,13 @@ export function createProgram(): Command {
     .option('--seed <seed>', 'Base seed (per-game seeds derived and recorded in output)')
     .addOption(
       new Option('--replay <game seed>', "Play one game again by its own seed, as a failing game's Replay line prints it")
-        .conflicts(['games', 'seed']),
+        .conflicts(['games', 'seed', 'jobs']),
     )
     .option('--players <counts>', 'Player counts, comma-separated (e.g. 2,4,6); every count the game declares when omitted')
     .option('--policy <spec...>', 'Who plays the seats: a name for every seat (e.g. --policy greedy) or seat=name for one (e.g. --policy 2=random). Names: random, mcts:<level> (easy, medium, hard or an iteration count), or a policy src/sim/index.ts exports. Default: random')
     .option('--game-option <kv...>', 'Select a declared game option as key=value (repeatable, e.g. --game-option difficulty=hard) so option-gated configurations are simulated too')
+    .option('--compare <dimension=values...>', 'Play variants side by side on the same seeds: policy=random,greedy, a declared game option (e.g. hand=5,7), or a data file the rules import and the files to play in its place (e.g. src/rules/data/loot.csv=data/loot-75.csv,data/loot-85.csv). The first value is the base. Repeat for every combination, at most 12')
+    .option('--jobs <n>', 'Worker threads to play games on (default: every core); 1 plays in this process')
     .addOption(new Option('--json', 'Output the run, the unfinished games and the report as JSON').conflicts('csv'))
     .option('--csv', 'Output the report as CSV, one statistic per row: variant,players,section,metric,key,stat,value')
     .action(simulateCommand);

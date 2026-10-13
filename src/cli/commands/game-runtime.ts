@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve, dirname } from 'node:path';
+import { join, resolve, dirname, relative } from 'node:path';
 import { build, type Plugin as EsbuildPlugin } from 'esbuild';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 
@@ -149,6 +149,37 @@ const rawImportPlugin: EsbuildPlugin = {
   },
 };
 
+/** Marks the inner resolve of {@link redirectPlugin}, so it does not answer itself. */
+const REDIRECTING = Symbol('boardsmith-redirecting');
+
+/**
+ * esbuild plugin that builds the rules with each file `redirects` names
+ * replaced by another (`boardsmith simulate --compare <data file>=...`),
+ * however the rules import it, `?raw` included. `imported` collects the files
+ * it replaced, so a file the rules never import can be refused.
+ */
+function redirectPlugin(redirects: ReadonlyMap<string, string>, imported: Set<string>): EsbuildPlugin {
+  return {
+    name: 'boardsmith-redirect',
+    setup(esbuildBuild) {
+      esbuildBuild.onResolve({ filter: /.*/ }, async (args) => {
+        if (args.pluginData === REDIRECTING) return undefined;
+        const found = await esbuildBuild.resolve(args.path, {
+          kind: args.kind,
+          importer: args.importer,
+          resolveDir: args.resolveDir,
+          namespace: args.namespace,
+          pluginData: REDIRECTING,
+        });
+        const replacement = found.errors.length > 0 ? undefined : redirects.get(found.path);
+        if (replacement === undefined) return undefined;
+        imported.add(found.path);
+        return { path: replacement, namespace: found.namespace };
+      });
+    },
+  };
+}
+
 /** Forward-slash an absolute path for use in a Vite module specifier / `/@fs/` URL. */
 export function toPosix(p: string): string {
   return p.replace(/\\/g, '/');
@@ -185,7 +216,7 @@ export async function loadGameDefinition(
 }
 
 /** Where {@link importRuntimeBundle} writes the bundle it names `name` in `tempDir`. */
-function runtimeBundlePath(tempDir: string, name: string): string {
+export function runtimeBundlePath(tempDir: string, name: string): string {
   return join(tempDir, `${name}-bundle.mjs`);
 }
 
@@ -229,6 +260,11 @@ export async function importRuntimeBundle(args: {
   name: string;
   context: 'monorepo' | 'standalone';
   exports: readonly string[];
+  /**
+   * Absolute path -> absolute path of the file to bundle in its place. A file
+   * the rules never import is refused, since replacing it would change nothing.
+   */
+  redirects?: ReadonlyMap<string, string>;
 }): Promise<{ gameDefinition: GameDefinition } & Record<string, unknown>> {
   const rulesIndexPath = join(args.rulesPath, 'index.ts');
   const entryPath = join(args.tempDir, `${args.name}-entry.ts`);
@@ -239,6 +275,8 @@ export async function importRuntimeBundle(args: {
     ),
   );
   const bundlePath = runtimeBundlePath(args.tempDir, args.name);
+  const redirects = args.redirects ?? new Map<string, string>();
+  const redirected = new Set<string>();
 
   await build({
     entryPoints: [entryPath],
@@ -247,8 +285,19 @@ export async function importRuntimeBundle(args: {
     platform: 'node',
     outfile: bundlePath,
     logLevel: 'silent',
-    plugins: [boardsmithResolvePlugin(args.context), rawImportPlugin],
+    plugins: [
+      ...(redirects.size > 0 ? [redirectPlugin(redirects, redirected)] : []),
+      boardsmithResolvePlugin(args.context),
+      rawImportPlugin,
+    ],
   });
+  const unused = [...redirects.keys()].filter((path) => !redirected.has(path));
+  if (unused.length > 0) {
+    throw new Error(
+      `The rules never import ${unused.map((path) => toPosix(relative(process.cwd(), path))).join(' or ')}, ` +
+        'so replacing it would change nothing. Name a data file the rules import (a CSV through ?raw, for example).',
+    );
+  }
 
   const moduleUrl = pathToFileURL(bundlePath).href;
   // The cache-bust is `load`, not `t`: Vite strips a `t=` query as its own HMR

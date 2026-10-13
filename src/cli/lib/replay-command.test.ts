@@ -17,6 +17,12 @@ describe('simulateReplayCommand (#322)', () => {
     );
   });
 
+  it('carries the data files its --compare variant swapped, as one-value --compare flags (#556)', () => {
+    expect(simulateReplayCommand({ seed: 'run-2-0', playerCount: 2 }, {}, [], { 'src/rules/data/loot.csv': 'data/loot-85.csv' })).toBe(
+      'boardsmith simulate --replay run-2-0 --players 2 --compare src/rules/data/loot.csv=data/loot-85.csv',
+    );
+  });
+
   it('quotes an argument a shell would otherwise split or expand', () => {
     expect(simulateReplayCommand({ seed: "it's me-2-0", playerCount: 2 }, { name: 'a b' }, [])).toBe(
       `boardsmith simulate --replay 'it'\\''s me-2-0' --players 2 --game-option 'name=a b'`,

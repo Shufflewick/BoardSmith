@@ -221,10 +221,11 @@ combined in game order, so the same seed gives the same report.
   did not finish, and `report` is an array with one entry per player count
   holding `players`, `games`, `winShare`, `tieRate`, `length`, `segments`,
   `scores`, `counts`, `samples`, `categories`, `ratios` and `elements`, or
-  `null` when any game did not finish.
+  `null` when any game did not finish. A run with `--compare` gives
+  `{ run, variants }` instead (see [comparing variants](#comparing-variants)).
 - **`--csv`** - one statistic per row:
-  `variant,players,section,metric,key,stat,value`. `variant` is empty (a later
-  release compares variants in one run). `section` is `games`, `winShare`,
+  `variant,players,section,metric,key,stat,value`. `variant` is the variant's
+  label in a run with `--compare`, and empty otherwise. `section` is `games`, `winShare`,
   `ties`, `length`, `segment`, `score`, `count`, `sample`, `category`, `ratio`
   or `element`; `metric` is empty for the built-in sections; `key` is the seat,
   label, category, count key or element name. In an `element` row, `stat` is
@@ -235,3 +236,67 @@ combined in game order, so the same seed gives the same report.
 ,2,score,score,,mean,41.3
 ,2,element,,Forge,buildRate,0.27
 ```
+
+## Comparing variants
+
+`--compare <dimension>=<value>,<value>,...` plays the same games under each
+value and prints them side by side. The dimension is one of:
+
+- **`policy`** - each value is one more `--policy` flag, such as
+  `--compare policy=random,greedy` or `--compare policy=2=random,2=greedy`.
+- **A declared game option** - `--compare hand=5,7`. Each value is read as
+  `--game-option` reads it, so an option the game does not declare is refused.
+  Give an option in `--compare` or in `--game-option`, not both.
+- **A data file the rules import** - `--compare src/rules/data/loot.csv=data/loot-75.csv,data/loot-85.csv`.
+  Each value is a file played in that file's place, as if its contents were
+  the original's. List the original itself to keep it as one of the variants.
+  Paths are relative to the project. A file the rules never import is refused,
+  since swapping it would change nothing.
+
+The first value of each dimension is the base. Repeat `--compare` to play
+every combination of the values, first flag slowest; a run compares at most 12
+variants. Each variant is labelled `dimension=value` for each dimension,
+separated by spaces, such as `policy=greedy hand=7`.
+
+```bash
+boardsmith simulate --games 1000 --seed tune --compare src/rules/data/loot.csv=data/loot-75.csv,data/loot-85.csv
+```
+
+Every variant plays the same games: game `i` at each player count has the seed
+`<seed>-<players>-<i>` in every variant, and each seat's policy draws from the
+same generator. **The same seed is not the same deal once a variant draws a
+different number of random values.** A variant that shuffles a bigger deck, or
+whose policy looks at one more random choice, moves every later draw, so its
+games part ways with the base from that point on. Compare variants over many
+games, not game by game.
+
+- **Tables** - a column per variant, numbered as the list at the top of the
+  output numbers them. Each variant after the first shows its difference from
+  the first in brackets; a share's difference is in percentage points (`pts`).
+- **`--json`** - `{ run, variants }`. `run` holds the `seed`, `gamesPerCount`,
+  `players` and `compare` (each dimension with its values). Each variant holds
+  its `label`, `policies` (its `--policy` flags), `gameOptions`, `data` (each
+  swapped file and the file played in its place), `games` (the games that did
+  not finish) and `report`.
+- **`--csv`** - every variant's rows under one header, each row's `variant`
+  set to the variant's label.
+
+A game that does not finish in any variant fails the run, which then prints no
+statistics. Its replay line carries its variant: the `--game-option` and
+`--policy` flags it was played with, and each data file it swapped as a
+one-value `--compare`, such as
+`boardsmith simulate --replay tune-2-14 --players 2 --compare src/rules/data/loot.csv=data/loot-85.csv`.
+
+## Parallel runs
+
+`--jobs <n>` plays the games on `n` worker threads; it defaults to the number
+of cores. Each worker loads the same rules bundle and plays an even, unbroken
+slice of the games, and the results are put back in game order, so the output
+is byte for byte the same whatever `--jobs` is. `--jobs 1` plays in the
+`boardsmith` process itself, with no workers.
+
+Games are played in production mode, as the published game plays them,
+whatever `--jobs` is. Production mode leaves the text of an error the rules
+throw out of the game's message, so each game that does not finish is played
+again in dev mode to report its real message. `--replay` plays in dev mode.
+

@@ -70,24 +70,31 @@ export const scoreMetrics = defineMetrics(({ count, finalScore }) => ({
   score: finalScore((game: ScoreGame, player) => game.scores[player.seat]),
 }));
 
-/** Each seat adds 1 to 3 to its own score, recording the amount, until a round ends with someone at 6 or more. */
+/**
+ * Each seat adds one of `amounts` (1 to 3 by default) to its own score, recording the amount, until a
+ * round ends with someone at `target` (6 by default) or more. A move that would take a score over
+ * `limit` throws, which production mode reports without the throw's own text.
+ */
 export class ScoreGame extends Game<ScoreGame, Player> {
   scores: Record<number, number> = {};
 
-  constructor(options: GameOptions) {
+  constructor(options: GameOptions & { target?: number; limit?: number; amounts?: number[] }) {
     super(options);
+    const { target = 6, limit = Infinity, amounts = [1, 2, 3] } = options;
     for (const player of this.players) this.scores[player.seat] = 0;
     this.registerAction(
       Action.create<ScoreGame>('add')
-        .chooseFrom('amount', { choices: [1, 2, 3] })
+        .chooseFrom('amount', { choices: amounts })
         .execute((args, ctx) => {
-          ctx.game.scores[ctx.player.seat] += args.amount as number;
+          const score = ctx.game.scores[ctx.player.seat] + (args.amount as number);
+          if (score > limit) throw new Error(`a score of ${score} is over the limit of ${limit}`);
+          ctx.game.scores[ctx.player.seat] = score;
           scoreMetrics.added.add(ctx.game, String(args.amount));
         }),
     );
     this.setFlow({
       root: loop({
-        while: (ctx) => Math.max(...Object.values(ctx.game.scores)) < 6,
+        while: (ctx) => Math.max(...Object.values(ctx.game.scores)) < target,
         maxIterations: 50,
         do: eachPlayer({ do: actionStep({ actions: ['add'] }) }),
       }),
