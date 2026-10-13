@@ -1308,6 +1308,12 @@ export class MCTSBot<G extends Game = Game> {
    * Serialize all args at once after enumeration is complete.
    * This ensures element objects are available during recursion for dependent filters,
    * and only converted to IDs when returning final results.
+   *
+   * Elements become bare numeric ids, not `elementsAsIds`' `{ id, className }`,
+   * on purpose (#685): `BotMove.args` is public, and game bot hooks
+   * (`playoutPolicy`, `moveOrdering`, `threatResponseMoves`,
+   * `hintTargetFromMove`) and the hint and heatmap fallbacks in
+   * session/stateless-ops.ts read element args as numbers. Do not merge the two.
    */
   private serializeArgs(
     args: Record<string, unknown>,
