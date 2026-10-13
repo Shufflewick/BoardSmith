@@ -2341,8 +2341,10 @@ export class Game<
    *   flow's state (`getFlowState()`, `getLastActionResult()`) is not kept.
    * - **The value is shared** by every caller in the state, so an array or
    *   plain object it returns is frozen and changing it throws; copy it first
-   *   to sort it (`[...moves].sort(...)`). An element, `Map`, `Set` or other
-   *   class instance is handed back as it is; do not change it either.
+   *   to sort it (`[...moves].sort(...)`). Return a new array or object,
+   *   never one the game holds (`() => this.turnOrder` would freeze the
+   *   game's own list). An element, `Map`, `Set` or other class instance is
+   *   handed back as it is; do not change it either.
    * - **Nothing kept is part of the game's state**: it is never serialized and
    *   is not shared with any other game, including a bot's copies.
    */

@@ -331,8 +331,10 @@ obvious one-candidate-at-a-time code.
   A value whose work read the flow's state is not kept.
 - **The value is shared**, so an array or plain object it returns is frozen
   and changing it throws, in tests as in production; copy it first to sort it
-  (`[...moves].sort(...)`). An element, `Map`, `Set` or other class instance is
-  handed back as it is; do not change it either. Nothing kept is serialized or
+  (`[...moves].sort(...)`). Return a new array or object, never one the game
+  holds (`() => this.turnOrder` would freeze the game's own list). An element,
+  `Map`, `Set` or other class instance is handed back as it is; do not change
+  it either. Nothing kept is serialized or
   shared with another game, including a bot's copies.
 
 #### On-Demand Choices
