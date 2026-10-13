@@ -127,6 +127,28 @@ function boardsmithResolvePlugin(context: 'monorepo' | 'standalone'): EsbuildPlu
   };
 }
 
+/**
+ * esbuild plugin that loads `import text from './data/cards.csv?raw'` as the
+ * file's text, as Vite and vitest do, so card data reaches every rules bundle.
+ */
+const rawImportPlugin: EsbuildPlugin = {
+  name: 'boardsmith-raw',
+  setup(esbuildBuild) {
+    esbuildBuild.onResolve({ filter: /\?raw$/ }, async (args) => {
+      const found = await esbuildBuild.resolve(args.path.slice(0, -'?raw'.length), {
+        kind: args.kind,
+        importer: args.importer,
+        resolveDir: args.resolveDir,
+      });
+      return found.errors.length > 0 ? { errors: found.errors } : { path: found.path, namespace: 'boardsmith-raw' };
+    });
+    esbuildBuild.onLoad({ filter: /.*/, namespace: 'boardsmith-raw' }, (args) => ({
+      contents: readFileSync(args.path),
+      loader: 'text',
+    }));
+  },
+};
+
 /** Forward-slash an absolute path for use in a Vite module specifier / `/@fs/` URL. */
 export function toPosix(p: string): string {
   return p.replace(/\\/g, '/');
@@ -225,7 +247,7 @@ export async function importRuntimeBundle(args: {
     platform: 'node',
     outfile: bundlePath,
     logLevel: 'silent',
-    plugins: [boardsmithResolvePlugin(args.context)],
+    plugins: [boardsmithResolvePlugin(args.context), rawImportPlugin],
   });
 
   const moduleUrl = pathToFileURL(bundlePath).href;

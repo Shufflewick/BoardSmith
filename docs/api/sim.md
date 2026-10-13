@@ -147,6 +147,40 @@ The kinds:
   that is not finite. `simulateRandomGames` has no metrics to check against,
   so there a game records nothing, as in real play.
 
+## Card data from CSV
+
+Keep the numbers a balance run tunes in a spreadsheet, export it as CSV beside
+the rules, and read it with `parseCsv` from `boardsmith`. Import the file with
+`?raw` so its text is bundled with the rules; build the elements with an
+ordinary `create` loop.
+
+```csv
+name,cost,rare,tags
+Goblin,2,no,monster;green
+"Troll, Big",5,yes,monster
+```
+
+```typescript
+// src/rules/game.ts
+import { parseCsv } from 'boardsmith';
+import cardsCsv from './data/cards.csv?raw';
+
+const cards = parseCsv(
+  cardsCsv,
+  { name: 'string', cost: 'number', rare: 'boolean', tags: 'list' },
+  { source: 'src/rules/data/cards.csv' },
+);
+
+// in the game's constructor:
+for (const card of cards) {
+  this.deck.create(Card, card.name, { cost: card.cost, rare: card.rare, tags: card.tags });
+}
+```
+
+A bad cell stops the game from loading with the file, row and column, such as
+`src/rules/data/cards.csv row 3, column "cost": "five" is not a number`. The
+rules and the error messages are in [the engine API](./index.md#card-data-from-csv).
+
 ## The balance report
 
 `boardsmith simulate` reports each player count once every game has finished

@@ -77,6 +77,7 @@ export type { RandomState } from '../utils/random.js';
 
 // Author metrics for the balance simulator (#556).
 export { defineMetrics, type GameMetrics } from './metrics.js';
+export { parseCsv, type CsvColumnType, type CsvValue, type CsvRow } from './utils/csv.js';
 
 
 // Player system
