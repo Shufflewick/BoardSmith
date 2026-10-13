@@ -209,10 +209,10 @@ describe('mapping a submitted value does not judge the candidates (#364)', () =>
     const { r, game } = countedGame();
     expect(r.performAction('place', 1, { space: 's500' }).error).toBeUndefined();
 
-    // Validating the submission, the next step's availability, and the
-    // player view's disabled actions: three evaluations, each one prepare and
-    // one disabled call per choice. Mapping the value adds none.
-    expect(game.prepareCalls).toBe(3);
-    expect(game.disabledCalls).toBe(3 * SPACES.length);
+    // Validating the submission and the next step's availability: two
+    // evaluations, each one prepare and one disabled call per choice. Mapping
+    // the value adds none, and performAction builds no player view (#695).
+    expect(game.prepareCalls).toBe(2);
+    expect(game.disabledCalls).toBe(2 * SPACES.length);
   });
 });

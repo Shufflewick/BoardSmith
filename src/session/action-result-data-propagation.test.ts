@@ -118,10 +118,10 @@ describe('BUG-017 — ActionResult.data across layer boundaries', () => {
       const runner = makeRunner();
       const result = runner.performAction('viewMap', 1, {});
 
-      // `flowState` and `playerViews` reach every seat and the spectator.
+      // `flowState` and the seats' views reach every seat and the spectator.
       // `data` is the acting seat's private return value and must not ride them.
       expect(JSON.stringify(result.flowState)).not.toContain('cartography');
-      expect(JSON.stringify(result.playerViews)).not.toContain('cartography');
+      expect(JSON.stringify(runner.getAllPlayerViews())).not.toContain('cartography');
     });
   });
 
