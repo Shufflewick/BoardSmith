@@ -50,7 +50,11 @@ class DuelGame extends Game<DuelGame, Player> {
           this.runs.push({ action: 'buy', ...args });
         }),
       Action.create<DuelGame>('gather')
-        .chooseFrom('coins', { choices: ['a', 'b', 'stop'], repeat: { until: (_ctx, last) => last === 'stop' } })
+        // Each coin once, so its moves can be listed (#692): an unbounded repeat is too many.
+        .chooseFrom('coins', {
+          choices: (ctx) => ['a', 'b', 'stop'].filter((coin) => !((ctx.args.coins as string[] | undefined) ?? []).includes(coin)),
+          repeat: { until: (_ctx, last) => last === 'stop' },
+        })
         .execute((args) => {
           this.runs.push({ action: 'gather', ...args });
         }),
