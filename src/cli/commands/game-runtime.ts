@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve, dirname } from 'node:path';
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { join, resolve, dirname, sep } from 'node:path';
 import { build, type Plugin as EsbuildPlugin } from 'esbuild';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 
@@ -247,6 +247,36 @@ export function cliSourceFile(pathUnderCli: string): string {
   return found;
 }
 
+/** The real path of the `boardsmith` the rules in `rulesPath` import, found the way esbuild finds it, or undefined when none is installed. */
+function installedBoardsmith(rulesPath: string): string | undefined {
+  for (let dir = rulesPath; ; dir = dirname(dir)) {
+    const candidate = join(dir, 'node_modules', 'boardsmith');
+    if (existsSync(candidate)) return realpathSync.native(candidate);
+    if (dirname(dir) === dir) return undefined;
+  }
+}
+
+/**
+ * Refuse a bundle that holds this CLI's own source beside rules built on another
+ * `boardsmith` install (#696). Each install brings its own engine, so the CLI's code
+ * would check the rules' elements against classes they are not instances of, and
+ * match nothing without a word. `inputs` are the bundle's source files, absolute.
+ */
+function requireOneBoardsmith(rulesPath: string, inputs: readonly string[]): void {
+  const game = installedBoardsmith(rulesPath);
+  // As esbuild names the CLI's files: the letter case this process was started with.
+  const cliAsBundled = realpathSync(resolve(dirname(cliSourceFile('cli.ts')), '..', '..'));
+  // The case on disk, so a link or a command typed in other case on macOS is still the same install.
+  const cli = realpathSync.native(cliAsBundled);
+  if (game === undefined || game === cli || !inputs.some((input) => input.startsWith(cliAsBundled + sep))) return;
+  throw new Error(
+    `This game's rules import boardsmith from ${game}, but this boardsmith command runs from ${cli}. ` +
+      'The command builds its own code into the rules bundle, so the bundle would hold two copies of the engine ' +
+      "that do not recognise each other's elements. Run the game's own boardsmith from the game's directory " +
+      `(npx boardsmith ...), or install this boardsmith into the game (npm install ${cli}).`,
+  );
+}
+
 /**
  * BUNDLE THE PROJECT'S RULES, AND WHATEVER MUST SHARE THEIR ENGINE, AND LOAD IT.
  *
@@ -255,6 +285,8 @@ export function cliSourceFile(pathUnderCli: string): string {
  * world host for a world (#283) -- has to come out of the same bundle, or it
  * runs on a second copy of the engine whose classes and functions the rules'
  * elements do not share.
+ * For the same reason a bundle that takes CLI source from one install and the
+ * rules' `boardsmith` from another is refused, naming both.
  *
  * `exports` are extra `export ... from ...;` lines for the entry, beside the
  * `gameDefinition` every bundle exports. The import is cache-busted, so calling
@@ -285,8 +317,9 @@ export async function importRuntimeBundle(args: {
   const redirects = args.redirects ?? new Map<string, string>();
   const redirected = new Set<string>();
 
-  await build({
+  const { metafile } = await build({
     entryPoints: [entryPath],
+    metafile: true,
     bundle: true,
     format: 'esm',
     platform: 'node',
@@ -300,6 +333,10 @@ export async function importRuntimeBundle(args: {
   });
   const unused = [...redirects.keys()].filter((path) => !redirected.has(path));
   if (unused.length > 0) throw new UnimportedRedirectError(unused);
+  // In monorepo context the resolve plugin points every `boardsmith` import at this checkout already.
+  if (args.context === 'standalone') {
+    requireOneBoardsmith(args.rulesPath, Object.keys(metafile.inputs).map((input) => resolve(input)));
+  }
 
   const moduleUrl = pathToFileURL(bundlePath).href;
   // The cache-bust is `load`, not `t`: Vite strips a `t=` query as its own HMR
