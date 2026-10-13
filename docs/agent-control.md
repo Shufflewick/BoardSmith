@@ -217,7 +217,9 @@ wire form is accepted by `performAction` as well.
 By default enumeration is exhaustive. `text`/`number` selections and
 function-based `multiSelect` configs cannot be statically enumerated —
 optional ones are skipped, required ones block the whole action from
-appearing (you'll need `doAction` directly for those). Pass
+appearing (you'll need `doAction` directly for those). An action its own
+`.disabled()` rule or the active tutorial step turns off has no moves, since
+the server would refuse them. Pass
 `{ maxPerAction: N }` to cap the number of moves returned per action name
 (useful when an action's combinatorics are large and you only need a
 sample):

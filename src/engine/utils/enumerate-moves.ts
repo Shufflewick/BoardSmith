@@ -161,6 +161,11 @@ export function enumerateActionMoves(
   const bound = followUp?.args ?? {};
 
   try {
+    // #690: an action the game refuses outright (its own `.disabled()` rule or
+    // the tutorial gate) stays offered so the panel can grey it out, but
+    // performAction refuses it, so it has no moves. A held follow-up too.
+    if (game.getActionRefusalReason(actionDef, player)) return [];
+
     // #19: an action list comes from the flow state's FROZEN `availableActions`,
     // computed once on the authoritative game when the step opened and replayed
     // verbatim — into a bot's redacted sandbox, and into a game whose state has

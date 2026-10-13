@@ -2500,19 +2500,12 @@ export class Game<
     const player = this.getPlayer(seat);
     if (!player) return {};
 
-    const availableActions = this.getAvailableActions(player);
     const reasons: Record<string, string> = {};
-
-    for (const action of availableActions) {
-      const reason = this.getActionDisabledReason(action, player);
+    for (const action of this.getAvailableActions(player)) {
+      const reason = this.getActionRefusalReason(action, player);
       if (reason) reasons[action.name] = reason;
     }
-
-    // Tutorial gate reasons are layered on top (and win) — see JSDoc above.
-    return {
-      ...reasons,
-      ...getActionLevelDisabledReasons(this, seat, availableActions.map(a => a.name)),
-    };
+    return reasons;
   }
 
   /**
@@ -2522,9 +2515,9 @@ export class Game<
    * is not (or declares no rule). Evaluated with EMPTY args, matching
    * `condition`'s availability-time contract.
    *
-   * Shared by `getDisabledActions` (projection) and `performAction`
-   * (enforcement) so the button a player sees and the gate the server applies
-   * can never disagree.
+   * Reached through `getActionRefusalReason`, which `getDisabledActions`
+   * (projection) and `performAction` (enforcement) both call, so the button a
+   * player sees and the gate the server applies can never disagree.
    *
    * PUBLIC because a THIRD caller needs it (#169). A persistent world builds a
    * seat's offer one action at a time, hydrating each one's declaration as it
@@ -2549,6 +2542,22 @@ export class Game<
     // rule evaluated one way.
     const reason = action.disabled({ game: reading ?? this, player, args: {} });
     return reason === false ? null : reason;
+  }
+
+  /**
+   * Why `player` may not take `action` at all right now, or `null` when it may:
+   * the active tutorial step's gate (which wins) or the action's own
+   * `.disabled(ctx)` rule. A bare `{ action: 'move' }` gate refuses 'pass' and
+   * 'endTurn' here, not just annotates them for the UI.
+   *
+   * The one check of a disabled action: `getDisabledActions` projects it for
+   * the panel, `performAction` refuses with it, and `enumerateActionMoves`
+   * leaves out what it refuses (#690), so an enumerated move is never answered
+   * "Action X is disabled".
+   */
+  getActionRefusalReason(action: ActionDefinition, player: P): string | null {
+    return getActionLevelDisabledReasons(this, player.seat, [action.name])[action.name]
+      ?? this.getActionDisabledReason(action, player);
   }
 
   /**
@@ -2685,15 +2694,8 @@ export class Game<
     }
 
     // Enforce action-level disabling at execution, not just in the projection
-    // layer: a greyed-out button must also be a closed door. Covers both the
-    // action's own `.disabled()` rule and the tutorial gate — a bare
-    // { action: 'move' } gate must prevent execution of 'pass'/'endTurn', not
-    // just annotate them for the UI (HR-01). Both reuse the same evaluators the
-    // projection consults (getActionDisabledReason / getActionLevelDisabledReasons),
-    // so there is no parallel validator to drift.
-    const disabledReason =
-      getActionLevelDisabledReasons(this, player.seat, [actionName])[actionName]
-      ?? this.getActionDisabledReason(action, player);
+    // layer: a greyed-out button must also be a closed door (HR-01).
+    const disabledReason = this.getActionRefusalReason(action, player);
     if (disabledReason) {
       return {
         success: false,

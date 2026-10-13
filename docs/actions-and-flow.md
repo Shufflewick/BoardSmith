@@ -1114,7 +1114,8 @@ Return a **reason string** to disable the button, or `false` to leave it
 enabled. The reason is not optional, and there is no boolean form: a greyed-out
 button that will not say why is the single most reliable way to make a player
 think the game is broken. The reason is shown on hover and on focus, and read by
-screen readers.
+screen readers. The server refuses a disabled action, and `enumerateLegalMoves`,
+bots and the simulator never offer it; a tutorial step's gate works the same way.
 
 Choose between this and `.condition()` by asking whether the player should be
 thinking about the action at all:

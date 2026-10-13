@@ -135,8 +135,7 @@ export function random(
 /**
  * Scores every legal move of the seat (`enumerateLegalMoves`) and plays the
  * highest, breaking a tie with the seat's own generator. `score` must return a
- * finite number and only read the game. Only the seat's enabled actions and
- * its held follow-up are scored. A move that takes a number input cannot be
+ * finite number and only read the game. A move that takes a number input cannot be
  * listed (#689), so greedy refuses a seat offered one, as an action or as a
  * held follow-up whose args do not already answer it.
  */
@@ -147,15 +146,9 @@ export function greedy<G extends Game>(score: (game: G, move: PolicyMove, seat: 
       const followUp = followUpForSeat(game.getFlowState(), seat);
       const unlistable = unlistableNumberInput(game, actions, followUp);
       if (unlistable) return { noMove: unlistable };
-      // enumerateLegalMoves does not apply an action's `.disabled()` rule or a tutorial gate, so
-      // only the seat's enabled actions and its held follow-up are scored.
-      const legal = enumerateLegalMoves(game, seat);
-      const playable = legal.filter(
-        (move) => actions.includes(move.action) || move.action === followUp?.action,
-      );
       let best: PolicyMove[] = [];
       let bestScore = -Infinity;
-      for (const move of playable) {
+      for (const move of enumerateLegalMoves(game, seat)) {
         const value = score(game as G, move, seat);
         if (!Number.isFinite(value)) {
           throw new Error(`greedy's score returned ${value} for player ${seat}'s '${move.action}'. Return a finite number.`);
