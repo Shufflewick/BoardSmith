@@ -15,13 +15,15 @@
  * }));
  * ```
  *
- * and records from game code that changes the game (an action's `execute`, a
- * pick's `onSelect` or `onEach`, a flow step): `metrics.built.add(game, card)`,
+ * and records from game code that builds or changes the game (its
+ * constructor, an action's `execute`, a pick's `onSelect` or `onEach`, a flow
+ * step): `metrics.built.add(game, card)`,
  * `metrics.draftChoice.record(game, 'both')`, `metrics.buildsPerRound.add(game, 2)`.
  *
  * Recording does nothing in real play. Only the simulator attaches a sink, to
- * the one game it is playing, and keeps an action's records only when the
- * action commits. In a simulation a record made anywhere else (a `choices`
+ * the one game it is playing (through `GameOptions.metricSink`, so the
+ * constructor's records count too), and keeps an action's records only when
+ * the action commits. In a simulation a record made anywhere else (a `choices`
  * callback, a condition, a policy) is refused. `sample({ atEnd })`, `segment`
  * and `finalScore` are not recorded: the simulator reads them once per player
  * when the game ends.
@@ -137,17 +139,24 @@ export interface MetricKinds {
   finalScore<G extends Game>(read: (game: G, player: PlayerOf<G>) => number): FinalScoreMetric<G>;
 }
 
+/** Why the simulator refuses this record, or undefined when it keeps it. */
+function refusalOf(game: Game, sink: MetricSink, metric: Metric, value: number, problem?: string): string | undefined {
+  if (sink.declared[metric.name] !== metric) {
+    return 'it is not in gameDefinition.metrics. Declare it in the defineMetrics that gameDefinition.metrics holds.';
+  }
+  if (game._ctx._setupComplete === true && game._ctx._changingDepth === 0) {
+    return 'it was recorded outside game code that changes the game. Record in the game\'s constructor, an ' +
+      'action\'s execute, a pick\'s onSelect or onEach, or a flow step; never in choices, a condition, a ' +
+      'filter or a policy.';
+  }
+  return problem ?? (Number.isFinite(value) ? undefined : `it was given ${value}, which is not a finite number.`);
+}
+
 /** Hand a record to the game's sink, or refuse it; without a sink (real play) do nothing. */
 function record(game: Game, metric: Metric, key: string, value: number, problem?: string): void {
   const sink = game._ctx._metricSink;
   if (sink === undefined) return;
-  const refusal =
-    sink.declared[metric.name] !== metric
-      ? 'it is not in gameDefinition.metrics. Declare it in the defineMetrics that gameDefinition.metrics holds.'
-      : game._ctx._changingDepth === 0
-        ? 'it was recorded outside game code that changes the game. Record in an action\'s execute, a pick\'s ' +
-          'onSelect or onEach, or a flow step; never in choices, a condition, a filter or a policy.'
-        : problem ?? (Number.isFinite(value) ? undefined : `it was given ${value}, which is not a finite number.`);
+  const refusal = refusalOf(game, sink, metric, value, problem);
   if (refusal !== undefined) {
     const error = new Error(`Metric '${metric.name || '(not named by defineMetrics)'}' was refused: ${refusal}`);
     sink.refused ??= error;

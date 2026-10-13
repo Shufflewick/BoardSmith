@@ -69,11 +69,11 @@ export interface SingleGameResult {
   /** Winner indices (if completed) */
   winners?: number[];
   /**
-   * The game's author metric records, in the order they were kept: those of
-   * the flow's start, each committed action, and (when the game completed)
+   * The game's author metrics, totalled: the records of its construction and
+   * the flow's start, of each committed action, and (when the game completed)
    * the end-of-game reads, once per player.
    */
-  metrics: MetricRecord[];
+  metrics: GameMetricSummary;
 }
 
 
@@ -180,37 +180,69 @@ export function gameSeed(baseSeed: string, playerCount: number, index: number): 
 }
 
 /**
- * The author metric records of one simulated game. Only the live game gets
- * the sink (`attach`): the copies policies make are games of their own. A
- * definition with no metrics (`simulateRandomGames`) records nothing, as in
+ * One game's author metrics, totalled as it is played: what the report needs
+ * and nothing more.
+ */
+export interface GameMetricSummary {
+  /** Count or category -> key ('' when not keyed) -> its total. */
+  totals: Record<string, Record<string, number>>;
+  /** Sample -> every value, in the order kept; finalScore -> each seat's score, seat 1 first. */
+  values: Record<string, number[]>;
+  /** Segment -> each seat's label, seat 1 first. */
+  labels: Record<string, string[]>;
+}
+
+/** Fold kept records into a game's summary, by each metric's kind. */
+function addRecords(summary: GameMetricSummary, metrics: GameMetrics, records: MetricRecord[]): void {
+  for (const { metric, key, value } of records) {
+    const kind = metrics[metric].kind;
+    if (kind === 'count' || kind === 'category') {
+      const totals = (summary.totals[metric] ??= {});
+      totals[key] = (totals[key] ?? 0) + value;
+    } else if (kind === 'segment') {
+      (summary.labels[metric] ??= [])[value - 1] = key;
+    } else {
+      (summary.values[metric] ??= []).push(value);
+    }
+  }
+}
+
+/**
+ * The author metrics of one simulated game. Only the live game gets the sink,
+ * through its constructor options (`sink`), which no copy or restore inherits.
+ * A definition with no metrics (`simulateRandomGames`) records nothing, as in
  * real play.
  */
 function metricRecorder(metrics: GameMetrics | undefined) {
   const sink: MetricSink = { declared: metrics ?? {}, pending: [] };
-  const records: MetricRecord[] = [];
+  const summary: GameMetricSummary = { totals: {}, values: {}, labels: {} };
   /** A refused record ends the game, even when game code caught the throw. */
   const check = () => {
     if (sink.refused) throw sink.refused;
   };
   return {
-    records,
-    attach: (game: Game) => {
-      if (metrics) game._ctx._metricSink = sink;
-    },
+    summary,
+    sink: metrics === undefined ? undefined : sink,
     check,
-    /** Drop records not made by a committed step. */
+    /** Refuse records made outside a step the simulator plays: only a policy's turn runs between steps. */
+    refuseStray: (who: string) => {
+      const [stray] = sink.pending;
+      if (stray === undefined) return;
+      throw new Error(`${who}: metric '${stray.metric}' was recorded on the simulated game while it chose a move. A policy must only read the game.`);
+    },
+    /** Drop the records of a refused or rolled-back action. */
     discard: () => {
       sink.pending = [];
     },
     /** Keep the records of the step that just committed. */
     keep: () => {
       check();
-      records.push(...sink.pending);
+      if (metrics) addRecords(summary, metrics, sink.pending);
       sink.pending = [];
     },
     /** Add the end-of-game reads. */
     end: (game: Game) => {
-      if (metrics) records.push(...endOfGameRecords(metrics, game));
+      if (metrics) addRecords(summary, metrics, endOfGameRecords(metrics, game));
     },
   };
 }
@@ -288,8 +320,8 @@ export async function playGame<G extends Game>(
       playerCount,
       seed,
       autoStart: false,
+      metricSink: recorder.sink,
     });
-    recorder.attach(testGame.game);
     testGame.start();
     recorder.keep();
 
@@ -355,7 +387,7 @@ export async function playGame<G extends Game>(
 
       // Uses tryAction (not doAction) so the consecutiveFailures retry branch
       // below keeps working as a normal control-flow branch, not a throw.
-      recorder.discard();
+      recorder.refuseStray(`policy '${policy.name}'`);
       const result = testGame.tryAction(actor.seat, choice.action, choice.args);
       recorder.check();
 
@@ -373,6 +405,7 @@ export async function playGame<G extends Game>(
       // A move built from the engine's own choices was rejected. That is a real
       // inconsistency between availability and validation -- surface it loudly
       // rather than retrying forever.
+      recorder.discard();
       consecutiveFailures++;
       if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
         stuck = true;
@@ -402,7 +435,7 @@ export async function playGame<G extends Game>(
       playerCount,
       seed,
       winners: completed ? testGame.getWinners().map(p => p.seat) : undefined,
-      metrics: recorder.records,
+      metrics: recorder.summary,
     };
   } catch (error) {
     return {
@@ -417,7 +450,7 @@ export async function playGame<G extends Game>(
       duration: Date.now() - startTime,
       playerCount,
       seed,
-      metrics: recorder.records,
+      metrics: recorder.summary,
     };
   }
 }

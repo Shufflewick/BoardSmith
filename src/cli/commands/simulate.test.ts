@@ -503,6 +503,13 @@ const metricsProject = projectWithAuthorFiles(
 const metricsHuman = await simulateOutput(metricsProject.dir, { games: '4', seed: 'metrics' });
 const metricsJson = await simulateOutput(metricsProject.dir, { games: '4', seed: 'metrics', json: true });
 const metricsCsv = await simulateOutput(metricsProject.dir, { games: '4', seed: 'metrics', csv: true });
+const forgotMetricsProject = projectWithAuthorFiles(
+  [
+    `import { ScoreGame } from ${JSON.stringify(deadEndFixture)};`,
+    `export const gameDefinition = { gameClass: ScoreGame, gameType: 'score', displayName: 'Score', minPlayers: 2, maxPlayers: 2 };`,
+  ].join('\n'),
+);
+const forgotMetrics = await simulateOutput(forgotMetricsProject.dir, { games: '1', seed: 'forgot' });
 const failingCsv = await simulateOutput(afterRun.dir, { games: '4', players: '3', seed: 'fails', gameOption: ['deadEnd=7'], csv: true });
 
 describe("boardsmith simulate reports the game's author metrics (#556)", () => {
@@ -530,6 +537,11 @@ describe("boardsmith simulate reports the game's author metrics (#556)", () => {
     const { report } = JSON.parse(metricsJson.output);
     expect(lines).toContain(`,2,score,score,,mean,${report[0].scores.score.mean}`);
     expect(lines).toContain(`,3,length,,,max,${report[1].length.max}`);
+  });
+
+  it('a game that records metrics gameDefinition.metrics does not declare fails, naming the metric', () => {
+    expect(forgotMetrics.exitCode).toBe(1);
+    expect(forgotMetrics.output).toContain("Metric 'added' was refused: it is not in gameDefinition.metrics");
   });
 
   it('--csv with an unfinished game prints the failure, no rows, and exits 1', () => {

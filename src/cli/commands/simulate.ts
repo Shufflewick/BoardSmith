@@ -214,9 +214,11 @@ async function playAndReport(
   games: Array<{ seed: string; players: number }>,
   options: Pick<RunSimulationOptions, 'policiesFor' | 'maxActions' | 'gameOptions'>,
 ): Promise<RunSimulationResult> {
+  // Always a metrics object, so a game that records without declaring gameDefinition.metrics is refused, naming the metric.
+  const recorded = { ...definition, metrics: definition.metrics ?? {} };
   const played: SingleGameResult[] = [];
   for (const game of games) {
-    played.push(await playGame(definition, {
+    played.push(await playGame(recorded, {
       playerCount: game.players,
       seed: game.seed,
       policies: options.policiesFor(game.players),

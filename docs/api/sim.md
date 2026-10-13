@@ -98,7 +98,7 @@ export const metrics = defineMetrics(({ count, ratio, sample, category, segment,
 // src/rules/index.ts
 export const gameDefinition = { gameClass: MyGame, /* ... */ metrics };
 
-// in an action's execute, a pick's onSelect or onEach, or a flow step:
+// in the game's constructor, an action's execute, a pick's onSelect or onEach, or a flow step:
 metrics.built.add(game, card);              // count by element: keyed by the element's name
 metrics.shortOf.add(game, 'wood', 2);       // count by category, adding 2
 metrics.draftChoice.record(game, 'both');   // one of the declared values
@@ -133,14 +133,19 @@ The kinds:
   games of their own and record nothing.
 - **Only committed actions count.** An action's records are kept when it
   commits; an action that is refused or rolled back (its `execute` threw)
-  leaves none. Records made while the flow starts and in flow steps are kept.
-- **Record only in code that changes the game**: an action's `execute`, a
-  pick's `onSelect` or `onEach`, or a flow step. In a simulation, a record made
-  anywhere else (a `choices` or `filter` callback, a condition, a policy), of a
-  metric `gameDefinition.metrics` does not declare, or with a number that is
-  not finite or a category not declared, ends the game as crashed with an error
-  naming the metric, even if game code caught the throw. A game whose
-  definition declares no metrics records nothing, as in real play.
+  leaves none. Records made in the game's constructor (a deal), while the flow
+  starts and in flow steps are kept.
+- **Record only in code that builds or changes the game**: the game's
+  constructor, an action's `execute`, a pick's `onSelect` or `onEach`, or a
+  flow step. In a simulation, a record made anywhere else (a `choices` or
+  `filter` callback, a condition, a policy), of a metric
+  `gameDefinition.metrics` does not declare (or with no `gameDefinition.metrics`
+  at all), with a number that is not finite, a category not declared or an
+  element with no name, ends the game as crashed with an error naming the
+  metric, even if game code caught the throw. So does a `segment` that gives
+  an empty label, or a `finalScore` or `sample({ atEnd })` that gives a number
+  that is not finite. `simulateRandomGames` has no metrics to check against,
+  so there a game records nothing, as in real play.
 
 ## The balance report
 
@@ -164,8 +169,17 @@ The kinds:
 
 A distribution gives `n`, `mean` with its 95% interval (`low`, `high`, from the
 standard error), `sd`, `p10`, `p50`, `p90`, `min` and `max`. A share gives
-`share` with its 95% Wilson interval (`low`, `high`). A value with nothing to
-divide by is `-` in the tables, `null` in JSON and empty in CSV. Games are
+`share` with its 95% Wilson interval (`low`, `high`). A ratio whose
+denominator totals 0, or a sample with no values, has nothing to divide by:
+`-` in the tables, `null` in JSON and empty in CSV. A count nothing recorded
+is still reported, as 0 per game.
+
+The intervals on category shares, sample means, segment win shares and score
+means treat every record (or player) as independent. Records from one game are
+not (one player's builds in a game depend on each other, and one game's scores
+move together), so those intervals are optimistic: read them as a lower bound
+on the uncertainty. Win share by seat, ties, game length and counts per game
+have one value per game, so their intervals are sound. Games are
 combined in game order, so the same seed gives the same report.
 
 - **Tables** (the default) - one table per section and metric.

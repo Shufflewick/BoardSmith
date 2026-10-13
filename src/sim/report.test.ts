@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { defineMetrics } from '../engine/index.js';
-import type { MetricRecord } from '../engine/metrics.js';
-import type { SingleGameResult } from './play-game.js';
+import type { GameMetricSummary, SingleGameResult } from './play-game.js';
 import { buildReport, reportCsv, formatReport } from './report.js';
 
 const metrics = defineMetrics(({ count, ratio, sample, category, segment, finalScore }) => ({
@@ -11,31 +10,32 @@ const metrics = defineMetrics(({ count, ratio, sample, category, segment, finalS
   shortOf: count({ by: 'category' }),
   deadTurns: count(),
   deadRate: ratio('deadTurns', 'deadTurns'),
+  neverCounted: count(),
+  neverRate: ratio('neverCounted', 'neverCounted'),
   choice: category(['neither', 'one', 'both']),
   builds: sample(),
   tool: segment(() => 'unused'),
   score: finalScore(() => 0),
 }));
 
-const r = (metric: string, key: string, value = 1): MetricRecord => ({ metric, key, value });
-
-function finished(actionCount: number, winners: number[], records: MetricRecord[]): SingleGameResult {
+function finished(actionCount: number, winners: number[], metrics: GameMetricSummary): SingleGameResult {
   return {
     completed: true, crashed: false, timedOut: false, exceededMaxActions: false, stuck: false, resting: false,
-    actionCount, duration: 0, playerCount: 2, seed: 's', winners, metrics: records,
+    actionCount, duration: 0, playerCount: 2, seed: 's', winners, metrics,
   };
 }
 
 const games = [
-  finished(10, [1], [
-    r('held', 'ruby', 2), r('held', 'opal'), r('built', 'ruby'), r('shortOf', 'wood'), r('deadTurns', ''), r('deadTurns', ''),
-    r('choice', 'both'), r('choice', 'one'), r('builds', '', 1), r('builds', '', 3),
-    r('tool', 'hammer', 1), r('tool', 'saw', 2), r('score', '1', 10), r('score', '2', 6),
-  ]),
-  finished(20, [1, 2], [
-    r('held', 'ruby', 2), r('built', 'ruby'), r('built', 'opal'), r('choice', 'neither'), r('builds', '', 2),
-    r('tool', 'saw', 1), r('tool', 'hammer', 2), r('score', '1', 8), r('score', '2', 8),
-  ]),
+  finished(10, [1], {
+    totals: { held: { ruby: 2, opal: 1 }, built: { ruby: 1 }, shortOf: { wood: 1 }, deadTurns: { '': 2 }, choice: { both: 1, one: 1 } },
+    values: { builds: [1, 3], score: [10, 6] },
+    labels: { tool: ['hammer', 'saw'] },
+  }),
+  finished(20, [1, 2], {
+    totals: { held: { ruby: 2 }, built: { ruby: 1, opal: 1 }, choice: { neither: 1 } },
+    values: { builds: [2], score: [8, 8] },
+    labels: { tool: ['saw', 'hammer'] },
+  }),
 ];
 
 /** The 95% Wilson interval of 1 in 2. */
@@ -77,7 +77,14 @@ describe('the balance report (#556)', () => {
     expect(report.samples.builds.p90).toBeCloseTo(2.8, 9);
     expect(Object.keys(report.categories.choice)).toEqual(['neither', 'one', 'both']);
     expect(report.categories.choice.both.share).toBeCloseTo(1 / 3, 9);
-    expect(report.ratios).toEqual({ deadRate: { '': 1 } });
+    expect(report.ratios).toEqual({ deadRate: { '': 1 }, neverRate: { '': NaN } });
+  });
+
+  it('reports an unkeyed count and ratio nothing recorded: 0 per game, and nothing to divide by', () => {
+    expect(report.counts.neverCounted['']).toMatchObject({ n: 2, mean: 0, max: 0 });
+    const lines = reportCsv([report]).split('\n');
+    expect(lines).toContain(',2,count,neverCounted,,mean,0');
+    expect(lines).toContain(',2,ratio,neverRate,,ratio,');
   });
 
   it('gives one per-element table with a column per element-keyed count (per game) and ratio', () => {

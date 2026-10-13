@@ -6,7 +6,7 @@
  *
  * @module
  */
-import type { GameMetrics, Metric, MetricRecord } from '../engine/metrics.js';
+import type { GameMetrics, Metric } from '../engine/metrics.js';
 import type { SingleGameResult } from './play-game.js';
 
 /** A distribution: its size, mean with a 95% interval, standard deviation, percentiles and range. */
@@ -30,7 +30,11 @@ export interface Share {
   high: number;
 }
 
-/** The statistics of one player count. A metric with nothing to divide by reports NaN (null in JSON). */
+/**
+ * The statistics of one player count. A statistic with nothing to divide by
+ * (a ratio whose denominator totals 0, a sample with no values) is Infinity or
+ * NaN, which JSON writes as null.
+ */
 export interface PlayerCountReport {
   players: number;
   games: number;
@@ -50,7 +54,7 @@ export interface PlayerCountReport {
   samples: Record<string, Summary>;
   /** Category -> value -> its share of the records. */
   categories: Record<string, Record<string, Share>>;
-  /** Ratio (not by element) -> key -> numerator total over denominator total. */
+  /** Ratio (not by element) -> key ('' when not keyed) -> numerator total over denominator total. */
   ratios: Record<string, Record<string, number>>;
   /** Element name -> each element-keyed count (per game) and ratio (pooled). */
   elements: Record<string, Record<string, number>>;
@@ -83,16 +87,9 @@ function share(k: number, n: number): Share {
   return { share: p, low: Math.max(0, centre - half), high: Math.min(1, centre + half) };
 }
 
-const recordsOf = (game: SingleGameResult, metric: string): MetricRecord[] => game.metrics.filter((r) => r.metric === metric);
+const totalsOf = (game: SingleGameResult, metric: string): Record<string, number> => game.metrics.totals[metric] ?? {};
 
-/** Key -> sum of values, over `records`. */
-function totals(records: MetricRecord[]): Map<string, number> {
-  const sums = new Map<string, number>();
-  for (const { key, value } of records) sums.set(key, (sums.get(key) ?? 0) + value);
-  return sums;
-}
-
-const sortedKeys = (maps: Array<Map<string, number>>) => [...new Set(maps.flatMap((m) => [...m.keys()]))].sort();
+const sortedKeys = (tables: Array<Record<string, number>>) => [...new Set(tables.flatMap((t) => Object.keys(t)))].sort();
 
 /** What every section of one player count's report is built from, and the report it fills. */
 interface Tally {
@@ -104,7 +101,14 @@ interface Tally {
 }
 
 const soleWinner = (g: SingleGameResult) => (g.winners?.length === 1 ? g.winners[0] : undefined);
-const pooled = (tally: Tally, name: string) => totals(tally.games.flatMap((g) => recordsOf(g, name)));
+/** Key -> the metric's total over every game. */
+function pooled(tally: Tally, name: string): Record<string, number> {
+  const sums: Record<string, number> = {};
+  for (const game of tally.games) {
+    for (const [key, value] of Object.entries(totalsOf(game, name))) sums[key] = (sums[key] ?? 0) + value;
+  }
+  return sums;
+}
 const countedByElement = (metric: Metric | undefined) => metric?.kind === 'count' && metric.by === 'element';
 
 /** How each kind of metric adds its section to the report. */
@@ -112,34 +116,41 @@ const SECTIONS: { [K in Metric['kind']]: (metric: Extract<Metric, { kind: K }>, 
   count: (metric, tally) => {
     if (countedByElement(metric)) {
       const sums = pooled(tally, metric.name);
-      tally.elementColumns.push([metric.name, (key) => (sums.get(key) ?? 0) / tally.games.length]);
+      tally.elementColumns.push([metric.name, (key) => (sums[key] ?? 0) / tally.games.length]);
       return;
     }
-    const perGame = tally.games.map((g) => totals(recordsOf(g, metric.name)));
+    const perGame = tally.games.map((g) => totalsOf(g, metric.name));
+    // An unkeyed count is always reported, as 0 per game when nothing recorded it.
+    const keys = metric.by === undefined ? [''] : sortedKeys(perGame);
     tally.report.counts[metric.name] = Object.fromEntries(
-      sortedKeys(perGame).map((key) => [key, summarize(perGame.map((g) => g.get(key) ?? 0))]),
+      keys.map((key) => [key, summarize(perGame.map((g) => g[key] ?? 0))]),
     );
   },
   ratio: (metric, tally) => {
     const [top, bottom] = [pooled(tally, metric.numerator), pooled(tally, metric.denominator)];
-    const ratio = (key: string) => (top.get(key) ?? 0) / (bottom.get(key) ?? 0);
-    if (countedByElement(tally.metrics.find((m) => m.name === metric.numerator))) tally.elementColumns.push([metric.name, ratio]);
-    else tally.report.ratios[metric.name] = Object.fromEntries(sortedKeys([top, bottom]).map((key) => [key, ratio(key)]));
+    const ratio = (key: string) => (top[key] ?? 0) / (bottom[key] ?? 0);
+    const numerator = tally.metrics.find((m) => m.name === metric.numerator);
+    if (countedByElement(numerator)) {
+      tally.elementColumns.push([metric.name, ratio]);
+      return;
+    }
+    const keys = numerator?.kind === 'count' && numerator.by === undefined ? [''] : sortedKeys([top, bottom]);
+    tally.report.ratios[metric.name] = Object.fromEntries(keys.map((key) => [key, ratio(key)]));
   },
   sample: (metric, tally) => {
-    tally.report.samples[metric.name] = summarize(tally.games.flatMap((g) => recordsOf(g, metric.name).map((r) => r.value)));
+    tally.report.samples[metric.name] = summarize(tally.games.flatMap((g) => g.metrics.values[metric.name] ?? []));
   },
   category: (metric, tally) => {
     const counted = pooled(tally, metric.name);
-    const total = [...counted.values()].reduce((sum, v) => sum + v, 0);
-    tally.report.categories[metric.name] = Object.fromEntries(metric.values.map((v) => [v, share(counted.get(v) ?? 0, total)]));
+    const total = Object.values(counted).reduce((sum, v) => sum + v, 0);
+    tally.report.categories[metric.name] = Object.fromEntries(metric.values.map((v) => [v, share(counted[v] ?? 0, total)]));
   },
   segment: (metric, tally) => {
     const labels = new Map<string, { players: number; wins: number }>();
     for (const game of tally.games) {
-      for (const { key, value: seat } of recordsOf(game, metric.name)) {
+      for (const [i, key] of (game.metrics.labels[metric.name] ?? []).entries()) {
         const label = labels.get(key) ?? { players: 0, wins: 0 };
-        labels.set(key, { players: label.players + 1, wins: label.wins + (soleWinner(game) === seat ? 1 : 0) });
+        labels.set(key, { players: label.players + 1, wins: label.wins + (soleWinner(game) === i + 1 ? 1 : 0) });
       }
     }
     tally.report.segments[metric.name] = Object.fromEntries(
@@ -150,7 +161,7 @@ const SECTIONS: { [K in Metric['kind']]: (metric: Extract<Metric, { kind: K }>, 
     );
   },
   finalScore: (metric, tally) => {
-    const scores = tally.games.map((g) => recordsOf(g, metric.name).map((r) => r.value));
+    const scores = tally.games.map((g) => g.metrics.values[metric.name] ?? []);
     const spread = scores.reduce((sum, s) => sum + Math.max(...s) - Math.min(...s), 0) / tally.games.length;
     tally.report.scores[metric.name] = { ...summarize(scores.flat()), spread };
   },
