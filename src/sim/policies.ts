@@ -24,7 +24,7 @@ import type {
   GameMetrics,
 } from '../engine/index.js';
 import { followUpForSeat } from '../engine/index.js';
-import { enumerateActionMoves, enumerateLegalMoves } from '../engine/utils/enumerate-moves.js';
+import { enumerateActionMoves, enumerateLegalMoves, numberInputValues } from '../engine/utils/enumerate-moves.js';
 import { createBot } from '../bot/index.js';
 import type { BotStrategy, DifficultyLevel } from '../bot/types.js';
 import type { SeededRandom } from '../utils/random.js';
@@ -135,9 +135,10 @@ export function random(
 /**
  * Scores every legal move of the seat (`enumerateLegalMoves`) and plays the
  * highest, breaking a tie with the seat's own generator. `score` must return a
- * finite number and only read the game. A move that takes a number input cannot be
- * listed (#689), so greedy refuses a seat offered one, as an action or as a
- * held follow-up whose args do not already answer it.
+ * finite number and only read the game. A number input is listed only when it
+ * declares min, max and `integer: true` within enumeration's cap (#689), so
+ * greedy refuses a seat offered any other, as an action or as a held follow-up
+ * whose args do not already answer it.
  */
 export function greedy<G extends Game>(score: (game: G, move: PolicyMove, seat: number) => number): Policy {
   return {
@@ -165,7 +166,7 @@ export function greedy<G extends Game>(score: (game: G, move: PolicyMove, seat: 
 /**
  * Why greedy cannot list one of the seat's offered moves, or `undefined`: an
  * enabled action, or the held follow-up, with a number input its args do not
- * already answer (enumerateLegalMoves skips number inputs, #689).
+ * already answer and enumeration cannot list (#689).
  */
 function unlistableNumberInput(game: Game, actions: string[], followUp: FollowUpAction | undefined): string | undefined {
   const offered = [
@@ -173,12 +174,17 @@ function unlistableNumberInput(game: Game, actions: string[], followUp: FollowUp
     ...(followUp ? [{ action: followUp.action, args: followUp.args ?? {} }] : []),
   ];
   for (const { action, args } of offered) {
-    const numberInput = game.getAction(action)?.selections.find((s) => s.type === 'number' && !(s.name in args));
-    if (numberInput) {
-      return (
-        `greedy cannot play action '${action}': its number input '${numberInput.name}' has no list of values ` +
-        'to score (enumerateLegalMoves skips number inputs, #689). Play this seat with random or mcts.'
-      );
+    const unanswered = (game.getAction(action)?.selections ?? []).filter(
+      (s): s is NumberSelection => s.type === 'number' && !(s.name in args),
+    );
+    for (const input of unanswered) {
+      const listed = numberInputValues(input);
+      if ('unlistable' in listed) {
+        return (
+          `greedy cannot play action '${action}': its number input '${input.name}' cannot be listed: ` +
+          `${listed.unlistable} Or play this seat with random.`
+        );
+      }
     }
   }
   return undefined;

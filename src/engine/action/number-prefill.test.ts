@@ -116,6 +116,15 @@ describe('#258 — enterNumber labels the value the player is on', () => {
     expect(Object.keys(pick.valueLabels!)).toHaveLength(50);
   });
 
+  it('labels only the whole numbers a fractional range holds, the values a submission accepts (#689)', () => {
+    const { game, player } = soloGame();
+    const half = Action.create<AgeGame>('wager')
+      .enterNumber('amount', { min: 0.5, max: 3.5, integer: true, display: (n) => `bet ${n}` })
+      .execute(() => ({ success: true })).selections[0]!;
+
+    expect(buildPickMetadata(game, player, half).valueLabels).toEqual({ 1: 'bet 1', 2: 'bet 2', 3: 'bet 3' });
+  });
+
   it('omits `valueLabels` when the game declared no display', () => {
     const { game, player } = soloGame();
     const plain = Action.create<AgeGame>('wager')

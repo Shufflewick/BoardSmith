@@ -20,10 +20,11 @@
 // name below has exactly one defining module.
 import { constructGame, type Game, type GameOptions } from '../element/game.js';
 import type { Player } from '../player/player.js';
-import type { ActionDefinition, FollowUpAction, PendingActionState, Selection } from '../action/types.js';
+import type { ActionDefinition, FollowUpAction, NumberSelection, PendingActionState, Selection } from '../action/types.js';
 import { availableActionsForSeat, followUpForSeat } from '../flow/seat-activity.js';
 import { resolveMultiSelect, resolveOrderedList } from './resolve-multiselect.js';
 import { elementsAsIds } from './arg-builder.js';
+import { numberRangeValues } from '../action/number-labels.js';
 import { NotSimulableError } from '../errors.js';
 import { devWarn } from '../../utils/dev.js';
 
@@ -338,8 +339,9 @@ function nextStepValues(
   selection: Selection,
 ): unknown[] {
   const args = game.getActionExecutor().resolveArgs(action, pending.collectedArgs, player);
-  if (selection.type === 'text' || selection.type === 'number') {
-    return selection.optional ? [null] : [];
+  if (selection.type === 'text') return selection.optional ? [null] : [];
+  if (selection.type === 'number') {
+    return numberInputPicks(game, action, player, selection, args) ?? (selection.optional ? [null] : []);
   }
   const choices = _getChoices(game, action.name, selection, player, args);
   if (choices.length === 0) return selection.optional ? [null] : [];
@@ -477,6 +479,8 @@ function enumerateSelections(
  * The bot samples down to a handful of moves per node ANYWAY, so materializing
  * the full power set first is both a DoS and pointless. Callers that hit the
  * cap get a bounded prefix (and should warn — see `_enumerateRecursive`).
+ * A number input with more values than this is not listed (#689, see
+ * `numberInputValues`).
  */
 export const MAX_MULTISELECT_COMBINATIONS = 10000;
 
@@ -558,17 +562,11 @@ function _enumerateRecursive(
     return _enumerateRecursive(game, actionDef, player, index + 1, currentArgs);
   }
   const seen = argsCallbacksSee(actionDef, currentArgs);
-  const choices = _getChoices(game, actionDef.name, selection, player, seen);
+  const values = selectionValues(game, actionDef, player, selection, seen);
 
-  // Text/number inputs cannot be enumerated — skip optional, block required
-  if (selection.type === 'text' || selection.type === 'number') {
-    if (selection.optional) {
-      return _enumerateRecursive(game, actionDef, player, index + 1, currentArgs);
-    }
-    return [];
-  }
-
-  if (choices.length === 0) {
+  // Nothing to offer (no enabled choice, a text input, a number input that
+  // cannot be listed): skip an optional selection, block a required one.
+  if (values === null) {
     if (selection.optional) {
       return _enumerateRecursive(game, actionDef, player, index + 1, currentArgs);
     }
@@ -576,17 +574,91 @@ function _enumerateRecursive(
   }
 
   // ONE LOOP, over whatever this selection's shape says its candidate VALUES
-  // are: a scalar choice, a multiSelect combination, or an ordered list. The
-  // three used to be three copies of this recursion, which is how a fourth shape
-  // would have arrived with its own subtly different one.
+  // are: a scalar choice, a multiSelect combination, an ordered list, or a
+  // number. They used to be copies of this recursion, which is how another
+  // shape would have arrived with its own subtly different one.
   const results: Record<string, unknown>[] = [];
-  for (const value of _valuesToTry(game, actionDef, player, selection, choices, seen)) {
+  for (const value of values) {
     // Element objects stay in currentArgs so dependent selections receive the
     // real objects (matching the bot's original behavior).
     const newArgs = { ...currentArgs, [selection.name]: value };
     results.push(..._enumerateRecursive(game, actionDef, player, index + 1, newArgs));
   }
   return results;
+}
+
+/**
+ * The values `_enumerateRecursive` tries for one selection, or `null` when it
+ * has nothing to offer: no enabled choice, a text input, or a number input
+ * with no value to offer (see {@link numberInputPicks}).
+ */
+function selectionValues(
+  game: Game,
+  actionDef: ActionDefinition,
+  player: Player,
+  selection: Selection,
+  seen: Record<string, unknown>,
+): unknown[] | null {
+  if (selection.type === 'text') return null;
+  if (selection.type === 'number') return numberInputPicks(game, actionDef, player, selection, seen);
+  const choices = _getChoices(game, actionDef.name, selection, player, seen);
+  if (choices.length === 0) return null;
+  return _valuesToTry(game, actionDef, player, selection, choices, seen);
+}
+
+/**
+ * The values a number input offers a move (#689), or `null` when it offers
+ * none: it cannot be listed (see {@link numberInputValues}), or its rules and
+ * `validate` refuse every value, judged as a submission is. Both enumeration
+ * paths use it. A required input that cannot be listed says why, once.
+ */
+function numberInputPicks(
+  game: Game,
+  actionDef: ActionDefinition,
+  player: Player,
+  selection: NumberSelection,
+  args: Record<string, unknown>,
+): number[] | null {
+  const listed = numberInputValues(selection);
+  if ('unlistable' in listed) {
+    if (!selection.optional) {
+      devWarn(
+        `number-input-unlistable:${actionDef.name}:${selection.name}`,
+        `Action "${actionDef.name}" contributed no moves because its number input "${selection.name}" ` +
+          `cannot be listed: ${listed.unlistable}`,
+      );
+    }
+    return null;
+  }
+  const executor = game.getActionExecutor();
+  const accepted = listed.values.filter(
+    (value) => executor.validateSelection(selection, value, player, args, actionDef.name).valid,
+  );
+  return accepted.length > 0 ? accepted : null;
+}
+
+/**
+ * The values enumeration lists for a number input (#689): every whole number
+ * in its range ({@link numberRangeValues}), when it declares `min`, `max` and
+ * `integer: true`. A range with more than {@link MAX_MULTISELECT_COMBINATIONS}
+ * values (the same ceiling a multiSelect's combinations have) is not listed at
+ * all rather than cut short, since a prefix of it is one corner of the range,
+ * not a sample. An input that is not listed comes back with the reason, worded
+ * for the game author.
+ */
+export function numberInputValues(selection: NumberSelection): { values: number[] } | { unlistable: string } {
+  const values = numberRangeValues(selection, MAX_MULTISELECT_COMBINATIONS);
+  if (values === null) {
+    return { unlistable: 'it needs min, max and integer: true to be listed. Give it all three.' };
+  }
+  if ('tooMany' in values) {
+    return {
+      unlistable:
+        `its range ${selection.min} to ${selection.max} holds ${values.tooMany} values, and at most ` +
+        `${MAX_MULTISELECT_COMBINATIONS} may be listed. Narrow the range.`,
+    };
+  }
+  return { values };
 }
 
 /**

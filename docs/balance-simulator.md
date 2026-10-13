@@ -460,9 +460,11 @@ or bots, and `boardsmith simulate` keeps working exactly as before.
   Every variant plays game `i` from the same seed, but a variant that shuffles
   a different deck, or draws one more card (as the Caravan does), moves every
   later draw. Compare variants over many games, not game by game.
-- **Greedy cannot pick a number input** (#689). A move that asks for a number
-  cannot be listed, so greedy reports that seat as stuck and names the input.
-  Use `random`, `mcts:<level>` or a policy of your own for such a game.
+- **Greedy picks a number only from a bounded whole-number range** (#689). A
+  number input is listed when it has `min`, `max` and `integer: true` and at
+  most 10,000 values. Any other number input cannot be listed, so greedy
+  reports that seat as stuck and names the input. Use `random` or a policy of
+  your own for such a game.
 
 ## How fast it is
 
