@@ -110,17 +110,22 @@ describe('a fact is worked out once per game state (#673)', () => {
     runner.start();
     const game = runner.game;
     // The piece filter runs once per pawn and the destinations once more, for
-    // each seat's offer, but all of them share one run per seat.
+    // the next seat's offer, but all of them share one run. performAction
+    // builds no player view (#695), so no other seat's choices are asked for.
     const before = game.legalMovesRuns;
     expect(runner.performAction('pass', 1, {}).success).toBe(true);
-    expect(game.legalMovesRuns).toBe(before + 2);
+    expect(game.legalMovesRuns).toBe(before + 1);
 
-    const asked = game.legalMovesRuns;
+    // Seat 2's offer is reused; seat 1's fact is worked out once, the first time it is asked for.
+    const offered = game.legalMovesRuns;
     const [move] = enumerateLegalMoves(game, 2).filter((m) => m.action === 'move');
+    for (const pawn of game.all(Pawn)) game.legalMoves(pawn.player);
+    expect(game.legalMovesRuns).toBe(offered + 1);
+    const asked = game.legalMovesRuns;
     for (const pawn of game.all(Pawn)) game.legalMoves(pawn.player);
     expect(game.legalMovesRuns).toBe(asked);
     expect(runner.performAction(move.action, 2, move.args).success).toBe(true);
-    expect(game.legalMovesRuns).toBe(asked + 2);
+    expect(game.legalMovesRuns).toBe(asked + 1);
   });
 });
 

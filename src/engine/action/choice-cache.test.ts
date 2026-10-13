@@ -168,14 +168,14 @@ describe('a decision point is worked out once per game state (#631)', () => {
     devMode.override = false;
     const runner = start(DuelGame);
     const game = runner.game;
-    // A move's whole cost: in the new state each seat's choices are worked out
-    // once, the piece filter once per pawn and the destinations once, whichever
-    // pawn they were asked for. Seat 2's are for the flow's offer, which its
-    // player view reuses; seat 1's are for its own player view.
+    // A move's whole cost: in the new state seat 2's choices are worked out
+    // once for the flow's offer, the piece filter once per pawn and the
+    // destinations once, whichever pawn they were asked for. performAction
+    // builds no player view (#695), so seat 1's are not asked for.
     const perSeat = game.all(Pawn).length + 1;
     const before = game.legalMovesRuns;
     expect(runner.performAction('pass', 1, {}).success).toBe(true);
-    expect(game.legalMovesRuns).toBe(before + 2 * perSeat);
+    expect(game.legalMovesRuns).toBe(before + perSeat);
 
     // Every other question about this state reuses them.
     const asked = game.legalMovesRuns;
@@ -189,9 +189,10 @@ describe('a decision point is worked out once per game state (#631)', () => {
     const [first] = enumerateActionMoves(game, move, player);
     expect(game.legalMovesRuns).toBe(asked);
 
-    // So do validating and resolving the move; then it changes the board.
+    // So do validating and resolving the move; then it changes the board, and
+    // only the next offer, seat 1's, is worked out in the new state.
     expect(runner.performAction('move', 2, first).success).toBe(true);
-    expect(game.legalMovesRuns).toBe(asked + 2 * perSeat);
+    expect(game.legalMovesRuns).toBe(asked + perSeat);
   });
 
   it('works every answer out again in development mode', () => {
