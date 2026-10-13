@@ -1422,7 +1422,7 @@
       "surfaceHash": "4ee11bee5cce21da",
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "Game gains oncePerState(key, workOut) (#673): a game works out a whole-position fact (such as every legal move) once per game state and every caller in that state shares the value, kept by the same state version as a pick's candidates (#631) and reused under the same rules: never in development or world mode or while game code that may change the game runs, and never kept when it read the flow's state or changed the game. Nothing kept is serialized or shared between games; no format or payload change."
+      "summary": "Game gains oncePerState(key, workOut) (#673): a game works out a whole-position fact (such as every legal move) once per game state and every caller in that state shares the value, kept by the same state version as a pick's candidates (#631) and reused under the same rules: never in development or world mode or while game code that may change the game runs, and never kept when it read the flow's state. workOut must only read the game: one that changes it in a way the state version sees throws, naming the key, in every mode, and an array or plain object it returns is frozen so a caller changing the shared value throws. Nothing kept is serialized or shared between games; no format or payload change."
     }
   ]
 }

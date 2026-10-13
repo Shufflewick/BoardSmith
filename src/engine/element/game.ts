@@ -2317,10 +2317,18 @@ export class Game<
    * }
    * ```
    *
+   * - **`workOut` must only read the game.** A change the engine sees (an
+   *   element created, moved or removed, a draw from `game.random`, a write
+   *   through `actionTempState`) throws, in every mode. Any other write, such
+   *   as an attribute used as a lazy cache or a counter, is not seen: it would
+   *   happen once per state in production but on every call in development
+   *   mode, so the saved game would depend on reuse. Never write from it.
    * - **The key names everything the value depends on besides the game's
-   *   state**, such as the seat it is for. A `mine` query reads the player
-   *   context, so a value that makes one depends on that seat too. Two calls
-   *   with one key in one state get one value.
+   *   state**, such as the seat it is for. A `mine` query and `isVisible()`
+   *   read the player context, which is not always the seat passed in, so a
+   *   value that uses either needs the context's seat
+   *   (`getPlayerContext()?.seat`) in its key. Two calls with one key in one
+   *   state get one value.
    * - **The game changing drops every kept value.** It is the same game state
    *   version that a pick's candidates are kept by (docs/actions-and-flow.md,
    *   "A pick's candidates are worked out once per game state"), so the same
@@ -2330,9 +2338,11 @@ export class Game<
    * - **Nothing is reused** in development mode, in world mode, or while game
    *   code that may change the game is running (an `execute`, a flow step);
    *   `workOut` runs on every call there. A value whose `workOut` read the
-   *   flow's state (`getFlowState()`, `getLastActionResult()`) or changed the
-   *   game is not kept.
-   * - **The value is shared** by every caller in the state. Do not change it.
+   *   flow's state (`getFlowState()`, `getLastActionResult()`) is not kept.
+   * - **The value is shared** by every caller in the state, so an array or
+   *   plain object it returns is frozen and changing it throws; copy it first
+   *   to sort it (`[...moves].sort(...)`). An element, `Map`, `Set` or other
+   *   class instance is handed back as it is; do not change it either.
    * - **Nothing kept is part of the game's state**: it is never serialized and
    *   is not shared with any other game, including a bot's copies.
    */

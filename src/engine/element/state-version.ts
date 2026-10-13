@@ -54,19 +54,40 @@ const remembered = new WeakMap<ElementContext, { version: number; values: Map<st
 
 /**
  * `workOut()`'s value for `key`, from an earlier run in the same state version
- * when there is one (`Game.oncePerState` says how a game uses it).
+ * when there is one (`Game.oncePerState` says how a game uses it). A `workOut`
+ * that changes the game in a way the version sees throws, in every mode; an
+ * array or plain object it returns is frozen, so a caller changing the shared
+ * value throws too.
  */
 export function oncePerState<T>(ctx: ElementContext, key: string, workOut: () => T): T {
-  if (!answersReusable(ctx)) return workOut();
-  let kept = remembered.get(ctx);
-  if (kept?.version !== ctx._stateVersion) remembered.set(ctx, (kept = { version: ctx._stateVersion, values: new Map() }));
-  if (kept.values.has(key)) return kept.values.get(key) as T;
+  const kept = answersReusable(ctx) ? keptNow(ctx) : undefined;
+  if (kept?.values.has(key)) return kept.values.get(key) as T;
+  const version = ctx._stateVersion;
   const flowReads = ctx._flowStateReads;
   const value = workOut();
-  // A value whose work changed the game is filed under a version that has
-  // passed, so it is never found. One that read the flow's state is not filed.
-  if (ctx._flowStateReads === flowReads) kept.values.set(key, value);
+  if (ctx._stateVersion !== version) {
+    throw new Error(
+      `oncePerState("${key}"): its work changed the game (created, moved or removed an element, drew from game.random, ` +
+        'or wrote through actionTempState). It must only read the game; make the change in an action or a flow step.',
+    );
+  }
+  if (Array.isArray(value) || isPlainObject(value)) Object.freeze(value);
+  // The flow's state is not versioned, so a value that read it is not kept.
+  if (kept && ctx._flowStateReads === flowReads) kept.values.set(key, value);
   return value;
+}
+
+/** The values kept in the current state version, dropping any older ones. */
+function keptNow(ctx: ElementContext): { version: number; values: Map<string, unknown> } {
+  let kept = remembered.get(ctx);
+  if (kept?.version !== ctx._stateVersion) remembered.set(ctx, (kept = { version: ctx._stateVersion, values: new Map() }));
+  return kept;
+}
+
+function isPlainObject(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 /** Mark the game changed: every answer worked out before now is stale. */

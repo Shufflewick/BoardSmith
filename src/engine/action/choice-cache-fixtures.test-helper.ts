@@ -45,13 +45,21 @@ export interface PawnMove {
   to: number;
 }
 
+const legalMovesRuns = new WeakMap<DuelGame, number>();
+
 export class DuelGame extends Game<DuelGame, Player> {
   squares: Square[] = [];
   /** How far a pawn steps: 1, or 2 once a `pass` or the round's end flips it. */
   stride = 1;
   round = 0;
-  /** Runs of the whole-position computation, for the tests to count. */
-  legalMovesRuns = 0;
+  /**
+   * Runs of the whole-position computation, for the tests to count. Counted
+   * outside the game, since candidate code and `oncePerState` work must only
+   * read the game.
+   */
+  get legalMovesRuns(): number {
+    return legalMovesRuns.get(this) ?? 0;
+  }
 
   constructor(options: GameOptions) {
     super(options);
@@ -122,7 +130,7 @@ export class DuelGame extends Game<DuelGame, Player> {
 
   /** Every pawn move `player` can make: the whole-position computation. */
   legalMoves(player: Player): PawnMove[] {
-    this.legalMovesRuns++;
+    legalMovesRuns.set(this, this.legalMovesRuns + 1);
     const direction = player.seat === 1 ? 1 : -1;
     const moves: PawnMove[] = [];
     for (const pawn of this.all(Pawn)) {

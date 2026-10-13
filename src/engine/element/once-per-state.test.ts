@@ -5,7 +5,8 @@
  * It is kept for one state version (#631, `state-version.ts`) and follows the
  * choice cache's rules for when nothing is reused: development mode, world
  * mode, while game code that may change the game runs, and an answer that read
- * the flow's state or changed the game itself.
+ * the flow's state. Misuse is loud in every mode: work that changes the game
+ * throws, and an array or plain object it returns is frozen.
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { Game, Player, Piece, Space, Action, actionStep, loop, enumerateLegalMoves, type GameOptions } from '../index.js';
@@ -194,19 +195,40 @@ describe('when nothing is reused', () => {
     expect(runs).toBe(2);
   });
 
-  it('a fact whose own work changed the game is not kept', () => {
-    const game = start().game;
-    const roll = () => game.oncePerState('roll', () => (runs++, game.random()));
-    roll();
-    roll();
-    expect(runs).toBe(2);
-  });
-
   it('world mode works the fact out every time', () => {
     const game = new TallyGame({ playerCount: 1, seed: 'bs673', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     game.tally();
     game.tally();
     expect(runs).toBe(2);
+  });
+});
+
+describe('misuse fails loudly in every mode', () => {
+  it.each([false, true])('work that changes the game throws, naming the key (development mode: %s)', (dev) => {
+    devMode.override = dev;
+    const game = start().game;
+    expect(() => game.oncePerState('roll', () => game.random())).toThrow(/oncePerState\("roll"\).*only read the game/);
+    const token = game.first(Token)!;
+    expect(() => game.oncePerState('tidy', () => token.putInto(game.first(Space, 'yard')!))).toThrow(/oncePerState\("tidy"\)/);
+  });
+
+  it.each([false, true])('the shared value cannot be changed through an array or plain object (development mode: %s)', (dev) => {
+    devMode.override = dev;
+    const game = start().game;
+    const moves = game.oncePerState('moves', () => [1, 2]);
+    expect(() => moves.push(3)).toThrow(TypeError);
+    const counts = game.oncePerState('counts', () => ({ tokens: 1 }));
+    expect(() => {
+      counts.tokens = 2;
+    }).toThrow(TypeError);
+    expect(game.oncePerState('moves', () => [1, 2])).toEqual([1, 2]);
+  });
+
+  it('an element or other class instance it returns is handed back as it is', () => {
+    const game = start().game;
+    const token = game.oncePerState('token', () => game.first(Token)!);
+    expect(Object.isFrozen(token)).toBe(false);
+    expect(Object.isFrozen(game.oncePerState('seen', () => new Set([1])))).toBe(false);
   });
 });
 

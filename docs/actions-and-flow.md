@@ -310,19 +310,30 @@ class ChessGame extends Game<ChessGame, ChessPlayer> {
 The rules read `game.legalMoves(player)` as before; the `filter` can stay the
 obvious one-candidate-at-a-time code.
 
+- **`workOut` must only read the game.** A change the engine sees (an element
+  created, moved or removed, a draw from `game.random`, a write through
+  `actionTempState`) throws, in every mode, with the key in the message. Any
+  other write, such as an attribute used as a lazy cache or a counter, is not
+  seen: it would happen once per state in production but on every call in
+  development mode, so the saved game would depend on reuse. Never write from
+  `workOut`.
 - **The key names everything the value depends on besides the game's state**,
-  such as the seat it is for. A `mine` query reads the player context, so a
-  value that makes one depends on that seat too. Two calls with one key in one
-  state get one value.
+  such as the seat it is for. A `mine` query and `isVisible()` read the player
+  context, which is not always the seat passed in, so a value that uses either
+  needs the context's seat (`getPlayerContext()?.seat`) in its key. Two calls
+  with one key in one state get one value.
 - **It is kept by the same state version as a pick's candidates** (above), so
   it is dropped by the same changes, and an attribute written outside game
   code that may change the game is not seen until one of those changes happens.
 - **Nothing is reused** in development mode, in world mode, or while game code
   that may change the game is running (an `execute`, a flow step), so an
   `execute` that reads the fact, writes, and reads it again sees its own write.
-  A value whose work read the flow's state or changed the game is not kept.
-- **The value is shared**: do not change it. It is never serialized and is
-  never shared with another game, including a bot's copies.
+  A value whose work read the flow's state is not kept.
+- **The value is shared**, so an array or plain object it returns is frozen
+  and changing it throws, in tests as in production; copy it first to sort it
+  (`[...moves].sort(...)`). An element, `Map`, `Set` or other class instance is
+  handed back as it is; do not change it either. Nothing kept is serialized or
+  shared with another game, including a bot's copies.
 
 #### On-Demand Choices
 
