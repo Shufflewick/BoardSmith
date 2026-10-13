@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -927,6 +927,7 @@ describe('validateRequiredFiles — a world has a different entry point (#168)',
 
 
   function writeTableUi(): void {
+    writeFileSync(join(dir, 'index.html'), '');
     writeFileSync(join(dir, 'src', 'ui', 'App.vue'), '');
     writeFileSync(join(dir, 'src', 'ui', 'uis.ts'), '');
   }
@@ -960,9 +961,23 @@ describe('validateRequiredFiles — a world has a different entry point (#168)',
   });
 
   it('still fails a table game missing its UI registry', async () => {
+    writeFileSync(join(dir, 'index.html'), '');
     const result = await validateRequiredFiles(dir, false);
     expect(result.passed).toBe(false);
-    expect(result.details).toContain('src/ui/uis.ts');
+    expect(result.details).toEqual(['src/ui/uis.ts', 'src/ui/App.vue']);
+  });
+
+  it('asks a table that lost index.html but kept other UI files for its page and shell (#556)', async () => {
+    writeFileSync(join(dir, 'src', 'ui', 'uis.ts'), '');
+    const result = await validateRequiredFiles(dir, false);
+    expect(result.passed).toBe(false);
+    expect(result.details).toEqual(['index.html', 'src/ui/App.vue']);
+  });
+
+  it('asks a table with no UI yet (no index.html, #556) only for its rules', async () => {
+    expect(await validateRequiredFiles(dir, false)).toMatchObject({ passed: true, details: [] });
+    rmSync(join(dir, 'src', 'rules', 'game.ts'));
+    expect((await validateRequiredFiles(dir, false)).details).toEqual(['src/rules/game.ts']);
   });
 });
 

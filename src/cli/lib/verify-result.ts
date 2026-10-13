@@ -46,16 +46,27 @@ interface VerifyFinding {
   detail: string;
 }
 
-/** One check's outcome. `summary` says what happened; `next`, on a failure, says what to run. */
-export interface VerifyCheckResult {
-  name: VerifyCheckName;
-  passed: boolean;
+/**
+ * One check's outcome, without its name. `summary` says what happened; `next`, on a failure, says
+ * what to run. A check either ran, passing or failing, or was skipped, which never fails.
+ */
+export type VerifyCheckOutcome = {
   summary: string;
   next?: string;
   /** What the check counted: tests run, passed and failed; mutants tried, killed and survived. */
   counts?: Record<string, number>;
   findings?: VerifyFinding[];
-}
+} & (
+  | { passed: boolean; skipped?: never }
+  /**
+   * The check did not run, and `summary` says why: `build` and `smoke` in a project with no UI yet.
+   * Every report of the result names it.
+   */
+  | { passed: true; skipped: true }
+);
+
+/** One check's outcome, with the check's name. */
+export type VerifyCheckResult = VerifyCheckOutcome & { name: VerifyCheckName };
 
 export interface VerifyResult {
   format: typeof VERIFY_RESULT_FORMAT;

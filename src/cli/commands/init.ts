@@ -12,6 +12,7 @@ import {
   type GeneratedFile,
   type ProjectConfig,
   generateSmokeSpecTs,
+  tableUiFiles,
 } from '../lib/project-scaffold.js';
 import {
   generateWorldA11yTestTs,
@@ -99,6 +100,13 @@ export interface InitOptions {
    * repository and its history already exist.
    */
   intoExisting?: boolean;
+  /**
+   * Scaffold a table game with no UI yet: the same project without index.html, src/main.ts,
+   * src/ui/, the a11y example and the smoke spec, so the rules can be balanced with
+   * `boardsmith simulate` first. `boardsmith add-ui` writes the UI later; the dependencies are the
+   * table's, so that needs no `npm install`. A world has no simulator, so it refuses `world`.
+   */
+  sim?: boolean;
 }
 
 /**
@@ -131,17 +139,9 @@ const TABLE_SCAFFOLD: ProjectScaffold = {
     tags: ['card-game'],
   }),
 
-  sources: (config) => {
-    const pascal = toPascalCase(config.name);
-    return [
-      { path: join('src', 'rules', 'game.ts'), content: generateGameTs(pascal) },
-      { path: join('src', 'rules', 'elements.ts'), content: generateElementsTs() },
-      { path: join('src', 'rules', 'actions.ts'), content: generateActionsTs(pascal) },
-      { path: join('src', 'rules', 'flow.ts'), content: generateFlowTs(pascal) },
-      { path: join('tests', 'game.test.ts'), content: generateTestTs(pascal) },
-      { path: SMOKE_SPEC_PATH, content: generateSmokeSpecTs(['draw', 'play']) },
-    ];
-  },
+  // The rules the scaffold writes register these two actions (generateActionsTs), which the smoke
+  // spec lists. `boardsmith add-ui` reads them from the rules instead, which may have grown by then.
+  sources: (config) => [...tableRulesFiles(config), ...tableUiFiles(config, ['draw', 'play'])],
 
   printNextSteps: (firstSteps) => {
     console.log(`
@@ -155,9 +155,49 @@ ${chalk.dim('This will start the development server and open player tabs in your
 ${chalk.cyan('Everything else runs through the same CLI:')}
 
   ${chalk.dim('boardsmith test')}      ${chalk.dim("- run your game's tests")}
+  ${chalk.dim('boardsmith simulate')}  ${chalk.dim('- play seeded games headlessly and report their balance')}
   ${chalk.dim('boardsmith lint')}      ${chalk.dim('- check for BoardSmith pitfalls')}
   ${chalk.dim('boardsmith build')}     ${chalk.dim('- build the publishable bundle')}
   ${chalk.dim('boardsmith validate')}  ${chalk.dim('- run pre-publish checks')}
+  ${chalk.dim('boardsmith --help')}    ${chalk.dim('- see every command')}
+`);
+  },
+};
+
+/** The table's rules, its tests and the simulator's sample files: everything but its UI. */
+function tableRulesFiles(config: ProjectConfig): GeneratedFile[] {
+  const pascal = toPascalCase(config.name);
+  return [
+    { path: join('src', 'rules', 'game.ts'), content: generateGameTs(pascal) },
+    { path: join('src', 'rules', 'elements.ts'), content: generateElementsTs() },
+    { path: join('src', 'rules', 'actions.ts'), content: generateActionsTs(pascal) },
+    { path: join('src', 'rules', 'flow.ts'), content: generateFlowTs(pascal) },
+    { path: join('src', 'rules', 'metrics.ts'), content: generateMetricsTs(pascal) },
+    { path: join('src', 'rules', 'data', 'cards.csv'), content: generateCardsCsv() },
+    { path: join('src', 'sim', 'index.ts'), content: generateSimTs(pascal) },
+    { path: join('tests', 'game.test.ts'), content: generateTestTs(pascal) },
+    { path: join('tests', 'sim.test.ts'), content: generateSimTestTs() },
+  ];
+}
+
+/** A table with no UI yet (`--sim`): balanced with `boardsmith simulate` until `boardsmith add-ui`. */
+const SIM_SCAFFOLD: ProjectScaffold = {
+  config: TABLE_SCAFFOLD.config,
+  sources: tableRulesFiles,
+  printNextSteps: (firstSteps) => {
+    console.log(`
+${chalk.cyan('Next steps:')}
+
+${firstSteps.map((step) => `  ${step}`).join('\n')}
+  boardsmith simulate --policy greedy
+
+${chalk.dim('This plays seeded games of your rules and reports their balance. The game has no UI yet.')}
+
+${chalk.cyan('Everything else runs through the same CLI:')}
+
+  ${chalk.dim('boardsmith test')}      ${chalk.dim("- run your game's tests")}
+  ${chalk.dim('boardsmith lint')}      ${chalk.dim('- check for BoardSmith pitfalls')}
+  ${chalk.dim('boardsmith add-ui')}    ${chalk.dim('- add the UI, to play the game in a browser')}
   ${chalk.dim('boardsmith --help')}    ${chalk.dim('- see every command')}
 `);
   },
@@ -303,6 +343,18 @@ function refuseConflicts(projectPath: string, name: string, paths: string[]): vo
   );
 }
 
+/** The kind of project `--world` and `--sim` ask for, refusing the two together. */
+function chooseScaffold(options: InitOptions): ProjectScaffold {
+  if (options.sim && options.world) {
+    throw new Error(
+      '--sim cannot be combined with --world: --sim starts a table game as a simulator, and a ' +
+        'persistent world has no simulator. Pass one of them.',
+    );
+  }
+  if (options.world) return WORLD_SCAFFOLD;
+  return options.sim ? SIM_SCAFFOLD : TABLE_SCAFFOLD;
+}
+
 export async function initCommand(name: string, options: InitOptions = {}): Promise<void> {
   // BEFORE ANYTHING IS CREATED, and before `name` is interpolated into the
   // messages below. `<name>` is this project's directory AND its package name
@@ -345,7 +397,7 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
     );
   }
 
-  const scaffold: ProjectScaffold = options.world ? WORLD_SCAFFOLD : TABLE_SCAFFOLD;
+  const scaffold = chooseScaffold(options);
   const projectPath = options.intoExisting ? process.cwd() : join(process.cwd(), name);
 
   if (options.intoExisting) {
@@ -468,10 +520,20 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
 }
 
 export function generateGameTs(pascal: string): string {
-  return `import { Game, Player, type GameOptions } from 'boardsmith';
+  return `import { Game, Player, parseCsv, type GameOptions } from 'boardsmith';
 import { Card, Hand, Deck } from './elements.js';
 import { createGameFlow } from './flow.js';
 import { createDrawAction, createPlayAction } from './actions.js';
+import cardsCsv from './data/cards.csv?raw';
+
+// Each rank and the points it scores, from the card data. Edit the CSV to
+// rebalance the game, or play another file in its place with
+// \`boardsmith simulate --compare src/rules/data/cards.csv=<file>,<file>\`.
+const ranks = parseCsv(
+  cardsCsv,
+  { rank: 'string', points: 'number' },
+  { source: 'src/rules/data/cards.csv' },
+);
 
 export interface ${pascal}Options extends GameOptions {
   seed?: string;
@@ -516,12 +578,11 @@ export class ${pascal}Game extends Game<${pascal}Game, ${pascal}Player> {
     this.deck = this.create(Deck, 'deck');
     this.deck.setOrder('stacking');
 
-    // Create standard 52-card deck
+    // Create a 52-card deck: every rank in the card data, in each suit
     const suits = ['H', 'D', 'C', 'S'] as const;
-    const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'] as const;
     for (const suit of suits) {
-      for (const rank of ranks) {
-        this.deck.create(Card, \`\${rank}\${suit}\`, { suit, rank });
+      for (const { rank, points } of ranks) {
+        this.deck.create(Card, \`\${rank}\${suit}\`, { suit, rank, points });
       }
     }
 
@@ -573,11 +634,12 @@ export function generateElementsTs(): string {
   return `import { Card as BaseCard, Hand as BaseHand, Deck as BaseDeck, Space } from 'boardsmith';
 
 export type Suit = 'H' | 'D' | 'C' | 'S';
-export type Rank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K';
 
 export class Card extends BaseCard {
   suit!: Suit;
-  rank!: Rank;
+  /** A rank from src/rules/data/cards.csv, and the points playing it scores. */
+  rank!: string;
+  points!: number;
 }
 
 export class Hand extends BaseHand {
@@ -595,6 +657,7 @@ export function generateActionsTs(pascal: string): string {
   return `import { Action, type ActionDefinition } from 'boardsmith';
 import type { ${pascal}Game } from './game.js';
 import { Card } from './elements.js';
+import { metrics } from './metrics.js';
 
 // Action.create<${pascal}Game> types every callback by this game: ctx.game is a
 // ${pascal}Game, ctx.player a ${pascal}Player, and each choice arrives as what
@@ -606,6 +669,7 @@ export function createDrawAction(): ActionDefinition {
       const card = ctx.game.deck.first(Card);
       if (card) {
         card.putInto(ctx.player.hand);
+        metrics.drawn.add(ctx.game);
         return { success: true, message: 'Drew a card' };
       }
       return { success: false, message: 'No cards left in deck' };
@@ -620,8 +684,9 @@ export function createPlayAction(): ActionDefinition {
       choices: (ctx) => [...ctx.player.hand.all(Card)],
     })
     .execute(({ card }, ctx) => {
+      ctx.player.score += card.points;
+      metrics.played.add(ctx.game, card.rank);
       card.remove();
-      ctx.player.score += 1;
       return { success: true, message: 'Played a card' };
     });
 }
@@ -694,6 +759,68 @@ describe('${pascal}Game', () => {
     }
     expect(game.deck.all(Card).length).toBe(52 - game.players.length * 5);
   });
+});
+`;
+}
+
+/** The card data: each rank and the points it scores, read by game.ts with parseCsv. */
+export function generateCardsCsv(): string {
+  return ['rank,points', 'A,1', ...['2', '3', '4', '5', '6', '7', '8', '9', '10'].map((n) => `${n},${n}`), 'J,10', 'Q,10', 'K,10', ''].join('\n');
+}
+
+export function generateMetricsTs(pascal: string): string {
+  return `import { defineMetrics } from 'boardsmith';
+import { Card } from './elements.js';
+import type { ${pascal}Game } from './game.js';
+
+// What \`boardsmith simulate\` measures and reports. The actions record \`played\`
+// and \`drawn\` as they happen; the simulator reads \`cardsLeft\` and \`score\` once
+// per player when a game ends. Recording does nothing in real play.
+export const metrics = defineMetrics(({ count, sample, finalScore }) => ({
+  /** Cards played, by rank. */
+  played: count({ by: 'category' }),
+  drawn: count(),
+  cardsLeft: sample({ atEnd: (game: ${pascal}Game, player) => player.hand.count(Card) }),
+  score: finalScore((game: ${pascal}Game, player) => player.score),
+}));
+`;
+}
+
+function generateSimTs(pascal: string): string {
+  return `import { greedy } from 'boardsmith/sim';
+import { Card } from '../rules/elements.js';
+import type { ${pascal}Game } from '../rules/game.js';
+
+// The policies \`boardsmith simulate --policy <name>\` can play a seat with, beside
+// the built-in \`random\` and \`mcts:<level>\`. Greedy plays the card worth the
+// most points; a draw scores 0, so it draws only when that is all it can do.
+export const policies = {
+  greedy: greedy<${pascal}Game>((_game, move) => (move.args.card instanceof Card ? move.args.card.points : 0)),
+};
+`;
+}
+
+function generateSimTestTs(): string {
+  return `import { describe, it, expect } from 'vitest';
+import { playGame } from 'boardsmith/sim';
+import { gameDefinition } from '../src/rules/index.js';
+import { policies } from '../src/sim/index.js';
+
+// Plays seeded games with the greedy policy in every seat, as
+// \`boardsmith simulate --policy greedy\` does, and checks each one finishes.
+describe('greedy simulation', () => {
+  for (const seed of ['one', 'two', 'three']) {
+    it(\`finishes the game seeded "\${seed}"\`, async () => {
+      const result = await playGame(gameDefinition, {
+        playerCount: 2,
+        seed,
+        policies: [policies.greedy, policies.greedy],
+        maxActions: 1000,
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.completed).toBe(true);
+    });
+  }
 });
 `;
 }

@@ -21,8 +21,8 @@ vi.setConfig({ testTimeout: 180_000, hookTimeout: 60_000 });
  * a whole game every one of the six real checks can run, the smoke check against `boardsmith dev`
  * in Chromium included.
  */
-async function scaffoldedTableOnBranch(): Promise<string> {
-  const dir = await smokeProject(false);
+async function scaffoldedTableOnBranch(init: { sim?: boolean } = {}): Promise<string> {
+  const dir = await smokeProject(false, {}, init);
   git(dir, 'checkout', '-q', '-b', 'fee');
   await write(dir, {
     'src/rules/fee.ts': 'export function fee(price: number): number {\n  return price * 2;\n}\n',
@@ -102,9 +102,51 @@ describe('boardsmith verify on a whole game, as a user runs it', () => {
       ['smoke', true, expect.stringMatching(/^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "draw", "play"/)],
       ['mutation', true, expect.stringMatching(/^Every one of 3 mutants of the lines changed since (main|master)/)],
     ]);
+    expect(result.checks.filter((c) => c.skipped)).toEqual([]);
+    expect(run.stdout).toMatch(/Every check passed for /);
     expect(run.code).toBe(0);
     expect(git(dir, 'status', '--porcelain')).toBe('');
     expect((await spawnCli(['verify', '--check', '--project', dir])).code).toBe(0);
+  });
+
+  it('runs test, typecheck, validate and mutation on a game with no UI yet, skipping build and smoke and saying so (#556)', async () => {
+    const dir = await scaffoldedTableOnBranch({ sim: true });
+    const { run, result } = await verifyAsAUser(dir);
+    const skip = 'Skipped: this project has no UI yet (no index.html); run `boardsmith add-ui`.';
+    expect(result.checks.map((c) => [c.name, c.passed, c.skipped, c.summary])).toEqual([
+      ['test', true, undefined, expect.stringMatching(/^\d+ tests passed in \d+ files\.$/)],
+      ['typecheck', true, undefined, 'No type errors.'],
+      ['build', true, true, skip],
+      ['validate', true, undefined, '`boardsmith validate` passed.'],
+      ['smoke', true, true, skip],
+      ['mutation', true, undefined, expect.stringMatching(/^Every one of 3 mutants of the lines changed since (main|master)/)],
+    ]);
+    expect(result.passed).toBe(true);
+    expect(run.stdout).not.toMatch(/Every check passed/);
+    expect(run.stdout).toMatch(/Passed for \w+, except build and smoke, skipped because this project has no UI yet\./);
+    expect(run.code).toBe(0);
+    const checked = await spawnCli(['verify', '--check', '--project', dir]);
+    expect(checked.stdout).toMatch(/except build and smoke, skipped because this project has no UI yet/);
+    expect(checked.code).toBe(0);
+  });
+
+  it('fails build and smoke, never skipping them, on a table that lost index.html but kept its other UI files (#556)', async () => {
+    const dir = await scaffoldedTableOnBranch();
+    git(dir, 'rm', '-q', 'index.html');
+    commitAll(dir, 'lose the page');
+    const { run, result } = await verifyAsAUser(dir);
+    // smokeProject leaves out the a11y example, which needs axe-core.
+    const broken =
+      'index.html is missing, but this project has UI files (src/main.ts, src/ui/index.ts, src/ui/uis.ts, ' +
+      'src/ui/App.vue, src/ui/components/GameTable.vue, tests/browser/smoke.spec.ts); ' +
+      'restore index.html, or remove them and run `boardsmith add-ui`.';
+    for (const name of ['build', 'smoke']) {
+      expect(check(result, name)).toMatchObject({ passed: false, summary: broken });
+      expect(check(result, name).skipped).toBeUndefined();
+    }
+    expect(result.passed).toBe(false);
+    expect(run.stdout).not.toMatch(/skipped because this project has no UI yet/);
+    expect(run.code).toBe(1);
   });
 
   it('fails a world whose board reads a table-only context key, though its unit test with a hand-built stub passes (#453)', async () => {

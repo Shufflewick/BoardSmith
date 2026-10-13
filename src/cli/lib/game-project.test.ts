@@ -6,6 +6,8 @@ import {
   requireGameProjectManifests,
   resolveRulesDir,
   requireRulesIndex,
+  requireTableUi,
+  tableUiState,
 } from './game-project.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
@@ -80,6 +82,40 @@ describe('game-project guards', () => {
       const rulesDir = join(projectDir, 'custom', 'rules');
       expect(() => requireRulesIndex(rulesDir)).toThrow(join(rulesDir, 'index.ts'));
       expect(() => requireRulesIndex(rulesDir)).toThrow(/gameDefinition[\s\S]*"paths\.rules"/);
+    });
+  });
+
+  describe('tableUiState and requireTableUi (#556)', () => {
+    const touch = (path: string) => {
+      mkdirSync(join(projectDir, path, '..'), { recursive: true });
+      writeFileSync(join(projectDir, path), '');
+    };
+
+    it('a table with none of the UI files has no UI yet, and is told to run add-ui', () => {
+      expect(tableUiState(projectDir)).toEqual({ state: 'none' });
+      expect(() => requireTableUi(projectDir, {})).toThrow('This project has no UI yet. Run `boardsmith add-ui`.');
+    });
+
+    it('a table with index.html has a UI', () => {
+      touch('index.html');
+      touch('src/ui/App.vue');
+      expect(tableUiState(projectDir)).toEqual({ state: 'present', files: ['index.html', 'src/ui/App.vue'] });
+      expect(() => requireTableUi(projectDir, {})).not.toThrow();
+    });
+
+    it('a table missing index.html but keeping other UI files is broken, and is told to restore it', () => {
+      touch('src/ui/App.vue');
+      touch('tests/browser/smoke.spec.ts');
+      expect(tableUiState(projectDir)).toEqual({ state: 'broken', files: ['src/ui/App.vue', 'tests/browser/smoke.spec.ts'] });
+      expect(() => requireTableUi(projectDir, {})).toThrow(
+        'index.html is missing, but this project has UI files (src/ui/App.vue, tests/browser/smoke.spec.ts); ' +
+          'restore index.html, or remove them and run `boardsmith add-ui`.',
+      );
+    });
+
+    it('a world always has its UI, whatever table files it holds', () => {
+      touch('src/ui/uis.ts');
+      expect(() => requireTableUi(projectDir, { backend: 'world' })).not.toThrow();
     });
   });
 });

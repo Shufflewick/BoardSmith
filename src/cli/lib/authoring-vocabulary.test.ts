@@ -57,7 +57,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
-import { generateScaffoldFiles } from './project-scaffold.js';
+import { generateScaffoldFiles, tableUiFiles } from './project-scaffold.js';
 import {
   generateWorldA11yTestTs,
   generateWorldBoardVue,
@@ -89,16 +89,14 @@ interface Surface {
  *  a new project receives it -- comments included, because a scaffold's
  *  comments are the scaffold's teaching. */
 function scaffoldSurfaces(): Surface[] {
-  const table = generateScaffoldFiles(
-    {
-      backend: 'table',
-      name: 'gate-table',
-      displayName: 'Gate Table',
-      description: 'A table project rendered by the vocabulary gate.',
-      playerCount: { min: 2, max: 4 },
-    },
-    '/tmp/gate-table',
-  );
+  const tableConfig = {
+    backend: 'table' as const,
+    name: 'gate-table',
+    displayName: 'Gate Table',
+    description: 'A table project rendered by the vocabulary gate.',
+    playerCount: { min: 2, max: 4 },
+  };
+  const table = [...generateScaffoldFiles(tableConfig, '/tmp/gate-table'), ...tableUiFiles(tableConfig, ['draw', 'play'])];
   const worldConfig = {
     backend: 'world' as const,
     name: 'gate-world',

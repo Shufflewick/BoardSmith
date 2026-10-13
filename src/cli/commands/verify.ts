@@ -41,18 +41,20 @@
  * which mutates nothing, cannot stand in for it. `chunk-signoff <slug>` asks that question, and
  * `chunk-gate-transition`, which builds no chunk, the plain one (`verifiedProblem`).
  */
-import { existsSync, promises as fs } from 'node:fs';
+import { existsSync, promises as fs, readFileSync } from 'node:fs';
 import { join, relative, resolve as pathResolve } from 'node:path';
 import chalk from 'chalk';
 import { chunkVerifyBase } from '../lib/chunk-commits.js';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { type MutantCache, openMutantCache } from '../lib/mutant-cache.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
+import { projectUiProblem } from '../lib/game-project.js';
 import { testRunScopeProblem } from '../lib/test-run-scope.js';
 import { discardRecord, runVitestRecorded, testRunVerdict } from '../lib/vitest-run.js';
 import {
   VERIFY_CHECK_NAMES,
   type VerifyCheckName,
+  type VerifyCheckOutcome,
   type VerifyCheckResult,
   type VerifyResult,
   buildVerifyResult,
@@ -203,8 +205,7 @@ interface VerifyContext {
   typeCheck: () => Promise<TypeCheckRun>;
 }
 
-type CheckOutcome = Omit<VerifyCheckResult, 'name'>;
-type CheckRunner = (ctx: VerifyContext) => Promise<CheckOutcome>;
+type CheckRunner = (ctx: VerifyContext) => Promise<VerifyCheckOutcome>;
 
 const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
 
@@ -228,7 +229,7 @@ function whereTestsFailed(failing: string[], changed: ReadonlySet<string>): stri
 }
 
 /** Why the suite cannot run at all, as a failed check, or undefined when it can. */
-async function suiteCannotRun(dir: string): Promise<CheckOutcome | undefined> {
+async function suiteCannotRun(dir: string): Promise<VerifyCheckOutcome | undefined> {
   if (!existsSync(join(dir, 'tests'))) {
     return {
       passed: false,
@@ -259,7 +260,7 @@ function suiteCounts(report: VitestJsonReport): Record<string, number> {
 }
 
 /** A failed suite whose report names the failing files, said relative to what the change touched. */
-function failedSuite(report: VitestJsonReport, failing: string[], changed: ReadonlySet<string>): CheckOutcome {
+function failedSuite(report: VitestJsonReport, failing: string[], changed: ReadonlySet<string>): VerifyCheckOutcome {
   const tests = report.numFailedTests;
   const what = tests > 0 ? `${plural(tests, 'test')} failed` : `${plural(failing.length, 'test file')} could not run`;
   const one = failing.length === 1 && tests <= 1;
@@ -287,7 +288,7 @@ async function unpassedSuite(
   verdict: string | undefined,
   report: VitestJsonReport | undefined,
   changed: ReadonlySet<string>,
-): Promise<CheckOutcome> {
+): Promise<VerifyCheckOutcome> {
   const root = await fs.realpath(dir);
   const failing = (report?.testResults ?? []).filter((f) => f.status === 'failed').map((f) => relative(root, f.name));
   if (report && failing.length > 0) return failedSuite(report, failing, changed);
@@ -300,7 +301,7 @@ async function unpassedSuite(
 }
 
 /** 1. The full suite, run the way `boardsmith test` runs it. */
-async function testCheck(ctx: VerifyContext): Promise<CheckOutcome> {
+async function testCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   const cannot = await suiteCannotRun(ctx.projectDir);
   if (cannot) return cannot;
   const { run, verdict, report } = await runSuite(ctx.projectDir);
@@ -311,7 +312,7 @@ async function testCheck(ctx: VerifyContext): Promise<CheckOutcome> {
 }
 
 /** 2. vue-tsc over the project's tsconfig.json, the run `validate` reports too. */
-async function typecheckCheck(ctx: VerifyContext): Promise<CheckOutcome> {
+async function typecheckCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   const { result, compilerReport } = await ctx.typeCheck();
   if (result.passed) return { passed: true, summary: 'No type errors.' };
   for (const line of compilerReport) console.log(line);
@@ -319,7 +320,9 @@ async function typecheckCheck(ctx: VerifyContext): Promise<CheckOutcome> {
 }
 
 /** 3. `boardsmith build`, run in this process. */
-async function buildCheck(ctx: VerifyContext): Promise<CheckOutcome> {
+async function buildCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
+  const noUi = noUiOutcome(ctx.projectDir);
+  if (noUi) return noUi;
   try {
     await buildProject(ctx.projectDir, {});
     return { passed: true, summary: '`boardsmith build` passed.' };
@@ -330,7 +333,7 @@ async function buildCheck(ctx: VerifyContext): Promise<CheckOutcome> {
 }
 
 /** 4. `boardsmith validate`, run in this process on the type check the run already has. */
-async function validateCheck(ctx: VerifyContext): Promise<CheckOutcome> {
+async function validateCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   try {
     await validateProject(ctx.projectDir, { typeCheck: await ctx.typeCheck() });
     return { passed: true, summary: '`boardsmith validate` passed.' };
@@ -343,7 +346,7 @@ async function validateCheck(ctx: VerifyContext): Promise<CheckOutcome> {
 const NO_MUTANTS = Object.freeze({ files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, reused: 0 });
 
 /** Why no mutant is tried at all (nothing measured, nothing changed, a red suite), or undefined. */
-function mutationNotTried(ctx: VerifyContext, since: string): CheckOutcome | undefined {
+function mutationNotTried(ctx: VerifyContext, since: string): VerifyCheckOutcome | undefined {
   if (!ctx.base.given && ctx.base.commit === ctx.head) {
     // On the main branch itself (a chunk built in the main checkout) the merge base is HEAD, so the
     // default base measures no change at all, and a pass would cover nothing.
@@ -371,7 +374,7 @@ function mutationNotTried(ctx: VerifyContext, since: string): CheckOutcome | und
 }
 
 /** What a finished mutation run says: a red suite under the runner, survivors, or every mutant caught. */
-function mutationVerdict(since: string, run: Awaited<ReturnType<typeof runDiffMutationCheck>>): CheckOutcome {
+function mutationVerdict(since: string, run: Awaited<ReturnType<typeof runDiffMutationCheck>>): VerifyCheckOutcome {
   const { summary, reused, survivors, notGreen } = run;
   const counts = { ...summary, reused };
   const reuse = reused > 0 ? ` ${reused} reused from an earlier run of this same code and these same tests.` : '';
@@ -407,7 +410,7 @@ function mutationVerdict(since: string, run: Awaited<ReturnType<typeof runDiffMu
 }
 
 /** 6. Every mutant of a changed code line must make the whole suite fail. */
-async function mutationCheck(ctx: VerifyContext): Promise<CheckOutcome> {
+async function mutationCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   const since = `${ctx.base.ref} (${short(ctx.base.commit)})`;
   const notTried = mutationNotTried(ctx, since);
   if (notTried) return notTried;
@@ -421,8 +424,31 @@ async function mutationCheck(ctx: VerifyContext): Promise<CheckOutcome> {
 }
 
 /** 5. The game in Chromium, served by `boardsmith dev` from a fresh copy (`smoke.ts`). */
-async function smokeCheck(ctx: VerifyContext): Promise<CheckOutcome> {
-  return (await runSmoke({ projectDir: ctx.projectDir, log: ctx.log })).outcome;
+async function smokeCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
+  return noUiOutcome(ctx.projectDir) ?? (await runSmoke({ projectDir: ctx.projectDir, log: ctx.log })).outcome;
+}
+
+/**
+ * `build` and `smoke` need a UI, so in a project with none yet (`boardsmith init --sim`) they are
+ * skipped rather than failed, and the result says so. A table that lost `index.html` but kept its
+ * other UI files fails them. Undefined when the project has a UI.
+ */
+function noUiOutcome(projectDir: string): VerifyCheckOutcome | undefined {
+  const config = JSON.parse(readFileSync(join(projectDir, 'boardsmith.json'), 'utf-8')) as { backend?: unknown };
+  const ui = projectUiProblem(projectDir, config);
+  if (ui === undefined) return undefined;
+  if (ui.state === 'broken') return { passed: false, summary: ui.problem };
+  return {
+    passed: true,
+    skipped: true,
+    summary: 'Skipped: this project has no UI yet (no index.html); run `boardsmith add-ui`.',
+  };
+}
+
+/** The checks a result skipped, as a clause for a closing line, or '' when none was. */
+function skippedClause(result: VerifyResult): string {
+  const skipped = result.checks.filter((c) => c.skipped).map((c) => c.name);
+  return skipped.length === 0 ? '' : `, except ${skipped.join(' and ')}, skipped because this project has no UI yet`;
 }
 
 /** Every check, by name. Adding a name to `VERIFY_CHECK_NAMES` requires its runner here. */
@@ -502,7 +528,7 @@ async function runChecks(
   const earlier = new Map<VerifyCheckName, VerifyCheckResult>();
   for (const name of VERIFY_CHECK_NAMES) {
     console.log(chalk.cyan(`\nboardsmith verify: ${name}\n`));
-    let outcome: CheckOutcome;
+    let outcome: VerifyCheckOutcome;
     try {
       outcome = await checks[name]({ ...ctx, earlier });
     } catch (error) {
@@ -571,6 +597,8 @@ function printVerdict(result: VerifyResult): void {
           'Commit or remove the changes (`git status` lists them), then run `boardsmith verify` again.',
       ),
     );
+  } else if (result.passed && skippedClause(result) !== '') {
+    console.log(chalk.yellow(`\nPassed for ${short(result.commit)}${skippedClause(result)}.`));
   } else if (result.passed) {
     console.log(chalk.green(`\nEvery check passed for ${short(result.commit)}.`));
   } else {
@@ -582,7 +610,7 @@ function printVerdict(result: VerifyResult): void {
 function printResult(result: VerifyResult, path: string | undefined, projectDir: string): void {
   console.log(`\nboardsmith verify for ${short(result.commit)} (changes since ${result.base.ref} at ${short(result.base.commit)})`);
   for (const check of result.checks) {
-    const mark = check.passed ? chalk.green('pass') : chalk.red('FAIL');
+    const mark = check.skipped ? chalk.yellow('skip') : check.passed ? chalk.green('pass') : chalk.red('FAIL');
     console.log(`  ${mark}  ${check.name.padEnd(10)} ${check.summary}`);
     for (const f of check.findings ?? []) console.log(`          ${f.file}:${f.line}  ${f.detail}`);
     if (!check.passed && check.next) console.log(`          ${check.next}`);
@@ -593,6 +621,22 @@ function printResult(result: VerifyResult, path: string | undefined, projectDir:
       : `Result: ${relative(projectDir, path)}`,
   );
   printVerdict(result);
+}
+
+/** `--check`: says whether HEAD has a passing result, naming any check it skipped. */
+async function checkVerified(projectDir: string, chunk: string | undefined): Promise<void> {
+  const problem = await verifiedProblem(projectDir, chunk);
+  if (problem !== undefined) {
+    console.error(chalk.red(problem));
+    process.exitCode = 1;
+    return;
+  }
+  const state = await checkoutState(projectDir);
+  const head = 'commit' in state ? short(state.commit) : 'HEAD';
+  const covering = chunk === undefined ? '' : `, covering chunk "${chunk}"'s change`;
+  const onFile = 'commit' in state ? await readVerifyResult(projectDir, state.commit) : undefined;
+  const skipped = onFile === undefined || onFile === 'unreadable' ? '' : skippedClause(onFile);
+  console.log(chalk.green(`${head} passed \`boardsmith verify\` on a clean tree${covering}${skipped}.`));
 }
 
 /**
@@ -612,16 +656,7 @@ export async function verifyCommand(
           'Run `boardsmith verify --check`, with `--chunk <slug>` for a chunk.',
       );
     }
-    const problem = await verifiedProblem(projectDir, options.chunk);
-    if (problem !== undefined) {
-      console.error(chalk.red(problem));
-      process.exitCode = 1;
-      return;
-    }
-    const state = await checkoutState(projectDir);
-    const head = 'commit' in state ? short(state.commit) : 'HEAD';
-    const covering = options.chunk === undefined ? '' : `, covering chunk "${options.chunk}"'s change`;
-    console.log(chalk.green(`${head} passed \`boardsmith verify\` on a clean tree${covering}.`));
+    await checkVerified(projectDir, options.chunk);
     return;
   }
 

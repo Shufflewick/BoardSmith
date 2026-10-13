@@ -2,11 +2,13 @@
  * Project Scaffold
  *
  * Shared library for generating BoardSmith project structure.
- * Used by both `init` and `design` commands.
+ * Used by `init` and `add-ui`.
  */
 
 import { DESIGN_DIR, SCRATCH_DIR } from './project-paths.js';
 import { GAME_VITE_CONFIG, GAME_VITE_CONFIG_FILE } from './test-run-scope.js';
+import { TABLE_UI_ENTRY, TABLE_UI_PATHS } from './game-project.js';
+import { SMOKE_SPEC_PATH } from '../../testing/browser-smoke-verdict.js';
 import { existsSync } from 'node:fs';
 import { join, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -311,7 +313,7 @@ export function generateTsConfig(): string {
 /**
  * Generate index.html
  */
-export function generateIndexHtml(config: ProjectConfig): string {
+export function generateIndexHtml(config: TableUiConfig): string {
   return `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -354,6 +356,7 @@ export * from './actions.js';
 export { createGameFlow } from './flow.js';
 
 import { ${pascal}Game } from './game.js';
+import { metrics } from './metrics.js';
 
 export const gameDefinition = {
   gameClass: ${pascal}Game,
@@ -361,6 +364,8 @@ export const gameDefinition = {
   displayName: '${config.displayName}',
   minPlayers: ${config.playerCount.min},
   maxPlayers: ${config.playerCount.max},
+  // What \`boardsmith simulate\` measures and reports (src/rules/metrics.ts).
+  metrics,
 } as const;
 `;
 }
@@ -384,7 +389,7 @@ export { App };
  * stub kept dev-only; when the author is ready they swap which one is wrapped
  * in `defaultUI()`. That swap is the whole migration.
  */
-export function generateUisTs(config: ProjectConfig): string {
+export function generateUisTs(config: TableUiConfig): string {
   const custom = config.ui && config.ui !== 'auto' ? config.ui : undefined;
   if (!custom) {
     return `import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui';
@@ -426,13 +431,9 @@ export default defineGameUIs({
 }
 
 /**
- * Generate src/ui/App.vue
- *
- * Branches on config.ui:
- *   "auto" (default) → single AutoUI import
- *   relative path    → single custom component import (no AutoUI)
+ * Generate src/ui/App.vue, which mounts GameShell over the UI registry (src/ui/uis.ts).
  */
-export function generateAppVue(config: TableProjectConfig): string {
+export function generateAppVue(): string {
   return `<script setup lang="ts">
 import { GameShell } from 'boardsmith/ui';
 import uis from './uis.js';
@@ -697,7 +698,9 @@ defineSmokeTest({
 }
 
 /**
- * Generate all scaffold files for a project
+ * The files every project gets: the manifests and configs, and a table's rules entry point. A
+ * table's UI is {@link tableUiFiles}, which `boardsmith init --sim` leaves out and
+ * `boardsmith add-ui` writes later.
  */
 export function generateScaffoldFiles(config: ProjectConfig, projectPath: string): GeneratedFile[] {
   const shared: GeneratedFile[] = [
@@ -708,25 +711,36 @@ export function generateScaffoldFiles(config: ProjectConfig, projectPath: string
     { path: '.gitignore', content: generateGitignore() },
   ];
 
-  // A WORLD PROJECT GETS NO TABLE HALF. Everything below this line -- the
-  // table entry point, the game shell, the auto-UI registry -- describes a game
-  // with a turn order, a flow position and an action table, and a world has
-  // none of the three. Scaffolding them anyway would hand every new world the
+  // A WORLD PROJECT GETS NO TABLE HALF. The table's rules entry point describes
+  // a game with a turn order, a flow position and an action table, and a world
+  // has none of the three. Scaffolding it anyway would hand every new world the
   // vestigial table half the existing world games are being stripped of
   // (BoardSmith #174), and would teach the wrong model on the first day.
   if (config.backend === 'world') return shared;
 
-  return [
-    ...shared,
-    { path: 'index.html', content: generateIndexHtml(config) },
-    { path: 'src/main.ts', content: generateMainTs() },
-    { path: 'src/rules/index.ts', content: generateRulesIndexTs(config) },
-    { path: 'src/ui/index.ts', content: generateUiIndexTs() },
-    { path: 'src/ui/uis.ts', content: generateUisTs(config) },
-    { path: 'src/ui/App.vue', content: generateAppVue(config) },
-    { path: 'src/ui/components/GameTable.vue', content: generateGameTableVue() },
-    { path: 'tests/a11y.example.test.ts', content: generateA11yExampleTestTs() },
-  ];
+  return [...shared, { path: 'src/rules/index.ts', content: generateRulesIndexTs(config) }];
+}
+
+/** What a table's UI files read from the project: its display name and, optionally, its custom board. */
+type TableUiConfig = Pick<ProjectConfigBase, 'displayName' | 'ui'>;
+
+/**
+ * A table's UI, one file for each of {@link TABLE_UI_PATHS}: the page and its entry point, the game
+ * shell and the board registry, the a11y example and the in-browser smoke test, which lists
+ * `actions`, every action the game's rules register.
+ */
+export function tableUiFiles(config: TableUiConfig, actions: readonly string[]): GeneratedFile[] {
+  const content: Record<(typeof TABLE_UI_PATHS)[number], string> = {
+    [TABLE_UI_ENTRY]: generateIndexHtml(config),
+    'src/main.ts': generateMainTs(),
+    'src/ui/index.ts': generateUiIndexTs(),
+    'src/ui/uis.ts': generateUisTs(config),
+    'src/ui/App.vue': generateAppVue(),
+    'src/ui/components/GameTable.vue': generateGameTableVue(),
+    'tests/a11y.example.test.ts': generateA11yExampleTestTs(),
+    [SMOKE_SPEC_PATH]: generateSmokeSpecTs(actions),
+  };
+  return TABLE_UI_PATHS.map((path) => ({ path, content: content[path] }));
 }
 
 /**
@@ -736,9 +750,6 @@ export function getRequiredDirectories(): string[] {
   return [
     'src',
     'src/rules',
-    'src/ui',
-    'src/ui/components',
-    'src/ui/assets',
     'tests',
     'public',
     // The bs- skills' design artifacts (SKETCH.md, chunks/, rulebook/, …) all live here.

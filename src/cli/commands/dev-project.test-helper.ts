@@ -13,7 +13,7 @@ import { join } from 'node:path';
 
 import { vi } from 'vitest';
 
-import { initCommand } from './init.js';
+import { initCommand, type InitOptions } from './init.js';
 import { collectOutput } from '../lib/child-output.js';
 import { REPO_ROOT } from '../spawn-cli.test-helper.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
@@ -21,17 +21,17 @@ import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.j
 
 /**
  * Scaffold a table project, or a world project when `world` is true, in a temp
- * tree the test file removes when it ends.
+ * tree the test file removes when it ends. `init` adds init's other flags, such as `sim`.
  *
  * @returns the project directory
  */
-export async function devProject(world: boolean): Promise<string> {
+export async function devProject(world: boolean, init: Pick<InitOptions, 'sim'> = {}): Promise<string> {
   const parent = tempTree('bs-dev-project-');
   const cwd = process.cwd();
   const log = vi.spyOn(console, 'log').mockImplementation(() => {});
   process.chdir(parent);
   try {
-    await initCommand('dev-game', { withoutRulebook: true, world });
+    await initCommand('dev-game', { withoutRulebook: true, world, ...init });
   } finally {
     process.chdir(cwd);
     log.mockRestore();

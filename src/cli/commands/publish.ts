@@ -19,7 +19,7 @@ import {
 import { buildCommand } from './build.js';
 import { validateCommand, validateBundleSize } from './validate.js';
 import { resolveWorldMode } from '../lib/world-project.js';
-import { requireGameProjectManifests } from '../lib/game-project.js';
+import { requireGameProjectManifests, requireTableUi } from '../lib/game-project.js';
 
 /**
  * END A FAILED PUBLISH.
@@ -99,6 +99,10 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     process.exit(1);
   }
 
+  // -- Validate project, before any key or network: a project with no UI has nothing to publish --
+  const { configPath, config, pkg } = requireGameProjectManifests(cwd);
+  requireTableUi(cwd, config);
+
   // -- Resolve API key (per target: dev and prod are separate deployments
   // with separate key stores) --
   let apiKey = options.apiKey;
@@ -125,8 +129,6 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     }
   }
 
-  // -- Validate project --
-  const { configPath, config, pkg } = requireGameProjectManifests(cwd);
   const version = pkg.version;
   if (!version) {
     console.error(chalk.red('No version field in package.json.'));

@@ -20,7 +20,7 @@ import { getProjectContext, toPosix } from './game-runtime.js';
 import { loadTableRuntime, tableRulesReloadQueue } from './dev-table-runtime.js';
 import { gateOf } from '../dev-host/rules-reload-queue.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
-import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
+import { requireGameProject, resolveRulesDir, requireRulesIndex, requireTableUi } from '../lib/game-project.js';
 import { resolveWorldMode } from '../lib/world-project.js';
 import { resolveUserPath } from '../lib/user-path.js';
 import { makeCommandBuildDir } from '../lib/command-build-dir.js';
@@ -688,6 +688,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
 
   const configPath = requireGameProject(cwd);
   const config: BoardSmithConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
+  requireTableUi(cwd, config);
   console.log(chalk.cyan(`\nStarting development server for ${config.displayName || config.name}...`));
 
   // CLIX-02: loud (non-exiting) warning on unknown top-level boardsmith.json

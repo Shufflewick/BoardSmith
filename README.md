@@ -31,6 +31,10 @@ npm install
 npx boardsmith dev
 ```
 
+`boardsmith init my-game --sim` starts the game as a simulator with no UI, to
+balance the rules with `boardsmith simulate` first; `boardsmith add-ui` adds the
+UI later.
+
 `boardsmith dev` serves the game on http://localhost:5173 and hosts its
 multiplayer on the same port. Every browser tab is a real player, so open a
 second tab to take the second seat.

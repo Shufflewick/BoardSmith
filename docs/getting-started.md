@@ -49,15 +49,56 @@ my-game/
 │   │   ├── elements.ts      # Custom element classes
 │   │   ├── actions.ts       # Player action definitions
 │   │   ├── flow.ts          # Game flow definition
-│   │   └── index.ts         # Exports
+│   │   ├── metrics.ts       # What `boardsmith simulate` measures (defineMetrics)
+│   │   ├── data/cards.csv   # Card data, read with parseCsv
+│   │   └── index.ts         # Exports gameDefinition
+│   ├── sim/
+│   │   └── index.ts         # Policies for `boardsmith simulate --policy` (a greedy one)
 │   └── ui/                  # Vue UI components
 │       ├── App.vue          # Main app component
+│       ├── uis.ts           # The game's UIs, and which one ships
 │       ├── components/      # Custom components
 │       │   └── GameTable.vue
 │       └── index.ts         # UI exports
 └── tests/
-    └── game.test.ts         # Game tests
+    ├── game.test.ts         # Game tests
+    ├── sim.test.ts          # Plays seeded games with the greedy policy
+    ├── a11y.example.test.ts # An axe-core scan of GameTable.vue
+    └── browser/smoke.spec.ts # The in-browser smoke test `boardsmith verify` runs
 ```
+
+Every game starts as a simulator: `boardsmith simulate --policy greedy` plays
+seeded games of the scaffold's rules and reports their balance from the
+metrics in `src/rules/metrics.ts`. See [boardsmith/sim](./api/sim.md).
+
+#### Starting as a simulator, with no UI yet
+
+To balance the rules before building anything to look at, pass `--sim`:
+
+```bash
+npx boardsmith init my-game --sim
+cd my-game
+npm install
+boardsmith simulate --policy greedy
+```
+
+That writes the same project without its UI: no `index.html`, `src/main.ts`,
+`src/ui/`, `tests/a11y.example.test.ts` or `tests/browser/smoke.spec.ts`.
+`boardsmith test`, `lint`, `typecheck`, `validate` and `simulate` work as
+usual (validate's Required Files check asks only for the rules). `dev`, `build`,
+`smoke` and `publish` stop with "This project has no UI yet. Run
+`boardsmith add-ui`." `boardsmith verify` runs test, typecheck, validate and
+mutation, and records build and smoke as skipped for that reason; its closing
+line and `verify --check` name the skipped checks. A table that loses
+`index.html` but keeps any other UI file is broken, not a simulator: those
+commands stop and name the files, and `verify` fails build and smoke. `--sim`
+cannot be combined with `--world`.
+
+When you want to play it, run `boardsmith add-ui` in the project. It writes
+the UI files the table scaffold has, with the smoke spec listing the actions
+your rules register at that moment, and refuses, naming them, if any of those
+files already exists. `package.json` already has every dependency the UI
+needs, so there is nothing to install.
 
 #### Starting a persistent world instead
 
