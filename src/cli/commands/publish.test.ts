@@ -127,7 +127,7 @@ describe('per-platform ids (#704: dev and prod are separate deployments with sep
       expect(message).toContain(Object.keys(old)[0]);
       expect(message).toContain('platforms.dev');
       expect(message).toContain('platforms.prod');
-      expect(message).toMatch(/delete them and publish again/);
+      expect(message).toMatch(/delete it and publish again/);
     }
   });
 

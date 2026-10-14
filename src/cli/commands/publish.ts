@@ -17,7 +17,7 @@ import {
   type PlatformTarget,
 } from '../lib/publish-api.js';
 import { buildCommand } from './build.js';
-import { validateCommand, validateBundleSize } from './validate.js';
+import { validateCommand, validateBundleSize, topLevelIdMessage } from './validate.js';
 import { resolveWorldMode } from '../lib/world-project.js';
 import {
   requireGameProjectManifests,
@@ -98,16 +98,8 @@ export function resolveTarget(options: PublishOptions): PlatformTarget {
  * because nothing says which platform they came from.
  */
 export function savedPlatformIds(config: GameProjectConfig, target: PlatformTarget): PlatformIds {
-  const retired = ['gameId', 'publisherId'].filter((key) => config[key] !== undefined);
-  if (retired.length > 0) {
-    throw new Error(
-      `boardsmith.json has ${retired.map((key) => `"${key}"`).join(' and ')} at the top level, but each platform now ` +
-      'keeps its own ids, because dev and prod are separate deployments. Move them under "platforms.dev" or ' +
-      '"platforms.prod", whichever platform gave them, e.g. "platforms": { "prod": { "gameId": "...", "publisherId": "..." } }. ' +
-      `If you are not sure which platform they belong to, delete them and publish again with --${target} --publisher <slug> ` +
-      'to re-register.',
-    );
-  }
+  const retired = (['gameId', 'publisherId'] as const).filter((key) => config[key] !== undefined);
+  if (retired.length > 0) throw new Error(retired.map(topLevelIdMessage).join('\n'));
   return { ...config.platforms?.[target] };
 }
 
@@ -123,10 +115,10 @@ export function recordPlatformIds(
   return true;
 }
 
-/** What to do when `target` may no longer know the ids saved for it (a platform reset, a deleted game). */
+/** What to do when `target` may no longer know the ids saved for it, after a platform reset. */
 export function staleIdsHint(target: PlatformTarget): string {
   return (
-    `If the ${target} platform was reset, or the game deleted there, since your last publish to it, the ids saved ` +
+    `If the ${target} platform was reset since your last publish to it, the ids saved ` +
     `under "platforms.${target}" in boardsmith.json no longer exist on it. Delete "platforms.${target}" and run: ` +
     `boardsmith publish --${target} --publisher <slug>`
   );

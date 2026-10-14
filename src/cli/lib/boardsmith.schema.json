@@ -162,20 +162,10 @@
       },
       "examples": [{ "judgement": "senior", "review": "reviewer" }]
     },
-    "gameId": {
-      "x-convex-sink": false,
-      "type": "string",
-      "description": "Retired: platform ids are kept per platform under `platforms.<dev|prod>` (#704), and `boardsmith publish` refuses a project that still carries this key. It stays declared only so `boardsmith validate` does not fail the catalogue games that still carry it before their move; remove it then."
-    },
     "publisher": {
       "x-convex-sink": false,
       "type": "string",
       "description": "Publisher slug, written back into boardsmith.json by `boardsmith publish` (from --publisher). Read by publish.ts."
-    },
-    "publisherId": {
-      "x-convex-sink": false,
-      "type": "string",
-      "description": "Retired: see `gameId`. `boardsmith publish` refuses a project that still carries this key; move it under `platforms.<dev|prod>`."
     },
     "platforms": {
       "x-convex-sink": false,

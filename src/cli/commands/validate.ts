@@ -306,6 +306,8 @@ export function checkMetadataIssues(config: Record<string, unknown>): string[] {
       issues.push(
         "Unknown key 'estimatedDuration' — replaced by 'playtime': { \"min\": <minutes>, \"max\": <minutes> }.",
       );
+    } else if (key === 'gameId' || key === 'publisherId') {
+      issues.push(topLevelIdMessage(key));
     } else if (suggestion) {
       issues.push(`Unknown key '${key}' — did you mean '${suggestion}'?`);
     } else {
@@ -372,6 +374,16 @@ function checkBlockKeys(
       ? `Unknown key '${key}' in "${path}" — did you mean '${suggestion}'?`
       : `Unknown key '${key}' in "${path}" — not a recognized field of "${path}".`
   ));
+}
+
+/** Why a top-level platform id is refused and where it goes (#704); `publish` refuses with the same words. */
+export function topLevelIdMessage(key: 'gameId' | 'publisherId'): string {
+  return (
+    `Unknown key '${key}' — each publishing platform keeps its own ids, because dev and prod are separate ` +
+    'deployments. Move it under "platforms.dev" or "platforms.prod", whichever platform gave it, e.g. ' +
+    '"platforms": { "prod": { "gameId": "...", "publisherId": "..." } }. If you are not sure which platform it ' +
+    'belongs to, delete it and publish again with --publisher <slug>; the platform finds the game by its slug.'
+  );
 }
 
 /** Shape of the per-platform ids `boardsmith publish` keeps (#704). */

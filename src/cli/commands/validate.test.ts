@@ -130,7 +130,7 @@ describe('config-schema', () => {
       playerOptions: [],
       colorPalette: [],
       paths: { rules: 'src/rules' },
-      gameId: 'abc123',
+      platforms: { prod: { gameId: 'abc123' } },
       asyncPlay: true,
     });
     expect(result).toEqual([]);
@@ -573,6 +573,16 @@ describe('the platforms block', () => {
         prod: { gameId: 'prod-game', publisherId: 'prod-pub' },
       },
     })).toEqual([]);
+  });
+
+  it('refuses the old top-level ids, saying which block they move to', () => {
+    for (const key of ['gameId', 'publisherId']) {
+      const [message] = checkMetadataIssues({ ...validConfig(), [key]: 'x' });
+      expect(message).toContain(`Unknown key '${key}'`);
+      expect(message).toContain('platforms.dev');
+      expect(message).toContain('platforms.prod');
+      expect(message).toMatch(/delete it and publish again/);
+    }
   });
 
   it('refuses a platform publish cannot target and an unknown key inside one', () => {

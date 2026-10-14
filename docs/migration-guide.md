@@ -5,7 +5,7 @@
 `boardsmith publish` used to keep one `gameId` and `publisherId` at the top of
 `boardsmith.json` for every platform, so a `--prod` publish sent dev's ids to
 prod and then overwrote them. Each platform now has its own block, and
-`boardsmith publish` refuses a project that still has the top-level keys. Move
+`boardsmith validate` and `boardsmith publish` refuse the top-level keys. Move
 them under the platform that gave them:
 
 ```diff
