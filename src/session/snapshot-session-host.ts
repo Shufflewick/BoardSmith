@@ -16,6 +16,7 @@ import type { HistoryEntry } from '../engine/action/types.js';
 import { dueSeats, type SeatActivityState } from '../engine/flow/seat-activity.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
 import { stepTimeLimitMs, type StepTimeLimitState } from '../engine/flow/step-time-limit.js';
+import { ErrorCode } from '../types/protocol.js';
 import { describeMoveForNarration } from './move-summary.js';
 import { runsAtOnce, type HostWorkGate } from './host-work-gate.js';
 import { StatePushGate } from './state-push-gate.js';
@@ -28,8 +29,9 @@ export { StatePushGate, type StatePushGateOptions } from './state-push-gate.js';
 const MAX_BOT_MOVES = 500;
 
 /**
- * Bot searches thrown away as stale in a row before the next one runs inside
- * the one-at-a-time section (#635). See {@link SnapshotSessionHost.runBotTurns}.
+ * Bot searches thrown away as stale in a row before the bot's moves are made
+ * on the table as it stands, when still legal there (#700). See
+ * {@link SnapshotSessionHost.runBotTurns}.
  */
 const MAX_STALE_BOT_SEARCHES = 3;
 
@@ -47,12 +49,32 @@ interface BotRun {
 type BotStep = 'moved' | 'again' | 'stale' | 'done';
 
 /**
- * The `action` op that makes the move a bot chose on `searched` for its seat.
- * A SERVER-COMPOSED op acting NOW: the caller has checked, inside the
- * one-at-a-time section, that the game still stands on `searched`, so the
- * boundary the move was composed against is that snapshot's own. Stamping the
- * current key is correct HERE and would be a silent bypass anywhere a human's
- * intent is being carried (docs/simultaneous-and-interrupt-semantics.md §7).
+ * Whether `made`, the refusal of a bot's move made on a table that moved since
+ * its search, answers that move rather than the table: the game refused it
+ * (it is no longer legal), or its round has closed. Either way the bot
+ * searches again, and its seat is not held back (#421), since the move was
+ * never chosen at the state that refused it (#700).
+ */
+function refusedForTheMove(made: OpFailure): boolean {
+  return made.category === 'bundle' || made.errorCode === ErrorCode.STALE_SUBMISSION;
+}
+
+/**
+ * Whether a bot search answered with a move. Only a move can be made on a
+ * table that moved since the search (#700): any other answer (a refusal, a
+ * stalled seat, nothing due) is about the searched snapshot alone.
+ */
+function foundAMove(found: OpResultFor<'botSuggest'>): boolean {
+  return found.success && found.botPlayer !== undefined && !found.botStalled;
+}
+
+/**
+ * The `action` op that makes the move a bot chose on `searched` for its seat,
+ * stamped with the boundary key of `searched`, the snapshot the move was
+ * composed against, exactly as a player's submission echoes the key it was
+ * shown. Usually the game still stands on `searched`, so that is the current
+ * key. When it is made on a table that moved (#700), the key is what refuses
+ * the move if its round has closed (docs/simultaneous-and-interrupt-semantics.md §7).
  */
 function botMoveOp(
   searched: unknown,
@@ -1330,7 +1352,9 @@ export class SnapshotSessionHost {
    * It runs ON THE OP CHAIN, like every mutation: an op already in flight
    * finishes on the old rules first, and nothing reads the snapshot between
    * `carry` and the broadcast of what it produced. A bot search under way on
-   * the old rules is stale once this lands, and searches again on the new ones.
+   * the old rules is stale once this lands, and searches again on the new ones,
+   * unless the bot has already gone stale three times in a row: then the move
+   * it found is made if the new rules accept it (see {@link runBotTurns}).
    *
    * What goes with the old rules:
    * - transient teaching state (a hint or a heatmap was computed by them);
@@ -1449,9 +1473,14 @@ export class SnapshotSessionHost {
    * move the bot found is made inside the section, as an ordinary `action` for
    * its seat, only if the game still stands on that snapshot. Otherwise it is
    * stale: it is never made, and the bot searches again from where the game is
-   * now. After {@link MAX_STALE_BOT_SEARCHES} stale searches in a row, the next
-   * search runs inside the section, so a table that keeps changing still sees
-   * the bot move; everyone else waits for that one search.
+   * now. After {@link MAX_STALE_BOT_SEARCHES} stale searches in a row, the
+   * bot's move is made on the table as it stands, until the bot has moved: it
+   * is submitted like a player's, with the boundary key of the snapshot it was
+   * chosen on, and the game decides whether it is still legal (#700). A
+   * refusal for the move (no longer legal, or its round closed) makes it stale
+   * too, and holds no seat back. So a table that keeps changing still sees the
+   * bot move, and no op ever waits for a search, only for the bot's move
+   * itself to be made.
    *
    * A run that fails rejects every call that joined it, and is then not handed
    * to `onBackgroundError` (#698): each failure goes one way.
@@ -1568,9 +1597,7 @@ export class SnapshotSessionHost {
           break;
         }
         const wakes = this.botWakes;
-        const step = staleInARow < MAX_STALE_BOT_SEARCHES
-          ? await this.botStep(false)
-          : await this.enqueue(() => this.botStep(true));
+        const step = await this.botStep(staleInARow >= MAX_STALE_BOT_SEARCHES);
         if (step === 'stale') {
           staleInARow++;
           continue;
@@ -1586,37 +1613,61 @@ export class SnapshotSessionHost {
 
   /**
    * One bot search, and its move made inside the one-at-a-time section when
-   * the game still stands where the search began. The search (`botSuggest`)
-   * changes nothing; the move is an ordinary `action` for the bot's seat, so
-   * no op that changes the game is ever run and then thrown away. `inSection`
-   * says the caller already holds the section, so the game cannot move during
-   * the search. The bot seats are read once the step can see the game it
-   * searches: a roster change made while it waited is never missed.
+   * the game still stands where the search began, or, when `onTableAsItStands`,
+   * wherever the game stands now if the move is still legal there (#700). The
+   * search (`botSuggest`) changes nothing and runs outside the section; the
+   * move is an ordinary `action` for the bot's seat, so no op that changes the
+   * game is ever run and then thrown away. The bot seats are read when the
+   * search begins: a roster change made before it is never missed.
+   *
+   * Why a table that keeps changing is not held for a search (#700): the old
+   * answer to #635's livelock ran the fourth search inside the section, so
+   * every op waited for it, up to the whole bot budget. Holding only the
+   * move's commit keeps both promises. A human op waits at most for one bot
+   * move to be made. The bot moves as soon as one search's move is still legal
+   * when it lands, and in a simultaneous step another seat's play rarely
+   * touches what this seat may do; only a change that makes that very move
+   * illegal or closes its round sends it searching again, and each such change
+   * is one more move by someone else. The first three searches still require
+   * an unchanged table, so a quiet table always gets a move chosen on what it
+   * shows now.
    */
-  private async botStep(inSection: boolean): Promise<BotStep> {
+  private async botStep(onTableAsItStands: boolean): Promise<BotStep> {
     const seats = this.botSeatsToAsk();
     if (this.disposed || this.isComplete || seats.length === 0) return 'done';
     const searched = this._snapshot;
     const found = await this.adapters.executeOp(searched, null, { type: 'botSuggest', seats });
     const settle = async (): Promise<BotStep> => {
-      if (this.disposed) return 'done';
-      if (this._snapshot !== searched) return 'stale';
+      if (this.disposed || this.isComplete) return 'done';
+      const tableMoved = this._snapshot !== searched;
+      if (tableMoved && !(onTableAsItStands && foundAMove(found))) return 'stale';
       if (!found.success) return this.reportRefusedBotMove(found, seats);
       if (found.botStalled) {
         this.holdBackStalledSeat(found.botStalled);
         return 'again';
       }
       if (found.botPlayer === undefined) return 'done';
-      // A human took the seat while the bot searched: ask the bot seats the table has now.
-      if (!this.botSeats.some((s) => s.seat === found.botPlayer)) return 'again';
-      const made = await this.commitMutatingOp(
-        found.botPlayer,
-        botMoveOp(searched, found.botPlayer, found.suggestedAction, found.suggestedArgs),
-      );
-      if (made.success) return 'moved';
-      return this.reportRefusedBotMove(made, seats, found.botPlayer);
+      return this.makeBotMove(searched, botMoveOp(searched, found.botPlayer, found.suggestedAction, found.suggestedArgs), seats);
     };
-    return inSection ? settle() : this.enqueue(settle);
+    return this.enqueue(settle);
+  }
+
+  /**
+   * Make `move`, which a bot chose on `searched`, and answer what the pump
+   * does next. Runs inside the one-at-a-time section, on the game as it stands.
+   */
+  private async makeBotMove(
+    searched: unknown,
+    move: Extract<MutatingOp, { type: 'action' }>,
+    seats: Array<{ seat: number }>,
+  ): Promise<BotStep> {
+    // A human took the seat while the bot searched: ask the bot seats the table has now.
+    if (!this.botSeats.some((s) => s.seat === move.player)) return 'again';
+    const made = await this.commitMutatingOp(move.player, move);
+    if (made.success) return 'moved';
+    // A refused move changed nothing, so the game still stands where it did.
+    if (this._snapshot !== searched && refusedForTheMove(made)) return 'stale';
+    return this.reportRefusedBotMove(made, seats, move.player);
   }
 
   /**
