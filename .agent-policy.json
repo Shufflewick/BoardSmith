@@ -4,7 +4,7 @@
     { "name": "audit", "run": "node bin/boardsmith.js audit --dupes-baseline --health-baseline --duplication" },
     { "name": "test", "run": "node bin/boardsmith.js test --verdict-file {verdictFile}", "verdictFile": true },
     { "name": "browser", "run": "node bin/boardsmith.js test --browser" },
-    { "name": "catalogue", "run": "node bin/boardsmith.js catalogue --skip 'WindupWarfare=validate does not finish (Shufflewick/WindupWarfare#100)'" }
+    { "name": "catalogue", "run": "node bin/boardsmith.js catalogue --skip 'WindupWarfare=validate does not finish (Shufflewick/WindupWarfare#100)' 'checkers=imports createHeadlessSession from boardsmith/session until its bs701-headless-import branch lands (#701)' 'cribbage=imports createHeadlessSession from boardsmith/session until its bs701-headless-import branch lands (#701)' 'go-fish=imports createHeadlessSession from boardsmith/session until its bs701-headless-import branch lands (#701)' 'polyhedral-potions=imports createHeadlessSession from boardsmith/session until its bs701-headless-import branch lands (#701)' 'seven=imports createHeadlessSession from boardsmith/session until its bs701-headless-import branch lands (#701)' 'doom-machine=imports createHeadlessSession from boardsmith/session until its bs701-headless-import branch lands (#701)' 'one-two-punch=imports createHeadlessSession from boardsmith/session until its bs701-headless-import branch lands (#701)'" }
   ],
   "thread": {
     "workspaces": [
