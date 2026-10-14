@@ -42,7 +42,7 @@ import {
 } from '../index.js';
 import { GameRunner } from '../../runtime/index.js';
 import { executeOp, type GameDefinitionLike } from '../../session/stateless-ops.js';
-import { createHeadlessSession } from '../../session/headless-session.js';
+import { createHeadlessSession } from '../../testing/headless-session.js';
 import { SnapshotSessionHost, type SnapshotHostState } from '../../session/snapshot-session-host.js';
 import { boundaryKeyOf, boundaryKeyOfHost } from '../../session/testing/boundary-stamp.js';
 import { succeeded } from '../../session/op-result.test-helper.js';

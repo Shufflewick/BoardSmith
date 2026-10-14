@@ -30,7 +30,7 @@ import { GameRunner } from '../../runtime/index.js';
 import { executeOp, type GameDefinitionLike } from '../stateless-ops.js';
 import { PickHandler } from '../pick-handler.js';
 import { buildPlayerState } from '../utils.js';
-import { createHeadlessSession } from '../headless-session.js';
+import { createHeadlessSession } from '../../testing/headless-session.js';
 import type { PlayerGameState } from '../types.js';
 import { succeeded } from '../op-result.test-helper.js';
 

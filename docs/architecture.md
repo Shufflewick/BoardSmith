@@ -260,13 +260,13 @@ Runtime Isolation below).
 |---------|---------------|-------------|
 | `engine` | Game rules framework | `Game`, `Action`, `Flow`, elements |
 | `runtime` | Game execution | `GameRunner` |
-| `session` | Session management | `SnapshotSessionHost`, `executeOp`, `createHeadlessSession` |
+| `session` | Session management | `SnapshotSessionHost`, `executeOp` |
 | `client` | Dev-host driver, audio, state types | `createDevHostClient`, `audioService`, `GameState` |
 | `ui` | Vue components | `GameShell`, composables |
 | `bot` | MCTS bot | `createBot`, `MCTSBot` |
 | `bot-trainer` | Bot weight evolution | `WeightEvolver`, `readObjectiveWeights`, `updateBotWeights` |
 | `cli` | Dev tools | Commands (init, dev, build, etc.) |
-| `testing` | Test utilities | `createTestGame`, assertions |
+| `testing` | Test utilities | `createTestGame`, `createHeadlessSession`, assertions |
 | `sim` | Balance simulator policies | `random`, `greedy`, `mcts` |
 | `eslint-plugin` | Linting rules | Sandbox security rules |
 

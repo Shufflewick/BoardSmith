@@ -188,7 +188,7 @@ the game's `BotStrategy`, and the host's roster says which seats a bot plays.
 `createHeadlessSession` takes it as its third argument:
 
 ```typescript
-import { createHeadlessSession } from 'boardsmith/session';
+import { createHeadlessSession } from 'boardsmith/testing';
 import { gameDefinition } from './index.js'; // its `bot` field is myGameBotStrategy
 
 const session = createHeadlessSession(

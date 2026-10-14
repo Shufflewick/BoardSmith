@@ -18,7 +18,6 @@ ShufflewickPub all run it.
 
 ```typescript
 import {
-  createHeadlessSession,
   SnapshotSessionHost,
   executeOp,
   generateGameId,
@@ -42,9 +41,10 @@ import {
 
 ### Headless Session
 
-- `createHeadlessSession(definition, tableOptions, botSeats?)` - Runs a `SnapshotSessionHost` in process over `executeOp`, for tests, simulations and agents
-- `HeadlessSession<G>` - The table `createHeadlessSession` returns
-- `HeadlessGameOptions` - `{ playerCount, seed?, playerNames?, options?, teachingDisabled? }`; `teachingDisabled` locks hints, the heatmap, the demo and the tutorial at both the host and `executeOp`
+`createHeadlessSession`, which runs a `SnapshotSessionHost` in process over
+`executeOp`, is exported from `boardsmith/testing` (see
+[testing.md](testing.md)): it reads the project's `boardsmith.json`, which takes
+Node, and `boardsmith/session` also runs on Workers and in browsers.
 
 ### Utilities
 
@@ -128,7 +128,7 @@ a simulation plays the game exactly as a host does. Pass the game's exported
 strategy apply.
 
 ```typescript
-import { createHeadlessSession } from 'boardsmith/session';
+import { createHeadlessSession } from 'boardsmith/testing';
 import { gameDefinition } from './index.js';
 
 const session = createHeadlessSession(gameDefinition, {

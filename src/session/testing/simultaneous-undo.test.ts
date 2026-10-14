@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createHeadlessSession } from '../headless-session.js';
+import { createHeadlessSession } from '../../testing/headless-session.js';
 import { simultaneousFixtureDefinition } from './fixtures/simultaneous-fixture.js';
 import type { Op } from '../stateless-ops.js';
 import { ErrorCode } from '../../types/protocol.js';

@@ -25,7 +25,7 @@ import { BOARD_INTERACTION_KEY, type BoardInteraction } from '../../composables/
 import type { TableActionWiring } from '../../composables/useTableActionWiring.js';
 import { mountLiveSeat, settle } from '../../composables/table-wiring.test-helper.js';
 import { mailPicks } from '../../composables/send-mail.test-helper.js';
-import type { HeadlessSession } from '../../../session/headless-session.js';
+import type { HeadlessSession } from '../../../testing/headless-session.js';
 import {
   Game,
   Player,

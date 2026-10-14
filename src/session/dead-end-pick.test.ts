@@ -20,7 +20,7 @@
  */
 import { describe, test, expect, beforeEach } from 'vitest';
 import { Game, Player, Piece, Space, Action, actionStep, type GameOptions } from '../engine/index.js';
-import { createHeadlessSession, type HeadlessSession } from './headless-session.js';
+import { createHeadlessSession, type HeadlessSession } from '../testing/headless-session.js';
 import { succeeded } from './op-result.test-helper.js';
 import { ErrorCode } from '../types/protocol.js';
 

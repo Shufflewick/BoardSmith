@@ -389,7 +389,7 @@ above).
    individual-control shape (mount the component, `trigger('keydown', { key: 'Enter' })`, assert
    the expected handler fired exactly once) for the control-level assertion, and the real wiring
    for the full completion path: the live session host, started with `createHeadlessSession` from
-   `boardsmith/session` (the same `SnapshotSessionHost` the dev host and the platform run), and the
+   `boardsmith/testing` (the same `SnapshotSessionHost` the dev host and the platform run), and the
    controller and board bridge built by `useTableActionWiring` from `boardsmith/ui`, the same
    function GameShell wires them with.
    A mocked controller misses the real

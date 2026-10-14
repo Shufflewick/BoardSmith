@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { describe, it, expect } from 'vitest';
-import { createHeadlessSession } from '../../session/headless-session.js';
+import { createHeadlessSession } from '../../testing/headless-session.js';
 import { GameRunner } from '../../runtime/runner.js';
 import {
   Game,

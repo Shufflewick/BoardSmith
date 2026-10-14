@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { createHeadlessSession } from './headless-session.js';
-import { eachPlayerFixtureDefinition } from './testing/fixtures/each-player-fixture.js';
+import { eachPlayerFixtureDefinition } from '../session/testing/fixtures/each-player-fixture.js';
 import { Game, Player, Action, actionStep, eachPlayer, loop, type GameOptions } from '../engine/index.js';
-import type { GameDefinitionLike } from './stateless-ops.js';
-import { selectGameOptions } from './game-option-selection.js';
+import type { GameDefinitionLike } from '../session/stateless-ops.js';
+import { selectGameOptions } from '../session/game-option-selection.js';
 
 /**
- * Public-path tests for `createHeadlessSession` (boardsmith/session).
+ * Public-path tests for `createHeadlessSession` (boardsmith/testing).
  *
  * Proves the three contract guarantees a headless simulation driver depends on:
  * seeded determinism, bot seats acting on their own, and a normal action op

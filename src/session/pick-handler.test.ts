@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { Game, Player, Space, Piece, Action, actionStep, type GameOptions, type GameClass } from '../engine/index.js';
-import { createHeadlessSession, type HeadlessSession } from './headless-session.js';
+import { createHeadlessSession, type HeadlessSession } from '../testing/headless-session.js';
 import { succeeded } from './op-result.test-helper.js';
 import { ErrorCode } from '../types/protocol.js';
 

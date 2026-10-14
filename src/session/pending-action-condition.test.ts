@@ -29,7 +29,7 @@ import {
   type GameOptions,
 } from '../engine/index.js';
 import { GameRunner } from '../runtime/runner.js';
-import { createHeadlessSession } from './headless-session.js';
+import { createHeadlessSession } from '../testing/headless-session.js';
 import { executeOp, type GameDefinitionLike, type StateEnvelope } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { historyLabels } from './testing/history-labels.js';

@@ -26,7 +26,7 @@ import {
   actionStep,
   type GameOptions,
 } from '../engine/index.js';
-import { createHeadlessSession } from './headless-session.js';
+import { createHeadlessSession } from '../testing/headless-session.js';
 import type { TutorialDefinition } from '../engine/tutorial/types.js';
 
 // ============================================

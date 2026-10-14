@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createHeadlessSession } from '../headless-session.js';
+import { createHeadlessSession } from '../../testing/headless-session.js';
 import { collectTurnsFixtureDefinition } from './fixtures/collect-turns-fixture.js';
 import { succeeded } from '../op-result.test-helper.js';
 

@@ -1,7 +1,7 @@
 /**
  * The game options of the project the tests run in, read from its
- * `boardsmith.json` with Node (#701). `test-game.ts` and
- * `bot-trainer/benchmark.ts` load this, through `#testing/project-game-options`,
+ * `boardsmith.json` with Node (#701). `test-game.ts`,
+ * `headless-session.ts` and `bot-trainer/benchmark.ts` load this, through `#testing/project-game-options`,
  * and a compiler sees `project-game-options.d.ts` in its place (see
  * `project-test-utils.d.ts`).
  */

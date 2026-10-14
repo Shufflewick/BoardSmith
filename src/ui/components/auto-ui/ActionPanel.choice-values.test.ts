@@ -24,7 +24,7 @@ import type { TableActionWiring } from '../../composables/useTableActionWiring.j
 import { createBoardInteraction } from '../../composables/useBoardInteraction.js';
 import { mountLiveSeat, mountTableWiring, settle, startTable } from '../../composables/table-wiring.test-helper.js';
 import type { PlayerGameState } from '../../../session/types.js';
-import type { HeadlessSession } from '../../../session/headless-session.js';
+import type { HeadlessSession } from '../../../testing/headless-session.js';
 import { Game, Player, Action, actionStep, type GameOptions } from '../../../engine/index.js';
 
 class ValuesGame extends Game<ValuesGame, Player> {

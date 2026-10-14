@@ -32,6 +32,10 @@ export {
   type TestGameOptions,
 } from './test-game.js';
 
+// A whole session in process, over the host every platform runs. It lives here,
+// not in boardsmith/session, because it reads the project's boardsmith.json (#701).
+export { createHeadlessSession, type HeadlessSession, type HeadlessGameOptions } from './headless-session.js';
+
 // Random game simulation
 export {
   simulateRandomGames,

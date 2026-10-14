@@ -34,7 +34,7 @@ import {
   type GameOptions,
 } from '../engine/index.js';
 import { GameRunner } from '../runtime/index.js';
-import { createHeadlessSession } from './headless-session.js';
+import { createHeadlessSession } from '../testing/headless-session.js';
 import { SnapshotSessionHost, type SnapshotHostState } from './snapshot-session-host.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { runnerFromSnapshot } from './runner-from-snapshot.js';

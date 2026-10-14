@@ -11,7 +11,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, actionStep, type GameOptions } from '../engine/index.js';
-import { createHeadlessSession } from './headless-session.js';
+import { createHeadlessSession } from '../testing/headless-session.js';
 
 const SECRET_VALUE = 'top-secret-deck-order';
 

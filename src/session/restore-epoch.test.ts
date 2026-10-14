@@ -20,7 +20,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { GameRunner } from '../runtime/index.js';
-import { createHeadlessSession, type HeadlessSession } from './headless-session.js';
+import { createHeadlessSession, type HeadlessSession } from '../testing/headless-session.js';
 import { SnapshotSessionHost, type SnapshotHostState } from './snapshot-session-host.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import type { PlayerGameState } from './types.js';

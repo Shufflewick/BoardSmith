@@ -228,8 +228,8 @@ removed/changed API.
 // Before — internal, test-only module path (never a public package export)
 import { createHeadlessSession } from './session/testing/headless-harness.js';
 
-// After — public export from the boardsmith/session barrel
-import { createHeadlessSession } from 'boardsmith/session';
+// After — public export from boardsmith/testing (boardsmith/session before r196)
+import { createHeadlessSession } from 'boardsmith/testing';
 ```
 
 The old module (`src/session/testing/headless-harness.ts`) is deleted — there
@@ -306,7 +306,7 @@ missing-anchor bug in your board names the actual component, not a generic
 
 ### Checklist
 
-- [ ] Update `createHeadlessSession` imports from `boardsmith/session/testing/headless-harness` to `boardsmith/session`
+- [ ] Update `createHeadlessSession` imports from `boardsmith/session/testing/headless-harness` to `boardsmith/testing`
 - [ ] Pass an explicit RNG to any direct `ElementCollection.shuffle()` calls (not `Deck`/`Space.shuffle()` — that wrapper is unaffected)
 - [ ] Spread `anchorAttrs(ref, type)` (or `useSelectable()`'s `attrs`) onto every custom board element that animates or drag-drops
 - [ ] Update any `onPersistenceError` callback to accept `(error, consecutiveFailures, healthy)`

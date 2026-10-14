@@ -13,7 +13,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, actionStep, type GameOptions } from '../engine/index.js';
-import { createHeadlessSession } from './headless-session.js';
+import { createHeadlessSession } from '../testing/headless-session.js';
 
 // An onSelect callback on the first selection, so `onSelectFired` is populated.
 class OnSelectGame extends Game<OnSelectGame, Player> {

@@ -18,7 +18,7 @@ import { computed, defineComponent, h, nextTick, ref, toRaw, type Ref } from 'vu
 import { mount, type VueWrapper } from '@vue/test-utils';
 import type { Game, GameClass } from '../../engine/index.js';
 import type { BoundaryKeyState } from '../../engine/flow/boundary-key.js';
-import { createHeadlessSession, type HeadlessOp, type HeadlessSession } from '../../session/headless-session.js';
+import { createHeadlessSession, type HeadlessOp, type HeadlessSession } from '../../testing/headless-session.js';
 import type { PlayerGameState } from '../../session/types.js';
 import { toCloneablePayload } from '../components/platformRequestClone.js';
 import { createBoardInteraction, type BoardInteraction } from './useBoardInteraction.js';

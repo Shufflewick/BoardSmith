@@ -25,6 +25,9 @@ import {
 - `TestGame` - Test game wrapper around `GameRunner`; also exposes `getPlayerView()` (typed observable state) and `action()` (returns an `ActionBuilder`). `doAction()` throws an `ActionExecutionError` (with an actionable `debugActionAvailability` trace) on failure — use `tryAction()` for tests that deliberately exercise the failure path.
 - `createTestGame()` - Convenience function wrapping `TestGame.create()`
 - `ActionExecutionError` - Structured error thrown by `doAction()` on failure; carries `actionName`, `playerSeat`, `args`, and the engine `result` for `instanceof` handling in tests
+- `createHeadlessSession(definition, tableOptions, botSeats?)` - Runs a `SnapshotSessionHost` in process over `executeOp`, the host every platform runs, for tests, simulations and agents. Like `createTestGame`, it starts the game with every option the project's `boardsmith.json` declares that `tableOptions.options` leaves out, at its default
+- `HeadlessSession<G>` - The table `createHeadlessSession` returns
+- `HeadlessGameOptions` - `{ playerCount, seed?, playerNames?, options?, teachingDisabled?, fullHistory? }`; `teachingDisabled` locks hints, the heatmap, the demo and the tutorial at both the host and `executeOp`
 
 ### Persistent-World Test Harness
 
@@ -609,13 +612,13 @@ worked composable-level example.
 
 ### Headless Simulation (SIM)
 
-**`createHeadlessSession`** (from `boardsmith/session`) drives a game to
+**`createHeadlessSession`** (from `boardsmith/testing`) drives a game to
 completion the same way a real hosted session would, without any WebSocket
 or storage layer — the seeded-run building block behind CI smoke tests and
 reproducible agent benchmarking:
 
 ```typescript
-import { createHeadlessSession } from 'boardsmith/session';
+import { createHeadlessSession } from 'boardsmith/testing';
 import { gameDefinition } from '../src/rules/game.js'; // your game's exported GameDefinitionLike
 
 const session = createHeadlessSession(
