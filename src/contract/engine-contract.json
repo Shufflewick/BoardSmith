@@ -1,5 +1,5 @@
 {
-  "revision": 194,
+  "revision": 195,
   "surfaceHash": "59faad952865bb60",
   "payloadHash": "7e563b9e75959ec4",
   "formatHash": "3aff5d1f34f52ec0",
@@ -1495,6 +1495,14 @@
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "SnapshotSessionHost no longer runs any bot search inside its one-at-a-time section (#700). Before, after three stale bot searches in a row (three changes to the table while the bot thought, such as three picks of a multi-step selection in a simultaneous step), the fourth search held the table, so a human's op could wait the whole bot budget (30 s on the platform) past the client's 20 s request timeout and be reported as failed after it landed. Now, after three stale searches in a row, the bot's move is made on the table as it stands if the game still accepts it: it is an ordinary action stamped with the boundary key of the snapshot it was chosen on, so a move whose round has closed (STALE_SUBMISSION) or that the game refuses (category bundle) is not made, holds no seat back, and the bot searches again; a crash inside the rules while making it (ENGINE_ERROR) is logged at once as a rules bug, and the bot searches again without holding its seat back. A human's op now waits at most for one bot move to be made, never for a search. No public API, payload or stored format changed (the surface hash moved only for the host's private methods); re-vendor to get the fix."
+    },
+    {
+      "revision": 195,
+      "date": "2026-10-14",
+      "surfaceHash": "59faad952865bb60",
+      "payloadHash": "7e563b9e75959ec4",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Game options can be declared designerOnly: true (#687), a designer knob such as a balance scale that no player chooses. selectGameOptions now refuses a selection naming one (GameOptionSelectionError, \"Game option \\\"x\\\" is designer-only\"); only boardsmith simulate and the dev host set one, through an internal designer selection the platform never calls. A designer-only option is declared only in gameDefinition.gameOptions and must have a default; boardsmith build refuses one in boardsmith.json, marked or merely named the same, so a published manifest never lists one and the platform lobby never shows one. GameOptionDefinition (NumberOption, SelectOption, BooleanOption) gained the optional designerOnly field. GamePreset.options is now optional (a preset may set only its players), matching what games already write. Platform: re-vendor; nothing else is required, since a manifest from boardsmith build never carries the flag. Recommended: make manifest-schema validateOptionDefinition refuse designerOnly on a gameOptions entry, so a hand-written manifest cannot put a designer knob in the lobby (toGameOptionDefinition drops unknown fields, so the engine would not see the flag). No payload or stored format changed."
     }
   ]
 }

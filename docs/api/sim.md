@@ -276,7 +276,9 @@ value and prints them side by side. The dimension is one of:
   `--compare policy=random,greedy` or `--compare policy=2=random,2=greedy`.
 - **A declared game option** - `--compare hand=5,7`. Each value is read as
   `--game-option` reads it, so an option the game does not declare is refused.
-  Give an option in `--compare` or in `--game-option`, not both.
+  Give an option in `--compare` or in `--game-option`, not both. A
+  designer-only option (`designerOnly: true`), which no player can choose, is
+  set here like any other; that is what it is for.
 - **A data file the rules import** - `--compare src/rules/data/loot.csv=data/loot-75.csv,data/loot-85.csv`.
   Each value is a file played in that file's place, as if its contents were
   the original's. List the original itself to keep it as one of the variants.

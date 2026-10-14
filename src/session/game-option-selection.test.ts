@@ -13,6 +13,8 @@ import {
   HOST_OWNED_GAME_OPTION_KEYS,
   GameOptionSelectionError,
   assertDeclarableGameOptions,
+  assertPresetsSelectable,
+  selectDesignerGameOptions,
   selectGameOptions,
 } from './game-option-selection.js';
 import type { GameOptionDefinition } from '../types/protocol.js';
@@ -357,5 +359,67 @@ describe('a game cannot declare a number option no value could satisfy', () => {
     expect(() =>
       assertDeclarableGameOptions({ rounds: { type: 'number', label: 'Rounds', max: '10' as unknown as number } }),
     ).toThrow(/"rounds".*max/);
+  });
+});
+
+describe('a designer-only option is never a player\'s to choose (#687)', () => {
+  const withKnob: Record<string, GameOptionDefinition> = {
+    ...declared,
+    lootScale: { type: 'number', label: 'Loot scale', min: 0.5, max: 2, step: 0.25, default: 1, designerOnly: true },
+  };
+
+  it('a player selection naming it is refused by name, saying who can set it', () => {
+    expect(() => selectGameOptions(withKnob, { lootScale: 1.5 })).toThrow(GameOptionSelectionError);
+    expect(() => selectGameOptions(withKnob, { lootScale: 1.5 })).toThrow(
+      /Game option "lootScale" is designer-only: .*boardsmith simulate.*table setup/,
+    );
+  });
+
+  it('a player selection of the other options is admitted as before', () => {
+    expect(selectGameOptions(withKnob, { rounds: 4 })).toEqual({ rounds: 4 });
+  });
+
+  it('the designer selection admits it, checked against its declaration like any option', () => {
+    expect(selectDesignerGameOptions(withKnob, { lootScale: '1.5', rounds: 4 })).toEqual({ lootScale: 1.5, rounds: 4 });
+    expect(() => selectDesignerGameOptions(withKnob, { lootScale: 3 })).toThrow(/"lootScale" must be between 0.5 and 2/);
+  });
+
+  it('the designer selection still refuses a host-owned or undeclared key', () => {
+    expect(() => selectDesignerGameOptions(withKnob, { seed: 'x' })).toThrow(/"seed" cannot be chosen/);
+    expect(() => selectDesignerGameOptions(withKnob, { nope: 1 })).toThrow(/Unknown game option "nope"/);
+  });
+
+  it('a designer-only option declared without a default is refused, blaming the game', () => {
+    expect(() =>
+      assertDeclarableGameOptions({ lootScale: { type: 'number', label: 'Loot scale', designerOnly: true } }),
+    ).toThrow(/This game declares designer-only option "lootScale" with no default.*Give it a default/);
+    expect(() =>
+      selectDesignerGameOptions({ fast: { type: 'boolean', label: 'Fast', designerOnly: true } }, {}),
+    ).toThrow(/"fast" with no default/);
+  });
+
+  it('a preset that sets a designer-only option is refused, naming the preset and the option', () => {
+    expect(() =>
+      assertPresetsSelectable(withKnob, [
+        { name: 'Quick', options: { rounds: 2 } },
+        { name: 'Rich', options: { lootScale: 2 } },
+      ]),
+    ).toThrow(/This game's preset "Rich" cannot be used: Game option "lootScale" is designer-only/);
+    expect(() => assertPresetsSelectable(withKnob, [{ name: 'Quick', options: { rounds: 2 } }])).not.toThrow();
+    expect(() => assertPresetsSelectable(withKnob, undefined)).not.toThrow();
+  });
+
+  it('a preset naming an undeclared option, or a number off its step, is refused at load', () => {
+    expect(() => assertPresetsSelectable(withKnob, [{ name: 'Typo', options: { roundz: 2 } }])).toThrow(
+      /preset "Typo" cannot be used: Unknown game option "roundz"/,
+    );
+    const stepped: Record<string, GameOptionDefinition> = { bid: { type: 'number', label: 'Bid', min: 5, step: 5, default: 5 } };
+    expect(() => assertPresetsSelectable(stepped, [{ name: 'Odd', options: { bid: 7 } }])).toThrow(
+      /preset "Odd" cannot be used: Game option "bid" must be in steps of 5/,
+    );
+  });
+
+  it('a preset that sets only its players, with no options, is admitted', () => {
+    expect(() => assertPresetsSelectable(withKnob, [{ name: 'Three', players: [{}, {}, {}] }])).not.toThrow();
   });
 });

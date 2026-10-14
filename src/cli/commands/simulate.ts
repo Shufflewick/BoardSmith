@@ -11,7 +11,7 @@ import { seatPolicies, type ShardRequest, type SimulationBundle } from '../lib/s
 import { playOnWorkers } from '../lib/sim-workers.js';
 import { buildVariants, parseCompare, type CompareDimension, type Variant } from '../lib/sim-variants.js';
 import { parseGameOptionFlags } from './dev.js';
-import { selectGameOptions, type GameOptionSelection } from '../../session/game-option-selection.js';
+import { selectDesignerGameOptions, type GameOptionSelection } from '../../session/game-option-selection.js';
 import type { GameOptionDefinition } from '../../session/types.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { simulateReplayCommand } from '../lib/replay-command.js';
@@ -53,14 +53,16 @@ const MAX_ACTIONS = 10000;
  * Simulating only the default configuration is how a game's worst case stays
  * invisible: the longest or heaviest mode is usually behind an option, and a
  * harness that cannot reach it reports green about a configuration nobody
- * asked about. Throws an actionable error on an unknown key, a malformed
- * flag, or a value outside a select option's declared choices.
+ * asked about. A designer-only option is set here like any other: the
+ * simulator is one of the designer's tools (#687). Throws an actionable error
+ * on an unknown key, a malformed flag, or a value outside a select option's
+ * declared choices.
  */
 export function resolveSimulationGameOptions(
   declaredOptions: Record<string, GameOptionDefinition> | undefined,
   rawFlags: string[] | undefined,
 ): GameOptionSelection {
-  return selectGameOptions(declaredOptions, parseGameOptionFlags(rawFlags));
+  return selectDesignerGameOptions(declaredOptions, parseGameOptionFlags(rawFlags));
 }
 
 /**

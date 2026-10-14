@@ -180,11 +180,26 @@ export interface LobbyInfo {
 // Game Option Types
 // ============================================
 
-/** Number option definition */
-export interface NumberOption {
-  type: 'number';
+/**
+ * What every game option may declare. `designerOnly: true` marks a knob for the
+ * game's designer, a balance scale for instance: no lobby, preset or platform
+ * offers it, and `selectGameOptions` refuses a player's selection naming it.
+ * Only `boardsmith simulate` (`--game-option`, `--compare`) and the dev host's
+ * table setup set it, through `selectDesignerGameOptions`. Such an option must
+ * declare its `default`, the value players play with. No platform hands the
+ * game the option, so the game reads it with that same default (one constant
+ * for both). It is declared in `gameDefinition.gameOptions`, never in
+ * `boardsmith.json`, whose options the platform's lobby lists.
+ */
+interface GameOptionBase {
   label: string;
   description?: string;
+  designerOnly?: true;
+}
+
+/** Number option definition */
+export interface NumberOption extends GameOptionBase {
+  type: 'number';
   default?: number;
   min?: number;
   max?: number;
@@ -197,19 +212,15 @@ export interface NumberOption {
  * selection is matched to a choice by `selectGameOptions`, and the game
  * receives the declared value itself, frozen.
  */
-export interface SelectOption {
+export interface SelectOption extends GameOptionBase {
   type: 'select';
-  label: string;
-  description?: string;
   default?: unknown;
   choices: Array<{ value: unknown; label: string }>;
 }
 
 /** Boolean option definition */
-export interface BooleanOption {
+export interface BooleanOption extends GameOptionBase {
   type: 'boolean';
-  label: string;
-  description?: string;
   default?: boolean;
 }
 

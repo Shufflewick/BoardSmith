@@ -353,6 +353,13 @@ boardsmith simulate --games 3000 --players 2,4,6 --policy greedy --compare handS
 `--compare policy=random,greedy` compares policies the same way; repeat
 `--compare` to play every combination.
 
+`handSize` is a variant players choose in the lobby. A knob only you should
+turn, such as a scale on every loot amount, is declared with
+`designerOnly: true` and a `default`: no lobby, preset or platform offers it,
+but `--game-option` and `--compare` set it, and so does the dev host's lobby.
+The game reads it with the same default, from one constant. See
+"Designer-only options" in [core-concepts.md](core-concepts.md).
+
 ## 3. Add card abilities, one at a time
 
 **The Merchant** scores 2 for each color you have. That is a change to scoring

@@ -11,13 +11,16 @@
  * host-owned key, a value that is not of the declared type, and a number
  * outside its declared `min`/`max` or off its `step`, and the
  * session's types take a {@link GameOptionSelection}, which nothing else can
- * produce. A host that spreads a client's object straight into a constructor
+ * produce. An option declared `designerOnly` is refused there too: only
+ * {@link selectDesignerGameOptions}, which `boardsmith simulate` and the dev
+ * host's table setup call, admits it (#687). A host that spreads a client's object straight into a constructor
  * is then a type error, not a leak found in review.
  */
 import { valuesEqual } from '../engine/action/choice-matching.js';
 import { ENGINE_OWNED_GAME_OPTION_KEYS } from '../engine/element/game.js';
 import { PERSIST_KEY } from '../persistence/persistence.js';
 import type { GameOptionDefinition, NumberOption, SelectOption } from '../types/protocol.js';
+import type { GamePreset } from './types.js';
 
 /**
  * Every option name a player's selection may not use: each `GameOptions`
@@ -71,7 +74,34 @@ export function assertDeclarableGameOptions(declared: Record<string, GameOptionD
           `sets for every game, so a player could never choose it. Rename the option.`,
       );
     }
+    if (def.designerOnly && def.default === undefined) {
+      throw new Error(
+        `This game declares designer-only option "${name}" with no default. No player can set it, ` +
+          `so its default is the value every real game is played with. Give it a default.`,
+      );
+    }
     if (def.type === 'number') assertDeclarableBounds(name, def);
+  }
+}
+
+/**
+ * Refuse a game's presets if one sets an option a player could not choose: a
+ * preset is a shortcut a player picks, so its options must pass
+ * {@link selectGameOptions}. A preset naming a designer-only option, an
+ * undeclared option or a value its option refuses is the game's mistake, so
+ * this says so when the game is loaded, naming the preset.
+ */
+export function assertPresetsSelectable(
+  declared: Record<string, GameOptionDefinition> | undefined,
+  presets: readonly GamePreset[] | undefined,
+): void {
+  for (const preset of presets ?? []) {
+    try {
+      selectGameOptions(declared, preset.options ?? {});
+    } catch (err) {
+      if (!(err instanceof GameOptionSelectionError)) throw err;
+      throw new Error(`This game's preset "${preset.name}" cannot be used: ${err.message} Correct the preset.`);
+    }
   }
 }
 
@@ -230,38 +260,75 @@ function coerceSelect(name: string, def: SelectOption, raw: unknown): unknown {
  * Returns a new object holding only the keys of `raw` that are declared, each
  * coerced to its declared type; a key whose value is `undefined` is no choice
  * and is left out. Throws {@link GameOptionSelectionError} for a host-owned
- * key, an undeclared key or a value the declaration does not admit (wrong
- * type, not a declared choice, a number outside `min`/`max` or off `step`),
- * and a plain error if the declarations themselves are unusable (see
- * {@link assertDeclarableGameOptions}).
+ * key, an undeclared or designer-only key or a value the declaration does not
+ * admit (wrong type, not a declared choice, a number outside `min`/`max` or
+ * off `step`), and a plain error if the declarations themselves are unusable
+ * (see {@link assertDeclarableGameOptions}).
  */
 export function selectGameOptions(
   declared: Record<string, GameOptionDefinition> | undefined,
   raw: Record<string, unknown>,
 ): GameOptionSelection {
+  return select(declared, raw, false);
+}
+
+/**
+ * Admit the game designer's selection: {@link selectGameOptions}, except that
+ * an option declared `designerOnly` may be set too. Only `boardsmith simulate`
+ * (`--game-option`, `--compare`) and the dev host's table setup call this; a
+ * host taking a player's choice never does.
+ */
+export function selectDesignerGameOptions(
+  declared: Record<string, GameOptionDefinition> | undefined,
+  raw: Record<string, unknown>,
+): GameOptionSelection {
+  return select(declared, raw, true);
+}
+
+function select(
+  declared: Record<string, GameOptionDefinition> | undefined,
+  raw: Record<string, unknown>,
+  designer: boolean,
+): GameOptionSelection {
   assertDeclarableGameOptions(declared);
   const selection: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(raw)) {
     if (value === undefined) continue;
-    if (hostOwned.has(name)) {
-      throw new GameOptionSelectionError(
-        `Game option "${name}" cannot be chosen: the engine or the host sets it for every game.`,
-      );
-    }
-    // Own declarations only: `raw` is parsed client JSON, and a name such as
-    // "constructor" or "toString" is found on every object's prototype.
-    const def = declared !== undefined && Object.hasOwn(declared, name) ? declared[name] : undefined;
-    if (!def) {
-      const known = Object.keys(declared ?? {});
-      throw new GameOptionSelectionError(
-        known.length === 0
-          ? `Unknown game option "${name}": this game declares no game options.`
-          : `Unknown game option "${name}": the declared options are ${known.join(', ')}.`,
-      );
-    }
+    const def = choosable(declared, name, designer);
     // Defined as an own data property, never assigned: assigning "__proto__"
     // would set the selection's prototype instead of a key.
     Object.defineProperty(selection, name, { value: coerce(name, def, value), enumerable: true, writable: true, configurable: true });
   }
   return selection as GameOptionSelection;
+}
+
+/** The declaration of option `name` if this selection may set it; throws {@link GameOptionSelectionError} if not. */
+function choosable(
+  declared: Record<string, GameOptionDefinition> | undefined,
+  name: string,
+  designer: boolean,
+): GameOptionDefinition {
+  if (hostOwned.has(name)) {
+    throw new GameOptionSelectionError(
+      `Game option "${name}" cannot be chosen: the engine or the host sets it for every game.`,
+    );
+  }
+  // Own declarations only: `raw` is parsed client JSON, and a name such as
+  // "constructor" or "toString" is found on every object's prototype.
+  const def = declared !== undefined && Object.hasOwn(declared, name) ? declared[name] : undefined;
+  if (!def) {
+    const known = Object.keys(declared ?? {});
+    throw new GameOptionSelectionError(
+      known.length === 0
+        ? `Unknown game option "${name}": this game declares no game options.`
+        : `Unknown game option "${name}": the declared options are ${known.join(', ')}.`,
+    );
+  }
+  if (def.designerOnly && !designer) {
+    throw new GameOptionSelectionError(
+      `Game option "${name}" is designer-only: players never choose it. Only boardsmith simulate ` +
+        `and the dev host's table setup set it.`,
+    );
+  }
+  return def;
 }

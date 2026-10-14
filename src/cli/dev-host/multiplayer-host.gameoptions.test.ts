@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, actionStep, loop, type GameOptions } from '../../engine/index.js';
-import { executeOp, selectGameOptions, type GameDefinitionLike, type GameOptionSelection } from '../../session/index.js';
+import { executeOp, type GameDefinitionLike, type GameOptionSelection } from '../../session/index.js';
+import { selectDesignerGameOptions } from '../../session/game-option-selection.js';
 import type { GameOptionDefinition } from '../../session/types.js';
 import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
 
@@ -58,9 +59,11 @@ const declaredGameOptions: Record<string, GameOptionDefinition> = {
       { value: 4, label: 'Level 4' },
     ],
   },
+  // #687: a balance knob no player chooses; the dev host's table setup sets it.
+  lootScale: { type: 'number', label: 'Loot scale', default: 1, designerOnly: true },
 };
 
-const declaredDefaults = selectGameOptions(
+const declaredDefaults = selectDesignerGameOptions(
   declaredGameOptions,
   Object.fromEntries(Object.entries(declaredGameOptions).map(([id, def]) => [id, def.default])),
 );
@@ -117,6 +120,15 @@ describe('MultiplayerHost — gameOption/preset selection reaches the start op (
     await host.handleMessage('A', { type: 'hello' }); // initial auto-start
     await host.handleMessage('A', { type: 'configure', gameOptions: { difficulty: 'hard' } });
     expect(getStartOptions().difficulty).toBe('hard'); // NOT 'easy' (.default)
+  });
+
+  it('a `configure` sets a designer-only option: the table setup is a designer tool (#687)', async () => {
+    const { host, getStartOptions, lastOfType } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+    expect(getStartOptions().lootScale).toBe(1);
+    await host.handleMessage('A', { type: 'configure', gameOptions: { lootScale: 2 } });
+    expect(lastOfType('A', 'error')).toBeUndefined();
+    expect(getStartOptions().lootScale).toBe(2);
   });
 
   it('applying a preset by name sets EVERY option in its bundle', async () => {
@@ -290,13 +302,13 @@ describe('MultiplayerHost — every lobby message says which game options are ap
   const lobbyOf = (frame: HostOutbound | undefined) => frame as Extract<HostOutbound, { type: 'lobby' }> | undefined;
 
   it('a selection made at startup (`--game-option`) is the one a lobby message carries, not the declared default', async () => {
-    const baseGameOptions = selectGameOptions(declaredGameOptions, { ...declaredDefaults, difficulty: 'hard', rounds: 5 });
+    const baseGameOptions = selectDesignerGameOptions(declaredGameOptions, { ...declaredDefaults, difficulty: 'hard', rounds: 5 });
     const { host, lastOfType, getStartOptions } = makeHost({ baseGameOptions });
     await host.handleMessage('A', { type: 'hello' });
     await host.handleMessage('A', { type: 'getLobby', requestId: 'q' });
 
     expect(getStartOptions().rounds).toBe(5);
-    expect(lobbyOf(lastOfType('A', 'lobby'))?.gameOptions).toEqual({ difficulty: 'hard', rounds: 5, hardMode: false, level: 1 });
+    expect(lobbyOf(lastOfType('A', 'lobby'))?.gameOptions).toEqual({ difficulty: 'hard', rounds: 5, hardMode: false, level: 1, lootScale: 1 });
   });
 
   it('an accepted `configure` is broadcast to every page, so a second page shows it too', async () => {

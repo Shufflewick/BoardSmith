@@ -558,7 +558,9 @@ host-owned key and a value of the wrong type, and returns a
 lobby and `createHeadlessSession` take as a player's choice. The stateless executor refuses `elementIdKey` on a `start` op
 outright, since a new game mints its own. A host that assembles a game's
 options itself must keep a client's object out of them, or hand it to
-`selectGameOptions` first.
+`selectGameOptions` first. An option declared `designerOnly` is refused there
+too: only `boardsmith simulate` and the dev host set one (see "Designer-only
+options" below).
 
 Two consequences:
 
@@ -818,6 +820,35 @@ Game-level configuration options that appear in the lobby. Defined as an array w
 ```
 
 Option types: `number` (with min/max/step), `select` (with choices), `boolean`.
+
+#### Designer-only options
+
+A balance knob, such as a loot scale, is for the game's designer, not its
+players. Mark it `designerOnly: true` and declare it in
+`gameDefinition.gameOptions`, never in `boardsmith.json`:
+
+```typescript
+const LOOT_SCALE = 1;
+
+export const gameDefinition = {
+  // ...
+  gameOptions: {
+    lootScale: { type: 'number', label: 'Loot scale', min: 0.5, max: 2, step: 0.25, default: LOOT_SCALE, designerOnly: true },
+  },
+};
+```
+
+- No lobby, preset or platform offers it. `selectGameOptions` refuses a
+  player's selection naming it, a preset that sets it is refused when the game
+  loads, and `boardsmith.json` options (which the platform's lobby lists)
+  refuse `designerOnly`, and an option named for a designer-only one, so
+  `boardsmith build` never publishes one.
+- `boardsmith simulate --game-option lootScale=1.5`, `--compare lootScale=1,1.5`
+  and the dev host's lobby and Table setup set it. The dev host marks it
+  "Designer only".
+- It must declare a `default`: that is the value every real game is played
+  with. No platform hands the game the option, so the game reads it with the
+  same default, from one constant: `options.lootScale ?? LOOT_SCALE`.
 
 #### Player Options
 

@@ -19,7 +19,7 @@ import type { PersistenceStore } from '../../persistence/index.js';
 import { getProjectContext, toPosix } from './game-runtime.js';
 import { loadTableRuntime, tableRulesReloadQueue } from './dev-table-runtime.js';
 import { gateOf } from '../dev-host/rules-reload-queue.js';
-import { findUnknownKeys } from '../lib/config-schema.js';
+import { assertNoDesignerOnlyConfigOptions, findUnknownKeys } from '../lib/config-schema.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex, requireTableUi } from '../lib/game-project.js';
 import { resolveWorldMode } from '../lib/world-project.js';
 import { resolveUserPath } from '../lib/user-path.js';
@@ -37,7 +37,11 @@ import {
 import { parseBotLevel } from '../../bot/index.js';
 
 import type { DevHostConfig, DevOptionDef } from '../dev-host/config-types.js';
-import { GameOptionSelectionError, selectGameOptions } from '../../session/game-option-selection.js';
+import {
+  GameOptionSelectionError,
+  assertPresetsSelectable,
+  selectDesignerGameOptions,
+} from '../../session/game-option-selection.js';
 import type { GameOptionDefinition, GamePreset } from '../../session/types.js';
 
 interface DevOptions {
@@ -836,11 +840,15 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     // REPLACES the previous replace-not-merge spread, which silently dropped
     // whichever source's options weren't chosen. gameDefinition.presets are
     // read here for the first time (never read before).
+    assertNoDesignerOnlyConfigOptions(config, gameDefinition.gameOptions);
     const configGameOptions = config.gameOptions
       ? configOptionsToRecord<GameOptionDefinition>(config.gameOptions)
       : undefined;
     const gameOptions = mergeGameOptionDefinitions(gameDefinition.gameOptions, configGameOptions);
     const presets: GamePreset[] = gameDefinition.presets ?? [];
+    // A preset is a shortcut a player picks, so one naming a designer-only or
+    // undeclared option is refused here, at load, rather than when picked.
+    assertPresetsSelectable(gameOptions, presets);
 
     let playerOptions = config.playerOptions
       ? configOptionsToRecord<import('../../session/types.js').PlayerOptionDefinition>(config.playerOptions)
@@ -879,7 +887,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     options.preset !== undefined
       ? resolvePreset(gameDefinition.presets, options.preset as string)
       : undefined;
-  const selectedGameOptions = selectGameOptions(gameDefinition.gameOptions, {
+  const selectedGameOptions = selectDesignerGameOptions(gameDefinition.gameOptions, {
     ...presetBundle?.options,
     ...gameOptionFlags,
   });
@@ -941,7 +949,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     // by --game-option flags (flag beats preset beats default) — replaces the
     // frozen `.default`-only computation.
     const optionDefaults = Object.fromEntries(devConfig.gameOptions.map((o) => [o.id, o.default]));
-    const baseGameOptions = selectGameOptions(gameDefinition.gameOptions, { ...optionDefaults, ...selectedGameOptions });
+    const baseGameOptions = selectDesignerGameOptions(gameDefinition.gameOptions, { ...optionDefaults, ...selectedGameOptions });
     const clients = new Map<string, WebSocket>();
 
     const storeFile = devStorePath(cwd);

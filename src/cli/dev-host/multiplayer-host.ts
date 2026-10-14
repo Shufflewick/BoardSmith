@@ -34,7 +34,7 @@ import { runsAtOnce, type HostWorkGate } from '../../session/host-work-gate.js';
 import { heldClock, type RulesReloadNotice } from './rules-reload-queue.js';
 import { dueSeats, type SeatActivityState } from '../../engine/index.js';
 import type { GameStateSnapshot } from '../../engine/utils/index.js';
-import { selectGameOptions, type GameOptionSelection } from '../../session/game-option-selection.js';
+import { selectDesignerGameOptions, type GameOptionSelection } from '../../session/game-option-selection.js';
 import type { GameOptionDefinition } from '../../session/types.js';
 import {
   PERSIST_KEY,
@@ -216,7 +216,7 @@ export interface MultiplayerHostOptions {
   /**
    * The game options the first `start` op carries (the declared defaults,
    * overlaid by `--preset` and `--game-option`), already admitted by
-   * `selectGameOptions`: only a selection is accepted here, so the start op
+   * `selectDesignerGameOptions`: only a selection is accepted here, so the start op
    * can never carry `seed`, `elementIdKey` or another host-owned field from
    * the author's flags (#447).
    */
@@ -504,7 +504,7 @@ export class MultiplayerHost {
     for (let seat = 1; seat <= opts.playerCount; seat++) {
       this.seats.set(seat, { seat, clientId: null, name: `Player ${seat}`, connected: false });
     }
-    this.appliedGameOptions = opts.baseGameOptions ?? selectGameOptions(opts.declaredGameOptions, {});
+    this.appliedGameOptions = opts.baseGameOptions ?? selectDesignerGameOptions(opts.declaredGameOptions, {});
   }
 
   // ── Connection lifecycle ──────────────────────────────────────────────────
@@ -733,7 +733,7 @@ export class MultiplayerHost {
     if (msg.gameOptions) {
       // The player count may ride beside the options, as a preset declares
       // it. It is the host's field, applied to the seat map below, and never
-      // part of the selection: `selectGameOptions` would refuse it by name.
+      // part of the selection: the selection would refuse it by name.
       const { playerCount, ...options } = msg.gameOptions;
       if (playerCount !== undefined) requestedPlayerCount = playerCount;
       bundle = { ...bundle, ...options };
@@ -741,10 +741,11 @@ export class MultiplayerHost {
 
     // Admitted as one selection with what is already applied, so the result
     // holds declared options only, each of its declared type, and never a
-    // host-owned field such as `seed` or `elementIdKey` (#447).
+    // host-owned field such as `seed` or `elementIdKey` (#447). The dev host
+    // is the designer's table, so a designer-only option is admitted (#687).
     let selection: GameOptionSelection;
     try {
-      selection = selectGameOptions(this.opts.declaredGameOptions, { ...this.appliedGameOptions, ...bundle });
+      selection = selectDesignerGameOptions(this.opts.declaredGameOptions, { ...this.appliedGameOptions, ...bundle });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Invalid game option selection.';
       this.send(clientId, { type: 'error', message });
