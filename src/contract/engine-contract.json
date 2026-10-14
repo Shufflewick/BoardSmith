@@ -1,6 +1,6 @@
 {
-  "revision": 193,
-  "surfaceHash": "8a97494e40643b57",
+  "revision": 194,
+  "surfaceHash": "59faad952865bb60",
   "payloadHash": "7e563b9e75959ec4",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1487,6 +1487,14 @@
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "SnapshotSessionHost.handleOp now answers a move, pick, undo or seat close as soon as it is made, published and persisted, instead of after the bot run it wakes and the heatmap refresh (#698): a bot search can take the whole bot budget (30 s on the platform), longer than the client's 20 s request timeout, so a landed move could be reported as timed out. That work now runs in the background, still serialised with every other change, and the bots' moves reach every seat as ordinary pushes; a move sent while a bot searches is answered at once too. New: host.settled() resolves once that background work is done and never rejects, and the optional onBackgroundError adapter. EACH FAILURE GOES ONE WAY: a bot run that any runBotTurns() call joined (directly, or through convertSeatToBot, which still awaits its run) rejects those calls and is NOT handed to onBackgroundError, however many moves also joined it; a run only moves joined is logged and handed to onBackgroundError once; a heatmap refresh failure always goes to onBackgroundError once. A background failure no longer rejects the move that woke the bot. Re-vendor: a host whose process may sleep once a request ends (a Durable Object) must keep itself alive for the run a move wakes (for example arm its wake alarm after each move and have the alarm await runBotTurns() or settled()), and send both what runBotTurns() rejects with and what onBackgroundError receives to its fatal bot-failure path: by the rule above, each failure then arrives there exactly once."
+    },
+    {
+      "revision": 194,
+      "date": "2026-10-14",
+      "surfaceHash": "59faad952865bb60",
+      "payloadHash": "7e563b9e75959ec4",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "SnapshotSessionHost no longer runs any bot search inside its one-at-a-time section (#700). Before, after three stale bot searches in a row (three changes to the table while the bot thought, such as three picks of a multi-step selection in a simultaneous step), the fourth search held the table, so a human's op could wait the whole bot budget (30 s on the platform) past the client's 20 s request timeout and be reported as failed after it landed. Now, after three stale searches in a row, the bot's move is made on the table as it stands if the game still accepts it: it is an ordinary action stamped with the boundary key of the snapshot it was chosen on, so a move whose round has closed (STALE_SUBMISSION) or that the game refuses (category bundle) is not made, holds no seat back, and the bot searches again; a crash inside the rules while making it (ENGINE_ERROR) is logged at once as a rules bug, and the bot searches again without holding its seat back. A human's op now waits at most for one bot move to be made, never for a search. No public API, payload or stored format changed (the surface hash moved only for the host's private methods); re-vendor to get the fix."
     }
   ]
 }

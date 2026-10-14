@@ -5,16 +5,19 @@
  * the game stood on when it started, with nothing held. Its move is made,
  * inside the section, as an ordinary `action` for its seat, and only if the
  * game still stands there; otherwise it is stale, never made, and the bot
- * searches again from where the game now is. Every search here is a held
- * promise the test releases, so nothing depends on how long anything takes.
+ * searches again from where the game now is. After three stale searches in a
+ * row, the move is made on the table as it stands if it is still legal there
+ * (#700). Every search here is a held promise the test releases, so nothing
+ * depends on how long anything takes.
  */
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { executeOp, isReadOnlyOp, type ExecutableOp, type GameDefinitionLike, type Op, type OpSuccess } from './stateless-ops.js';
+import { executeOp, isReadOnlyOp, STALE_SUBMISSION_MESSAGE, type ExecutableOp, type GameDefinitionLike, type Op, type OpSuccess } from './stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 import { simultaneousRoundsFixtureDefinition } from './testing/fixtures/simultaneous-rounds-fixture.js';
 import { fixedDeployDefinition } from './testing/fixtures/timed-step-fixture.js';
 import { stubExecuteOp, succeeded } from './op-result.test-helper.js';
+import { ErrorCode } from '../types/protocol.js';
 
 interface Snap {
   v: number;
@@ -116,6 +119,15 @@ type Table = ReturnType<typeof table>;
 /** Let every pending promise and queued task run. */
 async function settle(): Promise<void> {
   for (let i = 0; i < 20; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/** Expect `op` to be answered before any held search is released, and hand back its answer. */
+async function answeredWhileSearching<T>(op: Promise<T>): Promise<T> {
+  let answered = false;
+  const result = op.then((res) => { answered = true; return res; });
+  await settle();
+  expect(answered).toBe(true);
+  return result;
 }
 
 async function untilSearches(t: Table, n: number): Promise<void> {
@@ -226,7 +238,7 @@ describe('a bot search runs outside the one-at-a-time section (#635)', () => {
     expect(t.searches).toHaveLength(1);
   });
 
-  it('after three searches in a row are thrown away, the next one holds the table until its move is made', async () => {
+  it("after three searches in a row are thrown away, a human's move during the next one is answered at once, and the bot's move is made on the table as it stands (#700)", async () => {
     const t = table();
     await t.host.start();
     const pump = t.host.runBotTurns();
@@ -239,22 +251,139 @@ describe('a bot search runs outside the one-at-a-time section (#635)', () => {
       t.searches[i].release(moved);
     }
 
-    // The fourth search runs inside the section: a human move sent now waits.
+    // The fourth search holds nothing: a human move sent now is made and answered while it runs.
     await untilSearches(t, 4);
     expect(t.searches[3].from).toBe(30);
-    humans.push(humanMove(t.host));
-    await settle();
-    expect(t.humanReads).toEqual([0, 10, 20]);
+    succeeded(await answeredWhileSearching(humanMove(t.host)));
+    expect(t.searches[3].released).toBe(false);
+    expect(t.humanReads).toEqual([0, 10, 20, 30]);
 
+    // The table changed during every search, and the bot still moves on the fourth: the
+    // move it chose at v30 is still legal at v40, so it is made there, after the human's.
     t.searches[3].release(moved);
     await settle();
-    // The bot's move (v31) was made first, and the human then moved from it.
-    expect(t.humanReads).toEqual([0, 10, 20, 31]);
+    expect(t.botMoves).toEqual([40]);
+    expect(t.recorded.slice(-2)).toEqual([40, 41]);
 
     await finish(t, pump, ...humans);
   });
 
-  it('the search that holds the table asks the bot seats the table has when it begins', async () => {
+  /** Three searches thrown away, then a fourth during which a human moves the table from v30 to v40. */
+  async function staleThriceThenMoved(t: Table): Promise<Promise<unknown>[]> {
+    const humans: Promise<unknown>[] = [];
+    for (let i = 0; i < 4; i++) {
+      await untilSearches(t, i + 1);
+      humans.push(humanMove(t.host));
+      await settle();
+      if (i < 3) t.searches[i].release(moved);
+    }
+    return humans;
+  }
+
+  const refusalsOfAMovedTable: Array<[string, unknown]> = [
+    ["the game's rules (the move is no longer legal)", { success: false, error: 'That card is gone.', category: 'bundle' }],
+    ['a closed round (the move names a round that has ended)', {
+      success: false, error: STALE_SUBMISSION_MESSAGE, category: 'protocol', errorCode: ErrorCode.STALE_SUBMISSION,
+    }],
+  ];
+
+  it.each(refusalsOfAMovedTable)(
+    'a move chosen before the table moved and refused by %s is not made, holds no seat back, and the bot searches again (#700)',
+    async (_name, refusal) => {
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const t = table();
+      await t.host.start();
+      const pump = t.host.runBotTurns();
+      const humans = await staleThriceThenMoved(t);
+
+      t.refuseBot.push(refusal);
+      t.searches[3].release(moved); // chosen at v30, refused at v40
+      await untilSearches(t, 5);
+      expect(t.searches[4].from).toBe(40);
+      expect((t.host.snapshot as unknown as Snap).v).toBe(40);
+
+      t.searches[4].release(moved);
+      await finish(t, pump, ...humans);
+      expect(t.botMoves).toEqual([40, 40]);
+      expect((t.host.snapshot as unknown as Snap).v).toBe(41);
+      // A refusal of a move chosen on another position says nothing about this one: no hold-back, nothing logged.
+      expect(errors).not.toHaveBeenCalled();
+      errors.mockRestore();
+    },
+  );
+
+  const answersAboutTheSearchedTable: Array<[string, unknown]> = [
+    ['a stalled seat', { success: true, botStalled: { seat: 2, reason: 'The bot found no move.' } }],
+    ['a refused search', { success: false, error: 'The bot could not load the game.', category: 'executor' }],
+  ];
+
+  it.each(answersAboutTheSearchedTable)(
+    'after three stale searches, a fourth that answers %s while the table moves is stale: no seat is held back, nothing is logged, and the bot searches again (#700)',
+    async (_name, answer) => {
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const t = table();
+      await t.host.start();
+      const pump = t.host.runBotTurns();
+      const humans = await staleThriceThenMoved(t);
+
+      t.searches[3].release(answer); // about v30, which is gone
+      await untilSearches(t, 5);
+      expect(t.searches[4].from).toBe(40);
+      expect(t.searches[4].asked).toEqual([2]);
+      expect(errors).not.toHaveBeenCalled();
+
+      t.searches[4].release(moved);
+      await finish(t, pump, ...humans);
+      expect(t.botMoves).toEqual([40]);
+      errors.mockRestore();
+    },
+  );
+
+  it("a crash inside the rules while making a move chosen before the table moved is logged at once, holds no seat back, and the bot searches again (#700)", async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const t = table();
+    await t.host.start();
+    const pump = t.host.runBotTurns();
+    const humans = await staleThriceThenMoved(t);
+
+    t.refuseBot.push({ success: false, error: 'Cannot read properties of undefined.', category: 'bundle', errorCode: ErrorCode.ENGINE_ERROR });
+    t.searches[3].release(moved); // chosen at v30, crashed at v40
+    await untilSearches(t, 5);
+    const logged = errors.mock.calls.map((call) => String(call[0]));
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toMatch(/REJECTED the move the bot chose for seat 2: Cannot read properties of undefined\. \(ENGINE_ERROR\)/);
+    expect(logged[0]).toMatch(/searches again/);
+    // Not held back at v40, a state the bot never searched: the next search still asks seat 2.
+    expect(t.searches[4].from).toBe(40);
+    expect(t.searches[4].asked).toEqual([2]);
+
+    t.searches[4].release(moved);
+    await finish(t, pump, ...humans);
+    expect(t.botMoves).toEqual([40, 40]);
+    errors.mockRestore();
+  });
+
+  it('a bot run whose move, made on a table that moved, throws is reported once, and the human moves stand (#700)', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const t = table();
+    await t.host.start();
+    succeeded(await humanMove(t.host));
+    const humans = await staleThriceThenMoved(t);
+
+    // Rejects only once the host makes the move, as an executor that throws does.
+    t.refuseBot.push({ then: (_resolve: unknown, reject: (e: Error) => void) => reject(new Error('The executor did not answer in time.')) });
+    t.searches[3].release(moved);
+    await Promise.all(humans);
+    await t.host.settled();
+
+    expect(t.botMoves).toEqual([50]);
+    expect(t.backgroundErrors.map((e) => (e as Error).message)).toEqual(['The executor did not answer in time.']);
+    expect(errors.mock.calls.filter((call) => String(call[0]).includes('did not answer'))).toHaveLength(1);
+    expect((t.host.snapshot as unknown as Snap).v).toBe(50);
+    errors.mockRestore();
+  });
+
+  it('each search asks the bot seats the table has when it begins, however long it waited for the section', async () => {
     const t = table();
     await t.host.start();
     const pump = t.host.runBotTurns();
@@ -414,6 +543,51 @@ describe('a bot search runs outside the one-at-a-time section (#635)', () => {
     expect((await undo).success).toBe(true);
 
     expect(await t.history()).toEqual([2]);
+    t.expectEveryChangeAdopted();
+  });
+
+  it("on a real game: a human who commits and undoes during four searches in a row is answered each time, and the bot commits once, in that round (#700)", async () => {
+    const t = await realTable(simultaneousRoundsFixtureDefinition, 2, [2]);
+    const pump = t.host.runBotTurns();
+    for (let i = 0; i < 4; i++) {
+      await settle();
+      expect(t.held).toHaveLength(1);
+      const op: Op = i % 2 === 0
+        ? { type: 'action', actionName: 'commit', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(t.host) }
+        : { type: 'undo', player: 1 };
+      succeeded(await answeredWhileSearching(t.host.handleOp(1, op)));
+      t.held.shift()!();
+    }
+    await t.releaseAll(pump);
+
+    // Seat 1's commit was undone; the bot's commit, chosen before that undo, was made in the same round.
+    expect(await t.history()).toEqual([2]);
+    expect(t.due.at(-1)).toEqual([1]);
+    t.expectEveryChangeAdopted();
+  });
+
+  it("on a real game: a round that closes without the bot during its fourth search refuses the bot's move for it, and the bot commits in the next round (#700)", async () => {
+    const t = await realTable(fixedDeployDefinition, 2, [2]);
+    const pump = t.host.runBotTurns();
+    const commit = (): Op => ({ type: 'action', actionName: 'commit', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(t.host) });
+    const ops: Array<[number, () => Op]> = [
+      [1, commit],
+      [1, () => ({ type: 'undo', player: 1 })],
+      [1, commit],
+      // The platform closes the bot's seat at the deadline: round 1 ends without the bot's own move.
+      [2, () => ({ type: 'expireSeat', player: 2, idleAction: 'commit', args: {}, boundaryKey: boundaryKeyOfHost(t.host) })],
+    ];
+    for (const [seat, op] of ops) {
+      await settle();
+      expect(t.held).toHaveLength(1);
+      succeeded(await answeredWhileSearching(t.host.handleOp(seat, op())));
+      t.held.shift()!();
+    }
+    await t.releaseAll(pump);
+
+    // Round 1: seat 1's commit and seat 2's idle commit. The bot's round-1 move was refused; its round-2 move was made.
+    expect(await t.history()).toEqual([1, 2, 2]);
+    expect(t.due.at(-1)).toEqual([1]);
     t.expectEveryChangeAdopted();
   });
 });

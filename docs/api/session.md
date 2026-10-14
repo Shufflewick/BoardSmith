@@ -211,8 +211,14 @@ changes nothing) does not hold the table: another seat's move or undo is made
 and published while the bot thinks. The bot's move is then made as an
 ordinary `action` for its seat, and a move found for a position that has since
 changed is never made: the bot searches again (#635). After three such stale
-searches in a row, the next search does hold the table, so a table that keeps
-changing still sees the bot move; every other move waits for that one search.
+searches in a row, the bot's next move is made on the table as it stands, if it
+is still legal there: it carries the round key of the position it was chosen
+on, as a player's move does, so a move whose round has closed or that the game
+now refuses is not made, and the bot searches again (#700); a crash inside the
+rules while making it is logged at once, and the bot searches again too, its
+seat never held back at a state it did not search. So a table that
+keeps changing still sees the bot move, and no move ever waits for a search,
+only for the bot's own move to be made.
 `runBotTurns()` resolves once no bot has a move to make; a call while the bots
 are being asked joins that run.
 
