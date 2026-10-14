@@ -8,6 +8,8 @@ import {
   findUnknownKeysIn,
   ALLOWED_ROUND_DEADLINE_KEYS,
   ALLOWED_NAMED_ACTION_KEYS,
+  ALLOWED_PLATFORM_KEYS,
+  ALLOWED_PLATFORM_ID_KEYS,
   ASSET_PATH_KEYS,
 } from '../lib/config-schema.js';
 import { agentsBlockProblems } from '../lib/agent-roles.js';
@@ -254,6 +256,7 @@ export function checkMetadataIssues(config: Record<string, unknown>): string[] {
 
   issues.push(...checkTaxonomyShape(config));
   issues.push(...checkPlatformBlockShapes(config));
+  issues.push(...checkPlatformIdsShape(config.platforms));
   // Which agent each role is dispatched as (#454): a wrong mapping would send work to an agent
   // type the project never meant.
   issues.push(...agentsBlockProblems(config.agents));
@@ -303,6 +306,8 @@ export function checkMetadataIssues(config: Record<string, unknown>): string[] {
       issues.push(
         "Unknown key 'estimatedDuration' — replaced by 'playtime': { \"min\": <minutes>, \"max\": <minutes> }.",
       );
+    } else if (key === 'gameId' || key === 'publisherId') {
+      issues.push(topLevelIdMessage(key));
     } else if (suggestion) {
       issues.push(`Unknown key '${key}' — did you mean '${suggestion}'?`);
     } else {
@@ -369,6 +374,41 @@ function checkBlockKeys(
       ? `Unknown key '${key}' in "${path}" — did you mean '${suggestion}'?`
       : `Unknown key '${key}' in "${path}" — not a recognized field of "${path}".`
   ));
+}
+
+/** Why a top-level platform id is refused and where it goes (#704); `publish` refuses with the same words. */
+export function topLevelIdMessage(key: 'gameId' | 'publisherId'): string {
+  return (
+    `Unknown key '${key}' — each publishing platform keeps its own ids, because dev and prod are separate ` +
+    'deployments. Move it under "platforms.dev" or "platforms.prod", whichever platform gave it, e.g. ' +
+    '"platforms": { "prod": { "gameId": "...", "publisherId": "..." } }. If you are not sure which platform it ' +
+    'belongs to, delete it and publish again with --publisher <slug>; the platform finds the game by its slug.'
+  );
+}
+
+/** Shape of the per-platform ids `boardsmith publish` keeps (#704). */
+function checkPlatformIdsShape(raw: unknown): string[] {
+  if (raw === undefined) return [];
+  if (!isPlainObject(raw)) {
+    return ['"platforms" must be an object of platform ids, e.g. { "prod": { "gameId": "...", "publisherId": "..." } }.'];
+  }
+  const issues = checkBlockKeys(raw, 'platforms', ALLOWED_PLATFORM_KEYS);
+  for (const platform of ALLOWED_PLATFORM_KEYS) {
+    const block = raw[platform];
+    if (block === undefined) continue;
+    const path = `platforms.${platform}`;
+    if (!isPlainObject(block)) {
+      issues.push(`"${path}" must be an object holding this game's "gameId" and "publisherId" on ${platform}.`);
+      continue;
+    }
+    issues.push(...checkBlockKeys(block, path, ALLOWED_PLATFORM_ID_KEYS));
+    for (const key of ALLOWED_PLATFORM_ID_KEYS) {
+      if (block[key] !== undefined && typeof block[key] !== 'string') {
+        issues.push(`"${path}.${key}" must be a string, as \`boardsmith publish --${platform}\` wrote it.`);
+      }
+    }
+  }
+  return issues;
 }
 
 /**

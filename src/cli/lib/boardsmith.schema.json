@@ -162,20 +162,20 @@
       },
       "examples": [{ "judgement": "senior", "review": "reviewer" }]
     },
-    "gameId": {
-      "x-convex-sink": false,
-      "type": "string",
-      "description": "Stable platform game identifier, written back into boardsmith.json by `boardsmith publish` after first publish. Read by publish.ts."
-    },
     "publisher": {
       "x-convex-sink": false,
       "type": "string",
       "description": "Publisher slug, written back into boardsmith.json by `boardsmith publish` (from --publisher). Read by publish.ts."
     },
-    "publisherId": {
+    "platforms": {
       "x-convex-sink": false,
-      "type": "string",
-      "description": "Stable platform publisher identifier, written back into boardsmith.json by `boardsmith publish`. Read by publish.ts."
+      "type": "object",
+      "description": "The ids each publishing platform gave this game, written back by `boardsmith publish` after a publish to that platform and read only by a publish to the same one: dev and prod are separate deployments with separate ids (#704). Read by publish.ts.",
+      "additionalProperties": false,
+      "properties": {
+        "dev": { "$ref": "#/definitions/platformIds" },
+        "prod": { "$ref": "#/definitions/platformIds" }
+      }
     },
     "joinInProgress": {
       "x-convex-sink": false,
@@ -234,6 +234,14 @@
     }
   },
   "definitions": {
+    "platformIds": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gameId": { "type": "string", "description": "Stable game identifier on this platform." },
+        "publisherId": { "type": "string", "description": "Stable identifier, on this platform, of the publisher that owns the game." }
+      }
+    },
     "namedAction": {
       "type": "object",
       "additionalProperties": false,

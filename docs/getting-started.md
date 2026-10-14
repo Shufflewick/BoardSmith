@@ -383,6 +383,22 @@ boardsmith publish --prod    # the live platform
 boardsmith publish --dev     # a local platform at http://localhost:3006
 ```
 
+The first publish to a platform needs `--publisher <slug>`, naming the publisher
+that owns the game there. Afterwards `boardsmith publish` saves the ids that
+platform gave the game under its own block in `boardsmith.json`, and later
+publishes to the same platform reuse them:
+
+```json
+  "platforms": {
+    "dev": { "gameId": "...", "publisherId": "..." },
+    "prod": { "gameId": "...", "publisherId": "..." }
+  }
+```
+
+Dev and prod are separate deployments, so a publish reads and writes only its
+own platform's block. If a platform is reset, delete that platform's block and
+publish to it again with `--publisher <slug>`; the other block is untouched.
+
 ## Understanding the Generated Code
 
 ### Game Configuration (boardsmith.json)

@@ -1,5 +1,26 @@
 # Migration Guide
 
+## `boardsmith publish` keeps ids per platform (#704)
+
+`boardsmith publish` used to keep one `gameId` and `publisherId` at the top of
+`boardsmith.json` for every platform, so a `--prod` publish sent dev's ids to
+prod and then overwrote them. Each platform now has its own block, and
+`boardsmith validate` and `boardsmith publish` refuse the top-level keys. Move
+them under the platform that gave them:
+
+```diff
+-  "gameId": "j97...",
+-  "publisherId": "jd7...",
++  "platforms": {
++    "prod": { "gameId": "j97...", "publisherId": "jd7..." }
++  },
+```
+
+If you do not know which platform they came from, delete both and publish
+again with `--dev` or `--prod` and `--publisher <slug>`; the platform finds the
+game by its slug under that publisher and the ids are saved under the right
+block.
+
 ## A `chooseFrom` callback receives the value, and `label` is the one label key
 
 A `chooseFrom` choice is a value, or `{ value, label }` to give the value its own
