@@ -691,6 +691,12 @@ onUnmounted(() => {
               class="lobby__option"
             >
               <span class="dev-chrome__label">{{ opt.label || opt.id }}</span>
+              <span
+                v-if="opt.designerOnly"
+                class="dev-chrome__badge"
+                data-testid="designer-only"
+                title="No player sees this option: only boardsmith simulate and this table set it"
+              >Designer only</span>
               <select
                 v-if="opt.choices"
                 v-model="optionSelection[opt.id]"
@@ -960,7 +966,15 @@ onUnmounted(() => {
                 :key="opt.id"
                 class="table-setup__row"
               >
-                <dt>{{ opt.label || opt.id }}</dt>
+                <dt>
+                  {{ opt.label || opt.id }}
+                  <span
+                    v-if="opt.designerOnly"
+                    class="dev-chrome__badge"
+                    data-testid="designer-only"
+                    title="No player sees this option: only boardsmith simulate and this table set it"
+                  >Designer only</span>
+                </dt>
                 <dd>{{ optionValueLabel(opt, appliedOptions[opt.id]) }}</dd>
               </div>
             </template>

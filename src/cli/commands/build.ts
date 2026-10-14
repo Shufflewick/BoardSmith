@@ -10,6 +10,7 @@ import { resolveUserPath } from '../lib/user-path.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { requireGameProjectManifests, requireRulesIndex, requireTableUi, resolveRulesDir, tableUiState } from '../lib/game-project.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
+import { assertNoDesignerOnlyConfigOptions } from '../lib/config-schema.js';
 import { readWorldDefinition, type WorldDefinition } from '../../world/index.js';
 import type { GameBackend, GameDefinition } from '../../session/index.js';
 import {
@@ -166,6 +167,7 @@ export function deriveManifest(
   artifacts: { tableUi: boolean; worldUi: boolean },
 ): Record<string, unknown> {
   const backend = readBackend(config);
+  assertNoDesignerOnlyConfigOptions(config);
 
   // EVERY WAY THE DECLARATION AND THE CODE DISAGREE, IN ONE ERROR. Reporting
   // them one at a time turns a single bad edit into a queue of rebuilds.

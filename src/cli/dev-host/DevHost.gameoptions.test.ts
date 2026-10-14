@@ -362,3 +362,57 @@ describe('DevHost: a change the host applies later replaces what the page shows 
     expect(configure?.gameOptions).toEqual({ difficulty: 'hard' });
   });
 });
+
+// ── Designer-only options (#687) ──────────────────────────────────────────────
+//
+// No lobby, preset or platform offers a designer-only option, but the dev host
+// is the designer's table: it shows the option, says no player sees it, and
+// sets it through the same `configure` message as any other option.
+const DESIGNER_CONFIG: DevHostConfig = {
+  ...TEST_CONFIG,
+  gameOptions: [
+    ...TEST_CONFIG.gameOptions,
+    { id: 'lootScale', type: 'number', label: 'Loot scale', min: 0.5, max: 2, default: 1, designerOnly: true },
+  ],
+};
+
+describe('DevHost: designer-only game options (#687)', () => {
+  async function mountDesigner(): Promise<VueWrapper> {
+    const wrapper = mount(DevHost, { props: { config: DESIGNER_CONFIG }, attachTo: document.body });
+    await wrapper.vm.$nextTick();
+    mockWsInstance!.simulateOpen();
+    await wrapper.vm.$nextTick();
+    mockWsInstance!.simulateMessage(SEAT_LOBBY);
+    await wrapper.vm.$nextTick();
+    return wrapper;
+  }
+
+  it('the lobby field is marked designer-only, and the ordinary option is not', async () => {
+    const wrapper = await mountDesigner();
+    const fields = wrapper.findAll('.lobby__option');
+    const knob = fields.find((f) => f.find('[data-testid="lobby-option-lootScale"]').exists());
+    const ordinary = fields.find((f) => f.find('[data-testid="lobby-option-difficulty"]').exists());
+    expect(knob?.find('[data-testid="designer-only"]').text()).toBe('Designer only');
+    expect(ordinary?.find('[data-testid="designer-only"]').exists()).toBe(false);
+  });
+
+  it('Apply sends a value set for it, like any other option', async () => {
+    const wrapper = await mountDesigner();
+    mockWsInstance!.send.mockClear();
+    await wrapper.find('[data-testid="lobby-option-lootScale"]').setValue('1.5');
+    await wrapper.find('[data-testid="lobby-apply-options"]').trigger('click');
+    const frames = mockWsInstance!.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    expect(frames.find((f) => f.type === 'configure')?.gameOptions).toEqual({ difficulty: 'easy', lootScale: 1.5 });
+  });
+
+  it('Table setup shows its value and marks it designer-only', async () => {
+    const wrapper = await mountDesigner();
+    mockWsInstance!.simulateMessage({ type: 'init', seat: 1 });
+    await wrapper.vm.$nextTick();
+    await wrapper.findAll('[data-testid="table-setup-toggle"]')[0].trigger('click');
+    await wrapper.vm.$nextTick();
+    const row = wrapper.findAll('.table-setup__row').find((r) => r.find('dt').text().startsWith('Loot scale'));
+    expect(row?.find('dd').text()).toBe('1');
+    expect(row?.find('[data-testid="designer-only"]').text()).toBe('Designer only');
+  });
+});

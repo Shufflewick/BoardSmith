@@ -1,7 +1,7 @@
 /**
  * A table-game project for the `boardsmith simulate` variant and worker tests (#556): the
- * {@link ScoreGame} fixture with its metrics, the `target`, `limit` and `breakInProduction` game
- * options, its amounts read from `src/rules/data/amounts.csv` (1, 2 and 3) through `?raw`, a
+ * {@link ScoreGame} fixture with its metrics, the `target` (designer-only, #687), `limit` and
+ * `breakInProduction` game options, its amounts read from `src/rules/data/amounts.csv` (1, 2 and 3) through `?raw`, a
  * `biggest` greedy policy and a `steady` class policy. `data/one.csv` and `data/three.csv` are
  * replacements for the amounts file, and `src/rules/data/unused.csv` is a data file the rules
  * never import.
@@ -24,7 +24,7 @@ export function scoreProject(): string {
       `class CsvScoreGame extends ScoreGame { constructor(options) { super({ ...options, amounts }); } }`,
       `export const gameDefinition = { gameClass: CsvScoreGame, gameType: 'score', displayName: 'Score',`,
       `  minPlayers: 2, maxPlayers: 3, metrics: scoreMetrics,`,
-      `  gameOptions: { target: { type: 'number', label: 'Target' }, limit: { type: 'number', label: 'Limit' },`,
+      `  gameOptions: { target: { type: 'number', label: 'Target', default: 6, designerOnly: true }, limit: { type: 'number', label: 'Limit' },`,
       `    breakInProduction: { type: 'boolean', label: 'Break in production' } } };`,
     ].join('\n'),
     'src/rules/data/amounts.csv': 'amount\n1\n2\n3\n',

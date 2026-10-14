@@ -103,7 +103,7 @@
     "gameOptions": {
       "x-convex-sink": true,
       "type": "array",
-      "description": "Game-level option definitions surfaced in the dev host and lobby. Read by dev.ts."
+      "description": "Game-level option definitions surfaced in the dev host and lobby. Read by dev.ts. A designer-only option (designerOnly) is refused here: declare it in gameDefinition.gameOptions."
     },
     "playerOptions": {
       "x-convex-sink": true,

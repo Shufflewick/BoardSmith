@@ -192,3 +192,24 @@ export function findUnknownKeysIn(
 
   return results;
 }
+
+/**
+ * Refuse a `boardsmith.json` game option marked `designerOnly` (#687). That
+ * file's options are published in the manifest, which the platform's lobby
+ * lists, and `boardsmith simulate` never reads them, so a designer-only option
+ * belongs in `gameDefinition.gameOptions`. `boardsmith build` and
+ * `boardsmith dev` both call this, so a run that works locally cannot publish
+ * the option to players.
+ */
+export function assertNoDesignerOnlyConfigOptions(config: { gameOptions?: unknown }): void {
+  const options = Array.isArray(config.gameOptions) ? (config.gameOptions as Array<Record<string, unknown>>) : [];
+  const marked = options.find((option) => option?.designerOnly !== undefined);
+  if (marked) {
+    const name = String(marked.id ?? marked.name);
+    throw new Error(
+      `boardsmith.json declares game option "${name}" as designerOnly, but boardsmith.json's options ` +
+        `are published to the platform's lobby. Move "${name}" into gameDefinition.gameOptions ` +
+        `(src/rules/index.ts), where boardsmith simulate and the dev host read it and no player sees it.`,
+    );
+  }
+}

@@ -54,7 +54,7 @@ import {
 
 ### Game Options
 
-- `selectGameOptions()` - The one way a player's choice of the game's declared options is admitted; returns a `GameOptionSelection`
+- `selectGameOptions()` - The one way a player's choice of the game's declared options is admitted; returns a `GameOptionSelection`. It refuses a host-owned key, an undeclared key, a value the declaration does not admit, and an option declared `designerOnly: true` (a designer's knob that only `boardsmith simulate` and the dev host set)
 - `GameOptionSelection` - An admitted choice of game options
 
 ### Player Colors

@@ -207,6 +207,11 @@ describe('resolveSimulationGameOptions (issue 141)', () => {
   it('rejects a flag with no "=" separator', () => {
     expect(() => resolveSimulationGameOptions(declared, ['difficulty'])).toThrow(/key=value/);
   });
+
+  it('sets a designer-only option, which no player can choose (#687)', () => {
+    const withKnob = { ...declared, lootScale: { type: 'number' as const, label: 'Loot scale', default: 1, designerOnly: true as const } };
+    expect(resolveSimulationGameOptions(withKnob, ['lootScale=1.5'])).toEqual({ lootScale: 1.5 });
+  });
 });
 
 describe('simulateCommand', () => {

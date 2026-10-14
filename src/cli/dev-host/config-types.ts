@@ -5,8 +5,9 @@
  * `virtual:boardsmith-dev-config` module.
  *
  * A selection a client makes among these options is admitted by the session's
- * `selectGameOptions`, the same function the production lobby uses; nothing
- * here validates one.
+ * `selectDesignerGameOptions`: the production lobby's rules, except that a
+ * designer-only option (`designerOnly: true`) may be set too. Nothing here
+ * validates one.
  */
 
 import type { GamePreset } from '../../session/types.js';
@@ -20,6 +21,8 @@ export interface DevOptionDef {
   choices?: Array<{ value: unknown; label?: string }>;
   min?: number;
   max?: number;
+  /** Shown with a "Designer only" mark: no player sees it (#687). */
+  designerOnly?: true;
   [key: string]: unknown;
 }
 
