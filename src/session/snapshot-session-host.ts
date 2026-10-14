@@ -52,10 +52,12 @@ type BotStep = 'moved' | 'again' | 'stale' | 'done';
  * Whether `made`, the refusal of a bot's move made on a table that moved since
  * its search, answers that move rather than the table: the game refused it
  * (it is no longer legal), or its round has closed. Either way the bot
- * searches again, and its seat is not held back (#421), since the move was
- * never chosen at the state that refused it (#700).
+ * searches again, silently, and its seat is not held back (#421), since the
+ * move was never chosen at the state that refused it (#700). A crash inside
+ * the rules (ENGINE_ERROR) is not one of these: it is a bug, said at once.
  */
 function refusedForTheMove(made: OpFailure): boolean {
+  if (made.errorCode === ErrorCode.ENGINE_ERROR) return false;
   return made.category === 'bundle' || made.errorCode === ErrorCode.STALE_SUBMISSION;
 }
 
@@ -1514,7 +1516,9 @@ export class SnapshotSessionHost {
    * `bundle`) holds that seat back until the game state changes (#421): asked
    * again at the same state, the bot makes the same move and is refused the
    * same way. That is a bug in the game's action definition, its bot hooks or
-   * its move enumeration. The pump goes on to the other bot seats.
+   * its move enumeration. The pump goes on to the other bot seats. When
+   * `tableMoved`, the move was chosen on an earlier state than the one that
+   * refused it (#700), so the seat is not held back and the bot searches again.
    *
    * Any other refusal (of the search, or of the move by the executor or by the
    * host's own executeOp, such as a platform that could not store the result)
@@ -1524,15 +1528,22 @@ export class SnapshotSessionHost {
    * Either way it is said out loud: a bot that silently stops moving leaves
    * every seat waiting with nothing in the console to say why.
    */
-  private reportRefusedBotMove(res: OpFailure, seats: Array<{ seat: number }>, seat?: number): BotStep {
+  private reportRefusedBotMove(
+    res: OpFailure,
+    seats: Array<{ seat: number }>,
+    seat?: number,
+    tableMoved = false,
+  ): BotStep {
     const code = res.errorCode ? ` (${res.errorCode})` : '';
     if (seat !== undefined && res.category === 'bundle') {
+      const next = tableMoved
+        ? `The table had moved since the bot chose that move, so the bot searches again from where the game stands now.`
+        : `The bot will not try again until the game changes, so a step waiting on this seat will not close.`;
       console.error(
         `[SnapshotSessionHost] the game REJECTED the move the bot chose for seat ${seat}: ${res.error}${code}. ` +
-          `The bot will not try again until the game changes, so a step waiting on this seat will not ` +
-          `close. Check the action's selections and the bot's move enumeration for this seat.`,
+          `${next} Check the action's selections and the bot's move enumeration for this seat.`,
       );
-      this.holdBotSeatBack(seat);
+      if (!tableMoved) this.holdBotSeatBack(seat);
       return 'again';
     }
     // A refused search can carry any category (a platform relabels some), so it names none.
@@ -1666,8 +1677,9 @@ export class SnapshotSessionHost {
     const made = await this.commitMutatingOp(move.player, move);
     if (made.success) return 'moved';
     // A refused move changed nothing, so the game still stands where it did.
-    if (this._snapshot !== searched && refusedForTheMove(made)) return 'stale';
-    return this.reportRefusedBotMove(made, seats, move.player);
+    const tableMoved = this._snapshot !== searched;
+    if (tableMoved && refusedForTheMove(made)) return 'stale';
+    return this.reportRefusedBotMove(made, seats, move.player, tableMoved);
   }
 
   /**

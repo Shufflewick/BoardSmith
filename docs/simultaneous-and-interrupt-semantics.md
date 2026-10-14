@@ -244,8 +244,8 @@ The distinction that matters is **whose intent is being carried**.
 
 - A **player's** submission must echo the key it was rendered with. Stamping the
   current key on a player's behalf is the defect, not the fix.
-- A **server-composed op acting NOW** — a bot's move, a demo playback step, an
-  in-process headless driver — legitimately stamps the current key, because
+- A **server-composed op acting NOW** — a demo playback step, an in-process
+  headless driver — legitimately stamps the current key, because
   there is no interval between composing and submitting for a round to close
   in. Every such site says so in a comment at the site.
 - A bot's move gets there in two steps (#635). Its search, `botSuggest`, runs
@@ -262,6 +262,8 @@ The distinction that matters is **whose intent is being carried**.
   it echoes the key of the snapshot it was chosen on, so the engine refuses it
   if that round has closed, and the game's own checks refuse it if it is no
   longer legal. Either refusal sends the bot searching again, without holding
-  its seat back. No search ever runs inside the section, so a change waits at
+  its seat back. A crash inside the rules while making it (`ENGINE_ERROR`) is
+  logged at once as a rules bug, and the bot searches again, again without
+  holding its seat back at a state it never searched. No search ever runs inside the section, so a change waits at
   most for the bot's move to be made, never for its search.
 

@@ -214,7 +214,9 @@ changed is never made: the bot searches again (#635). After three such stale
 searches in a row, the bot's next move is made on the table as it stands, if it
 is still legal there: it carries the round key of the position it was chosen
 on, as a player's move does, so a move whose round has closed or that the game
-now refuses is not made, and the bot searches again (#700). So a table that
+now refuses is not made, and the bot searches again (#700); a crash inside the
+rules while making it is logged at once, and the bot searches again too, its
+seat never held back at a state it did not search. So a table that
 keeps changing still sees the bot move, and no move ever waits for a search,
 only for the bot's own move to be made.
 `runBotTurns()` resolves once no bot has a move to make; a call while the bots

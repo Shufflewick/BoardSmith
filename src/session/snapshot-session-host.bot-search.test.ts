@@ -254,10 +254,7 @@ describe('a bot search runs outside the one-at-a-time section (#635)', () => {
     // The fourth search holds nothing: a human move sent now is made and answered while it runs.
     await untilSearches(t, 4);
     expect(t.searches[3].from).toBe(30);
-    let answered = false;
-    humans.push(humanMove(t.host).then((res) => { answered = true; return res; }));
-    await settle();
-    expect(answered).toBe(true);
+    succeeded(await answeredWhileSearching(humanMove(t.host)));
     expect(t.searches[3].released).toBe(false);
     expect(t.humanReads).toEqual([0, 10, 20, 30]);
 
@@ -314,6 +311,57 @@ describe('a bot search runs outside the one-at-a-time section (#635)', () => {
       errors.mockRestore();
     },
   );
+
+  const answersAboutTheSearchedTable: Array<[string, unknown]> = [
+    ['a stalled seat', { success: true, botStalled: { seat: 2, reason: 'The bot found no move.' } }],
+    ['a refused search', { success: false, error: 'The bot could not load the game.', category: 'executor' }],
+  ];
+
+  it.each(answersAboutTheSearchedTable)(
+    'after three stale searches, a fourth that answers %s while the table moves is stale: no seat is held back, nothing is logged, and the bot searches again (#700)',
+    async (_name, answer) => {
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const t = table();
+      await t.host.start();
+      const pump = t.host.runBotTurns();
+      const humans = await staleThriceThenMoved(t);
+
+      t.searches[3].release(answer); // about v30, which is gone
+      await untilSearches(t, 5);
+      expect(t.searches[4].from).toBe(40);
+      expect(t.searches[4].asked).toEqual([2]);
+      expect(errors).not.toHaveBeenCalled();
+
+      t.searches[4].release(moved);
+      await finish(t, pump, ...humans);
+      expect(t.botMoves).toEqual([40]);
+      errors.mockRestore();
+    },
+  );
+
+  it("a crash inside the rules while making a move chosen before the table moved is logged at once, holds no seat back, and the bot searches again (#700)", async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const t = table();
+    await t.host.start();
+    const pump = t.host.runBotTurns();
+    const humans = await staleThriceThenMoved(t);
+
+    t.refuseBot.push({ success: false, error: 'Cannot read properties of undefined.', category: 'bundle', errorCode: ErrorCode.ENGINE_ERROR });
+    t.searches[3].release(moved); // chosen at v30, crashed at v40
+    await untilSearches(t, 5);
+    const logged = errors.mock.calls.map((call) => String(call[0]));
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toMatch(/REJECTED the move the bot chose for seat 2: Cannot read properties of undefined\. \(ENGINE_ERROR\)/);
+    expect(logged[0]).toMatch(/searches again/);
+    // Not held back at v40, a state the bot never searched: the next search still asks seat 2.
+    expect(t.searches[4].from).toBe(40);
+    expect(t.searches[4].asked).toEqual([2]);
+
+    t.searches[4].release(moved);
+    await finish(t, pump, ...humans);
+    expect(t.botMoves).toEqual([40, 40]);
+    errors.mockRestore();
+  });
 
   it('a bot run whose move, made on a table that moved, throws is reported once, and the human moves stand (#700)', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
