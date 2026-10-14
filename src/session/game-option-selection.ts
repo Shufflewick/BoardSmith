@@ -97,7 +97,7 @@ export function assertPresetsSelectable(
 ): void {
   for (const preset of presets ?? []) {
     try {
-      selectGameOptions(declared, preset.options);
+      selectGameOptions(declared, preset.options ?? {});
     } catch (err) {
       if (!(err instanceof GameOptionSelectionError)) throw err;
       throw new Error(`This game's preset "${preset.name}" cannot be used: ${err.message} Correct the preset.`);

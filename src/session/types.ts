@@ -257,8 +257,8 @@ export type PlayerOptionDefinition = StandardPlayerOption | ExclusivePlayerOptio
 export interface GamePreset {
   name: string;
   description?: string;
-  /** Game options to apply */
-  options: Record<string, unknown>;
+  /** Game options to apply; a preset that only sets its players leaves this out */
+  options?: Record<string, unknown>;
   /** Per-player configurations */
   players?: PlayerConfig[];
 }

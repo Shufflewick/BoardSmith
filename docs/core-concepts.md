@@ -841,7 +841,8 @@ export const gameDefinition = {
 - No lobby, preset or platform offers it. `selectGameOptions` refuses a
   player's selection naming it, a preset that sets it is refused when the game
   loads, and `boardsmith.json` options (which the platform's lobby lists)
-  refuse `designerOnly`, so `boardsmith build` never publishes one.
+  refuse `designerOnly`, and an option named for a designer-only one, so
+  `boardsmith build` never publishes one.
 - `boardsmith simulate --game-option lootScale=1.5`, `--compare lootScale=1,1.5`
   and the dev host's lobby and Table setup set it. The dev host marks it
   "Designer only".

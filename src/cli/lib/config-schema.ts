@@ -194,22 +194,39 @@ export function findUnknownKeysIn(
 }
 
 /**
- * Refuse a `boardsmith.json` game option marked `designerOnly` (#687). That
- * file's options are published in the manifest, which the platform's lobby
- * lists, and `boardsmith simulate` never reads them, so a designer-only option
- * belongs in `gameDefinition.gameOptions`. `boardsmith build` and
- * `boardsmith dev` both call this, so a run that works locally cannot publish
- * the option to players.
+ * Refuse a `boardsmith.json` game option that is designer-only (#687): one
+ * marked `designerOnly`, or one named for a designer-only option of
+ * `gameDefinition.gameOptions` (`rulesOptions`). That file's options are
+ * published in the manifest, which the platform's lobby lists, and
+ * `boardsmith simulate` never reads them, so a designer-only option belongs
+ * only in `gameDefinition.gameOptions`. `boardsmith build` and `boardsmith dev`
+ * both call this, so a run that works locally cannot publish the option to
+ * players.
  */
-export function assertNoDesignerOnlyConfigOptions(config: { gameOptions?: unknown }): void {
+export function assertNoDesignerOnlyConfigOptions(
+  config: { gameOptions?: unknown },
+  rulesOptions: Readonly<Record<string, { designerOnly?: true }>> | undefined,
+): void {
   const options = Array.isArray(config.gameOptions) ? (config.gameOptions as Array<Record<string, unknown>>) : [];
-  const marked = options.find((option) => option?.designerOnly !== undefined);
-  if (marked) {
-    const name = String(marked.id ?? marked.name);
+  for (const option of options) {
+    const name = String(option.id ?? option.name);
+    const why = designerOnlyReason(option, name, rulesOptions);
+    if (why === undefined) continue;
     throw new Error(
-      `boardsmith.json declares game option "${name}" as designerOnly, but boardsmith.json's options ` +
+      `boardsmith.json declares game option "${name}" ${why}, but boardsmith.json's options ` +
         `are published to the platform's lobby. Move "${name}" into gameDefinition.gameOptions ` +
-        `(src/rules/index.ts), where boardsmith simulate and the dev host read it and no player sees it.`,
+        `(src/rules/index.ts) only, where boardsmith simulate and the dev host read it and no player sees it.`,
     );
   }
+}
+
+/** Why a `boardsmith.json` option is designer-only, said for a message, or `undefined` if it is not. */
+function designerOnlyReason(
+  option: Record<string, unknown>,
+  name: string,
+  rulesOptions: Readonly<Record<string, { designerOnly?: true }>> | undefined,
+): string | undefined {
+  if (option.designerOnly !== undefined) return 'as designerOnly';
+  const rules = rulesOptions !== undefined && Object.hasOwn(rulesOptions, name) ? rulesOptions[name] : undefined;
+  return rules?.designerOnly ? 'that gameDefinition.gameOptions declares designer-only' : undefined;
 }

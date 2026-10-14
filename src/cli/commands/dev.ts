@@ -840,7 +840,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     // REPLACES the previous replace-not-merge spread, which silently dropped
     // whichever source's options weren't chosen. gameDefinition.presets are
     // read here for the first time (never read before).
-    assertNoDesignerOnlyConfigOptions(config);
+    assertNoDesignerOnlyConfigOptions(config, gameDefinition.gameOptions);
     const configGameOptions = config.gameOptions
       ? configOptionsToRecord<GameOptionDefinition>(config.gameOptions)
       : undefined;

@@ -69,6 +69,38 @@ describe('boardsmith dev and a designer-only game option (#687)', () => {
     expect(ended.output).toContain('This game\'s preset "Rich" cannot be used: Game option "lootScale" is designer-only');
   });
 
+  it('refuses to start a game whose boardsmith.json also declares a designer-only option of the rules', async () => {
+    const cwd = await projectDeclaring(`  gameOptions: { ${KNOB} },`);
+    const configPath = join(cwd, 'boardsmith.json');
+    const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+    config.gameOptions = [{ id: 'lootScale', type: 'number', label: 'Loot scale', default: 1 }];
+    writeFileSync(configPath, JSON.stringify(config, null, 2));
+
+    const ended = await spawnDev(cwd, await freePort()).ended;
+
+    expect(ended.code, ended.output).toBe(1);
+    expect(ended.output).toContain('boardsmith.json declares game option "lootScale"');
+    expect(ended.output).toContain('Move "lootScale" into gameDefinition.gameOptions');
+  });
+
+  it('starts a game whose preset sets only its players', async () => {
+    const cwd = await projectDeclaring(`  presets: [{ name: 'Pair', players: [{ name: 'A' }, { name: 'B' }] }],`);
+    const port = await freePort();
+    const run = spawnDev(cwd, port, ['--preset', 'Pair']);
+    try {
+      const ready = await new Promise<boolean>((resolve) => {
+        run.child.stdout.on('data', () => {
+          if (run.output().includes('Ready!')) resolve(true);
+        });
+        run.child.on('exit', () => resolve(false));
+      });
+      expect(ready, run.output()).toBe(true);
+    } finally {
+      run.child.kill('SIGINT');
+      await run.ended;
+    }
+  });
+
   it('refuses to start a game whose boardsmith.json marks an option designer-only', async () => {
     const cwd = await devProject(false);
     const configPath = join(cwd, 'boardsmith.json');

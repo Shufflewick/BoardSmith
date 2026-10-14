@@ -408,4 +408,18 @@ describe('a designer-only option is never a player\'s to choose (#687)', () => {
     expect(() => assertPresetsSelectable(withKnob, [{ name: 'Quick', options: { rounds: 2 } }])).not.toThrow();
     expect(() => assertPresetsSelectable(withKnob, undefined)).not.toThrow();
   });
+
+  it('a preset naming an undeclared option, or a number off its step, is refused at load', () => {
+    expect(() => assertPresetsSelectable(withKnob, [{ name: 'Typo', options: { roundz: 2 } }])).toThrow(
+      /preset "Typo" cannot be used: Unknown game option "roundz"/,
+    );
+    const stepped: Record<string, GameOptionDefinition> = { bid: { type: 'number', label: 'Bid', min: 5, step: 5, default: 5 } };
+    expect(() => assertPresetsSelectable(stepped, [{ name: 'Odd', options: { bid: 7 } }])).toThrow(
+      /preset "Odd" cannot be used: Game option "bid" must be in steps of 5/,
+    );
+  });
+
+  it('a preset that sets only its players, with no options, is admitted', () => {
+    expect(() => assertPresetsSelectable(withKnob, [{ name: 'Three', players: [{}, {}, {}] }])).not.toThrow();
+  });
 });

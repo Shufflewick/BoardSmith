@@ -161,13 +161,13 @@ export function deriveManifest(
   pkg: Record<string, unknown>,
   gameDefinition: Pick<
     GameDefinition,
-    'gameClass' | 'minPlayers' | 'maxPlayers' | 'bot' | 'persistence' | 'world'
+    'gameClass' | 'minPlayers' | 'maxPlayers' | 'bot' | 'persistence' | 'world' | 'gameOptions'
   >,
   engineRevision: number,
   artifacts: { tableUi: boolean; worldUi: boolean },
 ): Record<string, unknown> {
   const backend = readBackend(config);
-  assertNoDesignerOnlyConfigOptions(config);
+  assertNoDesignerOnlyConfigOptions(config, gameDefinition.gameOptions);
 
   // EVERY WAY THE DECLARATION AND THE CODE DISAGREE, IN ONE ERROR. Reporting
   // them one at a time turns a single bad edit into a queue of rebuilds.
