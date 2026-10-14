@@ -46,12 +46,12 @@ This document provides an overview of the BoardSmith package architecture and ho
 │  MCTS bot                │              - Assertions                        │
 │  - createBot()           │              - Random simulation                 │
 │  - Difficulty presets    │              - Debug utilities                   │
-│       │                  │                                                  │
+│       │                  │              - Headless sessions                 │
 │       ▼                  │                                                  │
 │  ┌────────────┐          │  Game session management                         │
 │  │ bot-trainer│          │  - SnapshotSessionHost (handleOp, bots)          │
 │  └────────────┘          │  - executeOp (one op, from a snapshot)           │
-│  - Weight evolution of   │  - createHeadlessSession (tests)                 │
+│  - Weight evolution of   │                                                  │
 │    the game's objectives │  - persist / record / push adapters              │
 │  - Benchmarking          │  - Game option selection                         │
 │                          │                                                  │
