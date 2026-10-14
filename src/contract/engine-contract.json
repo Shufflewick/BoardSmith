@@ -1,6 +1,6 @@
 {
-  "revision": 192,
-  "surfaceHash": "cde7780e73e735f3",
+  "revision": 193,
+  "surfaceHash": "8a97494e40643b57",
   "payloadHash": "7e563b9e75959ec4",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1479,6 +1479,14 @@
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "GameRunner.performAction no longer builds every seat's view on each action (#695): ActionExecutionResult.playerViews is gone (call runner.getAllPlayerViews() when views are needed). The executor's action op already built its views separately, so each action op did that work twice; re-vendor to drop the duplicate. The public type ActionExecutionResult lost its playerViews field, a change the surface hash cannot see (types are not hashed), hence an adopted revision; no format or payload change."
+    },
+    {
+      "revision": 193,
+      "date": "2026-10-14",
+      "surfaceHash": "8a97494e40643b57",
+      "payloadHash": "7e563b9e75959ec4",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "SnapshotSessionHost.handleOp now answers a move, pick, undo or seat close as soon as it is made, published and persisted, instead of after the bot run it wakes and the heatmap refresh (#698): a bot search can take the whole bot budget (30 s on the platform), longer than the client's 20 s request timeout, so a landed move could be reported as timed out. That work now runs in the background, still serialised with every other change, and the bots' moves reach every seat as ordinary pushes; a move sent while a bot searches is answered at once too. New: host.settled() resolves once that background work is done and never rejects, and the optional onBackgroundError adapter. EACH FAILURE GOES ONE WAY: a bot run that any runBotTurns() call joined (directly, or through convertSeatToBot, which still awaits its run) rejects those calls and is NOT handed to onBackgroundError, however many moves also joined it; a run only moves joined is logged and handed to onBackgroundError once; a heatmap refresh failure always goes to onBackgroundError once. A background failure no longer rejects the move that woke the bot. Re-vendor: a host whose process may sleep once a request ends (a Durable Object) must keep itself alive for the run a move wakes (for example arm its wake alarm after each move and have the alarm await runBotTurns() or settled()), and send both what runBotTurns() rejects with and what onBackgroundError receives to its fatal bot-failure path: by the rule above, each failure then arrives there exactly once."
     }
   ]
 }

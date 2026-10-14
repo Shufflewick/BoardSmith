@@ -33,6 +33,16 @@ const MAX_BOT_MOVES = 500;
  */
 const MAX_STALE_BOT_SEARCHES = 3;
 
+/** One run of the bot pump, which every wake while it runs joins: see {@link SnapshotSessionHost.runBotTurns}. */
+interface BotRun {
+  done: Promise<void>;
+  /**
+   * Whether a caller of `runBotTurns` joined it. Such a caller is handed the
+   * run's failure, so `onBackgroundError` is not (#698).
+   */
+  awaited: boolean;
+}
+
 /** What became of one bot search: see {@link SnapshotSessionHost.runBotTurns}. */
 type BotStep = 'moved' | 'again' | 'stale' | 'done';
 
@@ -329,6 +339,24 @@ export interface SnapshotSessionAdapters {
    */
   onPersistenceError?: (error: PersistenceErrorEntry, consecutiveFailures: number, healthy: boolean) => void;
   /**
+   * Called for a failure of the work a move starts and does not wait for
+   * (#698): the bot run it wakes, the bots' moves, and the heatmap refresh
+   * after them. The move itself was made, published and persisted, and its
+   * `handleOp` has answered; the host has logged the failure, and the bots are
+   * asked again on the next wake. `error` is what was thrown, usually by
+   * `executeOp`: tell the players in your own words, never with its stack.
+   *
+   * EACH FAILURE GOES ONE WAY. A bot run that any caller of
+   * {@link SnapshotSessionHost.runBotTurns} joined (directly, or through
+   * `convertSeatToBot`, which awaits it) rejects that caller's promise and is
+   * NOT handed here, however many moves also joined it. A run only moves
+   * joined is handed here, once. A heatmap refresh failure always comes here,
+   * once per refresh. So a platform that reports what `runBotTurns` rejects
+   * with and what arrives here reports every failure exactly once.
+   * A throwing hook is logged and swallowed. See {@link SnapshotSessionHost.settled}.
+   */
+  onBackgroundError?: (error: unknown) => void;
+  /**
    * Optional narrator hook for game authors.
    *
    * Supplying this hook is required for hidden-information games: the default
@@ -417,13 +445,20 @@ export class SnapshotSessionHost {
    * `isBot` on one side and writes `ai*` on the other is a regression.
    */
   private botSeats: BotSeat[] = [];
-  /** The run of {@link runBotTurns} under way, which every caller meanwhile joins. */
-  private botPump: Promise<void> = Promise.resolve();
+  /** The run of the bot pump under way, which every wake meanwhile joins. */
+  private botRun: BotRun = { done: Promise.resolve(), awaited: false };
   private botPumpRunning = false;
   /** Counts calls to {@link runBotTurns}, so a run sees a wake that came while it searched. */
   private botWakes = 0;
   /** The refresh of the visible heatmaps under way, which every caller meanwhile joins (#676). */
   private heatmapRefresh: Promise<void> | null = null;
+  /** Work ops started and did not wait for, until it settles: see {@link settled}. */
+  private readonly backgroundWork = new Set<Promise<void>>();
+  /**
+   * The runs (a {@link BotRun}, or a heatmap refresh) whose failure has been
+   * reported, so a run several moves joined is reported once.
+   */
+  private readonly reportedRuns = new WeakSet<object>();
   /**
    * Bot seats that could not act at one game state: their move was refused, or
    * they found none (#421). Nothing about the game changes when that happens,
@@ -963,7 +998,8 @@ export class SnapshotSessionHost {
   /**
    * Run `op` for `seat` and answer with that op's own result. Read-only ops
    * (a choices query, the read-only debug ops) do NOT mutate or broadcast.
-   * State-mutating ops broadcast the new state, THEN resolve.
+   * State-mutating ops broadcast and persist the new state, THEN resolve,
+   * without waiting for the bot run they wake ({@link settled}, #698).
    */
   async handleOp<T extends Op['type']>(seat: number, op: OpOfType<T>): Promise<OpResultFor<T>> {
     // `handle` answers each op from the branch that matched its type. TypeScript
@@ -1098,10 +1134,12 @@ export class SnapshotSessionHost {
   }
 
   /**
-   * A state-mutating op: made and published inside the one-at-a-time section.
-   * Then, with the section free again, the bot seats are asked whether the move
-   * handed them the turn, and the visible heatmaps are brought up to date.
-   * Resolves once no bot has a move left to make.
+   * A state-mutating op: made, published and persisted inside the one-at-a-time
+   * section, and resolved then (#698). The bot run the move wakes and the
+   * refresh of the visible heatmaps go on after it, in the background
+   * ({@link settled}): a bot's search can take the whole bot budget, longer
+   * than a client waits for the answer to a move that has already landed. What
+   * they change reaches every seat as an ordinary publish.
    */
   private async applyMutatingOp(seat: number, op: MutatingOp): Promise<OpResult> {
     const res = await this.enqueue(() => this.commitMutatingOp(seat, op));
@@ -1113,13 +1151,75 @@ export class SnapshotSessionHost {
     // just sits there. (Undo alone never showed this — it rewinds to the
     // requesting seat's own turn start, so the pump would find no due bot seat
     // anyway. A rewind can target ANY point, which is what made it reachable.)
-    if (actionCompleted || op.type === 'undo' || op.type === 'debugRewind') await this.runBotTurns();
+    const wakesBots = actionCompleted || op.type === 'undo' || op.type === 'debugRewind';
+    if (!wakesBots) return res;
+    const tracked: Promise<void> = this.afterMove(`seat ${seat}'s ${op.type}`, actionCompleted).finally(() =>
+      this.backgroundWork.delete(tracked),
+    );
+    this.backgroundWork.add(tracked);
+    return res;
+  }
+
+  /**
+   * The work a move starts and does not wait for (#698): the bot run it wakes,
+   * then the refresh of the visible heatmaps. Never rejects: a failure goes one
+   * way only. A bot run's goes to the callers of `runBotTurns` that joined the
+   * run (`convertSeatToBot`, a platform's own wake), whose promises reject
+   * with it; only a run none of them awaited is handed to `onBackgroundError`.
+   * A heatmap refresh has no such callers, so its failure always is.
+   */
+  private async afterMove(what: string, refreshHeatmaps: boolean): Promise<void> {
+    const run = this.wakeBots();
+    try {
+      await run.done;
+    } catch (error) {
+      if (!run.awaited) this.reportBackgroundFailure(run, `the bot run after ${what}`, error);
+      return;
+    }
+    if (!refreshHeatmaps) return;
     // Keep any visible "Show move quality" heatmaps current as play proceeds:
     // recompute for the seat whose turn it now is, drop stale chips for the rest.
     // (The hint is cleared on each action; the heatmap must be refreshed the
     // same way or it freezes at the position where it was first toggled on.)
-    if (actionCompleted) await this.refreshVisibleHeatmaps();
-    return res;
+    const refresh = this.refreshVisibleHeatmaps();
+    try {
+      await refresh;
+    } catch (error) {
+      this.reportBackgroundFailure(refresh, `the heatmap refresh after ${what}`, error);
+    }
+  }
+
+  /** Log the failure of `run`, and hand it to `onBackgroundError`, once per run however many moves joined it. */
+  private reportBackgroundFailure(run: object, what: string, error: unknown): void {
+    if (this.reportedRuns.has(run)) return;
+    this.reportedRuns.add(run);
+    console.error(
+      `[SnapshotSessionHost] ${what} failed: ${error instanceof Error ? error.message : String(error)}. ` +
+        `That move was made and published. The bots and heatmaps are brought up to date again on the ` +
+        `next move, roster change or resume.`,
+    );
+    try {
+      this.adapters.onBackgroundError?.(error);
+    } catch (hookError) {
+      console.error(
+        `[SnapshotSessionHost] onBackgroundError hook threw: ${hookError instanceof Error ? hookError.message : String(hookError)}`,
+      );
+    }
+  }
+
+  /**
+   * Resolves once the work ops started and did not wait for has finished: the
+   * bot run a move woke, the bots' moves, and the heatmap refresh after them,
+   * including any such work started while it waits. It never rejects: a
+   * failure of that work goes to `onBackgroundError`, or to the callers of
+   * {@link runBotTurns} that joined the failed run (see `onBackgroundError`).
+   *
+   * `handleOp` answers as soon as its own op is made (#698), so a host that
+   * must keep a request or process alive until the bots have moved awaits
+   * this, and so does code that reads the table after the bots' replies.
+   */
+  async settled(): Promise<void> {
+    while (this.backgroundWork.size > 0) await Promise.all(this.backgroundWork);
   }
 
   /** Execute `op`, then hold, publish and persist what it made. Runs inside the one-at-a-time section. */
@@ -1345,18 +1445,29 @@ export class SnapshotSessionHost {
    * one-at-a-time section, against the snapshot the game stands on when the
    * search starts, so a human's move, undo or seat close is made and published
    * while a bot thinks, not after it (#635). The `handleOp` call that made it
-   * still resolves only once the bot run it wakes, or joins, has finished. The
+   * resolves then too, without waiting for the bot run it wakes (#698). The
    * move the bot found is made inside the section, as an ordinary `action` for
    * its seat, only if the game still stands on that snapshot. Otherwise it is
    * stale: it is never made, and the bot searches again from where the game is
    * now. After {@link MAX_STALE_BOT_SEARCHES} stale searches in a row, the next
    * search runs inside the section, so a table that keeps changing still sees
    * the bot move; everyone else waits for that one search.
+   *
+   * A run that fails rejects every call that joined it, and is then not handed
+   * to `onBackgroundError` (#698): each failure goes one way.
    */
   runBotTurns(): Promise<void> {
+    const run = this.wakeBots();
+    // This caller is handed the run's failure, so onBackgroundError is not (#698).
+    run.awaited = true;
+    return run.done;
+  }
+
+  /** Start a run of the bot pump, or join the one under way, and make it look once more before it stops. */
+  private wakeBots(): BotRun {
     this.botWakes++;
-    if (!this.botPumpRunning) this.botPump = this.pumpBotTurns();
-    return this.botPump;
+    if (!this.botPumpRunning) this.botRun = { done: this.pumpBotTurns(), awaited: false };
+    return this.botRun;
   }
 
   /** The bot seats the pump may ask now: every one not held back at this state (#421). */

@@ -105,6 +105,7 @@ describe('#421: SnapshotSessionHost with a bot seat whose move is refused', () =
       type: 'action', actionName: 'move', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host),
     });
     expect(human.success).toBe(true);
+    await host.settled();
     expect(refusalsOfSeat2()).toBe(3);
     await host.runBotTurns();
     expect(refusalsOfSeat2()).toBe(3);

@@ -415,6 +415,11 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
     onPersistenceError: (entry, _consecutiveFailures, healthy) => {
       record(healthy ? 'warning' : 'error', entry.message, 'persistence');
     },
+    // The bot run a move wakes goes on after the move's reply (#698), so its
+    // failure reaches the ring buffer here rather than as that op's error.
+    onBackgroundError: (error) => {
+      record('error', error instanceof Error ? error.message : String(error), 'bot');
+    },
     record: (views, meta) => {
       lastPlayerViews = views.players;
       isComplete = meta.isComplete;

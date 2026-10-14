@@ -198,7 +198,10 @@ export function createHeadlessSession<G extends Game = Game>(
           ? { ...op, boundaryKey: flowBoundaryKey(host.flowState as BoundaryKeyState | null) }
           : op
       ) as OpOfType<T>;
-      return host.handleOp(seat, stamped);
+      const result = await host.handleOp(seat, stamped);
+      // The host answers once the op is made; a test reads the table once the bots have replied too (#698).
+      await host.settled();
+      return result;
     },
     /**
      * `seat`'s state of record: what the host last published to that seat,

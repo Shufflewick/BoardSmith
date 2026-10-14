@@ -32,7 +32,7 @@ import {
 ### Session Host
 
 - `SnapshotSessionHost` - Holds one game's snapshot, runs ops on it through an `executeOp` adapter, publishes views and drives bot seats
-- `SnapshotSessionAdapters` - What a host is built with: `playerCount`, `executeOp`, `record`, `push`, and optionally `persist`, `onPersistenceError`, `debug`, `teachingDisabled`, `narrateMove`, `hostWork`
+- `SnapshotSessionAdapters` - What a host is built with: `playerCount`, `executeOp`, `record`, `push`, and optionally `persist`, `onPersistenceError`, `onBackgroundError`, `debug`, `teachingDisabled`, `narrateMove`, `hostWork`
 - `SnapshotHostState` - The durable state a host hands `persist`: `snapshot` and `pendingStates`
 - `HostRestore` - What `SnapshotSessionHost.restore` takes: the durable state, the last views and the bot roster
 - `BotSeat` - A seat a bot plays, and how strongly: `{ seat, level? }`
@@ -200,22 +200,41 @@ const session = createHeadlessSession(
 );
 await session.start();
 
-// After the human's move the host runs its bot pump, so seat 2 replies
-// before `send` resolves.
+// After the human's move the host runs its bot pump, and `send` waits for it,
+// so seat 2 has replied by the time `send` resolves.
 await session.send(1, { type: 'action', actionName: 'move', player: 1, args: { from: 'a1', to: 'b2' } });
 ```
 
 `start()` does not run the bot pump. When a bot seat moves first, run it once
 with `await session.host.runBotTurns()`. A bot's search (`botSuggest`, which
 changes nothing) does not hold the table: another seat's move or undo is made
-and published while the bot thinks, though the `send` that made it resolves only
-once the bot run it wakes has finished. The bot's move is then made as an
+and published while the bot thinks. The bot's move is then made as an
 ordinary `action` for its seat, and a move found for a position that has since
 changed is never made: the bot searches again (#635). After three such stale
 searches in a row, the next search does hold the table, so a table that keeps
 changing still sees the bot move; every other move waits for that one search.
 `runBotTurns()` resolves once no bot has a move to make; a call while the bots
-are being asked joins that run. To hand a seat to the bot mid-game, call `session.makeSeatBot(seat, level)`
+are being asked joins that run.
+
+On a `SnapshotSessionHost` of your own, `handleOp` answers a move as soon as
+that move is made, published and persisted. It does not wait for the bot run
+the move wakes or the heatmap refresh after it (#698): a bot's search can take
+the whole bot budget, longer than a client waits for an answer. Those run in the
+background, still one move at a time with every other change, and what the bots
+do reaches each page as an ordinary push. A second move sent while a bot
+searches is answered at once too, and the bot searches again from it.
+`await host.settled()` waits until that background work is done (a host that
+must keep its process alive until the bots have moved awaits it; the headless
+`send` does); it never rejects. `convertSeatToBot` still resolves only once the
+bot run it starts has finished, since running the bots is that op's whole job.
+
+Each failure of that work goes one way. A bot run that any `runBotTurns()` call
+joined (directly, or through `convertSeatToBot`, which awaits it) rejects those
+calls and is not handed to `onBackgroundError`, however many moves also joined
+it. A run that only moves joined is logged and handed to `onBackgroundError`,
+once. A heatmap refresh failure always goes to `onBackgroundError`, once. So a
+platform that reports what `runBotTurns()` rejects with and what
+`onBackgroundError` receives reports every failure exactly once. To hand a seat to the bot mid-game, call `session.makeSeatBot(seat, level)`
 and then send
 `{ type: 'convertSeatToBot', seat }`: the first changes the roster, the second
 wakes the pump.

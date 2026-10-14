@@ -1411,6 +1411,15 @@ export class MultiplayerHost {
   }
 
   /**
+   * Resolves once the game's background work has finished: the bot run a move
+   * woke and the bots' moves (#698). A move's reply goes out as soon as the move
+   * is made, so a caller that reads the table after the bots replied waits here.
+   */
+  settled(): Promise<void> {
+    return this.session?.host.settled() ?? Promise.resolve();
+  }
+
+  /**
    * Tell every connected page where a saved rules edit stands (#379), so it can
    * say "Reloading rules..." while the host holds its moves.
    */
@@ -1651,7 +1660,10 @@ export class MultiplayerHost {
         return;
       }
     }
-    if (seats.length > 0) this.assertRoundMoved(window, idle.name, seats);
+    if (seats.length === 0) return;
+    // The bots still due answer after the idle actions do (#698); the round moves once they have.
+    await window.session.host.settled();
+    this.assertRoundMoved(window, idle.name, seats);
   }
 
   /**

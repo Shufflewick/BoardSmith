@@ -324,6 +324,7 @@ describe('MultiplayerHost — follow active seat', () => {
     const { host, lastOfType, pass } = makeAltHost();
     await host.handleMessage('A', { type: 'hello' }); // A = seat 1, seat 2 = bot
     await pass('A', 'r1'); // A passes seat 1 → bot passes seat 2 → flow completes
+    await host.settled();
     expect(lastOfType('A', 'game_state').isComplete).toBe(true);
   });
 
@@ -346,6 +347,7 @@ describe('MultiplayerHost — follow active seat', () => {
     // A now passes as seat 2 (attributed to the active seat) → flow completes.
     clear();
     await pass('A', 'r2');
+    await host.settled();
     expect(lastOfType('A', 'game_state').isComplete).toBe(true);
   });
 
@@ -685,6 +687,7 @@ describe('MultiplayerHost — restart from a finished game (D11 characterization
     const { host, lastOfType, pass, seeds } = makeAltHostWithSeedCapture();
     await host.handleMessage('A', { type: 'hello' }); // A = seat 1, seat 2 = bot
     await pass('A', 'r1'); // A passes seat 1 → bot passes seat 2 → flow completes
+    await host.settled();
     expect(lastOfType('A', 'game_state').isComplete).toBe(true);
     expect(seeds).toHaveLength(1);
 
@@ -701,6 +704,7 @@ describe('MultiplayerHost — restart from a finished game (D11 characterization
     const { host, lastOfType, pass, seeds } = makeAltHostWithSeedCapture();
     await host.handleMessage('A', { type: 'hello' });
     await pass('A', 'r1');
+    await host.settled();
     expect(lastOfType('A', 'game_state').isComplete).toBe(true);
 
     await host.handleMessage('A', { type: 'restart' });
@@ -710,6 +714,7 @@ describe('MultiplayerHost — restart from a finished game (D11 characterization
     // the runner is a genuinely fresh instance, not the finished one replaying
     // a completed flow (which would reject the action or stay complete).
     await pass('A', 'r2');
+    await host.settled();
     expect(lastOfType('A', 'game_state').isComplete).toBe(true);
 
     // Second restart-from-finished: the multi-game-format loop repeats.

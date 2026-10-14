@@ -65,6 +65,7 @@ function table(endsGame = false) {
   const heatmaps: HeatmapCompute[] = [];
   const slow: Array<() => void> = [];
   const recorded: number[] = [];
+  const backgroundErrors: unknown[] = [];
   let roster = [2];
   /** A bot search from `v` = `from`, held until the test releases it. */
   const search = (from: number, asked: number[]) =>
@@ -98,6 +99,7 @@ function table(endsGame = false) {
     }),
     record: () => recorded.push((host.snapshot as unknown as Snap).v),
     push: () => {},
+    onBackgroundError: (error) => backgroundErrors.push(error),
   };
   const host = new SnapshotSessionHost(adapters);
   /** Make `seats` the table's bot seats. */
@@ -106,7 +108,7 @@ function table(endsGame = false) {
     host.setBotSeats(seats.map((seat) => ({ seat })));
   };
   setRoster([2]);
-  return { host, searches, humanReads, botMoves, refuseBot, heatmaps, slow, recorded, setRoster };
+  return { host, searches, humanReads, botMoves, refuseBot, heatmaps, slow, recorded, backgroundErrors, setRoster };
 }
 
 type Table = ReturnType<typeof table>;
@@ -416,6 +418,191 @@ describe('a bot search runs outside the one-at-a-time section (#635)', () => {
   });
 });
 
+describe("a human's op resolves once it is made, not after the bot run it wakes (#698)", () => {
+  it("a human's move that hands the turn to a bot resolves while the bot still searches", async () => {
+    const t = table();
+    await t.host.start();
+    let resolved = false;
+    const human = humanMove(t.host).then((res) => { resolved = true; return res; });
+    await untilSearches(t, 1);
+
+    expect(t.searches[0].released).toBe(false);
+    expect(resolved).toBe(true);
+    succeeded(await human);
+    await finish(t, t.host.settled());
+  });
+
+  it('a second move made while the woken bot searches resolves at once too, and the bot moves from it', async () => {
+    const t = table();
+    await t.host.start();
+    succeeded(await humanMove(t.host));
+    await untilSearches(t, 1);
+
+    // The table moves on while the bot thinks: that move is answered without waiting either.
+    succeeded(await humanMove(t.host));
+    expect(t.searches[0].released).toBe(false);
+    expect((t.host.snapshot as unknown as Snap).v).toBe(20);
+
+    t.searches[0].release(moved); // chosen at v10, which is gone
+    await untilSearches(t, 2);
+    expect(t.searches[1].from).toBe(20);
+    t.searches[1].release(moved);
+    await finish(t, t.host.settled());
+    expect(t.botMoves).toEqual([20]);
+    expect((t.host.snapshot as unknown as Snap).v).toBe(21);
+  });
+
+  it('a bot run that throws after a move is logged and handed to onBackgroundError, once; the move stands', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const t = table();
+    await t.host.start();
+    succeeded(await humanMove(t.host));
+    await untilSearches(t, 1);
+    // An executor call that throws (a timeout on a platform, say): the search rejects.
+    t.searches[0].release(Promise.reject(new Error('The executor did not answer in time.')));
+
+    await t.host.settled();
+    expect(t.backgroundErrors.map((e) => (e as Error).message)).toEqual(['The executor did not answer in time.']);
+    expect(String(errors.mock.calls.at(-1)?.[0])).toMatch(
+      /the bot run after seat 1's action failed: The executor did not answer in time\./,
+    );
+    expect((t.host.snapshot as unknown as Snap).v).toBe(10);
+
+    // The next move wakes the bots again.
+    succeeded(await humanMove(t.host));
+    await untilSearches(t, 2);
+    t.searches[1].release(moved);
+    await finish(t, t.host.settled());
+    expect(t.botMoves).toEqual([20]);
+    expect(t.backgroundErrors).toHaveLength(1);
+    errors.mockRestore();
+  });
+
+  it('a bot run that several moves joined, and that throws, is reported once', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const t = table();
+    await t.host.start();
+    succeeded(await humanMove(t.host));
+    await untilSearches(t, 1);
+    succeeded(await humanMove(t.host));
+    succeeded(await humanMove(t.host));
+    t.searches[0].release(Promise.reject(new Error('The executor did not answer in time.')));
+
+    await t.host.settled();
+    expect(t.backgroundErrors).toHaveLength(1);
+    expect(errors.mock.calls.filter((call) => String(call[0]).includes('did not answer'))).toHaveLength(1);
+    errors.mockRestore();
+  });
+
+  it("a runBotTurns() that joins a move's bot run, which then throws, is the run's one report", async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const t = table();
+    await t.host.start();
+    succeeded(await humanMove(t.host));
+    await untilSearches(t, 1);
+    // A platform's own wake (an alarm, say) joins the run the move woke.
+    const wake = t.host.runBotTurns();
+    succeeded(await humanMove(t.host));
+    t.searches[0].release(Promise.reject(new Error('The executor did not answer in time.')));
+
+    await expect(wake).rejects.toThrow('The executor did not answer in time.');
+    await t.host.settled();
+    expect(t.backgroundErrors).toEqual([]);
+    expect(errors.mock.calls.filter((call) => String(call[0]).includes('did not answer'))).toEqual([]);
+    errors.mockRestore();
+  });
+
+  it('a run several moves joined that throws something other than an Error is reported once', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const t = table();
+    await t.host.start();
+    succeeded(await humanMove(t.host));
+    await untilSearches(t, 1);
+    succeeded(await humanMove(t.host));
+    succeeded(await humanMove(t.host));
+    t.searches[0].release(Promise.reject('executor gone'));
+
+    await t.host.settled();
+    expect(t.backgroundErrors).toEqual(['executor gone']);
+    errors.mockRestore();
+  });
+
+  it('two runs that fail with the same error object are each reported', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const shared = new Error('The executor is unavailable.');
+    const t = table();
+    await t.host.start();
+    for (let i = 0; i < 2; i++) {
+      succeeded(await humanMove(t.host));
+      await untilSearches(t, i + 1);
+      t.searches[i].release(Promise.reject(shared));
+      await t.host.settled();
+    }
+    expect(t.backgroundErrors).toEqual([shared, shared]);
+    errors.mockRestore();
+  });
+
+  it('settled() waits for work that starts while it waits and outlives the work it began waiting for', async () => {
+    const t = table();
+    await t.host.start();
+    // An undo wakes the bots and refreshes no heatmap: its work ends with the bot run.
+    succeeded(await t.host.handleOp(1, { type: 'undo', player: 1 }));
+    await untilSearches(t, 1);
+    let settled = false;
+    const waiting = t.host.settled().then(() => { settled = true; });
+
+    // A move made now joins that run, then refreshes seat 1's heatmap, which outlives it.
+    t.host.transientTeachingState.set(1, { heatmap: { visible: true, entries: [] } });
+    succeeded(await humanMove(t.host));
+    t.searches[0].release(nothingDue); // stale: the move landed during it
+    await untilSearches(t, 2);
+    t.searches[1].release(nothingDue);
+    await settle();
+    expect(t.heatmaps).toHaveLength(1);
+    expect(settled).toBe(false);
+
+    t.heatmaps[0].release();
+    await waiting;
+    expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([{ from: 20 }]);
+  });
+
+  it('a host disposed while the bot a move woke searches publishes nothing more, and settles', async () => {
+    const t = table();
+    await t.host.start();
+    succeeded(await humanMove(t.host));
+    await untilSearches(t, 1);
+    const published = t.recorded.length;
+
+    t.host.dispose();
+    t.searches[0].release(moved);
+    await t.host.settled();
+
+    expect(t.recorded).toHaveLength(published);
+    expect(t.botMoves).toEqual([]);
+    expect(t.searches).toHaveLength(1);
+  });
+
+  it("on a real game: the human's commit is answered and pushed, and the bot's commit follows as a push of its own", async () => {
+    const t = await realTable(simultaneousRoundsFixtureDefinition, 2, [2]);
+    const human = await t.host.handleOp(1, {
+      type: 'action', actionName: 'commit', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(t.host),
+    });
+    succeeded(human);
+    await settle();
+    expect(t.held).toHaveLength(1);
+    const pushedBeforeBot = t.pushes.length;
+    expect(pushedBeforeBot).toBeGreaterThan(0);
+
+    await t.releaseAll(t.host.settled());
+    // Round 1 has one commit from each seat; the bot goes on to commit in round 2.
+    expect((await t.history()).slice(0, 2)).toEqual([1, 2]);
+    const botPush = t.pushes[pushedBeforeBot];
+    expect(botPush.cause).toBe('change');
+    expect(botPush.seats).toContain(1);
+    t.expectEveryChangeAdopted();
+  });
+});
+
 describe('a refused bot move (#635)', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -526,29 +713,34 @@ describe('a visible heatmap, refreshed after a move (#635)', () => {
     expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([]);
     expect(t.heatmaps.map((h) => h.from)).toEqual([10, 40]);
     t.heatmaps[1].release();
-    await Promise.all([first, ...more]);
+    await Promise.all([first, ...more, t.host.settled()]);
     expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([{ from: 40 }]);
     expect(t.heatmaps).toHaveLength(2);
   });
 
-  it('a heatmap compute that fails rejects the move that started it, and the next move starts a new compute (#676)', async () => {
+  it('a heatmap compute that fails is logged and handed to onBackgroundError, the move stands, and the next move starts a new compute (#676, #698)', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     const t = table();
     t.setRoster([]);
     await t.host.start();
     t.host.transientTeachingState.set(1, { heatmap: { visible: true, entries: [] } });
 
-    const first = humanMove(t.host);
+    succeeded(await humanMove(t.host));
     await settle();
     expect(t.heatmaps.map((h) => h.from)).toEqual([10]);
     t.heatmaps[0].fail(new Error('executor unavailable'));
-    await expect(first).rejects.toThrow('executor unavailable');
+    await t.host.settled();
+    expect(t.backgroundErrors.map((e) => (e as Error).message)).toEqual(['executor unavailable']);
+    expect(String(errors.mock.calls.at(-1)?.[0])).toMatch(/heatmap refresh after seat 1's action failed: executor unavailable\. That move was made/);
+    expect((t.host.snapshot as unknown as Snap).v).toBe(10);
 
-    const next = humanMove(t.host);
+    succeeded(await humanMove(t.host));
     await settle();
     expect(t.heatmaps.map((h) => h.from)).toEqual([10, 20]);
     t.heatmaps[1].release();
-    succeeded(await next);
+    await t.host.settled();
     expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([{ from: 20 }]);
+    errors.mockRestore();
   });
 
   it('a heatmap turned off while it is being refreshed stays off, and nothing is published for it', async () => {
@@ -563,7 +755,7 @@ describe('a visible heatmap, refreshed after a move (#635)', () => {
     succeeded(await t.host.handleOp(1, { type: 'heatmapToggle', seat: 1, visible: false }));
     const published = t.recorded.length;
     t.heatmaps[0].release();
-    await move;
+    await Promise.all([move, t.host.settled()]);
 
     expect(t.host.transientTeachingState.get(1)?.heatmap).toEqual({ visible: false, entries: [] });
     expect(t.recorded).toHaveLength(published);
@@ -582,7 +774,7 @@ describe('a visible heatmap, refreshed after a move (#635)', () => {
     expect((t.host.snapshot as unknown as Snap).v).toBe(20);
     const published = t.recorded.length;
     t.heatmaps[0].release();
-    await move;
+    await Promise.all([move, t.host.settled()]);
 
     // The heatmap computed before the undo was not stored, and none was computed after it.
     expect(t.host.transientTeachingState.has(1)).toBe(false);
@@ -603,6 +795,7 @@ async function realTable(definition: GameDefinitionLike, playerCount: number, bo
   const due: number[][] = [];
   const changes: Array<{ op: string; snapshot: unknown }> = [];
   const adopted = new Set<unknown>();
+  const pushes: Array<{ cause: string; seats: number[] }> = [];
   const host = new SnapshotSessionHost({
     playerCount,
     debug: true,
@@ -613,7 +806,7 @@ async function realTable(definition: GameDefinitionLike, playerCount: number, bo
       return res;
     }),
     record: (_views, meta) => due.push(meta.turnBoundary.dueSeats),
-    push: () => {},
+    push: (changed, meta) => pushes.push({ cause: meta.cause, seats: changed.map((c) => c.seat) }),
     persist: (state) => { adopted.add(state.snapshot); },
   });
   host.setBotSeats(bots.map((seat) => ({ seat })));
@@ -622,6 +815,8 @@ async function realTable(definition: GameDefinitionLike, playerCount: number, bo
     host,
     held,
     due,
+    /** Each push: why, and the seats it went to. */
+    pushes,
     /** Release every search as it comes until all of `work` settles. */
     async releaseAll(...work: Promise<unknown>[]): Promise<void> {
       let done = false;

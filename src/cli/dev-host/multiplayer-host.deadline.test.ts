@@ -328,6 +328,38 @@ describe('MultiplayerHost step deadlines (#302)', () => {
     expect(error).toHaveBeenCalledWith(expect.stringContaining('did not move'));
   });
 
+  it('waits for a bot still searching when the window elapses before it checks that the round moved (#698)', async () => {
+    const held: Array<() => void> = [];
+    let holding = false;
+    const h = makeHost(fixedDeployDefinition, {
+      executeOp: async (gameOptions, snap, pend, op, hostOptions) => {
+        if (holding && op.type === 'botSuggest') await new Promise<void>((resolve) => held.push(resolve));
+        return executeOp(fixedDeployDefinition, gameOptions, snap, pend, op, hostOptions);
+      },
+    });
+    await h.host.handleMessage('A', { type: 'hello' }); // seat 2 is the bot, and commits round 1 at once
+    holding = true;
+    await h.commit('A', 'a1'); // round 2 opens, and the bot's search of it is held
+    await vi.waitFor(() => expect(held).toHaveLength(1));
+    const armedKey = clients.key('A');
+
+    h.clock.advance(WINDOW_MS);
+    // Seat 1's idle action lands and is published: only the bot still owes round 2.
+    await vi.waitFor(() => expect(h.due('A')).toEqual([2]));
+    expect(clients.key('A')).toBe(armedKey);
+    // Its op answers within the same turn of the event loop, with nothing waiting on I/O.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // The bot has not answered yet, and that is not a round that failed to move.
+    expect(h.errors('A')).toEqual([]);
+
+    holding = false;
+    held.splice(0).forEach((release) => release());
+    await vi.waitFor(() => expect(clients.key('A')).not.toBe(armedKey));
+    await h.host.settled();
+    expect(error).not.toHaveBeenCalled();
+    expect(h.errors('A')).toEqual([]);
+  });
+
   it('reports an idle action the game refuses in the terminal and to every client', async () => {
     const h = makeHost(fixedDeployDefinition, { idleAction: { name: 'surrender' } });
     await h.seatBoth();

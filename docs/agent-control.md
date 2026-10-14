@@ -585,8 +585,8 @@ An agent driving a long-running session should poll (or subscribe to)
 
 The dev host's `debug:logs` WS op returns the captured server-side error/warning
 ring buffer (capped at the most recent 300 entries) — persistence errors
-(health-escalated), `OpResult.warnings`, and uncaught request-boundary errors
-all feed it, sourced by originating op name. The `DebugPanel`'s "Logs" tab
+(health-escalated), `OpResult.warnings`, uncaught request-boundary errors, and
+failures of the bot run a move woke (source `bot`, #698) all feed it, sourced by originating op name. The `DebugPanel`'s "Logs" tab
 polls this same op for a human-visible view; an agent can poll it directly
 via `createDevHostClient`'s `serverRequest`/dev-host WS surface for the same
 data without opening a browser.
