@@ -8,8 +8,9 @@
  * search quality, so the assertions are about the accounting rather than about
  * how well MCTS plays.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { benchmarkBot, weightedObjectives } from './benchmark.js';
+import { createBot } from '../bot/index.js';
 import {
   Game,
   Player,
@@ -23,6 +24,12 @@ import {
 } from '../engine/index.js';
 import type { Objective } from '../bot/index.js';
 import type { ObjectiveWeight } from './types.js';
+
+// The real createBot, watched so a test can see how each move's search was set up.
+vi.mock('../bot/index.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../bot/index.js')>();
+  return { ...original, createBot: vi.fn(original.createBot) };
+});
 
 /** Every player acts once; the seat named by `winningSeat` always wins. */
 class FixedWinnerGame extends Game<FixedWinnerGame, Player> {
@@ -164,7 +171,6 @@ const benchmark = (gameCount: number, outcome: typeof DecisiveGame.outcome) => {
     gameCount,
     mctsIterations: 1,
     maxActions: 10,
-    timeout: 5000,
     seed: 'bench-test',
   });
 };
@@ -260,8 +266,7 @@ describe('benchmarkBot', () => {
       gameCount: 2,
       mctsIterations: 1,
       maxActions: 4,
-      timeout: 5000,
-      seed: 'never-ends',
+        seed: 'never-ends',
     });
     expect(result.gamesPlayed).toBe(2);
     expect(result.draws).toBe(2);
@@ -273,8 +278,7 @@ describe('benchmarkBot', () => {
       gameCount: 4,
       mctsIterations: 1,
       maxActions: 4,
-      timeout: 5000,
-      seed: 'override-declared',
+        seed: 'override-declared',
     });
     expect(result.failures).toEqual([]);
     expect(result.draws).toBe(0);
@@ -287,8 +291,7 @@ describe('benchmarkBot', () => {
       gameCount: 2,
       mctsIterations: 1,
       maxActions: 10,
-      timeout: 5000,
-      seed: 'simultaneous',
+        seed: 'simultaneous',
     });
     expect(result.failures).toEqual([]);
     expect(result.incomplete).toBe(0);
@@ -338,8 +341,7 @@ describe('benchmarkBot on a game that cannot finish (#37)', () => {
       gameCount: 4,
       mctsIterations: 1,
       maxActions: 10,
-      timeout: 5000,
-      seed: 'explode',
+        seed: 'explode',
       ...overrides,
     });
 
@@ -390,6 +392,8 @@ describe('a healthy benchmark reports no failures', () => {
  * positions with its objectives rather than with the game's result.
  */
 class RaceGame extends Game<RaceGame, Player> {
+  /** Every step taken by any RaceGame, as `seat:by`, for a test to compare runs by. */
+  static moves: string[] = [];
   totals: Record<number, number> = { 1: 0, 2: 0 };
 
   constructor(options: GameOptions) {
@@ -399,6 +403,7 @@ class RaceGame extends Game<RaceGame, Player> {
         .chooseFrom('by', { choices: [1, 2] })
         .execute((args, ctx) => {
           const game = ctx.game as RaceGame;
+          RaceGame.moves.push(`${ctx.player.seat}:${String(args.by)}`);
           game.totals[ctx.player.seat] += args.by as number;
           if (game.totals[ctx.player.seat] >= 12) game.finish([ctx.player]);
         }),
@@ -421,7 +426,7 @@ function raceObjectives() {
 }
 
 describe("benchmarkBot scores the game's own objectives (#523)", () => {
-  const config = { gameCount: 2, mctsIterations: 20, maxActions: 40, timeout: 30_000, seed: 'race' };
+  const config = { gameCount: 2, mctsIterations: 20, maxActions: 40, seed: 'race' };
 
   it("calls every one of the game's objective checkers", async () => {
     const { calls, objectives } = raceObjectives();
@@ -464,5 +469,46 @@ describe('weightedObjectives', () => {
   it("keeps the game's own weight for an objective with no evolved weight", () => {
     const { objectives } = raceObjectives();
     expect(weightedObjectives(objectives, [{ id: 'lead', weight: 9 }])(game, 1)['long-stride'].weight).toBe(2);
+  });
+});
+
+describe('a seeded benchmark is reproducible move for move (#699)', () => {
+  const race = (config: { seed?: string; timeout?: number }) =>
+    benchmarkBot(RaceGame, 'race', undefined, noWeights, { gameCount: 4, mctsIterations: 8, maxActions: 40, ...config });
+
+  /** Every move made, in play and in search, by one benchmark run. */
+  async function movesOf(config: { seed?: string }): Promise<string[]> {
+    RaceGame.moves = [];
+    await race(config);
+    return RaceGame.moves;
+  }
+
+  beforeEach(() => vi.mocked(createBot).mockClear());
+
+  it('makes the same moves, in play and in every search, when run twice with one seed', async () => {
+    const first = await movesOf({ seed: 'twice' });
+    const second = await movesOf({ seed: 'twice' });
+    expect(first.length).toBeGreaterThan(0);
+    expect(second).toEqual(first);
+  });
+
+  it("seeds every move's search through createBot's reproducible option, each with its own seed", async () => {
+    await race({ seed: 'per-move' });
+    const reproducible = vi.mocked(createBot).mock.calls.map((call) => call[7]);
+    expect(reproducible.length).toBeGreaterThan(0);
+    expect(reproducible.every((r) => typeof r?.seed === 'string')).toBe(true);
+    expect(new Set(reproducible.map((r) => r!.seed)).size).toBe(reproducible.length);
+  });
+
+  it('leaves an unseeded benchmark as it was: unseeded, clock-bounded searches', async () => {
+    await race({});
+    const calls = vi.mocked(createBot).mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every((call) => call[7] === undefined)).toBe(true);
+  });
+
+  it('refuses a game timeout on a seeded benchmark, since a clock would make it unrepeatable', async () => {
+    await expect(race({ seed: 'clock', timeout: 1000 })).rejects.toThrow(/seed.*timeout|timeout.*seed/);
+    expect(createBot).not.toHaveBeenCalled();
   });
 });

@@ -68,6 +68,24 @@ npx boardsmith evolve-bot-weights --generations 5 --population 20
 The game's `gameDefinition` must set `bot.objectives` to the objectives function
 `bot.ts` exports; the command refuses a game without one.
 
+### Reproducible runs
+
+By default each run draws a fresh seed, and every bot search is cut off by the
+clock, so two runs with the same settings give different weights. Pass
+`--seed` for a run you can repeat (#699):
+
+```bash
+npx boardsmith evolve-bot-weights --generations 5 --population 20 --seed tuning-1
+```
+
+The seed drives mutation and selection, every benchmark game and every move's
+search. Each search runs exactly its `--mcts` iterations with no time limit, so
+the same seed and settings give the same weights move for move, on any number
+of workers. From a script, `WeightEvolverConfig.seed` does the same, and
+`BenchmarkConfig.seed` seeds one benchmark. A seeded run has no clock bound at
+all: `gameTimeout` (or `timeout`) with a seed is refused, and `maxActionsPerGame`
+(or `maxActions`) still bounds each game.
+
 ## From a Script
 
 The bot must play on the same copy of the engine as the game's elements, or it

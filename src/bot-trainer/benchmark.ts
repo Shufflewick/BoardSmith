@@ -10,11 +10,20 @@ import type { ObjectiveWeight } from './types.js';
 export interface BenchmarkConfig {
   /** Number of games to run */
   gameCount?: number;
-  /** Timeout per game in ms */
+  /**
+   * Timeout per game in ms (default 60000). Only for an unseeded benchmark: a
+   * seeded one has no clock bound, so passing both is refused.
+   */
   timeout?: number;
   /** Maximum actions per game */
   maxActions?: number;
-  /** Base seed for reproducibility */
+  /**
+   * Seed for a reproducible benchmark (#699): every game and every move's
+   * search is seeded from it, and each search runs exactly `mctsIterations`
+   * iterations with no clock bound, so the same seed gives the same result
+   * move for move. Without one, the games still play from fixed seeds but each
+   * search draws a fresh random seed and is clock-bounded.
+   */
   seed?: string;
   /** MCTS iterations for the trained bot (default 100 for quality evaluation) */
   mctsIterations?: number;
@@ -101,8 +110,9 @@ export async function benchmarkBot<G extends Game>(
   weights: ObjectiveWeight[],
   config: BenchmarkConfig = {}
 ): Promise<BenchmarkResult> {
+  const timeout = gameTimeout(config);
+  const seeded = config.seed !== undefined;
   const gameCount = config.gameCount ?? 100;
-  const timeout = config.timeout ?? 60000;
   const maxActions = config.maxActions ?? 300;
   const seed = config.seed ?? 'benchmark';
   const mctsIterations = config.mctsIterations ?? 100;
@@ -132,6 +142,7 @@ export async function benchmarkBot<G extends Game>(
       timeout,
       maxActions,
       seed: gameSeed,
+      seeded,
     });
 
     if (trainedPlayerIndex === 0) tally.gamesAsPlayer0++;
@@ -183,6 +194,19 @@ export async function benchmarkBot<G extends Game>(
   return result;
 }
 
+/** Each game's clock bound: none for a seeded benchmark, which refuses one. */
+function gameTimeout({ seed, timeout }: BenchmarkConfig): number {
+  if (seed === undefined) return timeout ?? 60000;
+  if (timeout !== undefined) {
+    throw new Error(
+      `A seeded benchmark (seed "${seed}") cannot also have a ${timeout}ms game timeout: a game cut ` +
+        'short by the clock would make the result differ from run to run. Drop the timeout and bound games ' +
+        'with maxActions, or drop the seed.',
+    );
+  }
+  return Infinity;
+}
+
 interface BenchmarkGameOptions {
   trainedPlayerIndex: number;
   trainedBot: BotStrategy | undefined;
@@ -190,6 +214,8 @@ interface BenchmarkGameOptions {
   timeout: number;
   maxActions: number;
   seed: string;
+  /** Seed each move's search from `seed` (see {@link BenchmarkConfig.seed}). */
+  seeded: boolean;
 }
 
 type GameOutcome = 'win' | 'loss' | 'draw' | 'incomplete';
@@ -209,7 +235,7 @@ async function runBenchmarkGame<G extends Game>(
   gameType: string,
   options: BenchmarkGameOptions
 ): Promise<BenchmarkGameResult> {
-  const { trainedPlayerIndex, trainedBot, mctsIterations, timeout, maxActions, seed } = options;
+  const { trainedPlayerIndex, timeout, maxActions, seed } = options;
   const randomPlayerIndex = trainedPlayerIndex === 0 ? 1 : 0;
   const startTime = Date.now();
 
@@ -246,19 +272,8 @@ async function runBenchmarkGame<G extends Game>(
         return incomplete('A game was awaiting input with no seat able to act, and the game was not over.');
       }
 
-      // The trained bot searches; the opponent is the same bot at one
-      // iteration, which is essentially random but always produces valid args.
-      const trainedPosition = trainedPlayerIndex + 1;
-      const isTrainedSeat = currentPlayer === trainedPosition;
-      const bot = createBot(
-        runner.game,
-        GameClass,
-        gameType,
-        currentPlayer,
-        runner.actionHistory,
-        isTrainedSeat ? mctsIterations : 1,
-        isTrainedSeat ? trainedBot : undefined
-      );
+      const isTrainedSeat = currentPlayer === trainedPlayerIndex + 1;
+      const bot = moveBot(runner, GameClass, gameType, currentPlayer, isTrainedSeat, actionCount, options);
 
       let action: string;
       let args: Record<string, unknown>;
@@ -325,6 +340,33 @@ async function runBenchmarkGame<G extends Game>(
       `A game crashed: ${error instanceof Error ? error.message : String(error)}`
     );
   }
+}
+
+/**
+ * The bot that makes move `actionCount` for `seat`. The trained bot searches;
+ * the opponent is the same bot at one iteration, which is essentially random
+ * but always produces valid args. In a seeded benchmark each move's search
+ * gets its own seed, derived from the game's.
+ */
+function moveBot<G extends Game>(
+  runner: GameRunner<G>,
+  GameClass: GameClass<G>,
+  gameType: string,
+  seat: number,
+  isTrainedSeat: boolean,
+  actionCount: number,
+  { trainedBot, mctsIterations, seed, seeded }: BenchmarkGameOptions,
+) {
+  return createBot(
+    runner.game,
+    GameClass,
+    gameType,
+    seat,
+    runner.actionHistory,
+    isTrainedSeat ? mctsIterations : 1,
+    isTrainedSeat ? trainedBot : undefined,
+    seeded ? { seed: `${seed}-move-${actionCount}` } : undefined,
+  );
 }
 
 /**
