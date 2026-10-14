@@ -199,7 +199,8 @@ const session = createHeadlessSession(
 await session.start();
 
 // After every move the host runs its bot pump, so seat 2 plays whenever it is
-// due. start() does not run the pump; when a bot seat moves first, run it once:
+// due; `send` resolves once it has. start() does not run the pump; when a bot
+// seat moves first, run it once:
 await session.host.runBotTurns();
 ```
 

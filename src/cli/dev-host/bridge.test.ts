@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Game, Player, Action, actionStep, loop, type FollowUpOffer, type GameOptions } from '../../engine/index.js';
 import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import {
@@ -462,6 +462,32 @@ describe('dev host bridge', () => {
       expect(persistenceEntries[0]).toMatchObject({ severity: 'warning', message: 'disk full' });
       expect(persistenceEntries[1]).toMatchObject({ severity: 'warning' });
       expect(persistenceEntries[2]).toMatchObject({ severity: 'error' });
+    });
+
+    it("a bot run that throws after a move is captured as a 'bot' error, and the move's own reply is a success (#698)", async () => {
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const responses: Array<{ success?: boolean }> = [];
+      const session = createDevSession({
+        debug: () => false,
+        playerCount: 2,
+        botSeats: [{ seat: 2 }],
+        executeOp: (async (snap: unknown, pend: Record<string, unknown> | null, op: ExecutableOp) => {
+          if (op.type === 'botSuggest') throw new Error('The rules worker stopped answering.');
+          return executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op);
+        }) as ExecuteOpAdapter,
+        postGameState: () => {},
+        postServerResponse: (_seat, _id, result) => responses.push(result as { success?: boolean }),
+      });
+      await session.start();
+
+      await session.handleServerRequest(1, 'a1', 'action', { actionName: 'pass', args: {}, boundaryKey: boundaryKeyOfHost(session.host) });
+      expect(responses).toEqual([expect.objectContaining({ success: true })]);
+      await session.host.settled();
+
+      expect(getEntries().filter((e) => e.source === 'bot')).toEqual([
+        expect.objectContaining({ severity: 'error', message: 'The rules worker stopped answering.' }),
+      ]);
+      errors.mockRestore();
     });
 
     it("a pick's warnings are captured as 'warning' entries sourced by the wireOp", async () => {

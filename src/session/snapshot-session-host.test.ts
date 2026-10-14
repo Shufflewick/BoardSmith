@@ -372,6 +372,7 @@ describe('SnapshotSessionHost', () => {
         botCallCount = 0; // start() pumps once on its own — measure only the restore.
 
         await host.handleOp(1, { type: opType, player: 1, actionIndex: 0 } as Op);
+        await host.settled();
 
         expect(botCallCount).toBeGreaterThan(0);
       },
@@ -496,6 +497,7 @@ describe('SnapshotSessionHost', () => {
       broadcastLog.length = 0;
 
       await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
+      await host.settled();
 
       // bot pump should have been triggered (at least one search)
       expect(botCallCount).toBeGreaterThanOrEqual(1);
@@ -659,6 +661,7 @@ describe('SnapshotSessionHost', () => {
         type: 'expireSeat', player: 1, idleAction: 'rest', args: {}, boundaryKey: boundaryKeyOfHost(host),
       });
       expect(closed.success).toBe(true);
+      await host.settled();
 
       const closeCall = calls[startCalls + 1];
       expect(closeCall).toEqual({ type: 'expireSeat', pendingState: null });
@@ -1001,6 +1004,7 @@ describe('SnapshotSessionHost', () => {
       // Seat 1 acts — BotGame loops on seat 1, so it is STILL seat 1's turn →
       // the heatmap must recompute (compute #2), NOT clear or stay frozen.
       await host.handleOp(1, { type: 'action', actionName: 'move', player: 1, args: { direction: 'left' }, boundaryKey: boundaryKeyOfHost(host) });
+      await host.settled();
 
       expect(heatmapComputes).toBe(2);
       const s1 = lastBroadcastState(broadcastLog, 1);
