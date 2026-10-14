@@ -235,8 +235,12 @@ export function deriveManifest(
   const hasTableRoster = Number.isInteger(minPlayers) && Number.isInteger(maxPlayers);
 
   // The flags the capability set was RESOLVED FROM never travel beside it, and the role mapping
-  // (#454) says which agents build the game, which is nothing a player or the platform reads.
-  const { asyncPlay: _asyncPlay, joinInProgress: _joinInProgress, agents: _agents, gameOptions, ...rest } = config;
+  // (#454) says which agents build the game, and the publish ids and slug are local publish
+  // bookkeeping (#706): nothing a player or the platform reads.
+  const {
+    asyncPlay: _asyncPlay, joinInProgress: _joinInProgress, agents: _agents,
+    platforms: _platforms, publisher: _publisher, gameOptions, ...rest
+  } = config;
 
   return {
     ...rest,
