@@ -20,7 +20,7 @@ interface InitiateResponse {
 }
 
 export interface PublishError {
-  kind: 'SLUG_TAKEN' | 'VERSION_EXISTS' | 'NO_ACCESS' | 'SCOPE_VIOLATION' | 'NETWORK' | 'SERVER';
+  kind: 'VERSION_EXISTS' | 'NO_ACCESS' | 'SCOPE_VIOLATION' | 'NETWORK' | 'SERVER';
   message: string;
   statusCode?: number;
 }
@@ -185,7 +185,6 @@ export async function initiatePublish(
       throw { kind: 'SERVER', message: 'Invalid or revoked API key.', statusCode: 401 } satisfies PublishError;
     }
     await throwResponseError(res, res.statusText, {
-      '409:SLUG_TAKEN': 'SLUG_TAKEN',
       '409:VERSION_EXISTS': 'VERSION_EXISTS',
       '403:NO_ACCESS': 'NO_ACCESS',
       '403:SCOPE_VIOLATION': 'SCOPE_VIOLATION',

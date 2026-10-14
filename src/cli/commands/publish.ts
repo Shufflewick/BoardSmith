@@ -125,7 +125,6 @@ export function staleIdsHint(target: PlatformTarget): string {
 }
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const MAX_SLUG_ATTEMPTS = 10;
 
 export async function publishCommand(options: PublishOptions): Promise<void> {
   const cwd = process.cwd();
@@ -275,70 +274,42 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   // -- Preflight: validate audience against the platform's canonical list --
   await preflightAudience(platformUrl, manifest.audience);
 
-  // -- Initiate (with slug disambiguation) --
+  // -- Initiate --
   spinner.start('Publishing...');
 
   let initResult;
-  let resolvedSlug = baseSlug;
-
-  for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
-    const candidateSlug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
-
-    try {
-      initResult = await initiatePublish(
-        platformUrl, apiKey, candidateSlug, version, manifest,
-        // Only pass gameId on first attempt (slug derivation).
-        // Disambiguation attempts are slug-only since the game doesn't exist yet.
-        attempt === 0 ? existingGameId : undefined,
-        targetPublisherSlug,
-        targetPublisherId,
-      );
-      resolvedSlug = candidateSlug;
-      break;
-    } catch (err: unknown) {
-      if (isPublishError(err) && err.kind === 'SLUG_TAKEN') {
-        // If we had a gameId and still got SLUG_TAKEN, the ID lookup succeeded
-        // but the slug changed — this shouldn't happen. Fail clearly.
-        if (existingGameId && attempt === 0) {
-          spinner.fail('Publish failed');
-          console.error(chalk.red(`The gameId saved for ${target} no longer matches the slug. The game may have been deleted.`));
-          console.error(chalk.dim(staleIdsHint(target)));
-          process.exit(1);
-        }
-        continue;
-      }
-      if (isPublishError(err) && err.kind === 'VERSION_EXISTS') {
-        spinner.fail('Publish failed');
-        console.error(chalk.red(err.message));
-        console.error(chalk.dim('Bump the version in package.json past it and try again.'));
-        process.exit(1);
-      }
-      if (isPublishError(err) && err.kind === 'NO_ACCESS') {
-        spinner.fail('Publish failed');
-        console.error(chalk.red(
-          `You don't have develop access to this game under publisher \`${effectiveSlug}\`. `
-          + 'Ask an owner or manager to grant you develop access, then try again.',
-        ));
-        if (targetPublisherId) console.error(chalk.dim(staleIdsHint(target)));
-        process.exit(1);
-      }
-      if (isPublishError(err) && err.kind === 'SCOPE_VIOLATION') {
-        spinner.fail('Publish failed');
-        console.error(chalk.red(
-          `This API key is scoped to a different publisher and can't publish to \`${effectiveSlug}\`.`,
-        ));
-        process.exit(1);
-      }
+  try {
+    initResult = await initiatePublish(
+      platformUrl, apiKey, baseSlug, version, manifest,
+      existingGameId,
+      targetPublisherSlug,
+      targetPublisherId,
+    );
+  } catch (err: unknown) {
+    if (isPublishError(err) && err.kind === 'VERSION_EXISTS') {
       spinner.fail('Publish failed');
-      reportPublishFailure(err);
+      console.error(chalk.red(err.message));
+      console.error(chalk.dim('Bump the version in package.json past it and try again.'));
+      process.exit(1);
     }
-  }
-
-  if (!initResult) {
+    if (isPublishError(err) && err.kind === 'NO_ACCESS') {
+      spinner.fail('Publish failed');
+      console.error(chalk.red(
+        `You don't have develop access to this game under publisher \`${effectiveSlug}\`. `
+        + 'Ask an owner or manager to grant you develop access, then try again.',
+      ));
+      if (targetPublisherId) console.error(chalk.dim(staleIdsHint(target)));
+      process.exit(1);
+    }
+    if (isPublishError(err) && err.kind === 'SCOPE_VIOLATION') {
+      spinner.fail('Publish failed');
+      console.error(chalk.red(
+        `This API key is scoped to a different publisher and can't publish to \`${effectiveSlug}\`.`,
+      ));
+      process.exit(1);
+    }
     spinner.fail('Publish failed');
-    console.error(chalk.red(`Could not find an available slug after ${MAX_SLUG_ATTEMPTS} attempts.`));
-    console.error(chalk.dim(`Tried: ${baseSlug}, ${baseSlug}-2, ..., ${baseSlug}-${MAX_SLUG_ATTEMPTS}`));
-    process.exit(1);
+    reportPublishFailure(err);
   }
 
   // Save this platform's ids + resolved publisher target to boardsmith.json for future publishes
@@ -352,11 +323,6 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   }
   if (configDirty) {
     writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
-  }
-
-  if (resolvedSlug !== baseSlug) {
-    spinner.info(`Slug "${baseSlug}" was taken, using "${resolvedSlug}" instead.`);
-    spinner.start('Publishing...');
   }
 
   // -- Upload --
