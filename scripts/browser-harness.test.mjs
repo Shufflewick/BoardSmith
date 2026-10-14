@@ -77,9 +77,9 @@ describe('#231: the fixture world has one owner', () => {
     const source = read(name);
     expect(source, `${name} must not start its own world host`).not.toContain('startWorldHost');
     expect(source, `${name} must not write its own fixture`).not.toContain('writeWorldFixture');
-    expect(source, `${name} must not take the fixture lifetime apart`).not.toContain(
-      'withFixtureWorld',
-    );
+    for (const lifetime of ['withFixtureWorld', 'withFixtureTable']) {
+      expect(source, `${name} must not take the fixture lifetime apart`).not.toContain(lifetime);
+    }
   });
 });
 
@@ -118,12 +118,17 @@ describe('#231: the fixture world stops the host before it removes the project',
     expect(harness).toMatch(/export async function runBrowserRegression\b/);
   });
 
-  it('awaits the stop inside the guard that removes the project', () => {
-    const body = lifetime.slice(lifetime.indexOf('async function withFixtureWorld'));
-    const stop = body.indexOf('await stop()');
-    const remove = body.indexOf('rmSync(fixture');
-    expect(stop, 'withFixtureWorld must await the host stop').toBeGreaterThan(-1);
-    expect(remove, 'withFixtureWorld must remove the fixture').toBeGreaterThan(-1);
+  const table = readFileSync(join(REPO, 'src', 'cli', 'commands', 'fixture-table.test-helper.ts'), 'utf8');
+
+  it.each([
+    ['withFixtureWorld', lifetime, 'await stop()', 'rmSync(fixture'],
+    ['withFixtureTable', table, 'await stopDev(dev)', 'rmSync(parent'],
+  ])('%s awaits the stop inside the guard that removes the project', (name, source, stopCall, removeCall) => {
+    const body = source.slice(source.indexOf(`async function ${name}`));
+    const stop = body.indexOf(stopCall);
+    const remove = body.indexOf(removeCall);
+    expect(stop, `${name} must await the host stop`).toBeGreaterThan(-1);
+    expect(remove, `${name} must remove the fixture`).toBeGreaterThan(-1);
     expect(
       stop,
       'the stop must be awaited BEFORE the fixture is removed, or the removal races ' +

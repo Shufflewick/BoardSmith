@@ -8,8 +8,9 @@
  * BoardSmith's own Chromium the way the smoke check does, serve a throwaway
  * world project through the CLI's own dev host (`withFixtureWorld`, in
  * `src/cli/commands/fixture-world.test-helper.ts`, where it is type-checked and
- * run by the ordinary suite, #357), and report checks in a form a human can
- * read at the end.
+ * run by the ordinary suite, #357) or `boardsmith init`'s table sample through
+ * `boardsmith dev` (`withFixtureTable`, #703), and report checks in a form a
+ * human can read at the end.
  *
  * It also owns the whole RUN rather than just the pieces of it (#231), because
  * the order those pieces go in is the part a script got wrong every time it
@@ -40,7 +41,7 @@ const REPO = join(SCRIPTS, '..');
  *
  * It never skips. A browser regression that quietly passes when it did not run
  * is the thing these scripts exist to replace. Reached only after
- * `loadFixtureWorld`, which has loaded `tsx`.
+ * `loadFixtures`, which has loaded `tsx`.
  */
 async function loadChromium() {
   const { playwrightChromium, browserProblem } = await import(join(REPO, 'src/cli/commands/smoke.ts'));
@@ -222,8 +223,8 @@ export function summarise(what) {
 // ── One whole run ────────────────────────────────────────────────────────────
 
 /**
- * The fixture world's lifetime, or an exit that says how to install what it
- * needs.
+ * The fixture lifetimes (a world, or `boardsmith init`'s table sample), or an
+ * exit that says how to install what they need.
  *
  * `withFixtureWorld` lives in `src/cli/commands/fixture-world.test-helper.ts`,
  * TypeScript, so `boardsmith typecheck` compiles its call to the world dev host
@@ -239,11 +240,12 @@ export function summarise(what) {
  *
  * @param script the script's own filename, for the copy-pasteable command line
  */
-async function loadFixtureWorld(script) {
+async function loadFixtures(script) {
   try {
     await import('tsx');
-    return (await import(join(REPO, 'src/cli/commands/fixture-world.test-helper.ts')))
-      .withFixtureWorld;
+    const { withFixtureWorld } = await import(join(REPO, 'src/cli/commands/fixture-world.test-helper.ts'));
+    const { withFixtureTable } = await import(join(REPO, 'src/cli/commands/fixture-table.test-helper.ts'));
+    return { withFixtureWorld, withFixtureTable };
   } catch (thrown) {
     console.error(
       'BoardSmith\'s packages cannot be found from this checkout, so the fixture world cannot be served.\n' +
@@ -274,14 +276,15 @@ async function loadFixtureWorld(script) {
  *
  * @param run.script  the script's own filename, for the refusal's command line
  * @param run.fixture the world project, as `withFixtureWorld` takes it
+ * @param run.table   instead of `fixture`: `true` serves `boardsmith init`'s table
+ *                    sample through `boardsmith dev` (`withFixtureTable`, #703)
  * @param body        called with `{ launch, hostUrl }`; returns `summarise`
  */
 export async function runBrowserRegression(run, body) {
-  const withFixtureWorld = await loadFixtureWorld(run.script);
+  const { withFixtureWorld, withFixtureTable } = await loadFixtures(run.script);
   const chromium = await loadChromium();
-  process.exit(
-    await withFixtureWorld(run.fixture, ({ hostUrl }) => body({ launch: () => launchChromium(chromium), hostUrl })),
-  );
+  const drive = ({ hostUrl }) => body({ launch: () => launchChromium(chromium), hostUrl });
+  process.exit(await (run.table === true ? withFixtureTable(drive) : withFixtureWorld(run.fixture, drive)));
 }
 
 /**
