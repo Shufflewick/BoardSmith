@@ -21,7 +21,7 @@
  * `boardsmith install-browser`, which installs exactly the build this BoardSmith's Playwright
  * expects. The check is never skipped for want of it.
  */
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync, promises as fs, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -30,8 +30,7 @@ import { pathToFileURL } from 'node:url';
 import chalk from 'chalk';
 import { build } from 'esbuild';
 import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
-import { collectOutput } from '../lib/child-output.js';
-import { freePort } from '../lib/free-port.js';
+import { Started, startDev, tail } from '../lib/started-processes.js';
 import { gitOutput as git } from '../lib/git-output.js';
 import { requireTableUi } from '../lib/game-project.js';
 import type { VerifyCheckOutcome } from '../lib/verify-result.js';
@@ -40,17 +39,8 @@ import { SMOKE_ANNOTATION, SMOKE_SEEDS_ENV, SMOKE_SPEC_PATH, smokeSummary, type 
 /** Where each run's copy of the project lives, inside the project's own `.boardsmith/`. */
 const SMOKE_DIR = join('.boardsmith', 'smoke');
 
-/** How long `boardsmith dev` gets to print that it is ready. A hang guard, not a budget. */
-const DEV_READY_MS = 180_000;
-
-/** How long a process asked to stop gets before it is killed. */
-const STOP_GRACE_MS = 15_000;
-
 /** The longest the walk may run under Playwright before Playwright ends it. A hang guard. */
 const WALK_LIMIT_MS = 600_000;
-
-/** How many free ports to try when another process takes the one found before dev binds it. */
-const PORT_ATTEMPTS = 3;
 
 /** The command that installs the browser, as every message names it. */
 const INSTALL_BROWSER = '`boardsmith install-browser`';
@@ -111,76 +101,6 @@ export async function installBrowserCommand(): Promise<void> {
     );
   }
   console.log(chalk.green('Chromium is installed. `boardsmith verify` can run the smoke test now.'));
-}
-
-// -------------------------------------------------------------------------------------------
-// The processes a run starts, and stopping them
-// -------------------------------------------------------------------------------------------
-
-/**
- * Every process a run starts, so each is stopped however the run ends. While the run is live,
- * SIGINT or SIGTERM to this process stops them at once, and is raised again once the run has
- * cleaned up (`finish`), so an interrupted `boardsmith verify` leaves nothing running.
- */
-class Started {
-  readonly children: ChildProcess[] = [];
-  private interruptedBy: NodeJS.Signals | undefined;
-  private readonly onSignal = (signal: NodeJS.Signals) => {
-    this.interruptedBy ??= signal;
-    void this.stopAll();
-  };
-
-  constructor() {
-    process.on('SIGINT', this.onSignal);
-    process.on('SIGTERM', this.onSignal);
-  }
-
-  /**
-   * Starts `args` under this Node, with `env` added to this process's environment (a name given
-   * undefined is kept from the child), keeping its output. Refuses once the run was interrupted.
-   */
-  spawn(args: string[], cwd: string, env: Record<string, string | undefined> = {}): { child: ChildProcess; output: () => string } {
-    if (this.interruptedBy !== undefined) throw new Error(`The smoke check was interrupted (${this.interruptedBy}).`);
-    const environment: NodeJS.ProcessEnv = { ...process.env, FORCE_COLOR: '0' };
-    for (const [name, value] of Object.entries(env)) {
-      if (value === undefined) delete environment[name];
-      else environment[name] = value;
-    }
-    const child = spawn(process.execPath, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env: environment });
-    this.children.push(child);
-    return { child, output: collectOutput(child) };
-  }
-
-  /** The ids of every process started, for a caller that checks they are gone. */
-  get pids(): number[] {
-    return this.children.map((child) => child.pid).filter((pid): pid is number => pid !== undefined);
-  }
-
-  /** Stops every process still running: asked first, killed if it has not gone after a grace. */
-  async stopAll(): Promise<void> {
-    await Promise.all(this.children.map(stop));
-  }
-
-  /** Stops everything, runs `cleanUp`, then lets the signals go, raising again one that came. */
-  async finish(cleanUp: () => Promise<void>): Promise<void> {
-    await this.stopAll();
-    await cleanUp();
-    process.off('SIGINT', this.onSignal);
-    process.off('SIGTERM', this.onSignal);
-    if (this.interruptedBy !== undefined) process.kill(process.pid, this.interruptedBy);
-  }
-}
-
-const running = (child: ChildProcess) => child.exitCode === null && child.signalCode === null;
-
-async function stop(child: ChildProcess): Promise<void> {
-  if (!running(child)) return;
-  const exited = once(child, 'exit');
-  // SIGINT is the signal both `boardsmith dev` and Playwright stop in order on.
-  child.kill('SIGINT');
-  const killer = setTimeout(() => child.kill('SIGKILL'), STOP_GRACE_MS);
-  await exited;
-  clearTimeout(killer);
 }
 
 // -------------------------------------------------------------------------------------------
@@ -256,43 +176,6 @@ async function bundleSpec(copy: string, work: string): Promise<string | VerifyCh
       passed: false,
       summary: `${SMOKE_SPEC_PATH} could not be bundled: ${(error as Error).message.split('\n').slice(0, 4).join(' ')}`,
       next: `Fix it (\`boardsmith typecheck\` shows type errors), then run the check again.`,
-    };
-  }
-}
-
-/** The last lines of a process's output, for a message saying why it stopped. */
-const tail = (output: string, lines = 12) => output.trim().split('\n').slice(-lines).join('\n');
-
-/**
- * Starts `boardsmith dev` in the copy and resolves with its URL once it says it is ready, or with
- * a failed outcome carrying its last output when it stops or hangs first.
- */
-async function startDev(started: Started, copy: string): Promise<string | VerifyCheckOutcome> {
-  const bin = join(boardsmithPackageRoot(), 'bin', 'boardsmith.js');
-  for (let attempt = 1; ; attempt++) {
-    const port = await freePort();
-    const dev = started.spawn([bin, 'dev', '--port', String(port), '--no-open', '--bot-level', 'easy'], copy);
-    const ready = await new Promise<boolean>((resolve) => {
-      const guard = setTimeout(() => resolve(false), DEV_READY_MS);
-      const check = () => {
-        if (dev.output().includes('Ready!')) {
-          clearTimeout(guard);
-          resolve(true);
-        }
-      };
-      dev.child.stdout?.on('data', check);
-      dev.child.on('exit', () => {
-        clearTimeout(guard);
-        resolve(false);
-      });
-    });
-    if (ready) return `http://127.0.0.1:${port}`;
-    if (/already in use/.test(dev.output()) && attempt < PORT_ATTEMPTS) continue;
-    const why = running(dev.child) ? `did not say it was ready within ${DEV_READY_MS / 1000}s` : 'stopped before it was ready';
-    return {
-      passed: false,
-      summary: `\`boardsmith dev\` ${why}. Its last output: ${tail(dev.output()).replace(/\s*\n\s*/g, ' ')}`,
-      next: 'Run `boardsmith dev` to see it fail, fix what it names, then run the check again.',
     };
   }
 }
@@ -467,7 +350,7 @@ export async function runSmoke(options: { projectDir: string; log: (line: string
     await fs.mkdir(work, { recursive: true });
     const spec = await bundleSpec(copy, work);
     if (typeof spec !== 'string') return { outcome: spec, pids: started.pids };
-    const baseURL = await startDev(started, copy);
+    const baseURL = await startDev(started, copy, ['--bot-level', 'easy']);
     if (typeof baseURL !== 'string') return { outcome: baseURL, pids: started.pids };
     log(`boardsmith dev is serving a fresh copy of the game at ${baseURL}`);
     return { outcome: await runWalk(started, copy, work, baseURL, log, options.seeds), pids: started.pids };
