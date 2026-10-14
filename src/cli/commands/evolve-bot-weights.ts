@@ -14,6 +14,7 @@ interface EvolveBotWeightsOptions {
   population?: string;
   mcts?: string;
   workers?: string;
+  seed?: string;
   verbose?: boolean;
 }
 
@@ -53,6 +54,7 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
   console.log(chalk.dim(`  Population: ${population}`));
   console.log(chalk.dim(`  MCTS iterations: ${mctsIterations}`));
   console.log(chalk.cyan(`  Workers: ${workerCount}`));
+  if (options.seed !== undefined) console.log(chalk.dim(`  Seed: ${options.seed} (reproducible, no clock bound)`));
   console.log();
 
   const spinner = ora('Bundling the game rules...').start();
@@ -111,7 +113,7 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
         evolutionGenerations: generations,
         evolutionLambda: population,
         benchmarkMCTSIterations: mctsIterations,
-        seed: `evolve-${Date.now()}`,
+        seed: options.seed,
         onProgress: (progress: TrainingProgress) => {
           spinner.text = chalk.cyan(progress.message);
         },

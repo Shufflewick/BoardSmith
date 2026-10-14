@@ -216,6 +216,40 @@ describe('WeightEvolver.evolve', () => {
     }
   });
 
+  it('benchmarks every evaluation reproducibly from the evolution seed, with no game clock (#699)', async () => {
+    await evolver({ seed: 'repeat' }).evolve(objectives(5));
+    const configs = vi.mocked(runParallelBenchmarks).mock.calls.map((call) => call[3]);
+    expect(configs.map((c) => c.seed)).toEqual(['repeat-initial', 'repeat-gen-1', 'repeat-gen-2']);
+    expect(configs.every((c) => c.reproducible === true && c.timeout === undefined)).toBe(true);
+  });
+
+  it('plays new games at every stage of an unseeded evolution, with unseeded, clock-bounded searches (#699)', async () => {
+    await evolver({ seed: undefined }).evolve(objectives(5));
+    const first = vi.mocked(runParallelBenchmarks).mock.calls.map((call) => call[3]);
+    expect(first.every((c) => c.reproducible !== true && c.timeout === 30000)).toBe(true);
+    const gameSeeds = first.map((c) => c.seed);
+    expect(new Set(gameSeeds).size).toBe(3);
+    expect(gameSeeds.every((seed) => typeof seed === 'string')).toBe(true);
+
+    vi.mocked(runParallelBenchmarks).mockClear();
+    await evolver({ seed: undefined }).evolve(objectives(5));
+    const again = vi.mocked(runParallelBenchmarks).mock.calls.map((call) => call[3].seed);
+    expect(again.some((seed) => gameSeeds.includes(seed))).toBe(false);
+  });
+
+  it('mutates afresh on each unseeded evolution, as a run with no seed always has (#699)', async () => {
+    await evolver({ seed: undefined }).evolve(objectives(5));
+    const first = JSON.stringify(benchmarkCalls[1]);
+    benchmarkCalls.length = 0;
+    await evolver({ seed: undefined }).evolve(objectives(5));
+    expect(JSON.stringify(benchmarkCalls[1])).not.toBe(first);
+  });
+
+  it('refuses a game timeout on a seeded evolution, before benchmarking (#699)', async () => {
+    await expect(evolver({ seed: 'repeat', gameTimeout: 1000 }).evolve(objectives(5))).rejects.toThrow(/gameTimeout/);
+    expect(runParallelBenchmarks).not.toHaveBeenCalled();
+  });
+
   it('does no evolution at all when asked for zero generations', async () => {
     fitnessOf = () => 0.33;
     const result = await evolver({ evolutionGenerations: 0 }).evolve(objectives(5));

@@ -5,7 +5,7 @@
 import type { ObjectiveWeight, TrainingProgress } from './types.js';
 import { loadTrainingBundle } from './training-bundle.js';
 import { runParallelBenchmarks } from './parallel-benchmark.js';
-import { createSeededRandom } from '../utils/random.js';
+import { createSeededRandom, mintSeed } from '../utils/random.js';
 import { generateOffspring, selectBest } from './evolution.js';
 
 /**
@@ -26,11 +26,18 @@ export interface WeightEvolverConfig {
   evolutionBenchmarkGames?: number;
   /** MCTS iterations for benchmarking (default: 100) */
   benchmarkMCTSIterations?: number;
-  /** Game timeout in ms (default: 30000) */
+  /** Game timeout in ms (default: 30000). Only for an unseeded evolution; refused with `seed`. */
   gameTimeout?: number;
   /** Max actions per game (default: 1000) */
   maxActionsPerGame?: number;
-  /** Random seed for reproducibility */
+  /**
+   * Seed for a reproducible evolution (#699): mutation, selection, every
+   * benchmark game and every search are seeded from it, and benchmarks run
+   * with no clock bound (`reproducible`), so the same seed and settings give
+   * the same weights whatever the worker count. Without one, the evolver draws
+   * a fresh seed for mutation and the games, and each search is unseeded and
+   * clock-bounded.
+   */
   seed?: string;
   /** Progress callback */
   onProgress?: (progress: TrainingProgress) => void;
@@ -48,14 +55,13 @@ export interface WeightEvolutionResult {
   initialFitness: number;
 }
 
-const DEFAULT_CONFIG: Required<Omit<WeightEvolverConfig, 'seed' | 'onProgress' | 'workerCount'>> = {
+const DEFAULT_CONFIG: Required<Omit<WeightEvolverConfig, 'seed' | 'onProgress' | 'workerCount' | 'gameTimeout'>> = {
   evolutionGenerations: 5,
   evolutionLambda: 20,
   evolutionMu: 5,
   evolutionSigma: 1.0,
   evolutionBenchmarkGames: 50,
   benchmarkMCTSIterations: 100,
-  gameTimeout: 30000,
   maxActionsPerGame: 1000,
 };
 
@@ -67,6 +73,8 @@ export class WeightEvolver {
   private gameModulePath: string;
   private gameType: string;
   private config: WeightEvolverConfig;
+  /** What mutation, selection and the benchmark games are seeded from: the configured seed, or a fresh one per evolver. */
+  private evolutionSeed: string;
 
   /**
    * Create a new WeightEvolver.
@@ -84,6 +92,7 @@ export class WeightEvolver {
     this.gameModulePath = gameModulePath;
     this.gameType = gameType;
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.evolutionSeed = config.seed ?? mintSeed();
   }
 
   /**
@@ -95,6 +104,13 @@ export class WeightEvolver {
   async evolve(objectives: ObjectiveWeight[]): Promise<WeightEvolutionResult> {
     if (objectives.length === 0) {
       throw new Error('No objectives provided for evolution');
+    }
+    if (this.config.seed !== undefined && this.config.gameTimeout !== undefined) {
+      throw new Error(
+        `A seeded evolution (seed "${this.config.seed}") cannot also have a gameTimeout: a benchmark game cut ` +
+          'short by the clock would make the weights differ from run to run. Drop gameTimeout (maxActionsPerGame ' +
+          'still bounds each game), or drop the seed.',
+      );
     }
 
     // Every weight must name one of the game's objectives. Checked here, in
@@ -122,9 +138,8 @@ export class WeightEvolver {
       {
         gameCount: this.config.evolutionBenchmarkGames ?? 50,
         mctsIterations: this.config.benchmarkMCTSIterations ?? 100,
-        timeout: this.config.gameTimeout,
         maxActions: this.config.maxActionsPerGame,
-        seed: `${this.config.seed ?? 'evolve'}-initial`,
+        ...this.benchmarkSeeding('initial'),
       },
       { workerCount: this.config.workerCount }
     );
@@ -155,7 +170,7 @@ export class WeightEvolver {
     const benchmarkGames = this.config.evolutionBenchmarkGames ?? 50;
 
     // Initialize parent population with slight variations
-    const rng = createSeededRandom(`${this.config.seed ?? 'evolution'}-init`);
+    const rng = createSeededRandom(`${this.evolutionSeed}-init`);
     let parents: ObjectiveWeight[][] = [initialObjectives];
 
     // Fill initial population with mutations
@@ -178,7 +193,7 @@ export class WeightEvolver {
       });
 
       // Generate offspring
-      const genRng = createSeededRandom(`${this.config.seed ?? 'evolution'}-gen-${gen}`);
+      const genRng = createSeededRandom(`${this.evolutionSeed}-gen-${gen}`);
       const offspring = generateOffspring(parents, lambda, sigma, genRng);
 
       // Combine parents + offspring
@@ -202,9 +217,8 @@ export class WeightEvolver {
         {
           gameCount: benchmarkGames,
           mctsIterations: this.config.benchmarkMCTSIterations ?? 100,
-          timeout: this.config.gameTimeout,
           maxActions: this.config.maxActionsPerGame,
-          seed: `${this.config.seed ?? 'evolution'}-gen-${gen}`,
+          ...this.benchmarkSeeding(`gen-${gen}`),
         },
         { workerCount: this.config.workerCount },
         (completed, total) => {
@@ -246,6 +260,18 @@ export class WeightEvolver {
     }
 
     return { objectives: bestObjectives, bestFitness };
+  }
+
+  /**
+   * A benchmark's game seed, derived from the evolution's own and named by
+   * `stage`. A seeded evolution's benchmarks are also reproducible; an
+   * unseeded one's keep their clock bound (see {@link WeightEvolverConfig.seed}).
+   */
+  private benchmarkSeeding(stage: string): { seed: string; reproducible: true } | { seed: string; timeout: number } {
+    const seed = `${this.evolutionSeed}-${stage}`;
+    return this.config.seed === undefined
+      ? { seed, timeout: this.config.gameTimeout ?? 30000 }
+      : { seed, reproducible: true };
   }
 
   /**

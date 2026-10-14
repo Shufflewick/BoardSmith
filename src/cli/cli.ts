@@ -322,6 +322,7 @@ export function createProgram(): Command {
     .option('--population <count>', 'Population size per generation (default: 20)')
     .option('-m, --mcts <iterations>', 'MCTS iterations for benchmarking (default: 100)')
     .option('--workers <count>', 'Number of worker threads (default: CPU cores - 1)')
+    .option('--seed <seed>', 'Seed for a reproducible run: the same seed and settings give the same weights on any worker count, and each search runs its full MCTS iterations with no time limit (default: a fresh seed each run)')
     .option('-v, --verbose', 'Show detailed progress')
     .action(evolveBotWeightsCommand);
 
