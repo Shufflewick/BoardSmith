@@ -1171,6 +1171,7 @@ onUnmounted(() => {
 
 .lobby__colors {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }
