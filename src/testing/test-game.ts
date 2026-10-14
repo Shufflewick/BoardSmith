@@ -25,7 +25,6 @@ import {
 } from '../runtime/index.js';
 import { ActionBuilder } from './action-builder.js';
 import { formatSelectionLines } from './debug.js';
-import { fillGameOptionDefaults } from '../session/game-option-selection.js';
 import { projectGameOptions } from '#testing/project-game-options';
 
 /**
@@ -212,21 +211,20 @@ export class TestGame<G extends Game = Game> {
       ...extraOptions
     } = options;
 
-    const declaredGameOptions = projectGameOptions();
     const runner = new GameRunner({
       GameClass,
       gameType: GameClass.name.toLowerCase(),
       gameOptions: {
-        // Game-specific options (e.g. tutorialSetup, variant flags), and every
-        // option the project's boardsmith.json declares that the test left out,
-        // at its default (#701).
-        ...fillGameOptionDefaults(declaredGameOptions, extraOptions),
+        // Game-specific options (e.g. tutorialSetup, variant flags).
+        ...extraOptions,
         playerCount,
         playerNames,
         seed,
       },
       checkpoints,
-      declaredGameOptions,
+      // Every option the project's boardsmith.json declares that the test left
+      // out starts at its default (#701).
+      declaredGameOptions: projectGameOptions(),
     });
 
     const testGame = new TestGame(runner, seed);

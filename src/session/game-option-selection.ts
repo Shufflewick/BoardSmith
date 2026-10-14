@@ -352,10 +352,11 @@ function defineOption(options: Record<string, unknown>, name: string, value: unk
 /**
  * A copy of `options` in which every declared option that is missing or
  * `undefined` holds its declared default, so a game reads `options.x` and never
- * repeats a default in code (#701). Both selections end here, and so do the
- * `start` op (with the declarations the game's bundle carries, see
- * {@link withDeclaredGameOptions}) and `createTestGame`, so every host starts a
- * game with every option it declares.
+ * repeats a default in code (#701). Both selections end here, and so does every
+ * new `GameRunner` given `declaredGameOptions` (#708), which the `start` op
+ * (with the declarations the game's bundle carries, see
+ * {@link withDeclaredGameOptions}), `createTestGame` and the bot benchmark pass,
+ * so every host starts a game with every option it declares.
  */
 export function fillGameOptionDefaults<O extends Record<string, unknown>>(
   declared: Record<string, GameOptionDefinition> | undefined,

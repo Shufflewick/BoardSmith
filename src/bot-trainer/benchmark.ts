@@ -1,9 +1,8 @@
 import { dueSeats, type Game } from '../engine/index.js';
-import { GameRunner, type GameRunnerOptions } from '../runtime/index.js';
+import { GameRunner } from '../runtime/index.js';
 import { createBot, type BotStrategy, type Objective } from '../bot/index.js';
 import type { GameClass, GameOptions } from '../engine/index.js';
 import type { ObjectiveWeight } from './types.js';
-import { fillGameOptionDefaults } from '../session/game-option-selection.js';
 import { projectGameOptions } from '#testing/project-game-options';
 
 /**
@@ -232,16 +231,6 @@ interface BenchmarkGameResult {
 }
 
 /**
- * `options` with every game option the project's boardsmith.json declares, at
- * its default, so the benchmark plays the game every host starts (#701), and
- * those declarations, which the runner checks it was given (#708).
- */
-function projectOptions<O extends GameOptions>(options: O) {
-  const declaredGameOptions = projectGameOptions();
-  return { gameOptions: fillGameOptionDefaults(declaredGameOptions, options), declaredGameOptions };
-}
-
-/**
  * Run a single benchmark game
  */
 async function runBenchmarkGame<G extends Game>(
@@ -257,12 +246,14 @@ async function runBenchmarkGame<G extends Game>(
   const incomplete = (reason: string): BenchmarkGameResult => ({ outcome: 'incomplete', reason });
 
   try {
-    const runnerOptions: GameRunnerOptions<G> = {
+    const runner = new GameRunner({
       GameClass,
       gameType,
-      ...projectOptions({ playerCount: 2, seed }),
-    };
-    const runner = new GameRunner(runnerOptions);
+      gameOptions: { playerCount: 2, seed },
+      // Every option the project's boardsmith.json declares, at its default:
+      // the game every host starts (#701).
+      declaredGameOptions: projectGameOptions(),
+    });
     let flowState = runner.start();
 
     let actionCount = 0;
@@ -402,7 +393,12 @@ export function weightedBot<G extends Game>(
     );
   }
   const objectives = weightedObjectives(bot.objectives, weights);
-  const runner = new GameRunner({ GameClass, gameType, ...projectOptions({ playerCount: 2, seed: 'objective-check' }) });
+  const runner = new GameRunner({
+    GameClass,
+    gameType,
+    gameOptions: { playerCount: 2, seed: 'objective-check' },
+    declaredGameOptions: projectGameOptions(),
+  });
   runner.start();
   objectives(runner.game, 1);
   return { ...bot, objectives };

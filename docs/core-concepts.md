@@ -828,15 +828,15 @@ Option types: `number` (with min/max/step), `select` (with choices), `boolean`.
 
 Every option needs a `default`. Every host starts a game with every declared
 option: the value someone chose, or else the default. The selection a lobby
-admits a choice through (`selectGameOptions`) fills it in, so does a `start`, and
-so does `createTestGame`, which reads the nearest `boardsmith.json` at or above
-the directory the tests run in. So a game reads `options.boardSize` and never repeats the default
-in code. A new game that still reaches the engine without a declared option is
-refused, naming it (#708): `GameRunner` checks the declarations its host hands it
-(`declaredGameOptions`; the `start` op, `createTestGame` and the bot benchmark
-always do), before the game is constructed, so a gap fails at the start instead
-of as an empty board or a game nobody can win. A runner given no declarations, as
-in a test that builds one with explicit options, has nothing to check against.
+admits a choice through (`selectGameOptions`) fills it in, and so does
+`GameRunner` itself for a new game, from the declarations its host passes as
+`declaredGameOptions` (#708): the `start` op passes the ones the game's bundle
+carries, and `createTestGame` (so `boardsmith simulate` too) and the bot
+benchmark pass the nearest `boardsmith.json` at or above the directory the tests
+run in. So a game reads `options.boardSize` and never repeats the default in
+code, and no host can start a game missing an option. A test that builds a
+`GameRunner` by hand with explicit options and no declarations gets exactly the
+options it passed.
 A restored game keeps the options it started with, and nothing fills them: an option added later is missing from saves made before it, so a game keeps a fallback for such an option, or the platform migrates those saves.
 
 #### Designer-only options

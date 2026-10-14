@@ -37,6 +37,7 @@ import type {
 } from '../engine/action/types.js';
 import type { RandomnessPolicy } from '../engine/element/game.js';
 import { ErrorCode, type GameOptionDefinition } from '../types/protocol.js';
+import { fillGameOptionDefaults } from '../session/game-option-selection.js';
 import { PlayerFacingError } from '../engine/errors.js';
 import { constructGame, animationFloorOf, type AnimationFloor } from '../engine/element/game.js';
 import { isDevThrowEnabled } from '../utils/dev.js';
@@ -129,8 +130,9 @@ export interface GameRunnerOptions<G extends Game, O extends GameOptions = GameO
   undo?: UndoPolicy;
   /**
    * The game's option declarations (boardsmith.json's `gameOptions`), when the
-   * host has them. A new game missing one is refused, naming it (#708); a
-   * restore (`fromSnapshot`) never passes them, so a save keeps its options.
+   * host has them: a new game starts with every declared option it was not
+   * given at its default (#701, #708). A restore (`fromSnapshot`) never passes
+   * them, so a save keeps the options it started with.
    */
   declaredGameOptions?: Readonly<Record<string, GameOptionDefinition>>;
 }
@@ -380,18 +382,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // constructor every runner path funnels through, so a draw is impossible
     // from the game's first instruction — including anything setup does before
     // `start()` returns.
-    // Before construction: a game reads its options there (Hex builds its board).
-    for (const name of Object.keys(options.declaredGameOptions ?? {})) {
-      if ((options.gameOptions as Record<string, unknown>)[name] === undefined) {
-        throw new Error(
-          `Game option "${name}" is declared in boardsmith.json but was not passed to the game. ` +
-            'Pass it, or start the game the way BoardSmith hosts do (the start op, createTestGame), which ' +
-            'give every option left out its declared default.',
-        );
-      }
-    }
     this.game = constructGame(options.GameClass, {
-      ...options.gameOptions,
+      ...fillGameOptionDefaults(options.declaredGameOptions, options.gameOptions),
       randomness: options.randomness,
     });
 
