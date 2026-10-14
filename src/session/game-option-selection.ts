@@ -2,8 +2,10 @@
  * How a player's choice of game options becomes something a host may store or
  * hand to a game constructor.
  *
- * A game declares the options its players may set (`GameDefinition.gameOptions`:
- * a number, a boolean, a select). Everything else in `GameOptions` is minted
+ * A game declares the options its players may set in one place, the
+ * `gameOptions` list in `boardsmith.json` (a number, a boolean, a select, each
+ * with a default; read by {@link parseGameOptionList}, #701). Everything else
+ * in `GameOptions` is minted
  * by the engine or the host (`seed`, `elementIdKey`, `playerCount`, the colour
  * palette, ...), and a client that could write one of those would choose the
  * game's shuffles or decode its element ids (#447). So a selection is admitted
@@ -58,12 +60,12 @@ export type GameOptionSelection = Readonly<Record<string, unknown>> & { readonly
 
 /**
  * Refuse a game's option declarations if one is named for a field the host
- * owns, or is a number option whose `min`, `max` or `step` no value could
- * satisfy (not a finite number, `min` above `max`, a `step` that is not
- * positive), or whose `default` those bounds would refuse. Such an option
- * could never be chosen, or would start a lobby on a value the player is then
- * refused, so the game is wrong, not the player; this says so when the game
- * is loaded rather than at its first lobby.
+ * owns, is not a number, boolean or select option, is a number option whose
+ * `min`, `max` or `step` no value could satisfy (not a finite number, `min`
+ * above `max`, a `step` that is not positive), or has no `default` or one its
+ * own declaration refuses. Such an option could never be chosen, or would start
+ * a game on a value no player could choose, so the game is wrong, not the
+ * player; this says so when the game is loaded rather than at its first lobby.
  */
 export function assertDeclarableGameOptions(declared: Record<string, GameOptionDefinition> | undefined): void {
   if (!declared) return;
@@ -74,13 +76,52 @@ export function assertDeclarableGameOptions(declared: Record<string, GameOptionD
           `sets for every game, so a player could never choose it. Rename the option.`,
       );
     }
-    if (def.designerOnly && def.default === undefined) {
-      throw new Error(
-        `This game declares designer-only option "${name}" with no default. No player can set it, ` +
-          `so its default is the value every real game is played with. Give it a default.`,
-      );
-    }
+    assertDeclarableShape(name, def);
     if (def.type === 'number') assertDeclarableBounds(name, def);
+    assertDeclarableDefault(name, def);
+  }
+}
+
+/** Throws, naming the option, when it is not a labelled number, boolean or select option with choices. */
+function assertDeclarableShape(name: string, def: GameOptionDefinition): void {
+  const type: unknown = def.type;
+  if (type !== 'number' && type !== 'boolean' && type !== 'select') {
+    throw new Error(
+      `This game declares game option "${name}" with type ${JSON.stringify(type)}; a game option's ` +
+        `type is "number", "boolean" or "select".`,
+    );
+  }
+  if (typeof def.label !== 'string') {
+    throw new Error(`This game declares game option "${name}" with no label. Give it the label a player sees.`);
+  }
+  if (def.type === 'select' && (!Array.isArray(def.choices) || def.choices.length === 0)) {
+    throw new Error(
+      `This game declares select option "${name}" with no choices. Give it a "choices" list of { value, label }.`,
+    );
+  }
+}
+
+/**
+ * Every option is filled with its default when nobody chooses it (see
+ * {@link fillGameOptionDefaults}), so every option needs one, and one its own
+ * declaration admits.
+ */
+function assertDeclarableDefault(name: string, def: GameOptionDefinition): void {
+  if (def.default === undefined) {
+    throw new Error(
+      `This game declares game option "${name}" with no default. Give it a default: it is the value ` +
+        `a game is played with when nobody chooses one` +
+        (def.designerOnly ? ', and no player can choose a designer-only option, so every real game is played with it.' : '.'),
+    );
+  }
+  try {
+    coerce(name, def, def.default);
+  } catch (err) {
+    if (!(err instanceof GameOptionSelectionError)) throw err;
+    throw new Error(
+      `This game declares game option "${name}" with default ${JSON.stringify(def.default)}, which its own ` +
+        `declaration refuses: ${err.message} Correct the default.`,
+    );
   }
 }
 
@@ -257,9 +298,9 @@ function coerceSelect(name: string, def: SelectOption, raw: unknown): unknown {
 /**
  * Admit a player's selection against the game's declared options.
  *
- * Returns a new object holding only the keys of `raw` that are declared, each
- * coerced to its declared type; a key whose value is `undefined` is no choice
- * and is left out. Throws {@link GameOptionSelectionError} for a host-owned
+ * Returns a new object holding every declared option: the value `raw` gives
+ * it, coerced to its declared type, or else its declared default (a key whose
+ * value is `undefined` is no choice, so it gets the default too). Throws {@link GameOptionSelectionError} for a host-owned
  * key, an undeclared or designer-only key or a value the declaration does not
  * admit (wrong type, not a declared choice, a number outside `min`/`max` or
  * off `step`), and a plain error if the declarations themselves are unusable
@@ -295,11 +336,36 @@ function select(
   for (const [name, value] of Object.entries(raw)) {
     if (value === undefined) continue;
     const def = choosable(declared, name, designer);
-    // Defined as an own data property, never assigned: assigning "__proto__"
-    // would set the selection's prototype instead of a key.
-    Object.defineProperty(selection, name, { value: coerce(name, def, value), enumerable: true, writable: true, configurable: true });
+    defineOption(selection, name, coerce(name, def, value));
   }
-  return selection as GameOptionSelection;
+  return fillGameOptionDefaults(declared, selection) as GameOptionSelection;
+}
+
+/**
+ * Defined as an own data property, never assigned: assigning "__proto__"
+ * would set the object's prototype instead of a key.
+ */
+function defineOption(options: Record<string, unknown>, name: string, value: unknown): void {
+  Object.defineProperty(options, name, { value, enumerable: true, writable: true, configurable: true });
+}
+
+/**
+ * A copy of `options` in which every declared option that is missing or
+ * `undefined` holds its declared default, so a game reads `options.x` and never
+ * repeats a default in code (#701). Both selections end here, and so do the
+ * `start` op (with the declarations the game's bundle carries, see
+ * {@link withDeclaredGameOptions}) and `createTestGame`, so every host starts a
+ * game with every option it declares.
+ */
+export function fillGameOptionDefaults<O extends Record<string, unknown>>(
+  declared: Record<string, GameOptionDefinition> | undefined,
+  options: O,
+): O {
+  const filled: Record<string, unknown> = { ...options };
+  for (const [name, def] of Object.entries(declared ?? {})) {
+    if (filled[name] === undefined) defineOption(filled, name, coerce(name, def, def.default));
+  }
+  return filled as O;
 }
 
 /** The declaration of option `name` if this selection may set it; throws {@link GameOptionSelectionError} if not. */
@@ -331,4 +397,81 @@ function choosable(
     );
   }
   return def;
+}
+
+
+/**
+ * Read `boardsmith.json`'s `gameOptions` list, the one place a game declares
+ * its options (#701), into the declarations keyed by option id that the
+ * selections take. Every field but `id` is the option's declaration. Throws,
+ * naming the entry, for a list that is not one, an entry with no `id`, an id
+ * declared twice, a `designerOnly` that is not `true`, and anything
+ * {@link assertDeclarableGameOptions} refuses. An absent list declares nothing.
+ */
+export function parseGameOptionList(list: unknown): Record<string, GameOptionDefinition> {
+  if (list === undefined) return {};
+  if (!Array.isArray(list)) {
+    throw new Error(
+      `boardsmith.json's "gameOptions" must be a list of options, each with an "id", got ${typeof list}.`,
+    );
+  }
+  const declared: Record<string, GameOptionDefinition> = {};
+  list.forEach((entry: unknown, index) => {
+    const { id, ...def } = (typeof entry === 'object' && entry !== null ? entry : {}) as Record<string, unknown>;
+    if (typeof id !== 'string' || id === '') {
+      throw new Error(
+        `boardsmith.json's game option ${index + 1} has no "id". Give every entry in "gameOptions" an "id": ` +
+          `it is the name a game reads the option by (options.<id>).`,
+      );
+    }
+    if (Object.hasOwn(declared, id)) {
+      throw new Error(`boardsmith.json declares game option "${id}" twice. Remove or rename one.`);
+    }
+    if (def.designerOnly !== undefined && def.designerOnly !== true) {
+      throw new Error(
+        `boardsmith.json's game option "${id}" has designerOnly ${JSON.stringify(def.designerOnly)}; ` +
+          `set it to true or leave it out.`,
+      );
+    }
+    defineOption(declared, id, def);
+  });
+  assertDeclarableGameOptions(declared);
+  return deepFreeze(declared) as Record<string, GameOptionDefinition>;
+}
+
+/**
+ * The registered symbol under which a loaded game definition carries its option
+ * declarations: a key no game writes by accident, and one every copy of the
+ * engine (the CLI's, a bundle's, a platform runner's) reads alike.
+ * `boardsmith build` writes it into the published rules (`rulesEntrySource`).
+ */
+export const DECLARED_GAME_OPTIONS_KEY = 'boardsmith.declaredGameOptions';
+const DECLARED_GAME_OPTIONS = Symbol.for(DECLARED_GAME_OPTIONS_KEY);
+
+/**
+ * The game definition with `boardsmith.json`'s option list attached, as every
+ * BoardSmith command loads it (`boardsmith dev`, `simulate`, `validate`, and
+ * `build`, which writes the same declarations into the rules it publishes), so
+ * the `start` op fills even a designer-only option, which no manifest lists,
+ * with its default. Refuses a definition that still declares `gameOptions`
+ * itself, saying where they go.
+ */
+export function withDeclaredGameOptions<D extends object>(definition: D, list: unknown): D {
+  if (Object.hasOwn(definition, 'gameOptions')) {
+    throw new Error(
+      'This gameDefinition declares gameOptions. A game declares its options in one place, the ' +
+        '"gameOptions" list in boardsmith.json (one entry per option, with an "id"); move them there ' +
+        'and delete gameOptions from the gameDefinition.',
+    );
+  }
+  return { ...definition, [DECLARED_GAME_OPTIONS]: parseGameOptionList(list) };
+}
+
+/**
+ * The option declarations a loaded game definition carries (see
+ * {@link withDeclaredGameOptions}), or `undefined` for a definition imported
+ * straight from source, as a game's own tests do.
+ */
+export function declaredGameOptionsOf(definition: object): Record<string, GameOptionDefinition> | undefined {
+  return (definition as { [DECLARED_GAME_OPTIONS]?: Record<string, GameOptionDefinition> })[DECLARED_GAME_OPTIONS];
 }

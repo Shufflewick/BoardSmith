@@ -411,6 +411,21 @@ file the bundle does not carry:
   "thumbnail": "./public/thumbnail.png"
 ```
 
+#### Game options
+
+A game's options live here too, and only here: a `gameOptions` list, each entry
+with an `id` and a `default`. The game reads `options.<id>` in its constructor,
+and every host (the lobby, the dev host, `boardsmith simulate`, `createTestGame`)
+starts it with every option at its default unless someone chose another value,
+so the default is never repeated in code. See "Game Options" in
+[core-concepts.md](core-concepts.md).
+
+```json
+  "gameOptions": [
+    { "id": "rounds", "type": "number", "label": "Rounds", "min": 1, "max": 5, "default": 3 }
+  ]
+```
+
 #### Artwork that lives outside the bundle
 
 A published bundle is served under an image allowlist: its own files and

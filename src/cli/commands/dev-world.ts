@@ -199,6 +199,8 @@ export async function loadWorldRuntime(
     tempDir,
     name: 'world-runtime',
     context,
+    // A world has no lobby to start it with options, so it declares none.
+    gameOptions: undefined,
     exports: [
       `export { LocalWorldHost } from ${JSON.stringify(toPosix(join(devHostDir, 'world-host.ts')))};`,
       `export { openWorldStore } from ${JSON.stringify(toPosix(join(devHostDir, 'world-store.ts')))};`,

@@ -4,13 +4,13 @@ import { build as viteBuild } from 'vite';
 import chalk from 'chalk';
 import ora from 'ora';
 import { ENGINE_REVISION } from '../../contract/index.js';
-import { getProjectContext, loadGameDefinition } from './game-runtime.js';
+import { getProjectContext, loadGameDefinition, rulesEntrySource } from './game-runtime.js';
 import { buildCli, CLI_ENTRY, CLI_OUTFILE } from '../lib/build-cli.js';
 import { resolveUserPath } from '../lib/user-path.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { requireGameProjectManifests, requireRulesIndex, requireTableUi, resolveRulesDir, tableUiState } from '../lib/game-project.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
-import { assertNoDesignerOnlyConfigOptions } from '../lib/config-schema.js';
+import { parseGameOptionList } from '../../session/game-option-selection.js';
 import { readWorldDefinition, type WorldDefinition } from '../../world/index.js';
 import type { GameBackend, GameDefinition } from '../../session/index.js';
 import {
@@ -156,18 +156,23 @@ function deriveWorldBlock(world: WorldDefinition): {
   };
 }
 
+/** `boardsmith.json`'s game options a player may see: all but the designer-only ones, checked first. */
+function publishedGameOptions(list: unknown): unknown[] {
+  parseGameOptionList(list);
+  return (list as Array<{ designerOnly?: true }>).filter((option) => option.designerOnly !== true);
+}
+
 export function deriveManifest(
   config: Record<string, unknown>,
   pkg: Record<string, unknown>,
   gameDefinition: Pick<
     GameDefinition,
-    'gameClass' | 'minPlayers' | 'maxPlayers' | 'bot' | 'persistence' | 'world' | 'gameOptions'
+    'gameClass' | 'minPlayers' | 'maxPlayers' | 'bot' | 'persistence' | 'world'
   >,
   engineRevision: number,
   artifacts: { tableUi: boolean; worldUi: boolean },
 ): Record<string, unknown> {
   const backend = readBackend(config);
-  assertNoDesignerOnlyConfigOptions(config, gameDefinition.gameOptions);
 
   // EVERY WAY THE DECLARATION AND THE CODE DISAGREE, IN ONE ERROR. Reporting
   // them one at a time turns a single bad edit into a queue of rebuilds.
@@ -231,10 +236,14 @@ export function deriveManifest(
 
   // The flags the capability set was RESOLVED FROM never travel beside it, and the role mapping
   // (#454) says which agents build the game, which is nothing a player or the platform reads.
-  const { asyncPlay: _asyncPlay, joinInProgress: _joinInProgress, agents: _agents, ...rest } = config;
+  const { asyncPlay: _asyncPlay, joinInProgress: _joinInProgress, agents: _agents, gameOptions, ...rest } = config;
 
   return {
     ...rest,
+    // The platform's lobby lists these, so a designer-only option, which no
+    // player may see or set, is left out (#701). The bundle still carries it
+    // (`rulesEntrySource`), so a published game starts at its default.
+    ...(gameOptions === undefined ? {} : { gameOptions: publishedGameOptions(gameOptions) }),
     backend,
     capabilities: resolveCapabilities({
       backend,
@@ -419,32 +428,37 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
   const spinner = ora('Building game rules...').start();
 
   try {
-    // Build rules (TypeScript -> JS)
+    // Build rules (TypeScript -> JS), from the entry that gives the
+    // gameDefinition boardsmith.json's game options (#701).
     // copyPublicDir disabled — public/ is copied once to dist root below
-    await viteBuild({
-      root: cwd,
-      build: {
-        outDir: join(outDir, 'rules'),
-        copyPublicDir: false,
-        lib: {
-          entry: rulesIndexPath,
-          name: config.name,
-          fileName: () => 'rules.js',
-          formats: ['cjs'],
+    await withCommandBuildDir(cwd, 'build', async (tempDir) => {
+      const rulesEntryPath = join(tempDir, 'rules-entry.ts');
+      writeFileSync(rulesEntryPath, rulesEntrySource(rulesIndexPath, parseGameOptionList(config.gameOptions)));
+      await viteBuild({
+        root: cwd,
+        build: {
+          outDir: join(outDir, 'rules'),
+          copyPublicDir: false,
+          lib: {
+            entry: rulesEntryPath,
+            name: config.name,
+            fileName: () => 'rules.js',
+            formats: ['cjs'],
+          },
+          rollupOptions: {
+            // Mark boardsmith and all its subpath exports as external
+            external: ['boardsmith', /^boardsmith\//],
+          },
+          emptyOutDir: true,
+          // Keep class names — the game engine uses constructor.name for element
+          // type identification in serialized state and player views.
+          minify: 'esbuild',
         },
-        rollupOptions: {
-          // Mark boardsmith and all its subpath exports as external
-          external: ['boardsmith', /^boardsmith\//],
+        esbuild: {
+          keepNames: true,
         },
-        emptyOutDir: true,
-        // Keep class names — the game engine uses constructor.name for element
-        // type identification in serialized state and player views.
-        minify: 'esbuild',
-      },
-      esbuild: {
-        keepNames: true,
-      },
-      logLevel: 'warn',
+        logLevel: 'warn',
+      });
     });
     spinner.succeed('Game rules built');
 
@@ -502,7 +516,7 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
     // pack's tarballs, the scratch directory, chunk worktrees and the other
     // runs' build directories. Only ever create and delete what this run owns (#543).
     const gameDefinition = await withCommandBuildDir(cwd, 'build', (tempDir) =>
-      loadGameDefinition(rulesPath, tempDir, context),
+      loadGameDefinition(rulesPath, tempDir, context, config.gameOptions),
     );
 
     const manifest = deriveManifest(

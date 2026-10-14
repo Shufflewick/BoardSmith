@@ -1,6 +1,6 @@
 {
-  "revision": 195,
-  "surfaceHash": "59faad952865bb60",
+  "revision": 196,
+  "surfaceHash": "91a8cb057efc44c2",
   "payloadHash": "7e563b9e75959ec4",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1503,6 +1503,14 @@
       "payloadHash": "7e563b9e75959ec4",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "Game options can be declared designerOnly: true (#687), a designer knob such as a balance scale that no player chooses. selectGameOptions now refuses a selection naming one (GameOptionSelectionError, \"Game option \\\"x\\\" is designer-only\"); only boardsmith simulate and the dev host set one, through an internal designer selection the platform never calls. A designer-only option is declared only in gameDefinition.gameOptions and must have a default; boardsmith build refuses one in boardsmith.json, marked or merely named the same, so a published manifest never lists one and the platform lobby never shows one. GameOptionDefinition (NumberOption, SelectOption, BooleanOption) gained the optional designerOnly field. GamePreset.options is now optional (a preset may set only its players), matching what games already write. Platform: re-vendor; nothing else is required, since a manifest from boardsmith build never carries the flag. Recommended: make manifest-schema validateOptionDefinition refuse designerOnly on a gameOptions entry, so a hand-written manifest cannot put a designer knob in the lobby (toGameOptionDefinition drops unknown fields, so the engine would not see the flag). No payload or stored format changed."
+    },
+    {
+      "revision": 196,
+      "date": "2026-10-14",
+      "surfaceHash": "91a8cb057efc44c2",
+      "payloadHash": "7e563b9e75959ec4",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Game options have one declaration, boardsmith.json's gameOptions list (#701). gameDefinition.gameOptions is removed: GameDefinition no longer has the field, and every BoardSmith command refuses a definition that declares it. Every option must have a default (GameOptionDefinition.default is now required, and a default the option's own declaration refuses is an error), and selectGameOptions and the designer selection now return every declared option, the chosen value or else its default, so a game reads options.x with no fallback of its own. Designer-only options (designerOnly: true) are declared in boardsmith.json too; boardsmith build leaves them out of the manifest's gameOptions, so the manifest's shape is unchanged (entries are still { id, type, label, default, ... } and never carry designerOnly). The published rules.js carries the whole list on its gameDefinition (under Symbol.for('boardsmith.declaredGameOptions'); it imports nothing new), and executeOp's start op fills every declared option the host did not pass, which is how a designer-only option reaches its default on the platform. New boardsmith/session export: parseGameOptionList, which reads a boardsmith.json or manifest gameOptions list into the declarations selectGameOptions takes. Platform: re-vendor. Bundles built earlier run unchanged, but selectGameOptions now fills manifest defaults the platform did not send before (an async table started with {}), so such games start at their declared defaults: Hex starts at boardSize 11, its declared default, where its code fallback gave 7. Recommended: build the declarations with parseGameOptionList(manifest.gameOptions) instead of toGameOptionDefinition, which drops description, and drop the lobby page's own default filling in play/[sessionId].vue, now redundant. No payload or stored format changed."
     }
   ]
 }

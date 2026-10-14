@@ -33,12 +33,14 @@ export async function loadTableRuntime(
   rulesPath: string,
   tempDir: string,
   context: 'monorepo' | 'standalone',
+  declaredOptions: unknown,
 ): Promise<TableRuntime> {
   const module = await importRuntimeBundle({
     rulesPath,
     tempDir,
     name: 'runtime',
     context,
+    gameOptions: declaredOptions,
     exports: [
       `export { executeOp } from 'boardsmith/session';`,
       `export { reloadTableRules } from ${JSON.stringify(toPosix(cliSourceFile('dev-host/table-rules-reload.ts')))};`,

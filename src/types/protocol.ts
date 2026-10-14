@@ -181,15 +181,18 @@ export interface LobbyInfo {
 // ============================================
 
 /**
- * What every game option may declare. `designerOnly: true` marks a knob for the
- * game's designer, a balance scale for instance: no lobby, preset or platform
- * offers it, and `selectGameOptions` refuses a player's selection naming it.
- * Only `boardsmith simulate` (`--game-option`, `--compare`) and the dev host's
- * table setup set it, through `selectDesignerGameOptions`. Such an option must
- * declare its `default`, the value players play with. No platform hands the
- * game the option, so the game reads it with that same default (one constant
- * for both). It is declared in `gameDefinition.gameOptions`, never in
- * `boardsmith.json`, whose options the platform's lobby lists.
+ * What every game option may declare. A game declares its options in one
+ * place, the `gameOptions` list of `boardsmith.json`, each entry one of these
+ * with an `id` (#701). Every option has a `default`, which every selection and
+ * every `start` fills in when nobody chose the option, so a game reads
+ * `options.x` and never repeats the default in code.
+ *
+ * `designerOnly: true` marks a knob for the game's designer, a balance scale for
+ * instance: `boardsmith build` leaves it out of the manifest, so no lobby, preset
+ * or platform offers it, and `selectGameOptions` refuses a player's selection
+ * naming it. Only `boardsmith simulate` (`--game-option`, `--compare`) and the dev
+ * host's table setup set it, through `selectDesignerGameOptions`; every real game
+ * is played at its default, which the rules bundle carries.
  */
 interface GameOptionBase {
   label: string;
@@ -200,7 +203,7 @@ interface GameOptionBase {
 /** Number option definition */
 export interface NumberOption extends GameOptionBase {
   type: 'number';
-  default?: number;
+  default: number;
   min?: number;
   max?: number;
   step?: number;
@@ -214,14 +217,14 @@ export interface NumberOption extends GameOptionBase {
  */
 export interface SelectOption extends GameOptionBase {
   type: 'select';
-  default?: unknown;
+  default: unknown;
   choices: Array<{ value: unknown; label: string }>;
 }
 
 /** Boolean option definition */
 export interface BooleanOption extends GameOptionBase {
   type: 'boolean';
-  default?: boolean;
+  default: boolean;
 }
 
 /** Union type for game-level options */

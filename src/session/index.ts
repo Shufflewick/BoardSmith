@@ -90,10 +90,12 @@ export {
 // Core Classes
 // ============================================
 
-// The one way a client's choice of game options is admitted (#447).
+// The one way a client's choice of game options is admitted (#447), and the one
+// place they are declared, boardsmith.json's gameOptions list (#701).
 export {
   selectGameOptions,
   assertDeclarableGameOptions,
+  parseGameOptionList,
   GameOptionSelectionError,
   HOST_OWNED_GAME_OPTION_KEYS,
   type GameOptionSelection,

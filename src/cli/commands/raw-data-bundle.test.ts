@@ -22,7 +22,10 @@ const fixtureGame = resolve(here, 'simulate.fixture.ts');
 const engine = resolve(here, '../../engine/index.ts');
 
 const dir = tempTree('boardsmith-raw-data-');
-writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'fixture', displayName: 'Fixture', backend: 'table' }));
+writeFileSync(
+  join(dir, 'boardsmith.json'),
+  JSON.stringify({ name: 'fixture', displayName: 'Fixture', backend: 'table', gameOptions: [{ id: 'deadEnd', type: 'number', label: 'Dead end', default: 5 }] }),
+);
 writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'fixture', version: '1.0.0' }));
 writeFileSync(join(dir, 'index.html'), '<!doctype html><html><body></body></html>\n');
 mkdirSync(join(dir, 'src', 'rules', 'data'), { recursive: true });
@@ -35,7 +38,7 @@ writeFileSync(
     `import seatsCsv from './data/seats.csv?raw';`,
     `const seats = parseCsv(seatsCsv, { seat: 'number', label: 'string' }, { source: 'data/seats.csv' });`,
     `export const gameDefinition = { gameClass: DeadEndGame, gameType: 'fixture', displayName: 'Fixture',`,
-    `  minPlayers: 3, maxPlayers: seats.length, gameOptions: { deadEnd: { type: 'number', label: 'Dead end' } } };`,
+    `  minPlayers: 3, maxPlayers: seats.length };`,
   ].join('\n'),
 );
 

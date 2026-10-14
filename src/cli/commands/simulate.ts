@@ -11,7 +11,7 @@ import { seatPolicies, type ShardRequest, type SimulationBundle } from '../lib/s
 import { playOnWorkers } from '../lib/sim-workers.js';
 import { buildVariants, parseCompare, type CompareDimension, type Variant } from '../lib/sim-variants.js';
 import { parseGameOptionFlags } from './dev.js';
-import { selectDesignerGameOptions, type GameOptionSelection } from '../../session/game-option-selection.js';
+import { declaredGameOptionsOf, selectDesignerGameOptions, type GameOptionSelection } from '../../session/game-option-selection.js';
 import type { GameOptionDefinition } from '../../session/types.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { simulateReplayCommand } from '../lib/replay-command.js';
@@ -41,6 +41,8 @@ interface BoardSmithConfig {
   paths?: {
     rules?: string;
   };
+  /** The one declaration of the game's options (#701), designer-only ones included. */
+  gameOptions?: unknown;
 }
 
 /** A game stops as hung after this many actions; a report run has no wall-clock limit. */
@@ -217,7 +219,7 @@ export async function runReplay(rules: LoadedSimulation, options: RunReplayOptio
 
 /** A loaded simulation bundle, and the file it was loaded from, which worker threads import. */
 export type LoadedSimulation = SimulationBundle & {
-  gameDefinition: SimulatedGame & { gameOptions?: Record<string, GameOptionDefinition> };
+  gameDefinition: SimulatedGame;
   bundlePath: string;
 };
 
@@ -230,6 +232,7 @@ export async function loadSimulation(
   cwd: string,
   rulesPath: string,
   tempDir: string,
+  gameOptions: unknown,
   name = 'simulate',
   redirects?: ReadonlyMap<string, string>,
 ): Promise<LoadedSimulation> {
@@ -241,6 +244,7 @@ export async function loadSimulation(
       tempDir,
       name,
       context: getProjectContext(cwd),
+      gameOptions,
       exports: [
         `export { playShard } from ${JSON.stringify(toPosix(cliSourceFile('lib/sim-shard.ts')))};`,
         ...(hasSim ? [`export { policies } from ${JSON.stringify(toPosix(simIndex))};`] : []),
@@ -298,7 +302,7 @@ async function planVariants(
       rules = await bundle(`simulate-${bundles.size}`, redirects);
       bundles.set(key, rules);
     }
-    const gameOptions = resolveSimulationGameOptions(rules.gameDefinition.gameOptions, variant.gameOptionFlags);
+    const gameOptions = resolveSimulationGameOptions(declaredGameOptionsOf(rules.gameDefinition), variant.gameOptionFlags);
     for (const count of playerCounts) seatPolicies(variant.policyFlags, rules.policies, count);
     planned.push({ ...variant, rules, gameOptions });
   }
@@ -347,7 +351,7 @@ async function planRun(
     throw new Error(`--replay plays one game, so --players must name its one player count, got "${options.players ?? ''}".`);
   }
   const run = { cwd, policyFlags: options.policy ?? [], gameOptionFlags: options.gameOption ?? [] };
-  const wanted = buildVariants(flags.dimensions, run, base.gameDefinition.gameOptions);
+  const wanted = buildVariants(flags.dimensions, run, declaredGameOptionsOf(base.gameDefinition));
   if (options.replay !== undefined && wanted.length !== 1) {
     throw new Error('--replay plays one game, so each --compare must give it one value.');
   }
@@ -410,7 +414,7 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
   // This run's own build directory (#543), removed once the games have run; never `.boardsmith/`
   // itself (#391).
   const outcome = await withCommandBuildDir(cwd, 'simulate', async (tempDir) => {
-    const bundle = (name: string, redirects?: ReadonlyMap<string, string>) => loadSimulation(cwd, rulesPath, tempDir, name, redirects);
+    const bundle = (name: string, redirects?: ReadonlyMap<string, string>) => loadSimulation(cwd, rulesPath, tempDir, config.gameOptions, name, redirects);
     const base = await bundle('simulate');
     let plan: Awaited<ReturnType<typeof planRun>>;
     try {

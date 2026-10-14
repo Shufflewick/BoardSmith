@@ -551,10 +551,10 @@ A host must never accept the key, or the seed, from a player. The engine's own
 options (`ENGINE_OWNED_GAME_OPTION_KEYS`: `seed`, `elementIdKey`,
 `playerCount`, the palette, ...) are minted by the engine or the host; what a
 player chooses is limited to the options the game declared
-(`GameDefinition.gameOptions`), and `selectGameOptions` in `boardsmith/session`
+(`boardsmith.json`'s `gameOptions`), and `selectGameOptions` in `boardsmith/session`
 is the one way such a choice is admitted: it refuses an undeclared key, a
-host-owned key and a value of the wrong type, and returns a
-`GameOptionSelection`, which is the only thing the `boardsmith dev` host's
+host-owned key and a value of the wrong type, fills every option left out with
+its declared default, and returns a `GameOptionSelection`, which is the only thing the `boardsmith dev` host's
 lobby and `createHeadlessSession` take as a player's choice. The stateless executor refuses `elementIdKey` on a `start` op
 outright, since a new game mints its own. A host that assembles a game's
 options itself must keep a client's object out of them, or hand it to
@@ -780,11 +780,16 @@ export const gameDefinition = {
 
 ### Lobby Options (boardsmith.json)
 
-Game options, player options, and color palettes are defined in `boardsmith.json`. The dev server reads these and injects them into the game definition automatically.
+Game options, player options, and color palettes are defined in `boardsmith.json`.
 
 #### Game Options
 
-Game-level configuration options that appear in the lobby. Defined as an array with `id` as the key field.
+Game-level configuration options that appear in the lobby. `boardsmith.json`'s
+`gameOptions` list is the one place a game declares them (#701): the dev host,
+`boardsmith simulate`, `createTestGame`, `boardsmith build` and the platform all
+read it, and a `gameDefinition` that declares `gameOptions` is refused with a
+message saying to move them here. Each entry has an `id`, the name the game
+reads the option by.
 
 ```json
 {
@@ -821,34 +826,37 @@ Game-level configuration options that appear in the lobby. Defined as an array w
 
 Option types: `number` (with min/max/step), `select` (with choices), `boolean`.
 
+Every option needs a `default`. Every host starts a game with every declared
+option: the value someone chose, or else the default. The selection a lobby
+admits a choice through (`selectGameOptions`) fills it in, so does a `start`, and
+so does `createTestGame`, which reads `boardsmith.json` from the directory the
+tests run in. So a game reads `options.boardSize` and never repeats the default
+in code.
+
 #### Designer-only options
 
 A balance knob, such as a loot scale, is for the game's designer, not its
-players. Mark it `designerOnly: true` and declare it in
-`gameDefinition.gameOptions`, never in `boardsmith.json`:
+players. Declare it in `boardsmith.json` like any option and mark it
+`designerOnly: true`:
 
-```typescript
-const LOOT_SCALE = 1;
-
-export const gameDefinition = {
-  // ...
-  gameOptions: {
-    lootScale: { type: 'number', label: 'Loot scale', min: 0.5, max: 2, step: 0.25, default: LOOT_SCALE, designerOnly: true },
-  },
-};
+```json
+{
+  "gameOptions": [
+    { "id": "lootScale", "type": "number", "label": "Loot scale", "min": 0.5, "max": 2, "step": 0.25, "default": 1, "designerOnly": true }
+  ]
+}
 ```
 
-- No lobby, preset or platform offers it. `selectGameOptions` refuses a
-  player's selection naming it, a preset that sets it is refused when the game
-  loads, and `boardsmith.json` options (which the platform's lobby lists)
-  refuse `designerOnly`, and an option named for a designer-only one, so
-  `boardsmith build` never publishes one.
+- No lobby, preset or platform offers it. `boardsmith build` leaves it out of
+  the manifest the platform's lobby reads, `selectGameOptions` refuses a
+  player's selection naming it, and a preset that sets it is refused when the
+  game loads.
 - `boardsmith simulate --game-option lootScale=1.5`, `--compare lootScale=1,1.5`
   and the dev host's lobby and Table setup set it. The dev host marks it
   "Designer only".
-- It must declare a `default`: that is the value every real game is played
-  with. No platform hands the game the option, so the game reads it with the
-  same default, from one constant: `options.lootScale ?? LOOT_SCALE`.
+- Every real game is played at its `default`. The rules bundle `boardsmith build`
+  publishes carries every option, so the platform's `start` fills it in, and the
+  game reads `options.lootScale` like any other option.
 
 #### Player Options
 
@@ -954,8 +962,9 @@ class MyGame extends Game<MyGame, MyPlayer> {
   constructor(options: MyGameOptions) {
     super(options);
 
-    // Access game options
-    const boardSize = options.boardSize ?? 11;
+    // Access game options: every option boardsmith.json declares is there,
+    // at its default when nobody chose it
+    const boardSize = options.boardSize;
 
     // Access player configs (players are 1-indexed)
     for (const player of this.players) {

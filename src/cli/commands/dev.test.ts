@@ -16,7 +16,6 @@ import {
   resolvePlayerCount,
   resolveColorPalette,
   parseGameOptionFlags,
-  mergeGameOptionDefinitions,
   resolvePreset,
 } from './dev.js';
 import { describeTableReload, tableShapeChange } from './dev-table-runtime.js';
@@ -250,42 +249,6 @@ describe('parseGameOptionFlags (D13/DEVHOST-01: repeatable `--game-option key=va
   it('returns an empty record when no flags were passed', () => {
     expect(parseGameOptionFlags(undefined)).toEqual({});
     expect(parseGameOptionFlags([])).toEqual({});
-  });
-});
-
-describe('mergeGameOptionDefinitions (D13: gameDefinition.gameOptions merged with boardsmith.json, gameDefinition authoritative)', () => {
-  it('keeps both keys when the two sources are disjoint', () => {
-    const merged = mergeGameOptionDefinitions(
-      { fromGameDef: { type: 'boolean', label: 'From Game Def', default: true } },
-      { fromConfig: { type: 'boolean', label: 'From Config', default: false } },
-    );
-    expect(Object.keys(merged).sort()).toEqual(['fromConfig', 'fromGameDef']);
-  });
-
-  it('the gameDefinition definition wins on a key conflict', () => {
-    const merged = mergeGameOptionDefinitions(
-      { difficulty: { type: 'select', label: 'GameDef', default: 'hard', choices: [{ value: 'hard', label: 'Hard' }] } },
-      { difficulty: { type: 'select', label: 'Config', default: 'easy', choices: [{ value: 'easy', label: 'Easy' }] } },
-    );
-    expect(merged.difficulty.label).toBe('GameDef');
-    expect(merged.difficulty.default).toBe('hard');
-  });
-
-  it('handles either source being undefined', () => {
-    expect(mergeGameOptionDefinitions(undefined, undefined)).toEqual({});
-    expect(Object.keys(mergeGameOptionDefinitions({ a: { type: 'boolean', label: 'A' } }, undefined))).toEqual(['a']);
-  });
-
-  it('adversarial: a game-definition-only option survives even when boardsmith.json declares a DIFFERENT set', () => {
-    // Regression for the old replace-not-merge spread (`...(gameOptions &&
-    // { gameOptions })`) at dev.ts:557 — a boardsmith.json declaring ANY
-    // gameOptions used to silently drop every gameDefinition-only option.
-    const merged = mergeGameOptionDefinitions(
-      { onlyInGameDef: { type: 'boolean', label: 'Only game-def', default: true } },
-      { onlyInConfig: { type: 'boolean', label: 'Only config', default: false } },
-    );
-    expect(merged.onlyInGameDef).toBeDefined();
-    expect(merged.onlyInConfig).toBeDefined();
   });
 });
 

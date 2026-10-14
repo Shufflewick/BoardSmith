@@ -34,6 +34,7 @@ import { PERSIST_KEY, PERSIST_PRIVATE_KEY, type PersistCommit } from '../persist
 import { PickHandler } from './pick-handler.js';
 import { missingFieldError } from './parse-executor-op.js';
 import { runnerFromSnapshot } from './runner-from-snapshot.js';
+import { declaredGameOptionsOf, fillGameOptionDefaults } from './game-option-selection.js';
 import { changing } from '../engine/element/state-version.js';
 import {
   offerFollowUp,
@@ -782,12 +783,16 @@ function handleStart(
     };
   }
 
+  // Every option the bundle declares starts at its default unless the host
+  // passed one (#701): a designer-only option is in no manifest, so no
+  // platform lobby passes it.
+  const declaredOptions = fillGameOptionDefaults(declaredGameOptionsOf(def), gameOptions);
   // Thread tutorial definition un-serialized.
   // The game constructor strips `tutorial` from _constructorOptions so it is not
   // persisted in the snapshot; runnerFromSnapshot re-supplies it on restore.
   const effectiveOptions = def.tutorial
-    ? { ...gameOptions, tutorial: def.tutorial }
-    : gameOptions;
+    ? { ...declaredOptions, tutorial: def.tutorial }
+    : declaredOptions;
   const runner = new GameRunner({
     GameClass: def.gameClass,
     gameType: def.gameType,

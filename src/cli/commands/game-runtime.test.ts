@@ -55,6 +55,7 @@ function bundle(project: string, exports: string[]) {
     tempDir: tempTree('boardsmith-one-engine-build-'),
     name: 'one-engine',
     context: 'standalone',
+    gameOptions: undefined,
     exports,
   });
 }

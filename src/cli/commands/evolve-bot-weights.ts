@@ -72,6 +72,7 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
         tempDir,
         name: 'evolve',
         context: getProjectContext(cwd),
+        gameOptions: config.gameOptions,
         exports: [
           `export { benchmarkBot, weightedBot } from ${JSON.stringify(toPosix(packageSourceFile('bot-trainer/benchmark.ts')))};`,
         ],

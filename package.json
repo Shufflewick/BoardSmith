@@ -11,6 +11,10 @@
     "#testing/project-test-utils": {
       "types": "./src/testing/project-test-utils.d.ts",
       "default": "./src/testing/project-test-utils.node.ts"
+    },
+    "#testing/project-game-options": {
+      "types": "./src/testing/project-game-options.d.ts",
+      "default": "./src/testing/project-game-options.node.ts"
     }
   },
   "exports": {

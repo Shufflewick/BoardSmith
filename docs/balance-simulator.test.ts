@@ -3,7 +3,8 @@
  *
  * The page grows one game through four stages. Every code block it marks with
  * `<!-- doc-test: file <path> -->` is written, in page order, into a project
- * `boardsmith init --sim` scaffolded, and every block marked
+ * `boardsmith init --sim` scaffolded (a block marked `merge <path>` sets its
+keys in that JSON file, `boardsmith.json`), and every block marked
  * `<!-- doc-test: run -->` is run there at that point: `rm`, `boardsmith
  * simulate` (with a small `--games`, a fixed `--seed`, one worker and `--json`)
  * and `boardsmith add-ui`, after which the project must type-check and pass its
@@ -19,8 +20,7 @@ import { describe, expect, it } from 'vitest';
 
 import { smokeProject } from '../src/cli/commands/smoke-project.test-helper.js';
 import { spawnCli } from '../src/cli/spawn-cli.test-helper.js';
-import { writeFiles } from '../src/cli/lib/verify-result.test-helper.js';
-import { balanceSimulatorSteps } from './balance-simulator-steps.js';
+import { applyFileStep, balanceSimulatorSteps } from './balance-simulator-steps.js';
 
 const DOC = readFileSync(join(import.meta.dirname, 'balance-simulator.md'), 'utf-8');
 const steps = balanceSimulatorSteps();
@@ -47,8 +47,8 @@ let typecheck: Awaited<ReturnType<typeof spawnCli>> | undefined;
 let projectTests: Awaited<ReturnType<typeof spawnCli>> | undefined;
 
 for (const step of steps) {
-  if (step.kind === 'file') {
-    await writeFiles(project, { [step.path]: step.body });
+  if (step.kind !== 'run') {
+    applyFileStep(project, step);
     continue;
   }
   for (const line of step.lines) {

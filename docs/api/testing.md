@@ -66,7 +66,7 @@ There is one way to run an action and one way to assert it fails:
 
 ### Types
 
-- `TestGameOptions` - Test game creation options (`playerCount`, `playerNames`, `seed`, `autoStart`, `checkpoints`, plus any game-specific constructor options). `checkpoints` is the per-action checkpoint retention policy, applied to the runner rather than passed to the game constructor — without it a test always runs under the unbounded default and cannot exercise the policy the game ships (see `docs/state-size.md`). `seed` defaults to a fixed literal (`'test-seed'`) — never `Date.now()`/`Math.random` — so two seedless `TestGame.create()`/`createTestGame()` calls are deterministic and reproduce identical shuffles/command history. The resolved seed (fixed default or caller-supplied) is exposed via `testGame.seed` and included in `doAction`/`assertActionAvailable` failure messages so a failing run is one copy-paste from a deterministic repro.
+- `TestGameOptions` - Test game creation options (`playerCount`, `playerNames`, `seed`, `autoStart`, `checkpoints`, plus any game-specific constructor options). Every game option the project's `boardsmith.json` declares that is left out is passed at its `default`, as every host starts the game (the file is read from the directory the tests run in, the project root under `boardsmith test`), so a test plays the configuration players get unless it says otherwise. `checkpoints` is the per-action checkpoint retention policy, applied to the runner rather than passed to the game constructor — without it a test always runs under the unbounded default and cannot exercise the policy the game ships (see `docs/state-size.md`). `seed` defaults to a fixed literal (`'test-seed'`) — never `Date.now()`/`Math.random` — so two seedless `TestGame.create()`/`createTestGame()` calls are deterministic and reproduce identical shuffles/command history. The resolved seed (fixed default or caller-supplied) is exposed via `testGame.seed` and included in `doAction`/`assertActionAvailable` failure messages so a failing run is one copy-paste from a deterministic repro.
 - `SimulateRandomGamesOptions`, `ReplayRandomGameOptions`, `SingleGameResult`, `SimulationResults`, `IsResting` - Random simulation types
 - `DebugStringOptions`, `ActionTraceResult`, `ActionTraceDetail` - Debug utility types
 - `TutorialScenarioMove`, `SimulateTutorialOptions`, `SimulateTutorialResult` - Tutorial DSL types
@@ -215,7 +215,7 @@ as stuck with "no player has an enabled action to take", followed by each
 refused action and its reason.
 
 A game whose longest or heaviest configuration sits behind a game option needs
-`gameOptions`, or the run only ever measures the default one:
+`gameOptions`, or the run only ever measures the declared default:
 
 ```typescript
 const hard = await simulateRandomGames(MyGame, {

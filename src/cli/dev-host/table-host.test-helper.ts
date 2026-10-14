@@ -14,7 +14,7 @@ import type { createDevHostClientMemory } from './test-client-memory.js';
 /** A table project whose rules are `source`, and the one move an author makes to it: saving them. */
 export function tableProject(prefix: string, source: string) {
   const { rulesPath, tempDir, save } = rulesProject(prefix, source);
-  const load = (): Promise<TableRuntime> => loadTableRuntime(rulesPath, tempDir, 'monorepo');
+  const load = (): Promise<TableRuntime> => loadTableRuntime(rulesPath, tempDir, 'monorepo', undefined);
   return { save, load };
 }
 
