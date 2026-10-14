@@ -3,6 +3,13 @@ import { join } from 'node:path';
 import { resolveUserPath } from './user-path.js';
 import { resolveWorldMode } from './world-project.js';
 import { SMOKE_SPEC_PATH } from '../../testing/browser-smoke-verdict.js';
+import type { PlatformTarget } from './publish-api.js';
+
+/** The ids one publishing platform gave a game (#704). */
+export interface PlatformIds {
+  gameId?: string;
+  publisherId?: string;
+}
 
 /**
  * A game's `boardsmith.json`, as far as the CLI commands that read it care.
@@ -10,11 +17,11 @@ import { SMOKE_SPEC_PATH } from '../../testing/browser-smoke-verdict.js';
  * carries the rest, because the manifest is the author's file and the CLI is
  * not its schema (`boardsmith validate` is).
  */
-interface GameProjectConfig {
+export interface GameProjectConfig {
   name?: string;
   displayName?: string;
-  gameId?: string;
-  publisherId?: string;
+  /** Each platform's ids, kept apart because dev and prod are separate deployments (#704). */
+  platforms?: Partial<Record<PlatformTarget, PlatformIds>>;
   publisher?: string;
   /** The single backend declaration (#171): "table" or "world". */
   backend?: unknown;

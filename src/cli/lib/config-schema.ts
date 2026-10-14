@@ -92,6 +92,12 @@ export const ALLOWED_NAMED_ACTION_KEYS: readonly string[] = keysOf(
   rootSchema.definitions.namedAction,
 );
 
+/** The platforms a `platforms` block may hold ids for, which are the platforms publish can target. */
+export const ALLOWED_PLATFORM_KEYS: readonly string[] = keysOf(rootSchema.properties.platforms);
+
+/** Legitimate keys inside one platform's block of `platforms`. */
+export const ALLOWED_PLATFORM_ID_KEYS: readonly string[] = keysOf(rootSchema.definitions.platformIds);
+
 /**
  * Maximum edit distance for a did-you-mean suggestion. Beyond this the two
  * strings are considered unrelated rather than a likely typo.

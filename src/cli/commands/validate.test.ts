@@ -563,6 +563,32 @@ describe('platform-consumed blocks', () => {
   });
 });
 
+/** #704: publish keeps each platform's ids in its own block, because dev and prod are separate deployments. */
+describe('the platforms block', () => {
+  it('accepts ids for dev and prod', () => {
+    expect(checkMetadataIssues({
+      ...validConfig(),
+      platforms: {
+        dev: { gameId: 'dev-game', publisherId: 'dev-pub' },
+        prod: { gameId: 'prod-game', publisherId: 'prod-pub' },
+      },
+    })).toEqual([]);
+  });
+
+  it('refuses a platform publish cannot target and an unknown key inside one', () => {
+    const [platform] = checkMetadataIssues({ ...validConfig(), platforms: { staging: { gameId: 'g' } } });
+    expect(platform).toContain("Unknown key 'staging' in \"platforms\"");
+    const [key] = checkMetadataIssues({ ...validConfig(), platforms: { dev: { gameid: 'g' } } });
+    expect(key).toContain("Unknown key 'gameid' in \"platforms.dev\"");
+  });
+
+  it('refuses a platforms block, or a platform, that is not an object, and an id that is not a string', () => {
+    expect(checkMetadataIssues({ ...validConfig(), platforms: 'dev' })[0]).toContain('"platforms" must be an object');
+    expect(checkMetadataIssues({ ...validConfig(), platforms: { prod: 'g' } })[0]).toContain('"platforms.prod" must be an object');
+    expect(checkMetadataIssues({ ...validConfig(), platforms: { prod: { gameId: 7 } } })[0]).toContain('"platforms.prod.gameId" must be a string');
+  });
+});
+
 
 /**
  * Issue 142: `boardsmith validate` reported `Asset Paths: PASS` on a manifest

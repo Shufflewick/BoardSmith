@@ -19,7 +19,12 @@ import {
 import { buildCommand } from './build.js';
 import { validateCommand, validateBundleSize } from './validate.js';
 import { resolveWorldMode } from '../lib/world-project.js';
-import { requireGameProjectManifests, requireTableUi } from '../lib/game-project.js';
+import {
+  requireGameProjectManifests,
+  requireTableUi,
+  type GameProjectConfig,
+  type PlatformIds,
+} from '../lib/game-project.js';
 
 /**
  * END A FAILED PUBLISH.
@@ -85,6 +90,48 @@ export function resolveTarget(options: PublishOptions): PlatformTarget {
   return named[0];
 }
 
+/**
+ * The ids saved for `target`, and only for it: dev and prod are separate
+ * deployments, so one platform's ids mean nothing on the other (#704).
+ *
+ * The old top-level `gameId`/`publisherId` are refused rather than read,
+ * because nothing says which platform they came from.
+ */
+export function savedPlatformIds(config: GameProjectConfig, target: PlatformTarget): PlatformIds {
+  const retired = ['gameId', 'publisherId'].filter((key) => config[key] !== undefined);
+  if (retired.length > 0) {
+    throw new Error(
+      `boardsmith.json has ${retired.map((key) => `"${key}"`).join(' and ')} at the top level, but each platform now ` +
+      'keeps its own ids, because dev and prod are separate deployments. Move them under "platforms.dev" or ' +
+      '"platforms.prod", whichever platform gave them, e.g. "platforms": { "prod": { "gameId": "...", "publisherId": "..." } }. ' +
+      `If you are not sure which platform they belong to, delete them and publish again with --${target} --publisher <slug> ` +
+      'to re-register.',
+    );
+  }
+  return { ...config.platforms?.[target] };
+}
+
+/** Save what `target` answered under its own block; returns whether boardsmith.json needs writing. */
+export function recordPlatformIds(
+  config: GameProjectConfig,
+  target: PlatformTarget,
+  ids: Required<PlatformIds>,
+): boolean {
+  const saved = config.platforms?.[target];
+  if (saved?.gameId === ids.gameId && saved?.publisherId === ids.publisherId) return false;
+  config.platforms = { ...config.platforms, [target]: ids };
+  return true;
+}
+
+/** What to do when `target` may no longer know the ids saved for it (a platform reset, a deleted game). */
+export function staleIdsHint(target: PlatformTarget): string {
+  return (
+    `If the ${target} platform was reset, or the game deleted there, since your last publish to it, the ids saved ` +
+    `under "platforms.${target}" in boardsmith.json no longer exist on it. Delete "platforms.${target}" and run: ` +
+    `boardsmith publish --${target} --publisher <slug>`
+  );
+}
+
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_SLUG_ATTEMPTS = 10;
 
@@ -101,6 +148,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
 
   // -- Validate project, before any key or network: a project with no UI has nothing to publish --
   const { configPath, config, pkg } = requireGameProjectManifests(cwd);
+  const saved = savedPlatformIds(config, target);
   requireTableUi(cwd, config);
 
   // -- Resolve API key (per target: dev and prod are separate deployments
@@ -140,16 +188,16 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   const platformUrl = getPlatformUrl(target);
 
   // -- Resolve game identity early (needed for preflight) --
-  // Prefer gameId from boardsmith.json (stable across slug changes).
-  // Fall back to slug derivation if no gameId (first publish or deleted).
-  const existingGameId: string | undefined = config.gameId;
+  // Prefer this platform's saved gameId (stable across slug changes).
+  // Fall back to slug derivation if none (first publish here, or deleted).
+  const existingGameId = saved.gameId;
   const baseSlug = toSlug(config.name || pkg.name || 'game');
 
   // -- Resolve publisher target --
-  // --publisher overrides everything; otherwise reuse the persisted publisherId.
+  // --publisher overrides everything; otherwise reuse this platform's persisted publisherId.
   // A brand-new game (no persisted publisherId, no flag) has no target and must fail.
-  const existingPublisherId: string | undefined = config.publisherId;
-  const existingPublisherSlug: string | undefined = config.publisher;
+  const existingPublisherId = saved.publisherId;
+  const existingPublisherSlug = config.publisher;
   let targetPublisherSlug: string | undefined;
   let targetPublisherId: string | undefined;
   if (options.publisher) {
@@ -261,8 +309,8 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
         // but the slug changed — this shouldn't happen. Fail clearly.
         if (existingGameId && attempt === 0) {
           spinner.fail('Publish failed');
-          console.error(chalk.red('Your gameId no longer matches the slug. The game may have been deleted.'));
-          console.error(chalk.dim('Remove the "gameId" field from boardsmith.json and try again.'));
+          console.error(chalk.red(`The gameId saved for ${target} no longer matches the slug. The game may have been deleted.`));
+          console.error(chalk.dim(staleIdsHint(target)));
           process.exit(1);
         }
         continue;
@@ -279,6 +327,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
           `You don't have develop access to this game under publisher \`${effectiveSlug}\`. `
           + 'Ask an owner or manager to grant you develop access, then try again.',
         ));
+        if (targetPublisherId) console.error(chalk.dim(staleIdsHint(target)));
         process.exit(1);
       }
       if (isPublishError(err) && err.kind === 'SCOPE_VIOLATION') {
@@ -300,16 +349,11 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     process.exit(1);
   }
 
-  // Save gameId + resolved publisher target to boardsmith.json for future publishes
-  let configDirty = false;
-  if (initResult.gameId !== config.gameId) {
-    config.gameId = initResult.gameId;
-    configDirty = true;
-  }
-  if (initResult.publisherId !== config.publisherId) {
-    config.publisherId = initResult.publisherId;
-    configDirty = true;
-  }
+  // Save this platform's ids + resolved publisher target to boardsmith.json for future publishes
+  let configDirty = recordPlatformIds(config, target, {
+    gameId: initResult.gameId,
+    publisherId: initResult.publisherId,
+  });
   if (options.publisher && options.publisher !== config.publisher) {
     config.publisher = options.publisher;
     configDirty = true;

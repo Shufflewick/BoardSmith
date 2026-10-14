@@ -8,6 +8,8 @@ import {
   findUnknownKeysIn,
   ALLOWED_ROUND_DEADLINE_KEYS,
   ALLOWED_NAMED_ACTION_KEYS,
+  ALLOWED_PLATFORM_KEYS,
+  ALLOWED_PLATFORM_ID_KEYS,
   ASSET_PATH_KEYS,
 } from '../lib/config-schema.js';
 import { agentsBlockProblems } from '../lib/agent-roles.js';
@@ -254,6 +256,7 @@ export function checkMetadataIssues(config: Record<string, unknown>): string[] {
 
   issues.push(...checkTaxonomyShape(config));
   issues.push(...checkPlatformBlockShapes(config));
+  issues.push(...checkPlatformIdsShape(config.platforms));
   // Which agent each role is dispatched as (#454): a wrong mapping would send work to an agent
   // type the project never meant.
   issues.push(...agentsBlockProblems(config.agents));
@@ -369,6 +372,31 @@ function checkBlockKeys(
       ? `Unknown key '${key}' in "${path}" — did you mean '${suggestion}'?`
       : `Unknown key '${key}' in "${path}" — not a recognized field of "${path}".`
   ));
+}
+
+/** Shape of the per-platform ids `boardsmith publish` keeps (#704). */
+function checkPlatformIdsShape(raw: unknown): string[] {
+  if (raw === undefined) return [];
+  if (!isPlainObject(raw)) {
+    return ['"platforms" must be an object of platform ids, e.g. { "prod": { "gameId": "...", "publisherId": "..." } }.'];
+  }
+  const issues = checkBlockKeys(raw, 'platforms', ALLOWED_PLATFORM_KEYS);
+  for (const platform of ALLOWED_PLATFORM_KEYS) {
+    const block = raw[platform];
+    if (block === undefined) continue;
+    const path = `platforms.${platform}`;
+    if (!isPlainObject(block)) {
+      issues.push(`"${path}" must be an object holding this game's "gameId" and "publisherId" on ${platform}.`);
+      continue;
+    }
+    issues.push(...checkBlockKeys(block, path, ALLOWED_PLATFORM_ID_KEYS));
+    for (const key of ALLOWED_PLATFORM_ID_KEYS) {
+      if (block[key] !== undefined && typeof block[key] !== 'string') {
+        issues.push(`"${path}.${key}" must be a string, as \`boardsmith publish --${platform}\` wrote it.`);
+      }
+    }
+  }
+  return issues;
 }
 
 /**
