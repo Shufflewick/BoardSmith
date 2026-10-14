@@ -6,7 +6,7 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { Action, Game, Piece, Player, Space, actionStep, loop } from '../index.js';
 import { GameRunner } from '../../runtime/runner.js';
-import { createHeadlessSession } from '../../session/headless-session.js';
+import { createHeadlessSession } from '../../testing/headless-session.js';
 
 class Card extends Piece<CardGame> {}
 class Pile extends Space<CardGame> {}

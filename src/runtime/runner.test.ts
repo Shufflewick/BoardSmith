@@ -18,7 +18,7 @@ import {
 import type { GameStateSnapshot } from '../engine/utils/index.js';
 import { GameRunner, describeCheckpointAbsence, type RunnerCheckpointPolicy } from './runner.js';
 import { ErrorCode } from '../types/protocol.js';
-import { createHeadlessSession } from '../session/headless-session.js';
+import { createHeadlessSession } from '../testing/headless-session.js';
 import {
   collectFixtureDefinition,
   CollectGame,

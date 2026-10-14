@@ -4,6 +4,7 @@ import { build, type Plugin as EsbuildPlugin } from 'esbuild';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 
 import type { GameDefinition } from '../../session/index.js';
+import { DECLARED_GAME_OPTIONS_KEY, withDeclaredGameOptions } from '../../session/game-option-selection.js';
 
 // Workspace detection lives in lib/ so non-game commands (audit, lint, test)
 // can ask the same question without importing the game runtime's esbuild
@@ -214,8 +215,9 @@ export async function loadGameDefinition(
   rulesPath: string,
   tempDir: string,
   context: 'monorepo' | 'standalone',
+  gameOptions: unknown,
 ): Promise<GameDefinition> {
-  const module = await importRuntimeBundle({ rulesPath, tempDir, name: 'definition', context, exports: [] });
+  const module = await importRuntimeBundle({ rulesPath, tempDir, name: 'definition', context, gameOptions, exports: [] });
   return module.gameDefinition;
 }
 
@@ -283,6 +285,27 @@ function requireOneBoardsmith(rulesPath: string, inputs: readonly string[]): voi
 }
 
 /**
+ * The entry `boardsmith build` bundles a game's published rules from (#701): all
+ * the rules module exports, with its `gameDefinition` carrying `declarations`,
+ * the game options `boardsmith.json` declares (already read and checked by
+ * `parseGameOptionList`), under the key `withDeclaredGameOptions` uses. A
+ * platform's `start` op reads them there, so it fills every option the host
+ * left out, a designer-only one too, which no manifest lists. The entry imports
+ * nothing a runner must provide beyond what the rules already import.
+ */
+export function rulesEntrySource(rulesIndexPath: string, declarations: Record<string, unknown>): string {
+  const rules = JSON.stringify(toPosix(rulesIndexPath));
+  // A namespace import, so rules with no gameDefinition reach the loader's
+  // "must export a gameDefinition" message rather than a bundler error.
+  return [
+    `import * as rules from ${rules};`,
+    `export * from ${rules};`,
+    `export const gameDefinition = rules.gameDefinition && { ...rules.gameDefinition, [Symbol.for(${JSON.stringify(DECLARED_GAME_OPTIONS_KEY)})]: ${JSON.stringify(declarations)} };`,
+    '',
+  ].join('\n');
+}
+
+/**
  * BUNDLE THE PROJECT'S RULES, AND WHATEVER MUST SHARE THEIR ENGINE, AND LOAD IT.
  *
  * ONE esbuild bundle, because a game's rules are built with the engine inlined:
@@ -294,8 +317,10 @@ function requireOneBoardsmith(rulesPath: string, inputs: readonly string[]): voi
  * rules' `boardsmith` from another is refused, naming both.
  *
  * `exports` are extra `export ... from ...;` lines for the entry, beside the
- * `gameDefinition` every bundle exports. The import is cache-busted, so calling
- * this again after an edit is a genuine re-read of the author's source.
+ * `gameDefinition` every bundle exports, which is returned carrying
+ * `gameOptions` (`withDeclaredGameOptions`, which refuses a definition that
+ * declares its own). The import is cache-busted, so calling this again after an
+ * edit is a genuine re-read of the author's source.
  */
 export async function importRuntimeBundle(args: {
   rulesPath: string;
@@ -303,6 +328,8 @@ export async function importRuntimeBundle(args: {
   /** Names the entry and bundle files in `tempDir`, so loaders cannot collide. */
   name: string;
   context: 'monorepo' | 'standalone';
+  /** `boardsmith.json`'s `gameOptions` list, as read (absent when it declares none). */
+  gameOptions: unknown;
   exports: readonly string[];
   /**
    * Absolute path -> absolute path of the file to bundle in its place. A file
@@ -314,7 +341,12 @@ export async function importRuntimeBundle(args: {
   const entryPath = join(args.tempDir, `${args.name}-entry.ts`);
   writeFileSync(
     entryPath,
-    [`export { gameDefinition } from ${JSON.stringify(toPosix(rulesIndexPath))};`, ...args.exports].join(
+    [
+      // A namespace import, so rules with no gameDefinition reach the message below.
+      `import * as rules from ${JSON.stringify(toPosix(rulesIndexPath))};`,
+      'export const gameDefinition = rules.gameDefinition;',
+      ...args.exports,
+    ].join(
       '\n',
     ),
   );
@@ -353,5 +385,10 @@ export async function importRuntimeBundle(args: {
     throw new Error('Rules module must export a gameDefinition');
   }
 
-  return module as { gameDefinition: GameDefinition } & Record<string, unknown>;
+  // boardsmith.json's game options, the one declaration (#701), as the
+  // published bundle carries them (see rulesEntrySource).
+  return {
+    ...module,
+    gameDefinition: withDeclaredGameOptions(module.gameDefinition as GameDefinition, args.gameOptions),
+  };
 }

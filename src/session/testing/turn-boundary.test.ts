@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { createHeadlessSession } from '../headless-session.js';
+import { createHeadlessSession } from '../../testing/headless-session.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from '../snapshot-session-host.js';
 import { executeOp, type OpResult } from '../stateless-ops.js';
 import type { GameStateSnapshot } from '../../engine/utils/index.js';

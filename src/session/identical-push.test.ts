@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { SnapshotSessionHost, type BotSeat } from './snapshot-session-host.js';
 import { executeOp } from './stateless-ops.js';
-import { createHeadlessSession } from './headless-session.js';
+import { createHeadlessSession } from '../testing/headless-session.js';
 import { secretDeploymentDefinition } from './testing/fixtures/secret-deployment-fixture.js';
 
 // #487: in the fixture's simultaneous deployment, seat 1's `placePack` changes

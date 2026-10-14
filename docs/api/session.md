@@ -18,7 +18,6 @@ ShufflewickPub all run it.
 
 ```typescript
 import {
-  createHeadlessSession,
   SnapshotSessionHost,
   executeOp,
   generateGameId,
@@ -42,9 +41,10 @@ import {
 
 ### Headless Session
 
-- `createHeadlessSession(definition, tableOptions, botSeats?)` - Runs a `SnapshotSessionHost` in process over `executeOp`, for tests, simulations and agents
-- `HeadlessSession<G>` - The table `createHeadlessSession` returns
-- `HeadlessGameOptions` - `{ playerCount, seed?, playerNames?, options?, teachingDisabled? }`; `teachingDisabled` locks hints, the heatmap, the demo and the tutorial at both the host and `executeOp`
+`createHeadlessSession`, which runs a `SnapshotSessionHost` in process over
+`executeOp`, is exported from `boardsmith/testing` (see
+[testing.md](testing.md)): it reads the project's `boardsmith.json`, which takes
+Node, and `boardsmith/session` also runs on Workers and in browsers.
 
 ### Utilities
 
@@ -54,8 +54,11 @@ import {
 
 ### Game Options
 
-- `selectGameOptions()` - The one way a player's choice of the game's declared options is admitted; returns a `GameOptionSelection`. It refuses a host-owned key, an undeclared key, a value the declaration does not admit, and an option declared `designerOnly: true` (a designer's knob that only `boardsmith simulate` and the dev host set)
+- `selectGameOptions()` - The one way a player's choice of the game's declared options is admitted; returns a `GameOptionSelection` holding every declared option, the chosen value or else its `default`. It refuses a host-owned key, an undeclared key, a value the declaration does not admit, and an option declared `designerOnly: true` (a designer's knob that only `boardsmith simulate` and the dev host set)
 - `GameOptionSelection` - An admitted choice of game options
+- `parseGameOptionList()` - Reads `boardsmith.json`'s `gameOptions` list, the one place a game declares its options, into the declarations keyed by id that `selectGameOptions` takes. Refuses an entry with no `id`, an id declared twice, an option with no `default` or one its declaration refuses. A host reading a manifest's `gameOptions` uses it too
+
+The rules `boardsmith build` publishes carry the whole list on their `gameDefinition`, designer-only options included, so `executeOp`'s `start` fills every declared option the host did not pass with its default; that is how a designer-only option, which no manifest lists, reaches its default on a platform.
 
 ### Player Colors
 
@@ -125,7 +128,7 @@ a simulation plays the game exactly as a host does. Pass the game's exported
 strategy apply.
 
 ```typescript
-import { createHeadlessSession } from 'boardsmith/session';
+import { createHeadlessSession } from 'boardsmith/testing';
 import { gameDefinition } from './index.js';
 
 const session = createHeadlessSession(gameDefinition, {

@@ -1,8 +1,10 @@
 import { dueSeats, type Game } from '../engine/index.js';
 import { GameRunner, type GameRunnerOptions } from '../runtime/index.js';
 import { createBot, type BotStrategy, type Objective } from '../bot/index.js';
-import type { GameClass } from '../engine/index.js';
+import type { GameClass, GameOptions } from '../engine/index.js';
 import type { ObjectiveWeight } from './types.js';
+import { fillGameOptionDefaults } from '../session/game-option-selection.js';
+import { projectGameOptions } from '#testing/project-game-options';
 
 /**
  * Benchmark configuration
@@ -230,6 +232,14 @@ interface BenchmarkGameResult {
 }
 
 /**
+ * `options` with every game option the project's boardsmith.json declares, at
+ * its default, so the benchmark plays the game every host starts (#701).
+ */
+function projectOptions<O extends GameOptions>(options: O): O {
+  return fillGameOptionDefaults(projectGameOptions(), options);
+}
+
+/**
  * Run a single benchmark game
  */
 async function runBenchmarkGame<G extends Game>(
@@ -248,10 +258,7 @@ async function runBenchmarkGame<G extends Game>(
     const runnerOptions: GameRunnerOptions<G> = {
       GameClass,
       gameType,
-      gameOptions: {
-        playerCount: 2,
-        seed,
-      },
+      gameOptions: projectOptions({ playerCount: 2, seed }),
     };
     const runner = new GameRunner(runnerOptions);
     let flowState = runner.start();
@@ -393,7 +400,7 @@ export function weightedBot<G extends Game>(
     );
   }
   const objectives = weightedObjectives(bot.objectives, weights);
-  const runner = new GameRunner({ GameClass, gameType, gameOptions: { playerCount: 2, seed: 'objective-check' } });
+  const runner = new GameRunner({ GameClass, gameType, gameOptions: projectOptions({ playerCount: 2, seed: 'objective-check' }) });
   runner.start();
   objectives(runner.game, 1);
   return { ...bot, objectives };

@@ -1291,7 +1291,10 @@ async function withProjectBundle<T>(
   exports: (cliSourceFile: (pathUnderCli: string) => string) => string[],
   use: (bundle: { gameDefinition: GameDefinition } & Record<string, unknown>) => Promise<T>,
 ): Promise<T> {
-  const config = JSON.parse(readFileSync(join(cwd, 'boardsmith.json'), 'utf-8')) as { paths?: { rules?: string } };
+  const config = JSON.parse(readFileSync(join(cwd, 'boardsmith.json'), 'utf-8')) as {
+    paths?: { rules?: string };
+    gameOptions?: unknown;
+  };
   const rulesPath = resolveRulesDir(cwd, config);
   return withCommandBuildDir(cwd, 'validate', async (tempDir) => {
     const { importRuntimeBundle, getProjectContext, cliSourceFile, toPosix } = await import('./game-runtime.js');
@@ -1300,6 +1303,7 @@ async function withProjectBundle<T>(
       tempDir,
       name,
       context: getProjectContext(cwd),
+      gameOptions: config.gameOptions,
       exports: exports((pathUnderCli) => toPosix(cliSourceFile(pathUnderCli))),
     });
     return use(bundle);

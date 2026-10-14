@@ -26,7 +26,8 @@ import {
   type BoundaryKeyState,
   type GameOptions,
 } from '../index.js';
-import { createHeadlessSession, executeOp, type GameDefinitionLike } from '../../session/index.js';
+import { executeOp, type GameDefinitionLike } from '../../session/index.js';
+import { createHeadlessSession } from '../../testing/headless-session.js';
 import { GameRunner } from '../../runtime/index.js';
 import { succeeded, refused } from '../../session/op-result.test-helper.js';
 

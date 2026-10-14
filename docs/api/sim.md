@@ -274,8 +274,11 @@ value and prints them side by side. The dimension is one of:
 
 - **`policy`** - each value is one more `--policy` flag, such as
   `--compare policy=random,greedy` or `--compare policy=2=random,2=greedy`.
-- **A declared game option** - `--compare hand=5,7`. Each value is read as
-  `--game-option` reads it, so an option the game does not declare is refused.
+- **A declared game option** - `--compare hand=5,7`, for an option in
+  `boardsmith.json`'s `gameOptions`, the one place a game declares them. Each
+  value is read as `--game-option` reads it, so an option the game does not
+  declare is refused, and every option neither flag sets is played at its
+  declared default.
   Give an option in `--compare` or in `--game-option`, not both. A
   designer-only option (`designerOnly: true`), which no player can choose, is
   set here like any other; that is what it is for.

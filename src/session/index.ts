@@ -6,19 +6,8 @@
  * isolated from implementation details.
  *
  * Every host runs the same `SnapshotSessionHost` over the pure `executeOp`:
- * the `boardsmith dev` host, ShufflewickPub, and `createHeadlessSession`, which
- * drives one in process for tests and simulations.
- *
- * @example
- * ```typescript
- * import { createHeadlessSession } from 'boardsmith/session';
- * import { gameDefinition } from './rules/index.js';
- *
- * const session = createHeadlessSession(gameDefinition, { playerCount: 2, seed: 'demo' });
- * await session.start();
- * await session.send(1, { type: 'action', actionName: 'move', player: 1, args: { to: 'b4' } });
- * const seat1 = session.playerState(1); // what seat 1 was last published
- * ```
+ * the `boardsmith dev` host, ShufflewickPub, and `boardsmith/testing`'s
+ * `createHeadlessSession`, which drives one in process for a game's tests.
  */
 
 // ============================================
@@ -90,10 +79,12 @@ export {
 // Core Classes
 // ============================================
 
-// The one way a client's choice of game options is admitted (#447).
+// The one way a client's choice of game options is admitted (#447), and the one
+// place they are declared, boardsmith.json's gameOptions list (#701).
 export {
   selectGameOptions,
   assertDeclarableGameOptions,
+  parseGameOptionList,
   GameOptionSelectionError,
   HOST_OWNED_GAME_OPTION_KEYS,
   type GameOptionSelection,
@@ -126,7 +117,6 @@ export type { HostWorkGate } from './host-work-gate.js';
 // Headless Simulation
 // ============================================
 
-export { createHeadlessSession, type HeadlessSession, type HeadlessGameOptions } from './headless-session.js';
 
 /**
  * THE BACKEND AND THE CAPABILITY SET IT RESOLVES TO (#171).

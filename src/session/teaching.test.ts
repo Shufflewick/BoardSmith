@@ -12,7 +12,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { TwoPlayerPickGame } from './testing/fixtures/two-player-pick-fixture.js';
-import { createHeadlessSession } from './headless-session.js';
+import { createHeadlessSession } from '../testing/headless-session.js';
 import type { BotStrategy } from '../bot/index.js';
 
 // Every move scores the same; each pick names its option as the hint target,

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { executeOp } from './stateless-ops.js';
 import type { PlayerGameState } from './types.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/index.js';
-import { createHeadlessSession } from './headless-session.js';
+import { createHeadlessSession } from '../testing/headless-session.js';
 import { secretDeploymentDefinition } from './testing/fixtures/secret-deployment-fixture.js';
 import { succeeded } from './op-result.test-helper.js';
 

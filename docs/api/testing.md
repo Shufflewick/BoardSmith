@@ -25,6 +25,9 @@ import {
 - `TestGame` - Test game wrapper around `GameRunner`; also exposes `getPlayerView()` (typed observable state) and `action()` (returns an `ActionBuilder`). `doAction()` throws an `ActionExecutionError` (with an actionable `debugActionAvailability` trace) on failure — use `tryAction()` for tests that deliberately exercise the failure path.
 - `createTestGame()` - Convenience function wrapping `TestGame.create()`
 - `ActionExecutionError` - Structured error thrown by `doAction()` on failure; carries `actionName`, `playerSeat`, `args`, and the engine `result` for `instanceof` handling in tests
+- `createHeadlessSession(definition, tableOptions, botSeats?)` - Runs a `SnapshotSessionHost` in process over `executeOp`, the host every platform runs, for tests, simulations and agents. Like `createTestGame`, it starts the game with every option the project's `boardsmith.json` declares that `tableOptions.options` leaves out, at its default
+- `HeadlessSession<G>` - The table `createHeadlessSession` returns
+- `HeadlessGameOptions` - `{ playerCount, seed?, playerNames?, options?, teachingDisabled?, fullHistory? }`; `teachingDisabled` locks hints, the heatmap, the demo and the tutorial at both the host and `executeOp`
 
 ### Persistent-World Test Harness
 
@@ -66,7 +69,7 @@ There is one way to run an action and one way to assert it fails:
 
 ### Types
 
-- `TestGameOptions` - Test game creation options (`playerCount`, `playerNames`, `seed`, `autoStart`, `checkpoints`, plus any game-specific constructor options). `checkpoints` is the per-action checkpoint retention policy, applied to the runner rather than passed to the game constructor — without it a test always runs under the unbounded default and cannot exercise the policy the game ships (see `docs/state-size.md`). `seed` defaults to a fixed literal (`'test-seed'`) — never `Date.now()`/`Math.random` — so two seedless `TestGame.create()`/`createTestGame()` calls are deterministic and reproduce identical shuffles/command history. The resolved seed (fixed default or caller-supplied) is exposed via `testGame.seed` and included in `doAction`/`assertActionAvailable` failure messages so a failing run is one copy-paste from a deterministic repro.
+- `TestGameOptions` - Test game creation options (`playerCount`, `playerNames`, `seed`, `autoStart`, `checkpoints`, plus any game-specific constructor options). Every game option the project's `boardsmith.json` declares that is left out is passed at its `default`, as every host starts the game (the nearest `boardsmith.json` at or above the directory the tests run in; outside any game project, and outside BoardSmith's own checkout, `createTestGame` refuses to start rather than leave the options out), so a test plays the configuration players get unless it says otherwise. `checkpoints` is the per-action checkpoint retention policy, applied to the runner rather than passed to the game constructor — without it a test always runs under the unbounded default and cannot exercise the policy the game ships (see `docs/state-size.md`). `seed` defaults to a fixed literal (`'test-seed'`) — never `Date.now()`/`Math.random` — so two seedless `TestGame.create()`/`createTestGame()` calls are deterministic and reproduce identical shuffles/command history. The resolved seed (fixed default or caller-supplied) is exposed via `testGame.seed` and included in `doAction`/`assertActionAvailable` failure messages so a failing run is one copy-paste from a deterministic repro.
 - `SimulateRandomGamesOptions`, `ReplayRandomGameOptions`, `SingleGameResult`, `SimulationResults`, `IsResting` - Random simulation types
 - `DebugStringOptions`, `ActionTraceResult`, `ActionTraceDetail` - Debug utility types
 - `TutorialScenarioMove`, `SimulateTutorialOptions`, `SimulateTutorialResult` - Tutorial DSL types
@@ -215,7 +218,7 @@ as stuck with "no player has an enabled action to take", followed by each
 refused action and its reason.
 
 A game whose longest or heaviest configuration sits behind a game option needs
-`gameOptions`, or the run only ever measures the default one:
+`gameOptions`, or the run only ever measures the declared default:
 
 ```typescript
 const hard = await simulateRandomGames(MyGame, {
@@ -609,13 +612,13 @@ worked composable-level example.
 
 ### Headless Simulation (SIM)
 
-**`createHeadlessSession`** (from `boardsmith/session`) drives a game to
+**`createHeadlessSession`** (from `boardsmith/testing`) drives a game to
 completion the same way a real hosted session would, without any WebSocket
 or storage layer — the seeded-run building block behind CI smoke tests and
 reproducible agent benchmarking:
 
 ```typescript
-import { createHeadlessSession } from 'boardsmith/session';
+import { createHeadlessSession } from 'boardsmith/testing';
 import { gameDefinition } from '../src/rules/game.js'; // your game's exported GameDefinitionLike
 
 const session = createHeadlessSession(

@@ -1,4 +1,4 @@
-import { SnapshotSessionHost } from './snapshot-session-host.js';
+import { SnapshotSessionHost } from '../session/snapshot-session-host.js';
 import {
   executeOp,
   SUBMISSION_OP_TYPES,
@@ -6,13 +6,14 @@ import {
   type Op,
   type OpOfType,
   type OpResultFor,
-} from './stateless-ops.js';
-import { runnerFromSnapshot } from './runner-from-snapshot.js';
+} from '../session/stateless-ops.js';
+import { runnerFromSnapshot } from '../session/runner-from-snapshot.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
 import type { Game, GameClass } from '../engine/index.js';
-import type { BotSeat, SnapshotSessionAdapters } from './snapshot-session-host.js';
-import type { GameOptionSelection } from './game-option-selection.js';
-import type { PlayerGameState } from './types.js';
+import type { BotSeat, SnapshotSessionAdapters } from '../session/snapshot-session-host.js';
+import { fillGameOptionDefaults, type GameOptionSelection } from '../session/game-option-selection.js';
+import { projectGameOptions } from '#testing/project-game-options';
+import type { PlayerGameState } from '../session/types.js';
 
 /**
  * An op as a headless CALLER writes it: a submission may omit `boundaryKey`,
@@ -50,7 +51,11 @@ export interface HeadlessGameOptions {
   playerCount: number;
   seed?: string;
   playerNames?: string[];
-  /** The players' choice of the game's declared options, admitted by `selectGameOptions`. */
+  /**
+   * The players' choice of the game's declared options, admitted by
+   * `selectGameOptions`. Every option the project's boardsmith.json declares
+   * that it leaves out (all of them when it is absent) is played at its default.
+   */
   options?: GameOptionSelection;
   /**
    * Lock the teaching tools (hints, the move-quality heatmap, the demo and the
@@ -77,8 +82,8 @@ export interface HeadlessGameOptions {
  *
  * @example
  * ```typescript
- * import { createHeadlessSession } from 'boardsmith/session';
- * import { gameDefinition } from './my-game.js';
+ * import { createHeadlessSession } from 'boardsmith/testing';
+ * import { gameDefinition } from '../src/rules/index.js';
  *
  * const session = createHeadlessSession(
  *   gameDefinition,
@@ -106,9 +111,11 @@ export function createHeadlessSession<G extends Game = Game>(
   botSeats: BotSeat[] = [],
 ) {
   const { options, teachingDisabled, fullHistory, ...table } = tableOptions;
-  // The players' choice first and the table's own fields after it, so a
-  // selection cannot name the seat count, the names or the seed.
-  const gameOptions = { ...options, ...table };
+  // The players' choice, with every option the project's boardsmith.json
+  // declares that it leaves out at its default, as createTestGame fills them
+  // (#701); then the table's own fields, so a selection cannot name the seat
+  // count, the names or the seed.
+  const gameOptions = { ...fillGameOptionDefaults(projectGameOptions(), { ...options }), ...table };
   const broadcasts: unknown[] = [];
   const metas: BroadcastMeta[] = [];
   const pushes: Array<ReadonlyArray<{ seat: number; view: unknown }>> = [];

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createHeadlessSession } from '../headless-session.js';
+import { createHeadlessSession } from '../../testing/headless-session.js';
 import {
   simultaneousRoundsFixtureDefinition,
   TOTAL_ROUNDS,

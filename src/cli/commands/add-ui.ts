@@ -39,7 +39,7 @@ export async function addUiCommand(): Promise<void> {
   const rulesPath = resolveRulesDir(cwd, config);
   requireRulesIndex(rulesPath);
   const gameDefinition = await withCommandBuildDir(cwd, 'add-ui', (buildDir) =>
-    loadGameDefinition(rulesPath, buildDir, getProjectContext(cwd)),
+    loadGameDefinition(rulesPath, buildDir, getProjectContext(cwd), config.gameOptions),
   );
   const game = constructGame(gameDefinition.gameClass, { playerCount: gameDefinition.minPlayers ?? 1, seed: 'add-ui' });
   const files = tableUiFiles(uiConfig, game.getActionNames());

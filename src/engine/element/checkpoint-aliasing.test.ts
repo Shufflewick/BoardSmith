@@ -32,7 +32,7 @@ import {
   type GameOptions,
 } from '../index.js';
 import { GameRunner } from '../../runtime/index.js';
-import { createHeadlessSession } from '../../session/headless-session.js';
+import { createHeadlessSession } from '../../testing/headless-session.js';
 
 class Card extends Piece<AliasGame> {}
 class Zone extends Space<AliasGame> {}

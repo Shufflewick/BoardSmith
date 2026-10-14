@@ -33,7 +33,7 @@ import type { GameStateSnapshot } from '../engine/utils/index.js';
 import { _clearShownWarnings } from '../utils/dev.js';
 import { GameRunner } from '../runtime/runner.js';
 import { MCTSBot } from '../bot/mcts-bot.js';
-import { createHeadlessSession } from './headless-session.js';
+import { createHeadlessSession } from '../testing/headless-session.js';
 import { executeOp, type GameDefinitionLike, type StateEnvelope } from './stateless-ops.js';
 import { ErrorCode } from '../types/protocol.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';

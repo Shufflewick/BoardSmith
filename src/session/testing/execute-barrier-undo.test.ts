@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createHeadlessSession, type HeadlessOp } from '../headless-session.js';
+import { createHeadlessSession, type HeadlessOp } from '../../testing/headless-session.js';
 import { executeBarrierFixtureDefinition } from './fixtures/execute-barrier-fixture.js';
 import { bookkeepingExecuteFixtureDefinition, BookkeepingExecuteGame } from './fixtures/bookkeeping-execute-fixture.js';
 import type { Op } from '../stateless-ops.js';

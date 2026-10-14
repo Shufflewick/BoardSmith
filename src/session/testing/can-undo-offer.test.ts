@@ -14,7 +14,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { GameDefinitionLike } from '../stateless-ops.js';
-import { createHeadlessSession, type HeadlessOp } from '../headless-session.js';
+import { createHeadlessSession, type HeadlessOp } from '../../testing/headless-session.js';
 import type { PlayerGameState } from '../types.js';
 import {
   fencedScumDefinition,

@@ -23,7 +23,7 @@ import {
   actionStep,
   type GameOptions,
 } from '../index.js';
-import { createHeadlessSession } from '../../session/index.js';
+import { createHeadlessSession } from '../../testing/headless-session.js';
 
 class PlanPlayer extends Player<PlanGame, PlanPlayer> {
   static override visibleAttributes = ['score'];

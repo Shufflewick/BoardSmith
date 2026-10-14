@@ -103,7 +103,26 @@
     "gameOptions": {
       "x-convex-sink": true,
       "type": "array",
-      "description": "Game-level option definitions surfaced in the dev host and lobby. Read by dev.ts. A designer-only option (designerOnly) is refused here: declare it in gameDefinition.gameOptions."
+      "description": "THE ONE DECLARATION OF THE GAME'S OPTIONS (#701): a gameDefinition that declares gameOptions is refused. Each entry is an option with an id, the name the game reads it by (options.<id>), and a default, which every host fills in when nobody chose the option (selectGameOptions, the start op, createTestGame), so a game never repeats a default in code. The dev host, boardsmith simulate and createTestGame read this list; every BoardSmith command attaches it to the loaded gameDefinition, and boardsmith build writes it into the published rules, so the start op fills every option the host did not pass. boardsmith build copies it into the manifest the platform's lobby lists, leaving out every designerOnly option: a designer's knob that only boardsmith simulate and the dev host set, and that every real game plays at its default.",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "label", "default"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "enum": ["number", "boolean", "select"] },
+          "label": { "type": "string" },
+          "description": { "type": "string" },
+          "default": {},
+          "min": { "type": "number" },
+          "max": { "type": "number" },
+          "step": { "type": "number" },
+          "choices": {
+            "type": "array",
+            "items": { "type": "object", "required": ["value", "label"] }
+          },
+          "designerOnly": { "const": true }
+        }
+      }
     },
     "playerOptions": {
       "x-convex-sink": true,

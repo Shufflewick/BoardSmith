@@ -42,15 +42,13 @@ function cli(cwd, args) {
 /** The worked example's final game, in a project of its own under `parent`. */
 async function exampleProject(parent) {
   await import('tsx');
-  const { balanceSimulatorSteps } = await import('../../docs/balance-simulator-steps.ts');
+  const { applyFileStep, balanceSimulatorSteps } = await import('../../docs/balance-simulator-steps.ts');
   cli(parent, ['init', 'bazaar', '--sim', '--without-rulebook']);
   const dir = join(parent, 'bazaar');
   mkdirSync(join(dir, 'node_modules'));
   symlinkSync(REPO, join(dir, 'node_modules', 'boardsmith'), 'dir');
   for (const step of balanceSimulatorSteps()) {
-    if (step.kind !== 'file') continue;
-    mkdirSync(dirname(join(dir, step.path)), { recursive: true });
-    writeFileSync(join(dir, step.path), step.body);
+    if (step.kind !== 'run') applyFileStep(dir, step);
   }
   return dir;
 }

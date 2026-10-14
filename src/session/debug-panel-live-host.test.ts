@@ -13,7 +13,7 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { Game, Player, Action, actionStep, loop, type GameOptions } from '../engine/index.js';
-import { createHeadlessSession } from './headless-session.js';
+import { createHeadlessSession } from '../testing/headless-session.js';
 import { SnapshotSessionHost } from './snapshot-session-host.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';

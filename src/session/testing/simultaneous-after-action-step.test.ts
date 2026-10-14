@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { createHeadlessSession } from '../headless-session.js';
+import { createHeadlessSession } from '../../testing/headless-session.js';
 import { playThenAcknowledgeFixtureDefinition } from './fixtures/play-then-acknowledge-fixture.js';
 
 interface SeatView {

@@ -45,7 +45,7 @@ const takeSlices = (mode = 'production') => workerLog.slices.splice(0).filter((s
  * collected (#363), for the tests that call the runner directly.
  */
 const shardProject = scoreProject();
-const shardRules = await loadSimulation(shardProject, join(shardProject, 'src', 'rules'), tempTree('boardsmith-simulate-shards-'));
+const shardRules = await loadSimulation(shardProject, join(shardProject, 'src', 'rules'), tempTree('boardsmith-simulate-shards-'), undefined);
 
 describe('runSimulation', () => {
   const run = { gamesPerCount: 3, playerCounts: [2, 3], seed: 'fixed', jobs: 2 };
@@ -178,11 +178,11 @@ describe('parsePlayerCounts: --players (#556)', () => {
 
 describe('resolveSimulationGameOptions (issue 141)', () => {
   const declared = {
-    difficulty: { type: 'select' as const, label: 'Difficulty', choices: [
+    difficulty: { type: 'select' as const, label: 'Difficulty', default: 'normal', choices: [
       { value: 'normal', label: 'Normal' },
       { value: 'hard', label: 'Hard' },
     ] },
-    rounds: { type: 'number' as const, label: 'Rounds' },
+    rounds: { type: 'number' as const, label: 'Rounds', default: 10 },
   };
 
   it('parses and coerces --game-option values against the declared options', () => {
@@ -192,8 +192,8 @@ describe('resolveSimulationGameOptions (issue 141)', () => {
     });
   });
 
-  it('returns an empty bundle when no flag is passed', () => {
-    expect(resolveSimulationGameOptions(declared, undefined)).toEqual({});
+  it('returns every declared option at its default when no flag is passed (#701)', () => {
+    expect(resolveSimulationGameOptions(declared, undefined)).toEqual({ difficulty: 'normal', rounds: 10 });
   });
 
   it('rejects an undeclared option, naming the declared ones', () => {
@@ -210,7 +210,7 @@ describe('resolveSimulationGameOptions (issue 141)', () => {
 
   it('sets a designer-only option, which no player can choose (#687)', () => {
     const withKnob = { ...declared, lootScale: { type: 'number' as const, label: 'Loot scale', default: 1, designerOnly: true as const } };
-    expect(resolveSimulationGameOptions(withKnob, ['lootScale=1.5'])).toEqual({ lootScale: 1.5 });
+    expect(resolveSimulationGameOptions(withKnob, ['lootScale=1.5'])).toEqual({ difficulty: 'normal', rounds: 10, lootScale: 1.5 });
   });
 });
 
@@ -263,7 +263,10 @@ const deadEndFixture = resolve(dirname(fileURLToPath(import.meta.url)), 'simulat
 /** A project whose rules module is `rules`, already holding a scratch file and a chunk worktree. */
 function projectWithAuthorFiles(rules: string): { dir: string; expectAuthorFilesKept: () => void } {
   const dir = tempTree('boardsmith-simulate-391-');
-  writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table' }));
+  writeFileSync(
+    join(dir, 'boardsmith.json'),
+    JSON.stringify({ name: 'fixture', backend: 'table', gameOptions: [{ id: 'deadEnd', type: 'number', label: 'Dead end', default: 5 }] }),
+  );
   mkdirSync(join(dir, 'src', 'rules'), { recursive: true });
   writeFileSync(join(dir, 'src', 'rules', 'index.ts'), rules);
   const scratchFile = join(scratchDir(dir), 'keep.txt');
@@ -304,7 +307,7 @@ const afterRun = projectWithAuthorFiles(
   [
     `import { DeadEndGame } from ${JSON.stringify(deadEndFixture)};`,
     `export const gameDefinition = { gameClass: DeadEndGame, gameType: 'fixture', displayName: 'Fixture',`,
-    `  minPlayers: 3, maxPlayers: 4, gameOptions: { deadEnd: { type: 'number', label: 'Dead end' } } };`,
+    `  minPlayers: 3, maxPlayers: 4 };`,
   ].join('\n'),
 );
 const afterRunError = await simulateIn(afterRun.dir, { games: '1', players: '3', seed: 'keep', json: true });
@@ -358,7 +361,7 @@ const policyProject = projectWithAuthorFiles(
   [
     `import { DeadEndGame } from ${JSON.stringify(deadEndFixture)};`,
     `export const gameDefinition = { gameClass: DeadEndGame, gameType: 'fixture', displayName: 'Fixture',`,
-    `  minPlayers: 3, maxPlayers: 4, gameOptions: { deadEnd: { type: 'number', label: 'Dead end' } } };`,
+    `  minPlayers: 3, maxPlayers: 4 };`,
   ].join('\n'),
 );
 mkdirSync(join(policyProject.dir, 'src', 'sim'), { recursive: true });
@@ -603,8 +606,8 @@ describe('boardsmith simulate --compare (#556)', () => {
   it('compares a declared game option', () => {
     expect(compareTarget.exitCode, compareTarget.output).toBe(0);
     expect(JSON.parse(compareTarget.output).variants.map((v: { gameOptions: object }) => v.gameOptions)).toEqual([
-      { target: 6 },
-      { target: 9 },
+      { target: 6, limit: 1000, breakInProduction: false },
+      { target: 9, limit: 1000, breakInProduction: false },
     ]);
     expect(lengths(compareTarget.output)).toEqual([[4, 4, 4], [6, 6, 6]]);
   });

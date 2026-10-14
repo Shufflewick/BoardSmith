@@ -20,7 +20,7 @@ import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, actionStep, type GameOptions } from '../engine/index.js';
 import type { GameStateSnapshot } from '../engine/utils/snapshot.js';
 import { GameRunner } from '../runtime/index.js';
-import { createHeadlessSession } from './headless-session.js';
+import { createHeadlessSession } from '../testing/headless-session.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { succeeded } from './op-result.test-helper.js';

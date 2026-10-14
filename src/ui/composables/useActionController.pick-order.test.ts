@@ -27,7 +27,7 @@ import type { EnrichedActionMetadata, PickChoicesResult } from './useActionContr
 import { PEOPLE, recipientChoices, mailPicks } from './send-mail.test-helper.js';
 import type { TableActionWiring } from './useTableActionWiring.js';
 import { mountLiveSeat, settle } from './table-wiring.test-helper.js';
-import type { HeadlessSession } from '../../session/headless-session.js';
+import type { HeadlessSession } from '../../testing/headless-session.js';
 import {
   Game,
   Player,

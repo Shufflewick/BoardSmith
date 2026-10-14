@@ -14,7 +14,7 @@ import { flowBoundaryKey, type BoundaryKeyState } from './boundary-key.js';
 // reachability test at the bottom of this file.
 import { flowBoundaryKey as flowBoundaryKeyFromPackageRoot } from 'boardsmith';
 import { dueSeats, type SeatActivityState } from './seat-activity.js';
-import { createHeadlessSession } from '../../session/headless-session.js';
+import { createHeadlessSession } from '../../testing/headless-session.js';
 import { executeOp } from '../../session/stateless-ops.js';
 import {
   simultaneousRoundsFixtureDefinition,

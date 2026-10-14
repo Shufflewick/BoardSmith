@@ -25,6 +25,8 @@ import {
 } from '../runtime/index.js';
 import { ActionBuilder } from './action-builder.js';
 import { formatSelectionLines } from './debug.js';
+import { fillGameOptionDefaults } from '../session/game-option-selection.js';
+import { projectGameOptions } from '#testing/project-game-options';
 
 /**
  * Options for creating a test game.
@@ -53,7 +55,10 @@ export interface TestGameOptions {
    *
    * Any fields other than `playerCount`, `playerNames`, `seed`, and `autoStart`
    * are spread into `gameOptions` so game subclasses can receive custom options
-   * (e.g. `{ tutorialSetup: true }` for a tutorial-mode board position).
+   * (e.g. `{ tutorialSetup: true }` for a tutorial-mode board position). Every
+   * game option the project's `boardsmith.json` declares (the nearest one at
+   * or above the directory the tests run in) that is left out here is passed
+   * at its default, as every host starts the game.
    *
    * @example
    * ```typescript
@@ -211,7 +216,10 @@ export class TestGame<G extends Game = Game> {
       GameClass,
       gameType: GameClass.name.toLowerCase(),
       gameOptions: {
-        ...extraOptions,  // game-specific options (e.g. tutorialSetup, variant flags)
+        // Game-specific options (e.g. tutorialSetup, variant flags), and every
+        // option the project's boardsmith.json declares that the test left out,
+        // at its default (#701).
+        ...fillGameOptionDefaults(projectGameOptions(), extraOptions),
         playerCount,
         playerNames,
         seed,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createHeadlessSession } from './headless-session.js';
+import { createHeadlessSession } from '../testing/headless-session.js';
 import { Game, Player, Action, actionStep, eachPlayer, loop, sequence, execute, type GameOptions } from '../engine/index.js';
 import type { TutorialDefinition } from '../engine/index.js';
 

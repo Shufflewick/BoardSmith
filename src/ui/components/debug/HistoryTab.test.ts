@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
 import HistoryTab from './HistoryTab.vue';
 import { Game, Player, Action, actionStep, loop, eachPlayer, type GameOptions } from '../../../engine/index.js';
-import { createHeadlessSession } from '../../../session/headless-session.js';
+import { createHeadlessSession } from '../../../testing/headless-session.js';
 import type { GameDefinitionLike } from '../../../session/stateless-ops.js';
 
 // The game's own colours, set in setup as `Player.color` documents: a dark one,

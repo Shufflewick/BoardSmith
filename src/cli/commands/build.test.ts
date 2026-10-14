@@ -112,27 +112,18 @@ describe('deriveManifest', () => {
     expect(manifest.bot).toBeUndefined();
   });
 
-  it('never lists a designer-only option: one in boardsmith.json is refused, naming where it belongs (#687)', () => {
+  it('publishes boardsmith.json\'s game options without the designer-only ones, which no player may see (#701)', () => {
     const lobbyOption = { id: 'rounds', type: 'number', label: 'Rounds', default: 3 };
-    expect(() =>
-      derive({ name: 'fixture', gameOptions: [lobbyOption, { id: 'lootScale', type: 'number', label: 'Loot', default: 1, designerOnly: true }] }),
-    ).toThrow(/boardsmith\.json declares game option "lootScale" as designerOnly.*gameDefinition\.gameOptions/s);
-
-    const withKnob = {
-      ...makeGameDefinition(2, 4),
-      gameOptions: { lootScale: { type: 'number' as const, label: 'Loot', default: 1, designerOnly: true as const } },
-    };
-    expect(derive({ name: 'fixture', gameOptions: [lobbyOption] }, withKnob).gameOptions).toEqual([lobbyOption]);
+    const knob = { id: 'lootScale', type: 'number', label: 'Loot', default: 1, designerOnly: true };
+    expect(derive({ name: 'fixture', gameOptions: [lobbyOption, knob] }).gameOptions).toEqual([lobbyOption]);
+    expect(derive({ name: 'fixture', gameOptions: [knob] }).gameOptions).toEqual([]);
+    expect(derive({ name: 'fixture' })).not.toHaveProperty('gameOptions');
   });
 
-  it('refuses a boardsmith.json option named for a designer-only option of the rules, which would publish it (#687)', () => {
-    const withKnob = {
-      ...makeGameDefinition(2, 4),
-      gameOptions: { lootScale: { type: 'number' as const, label: 'Loot', default: 1, designerOnly: true as const } },
-    };
-    expect(() =>
-      derive({ name: 'fixture', gameOptions: [{ id: 'lootScale', type: 'number', label: 'Loot', default: 1 }] }, withKnob),
-    ).toThrow(/boardsmith\.json declares game option "lootScale".*designer-only.*Move "lootScale" into gameDefinition\.gameOptions/s);
+  it('refuses a boardsmith.json game options list it could not publish, naming the problem (#701)', () => {
+    expect(() => derive({ name: 'fixture', gameOptions: [{ id: 'rounds', type: 'number', label: 'Rounds' }] })).toThrow(
+      /"rounds" with no default/,
+    );
   });
 
   it('leaves the "agents" role mapping out of the manifest: it says how the game is built, not what is published (#454)', () => {

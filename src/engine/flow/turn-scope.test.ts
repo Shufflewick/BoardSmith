@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { _clearShownWarnings } from '../../utils/dev.js';
-import { createHeadlessSession } from '../../session/headless-session.js';
+import { createHeadlessSession } from '../../testing/headless-session.js';
 import {
   Game,
   Player,

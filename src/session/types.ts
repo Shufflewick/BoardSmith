@@ -138,8 +138,6 @@ export interface GameDefinition {
    * docs/persistent-worlds.md is the authoring guide.
    */
   world?: WorldDefinition;
-  /** Game-level configurable options */
-  gameOptions?: Record<string, GameOptionDefinition>;
   /** Per-player configurable options */
   playerOptions?: Record<string, PlayerOptionDefinition>;
   /** Preset configurations for quick setup */

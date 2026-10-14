@@ -334,7 +334,7 @@ answers each op with that op's own result. If you only need to save and
 restore a game, `TestGame.getSnapshot()` (below) is enough.
 
 ```typescript
-import { createHeadlessSession } from 'boardsmith/session';
+import { createHeadlessSession } from 'boardsmith/testing';
 
 const session = createHeadlessSession(gameDefinition, { playerCount: 2, seed: 'repro' });
 await session.start();

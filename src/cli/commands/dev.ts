@@ -19,7 +19,7 @@ import type { PersistenceStore } from '../../persistence/index.js';
 import { getProjectContext, toPosix } from './game-runtime.js';
 import { loadTableRuntime, tableRulesReloadQueue } from './dev-table-runtime.js';
 import { gateOf } from '../dev-host/rules-reload-queue.js';
-import { assertNoDesignerOnlyConfigOptions, findUnknownKeys } from '../lib/config-schema.js';
+import { findUnknownKeys } from '../lib/config-schema.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex, requireTableUi } from '../lib/game-project.js';
 import { resolveWorldMode } from '../lib/world-project.js';
 import { resolveUserPath } from '../lib/user-path.js';
@@ -40,6 +40,7 @@ import type { DevHostConfig, DevOptionDef } from '../dev-host/config-types.js';
 import {
   GameOptionSelectionError,
   assertPresetsSelectable,
+  declaredGameOptionsOf,
   selectDesignerGameOptions,
 } from '../../session/game-option-selection.js';
 import type { GameOptionDefinition, GamePreset } from '../../session/types.js';
@@ -295,8 +296,8 @@ interface BoardSmithConfig {
     rules?: string;
     ui?: string;
   };
-  /** Game-level options (array format for JSON config) */
-  gameOptions?: ConfigOptionDefinition[];
+  /** The one declaration of the game's options (#701), attached to the loaded gameDefinition. */
+  gameOptions?: unknown;
   /** Per-player options (array format for JSON config) */
   playerOptions?: ConfigOptionDefinition[];
   /** Custom color palette (hex strings or objects with hex/value + label) */
@@ -387,19 +388,6 @@ export function parseGameOptionFlags(raw: string[] | undefined): Record<string, 
     result[entry.slice(0, eq)] = entry.slice(eq + 1);
   }
   return result;
-}
-
-/**
- * D13/DEVHOST-01: merge `gameDefinition.gameOptions` with `boardsmith.json`'s
- * `gameOptions` — gameDefinition is AUTHORITATIVE on a key conflict. Replaces
- * the previous replace-not-merge spread (`...(gameOptions && { gameOptions })`)
- * that silently dropped one source's options whenever the other declared any.
- */
-export function mergeGameOptionDefinitions(
-  gameDefOptions: Record<string, GameOptionDefinition> | undefined,
-  configOptions: Record<string, GameOptionDefinition> | undefined,
-): Record<string, GameOptionDefinition> {
-  return { ...configOptions, ...gameDefOptions };
 }
 
 /** D13/DEVHOST-01: a preset's resolved options bundle + optional player count. */
@@ -561,6 +549,7 @@ export function boardsmithDevHostPlugin(args: {
 /** Build the dev-host config the browser consumes from the resolved game definition. */
 function buildDevConfig(args: {
   gameDefinition: GameDefinition;
+  gameOptions: Record<string, GameOptionDefinition> | undefined;
   minPlayers: number;
   maxPlayers: number;
   playerCount: number;
@@ -570,7 +559,6 @@ function buildDevConfig(args: {
   teachingDisabled: boolean;
 }): DevHostConfig {
   const gd = args.gameDefinition as GameDefinition & {
-    gameOptions?: Record<string, unknown>;
     playerOptions?: Record<string, unknown>;
   };
   return {
@@ -580,7 +568,7 @@ function buildDevConfig(args: {
     playerCount: args.playerCount,
     botSeats: args.botSeats,
     botLevel: args.botLevel,
-    gameOptions: optionRecordToList(gd.gameOptions),
+    gameOptions: optionRecordToList(args.gameOptions),
     playerOptions: optionRecordToList(gd.playerOptions),
     // D13/DEVHOST-01: gameDefinition.presets, surfaced for the first time so a
     // browser selector (Plan 03) can render them and apply one via `configure`.
@@ -804,10 +792,11 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   let gameDefinition: GameDefinition;
   let tableRules: TableRules;
   let minPlayers: number;
+  let gameOptions: Record<string, GameOptionDefinition> | undefined;
   let maxPlayers: number;
   let colorPalette: Array<{ value: string; label: string }> = [];
   try {
-    const runtime = await holdings.acquire(() => loadTableRuntime(rulesPath, tempDir, context), () => []);
+    const runtime = await holdings.acquire(() => loadTableRuntime(rulesPath, tempDir, context, config.gameOptions), () => []);
     gameDefinition = runtime.gameDefinition;
     tableRules = runtime.rules;
   } catch (error) {
@@ -835,16 +824,9 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     minPlayers = gameDefinition.minPlayers;
     maxPlayers = gameDefinition.maxPlayers;
 
-    // D13/DEVHOST-01: merge gameDefinition.gameOptions with boardsmith.json's
-    // gameOptions — gameDefinition is AUTHORITATIVE on a key conflict. This
-    // REPLACES the previous replace-not-merge spread, which silently dropped
-    // whichever source's options weren't chosen. gameDefinition.presets are
-    // read here for the first time (never read before).
-    assertNoDesignerOnlyConfigOptions(config, gameDefinition.gameOptions);
-    const configGameOptions = config.gameOptions
-      ? configOptionsToRecord<GameOptionDefinition>(config.gameOptions)
-      : undefined;
-    const gameOptions = mergeGameOptionDefinitions(gameDefinition.gameOptions, configGameOptions);
+    // boardsmith.json's gameOptions, the one declaration (#701), which the
+    // rules bundle carries on the definition.
+    gameOptions = declaredGameOptionsOf(gameDefinition);
     const presets: GamePreset[] = gameDefinition.presets ?? [];
     // A preset is a shortcut a player picks, so one naming a designer-only or
     // undeclared option is refused here, at load, rather than when picked.
@@ -867,7 +849,6 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       ...gameDefinition,
       minPlayers,
       maxPlayers,
-      gameOptions,
       presets,
       ...(playerOptions && { playerOptions }),
     };
@@ -887,7 +868,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     options.preset !== undefined
       ? resolvePreset(gameDefinition.presets, options.preset as string)
       : undefined;
-  const selectedGameOptions = selectDesignerGameOptions(gameDefinition.gameOptions, {
+  const selectedGameOptions = selectDesignerGameOptions(gameOptions, {
     ...presetBundle?.options,
     ...gameOptionFlags,
   });
@@ -903,6 +884,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
 
   const devConfig = buildDevConfig({
     gameDefinition,
+    gameOptions,
     minPlayers,
     maxPlayers,
     playerCount: effectivePlayerCount,
@@ -945,11 +927,9 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     // the authoritative SnapshotSessionHost (the local stand-in for the
     // ShufflewickPub game DO) and every browser is a WebSocket client. A solo
     // dev is just one client; others on the LAN join the same game.
-    // D13/DEVHOST-01: defaults, overlaid by the resolved --preset bundle, then
-    // by --game-option flags (flag beats preset beats default) — replaces the
-    // frozen `.default`-only computation.
-    const optionDefaults = Object.fromEntries(devConfig.gameOptions.map((o) => [o.id, o.default]));
-    const baseGameOptions = selectDesignerGameOptions(gameDefinition.gameOptions, { ...optionDefaults, ...selectedGameOptions });
+    // D13/DEVHOST-01: --game-option flags over the resolved --preset bundle
+    // over the declared defaults, which the selection fills (#701).
+    const baseGameOptions = selectedGameOptions;
     const clients = new Map<string, WebSocket>();
 
     const storeFile = devStorePath(cwd);
@@ -965,7 +945,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       baseGameOptions,
       // D13/DEVHOST-01: lets a host `configure` wire message (Plan 03's
       // selector) validate and apply a selection after startup.
-      declaredGameOptions: gameDefinition.gameOptions,
+      declaredGameOptions: gameOptions,
       presets: devConfig.presets,
       teachingDisabled,
       debug: options.debug === true,
@@ -1006,7 +986,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     const rulesReload = tableRulesReloadQueue({
       host: mpHost,
       running: gameDefinition,
-      load: () => loadTableRuntime(rulesPath, tempDir, context),
+      load: () => loadTableRuntime(rulesPath, tempDir, context, config.gameOptions),
     });
 
     // The `noServer` upgrade routing that leaves Vite's HMR socket alone lives

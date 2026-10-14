@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createHeadlessSession, type HeadlessOp } from '../headless-session.js';
+import { createHeadlessSession, type HeadlessOp } from '../../testing/headless-session.js';
 import { collectFixtureDefinition } from './fixtures/collect-fixture.js';
 import { undoFenceFixtureDefinition } from './fixtures/undo-fence-fixture.js';
 import { executeBarrierFixtureDefinition } from './fixtures/execute-barrier-fixture.js';

@@ -14,7 +14,7 @@ import {
 } from '../engine/index.js';
 import { createPlayerView } from '../engine/utils/snapshot.js';
 import { GameRunner } from '../runtime/runner.js';
-import { createHeadlessSession } from './headless-session.js';
+import { createHeadlessSession } from '../testing/headless-session.js';
 import { initialProgress, nextProgress } from '../engine/tutorial/progress.js';
 import { buildPlayerState, buildActionMetadata, buildSingleActionMetadata } from './utils.js';
 import type { TutorialDefinition } from '../engine/tutorial/types.js';

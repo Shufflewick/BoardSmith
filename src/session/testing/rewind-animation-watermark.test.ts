@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createHeadlessSession } from '../headless-session.js';
+import { createHeadlessSession } from '../../testing/headless-session.js';
 import { executeOp, type GameDefinitionLike, type OpResult } from '../stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotHostState } from '../snapshot-session-host.js';
 import { boundaryKeyOfHost } from './boundary-stamp.js';

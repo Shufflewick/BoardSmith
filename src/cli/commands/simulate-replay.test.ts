@@ -30,14 +30,14 @@ const cli = resolve(here, '../../../bin/boardsmith.js');
 /** A table-game project whose rules are the dead-end fixture game, with a greedy policy named `biggest`. */
 function deadEndProject(): string {
   const cwd = tempTree('bs-simulate-replay-');
-  writeFileSync(join(cwd, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table' }));
+  writeFileSync(join(cwd, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table', gameOptions: [{ id: 'deadEnd', type: 'number', label: 'Dead end', default: 5 }] }));
   mkdirSync(join(cwd, 'src', 'rules'), { recursive: true });
   writeFileSync(
     join(cwd, 'src', 'rules', 'index.ts'),
     [
       `import { DeadEndGame } from ${JSON.stringify(fixture)};`,
       `export const gameDefinition = { gameClass: DeadEndGame, gameType: 'fixture', displayName: 'Fixture',`,
-      `  minPlayers: 3, maxPlayers: 4, gameOptions: { deadEnd: { type: 'number', label: 'Dead end' } } };`,
+      `  minPlayers: 3, maxPlayers: 4 };`,
     ].join('\n'),
   );
   mkdirSync(join(cwd, 'src', 'sim'), { recursive: true });

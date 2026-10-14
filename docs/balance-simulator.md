@@ -87,7 +87,21 @@ export const scoreOf = (player: BazaarPlayer) => scoreCards([...player.tableau.a
 ```
 
 The deck is built from the CSV with `parseCsv`; `?raw` bundles the file's text
-with the rules. `handSize` is a game option, so a run can vary it.
+with the rules. `handSize` is a game option, so a run can vary it. A game
+declares its options in one place, `boardsmith.json`; add this list to it:
+
+<!-- doc-test: merge boardsmith.json -->
+```json
+{
+  "gameOptions": [
+    { "id": "handSize", "type": "number", "label": "Hand size", "min": 3, "max": 5, "default": 5 }
+  ]
+}
+```
+
+Every host starts the game with every declared option, at its `default` unless
+someone chose another value, so the game reads `options.handSize` without a
+fallback of its own. A restored game keeps the options it started with, and nothing fills them: an option added later is missing from saves made before it, so a game keeps a fallback for such an option, or the platform migrates those saves.
 
 <!-- doc-test: file src/rules/game.ts -->
 ```typescript
@@ -105,6 +119,7 @@ const cards = parseCsv(
 );
 
 export interface BazaarOptions extends GameOptions {
+  /** Declared in boardsmith.json, so every host passes it: at its default unless chosen. */
   handSize?: number;
 }
 
@@ -122,7 +137,7 @@ export class BazaarGame extends Game<BazaarGame, BazaarPlayer> {
 
   constructor(options: BazaarOptions) {
     super(options);
-    this.handSize = options.handSize ?? 5;
+    this.handSize = options.handSize!;
     this.registerElements([Card, Deck, Hand, Tableau]);
     this.deck = this.create(Deck, 'deck');
     for (const { name, copies, ...card } of cards) {
@@ -247,7 +262,6 @@ export const gameDefinition = {
   displayName: 'Bazaar',
   minPlayers: 2,
   maxPlayers: 6,
-  gameOptions: { handSize: { type: 'number', label: 'Hand size', min: 3, max: 5 } },
   metrics,
 } as const;
 ```
@@ -354,11 +368,11 @@ boardsmith simulate --games 3000 --players 2,4,6 --policy greedy --compare handS
 `--compare` to play every combination.
 
 `handSize` is a variant players choose in the lobby. A knob only you should
-turn, such as a scale on every loot amount, is declared with
-`designerOnly: true` and a `default`: no lobby, preset or platform offers it,
-but `--game-option` and `--compare` set it, and so does the dev host's lobby.
-The game reads it with the same default, from one constant. See
-"Designer-only options" in [core-concepts.md](core-concepts.md).
+turn, such as a scale on every loot amount, is declared the same way with
+`"designerOnly": true`: `boardsmith build` leaves it out of the manifest, so no
+lobby, preset or platform offers it, but `--game-option` and `--compare` set
+it, and so does the dev host's lobby. Every real game is played at its
+`default`. See "Designer-only options" in [core-concepts.md](core-concepts.md).
 
 ## 3. Add card abilities, one at a time
 

@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ref, type Ref } from 'vue';
 import type { VueWrapper } from '@vue/test-utils';
-import type { HeadlessSession } from '../../session/headless-session.js';
+import type { HeadlessSession } from '../../testing/headless-session.js';
 import type { PlayerGameState } from '../../session/types.js';
 import { MoveGame } from '../../session/move-game.test-helper.js';
 import { createBoardInteraction, type BoardInteraction } from './useBoardInteraction.js';
