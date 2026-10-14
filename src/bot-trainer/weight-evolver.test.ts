@@ -9,6 +9,10 @@ import type { ObjectiveWeight, TrainingProgress } from './types.js';
 import type { WeightEvolverConfig } from './weight-evolver.js';
 import { Game, Player, Action, actionStep, type GameOptions } from '../engine/index.js';
 import type { BotStrategy } from '../bot/index.js';
+import { benchmarkBot, weightedBot } from './benchmark.js';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tempTree } from '../testing/temp-tree.test-helper.js';
 
 /** Fitness for each benchmarked population, controlled per test. */
 let fitnessOf: (objectives: ObjectiveWeight[]) => number;
@@ -25,7 +29,12 @@ vi.mock('./parallel-benchmark.js', () => ({
   }),
 }));
 
+/** Every path loads the bundle below, except where a test hands the real loader a file. */
+vi.mock('./training-bundle.js', () => ({ loadTrainingBundle: vi.fn() }));
+
 const { WeightEvolver } = await import('./weight-evolver.js');
+const { loadTrainingBundle } = await import('./training-bundle.js');
+const realLoader = await vi.importActual<typeof import('./training-bundle.js')>('./training-bundle.js');
 const { runParallelBenchmarks } = await import('./parallel-benchmark.js');
 
 class EvolveGame extends Game<EvolveGame, Player> {
@@ -46,7 +55,7 @@ const objectives = (...weights: number[]): ObjectiveWeight[] =>
   weights.map((weight, i) => ({ id: `f${i}`, weight }));
 
 const evolver = (config: Partial<WeightEvolverConfig> = {}) =>
-  new WeightEvolver(EvolveGame, 'evolve-game', '/tmp/game.js', bot, {
+  new WeightEvolver('/tmp/game.js', 'evolve-game', {
     evolutionGenerations: 2,
     evolutionMu: 2,
     evolutionLambda: 3,
@@ -62,12 +71,24 @@ const totalWeight = (individual: ObjectiveWeight[]) =>
 beforeEach(() => {
   benchmarkCalls.length = 0;
   vi.clearAllMocks();
+  vi.mocked(loadTrainingBundle).mockResolvedValue({ gameDefinition: { gameClass: EvolveGame, bot }, benchmarkBot, weightedBot });
   fitnessOf = () => 0.5;
 });
 
 describe('WeightEvolver.evolve', () => {
   it('refuses an empty objective list with an actionable error', async () => {
     await expect(evolver().evolve([])).rejects.toThrow('No objectives provided for evolution');
+  });
+
+  it('refuses, in this process and before benchmarking, a bundle built without the benchmark (#697)', async () => {
+    const dir = tempTree('bs-weight-evolver-697-');
+    const bundlePath = join(dir, 'rules.mjs');
+    writeFileSync(bundlePath, 'export const gameDefinition = { gameClass: class {} };\n');
+    vi.mocked(loadTrainingBundle).mockImplementationOnce(realLoader.loadTrainingBundle);
+    await expect(new WeightEvolver(bundlePath, 'evolve-game').evolve(objectives(5))).rejects.toThrow(
+      `${bundlePath} must export the game's gameDefinition, benchmarkBot and weightedBot`,
+    );
+    expect(benchmarkCalls).toEqual([]);
   });
 
   it("refuses, naming it, a weight for an objective the game's bot does not define, before benchmarking", async () => {

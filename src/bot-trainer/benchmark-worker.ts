@@ -1,13 +1,13 @@
 /**
  * Worker thread script for parallel benchmark evaluation.
- * Receives benchmark request, runs benchmarkBot, and posts result back.
+ * Receives a benchmark request, runs the `benchmarkBot` built into the game's
+ * training bundle, and posts the result back. It imports no engine of its own,
+ * so the bot plays on the engine the game is built with (#697).
  */
 import { parentPort } from 'worker_threads';
-import type { Game } from '../engine/index.js';
-import type { GameClass } from '../engine/index.js';
-import type { BotStrategy } from '../bot/index.js';
 import type { ObjectiveWeight } from './types.js';
-import { benchmarkBot, type BenchmarkConfig } from './benchmark.js';
+import type { BenchmarkConfig } from './benchmark.js';
+import { loadTrainingBundle } from './training-bundle.js';
 
 if (!parentPort) {
   throw new Error('benchmark-worker.ts must be run as a worker thread');
@@ -19,7 +19,7 @@ if (!parentPort) {
 export interface BenchmarkRequest {
   /** Index of this individual in the population (for tracking) */
   individualIndex: number;
-  /** Path to the compiled game module */
+  /** Path to the game's training bundle (see `TrainingBundle`) */
   gameModulePath: string;
   /** Game type identifier */
   gameType: string;
@@ -69,27 +69,13 @@ parentPort.on('message', async (request: BenchmarkRequest) => {
   const { individualIndex, gameModulePath, gameType, weights, config } = request;
 
   try {
-    // Dynamically import the game module (need file:// URL for local imports in workers)
-    const modulePath = gameModulePath.startsWith('file://')
-      ? gameModulePath
-      : `file://${gameModulePath}`;
-    const gameModule = await import(modulePath);
-
-    // Extract the game class from the module's gameDefinition
-    const gameDefinition = gameModule.gameDefinition;
-    if (!gameDefinition?.gameClass) {
-      throw new Error(
-        `Game module at ${gameModulePath} does not export a valid gameDefinition with gameClass`
-      );
-    }
-
-    const GameClassRef = gameDefinition.gameClass as GameClass<Game>;
+    const bundle = await loadTrainingBundle(gameModulePath);
 
     // The game's own bot, so its own objective checkers are what is scored.
-    const result = await benchmarkBot(
-      GameClassRef,
+    const result = await bundle.benchmarkBot(
+      bundle.gameDefinition.gameClass,
       gameType,
-      gameDefinition.bot as BotStrategy | undefined,
+      bundle.gameDefinition.bot,
       weights,
       config,
     );

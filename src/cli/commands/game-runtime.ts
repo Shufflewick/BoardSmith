@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
-import { join, resolve, dirname, sep } from 'node:path';
+import { join, resolve, dirname, extname, sep } from 'node:path';
 import { build, type Plugin as EsbuildPlugin } from 'esbuild';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 
@@ -201,9 +201,7 @@ export function toPosix(p: string): string {
  * `gameClass` to hand to `simulateRandomGames`/`createTestGame`, which run the
  * engine directly without the stateless-ops executor.
  *
- * `bundlePath` is the bundle it loaded, left in `tempDir` for a caller that
- * must load the same rules again elsewhere (`evolve-bot-weights` hands it to its
- * worker threads). The caller owns `tempDir` and removes it.
+ * The caller owns `tempDir` and removes it.
  *
  * SECURITY NOTE (T-125-03, accepted risk): like `dev`/`build`, this
  * dynamic-imports the project's OWN rules module — arbitrary code from the
@@ -216,10 +214,9 @@ export async function loadGameDefinition(
   rulesPath: string,
   tempDir: string,
   context: 'monorepo' | 'standalone',
-): Promise<{ gameDefinition: GameDefinition; bundlePath: string }> {
-  const name = 'definition';
-  const module = await importRuntimeBundle({ rulesPath, tempDir, name, context, exports: [] });
-  return { gameDefinition: module.gameDefinition, bundlePath: runtimeBundlePath(tempDir, name) };
+): Promise<GameDefinition> {
+  const module = await importRuntimeBundle({ rulesPath, tempDir, name: 'definition', context, exports: [] });
+  return module.gameDefinition;
 }
 
 /** Where {@link importRuntimeBundle} writes the bundle it names `name` in `tempDir`. */
@@ -228,23 +225,31 @@ export function runtimeBundlePath(tempDir: string, name: string): string {
 }
 
 /**
- * THE ABSOLUTE PATH OF ONE OF THE CLI'S OWN SOURCE FILES, for an `exports` line
- * of {@link importRuntimeBundle} that must be built beside the rules.
- *
- * The package ships `src/`, and this module runs either from it under tsx
- * (`src/cli/commands`) or inlined in the CLI bundle (`dist/cli.js`), so the file
- * is looked for under both. `pathUnderCli` is relative to `src/cli`.
+ * The package's own `src/`. The package ships it, and this module runs either
+ * from it under tsx (`src/cli/commands/game-runtime.ts`) or inlined in the CLI
+ * bundle (`dist/cli.js`), beside it; the file's own extension says which.
  */
-export function cliSourceFile(pathUnderCli: string): string {
-  const candidates = [join(__dirname, '..', pathUnderCli), join(__dirname, '..', 'src', 'cli', pathUnderCli)];
-  const found = candidates.find((candidate) => existsSync(candidate));
-  if (found === undefined) {
+const packageSrc = extname(__filename) === '.ts' ? resolve(__dirname, '..', '..') : resolve(__dirname, '..', 'src');
+
+/**
+ * THE ABSOLUTE PATH OF ONE OF THE PACKAGE'S OWN SOURCE FILES, for an `exports`
+ * line of {@link importRuntimeBundle} that must be built beside the rules.
+ * `pathUnderSrc` is relative to `src/`.
+ */
+export function packageSourceFile(pathUnderSrc: string): string {
+  const file = join(packageSrc, pathUnderSrc);
+  if (!existsSync(file)) {
     throw new Error(
-      `this BoardSmith install is missing its own source file src/cli/${pathUnderCli}. ` +
+      `this BoardSmith install is missing its own source file src/${pathUnderSrc}. ` +
         'Reinstall boardsmith so the package is whole',
     );
   }
-  return found;
+  return file;
+}
+
+/** {@link packageSourceFile} for a file under `src/cli`; `pathUnderCli` is relative to it. */
+export function cliSourceFile(pathUnderCli: string): string {
+  return packageSourceFile(join('cli', pathUnderCli));
 }
 
 /** The real path of the `boardsmith` the rules in `rulesPath` import, found the way esbuild finds it, or undefined when none is installed. */

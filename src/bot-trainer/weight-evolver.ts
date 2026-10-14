@@ -2,11 +2,8 @@
  * WeightEvolver - Focused class for evolving bot weights on existing objectives.
  * This is the streamlined replacement for auto-discovery training.
  */
-import type { Game } from '../engine/index.js';
-import type { GameClass } from '../engine/index.js';
-import type { BotStrategy } from '../bot/index.js';
 import type { ObjectiveWeight, TrainingProgress } from './types.js';
-import { weightedBot } from './benchmark.js';
+import { loadTrainingBundle } from './training-bundle.js';
 import { runParallelBenchmarks } from './parallel-benchmark.js';
 import { createSeededRandom } from '../utils/random.js';
 import { generateOffspring, selectBest } from './evolution.js';
@@ -66,33 +63,26 @@ const DEFAULT_CONFIG: Required<Omit<WeightEvolverConfig, 'seed' | 'onProgress' |
  * WeightEvolver focuses solely on evolving weights for existing objectives.
  * Use /bs-build-bot to create objectives, then WeightEvolver to tune weights.
  */
-export class WeightEvolver<G extends Game = Game> {
-  private GameClass: GameClass<G>;
-  private gameType: string;
+export class WeightEvolver {
   private gameModulePath: string;
-  private bot: BotStrategy;
+  private gameType: string;
   private config: WeightEvolverConfig;
 
   /**
    * Create a new WeightEvolver.
    *
-   * @param GameClass - The game class constructor
+   * @param gameModulePath - Absolute path to the game's training bundle (see
+   *   `TrainingBundle`), which this process and each worker import
    * @param gameType - The game type identifier
-   * @param gameModulePath - Absolute path to the compiled game module (.js file)
-   * @param bot - The game's bot strategy, `gameDefinition.bot` from that module
    * @param config - Evolution configuration
    */
   constructor(
-    GameClass: GameClass<G>,
-    gameType: string,
     gameModulePath: string,
-    bot: BotStrategy,
+    gameType: string,
     config: WeightEvolverConfig = {}
   ) {
-    this.GameClass = GameClass;
-    this.gameType = gameType;
     this.gameModulePath = gameModulePath;
-    this.bot = bot;
+    this.gameType = gameType;
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
 
@@ -110,7 +100,9 @@ export class WeightEvolver<G extends Game = Game> {
     // Every weight must name one of the game's objectives. Checked here, in
     // this process, because a worker that refuses a candidate scores it 0
     // and evolution would carry on tuning weights that do nothing.
-    weightedBot(this.GameClass, this.gameType, this.bot, objectives);
+    const bundle = await loadTrainingBundle(this.gameModulePath);
+    const { gameClass, bot } = bundle.gameDefinition;
+    bundle.weightedBot(gameClass, this.gameType, bot, objectives);
 
     // Benchmark initial objectives to get baseline
     this.reportProgress({

@@ -13,4 +13,7 @@ export {
   type UpdateWeightsOptions,
 } from './objective-weights.js';
 
-export type { ObjectiveWeight, TrainingProgress } from './types.js';
+// Built into a game's training bundle beside its gameDefinition (see TrainingBundle)
+export { benchmarkBot, weightedBot } from './benchmark.js';
+
+export type { ObjectiveWeight, TrainingBundle, TrainingProgress } from './types.js';

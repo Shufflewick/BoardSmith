@@ -36,9 +36,8 @@ vi.mock('../../bot-trainer/index.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../bot-trainer/index.js')>();
   class RecordingEvolver {
     constructor(
-      _gameClass: unknown,
-      private readonly gameType: string,
       private readonly modulePath: string,
+      private readonly gameType: string,
     ) {}
     async evolve(objectives: Array<{ id: string; weight: number }>) {
       const bundleExistedDuringEvolution = existsSync(this.modulePath);
