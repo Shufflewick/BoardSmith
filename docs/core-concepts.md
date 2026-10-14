@@ -829,9 +829,9 @@ Option types: `number` (with min/max/step), `select` (with choices), `boolean`.
 Every option needs a `default`. Every host starts a game with every declared
 option: the value someone chose, or else the default. The selection a lobby
 admits a choice through (`selectGameOptions`) fills it in, so does a `start`, and
-so does `createTestGame`, which reads `boardsmith.json` from the directory the
-tests run in. So a game reads `options.boardSize` and never repeats the default
-in code.
+so does `createTestGame`, which reads the nearest `boardsmith.json` at or above
+the directory the tests run in. So a game reads `options.boardSize` and never repeats the default
+in code. A restored game keeps the options it started with, and nothing fills them: an option added later is missing from saves made before it, so a game keeps a fallback for such an option, or the platform migrates those saves.
 
 #### Designer-only options
 

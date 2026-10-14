@@ -4,7 +4,7 @@
  * The page grows one game through four stages. Every code block it marks with
  * `<!-- doc-test: file <path> -->` is written, in page order, into a project
  * `boardsmith init --sim` scaffolded (a block marked `merge <path>` sets its
-keys in that JSON file, `boardsmith.json`), and every block marked
+ * keys in that JSON file, `boardsmith.json`), and every block marked
  * `<!-- doc-test: run -->` is run there at that point: `rm`, `boardsmith
  * simulate` (with a small `--games`, a fixed `--seed`, one worker and `--json`)
  * and `boardsmith add-ui`, after which the project must type-check and pass its

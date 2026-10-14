@@ -295,10 +295,12 @@ function requireOneBoardsmith(rulesPath: string, inputs: readonly string[]): voi
  */
 export function rulesEntrySource(rulesIndexPath: string, declarations: Record<string, unknown>): string {
   const rules = JSON.stringify(toPosix(rulesIndexPath));
+  // A namespace import, so rules with no gameDefinition reach the loader's
+  // "must export a gameDefinition" message rather than a bundler error.
   return [
-    `import { gameDefinition as authored } from ${rules};`,
+    `import * as rules from ${rules};`,
     `export * from ${rules};`,
-    `export const gameDefinition = { ...authored, [Symbol.for(${JSON.stringify(DECLARED_GAME_OPTIONS_KEY)})]: ${JSON.stringify(declarations)} };`,
+    `export const gameDefinition = rules.gameDefinition && { ...rules.gameDefinition, [Symbol.for(${JSON.stringify(DECLARED_GAME_OPTIONS_KEY)})]: ${JSON.stringify(declarations)} };`,
     '',
   ].join('\n');
 }
@@ -339,7 +341,12 @@ export async function importRuntimeBundle(args: {
   const entryPath = join(args.tempDir, `${args.name}-entry.ts`);
   writeFileSync(
     entryPath,
-    [`export { gameDefinition } from ${JSON.stringify(toPosix(rulesIndexPath))};`, ...args.exports].join(
+    [
+      // A namespace import, so rules with no gameDefinition reach the message below.
+      `import * as rules from ${JSON.stringify(toPosix(rulesIndexPath))};`,
+      'export const gameDefinition = rules.gameDefinition;',
+      ...args.exports,
+    ].join(
       '\n',
     ),
   );

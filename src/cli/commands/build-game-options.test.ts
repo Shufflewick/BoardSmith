@@ -92,6 +92,10 @@ const builtError = await buildIn(built);
 const stale = project(` gameOptions: { rounds: { type: 'number', label: 'Rounds', default: 3 } }`);
 const staleError = await buildIn(stale);
 
+const unnamed = project();
+writeFileSync(join(unnamed, 'src', 'rules', 'index.ts'), 'export const answer = 42;\n');
+const unnamedError = await buildIn(unnamed);
+
 describe('boardsmith build publishes boardsmith.json\'s game options (#701)', () => {
   it('the manifest lists every option but the designer-only ones', () => {
     expect(builtError).toBeUndefined();
@@ -110,5 +114,9 @@ describe('boardsmith build publishes boardsmith.json\'s game options (#701)', ()
 
   it('refuses a gameDefinition that still declares gameOptions, saying to move them to boardsmith.json', () => {
     expect(String(staleError)).toMatch(/gameDefinition declares gameOptions.*boardsmith\.json/);
+  });
+
+  it('says the rules must export a gameDefinition when they do not, rather than failing inside the bundler', () => {
+    expect(String(unnamedError)).toContain('Rules module must export a gameDefinition');
   });
 });

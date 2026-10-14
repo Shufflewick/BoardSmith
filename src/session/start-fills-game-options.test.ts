@@ -10,10 +10,14 @@ import { Game, Player, Action, actionStep, type GameOptions } from '../engine/in
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { withDeclaredGameOptions } from './game-option-selection.js';
 import { succeeded } from './op-result.test-helper.js';
+import { boundaryKeyOf } from './testing/boundary-stamp.js';
 
 class OptionsGame extends Game<OptionsGame, Player> {
-  constructor(options: GameOptions) {
+  /** The `rounds` the latest construction was handed, restores included. */
+  static constructedWithRounds: unknown;
+  constructor(options: GameOptions & { rounds?: number }) {
     super(options);
+    OptionsGame.constructedWithRounds = options.rounds;
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
     this.setFlow({ root: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! }) });
   }
@@ -48,5 +52,21 @@ describe('the start op fills the options the bundle declares (#701)', () => {
   it('a definition imported from source, with no declarations, starts with what the host passed', async () => {
     const bare: GameDefinitionLike = { gameClass: OptionsGame, gameType: 'options', minPlayers: 1, maxPlayers: 2 };
     expect(await startedOptions(bare, {})).not.toHaveProperty('rounds');
+  });
+
+  it('a restored game keeps the options it started with: an option missing from its snapshot stays missing', async () => {
+    const bare: GameDefinitionLike = { gameClass: OptionsGame, gameType: 'options', minPlayers: 1, maxPlayers: 2 };
+    const started = succeeded(await executeOp(bare, { playerCount: 1, seed: 's' }, null, null, { type: 'start' }));
+    const moved = succeeded(
+      await executeOp(def, { playerCount: 1, seed: 's' }, started.snapshot, null, {
+        type: 'action',
+        actionName: 'pass',
+        player: 1,
+        args: {},
+        boundaryKey: boundaryKeyOf(started.snapshot),
+      }),
+    );
+    expect(OptionsGame.constructedWithRounds).toBeUndefined();
+    expect((moved.snapshot as { gameOptions: Record<string, unknown> }).gameOptions).not.toHaveProperty('rounds');
   });
 });

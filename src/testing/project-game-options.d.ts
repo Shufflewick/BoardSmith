@@ -8,10 +8,13 @@
 import type { GameOptionDefinition } from '../types/protocol.js';
 
 /**
- * The game options `boardsmith.json` declares in the directory the tests run
- * in, keyed by id, or `undefined` when that directory has no `boardsmith.json`
- * (BoardSmith's own tests, which run no project).
+ * The game options declared by the nearest `boardsmith.json` at or above the
+ * directory the tests run in, keyed by id, or `undefined` when the nearest
+ * project above it is BoardSmith's own checkout (its own tests, which run no
+ * game).
  *
- * @throws When the file is not JSON or its `gameOptions` list is unusable, naming the problem.
+ * @throws When there is no `boardsmith.json` and no BoardSmith checkout above
+ * the directory, when the file is not JSON, or when its `gameOptions` list is
+ * unusable, naming the problem.
  */
 export function projectGameOptions(): Record<string, GameOptionDefinition> | undefined;

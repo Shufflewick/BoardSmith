@@ -101,7 +101,7 @@ declares its options in one place, `boardsmith.json`; add this list to it:
 
 Every host starts the game with every declared option, at its `default` unless
 someone chose another value, so the game reads `options.handSize` without a
-fallback of its own.
+fallback of its own. A restored game keeps the options it started with, and nothing fills them: an option added later is missing from saves made before it, so a game keeps a fallback for such an option, or the platform migrates those saves.
 
 <!-- doc-test: file src/rules/game.ts -->
 ```typescript

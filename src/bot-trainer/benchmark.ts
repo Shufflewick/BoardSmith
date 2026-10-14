@@ -232,9 +232,6 @@ interface BenchmarkGameResult {
 }
 
 /**
- * Run a single benchmark game
- */
-/**
  * `options` with every game option the project's boardsmith.json declares, at
  * its default, so the benchmark plays the game every host starts (#701).
  */
@@ -242,6 +239,9 @@ function projectOptions<O extends GameOptions>(options: O): O {
   return fillGameOptionDefaults(projectGameOptions(), options);
 }
 
+/**
+ * Run a single benchmark game
+ */
 async function runBenchmarkGame<G extends Game>(
   GameClass: GameClass<G>,
   gameType: string,

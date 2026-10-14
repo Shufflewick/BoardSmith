@@ -549,7 +549,7 @@ export function boardsmithDevHostPlugin(args: {
 /** Build the dev-host config the browser consumes from the resolved game definition. */
 function buildDevConfig(args: {
   gameDefinition: GameDefinition;
-  gameOptions: Record<string, GameOptionDefinition>;
+  gameOptions: Record<string, GameOptionDefinition> | undefined;
   minPlayers: number;
   maxPlayers: number;
   playerCount: number;
@@ -792,7 +792,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   let gameDefinition: GameDefinition;
   let tableRules: TableRules;
   let minPlayers: number;
-  let gameOptions: Record<string, GameOptionDefinition>;
+  let gameOptions: Record<string, GameOptionDefinition> | undefined;
   let maxPlayers: number;
   let colorPalette: Array<{ value: string; label: string }> = [];
   try {
@@ -826,7 +826,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
 
     // boardsmith.json's gameOptions, the one declaration (#701), which the
     // rules bundle carries on the definition.
-    gameOptions = declaredGameOptionsOf(gameDefinition) ?? {};
+    gameOptions = declaredGameOptionsOf(gameDefinition);
     const presets: GamePreset[] = gameDefinition.presets ?? [];
     // A preset is a shortcut a player picks, so one naming a designer-only or
     // undeclared option is refused here, at load, rather than when picked.

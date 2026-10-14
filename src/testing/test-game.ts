@@ -56,9 +56,9 @@ export interface TestGameOptions {
    * Any fields other than `playerCount`, `playerNames`, `seed`, and `autoStart`
    * are spread into `gameOptions` so game subclasses can receive custom options
    * (e.g. `{ tutorialSetup: true }` for a tutorial-mode board position). Every
-   * game option the project's `boardsmith.json` declares (read from the
-   * directory the tests run in) that is left out here is passed at its
-   * default, as every host starts the game.
+   * game option the project's `boardsmith.json` declares (the nearest one at
+   * or above the directory the tests run in) that is left out here is passed
+   * at its default, as every host starts the game.
    *
    * @example
    * ```typescript
