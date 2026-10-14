@@ -33,6 +33,16 @@ const MAX_BOT_MOVES = 500;
  */
 const MAX_STALE_BOT_SEARCHES = 3;
 
+/** One run of the bot pump, which every wake while it runs joins: see {@link SnapshotSessionHost.runBotTurns}. */
+interface BotRun {
+  done: Promise<void>;
+  /**
+   * Whether a caller of `runBotTurns` joined it. Such a caller is handed the
+   * run's failure, so `onBackgroundError` is not (#698).
+   */
+  awaited: boolean;
+}
+
 /** What became of one bot search: see {@link SnapshotSessionHost.runBotTurns}. */
 type BotStep = 'moved' | 'again' | 'stale' | 'done';
 
@@ -329,12 +339,20 @@ export interface SnapshotSessionAdapters {
    */
   onPersistenceError?: (error: PersistenceErrorEntry, consecutiveFailures: number, healthy: boolean) => void;
   /**
-   * Called once for each failure of the work a move starts and does not wait
-   * for (#698): the bot run it wakes, the bots' moves, and the heatmap refresh
+   * Called for a failure of the work a move starts and does not wait for
+   * (#698): the bot run it wakes, the bots' moves, and the heatmap refresh
    * after them. The move itself was made, published and persisted, and its
-   * `handleOp` has answered; the host has already logged the failure, and the
-   * bots are asked again on the next wake. `error` is what was thrown, usually
-   * by `executeOp`: tell the players in your own words, never with its stack.
+   * `handleOp` has answered; the host has logged the failure, and the bots are
+   * asked again on the next wake. `error` is what was thrown, usually by
+   * `executeOp`: tell the players in your own words, never with its stack.
+   *
+   * EACH FAILURE GOES ONE WAY. A bot run that any caller of
+   * {@link SnapshotSessionHost.runBotTurns} joined (directly, or through
+   * `convertSeatToBot`, which awaits it) rejects that caller's promise and is
+   * NOT handed here, however many moves also joined it. A run only moves
+   * joined is handed here, once. A heatmap refresh failure always comes here,
+   * once per refresh. So a platform that reports what `runBotTurns` rejects
+   * with and what arrives here reports every failure exactly once.
    * A throwing hook is logged and swallowed. See {@link SnapshotSessionHost.settled}.
    */
   onBackgroundError?: (error: unknown) => void;
@@ -427,8 +445,8 @@ export class SnapshotSessionHost {
    * `isBot` on one side and writes `ai*` on the other is a regression.
    */
   private botSeats: BotSeat[] = [];
-  /** The run of {@link runBotTurns} under way, which every caller meanwhile joins. */
-  private botPump: Promise<void> = Promise.resolve();
+  /** The run of the bot pump under way, which every wake meanwhile joins. */
+  private botRun: BotRun = { done: Promise.resolve(), awaited: false };
   private botPumpRunning = false;
   /** Counts calls to {@link runBotTurns}, so a run sees a wake that came while it searched. */
   private botWakes = 0;
@@ -436,8 +454,11 @@ export class SnapshotSessionHost {
   private heatmapRefresh: Promise<void> | null = null;
   /** Work ops started and did not wait for, until it settles: see {@link settled}. */
   private readonly backgroundWork = new Set<Promise<void>>();
-  /** Failures of {@link backgroundWork} already reported, so a run several moves joined is reported once. */
-  private readonly reportedFailures = new WeakSet<object>();
+  /**
+   * The runs (a {@link BotRun}, or a heatmap refresh) whose failure has been
+   * reported, so a run several moves joined is reported once.
+   */
+  private readonly reportedRuns = new WeakSet<object>();
   /**
    * Bot seats that could not act at one game state: their move was refused, or
    * they found none (#421). Nothing about the game changes when that happens,
@@ -1132,35 +1153,46 @@ export class SnapshotSessionHost {
     // anyway. A rewind can target ANY point, which is what made it reachable.)
     const wakesBots = actionCompleted || op.type === 'undo' || op.type === 'debugRewind';
     if (!wakesBots) return res;
-    this.inBackground(`the bot run and heatmap refresh after seat ${seat}'s ${op.type}`, async () => {
-      await this.runBotTurns();
-      // Keep any visible "Show move quality" heatmaps current as play proceeds:
-      // recompute for the seat whose turn it now is, drop stale chips for the rest.
-      // (The hint is cleared on each action; the heatmap must be refreshed the
-      // same way or it freezes at the position where it was first toggled on.)
-      if (actionCompleted) await this.refreshVisibleHeatmaps();
-    });
+    const tracked: Promise<void> = this.afterMove(`seat ${seat}'s ${op.type}`, actionCompleted).finally(() =>
+      this.backgroundWork.delete(tracked),
+    );
+    this.backgroundWork.add(tracked);
     return res;
   }
 
   /**
-   * Run `work`, which an op starts and does not wait for, where
-   * {@link settled} can wait for it. The op that started it has already
-   * answered, so a failure is logged and handed to `onBackgroundError` at once.
+   * The work a move starts and does not wait for (#698): the bot run it wakes,
+   * then the refresh of the visible heatmaps. Never rejects: a failure goes one
+   * way only. A bot run's goes to the callers of `runBotTurns` that joined the
+   * run (`convertSeatToBot`, a platform's own wake), whose promises reject
+   * with it; only a run none of them awaited is handed to `onBackgroundError`.
+   * A heatmap refresh has no such callers, so its failure always is.
    */
-  private inBackground(what: string, work: () => Promise<void>): void {
-    const tracked: Promise<void> = work()
-      .catch((error: unknown) => this.reportBackgroundFailure(what, error))
-      .finally(() => this.backgroundWork.delete(tracked));
-    this.backgroundWork.add(tracked);
+  private async afterMove(what: string, refreshHeatmaps: boolean): Promise<void> {
+    const run = this.wakeBots();
+    try {
+      await run.done;
+    } catch (error) {
+      if (!run.awaited) this.reportBackgroundFailure(run, `the bot run after ${what}`, error);
+      return;
+    }
+    if (!refreshHeatmaps) return;
+    // Keep any visible "Show move quality" heatmaps current as play proceeds:
+    // recompute for the seat whose turn it now is, drop stale chips for the rest.
+    // (The hint is cleared on each action; the heatmap must be refreshed the
+    // same way or it freezes at the position where it was first toggled on.)
+    const refresh = this.refreshVisibleHeatmaps();
+    try {
+      await refresh;
+    } catch (error) {
+      this.reportBackgroundFailure(refresh, `the heatmap refresh after ${what}`, error);
+    }
   }
 
-  private reportBackgroundFailure(what: string, error: unknown): void {
-    // Every move made during one bot run joined it, so its one failure reaches each of their tasks.
-    if (typeof error === 'object' && error !== null) {
-      if (this.reportedFailures.has(error)) return;
-      this.reportedFailures.add(error);
-    }
+  /** Log the failure of `run`, and hand it to `onBackgroundError`, once per run however many moves joined it. */
+  private reportBackgroundFailure(run: object, what: string, error: unknown): void {
+    if (this.reportedRuns.has(run)) return;
+    this.reportedRuns.add(run);
     console.error(
       `[SnapshotSessionHost] ${what} failed: ${error instanceof Error ? error.message : String(error)}. ` +
         `That move was made and published. The bots and heatmaps are brought up to date again on the ` +
@@ -1179,7 +1211,8 @@ export class SnapshotSessionHost {
    * Resolves once the work ops started and did not wait for has finished: the
    * bot run a move woke, the bots' moves, and the heatmap refresh after them,
    * including any such work started while it waits. It never rejects: a
-   * failure of that work goes to `onBackgroundError`.
+   * failure of that work goes to `onBackgroundError`, or to the callers of
+   * {@link runBotTurns} that joined the failed run (see `onBackgroundError`).
    *
    * `handleOp` answers as soon as its own op is made (#698), so a host that
    * must keep a request or process alive until the bots have moved awaits
@@ -1419,11 +1452,22 @@ export class SnapshotSessionHost {
    * now. After {@link MAX_STALE_BOT_SEARCHES} stale searches in a row, the next
    * search runs inside the section, so a table that keeps changing still sees
    * the bot move; everyone else waits for that one search.
+   *
+   * A run that fails rejects every call that joined it, and is then not handed
+   * to `onBackgroundError` (#698): each failure goes one way.
    */
   runBotTurns(): Promise<void> {
+    const run = this.wakeBots();
+    // This caller is handed the run's failure, so onBackgroundError is not (#698).
+    run.awaited = true;
+    return run.done;
+  }
+
+  /** Start a run of the bot pump, or join the one under way, and make it look once more before it stops. */
+  private wakeBots(): BotRun {
     this.botWakes++;
-    if (!this.botPumpRunning) this.botPump = this.pumpBotTurns();
-    return this.botPump;
+    if (!this.botPumpRunning) this.botRun = { done: this.pumpBotTurns(), awaited: false };
+    return this.botRun;
   }
 
   /** The bot seats the pump may ask now: every one not held back at this state (#421). */

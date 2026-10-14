@@ -464,7 +464,7 @@ describe("a human's op resolves once it is made, not after the bot run it wakes 
     await t.host.settled();
     expect(t.backgroundErrors.map((e) => (e as Error).message)).toEqual(['The executor did not answer in time.']);
     expect(String(errors.mock.calls.at(-1)?.[0])).toMatch(
-      /bot run and heatmap refresh after seat 1's action failed: The executor did not answer in time\./,
+      /the bot run after seat 1's action failed: The executor did not answer in time\./,
     );
     expect((t.host.snapshot as unknown as Snap).v).toBe(10);
 
@@ -492,6 +492,78 @@ describe("a human's op resolves once it is made, not after the bot run it wakes 
     expect(t.backgroundErrors).toHaveLength(1);
     expect(errors.mock.calls.filter((call) => String(call[0]).includes('did not answer'))).toHaveLength(1);
     errors.mockRestore();
+  });
+
+  it("a runBotTurns() that joins a move's bot run, which then throws, is the run's one report", async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const t = table();
+    await t.host.start();
+    succeeded(await humanMove(t.host));
+    await untilSearches(t, 1);
+    // A platform's own wake (an alarm, say) joins the run the move woke.
+    const wake = t.host.runBotTurns();
+    succeeded(await humanMove(t.host));
+    t.searches[0].release(Promise.reject(new Error('The executor did not answer in time.')));
+
+    await expect(wake).rejects.toThrow('The executor did not answer in time.');
+    await t.host.settled();
+    expect(t.backgroundErrors).toEqual([]);
+    expect(errors.mock.calls.filter((call) => String(call[0]).includes('did not answer'))).toEqual([]);
+    errors.mockRestore();
+  });
+
+  it('a run several moves joined that throws something other than an Error is reported once', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const t = table();
+    await t.host.start();
+    succeeded(await humanMove(t.host));
+    await untilSearches(t, 1);
+    succeeded(await humanMove(t.host));
+    succeeded(await humanMove(t.host));
+    t.searches[0].release(Promise.reject('executor gone'));
+
+    await t.host.settled();
+    expect(t.backgroundErrors).toEqual(['executor gone']);
+    errors.mockRestore();
+  });
+
+  it('two runs that fail with the same error object are each reported', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const shared = new Error('The executor is unavailable.');
+    const t = table();
+    await t.host.start();
+    for (let i = 0; i < 2; i++) {
+      succeeded(await humanMove(t.host));
+      await untilSearches(t, i + 1);
+      t.searches[i].release(Promise.reject(shared));
+      await t.host.settled();
+    }
+    expect(t.backgroundErrors).toEqual([shared, shared]);
+    errors.mockRestore();
+  });
+
+  it('settled() waits for work that starts while it waits and outlives the work it began waiting for', async () => {
+    const t = table();
+    await t.host.start();
+    // An undo wakes the bots and refreshes no heatmap: its work ends with the bot run.
+    succeeded(await t.host.handleOp(1, { type: 'undo', player: 1 }));
+    await untilSearches(t, 1);
+    let settled = false;
+    const waiting = t.host.settled().then(() => { settled = true; });
+
+    // A move made now joins that run, then refreshes seat 1's heatmap, which outlives it.
+    t.host.transientTeachingState.set(1, { heatmap: { visible: true, entries: [] } });
+    succeeded(await humanMove(t.host));
+    t.searches[0].release(nothingDue); // stale: the move landed during it
+    await untilSearches(t, 2);
+    t.searches[1].release(nothingDue);
+    await settle();
+    expect(t.heatmaps).toHaveLength(1);
+    expect(settled).toBe(false);
+
+    t.heatmaps[0].release();
+    await waiting;
+    expect(t.host.transientTeachingState.get(1)?.heatmap?.entries).toEqual([{ from: 20 }]);
   });
 
   it('a host disposed while the bot a move woke searches publishes nothing more, and settles', async () => {

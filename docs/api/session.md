@@ -225,10 +225,16 @@ do reaches each page as an ordinary push. A second move sent while a bot
 searches is answered at once too, and the bot searches again from it.
 `await host.settled()` waits until that background work is done (a host that
 must keep its process alive until the bots have moved awaits it; the headless
-`send` does). A failure of it is logged and handed to the `onBackgroundError`
-adapter, once; it never rejects `settled()`. `convertSeatToBot` still resolves
-only once the bot run it starts has finished, since running the bots is that
-op's whole job. To hand a seat to the bot mid-game, call `session.makeSeatBot(seat, level)`
+`send` does); it never rejects. `convertSeatToBot` still resolves only once the
+bot run it starts has finished, since running the bots is that op's whole job.
+
+Each failure of that work goes one way. A bot run that any `runBotTurns()` call
+joined (directly, or through `convertSeatToBot`, which awaits it) rejects those
+calls and is not handed to `onBackgroundError`, however many moves also joined
+it. A run that only moves joined is logged and handed to `onBackgroundError`,
+once. A heatmap refresh failure always goes to `onBackgroundError`, once. So a
+platform that reports what `runBotTurns()` rejects with and what
+`onBackgroundError` receives reports every failure exactly once. To hand a seat to the bot mid-game, call `session.makeSeatBot(seat, level)`
 and then send
 `{ type: 'convertSeatToBot', seat }`: the first changes the roster, the second
 wakes the pump.

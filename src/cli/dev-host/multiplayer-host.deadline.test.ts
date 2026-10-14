@@ -344,8 +344,12 @@ describe('MultiplayerHost step deadlines (#302)', () => {
     const armedKey = clients.key('A');
 
     h.clock.advance(WINDOW_MS);
-    for (let i = 0; i < 20; i++) await new Promise((resolve) => setTimeout(resolve, 0));
-    // Seat 1's idle action landed, and the bot has not answered yet: nothing is wrong.
+    // Seat 1's idle action lands and is published: only the bot still owes round 2.
+    await vi.waitFor(() => expect(h.due('A')).toEqual([2]));
+    expect(clients.key('A')).toBe(armedKey);
+    // Its op answers within the same turn of the event loop, with nothing waiting on I/O.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // The bot has not answered yet, and that is not a round that failed to move.
     expect(h.errors('A')).toEqual([]);
 
     holding = false;
