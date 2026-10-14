@@ -115,6 +115,20 @@ describe('initiatePublish error reporting', () => {
     expect(err.message).toBe('Key scoped elsewhere');
   });
 
+  it('#707: reports a 409 SLUG_TAKEN body as a plain SERVER error, since the platform no longer sends it', async () => {
+    mockFetchResponse(409, {
+      message: 'Game slug belongs to another publisher.',
+      data: { code: 'SLUG_TAKEN' },
+    });
+
+    const err = await captureError(
+      initiatePublish('https://platform.example', 'key', 'slug', '1.0.0', {}),
+    );
+    expect(err.kind).toBe('SERVER');
+    expect(err.statusCode).toBe(409);
+    expect(err.message).toBe('Game slug belongs to another publisher.');
+  });
+
   it('maps a 401 to the fixed invalid-key message regardless of body', async () => {
     mockFetchResponse(401, { statusMessage: 'whatever' });
 
