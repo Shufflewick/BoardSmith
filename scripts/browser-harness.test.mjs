@@ -122,7 +122,7 @@ describe('#231: the fixture world stops the host before it removes the project',
 
   it.each([
     ['withFixtureWorld', lifetime, 'await stop()', 'rmSync(fixture'],
-    ['withFixtureTable', table, 'await stopDev(dev)', 'rmSync(parent'],
+    ['withFixtureTable', table, 'await started.finish(', 'rmSync(parent'],
   ])('%s awaits the stop inside the guard that removes the project', (name, source, stopCall, removeCall) => {
     const body = source.slice(source.indexOf(`async function ${name}`));
     const stop = body.indexOf(stopCall);

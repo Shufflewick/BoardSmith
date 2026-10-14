@@ -10,26 +10,23 @@
  * are what an author's project gets, and a hand-written copy would drift.
  *
  * `withFixtureTable` is the only export, for the same reason as the world's
- * (#231): the host must be stopped before its project is removed.
+ * (#231): the host must be stopped before its project is removed. The host is
+ * started through `Started`, as the smoke check starts it, so a SIGINT or
+ * SIGTERM to this process stops it and removes the project too.
  *
  * @module
  */
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { once } from 'node:events';
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { linkGameModules } from '../../testing/installed-modules.test-helper.js';
-import { collectOutput } from '../lib/child-output.js';
-import { freePort } from '../lib/free-port.js';
+import { Started, startDev } from '../lib/started-processes.js';
 import { REPO_ROOT } from '../spawn-cli.test-helper.js';
 
-const CLI = join(REPO_ROOT, 'bin', 'boardsmith.js');
-
-/** How long `boardsmith dev` gets to say it is ready, and to stop once asked. Hang guards, not budgets. */
-const READY_WITHIN_MS = 180_000;
-const STOP_WITHIN_MS = 15_000;
+/** How long `boardsmith init` gets to scaffold the sample. A hang guard, not a budget. */
+const INIT_WITHIN_MS = 120_000;
 
 /** What a fixture's body is handed while its host is serving. */
 interface ServedTable {
@@ -41,68 +38,43 @@ interface ServedTable {
 
 /** Scaffold `boardsmith init`'s table sample in `parent` and install it the way a real game is. */
 function writeTableFixture(parent: string): string {
-  const init = spawnSync(process.execPath, [CLI, 'init', 'table-fixture', '--without-rulebook'], {
+  const init = spawnSync(process.execPath, [join(REPO_ROOT, 'bin', 'boardsmith.js'), 'init', 'table-fixture', '--without-rulebook'], {
     cwd: parent,
     encoding: 'utf8',
+    timeout: INIT_WITHIN_MS,
   });
-  if (init.status !== 0) throw new Error(`boardsmith init failed:\n${init.stdout}${init.stderr}`);
+  if (init.status !== 0) {
+    const why = init.error ? init.error.message : `it exited with code ${init.status}`;
+    throw new Error(`boardsmith init could not scaffold the table fixture (${why}):\n${init.stdout}${init.stderr}`);
+  }
   const dir = join(parent, 'table-fixture');
   linkGameModules(dir);
   return dir;
 }
 
-/** Resolve once `dev` prints that it is ready; reject, with what it said, if it exits or hangs first. */
-function readyOrThrow(dev: ChildProcess, output: () => string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const fail = (why: string) => reject(new Error(`boardsmith dev ${why}:\n${output()}`));
-    const guard = setTimeout(() => fail('did not say it was ready'), READY_WITHIN_MS);
-    dev.stdout?.on('data', () => {
-      if (!output().includes('Ready!')) return;
-      clearTimeout(guard);
-      resolve();
-    });
-    dev.on('exit', () => {
-      clearTimeout(guard);
-      fail('stopped before it was ready');
-    });
-  });
-}
-
-/** Stop `dev` by its own pid, the orderly way (SIGINT), killing it only if it does not go. */
-async function stopDev(dev: ChildProcess): Promise<void> {
-  if (dev.exitCode !== null || dev.signalCode !== null) return;
-  const exited = once(dev, 'exit');
-  dev.kill('SIGINT');
-  const killer = setTimeout(() => dev.kill('SIGKILL'), STOP_WITHIN_MS);
-  await exited;
-  clearTimeout(killer);
-}
-
 /**
  * A TABLE GAME, SERVED, AND GONE AFTERWARDS -- IN THAT ORDER (#231).
  *
- * The host is stopped in the inner guard and the project removed in the outer
- * one, so a body that throws is cleaned up exactly like one that passes.
+ * `started.finish` stops the host before it removes the project, whether the
+ * body passed, threw, or this process was signalled while it ran.
  *
  * @param body called with the served fixture; its return value is passed on
  */
 export async function withFixtureTable<T>(body: (served: ServedTable) => Promise<T>): Promise<T> {
   // `realpathSync`: on macOS the temp root is a symlink, and Vite resolves the project by its real path.
   const parent = realpathSync(mkdtempSync(join(tmpdir(), 'bs-table-fixture-')));
+  const started = new Started();
   try {
     const fixture = writeTableFixture(parent);
-    const port = await freePort();
-    const dev = spawn(process.execPath, [CLI, 'dev', '--port', String(port), '--no-open'], {
-      cwd: fixture,
-      env: { ...process.env, FORCE_COLOR: '0' },
+    const hostUrl = await startDev(started, fixture);
+    if (typeof hostUrl !== 'string') throw new Error(`${hostUrl.summary}\n${hostUrl.next}`);
+    const interrupted = started.interrupted.then((signal) => {
+      throw new Error(`The table fixture was interrupted (${signal}).`);
     });
-    try {
-      await readyOrThrow(dev, collectOutput(dev));
-      return await body({ hostUrl: `http://127.0.0.1:${port}/`, fixture });
-    } finally {
-      await stopDev(dev);
-    }
+    // A signal after the body has settled must not crash the cleanup as an unhandled rejection.
+    interrupted.catch(() => {});
+    return await Promise.race([body({ hostUrl: `${hostUrl}/`, fixture }), interrupted]);
   } finally {
-    rmSync(parent, { recursive: true, force: true });
+    await started.finish(async () => rmSync(parent, { recursive: true, force: true }));
   }
 }

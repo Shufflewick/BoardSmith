@@ -21,14 +21,23 @@ const SCRIPTS = dirname(fileURLToPath(import.meta.url));
 /** A hang guard for one script, not a budget: the slowest takes about a minute. */
 const HANG_GUARD_MS = 600_000;
 
+/** How long a hung script gets to stop what it started once asked, before it is killed. */
+const STOP_GRACE_MS = 30_000;
+
 describe('the browser regressions', () => {
   it.each(browserScripts())('%s passes in Chromium', async (name) => {
     const child = spawn(process.execPath, [join(SCRIPTS, name)], { cwd: join(SCRIPTS, '..') });
-    // A script still running when the case ends hung past the guard: stop it, and the dev
-    // server it holds in-process, by its own pid, so nothing is left running.
-    onTestFinished(() => {
-      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-    });
+    // A script still running when the case ends hung past the guard. SIGTERM, by its own pid, lets
+    // it stop what it started (a world host in-process, or a `boardsmith dev` child) and remove its
+    // fixture; SIGKILL only if it has not gone after a grace, which would orphan that child.
+    onTestFinished(async () => {
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      const exited = once(child, 'exit');
+      child.kill('SIGTERM');
+      const killer = setTimeout(() => child.kill('SIGKILL'), STOP_GRACE_MS);
+      await exited;
+      clearTimeout(killer);
+    }, STOP_GRACE_MS + 5_000);
     let output = '';
     child.stdout.on('data', (chunk) => (output += chunk));
     child.stderr.on('data', (chunk) => (output += chunk));
