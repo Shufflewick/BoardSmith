@@ -119,7 +119,8 @@ const cards = parseCsv(
 );
 
 export interface BazaarOptions extends GameOptions {
-  handSize: number;
+  /** Declared in boardsmith.json, so every host passes it: at its default unless chosen. */
+  handSize?: number;
 }
 
 export class BazaarPlayer extends Player<BazaarGame, BazaarPlayer> {
@@ -136,7 +137,7 @@ export class BazaarGame extends Game<BazaarGame, BazaarPlayer> {
 
   constructor(options: BazaarOptions) {
     super(options);
-    this.handSize = options.handSize;
+    this.handSize = options.handSize!;
     this.registerElements([Card, Deck, Hand, Tableau]);
     this.deck = this.create(Deck, 'deck');
     for (const { name, copies, ...card } of cards) {
