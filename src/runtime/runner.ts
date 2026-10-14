@@ -36,7 +36,8 @@ import type {
   HistoryEntry,
 } from '../engine/action/types.js';
 import type { RandomnessPolicy } from '../engine/element/game.js';
-import { ErrorCode } from '../types/protocol.js';
+import { ErrorCode, type GameOptionDefinition } from '../types/protocol.js';
+import { fillGameOptionDefaults } from '../session/game-option-selection.js';
 import { PlayerFacingError } from '../engine/errors.js';
 import { constructGame, animationFloorOf, type AnimationFloor } from '../engine/element/game.js';
 import { isDevThrowEnabled } from '../utils/dev.js';
@@ -127,6 +128,13 @@ export interface GameRunnerOptions<G extends Game, O extends GameOptions = GameO
    * instead of re-threading it from the game definition at each call site.
    */
   undo?: UndoPolicy;
+  /**
+   * The game's option declarations (boardsmith.json's `gameOptions`), when the
+   * host has them: a new game starts with every declared option it was not
+   * given at its default (#701, #708). A restore (`fromSnapshot`) never passes
+   * them, so a save keeps the options it started with.
+   */
+  declaredGameOptions?: Readonly<Record<string, GameOptionDefinition>>;
 }
 
 /**
@@ -375,7 +383,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // from the game's first instruction — including anything setup does before
     // `start()` returns.
     this.game = constructGame(options.GameClass, {
-      ...options.gameOptions,
+      ...fillGameOptionDefaults(options.declaredGameOptions, options.gameOptions),
       randomness: options.randomness,
     });
 

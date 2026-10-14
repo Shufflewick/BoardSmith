@@ -72,3 +72,36 @@ describe('GameRunner carries the game class\'s own options type', () => {
     expect(runner.game.boardSize).toBe(3);
   });
 });
+
+describe('a new game starts with every option it declares (#708)', () => {
+  const declaredGameOptions = { boardSize: { type: 'number', label: 'Board size', default: 7 } } as const;
+
+  it('an option left out starts at its declared default', () => {
+    const runner = new GameRunner({
+      GameClass: SizedGame,
+      gameType: 'sized',
+      gameOptions: { playerCount: 1, seed: 'sized' },
+      declaredGameOptions,
+    });
+    expect(runner.game.boardSize).toBe(7);
+    expect(runner.getSnapshot().gameOptions).toMatchObject({ boardSize: 7 });
+  });
+
+  it('a chosen value is kept', () => {
+    const runner = new GameRunner({
+      GameClass: SizedGame,
+      gameType: 'sized',
+      gameOptions: { playerCount: 1, boardSize: 9, seed: 'sized' },
+      declaredGameOptions,
+    });
+    expect(runner.game.boardSize).toBe(9);
+  });
+
+  it('a restore keeps its saved options, even without an option declared since the save', () => {
+    const saved = new GameRunner({ GameClass: SizedGame, gameType: 'sized', gameOptions: { playerCount: 1, seed: 'sized' } });
+    saved.start();
+    const restored = GameRunner.fromSnapshot(saved.getSnapshot(), SizedGame);
+    expect(restored.game.boardSize).toBe(3);
+    expect(restored.getSnapshot().gameOptions).not.toHaveProperty('boardSize');
+  });
+});
