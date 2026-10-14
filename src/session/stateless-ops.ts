@@ -786,7 +786,8 @@ function handleStart(
   // Every option the bundle declares starts at its default unless the host
   // passed one (#701): a designer-only option is in no manifest, so no
   // platform lobby passes it.
-  const declaredOptions = fillGameOptionDefaults(declaredGameOptionsOf(def), gameOptions);
+  const declared = declaredGameOptionsOf(def);
+  const declaredOptions = fillGameOptionDefaults(declared, gameOptions);
   // Thread tutorial definition un-serialized.
   // The game constructor strips `tutorial` from _constructorOptions so it is not
   // persisted in the snapshot; runnerFromSnapshot re-supplies it on restore.
@@ -800,6 +801,7 @@ function handleStart(
     checkpoints: def.checkpoints,
     randomness: def.randomness,
     undo: def.undo,
+    declaredGameOptions: declared,
   });
 
   runner.start();

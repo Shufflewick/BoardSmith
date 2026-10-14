@@ -69,4 +69,13 @@ describe('the start op fills the options the bundle declares (#701)', () => {
     expect(OptionsGame.constructedWithRounds).toBeUndefined();
     expect((moved.snapshot as { gameOptions: Record<string, unknown> }).gameOptions).not.toHaveProperty('rounds');
   });
+
+  it('a start from a saved position keeps its options, even one saved before an option was declared (#708)', async () => {
+    const bare: GameDefinitionLike = { gameClass: OptionsGame, gameType: 'options', minPlayers: 1, maxPlayers: 2 };
+    const saved = succeeded(await executeOp(bare, { playerCount: 1, seed: 's' }, null, null, { type: 'start' }));
+    const restarted = succeeded(
+      await executeOp(def, { playerCount: 1, seed: 's' }, null, null, { type: 'start' }, { seedSnapshot: saved.snapshot }),
+    );
+    expect((restarted.snapshot as { gameOptions: Record<string, unknown> }).gameOptions).not.toHaveProperty('rounds');
+  });
 });

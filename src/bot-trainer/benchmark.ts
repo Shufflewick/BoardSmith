@@ -233,10 +233,12 @@ interface BenchmarkGameResult {
 
 /**
  * `options` with every game option the project's boardsmith.json declares, at
- * its default, so the benchmark plays the game every host starts (#701).
+ * its default, so the benchmark plays the game every host starts (#701), and
+ * those declarations, which the runner checks it was given (#708).
  */
-function projectOptions<O extends GameOptions>(options: O): O {
-  return fillGameOptionDefaults(projectGameOptions(), options);
+function projectOptions<O extends GameOptions>(options: O) {
+  const declaredGameOptions = projectGameOptions();
+  return { gameOptions: fillGameOptionDefaults(declaredGameOptions, options), declaredGameOptions };
 }
 
 /**
@@ -258,7 +260,7 @@ async function runBenchmarkGame<G extends Game>(
     const runnerOptions: GameRunnerOptions<G> = {
       GameClass,
       gameType,
-      gameOptions: projectOptions({ playerCount: 2, seed }),
+      ...projectOptions({ playerCount: 2, seed }),
     };
     const runner = new GameRunner(runnerOptions);
     let flowState = runner.start();
@@ -400,7 +402,7 @@ export function weightedBot<G extends Game>(
     );
   }
   const objectives = weightedObjectives(bot.objectives, weights);
-  const runner = new GameRunner({ GameClass, gameType, gameOptions: projectOptions({ playerCount: 2, seed: 'objective-check' }) });
+  const runner = new GameRunner({ GameClass, gameType, ...projectOptions({ playerCount: 2, seed: 'objective-check' }) });
   runner.start();
   objectives(runner.game, 1);
   return { ...bot, objectives };

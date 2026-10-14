@@ -212,6 +212,7 @@ export class TestGame<G extends Game = Game> {
       ...extraOptions
     } = options;
 
+    const declaredGameOptions = projectGameOptions();
     const runner = new GameRunner({
       GameClass,
       gameType: GameClass.name.toLowerCase(),
@@ -219,12 +220,13 @@ export class TestGame<G extends Game = Game> {
         // Game-specific options (e.g. tutorialSetup, variant flags), and every
         // option the project's boardsmith.json declares that the test left out,
         // at its default (#701).
-        ...fillGameOptionDefaults(projectGameOptions(), extraOptions),
+        ...fillGameOptionDefaults(declaredGameOptions, extraOptions),
         playerCount,
         playerNames,
         seed,
       },
       checkpoints,
+      declaredGameOptions,
     });
 
     const testGame = new TestGame(runner, seed);

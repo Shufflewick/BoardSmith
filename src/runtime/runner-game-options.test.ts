@@ -72,3 +72,36 @@ describe('GameRunner carries the game class\'s own options type', () => {
     expect(runner.game.boardSize).toBe(3);
   });
 });
+
+describe('a new game refuses to start without an option it declares (#708)', () => {
+  const declaredGameOptions = { boardSize: { type: 'number', label: 'Board size', default: 7 } } as const;
+
+  it('names the missing option before the game is constructed', () => {
+    expect(
+      () =>
+        new GameRunner({
+          GameClass: SizedGame,
+          gameType: 'sized',
+          gameOptions: { playerCount: 1, seed: 'sized' },
+          declaredGameOptions,
+        }),
+    ).toThrow('Game option "boardSize" is declared in boardsmith.json but was not passed to the game.');
+  });
+
+  it('starts when every declared option is passed', () => {
+    const runner = new GameRunner({
+      GameClass: SizedGame,
+      gameType: 'sized',
+      gameOptions: { playerCount: 1, boardSize: 9, seed: 'sized' },
+      declaredGameOptions,
+    });
+    expect(runner.game.boardSize).toBe(9);
+  });
+
+  it('a restore keeps its saved options, even without an option declared since the save', () => {
+    const saved = new GameRunner({ GameClass: SizedGame, gameType: 'sized', gameOptions: { playerCount: 1, seed: 'sized' } });
+    saved.start();
+    const restored = GameRunner.fromSnapshot(saved.getSnapshot(), SizedGame);
+    expect(restored.game.boardSize).toBe(3);
+  });
+});
