@@ -132,6 +132,19 @@ describe('deriveManifest', () => {
     expect(manifest.agents).toBeUndefined();
   });
 
+  it('leaves the publish bookkeeping ("platforms" ids and the "publisher" slug) out of the manifest (#706)', () => {
+    const manifest = derive({
+      name: 'fixture',
+      displayName: 'Fixture',
+      publisher: 'acme',
+      platforms: { dev: { gameId: 'g1', publisherId: 'p1' } },
+    });
+
+    expect(manifest).not.toHaveProperty('platforms');
+    expect(manifest).not.toHaveProperty('publisher');
+    expect(manifest).toMatchObject({ name: 'fixture', displayName: 'Fixture' });
+  });
+
   it('stamps capabilities.timedSteps from the compiled flow', () => {
     const timed = fixedDeployDefinition as GameDefinition;
     expect(derive({ name: 'fixture', idleAction: { name: 'commit' } }, timed).capabilities).toMatchObject({
