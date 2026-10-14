@@ -113,11 +113,6 @@ export * from './snapshot-session-host.js';
 // How a host holds the work a session starts itself while its rules are replaced (#388).
 export type { HostWorkGate } from './host-work-gate.js';
 
-// ============================================
-// Headless Simulation
-// ============================================
-
-
 /**
  * THE BACKEND AND THE CAPABILITY SET IT RESOLVES TO (#171).
  *
