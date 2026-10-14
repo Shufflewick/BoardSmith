@@ -103,6 +103,8 @@ function gameProject(prefix: string, withTestUtils: boolean): string {
   mkdirSync(join(dir, 'tests'), { recursive: true });
   mkdirSync(modules);
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'project', private: true, type: 'module' }));
+  // A game project has one; its test games read their options from it (#701).
+  writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'project', backend: 'table' }));
   writeFileSync(join(dir, 'vitest.config.ts'), DEDUPED_CONFIG);
   writeFileSync(join(dir, 'tests', 'board.test.ts'), BOARD_TEST);
   writeFileSync(join(dir, 'tests', 'refusal.test.ts'), REFUSAL_TEST);
