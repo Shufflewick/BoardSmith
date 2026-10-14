@@ -11,20 +11,22 @@ export interface BenchmarkConfig {
   /** Number of games to run */
   gameCount?: number;
   /**
-   * Timeout per game in ms (default 60000). Only for an unseeded benchmark: a
-   * seeded one has no clock bound, so passing both is refused.
+   * Timeout per game in ms (default 60000). Only for a benchmark that is not
+   * `reproducible`: a reproducible one has no clock bound, so passing both is refused.
    */
   timeout?: number;
   /** Maximum actions per game */
   maxActions?: number;
-  /**
-   * Seed for a reproducible benchmark (#699): every game and every move's
-   * search is seeded from it, and each search runs exactly `mctsIterations`
-   * iterations with no clock bound, so the same seed gives the same result
-   * move for move. Without one, the games still play from fixed seeds but each
-   * search draws a fresh random seed and is clock-bounded.
-   */
+  /** Base seed the games are played from (default 'benchmark'): which games are played. */
   seed?: string;
+  /**
+   * Also seed every move's search from its game's seed (#699), through
+   * createBot's `reproducible` option: each search runs exactly
+   * `mctsIterations` iterations with no clock bound, so the same `seed` gives
+   * the same result move for move. Otherwise each search draws a fresh random
+   * seed and is clock-bounded, so results vary from run to run.
+   */
+  reproducible?: boolean;
   /** MCTS iterations for the trained bot (default 100 for quality evaluation) */
   mctsIterations?: number;
   /**
@@ -111,7 +113,7 @@ export async function benchmarkBot<G extends Game>(
   config: BenchmarkConfig = {}
 ): Promise<BenchmarkResult> {
   const timeout = gameTimeout(config);
-  const seeded = config.seed !== undefined;
+  const reproducible = config.reproducible === true;
   const gameCount = config.gameCount ?? 100;
   const maxActions = config.maxActions ?? 300;
   const seed = config.seed ?? 'benchmark';
@@ -142,7 +144,7 @@ export async function benchmarkBot<G extends Game>(
       timeout,
       maxActions,
       seed: gameSeed,
-      seeded,
+      reproducible,
     });
 
     if (trainedPlayerIndex === 0) tally.gamesAsPlayer0++;
@@ -194,14 +196,14 @@ export async function benchmarkBot<G extends Game>(
   return result;
 }
 
-/** Each game's clock bound: none for a seeded benchmark, which refuses one. */
-function gameTimeout({ seed, timeout }: BenchmarkConfig): number {
-  if (seed === undefined) return timeout ?? 60000;
+/** Each game's clock bound: none for a reproducible benchmark, which refuses one. */
+function gameTimeout({ reproducible, timeout }: BenchmarkConfig): number {
+  if (reproducible !== true) return timeout ?? 60000;
   if (timeout !== undefined) {
     throw new Error(
-      `A seeded benchmark (seed "${seed}") cannot also have a ${timeout}ms game timeout: a game cut ` +
-        'short by the clock would make the result differ from run to run. Drop the timeout and bound games ' +
-        'with maxActions, or drop the seed.',
+      `A reproducible benchmark cannot also have a ${timeout}ms game timeout: a game cut short by the ` +
+        'clock would make the result differ from run to run. Drop the timeout and bound games with ' +
+        'maxActions, or drop reproducible.',
     );
   }
   return Infinity;
@@ -214,8 +216,8 @@ interface BenchmarkGameOptions {
   timeout: number;
   maxActions: number;
   seed: string;
-  /** Seed each move's search from `seed` (see {@link BenchmarkConfig.seed}). */
-  seeded: boolean;
+  /** Seed each move's search from `seed` (see {@link BenchmarkConfig.reproducible}). */
+  reproducible: boolean;
 }
 
 type GameOutcome = 'win' | 'loss' | 'draw' | 'incomplete';
@@ -345,7 +347,7 @@ async function runBenchmarkGame<G extends Game>(
 /**
  * The bot that makes move `actionCount` for `seat`. The trained bot searches;
  * the opponent is the same bot at one iteration, which is essentially random
- * but always produces valid args. In a seeded benchmark each move's search
+ * but always produces valid args. In a reproducible benchmark each move's search
  * gets its own seed, derived from the game's.
  */
 function moveBot<G extends Game>(
@@ -355,7 +357,7 @@ function moveBot<G extends Game>(
   seat: number,
   isTrainedSeat: boolean,
   actionCount: number,
-  { trainedBot, mctsIterations, seed, seeded }: BenchmarkGameOptions,
+  { trainedBot, mctsIterations, seed, reproducible }: BenchmarkGameOptions,
 ) {
   return createBot(
     runner.game,
@@ -365,7 +367,7 @@ function moveBot<G extends Game>(
     runner.actionHistory,
     isTrainedSeat ? mctsIterations : 1,
     isTrainedSeat ? trainedBot : undefined,
-    seeded ? { seed: `${seed}-move-${actionCount}` } : undefined,
+    reproducible ? { seed: `${seed}-move-${actionCount}` } : undefined,
   );
 }
 

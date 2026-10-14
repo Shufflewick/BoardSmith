@@ -70,9 +70,10 @@ The game's `gameDefinition` must set `bot.objectives` to the objectives function
 
 ### Reproducible runs
 
-By default each run draws a fresh seed, and every bot search is cut off by the
-clock, so two runs with the same settings give different weights. Pass
-`--seed` for a run you can repeat (#699):
+By default each run draws a fresh seed for mutation and for the benchmark
+games, so every run and every generation plays new games, and every bot search
+is unseeded and cut off by the clock. Two runs with the same settings therefore
+give different weights. Pass `--seed` for a run you can repeat (#699):
 
 ```bash
 npx boardsmith evolve-bot-weights --generations 5 --population 20 --seed tuning-1
@@ -81,10 +82,11 @@ npx boardsmith evolve-bot-weights --generations 5 --population 20 --seed tuning-
 The seed drives mutation and selection, every benchmark game and every move's
 search. Each search runs exactly its `--mcts` iterations with no time limit, so
 the same seed and settings give the same weights move for move, on any number
-of workers. From a script, `WeightEvolverConfig.seed` does the same, and
-`BenchmarkConfig.seed` seeds one benchmark. A seeded run has no clock bound at
-all: `gameTimeout` (or `timeout`) with a seed is refused, and `maxActionsPerGame`
-(or `maxActions`) still bounds each game.
+of workers. From a script, `WeightEvolverConfig.seed` does the same. For one
+benchmark, `BenchmarkConfig.seed` chooses the games and `reproducible: true`
+also seeds every search from them. A reproducible run has no clock bound at
+all: `gameTimeout` with an evolver seed, or `timeout` with `reproducible`, is
+refused, and `maxActionsPerGame` (or `maxActions`) still bounds each game.
 
 ## From a Script
 

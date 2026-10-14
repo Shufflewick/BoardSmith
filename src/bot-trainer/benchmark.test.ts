@@ -14,6 +14,8 @@ import { createBot } from '../bot/index.js';
 import {
   Game,
   Player,
+  Piece,
+  Space,
   Action,
   eachPlayer,
   actionStep,
@@ -266,7 +268,7 @@ describe('benchmarkBot', () => {
       gameCount: 2,
       mctsIterations: 1,
       maxActions: 4,
-        seed: 'never-ends',
+      seed: 'never-ends',
     });
     expect(result.gamesPlayed).toBe(2);
     expect(result.draws).toBe(2);
@@ -278,7 +280,7 @@ describe('benchmarkBot', () => {
       gameCount: 4,
       mctsIterations: 1,
       maxActions: 4,
-        seed: 'override-declared',
+      seed: 'override-declared',
     });
     expect(result.failures).toEqual([]);
     expect(result.draws).toBe(0);
@@ -291,7 +293,7 @@ describe('benchmarkBot', () => {
       gameCount: 2,
       mctsIterations: 1,
       maxActions: 10,
-        seed: 'simultaneous',
+      seed: 'simultaneous',
     });
     expect(result.failures).toEqual([]);
     expect(result.incomplete).toBe(0);
@@ -341,7 +343,7 @@ describe('benchmarkBot on a game that cannot finish (#37)', () => {
       gameCount: 4,
       mctsIterations: 1,
       maxActions: 10,
-        seed: 'explode',
+      seed: 'explode',
       ...overrides,
     });
 
@@ -472,12 +474,66 @@ describe('weightedObjectives', () => {
   });
 });
 
-describe('a seeded benchmark is reproducible move for move (#699)', () => {
-  const race = (config: { seed?: string; timeout?: number }) =>
+/** A card in a seat's hidden hand, or in the face-down pile. */
+class HiddenCard extends Piece<HiddenHandGame> {
+  rank!: number;
+}
+class HiddenHand extends Space<HiddenHandGame> {}
+class HiddenPile extends Space<HiddenHandGame> {}
+
+/**
+ * Each seat is dealt four of twelve shuffled cards that only it can see and
+ * plays them one at a time; the higher total wins. Every move is the pick of
+ * an element the other seat cannot see, so a search samples the hidden cards,
+ * and the element ids, which the engine mints under a fresh key per game, are
+ * what the moves name.
+ */
+class HiddenHandGame extends Game<HiddenHandGame, Player> {
+  /** Every card played by any HiddenHandGame, as `seat:rank`, in play and in search. */
+  static moves: string[] = [];
+  totals: Record<number, number> = { 1: 0, 2: 0 };
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([HiddenCard, HiddenHand, HiddenPile]);
+    const pile = this.create(HiddenPile, 'pile');
+    for (let rank = 1; rank <= 12; rank++) pile.create(HiddenCard, `card-${rank}`, { rank });
+    pile.contentsHidden();
+    pile.shuffle();
+    for (const player of this.all(Player)) {
+      const hand = this.create(HiddenHand, `hand-${player.seat}`);
+      hand.player = player;
+      hand.contentsVisibleToOwner();
+      for (let i = 0; i < 4; i++) pile.first(HiddenCard)!.putInto(hand);
+    }
+    this.registerAction(
+      Action.create<HiddenHandGame>('play')
+        .chooseElement('card', {
+          elementClass: HiddenCard,
+          filter: (card, ctx) => (card.parent as HiddenHand).player === ctx.player,
+        })
+        .execute((args, ctx) => {
+          const game = ctx.game as HiddenHandGame;
+          const card = args.card as HiddenCard;
+          HiddenHandGame.moves.push(`${ctx.player.seat}:${card.rank}`);
+          game.totals[ctx.player.seat] += card.rank;
+          card.putInto(game.first(HiddenPile)!);
+          if (game.all(HiddenHand).every((hand) => hand.all(HiddenCard).length === 0)) {
+            game.finish([game.players[game.totals[1] >= game.totals[2] ? 0 : 1]]);
+          }
+        }),
+    );
+    this.setFlow({ root: loop({ maxIterations: 10, do: eachPlayer({ do: actionStep({ actions: ['play'] }) }) }) });
+  }
+}
+
+describe('a reproducible benchmark is repeatable move for move (#699)', () => {
+  type RunConfig = { seed?: string; reproducible?: boolean; timeout?: number };
+  const race = (config: RunConfig) =>
     benchmarkBot(RaceGame, 'race', undefined, noWeights, { gameCount: 4, mctsIterations: 8, maxActions: 40, ...config });
 
   /** Every move made, in play and in search, by one benchmark run. */
-  async function movesOf(config: { seed?: string }): Promise<string[]> {
+  async function movesOf(config: RunConfig): Promise<string[]> {
     RaceGame.moves = [];
     await race(config);
     return RaceGame.moves;
@@ -485,30 +541,54 @@ describe('a seeded benchmark is reproducible move for move (#699)', () => {
 
   beforeEach(() => vi.mocked(createBot).mockClear());
 
-  it('makes the same moves, in play and in every search, when run twice with one seed', async () => {
-    const first = await movesOf({ seed: 'twice' });
-    const second = await movesOf({ seed: 'twice' });
+  it('makes the same moves, in play and in every search, when run twice', async () => {
+    const first = await movesOf({ seed: 'twice', reproducible: true });
+    const second = await movesOf({ seed: 'twice', reproducible: true });
     expect(first.length).toBeGreaterThan(0);
     expect(second).toEqual(first);
   });
 
+  it('makes the same element picks from hidden hands when run twice, with no fixed element id key', async () => {
+    const run = async () => {
+      HiddenHandGame.moves = [];
+      const result = await benchmarkBot(HiddenHandGame, 'hidden-hand', undefined, noWeights, {
+        gameCount: 4, mctsIterations: 10, maxActions: 40, seed: 'hidden', reproducible: true,
+      });
+      return { result, moves: HiddenHandGame.moves };
+    };
+    const first = await run();
+    expect(first.result.gamesPlayed).toBe(4);
+    expect(first.moves.length).toBeGreaterThan(16);
+    expect(await run()).toEqual(first);
+  });
+
   it("seeds every move's search through createBot's reproducible option, each with its own seed", async () => {
-    await race({ seed: 'per-move' });
+    await race({ seed: 'per-move', reproducible: true });
     const reproducible = vi.mocked(createBot).mock.calls.map((call) => call[7]);
     expect(reproducible.length).toBeGreaterThan(0);
     expect(reproducible.every((r) => typeof r?.seed === 'string')).toBe(true);
     expect(new Set(reproducible.map((r) => r!.seed)).size).toBe(reproducible.length);
   });
 
-  it('leaves an unseeded benchmark as it was: unseeded, clock-bounded searches', async () => {
+  it('gives different game seeds different search seeds', async () => {
+    await race({ seed: 'one', reproducible: true });
+    const one = vi.mocked(createBot).mock.calls.map((call) => call[7]!.seed);
+    vi.mocked(createBot).mockClear();
+    await race({ seed: 'two', reproducible: true });
+    const two = vi.mocked(createBot).mock.calls.map((call) => call[7]!.seed);
+    expect(two.some((seed) => one.includes(seed))).toBe(false);
+  });
+
+  it('leaves a benchmark that is not reproducible as it was: unseeded, clock-bounded searches, seeded games or not', async () => {
+    await race({ seed: 'games-only' });
     await race({});
     const calls = vi.mocked(createBot).mock.calls;
     expect(calls.length).toBeGreaterThan(0);
     expect(calls.every((call) => call[7] === undefined)).toBe(true);
   });
 
-  it('refuses a game timeout on a seeded benchmark, since a clock would make it unrepeatable', async () => {
-    await expect(race({ seed: 'clock', timeout: 1000 })).rejects.toThrow(/seed.*timeout|timeout.*seed/);
+  it('refuses a game timeout on a reproducible benchmark, since a clock would make it unrepeatable', async () => {
+    await expect(race({ seed: 'clock', reproducible: true, timeout: 1000 })).rejects.toThrow(/reproducible.*timeout/);
     expect(createBot).not.toHaveBeenCalled();
   });
 });

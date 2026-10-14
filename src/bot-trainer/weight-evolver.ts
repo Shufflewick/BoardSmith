@@ -5,8 +5,7 @@
 import type { ObjectiveWeight, TrainingProgress } from './types.js';
 import { loadTrainingBundle } from './training-bundle.js';
 import { runParallelBenchmarks } from './parallel-benchmark.js';
-import { randomUUID } from 'node:crypto';
-import { createSeededRandom } from '../utils/random.js';
+import { createSeededRandom, mintSeed } from '../utils/random.js';
 import { generateOffspring, selectBest } from './evolution.js';
 
 /**
@@ -32,11 +31,12 @@ export interface WeightEvolverConfig {
   /** Max actions per game (default: 1000) */
   maxActionsPerGame?: number;
   /**
-   * Seed for a reproducible evolution (#699): mutation, selection and every
-   * benchmark are seeded from it, and benchmarks run with no clock bound, so
-   * the same seed and settings give the same weights whatever the worker
-   * count. Without one, each benchmark's searches are unseeded and
-   * clock-bounded, as `benchmarkBot` runs without a seed.
+   * Seed for a reproducible evolution (#699): mutation, selection, every
+   * benchmark game and every search are seeded from it, and benchmarks run
+   * with no clock bound (`reproducible`), so the same seed and settings give
+   * the same weights whatever the worker count. Without one, the evolver draws
+   * a fresh seed for mutation and the games, and each search is unseeded and
+   * clock-bounded.
    */
   seed?: string;
   /** Progress callback */
@@ -73,7 +73,7 @@ export class WeightEvolver {
   private gameModulePath: string;
   private gameType: string;
   private config: WeightEvolverConfig;
-  /** What mutation and selection are seeded from: the configured seed, or a fresh one per evolver. */
+  /** What mutation, selection and the benchmark games are seeded from: the configured seed, or a fresh one per evolver. */
   private evolutionSeed: string;
 
   /**
@@ -92,7 +92,7 @@ export class WeightEvolver {
     this.gameModulePath = gameModulePath;
     this.gameType = gameType;
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.evolutionSeed = config.seed ?? randomUUID();
+    this.evolutionSeed = config.seed ?? mintSeed();
   }
 
   /**
@@ -263,13 +263,15 @@ export class WeightEvolver {
   }
 
   /**
-   * A benchmark's seed, derived from the evolution's own and named by `stage`,
-   * or for an unseeded evolution its clock bound (see {@link WeightEvolverConfig.seed}).
+   * A benchmark's game seed, derived from the evolution's own and named by
+   * `stage`. A seeded evolution's benchmarks are also reproducible; an
+   * unseeded one's keep their clock bound (see {@link WeightEvolverConfig.seed}).
    */
-  private benchmarkSeeding(stage: string): { seed: string } | { timeout: number } {
+  private benchmarkSeeding(stage: string): { seed: string; reproducible: true } | { seed: string; timeout: number } {
+    const seed = `${this.evolutionSeed}-${stage}`;
     return this.config.seed === undefined
-      ? { timeout: this.config.gameTimeout ?? 30000 }
-      : { seed: `${this.config.seed}-${stage}` };
+      ? { seed, timeout: this.config.gameTimeout ?? 30000 }
+      : { seed, reproducible: true };
   }
 
   /**
