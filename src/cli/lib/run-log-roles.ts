@@ -372,9 +372,10 @@ class RunLogChecker {
       out.push(`${name} reviews ${reviewed.name}, but ${unknownHistoricalRouting(reviewed.name)}`);
       return undefined;
     }
-    if (!FINISHED.includes(reviewed.outcome ?? '')) {
+    const outcome = reviewed.outcome ?? 'missing';
+    if (!FINISHED.includes(outcome)) {
       out.push(
-        `${name} reviews ${reviewed.name}, whose Outcome is ${reviewed.outcome ?? 'missing'}: only work that finished and passed its ` +
+        `${name} reviews ${reviewed.name}, whose Outcome is ${outcome}: only work that finished and passed its ` +
           'checks is reviewed. A failed dispatch is retried, never reviewed.',
       );
     }

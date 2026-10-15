@@ -87,6 +87,11 @@ describe('historical dispatches (#710)', () => {
     expect(details(historical())).toEqual(matching(/no "- Work:"/, /no "- Role:"/, /no "- Agent:"/));
   });
 
+  it.each(['', '- Pipeline: '])('requires the original nonempty Pipeline field (%s)', (pipeline) => {
+    const findings = checkRunLogRoles(historical().replace('- Pipeline: build-chunk', pipeline), noVerifyFiles, beforeRouting);
+    expect(findings.map((f) => f.detail)).toEqual(matching(/no "- Work:"/, /no "- Role:"/, /no "- Agent:"/));
+  });
+
   it.each(['Work', 'Role', 'Agent', 'Retry of', 'Designer answer'])('does not exempt an incomplete modern record containing %s', (field) => {
     const findings = checkRunLogRoles(`${historical()}- ${field}: bounded\n`, noVerifyFiles, beforeRouting);
     expect(findings.length).toBeGreaterThan(0);
