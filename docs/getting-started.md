@@ -262,6 +262,10 @@ it to pass. Once Vitest confirms that a mutant made a test fail, the mutation
 check stops that run's workers, including tests already running. A surviving
 mutant still runs the whole suite to completion.
 
+Stopping mutation verification with Ctrl+C or SIGTERM stops its Vitest process
+group and waits for it to close before removing that run's temporary files.
+The interrupted command still exits by the signal, so it cannot record a pass.
+
 On the main branch itself, the merge base with main is the current commit, so
 no change would be measured: there the mutation check fails unless you pass
 `--base <commit the work started from>`. For a chunk the `bs-` skills build,
