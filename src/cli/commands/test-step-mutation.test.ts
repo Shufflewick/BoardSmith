@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
@@ -14,6 +14,7 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { designProjectFixtures } from './design-project.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 import { plantOtherRuns } from '../lib/command-build-dirs.test-helper.js';
+import { fixtureSandbox } from '../../testing/fixture-sandbox.test-helper.js';
 
 const lines = (...n: number[]) => new Set(n);
 
@@ -558,6 +559,99 @@ export function fee(price: number): number {
       await fs.writeFile(join(project, path), text);
     }
   }
+
+  it('cancels already running work after a confirmed mutant failure, while completing the baseline (#711)', async () => {
+    const sandbox = fixtureSandbox('bs-mutant-fail-fast-');
+    const project = await designProjectFixtures(() => sandbox.root).makeProject({
+      'src/rules.ts': 'export const enabled = true;\n',
+      'vitest.config.ts': `export default { test: {
+  include: ['tests/**/*.test.ts'], pool: 'forks', minWorkers: 2, maxWorkers: 2,
+  testTimeout: 120000, cache: false,
+} };\n`,
+    });
+    await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');
+    await suite(project, {
+      'tests/busy.test.ts': `import { it } from 'vitest';
+import { existsSync, writeFileSync } from 'node:fs';
+const phase = process.env.BOARDSMITH_MUTANT ? 'mutant' : 'baseline';
+it('work already running in another worker', async () => {
+  writeFileSync(new URL('./' + phase + '-busy', import.meta.url), 'started');
+  while (!existsSync(new URL('./' + phase + '-release', import.meta.url))) {
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
+  writeFileSync(new URL('./' + phase + '-finished', import.meta.url), 'finished');
+});\n`,
+      'tests/assertion.test.ts': `import { it, expect, onTestFailed } from 'vitest';
+import { existsSync, writeFileSync } from 'node:fs';
+import { enabled } from '../src/rules';
+const phase = process.env.BOARDSMITH_MUTANT ? 'mutant' : 'baseline';
+it('catches the changed value after the other worker starts', async () => {
+  while (!existsSync(new URL('./' + phase + '-busy', import.meta.url))) {
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
+  onTestFailed(() => writeFileSync(new URL('./' + phase + '-failed', import.meta.url), 'assertion failed'));
+  expect(enabled).toBe(true);
+  writeFileSync(new URL('./' + phase + '-release', import.meta.url), 'released');
+});\n`,
+    });
+
+    for (const key of ['HOME', 'TMPDIR', 'PATH'] as const) vi.stubEnv(key, sandbox.env[key]!);
+    vi.stubEnv('NODE_OPTIONS', sandbox.env.NODE_OPTIONS + ' --allow-child-process --allow-worker --allow-addons');
+    try {
+      const result = await runDiffMutationCheck({
+        projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache: memoryCache(), log: () => {},
+      });
+      expect(await fs.readFile(join(project, 'tests/baseline-finished'), 'utf-8')).toBe('finished');
+      expect(await fs.readFile(join(project, 'tests/mutant-busy'), 'utf-8')).toBe('started');
+      expect(await fs.readFile(join(project, 'tests/mutant-failed'), 'utf-8')).toBe('assertion failed');
+      await expect(fs.access(join(project, 'tests/mutant-finished'))).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(result.summary).toEqual({ files: 1, mutants: 1, killed: 1, survived: 0, timedOut: 0 });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  }, 120_000);
+
+  it('completes surviving mutants after retries, repeats and expected failures (#711)', async () => {
+    const sandbox = fixtureSandbox('bs-mutant-final-result-');
+    const project = await designProjectFixtures(() => sandbox.root).makeProject({
+      'src/rules.ts': 'export const enabled = true;\n',
+      'vitest.config.ts': `export default { test: {
+  include: ['tests/**/*.test.ts'], minWorkers: 1, maxWorkers: 1, cache: false,
+} };\n`,
+    });
+    await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');
+    await suite(project, {
+      'tests/survivor.test.ts': `import { it, expect, afterEach, afterAll } from 'vitest';
+import { writeFileSync } from 'node:fs';
+import { enabled } from '../src/rules';
+let attempts = 0, repetitions = 0;
+// Keep teardown open through Vitest's task-update debounce so provisional failures are reported.
+afterEach(() => new Promise(resolve => setTimeout(resolve, 30)));
+it('passes on retry', { retry: 1 }, () => {
+  attempts++;
+  expect(enabled || attempts > 1).toBe(true);
+});
+it('passes each repeat', { repeats: 1 }, () => {
+  repetitions++;
+  expect(typeof enabled).toBe('boolean');
+});
+it.fails('expects its assertion to fail', () => { expect(enabled).toBe(!enabled); });
+afterAll(() => writeFileSync(new URL('./' + (process.env.BOARDSMITH_MUTANT ? 'mutant' : 'baseline') + '-completed', import.meta.url), JSON.stringify({ attempts, repetitions })));
+`,
+    });
+    for (const key of ['HOME', 'TMPDIR', 'PATH'] as const) vi.stubEnv(key, sandbox.env[key]!);
+    vi.stubEnv('NODE_OPTIONS', sandbox.env.NODE_OPTIONS + ' --allow-child-process --allow-worker --allow-addons');
+    try {
+      const result = await runDiffMutationCheck({
+        projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache: memoryCache(), log: () => {},
+      });
+      expect(result.notGreen).toBeUndefined();
+      expect(result.summary).toEqual({ files: 1, mutants: 1, killed: 0, survived: 1, timedOut: 0 });
+      expect(JSON.parse(await fs.readFile(join(project, 'tests/mutant-completed'), 'utf-8'))).toEqual({ attempts: 2, repetitions: 2 });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  }, 120_000);
 
   it('runs the whole suite against each mutant and reports every mutant no test caught, by file and line', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES_TWO });

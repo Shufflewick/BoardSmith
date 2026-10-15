@@ -305,6 +305,18 @@ const mutant = mutantPath ? JSON.parse(readFileSync(mutantPath, 'utf-8')) : null
 const STATUS = { pass: 'passed', fail: 'failed' };
 const testsIn = (tasks) => tasks.flatMap((task) => (task.type === 'suite' ? testsIn(task.tasks) : [task]));
 const reporter = {
+  onInit(ctx) { this.ctx = ctx; },
+  onTaskUpdate(packs) {
+    if (!mutant || !process.send || this.stopped) return;
+    // Vitest 2 sets duration only after retries, repeats and expected-failure inversion finish.
+    const failed = new Set(packs.filter(([, result]) => result?.state === 'fail' && typeof result.duration === 'number').map(([id]) => id));
+    if (failed.size === 0) return;
+    const files = this.ctx.state.getFiles();
+    if (!files.some((file) => testsIn(file.tasks).some((test) => failed.has(test.id)))) return;
+    this.onFinished(files);
+    this.stopped = true;
+    process.send({ type: 'boardsmith-mutant-failed' });
+  },
   onFinished(files = []) {
     const report = files.map((file) => ({
       path: file.filepath,
@@ -405,7 +417,7 @@ interface Runner {
   /** The run's own directory (`withCommandBuildDir`), which holds its generated files. */
   workDir: string;
   /**
-   * With `bail`, vitest stops at the first failing test: enough to know a mutant was caught. With
+   * With `bail`, a whole-suite mutant stops after a confirmed test failure, including running workers. With
    * `coverage`, each test file writes which game code it ran into that directory (`readCoverage`).
    */
   run(
@@ -420,23 +432,35 @@ interface Runner {
  * Runs vitest to its end, or kills it and every worker it started once `timeoutMs` passes (a mutant
  * can turn a loop infinite). Resolves with its exit code, or false when it was killed. Not
  * `runVitestRecorded` (lib/vitest-run.ts): a mutant run needs that timeout and the kill of the
- * whole process group, and prints nothing.
+ * whole process group, and prints nothing. A whole-suite mutant also stops on the reporter's
+ * confirmed failure, after its partial report is written, and waits for process close before returning.
  */
 function runVitest(
   bin: string,
   args: string[],
-  options: { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number },
+  options: { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number; stopOnFailure: boolean },
 ): Promise<{ exitCode: number | null } | false> {
   return new Promise((resolve, reject) => {
-    const child = spawn(bin, args, { cwd: options.cwd, env: options.env, stdio: 'ignore', detached: true });
-    const timer = setTimeout(() => {
+    const child = spawn(bin, args, {
+      cwd: options.cwd, env: options.env, detached: true,
+      stdio: options.stopOnFailure ? ['ignore', 'ignore', 'ignore', 'ipc'] : 'ignore',
+    });
+    const kill = () => {
       try {
         process.kill(-child.pid!, 'SIGKILL');
       } catch {
         child.kill('SIGKILL');
       }
+    };
+    const timer = setTimeout(() => {
+      kill();
       resolve(false);
     }, options.timeoutMs);
+    child.on('message', (message) => {
+      if (!options.stopOnFailure || (message as { type?: unknown })?.type !== 'boardsmith-mutant-failed') return;
+      clearTimeout(timer);
+      kill();
+    });
     child.on('error', (err) => {
       clearTimeout(timer);
       reject(new Error(`Could not run vitest in ${options.cwd}: ${err.message}`));
@@ -526,7 +550,9 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
           : scope.map((f) => relative(projectDir, realpathSync(f.absPath)).split(sep).join('/'))),
       ];
       const started = Date.now();
-      const finished = await runVitest(vitestBin, args, { cwd: projectDir, env, timeoutMs });
+      const finished = await runVitest(vitestBin, args, {
+        cwd: projectDir, env, timeoutMs, stopOnFailure: scope === 'whole-suite' && mutant !== null && options.bail === true,
+      });
       if (!finished) return { kind: 'timed-out' };
 
       const read = await readReport(reportPath, (realPath) =>
