@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { gitOutput as git } from './git-output.js';
 import { sha256Hex } from './hash.js';
-import type { MutantCache } from './mutant-cache.js';
+import type { MutationFingerprints } from './mutant-cache.js';
 
 export const MUTATION_EQUIVALENCES = 'design/MUTATION-EQUIVALENCES.json';
 
@@ -66,7 +66,7 @@ export function parseEquivalences(text: string): EquivalentMutant[] {
 }
 
 /** Git's external trust configuration authenticates the reviewer; the CLI never supplies trust. */
-export async function readEquivalenceReview(projectDir: string): Promise<EquivalenceReview | undefined> {
+export async function readEquivalenceReview(projectDir: string, pinnedCommit?: string): Promise<EquivalenceReview | undefined> {
   const path = join(projectDir, MUTATION_EQUIVALENCES);
   const stat = await fs.lstat(path).catch((error: NodeJS.ErrnoException) => {
     if (error.code === 'ENOENT') return undefined;
@@ -76,18 +76,23 @@ export async function readEquivalenceReview(projectDir: string): Promise<Equival
   if (!stat.isFile()) throw new Error(`${MUTATION_EQUIVALENCES} must be a regular tracked file. ${AGAIN}`);
   const text = await fs.readFile(path, 'utf8');
   const records = parseEquivalences(text);
-  return { records, basis: await verifyLedgerCommit(projectDir, text) };
+  return { records, basis: await verifyLedgerCommit(projectDir, text, pinnedCommit) };
 }
 
-async function verifyLedgerCommit(projectDir: string, text: string): Promise<EquivalenceReview['basis']> {
+async function requireLedgerBlob(projectDir: string, text: string, commit: string, currentRef: string): Promise<void> {
+  const prefix = (await git(projectDir, ['rev-parse', '--show-prefix'])).trim();
+  const path = `${prefix}${MUTATION_EQUIVALENCES}`;
+  if (await git(projectDir, ['show', `${commit}:${path}`]) !== text ||
+      await git(projectDir, ['show', `${currentRef}:${path}`]) !== text) throw new Error('the signed blob differs');
+}
+
+async function verifyLedgerCommit(projectDir: string, text: string, pinnedCommit?: string): Promise<EquivalenceReview['basis']> {
   let commit: string;
   let signature: string[];
   try {
-    commit = (await git(projectDir, ['log', '-1', '--format=%H', 'HEAD', '--', MUTATION_EQUIVALENCES])).trim();
+    commit = pinnedCommit ?? (await git(projectDir, ['log', '-1', '--format=%H', 'HEAD', '--', MUTATION_EQUIVALENCES])).trim();
     if (!/^[a-f0-9]{40,64}$/.test(commit)) throw new Error('no committed review');
-    const prefix = (await git(projectDir, ['rev-parse', '--show-prefix'])).trim();
-    if (await git(projectDir, ['show', `${commit}:${prefix}${MUTATION_EQUIVALENCES}`]) !== text ||
-        await git(projectDir, ['show', `HEAD:${prefix}${MUTATION_EQUIVALENCES}`]) !== text) throw new Error('the signed blob differs');
+    await requireLedgerBlob(projectDir, text, commit, pinnedCommit ? '' : 'HEAD');
     await git(projectDir, ['-c', 'gpg.minTrustLevel=fully', 'verify-commit', commit]);
     signature = (await git(projectDir, ['-c', 'gpg.minTrustLevel=fully', 'show', '-s', '--format=%G?%x00%GT%x00%GS%x00%GF', commit])).trim().split('\0');
   } catch {
@@ -105,12 +110,12 @@ function completeBasis(basis: EquivalenceBasis): boolean {
 }
 
 /** Recheck a saved done claim after the ledger, installed code, tool or signer trust changes. */
-export async function equivalenceBasisProblem(projectDir: string, basis: EquivalenceBasis, cache: MutantCache): Promise<string | undefined> {
+export async function equivalenceBasisProblem(projectDir: string, basis: EquivalenceBasis, cache: MutationFingerprints): Promise<string | undefined> {
   if (!completeBasis(basis)) {
     return 'This result has an incomplete equivalent-mutant review. Run `boardsmith verify` again.';
   }
   try {
-    const review = await readEquivalenceReview(projectDir);
+    const review = await readEquivalenceReview(projectDir, basis.reviewCommit);
     if (!review ||
       Object.entries(review.basis).some(([key, value]) => basis[key as keyof EquivalenceBasis] !== value)) {
       return `The equivalent-mutant review used by this result changed. ${AGAIN}`;

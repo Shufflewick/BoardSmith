@@ -23,8 +23,11 @@ import {
 } from './build-manifest.js';
 import { atomicWriteFile } from './verify-run.js';
 import { checkConstraints } from './constraint-check.js';
-import { verifiedProblem } from '../lib/verify-result.js';
+import { readVerifyResult, verifiedProblem } from '../lib/verify-result.js';
 import { escapeRegExp } from '../lib/regexp.js';
+import { gitOutput as git } from '../lib/git-output.js';
+import { currentMutationFingerprints } from '../lib/mutant-cache.js';
+import { equivalenceBasisProblem, type EquivalenceBasis } from '../lib/mutation-equivalences.js';
 
 /**
  * `boardsmith chunk-signoff` / `boardsmith chunk-waiver` / `checkSignoff()`: who may say a chunk
@@ -108,7 +111,7 @@ type SignoffBasis =
 type CodeFiles = Record<string, string>;
 
 /** Every basis also records `code`: the chunk's source files as they were at sign-off. */
-export type SignoffRecord = SignoffBasis & { code: CodeFiles };
+export type SignoffRecord = SignoffBasis & { code: CodeFiles; equivalence?: EquivalenceBasis };
 
 interface ParsedSignoff {
   /**
@@ -317,6 +320,7 @@ export function renderSignoff(record: SignoffRecord): string {
   const lines = [
     `Basis: ${record.basis}`,
     ...BASIS_FIELDS[record.basis].map((f) => `${f}: ${values[f]}`),
+    ...(record.equivalence === undefined ? [] : [`Equivalence: ${JSON.stringify(record.equivalence)}`]),
     ...renderCode(record.code),
   ];
   return `\n${lines.join('\n')}\n`;
@@ -394,6 +398,25 @@ function basisFromFields(fields: Record<string, string>): SignoffBasis | undefin
   return BASIS_FIELDS[key].every((f) => fields[f]) ? buildBasis(key, fields) : undefined;
 }
 
+function readEquivalence(body: string): { equivalence?: EquivalenceBasis } | undefined {
+  const values = [...body.matchAll(/^Equivalence:[ \t]*(.*)$/gm)];
+  if (values.length === 0) return {};
+  if (values.length !== 1) return undefined;
+  try { return { equivalence: JSON.parse(values[0][1]) as EquivalenceBasis }; }
+  catch { return undefined; }
+}
+
+function readRecordedSignoff(body: string, fields: Record<string, string>): ParsedSignoff {
+  const basis = basisFromFields(fields);
+  const code = readCode(body);
+  const equivalence = readEquivalence(body);
+  if (!basis || code === undefined || !equivalence) return { state: 'malformed' };
+  if (code === 'whole-file') {
+    return { state: 'whole-file', wholeFile: { basis, hash: /^Code:[ \t]*(\S+)/m.exec(body)![1] } };
+  }
+  return { state: 'recorded', record: { ...basis, code, ...equivalence } };
+}
+
 /** Pure. Strict: a block missing any field its basis needs is `malformed`, never half-read. */
 export function parseSignoff(chunkText: string): ParsedSignoff {
   if (findHeadingIndex(chunkText, SIGNOFF_HEADING) === -1) return { state: 'absent' };
@@ -404,13 +427,7 @@ export function parseSignoff(chunkText: string): ParsedSignoff {
   if (fields.Reopened) {
     return { state: 'reopened', reopened: { when: fields.Reopened, reason: fields.Reason ?? '' } };
   }
-  const basis = basisFromFields(fields);
-  const code = readCode(body);
-  if (!basis || code === undefined) return { state: 'malformed' };
-  if (code === 'whole-file') {
-    return { state: 'whole-file', wholeFile: { basis, hash: /^Code:[ \t]*(\S+)/m.exec(body)![1] } };
-  }
-  return { state: 'recorded', record: { ...basis, code } };
+  return readRecordedSignoff(body, fields);
 }
 
 /** The Status a sign-off derives. Never typed by a session. */
@@ -774,6 +791,28 @@ function transitionHint(transitioned: boolean): string {
   );
 }
 
+async function reviewProblems(dir: string, record: SignoffRecord): Promise<string[]> {
+  if (record.equivalence === undefined) return [];
+  let problem: string | undefined;
+  try {
+    problem = await equivalenceBasisProblem(dir, record.equivalence, await currentMutationFingerprints(dir));
+  } catch (error) {
+    problem = `The equivalent-mutant review could not be checked: ${(error as Error).message}`;
+  }
+  return problem ? [`${problem} If merging changed the reviewed context, rebase the branch onto current main, reopen the chunk, prepare and review the stale equivalences again, then verify, sign off and retry the merge.`] : [];
+}
+
+/** The merge calls this again after its final ledger writes, without changing older sign-offs. */
+export async function equivalenceSignoffProblems(projectDir: string): Promise<string[]> {
+  const problems: string[] = [];
+  for (const chunk of await readChunkStates(projectDir)) {
+    if (chunk.status.startsWith(VERIFIED) && chunk.parsed.record) {
+      problems.push(...await reviewProblems(projectDir, chunk.parsed.record));
+    }
+  }
+  return problems;
+}
+
 /** Everything wrong with one chunk's sign-off, given every chunk in the project. */
 async function assessChunk(dir: string, self: ChunkState, project: ProjectState): Promise<SignoffAssessment> {
   const none: SignoffAssessment = { problems: [], sharedEdits: [] };
@@ -825,7 +864,7 @@ async function assessChunk(dir: string, self: ChunkState, project: ProjectState)
 
   const record = parsed.record;
   const code = codeAssessment(self, record, project, resign);
-  const problems = [...signoffProblems(record, await loadContext(dir, slug, self.text)), ...code.problems];
+  const problems = [...signoffProblems(record, await loadContext(dir, slug, self.text)), ...code.problems, ...(await reviewProblems(dir, record))];
   const expected = derivedStatus(record);
   if (status !== expected) {
     problems.push(
@@ -967,6 +1006,13 @@ function sketchWithStatus(sketch: string, slug: string, status: string): string 
   );
 }
 
+async function verifiedEquivalenceBasis(dir: string): Promise<EquivalenceBasis | undefined> {
+  const commit = (await git(dir, ['rev-parse', 'HEAD'])).trim();
+  const verification = await readVerifyResult(dir, commit);
+  if (!verification || verification === 'unreadable') throw new Error('The verification result changed during signoff. Run `boardsmith verify` again, then sign off.');
+  return verification.checks.find((check) => check.name === 'mutation')?.equivalence;
+}
+
 /**
  * Records a chunk's sign-off and derives its Status from it: the block and the Status line land
  * in one CHUNK.md write, then SKETCH.md's derived pointer follows (`state-machine.md` "Write
@@ -994,6 +1040,10 @@ export async function recordSignoff(slug: string, options: SignoffOptions): Prom
   if (problems.length) {
     throw new Error(`${slug} was not signed off:\n${problems.map((p) => `  - ${p}`).join('\n')}`);
   }
+  const review = await verifiedEquivalenceBasis(dir);
+  if (review !== undefined) record.equivalence = review;
+  const reviewRefusals = await reviewProblems(dir, record);
+  if (reviewRefusals.length) throw new Error(`${slug} was not signed off:\n${reviewRefusals.map((p) => `  - ${p}`).join('\n')}`);
 
   const status = derivedStatus(record);
   const sketchPath = designPath(dir, SKETCH_MD);

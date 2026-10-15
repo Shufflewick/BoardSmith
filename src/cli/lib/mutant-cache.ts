@@ -266,10 +266,11 @@ async function toolRevisions(projectDir: string): Promise<string> {
  * The content of every file in the repository at HEAD, except the game folder's bookkeeping
  * records. The game folder is `git rev-parse --show-prefix`: empty when the game is the repository.
  */
-async function repositoryTreeHash(projectDir: string): Promise<string> {
+const isBookkeeping = (prefix: string, path: string) => path.startsWith(prefix) && BOOKKEEPING_RECORDS.some((re) => re.test(path.slice(prefix.length)));
+
+async function repositoryTreeHash(projectDir: string, treeRef: string): Promise<string> {
   const prefix = (await git(projectDir, ['rev-parse', '--show-prefix'])).trim();
-  const isBookkeeping = (path: string) => path.startsWith(prefix) && BOOKKEEPING_RECORDS.some((re) => re.test(path.slice(prefix.length)));
-  const listing = await git(projectDir, ['ls-tree', '-r', '-z', '--full-tree', 'HEAD']);
+  const listing = await git(projectDir, ['ls-tree', '-r', '-z', '--full-tree', treeRef]);
   const entries = listing
     .split('\0')
     .filter(Boolean)
@@ -277,7 +278,7 @@ async function repositoryTreeHash(projectDir: string): Promise<string> {
       const tab = line.indexOf('\t');
       return { object: line.slice(0, tab), path: line.slice(tab + 1) };
     })
-    .filter(({ path }) => !isBookkeeping(path))
+    .filter(({ path }) => !isBookkeeping(prefix, path))
     .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return sha256Hex(entries.map(({ object, path }) => `${object}\t${path}`).join('\0'));
 }
@@ -439,7 +440,7 @@ async function readEntries(path: string): Promise<Map<string, CachedOutcome>> {
   }
 }
 
-export interface MutantCache {
+export interface MutationFingerprints {
   /**
    * Why this run keeps no outcomes, when it does not: something the tests load could not be
    * fingerprinted, so no outcome may be trusted or stored. Undefined when the cache works.
@@ -447,6 +448,9 @@ export interface MutantCache {
   readonly unavailable?: string;
   /** The exact mutant and execution context, unavailable when that context cannot be read. */
   fingerprint(mutant: MutantText | { file: string; sourceHash: string }): string | undefined;
+}
+
+export interface MutantCache extends MutationFingerprints {
   /** The stored outcome of `mutant` for the project's HEAD, or undefined when it must run. */
   get(mutant: MutantText): CachedOutcome | undefined;
   set(mutant: MutantText, outcome: CachedOutcome): void;
@@ -458,28 +462,44 @@ export interface MutantCache {
   save(): Promise<void>;
 }
 
-/** The cache for the commit checked out in `projectDir`, as its tests run with what is installed now. */
-export async function openMutantCache(projectDir: string): Promise<MutantCache> {
-  const path = await mutantCachePath(projectDir);
+async function mutationFingerprints(projectDir: string, treeRef: string): Promise<MutationFingerprints> {
   let linked: string;
   try {
     linked = await linkedPackagesHash(projectDir);
   } catch (error) {
     return uncached(`the mutant cache is off for this run: ${error instanceof Error ? error.message : String(error)}`);
   }
-  const [stored, prefix, tree, installed, tools] = await Promise.all([
-    readEntries(path),
+  const [prefix, tree, installed, tools] = await Promise.all([
     git(projectDir, ['rev-parse', '--show-prefix']).then((p) => p.trim()),
-    repositoryTreeHash(projectDir),
+    repositoryTreeHash(projectDir, treeRef),
     installedPackagesHash(projectDir),
     toolRevisions(projectDir),
   ]);
+  return { fingerprint: (m) => sha256Hex(JSON.stringify([CACHE_FORMAT, tools, process.version, tree, installed, linked, prefix, m.file, 'source' in m ? sha256Hex(m.source) : m.sourceHash])) };
+}
+
+/** The real staged tree during a merge; unstaged runtime inputs cannot borrow its approvals. */
+export async function currentMutationFingerprints(projectDir: string): Promise<MutationFingerprints> {
+  const root = (await git(projectDir, ['rev-parse', '--show-toplevel'])).trim();
+  const prefix = (await git(projectDir, ['rev-parse', '--show-prefix'])).trim();
+  const unstaged = await git(root, ['ls-files', '--modified', '--others', '--exclude-standard', '-z']);
+  if (unstaged.split('\0').filter(Boolean).some((path) => !isBookkeeping(prefix, path))) {
+    return uncached('Unstaged or untracked source changes are outside the reviewed execution context. Commit them and verify again.');
+  }
+  return mutationFingerprints(projectDir, (await git(projectDir, ['write-tree'])).trim());
+}
+
+/** The cache for the commit checked out in `projectDir`, as its tests run with what is installed now. */
+export async function openMutantCache(projectDir: string): Promise<MutantCache> {
+  const path = await mutantCachePath(projectDir);
+  const context = await mutationFingerprints(projectDir, 'HEAD');
+  if (context.unavailable !== undefined) return uncached(context.unavailable);
+  const stored = await readEntries(path);
   const used = new Map<string, CachedOutcome>();
-  const keyOf = (m: MutantText | { file: string; sourceHash: string }) =>
-    sha256Hex(JSON.stringify([CACHE_FORMAT, tools, process.version, tree, installed, linked, prefix, m.file, 'source' in m ? sha256Hex(m.source) : m.sourceHash]));
+  const keyOf = (m: MutantText) => context.fingerprint(m)!;
 
   return {
-    fingerprint: keyOf,
+    fingerprint: context.fingerprint,
     get(mutant) {
       const key = keyOf(mutant);
       const outcome = stored.get(key);

@@ -390,9 +390,12 @@ remain in force, with no lower threshold, test exclusion or unsigned override.
 
 Source, tests, configuration, dependencies, BoardSmith or Node changes make a
 review stale: prepare, review and sign it again for the new context. Changing
-the ledger also requires a new review commit. `verify --check` and chunk
-sign-off recheck the current context and signature trust, so removing a record
-or revoking its signing key's trust invalidates a previously accepted result.
+the ledger also requires a new review commit. `verify --check`, chunk sign-off
+and chunk merge recheck the current context and signature trust, so removing
+a record or revoking its signing key's trust invalidates a previously accepted
+result. If the combined merge tree changes the reviewed context, rebase your
+branch onto current main, reopen the chunk, prepare, review and sign the stale
+equivalences again, then verify and sign off again before retrying the merge.
 
 #### Who does the work when the `bs-` skills build a game
 
