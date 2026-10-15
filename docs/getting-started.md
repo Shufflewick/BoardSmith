@@ -257,6 +257,10 @@ breaks each line of code under `src/` that changed since the main branch (or
 since `--base`), one small change at a time, and runs the whole suite against
 each: a change no test notices is reported by file and line, because the tests
 would not catch that line going wrong.
+Before trying a fresh mutant, it completes the unmodified suite and requires
+it to pass. Once Vitest confirms that a mutant made a test fail, the mutation
+check stops that run's workers, including tests already running. A surviving
+mutant still runs the whole suite to completion.
 
 On the main branch itself, the merge base with main is the current commit, so
 no change would be measured: there the mutation check fails unless you pass
