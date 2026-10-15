@@ -1,5 +1,29 @@
 # Migration Guide
 
+## Historical run logs keep their unrecorded routing facts (#710)
+
+The run-log template before #454 requested `Pipeline`, dispatch and finish times,
+`Outcome`, and `Detail`. It did not request `Work`, `Role`, or `Agent`.
+Leave those original entries unchanged. `boardsmith ledger-check` recognizes an
+old-template dispatch when it has a nonempty `Pipeline`, none of `Work`, `Role`,
+`Agent`, `Retry of`, or `Designer answer`, and git blame dates its heading,
+`Pipeline`, and `Dispatched at` lines before #454 reached main:
+`2026-10-01T02:32:39Z` (commit `8387a9a1`). Keep that git history available.
+
+Missing routing metadata means **unrecorded**, not that an agent was launched.
+An original `Detail: never launched: ...` records that no launch occurred; retain
+it. Never fill in a role or agent from old dispatch instructions, a current agent
+mapping, or commit coauthors. This check does not infer those facts or rewrite
+the log. Its timestamp, ordering, duplicate-number, and citation checks still run.
+
+Every new dispatch, including one appended to an old log, requires the current
+`Work`, `Role`, and actual `Agent`. A backdated `Dispatched at` does not qualify:
+the check uses git commit times, not the timestamp's value. Untracked entries
+and entries with any current routing fields are checked under the current rules.
+Historical entries supply no role or retry count to the current routing ladder.
+A new retry or review cannot name one as its routing source; record the current
+work in a new dispatch under the current rules before retrying or reviewing it.
+
 ## `boardsmith publish` keeps ids per platform (#704)
 
 `boardsmith publish` used to keep one `gameId` and `publisherId` at the top of

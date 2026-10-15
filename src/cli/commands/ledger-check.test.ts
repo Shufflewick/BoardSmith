@@ -439,6 +439,43 @@ describe('ledgerCheck — the whole project', () => {
     expect(result.absent).toEqual(['DECISIONS.md', 'FILINGS.md', 'QUESTIONS.md', 'RUN.md', 'CROSS-CHUNK.md']);
   });
 
+  it('preserves an old-template dispatch that never launched without inventing routing metadata (#710)', async () => {
+    const dir = await project({
+      'run-log/battle-playback.md': [
+        '# battle-playback Run Log',
+        '',
+        '### Dispatch 1',
+        '- Chunk: battle-playback',
+        '- Pipeline: build-chunk',
+        '- Dispatched at: 2026-09-25T18:57:45Z',
+        '- Finished at: 2026-09-25T19:39:30Z',
+        '- Outcome: stuck',
+        '- Detail: never launched: earlier chunks were re-verified first; superseded by Dispatch 2',
+        '',
+      ].join('\n'),
+    });
+    commitAt(dir, '2026-09-25T19:40:00Z');
+    expect((await ledgerCheck(dir)).findings).toEqual([]);
+  });
+
+  it('still checks historical clocks and refuses new old-template dispatches in the same file (#710)', async () => {
+    const old = dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T09:00:00Z')
+      .replace(/- Work: build-chunk\n- Role: judgement\n- Agent: bs-judgement/, '- Pipeline: build-chunk');
+    const dir = await project({ 'run-log/core-loop.md': old });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    const newEntry = old.replace('Dispatch 1', 'Dispatch 2').replace('09:00:00Z', '11:00:00Z');
+    await fs.appendFile(join(dir, 'design', 'run-log/core-loop.md'), newEntry);
+    commitAt(dir, '2026-10-02T12:00:00Z');
+    const findings = (await ledgerCheck(dir)).findings;
+    expect(findings.map((f) => [f.entry, f.kind])).toEqual([
+      ['Dispatch 1', 'run-timestamp'],
+      ['Dispatch 2', 'run-role'],
+      ['Dispatch 2', 'run-role'],
+      ['Dispatch 2', 'run-role'],
+    ]);
+    expect(findings[0].detail).toMatch(/earlier than/);
+  });
+
   it('checks every ledger in one run, so a merged tree is checked as a whole', async () => {
     const dir = await project({
       'RULINGS.md': ruling(138) + ruling(138),

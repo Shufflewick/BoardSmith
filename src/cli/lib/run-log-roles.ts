@@ -57,6 +57,20 @@ const REVIEW_LEVELS = ['light', 'full'];
 const REVIEW_OUTCOMES = ['pending', 'clean', 'changes requested'];
 const CHANGES_REQUESTED = 'changes requested';
 
+// #454 first reached main in 8387a9a1; earlier templates did not request routing metadata.
+const ROUTING_REQUIRED_SINCE = Date.parse('2026-10-01T02:32:39Z') / 1000;
+
+function historicalDispatch(entry: LedgerEntry, recordedAt: (line: number) => number | null): boolean {
+  if (['Work', 'Role', 'Agent', 'Retry of', 'Designer answer'].some((field) => entryField(entry, field) !== undefined)) return false;
+  const pipeline = entryField(entry, 'Pipeline');
+  const dispatched = entryField(entry, 'Dispatched at');
+  if (!pipeline?.value || dispatched === undefined) return false;
+  return [entry.line, pipeline.line, dispatched.line].every((line) => {
+    const time = recordedAt(line);
+    return time !== null && time < ROUTING_REQUIRED_SINCE;
+  });
+}
+
 /** The roles a dispatch may be recorded as: the escalation ladder, and second-opinion beside its top. */
 type DispatchRole = WorkRole | 'second-opinion';
 const DISPATCH_ROLES: readonly string[] = [...ESCALATION_LADDER, 'second-opinion'];
@@ -78,6 +92,7 @@ const lineOf = (work: string, role: DispatchRole | undefined) => (role === 'seco
 
 interface Dispatch {
   name: string;
+  historical?: true;
   work?: string;
   role?: DispatchRole;
   outcome?: string;
@@ -181,6 +196,9 @@ function howToRetry(f: Failure, role: DispatchRole): string {
 /** Why the designer, not another dispatch, answers `f`. */
 const designerDecides = (f: Failure) => `${described(f)}, its second failure there. ${ASK_DESIGNER}`;
 
+const unknownHistoricalRouting = (name: string) =>
+  `${name} is historical and its routing is unknown. Record current work in a new dispatch with its actual Work, Role and Agent before retrying or reviewing it.`;
+
 /**
  * The checker for one run log. Entries are fed in file order, since whether a dispatch may do some
  * work at some role depends on what failed before it.
@@ -225,6 +243,10 @@ class RunLogChecker {
     this.report(d.name, 'run-role', out);
   }
 
+  historicalDispatch(entry: LedgerEntry): void {
+    this.dispatches.set(entry.id, { name: `Dispatch ${entry.id}`, historical: true, attempt: 1 });
+  }
+
   private readDispatch(entry: LedgerEntry, out: string[]): Dispatch {
     const name = `Dispatch ${entry.id}`;
     const work = valueOf(entry, 'Work');
@@ -257,6 +279,7 @@ class RunLogChecker {
     const [, kind, id] = /^(Dispatch|Review Round) (\S+)$/.exec(source)!;
     const entry = kind === 'Dispatch' ? this.dispatches.get(id) : this.rounds.get(id);
     if (entry === undefined) return `${by} retries ${source}, but there is no ${source} before it.`;
+    if ('historical' in entry) return `${by} retries ${source}, but ${unknownHistoricalRouting(source)}`;
     return this.failures.get(source) ?? notAFailure(by, source, entry);
   }
 
@@ -343,6 +366,10 @@ class RunLogChecker {
     const reviewed = this.dispatches.get(id);
     if (reviewed === undefined) {
       out.push(`${name} reviews Dispatch ${id}, but there is no Dispatch ${id} before it. A round is recorded after the work it reviews.`);
+      return undefined;
+    }
+    if (reviewed.historical) {
+      out.push(`${name} reviews ${reviewed.name}, but ${unknownHistoricalRouting(reviewed.name)}`);
       return undefined;
     }
     if (!FINISHED.includes(reviewed.outcome ?? '')) {
@@ -488,10 +515,15 @@ export function reviewRoundCommits(text: string): string[] {
 }
 
 /** Every problem with the role, agent, retry and review-round records of one run log. */
-export function checkRunLogRoles(text: string, verifyOnFile: VerifyLookup): RunLogRoleFinding[] {
+export function checkRunLogRoles(
+  text: string,
+  verifyOnFile: VerifyLookup,
+  recordedAt: (line: number) => number | null = () => null,
+): RunLogRoleFinding[] {
   const checker = new RunLogChecker(verifyOnFile);
   for (const entry of runLogEntries(text)) {
-    if (entry.kind === 'Dispatch') checker.dispatch(entry);
+    if (entry.kind === 'Dispatch' && historicalDispatch(entry, recordedAt)) checker.historicalDispatch(entry);
+    else if (entry.kind === 'Dispatch') checker.dispatch(entry);
     else checker.round(entry);
   }
   return checker.findings;

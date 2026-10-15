@@ -486,7 +486,7 @@ export function checkRunLog(
     finishProblems(name, entry, dispatched, clock, out);
     findings.push(...out.map((detail) => ({ ledger, entry: name, kind: 'run-timestamp' as const, detail })));
   }
-  findings.push(...checkRunLogRoles(text, verifyOnFile).map((f) => ({ ledger, ...f })));
+  findings.push(...checkRunLogRoles(text, verifyOnFile, commitTimeOfLine).map((f) => ({ ledger, ...f })));
   return findings;
 }
 
