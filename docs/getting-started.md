@@ -256,7 +256,7 @@ The mutation check
 breaks each line of code under `src/` that changed since the main branch (or
 since `--base`), one small change at a time, and runs the whole suite against
 each: a change no test notices is reported by file and line, because the tests
-would not catch that line going wrong.
+cannot distinguish that mutant from the original.
 Before trying a fresh mutant, it completes the unmodified suite and requires
 it to pass. Once Vitest confirms that a mutant made a test fail, the mutation
 check stops that run's workers, including tests already running. A surviving
@@ -342,6 +342,64 @@ on a clean tree, has a passing result, and otherwise says what to run. With
 change: its base must be where the chunk began or a commit before that, so a
 `--base HEAD` run, which mutates nothing, does not count. `boardsmith
 chunk-signoff <slug>` asks the same question before it records a chunk as done.
+
+##### Reviewing an equivalent mutant
+
+A survivor can preserve every behavior its valid-input contract allows. For
+example, `isFirstSeat(seat: 1 | 2)` returning `seat < 1.5` has the same result
+as the generated `seat <= 1.5` mutant for both legal inputs. More valid-input
+tests cannot distinguish them. BoardSmith does not prove semantic equivalence
+automatically: a human reviewer must attest a complete argument covering the
+explicit contract, rather than a sample of passing cases.
+
+When `boardsmith verify` reports a survivor, it prints that exact mutant's ID.
+On a clean, committed tree, prepare its review record using the same `--base`
+or `--chunk` as the failed verify. For the example above:
+
+```bash
+boardsmith mutation-equivalence <id> --base v1.2 \
+  --contract 'seat is 1 or 2; return true exactly for seat 1' \
+  --proof 'For seat 1 both comparisons return true; for seat 2 both return false. These exhaust the legal inputs.'
+```
+
+Preparation runs the full unmodified suite and the selected mutant to
+completion. It writes `design/MUTATION-EQUIVALENCES.json` only when both pass;
+a red baseline, a killed mutant or a timeout is refused. Preparing this tracked
+record is not approval. The reviewer inspects the exact mutation, contract and
+proof, then signs the commit that changes the ledger:
+
+```bash
+git add design/MUTATION-EQUIVALENCES.json
+git diff --cached -- design/MUTATION-EQUIVALENCES.json
+git commit -S -m 'Review equivalent mutant'
+boardsmith verify --base v1.2
+```
+
+Use the reviewer's existing trusted Git signing setup. See Git's official
+[commit signing options](https://git-scm.com/docs/git-commit/2.54.0)
+and [signature trust configuration](https://git-scm.com/docs/git-config/2.54.0).
+The review commit must have a valid, fully trusted signature: GPG trust or an
+SSH key already authorized by `gpg.ssh.allowedSignersFile`. Unsigned or
+untrusted records are refused; have the authorized reviewer sign the ledger
+commit, then rerun verify. Signing alone does not establish trust in a key.
+
+Verify executes a reviewed candidate again even when its previous outcome is
+cached. An exact, trusted review is counted separately as `equivalent`; any
+unresolved survivor still fails. The full baseline, timeout and error handling
+remain in force, with no lower threshold, test exclusion or unsigned override.
+
+Source, tests, configuration, dependencies, BoardSmith or Node changes make a
+review stale: prepare, review and sign it again for the new context. Changing
+the ledger also requires a new review commit. `verify --check` and new chunk
+sign-offs recheck the current context and signature trust; chunk merge also
+checks the incoming chunk against the combined tree. Previously closed chunks
+keep their pinned trusted approvals through later unrelated work or ledger
+appends while their selected proof records remain present and unchanged.
+Removing or altering a selected record, or revoking its signing key's trust,
+invalidates that approval. If the combined merge tree changes the reviewed
+context, rebase your branch onto current main, reopen the chunk, prepare,
+review and sign the stale equivalences again, then verify and sign off again
+before retrying the merge.
 
 #### Who does the work when the `bs-` skills build a game
 

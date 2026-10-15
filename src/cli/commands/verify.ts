@@ -114,7 +114,7 @@ export async function resolveBase(projectDir: string, ref: string | undefined): 
  * The base a run measures from: `--chunk`'s verify base, else `resolveBase`. `given` says whether
  * the caller named it, since a base that is HEAD by default measures nothing (`mutationNotTried`).
  */
-async function runBase(projectDir: string, options: { base?: string; chunk?: string }): Promise<{ ref: string; commit: string; given: boolean }> {
+export async function runBase(projectDir: string, options: { base?: string; chunk?: string }): Promise<{ ref: string; commit: string; given: boolean }> {
   if (options.chunk === undefined) return { ...(await resolveBase(projectDir, options.base)), given: options.base !== undefined };
   if (options.base !== undefined) {
     throw new Error(
@@ -343,7 +343,7 @@ async function validateCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   }
 }
 
-const NO_MUTANTS = Object.freeze({ files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, reused: 0 });
+const NO_MUTANTS = Object.freeze({ files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, equivalent: 0, reused: 0 });
 
 /** Why no mutant is tried at all (nothing measured, nothing changed, a red suite), or undefined. */
 function mutationNotTried(ctx: VerifyContext, since: string): VerifyCheckOutcome | undefined {
@@ -375,7 +375,7 @@ function mutationNotTried(ctx: VerifyContext, since: string): VerifyCheckOutcome
 
 /** What a finished mutation run says: a red suite under the runner, survivors, or every mutant caught. */
 function mutationVerdict(since: string, run: Awaited<ReturnType<typeof runDiffMutationCheck>>): VerifyCheckOutcome {
-  const { summary, reused, survivors, notGreen } = run;
+  const { summary, reused, survivors, notGreen, equivalence } = run;
   const counts = { ...summary, reused };
   const reuse = reused > 0 ? ` ${reused} reused from an earlier run of this same code and these same tests.` : '';
   if (notGreen) {
@@ -396,16 +396,19 @@ function mutationVerdict(since: string, run: Awaited<ReturnType<typeof runDiffMu
         `${survivors.length} of ${plural(summary.mutants, 'mutant')} of the lines changed since ${since} survived: ` +
         `the whole suite still passed with the code changed.${reuse}`,
       next:
-        'For each one, add or tighten a test so it fails when that line is changed that way, then run `boardsmith verify` again.',
+        'For each one, add or tighten a test so it fails when that line is changed that way, then run `boardsmith verify` again. ' +
+        'For a demonstrated equivalent under an explicit valid-input contract, use `boardsmith mutation-equivalence <id> --contract <text> --proof <text>` with the same --base or --chunk, review the ledger and commit it with `git commit -S`.',
       counts,
-      findings: survivors.map((s) => ({ file: s.file, line: s.line, detail: `${s.description}: no test failed` })),
+      findings: survivors.map((s) => ({ file: s.file, line: s.line, detail: `${s.description}: no test failed`, ...(s.id ? { mutantId: s.id } : {}) })),
+      ...(equivalence ? { equivalence } : {}),
     };
   }
-  const timedOut = summary.timedOut > 0 ? ` (${summary.timedOut} by running past the time limit)` : '';
+  const dispositions = `${summary.killed} killed by tests, ${summary.equivalent} reviewed equivalent, ${summary.timedOut} timed out`;
   return {
     passed: true,
-    summary: `Every one of ${plural(summary.mutants, 'mutant')} of the lines changed since ${since} made a test fail${timedOut}.${reuse}`,
+    summary: `${plural(summary.mutants, 'mutant')} of the lines changed since ${since}: ${dispositions}; no unresolved survivors.${reuse}`,
     counts,
+    ...(equivalence ? { equivalence } : {}),
   };
 }
 
@@ -493,7 +496,7 @@ async function requireResultIgnored(projectDir: string): Promise<void> {
  * The commit checked out in `projectDir`, when it can be verified as it stands. A result is tied to
  * a commit, so uncommitted or untracked changes are refused here, before any check runs.
  */
-async function verifiableCommit(projectDir: string): Promise<string> {
+export async function verifiableCommit(projectDir: string): Promise<string> {
   const state = await checkoutState(projectDir);
   if ('problem' in state) throw new Error(state.problem);
   if (!state.clean) {
@@ -607,14 +610,19 @@ function printVerdict(result: VerifyResult): void {
   }
 }
 
+function printCheck(check: VerifyCheckResult): void {
+  const mark = check.skipped ? chalk.yellow('skip') : check.passed ? chalk.green('pass') : chalk.red('FAIL');
+  console.log(`  ${mark}  ${check.name.padEnd(10)} ${check.summary}`);
+  for (const f of check.findings ?? []) {
+    console.log(`          ${f.file}:${f.line}  ${f.detail}`);
+    if (f.mutantId) console.log(`          equivalence candidate ID: ${f.mutantId}`);
+  }
+  if (!check.passed && check.next) console.log(`          ${check.next}`);
+}
+
 function printResult(result: VerifyResult, path: string | undefined, projectDir: string): void {
   console.log(`\nboardsmith verify for ${short(result.commit)} (changes since ${result.base.ref} at ${short(result.base.commit)})`);
-  for (const check of result.checks) {
-    const mark = check.skipped ? chalk.yellow('skip') : check.passed ? chalk.green('pass') : chalk.red('FAIL');
-    console.log(`  ${mark}  ${check.name.padEnd(10)} ${check.summary}`);
-    for (const f of check.findings ?? []) console.log(`          ${f.file}:${f.line}  ${f.detail}`);
-    if (!check.passed && check.next) console.log(`          ${check.next}`);
-  }
+  result.checks.forEach(printCheck);
   console.log(
     path === undefined
       ? `Result: not recorded, because the tree changed while this run checked it; the clean, passing result already on file for ${short(result.commit)} stands.`

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { BOOKKEEPING_RECORDS, MAX_STORED_OUTCOMES, gameBoardsmithRoot, mutantCachePath, openMutantCache, toolRevision } from './mutant-cache.js';
+import { BOOKKEEPING_RECORDS, MAX_STORED_OUTCOMES, currentMutationFingerprints, gameBoardsmithRoot, mutantCachePath, openMutantCache, toolRevision } from './mutant-cache.js';
 import { commitAll, git, initRepo, writeFiles as write } from './verify-result.test-helper.js';
 
 // Each test builds real git repositories, one `git` process per step. A hang guard, not a budget:
@@ -62,6 +62,28 @@ async function afterChange(dir: string, writeTo: string, change: Record<string, 
 }
 
 describe('the mutant cache: a mutant outcome is reused only when nothing it could depend on changed', () => {
+  it('binds the current index and refuses unstaged or untracked runtime inputs while allowing bookkeeping', async () => {
+    const dir = await project();
+    const head = (await openMutantCache(dir)).fingerprint(MUTANT);
+    expect((await currentMutationFingerprints(dir)).fingerprint(MUTANT)).toBe(head);
+    await write(dir, { 'design/chunks/deal/CHUNK.md': 'Status: verified\n', 'design/RUN.md': 'Run Status: active\n' });
+    expect((await currentMutationFingerprints(dir)).fingerprint(MUTANT)).toBe(head);
+
+    await write(dir, { 'src/other.ts': 'export const other = 2;\n' });
+    const unstaged = await currentMutationFingerprints(dir);
+    expect(unstaged.fingerprint(MUTANT)).toBeUndefined();
+    expect(unstaged.unavailable).toEqual(expect.stringMatching(/Unstaged or untracked source changes/));
+    git(dir, 'add', 'src/other.ts');
+    const staged = await currentMutationFingerprints(dir);
+    expect(staged.unavailable).toBeUndefined();
+    expect(staged.fingerprint(MUTANT)).not.toBe(head);
+
+    await write(dir, { 'tests/new.test.ts': "it('new behavior', () => {});\n" });
+    const untracked = await currentMutationFingerprints(dir);
+    expect(untracked.fingerprint(MUTANT)).toBeUndefined();
+    expect(untracked.unavailable).toEqual(expect.stringMatching(/Unstaged or untracked source changes/));
+  });
+
   it('reuses an outcome for the same mutant, code, tests and BoardSmith, and after a bookkeeping-only commit', async () => {
     const dir = await project();
     await record(dir, 'killed');
@@ -78,6 +100,7 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
       'design/RUN.md': 'Run Status: running\n',
       'design/MERGE-SIGNOFFS.md': '# Merge sign-offs\n',
       'design/GATE-TRANSITION.md': '# Gate transition\n',
+      'design/MUTATION-EQUIVALENCES.json': '{"format":1,"entries":[]}\n',
       'design/run-log/deal.md': '### Dispatch 1\nOutcome: closed\n',
     });
     commitAll(dir, 'chunk-deal/step-close');
@@ -467,6 +490,8 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
   it('leaves out exactly the design records the bs- skills write after the code is verified', () => {
     const left = (path: string) => BOOKKEEPING_RECORDS.some((re) => re.test(path));
     expect(left('design/SKETCH.md')).toBe(true);
+    expect(left('design/MUTATION-EQUIVALENCES.json')).toBe(true);
+    expect(left('design/MUTATION-EQUIVALENCES.json.bak')).toBe(false);
     expect(left('design/chunks/deal/CHUNK.md')).toBe(true);
     expect(left('design/run-log/deal.md')).toBe(true);
     expect(left('design/DESIGN.md')).toBe(false);

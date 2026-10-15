@@ -100,7 +100,7 @@ describe('boardsmith verify on a whole game, as a user runs it', () => {
       ['validate', true, '`boardsmith validate` passed.'],
       // #460: the verify result records the seed the walk dealt from, so the walk can be repeated exactly.
       ['smoke', true, expect.stringMatching(/^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "draw", "play"/)],
-      ['mutation', true, expect.stringMatching(/^Every one of 3 mutants of the lines changed since (main|master)/)],
+      ['mutation', true, expect.stringMatching(/^3 mutants of the lines changed since (main|master)/)],
     ]);
     expect(result.checks.filter((c) => c.skipped)).toEqual([]);
     expect(run.stdout).toMatch(/Every check passed for /);
@@ -119,7 +119,7 @@ describe('boardsmith verify on a whole game, as a user runs it', () => {
       ['build', true, true, skip],
       ['validate', true, undefined, '`boardsmith validate` passed.'],
       ['smoke', true, true, skip],
-      ['mutation', true, undefined, expect.stringMatching(/^Every one of 3 mutants of the lines changed since (main|master)/)],
+      ['mutation', true, undefined, expect.stringMatching(/^3 mutants of the lines changed since (main|master)/)],
     ]);
     expect(result.passed).toBe(true);
     expect(run.stdout).not.toMatch(/Every check passed/);
