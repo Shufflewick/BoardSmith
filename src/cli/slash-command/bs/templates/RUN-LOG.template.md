@@ -20,6 +20,12 @@
      the log a readable history of how many passes the work took, who did each one, and how many
      review rounds it needed.
 
+     Historical entries from the old Pipeline template stay unchanged, with unknown routing
+     facts left unrecorded and any original "never launched" Detail preserved. ledger-check
+     recognizes them only with pre-#454 git provenance; all new dispatches need the fields below.
+     See routing.md "The Run Log" and docs/migration-guide.md (#710). Historical entries supply
+     no routing or retry count to current work and cannot be a new retry or review's source.
+
      CHECKED AS CODE: `boardsmith ledger-check` fails when a Dispatched at or Finished at is not a
      clock read in that exact shape, when a finish is earlier than its dispatch, when a dispatch is
      earlier than the one logged before it, when Outcome and Finished at disagree about whether

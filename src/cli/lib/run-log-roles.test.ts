@@ -54,6 +54,60 @@ const repairOf = (n: number, r: number, fields: Record<string, string> = {}) =>
 /** An investigate (Dispatch 1) whose red team round (Review Round 1) asked for changes. */
 const refutedClaims = [dispatch(1, { Work: 'investigate', ...J }), round(1, { Step: 'redteam', Outcome: 'changes requested' })];
 
+function historical(n = 1, outcome = 'closed'): string {
+  return [
+    `### Dispatch ${n}`,
+    '- Pipeline: build-chunk',
+    '- Dispatched at: 2026-09-25T18:57:45Z',
+    '- Finished at: 2026-09-25T19:39:30Z',
+    `- Outcome: ${outcome}`,
+    '- Detail: n/a',
+    '',
+  ].join('\n');
+}
+
+const beforeRouting = () => Date.parse('2026-09-27T00:00:00Z') / 1000;
+
+describe('historical dispatches (#710)', () => {
+  it('keeps unrecorded routing outside a modern dispatch\'s retry count', () => {
+    const text = log(historical(1, 'failed'), historical(2, 'closed'), dispatch(3, {}));
+    expect(checkRunLogRoles(text, noVerifyFiles, beforeRouting)).toEqual([]);
+  });
+
+  it.each([1, 2, 3])('requires pre-routing git provenance for original line %s, not a backdated dispatch time', (changedLine) => {
+    const cutoff = Date.parse('2026-10-01T02:32:39Z') / 1000;
+    for (const recorded of [null, cutoff, cutoff + 1]) {
+      const findings = checkRunLogRoles(historical(), noVerifyFiles, (line) => line === changedLine ? recorded : beforeRouting());
+      expect(findings.map((f) => f.detail)).toEqual(matching(/no "- Work:"/, /no "- Role:"/, /no "- Agent:"/));
+    }
+    expect(checkRunLogRoles(historical(), noVerifyFiles, () => cutoff - 1)).toEqual([]);
+  });
+
+  it('requires current metadata without git provenance, including an untracked old-template entry', () => {
+    expect(details(historical())).toEqual(matching(/no "- Work:"/, /no "- Role:"/, /no "- Agent:"/));
+  });
+
+  it.each(['', '- Pipeline: '])('requires the original nonempty Pipeline field (%s)', (pipeline) => {
+    const findings = checkRunLogRoles(historical().replace('- Pipeline: build-chunk', pipeline), noVerifyFiles, beforeRouting);
+    expect(findings.map((f) => f.detail)).toEqual(matching(/no "- Work:"/, /no "- Role:"/, /no "- Agent:"/));
+  });
+
+  it.each(['Work', 'Role', 'Agent', 'Retry of', 'Designer answer'])('does not exempt an incomplete modern record containing %s', (field) => {
+    const findings = checkRunLogRoles(`${historical()}- ${field}: bounded\n`, noVerifyFiles, beforeRouting);
+    expect(findings.length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ['retry', historical(1, 'failed'), dispatch(2, { 'Retry of': 'Dispatch 1' })],
+    ['review', historical(), round(1, {})],
+  ])('refuses a modern %s that would infer routing from a historical entry', (_kind, old, modern) => {
+    const findings = checkRunLogRoles(log(old, modern), noVerifyFiles, beforeRouting);
+    expect(findings.map((f) => f.detail)).toEqual([
+      expect.stringMatching(/Dispatch 1.*historical.*routing.*unknown.*new dispatch/i),
+    ]);
+  });
+});
+
 describe('dispatch entries', () => {
   it('pass with a role, the agent type dispatched, and a retry at the same role that names the failed dispatch', () => {
     const text = log(

@@ -187,6 +187,17 @@ refusing it: its narrower follow-up keeps the role of the work it follows up.
 
 ## The Run Log
 
+Historical exception (#710): leave pre-routing entries unchanged. `ledger-check`
+recognizes the old `Pipeline` shape, with no current routing fields, only when git
+blame dates the heading, `Pipeline`, and `Dispatched at` lines before #454 reached
+main (`2026-10-01T02:32:39Z`). Missing routing facts remain unrecorded; an original
+Detail saying "never launched" remains evidence that no launch occurred. Never
+invent roles or agent types. Timestamps, ordering, duplicate numbers, and citations
+are still checked. These entries supply no routing or retry history to new work,
+and a new retry or review cannot name one as its routing source. Every new dispatch
+uses the current fields below, even in an old file; see `docs/migration-guide.md`
+"Historical run logs keep their unrecorded routing facts" for the exact conditions.
+
 Each work package's run log (`design/run-log/<id>.md`, from `templates/RUN-LOG.template.md`)
 records every dispatch made for it, by whoever makes it: `/bs-build-game` for the chunk,
 `/bs-build-chunk` for its steps and reviewers, and `/bs-ingest-rules` and `/bs-verify-game` for
