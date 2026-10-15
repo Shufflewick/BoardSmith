@@ -4,6 +4,8 @@ import { ENGINE_REVISION } from '../../contract/index.js';
 import { boardsmithPackageRoot, readBoardsmithVersion } from './boardsmith-version.js';
 import { chunkVerifyBase } from './chunk-commits.js';
 import { gitOutput as git, gitSucceeds } from './git-output.js';
+import { openMutantCache } from './mutant-cache.js';
+import { equivalenceBasisProblem, type EquivalenceBasis } from './mutation-equivalences.js';
 
 /**
  * The result `boardsmith verify` writes, and the one question every done claim asks of it (#452).
@@ -44,6 +46,7 @@ interface VerifyFinding {
   file: string;
   line: number;
   detail: string;
+  mutantId?: string;
 }
 
 /**
@@ -56,6 +59,8 @@ export type VerifyCheckOutcome = {
   /** What the check counted: tests run, passed and failed; mutants tried, killed and survived. */
   counts?: Record<string, number>;
   findings?: VerifyFinding[];
+  /** Trusted reviewed survivors used by the mutation check, revalidated for every done claim. */
+  equivalence?: EquivalenceBasis;
 } & (
   | { passed: boolean; skipped?: never }
   /**
@@ -170,6 +175,14 @@ const short = (commit: string) => commit.slice(0, 12);
 
 const RUN_AGAIN = 'Commit your work, then run `boardsmith verify`.';
 
+function missingEquivalenceBasis(result: VerifyResult): string | undefined {
+  const mutation = result.checks.find((c) => c.name === 'mutation');
+  if ((mutation?.counts?.equivalent ?? 0) > 0 && !mutation?.equivalence) {
+    return `The equivalent-mutant review basis is missing from this result. Run \`boardsmith verify\` again.`;
+  }
+  return undefined;
+}
+
 /** Why `result` does not vouch for `head`, or undefined when it does. */
 export function resultProblem(result: VerifyResult, head: string): string | undefined {
   if (result.format !== VERIFY_RESULT_FORMAT || !Array.isArray(result.checks)) {
@@ -200,7 +213,7 @@ export function resultProblem(result: VerifyResult, head: string): string | unde
       'Fix what it names, commit, and run `boardsmith verify` again.',
     ].join('\n');
   }
-  return undefined;
+  return missingEquivalenceBasis(result);
 }
 
 /** The commit checked out in `projectDir` and whether its tree is clean, or why that cannot be said. */
@@ -249,6 +262,14 @@ async function chunkCoverageProblem(projectDir: string, slug: string, result: Ve
  * passing `boardsmith verify` result for HEAD, made on a clean tree, is on file. With `chunk`, the
  * result must also have measured that chunk's whole change (`chunkCoverageProblem`).
  */
+async function currentResultProblem(projectDir: string, result: VerifyResult, commit: string): Promise<string | undefined> {
+  const problem = resultProblem(result, commit);
+  if (problem !== undefined) return problem;
+  const basis = result.checks.find((c) => c.name === 'mutation')?.equivalence;
+  if (basis !== undefined) return equivalenceBasisProblem(projectDir, basis, await openMutantCache(projectDir));
+  return undefined;
+}
+
 export async function verifiedProblem(projectDir: string, chunk?: string): Promise<string | undefined> {
   const state = await checkoutState(projectDir);
   if ('problem' in state) return state.problem;
@@ -265,7 +286,7 @@ export async function verifiedProblem(projectDir: string, chunk?: string): Promi
   if (result === 'unreadable') {
     return `The \`boardsmith verify\` result for ${short(state.commit)} could not be read. Run \`boardsmith verify\` again.`;
   }
-  const problem = resultProblem(result, state.commit);
+  const problem = await currentResultProblem(projectDir, result, state.commit);
   if (problem !== undefined || chunk === undefined) return problem;
   try {
     return await chunkCoverageProblem(projectDir, chunk, result);

@@ -48,7 +48,7 @@ if (process.env.CHECK_KIND === 'scopes') {
   const run = () => process.env.CHECK_KIND === 'chunk'
     ? runMutationCheck({ ...input, claims: [], testFiles: [{ path: 'tests/busy.test.ts',
         absPath: join(projectDir, 'tests/busy.test.ts'), source: readFileSync(join(projectDir, 'tests/busy.test.ts'), 'utf8') }] })
-    : runDiffMutationCheck({ ...input, cache: { get: () => undefined, set: () => {}, save: async () => {} } });
+    : runDiffMutationCheck({ ...input, cache: { fingerprint: () => undefined, get: () => undefined, set: () => {}, save: async () => {} } });
   try {
     if (process.env.NESTED) await withCommandBuildDir(projectDir, 'verify', run);
     else await run();
@@ -200,7 +200,7 @@ describe('mutation verification cancellation (#712)', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     const running = runDiffMutationCheck({
       projectDir: project, added: new Map([['src/rules.ts', new Set([1])]]), log: () => {},
-      cache: { get: () => undefined, set: () => {}, save: async () => {} },
+      cache: { fingerprint: () => undefined, get: () => undefined, set: () => {}, save: async () => {} },
     });
     let finished = false;
     void running.then(() => { finished = true; }, () => { finished = true; });
@@ -211,7 +211,7 @@ describe('mutation verification cancellation (#712)', () => {
         await delay(10);
       }
       vi.advanceTimersByTime(30_000);
-      expect((await running).summary).toEqual({ files: 1, mutants: 1, killed: 0, survived: 0, timedOut: 1 });
+      expect((await running).summary).toEqual({ files: 1, mutants: 1, killed: 0, survived: 0, timedOut: 1, equivalent: 0 });
       expect(processGroup(owned.leader)).toEqual([]);
       expect(await fs.readdir(join(project, '.boardsmith'))).toEqual([]);
     } finally {

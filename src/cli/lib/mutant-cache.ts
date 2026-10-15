@@ -81,6 +81,8 @@ interface MutantText {
  * stays in the key: a test may read `DESIGN.md` or a rulebook slice, and evidence can be a script.
  */
 export const BOOKKEEPING_RECORDS: readonly RegExp[] = Object.freeze([
+  // The signed ledger is checked separately; its commit cannot invalidate the IDs it approves.
+  /^design\/MUTATION-EQUIVALENCES\.json$/,
   /^design\/(SKETCH|DECISIONS|RULINGS|QUESTIONS|FILINGS|ASSETS|RUN|MERGE-SIGNOFFS|GATE-TRANSITION)\.md$/,
   /^design\/chunks\/[^/]+\/CHUNK\.md$/,
   /^design\/run-log\/[^/]+\.md$/,
@@ -443,6 +445,8 @@ export interface MutantCache {
    * fingerprinted, so no outcome may be trusted or stored. Undefined when the cache works.
    */
   readonly unavailable?: string;
+  /** The exact mutant and execution context, unavailable when that context cannot be read. */
+  fingerprint(mutant: MutantText | { file: string; sourceHash: string }): string | undefined;
   /** The stored outcome of `mutant` for the project's HEAD, or undefined when it must run. */
   get(mutant: MutantText): CachedOutcome | undefined;
   set(mutant: MutantText, outcome: CachedOutcome): void;
@@ -471,10 +475,11 @@ export async function openMutantCache(projectDir: string): Promise<MutantCache> 
     toolRevisions(projectDir),
   ]);
   const used = new Map<string, CachedOutcome>();
-  const keyOf = (m: MutantText) =>
-    sha256Hex(JSON.stringify([CACHE_FORMAT, tools, process.version, tree, installed, linked, prefix, m.file, sha256Hex(m.source)]));
+  const keyOf = (m: MutantText | { file: string; sourceHash: string }) =>
+    sha256Hex(JSON.stringify([CACHE_FORMAT, tools, process.version, tree, installed, linked, prefix, m.file, 'source' in m ? sha256Hex(m.source) : m.sourceHash]));
 
   return {
+    fingerprint: keyOf,
     get(mutant) {
       const key = keyOf(mutant);
       const outcome = stored.get(key);
@@ -501,6 +506,7 @@ export async function openMutantCache(projectDir: string): Promise<MutantCache> 
 function uncached(reason: string): MutantCache {
   return {
     unavailable: reason,
+    fingerprint: () => undefined,
     get: () => undefined,
     set: () => {},
     save: async () => {},

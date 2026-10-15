@@ -547,6 +547,7 @@ export function fee(price: number): number {
     const key = (m: { file: string; source: string }) => `${m.file}\0${m.source}`;
     return {
       held,
+      fingerprint: () => undefined,
       get: (m: { file: string; source: string }) => held.get(key(m)),
       set: (m: { file: string; source: string }, outcome: 'killed' | 'survived') => void held.set(key(m), outcome),
       save: async () => {},
@@ -605,7 +606,7 @@ it('catches the changed value after the other worker starts', async () => {
       expect(await fs.readFile(join(project, 'tests/mutant-busy'), 'utf-8')).toBe('started');
       expect(await fs.readFile(join(project, 'tests/mutant-failed'), 'utf-8')).toBe('assertion failed');
       await expect(fs.access(join(project, 'tests/mutant-finished'))).rejects.toMatchObject({ code: 'ENOENT' });
-      expect(result.summary).toEqual({ files: 1, mutants: 1, killed: 1, survived: 0, timedOut: 0 });
+      expect(result.summary).toEqual({ files: 1, mutants: 1, killed: 1, survived: 0, timedOut: 0, equivalent: 0 });
     } finally {
       vi.unstubAllEnvs();
     }
@@ -646,7 +647,7 @@ afterAll(() => writeFileSync(new URL('./' + (process.env.BOARDSMITH_MUTANT ? 'mu
         projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache: memoryCache(), log: () => {},
       });
       expect(result.notGreen).toBeUndefined();
-      expect(result.summary).toEqual({ files: 1, mutants: 1, killed: 0, survived: 1, timedOut: 0 });
+      expect(result.summary).toEqual({ files: 1, mutants: 1, killed: 0, survived: 1, timedOut: 0, equivalent: 0 });
       expect(JSON.parse(await fs.readFile(join(project, 'tests/mutant-completed'), 'utf-8'))).toEqual({ attempts: 2, repetitions: 2 });
     } finally {
       vi.unstubAllEnvs();
@@ -716,6 +717,6 @@ it('a fee exists', () => { expect(typeof fee).toBe('function'); });
   it('runs nothing when no changed line can be mutated', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
     const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(3)]]), cache: memoryCache(), log: () => {} });
-    expect(result).toEqual({ summary: { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0 }, reused: 0, survivors: [] });
+    expect(result).toEqual({ summary: { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, equivalent: 0 }, reused: 0, survivors: [], equivalents: [] });
   });
 });
