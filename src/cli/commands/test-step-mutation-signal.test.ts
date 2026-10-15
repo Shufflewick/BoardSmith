@@ -84,6 +84,12 @@ it('holds an actual mutant worker open', async () => {
 
 interface WorkerRecord { worker: number; leader: number; workDir: string }
 
+async function stopOwnedGroup(owned: WorkerRecord | undefined): Promise<void> {
+  if (!owned) return;
+  if (processGroup(owned.leader).length > 0) process.kill(-owned.leader, 'SIGKILL');
+  await vi.waitFor(() => expect(processGroup(owned.leader)).toEqual([]), { timeout: 10_000 });
+}
+
 async function workerRecord(project: string): Promise<WorkerRecord | undefined> {
   try { return JSON.parse(await fs.readFile(join(project, 'tests/worker.json'), 'utf8')); }
   catch (error) {
@@ -137,10 +143,9 @@ describe('mutation verification cancellation (#712)', () => {
         expect(await fs.readdir(join(project, '.boardsmith'))).toEqual([]);
       } finally {
         clearTimeout(guard);
-        if (owned && processGroup(owned.leader).length > 0) process.kill(-owned.leader, 'SIGKILL');
         if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
         await ended;
-        if (owned) await vi.waitFor(() => expect(processGroup(owned!.leader)).toEqual([]), { timeout: 10_000 });
+        await stopOwnedGroup(owned);
       }
     });
   }
@@ -172,7 +177,7 @@ describe('mutation verification cancellation (#712)', () => {
       vi.useRealTimers();
       clearTimeout(guard);
       vi.unstubAllEnvs();
-      if (owned && processGroup(owned.leader).length > 0) process.kill(-owned.leader, 'SIGKILL');
+      await stopOwnedGroup(owned);
       await running.catch(() => {});
     }
   });
