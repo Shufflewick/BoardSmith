@@ -416,6 +416,8 @@ type RunScope = ChunkTestFile[] | 'whole-suite';
 interface Runner {
   /** The run's own directory (`withCommandBuildDir`), which holds its generated files. */
   workDir: string;
+  /** Stops the active process group and waits for close; refuses any later run. */
+  stop(): Promise<void>;
   /**
    * With `bail`, a whole-suite mutant stops after a confirmed test failure, including running workers. With
    * `coverage`, each test file writes which game code it ran into that directory (`readCoverage`).
@@ -439,22 +441,24 @@ function runVitest(
   bin: string,
   args: string[],
   options: { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number; stopOnFailure: boolean },
-): Promise<{ exitCode: number | null } | false> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(bin, args, {
-      cwd: options.cwd, env: options.env, detached: true,
-      stdio: options.stopOnFailure ? ['ignore', 'ignore', 'ignore', 'ipc'] : 'ignore',
-    });
-    const kill = () => {
-      try {
-        process.kill(-child.pid!, 'SIGKILL');
-      } catch {
-        child.kill('SIGKILL');
-      }
-    };
+): { finished: Promise<{ exitCode: number | null } | false>; stop: () => Promise<void> } {
+  const child = spawn(bin, args, {
+    cwd: options.cwd, env: options.env, detached: true,
+    stdio: options.stopOnFailure ? ['ignore', 'ignore', 'ignore', 'ipc'] : 'ignore',
+  });
+  const kill = () => {
+    try {
+      process.kill(-child.pid!, 'SIGKILL');
+    } catch {
+      child.kill('SIGKILL');
+    }
+  };
+  const closed = new Promise<void>((done) => child.once('close', () => done()));
+  const finished = new Promise<{ exitCode: number | null } | false>((resolve, reject) => {
+    let timedOut = false;
     const timer = setTimeout(() => {
+      timedOut = true;
       kill();
-      resolve(false);
     }, options.timeoutMs);
     child.on('message', (message) => {
       if (!options.stopOnFailure || (message as { type?: unknown })?.type !== 'boardsmith-mutant-failed') return;
@@ -467,9 +471,10 @@ function runVitest(
     });
     child.on('close', (exitCode) => {
       clearTimeout(timer);
-      resolve({ exitCode });
+      resolve(timedOut ? false : { exitCode });
     });
   });
+  return { finished, stop: async () => { kill(); await closed; } };
 }
 
 /**
@@ -527,10 +532,20 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
   await fs.writeFile(join(workDir, COVERAGE_SETUP_NAME), COVERAGE_SETUP);
 
   const byRealPath = new Map(testFiles.map((f) => [realpathSync(f.absPath), f.path]));
+  let active: ReturnType<typeof runVitest> | undefined;
+  let stopped = false;
 
   return {
     workDir,
+    async stop() {
+      stopped = true;
+      await active?.stop();
+    },
     async run(scope, mutant, timeoutMs, options = {}) {
+      const checkStopped = () => {
+        if (stopped) throw new Error('Mutation verification was interrupted. Run it again to finish the check.');
+      };
+      checkStopped();
       await fs.rm(reportPath, { force: true });
       const env = { ...process.env };
       delete env.BOARDSMITH_MUTANT;
@@ -550,9 +565,13 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
           : scope.map((f) => relative(projectDir, realpathSync(f.absPath)).split(sep).join('/'))),
       ];
       const started = Date.now();
-      const finished = await runVitest(vitestBin, args, {
+      checkStopped();
+      active = runVitest(vitestBin, args, {
         cwd: projectDir, env, timeoutMs, stopOnFailure: scope === 'whole-suite' && mutant !== null && options.bail === true,
       });
+      const finished = await active.finished;
+      active = undefined;
+      checkStopped();
       if (!finished) return { kind: 'timed-out' };
 
       const read = await readReport(reportPath, (realPath) =>
@@ -948,8 +967,9 @@ export async function runMutationCheck(
 ): Promise<{ findings: TestStepFinding[]; summary: MutationSummary }> {
   const projectDir = realpathSync(input.projectDir);
   const summary: MutationSummary = { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0 };
+  let runner: Runner | undefined;
   return withCommandBuildDir(projectDir, 'test-step-check', async (workDir) => {
-    const runner = await createRunner(projectDir, input.testFiles, workDir);
+    runner = await createRunner(projectDir, input.testFiles, workDir);
     const baseline = await runner.run(input.testFiles, null, 10 * 60_000);
     if (baseline.kind !== 'ran') throw new Error('The unmutated test run did not finish within 10 minutes.');
     const notGreen = baselineFindings(input.testFiles, baseline);
@@ -971,7 +991,7 @@ export async function runMutationCheck(
     }
     summary.files = files.size;
     return { findings: survivorFindings(input, tracked, killed, mutants.length, plans), summary };
-  });
+  }, () => runner?.stop());
 }
 
 // -------------------------------------------------------------------------------------------
@@ -1027,8 +1047,7 @@ interface GreenRunner {
  * Runs the whole suite once unmutated. Returns the runner when it passed; otherwise names what
  * failed, since a mutant proves nothing on a red suite.
  */
-async function greenRunner(projectDir: string, workDir: string): Promise<GreenRunner | { notGreen: string[] }> {
-  const runner = await createRunner(projectDir, [], workDir);
+async function greenRunner(runner: Runner): Promise<GreenRunner | { notGreen: string[] }> {
   const baseline = await runner.run('whole-suite', null, 10 * 60_000);
   if (baseline.kind !== 'ran') throw new Error('The unmutated test run did not finish within 10 minutes.');
   if (!suiteNoticed(baseline)) return { runner, timeoutMs: Math.max(30_000, baseline.ms * 10) };
@@ -1061,11 +1080,13 @@ export async function runDiffMutationCheck(
   const known = mutants.map((m) => input.cache.get(m));
   if (!known.includes(undefined)) return tallyMutants(input, mutants, known, undefined, summary);
 
+  let runner: Runner | undefined;
   return withCommandBuildDir(projectDir, 'verify-mutation', async (workDir) => {
-    const started = await greenRunner(projectDir, workDir);
+    runner = await createRunner(projectDir, [], workDir);
+    const started = await greenRunner(runner);
     if ('notGreen' in started) return { summary, reused: 0, survivors: [], notGreen: started.notGreen };
     return tallyMutants(input, mutants, known, started, summary);
-  });
+  }, () => runner?.stop());
 }
 
 /**

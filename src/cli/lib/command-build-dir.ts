@@ -52,6 +52,30 @@ export function makeCommandBuildDir(projectDir: string, command: BuildingCommand
 }
 
 const STOP_SIGNALS = ['SIGINT', 'SIGTERM'] as const;
+const active = new Set<{ remove: () => void; onStop?: () => void | Promise<void> }>();
+let stopping: Promise<void> | undefined;
+
+function releaseSignals(): void {
+  for (const signal of STOP_SIGNALS) process.off(signal, onSignal);
+}
+
+function onSignal(signal: NodeJS.Signals): void {
+  if (stopping) return;
+  const scopes = [...active].reverse();
+  // One signal owner waits for every scope: an outer directory may contain an inner worker's files.
+  stopping = (async () => {
+    try {
+      const results = await Promise.allSettled(scopes.map(async (scope) => scope.onStop?.()));
+      for (const result of results) {
+        if (result.status === 'rejected') console.error(`Could not stop command work: ${String(result.reason)}`);
+      }
+      for (const scope of scopes) scope.remove();
+    } finally {
+      releaseSignals();
+      process.kill(process.pid, signal);
+    }
+  })();
+}
 
 /**
  * Runs `use` with a fresh build directory for one run of `command`, and removes that directory
@@ -65,8 +89,9 @@ export async function withCommandBuildDir<T>(
   projectDir: string,
   command: BuildingCommand,
   use: (buildDir: string) => Promise<T>,
+  onStop?: () => void | Promise<void>,
 ): Promise<T> {
-  return withDirRemovedAfter(makeCommandBuildDir(projectDir, command), use);
+  return withDirRemovedAfter(makeCommandBuildDir(projectDir, command), use, onStop);
 }
 
 /**
@@ -75,22 +100,21 @@ export async function withCommandBuildDir<T>(
  * On a signal, `onStop` runs first, so whatever `use` started that writes into `dir` (a child
  * process) can be ended before the directory goes.
  */
-export async function withDirRemovedAfter<T>(dir: string, use: (dir: string) => Promise<T>, onStop?: () => void): Promise<T> {
+export async function withDirRemovedAfter<T>(dir: string, use: (dir: string) => Promise<T>, onStop?: () => void | Promise<void>): Promise<T> {
   const remove = (): void => rmSync(dir, { recursive: true, force: true });
-  const release = (): void => {
-    for (const signal of STOP_SIGNALS) process.off(signal, onSignal);
-  };
-  function onSignal(signal: NodeJS.Signals): void {
-    release();
-    onStop?.();
+  if (stopping) {
     remove();
-    process.kill(process.pid, signal);
+    throw new Error('The command was interrupted. Run it again to finish the check.');
   }
-  for (const signal of STOP_SIGNALS) process.on(signal, onSignal);
+  const scope = { remove, onStop };
+  active.add(scope);
+  if (active.size === 1) for (const signal of STOP_SIGNALS) process.on(signal, onSignal);
   try {
     return await use(dir);
   } finally {
-    release();
+    if (stopping) await stopping;
+    active.delete(scope);
+    if (active.size === 0) releaseSignals();
     remove();
   }
 }
