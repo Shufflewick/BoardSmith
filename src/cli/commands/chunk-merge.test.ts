@@ -848,6 +848,31 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
       await tradingSignsTheConfig(config(['node_modules/**', 'dist/**'], "\n    setupFiles: ['tests/setup.ts'],"));
       await expectMergeRefused('quests', configRunner, /chunks\/trading\/CHUNK\.md's sign-off \([^)]*\) was for different code: vite\.config\.ts changed after it/);
     });
+
+    it('refuses a deleted signed config after migration, naming the affected chunk and how to refresh its sign-off (#709)', async () => {
+      const oldConfig = `import { defineConfig } from 'vitest/config';\nexport default defineConfig({ test: {} });\n`;
+      await write(main, { 'vitest.config.ts': oldConfig });
+      git(main, 'add', 'vitest.config.ts');
+      git(main, 'commit', '-q', '-m', 'vitest config');
+      await buildOnBranch('trading', 100, {
+        'design/chunks/trading/CHUNK.md': (await chunkMd('trading'))
+          .replace('| src/trading.ts | written |', '| src/trading.ts | written |\n| vitest.config.ts | written |'),
+      });
+      expect((await chunkMerge(main, 'trading', { runTests: ownTestsRunner })).refusals).toEqual([]);
+      await buildOnBranch('quests', 100);
+      await fs.unlink(join(main, 'vitest.config.ts'));
+      await write(main, { 'vite.config.ts': config(['**/tests/browser/**']) });
+      git(main, 'add', 'vitest.config.ts', 'vite.config.ts');
+      git(main, 'commit', '-q', '-m', 'migrate to defineGameViteConfig');
+      expect(status()).toBe('');
+      expect((await assessSignoffs(main)).get('trading')!.problems.join('\n')).toContain('vitest.config.ts changed after it');
+
+      await expectMergeRefused(
+        'quests',
+        configRunner,
+        /chunks\/trading\/CHUNK\.md's sign-off[^\n]*vitest\.config\.ts changed after it[^\n]*boardsmith chunk-signoff trading/,
+      );
+    });
   });
 
   it('refuses a branch that writes the merge sign-offs itself', async () => {
