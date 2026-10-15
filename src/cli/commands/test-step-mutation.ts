@@ -33,6 +33,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync, promises as fs, realpathSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import {
   parseSource,
   walk,
@@ -416,7 +417,7 @@ type RunScope = ChunkTestFile[] | 'whole-suite';
 interface Runner {
   /** The run's own directory (`withCommandBuildDir`), which holds its generated files. */
   workDir: string;
-  /** Stops the active process group and waits for close; refuses any later run. */
+  /** Waits for the active process group to stop and disappear; refuses any later run. */
   stop(): Promise<void>;
   /**
    * With `bail`, a whole-suite mutant stops after a confirmed test failure, including running workers. With
@@ -435,7 +436,7 @@ interface Runner {
  * can turn a loop infinite). Resolves with its exit code, or false when it was killed. Not
  * `runVitestRecorded` (lib/vitest-run.ts): a mutant run needs that timeout and the kill of the
  * whole process group, and prints nothing. A whole-suite mutant also stops on the reporter's
- * confirmed failure, after its partial report is written, and waits for process close before returning.
+ * confirmed failure, after its partial report is written, and waits for its process group to disappear.
  */
 function runVitest(
   bin: string,
@@ -446,14 +447,35 @@ function runVitest(
     cwd: options.cwd, env: options.env, detached: true,
     stdio: options.stopOnFailure ? ['ignore', 'ignore', 'ignore', 'ipc'] : 'ignore',
   });
+  let killed = false;
+  let groupKilled = false;
   const kill = () => {
+    if (killed) return;
+    killed = true;
     try {
       process.kill(-child.pid!, 'SIGKILL');
+      groupKilled = true;
     } catch {
       child.kill('SIGKILL');
     }
   };
   const closed = new Promise<void>((done) => child.once('close', () => done()));
+  const reaped = closed.then(async () => {
+    if (!groupKilled) return;
+    // The leader's close can precede the OS reaping its orphaned workers.
+    for (;;) {
+      try {
+        process.kill(-child.pid!, 0);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'ESRCH') return;
+        if (code !== 'EPERM') {
+          throw new Error(`Could not confirm that Vitest process group ${child.pid} stopped: ${String(error)}. Check the system process status before running mutation verification again.`);
+        }
+      }
+      await delay(10);
+    }
+  });
   const finished = new Promise<{ exitCode: number | null } | false>((resolve, reject) => {
     let timedOut = false;
     const timer = setTimeout(() => {
@@ -474,7 +496,10 @@ function runVitest(
       resolve(timedOut ? false : { exitCode });
     });
   });
-  return { finished, stop: async () => { kill(); await closed; } };
+  return {
+    finished: finished.then(async (result) => { await reaped; return result; }),
+    stop: async () => { kill(); await reaped; },
+  };
 }
 
 /**

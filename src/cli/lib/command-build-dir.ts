@@ -69,7 +69,7 @@ function onSignal(signal: NodeJS.Signals): void {
       for (const result of results) {
         if (result.status === 'rejected') console.error(`Could not stop command work: ${String(result.reason)}`);
       }
-      for (const scope of scopes) scope.remove();
+      if (results.every((result) => result.status === 'fulfilled')) for (const scope of scopes) scope.remove();
     } finally {
       releaseSignals();
       process.kill(process.pid, signal);
@@ -113,8 +113,10 @@ export async function withDirRemovedAfter<T>(dir: string, use: (dir: string) => 
     return await use(dir);
   } finally {
     if (stopping) await stopping;
-    active.delete(scope);
-    if (active.size === 0) releaseSignals();
-    remove();
+    else {
+      active.delete(scope);
+      if (active.size === 0) releaseSignals();
+      remove();
+    }
   }
 }

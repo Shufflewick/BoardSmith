@@ -1,4 +1,4 @@
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -17,6 +17,21 @@ import { withCommandBuildDir, withDirRemovedAfter } from '../lib/command-build-d
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 const projectDir = process.cwd();
+if (process.env.HOLD_GROUP) {
+  const kill = process.kill;
+  let notified = false;
+  process.kill = function(pid, signal) {
+    if (pid < 0 && signal === 0 && process.env.HOLD_GROUP === 'unreadable') {
+      throw Object.assign(new Error('process group observation failed'), { code: 'EINVAL' });
+    }
+    if (pid < 0 && signal === 0 && !existsSync(join(projectDir, 'release'))) {
+      if (!notified) { notified = true; process.send('waiting-for-group'); }
+      if (process.env.HOLD_GROUP === 'EPERM') throw Object.assign(new Error('process group observation denied'), { code: 'EPERM' });
+      return true;
+    }
+    return kill.call(process, pid, signal);
+  };
+}
 if (process.env.CHECK_KIND === 'scopes') {
   const outer = join(projectDir, 'outer'), inner = join(outer, 'inner');
   mkdirSync(inner, { recursive: true });
@@ -44,14 +59,19 @@ if (process.env.CHECK_KIND === 'scopes') {
   bundle: true, platform: 'node', format: 'esm', packages: 'external', write: false,
 });
 
-interface OwnedProcess { pid: number; ppid: number; pgid: number; command: string }
+interface OwnedProcess { pid: number; ppid: number; pgid: number; state: string; command: string }
 
 function processGroup(pgid: number): OwnedProcess[] {
-  return execFileSync('ps', ['-axo', 'pid=,ppid=,pgid=,comm='], { encoding: 'utf8' })
+  return execFileSync('ps', ['-axo', 'pid=,ppid=,pgid=,stat=,comm='], { encoding: 'utf8' })
     .trim().split('\n').map((line) => {
-      const [, pid, ppid, group, command] = line.match(/^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/)!;
-      return { pid: Number(pid), ppid: Number(ppid), pgid: Number(group), command };
+      const [, pid, ppid, group, state, command] = line.match(/^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/)!;
+      return { pid: Number(pid), ppid: Number(ppid), pgid: Number(group), state, command };
     }).filter((entry) => entry.pgid === pgid);
+}
+
+function groupProbe(pgid: number): boolean | string {
+  try { return process.kill(-pgid, 0); }
+  catch (error) { return (error as NodeJS.ErrnoException).code ?? String(error); }
 }
 
 async function mutationProject() {
@@ -98,49 +118,70 @@ async function workerRecord(project: string): Promise<WorkerRecord | undefined> 
   }
 }
 
+async function waitForWorker(project: string, child: ChildProcess, output: () => string): Promise<WorkerRecord> {
+  let owned: WorkerRecord | undefined;
+  while (!(owned = await workerRecord(project))) {
+    if (child.exitCode !== null || child.signalCode !== null) throw new Error(`Mutation driver exited before a worker started:\n${output()}`);
+    await delay(10);
+  }
+  return owned;
+}
+
 describe('mutation verification cancellation (#712)', () => {
-  for (const { kind, phase, signal, target, nested } of [
-    { kind: 'diff', phase: 'mutant', signal: 'SIGINT', target: 'parent' },
-    { kind: 'diff', phase: 'baseline', signal: 'SIGINT', target: 'parent' },
-    { kind: 'diff', phase: 'mutant', signal: 'SIGTERM', target: 'parent' },
-    { kind: 'diff', phase: 'mutant', signal: 'SIGTERM', target: 'group', nested: true },
-    { kind: 'chunk', phase: 'mutant', signal: 'SIGINT', target: 'parent' },
+  for (const { kind, phase, signal, target, nested, holdGroup } of [
+    { kind: 'diff', phase: 'mutant', signal: 'SIGINT', target: 'parent', holdGroup: false },
+    { kind: 'diff', phase: 'baseline', signal: 'SIGINT', target: 'parent', holdGroup: false },
+    { kind: 'diff', phase: 'mutant', signal: 'SIGTERM', target: 'parent', holdGroup: false },
+    { kind: 'diff', phase: 'mutant', signal: 'SIGTERM', target: 'group', nested: true, holdGroup: false },
+    { kind: 'chunk', phase: 'mutant', signal: 'SIGINT', target: 'parent', holdGroup: false },
+    { kind: 'diff', phase: 'mutant', signal: 'SIGINT', target: 'parent', holdGroup: true },
+    { kind: 'diff', phase: 'mutant', signal: 'SIGINT', target: 'parent', nested: true, holdGroup: 'unreadable' },
+    { kind: 'diff', phase: 'mutant', signal: 'SIGINT', target: 'parent', holdGroup: 'EPERM' },
   ] as const) {
-    it(`stops the ${kind} ${phase} group on ${signal} to the ${target}${nested ? ' with an outer scope' : ''}`, async () => {
+    it(`stops the ${kind} ${phase} group on ${signal} to the ${target}${nested ? ' with an outer scope' : ''}${holdGroup === 'unreadable' ? ' retaining files when group observation fails' : holdGroup ? ' after group disappearance' : ''}${holdGroup === 'EPERM' ? ' with EPERM' : ''}`, async () => {
       const { sandbox, project } = await mutationProject();
       const child = spawn(process.execPath, ['driver.mjs'], {
         cwd: project, env: {
           ...sandbox.env,
           CHECK_KIND: kind, CANCEL_PHASE: phase, NESTED: nested ? 'yes' : '',
+          HOLD_GROUP: holdGroup ? String(holdGroup) : '',
           NODE_OPTIONS: sandbox.env.NODE_OPTIONS + ' --allow-child-process --allow-worker --allow-addons',
-        }, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
+        }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], detached: true,
       });
       let output = '';
-      child.stdout.on('data', (chunk) => { output += chunk; });
-      child.stderr?.on('data', (chunk) => { output += chunk; });
+      child.stdout!.on('data', (chunk) => { output += chunk; });
+      child.stderr!.on('data', (chunk) => { output += chunk; });
       const ended = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
         child.on('close', (code, signal) => resolve({ code, signal }));
       });
+      const groupObserved = new Promise<string>((resolve) => child.on('message', (message) => {
+        if (message === 'waiting-for-group') resolve(message);
+      }));
       const guard = setTimeout(() => child.kill('SIGKILL'), 90_000);
       let owned: WorkerRecord | undefined;
       try {
-        while (!owned) {
-          owned = await workerRecord(project);
-          if (!owned) {
-            if (child.exitCode !== null || child.signalCode !== null) throw new Error(`Mutation driver exited before a worker started:\n${output}`);
-            await new Promise((resolve) => setTimeout(resolve, 10));
-          }
-        }
+        owned = await waitForWorker(project, child, () => output);
         const before = processGroup(owned.leader);
         expect(before.map((entry) => entry.pid)).toEqual(expect.arrayContaining([owned.leader, owned.worker]));
         if (target === 'group') process.kill(-child.pid!, signal);
         else child.kill(signal);
+        if (holdGroup && holdGroup !== 'unreadable') {
+          expect(await Promise.race([groupObserved, ended]), 'parent exited before its process group disappeared: ' + output).toBe('waiting-for-group');
+          expect(child.signalCode).toBeNull();
+          expect(processGroup(owned.leader).map((entry) => entry.pid)).not.toContain(owned.leader);
+          await fs.access(owned.workDir);
+          await fs.writeFile(join(project, 'release'), 'released');
+        }
         const end = await ended;
         const after = processGroup(owned.leader);
-        const evidence = JSON.stringify({ parent: child.pid, signal, target, before, end, after });
+        const evidence = JSON.stringify({ parent: child.pid, signal, target, before, end, after, groupProbe: groupProbe(owned.leader) });
         expect(end, output + evidence).toEqual({ code: null, signal });
         expect(after, 'owned Vitest processes survived the interrupted parent: ' + evidence).toEqual([]);
-        expect(await fs.readdir(join(project, '.boardsmith'))).toEqual([]);
+        if (holdGroup === 'unreadable') {
+          expect(output).toContain('Could not confirm that Vitest process group');
+          await fs.access(owned.workDir);
+          expect(await fs.readdir(join(project, '.boardsmith'))).toHaveLength(2);
+        } else expect(await fs.readdir(join(project, '.boardsmith'))).toEqual([]);
       } finally {
         clearTimeout(guard);
         if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
