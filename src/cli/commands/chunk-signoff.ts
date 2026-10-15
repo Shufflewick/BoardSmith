@@ -27,7 +27,7 @@ import { readVerifyResult, verifiedProblem } from '../lib/verify-result.js';
 import { escapeRegExp } from '../lib/regexp.js';
 import { gitOutput as git } from '../lib/git-output.js';
 import { currentMutationFingerprints } from '../lib/mutant-cache.js';
-import { equivalenceBasisProblem, type EquivalenceBasis } from '../lib/mutation-equivalences.js';
+import { equivalenceBasisProblem, historicalEquivalenceProblem, type EquivalenceBasis } from '../lib/mutation-equivalences.js';
 
 /**
  * `boardsmith chunk-signoff` / `boardsmith chunk-waiver` / `checkSignoff()`: who may say a chunk
@@ -802,15 +802,16 @@ async function reviewProblems(dir: string, record: SignoffRecord): Promise<strin
   return problem ? [`${problem} If merging changed the reviewed context, rebase the branch onto current main, reopen the chunk, prepare and review the stale equivalences again, then verify, sign off and retry the merge.`] : [];
 }
 
-/** The merge calls this again after its final ledger writes, without changing older sign-offs. */
-export async function equivalenceSignoffProblems(projectDir: string): Promise<string[]> {
-  const problems: string[] = [];
-  for (const chunk of await readChunkStates(projectDir)) {
-    if (chunk.status.startsWith(VERIFIED) && chunk.parsed.record) {
-      problems.push(...await reviewProblems(projectDir, chunk.parsed.record));
-    }
-  }
-  return problems;
+/** The incoming chunk must cover the final merge tree, while prior chunks retain their history. */
+export async function equivalenceSignoffProblems(projectDir: string, slug: string): Promise<string[]> {
+  const parsed = parseSignoff(await fs.readFile(chunkMdPath(projectDir, slug), 'utf8'));
+  return parsed.record ? reviewProblems(projectDir, parsed.record) : [];
+}
+
+async function historicalReviewProblems(dir: string, record: SignoffRecord): Promise<string[]> {
+  if (record.equivalence === undefined) return [];
+  const problem = await historicalEquivalenceProblem(dir, record.equivalence);
+  return problem ? [`${problem} Reopen the chunk, then verify and sign off again.`] : [];
 }
 
 /** Everything wrong with one chunk's sign-off, given every chunk in the project. */
@@ -864,7 +865,7 @@ async function assessChunk(dir: string, self: ChunkState, project: ProjectState)
 
   const record = parsed.record;
   const code = codeAssessment(self, record, project, resign);
-  const problems = [...signoffProblems(record, await loadContext(dir, slug, self.text)), ...code.problems, ...(await reviewProblems(dir, record))];
+  const problems = [...signoffProblems(record, await loadContext(dir, slug, self.text)), ...code.problems, ...(await historicalReviewProblems(dir, record))];
   const expected = derivedStatus(record);
   if (status !== expected) {
     problems.push(

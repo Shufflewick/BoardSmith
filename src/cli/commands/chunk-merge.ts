@@ -414,6 +414,7 @@ async function combinedTreeProblems(ctx: MergeContext, alongside: string[], runT
     ...ledgers.findings.map(describeFinding),
     ...(await checkConstraints(ctx.projectDir, { runTests })).refusals,
     ...(await signoffProblems(ctx.projectDir)),
+    ...(await equivalenceSignoffProblems(ctx.projectDir, ctx.slug)),
   ];
   if (problems.length > 0) return problems;
   const suite = await runTests(ctx.projectDir, []);
@@ -782,7 +783,7 @@ async function checkStartedMerge(ctx: MergeContext, left: string[], runTests: Te
     return refused(problems);
   }
   const crossChunk = await recordCrossChunk(ctx, alongside);
-  const staleReviews = await equivalenceSignoffProblems(ctx.projectDir);
+  const staleReviews = await equivalenceSignoffProblems(ctx.projectDir, ctx.slug);
   if (staleReviews.length) {
     await gitSucceeds(ctx.top, ['merge', '--abort']);
     return refused(staleReviews);

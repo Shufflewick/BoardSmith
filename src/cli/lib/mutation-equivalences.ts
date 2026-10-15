@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { gitOutput as git } from './git-output.js';
 import { sha256Hex } from './hash.js';
 import type { MutationFingerprints } from './mutant-cache.js';
@@ -33,6 +34,8 @@ export interface EquivalenceReview {
 
 const AGAIN = `Review the valid-input contract and proof in ${MUTATION_EQUIVALENCES}, commit that file with \`git commit -S\` using a trusted reviewer key, then run \`boardsmith verify\` again.`;
 const HASH = /^[a-f0-9]{64}$/;
+const UNTRUSTED = `${MUTATION_EQUIVALENCES} is not the unchanged ledger from a valid, fully trusted signed commit. ${AGAIN}`;
+const INCOMPLETE = 'This result has an incomplete equivalent-mutant review. Run `boardsmith verify` again.';
 
 function validChange(change: EquivalentMutant['change']): boolean {
   return change && Number.isInteger(change.offset) && change.offset >= 0 &&
@@ -65,8 +68,7 @@ export function parseEquivalences(text: string): EquivalentMutant[] {
   });
 }
 
-/** Git's external trust configuration authenticates the reviewer; the CLI never supplies trust. */
-export async function readEquivalenceReview(projectDir: string, pinnedCommit?: string): Promise<EquivalenceReview | undefined> {
+async function readLedger(projectDir: string): Promise<{ text: string; records: EquivalentMutant[] } | undefined> {
   const path = join(projectDir, MUTATION_EQUIVALENCES);
   const stat = await fs.lstat(path).catch((error: NodeJS.ErrnoException) => {
     if (error.code === 'ENOENT') return undefined;
@@ -75,28 +77,48 @@ export async function readEquivalenceReview(projectDir: string, pinnedCommit?: s
   if (stat === undefined) return undefined;
   if (!stat.isFile()) throw new Error(`${MUTATION_EQUIVALENCES} must be a regular tracked file. ${AGAIN}`);
   const text = await fs.readFile(path, 'utf8');
-  const records = parseEquivalences(text);
-  return { records, basis: await verifyLedgerCommit(projectDir, text, pinnedCommit) };
+  return { text, records: parseEquivalences(text) };
 }
 
-async function requireLedgerBlob(projectDir: string, text: string, commit: string, currentRef: string): Promise<void> {
+/** Git's external trust configuration authenticates the reviewer; the CLI never supplies trust. */
+export async function readEquivalenceReview(projectDir: string, pinnedCommit?: string): Promise<EquivalenceReview | undefined> {
+  const ledger = await readLedger(projectDir);
+  if (!ledger) return undefined;
+  return { records: ledger.records, basis: await verifyLedgerCommit(projectDir, ledger.text, pinnedCommit) };
+}
+
+async function ledgerBlob(projectDir: string, ref: string): Promise<string> {
   const prefix = (await git(projectDir, ['rev-parse', '--show-prefix'])).trim();
-  const path = `${prefix}${MUTATION_EQUIVALENCES}`;
-  if (await git(projectDir, ['show', `${commit}:${path}`]) !== text ||
-      await git(projectDir, ['show', `${currentRef}:${path}`]) !== text) throw new Error('the signed blob differs');
+  return git(projectDir, ['show', `${ref}:${prefix}${MUTATION_EQUIVALENCES}`]);
+}
+
+async function requireLedgerBlob(projectDir: string, text: string, refs: string[]): Promise<void> {
+  for (const ref of refs) if (await ledgerBlob(projectDir, ref) !== text) throw new Error(UNTRUSTED);
+}
+
+function requireReviewCommit(commit: string): void {
+  if (!/^[a-f0-9]{40,64}$/.test(commit)) throw new Error(UNTRUSTED);
 }
 
 async function verifyLedgerCommit(projectDir: string, text: string, pinnedCommit?: string): Promise<EquivalenceReview['basis']> {
   let commit: string;
-  let signature: string[];
   try {
     commit = pinnedCommit ?? (await git(projectDir, ['log', '-1', '--format=%H', 'HEAD', '--', MUTATION_EQUIVALENCES])).trim();
-    if (!/^[a-f0-9]{40,64}$/.test(commit)) throw new Error('no committed review');
-    await requireLedgerBlob(projectDir, text, commit, pinnedCommit ? '' : 'HEAD');
+    requireReviewCommit(commit);
+    await requireLedgerBlob(projectDir, text, [commit, pinnedCommit ? '' : 'HEAD']);
+  } catch {
+    throw new Error(UNTRUSTED);
+  }
+  return verifyLedgerSignature(projectDir, text, commit);
+}
+
+async function verifyLedgerSignature(projectDir: string, text: string, commit: string): Promise<EquivalenceReview['basis']> {
+  let signature: string[];
+  try {
     await git(projectDir, ['-c', 'gpg.minTrustLevel=fully', 'verify-commit', commit]);
     signature = (await git(projectDir, ['-c', 'gpg.minTrustLevel=fully', 'show', '-s', '--format=%G?%x00%GT%x00%GS%x00%GF', commit])).trim().split('\0');
   } catch {
-    throw new Error(`${MUTATION_EQUIVALENCES} is not the unchanged ledger from a valid, fully trusted signed commit. ${AGAIN}`);
+    throw new Error(UNTRUSTED);
   }
   const [status, trust, reviewer, signerFingerprint] = signature;
   if (status !== 'G' || !['fully', 'ultimate'].includes(trust) || !reviewer || !signerFingerprint) {
@@ -109,15 +131,42 @@ function completeBasis(basis: EquivalenceBasis): boolean {
   return basis && typeof basis === 'object' && Array.isArray(basis.ids) && basis.ids.length > 0;
 }
 
+function matchesBasis(review: EquivalenceReview, basis: EquivalenceBasis): boolean {
+  return Object.entries(review.basis).every(([key, value]) => basis[key as keyof EquivalenceBasis] === value);
+}
+
+async function pinnedReview(projectDir: string, basis: EquivalenceBasis): Promise<EquivalenceReview> {
+  requireReviewCommit(basis.reviewCommit);
+  const text = await ledgerBlob(projectDir, basis.reviewCommit);
+  return { records: parseEquivalences(text), basis: await verifyLedgerSignature(projectDir, text, basis.reviewCommit) };
+}
+
+/** Closed chunks retain what was reviewed then; later work is covered by the normal code sign-offs. */
+export async function historicalEquivalenceProblem(projectDir: string, basis: EquivalenceBasis): Promise<string | undefined> {
+  if (!completeBasis(basis)) return INCOMPLETE;
+  try {
+    const reviewed = await pinnedReview(projectDir, basis);
+    const current = await readLedger(projectDir);
+    if (!matchesBasis(reviewed, basis) || !current) return `The equivalent-mutant review used by this sign-off changed. ${AGAIN}`;
+    await requireLedgerBlob(projectDir, current.text, ['']);
+    for (const id of basis.ids) {
+      const record = reviewed.records.find((entry) => entry.id === id);
+      if (!record || !isDeepStrictEqual(record, current.records.find((entry) => entry.id === id))) {
+        return `A selected equivalent-mutant review was removed or changed after sign-off. ${AGAIN}`;
+      }
+    }
+  } catch (error) {
+    return (error as Error).message;
+  }
+  return undefined;
+}
+
 /** Recheck a saved done claim after the ledger, installed code, tool or signer trust changes. */
 export async function equivalenceBasisProblem(projectDir: string, basis: EquivalenceBasis, cache: MutationFingerprints): Promise<string | undefined> {
-  if (!completeBasis(basis)) {
-    return 'This result has an incomplete equivalent-mutant review. Run `boardsmith verify` again.';
-  }
+  if (!completeBasis(basis)) return INCOMPLETE;
   try {
     const review = await readEquivalenceReview(projectDir, basis.reviewCommit);
-    if (!review ||
-      Object.entries(review.basis).some(([key, value]) => basis[key as keyof EquivalenceBasis] !== value)) {
+    if (!review || !matchesBasis(review, basis)) {
       return `The equivalent-mutant review used by this result changed. ${AGAIN}`;
     }
     for (const id of basis.ids) {
