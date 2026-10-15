@@ -495,8 +495,12 @@ async function collectionOnlyConfigEdits(ctx: MergeContext): Promise<Map<string,
   for (const [slug, edits] of await unaccountedEdits(ctx.projectDir)) {
     for (const edit of edits.filter((e) => TEST_RUNNER_CONFIG.test(posix.normalize(e.path)))) {
       const path = posix.normalize(edit.path);
+      const now = await fs.readFile(join(ctx.projectDir, path), 'utf-8').catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return undefined;
+        throw error;
+      });
+      if (now === undefined) continue;
       const before = await signedText(ctx, path, edit.signed);
-      const now = await fs.readFile(join(ctx.projectDir, path), 'utf-8');
       if (before !== undefined && onlyTestCollectionChanged(before, now)) found.set(path, [...(found.get(path) ?? []), slug]);
     }
   }
