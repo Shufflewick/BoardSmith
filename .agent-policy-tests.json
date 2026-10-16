@@ -1,52 +1,12 @@
 {
-  "ticket": "Shufflewick/BoardSmith#951",
+  "ticket": "Shufflewick/BoardSmith#771",
   "base": "e7da3d40e99eb989548d089002a4967d71fda62d",
   "tests": [
     {
-      "file": "src/cli/commands/focused-chunk-merge.test.ts",
+      "file": "src/world/choose-element-default-root.test.ts",
       "names": [
-        "focused chunk merge (#951) runs authored cases once on the allocated combined tree and records their honest scope",
-        "focused chunk merge (#951) refuses the full-run deadline before running authored tests and restores main",
-        "focused chunk merge (#951) refuses inconsistent or unrelated authority status before running tests",
-        "focused chunk merge (#951) requires the incoming branch to retain the trusted focused opt-in",
-        "focused chunk merge (#951) retains structural constraint checks and rolls back their prospective signoff records",
-        "focused chunk merge (#951) rolls back a failing actual authored case without recording a completed merge",
-        "focused chunk merge (#951) keeps measurement, own and whole-suite tests for a project without a trusted opt-in"
-      ]
-    },
-    {
-      "file": "src/cli/commands/focused-command-policy.test.ts",
-      "names": [
-        "focused standalone gates (#951) keeps unopted constraint checks available before the repository has a first commit",
-        "focused standalone gates (#951) checks constraints structurally and runs authored cases without claiming deferred measurements passed",
-        "focused standalone gates (#951) keeps static test-step findings and defers mutation execution under the committed focused policy"
-      ]
-    },
-    {
-      "file": "src/cli/commands/authored-tests.test.ts",
-      "names": [
-        "authored test selection (#951) typechecks a library workspace and runs only its declared full test name",
-        "authored test selection (#951) runs an exact declared file even when another test filename contains its whole path",
-        "authored test selection (#951) refuses empty, missing, skipped and unexecuted authored declarations"
-      ]
-    },
-    {
-      "file": "src/cli/commands/focused-game-verification.test.ts",
-      "names": [
-        "focused game verification (#951) records authored-test scope and opens its chunk review without claiming full or mutation verification"
-      ]
-    },
-    {
-      "file": "src/cli/lib/authored-tests.test.ts",
-      "names": [
-        "committed authored-test scope (#951) rejects unknown manifest keys instead of silently ignoring a misspelled declaration"
-      ]
-    },
-    {
-      "file": "src/cli/lib/focused-review-provenance.test.ts",
-      "names": [
-        "focused review provenance (#951) requires the authored selection hash when a review names a focused verify result",
-        "focused review provenance (#951) refuses a focused receipt whose passing counts do not account for the declared authored tests"
+        "chooseElement default root (#771) refuses a filter write in a world offer with `from` omitted, as with `from` named, and leaves the live game alone",
+        "chooseElement default root (#771) still finds the same elements in a table game"
       ]
     }
   ]
