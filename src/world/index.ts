@@ -62,6 +62,7 @@
 export {
   worldBudgets,
 } from './budgets.js';
+export { planEviction } from './eviction.js';
 export type {
   WorldBudgetOverrides,
   WorldBudgets,
@@ -255,6 +256,7 @@ export type {
 } from './notices.js';
 export {
   assertWorldOrder,
+  receiptAt,
   receiptFloor,
   resolveOrder,
 } from './orders.js';

@@ -73,7 +73,8 @@ export interface WorldReceipt {
   readonly orderId: string;
   /** The seat's durable player id, so one seat cannot replay another's order. */
   readonly player: string;
-  /** When the host committed it, on the world's clock. */
+  /** The instant the receipt is swept by, from `receiptAt`: not when the host
+   *  committed it. */
   readonly at: number;
   /** The sentence the world answered with, if it gave one. */
   readonly message?: string;
@@ -165,4 +166,19 @@ export function resolveOrder(args: {
  */
 export function receiptFloor(now: number, budgets: WorldBudgets, previousFloor: number): number {
   return Math.max(previousFloor, now - budgets.receiptRetentionMs);
+}
+
+/**
+ * THE INSTANT A RECEIPT IS SWEPT BY, on the host's wall clock `now` (#793).
+ *
+ * The order's own `at`, because that is what `resolveOrder` judges a repeat
+ * by: a receipt swept by any other instant can vanish while its order still
+ * stands at or above the floor, and the repeat runs again. Capped one window
+ * ahead of `now`, so a lying clock cannot pin a receipt forever; raised to the
+ * floor this same write moves to, so an old order that reached an idle world
+ * keeps its receipt for a retry.
+ */
+export function receiptAt(order: WorldOrder, now: number, budgets: WorldBudgets): number {
+  const window = budgets.receiptRetentionMs;
+  return Math.max(now - window, Math.min(order.at, now + window));
 }

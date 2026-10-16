@@ -1,0 +1,38 @@
+{
+  "ticket": "Shufflewick/BoardSmith#779",
+  "base": "e7da3d40e99eb989548d089002a4967d71fda62d",
+  "tests": [
+    {
+      "file": "src/runtime/player-helpers-restore.test.ts",
+      "names": [
+        "tracks and abilities on a Player survive every restore (#779) come back from a saved snapshot unchanged and still usable",
+        "tracks and abilities on a Player survive every restore (#779) come back from an undo to an earlier checkpoint and still usable",
+        "tracks and abilities on a Player survive every restore (#779) come back in the bot's search sandbox, built from the seat's view, and still usable"
+      ]
+    },
+    {
+      "file": "src/engine/scoring/track-functions.test.ts",
+      "names": [
+        "track functions (#779) a new track is plain data with its defaults filled in",
+        "track functions (#779) addToTrack records the entry and returns the points for its position",
+        "track functions (#779) addToTrack throws, naming the value and track, and leaves the track untouched when refused",
+        "track functions (#779) monotonic increasing needs each value above the last; decreasing below it",
+        "track functions (#779) monotonic allowEqual, or a special entry on a track that allows them, may repeat the last value",
+        "track functions (#779) unique accepts each value once and only inside the range",
+        "track functions (#779) unique a special entry may duplicate when the track allows it, but never leave the range",
+        "track functions (#779) counter incrementCounter scores pointsPerCount per mark and refuses once full",
+        "track functions (#779) every kind refuses everything once full",
+        "track functions (#779) trackPoints adds the completion bonus only once the track is full"
+      ]
+    },
+    {
+      "file": "src/engine/player/ability-functions.test.ts",
+      "names": [
+        "ability functions (#779) addAbility appends an unused ability, keeping its provenance only when given",
+        "ability functions (#779) spendAbility marks one unused ability of the type used, and says whether it could",
+        "ability functions (#779) countUnusedAbilities counts one type, or every type when none is named",
+        "ability functions (#779) groupAbilities totals each type in first-earned order"
+      ]
+    }
+  ]
+}

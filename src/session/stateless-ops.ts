@@ -614,7 +614,7 @@ type BotFlowState = {
 function buildViews(runner: GameRunner, playerCount: number): unknown[] {
   const flowState = runner.getFlowState();
   return Array.from({ length: playerCount }, (_, i) => ({
-    flowState: toPublicFlowState(flowState),
+    flowState: toPublicFlowState(flowState, i + 1),
     state: buildPlayerState(runner, [], i + 1, { includeActionMetadata: true }),
   }));
 }
@@ -629,7 +629,7 @@ function buildViews(runner: GameRunner, playerCount: number): unknown[] {
 // `_restoreZoneVisibility`), so both cases redact identically.
 function buildSpectatorView(runner: GameRunner): unknown {
   return {
-    flowState: toPublicFlowState(runner.getFlowState()),
+    flowState: toPublicFlowState(runner.getFlowState(), 0),
     state: buildPlayerState(runner, [], 0, { includeActionMetadata: false }),
   };
 }
@@ -683,20 +683,10 @@ function errorResult(
  * Every host asks this one question, so they cannot disagree about the answer.
  *
  * @param debug - whether the host turned debugging on for this session
- * @param askingSeat - the seat that sent the op, when the caller knows it. A
- *   debug op that reports a seat's view (it names a `player`) is refused unless
- *   that `player` is the asking seat, so no seat can read another seat's view.
  */
-export function debugOpRefusal(op: Op, debug: boolean, askingSeat?: number): OpFailure | null {
+export function debugOpRefusal(op: Op, debug: boolean): OpFailure | null {
   if (!DEBUG_OP_TYPES.has(op.type)) return null;
   if (!debug) return errorResult(debuggingOffMessage(op.type), 'protocol');
-  if (askingSeat !== undefined && 'player' in op && op.player !== askingSeat) {
-    return errorResult(
-      `Seat ${askingSeat} asked for seat ${op.player}'s view with '${op.type}', and was refused. ` +
-        'A debug view shows only the seat that asks for it; switch to that seat to see its view.',
-      'protocol',
-    );
-  }
   return null;
 }
 

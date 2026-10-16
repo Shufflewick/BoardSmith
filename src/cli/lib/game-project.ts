@@ -56,7 +56,7 @@ export function requireGameProject(cwd: string): string {
   const configPath = join(cwd, 'boardsmith.json');
   if (!existsSync(configPath)) {
     throw new Error(
-      'boardsmith.json not found.\nMake sure you are in a BoardSmith game project directory.',
+      `${cwd} has no boardsmith.json, so it is not a BoardSmith game project. Run this in the game's directory.`,
     );
   }
   return configPath;

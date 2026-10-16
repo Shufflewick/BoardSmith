@@ -2,7 +2,7 @@
  * Tests for useAnimationEvents composable
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, effectScope } from 'vue';
 import {
   createAnimationEvents,
   provideAnimationEvents,
@@ -1294,5 +1294,28 @@ describe('useAnimationEvents', () => {
       await q.send([1, 2]);
       expect(q.delivered).toEqual([1, 2, 3]);
     });
+  });
+});
+
+describe('unmount (#749)', () => {
+  it('clears the wait-for-handler timer when the owner scope stops', async () => {
+    vi.useFakeTimers();
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const events = ref<AnimationEvent[]>([]);
+      const scope = effectScope();
+      scope.run(() => createAnimationEvents({ events: () => events.value, handlerWaitTimeout: 500 }));
+      events.value = [createEvent(1, 'unhandled')];
+      await nextTick();
+
+      scope.stop();
+      await vi.advanceTimersByTimeAsync(500);
+
+      // The timeout would have warned "skipped: no handler" for a shell that is gone.
+      expect(consoleWarn).not.toHaveBeenCalled();
+    } finally {
+      consoleWarn.mockRestore();
+      vi.useRealTimers();
+    }
   });
 });

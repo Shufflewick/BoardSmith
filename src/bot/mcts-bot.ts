@@ -707,11 +707,11 @@ export class MCTSBot<G extends Game = Game> {
   /**
    * Select the most promising child node using the UCT-RAVE formula.
    * Blends UCT (tree statistics) with RAVE (global move statistics):
-   *   score = (1 - beta) * UCT + beta * RAVE
+   *   score = (1 - beta) * mean + beta * RAVE + exploration
    *   beta = sqrt(k / (3*visits + k))  // decreases as visits increase
    *
    * Early in search, beta is high so RAVE dominates (fast learning from all playouts).
-   * As visits accumulate, beta decreases so UCT dominates (accurate tree statistics).
+   * As visits accumulate, beta decreases so the child's own mean dominates.
    *
    * When PNS is enabled, solved children are set aside first: a proven loss is
    * never chosen on the bot's turn, and a proven win never on the opponent's.
@@ -754,10 +754,9 @@ export class MCTSBot<G extends Game = Game> {
       // make legal is otherwise permanently starved by moves every world offers.
       const offered = this.determinize ? child.availability : node.visits;
       const exploration = C * Math.sqrt(Math.log(offered + 1) / visits);
-      const uct = exploitation + exploration;
 
-      // RAVE component (blend with UCT if enabled)
-      let score = uct;
+      // RAVE blends into the value only; exploration stays whole so one unlucky sample cannot starve a move (#732)
+      let value = exploitation;
       if (this.config.useRAVE !== false && child.parentMove) {
         const raveEntry = this.raveTable.get(this.getMoveKey(child.parentMove));
         if (raveEntry && raveEntry.visits > 0) {
@@ -772,9 +771,10 @@ export class MCTSBot<G extends Game = Game> {
 
           // Beta decreases as node visits increase (trust UCT more with more data)
           const beta = Math.sqrt(k / (3 * visits + k));
-          score = (1 - beta) * uct + beta * raveValue;
+          value = (1 - beta) * exploitation + beta * raveValue;
         }
       }
+      const score = value + exploration;
 
       if (score > bestScore) {
         bestScore = score;
