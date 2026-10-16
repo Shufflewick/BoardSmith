@@ -298,8 +298,9 @@ describe('MCTS saved copies (#633)', () => {
   it('on a 19x19 board stays within its default budget, then makes moves again once the budget is spent', async () => {
     const GameClass = stoneGame({ size: 19 });
     const game = startedGame(GameClass, 40);
-    // Short playouts keep each step cheap; enough steps to spend the whole budget.
-    const config = { iterations: 6000, playoutDepth: 0 };
+    // Short playouts keep each step cheap. 6000 steps reach only about 565 nodes in a
+    // fairly explored tree, and the budget holds about 670 copies, so it takes more (#732).
+    const config = { iterations: 9000, playoutDepth: 0 };
     const withDefault = await search(GameClass, game, { config });
 
     expect(withDefault.budget).toBe(32 * 1024 * 1024);

@@ -357,7 +357,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
  * publish; a cleanup failure is reported dimly but never masks the original
  * error.
  */
-async function abortInFlightPublish(
+export async function abortInFlightPublish(
   platformUrl: string,
   apiKey: string,
   versionId: string,

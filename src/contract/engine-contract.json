@@ -1,7 +1,7 @@
 {
-  "revision": 202,
-  "surfaceHash": "f69ab10d1603172a",
-  "payloadHash": "e82681be0c7e858e",
+  "revision": 200,
+  "surfaceHash": "8b779d8dff5c7b45",
+  "payloadHash": "9f29fb7dcae7fc03",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1539,26 +1539,10 @@
     {
       "revision": 200,
       "date": "2026-10-16",
-      "surfaceHash": "aec787c2d7948d17",
+      "surfaceHash": "8b779d8dff5c7b45",
       "payloadHash": "9f29fb7dcae7fc03",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "boardsmith/world exports planEviction, the eviction rule ResidentWorld now runs after every checkpoint, and WorldBudgets gains maxResidentPartitions (default 256). The platform should read budgets.maxResidentPartitions and import planEviction instead of its own WORLD_MAX_RESIDENT_PARTITIONS and world-eviction.ts (#747)."
-    },
-    {
-      "revision": 201,
-      "date": "2026-10-16",
-      "surfaceHash": "aec787c2d7948d17",
-      "payloadHash": "e82681be0c7e858e",
-      "formatHash": "3aff5d1f34f52ec0",
-      "summary": "A seat named in a zone's hideContentsFrom (or a denied owner of an owner-only zone) is now shown anonymous placeholder children instead of every child's real id in true order (#750). Picks offering those children carry the same placeholder ids (#715)."
-    },
-    {
-      "revision": 202,
-      "date": "2026-10-16",
-      "surfaceHash": "f69ab10d1603172a",
-      "payloadHash": "e82681be0c7e858e",
-      "formatHash": "3aff5d1f34f52ec0",
-      "summary": "Removed Game.performSerializedAction, which was unused and skipped the flow's turn check (#756)"
+      "summary": "The session host refuses any op whose player is not the calling seat, and refuses a hint or heatmap result computed on a position the game has left (#738, #742)."
     }
   ]
 }
