@@ -806,7 +806,7 @@ export async function chunkMerge(projectDir: string, slug: string, options: Chun
   const branch = options.branch ?? `chunk/${slug}`;
   const common = await git(dir, ['rev-parse', '--path-format=absolute', '--git-common-dir']).catch(() => undefined);
   if (common === undefined) return refused([`${dir} is not in a git repository. Run chunk-merge from the game project's main checkout.`]);
-  const lock = await takeOsLock(join(common.trim(), 'boardsmith-chunk-merge.flock'), `chunk-merge of ${slug} (branch ${branch})`);
+  const lock = await takeOsLock(join(common.trim(), 'boardsmith-chunk-merge.flock'), 'chunk-merge', `chunk-merge of ${slug} (branch ${branch})`);
   if (typeof lock === 'string') return refused([lock]);
   try {
     const ctx = await readContext(dir, slug, branch);

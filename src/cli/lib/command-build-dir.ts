@@ -101,22 +101,29 @@ export async function withCommandBuildDir<T>(
  * process) can be ended before the directory goes.
  */
 export async function withDirRemovedAfter<T>(dir: string, use: (dir: string) => Promise<T>, onStop?: () => void | Promise<void>): Promise<T> {
-  const remove = (): void => rmSync(dir, { recursive: true, force: true });
+  return withCleanupAfter(() => rmSync(dir, { recursive: true, force: true }), () => use(dir), onStop);
+}
+
+/**
+ * Runs `use`, then `cleanup` when `use` settles or when SIGINT or SIGTERM stops the run, the same
+ * way {@link withDirRemovedAfter} removes its directory, for undo work that is not a directory.
+ */
+export async function withCleanupAfter<T>(cleanup: () => void, use: () => Promise<T>, onStop?: () => void | Promise<void>): Promise<T> {
   if (stopping) {
-    remove();
+    cleanup();
     throw new Error('The command was interrupted. Run it again to finish the check.');
   }
-  const scope = { remove, onStop };
+  const scope = { remove: cleanup, onStop };
   active.add(scope);
   if (active.size === 1) for (const signal of STOP_SIGNALS) process.on(signal, onSignal);
   try {
-    return await use(dir);
+    return await use();
   } finally {
     if (stopping) await stopping;
     else {
       active.delete(scope);
       if (active.size === 0) releaseSignals();
-      remove();
+      cleanup();
     }
   }
 }

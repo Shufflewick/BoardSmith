@@ -211,6 +211,16 @@ describe('SeededRandom', () => {
       const rng = new SeededRandom('single');
       for (let i = 0; i < 20; i++) expect(rng.nextInt(1)).toBe(0);
     });
+
+    it.each([0, -3, NaN, 2.5, Infinity])('nextInt(%s) throws a readable error', (bad) => {
+      const rng = new SeededRandom('bad-max');
+      expect(() => rng.nextInt(bad)).toThrow('max must be a whole number of at least 1');
+    });
+
+    it('still accepts a whole number of at least 1', () => {
+      const rng = new SeededRandom('good-max');
+      expect(rng.nextInt(6)).toBeLessThan(6);
+    });
   });
 
   describe('pick', () => {

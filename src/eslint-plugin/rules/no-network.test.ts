@@ -27,8 +27,24 @@ ruleTester.run('no-network', rule, {
     { code: `const label = 'https';` },
     // A local variable named after a forbidden module is fine.
     { code: `const net = { players: 2 };` },
+    // A game's own value named fetch is not the global (#737).
+    { code: `function load(fetch) { return fetch('x'); }` },
+    { code: `const WebSocket = Mock; new WebSocket();` },
+    // A literal dynamic import names what it loads.
+    { code: `const mod = await import('./rules.js');` },
+    { code: 'const mod = await import(`./rules.js`);' },
+    // A name used only as a type runs nothing (#737).
+    { code: `let ws: WebSocket | null = null;` },
+    { code: `interface Link { socket: WebSocket }` },
+    { code: `type F = typeof fetch;` },
   ],
   invalid: [
+    // Every other spelling of the same access (#737).
+    { code: `new globalThis.WebSocket('wss://x');`, errors: [{ messageId: 'noWebSocket' }] },
+    { code: `globalThis['fetch']('/api');`, errors: [{ messageId: 'noFetch' }] },
+    { code: `fetch.call(null, u);`, errors: [{ messageId: 'noFetch' }] },
+    { code: `const f = fetch; f('/api');`, errors: [{ messageId: 'noFetch' }] },
+    { code: `const mod = await import(name);`, errors: [{ messageId: 'noDynamicImport' }] },
     {
       code: `const res = fetch('https://example.com');`,
       errors: [{ messageId: 'noFetch' }],

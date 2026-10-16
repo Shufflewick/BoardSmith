@@ -358,16 +358,6 @@
         "count": 3
       }
     },
-    "src/eslint-plugin/rules/no-network.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "src/eslint-plugin/rules/no-nondeterministic.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/runtime/runner.ts": {
       "complexity_moderate": {
         "count": 5

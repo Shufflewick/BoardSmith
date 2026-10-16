@@ -1,6 +1,6 @@
 {
-  "revision": 199,
-  "surfaceHash": "29f429bc7433b8b2",
+  "revision": 200,
+  "surfaceHash": "8b779d8dff5c7b45",
   "payloadHash": "9f29fb7dcae7fc03",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1535,6 +1535,14 @@
       "payloadHash": "9f29fb7dcae7fc03",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "actionTempState values now live nested in settings._actionTemp as { [seat]: { [action]: { [key]: value } } } instead of flat _actionTemp_<seat>_<action>_<key> keys, so one action's clear() can no longer delete another action's values and names cannot alias (#725). Each seat's view still carries only its own seat's entry and spectators none. Temp values saved by an older engine are not read back. Platform: re-vendor; no host change."
+    },
+    {
+      "revision": 200,
+      "date": "2026-10-16",
+      "surfaceHash": "8b779d8dff5c7b45",
+      "payloadHash": "9f29fb7dcae7fc03",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "The session host refuses any op whose player is not the calling seat, and refuses a hint or heatmap result computed on a position the game has left (#738, #742)."
     }
   ]
 }
