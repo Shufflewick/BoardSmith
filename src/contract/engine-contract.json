@@ -1,6 +1,6 @@
 {
-  "revision": 212,
-  "surfaceHash": "df921086475c1773",
+  "revision": 213,
+  "surfaceHash": "f826367d58f23627",
   "payloadHash": "d037431574c86546",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1639,6 +1639,14 @@
       "payloadHash": "d037431574c86546",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "World clock-phase .about() refuses a chair above the world's seat count with invalid-seat-declaration (#799)."
+    },
+    {
+      "revision": 213,
+      "date": "2026-10-16",
+      "surfaceHash": "f826367d58f23627",
+      "payloadHash": "d037431574c86546",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "World resolvePick and resolveQuote answer only for an action offersFor lists for that seat (same read-only condition check after round zero); a disabled action is still listed greyed and still answers (#798)."
     }
   ]
 }

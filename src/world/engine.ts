@@ -1242,24 +1242,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // whose condition is false is not offered and no further round runs, so a
       // verb that is irrelevant here costs one predicate and no hydration past
       // round one.
-      if (
-        definition.condition &&
-        // PROJECTED, AND WITH REACH-MARKING OFF (ShufflewickPub #384/#295): a
-        // condition decides whether an action is OFFERED, and an offer changes
-        // nothing -- so a condition that wrote would be writing on the one path
-        // with nowhere to put it. `readingOnly` is not optional beside the
-        // projection: a finder reached through a projected game marks what it
-        // touched, and marking is a write these traps refuse.
-        !this.game.readingOnly(() =>
-          evaluateCondition(
-            definition.condition!,
-            { game: readOnlyProjection(this.game), player: acting, args: {} },
-            `action '${definition.name}'`,
-          ),
-        )
-      ) {
-        return null;
-      }
+      if (!this.conditionHolds(definition, acting)) return null;
 
       // ONE ROUND, THEN ONE SELECTION, IN THE AUTHOR'S ORDER.
       //
@@ -1308,6 +1291,23 @@ export class BoardSmithWorldEngine implements WorldEngine {
     } finally {
       bindWorldFacilities(this.game, null);
     }
+  }
+
+  /** Whether the action's condition offers it to this seat, with empty args as
+   *  a table evaluates availability. PROJECTED, AND WITH REACH-MARKING OFF
+   *  (ShufflewickPub #384/#295): a finder reached through a projected game marks
+   *  what it touched, and marking is a write these traps refuse. */
+  private conditionHolds(definition: ActionDefinition, acting: Player): boolean {
+    return (
+      !definition.condition ||
+      this.game.readingOnly(() =>
+        evaluateCondition(
+          definition.condition!,
+          { game: readOnlyProjection(this.game), player: acting, args: {} },
+          `action '${definition.name}'`,
+        ),
+      )
+    );
   }
 
   /**
@@ -1384,6 +1384,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
     try {
       for (let step = 0; step <= through; step++) {
         await this.hydrateRounds(definition, step, seat, args, named, namedSeats, null, arrivalAt(stamp.now));
+        // AFTER ROUND ZERO, as offerOf: a read answers only what the offer shows (#798).
+        if (step === 0 && !this.conditionHolds(definition, acting)) {
+          throw worldRefusal(
+            "unknown-command",
+            `"${definition.name}" is not offered to this seat right now, so there is nothing to ` +
+              "pick or price for it. Refresh the offer and choose an action it lists.",
+          );
+        }
       }
       return answer(acting, named, this.resolveDraft(definition, args, acting, named));
     } finally {
