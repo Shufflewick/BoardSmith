@@ -51,23 +51,25 @@ export class PersistentMap<K extends string, V> implements Map<K, V> {
   }
 
   get(key: K): V | undefined {
-    return this.#getData()[key];
+    const data = this.#getData();
+    return Object.hasOwn(data, key) ? data[key] : undefined;
   }
 
   set(key: K, value: V): this {
     const data = this.#getData();
-    data[key] = value;
+    // defineProperty, not assignment: `data['__proto__'] = v` sets the prototype instead of a key.
+    Object.defineProperty(data, key, { value, writable: true, enumerable: true, configurable: true });
     this.#setData(data);
     return this;
   }
 
   has(key: K): boolean {
-    return key in this.#getData();
+    return Object.hasOwn(this.#getData(), key);
   }
 
   delete(key: K): boolean {
     const data = this.#getData();
-    const existed = key in data;
+    const existed = Object.hasOwn(data, key);
     delete data[key];
     this.#setData(data);
     return existed;
