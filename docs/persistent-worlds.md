@@ -2756,6 +2756,7 @@ thing next time.
 | `undecided-audience` | A seat's `world.view` could only say whether it names an event's scope by reading a partition the command did not declare. Declare it in the action, or narrow who can see the scope in the tree. |
 | `partition-missing` | A declaration named a partition this world's store does not have, and `world.createPartition` did not build one for that name either. Usually a typo, or a partition nothing has created yet. |
 | `invalid-partition-name` | A partition name a store may not hold: empty, over 128 characters, outside `A-Za-z0-9._:@/-`, one of `__proto__`, `constructor`, `prototype`, or `notice`, the scope a seat's notices are delivered live on. |
+| `invalid-partition-root` | `genesis`, `createPartition` or a migration answered a partition root that is not a direct child of the game (it sits inside another element, so it would be stored twice), or answered one element under two names. Create each root with `game.create(...)` and answer it once. |
 | `partition-too-large` | A partition serialized past `partitionMaxBytes`. The fix is to split it. See the next section. |
 | `schedule-cap` | This owner's unkeyed pending events are at the cap. Use a key. |
 | `schedule-key-cap` | This owner holds as many distinct keys as one owner may. Reuse a key rather than minting one per action. |
