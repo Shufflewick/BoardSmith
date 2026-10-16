@@ -1755,6 +1755,16 @@ export function withheldFromSeat(element: GameElement): boolean {
   return element._ctx?._seatView === true && element.branch().startsWith(PILE_BRANCH);
 }
 
+/** Assignment would turn a `__proto__` key into a prototype change and lose the entry (#761). */
+function setOwnKey(target: Record<string, unknown>, key: string, value: unknown): void {
+  // Only `__proto__` needs the slow path; defineProperty on every key made encode/decode 2.5-4x slower.
+  if (key === '__proto__') {
+    Object.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true });
+  } else {
+    target[key] = value;
+  }
+}
+
 /**
  * Encode a value for saved state: an element attribute, an action argument in
  * history, the game's settings or message log. The one codec for all of them
@@ -1883,7 +1893,7 @@ function encodeAt(
 
     const result: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {
-      result[k] = encode(v, `${path}.${k}`);
+      setOwnKey(result, k, encode(v, `${path}.${k}`));
     }
     return result;
   } finally {
@@ -1938,7 +1948,7 @@ export function decodeValue(value: unknown, game: Game): unknown {
   }
   const result: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value)) {
-    result[k] = decodeValue(v, game);
+    setOwnKey(result, k, decodeValue(v, game));
   }
   return result;
 }
