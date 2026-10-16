@@ -178,6 +178,17 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
     expect(idOf(again!.partition)).not.toBe(idOf(first!.partition));
   });
 
+  it("answers a second ask for a resident created root from residency, minting nothing (#218)", async () => {
+    const genesis = await storedWorld();
+    const host = createWorld(options({ nextElementId: genesis.nextElementId })).runner;
+    const first = await host.createPartition("dynamic");
+
+    const again = await host.createPartition("dynamic");
+
+    expect(idOf(again!.partition)).toBe(idOf(first!.partition));
+    expect(again!.nextElementId).toBe(first!.nextElementId);
+  });
+
   it("REFUSES a cold mint from a host that declared no stamp at all", async () => {
     // The wrong path, made loud rather than made silent. A host that never
     // persisted the allocation cannot mint safely, and the old behaviour was to

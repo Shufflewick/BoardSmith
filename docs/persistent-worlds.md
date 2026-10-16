@@ -1216,8 +1216,11 @@ next one's to read. On ShufflewickPub it is also deleted when the holder's
 account is erased.
 
 A host drives all of this with one function, `applyNoticeWrites(result.notices,
-readBox)`, which applies a dispatch's sends and takes in order and answers each
-touched seat's box, so every host agrees about what a full box does. The
+readBox, { seatCount, budgets })`, which applies a dispatch's sends and takes in
+order and answers each touched seat's box, so every host agrees about what a
+full box does. The result comes from game code, so it first re-checks `perSeat`,
+the number of sends, each notice's size and every seat against the host's own
+budgets and seat count, and refuses a result they do not admit. The
 `WorldStore` interface carries `noticeBox(seat)` and a checkpoint's `notices`;
 `boardsmith dev` keeps boxes in its local store, and `TestWorld.noticeBox(seat)`
 shows a test what is waiting.
@@ -2064,7 +2067,8 @@ queue, rather than failing a check on the way in.
 - **`key`** makes it an **upsert**: it replaces the pending event with the same
   owner and key, so the count under one key never grows. This is the shape you
   should usually be writing, and it is why the cap refusal's first suggestion is
-  to use one. A key may be at most **512 UTF-8 bytes**
+  to use one. A key may not be empty (`schedule-key-empty`), since a cancel
+  must name a key. A key may be at most **512 UTF-8 bytes**
   (`WORLD_SCHEDULE_KEY_MAX_BYTES`), and a cancel's key the same. A host stores
   each event under a storage key built from it: percent-encoding makes each
   byte at most three, so 512 bytes is at most 1536 encoded, which leaves 512 of
@@ -2760,6 +2764,7 @@ thing next time.
 | `invalid-schedule-delay` | A negative or non-finite `delayMs`. |
 | `invalid-schedule-interval` | A non-positive or non-finite `everyMs`, which is a wake that re-arms instantly forever. |
 | `invalid-schedule-command` | A schedule request that names no action, or carries an argument that is not a JSON scalar. |
+| `schedule-key-empty` | A schedule armed under an empty key, which no cancel could ever take back. |
 | `schedule-key-too-long` | A schedule or cancel key past 512 UTF-8 bytes, which no host can store as part of a storage key. |
 | `schedule-key-malformed` | A schedule or cancel key that is not well-formed Unicode (it holds a lone UTF-16 surrogate), which no host can percent-encode into a storage key. |
 | `schedule-unknown-action` | A schedule naming an action this world does not register. The refusal lists the clock actions it can schedule. |

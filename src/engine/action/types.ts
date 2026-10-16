@@ -693,8 +693,8 @@ export interface ActionDefinition {
    *
    * Runs AFTER `condition` and after every selection validates, and ONLY at
    * submit time — it never affects whether the action is offered (that is
-   * `condition`'s job, which is also evaluated with EMPTY args at availability
-   * time). Set via `.validate(fn)`.
+   * `condition`'s job, which never sees picks in its args). Set via
+   * `.validate(fn)`.
    */
   validate?: (args: Record<string, unknown>, context: ActionContext) => boolean | string;
   /** The effect to execute */
