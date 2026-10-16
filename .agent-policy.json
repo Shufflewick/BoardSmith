@@ -1,16 +1,52 @@
 {
   "verify": [
-    { "name": "lint", "run": "node bin/boardsmith.js lint" },
-    { "name": "audit", "run": "node bin/boardsmith.js audit --dupes-baseline --health-baseline --duplication" },
-    { "name": "test", "run": "node bin/boardsmith.js test --verdict-file {verdictFile}", "verdictFile": true },
-    { "name": "browser", "run": "node bin/boardsmith.js test --browser" },
-    { "name": "catalogue", "run": "node bin/boardsmith.js catalogue --skip 'WindupWarfare=validate does not finish (Shufflewick/WindupWarfare#100)'" }
+    {
+      "name": "related-tests",
+      "run": "npx vitest run --changed {changeBase} --passWithNoTests=false",
+      "reporter": "vitest",
+      "related": true
+    },
+    {
+      "name": "typecheck",
+      "run": "node bin/boardsmith.js typecheck"
+    },
+    {
+      "name": "lint",
+      "run": "node bin/boardsmith.js lint"
+    },
+    {
+      "name": "audit",
+      "run": "node bin/boardsmith.js audit --dupes-baseline --health-baseline --duplication"
+    },
+    {
+      "name": "browser",
+      "run": "node bin/boardsmith.js test --browser"
+    },
+    {
+      "name": "catalogue",
+      "run": "node bin/boardsmith.js catalogue --skip 'WindupWarfare=validate does not finish (Shufflewick/WindupWarfare#100)' --skip 'one-two-punch=it calls player.setCurrent(), which #780 removes (Shufflewick/one-two-punch#2)' --skip 'seven=its bot-search test calls createSnapshot without the reseed #776 requires (Shufflewick/seven#2)' --skip 'sotf=its harness follows #789 on a branch that waits on its quest-forgery question (Shufflewick/sotf#75)'"
+    }
   ],
+  "slice": {
+    "count": 20,
+    "run": "npx vitest run --shard={slice}",
+    "reporter": "vitest"
+  },
   "thread": {
+    "push": "origin",
     "workspaces": [
-      { "dir": ".", "install": "npm install", "requireInstalled": "node_modules", "refreshWhenChanged": "^package(-lock)?\\.json$" }
+      {
+        "dir": ".",
+        "install": "npm install",
+        "requireInstalled": "node_modules",
+        "refreshWhenChanged": "^package(-lock)?\\.json$"
+      }
     ],
-    "seed": [".env", ".env.local", ".dev.vars"],
+    "seed": [
+      ".env",
+      ".env.local",
+      ".dev.vars"
+    ],
     "disposableIgnored": [
       "node_modules/",
       "dist/",
@@ -26,5 +62,7 @@
       "*.log"
     ]
   },
-  "approval": { "auth": [] }
+  "approval": {
+    "auth": []
+  }
 }

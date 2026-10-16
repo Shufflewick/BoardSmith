@@ -342,6 +342,10 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
    * **Snapshot-restore constraint:** same as {@link onEnter} — never capture
    * elements lexically in the handler closure; reach them via game
    * attributes or `element.game` queries.
+   *
+   * The handler runs part way through the move, so it must not move the
+   * leaving element: that throws. Move it from the destination's `onEnter`
+   * instead. A handler that throws leaves the element where it was.
    */
   onExit<T extends GameElement>(
     callback: (element: T) => void,

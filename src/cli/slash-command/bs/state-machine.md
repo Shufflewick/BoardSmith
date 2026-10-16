@@ -358,7 +358,7 @@ shorthand that names no id it can map: a dash then a plain number after a provis
 - Commit **before** `spec` starts, so work-in-progress is always distinguishable from the last verified baseline.
 - `chunk-<slug>/step-spec` is the **RED anchor**: failing tests and signature-only stubs, no implementation. `chunk-<slug>/step-build` is GREEN. Never conflate them into one commit — that erases the only durable evidence the tests preceded the code (`build/spec.md` "Git Protocol").
 - `close` records the verified commit hash in CHUNK.md — this is the bisect anchor for any later regression and the diff base for "what changed since the human last said yes."
-- **The chunk's verify base** is the commit before the chunk's first `chunk-<slug>/` commit: where
+- **The chunk's verify base**, under the default full policy, is the commit before the chunk's first `chunk-<slug>/` commit: where
   this chunk's work started. Every `boardsmith verify` run for chunk work (`build/test.md`,
   `build/repair.md`, `build/playtest.md`, `build/close.md`) names the chunk, and the command finds
   that commit itself, so its mutation check covers exactly the code changed since then. Run from
@@ -376,6 +376,50 @@ shorthand that names no id it can map: a dash then a plain number after a provis
   else is not the chunk's: `chunk-signoff <slug>` and `verify --check --chunk <slug>` accept a
   result only when its base is the chunk's verify base or a commit before it, so a
   `npx boardsmith verify --base HEAD` run (which mutates nothing) satisfies no chunk's sign-off.
+
+  For an explicitly opted-in project, use "Focused Verification Policy" below to choose the
+  authored selection and its ticket base instead.
+
+## Focused Verification Policy
+
+This section governs the conditional focused path in the build and orchestration steps. The
+default remains full verification. Focused gates require an explicit committed
+`.agent-policy.json` opt-in with a selection path and `fullEvery: 5`. The committed selection
+identifies the exact ticket, its full base commit, and authored file paths and full test names;
+each selected file must have changed since that base. A malformed policy or selection stops
+the gate.
+
+During TDD, `boardsmith test --selection <path>` can consume an uncommitted selection. Once
+the implementation and selection are committed, run
+`boardsmith verify --chunk <slug> --selection <path>` on a clean tree. That receipt records
+only authored tests and typecheck, with the manifest's hash and ticket base. Full-suite,
+build, validate, smoke and mutation checks are explicitly deferred. Plain `boardsmith verify`
+retains the full path. `verify --check --chunk <slug>` reads and validates the recorded scope.
+The ticket base can be later than the chunk's first commit; focused evidence covers the
+declared ticket cases.
+
+The shared command gates read the committed policy and `agent-policy ticket status --json`:
+
+- `constraint-check` retains structural constraint, cap, ruling and review checks, then runs
+  the authored selection. Other measurement tests are deferred.
+- `test-step-check` retains its static checks, including Spec Manifest coverage and test-file
+  placement. Its mutation checks are deferred; its output supplies no mutation verdict.
+- `chunk-merge` retains ledger allocation, structural constraints, sign-offs, chunk checks and
+  claim-quote checks. It uses the main line's committed opt-in and the pinned incoming
+  manifest, then runs the actual authored cases once on the combined tree. Other chunk tests,
+  measurement tests, the full suite and mutations are deferred. Shared-file merge evidence
+  records that focused scope and its selection hash. The prospective tree receives no clean
+  commit receipt; a receipt requires verification of an actual clean commit.
+
+`agent-policy` owns the five-ticket closure count. After landing and pushing an implementation,
+use `agent-policy ticket close Owner/repo#123` to confirm and count its issue closure. When
+`fullDue` is true, run `agent-policy verify` to satisfy the required full run before starting or
+merging another ticket; authored checks cannot satisfy that deadline. A failed or unreadable
+status stops the focused command gates.
+
+Carry `review-gate`'s brief verbatim and record both `Verify: <commit> passed` and
+`Scope: focused <selection SHA-256>` for a focused review. Report the checks actually run and
+their deferred checks. Human sign-off, checklist and valid-waiver gates stay unchanged.
 
 ## Repair Loop Bound
 

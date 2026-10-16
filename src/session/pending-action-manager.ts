@@ -129,6 +129,7 @@ export class PendingActionManager<G extends Game = Game> {
 
     const refused = this.#refuseUnofferedAction(playerPosition, pendingState, actionName);
     if (refused) return refused;
+    if (pendingState) this.#runner.markStalePicks(pendingState, playerPosition);
 
     // Auto-create pending action if it doesn't exist and actionName is provided
     if (!pendingState && actionName) {
@@ -311,33 +312,12 @@ export class PendingActionManager<G extends Game = Game> {
     pendingState: PendingActionState,
     playerPosition: number,
   ): Promise<PickStepResult> {
-    // Serialize the completed action BEFORE executing it, mirroring
-    // GameRunner.performAction (serialize-then-execute): the recorded element
-    // refs must reflect the positions the action acts on so replay/clone can
-    // re-resolve them. The fully-collected multi-step args live in
-    // pendingState.collectedArgs.
-    //
-    // This is the UNIQUE completion path for multi-step / repeating-selection
-    // actions (single-step actions go through performAction), so recording here
-    // neither double-records nor misses any path. We push only after a
-    // successful execute (below) to avoid recording a failed action.
-    const serializedAction = this.#runner.serializeForHistory(
-      action.name,
-      player,
-      pendingState.collectedArgs,
-    );
-
-    const actionResult = executor.executePendingAction(action, player, pendingState);
+    // The UNIQUE completion path for multi-step / repeating-selection actions
+    // on the session layer; the runner records, advances or rolls back.
+    const actionResult = this.#runner.executeCollectedAction(executor, action, player, pendingState, playerPosition);
     this.#pendingActions.delete(playerPosition);
 
-    if (actionResult.success) {
-      // Route the completed pending action through the same recording funnel as
-      // performAction so actionHistory is the single source of truth for what
-      // happened (replay, undo counts, and bot history all read it).
-      this.#runner.recordSerializedAction(serializedAction);
-      this.#runner.game.continueFlowAfterPendingAction(actionResult, playerPosition);
-      this.#runner.captureCheckpoint();
-    }
+    if (actionResult.success) this.#runner.captureCheckpoint();
 
     const flowState = this.#runner.getFlowState();
     return {
@@ -348,7 +328,7 @@ export class PendingActionManager<G extends Game = Game> {
       actionResult: {
         success: actionResult.success,
         error: actionResult.error,
-        flowState: toPublicFlowState(flowState),
+        flowState: toPublicFlowState(flowState, playerPosition),
         state: this.#seatState(playerPosition),
         data: actionResult.data,
         message: actionResult.message,

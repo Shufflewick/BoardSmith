@@ -860,6 +860,16 @@ describe("planSchedules -- how long an action name may be (#603)", () => {
   });
 });
 
+describe("planSchedules -- an empty key (#790)", () => {
+  it("refuses an arm under an empty key, which no cancel could take back", () => {
+    const result = plan([], [{ delayMs: 1000, action: "tick", key: "" }]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.refusal.code).toBe("schedule-key-empty");
+    expect(result.refusal.owner).toBe("game");
+  });
+});
+
 /**
  * #604: A KEY THAT IS NOT WELL-FORMED UNICODE IS REFUSED AT THE LINE.
  *

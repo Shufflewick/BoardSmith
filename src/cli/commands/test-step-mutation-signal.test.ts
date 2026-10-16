@@ -88,13 +88,16 @@ async function mutationProject() {
   testTimeout: 120000, cache: false,
 } };`);
   await fs.writeFile(join(project, 'tests/busy.test.ts'), `import { it, expect } from 'vitest';
-import { writeFileSync } from 'node:fs';
+import { renameSync, writeFileSync } from 'node:fs';
 import { enabled } from '../src/rules';
 it('holds an actual mutant worker open', async () => {
   if (process.env.CANCEL_PHASE === 'baseline' || process.env.BOARDSMITH_MUTANT) {
-    writeFileSync(new URL('./worker.json', import.meta.url), JSON.stringify({
+    // Renamed into place so the polling reader never sees the file empty or half written.
+    const record = new URL('./worker.json.partial', import.meta.url);
+    writeFileSync(record, JSON.stringify({
       worker: process.pid, leader: process.ppid, workDir: process.env.BOARDSMITH_MUTANT,
     }));
+    renameSync(record, new URL('./worker.json', import.meta.url));
     await new Promise(() => setInterval(() => {}, 1000));
   }
   expect(enabled).toBe(true);
@@ -108,6 +111,15 @@ async function stopOwnedGroup(owned: WorkerRecord | undefined): Promise<void> {
   if (!owned) return;
   if (processGroup(owned.leader).length > 0) process.kill(-owned.leader, 'SIGKILL');
   await vi.waitFor(() => expect(processGroup(owned.leader)).toEqual([]), { timeout: 10_000 });
+}
+
+async function groupAfterParent(pgid: number, unobservable: boolean, output: string): Promise<OwnedProcess[]> {
+  if (unobservable) {
+    // The message proves the whole group got SIGKILL, but the parent could not wait for it to finish exiting.
+    expect(output).toContain('Could not confirm that Vitest process group');
+    while (processGroup(pgid).length > 0) await delay(10);
+  }
+  return processGroup(pgid);
 }
 
 async function workerRecord(project: string): Promise<WorkerRecord | undefined> {
@@ -173,12 +185,11 @@ describe('mutation verification cancellation (#712)', () => {
           await fs.writeFile(join(project, 'release'), 'released');
         }
         const end = await ended;
-        const after = processGroup(owned.leader);
+        const after = await groupAfterParent(owned.leader, holdGroup === 'unreadable', output);
         const evidence = JSON.stringify({ parent: child.pid, signal, target, before, end, after, groupProbe: groupProbe(owned.leader) });
         expect(end, output + evidence).toEqual({ code: null, signal });
         expect(after, 'owned Vitest processes survived the interrupted parent: ' + evidence).toEqual([]);
         if (holdGroup === 'unreadable') {
-          expect(output).toContain('Could not confirm that Vitest process group');
           await fs.access(owned.workDir);
           expect(await fs.readdir(join(project, '.boardsmith'))).toHaveLength(2);
         } else expect(await fs.readdir(join(project, '.boardsmith'))).toEqual([]);

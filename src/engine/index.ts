@@ -99,6 +99,11 @@ export { parseCsv, type CsvColumnType, type CsvValue, type CsvRow } from './util
 export {
   Player,
   AbilityManager,
+  addAbility,
+  hasUnusedAbility,
+  spendAbility,
+  countUnusedAbilities,
+  groupAbilities,
 } from './player/index.js';
 
 export type { Ability, PlayerStatus } from './player/index.js';
@@ -109,6 +114,14 @@ export {
   MonotonicTrack,
   UniqueTrack,
   CounterTrack,
+  monotonicTrack,
+  uniqueTrack,
+  counterTrack,
+  canAddToTrack,
+  addToTrack,
+  incrementCounter,
+  isTrackComplete,
+  trackPoints,
 } from './scoring/index.js';
 
 export type {
@@ -117,6 +130,10 @@ export type {
   MonotonicTrackConfig,
   UniqueTrackConfig,
   CounterTrackConfig,
+  TrackState,
+  MonotonicTrackState,
+  UniqueTrackState,
+  CounterTrackState,
 } from './scoring/index.js';
 
 // Element visibility
