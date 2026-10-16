@@ -4,16 +4,14 @@
  * Handles the step-by-step processing of actions with repeating selections.
  */
 
-import type { FlowState, PendingActionState, Game, FollowUpOffer, PublicFlowState } from '../engine/index.js';
-import { toPublicFlowState } from '../engine/index.js';
+import type { PendingActionState, Game, FollowUpOffer } from '../engine/index.js';
 import type { GameRunner } from '../runtime/index.js';
 import {
   ErrorCode,
-  type PlayerGameState,
   type WarningEntry,
   type ChoiceWithRefs,
 } from './types.js';
-import { actionForSeat, buildPlayerState, offerFollowUp } from './utils.js';
+import { actionForSeat, offerFollowUp } from './utils.js';
 
 /**
  * Result from processing a pick step.
@@ -31,25 +29,14 @@ export interface PickStepResult {
   done?: boolean;
   nextChoices?: ChoiceWithRefs[];
   actionComplete?: boolean;
-  actionResult?: {
-    success: boolean;
-    error?: string;
-    flowState?: PublicFlowState;
-    state?: PlayerGameState;
-    /**
-     * `ActionResult.data` from the completed multi-step action (BUG-017), so a
-     * pick-driven action returns its computed value exactly like a single-step
-     * one does.
-     */
-    data?: Record<string, unknown>;
-    /** `ActionResult.message` from the completed multi-step action (BUG-012). */
-    message?: string;
-  };
-  /** Mirrors `actionResult.data`, hoisted for callers that read the step result directly. */
+  /**
+   * `ActionResult.data` from the completed multi-step action (BUG-017), so a
+   * pick-driven action returns its computed value exactly like a single-step
+   * one does.
+   */
   data?: Record<string, unknown>;
-  /** Mirrors `actionResult.message`, hoisted for callers that read the step result directly. */
+  /** `ActionResult.message` from the completed multi-step action (BUG-012). */
   message?: string;
-  state?: PlayerGameState;
   /** The follow-up the completed action chained to, with its action's metadata. */
   followUp?: FollowUpOffer;
   /**
@@ -67,12 +54,9 @@ export interface PickStepResult {
  * Handles the state machine for actions with repeating selections,
  * tracking progress through multi-step action flows.
  *
- * Every step that changes the game runs in one order: change the game, record
- * the op's checkpoint (`runner.captureCheckpoint()`), then build the state
- * returned to the acting seat. `canUndo` in that state asks the checkpoint
- * window whether the turn start is still retained (`decideUndo`), so a state
- * built before the checkpoint is recorded reads the window one step stale and
- * can offer an undo a small `checkpoints.max` has already dropped (#385).
+ * Every step that changes the game records the op's checkpoint
+ * (`runner.captureCheckpoint()`). It builds no seat view: the caller builds
+ * every view once, after the step (#813).
  *
  * `PickHandler` builds one per selection step, seeded with the seat's pending
  * state, and the host persists what is left of it.
@@ -196,7 +180,6 @@ export class PendingActionManager<G extends Game = Game> {
         nextChoices: result.nextChoices,
         warnings: result.warnings,
         actionComplete: false,
-        state: this.#seatState(playerPosition),
       };
     }
 
@@ -222,7 +205,6 @@ export class PendingActionManager<G extends Game = Game> {
       success: true,
       done: true,
       actionComplete: false,
-      state: this.#seatState(playerPosition),
     };
   }
 
@@ -300,11 +282,6 @@ export class PendingActionManager<G extends Game = Game> {
     return { success: false, error, errorCode: ErrorCode.INVALID_PICK };
   }
 
-  /** The acting seat's state after a step, as the step result returns it. */
-  #seatState(playerPosition: number): PlayerGameState {
-    return buildPlayerState(this.#runner, [], playerPosition, { includeActionMetadata: true });
-  }
-
   async #completePendingAction(
     executor: ReturnType<Game['getActionExecutor']>,
     action: any,
@@ -319,22 +296,12 @@ export class PendingActionManager<G extends Game = Game> {
 
     if (actionResult.success) this.#runner.captureCheckpoint();
 
-    const flowState = this.#runner.getFlowState();
     return {
       success: actionResult.success,
       error: actionResult.error,
       done: true,
       actionComplete: true,
-      actionResult: {
-        success: actionResult.success,
-        error: actionResult.error,
-        flowState: toPublicFlowState(flowState, playerPosition),
-        state: this.#seatState(playerPosition),
-        data: actionResult.data,
-        message: actionResult.message,
-      },
-      state: this.#seatState(playerPosition),
-      followUp: offerFollowUp(this.#runner.game, flowState, playerPosition),
+      followUp: offerFollowUp(this.#runner.game, this.#runner.getFlowState(), playerPosition),
       // Hoisted beside followUp so a multi-step action's return value reaches
       // the ops layer on the same footing as a single-step one (BUG-017).
       data: actionResult.data,

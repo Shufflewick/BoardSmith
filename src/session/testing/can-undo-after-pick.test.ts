@@ -14,7 +14,7 @@
  * `canUndo`, and the undo the seat is then offered succeeds (and one it is not
  * offered is refused). The executor is driven through `createHeadlessSession`,
  * and the public stateless `PickHandler` directly (the path whose returned
- * state went stale).
+ * state went stale; since #813 it returns no state, so its caller builds it).
  */
 import { describe, expect, it } from 'vitest';
 
@@ -132,8 +132,8 @@ async function observeStateless(max: number, upTo: number): Promise<Observed> {
 }
 
 /**
- * `PickHandler`, the public stateless pick API (#385's stale path): the state it
- * returns to the acting seat, the state the executor broadcasts from the same
+ * `PickHandler`, the public stateless pick API (#385's stale path): the state
+ * its caller builds for the acting seat after each step, the state the executor broadcasts from the same
  * runner once the op is settled, and the undo `executeOp` then takes from the
  * snapshot that op produced.
  */
@@ -153,16 +153,14 @@ async function observePickHandler(max: number, upTo: number): Promise<Observed> 
     if (step.kind === 'action') {
       const res = runner.performAction(step.actionName, 1, {});
       expect(res.success, res.error).toBe(true);
-      // A single-step action returns no state of its own; what the seat sees is the envelope.
-      runner.getSnapshot();
-      returned = buildPlayerState(runner, [], 1, { includeActionMetadata: true });
-      continue;
+    } else {
+      const res = await handler.processSelectionStep(1, step.selectionName, step.value, 'pair', undefined, pending);
+      expect(res.success, res.error).toBe(true);
+      pending = res.pendingState;
     }
-    const res = await handler.processSelectionStep(1, step.selectionName, step.value, 'pair', undefined, pending);
-    expect(res.success, res.error).toBe(true);
-    pending = res.pendingState;
-    returned = res.actionComplete ? res.actionResult!.state : res.state;
-    if (res.actionComplete) expect(canUndoOf(res.state)).toBe(canUndoOf(returned));
+    // Neither returns state of its own (#813); what the seat sees is the envelope.
+    runner.getSnapshot();
+    returned = buildPlayerState(runner, [], 1, { includeActionMetadata: true });
   }
   const snapshot = runner.getSnapshot();
   const broadcast = buildPlayerState(runner, [], 1, { includeActionMetadata: true });
