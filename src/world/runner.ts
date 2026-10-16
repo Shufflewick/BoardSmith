@@ -450,6 +450,25 @@ function assertSourceBytes(
 }
 
 /**
+ * THE ORIGINALS A CALL'S JOIN READS. A page carries them as `sources`; a
+ * whole-world call already holds every one it could declare among its own
+ * roots, so they are taken from there (#787). Either way they are checked.
+ */
+function joinSources(
+  declared: ReadonlyMap<string, readonly string[]> | undefined,
+  sent: Readonly<Record<string, StoredPartition>> | undefined,
+  whole: Readonly<Record<string, StoredPartition>> | undefined,
+): Readonly<Record<string, StoredPartition>> {
+  if (declared === undefined) return {};
+  const wanted = sourceUnion(declared);
+  const held =
+    whole === undefined
+      ? undefined
+      : Object.fromEntries(wanted.filter((name) => name in whole).map((name) => [name, whole[name]!]));
+  return assertSourceBytes(sent ?? held, wanted);
+}
+
+/**
  * ONE ROOT'S READER, HELD TO ONE ROOT'S DECLARATION (#275).
  *
  * The page's originals are hydrated once and shared, and what differs per root
@@ -1278,8 +1297,7 @@ export function createWorldRunner(
       // anything runs, and read through a second game that dies with this call.
       const join = migrationHooks.join;
       const declared = join === undefined ? undefined : declaredPerRoot(join, page, digest);
-      const supplied =
-        declared === undefined ? {} : assertSourceBytes(ctx.sources, sourceUnion(declared));
+      const supplied = joinSources(declared, ctx.sources, paged ? undefined : stored);
       const derived = engine.migrateSources(supplied, (read) => {
         const sourceFor = (root: string) => {
           if (declared === undefined) {
