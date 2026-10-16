@@ -1,7 +1,7 @@
 {
-  "revision": 200,
+  "revision": 199,
   "surfaceHash": "29f429bc7433b8b2",
-  "payloadHash": "a7779f70a5b2391c",
+  "payloadHash": "9f29fb7dcae7fc03",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1535,14 +1535,6 @@
       "payloadHash": "9f29fb7dcae7fc03",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "actionTempState values now live nested in settings._actionTemp as { [seat]: { [action]: { [key]: value } } } instead of flat _actionTemp_<seat>_<action>_<key> keys, so one action's clear() can no longer delete another action's values and names cannot alias (#725). Each seat's view still carries only its own seat's entry and spectators none. Temp values saved by an older engine are not read back. Platform: re-vendor; no host change."
-    },
-    {
-      "revision": 200,
-      "date": "2026-10-16",
-      "surfaceHash": "29f429bc7433b8b2",
-      "payloadHash": "a7779f70a5b2391c",
-      "formatHash": "3aff5d1f34f52ec0",
-      "summary": "An element or player in animate()/animateTo() data now reaches each seat as a reference instead of the whole object (#752): an element as { __elementRef: branch }, its path in that seat's own view (a card the seat cannot see names the placeholder its board shows), a player as { __playerRef, seat, color, name }. Before, the element was written whole, name and real id included, into every seat's and the spectator's view. A UI handler that read fields off an element in event data now gets the reference; no catalogue game or MERC passes elements there. Platform: re-vendor; no host change, no stored format change."
     }
   ]
 }

@@ -16,6 +16,7 @@ import {
   registerCreatedElementClass,
 } from './game-element.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE } from './hidden-placeholder.js';
+import { concealRefsForSeat } from './concealed-refs.js';
 import { childrenChanged } from './cell-index.js';
 import { oncePerState, stateChanged } from './state-version.js';
 import { Piece } from './piece.js';
@@ -475,8 +476,8 @@ export interface AnimationEvent {
   /**
    * Event-specific data payload. Live in the game's buffer; `toJSON()` writes
    * an element in it as `{ __elementRef }` and a player as `{ __playerRef, seat,
-   * color, name }`, so a seat's payload names an element it cannot see by the
-   * placeholder its board shows (#752).
+   * color, name }`, and a seat's payload names an element it cannot see by the
+   * outermost container concealing it (#752, `concealRefsForSeat`).
    */
   data: Record<string, unknown>;
   /**
@@ -4466,10 +4467,10 @@ export class Game<
    *
    * @param type - Event type identifier (e.g., 'combat', 'score-item')
    * @param data - Event-specific data payload: plain data, elements and
-   *   players. Each seat receives an element as `{ __elementRef: branch }`,
-   *   its path in that seat's own view, so a card the seat cannot see arrives
-   *   as the placeholder its board shows. Pass the element, not `card.id`:
-   *   a raw id reaches every seat as it is.
+   *   players. Each seat receives an element as `{ __elementRef: branch }`, a
+   *   path in its own view: the element's, or for one the seat cannot see, the
+   *   outermost container concealing it (world mode excepted, #956). Pass the
+   *   element, not `card.id`: a raw id reaches every seat as it is.
    * @param callback - Optional callback to advance truth (convenience).
    *   Runs immediately as normal game code, after the event is buffered. Its
    *   mutations change the game like any other code; they are not recorded
@@ -4689,8 +4690,7 @@ export class Game<
         // Copy the buffer (same CR-02 aliasing concern: the live array is
         // mutated in place as later events are recorded). `data` is encoded
         // here, not at `animate()`, so an element in it is written as a
-        // reference to where it is now, which a seat's view resolves to what
-        // its board shows (#752).
+        // reference to where it is now (#752).
         animationEvents: this._animationEvents.map((e) => ({
           ...e,
           data: encodeValue(e.data, this._ctx, `animation event "${e.type}"`, 'data') as Record<string, unknown>,
@@ -5265,7 +5265,8 @@ export class Game<
                 `that did not number events per seat: start the game again under this engine.`,
             );
           }
-          return { ...event, id: own };
+          // #752: a reference into what this seat cannot see names only the container hiding it.
+          return { ...event, id: own, data: concealRefsForSeat(event.data, this, visibilityPosition) as Record<string, unknown> };
         });
       if (visible.length === 0) delete view.animationEvents;
       else view.animationEvents = visible;
