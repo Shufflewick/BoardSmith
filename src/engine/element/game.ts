@@ -5374,12 +5374,9 @@ export class Game<
         }
         return { ...e, id: ++this._animationEventSeq, seatIds };
       });
-    } else if (jsonWithEvents.animationEventSeq !== undefined || jsonWithEvents.animationEvents) {
-      // Full restore (no floor supplied): adopt the persisted counters.
-      // Checked on `animationEventSeq` OR `animationEvents` (not
-      // `animationEvents` alone) because toJSON serializes the counters
-      // independently of whether the buffer happens to be empty -- a restore
-      // must still adopt them even when there is no buffer to go with it.
+    } else {
+      // Full restore (no floor supplied): always adopt the persisted counters,
+      // even when toJSON omitted them, or a rolled-back action's events survive (#751).
       // Copy the event objects too (CR-02): the snapshot may be restored again.
       this._animationEvents = (jsonWithEvents.animationEvents ?? []).map((e) => ({
         ...e,
