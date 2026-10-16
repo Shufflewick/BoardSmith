@@ -281,12 +281,20 @@ function onFrameLoad(): void {
   replayHeld();
 }
 
-function onWindowMessage(event: MessageEvent): void {
-  // Another site can frame or open this page; only our own game frame may drive it (#719).
+type WorldFrameMessage = { source?: string; type?: string; [key: string]: unknown };
+
+/** The message, if our world frame sent it and a world UI stamped it, or null. */
+function fromWorldFrame(event: MessageEvent): WorldFrameMessage | null {
+  // Another site can frame or open this page; only our own world frame may drive it (#719).
   const frame = frameRef.value?.contentWindow;
-  if (!frame || event.source !== frame) return;
-  const data = event.data as { source?: string; type?: string; [key: string]: unknown } | undefined;
-  if (!data || data.source !== WORLD_UI_SOURCE) return;
+  if (!frame || event.source !== frame) return null;
+  const data = event.data as WorldFrameMessage | undefined;
+  return data?.source === WORLD_UI_SOURCE ? data : null;
+}
+
+function onWindowMessage(event: MessageEvent): void {
+  const data = fromWorldFrame(event);
+  if (data === null) return;
   if (data.type === 'world_ready') {
     replayHeld();
     return;
