@@ -1,5 +1,5 @@
 {
-  "revision": 214,
+  "revision": 215,
   "surfaceHash": "41c0e589d7f550d1",
   "payloadHash": "5bb7ce7332b154d4",
   "formatHash": "3aff5d1f34f52ec0",
@@ -1655,6 +1655,14 @@
       "payloadHash": "5bb7ce7332b154d4",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "game.currentPlayer and player.isCurrent() come from the flow: the seat of the running eachPlayer turn or action step, and none before the flow starts, after it completes, or while a simultaneous step is open. game.setCurrentPlayer() and player.setCurrent() are removed and Player no longer saves _isCurrent; a snapshot that still has it restores and the value is ignored (#780)."
+    },
+    {
+      "revision": 215,
+      "date": "2026-10-16",
+      "surfaceHash": "41c0e589d7f550d1",
+      "payloadHash": "5bb7ce7332b154d4",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "game.refreshAwaitingActions() called outside game code ends the open simultaneous step when its allDone holds, finishing the game if that was the last step; inside an action or a pick's onEach it only updates the waiting list (#783)."
     }
   ]
 }

@@ -936,9 +936,15 @@ export class FlowEngine<G extends Game = Game> {
    *
    * No-op when no simultaneous step is open: there is no stale list to correct.
    *
+   * Called from outside game code, it then ends the step when `allDone` holds,
+   * as settling an action does; a seat made done outside an action otherwise
+   * left the step open with nobody able to act (#783). Inside game code the
+   * running action's settling makes that check, so the flow runs on once.
+   *
    * @param seat - Refresh only this seat. Omit to refresh every seat.
+   * @returns The flow's state when the refresh ended the step and ran the flow on.
    */
-  refreshAwaitingActions(seat?: number): void {
+  refreshAwaitingActions(seat?: number): FlowState | undefined {
     // A complete flow prompts no seat, so there is nothing to admit.
     if (this.complete) return;
     const frame = this.stack[this.stack.length - 1];
@@ -991,6 +997,20 @@ export class FlowEngine<G extends Game = Game> {
         });
       }
     }
+
+    // Inside game code (an action, a pick's onEach) the action's settling re-checks allDone and runs the flow once.
+    if (this.game._ctx._changingDepth > 0) return;
+    const allDone = config.allDone
+      ? config.allDone(context)
+      : this.awaitingPlayers.every((p) => p.completed);
+    if (!allDone) {
+      this.warnIfDeadlockedSimultaneousStep(config);
+      return;
+    }
+    this.awaitingInput = false;
+    this.awaitingPlayers = [];
+    frame.completed = true;
+    return this.run();
   }
 
   /**
