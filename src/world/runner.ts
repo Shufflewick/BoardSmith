@@ -127,18 +127,6 @@ export interface WorldCreatedPartition extends WorldAllocation {
   readonly partition: StoredPartition;
 }
 
-/**
- * ONE CHECKPOINT'S BYTES, AND THE STAMP THAT PRODUCED THEM (#224).
- *
- * #377 named three roads that mint -- genesis, on-demand creation, migration --
- * and left out the one every game takes: `room.create(...)` inside an action
- * advances the same counter. A host that wrote a grown partition and kept its
- * older stamp handed the next fresh runner a number below ids the store already
- * held, and `adoptSubtree` refused the bytes that host had itself just written.
- *
- * So a checkpoint cannot answer bytes without its stamp. The two land in the
- * same transaction for the same reason genesis's do.
- */
 /** The serialized bytes for exactly these names, as a null-prototype record. */
 function bytesFor(names: readonly string[], written: Record<string, string>): Record<string, string> {
   const partitions: Record<string, string> = Object.create(null) as Record<string, string>;
@@ -796,6 +784,18 @@ export interface WorldMigrationJoins {
   readonly maxSourceBytes: number;
 }
 
+/**
+ * ONE CHECKPOINT'S BYTES, AND THE STAMP THAT PRODUCED THEM (#224).
+ *
+ * #377 named three roads that mint -- genesis, on-demand creation, migration --
+ * and left out the one every game takes: `room.create(...)` inside an action
+ * advances the same counter. A host that wrote a grown partition and kept its
+ * older stamp handed the next fresh runner a number below ids the store already
+ * held, and `adoptSubtree` refused the bytes that host had itself just written.
+ *
+ * So a checkpoint cannot answer bytes without its stamp. The two land in the
+ * same transaction for the same reason genesis's do.
+ */
 export interface WorldSerialized extends WorldAllocation {
   readonly partitions: Record<string, string>;
 }
@@ -1051,19 +1051,6 @@ export function createInlinedPartitionStore(): InlinedPartitionStore {
 }
 
 /**
- * The child's half: an engine, its command table, and the two calls above.
- *
- * A factory over an object literal rather than a class, because there is no
- * state here beyond what is closed over and nothing to subclass -- and because
- * a `WorldRunnerHandle` is what every caller actually holds. The two names
- * below are the whole of the child's surface.
- *
- * Deliberately NOT a `WorldEngine`. It is the same operations with the
- * partitions made explicit, and collapsing the two would hide exactly the
- * thing this file exists to make visible: that a command's partitions are
- * decided before it runs and supplied from outside.
- */
-/**
  * THE PARTITIONS THE ENGINE HOLDS AS LIVE SUBTREES (#217).
  *
  * The other half of "this child already has it", and the half `declare` used
@@ -1104,6 +1091,19 @@ async function adopt(
   await engine.hydrate(Object.keys(fresh));
 }
 
+/**
+ * The child's half: an engine, its command table, and the two calls above.
+ *
+ * A factory over an object literal rather than a class, because there is no
+ * state here beyond what is closed over and nothing to subclass -- and because
+ * a `WorldRunnerHandle` is what every caller actually holds. The two names
+ * below are the whole of the child's surface.
+ *
+ * Deliberately NOT a `WorldEngine`. It is the same operations with the
+ * partitions made explicit, and collapsing the two would hide exactly the
+ * thing this file exists to make visible: that a command's partitions are
+ * decided before it runs and supplied from outside.
+ */
 export function createWorldRunner(
   engine: WorldEngine,
   store: InlinedPartitionStore,
@@ -1632,18 +1632,6 @@ export interface WorldRunnerHandle {
   serialize(dirty: readonly string[]): Promise<WorldSerialized>;
 
   /**
-   * MIGRATE ONE PARTITION, from bytes to bytes (#200).
-   *
-   * Hands the partition's own element to the bundle's migration hook and
-   * answers what it serializes to. Adoption is done here rather than by the
-   * caller because a migration reads bytes the CALLER holds -- a world's
-   * stored partitions -- rather than anything this runner already has resident.
-   *
-   * Nothing is written: the caller collects every answer and commits them
-   * together, because a migration that landed halfway is a world whose rooms
-   * disagree about which rules wrote them.
-   */
-  /**
    * A MIGRATION, WHOLE (ShufflewickPub #379).
    *
    * One call, replacing the per-root `migratePartition` and the trailing
@@ -1697,18 +1685,6 @@ export interface WorldRunnerHandle {
     ctx: WorldMigrationSourcesContext,
   ): readonly string[];
 
-
-  /**
-   * A PARTITION ROOT THE STORE HAS NEVER HELD, built on demand (#218).
-   *
-   * The host looks for a declared partition, finds no row, and asks here before
-   * refusing: the bundle answers an element for a name it creates on first use,
-   * and nothing for a name that is simply wrong. Idempotent -- a name already
-   * resident is answered from residency rather than rebuilt -- so the host may
-   * ask on every miss.
-   *
-   * The host owns the write, as it owns every other write.
-   */
   /**
    * WHAT RE-ASKING ONE PICK STILL NEEDS RESIDENT (ShufflewickPub #378).
    *
@@ -1773,7 +1749,19 @@ export interface WorldRunnerHandle {
     stamp: WorldOfferStamp,
   ): Promise<readonly string[] | null>;
 
+  /**
+   * A PARTITION ROOT THE STORE HAS NEVER HELD, built on demand (#218).
+   *
+   * The host looks for a declared partition, finds no row, and asks here before
+   * refusing: the bundle answers an element for a name it creates on first use,
+   * and nothing for a name that is simply wrong. Idempotent -- a name already
+   * resident is answered from residency rather than rebuilt -- so the host may
+   * ask on every miss.
+   *
+   * The host owns the write, as it owns every other write.
+   */
   createPartition(name: string): Promise<WorldCreatedPartition | undefined>;
+
   /**
    * Admit a player to a world that is already running (#37 item 2).
    *

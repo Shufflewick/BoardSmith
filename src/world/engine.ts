@@ -863,26 +863,6 @@ export class BoardSmithWorldEngine implements WorldEngine {
   }
 
   /**
-   * BUILD A PARTITION ROOT THE STORE HAS NEVER HELD (#218).
-   *
-   * Genesis runs once. Every root a world would ever need therefore had to
-   * exist from its first instant, which is why a 500-seat world paid for 500
-   * empires on the day it opened and a world whose rooms are discovered could
-   * not be written at all. This is the other door: a host that looks for a
-   * declared partition and finds no row asks here, and the bundle answers
-   * either an element -- which becomes that partition -- or nothing, in which
-   * case the name is the typo the refusal has always said it was.
-   *
-   * IDEMPOTENT BY CONSTRUCTION. It is reached only when the store holds no row
-   * for the name, and a name already resident is answered from residency
-   * without building anything, so a second reach finds the first one's work
-   * rather than replacing it.
-   *
-   * The host owns the WRITE, as it owns every other write: this answers the
-   * bytes and the parent, and a partition that was built and not yet stored is
-   * simply a partition the next checkpoint writes.
-   */
-  /**
    * THE COUNTER VALUE THIS WORLD MINTS FROM NEXT, for the host to persist
    * (#377). Never an id: an id is this value run through the world's keyed
    * cipher (#482).
@@ -908,6 +888,26 @@ export class BoardSmithWorldEngine implements WorldEngine {
     this.allocationDeclared = true;
   }
 
+  /**
+   * BUILD A PARTITION ROOT THE STORE HAS NEVER HELD (#218).
+   *
+   * Genesis runs once. Every root a world would ever need therefore had to
+   * exist from its first instant, which is why a 500-seat world paid for 500
+   * empires on the day it opened and a world whose rooms are discovered could
+   * not be written at all. This is the other door: a host that looks for a
+   * declared partition and finds no row asks here, and the bundle answers
+   * either an element -- which becomes that partition -- or nothing, in which
+   * case the name is the typo the refusal has always said it was.
+   *
+   * IDEMPOTENT BY CONSTRUCTION. It is reached only when the store holds no row
+   * for the name, and a name already resident is answered from residency
+   * without building anything, so a second reach finds the first one's work
+   * rather than replacing it.
+   *
+   * The host owns the WRITE, as it owns every other write: this answers the
+   * bytes and the parent, and a partition that was built and not yet stored is
+   * simply a partition the next checkpoint writes.
+   */
   createPartition(name: string): StoredPartition | undefined {
     if (!this.allocationDeclared) {
       throw worldRefusal(
@@ -2555,11 +2555,6 @@ export class BoardSmithWorldEngine implements WorldEngine {
         // throw is what triggers the rollback that makes "refused" mean the
         // world is unchanged.
         //
-        // A PLAIN ERROR AND NOT A `worldRefusal`, deliberately. Under the flat
-        // table a refusing handler threw the game's own exception and it
-        // travelled unclassified, which is how a host tells "the rules said no"
-        // from "the platform's bookkeeping broke". Giving it a code here would
-        // relabel every bug in a game's rules as one of the platform's words.
         // THE CLASSIFIED ONE IF THERE WAS ONE, and the game's own sentence
         // otherwise. A plain `Error` is deliberate for the second case: under
         // the flat table a refusing handler threw the game's own exception and
