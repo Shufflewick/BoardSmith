@@ -10,8 +10,9 @@
  *
  * Either way the corrupted tree then gets serialized into a snapshot and a
  * checkpoint, poisoning every later restore, while the one diagnostic scrolls
- * out of the console. These are dev/test-time checks (they cost a traversal),
- * and at dev/test time they throw.
+ * out of the console. The traversal check costs a walk, so it runs and throws
+ * only at dev/test time. The `moveToInternal` check is free and throws in every
+ * mode (#762).
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Game, Space, Piece, Player, type GameOptions } from '../index.js';
@@ -99,11 +100,15 @@ describe.each([
   });
 
   it('leaves the element where it was, listed once, in a tree that still traverses', () => {
-    const token = game.left.first(Token)!;
+    const token = game.left.all(Token)[1];
     const before = game.left.all(Token).map((t) => t.id);
     game.left.onExit((el: Token) => el.putInto((el.game as Board).far), Token);
+    const entered: Token[] = [];
+    game.right.onEnter((el: Token) => entered.push(el), Token);
 
     expect(() => token.putInto(game.right)).toThrow();
+
+    expect(entered).toEqual([]);
 
     expect(token.parent).toBe(game.left);
     expect(game.left.all(Token).map((t) => t.id)).toEqual(before);

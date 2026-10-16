@@ -904,10 +904,12 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // World mode (#35 item 2): mark BOTH endpoints' partitions. A
     // cross-partition move dirties a destination this command's reads never
     // hydrated — the room a thrown object lands in — so marking the source
-    // alone loses it. Placed AFTER every throw above, so a REJECTED move
-    // marks nothing, and BEFORE the splice, so the source walk still sees the
-    // pre-move parent chain. In snapshot mode there are no partitions at all
-    // and this costs one undefined check.
+    // alone loses it. Placed AFTER the guard throws above, so a move they
+    // reject marks nothing, and BEFORE the splice, so the source walk still
+    // sees the pre-move parent chain. A move refused below (parent does not
+    // list the element, or an exit handler throws) leaves both marked, which
+    // only costs an extra partition write. In snapshot mode there are no
+    // partitions at all and this costs one undefined check.
     const partitionRoots = this._ctx?._partitionRoots;
     if (partitionRoots && partitionRoots.size > 0) {
       let touched = this._ctx._touchedPartitions;
