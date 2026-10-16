@@ -45,7 +45,6 @@ export const TurnOrder = {
    * list so every player gets a turn this round.
    */
   CONTINUE: {
-    direction: 'forward' as const,
     startingPlayer: (ctx: FlowContext) => ctx.game.currentPlayer,
   } satisfies TurnOrderConfig,
 
@@ -57,7 +56,6 @@ export const TurnOrder = {
    * folded, passed, stunned — use {@link TurnOrder.SKIP_IF} instead.
    */
   ACTIVE_ONLY: {
-    direction: 'forward' as const,
     filter: (player: Player) => player.isActive,
   } satisfies TurnOrderConfig,
 
@@ -81,7 +79,6 @@ export const TurnOrder = {
    * ```
    */
   START_FROM: (getPlayer: number | ((ctx: FlowContext) => Player)): TurnOrderConfig => ({
-    direction: 'forward' as const,
     startingPlayer: (ctx: FlowContext) => {
       if (typeof getPlayer === 'number') {
         // Position is 1-indexed
@@ -105,7 +102,6 @@ export const TurnOrder = {
    * ```
    */
   ONLY: (positions: number[]): TurnOrderConfig => ({
-    direction: 'forward' as const,
     filter: (player: Player) => positions.includes(player.seat),
   }),
 
@@ -130,7 +126,6 @@ export const TurnOrder = {
    * ```
    */
   LEFT_OF_DEALER: (getDealerPosition: (ctx: FlowContext) => number): TurnOrderConfig => ({
-    direction: 'forward' as const,
     startingPlayer: (ctx: FlowContext) => {
       const dealerPos = getDealerPosition(ctx);
       const dealer = ctx.game.getPlayerOrThrow(dealerPos);
@@ -152,7 +147,6 @@ export const TurnOrder = {
    * ```
    */
   SKIP_IF: (shouldSkip: (player: Player, ctx: FlowContext) => boolean): TurnOrderConfig => ({
-    direction: 'forward' as const,
     filter: (player: Player, ctx: FlowContext) => !shouldSkip(player, ctx),
   }),
 
