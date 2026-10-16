@@ -1,7 +1,7 @@
 {
-  "revision": 199,
+  "revision": 200,
   "surfaceHash": "29f429bc7433b8b2",
-  "payloadHash": "9f29fb7dcae7fc03",
+  "payloadHash": "e82681be0c7e858e",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1535,6 +1535,14 @@
       "payloadHash": "9f29fb7dcae7fc03",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "actionTempState values now live nested in settings._actionTemp as { [seat]: { [action]: { [key]: value } } } instead of flat _actionTemp_<seat>_<action>_<key> keys, so one action's clear() can no longer delete another action's values and names cannot alias (#725). Each seat's view still carries only its own seat's entry and spectators none. Temp values saved by an older engine are not read back. Platform: re-vendor; no host change."
+    },
+    {
+      "revision": 200,
+      "date": "2026-10-16",
+      "surfaceHash": "29f429bc7433b8b2",
+      "payloadHash": "e82681be0c7e858e",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A seat named in a zone's hideContentsFrom (or a denied owner of an owner-only zone) is now shown anonymous placeholder children instead of every child's real id in true order (#750). Picks offering those children carry the same placeholder ids (#715)."
     }
   ]
 }

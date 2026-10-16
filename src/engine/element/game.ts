@@ -5138,17 +5138,17 @@ export class Game<
             children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
             childCount: element._t.children.length,
           };
-        } else if (zoneVisibility.mode === 'owner' && element.getEffectiveOwner()?.seat !== visibilityPosition) {
-          // Owner-only zone and this player doesn't own it - show hidden placeholders
-          // Preserve $-prefixed system attributes (like $type) for proper AutoUI rendering
-          const hiddenChildren = placeholderChildren(json, element);
-          return {
-            // ownJson (not json): the container's own attributes must stay
-            // whitelist-redacted in this early return (CR-01).
-            ...ownJson,
-            children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
-          };
         }
+        // Every other zone this seat cannot see (a non-owner of an owner zone,
+        // or a seat in `exceptPlayers` of any mode, #750) gets anonymous
+        // placeholders, which keep the ids its picks are offered by (#715).
+        const hiddenChildren = placeholderChildren(json, element);
+        return {
+          // ownJson (not json): the container's own attributes must stay
+          // whitelist-redacted in this early return (CR-01).
+          ...ownJson,
+          children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
+        };
       }
 
       // Filter children normally
