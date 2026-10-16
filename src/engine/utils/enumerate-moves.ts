@@ -474,7 +474,8 @@ function nextStep(
   }
   const args = executor.resolveArgs(action, pending.collectedArgs, seatPlayer);
   const offer = selectionValues(game, action, seatPlayer, selection, args, walk.random);
-  return { selection, values: spend(walk, actionDef, selection, offer) ?? (selection.optional ? [null] : []) };
+  const tried = spend(walk, actionDef, selection, offer);
+  return { selection, values: tried?.length ? tried : selection.optional ? [null] : [] };
 }
 
 /**
@@ -823,7 +824,7 @@ interface SelectionOffer<T = unknown> {
 
 /**
  * The values both enumeration paths try for one selection, or `null` when it
- * has nothing to offer: no enabled choice, a text input, or a number input
+ * has nothing to offer (an empty list means the same): no enabled choice, a text input, or a number input
  * with no value to offer (see {@link numberInputPicks}). With `random` (a
  * sampling walk), a multiSelect offers one combination drawn with it.
  */
