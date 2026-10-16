@@ -387,7 +387,11 @@ function choiceItemResolver(
   const named = nameableBy(candidates, player);
   const anyHidden = named.length < candidates.length;
   return (item) => {
-    if (isSerializedElement(item)) return byId((item as { id: number }).id) ?? item;
+    if (isSerializedElement(item)) {
+      // A plain data choice may carry `id` and `className` too: one equal to it is that choice, not an element (#774).
+      const data = named.find((c) => !isElement(c.value) && valuesEqual(c.value, item));
+      return data ? data.value : byId((item as { id: number }).id) ?? item;
+    }
     if (anyHidden && typeof item === 'number' && item < 0) return byId(item) ?? item;
     const match = findMatchingChoice(item, named);
     return match === undefined ? item : match.value;
@@ -562,8 +566,7 @@ export class ActionExecutor {
     known: readonly Candidate[] | undefined,
     byId: SeatIdReader,
   ): unknown {
-    if (isSerializedElement(value)) return byId((value as { id: number }).id) ?? value;
-    if (!player) return value;
+    if (!player) return isSerializedElement(value) ? byId((value as { id: number }).id) ?? value : value;
     // Only a multiSelect or an orderedList is resolved per item, so a single
     // choice whose VALUE is itself an array is never taken apart.
     if (Array.isArray(value) && selection.multiSelect === undefined && selection.orderedList === undefined) return value;
@@ -764,7 +767,7 @@ export class ActionExecutor {
     const from =
       typeof elementSel.from === 'function'
         ? elementSel.from(context)
-        : elementSel.from ?? this.game;
+        : elementSel.from ?? context.game;
 
     // DEV: Check if 'from' is an ElementCollection (likely a bug in action definition)
     if (isDevMode() && Array.isArray(from) && from.length > 0 && 'all' in from) {
@@ -942,7 +945,7 @@ export class ActionExecutor {
         if (orderedList !== undefined) {
           if (!Array.isArray(value)) {
             errors.push(
-              `Selection "${selection.name}" is an ordered list and expected an array, got ${typeof value}: ${JSON.stringify(value)}`
+              `Selection "${selection.name}" is an ordered list and expected an array, got a single ${typeof value}. Send an array.`
             );
           } else {
             errors.push(...choiceCountErrors(selection.name, value.length, orderedList.min, orderedList.max));
@@ -954,7 +957,7 @@ export class ActionExecutor {
           : resolveMultiSelect(selection, context);
         if (multiSelectConfig !== undefined) {
           if (!Array.isArray(value)) {
-            errors.push(`Selection "${selection.name}" is multi-select and expected an array, got ${typeof value}: ${JSON.stringify(value)}`);
+            errors.push(`Selection "${selection.name}" is multi-select and expected an array, got a single ${typeof value}. Send an array.`);
           } else {
             // Reject duplicates before the count check (WR-04): repeated
             // items must not satisfy the min bound. Multiplicity-aware
@@ -999,19 +1002,24 @@ export class ActionExecutor {
       // config, or a function returning either. Mirror pick-handler.ts resolution.
       const multiSelectConfig = resolveMultiSelect(selection, context);
       if (multiSelectConfig !== undefined) {
-        // Reject duplicates before the count check (WR-04): repeated
-        // elements (or repeated IDs of the same element) must not satisfy
-        // the min bound.
-        if (Array.isArray(value) && this.hasDuplicateElementItems(value)) {
-          errors.push(`Selection "${selection.name}" contains duplicate elements`);
-        }
-        const { min, max } = multiSelectConfig;
-        const count = Array.isArray(value) ? value.length : 1;
-        if (count < min) {
-          errors.push(`Selection "${selection.name}" requires at least ${min} element${min === 1 ? '' : 's'}, got ${count}`);
-        }
-        if (max !== undefined && count > max) {
-          errors.push(`Selection "${selection.name}" requires at most ${max} element${max === 1 ? '' : 's'}, got ${count}`);
+        if (!Array.isArray(value)) {
+          // Never print the value: it is already a resolved element, and its attributes may be hidden from this player.
+          errors.push(`Selection "${selection.name}" takes a list of elements; got a single element. Send an array, such as [id].`);
+        } else {
+          // Reject duplicates before the count check (WR-04): repeated
+          // elements (or repeated IDs of the same element) must not satisfy
+          // the min bound.
+          if (this.hasDuplicateElementItems(value)) {
+            errors.push(`Selection "${selection.name}" contains duplicate elements`);
+          }
+          const { min, max } = multiSelectConfig;
+          const count = value.length;
+          if (count < min) {
+            errors.push(`Selection "${selection.name}" requires at least ${min} element${min === 1 ? '' : 's'}, got ${count}`);
+          }
+          if (max !== undefined && count > max) {
+            errors.push(`Selection "${selection.name}" requires at most ${max} element${max === 1 ? '' : 's'}, got ${count}`);
+          }
         }
       }
     }
@@ -1849,8 +1857,12 @@ export class ActionExecutor {
 
     // A DECLARED dependency: re-ask the dependent step with each enabled answer
     // bound, exactly as the player's own answer will.
+    // A pick that takes several values answers with an array, so bind one as the player's would be.
+    const takesArray = this.isRepeatingSelection(selection)
+      || selection.type === 'elements'
+      || (selection.type === 'choice' && (selection.multiSelect !== undefined || selection.orderedList !== undefined));
     for (const choice of enabledChoices) {
-      const newArgs = { ...args, [selection.name]: choice.value };
+      const newArgs = { ...args, [selection.name]: takesArray ? [choice.value] : choice.value };
       if (this.hasValidSelectionPath(selections, player, newArgs, index + 1, actionName)) {
         return true;
       }

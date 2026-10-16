@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { uploadBundle, initiatePublish, completePublish, fetchTaxonomy, isPublishError } from './publish-api.js';
+import { uploadBundle, initiatePublish, completePublish, abortPublish, fetchTaxonomy, isPublishError } from './publish-api.js';
 import type { PublishError } from './publish-api.js';
 import { ALLOWED_TOP_LEVEL_KEYS, CONVEX_SINK_KEYS } from './config-schema.js';
 
@@ -378,5 +378,19 @@ describe('completePublish error reporting', () => {
     );
     expect(err.kind).toBe('SERVER');
     expect(err.message).toBe('version not uploaded');
+  });
+});
+
+describe('abortPublish error reporting', () => {
+  it.each([
+    [401, { message: 'Invalid API key' }, 'Invalid API key'],
+    [500, { error: 'database down' }, 'database down'],
+  ])('rejects on HTTP %i with the server message', async (status, body, message) => {
+    mockFetchResponse(status, body);
+
+    const err = await captureError(abortPublish('https://platform.example', 'key', 'version-id'));
+    expect(err.kind).toBe('SERVER');
+    expect(err.statusCode).toBe(status);
+    expect(err.message).toBe(message);
   });
 });

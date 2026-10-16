@@ -55,6 +55,15 @@ class HalfwayGame extends Game<HalfwayGame, Player> {
           game.message('halfway through');
           throw new Error('rules bug: undefined is not a suit');
         }),
+      // Animates for everyone and privately for seat 1, then throws (#751).
+      Action.create('animateThenFail')
+        .prompt('Animate, then fail')
+        .execute((_args, ctx) => {
+          const game = ctx.game as HalfwayGame;
+          game.animate('combat', { damage: 3 });
+          game.animateTo(1, 'private-peek', { card: 'ace' });
+          throw new Error('rules bug after animating');
+        }),
       Action.create('cleanMove')
         .prompt('Move one')
         .execute((_args, ctx) => {
@@ -72,7 +81,7 @@ class HalfwayGame extends Game<HalfwayGame, Player> {
         root: loop({
           while: (ctx) => (ctx.get<number>('round') ?? 1) <= 20,
           maxIterations: 50,
-          do: eachPlayer({ do: actionStep({ actions: ['halfMove', 'cleanMove', 'refuse'] }) }),
+          do: eachPlayer({ do: actionStep({ actions: ['halfMove', 'animateThenFail', 'cleanMove', 'refuse'] }) }),
         }),
         setup: (ctx) => ctx.set('round', 1),
       }
@@ -138,6 +147,21 @@ describe('an execute() that throws half-way through', () => {
     expect(snapshot.actionHistory).toHaveLength(0);
     const restored = GameRunner.fromSnapshot(snapshot, HalfwayGame);
     expect(restored.game.source.all(Token)).toHaveLength(5);
+  });
+});
+
+describe('an execute() that animates and then throws (#751)', () => {
+  it('leaves no animation event in either seat\'s view or the saved snapshot', () => {
+    const runner = makeRunner();
+    expect(runner.game.pendingAnimationEvents).toEqual([]);
+
+    expect(runner.performAction('animateThenFail', 1, {}).success).toBe(false);
+
+    expect(runner.game.pendingAnimationEvents).toEqual([]);
+    for (const seat of [1, 2]) {
+      expect(runner.getPlayerView(seat).state.animationEvents ?? []).toEqual([]);
+    }
+    expect(runner.getSnapshot().state.animationEvents ?? []).toEqual([]);
   });
 });
 

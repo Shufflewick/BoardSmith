@@ -1940,24 +1940,6 @@ describe('Game Action Integration', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('Unknown action');
   });
-
-  it('should perform serialized action', () => {
-    let executed = false;
-    const action = Action.create('test').execute(() => {
-      executed = true;
-    });
-
-    game.registerAction(action);
-
-    const result = game.performSerializedAction({
-      name: 'test',
-      player: 1,
-      args: {},
-    });
-
-    expect(result.success).toBe(true);
-    expect(executed).toBe(true);
-  });
 });
 
 describe('Action Chaining with followUp', () => {

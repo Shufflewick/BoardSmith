@@ -97,3 +97,25 @@ describe('ElementCollection finders with a class and a predicate', () => {
     expect(asked).toBe(game.all().length);
   });
 });
+
+// #763: spreading an array into the constructor overflows the call stack on large arrays.
+describe('ElementCollection on very large collections', () => {
+  function bigBag(count: number) {
+    const game = new ShuffleGame({ playerCount: 2, seed: 'big' });
+    const bag = game.create(Space<ShuffleGame>, 'bag');
+    for (let i = 0; i < count; i++) bag.create(Piece<ShuffleGame>, `${i}`);
+    return bag;
+  }
+
+  it('returns .children of a space with 50,000 children as an ElementCollection', () => {
+    const children = bigBag(50_000).children;
+    expect(children).toBeInstanceOf(ElementCollection);
+    expect(children.length).toBe(50_000);
+  });
+
+  it('sortBy over 50,000 elements returns an ElementCollection', () => {
+    const sorted = bigBag(50_000).all(Piece<ShuffleGame>).sortBy((p) => p.name ?? '', 'desc');
+    expect(sorted).toBeInstanceOf(ElementCollection);
+    expect(sorted.length).toBe(50_000);
+  });
+});

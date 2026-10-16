@@ -71,14 +71,16 @@ export class DicePool<G extends Game = any, P extends Player = any> extends Spac
 
   /**
    * Roll specific dice by their names
-   * @param names - Names of dice to roll
+   * @param names - Names of dice to roll; a repeated name rolls the next die of that name
    * @returns Array of [die, value] tuples
    */
   rollByName(...names: string[]): Array<[Die, number]> {
     const results: Array<[Die, number]> = [];
+    const rolled = new Set<Die>();
     for (const name of names) {
-      const die = this.first(Die, { name }) as Die | undefined;
+      const die = this.first(Die, (d: Die) => d.name === name && !rolled.has(d)) as Die | undefined;
       if (die) {
+        rolled.add(die);
         const value = die.roll();
         results.push([die, value]);
       }

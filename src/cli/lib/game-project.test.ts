@@ -29,8 +29,10 @@ describe('game-project guards', () => {
       expect(requireGameProject(projectDir)).toBe(join(projectDir, 'boardsmith.json'));
     });
 
-    it('throws naming the missing manifest', () => {
-      expect(() => requireGameProject(projectDir)).toThrow(/boardsmith\.json not found[\s\S]*BoardSmith game project directory/);
+    it('throws naming the directory and the missing manifest (#733)', () => {
+      expect(() => requireGameProject(projectDir)).toThrow(
+        `${projectDir} has no boardsmith.json, so it is not a BoardSmith game project. Run this in the game's directory.`,
+      );
     });
   });
 
@@ -48,7 +50,7 @@ describe('game-project guards', () => {
 
     it('throws when boardsmith.json is missing, before it ever looks for package.json', () => {
       writeFileSync(join(projectDir, 'package.json'), '{"version":"1.0.0"}');
-      expect(() => requireGameProjectManifests(projectDir)).toThrow(/boardsmith\.json not found/);
+      expect(() => requireGameProjectManifests(projectDir)).toThrow(/has no boardsmith\.json/);
     });
 
     it('throws when package.json is missing, and says where a version comes from', () => {
