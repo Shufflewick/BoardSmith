@@ -195,18 +195,25 @@ export async function applyNoticeWrites(
 function assertNoticeWrites(notices: WorldNoticeWrites, seatCount: number, budgets: WorldBudgets): void {
   const refuse = (why: string) =>
     worldRefusal("invalid-notice", `This dispatch's result carries a notice write that ${why}`);
-  const { perSeat } = notices;
+  assertNoticeBatch(refuse, notices, budgets);
+  for (const write of notices.writes) assertNoticeWriteShape(refuse, write, seatCount, budgets);
+}
+
+/** The batch as a whole: a box size this host keeps, a list of objects, and no
+ *  more sends than one command may make. */
+function assertNoticeBatch(refuse: NoticeRefusal, notices: WorldNoticeWrites, budgets: WorldBudgets): void {
+  const { perSeat, writes } = notices;
   if (!Number.isInteger(perSeat) || perSeat < 1 || perSeat > budgets.maxNoticesPerSeat) {
     throw refuse(
       `keeps ${JSON.stringify(perSeat)} notices per seat, and a seat's notice box keeps a whole ` +
         `number from 1 to ${budgets.maxNoticesPerSeat} on this host. Nothing was changed.`,
     );
   }
-  if (!Array.isArray(notices.writes)) throw refuse("has no list of writes. Nothing was changed.");
-  if (notices.writes.some((write) => typeof write !== "object" || write === null)) {
+  if (!Array.isArray(writes)) throw refuse("has no list of writes. Nothing was changed.");
+  if (writes.some((write) => typeof write !== "object" || write === null)) {
     throw refuse("is not an object. Nothing was changed.");
   }
-  const sends = notices.writes.filter((write) => write.kind === "send").length;
+  const sends = writes.filter((write) => write.kind === "send").length;
   if (sends > budgets.maxNoticesPerCommand) {
     throw worldRefusal(
       "notice-batch-cap",
@@ -214,16 +221,23 @@ function assertNoticeWrites(notices: WorldNoticeWrites, seatCount: number, budge
         "command may send. Nothing was changed.",
     );
   }
-  for (const write of notices.writes) {
-    noticeSeat(refuse, write.seat, seatCount);
-    if (write.kind === "take") continue;
-    if (write.kind !== "send") {
-      const kind: unknown = (write as { kind: unknown }).kind;
-      throw refuse(`is ${JSON.stringify(kind)}, and a write is a "send" or a "take".`);
-    }
-    noticeWhenFull(refuse, write.whenFull);
-    assertNoticeFits(refuse, write.notice, budgets);
+}
+
+/** One write: a seat inside this world, and for a send a valid notice. */
+function assertNoticeWriteShape(
+  refuse: NoticeRefusal,
+  write: WorldNoticeWrite,
+  seatCount: number,
+  budgets: WorldBudgets,
+): void {
+  noticeSeat(refuse, write.seat, seatCount);
+  if (write.kind === "take") return;
+  if (write.kind !== "send") {
+    const kind: unknown = (write as { kind: unknown }).kind;
+    throw refuse(`is ${JSON.stringify(kind)}, and a write is a "send" or a "take".`);
   }
+  noticeWhenFull(refuse, write.whenFull);
+  assertNoticeFits(refuse, write.notice, budgets);
 }
 
 /**
