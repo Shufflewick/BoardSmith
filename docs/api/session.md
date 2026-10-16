@@ -62,7 +62,7 @@ The rules `boardsmith build` publishes carry the whole list on their `gameDefini
 
 ### Player Colors
 
-- `createColorOption()` - Create a color player option; defaults to the engine's `DEFAULT_COLOR_PALETTE` with its names. `boardsmith dev` offers a game's own declared `color` option as it is
+- `createColorOption()` - Create a color player option; defaults to the engine's `DEFAULT_COLOR_PALETTE` with its names. `boardsmith dev` refuses a code-declared `color` option whose list differs from what the lobby offers (`boardsmith.json`'s `colorPalette`, else the engine palette)
 
 ### Executor Op Contract
 

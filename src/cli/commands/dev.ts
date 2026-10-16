@@ -6,7 +6,7 @@ import { WebSocket } from 'ws';
 import chalk from 'chalk';
 import open from 'open';
 
-import { createColorOption, type ColorOptionDefinition, type GameDefinition } from '../../session/index.js';
+import { createColorOption, type ColorChoice, type ColorOptionDefinition, type GameDefinition } from '../../session/index.js';
 import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import { MultiplayerHost, type TableRules } from '../dev-host/multiplayer-host.js';
 import { claimDevHostSocket } from '../dev-host/connection-handler.js';
@@ -352,22 +352,44 @@ function normalizeColorPalette(
 }
 
 /**
- * D16/DEVHOST-04: the dev `color` player option, always offered. A game's own
- * declared `playerOptions.color` is kept as it is (#814); otherwise the list is
- * `GameDefinition.colorPalette`, then `boardsmith.json`'s `colorPalette`, then
- * the engine palette `createColorOption()` names. Its choices also seed each
+ * D16/DEVHOST-04: the dev `color` player option, always offered, resolved as
+ * production does: the published manifest carries only `boardsmith.json`'s
+ * `colorPalette`, else the lobby offers the engine palette (#814). A palette a
+ * game declares in code is never published, so one that differs is refused
+ * here rather than shown in dev and missing live. Its choices also seed each
  * seat's colour in MultiplayerHost, so the option and the seats always agree.
  */
 export function resolveColorOption(
   gameDefinition: Pick<GameDefinition, 'playerOptions' | 'colorPalette'>,
   config: { colorPalette?: Array<string | Record<string, unknown>> },
 ): ColorOptionDefinition {
-  const declared = gameDefinition.playerOptions?.color;
-  if (declared?.type === 'color' && declared.choices) {
-    return { ...declared, type: 'color', choices: normalizeColorPalette(declared.choices) };
+  const option = createColorOption(config.colorPalette && normalizeColorPalette(config.colorPalette));
+  const source = config.colorPalette ? 'boardsmith.json\'s "colorPalette"' : 'the engine\'s default palette';
+  for (const [where, palette] of Object.entries(codeColorPalettes(gameDefinition))) {
+    if (palette && !samePalette(normalizeColorPalette(palette), option.choices)) {
+      throw new Error(
+        `Your gameDefinition declares ${where} in code, but the live lobby only offers ${source} ` +
+          `(${option.choices.map((c) => c.label).join(', ')}), so dev would show colours players never get. ` +
+          `Declare the palette in boardsmith.json's "colorPalette", or remove ${where} from your gameDefinition.`,
+      );
+    }
   }
-  const palette = gameDefinition.colorPalette ?? config.colorPalette;
-  return palette ? createColorOption(normalizeColorPalette(palette)) : createColorOption();
+  return option;
+}
+
+/** The colour lists a game declares in code, by where it declares them. */
+function codeColorPalettes(gameDefinition: Pick<GameDefinition, 'playerOptions' | 'colorPalette'>) {
+  const declared = gameDefinition.playerOptions?.color;
+  // A `color` option that is not a colour list can never match, so it is refused too.
+  const choices = declared?.type === 'color' ? declared.choices : undefined;
+  return { 'playerOptions.color': declared && (choices ?? []), colorPalette: gameDefinition.colorPalette };
+}
+
+function samePalette(a: ColorChoice[], b: ColorChoice[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((c, i) => c.value.toLowerCase() === b[i]!.value.toLowerCase() && c.label === b[i]!.label)
+  );
 }
 
 /**

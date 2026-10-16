@@ -143,16 +143,11 @@ export interface GameDefinition {
   /** Preset configurations for quick setup */
   presets?: GamePreset[];
   /**
-   * Code-declared color palette for this game's seats. The single
-   * source-of-truth entry shape ({id,hex,label}) also enforced by
-   * `boardsmith validate`'s `colorPalette` check — do not diverge from it.
-   *
-   * Dev (`boardsmith dev`) resolves the effective palette in this order:
-   * a declared `playerOptions.color` -> `gameDefinition.colorPalette` ->
-   * `boardsmith.json` `colorPalette` ->
-   * the engine's `DEFAULT_COLOR_PALETTE`. `publish` already writes
-   * `manifest.colorPalette` from its own source; this field unifies the
-   * game-authored declaration so dev matches what publish emits.
+   * Code-declared color palette for this game's seats, in the {id,hex,label}
+   * shape `boardsmith validate` enforces on `boardsmith.json`'s `colorPalette`.
+   * It is never published: the live lobby offers `boardsmith.json`'s
+   * `colorPalette`, else the engine's `DEFAULT_COLOR_PALETTE`, so
+   * `boardsmith dev` refuses to start when this differs from that.
    */
   colorPalette?: Array<{ id: string; hex: string; label: string }>;
   /**

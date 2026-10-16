@@ -19,7 +19,7 @@ import {
   resolvePreset,
 } from './dev.js';
 import { describeTableReload, tableShapeChange } from './dev-table-runtime.js';
-import type { OpSuccess } from '../../session/index.js';
+import { createColorOption, type OpSuccess } from '../../session/index.js';
 
 /**
  * PROC-02 regressions for CLIX-01/CLIX-02/CLIX-04/CLIX-06 (135-06-PLAN.md).
@@ -205,37 +205,58 @@ describe('resolvePlayerCount (D14/DEVHOST-02: default --players to gameDefinitio
   });
 });
 
-describe('resolveColorOption: a game\'s own colour option -> gameDefinition.colorPalette -> boardsmith.json -> engine default', () => {
-  it('keeps a game\'s own declared colour option, its list and its label', () => {
-    const declared = {
-      type: 'color' as const,
-      label: 'Team Colour',
-      choices: [{ value: '#111111', label: 'Coal' }, { value: '#eeeeee', label: 'Snow' }],
-    };
-    const option = resolveColorOption(
-      { playerOptions: { color: declared }, colorPalette: [{ id: 'a', hex: '#222222', label: 'A' }] },
-      { colorPalette: [{ value: '#999999', label: 'Config' }] },
-    );
-    expect(option).toEqual(declared);
+describe('resolveColorOption: dev offers exactly the colours production does (#814)', () => {
+  const engineDefault = createColorOption();
+  const configPalette = { colorPalette: [{ id: 'coal', hex: '#111111', label: 'Coal' }, { id: 'snow', hex: '#EEEEEE', label: 'Snow' }] };
+
+  it('offers boardsmith.json\'s colorPalette, as the published manifest does', () => {
+    expect(resolveColorOption({}, configPalette)).toEqual({
+      type: 'color',
+      label: 'Color',
+      choices: [{ value: '#111111', label: 'Coal' }, { value: '#EEEEEE', label: 'Snow' }],
+    });
   });
 
-  it('honors gameDefinition.colorPalette when config has none', () => {
-    const option = resolveColorOption({ colorPalette: [{ id: 'a', hex: '#111111', label: 'A' }] }, {});
-    expect(option).toEqual({ type: 'color', label: 'Color', choices: [{ value: '#111111', label: 'A' }] });
-  });
-
-  it('prefers gameDefinition.colorPalette over boardsmith.json config.colorPalette', () => {
-    const option = resolveColorOption(
-      { colorPalette: [{ id: 'a', hex: '#222222', label: 'A' }] },
-      { colorPalette: [{ value: '#999999', label: 'Config' }] },
-    );
-    expect(option.choices).toEqual([{ value: '#222222', label: 'A' }]);
-  });
-
-  it('falls back to the engine palette, named, when nothing declares one', () => {
+  it('falls back to the engine palette, named, when boardsmith.json declares none', () => {
     const option = resolveColorOption({}, {});
     expect(option.choices.map((p) => p.value)).toEqual([...DEFAULT_COLOR_PALETTE]);
     expect(option.choices).toContainEqual({ value: '#2c3e50', label: 'Black' });
+  });
+
+  it('refuses a code colour option that differs from boardsmith.json\'s colorPalette (MERC\'s case)', () => {
+    expect(() => resolveColorOption({ playerOptions: { color: createColorOption() } }, configPalette)).toThrow(
+      /playerOptions\.color.*boardsmith\.json's "colorPalette".*remove/s,
+    );
+  });
+
+  it('refuses a code colour option that differs from the engine palette when boardsmith.json declares none', () => {
+    const declared = createColorOption([{ value: '#111111', label: 'Coal' }]);
+    expect(() => resolveColorOption({ playerOptions: { color: declared } }, {})).toThrow(
+      /engine's default palette/,
+    );
+  });
+
+  it('accepts a code colour option equal to the palette production offers, hex case aside', () => {
+    const declared = createColorOption([{ value: '#111111', label: 'Coal' }, { value: '#eeeeee', label: 'Snow' }]);
+    expect(resolveColorOption({ playerOptions: { color: declared } }, configPalette).choices).toEqual(
+      resolveColorOption({}, configPalette).choices,
+    );
+    expect(resolveColorOption({ playerOptions: { color: createColorOption() } }, {})).toEqual(engineDefault);
+  });
+
+  it('refuses a `color` player option that is not a colour option with choices', () => {
+    expect(() =>
+      resolveColorOption({ playerOptions: { color: { type: 'select', label: 'Color', choices: ['red'] } } }, {}),
+    ).toThrow(/playerOptions\.color/);
+    expect(() => resolveColorOption({ playerOptions: { color: { type: 'color', label: 'Color' } } }, {})).toThrow(
+      /playerOptions\.color/,
+    );
+  });
+
+  it('refuses a code gameDefinition.colorPalette that differs from what production offers', () => {
+    expect(() =>
+      resolveColorOption({ colorPalette: [{ id: 'a', hex: '#222222', label: 'A' }] }, configPalette),
+    ).toThrow(/colorPalette.*boardsmith\.json/s);
   });
 });
 
