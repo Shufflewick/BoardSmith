@@ -1019,7 +1019,10 @@ The engine resolves the scope into the seats that can see it, and the host's job
 is a membership test against the seat behind each attached socket. You express
 co-location by giving two players the same scope. Who can see a scope is the
 engine's answer and not the game's: an action says where something happened, and
-the world decides who was there. A scope that is neither the reserved word nor a
+the world decides who was there. A partition's audience is the seats whose
+`world.view` names it, narrowed by ownership and visibility in the tree: events
+follow partition fog, so a room no seat's view names is a room that seat is not
+told about. A scope that is neither the reserved word nor a
 loaded partition is refused with `unknown-scope`: an event addressed to a place
 nobody can be in reaches nobody, and it is better refused than delivered silently
 to no one.

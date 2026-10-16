@@ -1655,6 +1655,26 @@ describe("#186 — a world can say something a player reads", () => {
     expect(result.events[0]?.seats).toEqual([1]);
   });
 
+  it("tells nobody whose view throws, and still runs the command (#717)", async () => {
+    const engine = new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([
+        ["player-a", 1],
+        ["player-b", 2],
+      ]),
+      store: new CountingStore(genesis()),
+      actions: [say],
+      view: (seat) => {
+        if (seat === 2) throw new Error("seat 2's view is broken");
+        return [ROOM_ONE];
+      },
+    });
+    await engine.hydrate([ROOM_ONE]);
+    const result = await engine.applyCommand("player-a", { name: "say", args: {} }, STAMP);
+
+    expect(result.events[0]?.seats).toEqual([1]);
+  });
+
   it("carries the line's kind when the game names one", async () => {
     const engine = sayingEngine();
     await engine.hydrate([ROOM_ONE]);

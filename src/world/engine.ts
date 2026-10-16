@@ -3030,7 +3030,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
    *     otherwise every seat the element is visible to. Both are BoardSmith's
    *     own primitives (`getEffectiveOwner`, `isVisibleTo`) rather than a
    *     second notion of visibility invented here, so a room hidden from a
-   *     player in the tree is a room they are not told about either.
+   *     player in the tree is a room they are not told about either. And of
+   *     those, only the seats whose `world.view` names the partition (#717).
    *
    * A SCOPE THAT NAMES NOTHING IS A REFUSAL, not an event delivered to nobody.
    * The silent version is invisible: the game author sees an event that never
@@ -3057,8 +3058,28 @@ export class BoardSmithWorldEngine implements WorldEngine {
 
     const root = this.rootOf(scope);
     const owner = root.getEffectiveOwner();
-    if (owner !== undefined) return all.filter((seat) => seat === owner.seat);
-    return all.filter((seat) => root.isVisibleTo(seat));
+    const sees =
+      owner !== undefined
+        ? (seat: number) => seat === owner.seat
+        : (seat: number) => root.isVisibleTo(seat);
+    return all.filter((seat) => sees(seat) && this.viewNames(seat, scope));
+  }
+
+  /**
+   * Whether this seat's `world.view` names the partition (#717): PARTITION FOG
+   * IS THE WHOLE FOG RULE, so a room no declaration of yours names is a room
+   * you are not told about either, whoever owns it.
+   *
+   * The declaration only, never a projection, so the check is one cheap call.
+   * A view that throws names nothing: that seat's frame is refused anyway
+   * (#310), and one seat's broken view must not refuse another seat's command.
+   */
+  private viewNames(seat: number, scope: string): boolean {
+    try {
+      return this.viewDeclaredFor(seat).includes(scope);
+    } catch {
+      return false;
+    }
   }
 
   /**
