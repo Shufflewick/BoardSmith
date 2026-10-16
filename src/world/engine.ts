@@ -1121,7 +1121,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
    */
   async offersFor(player: string, stamp: WorldOfferStamp): Promise<readonly WorldActionOffer[]> {
     const seat = this.seatFor(player);
-    const acting = this.playerFor(seat);
+    const acting = readOnlyProjection(this.playerFor(seat));
     const offers: WorldActionOffer[] = [];
 
     for (const definition of this.actions.values()) {
@@ -1362,7 +1362,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   ): Promise<T> {
     this.refuseUndeclaredArgs(definition, args);
     const seat = this.seatFor(player);
-    const acting = this.playerFor(seat);
+    const acting = readOnlyProjection(this.playerFor(seat));
     const named: string[] = [];
     // As `offerOf`: this is a seat's own read, and a seat's verb declares no chair.
     const namedSeats: number[] = [];

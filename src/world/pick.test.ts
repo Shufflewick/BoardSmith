@@ -343,6 +343,68 @@ describe("#384 — an offer cannot write to the world it is describing", () => {
     );
   });
 
+  /** #794: `ctx.player.game` is a third door into the same tree. */
+  const viaPlayer = (player: Player) => (player.game as FleetGame).ship("dory");
+
+  const meddlingCondition = worldAction<FleetGame>("meddlingCondition")
+    .needs(() => [FLEET])
+    .condition({
+      "may meddle": ({ player }) => {
+        viaPlayer(player).hold = 1;
+        return true;
+      },
+    })
+    .execute(() => {});
+
+  const meddlingPick = worldAction<FleetGame>("meddlingPick")
+    .needs(() => [FLEET])
+    .chooseFrom("ship", {
+      choices: ({ player }) => {
+        viaPlayer(player).hold = 1;
+        return ["dory"];
+      },
+    })
+    .execute(() => {});
+
+  const meddlingQuote = worldAction<FleetGame>("meddlingQuote")
+    .needs(() => [FLEET])
+    .chooseFrom("ship", { choices: () => ["dory"] })
+    .quote((_args, { player }) => {
+      viaPlayer(player).hold = 1;
+      return null;
+    })
+    .execute(() => {});
+
+  it("REFUSES a write through ctx.player.game from a condition (#794)", async () => {
+    const engine = await engineFor(meddlingCondition);
+
+    await expect(engine.offersFor("player-a", STAMP)).rejects.toThrow(
+      /A read-only view of this world tried to write/,
+    );
+    expect(await engine.serializePartitions([FLEET])).toMatchObject({
+      [FLEET]: expect.stringContaining('"hold":700') as unknown as string,
+    });
+  });
+
+  it("REFUSES a write through ctx.player.game from a pick's choices (#794)", async () => {
+    const engine = await engineFor(meddlingPick);
+
+    await expect(engine.offersFor("player-a", STAMP)).rejects.toThrow(
+      /A read-only view of this world tried to write/,
+    );
+    await expect(
+      engine.resolvePick("player-a", "meddlingPick", "ship", {}, STAMP),
+    ).rejects.toThrow(/A read-only view of this world tried to write/);
+  });
+
+  it("REFUSES a write through ctx.player.game from a quote (#794)", async () => {
+    const engine = await engineFor(meddlingQuote);
+
+    await expect(
+      engine.resolveQuote("player-a", "meddlingQuote", { ship: "dory" }, STAMP),
+    ).rejects.toThrow(/A read-only view of this world tried to write/);
+  });
+
   it("still lets an offer READ everything its declaration named", async () => {
     // The half that must not break: an offer's whole job is to read the
     // resident tree, and a projection that refused reads would refuse offers.
