@@ -1113,34 +1113,7 @@ export class SnapshotSessionHost {
     // these ops do NOT change game state: transient hints/heatmaps are merged
     // into each seat's view after the executor built it.
     if (op.type === 'hint' || op.type === 'heatmapToggle') {
-      // RESEARCH Pitfall 3: reject concurrent bot searches while demo is running.
-      if (this.demoRunning) {
-        return {
-          success: false,
-          error: 'Cannot request hint while a demo is running — stop the demo first.',
-          category: 'protocol',
-        };
-      }
-      const res = await this.adapters.executeOp(this.snapshot, null, op);
-      if (res.success) {
-        if ('hintAnnotation' in res) {
-          // Merge with existing seat entry so hint + heatmap coexist (RESEARCH Pitfall 6).
-          const existing = this.transientTeachingState.get(res.hintAnnotation.seat) ?? {};
-          this.transientTeachingState.set(res.hintAnnotation.seat, {
-            ...existing,
-            hint: { annotation: res.hintAnnotation.annotation },
-          });
-        }
-        if ('heatmapUpdate' in res) {
-          const existing = this.transientTeachingState.get(res.heatmapUpdate.seat) ?? {};
-          this.transientTeachingState.set(res.heatmapUpdate.seat, {
-            ...existing,
-            heatmap: { visible: res.heatmapUpdate.visible, entries: res.heatmapUpdate.entries },
-          });
-        }
-        this.broadcastCurrent();
-      }
-      return res;
+      return this.applyTeachingOp(op);
     }
 
     // Read-only ops (resolveChoices + debug queries) report state without
@@ -1288,6 +1261,47 @@ export class SnapshotSessionHost {
     }
 
     await this.apply(res, seat, pending);
+    return res;
+  }
+
+  /** A hint or heatmap toggle: computed on the current snapshot, stored as transient teaching state for that seat. */
+  private async applyTeachingOp(op: Extract<Op, { type: 'hint' | 'heatmapToggle' }>): Promise<OpResultFor<'hint' | 'heatmapToggle'>> {
+    // RESEARCH Pitfall 3: reject concurrent bot searches while demo is running.
+    if (this.demoRunning) {
+      return {
+        success: false,
+        error: 'Cannot request hint while a demo is running — stop the demo first.',
+        category: 'protocol',
+      };
+    }
+    const at = this._snapshot;
+    const res = await this.adapters.executeOp(at, null, op);
+    // Computed outside the one-at-a-time section: a move may have landed meanwhile.
+    if (res.success && this._snapshot !== at) {
+      return {
+        success: false,
+        error: 'The game moved on while this was being worked out. Ask again for the position as it is now.',
+        category: 'protocol',
+      };
+    }
+    if (res.success) {
+      if ('hintAnnotation' in res) {
+        // Merge with existing seat entry so hint + heatmap coexist (RESEARCH Pitfall 6).
+        const existing = this.transientTeachingState.get(res.hintAnnotation.seat) ?? {};
+        this.transientTeachingState.set(res.hintAnnotation.seat, {
+          ...existing,
+          hint: { annotation: res.hintAnnotation.annotation },
+        });
+      }
+      if ('heatmapUpdate' in res) {
+        const existing = this.transientTeachingState.get(res.heatmapUpdate.seat) ?? {};
+        this.transientTeachingState.set(res.heatmapUpdate.seat, {
+          ...existing,
+          heatmap: { visible: res.heatmapUpdate.visible, entries: res.heatmapUpdate.entries },
+        });
+      }
+      this.broadcastCurrent();
+    }
     return res;
   }
 

@@ -57,7 +57,7 @@ interface HeatmapCompute {
  * `v + 10` (to `complete` when `endsGame` says so), and a human action named
  * `slow` holds the section until the test releases it. A bot's move moves the
  * game from `v` to `v + 1`, unless the test queued a refusal in `refuseBot`.
- * Every bot search, and every heatmap computed, waits until the test releases it;
+ * Every bot search, hint and heatmap computed waits until the test releases it;
  * turning a heatmap off answers at once.
  */
 function table(endsGame = false) {
@@ -66,6 +66,7 @@ function table(endsGame = false) {
   const botMoves: number[] = [];
   const refuseBot: unknown[] = [];
   const heatmaps: HeatmapCompute[] = [];
+  const hints: HeatmapCompute[] = [];
   const slow: Array<() => void> = [];
   const recorded: number[] = [];
   const backgroundErrors: unknown[] = [];
@@ -76,8 +77,14 @@ function table(endsGame = false) {
       const held: Search = { from, asked, roster, released: false, release: (r) => { held.released = true; resolve(r); } };
       searches.push(held);
     });
-  /** A human's op from `v` = `from`; an action named `slow` waits until the test releases it. */
+  /** A hint computed from `v` = `from`, held until the test releases it. */
+  const hint = async (from: number, op: Extract<ExecutableOp, { type: 'hint' }>) => {
+    await new Promise<void>((release, fail) => hints.push({ from, release, fail }));
+    return { success: true, hintAnnotation: { seat: op.seat, annotation: { text: `from ${from}` } } };
+  };
+  /** A human's op from `v` = `from` (a hint is held as {@link hint}); an action named `slow` waits until the test releases it. */
   const humanOp = async (from: number, op: ExecutableOp) => {
+    if (op.type === 'hint') return hint(from, op);
     if (op.type === 'action' && op.actionName === 'slow') await new Promise<void>((resolve) => slow.push(resolve));
     humanReads.push(from);
     return answer(snap(from + 10, endsGame ? { complete: true } : {}));
@@ -111,7 +118,7 @@ function table(endsGame = false) {
     host.setBotSeats(seats.map((seat) => ({ seat })));
   };
   setRoster([2]);
-  return { host, searches, humanReads, botMoves, refuseBot, heatmaps, slow, recorded, backgroundErrors, setRoster };
+  return { host, searches, humanReads, botMoves, refuseBot, heatmaps, hints, slow, recorded, backgroundErrors, setRoster };
 }
 
 type Table = ReturnType<typeof table>;
@@ -862,6 +869,38 @@ describe('a refused bot move (#635)', () => {
 
     expect(t.botMoves).toEqual([]);
     expect((t.host.snapshot as unknown as Snap).v).toBe(0);
+  });
+});
+
+describe('a hint or heatmap asked for while a move lands (#742)', () => {
+  it('a hint computed on a position the game has left is refused, not stored', async () => {
+    const t = table();
+    t.setRoster([]);
+    await t.host.start();
+    const hint = t.host.handleOp(1, { type: 'hint', seat: 1 });
+    await settle();
+    expect(t.hints.map((h) => h.from)).toEqual([0]);
+    succeeded(await humanMove(t.host));
+
+    t.hints[0].release();
+    const res = await hint;
+    expect(res.success).toBe(false);
+    expect(t.host.transientTeachingState.has(1)).toBe(false);
+  });
+
+  it('a heatmap turned on and computed on a position the game has left is refused, not stored', async () => {
+    const t = table();
+    t.setRoster([]);
+    await t.host.start();
+    const toggle = t.host.handleOp(1, { type: 'heatmapToggle', seat: 1, visible: true });
+    await settle();
+    expect(t.heatmaps.map((h) => h.from)).toEqual([0]);
+    succeeded(await humanMove(t.host));
+
+    t.heatmaps[0].release();
+    const res = await toggle;
+    expect(res.success).toBe(false);
+    expect(t.host.transientTeachingState.has(1)).toBe(false);
   });
 });
 
