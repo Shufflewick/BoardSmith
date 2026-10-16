@@ -232,16 +232,22 @@ export class PickHandler<G extends Game = Game> {
    * @param playerPosition Player requesting choices
    * @param currentArgs The picks made so far (for dependent picks); a key that
    *   names no pick is refused
+   * @param pendingState The seat's persisted pending state, if any
    * @returns Choices/elements with display strings and board refs, plus multiSelect config
    */
   getPickChoices(
     actionName: string,
     selectionName: string,
     playerPosition: number,
-    currentArgs: Record<string, unknown> = {}
+    currentArgs: Record<string, unknown> = {},
+    pendingState: Record<string, unknown> | null = null,
   ): PickChoicesResponse {
     const found = actionForSeat(this.#runner.game, this.#playerCount, playerPosition, actionName);
     if ('refusal' in found) return found.refusal;
+    // Choices can name what only other seats see, so answer only a seat that may take the pick now (#714).
+    const pending = pendingState?.actionName === actionName ? deserializePendingState(pendingState) : undefined;
+    const refusal = this.#runner.refusalToPick(actionName, playerPosition, pending);
+    if (refusal) return { success: false, ...refusal };
     const { action } = found;
 
     // Find the pick
