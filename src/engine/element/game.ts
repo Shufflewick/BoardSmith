@@ -4559,12 +4559,6 @@ export class Game<
     for (const key of GAME_SELF_SERIALIZED_FIELDS) {
       delete base.attributes[key];
     }
-    // A persistentMap field is a live view onto `settings`, which is serialized
-    // in full below. See persistentMapFields for why emitting it too broke
-    // every restore path (#139).
-    for (const key of persistentMapFields(this)) {
-      delete base.attributes[key];
-    }
 
     return {
       ...base,

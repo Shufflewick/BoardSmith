@@ -1490,13 +1490,15 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   /**
    * The attributes `toJSON` saves and `resolveElementReferences` decodes: own
    * keys that are not `_`-prefixed engine state or one of the class's
-   * `unserializableAttributes`, and whose value is not `undefined`.
+   * `unserializableAttributes`, and whose value is neither `undefined` nor a
+   * {@link PersistentMap}, a live view onto `settings`, which saves its data (#139).
    */
   private savedAttributeKeys(): string[] {
     const unserializable = (this.constructor as typeof GameElement).unserializableAttributes;
-    return Object.keys(this).filter(
-      (key) => !key.startsWith('_') && !unserializable.includes(key) && (this as Record<string, unknown>)[key] !== undefined,
-    );
+    return Object.keys(this).filter((key) => {
+      const value = (this as Record<string, unknown>)[key];
+      return !key.startsWith('_') && !unserializable.includes(key) && value !== undefined && !(value instanceof PersistentMap);
+    });
   }
 
   /**
@@ -1768,9 +1770,10 @@ export function withheldFromSeat(element: GameElement): boolean {
  *   rebuilds.
  *
  * Fails loud, naming `subject` and the property path, on a circular reference,
- * nesting past {@link GameElement.MAX_SERIALIZE_DEPTH}, or a raw `ArrayBuffer`
- * or `DataView`: dropping the value silently would corrupt every snapshot,
- * undo and network payload built from it.
+ * nesting past {@link GameElement.MAX_SERIALIZE_DEPTH}, a raw `ArrayBuffer` or
+ * `DataView`, or a Date or class instance (#759): dropping or flattening the
+ * value silently would corrupt every snapshot, undo and network payload built
+ * from it.
  *
  * @param ctx - The context of the game the value belongs to; decides world
  *   mode and whether a seat's view is being written.
@@ -1864,6 +1867,17 @@ function encodeAt(
       throw new Error(
         `Cannot serialize ${subject}: ${kind} at property '${path}' has no serializable form. ` +
           `Store a typed array over the buffer instead (e.g. new Uint8Array(buffer)), which round-trips with its type intact.`
+      );
+    }
+
+    // A Date or class instance would come back a plain object, without its
+    // methods or getters, on the first restore.
+    const proto: unknown = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) {
+      const kind = (proto as { constructor?: { name?: string } }).constructor?.name || 'class instance';
+      throw new Error(
+        `Cannot serialize ${subject}: ${kind} at property '${path}' would be restored as a plain object, losing its type and methods. ` +
+          `Store a plain object, array, Map or Set instead (for a Date, store its getTime() number).`
       );
     }
 
