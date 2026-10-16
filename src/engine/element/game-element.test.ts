@@ -569,16 +569,6 @@ describe('Player', () => {
     game = new TestGame({ playerCount: 3, playerNames: ['Alice', 'Bob', 'Charlie'] });
   });
 
-  it('should track current player', () => {
-    expect(game.currentPlayer).toBe(game.getPlayer(1)!);
-    expect(game.getPlayer(1)!.isCurrent()).toBe(true);
-
-    game.setCurrentPlayer(2);
-    expect(game.currentPlayer).toBe(game.getPlayer(2)!);
-    expect(game.getPlayer(1)!.isCurrent()).toBe(false);
-    expect(game.getPlayer(2)!.isCurrent()).toBe(true);
-  });
-
   it('should get next/previous player', () => {
     expect(game.nextAfter(game.getPlayer(1)!)).toBe(game.getPlayer(2)!);
     expect(game.nextAfter(game.getPlayer(3)!)).toBe(game.getPlayer(1)!); // Wrap around

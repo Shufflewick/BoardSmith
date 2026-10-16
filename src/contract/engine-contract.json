@@ -1,7 +1,7 @@
 {
-  "revision": 211,
-  "surfaceHash": "4a87ffd072485c35",
-  "payloadHash": "d037431574c86546",
+  "revision": 214,
+  "surfaceHash": "41c0e589d7f550d1",
+  "payloadHash": "5bb7ce7332b154d4",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1631,6 +1631,30 @@
       "payloadHash": "d037431574c86546",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "The boardsmith entry point gains plain-data scoring tracks (monotonicTrack, uniqueTrack, counterTrack, canAddToTrack, addToTrack, incrementCounter, isTrackComplete, trackPoints, TrackState types) and functions over a plain Ability[] (addAbility, hasUnusedAbility, spendAbility, countUnusedAbilities, groupAbilities), so tracks and abilities stored on a Player survive snapshot, undo and bot clone (#779)."
+    },
+    {
+      "revision": 212,
+      "date": "2026-10-16",
+      "surfaceHash": "df921086475c1773",
+      "payloadHash": "d037431574c86546",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "World clock-phase .about() refuses a chair above the world's seat count with invalid-seat-declaration (#799)."
+    },
+    {
+      "revision": 213,
+      "date": "2026-10-16",
+      "surfaceHash": "f826367d58f23627",
+      "payloadHash": "d037431574c86546",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "World resolvePick and resolveQuote answer only for an action offersFor lists for that seat (same read-only condition check after round zero); a disabled action is still listed greyed and still answers (#798)."
+    },
+    {
+      "revision": 214,
+      "date": "2026-10-16",
+      "surfaceHash": "41c0e589d7f550d1",
+      "payloadHash": "5bb7ce7332b154d4",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "game.currentPlayer and player.isCurrent() come from the flow: the seat of the running eachPlayer turn or action step, and none before the flow starts, after it completes, or while a simultaneous step is open. game.setCurrentPlayer() and player.setCurrent() are removed and Player no longer saves _isCurrent; a snapshot that still has it restores and the value is ignored (#780)."
     }
   ]
 }

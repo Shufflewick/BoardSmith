@@ -10,7 +10,7 @@
  * // Advance off the intro step after the learner's first action:
  * { id: 'intro', gate: { action: 'move' }, advanceWhen: { ...afterFirstTurn() } }
  *
- * // Advance after the learner has made 3 moves:
+ * // Advance after the learner has taken 3 turns:
  * { id: 'practice', gate: { action: 'move' }, advanceWhen: { ...afterTurns(3) } }
  *
  * // Advance when a capture becomes the only legal move:
@@ -56,17 +56,18 @@ export function afterFirstTurn(): TutorialAdvanceCondition {
  * **Turn signal derivation — documented approximation:**
  * Turn counting uses two signals from `game.getFlowState().position`:
  *
- * 1. `iterations` — a `Record<string, number>` summing all outer-loop
- *    iteration counters. Each loop node increments its counter when
- *    pushing its body, so the sum starts at 1 at game start (first round
- *    in progress). Subtracting 1 normalises to 0 before the first turn.
+ * 1. `iterations` — the `__iter_<depth>` loop counters. Only the outermost
+ *    loop's counter is read: it counts rounds, starting at 1 at game start
+ *    (first round in progress). Subtracting 1 normalises to 0 before the first
+ *    turn. Inner loops, such as a turn the same seat keeps playing (a
+ *    multi-jump, an extra ask), are ignored, so one learner turn counts once.
  *
  * 2. `playerIndex` — the seat of the player currently awaiting input.
  *    After the learner acts within a round, `playerIndex` changes to another
  *    player's seat, signalling that the learner has contributed their turn for
  *    that round even before the round's loop counter increments.
  *
- * Completed turns ≈ `(sum(iterations) − 1) + (playerIndex !== learnerSeat ? 1 : 0)`
+ * Completed turns ≈ `(outermost loop counter − 1) + (playerIndex !== learnerSeat ? 1 : 0)`
  *
  * **Assumption:** the learner (`ctx.seat`) is the FIRST player to act within
  * each round of the flow (i.e., `eachPlayer` begins with the learner's seat).
@@ -76,7 +77,8 @@ export function afterFirstTurn(): TutorialAdvanceCondition {
  * write a custom `advanceWhen` predicate instead.
  *
  * **Flow structure requirement:** the predicate relies on an outer `loop` node
- * whose iteration counter it reads. For bare `eachPlayer` without a `loop`,
+ * around `eachPlayer`, whose iteration counter it reads, and on the learner
+ * taking one turn per round of it. For bare `eachPlayer` without a `loop`,
  * `iterations` is empty and the predicate never fires — document this if your
  * tutorial uses a non-looping flow.
  *
@@ -98,10 +100,13 @@ export function afterTurns(n: number): TutorialAdvanceCondition {
 
       const { iterations, playerIndex } = flowState.position;
 
-      // Sum all loop-level iteration counters. Each loop increments its counter
-      // when pushing its body, so the count is 1 at game start (first round begun).
-      // Subtracting 1 normalises to 0 before the learner has acted at all.
-      const roundsStarted = Object.values(iterations).reduce((a, b) => a + b, 0);
+      // The outermost loop's counter is the round number: 1 at game start, so
+      // subtracting 1 normalises to 0 before the learner has acted. Inner loops
+      // (a multi-step turn) are ignored. A restored position stamps 0 on every
+      // non-loop frame (#971), and a loop with frames above it has always begun
+      // its body, so the outermost loop is the shallowest counter above 0
+      // (getPosition emits the counters shallowest first).
+      const roundsStarted = Object.values(iterations).find((count) => count > 0) ?? 0;
 
       // Within the current round: the learner has already acted if it is now
       // another player's turn (playerIndex changed away from the learner's seat).

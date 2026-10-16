@@ -226,14 +226,14 @@ import { afterFirstTurn, afterTurns, whenForced } from 'boardsmith';
 // Advance after the learner's first action:
 { id: 'intro', gate: { action: 'move' }, advanceWhen: { ...afterFirstTurn() } }
 
-// Advance after the learner has made 3 moves:
+// Advance after the learner has taken 3 turns:
 { id: 'practice', gate: { action: 'move' }, advanceWhen: { ...afterTurns(3) } }
 
 // Advance when an action becomes the ONLY option:
 { id: 'forced-action', gate: { action: 'capture' }, advanceWhen: { ...whenForced('capture') } }
 ```
 
-`afterTurns(n)` reads `game.getFlowState().position` (`iterations` + `playerIndex`). It assumes the learner acts first within each round and requires an outer `loop` node. If either assumption does not hold, write a custom predicate instead.
+`afterTurns(n)` reads `game.getFlowState().position` (`iterations` + `playerIndex`). It counts rounds of the outermost `loop` around `eachPlayer`, so inner loops inside a turn (a multi-jump, an extra ask) count as one turn, and a turn counts once play passes to another seat. It assumes the learner acts first within each round and requires that outer `loop` node. If either assumption does not hold, write a custom predicate instead.
 
 `whenForced(actionName)` fires when `game.getAvailableActions(player)` returns exactly one action matching `actionName`. Do not use it as a substitute for a custom predicate that reads a specific game property (see the checkers `capture-tip` step, which uses `playerHasCaptures` directly because `move` is never the sole available action — `endTurn` is always also offered).
 

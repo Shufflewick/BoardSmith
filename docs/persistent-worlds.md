@@ -1825,7 +1825,8 @@ more refusals belong to the HOST rather than the bundle: `activity-unanswered`
 if a handler reaches a chair the walk declared and the host supplied nothing
 for, and `activity-answered-wrong` if the host answers about a different chair
 from the one it was asked about. `.about()` returning something that is not a
-whole positive seat number is `invalid-seat-declaration`, refused rather than
+seat of this world -- not a whole number from 1 to the world's seat count -- is
+`invalid-seat-declaration` (#799), refused rather than
 passed on -- a host asked about seat `1.5` answers an empty row, which reads to
 the phase that asked exactly like an established empire nobody has touched.
 

@@ -396,6 +396,18 @@ describe('validateTutorialDefinition', () => {
     })).not.toThrow();
   });
 
+  it('throws naming a step id used twice, which would loop progress forever (#782)', () => {
+    expect(() => validateTutorialDefinition({
+      learnerSeat: 1,
+      steps: [
+        { id: 'intro', gate: { action: 'pass' } },
+        { id: 'draw', gate: { action: 'pass' } },
+        { id: 'intro', gate: { action: 'pass' } },
+        { id: 'finish', gate: { action: 'pass' } },
+      ],
+    })).toThrow(/step id 'intro' is used by more than one step/);
+  });
+
   it('throws an actionable error when steps is empty', () => {
     expect(() => validateTutorialDefinition({ learnerSeat: 1, steps: [] }))
       .toThrow(/no steps|empty/i);

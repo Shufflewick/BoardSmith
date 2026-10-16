@@ -301,10 +301,10 @@
         "count": 1
       },
       "complexity_high": {
-        "count": 2
+        "count": 1
       },
       "complexity_moderate": {
-        "count": 7
+        "count": 8
       }
     },
     "src/engine/element/typed-array-codec.ts": {

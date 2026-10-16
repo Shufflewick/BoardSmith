@@ -923,51 +923,49 @@ export class ActionExecutor {
         ? oneChoiceListRefusal(selection.name, value, choices)
         : undefined;
       if (listRefusal) return { valid: false, errors: [listRefusal] };
+      // A list's length is judged before its entries, so an over-long one costs no matching (#776).
+      const orderedList = selection.type === 'choice' ? resolveOrderedList(selection, context) : undefined;
+      const multiSelectConfig = selection.type === 'choice' && orderedList === undefined
+        ? resolveMultiSelect(selection, context)
+        : undefined;
+      const listBounds = orderedList ?? multiSelectConfig;
+      if (listBounds !== undefined && Array.isArray(value)) {
+        const lengthErrors = countErrors('choice', selection.name, value.length, listBounds.min, listBounds.max);
+        if (lengthErrors.length > 0) return { valid: false, errors: lengthErrors };
+      }
       for (const item of Array.isArray(value) && takesItems ? value : [value]) {
         const offered = this.matchOffered(selection, item, choices, context, actionName);
         if ('refusal' in offered) errors.push(offered.refusal);
       }
 
-      // Enforce multiSelect min/max bounds on choice selections (ENG-04/F6).
-      // Structurally identical to the elements-branch enforcement below, except
-      // a non-array value must be REJECTED outright when multiSelect is
-      // configured -- unlike the elements branch, a bare choice is not a valid
-      // shorthand for a multiSelect-configured chooseFrom.
+      // A list selection takes an array (ENG-04/F6): unlike the elements
+      // branch, a bare choice is not a shorthand for a multiSelect or list.
       if (selection.type === 'choice') {
-        // AN ORDERED LIST IS BOUNDED THE SAME WAY AND DEDUPED NOT AT ALL (#249).
-        // Its bounds count ENTRIES, so a repeat satisfies `min` and fills a slot
+        // AN ORDERED LIST IS DEDUPED NOT AT ALL (#249). Its bounds (checked
+        // above) count ENTRIES, so a repeat satisfies `min` and fills a slot
         // under `max`; every occurrence was already checked against `choices` by
         // the per-item loop above, which is the guarantee that makes repetition
         // safe to allow. The two configs are mutually exclusive (the builder
         // refuses both), so the set rules below are skipped when this one
         // applies -- while everything AFTER this block (the selection's own
         // `validate`, the type-specific rules) still runs for both.
-        const orderedList = resolveOrderedList(selection, context);
-        if (orderedList !== undefined) {
-          if (!Array.isArray(value)) {
-            errors.push(
-              `Selection "${selection.name}" is an ordered list and expected an array, got a single ${typeof value}. Send an array.`
-            );
-          } else {
-            errors.push(...countErrors('choice', selection.name, value.length, orderedList.min, orderedList.max));
-          }
+        if (orderedList !== undefined && !Array.isArray(value)) {
+          errors.push(
+            `Selection "${selection.name}" is an ordered list and expected an array, got a single ${typeof value}. Send an array.`
+          );
         }
 
-        const multiSelectConfig = orderedList !== undefined
-          ? undefined
-          : resolveMultiSelect(selection, context);
         if (multiSelectConfig !== undefined) {
           if (!Array.isArray(value)) {
             errors.push(`Selection "${selection.name}" is multi-select and expected an array, got a single ${typeof value}. Send an array.`);
           } else {
-            // Reject duplicates before the count check (WR-04): repeated
-            // items must not satisfy the min bound. Multiplicity-aware
+            // Reject duplicates (WR-04), so repeated items cannot
+            // satisfy the min bound. Multiplicity-aware
             // (WR-07): a value duplicated in the choices list may be
             // submitted that many times.
             if (this.hasDuplicateChoiceItems(value, choices)) {
               errors.push(`Selection "${selection.name}" contains duplicate choices`);
             }
-            errors.push(...countErrors('choice', selection.name, value.length, multiSelectConfig.min, multiSelectConfig.max));
           }
         }
       }
@@ -1428,7 +1426,7 @@ export class ActionExecutor {
    *
    * A pick a held follow-up answered is the engine's and is passed over
    * (`passBoundPick`): `submitted` is not read for it. A key of `submitted`
-   * that names no pick is refused (#662).
+   * that names no pick is refused (#662), and so is a `selectionName` that names none (#776).
    *
    * Returns why a pick was refused, or `undefined` when every pick was made.
    */
@@ -1442,6 +1440,9 @@ export class ActionExecutor {
     const refusal = this.undeclaredArgsRefusal(action, submitted);
     if (refusal) return refusal;
     const target = action.selections.findIndex(s => s.name === selectionName);
+    if (target === -1) {
+      return `'${action.name}' has no pick named '${selectionName}'. It takes: ${action.selections.map(s => s.name).join(', ')}.`;
+    }
     while (pendingState.currentSelectionIndex < target) {
       if (this.passBoundPick(action, pendingState)) continue;
       const selection = action.selections[pendingState.currentSelectionIndex];

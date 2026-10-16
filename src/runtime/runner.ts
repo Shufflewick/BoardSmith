@@ -313,12 +313,12 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * has already been observed.
    *
    * Called from `captureCheckpoint()` rather than directly from
-   * `performAction`/`recordSerializedAction`: an execute() node immediately
+   * `performAction`/`executeCollectedAction`: an execute() node immediately
    * following an action-step frequently runs INSIDE the completion of the
    * NEXT flow step, which for the multi-step / repeating-selection funnel
    * (`completePendingAction` here, `PendingActionManager` on the session
    * layer) happens via `continueFlowAfterPendingAction` -- called AFTER
-   * `recordSerializedAction` already pushed to history. `captureCheckpoint()`
+   * `executeCollectedAction` already pushed to history. `captureCheckpoint()`
    * is the one chokepoint the executor already calls, via `getSnapshot()`,
    * once the WHOLE op (including any such trailing flow advance) has settled,
    * so it is also the correct place to
@@ -688,16 +688,15 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * being passed through as raw numbers. This is the single place the
    * `actionHistory` entry shape is produced, shared by:
    *   - `performAction` (single-step actions), and
-   *   - the pending-action completion funnel (multi-step / repeating-selection
-   *     actions, via `PendingActionManager`).
+   *   - `executeCollectedAction` (multi-step / repeating-selection actions).
    * Keeping both paths on this one helper guarantees every `actionHistory` entry
    * is identical in shape regardless of how the action was driven, so replay,
    * undo, and bot history treat them the same.
    *
    * Does NOT push to history — callers decide when to record (e.g. only after a
-   * successful execute). Use `recordSerializedAction` to append.
+   * successful execute).
    */
-  serializeForHistory(
+  private serializeForHistory(
     actionName: string,
     player: Player,
     args: Record<string, unknown>
@@ -723,16 +722,29 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   }
 
   /**
-   * Append an already-serialized action to history.
-   *
-   * Used by the multi-step pending-action completion path, which serializes the
-   * collected args BEFORE executing (so recorded element refs are replay-safe)
-   * but must defer the actual history append until execution succeeds. Single
-   * source of truth: `performAction` and this method are the only writers of
-   * `actionHistory` entries during normal play.
+   * Execute a fully-collected pending action, the one completion step shared by
+   * this runner's `completePendingAction` and `PendingActionManager`'s: record
+   * it and advance the flow when it succeeds, and roll the game back when it
+   * failed after changing something, as `performAction` does (#44, #801).
    */
-  recordSerializedAction(serializedAction: SerializedAction): void {
-    this.actionHistory.push(serializedAction);
+  executeCollectedAction(
+    executor: ActionExecutor,
+    action: ActionDefinition,
+    player: Player,
+    pendingState: PendingActionState,
+    playerPosition: number
+  ): ActionResult {
+    // Serialized before executing, so the recorded refs are the positions the action acts on.
+    const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs);
+    const actionResult = executor.executePendingAction(action, player, pendingState);
+
+    if (actionResult.success) {
+      this.actionHistory.push(serializedAction);
+      this.game.continueFlowAfterPendingAction(actionResult, playerPosition);
+      return actionResult;
+    }
+    const rollback = actionResult.partiallyApplied ? this.rollbackToPreActionState() : undefined;
+    return rollback === undefined ? actionResult : { ...actionResult, error: `${actionResult.error} ${rollback}` };
   }
 
   /**
@@ -992,8 +1004,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * (started via `startPendingAction`). Session-free mirror of
    * `PendingActionManager.processSelectionStep` — handles both regular and
    * repeating selections, and auto-completes + executes the action (recording
-   * it in `actionHistory` via the same `serializeForHistory`/
-   * `recordSerializedAction` funnel `performAction` uses) once every selection
+   * it in `actionHistory` via `executeCollectedAction`) once every selection
    * has been supplied.
    *
    * Clears the tracked pending state once the action completes, whether it
@@ -1075,14 +1086,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     pendingState: PendingActionState,
     playerPosition: number
   ): PendingStepResult & { actionComplete: true } {
-    const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs);
-    const actionResult = executor.executePendingAction(action, player, pendingState);
+    const actionResult = this.executeCollectedAction(executor, action, player, pendingState, playerPosition);
     this.pendingActions.delete(playerPosition);
-
-    if (actionResult.success) {
-      this.recordSerializedAction(serializedAction);
-      this.game.continueFlowAfterPendingAction(actionResult, playerPosition);
-    }
 
     return {
       success: actionResult.success,
