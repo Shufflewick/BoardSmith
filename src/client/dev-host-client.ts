@@ -184,8 +184,21 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
       );
       return;
     }
-    for (const listener of listeners) listener(msg);
+    settlePending(msg);
+    // #741: a throwing listener must not stop the other listeners or escape into the socket's event loop.
+    for (const listener of listeners) {
+      try {
+        listener(msg);
+      } catch (error) {
+        console.error(
+          `createDevHostClient: an onMessage listener threw while handling a '${String(msg.type)}' message: ` +
+            `${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+  });
 
+  function settlePending(msg: DevHostInboundMessage): void {
     const requestId = msg.requestId;
     if (typeof requestId !== 'string' || !pending.has(requestId)) return;
     const entry = pending.get(requestId)!;
@@ -196,7 +209,7 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
       return;
     }
     entry.resolve(msg);
-  });
+  }
 
   // The host drops anything a connection sends before `hello` (#422), so a
   // request sent earlier could only ever time out. Refused here instead.
