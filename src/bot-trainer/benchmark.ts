@@ -134,6 +134,7 @@ export async function benchmarkBot<G extends Game>(
     win: 0, loss: 0, draw: 0, incomplete: 0,
     winsAsPlayer0: 0, gamesAsPlayer0: 0,
     winsAsPlayer1: 0, gamesAsPlayer1: 0,
+    decidedAsPlayer0: 0, decidedAsPlayer1: 0,
   };
   const failures = new Set<string>();
 
@@ -152,6 +153,10 @@ export async function benchmarkBot<G extends Game>(
     else tally.gamesAsPlayer1++;
 
     tally[outcome]++;
+    if (outcome !== 'incomplete') {
+      if (trainedPlayerIndex === 0) tally.decidedAsPlayer0++;
+      else tally.decidedAsPlayer1++;
+    }
     if (outcome === 'win') {
       if (trainedPlayerIndex === 0) tally.winsAsPlayer0++;
       else tally.winsAsPlayer1++;
@@ -162,11 +167,6 @@ export async function benchmarkBot<G extends Game>(
   const gamesPlayed = tally.win + tally.loss + tally.draw;
   const gamesAttempted = schedule.length;
   const incompleteRate = gamesAttempted > 0 ? tally.incomplete / gamesAttempted : 0;
-
-  // A seat that never finished a game has no rate; reporting one over a
-  // denominator that excludes its failures would read as a real result.
-  const decidedAsPlayer0 = tally.gamesAsPlayer0;
-  const decidedAsPlayer1 = tally.gamesAsPlayer1;
 
   const result: BenchmarkResult = {
     winRate: gamesPlayed > 0 ? tally.win / gamesPlayed : 0,
@@ -180,8 +180,9 @@ export async function benchmarkBot<G extends Game>(
     gamesAttempted,
     gamesAsPlayer0: tally.gamesAsPlayer0,
     gamesAsPlayer1: tally.gamesAsPlayer1,
-    winRateAsPlayer0: decidedAsPlayer0 > 0 ? tally.winsAsPlayer0 / decidedAsPlayer0 : 0,
-    winRateAsPlayer1: decidedAsPlayer1 > 0 ? tally.winsAsPlayer1 / decidedAsPlayer1 : 0,
+    // Over finished games only, like winRate; a seat that finished none reports 0.
+    winRateAsPlayer0: tally.decidedAsPlayer0 > 0 ? tally.winsAsPlayer0 / tally.decidedAsPlayer0 : 0,
+    winRateAsPlayer1: tally.decidedAsPlayer1 > 0 ? tally.winsAsPlayer1 / tally.decidedAsPlayer1 : 0,
   };
 
   // Fail the run rather than hand back a rate the caller will treat as skill.

@@ -378,6 +378,42 @@ describe('benchmarkBot on a game that cannot finish (#37)', () => {
   });
 });
 
+/** Seat 1 wins every game except the one played from `stallSeed`, whose move throws. */
+class OneStallGame extends DecisiveGame {
+  static stallSeed = 'one-stall-p0-0';
+
+  constructor(options: GameOptions) {
+    super(options);
+    if (options.seed === OneStallGame.stallSeed) {
+      this.registerAction(
+        Action.create<DecisiveGame>('move')
+          .chooseFrom('value', { choices: [1, 2] })
+          .execute(() => {
+            throw new Error('this game cannot finish');
+          }),
+      );
+    }
+  }
+}
+
+describe('per-seat win rates with an unfinished game (#736)', () => {
+  it('divide by finished games, agreeing with winRate', async () => {
+    DecisiveGame.outcome = 'seat1';
+    const result = await benchmarkBot(OneStallGame, 'one-stall', undefined, noWeights, {
+      gameCount: 4,
+      mctsIterations: 1,
+      maxActions: 10,
+      seed: 'one-stall',
+      allowIncomplete: true,
+    });
+    expect(result.incomplete).toBe(1);
+    // Seat 0 finished one game and won it; seat 1 finished two and lost both.
+    expect(result.winRateAsPlayer0).toBe(1);
+    expect(result.winRateAsPlayer1).toBe(0);
+    expect(result.winRate).toBeCloseTo((1 * 1 + 0 * 2) / 3);
+  });
+});
+
 describe('a healthy benchmark reports no failures', () => {
   it('leaves the failure counters empty', async () => {
     const result = await benchmark(4, 'seat1');

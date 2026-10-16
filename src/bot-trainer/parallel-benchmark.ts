@@ -123,7 +123,6 @@ export async function runParallelBenchmarks(
   interface WorkerState {
     worker: Worker;
     busy: boolean;
-    currentIndex: number | null;
   }
 
   const workers: WorkerState[] = [];
@@ -136,7 +135,6 @@ export async function runParallelBenchmarks(
       const workerState: WorkerState = {
         worker,
         busy: false,
-        currentIndex: null,
       };
       workers.push(workerState);
 
@@ -145,7 +143,6 @@ export async function runParallelBenchmarks(
         const index = inFlightWork.get(worker);
         inFlightWork.delete(worker);
         workerState.busy = false;
-        workerState.currentIndex = null;
 
         if ('error' in message) {
           // Benchmark errored - use 0 fitness
@@ -223,7 +220,6 @@ export async function runParallelBenchmarks(
 
       const index = workQueue.shift()!;
       workerState.busy = true;
-      workerState.currentIndex = index;
       inFlightWork.set(workerState.worker, index);
 
       const request: BenchmarkRequest = {
