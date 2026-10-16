@@ -1445,32 +1445,6 @@ export class MCTSBot<G extends Game = Game> {
       untriedMoves = [...allMoves];
     }
 
-    // Initialize proof numbers based on terminal state
-    let proofNumber = 1;
-    let disproofNumber = 1;
-    let isProven = false;
-    let isDisproven = false;
-
-    // A result is proof only when it is certain (#720): a draw is neither win nor loss, and a
-    // result reached through a sampled world or a random draw this step is one outcome of many.
-    if (
-      flowState.complete &&
-      this.searchGame &&
-      !this.determinize &&
-      this.searchGame.getRandomState() === this.resumedRandomState
-    ) {
-      const winners = this.searchGame.getWinners().map(p => p.seat);
-      if (winners.includes(this.playerIndex)) {
-        proofNumber = 0;
-        disproofNumber = Infinity;
-        isProven = true;
-      } else if (winners.length > 0) {
-        proofNumber = Infinity;
-        disproofNumber = 0;
-        isDisproven = true;
-      }
-    }
-
     return {
       flowState,
       parent,
@@ -1489,13 +1463,25 @@ export class MCTSBot<G extends Game = Game> {
         parent === null || flowState.complete
           ? this.playerIndex
           : (this.seatToMove(flowState) ?? this.playerIndex),
-      proofNumber,
-      disproofNumber,
-      isProven,
-      isDisproven,
+      ...this.terminalProof(flowState),
       availability: 0,
       refusedMoveKeys: new Set(),
     };
+  }
+
+  /**
+   * A new node's proof numbers: solved only for a finished game whose result
+   * is certain (#720). A draw is neither win nor loss, and a result reached
+   * through a sampled world or a random draw this step is one outcome of many.
+   */
+  private terminalProof(flowState: FlowState): Pick<MCTSNode, 'proofNumber' | 'disproofNumber' | 'isProven' | 'isDisproven'> {
+    const unsolved = { proofNumber: 1, disproofNumber: 1, isProven: false, isDisproven: false };
+    if (!flowState.complete || !this.searchGame || this.determinize) return unsolved;
+    if (this.searchGame.getRandomState() !== this.resumedRandomState) return unsolved;
+    const winners = this.searchGame.getWinners().map(p => p.seat);
+    if (winners.includes(this.playerIndex)) return { proofNumber: 0, disproofNumber: Infinity, isProven: true, isDisproven: false };
+    if (winners.length > 0) return { proofNumber: Infinity, disproofNumber: 0, isProven: false, isDisproven: true };
+    return unsolved;
   }
 
   /**
