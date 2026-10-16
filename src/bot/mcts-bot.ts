@@ -1451,16 +1451,20 @@ export class MCTSBot<G extends Game = Game> {
     let isProven = false;
     let isDisproven = false;
 
-    if (flowState.complete && this.searchGame) {
-      // Terminal node - check winner to determine proof status
+    // A result is proof only when it is certain (#720): a draw is neither win nor loss, and a
+    // result reached through a sampled world or a random draw this step is one outcome of many.
+    if (
+      flowState.complete &&
+      this.searchGame &&
+      !this.determinize &&
+      this.searchGame.getRandomState() === this.resumedRandomState
+    ) {
       const winners = this.searchGame.getWinners().map(p => p.seat);
       if (winners.includes(this.playerIndex)) {
-        // Bot wins: proven
         proofNumber = 0;
         disproofNumber = Infinity;
         isProven = true;
-      } else {
-        // Bot loses or draws: disproven
+      } else if (winners.length > 0) {
         proofNumber = Infinity;
         disproofNumber = 0;
         isDisproven = true;
