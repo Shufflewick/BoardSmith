@@ -219,7 +219,7 @@ async function keysInsideWorldShell(world: TestWorld, seat: number): Promise<Set
     mounted.push(shell);
     const send = (data: unknown): void =>
       (shell.vm as unknown as { host: { handleMessage(event: MessageEvent): void } }).host.handleMessage(
-        new MessageEvent('message', { data, origin: 'https://shufflewick.pub' }),
+        new MessageEvent('message', { source: window.parent, data, origin: 'https://shufflewick.pub' }),
       );
     send({
       source: WORLD_HOST_SOURCE,

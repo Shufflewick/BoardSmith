@@ -158,6 +158,7 @@ async function mountWithHeldFollowUp() {
   await flushPromises();
   const fetch = mounted.posted.find((message) => (message as { op?: string }).op === 'resolve_choices') as { requestId: string };
   window.dispatchEvent(new MessageEvent('message', {
+    source: window.parent,
     data: {
       source: 'shufflewick',
       type: 'server_response',
@@ -177,7 +178,7 @@ async function mountWithHeldFollowUp() {
 
 /** The host's message, as a live server sends it. */
 const fromHost = (data: Record<string, unknown>) =>
-  window.dispatchEvent(new MessageEvent('message', { data: { source: 'shufflewick', ...data } }));
+  window.dispatchEvent(new MessageEvent('message', { source: window.parent, data: { source: 'shufflewick', ...data } }));
 const LOOT = {
   name: 'loot',
   prompt: 'Loot',

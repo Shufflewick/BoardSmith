@@ -194,7 +194,7 @@ async function renderInsideGameShell(game: TestGame<MoveGame>, seat: number, boa
   const shell = mountPlatformShell({ board });
   mounted.push(shell);
   await nextTick();
-  window.dispatchEvent(new MessageEvent('message', { data: { source: 'shufflewick', type: 'init', seat } }));
+  window.dispatchEvent(new MessageEvent('message', { source: window.parent, data: { source: 'shufflewick', type: 'init', seat } }));
   await nextTick();
   const names = game.game.players.map((player) => player.name ?? `Player ${player.seat}`);
   const frame = {
@@ -202,7 +202,7 @@ async function renderInsideGameShell(game: TestGame<MoveGame>, seat: number, boa
     state: buildPlayerState(game.runner, names, seat, { includeActionMetadata: true }),
   };
   window.dispatchEvent(
-    new MessageEvent('message', { data: { source: 'shufflewick', type: 'game_state', view: frame, winners: [] } }),
+    new MessageEvent('message', { source: window.parent, data: { source: 'shufflewick', type: 'game_state', view: frame, winners: [] } }),
   );
   for (let i = 0; i < 3; i++) await nextTick();
   return shell;

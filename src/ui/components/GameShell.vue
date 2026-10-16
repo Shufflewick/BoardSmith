@@ -1036,6 +1036,8 @@ if (inHost) {
     // origins when trustedOrigins is unset (preserving existing behavior); the
     // host locks this down via the trustedOrigins prop (HOST-02).
     if (!isOriginAllowed(event.origin, props.trustedOrigins)) return;
+    // Any frame or popup can post here; only the host page may drive the shell (#719).
+    if (event.source !== window.parent) return;
 
     const data = event.data;
     // Lightweight message-shape filter: data.source is a sender-controlled field,

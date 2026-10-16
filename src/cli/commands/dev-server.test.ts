@@ -43,9 +43,9 @@ afterEach(async () => {
 });
 
 /** Open a socket at the claimed path and resolve with what the host received. */
-function connect(port: number): Promise<string> {
+function connect(port: number, headers?: Record<string, string>): Promise<string> {
   return new Promise((resolve, reject) => {
-    const socket = new WsClient(`ws://127.0.0.1:${port}${TEST_WS_PATH}`);
+    const socket = new WsClient(`ws://127.0.0.1:${port}${TEST_WS_PATH}`, { headers });
     const timer = setTimeout(() => {
       socket.terminate();
       reject(new Error('the claimed socket path never answered the upgrade'));
@@ -118,6 +118,18 @@ describe('a dev host socket survives what Vite does on restart (#214)', () => {
       });
     });
     expect(hmr).toBe(true);
+  }, 30000);
+});
+
+describe('a dev host socket answers only pages it served (#719)', () => {
+  it('refuses an upgrade from another site\'s page', async () => {
+    const { port } = await serveEmpty((socket) => socket.send('ours'));
+    await expect(connect(port, { Origin: 'http://evil.example' })).rejects.toThrow(/socket hang up/);
+  }, 30000);
+
+  it('accepts a page whose origin is the host it connected to, as a --lan browser\'s is', async () => {
+    const { port } = await serveEmpty((socket) => socket.send('ours'));
+    expect(await connect(port, { Origin: `http://127.0.0.1:${port}` })).toBe('ours');
   }, 30000);
 });
 

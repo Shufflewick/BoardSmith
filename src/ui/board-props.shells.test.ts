@@ -290,6 +290,7 @@ describe('WorldShell binds WorldBoardProps onto a world board (#516)', () => {
     });
     const send = (frame: unknown): void =>
       (wrapper.vm as unknown as { host: { handleMessage(e: unknown): void } }).host.handleMessage({
+        source: window.parent,
         origin: 'https://shufflewick.pub',
         data: frame,
       });

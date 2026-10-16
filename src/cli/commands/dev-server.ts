@@ -39,7 +39,7 @@
  */
 
 import { existsSync } from 'node:fs';
-import { createServer as createHttpServer } from 'node:http';
+import { createServer as createHttpServer, type IncomingMessage } from 'node:http';
 import { networkInterfaces } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 
@@ -109,11 +109,29 @@ export function claimWebSocketPath(
           return;
         }
         if (pathname !== path) return; // not ours -- Vite HMR handles it
+        if (!fromOurOwnPage(req)) {
+          socket.destroy();
+          return;
+        }
         wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
       });
     },
     close: () => wss.close(),
   };
+}
+
+/**
+ * A browser page may open a socket to any host, so a page we did not serve must not reach ours
+ * (#719). Browsers always send `Origin`; a client that sends none is not a web page.
+ */
+function fromOurOwnPage(req: IncomingMessage): boolean {
+  const origin = req.headers.origin;
+  if (origin === undefined) return true;
+  try {
+    return new URL(origin).host === req.headers.host;
+  } catch {
+    return false; // `null` and other opaque origins
+  }
 }
 
 /** The path part of a request, with any query string dropped. */
