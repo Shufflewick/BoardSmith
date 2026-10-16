@@ -2196,7 +2196,24 @@ describe("retiring a seat's holder (ShufflewickPub #399)", () => {
     expect(() => engine.seat("p2", 3)).toThrow(/already plays seat/);
 
     engine.unseat("p2");
+    engine.unseat("p3");
     expect(() => engine.seat("p2", 3)).not.toThrow();
+  });
+
+  it("refuses a chair somebody else holds, and hands it on once they leave (#796)", () => {
+    const { engine } = newVillageEngine([tend]);
+
+    let refused: unknown;
+    try {
+      engine.seat("newcomer", 2);
+    } catch (error) {
+      refused = error;
+    }
+    expect(refused).toMatchObject({ code: "seat-conflict", message: expect.stringMatching(/"p2" holds seat 2/) });
+    expect(() => engine.seat("p2", 2)).not.toThrow();
+
+    engine.unseat("p2");
+    reissueSeatTwo(engine);
   });
 
   it("is idempotent, so a host retrying a departure is not the failure", () => {
