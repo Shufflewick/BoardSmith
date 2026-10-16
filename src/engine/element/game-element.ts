@@ -1867,8 +1867,16 @@ function encodeAt(
       );
     }
 
+    // World mode keeps an unresolved `{ __elementId }` verbatim on decode; it must re-encode as it is.
+    const isKeptWorldRef = ctx?._worldMode && Object.keys(value).join() === '__elementId' && typeof (value as { __elementId: unknown }).__elementId === 'number';
     const result: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {
+      if (CODEC_MARKER_KEYS.includes(k) && !isKeptWorldRef) {
+        throw new Error(
+          `Cannot serialize ${subject}: property '${path}' has the key '${k}', which the state codec reserves as a type marker. ` +
+            `Rename the key (for example drop the leading underscores).`
+        );
+      }
       result[k] = encode(v, `${path}.${k}`);
     }
     return result;
@@ -1877,6 +1885,10 @@ function encodeAt(
     ancestors.delete(value);
   }
 }
+
+// The keys decodeValue reads as tags (the typed-array one via isSerializedTypedArray); encodeAt refuses them as plain keys.
+const CODEC_MARKER_KEYS: readonly string[] = ['__elementRef', '__elementId', '__playerRef', '__map', '__set', '__typedArray'];
+
 
 /**
  * Decode a value {@link encodeValue} wrote, resolving its references against
