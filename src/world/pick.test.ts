@@ -504,3 +504,55 @@ describe("#393 — a submitted choice that is no longer listed", () => {
     ).rejects.toThrow(/^The galleon has left dock before seat 1 could board\. Pick another ship\.$/);
   });
 });
+
+/**
+ * #798: A PICK OR A QUOTE ANSWERS ONLY FOR AN ACTION THE SEAT IS OFFERED.
+ *
+ * `offersFor` drops an action whose condition is false; a re-asked pick or a
+ * quote used to answer for it anyway, so a seat could read candidates the
+ * offer never showed it. A disabled action is still offered (greyed, with its
+ * picks), so its reads still answer, exactly as the offer does.
+ */
+describe("#798 — a read answers only for an offered action", () => {
+  const hidden = worldAction<FleetGame>("hidden")
+    .needs(() => [FLEET])
+    .condition({ "never offered": () => false })
+    .chooseFrom("ship", { choices: ({ game }) => game.all(Ship).map((ship) => ship.name!) })
+    .quote(() => ["secret price"])
+    .execute(() => {});
+
+  const greyed = worldAction<FleetGame>("greyed")
+    .needs(() => [FLEET])
+    .disabled(() => "The dock is closed.")
+    .chooseFrom("ship", { choices: ({ game }) => game.all(Ship).map((ship) => ship.name!) })
+    .quote(() => ["closed price"])
+    .execute(() => {});
+
+  const notOffered = { code: "unknown-command", message: expect.stringContaining('"hidden"') as unknown };
+
+  it("REFUSES a pick and a quote on an action whose condition is false", async () => {
+    const engine = await engineFor(hidden);
+
+    expect(await engine.offersFor("player-a", STAMP)).toEqual([]);
+    await expect(
+      engine.resolvePick("player-a", "hidden", "ship", {}, STAMP),
+    ).rejects.toMatchObject(notOffered);
+    await expect(
+      engine.resolveQuote("player-a", "hidden", { ship: "dory" }, STAMP),
+    ).rejects.toMatchObject(notOffered);
+  });
+
+  it("still answers a disabled action, which the offer shows greyed with its picks", async () => {
+    const engine = await engineFor(greyed);
+
+    const [offer] = await engine.offersFor("player-a", STAMP);
+    const pick = await engine.resolvePick("player-a", "greyed", "ship", {}, STAMP);
+    const quote = await engine.resolveQuote("player-a", "greyed", { ship: "dory" }, STAMP);
+
+    expect(offer!.disabled).toBe("The dock is closed.");
+    expect(pick.choices?.map((choice) => choice.value)).toEqual(
+      offer!.selections[0]!.choices?.map((choice) => choice.value),
+    );
+    expect(quote).toEqual(["closed price"]);
+  });
+});
