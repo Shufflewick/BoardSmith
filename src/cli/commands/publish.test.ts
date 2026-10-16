@@ -11,7 +11,17 @@ import {
   abortInFlightPublish,
   publishCommand,
 } from './publish.js';
-import { getPlatformUrl, type TaxonomyAudience, completePublish, uploadBundle } from '../lib/publish-api.js';
+import {
+  getPlatformUrl,
+  type TaxonomyAudience,
+  abortPublish,
+  checkVersionAvailable,
+  completePublish,
+  fetchTaxonomy,
+  initiatePublish,
+  uploadBundle,
+} from '../lib/publish-api.js';
+import { validateBundleSize, validateCommand } from './validate.js';
 import type * as PublishApi from '../lib/publish-api.js';
 import type * as Validate from './validate.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
@@ -374,35 +384,56 @@ describe('publish requires a full, passing boardsmith verify for the commit on a
     expect(await problemOf(dir)).toContain(`boardsmith verify --base ${first}`);
   });
 
-  it('publishing a commit older than the published one names a base that measures a change (no loop)', async () => {
+  /** The chain first, a, b, c, with c checked out. */
+  async function chain(): Promise<{ dir: string; first: string; a: string; b: string; c: string }> {
     const { dir, first, head: a } = await game();
     writeFileSync(join(dir, 'src/rules.ts'), 'export const x = 6;\n');
     const b = commitAll(dir, 'b');
     writeFileSync(join(dir, 'src/rules.ts'), 'export const x = 7;\n');
-    const c = commitAll(dir, 'c');
+    return { dir, first, a, b, c: commitAll(dir, 'c') };
+  }
 
-    // B was published measured from A's parent: A is past that base, so A is measured from it too.
-    await recordPublished(dir, { commit: b, base: first });
-    git(dir, 'checkout', '-q', a);
-    expect(await problemOf(dir)).toContain(`boardsmith verify --base ${first}`);
-    await verified(dir, a, first);
-    expect(await publishGate(dir)).toEqual({ commit: a, base: first });
+  it('an older commit past the published commit\'s base is measured from that base', async () => {
+    const { dir, a, b, c } = await chain();
+    await recordPublished(dir, { commit: c, base: a });
+    git(dir, 'checkout', '-q', b);
+    expect(await problemOf(dir)).toContain(`boardsmith verify --base ${a}`);
+    await verified(dir, b, a);
+    expect(await publishGate(dir)).toEqual({ commit: b, base: a });
+  });
 
-    // C was published measured from B, which A is not past: A is measured from the first commit.
-    rmSync(verifyResultPath(dir, a));
-    git(dir, 'checkout', '-q', c);
+  it('an older commit that is the published commit\'s base is measured from the first commit, not from itself', async () => {
+    const { dir, first, b, c } = await chain();
     await recordPublished(dir, { commit: c, base: b });
-    git(dir, 'checkout', '-q', a);
-    expect(await problemOf(dir)).toContain(`boardsmith verify --base ${first}`);
+    git(dir, 'checkout', '-q', b);
+    const problem = await problemOf(dir);
+    expect(problem).toContain(`boardsmith verify --base ${first}`);
+    expect(problem).not.toContain(`--base ${b}`);
+  });
+
+  it('after history was rewritten, measures from where it left the published commit', async () => {
+    const { dir, a, c } = await chain();
+    await recordPublished(dir, { commit: c, base: a });
+    git(dir, 'checkout', '-q', '-b', 'rewritten', a);
+    writeFileSync(join(dir, 'src/rules.ts'), 'export const x = 8;\n');
+    commitAll(dir, 'rewritten');
+    expect(await problemOf(dir)).toContain(`boardsmith verify --base ${a}`);
   });
 
   it('refuses when the published commit is not in this repository, saying what to do', async () => {
     const { dir, first } = await game();
     await recordPublished(dir, { commit: 'f'.repeat(40), base: first });
-    expect(await problemOf(dir)).toMatch(/published\.json does not name a commit in this repository.*Delete it/s);
-    for (const record of ['not json', 'null', JSON.stringify({ commit: first })]) {
+    expect(await problemOf(dir)).toMatch(/published\.json does not hold a commit of this repository.*Delete it/s);
+    const head = git(dir, 'rev-parse', 'HEAD').trim();
+    for (const record of [
+      'not json',
+      'null',
+      JSON.stringify({ commit: first }),
+      JSON.stringify({ commit: head, base: head }),
+      JSON.stringify({ commit: first, base: 'nope' }),
+    ]) {
       writeFileSync(join(dir, '.boardsmith', 'published.json'), record);
-      expect(await problemOf(dir)).toMatch(/published\.json does not name a commit in this repository/);
+      expect(await problemOf(dir)).toMatch(/published\.json does not hold a commit of this repository/);
     }
   });
 
@@ -425,6 +456,10 @@ describe('publish requires a full, passing boardsmith verify for the commit on a
 
 describe('publishCommand records the published commit only once the publish completes (#984)', () => {
   afterEach(() => {
+    // Back to the real calls, dropping any answer a test queued and did not use.
+    for (const mock of [validateCommand, validateBundleSize, checkVersionAvailable, fetchTaxonomy, initiatePublish, uploadBundle, completePublish, abortPublish]) {
+      vi.mocked(mock).mockRestore();
+    }
     vi.restoreAllMocks();
   });
 
@@ -451,19 +486,17 @@ describe('publishCommand records the published commit only once the publish comp
   }
 
   async function publishFrom(dir: string): Promise<void> {
-    const api = await import('../lib/publish-api.js');
-    const validate = await import('./validate.js');
     vi.spyOn(process, 'cwd').mockReturnValue(dir);
     const errors: string[] = [];
     vi.spyOn(process, 'exit').mockImplementation((code) => { throw new Error(`process.exit(${code}): ${errors.join(' ')}`); });
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation((...args) => { errors.push(args.join(' ')); });
-    vi.mocked(validate.validateCommand).mockResolvedValueOnce();
-    vi.mocked(validate.validateBundleSize).mockResolvedValueOnce({ name: 'size', passed: true, message: 'ok' });
-    vi.mocked(api.checkVersionAvailable).mockResolvedValueOnce();
-    vi.mocked(api.fetchTaxonomy).mockResolvedValueOnce({ audiences: AUDIENCES });
-    vi.mocked(api.initiatePublish).mockResolvedValueOnce({ versionId: 'v', gameId: 'g', publisherId: 'p', uploadUrl: 'u', uploadCode: 'c' });
-    vi.mocked(api.abortPublish).mockResolvedValueOnce();
+    vi.mocked(validateCommand).mockResolvedValueOnce();
+    vi.mocked(validateBundleSize).mockResolvedValueOnce({ name: 'size', passed: true, message: 'ok' });
+    vi.mocked(checkVersionAvailable).mockResolvedValueOnce();
+    vi.mocked(fetchTaxonomy).mockResolvedValueOnce({ audiences: AUDIENCES });
+    vi.mocked(initiatePublish).mockResolvedValueOnce({ versionId: 'v', gameId: 'g', publisherId: 'p', uploadUrl: 'u', uploadCode: 'c' });
+    vi.mocked(abortPublish).mockResolvedValueOnce();
     await publishCommand({ prod: true, publisher: 'pub' });
   }
 

@@ -33,8 +33,8 @@ type Base = { commit: string; what: string };
 
 const UNUSABLE = {
   problem:
-    '.boardsmith/published.json does not name a commit in this repository, so there is no base to measure this ' +
-    "publish from. Delete it to measure from the repository's first commit, then run `boardsmith publish` again.",
+    '.boardsmith/published.json does not hold a commit of this repository and a different base commit, so there ' +
+    "is no base to measure this publish from. Delete it to measure from the repository's first commit, then run `boardsmith publish` again.",
 };
 
 /** The last publish recorded on this machine, undefined when there is none, or 'unusable' when it is malformed. */
@@ -61,6 +61,9 @@ async function readPublished(projectDir: string): Promise<Published | 'unusable'
  * publish covered up to, when `head` is past it; otherwise null.
  */
 async function sinceLastPublish(projectDir: string, head: string, published: Published): Promise<Base | null | 'unusable'> {
+  const sound = published.base !== published.commit &&
+    await gitSucceeds(projectDir, ['rev-parse', '--verify', '--quiet', `${published.base}^{commit}`]);
+  if (!sound) return 'unusable';
   if (published.commit === head) return { commit: published.base, what: 'the base this commit was published with' };
   let fork: string;
   try {
