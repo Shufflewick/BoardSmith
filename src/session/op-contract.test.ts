@@ -216,6 +216,11 @@ describe('the result of each op (#530, #536)', () => {
     expectTypeOf<Succeeded<'botSuggest'>>().not.toHaveProperty('snapshot');
     expectTypeOf<Succeeded<'botSuggest'>>().not.toHaveProperty('playerViews');
     expectTypeOf<Succeeded<'botSuggest'>>().not.toHaveProperty('spectatorView');
+    // A hint or heatmap is the host's transient teaching state; it returns no game state (#816).
+    expectTypeOf<Succeeded<'hint'>>().not.toHaveProperty('snapshot');
+    expectTypeOf<Succeeded<'hint'>>().not.toHaveProperty('playerViews');
+    expectTypeOf<Succeeded<'heatmapToggle'>>().not.toHaveProperty('snapshot');
+    expectTypeOf<Succeeded<'heatmapToggle'>>().not.toHaveProperty('spectatorView');
     // The host's lifecycle ops publish through the host; their answer carries no state.
     expectTypeOf<Succeeded<'demoStart'>>().not.toHaveProperty('snapshot');
     expectTypeOf<Succeeded<'convertSeatToBot'>['convertedSeat']>().toEqualTypeOf<number>();
