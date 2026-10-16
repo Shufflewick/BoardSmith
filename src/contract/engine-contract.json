@@ -1,7 +1,7 @@
 {
-  "revision": 199,
-  "surfaceHash": "29f429bc7433b8b2",
-  "payloadHash": "9f29fb7dcae7fc03",
+  "revision": 208,
+  "surfaceHash": "72c3970831e07bc0",
+  "payloadHash": "d037431574c86546",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1535,6 +1535,78 @@
       "payloadHash": "9f29fb7dcae7fc03",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "actionTempState values now live nested in settings._actionTemp as { [seat]: { [action]: { [key]: value } } } instead of flat _actionTemp_<seat>_<action>_<key> keys, so one action's clear() can no longer delete another action's values and names cannot alias (#725). Each seat's view still carries only its own seat's entry and spectators none. Temp values saved by an older engine are not read back. Platform: re-vendor; no host change."
+    },
+    {
+      "revision": 200,
+      "date": "2026-10-16",
+      "surfaceHash": "8b779d8dff5c7b45",
+      "payloadHash": "9f29fb7dcae7fc03",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "The session host refuses any op whose player is not the calling seat, and refuses a hint or heatmap result computed on a position the game has left (#738, #742)."
+    },
+    {
+      "revision": 201,
+      "date": "2026-10-16",
+      "surfaceHash": "1b1303a828bcbf65",
+      "payloadHash": "e82681be0c7e858e",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "boardsmith/world exports planEviction, the eviction rule ResidentWorld now runs after every checkpoint, and WorldBudgets gains maxResidentPartitions (default 256); the platform should read budgets.maxResidentPartitions and import planEviction instead of its own WORLD_MAX_RESIDENT_PARTITIONS and world-eviction.ts (#747). A seat named in a zone's hideContentsFrom (or a denied owner of an owner-only zone) is shown anonymous placeholder children instead of every child's real id in true order, and picks offering those children carry the same placeholder ids (#750, #715). Game.performSerializedAction is removed (#756)."
+    },
+    {
+      "revision": 202,
+      "date": "2026-10-16",
+      "surfaceHash": "3aad10f70947c23a",
+      "payloadHash": "45aa9d0eec3fa215",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Game loses three methods nothing called: static Game.restoreGame, getAwaitingPlayers and debugElement; performAction no longer clears pending animation events when it refuses an unknown or disabled action; a failed restoreFlowState throws without replacing the running flow; settings.playerNames is the game's own copy filled with 'Player N' for missing seats (#757). Saved state refuses Dates and class instances instead of flattening them, and refuses plain object keys that collide with the codec's markers (#759, #760). PersistentMap treats built-in object names as ordinary keys (#761). A move refused by an exit handler leaves the element where it was, in production as well as development (#762). Grid cell lookup keeps every layered cell at a coordinate (#764). Die refuses roll and setValue when sides is not a whole number of at least 1 (#765). An element or player in animate()/animateTo() data reaches each seat as a reference instead of the whole object; an element the seat cannot see is named by the outermost container concealing it (#752). Platform: re-vendor."
+    },
+    {
+      "revision": 203,
+      "date": "2026-10-16",
+      "surfaceHash": "3aad10f70947c23a",
+      "payloadHash": "e120675dfc7aacb1",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A card's own grant (addVisibleTo, showOnlyTo, showToAll) reveals it through a hidden, count-only or owner-only zone to the granted seats only; a bare addVisibleTo follows the card's current zone (#758)."
+    },
+    {
+      "revision": 204,
+      "date": "2026-10-16",
+      "surfaceHash": "409ce1ca647d80f0",
+      "payloadHash": "e120675dfc7aacb1",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "World schedules refuse a timer armed under an empty key with the new refusal code schedule-key-empty (#790)."
+    },
+    {
+      "revision": 205,
+      "date": "2026-10-16",
+      "surfaceHash": "409ce1ca647d80f0",
+      "payloadHash": "e120675dfc7aacb1",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "applyNoticeWrites(notices, read, { seatCount, budgets }) now requires the host's seat count and budgets and refuses a dispatch's notice writes before reading any box (invalid-notice for a perSeat outside 1..maxNoticesPerSeat, a seat outside 1..seatCount, a malformed write, an unknown kind, a bad whenFull or a notice over noticeMaxBytes; notice-batch-cap for more than maxNoticesPerCommand sends) (#789). Platform: pass { seatCount, budgets } at games/src/world-session.ts and treat the throw as a refused command; re-vendor."
+    },
+    {
+      "revision": 206,
+      "date": "2026-10-16",
+      "surfaceHash": "46b82ee1a1053272",
+      "payloadHash": "e120675dfc7aacb1",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Hosts keep a world receipt by receiptAt(order, now, budgets) (new export: the order's own time, capped one retention window past the host clock and never below the floor its write sets); a notice is refused with invalid-notice unless its payload is plain JSON and its line is a string or { text, type? } of strings; a world view throw reaches a player verbatim only as a WorldRefusal or PlayerFacingError (#793)."
+    },
+    {
+      "revision": 207,
+      "date": "2026-10-16",
+      "surfaceHash": "72c3970831e07bc0",
+      "payloadHash": "e120675dfc7aacb1",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "World partition roots must be direct children of the game and registered under one name; genesis, createPartition and migration roots that are nested or aliased raise the new game-owned refusal invalid-partition-root (#795)."
+    },
+    {
+      "revision": 208,
+      "date": "2026-10-16",
+      "surfaceHash": "72c3970831e07bc0",
+      "payloadHash": "d037431574c86546",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "The world unknown-player refusal no longer lists the seated players; it says only that the player is not in this world (#797)."
     }
   ]
 }

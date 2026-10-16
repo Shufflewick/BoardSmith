@@ -118,6 +118,8 @@ let rollSpins = { x: 0, y: 0, z: 0 };
 const snapshotDataUrl = ref<string | null>(null);
 const isShowingSnapshot = ref(false);
 let webglDisposed = false;
+// The 50ms wait after a scene is built; cleared on unmount so it never reaches a gone die.
+let sceneInitTimer: ReturnType<typeof setTimeout> | undefined;
 
 // Component instance ID for tracking queued renders (from shared module)
 const myComponentId = getNextComponentId();
@@ -868,7 +870,7 @@ watch(() => props.rollCount, (newRollCount) => {
       }
 
       // Start animation after a brief delay for scene init
-      setTimeout(() => {
+      sceneInitTimer = setTimeout(() => {
         if (mesh) {
           startRollAnimation(props.value);
         }
@@ -930,7 +932,7 @@ onMounted(() => {
       initScene();
 
       // Start animation after a brief delay for scene init
-      setTimeout(() => {
+      sceneInitTimer = setTimeout(() => {
         if (mesh) {
           startRollAnimation(props.value);
         }
@@ -942,7 +944,7 @@ onMounted(() => {
       initScene();
 
       // Take a snapshot and dispose WebGL immediately
-      setTimeout(() => {
+      sceneInitTimer = setTimeout(() => {
         scheduleSnapshotAndDispose();
       }, 50);
     }, myComponentId);
@@ -956,6 +958,7 @@ onUnmounted(() => {
   // forceContextLoss() runs on unmount too — otherwise an unmounted-mid-render
   // die would leak its context and re-trip the context limit.
   cancelComponentRenders(myComponentId);
+  clearTimeout(sceneInitTimer);
   disposeWebGL();
 });
 </script>

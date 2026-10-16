@@ -241,6 +241,10 @@ headless batch simulation).
 
 #### Before you call a change done: `boardsmith verify`
 
+The commands below describe the default full policy. A repository that explicitly opts into
+authored tests per ticket follows [Focused ticket verification](./focused-verification.md),
+including its committed selection and required full run after five confirmed ticket closures.
+
 ```bash
 boardsmith verify                    # every check, recorded for this commit
 boardsmith verify --base v1.2        # measure the change from somewhere other than main
@@ -337,8 +341,8 @@ Commit first: a tree with uncommitted changes is refused before any check runs.
 The result is written to `.boardsmith/verify/<commit>.json`, tied to that one
 commit, to the base it measured from, and to whether the tree stayed clean while
 the checks ran. `boardsmith verify --check` exits 0 only when the current commit,
-on a clean tree, has a passing result, and otherwise says what to run. With
-`--chunk <slug>` it also requires that result to have measured the chunk's whole
+on a clean tree, has a passing result, and otherwise says what to run. Under the default full
+policy, `--chunk <slug>` also requires that result to have measured the chunk's whole
 change: its base must be where the chunk began or a commit before that, so a
 `--base HEAD` run, which mutates nothing, does not count. `boardsmith
 chunk-signoff <slug>` asks the same question before it records a chunk as done.

@@ -28,6 +28,11 @@ export interface ChunkCommit {
   label: string;
 }
 
+/** A commit of a chunk's history, as messages name it. */
+export function commitName({ hash, label }: ChunkCommit): string {
+  return `${hash.slice(0, 10)} (${label})`;
+}
+
 /** The tips of the checked-out tree's history: HEAD, and MERGE_HEAD while a merge is in progress. */
 async function checkoutTips(projectDir: string): Promise<string[]> {
   const merging = await git(projectDir, ['rev-parse', '--quiet', '--verify', 'MERGE_HEAD^{commit}']).catch(() => '');

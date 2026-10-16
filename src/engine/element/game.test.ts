@@ -21,6 +21,7 @@ import {
   loop,
   eachPlayer,
   actionStep,
+  sequence,
   type GameOptions,
 } from '../index.js';
 import { _clearShownWarnings } from '../../utils/dev.js';
@@ -596,5 +597,40 @@ describe('setFlow refuses keys a flow definition does not take (#617)', () => {
   it('accepts every key FlowDefinition declares', () => {
     const run = setFlowWith({ root, setup: () => {}, onEnterPhase: () => {}, onExitPhase: () => {} });
     expect(run).not.toThrow();
+  });
+});
+
+describe('settings.playerNames (#757)', () => {
+  it('fills a short list the way the players are named, so the two always agree', () => {
+    const game = new Game({ playerCount: 3, playerNames: ['Alice'] });
+    expect(game.settings.playerNames).toEqual(['Alice', 'Player 2', 'Player 3']);
+    expect(game.players.map((p) => p.name)).toEqual(game.settings.playerNames);
+  });
+
+  it('keeps its own copy, so changing the caller\'s array later does not reach the game', () => {
+    const names = ['Alice', 'Bob'];
+    const game = new Game({ playerCount: 2, playerNames: names });
+    names[0] = 'Mallory';
+    expect(game.settings.playerNames).toEqual(['Alice', 'Bob']);
+  });
+});
+
+describe('a failed restoreFlowState keeps the flow that was running (#757)', () => {
+  class TwoStepGame extends Game<TwoStepGame, Player> {
+    constructor(options: GameOptions) {
+      super(options);
+      this.registerAction(Action.create<TwoStepGame>('go').execute(() => {}));
+      this.setFlow({ root: sequence(actionStep({ actions: ['go'] }), actionStep({ actions: ['go'] })) });
+    }
+  }
+
+  it('throws, and the game still answers from its previous flow position', async () => {
+    const game = await new TwoStepGame(makeOptions()).ready();
+    game.startFlow();
+    const before = game.getFlowState();
+    const broken = { ...before!, position: { ...before!.position, path: [99] } };
+
+    expect(() => game.restoreFlowState(broken)).toThrowError(/Flow position invalid/);
+    expect(game.getFlowState()).toEqual(before);
   });
 });

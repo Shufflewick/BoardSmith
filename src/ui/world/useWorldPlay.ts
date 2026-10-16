@@ -47,7 +47,7 @@
  *
  * 4. **The log is a tail, not a history.** See `messages`.
  */
-import { computed, watch, type ComputedRef } from 'vue';
+import { computed, effectScope, watch, type ComputedRef } from 'vue';
 import { deadEndPickMessage } from '../../engine/element/pick-candidates.js';
 import type { WorldSeatHost } from './useWorldHost.js';
 import type { WorldActionOffer } from './worldProtocol.js';
@@ -118,6 +118,8 @@ interface WorldView {
 }
 
 export function useWorldPlay(host: WorldSeatHost): WorldPlay {
+  // offerOnScreen's waits start after setup, outside any scope; this one ends with the owner's (#749).
+  const waits = effectScope();
   const offers = computed<readonly WorldActionOffer[]>(() => host.actions.value);
 
   const availableActions = computed(() => offers.value.map((offer) => offer.name));
@@ -267,11 +269,13 @@ export function useWorldPlay(host: WorldSeatHost): WorldPlay {
   async function offerOnScreen(actionName: string): Promise<WorldActionOffer | undefined> {
     if (host.offersPending.value && host.phase.value === 'watching') {
       await new Promise<void>((arrived) => {
-        const stop = watch([host.offersPending, host.phase], ([pending, phase]) => {
-          if (pending && phase === 'watching') return;
-          stop();
-          arrived();
-        });
+        const stop = waits.run(() =>
+          watch([host.offersPending, host.phase], ([pending, phase]) => {
+            if (pending && phase === 'watching') return;
+            stop?.();
+            arrived();
+          }),
+        );
       });
     }
     return offers.value.find((candidate) => candidate.name === actionName);

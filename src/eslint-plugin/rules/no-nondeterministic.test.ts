@@ -22,8 +22,27 @@ ruleTester.run('no-nondeterministic', rule, {
     { code: `const when = game.settings.startedAt;` },
     // A method named random on something that is not Math.
     { code: `const value = rng.random();` },
+    // Names that only look like the banned globals (#737).
+    { code: `const random = () => 4; random();` },
+    { code: `function roll(Math) { return Math.random(); }` },
+    { code: `const Date = makeClock(); Date.now();` },
+    { code: `const d = new globalThis.Date(0);` },
+    // A name used only as a type runs nothing (#737).
+    { code: `function f(d: Date) {}` },
+    { code: `type Rng = typeof Math.random;` },
   ],
   invalid: [
+    // Every other spelling of the same read (#737).
+    { code: `const r = Math.random; r();`, errors: [{ messageId: 'noMathRandom' }] },
+    { code: `const { random } = Math;`, errors: [{ messageId: 'noMathRandom' }] },
+    { code: `Math['random']();`, errors: [{ messageId: 'noMathRandom' }] },
+    { code: `globalThis.Math.random();`, errors: [{ messageId: 'noMathRandom' }] },
+    { code: `const now = Date();`, errors: [{ messageId: 'noNewDate' }] },
+    // Called without new, Date ignores its argument and returns the current time.
+    { code: `const now = Date(0);`, errors: [{ messageId: 'noNewDate' }] },
+    { code: `const now = new globalThis.Date();`, errors: [{ messageId: 'noNewDate' }] },
+    { code: `const id = self.crypto.randomUUID();`, errors: [{ messageId: 'noCryptoRandom' }] },
+    { code: `const { now } = Date;`, errors: [{ messageId: 'noDateNow' }] },
     {
       code: `const roll = Math.random();`,
       errors: [{ messageId: 'noMathRandom' }],

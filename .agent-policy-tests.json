@@ -1,0 +1,13 @@
+{
+  "ticket": "Shufflewick/BoardSmith#777",
+  "base": "e7da3d40e99eb989548d089002a4967d71fda62d",
+  "tests": [
+    {
+      "file": "src/engine/flow/restore-deleted-branch.test.ts",
+      "names": [
+        "#777: restoring a save inside a removed branch is refused refuses a save inside a switchOn case the rules removed, naming the switch",
+        "#777: restoring a save inside a removed branch is refused refuses a save inside an if else-branch the rules removed, naming the if"
+      ]
+    }
+  ]
+}

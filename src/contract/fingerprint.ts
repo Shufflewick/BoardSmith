@@ -1989,6 +1989,8 @@ export async function computePayloadHash(): Promise<string> {
   const secretPile = game.create(Space, 'secret-pile');
   secretPile.contentsHidden();
   secretPile.create(FixtureCard, 'secret-0', { suit: 'D', rank: 'A' });
+  // A card's own grant gets through its hidden zone to that seat alone (#758).
+  secretPile.create(FixtureCard, 'secret-1', { suit: 'D', rank: '2' }).addVisibleTo(1);
 
   // Owner-visible hands: the asymmetry between "my hand" and "their hand" is
   // the hidden-information guarantee the platform relies on most.
@@ -2017,6 +2019,10 @@ export async function computePayloadHash(): Promise<string> {
   const cut = game.create(FixtureCard, 'cut-0', { suit: 'S', rank: 'Q' });
   cut.remove();
   game.lastCut = cut;
+
+  // A card in an animation event's data (#752). Each view refers to it by a
+  // branch, never the card itself: seat 1's names the card, seat 2's the hand.
+  game.animate('drew', { card: game.first(FixtureCard, 'hand-1-0') });
 
   // Start the flow so the views carry real flow state. Without this every view
   // reports `flowState: undefined` and the hash covers only board
