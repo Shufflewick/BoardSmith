@@ -1,0 +1,45 @@
+{
+  "ticket": "Shufflewick/BoardSmith#768",
+  "base": "e7da3d40e99eb989548d089002a4967d71fda62d",
+  "tests": [
+    {
+      "file": "src/engine/utils/enumerate-moves.test.ts",
+      "names": [
+        "enumerateLegalMoves returns one move per legal target element (full enumeration default)",
+        "enumerateLegalMoves returns element objects in args (not serialized IDs)",
+        "enumerateLegalMoves maxPerAction truncates moves per action when provided",
+        "enumerateLegalMoves returns all moves when maxPerAction exceeds available count",
+        "enumerateLegalMoves returns the same move set as the MCTSBot root enumeration on identical state",
+        "enumerateLegalMoves returns empty array when seat has no available actions",
+        "enumerateLegalMoves: function-valued multiSelect routes a function multiSelect resolving to a concrete config into generateCombinations (C(3,2) = 3 combos)",
+        "enumerateLegalMoves: choices with an undefined value yields NO moves for a required selection whose only choice value is undefined — never a move missing that arg",
+        "enumerateLegalMoves with an orderedList selection (#249) offers one single-entry list per choice, and every one is a LEGAL move",
+        "enumerateLegalMoves with an orderedList selection (#249) includes the EMPTY list when the rules allow one",
+        "a follow-up that pre-fills an optional pick as null (#627) treats the pick as answered for an ordinary action",
+        "a follow-up that pre-fills an optional pick as null (#627) treats the pick as answered for an action with a repeating pick",
+        "an action-level validate sees a pre-filled null pick as absent (#648) enumerates the move execution accepts for an ordinary action",
+        "an action-level validate sees a pre-filled null pick as absent (#648) enumerates the move execution accepts for an action with a repeating pick",
+        "a later pick's callbacks see a pre-filled null pick as absent (#659) enumerates exactly what execution accepts when b uses choices (repeating: false)",
+        "a later pick's callbacks see a pre-filled null pick as absent (#659) enumerates exactly what execution accepts when b uses choices (repeating: true)",
+        "a later pick's callbacks see a pre-filled null pick as absent (#659) enumerates exactly what execution accepts when b uses disabled (repeating: false)",
+        "a later pick's callbacks see a pre-filled null pick as absent (#659) enumerates exactly what execution accepts when b uses disabled (repeating: true)",
+        "a later pick's callbacks see a pre-filled null pick as absent (#659) enumerates exactly what execution accepts when b uses multiSelect (repeating: false)",
+        "enumeration leaves out actions the game refuses (#690) drops an action its own .disabled() rule turns off, and every listed move is accepted",
+        "enumeration leaves out actions the game refuses (#690) never lets the bot search or play a disabled action",
+        "enumeration leaves out actions the game refuses (#690) drops an action the active tutorial step gates out",
+        "a held follow-up the game refuses (#690) has no moves while its .disabled() rule turns it off, and performAction refuses it",
+        "enumeration lists a bounded whole-number input (#689) lists each whole number from min to max that the input's own validate accepts",
+        "enumeration lists a bounded whole-number input (#689) enumerates a selection that depends on the number picked before it",
+        "enumeration lists a bounded whole-number input (#689) lists a number input that follows a repeating selection",
+        "enumeration lists a bounded whole-number input (#689) lists no move for a required input without both bounds, a whole-number rule, or with more values than the cap",
+        "enumeration lists a bounded whole-number input (#689) skips an optional input it cannot list, as a player may",
+        "enumeration lists a bounded whole-number input (#689) skips an optional input whose validate refuses every value, after a repeating selection too",
+        "enumeration lists a bounded whole-number input (#689) says once why a required input it cannot list contributes no moves, after a repeating selection too",
+        "numberInputValues (#689) is every whole number in the range",
+        "numberInputValues (#689) says what an input it cannot list is missing",
+        "numberInputValues (#689) refuses a range with more values than the cap, naming it",
+        "enumeration honours a pick's own validate (#768) lists no move a choice or element pick validate refuses"
+      ]
+    }
+  ]
+}

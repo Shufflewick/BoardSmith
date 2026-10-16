@@ -760,7 +760,7 @@ export class ActionExecutor {
     const from =
       typeof elementSel.from === 'function'
         ? elementSel.from(context)
-        : elementSel.from ?? this.game;
+        : elementSel.from ?? context.game;
 
     // DEV: Check if 'from' is an ElementCollection (likely a bug in action definition)
     if (isDevMode() && Array.isArray(from) && from.length > 0 && 'all' in from) {

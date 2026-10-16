@@ -145,7 +145,7 @@ describe('undo-fence error codes', () => {
     expect(noActions.errorCode).toBe(ErrorCode.NO_ACTIONS_TO_UNDO);
 
     // Out-of-range seat -> INVALID_PLAYER.
-    const badSeat = await session.send(1, { type: 'undo', player: 99 });
+    const badSeat = await session.send(99, { type: 'undo', player: 99 });
     expect(badSeat.success).toBe(false);
     expect(badSeat.errorCode).toBe(ErrorCode.INVALID_PLAYER);
   });

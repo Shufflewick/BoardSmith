@@ -121,7 +121,7 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
    * Sort elements by a property or function
    */
   sortBy<K extends Sorter<T>>(key: K, direction: 'asc' | 'desc' = 'asc'): ElementCollection<T> {
-    const sorted = new ElementCollection<T>(...this);
+    const sorted = ElementCollection.from(this) as ElementCollection<T>;
     sorted.sort((a, b) => {
       const aVal = typeof key === 'function' ? key(a) : a[key as keyof T];
       const bVal = typeof key === 'function' ? key(b) : b[key as keyof T];
