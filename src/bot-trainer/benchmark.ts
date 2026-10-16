@@ -88,7 +88,7 @@ export interface BenchmarkResult {
 
 /**
  * Benchmark the game's own bot, with `weights` in place of its objectives'
- * weights, against a near-random baseline.
+ * weights, against a baseline that plays uniformly random legal moves.
  *
  * Plays games where the trained bot faces the baseline in both positions
  * to eliminate first-player advantage bias. The trained bot is `bot`, the
@@ -346,9 +346,9 @@ async function runBenchmarkGame<G extends Game>(
 
 /**
  * The bot that makes move `actionCount` for `seat`. The trained bot searches;
- * the opponent is the same bot at one iteration, which is essentially random
- * but always produces valid args. In a reproducible benchmark each move's search
- * gets its own seed, derived from the game's.
+ * the baseline is a bot that runs no iterations, so it picks uniformly at random
+ * from the legal moves it enumerates (#734). In a reproducible benchmark each
+ * move gets its own seed, derived from the game's.
  */
 function moveBot<G extends Game>(
   runner: GameRunner<G>,
@@ -365,7 +365,7 @@ function moveBot<G extends Game>(
     gameType,
     seat,
     runner.actionHistory,
-    isTrainedSeat ? mctsIterations : 1,
+    isTrainedSeat ? mctsIterations : 0,
     isTrainedSeat ? trainedBot : undefined,
     reproducible ? { seed: `${seed}-move-${actionCount}` } : undefined,
   );
