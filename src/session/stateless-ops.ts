@@ -920,12 +920,13 @@ function handleResolveChoices(
   def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
+  pendingState: Record<string, unknown> | null,
   op: Extract<Op, { type: 'resolveChoices' }>,
 ): OpResultFor<'resolveChoices'> {
   const runner = runnerFromSnapshot(snapshot, def);
 
   const handler = new PickHandler(runner, gameOptions.playerCount);
-  const result = handler.getPickChoices(op.actionName, op.selectionName, op.player, op.args);
+  const result = handler.getPickChoices(op.actionName, op.selectionName, op.player, op.args, pendingState);
 
   if (!result.success) {
     return errorResult(result.error ?? 'Failed to resolve choices', 'bundle', result.errorCode);
@@ -1731,7 +1732,7 @@ async function runOp(
       case 'selectionStep':
         return handleSelectionStep(def, gameOptions, snap, pendingState, op);
       case 'resolveChoices':
-        return handleResolveChoices(def, gameOptions, snap, op);
+        return handleResolveChoices(def, gameOptions, snap, pendingState, op);
       case 'cancelAction':
         return handleCancelAction(def, gameOptions, snap, pendingState, op);
       case 'undo':

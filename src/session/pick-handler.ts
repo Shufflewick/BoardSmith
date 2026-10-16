@@ -232,16 +232,20 @@ export class PickHandler<G extends Game = Game> {
    * @param playerPosition Player requesting choices
    * @param currentArgs The picks made so far (for dependent picks); a key that
    *   names no pick is refused
+   * @param pendingState The seat's persisted pending state, if any
    * @returns Choices/elements with display strings and board refs, plus multiSelect config
    */
   getPickChoices(
     actionName: string,
     selectionName: string,
     playerPosition: number,
-    currentArgs: Record<string, unknown> = {}
+    currentArgs: Record<string, unknown> = {},
+    pendingState: Record<string, unknown> | null = null,
   ): PickChoicesResponse {
     const found = actionForSeat(this.#runner.game, this.#playerCount, playerPosition, actionName);
     if ('refusal' in found) return found.refusal;
+    const refusal = this.#refusalToPick(actionName, playerPosition, pendingState);
+    if (refusal) return refusal;
     const { action } = found;
 
     // Find the pick
@@ -269,6 +273,21 @@ export class PickHandler<G extends Game = Game> {
     // A number or text pick has no choices.
     if (selection.type === 'number' || selection.type === 'text') return { success: true };
     return answerPick(executor, action, selection, player, ctx, warnings);
+  }
+
+  /**
+   * Why `seat` may not see this action's choices now, or `undefined`. Choices
+   * can name what only other seats see, so only a seat the flow would let take
+   * the pick is answered (#714). The pending state counts only for its own action.
+   */
+  #refusalToPick(
+    actionName: string,
+    seat: number,
+    pendingState: Record<string, unknown> | null,
+  ): PickChoicesResponse | undefined {
+    const pending = pendingState?.actionName === actionName ? deserializePendingState(pendingState) : undefined;
+    const refusal = this.#runner.refusalToPick(actionName, seat, pending);
+    return refusal && { success: false, ...refusal };
   }
 
   /**

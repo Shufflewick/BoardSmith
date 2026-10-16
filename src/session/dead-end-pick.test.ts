@@ -75,6 +75,8 @@ class EquipGame extends Game<EquipGame, Player> {
     // why, which is better than anything a step-level message could add.
     this.registerAction(
       Action.create('equipGreyed')
+        // A lone all-greyed pick leaves the action unoffered, and choices are answered only for offered actions (#714).
+        .chooseFrom('slot', { prompt: 'Slot', choices: ['hand'] })
         .chooseElement('item', {
           prompt: 'Item',
           elements: (ctx) => [...ctx.game.all(Item)],
@@ -139,7 +141,7 @@ describe('#270 — a step with nothing to pick refuses, and says what was asked 
   });
 
   test('leaves an all-greyed step alone: every row already carries its reason', async () => {
-    const result = succeeded(await choicesFor('equipGreyed', 'item'));
+    const result = succeeded(await choicesFor('equipGreyed', 'item', { slot: 'hand' }));
 
     expect(result.validElements).toHaveLength(2);
     expect(result.validElements?.every((e) => e.disabled === 'Too heavy to lift')).toBe(true);
