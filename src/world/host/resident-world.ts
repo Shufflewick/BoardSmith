@@ -67,7 +67,9 @@ import {
   WorldRefusal,
   assertWorldOrder,
   migratedArgs,
+  planEviction,
   planMigration,
+  receiptAt,
   receiptFloor,
   resolveOrder,
   type PlannedEvent,
@@ -83,7 +85,6 @@ import {
   type WorldRunnerOptions,
   type WorldActionOffer,
   type WorldOrder,
-  type WorldReceipt,
   type WorldTiming,
   type SettledNoticeBox,
   type WorldNoticeWrites,
@@ -516,6 +517,12 @@ export class ResidentWorld {
     this.#onVacated(vacated);
   }
 
+  /** Let go of the coldest clean partitions past the budget (#747). Only right after a checkpoint. */
+  #evictCold(runner: WorldRunnerHandle): void {
+    const dirty = new Set(this.#store.dirtyPartitions());
+    runner.evict(planEviction(runner.residency(), dirty, this.#budgets.maxResidentPartitions).evict);
+  }
+
   /** The seat a player id is filed under, or undefined for the world's own
    *  reserved owner and for anybody this roster has never seated. */
   #seatOf(player: string | null): number | undefined {
@@ -523,8 +530,7 @@ export class ResidentWorld {
     return this.#store.seats().find((record) => record.player === player)?.seat;
   }
 
-  #allowanceFor(owner: string): ScheduleAllowance {
-    const pending = this.#store.pendingEvents();
+  #allowanceFor(owner: string, pending: readonly PlannedEvent[]): ScheduleAllowance {
     const mine = pending.filter((event) => event.owner === owner);
     return {
       unkeyed: mine.filter((event) => event.key === undefined).length,
@@ -870,9 +876,9 @@ export class ResidentWorld {
       };
     }
     // THE PLAYER'S OWN ARRIVAL INSTANT, taken once and used for everything
-    // below: the catch-up's ceiling, the handler's `world.now`, and the
-    // receipt. Reading the clock twice would let a long catch-up move the
-    // instant the command claims to have arrived at.
+    // below: the catch-up's ceiling and the handler's `world.now`. Reading the
+    // clock twice would let a long catch-up move the instant the command claims
+    // to have arrived at.
     const arrivedAt = this.now();
     try {
       // EVERYTHING ALREADY DUE FIRST, for a world that declared it (#380).
@@ -901,7 +907,8 @@ export class ResidentWorld {
         command: { name: action, args },
         timing: null,
         arrivedAt,
-        receipt: { orderId: order.id, player, at: arrivedAt },
+        queue: this.#store.pendingEvents(),
+        receipt: { order, player },
       });
       return { kind: "committed", events };
     } finally {
@@ -932,12 +939,14 @@ export class ResidentWorld {
     // drops a presence transition on an ended world the same way: nobody is
     // owed an answer, so there is nothing to refuse.
     if (this.completed) return;
+    const now = this.now();
     try {
       const { events } = await this.#dispatch({
         player: null,
         command: { name, args },
-        timing: { due: this.now(), missedCount: 0 },
-        arrivedAt: this.now(),
+        timing: { due: now, missedCount: 0 },
+        arrivedAt: now,
+        queue: this.#store.pendingEvents(),
       });
       this.#onEvents(events);
     } finally {
@@ -964,6 +973,12 @@ export class ResidentWorld {
     timing: WorldTiming;
     arrivedAt: number;
     /**
+     * THE QUEUE AS COMMITTED NOW, read once by the caller (#746). Nothing
+     * before this dispatch's checkpoint writes the queue, so the allowance and
+     * the planning below both judge against it without re-reading.
+     */
+    queue: readonly PlannedEvent[];
+    /**
      * THE QUEUED EVENT THIS DISPATCH IS ONE OCCURRENCE OF, and where it is
      * owed next (`runDueOccurrences`' `owedDue`). The event is settled and
      * re-armed there in the same write as the occurrence's effects -- unless
@@ -971,9 +986,9 @@ export class ResidentWorld {
      * request is what stays queued under its key.
      */
     occurrence?: { readonly event: PlannedEvent; readonly owedDue: number | null };
-    /** The receipt for the player order this dispatch is the effects of (#195),
-     *  committed with them or not at all. */
-    receipt?: WorldReceipt;
+    /** The player order this dispatch is the effects of (#195), whose receipt
+     *  is committed with them or not at all. */
+    receipt?: { readonly order: WorldOrder; readonly player: string };
     /**
      * WHOSE IDLENESS THIS DISPATCH IS ABOUT (ShufflewickPub #383).
      *
@@ -985,7 +1000,7 @@ export class ResidentWorld {
      */
     about?: string;
   }): Promise<{ readonly events: readonly RoutedEvent[]; readonly displaced: boolean }> {
-    const { player, command, timing, arrivedAt } = request;
+    const { player, command, timing, arrivedAt, queue } = request;
     const runner = this.#world.runner;
 
     // THE ORDER EVERY HOST SHARES (#539): walk the action's declaration
@@ -1007,7 +1022,7 @@ export class ResidentWorld {
         // partition.
         readActivity: (seat) => Promise.resolve(this.#store.activityOf(seat)),
         readNoticeBox: (seat) => Promise.resolve({ seat, box: this.#store.noticeBox(seat) }),
-        allowance: (asking) => Promise.resolve(this.#allowanceFor(asking)),
+        allowance: (asking) => Promise.resolve(this.#allowanceFor(asking, queue)),
         apply: ({ allowance, answers }) =>
           runner.apply({
             player,
@@ -1026,15 +1041,13 @@ export class ResidentWorld {
             activity: this.#activityFor(request.about ?? player),
             ...answers,
           }),
-        planning: (owner) => {
-          const pending = this.#store.pendingEvents();
-          return Promise.resolve({
+        planning: (owner) =>
+          Promise.resolve({
             nextSeq: this.#store.nextSeq(),
             mintId: this.#mintId,
             replaces: (key: string) =>
-              pending.find((event) => event.owner === owner && event.key === key)?.id,
-          });
-        },
+              queue.find((event) => event.owner === owner && event.key === key)?.id,
+          }),
       },
       this.#budgets,
     );
@@ -1048,6 +1061,9 @@ export class ResidentWorld {
     // durable bytes are older than the last command that ran.
     this.#store.recordDirty(result.dirty);
     const dirty = this.#store.dirtyPartitions();
+    // ONE WALL-CLOCK READING for the receipt and the floor this write sweeps to
+    // (#793): from two, a receipt raised to the floor lands just below it and is swept at once.
+    const wallNow = this.#clock.now();
     try {
       await this.#store.writeCheckpoint(await runner.serialize(dirty), {
         // SETTLED AND ARMED IN THE SAME WRITE AS THE EFFECTS. A crash between
@@ -1056,11 +1072,19 @@ export class ResidentWorld {
         settle,
         schedule,
         // THE ORDER'S RECEIPT LANDS WITH ITS EFFECTS (#195), or neither does.
-        ...(request.receipt === undefined ? {} : { receipt: request.receipt }),
+        ...(request.receipt === undefined
+          ? {}
+          : {
+              receipt: {
+                orderId: request.receipt.order.id,
+                player: request.receipt.player,
+                at: receiptAt(request.receipt.order, wallNow, this.#budgets),
+              },
+            }),
         // And the ledger is swept on the way past, so a world running for
         // months does not keep every answer it ever gave. Wall clock, not
         // world time: orders are stamped by the page's clock, which has no skew (#722).
-        receiptFloorAt: receiptFloor(this.#clock.now(), this.#budgets, this.#store.receiptFloorAt()),
+        receiptFloorAt: receiptFloor(wallNow, this.#budgets, this.#store.receiptFloorAt()),
         // THIS SEAT WAS HERE (ShufflewickPub #383), landing with the effects
         // it produced or not at all.
         ...this.#activityWrite(player, arrivedAt),
@@ -1080,6 +1104,7 @@ export class ResidentWorld {
       // the discard below leaves the world at the revision it was already at.
       this.#revision += 1;
       this.#released(runner, result.vacated);
+      this.#evictCold(runner);
     } catch (error) {
       // A COMMAND THAT CANNOT BE MADE DURABLE IS A COMMAND THAT DID NOT HAPPEN.
       //
@@ -1100,7 +1125,12 @@ export class ResidentWorld {
     notices: WorldNoticeWrites | undefined,
   ): Promise<{ notices?: readonly SettledNoticeBox[] }> {
     if (notices === undefined) return {};
-    return { notices: await applyNoticeWrites(notices, (seat) => this.#store.noticeBox(seat)) };
+    return {
+      notices: await applyNoticeWrites(notices, (seat) => this.#store.noticeBox(seat), {
+        seatCount: this.#world.seatCount,
+        budgets: this.#budgets,
+      }),
+    };
   }
 
   // ── the schedule ───────────────────────────────────────────────────────────
@@ -1138,7 +1168,8 @@ export class ResidentWorld {
    * delay produces a busy host rather than a wedged one.
    */
   async #drain(): Promise<void> {
-    await this.#drainBatch(this.now());
+    this.#retryAt = undefined;
+    await this.#drainBatch(this.now(), new Set());
     this.rearm();
   }
 
@@ -1166,22 +1197,23 @@ export class ResidentWorld {
    * handler that re-arms itself at zero delay a slow world rather than a
    * wedged one.
    */
-  async #drainBatch(now: number): Promise<number> {
+  async #drainBatch(now: number, spent: Set<string>): Promise<number> {
     let ran = 0;
-    this.#retryAt = undefined;
-    // WHAT THIS BATCH HAS ALREADY TAKEN. An event that REFUSED stays queued by
-    // design, and a re-read would hand back the same refusal until the bound
-    // ran out; an event that ran is gone from the queue and is here only
-    // because being spent is this batch's fact, not the store's.
-    const spent = new Set<string>();
+    // `spent` IS WHAT THIS DRAIN HAS ALREADY TAKEN. An event that REFUSED stays
+    // queued by design, and a re-read would hand back the same refusal until
+    // the bound ran out; an event that ran is gone from the queue and is here
+    // only because being spent is this drain's fact, not the store's. A
+    // catch-up shares one across its rounds, so a refusal is tried and said
+    // once per catch-up rather than once per round (#793).
     for (let taken = 0; taken < this.#budgets.drainBatch; taken++) {
       // RE-ASKED BEFORE EVERY EVENT (#395): the one before may have ended the
       // world, and an ended world runs nothing else.
       if (this.completed) break;
-      const event = this.#nextDue(now, spent);
+      const queue = this.#store.pendingEvents();
+      const event = this.#nextDue(queue, now, spent);
       if (event === undefined) break;
       spent.add(event.id);
-      ran += await this.#runQueued(event, now);
+      ran += await this.#runQueued(event, now, queue);
     }
     return ran;
   }
@@ -1196,9 +1228,15 @@ export class ResidentWorld {
    * loop is `runDueOccurrences`, the one every host runs (#539).
    *
    * Answers how many calls it made, which is a batch's own measure of progress.
+   *
+   * `queue` is the read that picked this event, still current for its first
+   * occurrence; every later one follows a checkpoint and reads again (#746).
    */
-  async #runQueued(event: PlannedEvent, now: number): Promise<number> {
+  async #runQueued(event: PlannedEvent, now: number, queue: readonly PlannedEvent[]): Promise<number> {
+    let unwritten: readonly PlannedEvent[] | undefined = queue;
     const outcome = await runDueOccurrences(event, now, this.#budgets, async (timing, owedDue) => {
+      const current = unwritten ?? this.#store.pendingEvents();
+      unwritten = undefined;
       const { events, displaced } = await this.#dispatch({
         player: null,
         command: { name: event.action, args: event.args },
@@ -1206,6 +1244,7 @@ export class ResidentWorld {
         // ITS `now` IS ITS `due`, never the wall clock at execution: a world
         // that drained late must produce the state a punctual one would.
         arrivedAt: timing.due,
+        queue: current,
         // THE EVENT'S OWNER IS WHO IT IS ABOUT (#383), which is not who is
         // charged for it. A seat's own deadline rechecks that seat.
         about: event.owner,
@@ -1245,8 +1284,12 @@ export class ResidentWorld {
    * selection ran in -- insertion still breaks a tie within one millisecond,
    * and no second comparison of due times exists to disagree with it.
    */
-  #nextDue(now: number, spent: ReadonlySet<string>): PlannedEvent | undefined {
-    const queued = this.#store.pendingEvents().filter((event) => !spent.has(event.id));
+  #nextDue(
+    queue: readonly PlannedEvent[],
+    now: number,
+    spent: ReadonlySet<string>,
+  ): PlannedEvent | undefined {
+    const queued = queue.filter((event) => !spent.has(event.id));
     return nextDueBatch(queued, now, 1).batch[0];
   }
 
@@ -1290,12 +1333,14 @@ export class ResidentWorld {
       // to be overtaken, and the absence of a guarantee is not a lesser one.
       return false;
     }
+    this.#retryAt = undefined;
+    const spent = new Set<string>();
     for (let round = 0; round < this.#budgets.catchUpRounds; round++) {
       if (!this.#anythingDueAt(arrivedAt)) return false;
       // A BATCH THAT RAN NOTHING WILL RUN NOTHING NEXT ROUND EITHER: an earlier
       // event refused, said so out loud, and stays queued. The world is behind
       // it and stopping here is what keeps this from spinning.
-      if ((await this.#drainBatch(arrivedAt)) === 0) return true;
+      if ((await this.#drainBatch(arrivedAt, spent)) === 0) return true;
       // A TURN FOR EVERYTHING ELSE. The world lock is still held -- the catch-up
       // and the command it gates are one ordered unit -- but the runtime is not
       // starved, so a host under load stays answerable while it happens.
@@ -1326,7 +1371,9 @@ export class ResidentWorld {
   async fireDue(): Promise<WorldFireOutcome | null> {
     const pending = this.#store.pendingEvents();
     if (pending.length === 0) return null;
-    const earliest = Math.min(...pending.map((event) => event.due));
+    // A loop, not Math.min(...): spreading a queue past ~125k events overflows the stack (#791).
+    let earliest = Infinity;
+    for (const event of pending) if (event.due < earliest) earliest = event.due;
     const jumpMs = Math.max(0, earliest - this.now());
     // DURABLE BEFORE IT IS DRAINED. The partitions this firing settles become
     // durable at the advanced time, so the advance itself has to be on disk
@@ -1375,11 +1422,14 @@ export class ResidentWorld {
     await this.settled();
     this.#closed = true;
     this.#clock.arm(null, () => {});
-    const dirty = this.#store.dirtyPartitions();
-    if (dirty.length > 0) {
-      await this.#store.writeCheckpoint(await this.#world.runner.serialize(dirty));
+    try {
+      const dirty = this.#store.dirtyPartitions();
+      if (dirty.length > 0) {
+        await this.#store.writeCheckpoint(await this.#world.runner.serialize(dirty));
+      }
+    } finally {
+      this.#store.close();
     }
-    this.#store.close();
   }
 
   /**

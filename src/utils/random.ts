@@ -244,6 +244,7 @@ export class SeededRandom {
    *
    * @param max - Upper bound (exclusive)
    * @returns Integer from 0 to max-1
+   * @throws If max is not a whole number of at least 1
    *
    * @example
    * ```typescript
@@ -252,6 +253,9 @@ export class SeededRandom {
    * ```
    */
   nextInt(max: number): number {
+    if (!Number.isInteger(max) || max < 1) {
+      throw new Error(`nextInt: max must be a whole number of at least 1, got ${max}.`);
+    }
     return Math.floor(this.next() * max);
   }
 

@@ -362,19 +362,16 @@ describe("#408/#411/#413 -- which seats hold the same projection", () => {
   });
 
   it("refuses for an owner-only zone even where every seat is DENIED it", () => {
-    // The narrow case that makes the refusal a refusal of the MODE rather than
-    // of a branch: `canPlayerSee` says no to a denied owner and to a denied
-    // stranger alike, and the serializer then treats them differently -- the
-    // owner is shown its children one by one under their real ids, the stranger
-    // gets synthetic ones. A predicate that grouped by the denial would hand
-    // the stranger the owner's ids.
+    // The refusal is of the MODE rather than of a branch. A denied owner and a
+    // denied stranger are both shown placeholders (#750), so they hold the same
+    // projection, but the predicate does not reason about ownership at all.
     const game = newSquare();
     const square = game.first(Stall, 'square')!;
     square.setZoneVisibility('owner');
     square.player = game.players[0];
     square.hideContentsFrom(1, 2);
     const { predicted, observed } = grouping(game);
-    expect(observed, 'the owner and the stranger are shown different things').toEqual([[1], [2]]);
+    expect(observed, 'a denied owner is shown what a denied stranger is').toEqual([[1, 2]]);
     expect(predicted).toBe(null);
   });
 

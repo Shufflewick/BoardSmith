@@ -23,10 +23,11 @@ describe('move choice in a game that does not end inside the search', () => {
     expect(picks).toEqual(SEEDS.map(() => 'good'));
   });
 
-  it('spends most of its visits on the scoring move', async () => {
+  it('spends more visits on the scoring move than on any other', async () => {
     const { stats } = await scoreRaceBot(newScoreRace(), 'visits').playWithStats();
-    const total = stats.reduce((sum, s) => sum + s.visits, 0);
     const good = stats.find((s) => s.move.args.option === 'good')!;
-    expect(good.visits / total).toBeGreaterThan(0.5);
+    for (const other of stats.filter((s) => s !== good)) {
+      expect(good.visits, `'good' vs '${other.move.args.option}'`).toBeGreaterThan(other.visits);
+    }
   });
 });

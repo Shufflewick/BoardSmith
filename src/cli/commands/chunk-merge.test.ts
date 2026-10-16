@@ -492,7 +492,7 @@ describe('chunkMerge: preconditions', () => {
   it('refuses while another chunk-merge holds the lock, naming it, and merges once it is released (#441)', async () => {
     await buildOnBranch('trading', 100);
     const common = git(main, 'rev-parse', '--path-format=absolute', '--git-common-dir').trim();
-    const other = await takeOsLock(join(common, 'boardsmith-chunk-merge.flock'), 'chunk-merge of quests (branch chunk/quests)');
+    const other = await takeOsLock(join(common, 'boardsmith-chunk-merge.flock'), 'chunk-merge', 'chunk-merge of quests (branch chunk/quests)');
     if (typeof other === 'string') throw new Error(other);
 
     const refused = await chunkMerge(main, 'trading', { runTests: budgetRunner });
@@ -505,7 +505,7 @@ describe('chunkMerge: preconditions', () => {
     await other.release();
     expect(refused.merged).toBe(false);
     expect(refused.refusals.join('\n')).toContain(
-      `Another chunk-merge holds the merge lock: chunk-merge of quests (branch chunk/quests), pid ${process.pid}`,
+      `Another chunk-merge holds the lock: chunk-merge of quests (branch chunk/quests), pid ${process.pid}`,
     );
     expect(whileDirty.refusals).toEqual(refused.refusals);
     expect(git(main, 'status', '--porcelain')).toBe('');

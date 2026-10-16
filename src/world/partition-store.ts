@@ -178,7 +178,13 @@ export function assertPartitionWithinBudget(
  */
 export interface WorldPartitionWriter {
   /**
-   * Mint an ENTIRE GENESIS, or none of it.
+   * Create every partition a genesis produced, in one write.
+   *
+   * `genesis` is the whole of what `WorldRunnerHandle.genesis()` answered --
+   * the partitions AND the world's id allocation stamp -- and it is one object
+   * rather than two arguments for the reason ShufflewickPub #377 exists: a host
+   * that wrote the partitions and dropped the stamp built a world whose next
+   * host mints ids these bytes already own.
    *
    * ALL-OR-NOTHING, and that is the requirement rather than a nicety. A bundle
    * whose genesis names one storable partition and one it may not, committed
@@ -192,15 +198,6 @@ export interface WorldPartitionWriter {
    * goes out in the same commit as these partitions -- a retry then finds
    * either an empty world or a launched one, and never the state in between
    * that had no way out.
-   */
-  /**
-   * Create every partition a genesis produced, in one write.
-   *
-   * `genesis` is the whole of what `WorldRunnerHandle.genesis()` answered --
-   * the partitions AND the world's id allocation stamp -- and it is one object
-   * rather than two arguments for the reason ShufflewickPub #377 exists: a host
-   * that wrote the partitions and dropped the stamp built a world whose next
-   * host mints ids these bytes already own.
    *
    * A host may widen this -- the local dev store takes the state version
    * genesis wrote under, and the platform's takes the rows that ride the same

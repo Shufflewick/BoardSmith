@@ -100,6 +100,15 @@ describe('creating an unregistered element class after setup (#496)', () => {
     expect(restored!.game.tray.all(Token)).toHaveLength(1);
   });
 
+  it('a refused create leaves nothing behind in the tree (#766)', () => {
+    const runner = runnerFor(makeGame('none'));
+    runner.start();
+    const before = runner.game._ctx.sequence;
+    expect(() => runner.game.tray.create(Token, 'tok')).toThrow(MESSAGE);
+    expect(runner.game.tray.children).toHaveLength(0);
+    expect(runner.game._ctx.sequence).toBe(before);
+  });
+
   it('refuses creation inside an opening execute node during startFlow()', () => {
     const runner = runnerFor(makeGame('opening-execute'));
     expect(() => runner.start()).toThrow(MESSAGE);

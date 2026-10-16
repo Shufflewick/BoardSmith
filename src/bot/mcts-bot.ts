@@ -707,11 +707,11 @@ export class MCTSBot<G extends Game = Game> {
   /**
    * Select the most promising child node using the UCT-RAVE formula.
    * Blends UCT (tree statistics) with RAVE (global move statistics):
-   *   score = (1 - beta) * UCT + beta * RAVE
+   *   score = (1 - beta) * mean + beta * RAVE + exploration
    *   beta = sqrt(k / (3*visits + k))  // decreases as visits increase
    *
    * Early in search, beta is high so RAVE dominates (fast learning from all playouts).
-   * As visits accumulate, beta decreases so UCT dominates (accurate tree statistics).
+   * As visits accumulate, beta decreases so the child's own mean dominates.
    *
    * When PNS is enabled, solved children are set aside first: a proven loss is
    * never chosen on the bot's turn, and a proven win never on the opponent's.
@@ -754,10 +754,9 @@ export class MCTSBot<G extends Game = Game> {
       // make legal is otherwise permanently starved by moves every world offers.
       const offered = this.determinize ? child.availability : node.visits;
       const exploration = C * Math.sqrt(Math.log(offered + 1) / visits);
-      const uct = exploitation + exploration;
 
-      // RAVE component (blend with UCT if enabled)
-      let score = uct;
+      // RAVE blends into the value only; exploration stays whole so one unlucky sample cannot starve a move (#732)
+      let value = exploitation;
       if (this.config.useRAVE !== false && child.parentMove) {
         const raveEntry = this.raveTable.get(this.getMoveKey(child.parentMove));
         if (raveEntry && raveEntry.visits > 0) {
@@ -772,9 +771,10 @@ export class MCTSBot<G extends Game = Game> {
 
           // Beta decreases as node visits increase (trust UCT more with more data)
           const beta = Math.sqrt(k / (3 * visits + k));
-          score = (1 - beta) * uct + beta * raveValue;
+          value = (1 - beta) * exploitation + beta * raveValue;
         }
       }
+      const score = value + exploration;
 
       if (score > bestScore) {
         bestScore = score;
@@ -1356,10 +1356,13 @@ export class MCTSBot<G extends Game = Game> {
    * T-159-06 (bot-02): passes `forSeat: this.playerIndex` so `createSnapshot`
    * clones the bot's per-seat REDACTED view (`toJSONForPlayer`) instead of
    * the full un-redacted truth. The search sandbox must never see opponents'
-   * hidden info -- reusing the existing redaction, not inventing one.
+   * hidden info -- reusing the existing redaction, not inventing one. Its
+   * random source is reseeded from the bot's own generator, so the search
+   * samples chance instead of reading the real game's next draws (#776).
    */
   private captureSnapshot(): GameStateSnapshot {
-    return createSnapshot(this.game, this.gameType, this.actionHistory, this.seed, { forSeat: this.playerIndex });
+    const seat = { forSeat: this.playerIndex, reseed: String(this.rng.next()) };
+    return createSnapshot(this.game, this.gameType, this.actionHistory, this.seed, seat);
   }
 
   /**
@@ -1375,12 +1378,12 @@ export class MCTSBot<G extends Game = Game> {
    * serialized tree keeps those mutations.
    */
   private restoreGame(snapshot: GameStateSnapshot): Game {
-    // The game's own constructor options, custom ones (playerConfigs), its
-    // seed and its element id key included. Every snapshot this bot restores
-    // is one it captured itself, and `createSnapshot` always records them.
-    // They are required: element ids are minted under the game's own key
-    // (#447), which only these options carry, and `snapshot.seed` is the
-    // BOT's search seed, not the game's.
+    // The game's own constructor options, custom ones (playerConfigs) and its
+    // element id key included, with the search game's own seed (#776). Every
+    // snapshot this bot restores is one it captured itself, and
+    // `createSnapshot` always records them. They are required: element ids are
+    // minted under the game's own key (#447), which only these options carry,
+    // and `snapshot.seed` is the BOT's search seed, not the search game's.
     const gameOptions = snapshot.gameOptions;
     if (gameOptions === undefined) {
       throw new Error(
@@ -1407,7 +1410,7 @@ export class MCTSBot<G extends Game = Game> {
       game._ctx.sequence = snapshot.sequence;
     }
 
-    // Restore the seeded RNG position so the next draw matches the live game.
+    // Restore the snapshot's RNG position: the search game's own, never the live game's (#776).
     game.setRandomState(snapshot.randomState);
 
     // Restore the authoritative flow position. Every element the flow holds
