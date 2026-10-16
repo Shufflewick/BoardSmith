@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { withDevLog } from './dev-log.test-helper.js';
 import {
   Game,
@@ -3103,5 +3103,53 @@ describe('repeating element selection with an unresolvable choice', () => {
     expect(result.done).toBe(false);
     // The same refusal any pick of a value not on offer gets (#393, #507).
     expect(result.error).toMatch(/no longer available/);
+  });
+});
+
+describe('whole-move submission checks each pick before a later pick reads it (#772)', () => {
+  let game: TestGame;
+  let executor: ActionExecutor;
+  let hand: Hand;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+    hand = game.create(Hand, 'hand');
+    hand.create(Card, 'ace');
+    executor = new ActionExecutor(game);
+  });
+
+  // Pick 2's choices read pick 1 as an element, as a step-by-step player always hands them.
+  // A repeating pick 3 sends the submission down the selection-step path instead (#325).
+  function discardAction(repeating: boolean) {
+    const destinationsRead: unknown[] = [];
+    const picks = Action.create('discard')
+      .chooseElement('card', { elements: () => [...hand.all(Card)] })
+      .chooseFrom('to', {
+        choices: (ctx) => { destinationsRead.push(ctx.args.card); return [(ctx.args.card as Card).parent!.name]; },
+      });
+    const action = (repeating ? picks.chooseFrom('extra', { choices: ['done'], repeatUntil: 'done' }) : picks).execute(() => {});
+    return { action, destinationsRead };
+  }
+
+  for (const repeating of [false, true]) {
+    it(`refuses an unknown card without running pick 2's choices${repeating ? ' (with a repeating pick 3)' : ''}`, () => {
+      const { action, destinationsRead } = discardAction(repeating);
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const result = executor.executeAction(action, game.getPlayer(1)!, { card: 'x', to: 'hand', ...(repeating && { extra: ['done'] }) });
+        expect(result).toEqual({ success: false, error: expect.stringMatching(/no longer available|Invalid selection for "card"/) });
+        expect(destinationsRead).toEqual([]);
+        expect(errors).not.toHaveBeenCalled();
+      } finally {
+        errors.mockRestore();
+      }
+    });
+  }
+
+  it('still takes a valid whole submission', () => {
+    const { action, destinationsRead } = discardAction(false);
+    const card = hand.first(Card)!;
+    expect(executor.executeAction(action, game.getPlayer(1)!, { card: card.id, to: 'hand' })).toEqual({ success: true });
+    expect(destinationsRead.every((read) => read === card)).toBe(true);
   });
 });

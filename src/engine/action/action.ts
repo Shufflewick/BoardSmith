@@ -450,12 +450,10 @@ export class ActionExecutor {
     reading?: Game,
   ): Record<string, unknown> {
     const game = reading ?? this.game;
-    const resolved = { ...args };
-    const selectionNames = new Set(action.selections.map(s => s.name));
+    const resolved = { ...args, ...this.resolveNonPickArgs(action, args, game) };
 
-    // First pass: each selection's value, with the selections before it
-    // already resolved in view, so a `choices` callback that reads an earlier
-    // pick sees what it named. A skipped optional pick is ABSENT (#627): a
+    // Each selection's value, with the selections before it already resolved
+    // in view, so a `choices` callback that reads an earlier pick sees what it named. A skipped optional pick is ABSENT (#627): a
     // whole submission may send it as `null`, but every callback and `execute`
     // see it the way a player's skipped step leaves it, with no key at all.
     for (const selection of action.selections) {
@@ -465,7 +463,14 @@ export class ActionExecutor {
       resolved[selection.name] = this.resolveOne(selection, value, player, resolved, game);
     }
 
-    // Second pass: resolve non-selection args that unambiguously represent element
+    return resolved;
+  }
+
+  /** `args`' keys that name no pick, each serialized element among them resolved to its element. */
+  private resolveNonPickArgs(action: ActionDefinition, args: Record<string, unknown>, game: Game): Record<string, unknown> {
+    const resolved: Record<string, unknown> = {};
+    const selectionNames = new Set(action.selections.map(s => s.name));
+    // Resolve non-selection args that unambiguously represent element
     // references. This handles followUp args like { sectorId: { id: 145, className: 'Sector' } }.
     // Bare numbers are NEVER coerced here -- a non-selection arg was never declared
     // element-typed by the developer, so a plain number that happens to collide with a
@@ -473,28 +478,26 @@ export class ActionExecutor {
     // auto-coercion). Only genuine {id, className}-shaped serialized-element objects
     // (isSerializedElement) are resolved.
     for (const [key, value] of Object.entries(args)) {
-      if (selectionNames.has(key)) continue; // Already processed above
-      if (value === undefined) continue;
+      if (selectionNames.has(key)) continue;
+      resolved[key] = value;
+      if (!isSerializedElement(value)) continue;
 
-      // Resolve serialized element objects (from followUp args). className is part
-      // of the contract, not just a shape discriminator: if the id points at an
-      // element of a different class than the caller claimed, resolving by id alone
-      // would hand the handler a wrong-class element (the corruption class ENG-05
-      // removed, one step removed). On mismatch, leave the arg unresolved so it
-      // fails loudly downstream. A flow marker that does not resolve throws on
+      // className is part of the contract, not just a shape discriminator: if
+      // the id points at an element of a different class than the caller
+      // claimed, resolving by id alone would hand the handler a wrong-class
+      // element (the corruption class ENG-05 removed, one step removed). On
+      // mismatch, leave the arg unresolved so it fails loudly downstream. A flow marker that does not resolve throws on
       // restore instead (relinkFlowValue, flow/engine.ts).
-      if (isSerializedElement(value)) {
-        const serialized = value as { id: number; className: string };
-        const element = game.getElementById(serialized.id);
-        if (element && element.constructor.name === serialized.className) {
-          resolved[key] = element;
-        } else if (element) {
-          devWarn(
-            `followup-arg-class-mismatch:${key}`,
-            `followUp arg '${key}' claims className '${serialized.className}' but element ` +
-            `${serialized.id} is a ${element.constructor.name}; leaving the arg unresolved.`
-          );
-        }
+      const serialized = value as { id: number; className: string };
+      const element = game.getElementById(serialized.id);
+      if (element && element.constructor.name === serialized.className) {
+        resolved[key] = element;
+      } else if (element) {
+        devWarn(
+          `followup-arg-class-mismatch:${key}`,
+          `followUp arg '${key}' claims className '${serialized.className}' but element ` +
+          `${serialized.id} is a ${element.constructor.name}; leaving the arg unresolved.`
+        );
       }
     }
 
@@ -1205,56 +1208,62 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): ValidationResult {
-    const allErrors: string[] = [];
-    const context: ActionContext = {
-      game: this.game,
-      player,
-      args,
-    };
+    const checked = this.checkSubmission(action, player, args, options);
+    return 'error' in checked ? { valid: false, errors: [checked.error] } : { valid: true, errors: [] };
+  }
 
-    // Check condition. A follow-up is offered by the chain, not its condition.
-    if (!options?.followUp && action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
-      return {
-        valid: false,
-        errors: ['Action is not available'],
-      };
+  /**
+   * A whole submission resolved and checked one pick at a time, stopping at
+   * the first refusal, as a player's own steps are (#772): a pick's callbacks
+   * see only earlier picks that were resolved and offered, never one as sent.
+   * Returns the resolved args `execute` receives, or why the submission was refused.
+   */
+  private checkSubmission(
+    action: ActionDefinition,
+    player: Player,
+    args: Record<string, unknown>,
+    options?: PerformOptions,
+  ): { args: Record<string, unknown> } | { error: string } {
+    // A follow-up is offered by the chain, not its condition.
+    if (!options?.followUp && action.condition && !evaluateCondition(action.condition, { game: this.game, player, args }, `action '${action.name}'`)) {
+      return { error: 'Action is not available' };
     }
 
-    // Validate each selection
+    const resolved = this.resolveNonPickArgs(action, args, this.game);
     for (const selection of action.selections) {
       const value = args[selection.name];
-
-      // Handle missing or skipped selections
-      // undefined = not provided (key absent from args)
-      // null = explicitly skipped (from direct API/bot calls; UI strips skipped via buildServerArgs)
-      // A missing required pick stops validation: every later pick's validate
-      // is typed as seeing it present (#651).
+      // null = explicitly skipped (from direct API/bot calls); a skipped pick is
+      // absent from what callbacks see (#627).
       if (value === undefined || value === null) {
-        if (!selection.optional) {
-          allErrors.push(`Missing required selection: ${selection.name}`);
-          break;
-        }
+        if (!selection.optional) return { error: `Missing required selection: ${selection.name}` };
         continue;
       }
-
-      const result = this.validateSelection(selection, value, player, args, action.name);
-      allErrors.push(...result.errors);
+      const pick = this.checkPick(action, selection, value, player, resolved);
+      if ('error' in pick) return pick;
+      resolved[selection.name] = pick.value;
     }
 
     // Whole-action gate, LAST: every selection is present and individually
-    // valid by now, so `args` is complete and a cross-selection rule can be
-    // stated once, in one place, with its own message. Skipped when a selection
-    // already failed — reporting "you must play 2 cards" on top of "missing
-    // required selection: cards" only obscures the real problem.
-    if (allErrors.length === 0) {
-      const error = this.checkActionValidate(action, context);
-      if (error) allErrors.push(error);
-    }
+    // valid by now, so a cross-selection rule can be stated once, in one place.
+    const error = this.checkActionValidate(action, { game: this.game, player, args: resolved });
+    return error ? { error } : { args: resolved };
+  }
 
-    return {
-      valid: allErrors.length === 0,
-      errors: allErrors,
-    };
+  /**
+   * One submitted pick resolved with the picks before it in view and checked
+   * against what is offered: the check a selection step and a whole
+   * submission share (#507, #772).
+   */
+  private checkPick(
+    action: ActionDefinition,
+    selection: Selection,
+    value: unknown,
+    player: Player,
+    args: Record<string, unknown>,
+  ): { value: unknown } | { error: string } {
+    const resolved = this.resolveOne(selection, value, player, args, this.game);
+    const result = this.validateSelection(selection, resolved, player, args, action.name);
+    return result.valid ? { value: resolved } : { error: result.errors.join('; ') };
   }
 
   /**
@@ -1278,18 +1287,10 @@ export class ActionExecutor {
       return this.executeThroughSelectionSteps(action, player, args, options);
     }
 
-    // Resolve serialized args (player indices, element IDs) to actual objects,
-    // a held follow-up's args over the client's.
-    const resolvedArgs = this.resolveArgs(action, { ...args, ...options?.followUp?.args }, player);
-
-    // Validate with resolved args
-    const validation = this.validateAction(action, player, resolvedArgs, options);
-    if (!validation.valid) {
-      return {
-        success: false,
-        error: validation.errors.join('; '),
-      };
-    }
+    // A held follow-up's args over the client's.
+    const checked = this.checkSubmission(action, player, { ...args, ...options?.followUp?.args }, options);
+    if ('error' in checked) return { success: false, error: checked.error };
+    const resolvedArgs = checked.args;
 
     // Fire onSelect for each selection that has it (before execute).
     // A throwing onSelect must ABORT the action (fail loud): fire onCancel for
@@ -1362,7 +1363,8 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): ActionResult {
-    const context = { game: this.game, player, args: this.resolveArgs(action, args, player) };
+    // The picks are resolved one step at a time below, so the condition sees them as sent (#772).
+    const context = { game: this.game, player, args };
     if (!options?.followUp && action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
       return { success: false, error: 'Action is not available' };
     }
@@ -2218,12 +2220,9 @@ export class ActionExecutor {
 
     // Resolve and check the pick exactly as a whole submission does (#507):
     // with the picks before it resolved in view, then against what is offered.
-    const args = this.resolveArgs(action, pendingState.collectedArgs, player);
-    const resolvedValue = this.resolveOne(selection, value, player, args, this.game);
-    const validationResult = this.validateSelection(selection, resolvedValue, player, args, action.name);
-    if (!validationResult.valid) {
-      return { success: false, error: validationResult.errors.join('; ') };
-    }
+    const pick = this.checkPick(action, selection, value, player, this.resolveArgs(action, pendingState.collectedArgs, player));
+    if ('error' in pick) return { success: false, error: pick.error };
+    const resolvedValue = pick.value;
 
     // Store the resolved value so downstream dependsOn filters see GameElements, not raw IDs
     pendingState.collectedArgs[selectionName] = resolvedValue;
