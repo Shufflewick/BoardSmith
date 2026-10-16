@@ -1666,6 +1666,29 @@ describe('#195: an uncertain order is answered from its receipt, never spent twi
     expect(logsIn(sent)).toBe(before);
     await host.close();
   });
+
+  it('runs a fresh order after "fire due events now" jumps the clock past the retention window (#722)', async () => {
+    // The page stamps orders with its own wall clock, so the floor they are
+    // judged against must not include the world's skew.
+    const clock = testClock();
+    const budgets = worldBudgets({ receiptRetentionMs: 1_000 });
+    const { host, sent } = await attached({ dir, clock, budgets });
+    await host.handleMessage('c1', {
+      type: 'action',
+      order: order('o1', clock.now()),
+      requestId: 'r1',
+      action: 'bank',
+      args: {},
+    });
+    await host.handleMessage('c1', { type: 'fire_due' });
+    expect(last(sent, 'c1', 'world_notice')?.message).toContain('600000ms');
+
+    expect(logsIn(sent)).toContain('"logs":1');
+    await chop(host, 'r2', 'o2', clock.now());
+    expect(last(sent, 'c1', 'world_response')?.code).toBeUndefined();
+    expect(logsIn(sent)).toContain('"logs":2');
+    await host.close();
+  });
 });
 
 /**
