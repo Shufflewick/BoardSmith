@@ -48,7 +48,7 @@
  * PURE, like the rest of `boardsmith/world`: the host supplies the read.
  */
 import type { WorldBudgets } from "./budgets.js";
-import { worldRefusal } from "./refusals.js";
+import { worldRefusal, type WorldRefusal } from "./refusals.js";
 
 /**
  * THE SCOPE A NOTICE IS DELIVERED LIVE ON.
@@ -125,8 +125,8 @@ export type WorldNoticeWrite =
  * WHAT A DISPATCH DID TO NOTICE BOXES, as it rides home on the result.
  *
  * `perSeat` travels with the writes so a host needs nothing but the result to
- * apply them: the limit is the bundle's declaration and the engine already
- * validated it against the host's own budget.
+ * apply them. Everything here comes from the untrusted child, so
+ * `applyNoticeWrites` re-checks it against the host's own budgets (#789).
  */
 export interface WorldNoticeWrites {
   readonly perSeat: number;
@@ -170,17 +170,74 @@ export function applyNoticeWrite(
  * written -- and the writes are applied in the order the handler made them.
  * Answers one entry per touched seat, in the order the seats were first
  * touched.
+ *
+ * THE CHILD IS NOT BELIEVED ABOUT A QUOTA (#789). `notices` comes back from
+ * game code, so `perSeat`, the number of sends, each notice's size and every
+ * seat are re-checked against `host` before any box is read, as
+ * `planSchedules` re-checks timers: a forged result is refused, never stored.
  */
 export async function applyNoticeWrites(
   notices: WorldNoticeWrites,
   read: (seat: number) => WorldNoticeBox | Promise<WorldNoticeBox>,
+  host: { readonly seatCount: number; readonly budgets: WorldBudgets },
 ): Promise<readonly SettledNoticeBox[]> {
+  assertNoticeWrites(notices, host.seatCount, host.budgets);
   const boxes = new Map<number, WorldNoticeBox>();
   for (const write of notices.writes) {
     const before = boxes.get(write.seat) ?? (await read(write.seat));
     boxes.set(write.seat, applyNoticeWrite(before, write, notices.perSeat));
   }
   return [...boxes].map(([seat, box]) => ({ seat, box }));
+}
+
+/** Refuse a dispatch result's notice writes that this host's budgets do not
+ *  admit, with the codes the child raises for the same lines. */
+function assertNoticeWrites(notices: WorldNoticeWrites, seatCount: number, budgets: WorldBudgets): void {
+  const refuse = (why: string) =>
+    worldRefusal("invalid-notice", `This dispatch's result carries a notice write that ${why}`);
+  assertNoticeBatch(refuse, notices, budgets);
+  for (const write of notices.writes) assertNoticeWriteShape(refuse, write, seatCount, budgets);
+}
+
+/** The batch as a whole: a box size this host keeps, a list of objects, and no
+ *  more sends than one command may make. */
+function assertNoticeBatch(refuse: NoticeRefusal, notices: WorldNoticeWrites, budgets: WorldBudgets): void {
+  const { perSeat, writes } = notices;
+  if (!Number.isInteger(perSeat) || perSeat < 1 || perSeat > budgets.maxNoticesPerSeat) {
+    throw refuse(
+      `keeps ${JSON.stringify(perSeat)} notices per seat, and a seat's notice box keeps a whole ` +
+        `number from 1 to ${budgets.maxNoticesPerSeat} on this host. Nothing was changed.`,
+    );
+  }
+  if (!Array.isArray(writes)) throw refuse("has no list of writes. Nothing was changed.");
+  if (writes.some((write) => typeof write !== "object" || write === null)) {
+    throw refuse("is not an object. Nothing was changed.");
+  }
+  const sends = writes.filter((write) => write.kind === "send").length;
+  if (sends > budgets.maxNoticesPerCommand) {
+    throw worldRefusal(
+      "notice-batch-cap",
+      `This dispatch sent ${sends} notices, more than the ${budgets.maxNoticesPerCommand} one ` +
+        "command may send. Nothing was changed.",
+    );
+  }
+}
+
+/** One write: a seat inside this world, and for a send a valid notice. */
+function assertNoticeWriteShape(
+  refuse: NoticeRefusal,
+  write: WorldNoticeWrite,
+  seatCount: number,
+  budgets: WorldBudgets,
+): void {
+  noticeSeat(refuse, write.seat, seatCount);
+  if (write.kind === "take") return;
+  if (write.kind !== "send") {
+    const kind: unknown = (write as { kind: unknown }).kind;
+    throw refuse(`is ${JSON.stringify(kind)}, and a write is a "send" or a "take".`);
+  }
+  noticeWhenFull(refuse, write.whenFull);
+  assertNoticeFits(refuse, write.notice, budgets);
 }
 
 /**
@@ -196,59 +253,94 @@ export function stampNotice(
   request: unknown,
   context: { readonly now: number; readonly seatCount: number; readonly budgets: WorldBudgets },
 ): { readonly seat: number; readonly notice: WorldNotice; readonly whenFull: NoticeWhenFull } {
-  const addressed = noticeSeat(action, seat, context.seatCount);
+  const refuse = (why: string) => invalidNotice(action, why);
+  const addressed = noticeSeat(refuse, seat, context.seatCount);
   if (typeof request !== "object" || request === null) {
-    throw invalidNotice(action, "was not given a notice. Pass `{ payload, line?, whenFull }`.");
+    throw refuse("was not given a notice. Pass `{ payload, line?, whenFull }`.");
   }
   const { payload, line, whenFull } = request as Partial<WorldNoticeRequest>;
-  const narration = typeof line === "string" ? { text: line } : line;
+  const narration = noticeLine(action, line);
   const notice: WorldNotice = {
     at: context.now,
     payload,
     ...(narration?.text === undefined ? {} : { text: narration.text }),
     ...(narration?.type === undefined ? {} : { type: narration.type }),
   };
-  assertNoticeFits(action, notice, context.budgets);
-  return { seat: addressed, notice, whenFull: noticeWhenFull(action, whenFull) };
+  assertNoticeFits(refuse, notice, context.budgets);
+  return { seat: addressed, notice, whenFull: noticeWhenFull(refuse, whenFull) };
 }
 
+/** Builds the refusal for one bad notice; the child's names the action. */
+type NoticeRefusal = (why: string) => WorldRefusal;
+
 /** The seat a notice is for: a whole number inside this world, or a refusal. */
-function noticeSeat(action: string, seat: unknown, seatCount: number): number {
+function noticeSeat(refuse: NoticeRefusal, seat: unknown, seatCount: number): number {
   if (typeof seat === "number" && Number.isInteger(seat) && seat >= 1 && seat <= seatCount) {
     return seat;
   }
-  throw invalidNotice(
-    action,
+  throw refuse(
     `names seat ${JSON.stringify(seat)}, and this world's seats are 1 to ${seatCount}.`,
   );
 }
 
 /** What a full box means for this notice. Required: there is no default. */
-function noticeWhenFull(action: string, whenFull: unknown): NoticeWhenFull {
+function noticeWhenFull(refuse: NoticeRefusal, whenFull: unknown): NoticeWhenFull {
   if (whenFull === "refuse" || whenFull === "dropOldest") return whenFull;
-  throw invalidNotice(
-    action,
+  throw refuse(
     `says whenFull is ${JSON.stringify(whenFull)}. Every notice says what a full box means for ` +
       'it, and there is no default: "dropOldest" evicts the oldest waiting notice (right for ' +
       'an alert), "refuse" refuses this command (right for a letter that must not be lost).',
   );
 }
 
+/** The notice's sentence in `{ text, type? }` form, or a refusal: absent is silence. */
+function noticeLine(action: string, line: unknown): { text: string; type?: string } | undefined {
+  if (line === undefined) return undefined;
+  if (typeof line === "string") return { text: line };
+  const { text, type } = (typeof line === "object" && line !== null ? line : {}) as Record<string, unknown>;
+  if (typeof text === "string" && (type === undefined || typeof type === "string")) {
+    return { text, ...(type === undefined ? {} : { type }) };
+  }
+  throw invalidNotice(
+    action,
+    'has a line that is not one. A line is a string, or `{ text, type? }` whose text and type are strings.',
+  );
+}
+
+/**
+ * Is `value` made only of what JSON stores as itself? `JSON.stringify` turns a
+ * Map into `{}`, NaN into `null` and drops a function, so it cannot be the test.
+ */
+function isPlainJson(value: unknown, ancestors: ReadonlySet<object> = new Set()): boolean {
+  if (typeof value !== "object" || value === null) return isPlainScalar(value);
+  if (ancestors.has(value)) return false;
+  const inside = new Set(ancestors).add(value);
+  if (Array.isArray(value)) return value.every((item) => isPlainJson(item, inside));
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return false;
+  // An absent key and an `undefined` one read the same, so dropping it loses nothing.
+  return Object.values(value).every((item) => item === undefined || isPlainJson(item, inside));
+}
+
+function isPlainScalar(value: unknown): boolean {
+  if (typeof value === "number") return Number.isFinite(value);
+  return value === null || typeof value === "string" || typeof value === "boolean";
+}
+
 /** Refuse a notice JSON cannot carry, or one past `noticeMaxBytes`. */
-function assertNoticeFits(action: string, notice: WorldNotice, budgets: WorldBudgets): void {
-  const json = notice.payload === undefined ? undefined : JSON.stringify(notice);
-  if (json === undefined) {
-    throw invalidNotice(
-      action,
+function assertNoticeFits(refuse: NoticeRefusal, notice: WorldNotice, budgets: WorldBudgets): void {
+  if (!isPlainJson(notice?.payload)) {
+    throw refuse(
       "has a payload JSON cannot carry. A notice is stored until its seat reads it, so it has to " +
-        "be made of plain values: objects, arrays, numbers, strings, booleans and null.",
+        "be made of plain values: plain objects, arrays, finite numbers, strings, booleans and " +
+        "null -- not a function, a Map, a Set, a class instance or a cycle.",
     );
   }
+  const json = JSON.stringify(notice);
   // MEASURED AS STORAGE MEASURES IT, in UTF-8 bytes.
   const bytes = encoder.encode(json).length;
   if (bytes > budgets.noticeMaxBytes) {
-    throw invalidNotice(
-      action,
+    throw refuse(
       `is ${bytes} bytes, over the ${budgets.noticeMaxBytes}-byte limit one notice may ` +
         "be. A notice is a line and a small payload; put anything larger in a partition and send " +
         "a notice that points at it.",

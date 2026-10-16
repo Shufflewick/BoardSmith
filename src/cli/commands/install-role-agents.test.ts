@@ -73,7 +73,7 @@ describe('the role agents a global install writes into the home directory', () =
       'review nothing and reply only: `REVIEW REFUSED: no verify result in the prompt. Run npx boardsmith review-gate <slug> and put its brief in the review prompt.`';
     for (const role of ['review', 'judgement']) {
       const text = readFileSync(join(agentsDir(), `bs-${role}.md`), 'utf-8').split(/\s+/).join(' ');
-      expect(text, `bs-${role}`).toContain('Mechanical checks: done.');
+      expect(text, `bs-${role}`).toContain('Fast checks: done.');
       expect(text, `bs-${role}`).toContain(refusal);
     }
   });

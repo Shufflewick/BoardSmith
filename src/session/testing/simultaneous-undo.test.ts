@@ -6,10 +6,9 @@ import { ErrorCode } from '../../types/protocol.js';
 import { succeeded } from '../op-result.test-helper.js';
 
 /**
- * D4/SIM-02 regression: a simultaneous-step undo is pinned to
- * `flowState.currentPlayer` (which the engine's `game.currentPlayer` default
- * leaves resolved to seat 1, never advancing during a simultaneous step) so
- * any OTHER awaiting seat cannot undo its own committed action. This suite
+ * D4/SIM-02 regression: a simultaneous-step undo was once pinned to
+ * `flowState.currentPlayer`, so any OTHER awaiting seat could not undo its
+ * own committed action. This suite
  * drives the shared `simultaneous-fixture.ts` (Plan 01) through
  * `createHeadlessSession` and proves:
  *  - seat-2 can undo its own committed action even though it is not

@@ -49,14 +49,14 @@ import {
 ### Player System
 
 - `Player` - Base class for player state
-- `AbilityManager` - Manages player abilities and resources
+- `addAbility()`, `hasUnusedAbility()`, `spendAbility()`, `countUnusedAbilities()`, `groupAbilities()` - Work with a player's plain `Ability[]` list
+- `AbilityManager` - Older class form; not restorable, use the functions above
 
 ### Scoring System
 
-- `Track` - Base scoring track
-- `MonotonicTrack` - Track that only increases/decreases
-- `UniqueTrack` - Track with unique values
-- `CounterTrack` - Simple numeric counter
+- `monotonicTrack()`, `uniqueTrack()`, `counterTrack()` - Make a plain-data scoring track (`TrackState`)
+- `canAddToTrack()`, `addToTrack()`, `incrementCounter()`, `isTrackComplete()`, `trackPoints()` - Read and change a track
+- `Track`, `MonotonicTrack`, `UniqueTrack`, `CounterTrack` - Older class form; not restorable, use the functions above
 
 ### Visibility
 
@@ -142,6 +142,7 @@ the root entry. Import them from `boardsmith/runtime`; see [Runtime](./runtime.m
 - `Ability` - Player ability type
 - `TrackEntry` - Track entry type
 - `TrackConfig` - Track configuration
+- `TrackState` - A plain-data scoring track
 - `SelectionType` - Selection type enum
 - `Selection` - Selection definition
 - `ActionContext` - Action execution context

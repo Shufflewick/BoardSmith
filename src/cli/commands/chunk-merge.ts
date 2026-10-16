@@ -75,7 +75,7 @@ import {
 } from '../lib/ledger-allocation.js';
 import { describeFinding, ledgerCheck } from './ledger-check.js';
 import { type TestRunner, checkConstraints, runVitest } from './constraint-check.js';
-import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles, equivalenceSignoffProblems, unaccountedEdits } from './chunk-signoff.js';
+import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles, unaccountedEdits } from './chunk-signoff.js';
 import { verifiedAgainstIsCurrent } from './chunk-provenance.js';
 import { checkClaimQuotes } from './claim-quotes.js';
 import { parseSpecManifest } from './test-step-check.js';
@@ -112,6 +112,8 @@ interface MergeContext {
   top: string;
   slug: string;
   branch: string;
+  mainCommit: string;
+  branchCommit: string;
   /** The project's path inside its repository, `''` or ending in `/`. */
   prefix: string;
   /** The merge base of the main line and the branch. */
@@ -143,7 +145,7 @@ async function realNumbersAdded(ctx: MergeContext): Promise<string[]> {
   const refusals: string[] = [];
   // A ledger the branch did not change cannot have gained a number on it.
   for (const spec of NUMBERED_LEDGER_SPECS.filter((s) => ctx.changed.includes(`${ctx.prefix}${DESIGN_DIR}/${s.file}`))) {
-    const added = plainNumbersAdded(await showAt(ctx, ctx.base, spec.file), await showAt(ctx, ctx.branch, spec.file), spec);
+    const added = plainNumbersAdded(await showAt(ctx, ctx.base, spec.file), await showAt(ctx, ctx.branchCommit, spec.file), spec);
     for (const id of added) {
       refusals.push(
         `${ctx.branch} adds ${id} to ${DESIGN_DIR}/${spec.file}. A chunk built alongside others never takes ` +
@@ -414,7 +416,6 @@ async function combinedTreeProblems(ctx: MergeContext, alongside: string[], runT
     ...ledgers.findings.map(describeFinding),
     ...(await checkConstraints(ctx.projectDir, { runTests })).refusals,
     ...(await signoffProblems(ctx.projectDir)),
-    ...(await equivalenceSignoffProblems(ctx.projectDir, ctx.slug)),
   ];
   if (problems.length > 0) return problems;
   const suite = await runTests(ctx.projectDir, []);
@@ -482,7 +483,7 @@ const TEST_RUNNER_CONFIG = /^vite(st)?\.config\.[cm]?[jt]s$/;
 /** The text `path` had when it hashed to `signed`, found in the history of either side, or undefined. */
 async function signedText(ctx: MergeContext, path: string, signed: string): Promise<string | undefined> {
   const where = `${ctx.prefix}${path}`;
-  const commits = (await git(ctx.top, ['log', '--format=%H', 'HEAD', ctx.branch, '--', where])).split('\n').filter(Boolean);
+  const commits = (await git(ctx.top, ['log', '--format=%H', 'HEAD', ctx.branchCommit, '--', where])).split('\n').filter(Boolean);
   for (const commit of commits) {
     const shown = await git(ctx.top, ['show', `${commit}:${where}`]).catch(() => undefined);
     if (shown !== undefined && sha256Hex(Buffer.from(shown)) === signed) return shown;
@@ -632,7 +633,7 @@ function vouchRefusal(ctx: MergeContext, shared: SharedFile[], slug: string, [wh
 
 /** Records every shared file as the merge combined it, in design/MERGE-SIGNOFFS.md, staged. */
 async function recordMergeSignoffs(ctx: MergeContext, shared: SharedFile[]): Promise<void> {
-  const merge = `${ctx.branch} ${(await git(ctx.top, ['rev-parse', ctx.branch])).trim()} into ${(await git(ctx.top, ['rev-parse', 'HEAD'])).trim()}`;
+  const merge = `${ctx.branch} ${ctx.branchCommit} into ${ctx.mainCommit}`;
   const when = new Date().toISOString();
   const entries: MergeSignoff[] = [];
   for (const file of shared) {
@@ -674,7 +675,7 @@ async function vouchForSharedFiles(ctx: MergeContext, shared: SharedFile[], runT
 /** Records where this chunk's changes meet what the main line gained while it was built. */
 async function recordCrossChunk(ctx: MergeContext, alongside: string[]): Promise<ChunkMergeResult['crossChunk']> {
   if (alongside.length === 0) return 'not built alongside';
-  const branchDiff = await git(ctx.top, ['diff', '--unified=0', ctx.base, ctx.branch]);
+  const branchDiff = await git(ctx.top, ['diff', '--unified=0', ctx.base, ctx.branchCommit]);
   const mainDiff = await git(ctx.top, ['diff', '--unified=0', ctx.fork, 'HEAD']);
   const refs = crossReferences(changedSide(branchDiff), changedSide(mainDiff));
   const path = designPath(ctx.projectDir, CROSS_CHUNK_MD);
@@ -704,25 +705,29 @@ async function readContext(projectDir: string, slug: string, branch: string): Pr
   if ((await git(projectDir, ['status', '--porcelain', '--untracked-files=no'])).trim() !== '') {
     return 'The main checkout has uncommitted changes. Commit or remove them first, so a refused merge can put everything back.';
   }
-  const own = (await git(projectDir, ['rev-list', '--first-parent', branch, '^HEAD'])).split('\n').filter(Boolean);
+  const mainCommit = (await git(projectDir, ['rev-parse', 'HEAD'])).trim();
+  const branchCommit = (await git(projectDir, ['rev-parse', branch])).trim();
+  const own = (await git(projectDir, ['rev-list', '--first-parent', branchCommit, `^${mainCommit}`])).split('\n').filter(Boolean);
   if (own.length === 0) return `${branch} has nothing the main line does not already have.`;
   const [top, prefix] = where.split('\n');
-  const base = (await git(projectDir, ['merge-base', 'HEAD', branch])).trim();
+  const base = (await git(projectDir, ['merge-base', mainCommit, branchCommit])).trim();
   return {
     projectDir,
     top,
     slug,
     branch,
+    mainCommit,
+    branchCommit,
     prefix,
     base,
     fork: (await git(projectDir, ['rev-parse', `${own[own.length - 1]}^1`])).trim(),
-    changed: (await git(top, ['diff', '--name-only', base, branch])).split('\n').filter(Boolean),
+    changed: (await git(top, ['diff', '--name-only', base, branchCommit])).split('\n').filter(Boolean),
   };
 }
 
 /** Starts the merge without committing it; returns the files whose conflicts remain. */
 async function startMerge(ctx: MergeContext): Promise<string[]> {
-  const merged = await gitSucceeds(ctx.top, ['-c', 'merge.conflictStyle=diff3', 'merge', '--no-ff', '--no-commit', ctx.branch]);
+  const merged = await gitSucceeds(ctx.top, ['-c', 'merge.conflictStyle=diff3', 'merge', '--no-ff', '--no-commit', ctx.branchCommit]);
   const left = merged ? [] : await resolveConflicts(ctx);
   if (left.length === 0) await keepMainLock(ctx);
   return left;
@@ -783,11 +788,6 @@ async function checkStartedMerge(ctx: MergeContext, left: string[], runTests: Te
     return refused(problems);
   }
   const crossChunk = await recordCrossChunk(ctx, alongside);
-  const staleReviews = await equivalenceSignoffProblems(ctx.projectDir, ctx.slug);
-  if (staleReviews.length) {
-    await gitSucceeds(ctx.top, ['merge', '--abort']);
-    return refused(staleReviews);
-  }
   await git(ctx.top, ['commit', '-q', '-m', commitMessage(ctx, allocated, alongside)]);
   return { merged: true, refusals: [], allocated, alongside, crossChunk, vouched: shared };
 }

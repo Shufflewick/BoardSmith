@@ -24,7 +24,9 @@ import type { ActionDefinition, FollowUpAction, NumberSelection, PendingActionSt
 import { availableActionsForSeat, followUpForSeat } from '../flow/seat-activity.js';
 import { resolveMultiSelect, resolveOrderedList } from './resolve-multiselect.js';
 import { elementsAsIds } from './arg-builder.js';
+import { isElement } from '../element/game-element.js';
 import { numberRangeValues } from '../action/number-labels.js';
+import { choiceValueKey } from '../action/choice-matching.js';
 import { MoveListTooLargeError, NotSimulableError } from '../errors.js';
 import { devWarn } from '../../utils/dev.js';
 import type { SeededRandom } from '../../utils/random.js';
@@ -245,8 +247,10 @@ function enumerateGatedSelections(
   // never called it — so a bot enumerated moves the engine then rejected, and
   // the pump halted on the rejection with the round never closing for any
   // seat. Every move handed back must be one `performAction` would accept.
+  // A pick's own `validate` refuses a submission the same way (#768).
+  const gated = !!actionDef.validate || actionDef.selections.some((s) => s.validate);
   const accepts = (args: Record<string, unknown>) =>
-    !actionDef.validate
+    !gated
     || executor.validateAction(actionDef, player, argsCallbacksSee(actionDef, args), { followUp }).valid;
   try {
     return enumerateSelections(game, actionDef, player, start, { left: MAX_MULTISELECT_COMBINATIONS }).filter(accepts);
@@ -391,7 +395,7 @@ function listSelectionSteps(
       continue;
     }
     for (const value of step.values) {
-      queue.push([...steps, { selection: step.selection, value: elementsAsIds(value) }]);
+      queue.push([...steps, { selection: step.selection, value: holdElements(value) }]);
     }
   }
   return moves;
@@ -445,7 +449,7 @@ function drawSelectionSteps(
     const step = nextStep(scratch.game, actionDef, at, walk);
     if ('accepted' in step) return step.accepted ? steps : null;
     if (step.values.length === 0) return null;
-    const pick = { selection: step.selection, value: elementsAsIds(step.values[0]) };
+    const pick = { selection: step.selection, value: holdElements(step.values[0]) };
     if (!scratch.apply(at, pick)) return null;
     steps.push(pick);
   }
@@ -474,7 +478,8 @@ function nextStep(
   }
   const args = executor.resolveArgs(action, pending.collectedArgs, seatPlayer);
   const offer = selectionValues(game, action, seatPlayer, selection, args, walk.random);
-  return { selection, values: spend(walk, actionDef, selection, offer) ?? (selection.optional ? [null] : []) };
+  const tried = spend(walk, actionDef, selection, offer);
+  return { selection, values: tried?.length ? tried : selection.optional ? [null] : [] };
 }
 
 /**
@@ -499,9 +504,21 @@ function liveArgs(game: Game, steps: EnumerationStep[]): Record<string, unknown>
   return args;
 }
 
+/** The references {@link holdElements} made, so a plain choice of the same `{ id, className }` shape is never taken for an element (#774). */
+const heldElements = new WeakSet<object>();
+
+/** A pick's value with each element held as an `{ id, className }` reference, which survives a tree rebuild. */
+function holdElements(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(holdElements);
+  if (!isElement(value)) return value;
+  const ref = elementsAsIds(value) as object;
+  heldElements.add(ref);
+  return ref;
+}
+
 function liveValue(game: Game, selection: Selection, value: unknown): unknown {
   if (Array.isArray(value)) return value.map((v) => liveValue(game, selection, v));
-  if (typeof value === 'object' && value !== null && 'className' in value && 'id' in value) {
+  if (typeof value === 'object' && value !== null && heldElements.has(value)) {
     return liveElement(game, selection, value as { id: number });
   }
   return value;
@@ -698,17 +715,38 @@ export function generateCombinations(
   limit: number = MAX_MULTISELECT_COMBINATIONS,
 ): unknown[][] {
   const results: unknown[][] = [];
+  const { grouped, keys } = groupEqualChoices(choices);
 
   if (min === max) {
-    combinationsOfSize(choices, min, [], 0, results, limit);
+    combinationsOfSize(grouped, keys, min, [], 0, results, limit);
   } else {
     for (let size = min; size <= Math.min(max, choices.length); size++) {
       if (results.length >= limit) break;
-      combinationsOfSize(choices, size, [], 0, results, limit);
+      combinationsOfSize(grouped, keys, size, [], 0, results, limit);
     }
   }
 
   return results;
+}
+
+/**
+ * `choices` with equal values side by side, and each one's identity: an
+ * element by itself, any other value by `choiceValueKey`. Combinations skip a
+ * repeat of the value just tried, so each combination of values is listed once (#776).
+ */
+function groupEqualChoices(choices: unknown[]): { grouped: unknown[]; keys: unknown[] } {
+  const groups = new Map<unknown, unknown[]>();
+  for (const choice of choices) {
+    const key = isElement(choice) ? choice : choiceValueKey(choice);
+    const group = groups.get(key);
+    if (group) group.push(choice);
+    else groups.set(key, [choice]);
+  }
+  const entries = [...groups.entries()];
+  return {
+    grouped: entries.flatMap(([, group]) => group),
+    keys: entries.flatMap(([key, group]) => group.map(() => key)),
+  };
 }
 
 /**
@@ -721,6 +759,7 @@ export function generateCombinations(
 // sentence rather than a contract.
 function combinationsOfSize(
   choices: unknown[],
+  keys: unknown[],
   size: number,
   current: unknown[],
   startIndex: number,
@@ -736,8 +775,9 @@ function combinationsOfSize(
 
   for (let i = startIndex; i < choices.length; i++) {
     if (results.length >= limit) return;
+    if (i > startIndex && keys[i] === keys[i - 1]) continue;
     current.push(choices[i]);
-    combinationsOfSize(choices, size, current, i + 1, results, limit);
+    combinationsOfSize(choices, keys, size, current, i + 1, results, limit);
     current.pop();
   }
 }
@@ -766,8 +806,9 @@ function _enumerateRecursive(
   const tried = spend(walk, actionDef, selection, selectionValues(game, actionDef, player, selection, seen, walk.random));
 
   // Nothing to offer (no enabled choice, a text input, a number input that
-  // cannot be listed): skip an optional selection, block a required one.
-  if (tried === null) {
+  // cannot be listed, a multiSelect with fewer candidates than its min): skip
+  // an optional selection, block a required one.
+  if (tried === null || tried.length === 0) {
     if (selection.optional) {
       return _enumerateRecursive(game, actionDef, player, index + 1, currentArgs, walk);
     }
@@ -822,7 +863,7 @@ interface SelectionOffer<T = unknown> {
 
 /**
  * The values both enumeration paths try for one selection, or `null` when it
- * has nothing to offer: no enabled choice, a text input, or a number input
+ * has nothing to offer (an empty list means the same): no enabled choice, a text input, or a number input
  * with no value to offer (see {@link numberInputPicks}). With `random` (a
  * sampling walk), a multiSelect offers one combination drawn with it.
  */

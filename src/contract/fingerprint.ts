@@ -1989,6 +1989,8 @@ export async function computePayloadHash(): Promise<string> {
   const secretPile = game.create(Space, 'secret-pile');
   secretPile.contentsHidden();
   secretPile.create(FixtureCard, 'secret-0', { suit: 'D', rank: 'A' });
+  // A card's own grant gets through its hidden zone to that seat alone (#758).
+  secretPile.create(FixtureCard, 'secret-1', { suit: 'D', rank: '2' }).addVisibleTo(1);
 
   // Owner-visible hands: the asymmetry between "my hand" and "their hand" is
   // the hidden-information guarantee the platform relies on most.
@@ -2018,6 +2020,10 @@ export async function computePayloadHash(): Promise<string> {
   cut.remove();
   game.lastCut = cut;
 
+  // A card in an animation event's data (#752). Each view refers to it by a
+  // branch, never the card itself: seat 1's names the card, seat 2's the hand.
+  game.animate('drew', { card: game.first(FixtureCard, 'hand-1-0') });
+
   // Start the flow so the views carry real flow state. Without this every view
   // reports `flowState: undefined` and the hash covers only board
   // serialization — which is exactly how the flow layer stayed invisible in the
@@ -2029,8 +2035,9 @@ export async function computePayloadHash(): Promise<string> {
   assertCoversFlowLayer(views);
 
   // The whole-game flow state at the same point. The executor hands it to the
-  // platform beside the views, the platform stores it, and the session layer
-  // sends it to every seat, where GameShell reads `availableActions` from it.
+  // platform beside the views and the platform stores it; the session layer
+  // sends each seat only its own cut of it (#778), so this hash does not see
+  // what a seat receives (#968).
   // The per-seat views above resolve turns through `awaitingPlayers` and so
   // could not see #321: a simultaneous step also published a single-seat
   // `currentPlayer` / `availableActions` left over from before it.

@@ -35,8 +35,8 @@ describe('getSuitSymbol', () => {
     expect(getSuitSymbol('')).toBe('');
   });
 
-  it('is case sensitive — a lowercase suit is not a known one', () => {
-    expect(getSuitSymbol('h')).toBe('h');
+  it('reads a lowercase suit as the same suit (#733)', () => {
+    expect(getSuitSymbol('h')).toBe('♥');
   });
 });
 
@@ -44,6 +44,10 @@ describe('getSuitColor', () => {
   it('paints hearts and diamonds red', () => {
     expect(getSuitColor('H')).toBe('#e74c3c');
     expect(getSuitColor('D')).toBe('#e74c3c');
+  });
+
+  it('reads a lowercase suit as the same suit (#733)', () => {
+    expect(getSuitColor('h')).toBe('#e74c3c');
   });
 
   it('paints clubs and spades dark', () => {

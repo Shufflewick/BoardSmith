@@ -482,7 +482,7 @@ export class FlowEngine<G extends Game = Game> {
   private resetToRoot(variables: Record<string, unknown>): void {
     this.stack = [{ node: this.definition.root, index: 0, completed: false }];
     this.variables = { ...variables };
-    this.currentPlayer = this.game.currentPlayer;
+    this.currentPlayer = this.game.firstPlayer;
     this.awaitingInput = false;
     this.availableActions = [];
     this.awaitingPlayers = [];
@@ -936,9 +936,15 @@ export class FlowEngine<G extends Game = Game> {
    *
    * No-op when no simultaneous step is open: there is no stale list to correct.
    *
+   * Called from outside game code, it then ends the step when `allDone` holds,
+   * as settling an action does; a seat made done outside an action otherwise
+   * left the step open with nobody able to act (#783). Inside game code the
+   * running action's settling makes that check, so the flow runs on once.
+   *
    * @param seat - Refresh only this seat. Omit to refresh every seat.
+   * @returns The flow's state when the refresh ended the step and ran the flow on.
    */
-  refreshAwaitingActions(seat?: number): void {
+  refreshAwaitingActions(seat?: number): FlowState | undefined {
     // A complete flow prompts no seat, so there is nothing to admit.
     if (this.complete) return;
     const frame = this.stack[this.stack.length - 1];
@@ -991,6 +997,20 @@ export class FlowEngine<G extends Game = Game> {
         });
       }
     }
+
+    // Inside game code (an action, a pick's onEach) the action's settling re-checks allDone and runs the flow once.
+    if (this.game._ctx._changingDepth > 0) return;
+    const allDone = config.allDone
+      ? config.allDone(context)
+      : this.awaitingPlayers.every((p) => p.completed);
+    if (!allDone) {
+      this.warnIfDeadlockedSimultaneousStep(config);
+      return;
+    }
+    this.awaitingInput = false;
+    this.awaitingPlayers = [];
+    frame.completed = true;
+    return this.run();
   }
 
   /**
@@ -1177,6 +1197,19 @@ export class FlowEngine<G extends Game = Game> {
       if (error instanceof FlowHaltedError) throw error;
       throw new FlowHaltedError(error);
     }
+  }
+
+  /**
+   * The player whose turn it is: the seat the flow is running for (an
+   * `eachPlayer` seat, an action step's player). None while a simultaneous
+   * step is open (from the moment its conditions are first checked), since
+   * every seat acts there, and none once the flow is complete.
+   */
+  getCurrentPlayer(): PlayerOf<G> | undefined {
+    flowStateRead(this.game._ctx);
+    const top = this.stack[this.stack.length - 1];
+    const inSimultaneous = top?.node.type === 'simultaneous-action-step' && !top.completed;
+    return inSimultaneous || this.complete ? undefined : this.currentPlayer;
   }
 
   /**
@@ -2086,6 +2119,8 @@ export class FlowEngine<G extends Game = Game> {
       throw new Error('ActionStep requires a player');
     }
 
+    // Current while its conditions are checked, so `ctx.player.isCurrent()` holds for it.
+    this.currentPlayer = player;
     const available = this.offeredSequentialActions(config, context, player);
 
     // If no available actions and minMoves met, complete
@@ -2109,7 +2144,6 @@ export class FlowEngine<G extends Game = Game> {
     this.moveCount = moveCount;
 
     // Prompt for input
-    this.currentPlayer = player;
     this.availableActions = available;
 
     // Don't mark completed yet - we'll continue after input
@@ -2131,13 +2165,13 @@ export class FlowEngine<G extends Game = Game> {
     if (!player) {
       throw new Error(`Action step holds a follow-up for seat ${seat}, but this game has no seat ${seat}.`);
     }
+    this.currentPlayer = player;
     const available = this.offeredSequentialActions(config, context, player);
 
     this.warnIfFollowUpStalls(config.name ?? 'action-step', seat, this.heldFollowUp(frame, seat)!);
     this.openStepWindow(frame, config, context, 'action-step');
     this.currentActionConfig = config;
     this.moveCount = frame.data?.moveCount as number;
-    this.currentPlayer = player;
     this.availableActions = available;
     return { awaitingInput: true };
   }

@@ -120,3 +120,17 @@ describe('template data is written as the text of each value', () => {
     expect(game.getFormattedMessages(1)).toEqual(['flag moved 3 spaces (true).']);
   });
 });
+
+describe('template substitution is literal (#754)', () => {
+  it('does not treat $ codes in a value as regex replacement patterns', () => {
+    const game = new LogGame({ playerCount: 2, playerNames: ["$'", 'Bob$&'], seed: 'log' });
+    game.message('{{p}} beats {{q}}', { p: game.getPlayer(1)!, q: game.getPlayer(2)! });
+    expect(game.getFormattedMessageEntries(1)[0].text).toBe("$' beats Bob$&");
+  });
+
+  it('does not throw on a data key containing regex syntax', () => {
+    const game = makeGame();
+    game.message('a (b {{x(}} c', { 'x(': 'ok' });
+    expect(game.getFormattedMessageEntries(1)[0].text).toBe('a (b ok c');
+  });
+});

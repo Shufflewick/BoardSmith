@@ -38,8 +38,8 @@ Work package: {slug}
 You are the DESIGN-REVIEW lens auditing the built UI for {gameName}, chunk "{slug}". This is a
 SEPARATE dispatch with NO inherited conversation: do NOT read the orchestrator's running
 conversation, any prior agent's framing, or CHUNK.md's "## Interpretation". You take your own
-screenshots and judge the UI independently. The mechanical checks are done. This is what
-`boardsmith verify` found for the commit under review:
+screenshots and judge the UI independently. The fast checks are done. This is what
+`boardsmith verify --chunk` found for the commit under review:
 
 {verifyResult}
 

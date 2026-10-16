@@ -162,9 +162,10 @@ already owns:
   - `closed` — the chunk reached `close` (or the light path's equivalent) and its status is
     `verified` or `verified (user-waived)`, and close ended with `build/close.md` "The Done Gate":
     its last command was `npx boardsmith verify --check --chunk <slug>`, which exited zero, and
-    nothing was written or committed after it. So the chunk's last commit, on a clean tree, has a
-    passing `boardsmith verify` result that measured the chunk's whole change (the full suite,
-    typecheck, build, validate, the smoke test and the mutation check of everything since the chunk began).
+    nothing was written or committed after it. So the chunk's last commit, on a clean tree, has
+    passed the chunk's fast checks, `boardsmith verify --chunk <slug>` (its tests and typecheck,
+    `state-machine.md` "Git Protocol"). That is enough to accept the chunk as closed and merge it;
+    the full checks run at publish.
     A subagent never returns `closed`, and never says done or green anywhere in its report, without
     that; the orchestrator runs the same check before it believes one.
   - `gate` — work stopped at a human gate. Requires `gate`.

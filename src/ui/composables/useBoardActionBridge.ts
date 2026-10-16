@@ -35,7 +35,7 @@ import type {
   ChoiceWithRefs,
   EnrichedValidElement,
 } from './useActionControllerTypes.js';
-import { choiceBoardTarget, devWarn, resolvePickCounts } from './actionControllerHelpers.js';
+import { choiceBoardTarget, devWarn, formatActionName, resolvePickCounts } from './actionControllerHelpers.js';
 import { createActionMutators } from './actionMutators.js';
 
 interface BoardActionBridgeOptions {
@@ -97,13 +97,6 @@ interface BoardActionBridgeOptions {
 export interface RunnerIdentity {
   gameInstanceId: string;
   restoreEpoch: number;
-}
-
-function formatActionName(name: string): string {
-  return name
-    .replace(/([A-Z])/g, ' $1')
-    .replace(/^./, str => str.toUpperCase())
-    .trim();
 }
 
 /**
