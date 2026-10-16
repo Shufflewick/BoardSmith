@@ -63,6 +63,12 @@ selection; it does not claim mutation coverage of the entire chunk. Plain
 `boardsmith verify` keeps its existing full checks. `agent-policy` owns the
 five-ticket closure counter and the mandatory full-run deadline.
 
+The build and merge workflow follows
+[`state-machine.md`'s Focused Verification Policy](../src/cli/slash-command/bs/state-machine.md#focused-verification-policy).
+That section is the authority for conditional standalone checks, combined-tree authored tests,
+honest shared-file evidence and the `agent-policy` full-run deadline. Projects without an
+explicit committed opt-in keep their existing full workflow and sign-off gates.
+
 For a review backed by a focused receipt, the run log records both
 `Verify: <commit> passed` and `Scope: focused <selection SHA-256>`, as
 `review-gate` prints them. The ledger checker refuses a missing or mismatched

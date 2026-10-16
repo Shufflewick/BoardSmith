@@ -6,7 +6,8 @@ import { chunkVerifyBase } from './chunk-commits.js';
 import { gitOutput as git, gitSucceeds } from './git-output.js';
 import { openMutantCache } from './mutant-cache.js';
 import { equivalenceBasisProblem, type EquivalenceBasis } from './mutation-equivalences.js';
-import { focusedVerificationScope, type FocusedVerificationScope } from './authored-tests.js';
+import type { FocusedVerificationScope } from './authored-tests.js';
+import { focusedPolicyScope } from './focused-policy.js';
 
 /**
  * The result `boardsmith verify` writes, and the one question every done claim asks of it (#452).
@@ -296,8 +297,8 @@ async function currentResultProblem(projectDir: string, result: VerifyResult, co
   if (problem !== undefined) return problem;
   if (result.scope?.kind === 'focused') {
     try {
-      const current = await focusedVerificationScope(projectDir, result.scope.selection.path);
-      if (JSON.stringify(current) !== JSON.stringify(result.scope) || result.base.commit !== current.selection.base) {
+      const current = await focusedPolicyScope(projectDir);
+      if (current === undefined || JSON.stringify(current) !== JSON.stringify(result.scope) || result.base.commit !== current.selection.base) {
         return 'The focused result does not match the committed authored-test selection. Run `boardsmith verify --selection <path>` again.';
       }
     } catch (error) { return (error as Error).message; }

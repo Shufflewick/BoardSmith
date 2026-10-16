@@ -54,7 +54,8 @@ import { type MutantCache, openMutantCache } from '../lib/mutant-cache.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { projectUiProblem, requireGameProject } from '../lib/game-project.js';
 import { gameTestRunProblem } from '../lib/test-run-scope.js';
-import { focusedVerificationScope, runAuthoredTests } from '../lib/authored-tests.js';
+import { runAuthoredTests } from '../lib/authored-tests.js';
+import { focusedPolicyScope } from '../lib/focused-policy.js';
 import { discardRecord, runVitestRecorded, testRunVerdict } from '../lib/vitest-run.js';
 import {
   VERIFY_CHECK_NAMES,
@@ -553,7 +554,10 @@ export async function runVerify(options: {
   requireGameProject(projectDir);
   const head = await verifiableCommit(projectDir);
   await requireResultIgnored(projectDir);
-  const scope = options.selection === undefined ? undefined : await focusedVerificationScope(projectDir, options.selection);
+  const scope = options.selection === undefined ? undefined : await focusedPolicyScope(projectDir);
+  if (options.selection !== undefined && scope?.selection.path !== options.selection) {
+    throw new Error('The committed policy must explicitly opt into focused verification with this selection. Use its configured selection path.');
+  }
   const base = scope === undefined
     ? await runBase(projectDir, options)
     : { ref: `authored selection ${scope.selection.path}`, commit: scope.selection.base, given: true };
