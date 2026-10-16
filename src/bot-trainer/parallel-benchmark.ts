@@ -76,6 +76,8 @@ export type BenchmarkProgressCallback = (completed: number, total: number) => vo
  * @param options - Worker pool configuration
  * @param onProgress - Optional progress callback
  * @returns Array of fitness values in same order as population
+ * @throws When a candidate's benchmark fails or a worker stops unexpectedly; the
+ *   remaining workers are terminated, so a failure is never scored as fitness 0.
  */
 export async function runParallelBenchmarks(
   gameModulePath: string,
@@ -129,6 +131,15 @@ export async function runParallelBenchmarks(
   const inFlightWork = new Map<Worker, number>();
 
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const candidate = (index: number) => `candidate ${index + 1} of ${populationSize}`;
+
+    function fail(message: string): void {
+      settled = true;
+      terminateAllWorkers();
+      reject(new Error(message));
+    }
+
     // Create workers
     for (let i = 0; i < workerCount; i++) {
       const worker = new Worker(workerUrl, { execArgv });
@@ -140,17 +151,15 @@ export async function runParallelBenchmarks(
 
       // Handle worker messages
       worker.on('message', (message: BenchmarkResponse | BenchmarkErrorResponse) => {
-        const index = inFlightWork.get(worker);
+        if (settled) return;
         inFlightWork.delete(worker);
         workerState.busy = false;
 
         if ('error' in message) {
-          // Benchmark errored - use 0 fitness
-          fitnesses[message.individualIndex] = 0;
-        } else {
-          // Successful benchmark
-          fitnesses[message.individualIndex] = message.winRate;
+          fail(`Benchmarking ${candidate(message.individualIndex)} for game "${gameType}" failed: ${message.error}`);
+          return;
         }
+        fitnesses[message.individualIndex] = message.winRate;
 
         completedCount++;
 
@@ -161,6 +170,7 @@ export async function runParallelBenchmarks(
 
         // Check if all done
         if (completedCount >= populationSize) {
+          settled = true;
           terminateAllWorkers();
           resolve(fitnesses);
           return;
@@ -172,6 +182,7 @@ export async function runParallelBenchmarks(
 
       // Handle worker errors/crashes
       worker.on('error', (error) => {
+        if (settled) return;
         console.error(`Benchmark worker crashed: ${error.message}`);
 
         // Get the index that was being processed
@@ -203,10 +214,13 @@ export async function runParallelBenchmarks(
         }
       });
 
+      // A crash emits 'error' first and has already left the pool; any other exit
+      // before the run settles (game code calling process.exit) is a failure.
       worker.on('exit', (code) => {
-        if (code !== 0 && completedCount < populationSize) {
-          // Unexpected exit, handled by error event
-        }
+        if (settled || !workers.includes(workerState)) return;
+        const lostIndex = inFlightWork.get(worker);
+        const during = lostIndex === undefined ? '' : ` while benchmarking ${candidate(lostIndex)}`;
+        fail(`A benchmark worker for game "${gameType}" stopped (exit code ${code})${during}.`);
       });
     }
 
