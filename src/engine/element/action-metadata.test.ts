@@ -144,7 +144,7 @@ describe('buildPickMetadata: function-valued multiSelect (bot-01 / C.2)', () => 
     const { game, player } = makeGame();
     const selection = getSelection(game, 'pickChoice');
 
-    const meta = buildPickMetadata(game, player, selection);
+    const meta = buildPickMetadata(game, player, 'pickChoice', selection);
 
     expect(meta.multiSelect).toEqual({ min: 2, max: 2 });
   });
@@ -153,7 +153,7 @@ describe('buildPickMetadata: function-valued multiSelect (bot-01 / C.2)', () => 
     const { game, player } = makeGame();
     const selection = getSelection(game, 'pickElements');
 
-    const meta = buildPickMetadata(game, player, selection);
+    const meta = buildPickMetadata(game, player, 'pickElements', selection);
 
     expect(meta.multiSelect).toEqual({ min: 1, max: 3 });
   });
@@ -162,7 +162,7 @@ describe('buildPickMetadata: function-valued multiSelect (bot-01 / C.2)', () => 
     const { game, player } = makeGame();
     const selection = getSelection(game, 'pickChoiceUndefined');
 
-    expect(() => buildPickMetadata(game, player, selection)).toThrow(
+    expect(() => buildPickMetadata(game, player, 'pickChoiceUndefined', selection)).toThrow(
       'Selection "flavor": its multiSelect function returned undefined',
     );
   });
@@ -171,7 +171,7 @@ describe('buildPickMetadata: function-valued multiSelect (bot-01 / C.2)', () => 
     const { game, player } = makeGame();
     const selection = getSelection(game, 'pickChoiceStaticNumber');
 
-    const meta = buildPickMetadata(game, player, selection);
+    const meta = buildPickMetadata(game, player, 'pickChoiceStaticNumber', selection);
 
     expect(meta.multiSelect).toEqual({ min: 1, max: 2 });
   });
@@ -180,7 +180,7 @@ describe('buildPickMetadata: function-valued multiSelect (bot-01 / C.2)', () => 
     const { game, player } = makeGame();
     const selection = getSelection(game, 'pickElementsStaticConfig');
 
-    const meta = buildPickMetadata(game, player, selection);
+    const meta = buildPickMetadata(game, player, 'pickElementsStaticConfig', selection);
 
     expect(meta.multiSelect).toEqual({ min: 1, max: 2 });
   });
@@ -195,7 +195,7 @@ describe('buildPickMetadata: function-valued multiSelect (bot-01 / C.2)', () => 
     const selection = getSelection(game, 'pickElements');
     const ctx = { game, player, args: {} };
 
-    const panelResolved = buildPickMetadata(game, player, selection).multiSelect;
+    const panelResolved = buildPickMetadata(game, player, 'pickElements', selection).multiSelect;
     const enumerationResolved = resolveMultiSelect(selection, ctx);
 
     expect(panelResolved).toEqual(enumerationResolved);
@@ -207,7 +207,7 @@ describe('buildPickMetadata: function-valued multiSelect (bot-01 / C.2)', () => 
     const selection = getSelection(game, 'pickChoice');
     const ctx = { game, player, args: {} };
 
-    const panelResolved = buildPickMetadata(game, player, selection).multiSelect;
+    const panelResolved = buildPickMetadata(game, player, 'pickChoice', selection).multiSelect;
     const enumerationResolved = resolveMultiSelect(selection, ctx);
 
     expect(panelResolved).toEqual(enumerationResolved);
@@ -225,7 +225,7 @@ describe('buildPickMetadata: function-valued multiSelect (bot-01 / C.2)', () => 
     it('toggleMultiSelect accepts values for a dynamic-multiSelect pick instead of falling back to single-select', async () => {
       const { game, player } = makeGame();
       const selection = getSelection(game, 'pickElements');
-      const pickMeta = buildPickMetadata(game, player, selection);
+      const pickMeta = buildPickMetadata(game, player, 'pickElements', selection);
 
       // Resolved metadata carries a concrete multiSelect config (proven above) —
       // this is exactly what a real server response would send to the client.

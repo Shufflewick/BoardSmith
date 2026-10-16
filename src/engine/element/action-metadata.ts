@@ -16,7 +16,7 @@ import { resolveMultiSelect, resolveOrderedList } from '../utils/resolve-multise
 import { numberValueLabels } from '../action/number-labels.js';
 import type { Game } from './game.js';
 import type { Player } from '../player/player.js';
-import type { Selection, ActionDefinition, TextSelection, NumberSelection } from '../action/types.js';
+import type { Selection, ActionContext, ActionDefinition, TextSelection, NumberSelection } from '../action/types.js';
 import type { ActionMetadata, PickMetadata } from '../../types/protocol.js';
 
 /**
@@ -66,7 +66,7 @@ export function buildActionMetadata(
     const pickMetas: PickMetadata[] = [];
 
     for (const selection of actionDef.selections) {
-      const pickMeta = buildPickMetadata(game, player, selection);
+      const pickMeta = buildPickMetadata(game, player, actionName, selection);
       pickMetas.push(pickMeta);
     }
 
@@ -123,6 +123,7 @@ function actionMetadataOf(
  * - elementClassName - for CSS targeting
  * - min, max, integer, pattern, etc. - for number/text validation
  *
+ * @param actionName The action the pick belongs to, named when an author callback fails
  * @param knownArgs Optional args for evaluating dynamic prompts (for followUp actions with pre-filled args)
  */
 /**
@@ -171,24 +172,33 @@ function describeNumberPick(base: PickMetadata, selection: NumberSelection): voi
   }
 }
 
+/** A pick's prompt: a static string, or the author's function evaluated now, its failure named. */
+function evaluatePrompt(actionName: string, selection: Selection, ctx: ActionContext): string | undefined {
+  if (typeof selection.prompt !== 'function') return selection.prompt;
+  try {
+    return selection.prompt(ctx);
+  } catch (error) {
+    throw new Error(
+      `The prompt function for "${selection.name}" in action "${actionName}" threw an error: ` +
+      `${error instanceof Error ? error.message : String(error)}. Fix the prompt function before this action can be offered.`,
+    );
+  }
+}
+
 export function buildPickMetadata(
   game: Game,
   player: Player,
+  actionName: string,
   selection: Selection,
   knownArgs?: Record<string, unknown>
 ): PickMetadata {
   // Create context with known args if provided (for followUp actions)
   const ctx = { game, player, args: knownArgs ?? {} };
 
-  // Evaluate prompt - can be static string or function returning string
-  const evaluatedPrompt = typeof selection.prompt === 'function'
-    ? selection.prompt(ctx)
-    : selection.prompt;
-
   const base: PickMetadata = {
     name: selection.name,
     type: selection.type,
-    prompt: evaluatedPrompt,
+    prompt: evaluatePrompt(actionName, selection, ctx),
     optional: selection.optional,
   };
 
