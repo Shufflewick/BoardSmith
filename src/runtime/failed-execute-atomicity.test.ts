@@ -13,7 +13,7 @@
  * The runner already keeps a per-action checkpoint whose head is exactly the
  * pre-action state, so the rollback costs no extra serialization.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   Game,
   Space,
@@ -28,6 +28,7 @@ import {
 } from '../engine/index.js';
 import { GameRunner } from './runner.js';
 import { PendingActionManager } from '../session/pending-action-manager.js';
+import { TestGame } from '../testing/test-game.js';
 
 class Token extends Piece<HalfwayGame, Player> {}
 class Zone extends Space<HalfwayGame, Player> {}
@@ -103,11 +104,12 @@ class HalfwayGame extends Game<HalfwayGame, Player> {
   }
 }
 
-function makeRunner() {
+function makeRunner(checkpoints?: { enabled: boolean }) {
   const runner = new GameRunner({
     GameClass: HalfwayGame,
     gameType: 'halfway',
     gameOptions: { playerCount: 2, playerNames: ['A', 'B'], seed: 'atomic' },
+    checkpoints,
   });
   runner.start();
   return runner;
@@ -233,5 +235,84 @@ describe('an action that refuses without mutating', () => {
     const runner = makeRunner();
     runner.performAction('refuse', 1, {});
     expect(runner.performAction('cleanMove', 1, {}).success).toBe(true);
+  });
+});
+
+// performAction alone never wrote a checkpoint, so a second action had none to
+// roll back to unless something called getSnapshot in between (#802).
+describe('a second action that throws half-way, with no snapshot taken between (#802)', () => {
+  function expectAfterFirstAction(runner: GameRunner<HalfwayGame>, messagesBefore: number, error?: string) {
+    expect(error).not.toContain('disabled');
+    expect(runner.game.source.all(Token)).toHaveLength(4);
+    expect(runner.game.target.all(Token)).toHaveLength(1);
+    expect(runner.game.messages.length).toBe(messagesBefore);
+    expect(runner.actionHistory).toHaveLength(1);
+  }
+
+  it('performAction rolls back to the state after the first action', () => {
+    const runner = makeRunner();
+    expect(runner.performAction('cleanMove', 1, {}).success).toBe(true);
+    const messagesBefore = runner.game.messages.length;
+
+    const result = runner.performAction('halfMove', 2, {});
+
+    expect(result.success).toBe(false);
+    expectAfterFirstAction(runner, messagesBefore, result.error);
+  });
+
+  it('TestGame.tryAction rolls back to the state after the first action', () => {
+    const testGame = TestGame.create(HalfwayGame, { playerCount: 2, seed: 'atomic' });
+    testGame.doAction(1, 'cleanMove', {});
+    const messagesBefore = testGame.game.messages.length;
+
+    const result = testGame.tryAction(2, 'halfMove', {});
+
+    expect(result.success).toBe(false);
+    expectAfterFirstAction(testGame.runner, messagesBefore, result.error);
+  });
+
+  it('the runner\'s pending-action completion rolls back to the state after the first action', () => {
+    const runner = makeRunner();
+    expect(runner.performAction('cleanMove', 1, {}).success).toBe(true);
+    const messagesBefore = runner.game.messages.length;
+    runner.startPendingAction('pickThenFail', 2);
+
+    const result = runner.processSelectionStep(2, 'how', 'all');
+
+    expect(result.success).toBe(false);
+    expectAfterFirstAction(runner, messagesBefore, result.error);
+  });
+
+  it('the session\'s pending-action completion rolls back to the state after the first action', async () => {
+    const runner = makeRunner();
+    expect(runner.performAction('cleanMove', 1, {}).success).toBe(true);
+    const messagesBefore = runner.game.messages.length;
+    const manager = new PendingActionManager(runner, 2);
+    manager.startPendingAction('pickThenFail', 2);
+
+    const result = await manager.processSelectionStep(2, 'how', 'all');
+
+    expect(result.success).toBe(false);
+    expectAfterFirstAction(runner, messagesBefore, result.error);
+  });
+
+  it('takes no extra checkpoint when a snapshot already captured one', () => {
+    const runner = makeRunner();
+    runner.performAction('cleanMove', 1, {});
+    runner.getSnapshot();
+    const capture = vi.spyOn(runner, 'captureCheckpoint');
+
+    runner.performAction('halfMove', 2, {});
+
+    expect(capture).not.toHaveBeenCalled();
+  });
+
+  it('says checkpoints are disabled only when they are', () => {
+    const runner = makeRunner({ enabled: false });
+    runner.performAction('cleanMove', 1, {});
+
+    const result = runner.performAction('halfMove', 2, {});
+
+    expect(result.error).toContain('per-action checkpoints are disabled');
   });
 });

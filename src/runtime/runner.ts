@@ -555,6 +555,17 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    *   to, and saying so is far better than reporting that nothing happened
    *   when something did.
    */
+  /**
+   * Capture the head checkpoint unless one already exists, so a failed action
+   * has a state to roll back to even when no snapshot was taken since the last
+   * action (#802). Hosts snapshot after every action, so there it costs nothing.
+   */
+  private ensureHeadCheckpoint(): void {
+    if (this.checkpointPolicy_.enabled && !this.actionCheckpoints[this.actionHistory.length - this.checkpointBaseIndex]) {
+      this.captureCheckpoint();
+    }
+  }
+
   private rollbackToPreActionState(): string | undefined {
     const headOffset = this.actionHistory.length - this.checkpointBaseIndex;
     const checkpoint = this.actionCheckpoints[headOffset];
@@ -618,6 +629,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
     // Serialize the action before executing (captures current element refs)
     const serializedAction = this.serializeForHistory(actionName, playerObj, args);
+
+    this.ensureHeadCheckpoint();
 
     // Execute through flow (pass player index for simultaneous actions)
     let flowState: FlowState;
@@ -734,6 +747,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     pendingState: PendingActionState,
     playerPosition: number
   ): ActionResult {
+    this.ensureHeadCheckpoint();
     // Serialized before executing, so the recorded refs are the positions the action acts on.
     const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs);
     const actionResult = executor.executePendingAction(action, player, pendingState);
@@ -783,6 +797,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // A held follow-up's published args are the engine's, bound before any
     // client pick, so every pick's callbacks see them.
     this.bindFollowUpArgs(pendingState, playerPosition);
+    // Before any pick runs, so a failure also undoes what the picks changed.
+    this.ensureHeadCheckpoint();
     this.pendingActions.set(playerPosition, pendingState);
     return pendingState;
   }
