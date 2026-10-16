@@ -41,6 +41,11 @@ function deserializePendingState(s: Record<string, unknown>): PendingActionState
   };
 }
 
+/** The picks a pending action of `actionName` already holds, resolved to real elements when made. */
+function picksHeldBy(pendingState: Record<string, unknown> | null, actionName: string): Record<string, unknown> {
+  return pendingState?.actionName === actionName ? deserializePendingState(pendingState).collectedArgs : {};
+}
+
 /**
  * What the executor says this pick's candidates are, or the response that says
  * the game's own callback threw while being asked.
@@ -96,7 +101,7 @@ function answerPick(
   const said = () => (warnings.length > 0 ? warnings : undefined);
 
   if (selection.type === 'choice') {
-    const choices = formatChoiceCandidates(evaluated.candidates, selection, ctx, warnings);
+    const choices = formatChoiceCandidates(evaluated.candidates, selection, ctx, warnings, ctx.game);
     if (choices.length === 0 && !selection.optional) return deadEnd(action, selection, ctx);
     return {
       success: true,
@@ -111,7 +116,7 @@ function answerPick(
     };
   }
 
-  const validElements = formatElementCandidates(evaluated.candidates, selection, ctx, warnings);
+  const validElements = formatElementCandidates(evaluated.candidates, selection, ctx, warnings, ctx.game);
   if (validElements.length === 0 && !selection.optional) return deadEnd(action, selection, ctx);
   return {
     success: true,
@@ -152,6 +157,7 @@ function deadEnd(
       action: action.prompt ?? action.name,
       pick: prompt ?? selection.name,
       args: ctx.args,
+      seat: ctx.player.seat,
     }),
     errorCode: ErrorCode.PICK_HAS_NO_CANDIDATES,
   };
@@ -261,7 +267,7 @@ export class PickHandler<G extends Game = Game> {
     }
 
     const executor = this.#runner.game.getActionExecutor();
-    const asked = this.#choiceContext(action, player, currentArgs);
+    const asked = this.#choiceContext(action, player, currentArgs, picksHeldBy(pendingState, actionName));
     if ('refusal' in asked) return asked.refusal;
     const { ctx } = asked;
 
@@ -291,19 +297,22 @@ export class PickHandler<G extends Game = Game> {
   }
 
   /**
-   * What a pick's choices see: the client's picks so far, with the seat's held
-   * follow-up's args bound over them, resolved. The client sends picks only, so
-   * any other key is refused (#662).
+   * What a pick's choices see: the client's picks so far, with the picks the
+   * pending action already holds and the seat's held follow-up's args bound
+   * over them, resolved. A held pick wins because the client names it by a
+   * placeholder id, which a move since may have given to another card (#715).
+   * The client sends picks only, so any other key is refused (#662).
    */
   #choiceContext(
     action: ActionDefinition,
     player: Player,
     currentArgs: Record<string, unknown>,
+    heldPicks: Record<string, unknown>,
   ): { ctx: ActionContext } | { refusal: PickChoicesResponse } {
     const executor = this.#runner.game.getActionExecutor();
     const refusal = executor.undeclaredArgsRefusal(action, currentArgs);
     if (refusal) return { refusal: { success: false, error: refusal, errorCode: ErrorCode.INVALID_PICK } };
-    const bound = { ...currentArgs, ...this.#runner.followUpArgsFor(action.name, player.seat) };
+    const bound = { ...currentArgs, ...heldPicks, ...this.#runner.followUpArgsFor(action.name, player.seat) };
     return { ctx: { game: this.#runner.game, player, args: executor.resolveArgs(action, bound, player) } };
   }
 }

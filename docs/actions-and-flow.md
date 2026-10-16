@@ -416,6 +416,11 @@ The helper namespaces by the name you pass and the player, so multiple players
 or actions won't conflict. Both actions above pass `'explore'`, so the second
 reads what the first wrote for the same player.
 
+Each value goes only to the player who wrote it: other players and spectators
+never receive it. The rest of `game.settings`, including every
+`persistentMap()`, is public and reaches every player and spectator, so never
+keep a player's secret there; put it in an element only that player can see.
+
 If what you want to remember is where elements are (cards drawn, loot set
 aside), put the elements in a space instead. The space is the record, and the
 UI already shows it.

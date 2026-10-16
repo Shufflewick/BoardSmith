@@ -1678,7 +1678,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // somewhere to put one, and dropped, because the console already has it.
     const warnings: never[] = [];
     if (selection.type === "choice") {
-      pick.choices = formatChoiceCandidates(candidates, selection, context, warnings);
+      pick.choices = formatChoiceCandidates(candidates, selection, context, warnings, this.game);
       return pick;
     }
 
@@ -1689,7 +1689,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     for (const candidate of candidates) {
       assertDeclared(definition.name, this.partitionOf(candidate.value as GameElement), named);
     }
-    pick.validElements = formatElementCandidates(candidates, selection, context, warnings);
+    pick.validElements = formatElementCandidates(candidates, selection, context, warnings, this.game);
     return pick;
   }
 

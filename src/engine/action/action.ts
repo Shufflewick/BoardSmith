@@ -35,6 +35,7 @@ import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
 import { findMatchingChoice, isSerializedElement, oneChoiceListRefusal, oneElementListRefusal, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
 import { numberRuleErrors } from './number-rules.js';
 import { formatRepeatCandidates } from '../element/pick-candidates.js';
+import { placeholderIdsFor } from '../element/seat-placeholders.js';
 import type { ChoiceWithRefs, WarningEntry } from '../../types/protocol.js';
 import { textRuleErrors } from './text-rules.js';
 import { changing } from '../element/state-version.js';
@@ -370,6 +371,43 @@ export interface PerformOptions {
   followUp?: FollowUpAction;
 }
 
+/** The element an id a player sent names, or undefined. */
+type SeatIdReader = (id: number) => GameElement | undefined;
+
+/**
+ * One submitted `chooseFrom` item resolved against its candidates. A candidate
+ * the player cannot see is named only by its placeholder id, never by its name
+ * or its real id, which the player was never sent (#715).
+ */
+function choiceItemResolver(
+  candidates: readonly Candidate[],
+  player: Player,
+  byId: SeatIdReader,
+): (item: unknown) => unknown {
+  const named = nameableBy(candidates, player);
+  const anyHidden = named.length < candidates.length;
+  return (item) => {
+    if (isSerializedElement(item)) return byId((item as { id: number }).id) ?? item;
+    if (anyHidden && typeof item === 'number' && item < 0) return byId(item) ?? item;
+    const match = findMatchingChoice(item, named);
+    return match === undefined ? item : match.value;
+  };
+}
+
+/** The candidates a player may name by shorthand: all but those it cannot see (#715). */
+function nameableBy<C extends { value: unknown }>(candidates: readonly C[], player: Player): C[] {
+  return candidates.filter((c) => !isElement(c.value) || c.value.isVisibleTo(player.seat));
+}
+
+/**
+ * The offered `chooseFrom` choice a resolved value names. A hidden candidate
+ * arrives only as the element its placeholder id resolved to, so it matches
+ * that element and never a name or partial object (#715).
+ */
+function offeredChoice<C extends { value: unknown }>(value: unknown, choices: readonly C[], player: Player): C | undefined {
+  return findMatchingChoice(value, isElement(value) ? choices : nameableBy(choices, player));
+}
+
 export class ActionExecutor {
   private game: Game;
 
@@ -489,19 +527,22 @@ export class ActionExecutor {
     game: Game,
     candidates?: readonly Candidate[],
   ): unknown {
+    const byId = this.seatIdReader(game, player);
     switch (selection.type) {
       case 'element':
         // A repeating chooseElement's picks: one element per pick, in the
         // order they were made (#325). Any other array is left as sent, for
         // validateSelection to refuse.
         if (Array.isArray(value)) {
-          return this.isRepeatingSelection(selection) ? value.map(v => this.resolveElementItem(v, game)) : value;
+          return this.isRepeatingSelection(selection) ? value.map(v => this.resolveElementItem(v, byId)) : value;
         }
-        return this.resolveElementItem(value, game);
+        return this.resolveElementItem(value, byId);
       case 'elements':
-        return Array.isArray(value) ? value.map(v => this.resolveElementItem(v, game)) : this.resolveElementItem(value, game);
+        return Array.isArray(value)
+          ? value.map(v => this.resolveElementItem(v, byId))
+          : this.resolveElementItem(value, byId);
       case 'choice':
-        return this.resolveChoiceValue(selection as ChoiceSelection, value, player, args, game, candidates);
+        return this.resolveChoiceValue(selection as ChoiceSelection, value, player, args, game, candidates, byId);
       default:
         return value;
     }
@@ -515,34 +556,49 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     game: Game,
     known: readonly Candidate[] | undefined,
+    byId: SeatIdReader,
   ): unknown {
-    if (isSerializedElement(value)) return game.getElementById((value as { id: number }).id) ?? value;
+    if (isSerializedElement(value)) return byId((value as { id: number }).id) ?? value;
     if (!player) return value;
     // Only a multiSelect or an orderedList is resolved per item, so a single
     // choice whose VALUE is itself an array is never taken apart.
     if (Array.isArray(value) && selection.multiSelect === undefined && selection.orderedList === undefined) return value;
-    const candidates = known ?? this.candidatesOf(selection, { game, player, args });
-    const resolveItem = (item: unknown): unknown => {
-      if (isSerializedElement(item)) return game.getElementById((item as { id: number }).id) ?? item;
-      const match = findMatchingChoice(item, candidates);
-      return match === undefined ? item : match.value;
-    };
+    const resolveItem = choiceItemResolver(known ?? this.candidatesOf(selection, { game, player, args }), player, byId);
     return Array.isArray(value) ? value.map(resolveItem) : resolveItem(value);
   }
 
   /**
    * An element reference (an id, or an object with a numeric `id`) resolved to
-   * its element. A reference that names nothing is KEPT as its id, not
+   * its element; a placeholder id from the player's own view names the element
+   * it stands for (#715). A reference that names nothing is KEPT as its id, not
    * dropped, so the pick is refused with an actionable error instead of
    * vanishing, and `unavailable` is handed the id the client sent.
    */
-  private resolveElementItem(item: unknown, game: Game): unknown {
-    if (typeof item === 'number') return game.getElementById(item) ?? item;
+  private resolveElementItem(item: unknown, byId: SeatIdReader): unknown {
+    if (typeof item === 'number') return byId(item) ?? item;
     if (this.looksLikeSerializedElement(item)) {
       const id = (item as { id: number }).id;
-      return game.getElementById(id) ?? id;
+      return byId(id) ?? id;
     }
     return item;
+  }
+
+  /**
+   * Reads the element an id a player sent names: a real id, or a placeholder
+   * from that player's own view (#715), whose map is built at most once per
+   * reader. The view is projected from the live game, which a world's
+   * read-only `game` cannot do; the element is read off `game`.
+   */
+  private seatIdReader(game: Game, player: Player | undefined): SeatIdReader {
+    let realIdOf: Map<number, number> | undefined;
+    return (id) => {
+      // A direct hit first: a game restored from a seat's view (a bot's search) holds its placeholders as real elements.
+      const element = game.getElementById(id);
+      if (element || id >= 0 || !player) return element;
+      realIdOf ??= new Map([...placeholderIdsFor(this.game, player.seat)].map(([real, placeholder]) => [placeholder, real]));
+      const realId = realIdOf.get(id);
+      return realId === undefined ? undefined : game.getElementById(realId);
+    };
   }
 
   /**
@@ -1034,7 +1090,7 @@ export class ActionExecutor {
     actionName: string | undefined,
   ): { match: AnnotatedChoice<unknown> } | { refusal: string } {
     const match = selection.type === 'choice'
-      ? findMatchingChoice(value, choices)
+      ? offeredChoice(value, choices, context.player)
       : this.offeredElement(value, choices);
     if (match === undefined) {
       const detail = this.notOfferedDetail(selection, value, choices);
@@ -1860,12 +1916,13 @@ export class ActionExecutor {
   ): Record<string, unknown> {
     const selection = action.selections.find(s => s.name === selectionName);
     const picks = pendingState.repeating?.accumulated ?? [];
+    const byId = this.seatIdReader(this.game, player);
     return {
       ...this.resolveArgs(action, pendingState.collectedArgs, player),
       // A repeating chooseElement's picks are held as ids; its callbacks see
       // the elements, as `execute` does.
       [selectionName]: selection?.type === 'element' || selection?.type === 'elements'
-        ? picks.map(p => this.resolveElementItem(p, this.game))
+        ? picks.map(p => this.resolveElementItem(p, byId))
         : [...picks],
     };
   }
@@ -1999,7 +2056,7 @@ export class ActionExecutor {
     const resolved = this.resolveOne(selection, value, player, context.args, this.game, currentChoices);
     const offered = this.matchOffered(repeatSelection, resolved, currentChoices, context, action.name);
     if ('refusal' in offered) {
-      const nextChoices = formatRepeatCandidates(currentChoices, repeatSelection, context, warnings);
+      const nextChoices = formatRepeatCandidates(currentChoices, repeatSelection, context, warnings, this.game);
       return { done: false, error: offered.refusal, nextChoices, warnings: said() };
     }
     // What the callbacks receive (the element, or the choice value), and the
@@ -2100,7 +2157,7 @@ export class ActionExecutor {
       return { done: true };
     }
 
-    const nextChoices = formatRepeatCandidates(nextAnnotated, repeatSelection, nextContext, warnings);
+    const nextChoices = formatRepeatCandidates(nextAnnotated, repeatSelection, nextContext, warnings, this.game);
     return { done: false, nextChoices, warnings: said() };
   }
 

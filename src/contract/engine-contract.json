@@ -1,7 +1,7 @@
 {
-  "revision": 197,
-  "surfaceHash": "e90bfa121a8d2468",
-  "payloadHash": "7e563b9e75959ec4",
+  "revision": 198,
+  "surfaceHash": "29f429bc7433b8b2",
+  "payloadHash": "dcce6f6928763aa4",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1515,8 +1515,16 @@
     {
       "revision": 197,
       "date": "2026-10-16",
-      "surfaceHash": "e90bfa121a8d2468",
-      "payloadHash": "7e563b9e75959ec4",
+      "surfaceHash": "114ec991a2ff6155",
+      "payloadHash": "dcce6f6928763aa4",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Each seat's view now carries only its own actionTempState values and spectators none (#716); the stored key moved to _actionTemp_<seat>_<action>_<key>, so temp values saved by an older engine are not read back. settings and persistentMap stay public to every seat."
+    },
+    {
+      "revision": 198,
+      "date": "2026-10-16",
+      "surfaceHash": "29f429bc7433b8b2",
+      "payloadHash": "dcce6f6928763aa4",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A partition-scoped world event now reaches only the seats the tree lets see it (owner, or visibility) whose world.view names that partition (#717). Each such seat's view runs once per command, after the handler, against only the partitions the command declared, so residency never decides who hears; a view must name more as more is loaded, never less. New world refusal undecided-audience (game-owned): a seat's view could only say whether it names the scope by reading a partition the command did not declare; the fix is declaring it in the action, or narrowing the scope with an owner or addVisibleTo. A view that throws on declared state alone leaves that seat out (its own view refuses identically). Platform: re-vendor. No host change: RoutedEvent.seats is still the whole audience, and the platform's park ladder reads the new code's owner from the refusal table. No payload or stored format changed."
     }

@@ -85,10 +85,14 @@ describe('renderAsSeat with an action open (#405)', () => {
     const wrapper = await renderAsSeat(game, 1, { component: TargetBoard, startAction: { name: 'peek' } });
     mounted.push(wrapper as unknown as VueWrapper);
 
-    const secondSeatCard = game.game.all(Card).find((card) => card.name === '2-secret-card');
+    // The target carries the placeholder id seat 1's board shows for the hidden card, never its real id (#715).
+    const secondSeatCard = game.game.all(Card).find((card) => card.name === '2-secret-card')!;
+    const placeholders = new Map<number, number>();
+    game.game.toJSONForPlayer(1, placeholders);
     expect(wrapper.findAll('.target').map((target) => target.attributes('data-element-id'))).toEqual([
-      String(secondSeatCard?.id),
+      String(placeholders.get(secondSeatCard.id)),
     ]);
+    expect(placeholders.get(secondSeatCard.id)).toBeLessThan(0);
   });
 });
 
