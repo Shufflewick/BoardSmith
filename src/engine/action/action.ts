@@ -387,7 +387,11 @@ function choiceItemResolver(
   const named = nameableBy(candidates, player);
   const anyHidden = named.length < candidates.length;
   return (item) => {
-    if (isSerializedElement(item)) return byId((item as { id: number }).id) ?? item;
+    if (isSerializedElement(item)) {
+      // A plain data choice may carry `id` and `className` too: one equal to it is that choice, not an element (#774).
+      const data = named.find((c) => !isElement(c.value) && valuesEqual(c.value, item));
+      return data ? data.value : byId((item as { id: number }).id) ?? item;
+    }
     if (anyHidden && typeof item === 'number' && item < 0) return byId(item) ?? item;
     const match = findMatchingChoice(item, named);
     return match === undefined ? item : match.value;
@@ -558,8 +562,7 @@ export class ActionExecutor {
     known: readonly Candidate[] | undefined,
     byId: SeatIdReader,
   ): unknown {
-    if (isSerializedElement(value)) return byId((value as { id: number }).id) ?? value;
-    if (!player) return value;
+    if (!player) return isSerializedElement(value) ? byId((value as { id: number }).id) ?? value : value;
     // Only a multiSelect or an orderedList is resolved per item, so a single
     // choice whose VALUE is itself an array is never taken apart.
     if (Array.isArray(value) && selection.multiSelect === undefined && selection.orderedList === undefined) return value;

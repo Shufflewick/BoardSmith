@@ -24,6 +24,7 @@ import type { ActionDefinition, FollowUpAction, NumberSelection, PendingActionSt
 import { availableActionsForSeat, followUpForSeat } from '../flow/seat-activity.js';
 import { resolveMultiSelect, resolveOrderedList } from './resolve-multiselect.js';
 import { elementsAsIds } from './arg-builder.js';
+import { isElement } from '../element/game-element.js';
 import { numberRangeValues } from '../action/number-labels.js';
 import { MoveListTooLargeError, NotSimulableError } from '../errors.js';
 import { devWarn } from '../../utils/dev.js';
@@ -393,7 +394,7 @@ function listSelectionSteps(
       continue;
     }
     for (const value of step.values) {
-      queue.push([...steps, { selection: step.selection, value: elementsAsIds(value) }]);
+      queue.push([...steps, { selection: step.selection, value: holdElements(value) }]);
     }
   }
   return moves;
@@ -447,7 +448,7 @@ function drawSelectionSteps(
     const step = nextStep(scratch.game, actionDef, at, walk);
     if ('accepted' in step) return step.accepted ? steps : null;
     if (step.values.length === 0) return null;
-    const pick = { selection: step.selection, value: elementsAsIds(step.values[0]) };
+    const pick = { selection: step.selection, value: holdElements(step.values[0]) };
     if (!scratch.apply(at, pick)) return null;
     steps.push(pick);
   }
@@ -502,9 +503,21 @@ function liveArgs(game: Game, steps: EnumerationStep[]): Record<string, unknown>
   return args;
 }
 
+/** The references {@link holdElements} made, so a plain choice of the same `{ id, className }` shape is never taken for an element (#774). */
+const heldElements = new WeakSet<object>();
+
+/** A pick's value with each element held as an `{ id, className }` reference, which survives a tree rebuild. */
+function holdElements(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(holdElements);
+  if (!isElement(value)) return value;
+  const ref = elementsAsIds(value) as object;
+  heldElements.add(ref);
+  return ref;
+}
+
 function liveValue(game: Game, selection: Selection, value: unknown): unknown {
   if (Array.isArray(value)) return value.map((v) => liveValue(game, selection, v));
-  if (typeof value === 'object' && value !== null && 'className' in value && 'id' in value) {
+  if (typeof value === 'object' && value !== null && heldElements.has(value)) {
     return liveElement(game, selection, value as { id: number });
   }
   return value;

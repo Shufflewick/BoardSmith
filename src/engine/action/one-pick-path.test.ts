@@ -72,6 +72,9 @@ function chooseFromCase(log: Log, options: Record<string, unknown>, withEarlierP
     .execute((args) => { log.execute.push(args.pick); });
 }
 
+/** A plain data choice that happens to carry `id` and `className`, as an element reference does (#774). */
+const slotChoice = (id: number) => ({ id, className: 'Slot', label: 'x' });
+
 /** The same pick, made by a selection that repeats and ends after one pick. */
 const once = { repeat: { until: () => true } };
 
@@ -105,6 +108,18 @@ const choiceCases = (repeat: boolean): PickCase[] => [
     build: (game, log) => chooseFromCase(log, { choices: () => game.rocks.all(Stone), ...(repeat && once) }),
     picks: (game) => [['pick', { id: game.stone('slate').id, className: 'Stone' }]],
     means: (game) => game.stone('slate'),
+  },
+  {
+    name: "a plain-object choice shaped like a serialized element, naming a real element's id (#774)",
+    build: (game, log) => chooseFromCase(log, { choices: () => [slotChoice(game.stone('slate').id)], ...(repeat && once) }),
+    picks: (game) => [['pick', slotChoice(game.stone('slate').id)]],
+    means: (game) => slotChoice(game.stone('slate').id),
+  },
+  {
+    name: 'a plain-object choice shaped like a serialized element, naming no element (#774)',
+    build: (_game, log) => chooseFromCase(log, { choices: [slotChoice(999)], ...(repeat && once) }),
+    picks: () => [['pick', slotChoice(999)]],
+    means: () => slotChoice(999),
   },
   {
     name: 'a choice that depends on an earlier pick, submitted by its label',

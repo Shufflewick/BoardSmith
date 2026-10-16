@@ -299,6 +299,48 @@ describe('enumerateLegalMoves: choices with an undefined value', () => {
   });
 });
 
+describe('enumerateLegalMoves: plain-object choices shaped like element references (#774)', () => {
+  /** A game whose one pick offers plain data carrying `id` and `className`, one naming a real element's id, and that element. */
+  function slotGame(repeat: boolean): Game {
+    class SlotGame extends Game<SlotGame, Player> {
+      constructor(options: GameOptions) {
+        super(options);
+        const board = this.create(Space<SlotGame>, 'board');
+        const choices = () => [{ id: board.id, className: 'Slot', label: 'x' }, { id: 999, className: 'Slot', label: 'y' }, board];
+        const claim = Action.create<SlotGame>('claim');
+        this.registerAction(
+          (repeat ? claim.chooseFrom('slot', { choices, repeat: { until: () => true } }) : claim.chooseFrom('slot', { choices }))
+            .execute(() => ({ success: true })),
+        );
+        this.setFlow({ root: loop({ maxIterations: 10, do: eachPlayer({ do: actionStep({ actions: ['claim'] }) }) }) });
+      }
+    }
+    const game = new SlotGame({ playerCount: 2, seed: 'slots' });
+    game.startFlow();
+    return game;
+  }
+
+  it.each([['a single pick', false], ['a repeating pick', true]] as const)(
+    'lists each plain choice of %s as the object it is and the element as the live element, and every move is accepted',
+    (_name, repeat) => {
+    const game = slotGame(repeat);
+    const board = game.first(Space)!;
+    const pick = (value: unknown) => (repeat ? [value] : value);
+
+    const moves = enumerateLegalMoves(game, 1);
+
+    expect(moves.map((move) => move.args.slot)).toEqual([
+      pick({ id: board.id, className: 'Slot', label: 'x' }),
+      pick({ id: 999, className: 'Slot', label: 'y' }),
+      pick(board),
+    ]);
+    expect([moves[2].args.slot].flat()[0]).toBe(board);
+    for (const move of moves) {
+      expect(game.performAction('claim', game.getPlayer(1)!, move.args).error).toBeUndefined();
+    }
+  });
+});
+
 // ============================================================================
 // #249 — an ordered, repeatable list is enumerated one ENTRY at a time
 // ============================================================================
