@@ -138,8 +138,8 @@ function encodeFlowValue(value: unknown): unknown {
  *   bot's search sandbox). A fungible hidden-zone child is anonymized to a
  *   synthetic id there, so a marker holding its ORIGINAL id resolves through the
  *   remap to the (still-redacted) placeholder. Failing that, a marker that
- *   recorded a zone-`'hidden'` container (WR-01) resolves to that container,
- *   which every viewer already sees.
+ *   recorded its outermost concealing ancestor (WR-01, #726) resolves to that
+ *   ancestor, which every viewer already sees.
  * @param name - The flow slot holding the marker, for the error.
  * @throws When nothing resolves: the element is gone from the game, and handing
  *   the rules a marker object where they expect an element would fail later
