@@ -1,6 +1,6 @@
 {
   "revision": 197,
-  "surfaceHash": "282679c98c58bf6b",
+  "surfaceHash": "114ec991a2ff6155",
   "payloadHash": "dcce6f6928763aa4",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1515,7 +1515,7 @@
     {
       "revision": 197,
       "date": "2026-10-16",
-      "surfaceHash": "282679c98c58bf6b",
+      "surfaceHash": "114ec991a2ff6155",
       "payloadHash": "dcce6f6928763aa4",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "Each seat's view now carries only its own actionTempState values and spectators none (#716); the stored key moved to _actionTemp_<seat>_<action>_<key>, so temp values saved by an older engine are not read back. settings and persistentMap stay public to every seat."
