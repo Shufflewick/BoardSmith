@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
@@ -9,17 +9,48 @@ import {
   recordPlatformIds,
   staleIdsHint,
   abortInFlightPublish,
+  publishCommand,
 } from './publish.js';
-import { getPlatformUrl, type TaxonomyAudience } from '../lib/publish-api.js';
+import { getPlatformUrl, type TaxonomyAudience, completePublish, uploadBundle } from '../lib/publish-api.js';
+import type * as PublishApi from '../lib/publish-api.js';
+import type * as Validate from './validate.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { publishGate, recordPublished } from '../lib/publish-gate.js';
-import { VERIFY_CHECK_NAMES, buildVerifyResult, writeVerifyResult, type VerifyCheckResult } from '../lib/verify-result.js';
+import { VERIFY_CHECK_NAMES, buildVerifyResult, verifyResultPath, writeVerifyResult, type VerifyCheckResult } from '../lib/verify-result.js';
 import { commitAll, git, initRepo, writeFiles } from '../lib/verify-result.test-helper.js';
 
 // A spawn can exceed vitest's 5s default under full-suite parallelism; see
 // spawn-cli.test-helper.ts. This is a hang guard, not a performance budget.
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+
+// publishCommand's tests answer for the platform; every other test here gets the real calls.
+vi.mock('../lib/publish-api.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof PublishApi>();
+  return {
+    ...actual,
+    checkVersionAvailable: vi.fn(actual.checkVersionAvailable),
+    fetchTaxonomy: vi.fn(actual.fetchTaxonomy),
+    initiatePublish: vi.fn(actual.initiatePublish),
+    uploadBundle: vi.fn(actual.uploadBundle),
+    completePublish: vi.fn(actual.completePublish),
+    abortPublish: vi.fn(actual.abortPublish),
+  };
+});
+vi.mock('./validate.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof Validate>();
+  return { ...actual, validateCommand: vi.fn(actual.validateCommand), validateBundleSize: vi.fn(actual.validateBundleSize) };
+});
+vi.mock('./build.js', () => ({
+  buildCommand: vi.fn(async () => {
+    mkdirSync(join(process.cwd(), 'dist', 'rules'), { recursive: true });
+    writeFileSync(join(process.cwd(), 'dist', 'manifest.json'), JSON.stringify({ backend: 'table', audience: 'casual', playerCount: { min: 2, max: 2 } }));
+    writeFileSync(join(process.cwd(), 'dist', 'rules', 'rules.js'), 'export {};\n');
+    mkdirSync(join(process.cwd(), 'dist', 'ui'), { recursive: true });
+    writeFileSync(join(process.cwd(), 'dist', 'ui', 'index.html'), '<!doctype html>\n');
+  }),
+}));
+vi.mock('../lib/config.js', async (importOriginal) => ({ ...(await importOriginal<object>()), getApiKey: () => 'spk_test' }));
 
 const AUDIENCES: TaxonomyAudience[] = [
   { value: 'strategy', label: 'Strategy', helperText: 'For dedicated gamers', litmus: 'l1' },
@@ -248,18 +279,19 @@ describe('publish requires a full, passing boardsmith verify for the commit on a
   it('refuses a commit with no result, naming the verify to run from the first commit', async () => {
     const { dir, first, head } = await game();
     const problem = await problemOf(dir);
-    expect(problem).toContain(`No passing \`boardsmith verify\` result for commit ${head.slice(0, 12)}`);
+    expect(problem).toContain(`No \`boardsmith verify\` result for the current commit (${head.slice(0, 12)})`);
     expect(problem).toContain(`boardsmith verify --base ${first}`);
+    expect(problem).not.toMatch(/Commit your work/);
   });
 
   it('refuses uncommitted and untracked changes, saying to commit first', async () => {
     const { dir, first, head } = await game();
     await verified(dir, head, first);
     writeFileSync(join(dir, 'src/rules.ts'), 'export const x = 3;\n');
-    expect(await problemOf(dir)).toMatch(/uncommitted or untracked changes.*Commit your work first/s);
+    expect(await problemOf(dir)).toMatch(/uncommitted changes.*Commit your work/s);
     git(dir, 'checkout', '--', 'src/rules.ts');
     writeFileSync(join(dir, 'src/new.ts'), '');
-    expect(await problemOf(dir)).toMatch(/uncommitted or untracked changes.*Commit your work first/s);
+    expect(await problemOf(dir)).toMatch(/uncommitted changes.*Commit your work/s);
   });
 
   it('refuses a focused result', async () => {
@@ -342,12 +374,36 @@ describe('publish requires a full, passing boardsmith verify for the commit on a
     expect(await problemOf(dir)).toContain(`boardsmith verify --base ${first}`);
   });
 
+  it('publishing a commit older than the published one names a base that measures a change (no loop)', async () => {
+    const { dir, first, head: a } = await game();
+    writeFileSync(join(dir, 'src/rules.ts'), 'export const x = 6;\n');
+    const b = commitAll(dir, 'b');
+    writeFileSync(join(dir, 'src/rules.ts'), 'export const x = 7;\n');
+    const c = commitAll(dir, 'c');
+
+    // B was published measured from A's parent: A is past that base, so A is measured from it too.
+    await recordPublished(dir, { commit: b, base: first });
+    git(dir, 'checkout', '-q', a);
+    expect(await problemOf(dir)).toContain(`boardsmith verify --base ${first}`);
+    await verified(dir, a, first);
+    expect(await publishGate(dir)).toEqual({ commit: a, base: first });
+
+    // C was published measured from B, which A is not past: A is measured from the first commit.
+    rmSync(verifyResultPath(dir, a));
+    git(dir, 'checkout', '-q', c);
+    await recordPublished(dir, { commit: c, base: b });
+    git(dir, 'checkout', '-q', a);
+    expect(await problemOf(dir)).toContain(`boardsmith verify --base ${first}`);
+  });
+
   it('refuses when the published commit is not in this repository, saying what to do', async () => {
     const { dir, first } = await game();
     await recordPublished(dir, { commit: 'f'.repeat(40), base: first });
     expect(await problemOf(dir)).toMatch(/published\.json does not name a commit in this repository.*Delete it/s);
-    writeFileSync(join(dir, '.boardsmith', 'published.json'), 'not json');
-    expect(await problemOf(dir)).toMatch(/published\.json does not name a commit in this repository/);
+    for (const record of ['not json', 'null', JSON.stringify({ commit: first })]) {
+      writeFileSync(join(dir, '.boardsmith', 'published.json'), record);
+      expect(await problemOf(dir)).toMatch(/published\.json does not name a commit in this repository/);
+    }
   });
 
   it('refuses a repository whose only commit is the one being published: there is nothing to measure', async () => {
@@ -355,7 +411,7 @@ describe('publish requires a full, passing boardsmith verify for the commit on a
     await writeFiles(dir, { '.gitignore': '.boardsmith/\n', 'src/rules.ts': 'export const x = 1;\n' });
     initRepo(dir);
     commitAll(dir, 'only');
-    expect(await problemOf(dir)).toMatch(/only commit/);
+    expect(await problemOf(dir)).toMatch(/is this repository's first commit/);
   });
 
   it('the real CLI refuses before any API key lookup', async () => {
@@ -364,5 +420,73 @@ describe('publish requires a full, passing boardsmith verify for the commit on a
     expect(result.code).toBe(1);
     expect(result.stderr).toContain(`boardsmith verify --base ${first}`);
     expect(result.stdout + result.stderr).not.toMatch(/API key/);
+  });
+});
+
+describe('publishCommand records the published commit only once the publish completes (#984)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function verifiedGame(): Promise<{ dir: string; first: string; head: string }> {
+    const dir = join(tempTree('bs984-cmd-'), 'game');
+    await writeFiles(dir, {
+      '.gitignore': '.boardsmith/\ndist/\n',
+      'boardsmith.json': JSON.stringify({ name: 'x' }),
+      'package.json': JSON.stringify({ name: 'x', version: '1.0.0' }),
+      'index.html': '<!doctype html>\n',
+      'src/rules.ts': 'export const x = 1;\n',
+    });
+    initRepo(dir);
+    const first = commitAll(dir, 'first');
+    writeFileSync(join(dir, 'src/rules.ts'), 'export const x = 2;\n');
+    const head = commitAll(dir, 'work');
+    await writeVerifyResult(dir, buildVerifyResult({
+      commit: head,
+      cleanTree: true,
+      base: { ref: first, commit: first },
+      checks: VERIFY_CHECK_NAMES.map((name) => ({ name, passed: true, summary: `${name} passed` })),
+    }));
+    return { dir, first, head };
+  }
+
+  async function publishFrom(dir: string): Promise<void> {
+    const api = await import('../lib/publish-api.js');
+    const validate = await import('./validate.js');
+    vi.spyOn(process, 'cwd').mockReturnValue(dir);
+    const errors: string[] = [];
+    vi.spyOn(process, 'exit').mockImplementation((code) => { throw new Error(`process.exit(${code}): ${errors.join(' ')}`); });
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation((...args) => { errors.push(args.join(' ')); });
+    vi.mocked(validate.validateCommand).mockResolvedValueOnce();
+    vi.mocked(validate.validateBundleSize).mockResolvedValueOnce({ name: 'size', passed: true, message: 'ok' });
+    vi.mocked(api.checkVersionAvailable).mockResolvedValueOnce();
+    vi.mocked(api.fetchTaxonomy).mockResolvedValueOnce({ audiences: AUDIENCES });
+    vi.mocked(api.initiatePublish).mockResolvedValueOnce({ versionId: 'v', gameId: 'g', publisherId: 'p', uploadUrl: 'u', uploadCode: 'c' });
+    vi.mocked(api.abortPublish).mockResolvedValueOnce();
+    await publishCommand({ prod: true, publisher: 'pub' });
+  }
+
+  const record = (dir: string) => join(dir, '.boardsmith', 'published.json');
+
+  it('a completed publish writes the commit and the base its result measured', async () => {
+    const { dir, first, head } = await verifiedGame();
+    vi.mocked(uploadBundle).mockResolvedValueOnce();
+    vi.mocked(completePublish).mockResolvedValueOnce({ gameUrl: 'https://example.test/x' });
+    await publishFrom(dir);
+    expect(JSON.parse(readFileSync(record(dir), 'utf-8'))).toEqual({ commit: head, base: first });
+  });
+
+  it.each([
+    ['upload', () => vi.mocked(uploadBundle).mockRejectedValueOnce(new Error('upload broke'))],
+    ['finalize', () => {
+      vi.mocked(uploadBundle).mockResolvedValueOnce();
+      vi.mocked(completePublish).mockRejectedValueOnce(new Error('finalize broke'));
+    }],
+  ])('a failed %s leaves no record', async (_stage, fail) => {
+    const { dir } = await verifiedGame();
+    fail();
+    await expect(publishFrom(dir)).rejects.toThrow('process.exit(1)');
+    expect(existsSync(record(dir))).toBe(false);
   });
 });

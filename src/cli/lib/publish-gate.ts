@@ -29,48 +29,70 @@ export async function recordPublished(projectDir: string, published: Published):
   await fs.writeFile(publishedPath(projectDir), `${JSON.stringify(published, null, 2)}\n`);
 }
 
-/** The commit a publish of `head` must be measured from, and what that commit is, or why there is none. */
-async function requiredBase(projectDir: string, head: string): Promise<{ commit: string; what: string } | { problem: string }> {
-  let text: string | undefined;
+type Base = { commit: string; what: string };
+
+const UNUSABLE = {
+  problem:
+    '.boardsmith/published.json does not name a commit in this repository, so there is no base to measure this ' +
+    "publish from. Delete it to measure from the repository's first commit, then run `boardsmith publish` again.",
+};
+
+/** The last publish recorded on this machine, undefined when there is none, or 'unusable' when it is malformed. */
+async function readPublished(projectDir: string): Promise<Published | 'unusable' | undefined> {
+  let text: string;
   try {
     text = await fs.readFile(publishedPath(projectDir), 'utf-8');
   } catch {
-    // No publish recorded on this machine.
+    return undefined;
   }
-  if (text === undefined) {
-    const first = (await git(projectDir, ['rev-list', '--max-parents=0', 'HEAD'])).trim().split('\n').pop()!;
-    if (first === head) {
-      return {
-        problem:
-          `The commit being published (${short(head)}) is this repository's only commit, so \`boardsmith verify\` has no ` +
-          'change to measure from the first commit. Commit your game on top of it, then run `boardsmith verify --base ' +
-          `${first}\`.`,
-      };
-    }
-    return { commit: first, what: "the repository's first commit" };
-  }
-  const unusable = {
-    problem:
-      '.boardsmith/published.json does not name a commit in this repository, so there is no base to measure this ' +
-      "publish from. Delete it to measure from the repository's first commit, then run `boardsmith publish` again.",
-  };
-  let published: Published;
   try {
-    published = JSON.parse(text) as Published;
+    const published = JSON.parse(text) as Partial<Published> | null;
+    if (typeof published?.commit === 'string' && typeof published.base === 'string') return { commit: published.commit, base: published.base };
   } catch {
-    return unusable;
+    // Not JSON: as unusable as a record missing a field.
   }
+  return 'unusable';
+}
+
+/**
+ * Where the last publish leaves `head`'s unverified change starting: the published commit, or where
+ * `head`'s history left it. When `head` is itself behind the published commit, that point is `head`
+ * and measures nothing, so it is the base the published commit was measured from, which every earlier
+ * publish covered up to, when `head` is past it; otherwise null.
+ */
+async function sinceLastPublish(projectDir: string, head: string, published: Published): Promise<Base | null | 'unusable'> {
   if (published.commit === head) return { commit: published.base, what: 'the base this commit was published with' };
+  let fork: string;
   try {
-    const commit = (await git(projectDir, ['merge-base', `${published.commit}^{commit}`, 'HEAD'])).trim();
-    return { commit, what: 'the last published commit' };
+    fork = (await git(projectDir, ['merge-base', `${published.commit}^{commit}`, 'HEAD'])).trim();
   } catch {
-    return unusable;
+    return 'unusable';
   }
+  if (fork !== head) return { commit: fork, what: 'the last published commit' };
+  if (published.base !== head && await gitSucceeds(projectDir, ['merge-base', '--is-ancestor', published.base, head])) {
+    return { commit: published.base, what: 'the base the last published commit was measured from' };
+  }
+  return null;
+}
+
+/** The commit a publish of `head` must be measured from, and what that commit is, or why there is none. */
+async function requiredBase(projectDir: string, head: string): Promise<Base | { problem: string }> {
+  const published = await readPublished(projectDir);
+  if (published === 'unusable') return UNUSABLE;
+  const since = published === undefined ? null : await sinceLastPublish(projectDir, head, published);
+  if (since === 'unusable') return UNUSABLE;
+  if (since !== null) return since;
+  const first = (await git(projectDir, ['rev-list', '--max-parents=0', 'HEAD'])).trim().split('\n').pop()!;
+  if (first !== head) return { commit: first, what: "the repository's first commit" };
+  return {
+    problem:
+      `The commit being published (${short(head)}) is this repository's first commit, so \`boardsmith verify\` has no ` +
+      'earlier commit to measure its change from. Commit your game on top of it, then run `boardsmith publish` again.',
+  };
 }
 
 /** Why `result`, which `verifiedProblem` accepts, does not cover a publish measured from `base`. */
-async function coverageProblem(projectDir: string, result: VerifyResult, base: { commit: string; what: string }): Promise<string | undefined> {
+async function coverageProblem(projectDir: string, result: VerifyResult, base: Base): Promise<string | undefined> {
   const of = `The \`boardsmith verify\` result for ${short(result.commit)}`;
   const skipped = result.checks.filter((check) => check.skipped);
   if (skipped.length > 0) {
@@ -84,24 +106,17 @@ async function coverageProblem(projectDir: string, result: VerifyResult, base: {
   );
 }
 
-/** The verify result that vouches for publishing `head`, or why there is none. */
-async function publishableResult(
-  projectDir: string,
-  state: { commit: string; clean: boolean },
-  base: { commit: string; what: string },
-): Promise<VerifyResult | string> {
-  const of = `The \`boardsmith verify\` result for ${short(state.commit)}`;
-  if (!state.clean) {
-    return (
-      'The working tree has uncommitted or untracked changes, so it is not the commit that would be published. ' +
-      'Commit your work first. (`git status` lists the changes.)'
-    );
+/** The verify result that vouches for publishing HEAD, or why there is none. */
+async function publishableResult(projectDir: string, head: string, base: Base): Promise<VerifyResult | string> {
+  const result = await readVerifyResult(projectDir, head);
+  // Before verifiedProblem, which accepts a focused result and refuses one for focused reasons.
+  if (typeof result === 'object' && result.scope !== undefined) {
+    return `The \`boardsmith verify\` result for ${short(head)} is a focused one: it ran only the authored tests and typecheck.`;
   }
-  const result = await readVerifyResult(projectDir, state.commit);
-  if (result === undefined) return `No passing \`boardsmith verify\` result for commit ${short(state.commit)}. Commit your work first.`;
-  if (result === 'unreadable') return `${of} could not be read.`;
-  if (result.scope !== undefined) return `${of} is a focused one: it ran only the authored tests and typecheck.`;
-  return (await verifiedProblem(projectDir)) ?? (await coverageProblem(projectDir, result, base)) ?? result;
+  const problem = await verifiedProblem(projectDir);
+  if (problem !== undefined) return problem;
+  // verifiedProblem refuses a missing or unreadable result, so this one is readable.
+  return (await coverageProblem(projectDir, result as VerifyResult, base)) ?? (result as VerifyResult);
 }
 
 /**
@@ -113,7 +128,7 @@ export async function publishGate(projectDir: string): Promise<{ problem: string
   if ('problem' in state) return state;
   const base = await requiredBase(projectDir, state.commit);
   if ('problem' in base) return base;
-  const result = await publishableResult(projectDir, state, base);
+  const result = await publishableResult(projectDir, state.commit, base);
   if (typeof result !== 'string') return { commit: state.commit, base: result.base.commit };
   return {
     problem:
