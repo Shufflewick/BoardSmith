@@ -85,7 +85,9 @@ split is documented here rather than left implicit):
 This is a review, so it waits for verify like every other (`routing.md` "No Review Before
 Verify"): commit, run `npx boardsmith verify --chunk <slug>` for this final-acceptance chunk, then
 `npx boardsmith review-gate <slug>`. A refusal means nothing is dispatched; fix what verify names
-first. Open, its brief fills `{verifyResult}` below, and the round is recorded as a
+first. When this chunk has added or changed no test file, its `## Spec Manifest` carries the one
+`| exempt | <reason> | n/a |` row (`build/spec.md` "Exemptions"), so its fast checks pass on
+typecheck alone; without that row they fail. Open, its brief fills `{verifyResult}` below, and the round is recorded as a
 `### Review Round N` entry (`Step: final-acceptance`, `Reviewed: Dispatch M` for the chunk's latest
 finished dispatch that changed its code) in the chunk's run log.
 

@@ -49,6 +49,7 @@ import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { type MutantCache, openMutantCache } from '../lib/mutant-cache.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { projectUiProblem, requireGameProject } from '../lib/game-project.js';
+import { chunkMdPath } from '../lib/project-paths.js';
 import { gameTestRunProblem } from '../lib/test-run-scope.js';
 import { discardRecord, runVitestRecorded, testRunVerdict } from '../lib/vitest-run.js';
 import {
@@ -66,7 +67,7 @@ import {
   verifiedProblem,
   writeVerifyResult,
 } from '../lib/verify-result.js';
-import { isChunkCode, isTestFile } from './test-step-check.js';
+import { isChunkCode, isTestFile, parseSpecManifest } from './test-step-check.js';
 import { runSmoke } from './smoke.js';
 import { runDiffMutationCheck } from './test-step-mutation.js';
 import { buildProject } from './build.js';
@@ -302,18 +303,36 @@ function chunkTestFiles(ctx: VerifyContext): string[] {
   return ctx.changed.files.filter((path) => isTestFile(path) && existsSync(join(ctx.projectDir, path)));
 }
 
+/**
+ * A chunk that added or changed no test file: it passes on typecheck alone only when its Spec
+ * Manifest marks it exempt (`build/spec.md` "Exemptions"); any other chunk must add or change a test.
+ */
+async function noChunkTests(projectDir: string, chunk: string, base: string): Promise<VerifyCheckOutcome> {
+  const text = await fs.readFile(chunkMdPath(projectDir, chunk), 'utf-8').catch(() => undefined);
+  const exemption = text === undefined ? undefined : parseSpecManifest(text).exemption;
+  if (exemption !== undefined) {
+    return {
+      passed: true,
+      summary:
+        `No test ran: chunk "${chunk}" added or changed no test file, and its Spec Manifest marks it exempt ` +
+        `("${exemption}"), so typecheck alone is its fast check.`,
+    };
+  }
+  return {
+    passed: false,
+    summary: `Chunk "${chunk}" added or changed no test file since its base (${short(base)}), so no test of its own ran.`,
+    next:
+      `Write the chunk's tests (its test step), or mark a chunk with no new game behavior exempt in its Spec Manifest ` +
+      `(build/spec.md "Exemptions"), commit, then run \`boardsmith verify --chunk ${chunk}\` again.`,
+  };
+}
+
 /** 1. The full suite, run the way `boardsmith test` runs it; with `--chunk`, the chunk's own test files. */
 async function testCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   const cannot = await suiteCannotRun(ctx.projectDir);
   if (cannot) return cannot;
   const files = ctx.chunk === undefined ? [] : chunkTestFiles(ctx);
-  if (ctx.chunk !== undefined && files.length === 0) {
-    return {
-      passed: false,
-      summary: `Chunk "${ctx.chunk}" added or changed no test file since its base (${short(ctx.base.commit)}), so no test of its own ran.`,
-      next: `Write the chunk's tests (its test step), commit, then run \`boardsmith verify --chunk ${ctx.chunk}\` again.`,
-    };
-  }
+  if (ctx.chunk !== undefined && files.length === 0) return noChunkTests(ctx.projectDir, ctx.chunk, ctx.base.commit);
   const suite = ctx.chunk === undefined ? 'the full suite' : "the chunk's tests";
   // Real absolute paths, as vitest names test files, so its filename filter matches only these.
   const root = await fs.realpath(ctx.projectDir);

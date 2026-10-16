@@ -311,10 +311,18 @@ describe('boardsmith verify --chunk <slug>: the chunk\'s fast checks', () => {
     await expect(signoff(dir)).rejects.toThrow(/test: 1 test failed in the chunk's tests/);
   });
 
+  /** Commits a `combat` chunk that changes code and its CHUNK.md, with `manifestRow` its one Spec Manifest row, and no test. */
+  async function chunkWithoutTests(dir: string, manifestRow: string): Promise<void> {
+    await write(dir, {
+      'src/rules.ts': `${await fs.readFile(join(dir, 'src', 'rules.ts'), 'utf-8')}export const tax = 1;\n`,
+      'design/chunks/combat/CHUNK.md': `# combat\n\n## Spec Manifest\n\n| Test File | Claims Covered | RED Observed |\n|---|---|---|\n${manifestRow}\n`,
+    });
+    commitAll(dir, 'chunk-combat/build');
+  }
+
   it('fails a chunk that added or changed no test file, rather than passing with nothing run', async () => {
     const dir = await gameOnBranch(false);
-    await write(dir, { 'src/rules.ts': `${await fs.readFile(join(dir, 'src', 'rules.ts'), 'utf-8')}export const tax = 1;\n` });
-    commitAll(dir, 'chunk-combat/build');
+    await chunkWithoutTests(dir, '| tests/combat.test.ts | 1 | yes |');
 
     const { result } = await runVerify({ projectDir: dir, chunk: 'combat', log: () => {} });
 
@@ -322,6 +330,19 @@ describe('boardsmith verify --chunk <slug>: the chunk\'s fast checks', () => {
     const test = check(result, 'test');
     expect(test.summary).toMatch(/^Chunk "combat" added or changed no test file since its base/);
     expect(test.next).toMatch(/boardsmith verify --chunk combat/);
+  });
+
+  it('passes an exempt chunk with no test of its own on typecheck alone, saying no test ran and why', async () => {
+    const dir = await gameOnBranch(false);
+    await chunkWithoutTests(dir, '| exempt | a restyle, no rules change | n/a |');
+
+    const { result } = await runVerify({ projectDir: dir, chunk: 'combat', log: () => {} });
+
+    expect(result.passed).toBe(true);
+    expect(result.checks.map((c) => [c.name, c.passed])).toEqual([['test', true], ['typecheck', true]]);
+    expect(check(result, 'test').summary).toBe(
+      'No test ran: chunk "combat" added or changed no test file, and its Spec Manifest marks it exempt ("a restyle, no rules change"), so typecheck alone is its fast check.',
+    );
   });
 
   it('a full result satisfies no chunk gate, and the chunk\'s fast checks satisfy only its own', async () => {

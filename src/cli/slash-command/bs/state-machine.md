@@ -141,7 +141,9 @@ only be proposed as `light` if it introduces **no new game behavior** — no new
 no change to how an existing rule resolves. Asset swaps, restyles, and copy changes qualify; a
 chunk with a rules claim to pin does not, and runs the full ceremony so its claims get tests before
 code. If a `light` chunk turns out mid-build to need new behavior, that is a re-proposal (full
-ceremony), not something `build` absorbs.
+ceremony), not something `build` absorbs. A light chunk that writes no test names that in its
+`## Spec Manifest` as the one `| exempt | <reason> | n/a |` row (`build/spec.md` "Exemptions"),
+written by `build`: that row is what lets its fast checks (`Git Protocol`) pass on typecheck alone.
 
 Light-path status transitions: the light path has no `ask` step, so `approved` is unreachable
 for light chunks. A light chunk moves `proposed → built` directly when the user accepts the
@@ -369,7 +371,8 @@ shorthand that names no id it can map: a dash then a plain number after a provis
 
   That is the chunk's fast checks, and the only verify chunk work runs: the test files the chunk
   added or changed since its verify base, picked by the command itself, and typecheck. A chunk
-  that added or changed no test file fails it. The full checks (the whole suite, build, validate,
+  that added or changed no test file fails it, unless its Spec Manifest marks it exempt
+  (`build/spec.md` "Exemptions"): an exempt chunk passes on typecheck alone. The full checks (the whole suite, build, validate,
   the smoke test and the mutation check) run once, before the game is published
   (`boardsmith publish` refuses without a full `boardsmith verify` for the commit), not per chunk.
 

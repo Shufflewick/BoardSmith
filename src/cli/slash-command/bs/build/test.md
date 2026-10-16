@@ -352,7 +352,9 @@ here.
    (`state-machine.md` "Git Protocol" says what it measures from). It runs the chunk's fast
    checks: the test files the chunk added or changed since it began, and typecheck, without
    stopping at the first failure, and writes the result for this commit to
-   `.boardsmith/verify/<commit>.json`. A chunk that added or changed no test file fails it. The
+   `.boardsmith/verify/<commit>.json`. A chunk that added or changed no test file fails it,
+   unless its Spec Manifest marks it exempt (`build/spec.md` "Exemptions"), which passes on
+   typecheck alone. The
    full suite, build, validate, the smoke test and a mutation check run once, at publish, as
    `boardsmith verify`; the full suite is the regression check that a chunk did not break an
    earlier chunk's tests, and `boardsmith chunk-merge` runs it on the combined tree too. The smoke

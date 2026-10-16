@@ -2225,6 +2225,16 @@ describe('#452: the done gate is `boardsmith verify`', () => {
     expect(playtest).toMatch(/chunk-signoff.{0,300}boardsmith verify/);
   });
 
+  // #985 ruling: a chunk with no test of its own passes its fast checks only when its Spec Manifest marks it exempt.
+  it('says an exempt chunk passes its fast checks on typecheck alone, and any other chunk must add or change a test', () => {
+    const protocol = flatRead('state-machine.md').split('## Git Protocol')[1].split(' ## ')[0];
+    expect(protocol).toMatch(/no test file fails it, unless its Spec Manifest marks it exempt.{0,80}passes on typecheck alone/);
+    expect(flatRead('state-machine.md')).toMatch(/light chunk that writes no test.{0,120}`\| exempt \| <reason> \| n\/a \|` row/);
+    expect(flatRead('build/test.md')).toMatch(/no test file fails it, unless its Spec Manifest marks it exempt/);
+    expect(flatRead('build/spec.md')).toMatch(/exempt chunk that adds or changes no test file passes its fast checks on typecheck alone/);
+    expect(flatRead('build/final-acceptance.md')).toMatch(/no test file, its `## Spec Manifest` carries the one `\| exempt/);
+  });
+
   // #985: chunk work has one verify, the fast checks; the opt-in authored-test selection is gone.
   it('no chunk step names the removed focused selection path', () => {
     for (const file of ['state-machine.md', 'routing.md', 'build-chunk.md', 'build-game.md', 'build/test.md', 'build/repair.md',
