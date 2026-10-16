@@ -158,7 +158,7 @@ export function buildSingleActionMetadata(
   const pickMetas: PickMetadata[] = [];
 
   for (const selection of actionDef.selections) {
-    const pickMeta = buildPickMetadata(game, player, selection, knownArgs);
+    const pickMeta = buildPickMetadata(game, player, actionName, selection, knownArgs);
     pickMetas.push(pickMeta);
   }
 

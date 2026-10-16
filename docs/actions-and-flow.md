@@ -964,10 +964,11 @@ happened and what to do next. An empty return is refused as an authoring error.
 #### `.condition()` is about availability, not arguments
 
 `.condition()` decides whether the action appears. It is evaluated **twice**:
-once at availability time with `ctx.args` as an **empty object**, and again at
-submit time with the real args. A predicate that reads `ctx.args` must therefore
-handle the empty record, or the action becomes permanently available or
-permanently hidden:
+once at availability time and again at submit time, and both times `ctx.args`
+holds **no picks** (a submitted move's picks are checked one at a time after
+the condition, #772). A predicate that reads a pick from `ctx.args` must
+therefore handle it being absent, or the action becomes permanently available
+or permanently hidden:
 
 ```typescript
 // TRAP: at availability time args is {}, so this is always false —

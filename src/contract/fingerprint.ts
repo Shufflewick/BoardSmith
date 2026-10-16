@@ -1989,6 +1989,8 @@ export async function computePayloadHash(): Promise<string> {
   const secretPile = game.create(Space, 'secret-pile');
   secretPile.contentsHidden();
   secretPile.create(FixtureCard, 'secret-0', { suit: 'D', rank: 'A' });
+  // A card's own grant gets through its hidden zone to that seat alone (#758).
+  secretPile.create(FixtureCard, 'secret-1', { suit: 'D', rank: '2' }).addVisibleTo(1);
 
   // Owner-visible hands: the asymmetry between "my hand" and "their hand" is
   // the hidden-information guarantee the platform relies on most.
