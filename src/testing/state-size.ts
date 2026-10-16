@@ -1,9 +1,9 @@
 /**
  * State-size measurement for CI.
  *
- * A game's saved state is not its board. It is the board PLUS one full copy of
- * the element tree per retained checkpoint. A hosted table retains them back
- * to the start of the current turn, so:
+ * A game's saved state is not its board. It is one full copy of the element
+ * tree per retained checkpoint, the newest of which is the board itself (#804).
+ * A hosted table retains them back to the start of the current turn, so:
  *
  *     saved size  ~=  tree size  x  (undoable actions in the longest turn + 1)  +  history  +  log
  *
@@ -250,7 +250,7 @@ export function assertStateBudget(measurement: SnapshotSizeMeasurement, budgetBy
   const bytes = (n: number) => `${n.toLocaleString('en-US')} bytes`;
   throw new Error(
     `The saved game state is ${bytes(measurement.totalBytes)}, over the host's budget of ${bytes(budgetBytes)}.\n` +
-      `  game tree:      ${bytes(measurement.treeBytes)}\n` +
+      `  game tree:      ${bytes(measurement.treeBytes)}${measurement.checkpointCount > 0 ? ' (the newest checkpoint, counted below)' : ''}\n` +
       `  checkpoints:    ${measurement.checkpointCount} checkpoints, ${bytes(measurement.checkpointBytes)}\n` +
       `  action history: ${bytes(measurement.actionHistoryBytes)}\n` +
       `  message log:    ${bytes(measurement.messageLogBytes)}\n` +

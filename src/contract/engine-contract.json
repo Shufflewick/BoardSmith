@@ -1662,7 +1662,7 @@
       "surfaceHash": "9b2bcf3f0de788c5",
       "payloadHash": "5bb7ce7332b154d4",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "A table snapshot now stores the element tree once: when it carries checkpoints the tree is the newest checkpoint and snapshot.state is absent, so every platform reader of snapshot.state must read the tree with snapshotTree(snapshot) from boardsmith/session, and this engine refuses with a readable error any snapshot written by an earlier engine (both state and actionCheckpoints), so in-progress sessions must keep running on the engine revision that wrote them."
+      "summary": "A table snapshot from this engine stores the element tree once: when it carries checkpoints the tree is the newest checkpoint and snapshot.state is absent, otherwise it is snapshot.state and there is no window; tables below r215 still carry both state and the window, so a platform reader that spans revisions must tell the two shapes apart (state when present, otherwise the newest entry of actionCheckpoints) or call snapshotTree (boardsmith/session) only inside an r215+ runner, and this engine refuses with a readable error any snapshot an earlier engine wrote, so in-progress tables must keep running on the revision that wrote them."
     }
   ]
 }

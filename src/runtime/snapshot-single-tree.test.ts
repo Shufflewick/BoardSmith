@@ -55,6 +55,16 @@ describe('a snapshot carries the element tree once (#804)', () => {
     expect(bytes(snapshot) - treeBytes).toBeLessThan(treeBytes);
   });
 
+  it('does not compile a snapshot with both places or neither', () => {
+    const disabled = playedRunner({ enabled: false }).getSnapshot();
+    const { state: _state, ...withoutTree } = disabled;
+    // @ts-expect-error a snapshot may not carry the tree in both places
+    const both: GameStateSnapshot = { ...disabled, actionCheckpoints: { baseIndex: 0, entries: [] } };
+    // @ts-expect-error a snapshot must carry the tree in one place
+    const neither: GameStateSnapshot = withoutTree;
+    expect([both, neither]).toHaveLength(2);
+  });
+
   it('serializes the tree once per snapshot', () => {
     const runner = playedRunner();
     const toJSON = vi.spyOn(runner.game, 'toJSON');

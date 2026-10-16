@@ -58,9 +58,11 @@ time, not from a fresh re-seed.
 `actionHistory` is also present on the snapshot (`SerializedAction[]`), but
 it exists only to support undo (the undo op reads `runner.actionHistory`) —
 it is NOT needed to reach the target state. A seed file therefore does not
-need to encode a real play history; the `state`/`flowState`/`sequence`/
+need to encode a real play history; the tree plus the `flowState`/`sequence`/
 `randomState`/`gameOptions` fields alone are sufficient to reconstruct the
-exact target state.
+exact target state. A seed recorded from a runner that keeps checkpoints has
+no `state`: its tree is the newest entry of `actionCheckpoints`, so read it
+with `snapshotTree(snapshot)`.
 
 ## Load path
 
