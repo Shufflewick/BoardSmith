@@ -1216,8 +1216,11 @@ next one's to read. On ShufflewickPub it is also deleted when the holder's
 account is erased.
 
 A host drives all of this with one function, `applyNoticeWrites(result.notices,
-readBox)`, which applies a dispatch's sends and takes in order and answers each
-touched seat's box, so every host agrees about what a full box does. The
+readBox, { seatCount, budgets })`, which applies a dispatch's sends and takes in
+order and answers each touched seat's box, so every host agrees about what a
+full box does. The result comes from game code, so it first re-checks `perSeat`,
+the number of sends, each notice's size and every seat against the host's own
+budgets and seat count, and refuses a result they do not admit. The
 `WorldStore` interface carries `noticeBox(seat)` and a checkpoint's `notices`;
 `boardsmith dev` keeps boxes in its local store, and `TestWorld.noticeBox(seat)`
 shows a test what is waiting.
@@ -1504,6 +1507,13 @@ round asks for nothing is never asked again, so the steady state costs one round
 
 It sees the same read-only projection an action's declaration does, and an
 assignment through it is refused with `declaration-write`.
+
+**A view that throws fails for that seat only, and its text reaches the player
+only as a `PlayerFacingError`** (or a world refusal). Any other throw is a bug:
+the seat is told the view could not be shown because of an error in the game's
+rules, and the error goes to the log -- once per call, with a count of the seats
+it failed for, so one broken view in front of a large audience is one log line.
+In a dev or test run the raw text is added in brackets, as it is for actions.
 
 What the seat receives is `{ state, phase }`, where `state` is the
 engine's own per-player projection, with its fog of war already applied, **pruned
@@ -2057,7 +2067,8 @@ queue, rather than failing a check on the way in.
 - **`key`** makes it an **upsert**: it replaces the pending event with the same
   owner and key, so the count under one key never grows. This is the shape you
   should usually be writing, and it is why the cap refusal's first suggestion is
-  to use one. A key may be at most **512 UTF-8 bytes**
+  to use one. A key may not be empty (`schedule-key-empty`), since a cancel
+  must name a key. A key may be at most **512 UTF-8 bytes**
   (`WORLD_SCHEDULE_KEY_MAX_BYTES`), and a cancel's key the same. A host stores
   each event under a storage key built from it: percent-encoding makes each
   byte at most three, so 512 bytes is at most 1536 encoded, which leaves 512 of
@@ -2753,6 +2764,7 @@ thing next time.
 | `invalid-schedule-delay` | A negative or non-finite `delayMs`. |
 | `invalid-schedule-interval` | A non-positive or non-finite `everyMs`, which is a wake that re-arms instantly forever. |
 | `invalid-schedule-command` | A schedule request that names no action, or carries an argument that is not a JSON scalar. |
+| `schedule-key-empty` | A schedule armed under an empty key, which no cancel could ever take back. |
 | `schedule-key-too-long` | A schedule or cancel key past 512 UTF-8 bytes, which no host can store as part of a storage key. |
 | `schedule-key-malformed` | A schedule or cancel key that is not well-formed Unicode (it holds a lone UTF-16 surrogate), which no host can percent-encode into a storage key. |
 | `schedule-unknown-action` | A schedule naming an action this world does not register. The refusal lists the clock actions it can schedule. |
@@ -2768,7 +2780,7 @@ thing next time.
 | `element-id-key-mismatch` | A stored partition does not hang from this world's root under the key the world was built with, so its bytes were minted under another key: the host passed a different world's key, minted a new one on a wake, or is serving bytes from before keyed ids (#482). Raised before anything is adopted. Pass the key stored with the world. Platform-owned and deterministic. |
 | `allocation-stale` | A host handed back a stamp standing below an id its own stored bytes hold, so the next id minted would collide with one already written. Raised at the adoption that proves it. A host defect with no repair: the world stops (#540). |
 | `child-timeout` | The bundle did not answer a host's call inside its deadline. |
-| `invalid-notice` | `ctx.world.notify` was handed a notice a box cannot hold: a seat outside the world, no `whenFull`, a payload JSON cannot carry, one past `noticeMaxBytes` -- or the world declares no `world.notices`. See [notices](#notices-a-lasting-line-for-one-seat-without-loading-it). |
+| `invalid-notice` | `ctx.world.notify` was handed a notice a box cannot hold: a seat outside the world, no `whenFull`, a payload that is not plain JSON (a function, `Map`, `Set`, class instance, cycle or non-finite number would be stored as something else, so it is refused), a `line` that is not a string or `{ text, type? }` with string fields, one past `noticeMaxBytes` -- or the world declares no `world.notices`. See [notices](#notices-a-lasting-line-for-one-seat-without-loading-it). |
 | `notice-batch-cap` | One dispatch sent more notices than `maxNoticesPerCommand`. |
 | `notice-box-full` | A notice sent with `whenFull: "refuse"` met a box already holding `perSeat` notices. The command is rolled back. |
 | `undeclared-notice-box` | `notices`, `takeNotices`, or a `"refuse"` notice named a seat whose box no `.noticeBox()` round declared. |

@@ -326,7 +326,8 @@ function isLabelledChoice(choice: unknown): choice is LabelledChoice<unknown> {
  * identities for one, entries for the other. Two copies of the sentence is how
  * the player would end up reading two different ones for the same mistake.
  */
-function choiceCountErrors(
+function countErrors(
+  noun: 'choice' | 'element',
   name: string,
   count: number,
   min: number,
@@ -334,10 +335,10 @@ function choiceCountErrors(
 ): string[] {
   const errors: string[] = [];
   if (count < min) {
-    errors.push(`Selection "${name}" requires at least ${min} choice${min === 1 ? '' : 's'}, got ${count}`);
+    errors.push(`Selection "${name}" requires at least ${min} ${noun}${min === 1 ? '' : 's'}, got ${count}`);
   }
   if (max !== undefined && count > max) {
-    errors.push(`Selection "${name}" requires at most ${max} choice${max === 1 ? '' : 's'}, got ${count}`);
+    errors.push(`Selection "${name}" requires at most ${max} ${noun}${max === 1 ? '' : 's'}, got ${count}`);
   }
   return errors;
 }
@@ -948,7 +949,7 @@ export class ActionExecutor {
               `Selection "${selection.name}" is an ordered list and expected an array, got a single ${typeof value}. Send an array.`
             );
           } else {
-            errors.push(...choiceCountErrors(selection.name, value.length, orderedList.min, orderedList.max));
+            errors.push(...countErrors('choice', selection.name, value.length, orderedList.min, orderedList.max));
           }
         }
 
@@ -966,7 +967,7 @@ export class ActionExecutor {
             if (this.hasDuplicateChoiceItems(value, choices)) {
               errors.push(`Selection "${selection.name}" contains duplicate choices`);
             }
-            errors.push(...choiceCountErrors(selection.name, value.length, multiSelectConfig.min, multiSelectConfig.max));
+            errors.push(...countErrors('choice', selection.name, value.length, multiSelectConfig.min, multiSelectConfig.max));
           }
         }
       }
@@ -1012,14 +1013,7 @@ export class ActionExecutor {
           if (this.hasDuplicateElementItems(value)) {
             errors.push(`Selection "${selection.name}" contains duplicate elements`);
           }
-          const { min, max } = multiSelectConfig;
-          const count = value.length;
-          if (count < min) {
-            errors.push(`Selection "${selection.name}" requires at least ${min} element${min === 1 ? '' : 's'}, got ${count}`);
-          }
-          if (max !== undefined && count > max) {
-            errors.push(`Selection "${selection.name}" requires at most ${max} element${max === 1 ? '' : 's'}, got ${count}`);
-          }
+          errors.push(...countErrors('element', selection.name, value.length, multiSelectConfig.min, multiSelectConfig.max));
         }
       }
     }
@@ -1895,19 +1889,9 @@ export class ActionExecutor {
    * Check if a selection is configured for repeating.
    */
   isRepeatingSelection(selection: Selection): boolean {
-    if (selection.type === 'choice') {
-      const cs = selection as ChoiceSelection;
-      return cs.repeat !== undefined || cs.repeatUntil !== undefined;
-    }
-    if (selection.type === 'element') {
-      const es = selection as ElementSelection;
-      return es.repeat !== undefined || es.repeatUntil !== undefined;
-    }
-    if (selection.type === 'elements') {
-      const es = selection as ElementsSelection;
-      return es.repeat !== undefined || es.repeatUntil !== undefined;
-    }
-    return false;
+    if (selection.type === 'text' || selection.type === 'number') return false;
+    const rs = selection as ChoiceSelection | ElementSelection | ElementsSelection;
+    return rs.repeat !== undefined || rs.repeatUntil !== undefined;
   }
 
   /**
@@ -2021,31 +2005,17 @@ export class ActionExecutor {
       return { done: true, error: `Selection at index ${pendingState.currentSelectionIndex} not found` };
     }
 
-    // Get repeat config based on selection type
-    let repeatConfig: RepeatConfig<unknown> | undefined;
-    let repeatUntil: unknown;
-    const isElementSelection = selection.type === 'element' || selection.type === 'elements';
-
-    if (selection.type === 'choice') {
-      const choiceSel = selection as ChoiceSelection;
-      repeatConfig = choiceSel.repeat;
-      repeatUntil = choiceSel.repeatUntil;
-    } else if (selection.type === 'element') {
-      const elemSel = selection as ElementSelection;
-      repeatConfig = elemSel.repeat as RepeatConfig<unknown>;
-      repeatUntil = elemSel.repeatUntil;
-    } else if (selection.type === 'elements') {
-      const elemsSel = selection as ElementsSelection;
-      repeatConfig = elemsSel.repeat as RepeatConfig<unknown>;
-      repeatUntil = elemsSel.repeatUntil;
-    } else {
+    if (selection.type === 'text' || selection.type === 'number') {
       return { done: true, error: `Selection ${selection.name} type ${selection.type} does not support repeat` };
     }
+    const isElementSelection = selection.type === 'element' || selection.type === 'elements';
+    const repeatSelection = selection as ChoiceSelection | ElementSelection | ElementsSelection;
+    const repeatConfig = repeatSelection.repeat as RepeatConfig<unknown> | undefined;
+    const repeatUntil: unknown = repeatSelection.repeatUntil;
 
     if (!repeatConfig && repeatUntil === undefined) {
       return { done: true, error: `Selection ${selection.name} is not repeating` };
     }
-    const repeatSelection = selection as ChoiceSelection | ElementSelection | ElementsSelection;
     const warnings: WarningEntry[] = [];
     const said = () => (warnings.length > 0 ? warnings : undefined);
 
