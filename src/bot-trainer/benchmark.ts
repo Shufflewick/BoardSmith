@@ -88,7 +88,7 @@ export interface BenchmarkResult {
 
 /**
  * Benchmark the game's own bot, with `weights` in place of its objectives'
- * weights, against a near-random baseline.
+ * weights, against a baseline that plays uniformly random legal moves.
  *
  * Plays games where the trained bot faces the baseline in both positions
  * to eliminate first-player advantage bias. The trained bot is `bot`, the
@@ -130,10 +130,11 @@ export async function benchmarkBot<G extends Game>(
     ...(gameCount % 2 !== 0 ? [{ trainedPlayerIndex: 0, seed: `${seed}-extra` }] : []),
   ];
 
-  const tally = {
+  const tally: Tally = {
     win: 0, loss: 0, draw: 0, incomplete: 0,
     winsAsPlayer0: 0, gamesAsPlayer0: 0,
     winsAsPlayer1: 0, gamesAsPlayer1: 0,
+    decidedAsPlayer0: 0, decidedAsPlayer1: 0,
   };
   const failures = new Set<string>();
 
@@ -148,25 +149,13 @@ export async function benchmarkBot<G extends Game>(
       reproducible,
     });
 
-    if (trainedPlayerIndex === 0) tally.gamesAsPlayer0++;
-    else tally.gamesAsPlayer1++;
-
-    tally[outcome]++;
-    if (outcome === 'win') {
-      if (trainedPlayerIndex === 0) tally.winsAsPlayer0++;
-      else tally.winsAsPlayer1++;
-    }
+    recordOutcome(tally, trainedPlayerIndex, outcome);
     if (reason) failures.add(reason);
   }
 
   const gamesPlayed = tally.win + tally.loss + tally.draw;
   const gamesAttempted = schedule.length;
   const incompleteRate = gamesAttempted > 0 ? tally.incomplete / gamesAttempted : 0;
-
-  // A seat that never finished a game has no rate; reporting one over a
-  // denominator that excludes its failures would read as a real result.
-  const decidedAsPlayer0 = tally.gamesAsPlayer0;
-  const decidedAsPlayer1 = tally.gamesAsPlayer1;
 
   const result: BenchmarkResult = {
     winRate: gamesPlayed > 0 ? tally.win / gamesPlayed : 0,
@@ -180,8 +169,9 @@ export async function benchmarkBot<G extends Game>(
     gamesAttempted,
     gamesAsPlayer0: tally.gamesAsPlayer0,
     gamesAsPlayer1: tally.gamesAsPlayer1,
-    winRateAsPlayer0: decidedAsPlayer0 > 0 ? tally.winsAsPlayer0 / decidedAsPlayer0 : 0,
-    winRateAsPlayer1: decidedAsPlayer1 > 0 ? tally.winsAsPlayer1 / decidedAsPlayer1 : 0,
+    // Over finished games only, like winRate; a seat that finished none reports 0.
+    winRateAsPlayer0: tally.decidedAsPlayer0 > 0 ? tally.winsAsPlayer0 / tally.decidedAsPlayer0 : 0,
+    winRateAsPlayer1: tally.decidedAsPlayer1 > 0 ? tally.winsAsPlayer1 / tally.decidedAsPlayer1 : 0,
   };
 
   // Fail the run rather than hand back a rate the caller will treat as skill.
@@ -195,6 +185,21 @@ export async function benchmarkBot<G extends Game>(
   }
 
   return result;
+}
+
+type Tally = Record<GameOutcome, number> & {
+  winsAsPlayer0: number; gamesAsPlayer0: number;
+  winsAsPlayer1: number; gamesAsPlayer1: number;
+  decidedAsPlayer0: number; decidedAsPlayer1: number;
+};
+
+/** Count one game's outcome for the seat the trained bot played. */
+function recordOutcome(tally: Tally, trainedPlayerIndex: number, outcome: GameOutcome): void {
+  const seat = trainedPlayerIndex === 0 ? 0 : 1;
+  tally[`gamesAsPlayer${seat}`]++;
+  tally[outcome]++;
+  if (outcome !== 'incomplete') tally[`decidedAsPlayer${seat}`]++;
+  if (outcome === 'win') tally[`winsAsPlayer${seat}`]++;
 }
 
 /** Each game's clock bound: none for a reproducible benchmark, which refuses one. */
@@ -346,9 +351,9 @@ async function runBenchmarkGame<G extends Game>(
 
 /**
  * The bot that makes move `actionCount` for `seat`. The trained bot searches;
- * the opponent is the same bot at one iteration, which is essentially random
- * but always produces valid args. In a reproducible benchmark each move's search
- * gets its own seed, derived from the game's.
+ * the baseline is a bot that runs no iterations, so it picks uniformly at random
+ * from the legal moves it enumerates (#734). In a reproducible benchmark each
+ * move gets its own seed, derived from the game's.
  */
 function moveBot<G extends Game>(
   runner: GameRunner<G>,
@@ -365,7 +370,7 @@ function moveBot<G extends Game>(
     gameType,
     seat,
     runner.actionHistory,
-    isTrainedSeat ? mctsIterations : 1,
+    isTrainedSeat ? mctsIterations : 0,
     isTrainedSeat ? trainedBot : undefined,
     reproducible ? { seed: `${seed}-move-${actionCount}` } : undefined,
   );
