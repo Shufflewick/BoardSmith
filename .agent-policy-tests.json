@@ -1,16 +1,21 @@
 {
-  "ticket": "Shufflewick/BoardSmith#982",
+  "ticket": "Shufflewick/BoardSmith#801",
   "base": "2a6bd1aad31b71b869ca9b8656ffcc172376607f",
   "tests": [
     {
-      "file": "src/world/host/resident-world.test.ts",
+      "file": "src/runtime/failed-execute-atomicity.test.ts",
       "names": [
-        "#793: ResidentWorld closes the store even when the final checkpoint throws",
-        "#793: ResidentWorld says a refusing event refused once per catch-up, not once per round",
-        "#793: ResidentWorld plans a clock-issued command's schedules from the instant its handler was told",
-        "#793: ResidentWorld a view that throws does not hand the game's raw error text to the player",
-        "#793: ResidentWorld a view that throws logs once for the whole audience, with how many seats failed, not once per seat",
-        "#793: ResidentWorld a view that throws passes a PlayerFacingError the game wrote through verbatim"
+        "an execute() that throws half-way through reports failure",
+        "an execute() that throws half-way through leaves the element tree exactly as it was",
+        "an execute() that throws half-way through leaves the message log as it was — no half-written narration",
+        "an execute() that throws half-way through records nothing in actionHistory, matching the state it restored",
+        "an execute() that throws half-way through leaves the seat able to act, so the game does not wedge",
+        "an execute() that throws half-way through surfaces the failure in a snapshot that matches the restored state",
+        "an execute() that animates and then throws (#751) leaves no animation event in either seat's view or the saved snapshot",
+        "an execute() that throws after its picks were taken one at a time (#801) the runner's selection path leaves the game as it was",
+        "an execute() that throws after its picks were taken one at a time (#801) the session's pending-action path leaves the game as it was",
+        "an action that refuses without mutating still reports failure and still changes nothing",
+        "an action that refuses without mutating lets the seat go on to act normally"
       ]
     }
   ]

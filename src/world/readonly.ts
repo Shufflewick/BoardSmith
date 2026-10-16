@@ -474,8 +474,10 @@ function cloakedDescriptor(
   cloak: object,
   property: string | symbol,
 ): PropertyDescriptor | undefined {
-  const held = Reflect.getOwnPropertyDescriptor(subject, property);
-  if (held === undefined) return undefined;
+  const subjectHeld = Reflect.getOwnPropertyDescriptor(subject, property);
+  if (subjectHeld === undefined) return undefined;
+  // A descriptor's value is a way to the live object too, so it is projected like a read (#800).
+  const held = "value" in subjectHeld ? { ...subjectHeld, value: readOnlyProjection(subjectHeld.value) } : subjectHeld;
   const onCloak = Reflect.getOwnPropertyDescriptor(cloak, property);
   if (onCloak !== undefined && !onCloak.configurable) {
     return { ...held, writable: onCloak.writable, configurable: false };
