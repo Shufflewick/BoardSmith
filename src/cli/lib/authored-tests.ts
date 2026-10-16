@@ -48,8 +48,8 @@ async function readSelection(projectDir: string, selectionPath: string): Promise
     if (!object(entry) || !plainPath(entry.file) || !Array.isArray(entry.names) || entry.names.length === 0) {
       return fail('each test entry must declare a file inside the project and non-empty full test names.');
     }
-    const unknown = Object.keys(entry).find((key) => !['file', 'names'].includes(key));
-    if (unknown !== undefined) return fail(`unknown key "${unknown}" in ${entry.file}. Use only file and names.`);
+    const unknownKey = Object.keys(entry).find((key) => !['file', 'names'].includes(key));
+    if (unknownKey !== undefined) return fail(`unknown key "${unknownKey}" in ${entry.file}. Use only file and names.`);
     if (files.has(entry.file)) return fail(`${entry.file} is listed more than once.`);
     files.add(entry.file);
     const names = entry.names.map((name: unknown) => {
