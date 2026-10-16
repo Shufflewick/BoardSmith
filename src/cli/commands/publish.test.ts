@@ -13,6 +13,9 @@ import {
 import { getPlatformUrl, type TaxonomyAudience } from '../lib/publish-api.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { publishGate, recordPublished } from '../lib/publish-gate.js';
+import { VERIFY_CHECK_NAMES, buildVerifyResult, writeVerifyResult, type VerifyCheckResult } from '../lib/verify-result.js';
+import { commitAll, git, initRepo, writeFiles } from '../lib/verify-result.test-helper.js';
 
 // A spawn can exceed vitest's 5s default under full-suite parallelism; see
 // spawn-cli.test-helper.ts. This is a hang guard, not a performance budget.
@@ -201,5 +204,165 @@ describe('abortInFlightPublish (#745: a refused abort is reported, not silent)',
     await abortInFlightPublish('https://platform.example', 'key', 'version-id');
 
     expect(errorLog).not.toHaveBeenCalled();
+  });
+});
+
+describe('publish requires a full, passing boardsmith verify for the commit on a clean tree (#984)', () => {
+  /** A game with two commits: the repository's first, and work on top of it. */
+  async function game(): Promise<{ dir: string; first: string; head: string }> {
+    const dir = join(tempTree('bs984-'), 'game');
+    await writeFiles(dir, {
+      '.gitignore': '.boardsmith/\n',
+      'boardsmith.json': JSON.stringify({ name: 'x' }),
+      'package.json': JSON.stringify({ name: 'x', version: '1.0.0' }),
+      'index.html': '<!doctype html>\n',
+      'src/rules.ts': 'export const x = 1;\n',
+    });
+    initRepo(dir);
+    const first = commitAll(dir, 'first');
+    writeFileSync(join(dir, 'src/rules.ts'), 'export const x = 2;\n');
+    return { dir, first, head: commitAll(dir, 'work') };
+  }
+
+  const passed = (name: VerifyCheckResult['name']): VerifyCheckResult => ({ name, passed: true, summary: `${name} passed` });
+
+  async function verified(
+    dir: string,
+    commit: string,
+    base: string,
+    overrides: { cleanTree?: boolean; checks?: VerifyCheckResult[] } = {},
+  ): Promise<void> {
+    await writeVerifyResult(dir, buildVerifyResult({
+      commit,
+      cleanTree: overrides.cleanTree ?? true,
+      base: { ref: base, commit: base },
+      checks: overrides.checks ?? VERIFY_CHECK_NAMES.map(passed),
+    }));
+  }
+
+  const problemOf = async (dir: string) => {
+    const gate = await publishGate(dir);
+    return 'problem' in gate ? gate.problem : undefined;
+  };
+
+  it('refuses a commit with no result, naming the verify to run from the first commit', async () => {
+    const { dir, first, head } = await game();
+    const problem = await problemOf(dir);
+    expect(problem).toContain(`No passing \`boardsmith verify\` result for commit ${head.slice(0, 12)}`);
+    expect(problem).toContain(`boardsmith verify --base ${first}`);
+  });
+
+  it('refuses uncommitted and untracked changes, saying to commit first', async () => {
+    const { dir, first, head } = await game();
+    await verified(dir, head, first);
+    writeFileSync(join(dir, 'src/rules.ts'), 'export const x = 3;\n');
+    expect(await problemOf(dir)).toMatch(/uncommitted or untracked changes.*Commit your work first/s);
+    git(dir, 'checkout', '--', 'src/rules.ts');
+    writeFileSync(join(dir, 'src/new.ts'), '');
+    expect(await problemOf(dir)).toMatch(/uncommitted or untracked changes.*Commit your work first/s);
+  });
+
+  it('refuses a focused result', async () => {
+    const { dir, first, head } = await game();
+    await writeVerifyResult(dir, buildVerifyResult({
+      commit: head,
+      cleanTree: true,
+      base: { ref: first, commit: first },
+      checks: [passed('test'), passed('typecheck')],
+      scope: { kind: 'focused', selection: { ticket: '1', base: first, tests: [{ file: 'a.test.ts', names: ['a'] }], path: 's.json', hash: 'a'.repeat(64) } },
+    }));
+    const problem = await problemOf(dir);
+    expect(problem).toMatch(/focused/);
+    expect(problem).toContain(`boardsmith verify --base ${first}`);
+  });
+
+  it('refuses a failed result, and a result made on a dirty tree', async () => {
+    const { dir, first, head } = await game();
+    await verified(dir, head, first, {
+      checks: VERIFY_CHECK_NAMES.map((name): VerifyCheckResult => (name === 'mutation' ? { name, passed: false, summary: 'a mutant survived' } : passed(name))),
+    });
+    let problem = await problemOf(dir);
+    expect(problem).toMatch(/did not pass/);
+    expect(problem).toContain(`boardsmith verify --base ${first}`);
+
+    await verified(dir, head, first, { cleanTree: false });
+    problem = await problemOf(dir);
+    expect(problem).toMatch(/uncommitted changes/);
+    expect(problem).toContain(`boardsmith verify --base ${first}`);
+  });
+
+  it('refuses a result with a skipped check', async () => {
+    const { dir, first, head } = await game();
+    await verified(dir, head, first, {
+      checks: VERIFY_CHECK_NAMES.map((name) =>
+        name === 'smoke' ? { name, passed: true, skipped: true, summary: 'no UI yet' } : passed(name)),
+    });
+    const problem = await problemOf(dir);
+    expect(problem).toMatch(/skipped its smoke check/);
+    expect(problem).toContain(`boardsmith verify --base ${first}`);
+  });
+
+  it('refuses a result whose base measured nothing, or started after the required base', async () => {
+    const { dir, first, head } = await game();
+    await verified(dir, head, head);
+    let problem = await problemOf(dir);
+    expect(problem).toMatch(/measured no change/);
+    expect(problem).toContain(`boardsmith verify --base ${first}`);
+
+    writeFileSync(join(dir, 'src/rules.ts'), 'export const x = 4;\n');
+    const later = commitAll(dir, 'more');
+    await verified(dir, later, head);
+    problem = await problemOf(dir);
+    expect(problem).toMatch(/does not cover everything since the repository's first commit/);
+    expect(problem).toContain(`boardsmith verify --base ${first}`);
+  });
+
+  it('accepts a passing full result measured from the first commit, on a clean tree', async () => {
+    const { dir, first, head } = await game();
+    await verified(dir, head, first);
+    expect(await publishGate(dir)).toEqual({ commit: head, base: first });
+  });
+
+  it('after a publish, measures the next one from the published commit', async () => {
+    const { dir, first, head } = await game();
+    await recordPublished(dir, { commit: head, base: first });
+    writeFileSync(join(dir, 'src/rules.ts'), 'export const x = 5;\n');
+    const next = commitAll(dir, 'next');
+    expect(await problemOf(dir)).toContain(`boardsmith verify --base ${head}`);
+    await verified(dir, next, head);
+    expect(await publishGate(dir)).toEqual({ commit: next, base: head });
+  });
+
+  it('republishing the published commit requires the coverage it was published with, not --base HEAD', async () => {
+    const { dir, first, head } = await game();
+    await verified(dir, head, first);
+    await recordPublished(dir, { commit: head, base: first });
+    expect(await publishGate(dir)).toEqual({ commit: head, base: first });
+    await verified(dir, head, head);
+    expect(await problemOf(dir)).toContain(`boardsmith verify --base ${first}`);
+  });
+
+  it('refuses when the published commit is not in this repository, saying what to do', async () => {
+    const { dir, first } = await game();
+    await recordPublished(dir, { commit: 'f'.repeat(40), base: first });
+    expect(await problemOf(dir)).toMatch(/published\.json does not name a commit in this repository.*Delete it/s);
+    writeFileSync(join(dir, '.boardsmith', 'published.json'), 'not json');
+    expect(await problemOf(dir)).toMatch(/published\.json does not name a commit in this repository/);
+  });
+
+  it('refuses a repository whose only commit is the one being published: there is nothing to measure', async () => {
+    const dir = join(tempTree('bs984-'), 'game');
+    await writeFiles(dir, { '.gitignore': '.boardsmith/\n', 'src/rules.ts': 'export const x = 1;\n' });
+    initRepo(dir);
+    commitAll(dir, 'only');
+    expect(await problemOf(dir)).toMatch(/only commit/);
+  });
+
+  it('the real CLI refuses before any API key lookup', async () => {
+    const { dir, first } = await game();
+    const result = await spawnCli(['publish', '--prod'], dir);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain(`boardsmith verify --base ${first}`);
+    expect(result.stdout + result.stderr).not.toMatch(/API key/);
   });
 });

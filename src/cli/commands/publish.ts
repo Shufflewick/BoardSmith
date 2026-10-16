@@ -25,6 +25,7 @@ import {
   type GameProjectConfig,
   type PlatformIds,
 } from '../lib/game-project.js';
+import { publishGate, recordPublished } from '../lib/publish-gate.js';
 
 /**
  * END A FAILED PUBLISH.
@@ -141,6 +142,11 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   const { configPath, config, pkg } = requireGameProjectManifests(cwd);
   const saved = savedPlatformIds(config, target);
   requireTableUi(cwd, config);
+  const verified = await publishGate(cwd);
+  if ('problem' in verified) {
+    console.error(chalk.red(verified.problem));
+    process.exit(1);
+  }
 
   // -- Resolve API key (per target: dev and prod are separate deployments
   // with separate key stores) --
@@ -349,6 +355,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     await abortInFlightPublish(platformUrl, apiKey, initResult.versionId);
     reportPublishFailure(err);
   }
+  await recordPublished(cwd, verified);
 }
 
 /**
