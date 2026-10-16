@@ -26,9 +26,16 @@ const filch = worldAction<PouchWorld>('filch').chooseElement('card', {
   card.putInto(card.game.first(Commons)!);
 });
 
+const grab = worldAction<PouchWorld>('grab').chooseFrom('card', {
+  needs: () => ['commons'],
+  choices: ({ game }) => game.first(Pouch)!.all(Card),
+}).execute(({ card }) => {
+  (card as Card).putInto((card as Card).game.first(Commons)!);
+});
+
 const world: WorldDefinition = {
   maxPlayers: 2,
-  actions: [filch],
+  actions: [filch, grab],
   view: () => ['commons'],
   genesis: (game: Game) => {
     const commons = game.create(Commons, 'commons');
@@ -67,6 +74,21 @@ describe("a world's pick candidates the seat cannot see (#715)", () => {
     const after = await test.getPlayerView(1);
     const commons = find(after.state as ElementJSON, 'commons')!;
     expect(commons.children!.map((c) => c.name)).toContain('KH');
+    await test.close();
+  });
+
+  it('offers a chooseFrom element the same way, and takes it by its placeholder', async () => {
+    const test = await started();
+
+    const pick = await test.resolvePick(1, 'grab', 'card', {});
+    expect(JSON.parse(JSON.stringify(pick.choices))).toEqual([
+      { value: { id: -1, className: 'Card' }, display: 'Card #1' },
+      { value: { id: -2, className: 'Card' }, display: 'Card #2' },
+    ]);
+
+    await test.take(1, 'grab', { card: { id: -2, className: 'Card' } });
+    const after = await test.getPlayerView(1);
+    expect(find(after.state as ElementJSON, 'commons')!.children!.map((c) => c.name)).toContain('KH');
     await test.close();
   });
 });

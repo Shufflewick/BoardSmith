@@ -312,8 +312,10 @@ export function deadEndPickMessage(options: {
   pick: string;
   /** The answers bound so far, which are what narrowed this question. */
   args: Readonly<Record<string, unknown>>;
+  /** The seat being told. An element it cannot see is described without its name (#715); with no seat, every element is. */
+  seat?: number;
 }): string {
-  const narrowedBy = describeBoundArgs(options.args);
+  const narrowedBy = describeBoundArgs(options.args, options.seat);
   // The tail is the player's next move, and it differs: an answer they gave is
   // something they can give differently, and when they have given none there is
   // nothing in this action to change.
@@ -327,22 +329,23 @@ export function deadEndPickMessage(options: {
 /** The bound answers as a player would recognize them, or `undefined` when none
  *  of them has a form worth showing (an answer nobody can read is worse than
  *  saying only that the question was narrowed). */
-function describeBoundArgs(args: Readonly<Record<string, unknown>>): string | undefined {
+function describeBoundArgs(args: Readonly<Record<string, unknown>>, seat: number | undefined): string | undefined {
   const parts: string[] = [];
   for (const [name, value] of Object.entries(args)) {
-    const described = describeBoundValue(value);
+    const described = describeBoundValue(value, seat);
     if (described !== undefined) parts.push(`${name} = ${described}`);
   }
   if (parts.length === 0) return Object.keys(args).length > 0 ? 'your earlier answers' : undefined;
   return parts.join(' and ');
 }
 
-function describeBoundValue(value: unknown): string | undefined {
+function describeBoundValue(value: unknown, seat: number | undefined): string | undefined {
+  if (isElement(value) && (seat === undefined || !value.isVisibleTo(seat))) return `a hidden ${value.constructor.name}`;
   if (isElement(value)) return `"${value.name ?? `${value.constructor.name} #${value.id}`}"`;
   if (typeof value === 'string') return `"${value}"`;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   if (Array.isArray(value)) {
-    const described = value.map(describeBoundValue).filter((one): one is string => one !== undefined);
+    const described = value.map((one) => describeBoundValue(one, seat)).filter((one): one is string => one !== undefined);
     return described.length > 0 ? described.join(', ') : undefined;
   }
   return undefined;

@@ -152,6 +152,7 @@ function deadEnd(
       action: action.prompt ?? action.name,
       pick: prompt ?? selection.name,
       args: ctx.args,
+      seat: ctx.player.seat,
     }),
     errorCode: ErrorCode.PICK_HAS_NO_CANDIDATES,
   };
@@ -261,7 +262,8 @@ export class PickHandler<G extends Game = Game> {
     }
 
     const executor = this.#runner.game.getActionExecutor();
-    const asked = this.#choiceContext(action, player, currentArgs);
+    const held = pendingState?.actionName === actionName ? deserializePendingState(pendingState).collectedArgs : {};
+    const asked = this.#choiceContext(action, player, currentArgs, held);
     if ('refusal' in asked) return asked.refusal;
     const { ctx } = asked;
 
@@ -291,19 +293,22 @@ export class PickHandler<G extends Game = Game> {
   }
 
   /**
-   * What a pick's choices see: the client's picks so far, with the seat's held
-   * follow-up's args bound over them, resolved. The client sends picks only, so
-   * any other key is refused (#662).
+   * What a pick's choices see: the client's picks so far, with the picks the
+   * pending action already holds and the seat's held follow-up's args bound
+   * over them, resolved. A held pick wins because the client names it by a
+   * placeholder id, which a move since may have given to another card (#715).
+   * The client sends picks only, so any other key is refused (#662).
    */
   #choiceContext(
     action: ActionDefinition,
     player: Player,
     currentArgs: Record<string, unknown>,
+    heldPicks: Record<string, unknown>,
   ): { ctx: ActionContext } | { refusal: PickChoicesResponse } {
     const executor = this.#runner.game.getActionExecutor();
     const refusal = executor.undeclaredArgsRefusal(action, currentArgs);
     if (refusal) return { refusal: { success: false, error: refusal, errorCode: ErrorCode.INVALID_PICK } };
-    const bound = { ...currentArgs, ...this.#runner.followUpArgsFor(action.name, player.seat) };
+    const bound = { ...currentArgs, ...heldPicks, ...this.#runner.followUpArgsFor(action.name, player.seat) };
     return { ctx: { game: this.#runner.game, player, args: executor.resolveArgs(action, bound, player) } };
   }
 }

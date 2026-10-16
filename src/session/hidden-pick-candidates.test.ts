@@ -42,9 +42,40 @@ class BlindGame extends Game<BlindGame, Player> {
       Action.create<BlindGame>('draw')
         .chooseFrom<'card', Card>('card', { choices: theirs })
         .execute(({ card }) => take(card)),
+      Action.create<BlindGame>('stealFirst')
+        .chooseElement<'card', Card>('card', { elements: (ctx) => [theirs(ctx)[0]!] })
+        .execute(({ card }) => take(card)),
+      Action.create<BlindGame>('stealTwo')
+        .chooseElements<'cards', Card>('cards', { elements: theirs, multiSelect: { min: 2, max: 2 } })
+        .execute(({ cards }) => {
+          for (const card of cards) take(card);
+          return { success: true };
+        }),
+      Action.create<BlindGame>('stealUntilTwo')
+        .chooseElement<'card', Card>('card', {
+          elements: theirs,
+          repeat: { until: (ctx) => theirs(ctx as { game: BlindGame }).length === 0, onEach: (_ctx, card) => take(card) },
+        })
+        .execute(() => ({ success: true })),
+      // A blind pick, then a question that reads it.
+      Action.create<BlindGame>('stealAndSay')
+        .chooseElement<'card', Card>('card', { elements: theirs, onSelect: (card) => take(card) })
+        .chooseFrom('where', { choices: ({ args }) => [(args.card as Card).name] })
+        .execute(() => ({ success: true })),
+      Action.create<BlindGame>('stealNowhere')
+        .chooseElement<'card', Card>('card', { elements: theirs })
+        .chooseFrom('where', { choices: () => [] as string[] })
+        .execute(() => ({ success: true })),
     );
     this.setFlow({
-      root: loop({ maxIterations: 10, do: eachPlayer({ do: actionStep({ actions: ['steal', 'draw'] }) }) }),
+      root: loop({
+        maxIterations: 10,
+        do: eachPlayer({
+          do: actionStep({
+            actions: ['steal', 'draw', 'stealFirst', 'stealTwo', 'stealUntilTwo', 'stealAndSay', 'stealNowhere'],
+          }),
+        }),
+      }),
     });
   }
 }
@@ -126,5 +157,83 @@ describe('pick candidates the seat cannot see (#715)', () => {
     expect(step.done).toBe(true);
     const seat1 = (step.playerViews[0] as { state: { view: Node } }).state.view;
     expect(findByName(seat1, 'hand-1')!.children!.map((c) => c.name)).toEqual(['AS']);
+  });
+
+  it('refuses a placeholder for a hidden card that is not on offer', async () => {
+    const start = await started();
+    const [, kingId] = boardIdsOfHand2(start);
+
+    const res = await executeOp(definition, options, start.snapshot, null, {
+      type: 'action', actionName: 'stealFirst', player: 1, args: { card: kingId! },
+      boundaryKey: boundaryKeyOf(start.snapshot),
+    });
+
+    expect(res.success).toBe(false);
+  });
+
+  it('takes every hidden card a multi-select names by placeholder', async () => {
+    const start = await started();
+
+    const after = succeeded(await executeOp(definition, options, start.snapshot, null, {
+      type: 'action', actionName: 'stealTwo', player: 1, args: { cards: boardIdsOfHand2(start) },
+      boundaryKey: boundaryKeyOf(start.snapshot),
+    }));
+
+    const seat1 = (after.playerViews[0] as { state: { view: Node } }).state.view;
+    expect(findByName(seat1, 'hand-1')!.children!.map((c) => c.name).sort()).toEqual(['AS', 'KH']);
+  });
+
+  it("offers a repeating pick's next hidden candidates by placeholder, without names", async () => {
+    const start = await started();
+    const [firstId] = boardIdsOfHand2(start);
+
+    const step = succeeded(await executeOp(definition, options, start.snapshot, null, {
+      type: 'selectionStep', player: 1, selectionName: 'card', value: firstId!, actionName: 'stealUntilTwo',
+      boundaryKey: boundaryKeyOf(start.snapshot),
+    }));
+
+    expect(boardIdsOfHand2(step)).toEqual([-1]);
+    expect(step.nextChoices?.map((c) => [c.value, c.display])).toEqual([[-1, 'Card #1']]);
+  });
+
+  it('does not take a hidden chooseFrom candidate by its secret name', async () => {
+    const start = await started();
+
+    const res = await executeOp(definition, options, start.snapshot, null, {
+      type: 'action', actionName: 'draw', player: 1, args: { card: 'AS' },
+      boundaryKey: boundaryKeyOf(start.snapshot),
+    });
+
+    expect(res.success).toBe(false);
+  });
+
+  it("names an earlier hidden pick neutrally when a later step has nothing to choose", async () => {
+    const start = await started();
+    const [firstId] = boardIdsOfHand2(start);
+
+    const res = await executeOp(definition, options, start.snapshot, null, {
+      type: 'resolveChoices', actionName: 'stealNowhere', selectionName: 'where', player: 1, args: { card: firstId! },
+    });
+
+    expect(res.success).toBe(false);
+    expect(JSON.stringify(res)).not.toMatch(/\bAS\b|\bKH\b/);
+    expect((res as { error: string }).error).toContain('card = a hidden Card');
+  });
+
+  it("answers a later step from the pick the pending action holds, not a placeholder that has since moved", async () => {
+    const start = await started();
+    const [aceId] = boardIdsOfHand2(start);
+    const step = succeeded(await executeOp(definition, options, start.snapshot, null, {
+      type: 'selectionStep', player: 1, selectionName: 'card', value: aceId!, actionName: 'stealAndSay',
+      boundaryKey: boundaryKeyOf(start.snapshot),
+    }));
+    // The ace left seat 2's hand, so -1 now stands for the king.
+    expect(boardIdsOfHand2(step)).toEqual([-1]);
+
+    const res = succeeded(await executeOp(definition, options, step.snapshot, step.pendingState ?? null, {
+      type: 'resolveChoices', actionName: 'stealAndSay', selectionName: 'where', player: 1, args: { card: aceId! },
+    }));
+
+    expect(res.choices?.map((c) => c.value)).toEqual(['AS']);
   });
 });

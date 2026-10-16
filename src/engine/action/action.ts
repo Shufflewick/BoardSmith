@@ -371,6 +371,9 @@ export interface PerformOptions {
   followUp?: FollowUpAction;
 }
 
+/** The element an id a player sent names, or undefined. */
+type SeatIdReader = (id: number) => GameElement | undefined;
+
 export class ActionExecutor {
   private game: Game;
 
@@ -490,21 +493,22 @@ export class ActionExecutor {
     game: Game,
     candidates?: readonly Candidate[],
   ): unknown {
+    const byId = this.seatIdReader(game, player);
     switch (selection.type) {
       case 'element':
         // A repeating chooseElement's picks: one element per pick, in the
         // order they were made (#325). Any other array is left as sent, for
         // validateSelection to refuse.
         if (Array.isArray(value)) {
-          return this.isRepeatingSelection(selection) ? value.map(v => this.resolveElementItem(v, game, player)) : value;
+          return this.isRepeatingSelection(selection) ? value.map(v => this.resolveElementItem(v, byId)) : value;
         }
-        return this.resolveElementItem(value, game, player);
+        return this.resolveElementItem(value, byId);
       case 'elements':
         return Array.isArray(value)
-          ? value.map(v => this.resolveElementItem(v, game, player))
-          : this.resolveElementItem(value, game, player);
+          ? value.map(v => this.resolveElementItem(v, byId))
+          : this.resolveElementItem(value, byId);
       case 'choice':
-        return this.resolveChoiceValue(selection as ChoiceSelection, value, player, args, game, candidates);
+        return this.resolveChoiceValue(selection as ChoiceSelection, value, player, args, game, candidates, byId);
       default:
         return value;
     }
@@ -518,16 +522,22 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     game: Game,
     known: readonly Candidate[] | undefined,
+    byId: SeatIdReader,
   ): unknown {
-    if (isSerializedElement(value)) return this.elementForSeatId(game, (value as { id: number }).id, player) ?? value;
+    if (isSerializedElement(value)) return byId((value as { id: number }).id) ?? value;
     if (!player) return value;
     // Only a multiSelect or an orderedList is resolved per item, so a single
     // choice whose VALUE is itself an array is never taken apart.
     if (Array.isArray(value) && selection.multiSelect === undefined && selection.orderedList === undefined) return value;
     const candidates = known ?? this.candidatesOf(selection, { game, player, args });
+    // A candidate the player cannot see is named only by its placeholder id,
+    // never by its name or its real id, which the player was never sent (#715).
+    const hidden = candidates.filter((c) => isElement(c.value) && !c.value.isVisibleTo(player.seat));
+    const named = hidden.length === 0 ? candidates : candidates.filter((c) => !hidden.includes(c));
     const resolveItem = (item: unknown): unknown => {
-      if (isSerializedElement(item)) return this.elementForSeatId(game, (item as { id: number }).id, player) ?? item;
-      const match = findMatchingChoice(item, candidates);
+      if (isSerializedElement(item)) return byId((item as { id: number }).id) ?? item;
+      if (hidden.length > 0 && typeof item === 'number' && item < 0) return byId(item) ?? item;
+      const match = findMatchingChoice(item, named);
       return match === undefined ? item : match.value;
     };
     return Array.isArray(value) ? value.map(resolveItem) : resolveItem(value);
@@ -540,28 +550,31 @@ export class ActionExecutor {
    * dropped, so the pick is refused with an actionable error instead of
    * vanishing, and `unavailable` is handed the id the client sent.
    */
-  private resolveElementItem(item: unknown, game: Game, player: Player | undefined): unknown {
-    if (typeof item === 'number') return this.elementForSeatId(game, item, player) ?? item;
+  private resolveElementItem(item: unknown, byId: SeatIdReader): unknown {
+    if (typeof item === 'number') return byId(item) ?? item;
     if (this.looksLikeSerializedElement(item)) {
       const id = (item as { id: number }).id;
-      return this.elementForSeatId(game, id, player) ?? id;
+      return byId(id) ?? id;
     }
     return item;
   }
 
   /**
-   * The element an id a player sent names: a real id, or a placeholder from
-   * that player's own view (#715). The view is projected from the live game,
-   * which a world's read-only `game` cannot do; the element is read off `game`.
+   * Reads the element an id a player sent names: a real id, or a placeholder
+   * from that player's own view (#715), whose map is built at most once per
+   * reader. The view is projected from the live game, which a world's
+   * read-only `game` cannot do; the element is read off `game`.
    */
-  private elementForSeatId(game: Game, id: number, player: Player | undefined): GameElement | undefined {
-    // A direct hit first: a game restored from a seat's view (a bot's search) holds its placeholders as real elements.
-    const element = game.getElementById(id);
-    if (element || id >= 0 || !player) return element;
-    for (const [realId, placeholderId] of placeholderIdsFor(this.game, player.seat)) {
-      if (placeholderId === id) return game.getElementById(realId);
-    }
-    return undefined;
+  private seatIdReader(game: Game, player: Player | undefined): SeatIdReader {
+    let realIdOf: Map<number, number> | undefined;
+    return (id) => {
+      // A direct hit first: a game restored from a seat's view (a bot's search) holds its placeholders as real elements.
+      const element = game.getElementById(id);
+      if (element || id >= 0 || !player) return element;
+      realIdOf ??= new Map([...placeholderIdsFor(this.game, player.seat)].map(([real, placeholder]) => [placeholder, real]));
+      const realId = realIdOf.get(id);
+      return realId === undefined ? undefined : game.getElementById(realId);
+    };
   }
 
   /**
@@ -1879,12 +1892,13 @@ export class ActionExecutor {
   ): Record<string, unknown> {
     const selection = action.selections.find(s => s.name === selectionName);
     const picks = pendingState.repeating?.accumulated ?? [];
+    const byId = this.seatIdReader(this.game, player);
     return {
       ...this.resolveArgs(action, pendingState.collectedArgs, player),
       // A repeating chooseElement's picks are held as ids; its callbacks see
       // the elements, as `execute` does.
       [selectionName]: selection?.type === 'element' || selection?.type === 'elements'
-        ? picks.map(p => this.resolveElementItem(p, this.game, player))
+        ? picks.map(p => this.resolveElementItem(p, byId))
         : [...picks],
     };
   }
