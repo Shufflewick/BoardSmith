@@ -302,6 +302,10 @@ export const WORLD_REFUSALS = {
     owner: "game",
     why: "#602: a handler armed or cancelled a timer under a key longer than `WORLD_SCHEDULE_KEY_MAX_BYTES` UTF-8 bytes. A host stores each event under a storage key built from the schedule key, so a longer one is an event no host can write, and it used to surface at the checkpoint as a storage outage. The key is the bundle's own text and the same line writes it again, so it dead-letters rather than parking the world",
   },
+  "schedule-key-empty": {
+    owner: "game",
+    why: "#790: a handler armed a timer under an empty key. A cancel must name a key, so the timer would hold a keyed slot nothing can ever cancel. The key is the bundle's own text, so it dead-letters rather than parking the world",
+  },
   "schedule-key-malformed": {
     owner: "game",
     why: "#604: a handler armed or cancelled a timer under a key that is not well-formed Unicode -- it holds a lone UTF-16 surrogate. It passes the byte count, but a host that percent-encodes the key into a storage key throws on it, which used to surface at the checkpoint as a storage outage. The key is the bundle's own text, so it dead-letters rather than parking the world",

@@ -590,7 +590,7 @@ describe("createWorld — one construction, every host", () => {
     }
   });
 
-  it("REFUSES an unregistered or too-long action name, or a key that is not well-formed Unicode, at the offending line, so the change unwinds (#603, #604)", async () => {
+  it("REFUSES an unregistered or too-long action name, or a key that is empty or not well-formed Unicode, at the offending line, so the change unwinds (#603, #604, #790)", async () => {
     // A registered clock action whose name is over the bound: registering a
     // name does not bound it, so the length is refused even for this one.
     const longName = "s".repeat(WORLD_SCHEDULE_ACTION_MAX_BYTES + 1);
@@ -632,6 +632,7 @@ describe("createWorld — one construction, every host", () => {
         code: "schedule-key-malformed",
       },
       { action: cancelling("raid\uD83D"), code: "schedule-key-malformed" },
+      { action: arming({ delayMs: 1, action: "sweep", key: "" }), code: "schedule-key-empty" },
     ] as const;
 
     for (const { action, code } of cases) {

@@ -1,12 +1,32 @@
 {
-  "ticket": "Shufflewick/BoardSmith#775",
-  "base": "e7da3d40e99eb989548d089002a4967d71fda62d",
+  "ticket": "Shufflewick/BoardSmith#794",
+  "base": "bdf437bbfb556b4acf7939d4779dd71fc3807724",
   "tests": [
     {
-      "file": "src/engine/action/repeat-check.test.ts",
+      "file": "src/world/pick.test.ts",
       "names": [
-        "one repeat check and one count refusal for every pick type (#775) reports choice, element and elements picks with repeat as repeating, and the rest as not",
-        "one repeat check and one count refusal for every pick type (#775) names elements in an element count refusal and choices in a choice count refusal"
+        "#378 — an unbounded cap is not a cap of null on the wire omits max entirely rather than sending a number JSON cannot carry",
+        "#378 — an unbounded cap is not a cap of null on the wire still carries a cap the game DID give, unchanged",
+        "#378 — one pick, re-asked with the arguments bound so far resolves the cap from the ship the player has chosen",
+        "#378 — one pick, re-asked with the arguments bound so far answers the selection's candidates too, evaluated with the same args",
+        "#378 — one pick, re-asked with the arguments bound so far answers an ELEMENT selection's candidates in the same shape",
+        "#378 — one pick, re-asked with the arguments bound so far REFUSES an action this world does not offer, naming what it does",
+        "#378 — one pick, re-asked with the arguments bound so far REFUSES args carrying a key no pick declares, as the command itself would (#665)",
+        "#378 — one pick, re-asked with the arguments bound so far REFUSES a selection the action does not have",
+        "#378 — one pick, re-asked with the arguments bound so far says which partitions re-asking this pick still needs, before running it",
+        "#384 — an offer cannot write to the world it is describing REFUSES a write from a candidate callback, and leaves the world alone",
+        "#384 — an offer cannot write to the world it is describing REFUSES a write from a disabled predicate, which runs before any pick",
+        "#384 — an offer cannot write to the world it is describing REFUSES the same write through a re-asked pick (#378)",
+        "#384 — an offer cannot write to the world it is describing REFUSES a write through ctx.game, not only through world.partition",
+        "#384 — an offer cannot write to the world it is describing REFUSES a write from the action's own disabled rule",
+        "#384 — an offer cannot write to the world it is describing REFUSES a write through ctx.player.game from a condition (#794)",
+        "#384 — an offer cannot write to the world it is describing REFUSES a write through ctx.player.game from a pick's choices (#794)",
+        "#384 — an offer cannot write to the world it is describing REFUSES a write through ctx.player.game from a quote (#794)",
+        "#384 — an offer cannot write to the world it is describing still matches an owned element to ctx.player in an offer (#794)",
+        "#384 — an offer cannot write to the world it is describing still matches an owned element to ctx.player in a pick and a quote (#794)",
+        "#384 — an offer cannot write to the world it is describing still lets an offer READ everything its declaration named",
+        "#393 — a submitted choice that is no longer listed refuses in plain words when the game says nothing",
+        "#393 — a submitted choice that is no longer listed refuses in the game's own words, with the world in scope"
       ]
     }
   ]
