@@ -111,16 +111,16 @@ const CODECS: Readonly<Record<string, TypedArrayCodec>> = {
   },
 };
 
+/** The key that tags a serialized typed array; the state codec's marker list reads it from here. */
+export const TYPED_ARRAY_MARKER = '__typedArray';
+
 /** The serialized shape a typed array takes in game state. */
 export type SerializedTypedArray = {
-  __typedArray: string;
+  [TYPED_ARRAY_MARKER]: string;
   data: string;
 };
 
 /** Every typed-array type name this codec can encode, for error messages. */
-/** The key that tags a serialized typed array; the state codec's marker list reads it from here. */
-export const TYPED_ARRAY_MARKER = '__typedArray';
-
 export const SUPPORTED_TYPED_ARRAYS: readonly string[] = Object.keys(CODECS);
 
 const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
