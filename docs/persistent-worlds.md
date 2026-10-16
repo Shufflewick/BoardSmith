@@ -2057,7 +2057,8 @@ queue, rather than failing a check on the way in.
 - **`key`** makes it an **upsert**: it replaces the pending event with the same
   owner and key, so the count under one key never grows. This is the shape you
   should usually be writing, and it is why the cap refusal's first suggestion is
-  to use one. A key may be at most **512 UTF-8 bytes**
+  to use one. A key may not be empty (`schedule-key-empty`), since a cancel
+  must name a key. A key may be at most **512 UTF-8 bytes**
   (`WORLD_SCHEDULE_KEY_MAX_BYTES`), and a cancel's key the same. A host stores
   each event under a storage key built from it: percent-encoding makes each
   byte at most three, so 512 bytes is at most 1536 encoded, which leaves 512 of
@@ -2753,6 +2754,7 @@ thing next time.
 | `invalid-schedule-delay` | A negative or non-finite `delayMs`. |
 | `invalid-schedule-interval` | A non-positive or non-finite `everyMs`, which is a wake that re-arms instantly forever. |
 | `invalid-schedule-command` | A schedule request that names no action, or carries an argument that is not a JSON scalar. |
+| `schedule-key-empty` | A schedule armed under an empty key, which no cancel could ever take back. |
 | `schedule-key-too-long` | A schedule or cancel key past 512 UTF-8 bytes, which no host can store as part of a storage key. |
 | `schedule-key-malformed` | A schedule or cancel key that is not well-formed Unicode (it holds a lone UTF-16 surrogate), which no host can percent-encode into a storage key. |
 | `schedule-unknown-action` | A schedule naming an action this world does not register. The refusal lists the clock actions it can schedule. |
