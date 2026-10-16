@@ -69,7 +69,7 @@ describe('#258 — enterNumber carries a starting value', () => {
   it('carries it onto the pick metadata a host serializes', () => {
     const { game, player } = soloGame();
 
-    const pick = buildPickMetadata(game, player, askAge().selections[0]!);
+    const pick = buildPickMetadata(game, player, 'ask-age', askAge().selections[0]!);
 
     expect(pick.initial).toBe(35);
     // Through the wire and back: a starting value a host cannot ship is not one.
@@ -82,7 +82,7 @@ describe('#258 — enterNumber carries a starting value', () => {
       .enterNumber('amount', { min: 1 })
       .execute(() => ({ success: true })).selections[0]!;
 
-    const pick = buildPickMetadata(game, player, plain);
+    const pick = buildPickMetadata(game, player, 'wager', plain);
 
     expect(Object.keys(pick)).not.toContain('initial');
   });
@@ -108,7 +108,7 @@ describe('#258 — enterNumber labels the value the player is on', () => {
   it('labels every value the field can hold', () => {
     const { game, player } = soloGame();
 
-    const pick = buildPickMetadata(game, player, askAge().selections[0]!);
+    const pick = buildPickMetadata(game, player, 'ask-age', askAge().selections[0]!);
 
     expect(pick.valueLabels?.['16']).toBe('barely grown');
     expect(pick.valueLabels?.['35']).toBe('in your prime');
@@ -122,7 +122,7 @@ describe('#258 — enterNumber labels the value the player is on', () => {
       .enterNumber('amount', { min: 0.5, max: 3.5, integer: true, display: (n) => `bet ${n}` })
       .execute(() => ({ success: true })).selections[0]!;
 
-    expect(buildPickMetadata(game, player, half).valueLabels).toEqual({ 1: 'bet 1', 2: 'bet 2', 3: 'bet 3' });
+    expect(buildPickMetadata(game, player, 'wager', half).valueLabels).toEqual({ 1: 'bet 1', 2: 'bet 2', 3: 'bet 3' });
   });
 
   it('omits `valueLabels` when the game declared no display', () => {
@@ -131,7 +131,7 @@ describe('#258 — enterNumber labels the value the player is on', () => {
       .enterNumber('amount', { min: 1, max: 3, integer: true })
       .execute(() => ({ success: true })).selections[0]!;
 
-    expect(Object.keys(buildPickMetadata(game, player, plain))).not.toContain('valueLabels');
+    expect(Object.keys(buildPickMetadata(game, player, 'wager', plain))).not.toContain('valueLabels');
   });
 
   it('REFUSES a display over a range with no ceiling, saying what is missing', () => {
@@ -177,6 +177,6 @@ describe('#258 — enterNumber labels the value the player is on', () => {
       })
       .execute(() => ({ success: true })).selections[0]!;
 
-    expect(() => buildPickMetadata(game, player, selection)).toThrow(/age.*\b2\b/s);
+    expect(() => buildPickMetadata(game, player, 'ask-age', selection)).toThrow(/age.*\b2\b/s);
   });
 });

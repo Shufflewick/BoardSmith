@@ -13,7 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Piece, Space, Player, Action } from '../index.js';
 import type { GameOptions } from '../index.js';
-import { buildPickMetadata } from '../element/action-metadata.js';
+import { buildActionMetadata, buildPickMetadata } from '../element/action-metadata.js';
 import type { Selection } from './types.js';
 
 class Token extends Piece<PromptGame> {}
@@ -67,7 +67,7 @@ describe('dynamic selection prompts (#140)', () => {
     const player = game.getPlayer(1)!;
 
     const prompts = selectionsOf(game).map(
-      (selection) => buildPickMetadata(game, player, selection).prompt,
+      (selection) => buildPickMetadata(game, player, 'dynamic', selection).prompt,
     );
 
     expect(prompts).toEqual([
@@ -85,7 +85,7 @@ describe('dynamic selection prompts (#140)', () => {
     game.round = 7;
 
     const first = selectionsOf(game)[0]!;
-    expect(buildPickMetadata(game, player, first).prompt).toBe('Pick a flavor for round 7');
+    expect(buildPickMetadata(game, player, 'dynamic', first).prompt).toBe('Pick a flavor for round 7');
   });
 
   it('still accepts a plain string prompt', () => {
@@ -96,6 +96,22 @@ describe('dynamic selection prompts (#140)', () => {
       .chooseFrom('flavor', { prompt: 'Pick a flavor', choices: ['vanilla'] })
       .execute(() => ({ success: true })).selections[0]!;
 
-    expect(buildPickMetadata(game, player, staticSelection).prompt).toBe('Pick a flavor');
+    expect(buildPickMetadata(game, player, 'static', staticSelection).prompt).toBe('Pick a flavor');
+  });
+
+  it('names the action and pick when a prompt function throws (#766)', () => {
+    const game = new PromptGame({ playerCount: 1, playerNames: ['Solo'] });
+    game.registerAction(
+      Action.create<PromptGame>('broken')
+        .chooseFrom('flavor', {
+          prompt: () => { throw new Error('round is missing'); },
+          choices: ['vanilla'],
+        })
+        .execute(() => ({ success: true })),
+    );
+
+    expect(() => buildActionMetadata(game, game.getPlayer(1)!, ['broken'])).toThrow(
+      'The prompt function for "flavor" in action "broken" threw an error: round is missing',
+    );
   });
 });

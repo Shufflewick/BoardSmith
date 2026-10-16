@@ -267,9 +267,10 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
   /**
    * The one element query: the elements under `roots` (each root, then its
    * subtree, depth first) that are of the class and match every finder, up to
-   * `limit` of them. `fromEnd` walks from the last root backwards, each
-   * element before its children, and answers the first `limit` matches of
-   * that walk in reverse: a root A with a matching child B answers [B, A].
+   * `limit` of them. `fromEnd` walks document order reversed (from the last
+   * root backwards, each element after its children) and answers the first
+   * `limit` matches of that walk in document order: a root A with a matching
+   * child B answers B for `last()` and [A, B] for `lastN(2)`.
    *
    * `classNameOrFinder` is a query method's first argument, a class or the
    * first finder. The matches are collected into, and returned as, `result`:
@@ -357,9 +358,23 @@ function walk(elements: readonly GameElement[], query: Query, depth: number, und
     const el = elements[fromEnd ? count - 1 - i : i];
     // DEV: an element visited twice is tree corruption; skip it so a cycle cannot loop.
     if (firstSeenUnder && isRepeatVisit(query, firstSeenUnder, el, depth, under)) continue;
-    if (matches(query, el)) result.push(el);
-    if (el._t.children.length > 0) walk(el._t.children, query, depth + 1, el);
+    // Backwards, document order reversed meets an element after its children.
+    if (fromEnd) {
+      walkChildren(el, query, depth);
+      collect(query, el);
+    } else {
+      collect(query, el);
+      walkChildren(el, query, depth);
+    }
   }
+}
+
+function walkChildren(el: GameElement, query: Query, depth: number): void {
+  if (el._t.children.length > 0) walk(el._t.children, query, depth + 1, el);
+}
+
+function collect(query: Query, el: GameElement): void {
+  if (query.result.length < query.limit && matches(query, el)) query.result.push(el);
 }
 
 /**
