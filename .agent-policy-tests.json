@@ -1,16 +1,12 @@
 {
-  "ticket": "Shufflewick/BoardSmith#982",
-  "base": "2a6bd1aad31b71b869ca9b8656ffcc172376607f",
+  "ticket": "Shufflewick/BoardSmith#777",
+  "base": "e7da3d40e99eb989548d089002a4967d71fda62d",
   "tests": [
     {
-      "file": "src/world/host/resident-world.test.ts",
+      "file": "src/engine/flow/restore-deleted-branch.test.ts",
       "names": [
-        "#793: ResidentWorld closes the store even when the final checkpoint throws",
-        "#793: ResidentWorld says a refusing event refused once per catch-up, not once per round",
-        "#793: ResidentWorld plans a clock-issued command's schedules from the instant its handler was told",
-        "#793: ResidentWorld a view that throws does not hand the game's raw error text to the player",
-        "#793: ResidentWorld a view that throws logs once for the whole audience, with how many seats failed, not once per seat",
-        "#793: ResidentWorld a view that throws passes a PlayerFacingError the game wrote through verbatim"
+        "#777: restoring a save inside a removed branch is refused refuses a save inside a switchOn case the rules removed, naming the switch",
+        "#777: restoring a save inside a removed branch is refused refuses a save inside an if else-branch the rules removed, naming the if"
       ]
     }
   ]
