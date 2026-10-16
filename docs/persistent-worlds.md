@@ -3035,7 +3035,8 @@ const bytes = await runner.serialize([...result.dirty]);
 `runner.declareOffers(player, supplied)` and `runner.offersFor(player, stamp)`
 drive the offer path the same way, `runner.declareViews(...)` and
 `runner.viewsFor(...)` drive the read path, and `runner.evict(names)` releases
-partitions. `walkDeclaration(declare, read, readActivity, readNoticeBox)` is the
+partitions; `planEviction(runner.residency(), dirty, budgets.maxResidentPartitions)`
+says which, and `ResidentWorld` runs it after every checkpoint (#747). `walkDeclaration(declare, read, readActivity, readNoticeBox)` is the
 loop itself, exported so a host writes it once rather than three times: it reads
 the partitions, seat watermarks and notice boxes each round declares, and returns
 the `WorldWalkAnswers` (`declaredActivity`, `declaredNotices`) that `apply` takes

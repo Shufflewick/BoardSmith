@@ -67,6 +67,7 @@ import {
   WorldRefusal,
   assertWorldOrder,
   migratedArgs,
+  planEviction,
   planMigration,
   receiptFloor,
   resolveOrder,
@@ -514,6 +515,12 @@ export class ResidentWorld {
     if (vacated === undefined) return;
     runner.unseat(vacated.player);
     this.#onVacated(vacated);
+  }
+
+  /** Let go of the coldest clean partitions past the budget (#747). Only right after a checkpoint. */
+  #evictCold(runner: WorldRunnerHandle): void {
+    const dirty = new Set(this.#store.dirtyPartitions());
+    runner.evict(planEviction(runner.residency(), dirty, this.#budgets.maxResidentPartitions).evict);
   }
 
   /** The seat a player id is filed under, or undefined for the world's own
@@ -1076,6 +1083,7 @@ export class ResidentWorld {
       // the discard below leaves the world at the revision it was already at.
       this.#revision += 1;
       this.#released(runner, result.vacated);
+      this.#evictCold(runner);
     } catch (error) {
       // A COMMAND THAT CANNOT BE MADE DURABLE IS A COMMAND THAT DID NOT HAPPEN.
       //

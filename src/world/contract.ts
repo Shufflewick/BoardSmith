@@ -999,7 +999,7 @@ export interface WorldEngine {
   /**
    * Which partitions are resident, and when each was last NAMED by a command.
    *
-   * What `world-eviction.ts:planEviction` reads. `lastUsed` is a monotonic
+   * What `eviction.ts:planEviction` reads. `lastUsed` is a monotonic
    * counter rather than a clock, so two commands in the same millisecond are
    * still ordered and a world's eviction behaviour does not depend on how fast
    * the machine happened to be running.
