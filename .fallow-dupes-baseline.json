@@ -61,8 +61,8 @@
     "src/ui/components/auto-ui/renderers/DieRenderer.vue:80-97|src/ui/components/auto-ui/renderers/PieceRenderer.vue:75-88",
     "src/cli/commands/verify-classify.ts:1569-1576|src/cli/commands/verify-classify.ts:822-829",
     "src/ui/composables/useActionController.ts:1765-1775|src/ui/composables/useActionController.ts:1905-1916",
-    "src/engine/element/game.ts:3857-3863|src/engine/element/game.ts:3893-3899",
-    "src/engine/element/game.ts:3935-3939|src/engine/element/game.ts:3967-3971",
+    "src/engine/element/game.ts:3863-3869|src/engine/element/game.ts:3899-3905",
+    "src/engine/element/game.ts:3941-3945|src/engine/element/game.ts:3973-3977",
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:55-71|src/ui/components/auto-ui/renderers/HandRenderer.vue:47-65",
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:604-614|src/ui/components/auto-ui/renderers/HandRenderer.vue:565-575",
     "src/cli/commands/verify-classify.ts:719-725|src/cli/commands/verify-run.ts:1141-1146"

@@ -2455,6 +2455,10 @@ export class Game<
    * only seats it includes are admitted; a seat already awaited stays even if
    * the filter has since dropped it. No-op when no simultaneous step is open.
    *
+   * When every seat is then done (the step's `allDone`), the step ends: at
+   * once when called from outside game code, and when the running action
+   * settles when called from inside one (its `execute`, a pick's `onEach`).
+   *
    * @param seat - Refresh only this seat (1-indexed). Omit for every seat.
    *
    * @example
@@ -2465,7 +2469,8 @@ export class Game<
    * ```
    */
   refreshAwaitingActions(seat?: number): void {
-    this._flowEngine?.refreshAwaitingActions(seat);
+    const state = this._flowEngine?.refreshAwaitingActions(seat);
+    if (state) this.#applyFlowCompletion(state);
   }
 
   getActionNames(): string[] {
@@ -3313,8 +3318,9 @@ export class Game<
   /**
    * Single place where a completed `FlowState` is reflected onto the game.
    * Every flow-advancing entry point (`startFlow`, `continueFlow`,
-   * `continueFlowAfterPendingAction`) routes completion through here so a new
-   * entry point cannot complete a flow without finishing the game.
+   * `continueFlowAfterPendingAction`, `refreshAwaitingActions`) routes
+   * completion through here so a new entry point cannot complete a flow
+   * without finishing the game.
    *
    * It writes no winners: the game declares those itself (#503), through
    * `finish(winners)` or a `getWinners()` override.
