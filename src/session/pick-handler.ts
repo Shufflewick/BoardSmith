@@ -96,7 +96,7 @@ function answerPick(
   const said = () => (warnings.length > 0 ? warnings : undefined);
 
   if (selection.type === 'choice') {
-    const choices = formatChoiceCandidates(evaluated.candidates, selection, ctx, warnings);
+    const choices = formatChoiceCandidates(evaluated.candidates, selection, ctx, warnings, ctx.game);
     if (choices.length === 0 && !selection.optional) return deadEnd(action, selection, ctx);
     return {
       success: true,
@@ -111,7 +111,7 @@ function answerPick(
     };
   }
 
-  const validElements = formatElementCandidates(evaluated.candidates, selection, ctx, warnings);
+  const validElements = formatElementCandidates(evaluated.candidates, selection, ctx, warnings, ctx.game);
   if (validElements.length === 0 && !selection.optional) return deadEnd(action, selection, ctx);
   return {
     success: true,

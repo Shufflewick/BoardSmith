@@ -21,7 +21,8 @@
  * time a value reaches this file.
  */
 import { isDevThrowEnabled } from '../../utils/dev.js';
-import { isElement } from './game-element.js';
+import { isElement, type GameElement } from './game-element.js';
+import { placeholderIdsFor } from './seat-placeholders.js';
 import { labelOfValue } from '../action/choice-matching.js';
 import type { ElementRef } from '../../types/protocol.js';
 import type {
@@ -86,10 +87,16 @@ export function formatChoiceCandidates(
   selection: ChoiceSelection,
   ctx: CandidateContext,
   warnings: WarningEntry[],
+  live: Game,
 ): ChoiceWithRefs[] {
+  const sight = seatSight(candidates.map((c) => c.value), ctx, live);
   return candidates.map(({ value, label, disabled }) => {
-    const display = label ?? (selection.display ? selection.display(value) : labelOfValue(value));
-    const choice: ChoiceWithRefs = { value, display };
+    const neutral = sight.neutralLabel(value);
+    const display = label ?? (selection.display ? selection.display(value) : neutral ?? labelOfValue(value));
+    const choice: ChoiceWithRefs = {
+      value: neutral === undefined ? value : { id: sight.idOf(value as GameElement), className: (value as GameElement).constructor.name },
+      display,
+    };
 
     if (selection.boardRefs) {
       try {
@@ -122,14 +129,16 @@ export function formatElementCandidates(
   selection: ElementSelection | ElementsSelection,
   ctx: CandidateContext,
   warnings: WarningEntry[],
+  live: Game,
 ): ValidElement[] {
   const elements = candidates.map(({ value }) => value) as ElementLike[];
-  const labels = labelElements(elements, selection, ctx, warnings);
+  const sight = seatSight(elements, ctx, live);
+  const labels = labelElements(elements, selection, ctx, warnings, sight);
 
   return candidates.map(({ value: elementRaw, disabled }, index) => {
     const element = elementRaw as ElementLike;
-    const validElem: ValidElement = { id: element.id, display: labels[index]! };
-    validElem.refs = [{ ref: refFor(element, selection, ctx, warnings), role: 'highlight' }];
+    const validElem: ValidElement = { id: sight.idOf(element), display: labels[index]! };
+    validElem.refs = [{ ref: refFor(element, selection, ctx, warnings, sight), role: 'highlight' }];
     if (disabled !== false) validElem.disabled = disabled;
     return validElem;
   });
@@ -150,10 +159,11 @@ export function formatRepeatCandidates(
   selection: ChoiceSelection | ElementSelection | ElementsSelection,
   ctx: CandidateContext,
   warnings: WarningEntry[],
+  live: Game,
 ): ChoiceWithRefs[] {
-  if (selection.type === 'choice') return formatChoiceCandidates(candidates, selection, ctx, warnings);
-  const live = candidates.filter((c) => isElement(c.value));
-  return formatElementCandidates(live, selection, ctx, warnings).map(({ id, display, refs, disabled }) => {
+  if (selection.type === 'choice') return formatChoiceCandidates(candidates, selection, ctx, warnings, live);
+  const elements = candidates.filter((c) => isElement(c.value));
+  return formatElementCandidates(elements, selection, ctx, warnings, live).map(({ id, display, refs, disabled }) => {
     const choice: ChoiceWithRefs = { value: id, display: display!, refs };
     if (disabled !== undefined) choice.disabled = disabled;
     return choice;
@@ -162,6 +172,38 @@ export function formatRepeatCandidates(
 
 /** The little of an element these formatters read. */
 type ElementLike = { id: number; name?: string; notation?: string };
+
+/** How the asking seat's board shows each candidate. */
+interface SeatSight {
+  /** The id the seat's board carries for this element. */
+  idOf(element: ElementLike): number;
+  /** "Card #1" for an element the seat cannot see, else undefined. */
+  neutralLabel(value: unknown): string | undefined;
+}
+
+/**
+ * A candidate the seat cannot see goes out as its board shows it (#715): by
+ * the placeholder id its view carries, under a neutral label, so highlighting
+ * matches the board and the real id and name never leave the server. The view
+ * is projected only when some candidate is hidden, from the LIVE game: a
+ * world's callbacks read a projection that refuses the flag a projection sets.
+ */
+function seatSight(values: readonly unknown[], ctx: CandidateContext, live: Game): SeatSight {
+  const hidden = values.filter((v): v is GameElement => isElement(v) && !v.isVisibleTo(ctx.player.seat));
+  if (hidden.length === 0) return { idOf: (element) => element.id, neutralLabel: () => undefined };
+
+  const placeholders = placeholderIdsFor(live, ctx.player.seat);
+  const labels = new Map<unknown, string>();
+  const perClass = new Map<string, number>();
+  for (const element of hidden) {
+    const className = element.constructor.name;
+    const index = (perClass.get(className) ?? 0) + 1;
+    perClass.set(className, index);
+    labels.set(element, `${className} #${index}`);
+  }
+  // An individually hidden element keeps its real id in the view, so it has no placeholder.
+  return { idOf: (element) => placeholders.get(element.id) ?? element.id, neutralLabel: (value) => labels.get(value) };
+}
 
 /**
  * One label per element, disambiguating duplicates against their siblings.
@@ -176,6 +218,7 @@ function labelElements(
   selection: ElementSelection | ElementsSelection,
   ctx: CandidateContext,
   warnings: WarningEntry[],
+  sight: SeatSight,
 ): string[] {
   const display = selection.display as
     | ((element: never, context: CandidateContext, all: never[]) => string)
@@ -191,18 +234,21 @@ function labelElements(
           message: sanitizeCallbackError(e, 'display(...)'),
           source: 'display(...)',
         });
-        return element.name || String(element.id);
+        return sight.neutralLabel(element) ?? (element.name || String(element.id));
       }
     });
   }
 
   const counts = new Map<string, number>();
   for (const element of elements) {
+    if (sight.neutralLabel(element) !== undefined) continue;
     const name = element.name || 'Element';
     counts.set(name, (counts.get(name) || 0) + 1);
   }
   const seen = new Map<string, number>();
   return elements.map((element) => {
+    const neutral = sight.neutralLabel(element);
+    if (neutral !== undefined) return neutral;
     const baseName = element.name || 'Element';
     if ((counts.get(baseName) || 1) === 1) {
       return element.notation || element.name || String(element.id);
@@ -219,12 +265,14 @@ function refFor(
   selection: ElementSelection | ElementsSelection,
   ctx: CandidateContext,
   warnings: WarningEntry[],
+  sight: SeatSight,
 ): ElementRef {
   const boardRef = selection.boardRef as
     | ((element: never, context: CandidateContext) => ElementRef)
     | undefined;
   if (!boardRef) {
-    return { id: element.id, ...(element.notation ? { notation: element.notation } : {}) };
+    const hidden = sight.neutralLabel(element) !== undefined;
+    return { id: sight.idOf(element), ...(element.notation && !hidden ? { notation: element.notation } : {}) };
   }
   try {
     return boardRef(element as never, ctx);
@@ -235,7 +283,7 @@ function refFor(
       message: sanitizeCallbackError(e, 'boardRef(...)'),
       source: 'boardRef(...)',
     });
-    return { id: element.id };
+    return { id: sight.idOf(element) };
   }
 }
 
