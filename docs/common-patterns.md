@@ -289,7 +289,7 @@ card.showToAll();
 
 // Reveal to specific players
 card.showOnlyTo(player);      // Only this player can see
-card.addVisibleTo(player);    // Add player to visibility list
+card.addVisibleTo(player);    // Also show it to this player; everyone else keeps what they had
 
 // Hide again (e.g., after showing)
 card.hideFromAll();
@@ -299,6 +299,12 @@ card.setVisibility('all');     // Everyone sees
 card.setVisibility('owner');   // Only owner sees
 card.setVisibility('hidden');  // No one sees
 ```
+
+These work on a card inside a hidden deck or an opponent's hand too: the
+seats the card is shown to receive that one card face up, in its place (a
+`contentsHidden()` zone sends it alone, so its size stays secret), and the
+rest of the zone stays hidden from them. The setting moves with the card; call
+`card.clearVisibility()` when it should follow its zone again.
 
 ### Hiding a Space Itself
 

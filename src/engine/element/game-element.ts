@@ -15,7 +15,6 @@ import { PersistentMap } from './persistent-map.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE } from './hidden-placeholder.js';
 import type { VisibilityMode, VisibilityState } from './visibility.js';
 import {
-  DEFAULT_VISIBILITY,
   canPlayerSee,
   copyVisibilityState,
   resolveVisibility,
@@ -1341,12 +1340,15 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    * Internal method to add players to visibility list
    */
   addVisibleToInternal(players: number[]): void {
-    if (!this._visibility) {
-      this._visibility = { ...DEFAULT_VISIBILITY, explicit: true };
-    }
-    this._visibility.addPlayers = Array.from(
-      new Set([...(this._visibility.addPlayers ?? []), ...players])
-    );
+    // Built on what the element inherits, so a grant inside a hidden zone reveals it to these seats only (#758).
+    const base = copyVisibilityState(this.getEffectiveVisibility());
+    const exceptPlayers = base.exceptPlayers?.filter((seat) => !players.includes(seat));
+    this._visibility = {
+      ...base,
+      addPlayers: Array.from(new Set([...(base.addPlayers ?? []), ...players])),
+      ...(exceptPlayers && { exceptPlayers }),
+      explicit: true,
+    };
   }
 
   // ============================================
