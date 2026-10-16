@@ -161,22 +161,6 @@
       ]
     },
     {
-      "content": "5e3317414e4d4265",
-      "lines": 9,
-      "files": [
-        "src/eslint-plugin/rules/no-filesystem.ts",
-        "src/eslint-plugin/rules/no-network.ts"
-      ]
-    },
-    {
-      "content": "6210fad98994f281",
-      "lines": 11,
-      "files": [
-        "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
-      ]
-    },
-    {
       "content": "64c9b55ecd6a877d",
       "lines": 21,
       "files": [
