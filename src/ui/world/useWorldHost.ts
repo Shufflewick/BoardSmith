@@ -603,14 +603,16 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
   /**
    * THE MESSAGE, IF IT IS ONE OF OURS, or null.
    *
-   * Two rules and neither is about what arrived: the origin has to be allowed --
-   * a deployed host names its own, `boardsmith dev` allows any -- and the frame
-   * has to be stamped by a world HOST. A wrong pairing with a table shell is
+   * Three rules and none is about what arrived: the origin has to be allowed --
+   * a deployed host names its own, `boardsmith dev` allows any -- the sender has
+   * to be this frame's parent, and the frame has to be stamped by a world HOST. A wrong pairing with a table shell is
    * inert here rather than half-consumed, which is why the two protocols stamp
    * different sources at all.
    */
   function fromTheHost(event: MessageEvent): WorldHostMessage | null {
     if (!isOriginAllowed(event.origin, options.trustedOrigins)) return null;
+    // Any frame or popup can post here; only the host page may drive the world (#719).
+    if (event.source !== window.parent) return null;
     const data = event.data as WorldHostMessage | undefined;
     if (!data || data.source !== WORLD_HOST_SOURCE) return null;
     return data;

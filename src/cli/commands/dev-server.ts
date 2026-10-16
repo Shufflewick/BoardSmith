@@ -39,7 +39,8 @@
  */
 
 import { existsSync } from 'node:fs';
-import { createServer as createHttpServer } from 'node:http';
+import { createServer as createHttpServer, type IncomingMessage } from 'node:http';
+import { isIP } from 'node:net';
 import { networkInterfaces } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 
@@ -74,7 +75,7 @@ interface HttpUpgradeServer {
  */
 interface ClaimedWebSocketPath {
   /** Route this path's upgrades on `httpServer`. `serveVite` calls it. */
-  attach(httpServer: HttpUpgradeServer): void;
+  attach(httpServer: HttpUpgradeServer, allowedHosts: () => AllowedHosts): void;
   /** Stop accepting connections; called from the run's shutdown. */
   close(): void;
 }
@@ -100,7 +101,7 @@ export function claimWebSocketPath(
   const wss = new WebSocketServer({ noServer: true });
   wss.on('connection', onConnection);
   return {
-    attach(httpServer) {
+    attach(httpServer, allowedHosts) {
       httpServer.on('upgrade', (req, socket, head) => {
         let pathname: string;
         try {
@@ -109,11 +110,51 @@ export function claimWebSocketPath(
           return;
         }
         if (pathname !== path) return; // not ours -- Vite HMR handles it
+        if (!hostAllowed(allowedHosts(), req.headers.host) || !fromOurOwnPage(req)) {
+          socket.destroy();
+          return;
+        }
         wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
       });
     },
     close: () => wss.close(),
   };
+}
+
+type AllowedHosts = readonly string[] | true | undefined;
+
+/**
+ * Vite's DNS-rebinding guard, `server.allowedHosts`, which its middleware applies to every page but
+ * not to an upgrade we route ourselves (#719): localhost, an IP literal, or a host the project allows.
+ */
+function hostAllowed(allowedHosts: AllowedHosts, hostHeader: string | undefined): boolean {
+  if (allowedHosts === true) return true;
+  if (hostHeader === undefined) return false;
+  let hostname: string;
+  try {
+    hostname = new URL(`http://${hostHeader}`).hostname;
+  } catch {
+    return false;
+  }
+  if (isIP(hostname.replace(/^\[(.*)\]$/, '$1')) !== 0) return true;
+  if (hostname === 'localhost' || hostname.endsWith('.localhost')) return true;
+  return (allowedHosts ?? []).some(
+    (allowed) => allowed === hostname || (allowed.startsWith('.') && (allowed.slice(1) === hostname || hostname.endsWith(allowed))),
+  );
+}
+
+/**
+ * A browser page may open a socket to any host, so a page we did not serve must not reach ours
+ * (#719). Browsers always send `Origin`; a client that sends none is not a web page.
+ */
+function fromOurOwnPage(req: IncomingMessage): boolean {
+  const origin = req.headers.origin;
+  if (origin === undefined) return true;
+  try {
+    return new URL(origin).host === req.headers.host;
+  } catch {
+    return false; // `null` and other opaque origins
+  }
 }
 
 /** The path part of a request, with any query string dropped. */
@@ -303,7 +344,8 @@ export async function serveVite(args: {
   // Through `vite.middlewares` on every request, because a `vite.config.ts`
   // restart replaces them on the same `vite` object.
   const httpServer = createHttpServer((req, res) => vite!.middlewares(req, res));
-  for (const socket of args.sockets) socket.attach(httpServer);
+  // Read on every upgrade, because a `vite.config.ts` restart can change it.
+  for (const socket of args.sockets) socket.attach(httpServer, () => vite?.config.server.allowedHosts);
   try {
     vite = await createViteServer({
       ...args.config,

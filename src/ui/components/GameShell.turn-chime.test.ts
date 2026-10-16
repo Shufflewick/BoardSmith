@@ -17,6 +17,7 @@ import {
 
 function postState(isMyTurn: boolean): void {
   window.dispatchEvent(new MessageEvent('message', {
+    source: window.parent,
     data: {
       source: 'shufflewick',
       type: 'game_state',
@@ -37,7 +38,7 @@ async function mountAtSeat0() {
   const wrapper = mountPlatformShell();
   mounted.push(wrapper);
   await nextTick();
-  window.dispatchEvent(new MessageEvent('message', { data: { source: 'shufflewick', type: 'init', seat: 0 } }));
+  window.dispatchEvent(new MessageEvent('message', { source: window.parent, data: { source: 'shufflewick', type: 'init', seat: 0 } }));
   await nextTick();
   return { wrapper, chime };
 }

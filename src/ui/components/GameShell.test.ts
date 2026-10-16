@@ -23,6 +23,7 @@ import {
 
 function postState(state: Record<string, unknown>): void {
   window.dispatchEvent(new MessageEvent('message', {
+    source: window.parent,
     data: {
       source: 'shufflewick',
       type: 'game_state',

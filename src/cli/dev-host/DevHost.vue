@@ -357,6 +357,9 @@ function onIframeLoad(): void {
 }
 
 function onWindowMessage(event: MessageEvent): void {
+  // Another site can frame or open this page; only our own game frame may drive it (#719).
+  const frame = iframeRef.value?.contentWindow;
+  if (!frame || event.source !== frame) return;
   const data = event.data;
   if (!data || data.source !== 'shufflewick-game') return;
   // D11 (ENDGAME-02): 'debug:restart' is a host-chrome op, not a game-server op

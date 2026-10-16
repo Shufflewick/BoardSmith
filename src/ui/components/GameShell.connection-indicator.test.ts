@@ -49,7 +49,7 @@ describe('GameShell connection indicator (IA-01 / #179)', () => {
       await nextTick();
 
       window.dispatchEvent(
-        new MessageEvent('message', { data: { source: 'shufflewick', type: 'heartbeat' } }),
+        new MessageEvent('message', { source: window.parent, data: { source: 'shufflewick', type: 'heartbeat' } }),
       );
       await nextTick();
       // A healthy connection says nothing: a persistent green speck over the

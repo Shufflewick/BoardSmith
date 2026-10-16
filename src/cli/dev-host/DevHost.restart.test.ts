@@ -321,6 +321,7 @@ describe('DevHost — debug:restart postMessage routing (D11 RED #1)', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
+        source: (wrapper.find('iframe').element as HTMLIFrameElement).contentWindow,
         data: {
           source: 'shufflewick-game',
           type: 'server_request',
@@ -343,6 +344,7 @@ describe('DevHost — debug:restart postMessage routing (D11 RED #1)', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
+        source: (wrapper.find('iframe').element as HTMLIFrameElement).contentWindow,
         data: {
           source: 'shufflewick-game',
           type: 'server_request',
@@ -359,6 +361,28 @@ describe('DevHost — debug:restart postMessage routing (D11 RED #1)', () => {
       (f) => f.type === 'server_request' && f.op === 'debug:restart',
     );
     expect(forwarded).toBeUndefined();
+  });
+});
+
+// ── #719: only the game frame may drive the host ──────────────────────────────
+//
+// Another site can iframe or open this page; its socket is then ours, so a message posted from that
+// site's window must not reach restartGame, switchSeat or the socket.
+describe('DevHost — messages from a window other than the game frame (#719)', () => {
+  it('ignores a debug:restart that the game frame did not send', async () => {
+    const wrapper = await mountAndActivate();
+    const ws = mockWsInstance!;
+    ws.send.mockClear();
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: { postMessage() {} } as unknown as MessageEventSource,
+        data: { source: 'shufflewick-game', type: 'server_request', requestId: 'req-x', op: 'debug:restart', payload: {} },
+      }),
+    );
+    await wrapper.vm.$nextTick();
+
+    expect(ws.send).not.toHaveBeenCalled();
   });
 });
 

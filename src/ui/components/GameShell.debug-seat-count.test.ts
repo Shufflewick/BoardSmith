@@ -30,7 +30,7 @@ import {
 } from './GameShell.platform-mount.test-helper.js';
 
 function post(data: Record<string, unknown>): void {
-  window.dispatchEvent(new MessageEvent('message', { data: { source: 'shufflewick', ...data } }));
+  window.dispatchEvent(new MessageEvent('message', { source: window.parent, data: { source: 'shufflewick', ...data } }));
 }
 
 class FiveSeatGame extends Game<FiveSeatGame, Player> {

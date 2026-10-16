@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useWorldHost } from './useWorldHost.js';
 import { createOrderBook, type OrderBook, type OrderStorage } from './orderBook.js';
@@ -54,8 +55,13 @@ function memoryStorage(): OrderStorage {
   };
 }
 
-function deliver(host: ReturnType<typeof useWorldHost>, data: unknown, origin = HOST_ORIGIN) {
-  host.handleMessage({ origin, data } as MessageEvent);
+function deliver(
+  host: ReturnType<typeof useWorldHost>,
+  data: unknown,
+  origin = HOST_ORIGIN,
+  source: unknown = window.parent,
+) {
+  host.handleMessage({ origin, data, source } as MessageEvent);
 }
 
 describe('useWorldHost', () => {
@@ -288,6 +294,12 @@ describe('useWorldHost', () => {
   it('drops a frame from an origin the host never named', () => {
     const host = make([HOST_ORIGIN]);
     deliver(host, stateFrame(), 'https://evil.example.com');
+    expect(host.heardFromHost.value).toBe(false);
+  });
+
+  it('drops a frame from a window other than its parent (#719)', () => {
+    const host = make();
+    deliver(host, stateFrame(), HOST_ORIGIN, { postMessage() {} });
     expect(host.heardFromHost.value).toBe(false);
   });
 

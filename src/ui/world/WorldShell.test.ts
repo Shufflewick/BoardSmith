@@ -94,7 +94,7 @@ function stateFrame(over: Record<string, unknown> = {}) {
 
 function tell(wrapper: ReturnType<typeof mount>, data: unknown) {
   const send = (frame: unknown): void =>
-    (wrapper.vm as any).host.handleMessage({ origin: 'https://shufflewick.pub', data: frame });
+    (wrapper.vm as any).host.handleMessage({ source: window.parent, origin: 'https://shufflewick.pub', data: frame });
   const frame = data as Record<string, unknown>;
   if (frame?.type !== 'world_state') {
     send(frame);
@@ -837,7 +837,7 @@ describe('WorldShell — the panel says when the verbs are still arriving (#282)
   /** The projection frame ALONE, which is the first half of every push. */
   function tellState(wrapper: ReturnType<typeof mount>, over: Record<string, unknown> = {}) {
     const { actions: _enumerated, ...state } = stateFrame(over);
-    (wrapper.vm as any).host.handleMessage({ origin: 'https://shufflewick.pub', data: state });
+    (wrapper.vm as any).host.handleMessage({ source: window.parent, origin: 'https://shufflewick.pub', data: state });
   }
 
   /** The verbs frame that follows it, stamped with the state it was over. */
@@ -847,6 +847,7 @@ describe('WorldShell — the panel says when the verbs are still arriving (#282)
     names: readonly string[],
   ) {
     (wrapper.vm as any).host.handleMessage({
+      source: window.parent,
       origin: 'https://shufflewick.pub',
       data: {
         source: WORLD_HOST_SOURCE,

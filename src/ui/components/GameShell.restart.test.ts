@@ -66,6 +66,7 @@ describe('the controls menu (#515)', () => {
 /** The host relays a new game's first state into this same frame, as the dev host does on a restart. */
 async function postNewGame(players: unknown[], gameInstanceId: string): Promise<void> {
   window.dispatchEvent(new MessageEvent('message', {
+    source: window.parent,
     data: {
       source: 'shufflewick',
       type: 'game_state',
@@ -131,6 +132,7 @@ describe('leaving history when what it belongs to goes away (#589)', () => {
     expect(wrapper.find('.time-travel-banner').exists()).toBe(true);
 
     window.dispatchEvent(new MessageEvent('message', {
+      source: window.parent,
       data: { source: 'shufflewick', type: 'dev-debug-available', available: false },
     }));
     await flushPromises();

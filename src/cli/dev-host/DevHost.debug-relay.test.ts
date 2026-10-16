@@ -240,7 +240,7 @@ describe('DevHost — game_state deadline relay (#302)', () => {
     await wrapper.vm.$nextTick();
 
     now.mockReturnValue(7_000);
-    window.dispatchEvent(new MessageEvent('message', { data: { source: 'shufflewick-game', type: 'request-state' } }));
+    window.dispatchEvent(new MessageEvent('message', { source: (wrapper.find('iframe').element as HTMLIFrameElement).contentWindow, data: { source: 'shufflewick-game', type: 'request-state' } }));
     await wrapper.vm.$nextTick();
 
     expect(lastGameState(postSpy)).toMatchObject({ deadlineAt: 9_000, serverNow: 4_000, receivedAt: 5_000 });
