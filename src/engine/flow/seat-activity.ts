@@ -157,8 +157,8 @@ export function availableActionsForSeat(
   if (!flowState?.awaitingInput) return [];
 
   if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
-    const playerState = flowState.awaitingPlayers.find(p => p.playerIndex === seat);
-    return playerState && !playerState.completed ? (playerState.availableActions ?? []) : [];
+    const playerState = flowState.awaitingPlayers.find(p => p.playerIndex === seat && !p.completed);
+    return playerState?.availableActions ?? [];
   }
 
   return flowState.currentPlayer === seat ? (flowState.availableActions ?? []) : [];
