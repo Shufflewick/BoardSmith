@@ -1047,8 +1047,9 @@ export class ResidentWorld {
         // THE ORDER'S RECEIPT LANDS WITH ITS EFFECTS (#195), or neither does.
         ...(request.receipt === undefined ? {} : { receipt: request.receipt }),
         // And the ledger is swept on the way past, so a world running for
-        // months does not keep every answer it ever gave.
-        receiptFloorAt: receiptFloor(this.now(), this.#budgets, this.#store.receiptFloorAt()),
+        // months does not keep every answer it ever gave. Wall clock, not
+        // world time: orders are stamped by the page's clock, which has no skew (#722).
+        receiptFloorAt: receiptFloor(this.#clock.now(), this.#budgets, this.#store.receiptFloorAt()),
         // THIS SEAT WAS HERE (ShufflewickPub #383), landing with the effects
         // it produced or not at all.
         ...this.#activityWrite(player, arrivedAt),
