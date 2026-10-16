@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import chalk from 'chalk';
 import ora from 'ora';
 import { getApiKey, saveApiKey, hasLegacyApiKeyField, globalConfigPath } from '../lib/config.js';
-import { readDistDir, createZip } from '../lib/zip.js';
+import { readDistDir, createZip, formatBytes } from '../lib/zip.js';
 import {
   getPlatformUrl,
   initiatePublish,
@@ -428,10 +428,4 @@ function toSlug(name: string): string {
     process.exit(1);
   }
   return slug;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
