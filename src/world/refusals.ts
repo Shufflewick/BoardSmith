@@ -342,6 +342,10 @@ export const WORLD_REFUSALS = {
     owner: "game",
     why: "a handler addressed an event to a scope that is neither the reserved world scope nor a partition this world has loaded (#58). The platform routes on the scope, so an event nobody can be in reaches nobody -- refused rather than delivered silently to no one",
   },
+  "undecided-audience": {
+    owner: "game",
+    why: "#717: a seat the tree lets see an event's scope has a `world.view` that could only say whether it names that scope by reading a partition the command did not declare. Who hears is judged against what the command declared, so residency cannot decide it; the declaration is in the bundle's source, and the same command refuses the same way next time",
+  },
   "child-timeout": {
     owner: "game",
     why: "the bundle's isolate did not answer one of the parent's calls inside its deadline (#107). A handler that never resolves burns no CPU, so no runtime limit fires and nothing throws -- and without a deadline the world chains every later frame, alarm and wake behind it forever while the Durable Object bills continuously. It is the bundle's own doing and the same bundle hangs the same way next time, so it dead-letters the event rather than parking a world 499 other players are in",
