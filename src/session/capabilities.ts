@@ -32,8 +32,10 @@
  * what a legal bundle is.
  */
 
-import type { FlowNode } from '../engine/flow/types.js';
 import type { GameClass } from '../engine/index.js';
+import type { GameOptionDefinition } from '../types/protocol.js';
+import { valuesEqual } from '../engine/action/choice-matching.js';
+import { declaredGameOptionsOf, selectGameOptions } from './game-option-selection.js';
 import { timedStepNames } from '../engine/flow/step-time-limit.js';
 import { constructGame } from '../engine/element/game.js';
 
@@ -161,7 +163,7 @@ export interface CapabilityInputs {
   /**
    * The COMPILED `gameDefinition` -- the code, which cannot be wished. Its
    * `gameClass` is constructed to read the flow a table actually runs (see
-   * `compiledFlowRoots`), which is where `timedSteps` comes from.
+   * `findTimedBuild`), which is where `timedSteps` comes from.
    */
   definition: {
     gameClass: GameClass;
@@ -182,24 +184,111 @@ export interface CapabilityInputs {
 }
 
 /**
- * The root of the compiled flow at every seat count a TABLE's roster allows.
+ * The most times `boardsmith build` or `validate` will construct a game to find
+ * its timed steps. A game whose defaults already time a step needs no search;
+ * past that, 256 still covers a six-seat range with five boolean options, at a
+ * few milliseconds per construction, while ten booleans alone would need 1024.
+ */
+const MAX_FLOW_BUILDS = 256;
+
+/** A table this game can be built as: a seat count, and the options chosen away from their defaults. */
+interface FlowBuild {
+  playerCount: number;
+  choices: Record<string, unknown>;
+}
+
+/** A build whose compiled flow has a step declaring `timeLimitMs`, and those steps' names. */
+interface TimedBuild extends FlowBuild {
+  steps: string[];
+}
+
+/**
+ * The values a player can choose for an option other than its default. Number
+ * and designer-only options have none here: a player never picks a
+ * designer-only one, and a number has too many values to build each.
+ */
+function nonDefaultValues(def: GameOptionDefinition): unknown[] {
+  if (def.designerOnly) return [];
+  if (def.type === 'boolean') return [!def.default];
+  if (def.type === 'select') return def.choices.map((c) => c.value).filter((v) => !valuesEqual(v, def.default));
+  return [];
+}
+
+/** Every set of non-default choices among the declared options, the all-defaults set first. */
+function optionChoiceSets(declared: Record<string, GameOptionDefinition>): Array<Record<string, unknown>> {
+  let sets: Array<Record<string, unknown>> = [{}];
+  for (const [name, def] of Object.entries(declared)) {
+    const others = nonDefaultValues(def);
+    sets = sets.flatMap((set) => [set, ...others.map((value) => ({ ...set, [name]: value }))]);
+  }
+  return sets;
+}
+
+/** The timed steps of the flow this game builds at `playerCount` with `choices` (none if it builds no flow). */
+function timedStepsOf(definition: CapabilityInputs['definition'], build: FlowBuild): string[] {
+  const options = selectGameOptions(declaredGameOptionsOf(definition), build.choices);
+  const root = constructGame(definition.gameClass, {
+    ...options,
+    playerCount: build.playerCount,
+    seed: 'compiled-flow',
+  }).getFlow()?.root;
+  return root ? timedStepNames([root]) : [];
+}
+
+/**
+ * THE FIRST TABLE OF THIS GAME WHOSE FLOW HAS A TIMED STEP, or why it cannot
+ * be looked for.
  *
  * A game builds its flow in its constructor, so the only way to read the flow
- * is to construct the game -- once per seat count, because a constructor may
- * build a different flow for a different table. A world has no flow, and a
- * table without integer minPlayers/maxPlayers yields none here because
- * `capabilityContradictions` refuses it by name.
+ * is to construct the game, and a constructor may build a different flow for a
+ * different seat count or game options (#812). So every seat count is built
+ * with every combination of boolean and select options, the defaults first, and
+ * the search stops at the first timed step. A table without integer
+ * minPlayers/maxPlayers yields nothing here because `capabilityContradictions`
+ * refuses it by name.
  */
-function compiledFlowRoots(backend: GameBackend, definition: CapabilityInputs['definition']): FlowNode[] {
-  const { gameClass, minPlayers, maxPlayers } = definition;
-  if (backend !== 'table') return [];
-  if (!Number.isInteger(minPlayers) || !Number.isInteger(maxPlayers)) return [];
-  const roots: FlowNode[] = [];
-  for (let playerCount = minPlayers as number; playerCount <= (maxPlayers as number); playerCount++) {
-    const root = constructGame(gameClass, { playerCount, seed: 'compiled-flow' }).getFlow()?.root;
-    if (root) roots.push(root);
+function findTimedBuild(definition: CapabilityInputs['definition']): { timed?: TimedBuild; refusal?: string } {
+  const { minPlayers, maxPlayers } = definition;
+  if (!Number.isInteger(minPlayers) || !Number.isInteger(maxPlayers)) return {};
+  const declared = declaredGameOptionsOf(definition) ?? {};
+  const seats = (maxPlayers as number) - (minPlayers as number) + 1;
+  const combinations = Object.values(declared).reduce((n, def) => n * (nonDefaultValues(def).length + 1), 1);
+  const tooMany = combinations * seats > MAX_FLOW_BUILDS;
+  const timed = firstTimedBuild(definition, tooMany ? [{}] : optionChoiceSets(declared));
+  return timed !== undefined || !tooMany ? { timed } : { refusal: tooManyBuildsRefusal(combinations, seats) };
+}
+
+/** The first of these choice sets, at any seat count, whose flow has a timed step. */
+function firstTimedBuild(
+  definition: CapabilityInputs['definition'],
+  sets: Array<Record<string, unknown>>,
+): TimedBuild | undefined {
+  for (const choices of sets) {
+    for (let playerCount = definition.minPlayers as number; playerCount <= (definition.maxPlayers as number); playerCount++) {
+      const steps = timedStepsOf(definition, { playerCount, choices });
+      if (steps.length > 0) return { playerCount, choices, steps };
+    }
   }
-  return roots;
+  return undefined;
+}
+
+/** Why a game with too many option combinations is not searched, and what to change. */
+function tooManyBuildsRefusal(combinations: number, seats: number): string {
+  return (
+    `This game would have to be built ${combinations * seats} times to find every step that declares timeLimitMs ` +
+    `(${combinations} combinations of its boolean and select game options at each of its ${seats} ` +
+    `seat counts), and boardsmith builds it at most ${MAX_FLOW_BUILDS} times. A step's time limit can ` +
+    'depend on the options and the seat count, so each is built. Declare fewer boolean or select ' +
+    'options or a narrower seat range, mark balance knobs designerOnly, or, if the game has timed ' +
+    'steps, time a step with its default options, which ends the search at the first build.'
+  );
+}
+
+/** The table a {@link TimedBuild} was found at, for a message: its seat count and non-default choices. */
+function describeBuild({ playerCount, choices }: FlowBuild): string {
+  const chosen = Object.entries(choices).map(([name, value]) => `${name}: ${JSON.stringify(value)}`);
+  return `at ${playerCount} players with ` +
+    (chosen.length === 0 ? 'the default game options' : `game options ${chosen.join(', ')}`);
 }
 
 /** `true` only for a literal `true`; anything else, including `'yes'`, is false. */
@@ -224,8 +313,16 @@ export function resolveCapabilities(inputs: CapabilityInputs): GameCapabilities 
     asyncPlay: isWorld || declaredTrue(declared.asyncPlay),
     joinInProgress: isWorld || declaredTrue(declared.joinInProgress),
     crossSessionState: isWorld || declaredTrue(definition.persistence),
-    timedSteps: timedStepNames(compiledFlowRoots(backend, definition)).length > 0,
+    timedSteps: timedStepsResolved(backend, definition),
   };
+}
+
+/** `timedSteps`, refusing to guess for a game too large to search (`capabilityContradictions` names it first). */
+function timedStepsResolved(backend: GameBackend, definition: CapabilityInputs['definition']): boolean {
+  if (backend !== 'table') return false;
+  const { timed, refusal } = findTimedBuild(definition);
+  if (refusal !== undefined) throw new Error(refusal);
+  return timed !== undefined;
 }
 
 /**
@@ -370,12 +467,14 @@ function timedStepContradictions(
   definition: CapabilityInputs['definition'],
   declared: CapabilityInputs['declared'],
 ): string[] {
-  const timed = timedStepNames(compiledFlowRoots('table', definition));
-  if (timed.length === 0 || declared.idleAction !== undefined) return [];
-  const steps = timed.map((name) => `'${name}'`).join(', ');
+  const { timed, refusal } = findTimedBuild(definition);
+  if (refusal !== undefined) return [refusal];
+  if (timed === undefined || declared.idleAction !== undefined) return [];
+  const one = timed.steps.length === 1;
+  const steps = timed.steps.map((name) => `'${name}'`).join(', ');
   return [
-    `This game's flow has ${timed.length === 1 ? 'a step' : 'steps'} that declare${timed.length === 1 ? 's' : ''} ` +
-      `timeLimitMs (${steps}), but boardsmith.json declares no "idleAction". The host closes a ` +
+    `This game's flow has ${one ? 'a step' : 'steps'} that declare${one ? 's' : ''} ` +
+      `timeLimitMs (${steps}, ${describeBuild(timed)}), but boardsmith.json declares no "idleAction". The host closes a ` +
       'timed step when its window elapses by submitting the idle action for every seat that has ' +
       'not acted, so without one nothing can close it. Add the legal no-op action your rules ' +
       'register to boardsmith.json, e.g. "idleAction": { "name": "pass" }. A bot is not an ' +
