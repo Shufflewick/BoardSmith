@@ -1113,7 +1113,12 @@ export class ResidentWorld {
     notices: WorldNoticeWrites | undefined,
   ): Promise<{ notices?: readonly SettledNoticeBox[] }> {
     if (notices === undefined) return {};
-    return { notices: await applyNoticeWrites(notices, (seat) => this.#store.noticeBox(seat)) };
+    return {
+      notices: await applyNoticeWrites(notices, (seat) => this.#store.noticeBox(seat), {
+        seatCount: this.#world.seatCount,
+        budgets: this.#budgets,
+      }),
+    };
   }
 
   // ── the schedule ───────────────────────────────────────────────────────────
