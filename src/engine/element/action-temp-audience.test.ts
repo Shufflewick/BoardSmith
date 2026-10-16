@@ -69,7 +69,7 @@ describe('actionTempState: who receives it', () => {
     class Hooked extends TempGame {
       static override playerView = (state: ElementJSON): ElementJSON => ({
         ...state,
-        settings: { ...(state as { settings: Record<string, unknown> }).settings, _actionTemp_1_peek_cardId: 'AS-of-spades' },
+        settings: { ...(state as ElementJSON & { settings: Record<string, unknown> }).settings, _actionTemp_1_peek_cardId: 'AS-of-spades' },
       } as ElementJSON);
     }
     const game = new Hooked({ playerCount: 3, seed: 'action-temp-audience', elementIdKey: '00000000000000a2' });
