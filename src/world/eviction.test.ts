@@ -8,11 +8,11 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { planEviction, worldBudgets } from '../../world/index.js';
-import { ResidentWorld, worldSeatPlayer } from '../../world/host/index.js';
-import { createMemoryWorldStore } from '../../testing/memory-world-store.js';
-import { vaultBundle } from '../../testing/test-world.test-helper.js';
-import { TEST_WORLD_ELEMENT_ID_KEY } from '../../engine/element/world-element-id-key.test-helper.js';
+import { planEviction, worldBudgets } from './index.js';
+import { ResidentWorld, worldSeatPlayer } from './host/index.js';
+import { createMemoryWorldStore } from '../testing/memory-world-store.js';
+import { vaultBundle } from '../testing/test-world.test-helper.js';
+import { TEST_WORLD_ELEMENT_ID_KEY } from '../engine/element/world-element-id-key.test-helper.js';
 
 describe('planEviction', () => {
   it('picks the least recently used past the budget, skipping a dirty one', () => {
