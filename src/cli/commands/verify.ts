@@ -48,7 +48,7 @@ import { chunkVerifyBase } from '../lib/chunk-commits.js';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { type MutantCache, openMutantCache } from '../lib/mutant-cache.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
-import { projectUiProblem } from '../lib/game-project.js';
+import { projectUiProblem, requireGameProject } from '../lib/game-project.js';
 import { testRunScopeProblem } from '../lib/test-run-scope.js';
 import { discardRecord, runVitestRecorded, testRunVerdict } from '../lib/vitest-run.js';
 import {
@@ -467,15 +467,6 @@ export const VERIFY_CHECKS: Readonly<Record<VerifyCheckName, CheckRunner>> = Obj
 // -------------------------------------------------------------------------------------------
 // Running them
 // -------------------------------------------------------------------------------------------
-
-function requireGameProject(projectDir: string): void {
-  if (!existsSync(join(projectDir, 'boardsmith.json'))) {
-    throw new Error(
-      `boardsmith verify checks a game project, and ${projectDir} has no boardsmith.json. ` +
-        "Run it in the game's directory, or pass --project <dir>.",
-    );
-  }
-}
 
 /**
  * The result lives under `.boardsmith/`, which a game's `.gitignore` leaves out of git. Where it does

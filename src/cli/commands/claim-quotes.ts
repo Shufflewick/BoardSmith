@@ -63,7 +63,7 @@ import {
   installedBoardSmithPath,
   relChunkMdPath,
 } from '../lib/project-paths.js';
-import { type ChunkCommit, type PinnedCommit, chunkHistory, chunkPins, fileAtCommit } from '../lib/chunk-commits.js';
+import { type ChunkCommit, type PinnedCommit, chunkHistory, chunkPins, commitName, fileAtCommit } from '../lib/chunk-commits.js';
 import { readGateTransition } from '../lib/gate-transition.js';
 import { markdownHeading } from '../lib/slice-sections.js';
 import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem, splitLineLocation } from '../lib/line-location.js';
@@ -327,11 +327,6 @@ interface ChunkSources {
 
 function chunkSources(projectDir: string, slug: string): ChunkSources {
   return { projectDir, slug, pin: chunkPins(projectDir, slug) };
-}
-
-/** A commit of the chunk's history, as messages name it. */
-function commitName(commit: ChunkCommit): string {
-  return `${commit.hash.slice(0, 10)} (${commit.label})`;
 }
 
 /** Reads the cited file as it was in the commit of the chunk's history it is pinned to (#426). */

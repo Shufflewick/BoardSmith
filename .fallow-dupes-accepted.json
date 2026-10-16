@@ -33,14 +33,6 @@
       ]
     },
     {
-      "content": "0b60693abaf60f66",
-      "lines": 24,
-      "files": [
-        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
-      ]
-    },
-    {
       "content": "1207ddfa1fa44b57",
       "lines": 8,
       "files": [
@@ -116,14 +108,6 @@
       ]
     },
     {
-      "content": "30fc0deecd9670ca",
-      "lines": 17,
-      "files": [
-        "src/ui/components/helpers/FlyingCardsOverlay.vue",
-        "src/ui/components/helpers/ZoomPreviewOverlay.vue"
-      ]
-    },
-    {
       "content": "39398bdc869b7980",
       "lines": 40,
       "files": [
@@ -189,14 +173,6 @@
       "files": [
         "src/eslint-plugin/rules/no-filesystem.ts",
         "src/eslint-plugin/rules/no-network.ts"
-      ]
-    },
-    {
-      "content": "6210fad98994f281",
-      "lines": 11,
-      "files": [
-        "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
       ]
     },
     {
@@ -422,6 +398,14 @@
       ]
     },
     {
+      "content": "c6903880d55edbd4",
+      "lines": 20,
+      "files": [
+        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
+      ]
+    },
+    {
       "content": "ca704472e0333fde",
       "lines": 8,
       "files": [
@@ -445,15 +429,6 @@
       ]
     },
     {
-      "content": "d2c8c895c0955ba2",
-      "lines": 32,
-      "files": [
-        "src/ui/components/auto-ui/AutoRenderer.vue",
-        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
-      ]
-    },
-    {
       "content": "db1eb8419dc57e42",
       "lines": 5,
       "files": [
@@ -466,14 +441,6 @@
       "files": [
         "src/eslint-plugin/rules/no-element-array-state.ts",
         "src/eslint-plugin/rules/no-element-identity-comparison.ts"
-      ]
-    },
-    {
-      "content": "eed4e2c9f6eaa11b",
-      "lines": 20,
-      "files": [
-        "src/ui/components/helpers/FlyingCardsOverlay.vue",
-        "src/ui/components/helpers/ZoomPreviewOverlay.vue"
       ]
     },
     {
