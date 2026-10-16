@@ -48,14 +48,6 @@
       ]
     },
     {
-      "content": "1303bdcca252d17d",
-      "lines": 21,
-      "files": [
-        "src/ui/components/helpers/HeatmapOverlay.vue",
-        "src/ui/components/helpers/TutorialOverlay.vue"
-      ]
-    },
-    {
       "content": "1784dab72184ccca",
       "lines": 37,
       "files": [
@@ -76,6 +68,14 @@
       "lines": 26,
       "files": [
         "src/ui/composables/useActionController.ts"
+      ]
+    },
+    {
+      "content": "223d5ca54c33f5ed",
+      "lines": 30,
+      "files": [
+        "src/ui/components/helpers/HeatmapOverlay.vue",
+        "src/ui/components/helpers/TutorialOverlay.vue"
       ]
     },
     {
@@ -155,9 +155,10 @@
       ]
     },
     {
-      "content": "491ea82910510f29",
-      "lines": 100,
+      "content": "4613214a68f3d717",
+      "lines": 22,
       "files": [
+        "src/ui/components/helpers/HeatmapOverlay.vue",
         "src/ui/components/helpers/HintOverlay.vue",
         "src/ui/components/helpers/TutorialOverlay.vue"
       ]
@@ -280,15 +281,6 @@
       ]
     },
     {
-      "content": "91e082c0d4727e08",
-      "lines": 26,
-      "files": [
-        "src/ui/components/helpers/HeatmapOverlay.vue",
-        "src/ui/components/helpers/HintOverlay.vue",
-        "src/ui/components/helpers/TutorialOverlay.vue"
-      ]
-    },
-    {
       "content": "92e39fc1f52e0c32",
       "lines": 19,
       "files": [
@@ -390,14 +382,6 @@
       ]
     },
     {
-      "content": "bfab5db0336275ce",
-      "lines": 27,
-      "files": [
-        "src/ui/components/helpers/HeatmapOverlay.vue",
-        "src/ui/components/helpers/TutorialOverlay.vue"
-      ]
-    },
-    {
       "content": "c3ce706ae9b61683",
       "lines": 18,
       "files": [
@@ -437,6 +421,14 @@
       ]
     },
     {
+      "content": "cdf91f246a8fa43a",
+      "lines": 22,
+      "files": [
+        "src/ui/components/helpers/HeatmapOverlay.vue",
+        "src/ui/components/helpers/TutorialOverlay.vue"
+      ]
+    },
+    {
       "content": "d046fe4d078dae95",
       "lines": 28,
       "files": [
@@ -451,6 +443,14 @@
         "src/ui/components/auto-ui/AutoRenderer.vue",
         "src/ui/components/auto-ui/renderers/CardRenderer.vue",
         "src/ui/components/auto-ui/renderers/HandRenderer.vue"
+      ]
+    },
+    {
+      "content": "d4073999f27adcf2",
+      "lines": 103,
+      "files": [
+        "src/ui/components/helpers/HintOverlay.vue",
+        "src/ui/components/helpers/TutorialOverlay.vue"
       ]
     },
     {
