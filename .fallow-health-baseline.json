@@ -644,7 +644,7 @@
     },
     "src/ui/composables/useDragDropTargets.ts": {
       "complexity_moderate": {
-        "count": 3
+        "count": 2
       }
     },
     "src/ui/composables/useFLIP.ts": {
