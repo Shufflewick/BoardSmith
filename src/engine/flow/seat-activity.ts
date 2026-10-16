@@ -28,7 +28,8 @@ export interface SeatActivityState {
   /** Per-seat state during a simultaneous step. */
   awaitingPlayers?: Array<{
     playerIndex: number;
-    availableActions: string[];
+    /** Absent from another seat's entry in a client's view (#778). */
+    availableActions?: string[];
     completed: boolean;
   }>;
   /** The follow-ups the open step holds, each with the seat that owns it. */
@@ -157,7 +158,7 @@ export function availableActionsForSeat(
 
   if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
     const playerState = flowState.awaitingPlayers.find(p => p.playerIndex === seat);
-    return playerState && !playerState.completed ? playerState.availableActions : [];
+    return playerState && !playerState.completed ? (playerState.availableActions ?? []) : [];
   }
 
   return flowState.currentPlayer === seat ? (flowState.availableActions ?? []) : [];

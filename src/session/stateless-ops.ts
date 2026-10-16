@@ -614,7 +614,7 @@ type BotFlowState = {
 function buildViews(runner: GameRunner, playerCount: number): unknown[] {
   const flowState = runner.getFlowState();
   return Array.from({ length: playerCount }, (_, i) => ({
-    flowState: toPublicFlowState(flowState),
+    flowState: toPublicFlowState(flowState, i + 1),
     state: buildPlayerState(runner, [], i + 1, { includeActionMetadata: true }),
   }));
 }
@@ -629,7 +629,7 @@ function buildViews(runner: GameRunner, playerCount: number): unknown[] {
 // `_restoreZoneVisibility`), so both cases redact identically.
 function buildSpectatorView(runner: GameRunner): unknown {
   return {
-    flowState: toPublicFlowState(runner.getFlowState()),
+    flowState: toPublicFlowState(runner.getFlowState(), 0),
     state: buildPlayerState(runner, [], 0, { includeActionMetadata: false }),
   };
 }
