@@ -722,9 +722,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (elementRefusal) return { valid: false, error: elementRefusal };
     const choices = getChoices(selection);
     if (choices.length > 0) {
-      const takesItems = selection.type === 'elements'
-        || resolveMultiSelectConfig(selection) !== undefined
-        || resolveOrderedListConfig(selection) !== undefined;
+      const takesItems = selectionTakesList(selection);
       const listRefusal = selection.type === 'choice' && !takesItems
         ? oneChoiceListRefusal(selection.name, value, choices)
         : undefined;
@@ -874,11 +872,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (enabledChoices.length !== 1 || selection.optional) return false;
 
     const choice = enabledChoices[0];
-    currentArgs.value[selection.name] = choice.value;
+    // A pick that takes a list is sent a list: the engine refuses a bare value for it.
+    const value = asPickValue(selection, choice.value);
+    currentArgs.value[selection.name] = value;
 
     if (actionSnapshot.value) {
       actionSnapshot.value.collectedPicks.set(selection.name, {
-        value: choice.value,
+        value,
         display: choice.display,
         skipped: false,
       });
@@ -2409,6 +2409,18 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   ): { min: number; max?: number } | undefined {
     const pickSnapshot = actionSnapshot.value?.pickSnapshots.get(selection.name);
     return resolveEffectiveOrderedList(selection, pickSnapshot);
+  }
+
+  /** True for a chooseElements, multiSelect or ordered-list pick: one that is sent an array. */
+  function selectionTakesList(selection: EnrichedPickMetadata): boolean {
+    return selection.type === 'elements'
+      || resolveMultiSelectConfig(selection) !== undefined
+      || resolveOrderedListConfig(selection) !== undefined;
+  }
+
+  /** A lone choice as the value its pick is sent: a one-item array for a list pick, else the choice itself. */
+  function asPickValue(selection: EnrichedPickMetadata, choiceValue: unknown): unknown {
+    return selectionTakesList(selection) ? [choiceValue] : choiceValue;
   }
 
   /** The active selection by name, or `undefined` with a devWarn naming the verb. */

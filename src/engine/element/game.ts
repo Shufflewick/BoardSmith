@@ -2665,7 +2665,7 @@ export class Game<
     // Intentionally skip condition check — returns schema regardless of current
     // availability. Use getActionSpace() when you need condition-filtered actions.
     const selections = actionDef.selections.map(sel =>
-      buildPickMetadata(this, player, sel)
+      buildPickMetadata(this, player, actionName, sel)
     );
     return {
       name: actionName,
@@ -4815,6 +4815,12 @@ export class Game<
     // is past the safe integers and neighbouring placeholders round to one.
     let nextPlaceholderId = -1;
 
+    // #758: a child of a concealed zone whose own grant reaches this seat goes out whole.
+    const grantedChild = (element: GameElement, i: number, childJson: ElementJSON): ElementJSON | null => {
+      const child = element._t.children[i];
+      return child?.isVisibleTo(visibilityPosition) ? filterElement(childJson, child) : null;
+    };
+
     // A CONCEALED ZONE'S CHILDREN AS ANONYMOUS PLACEHOLDERS, for the count-only
     // and owner-only zone branches below. Each keeps its class and only the
     // safe layout $-keys of its attributes (identity-bearing image refs are
@@ -4828,6 +4834,11 @@ export class Game<
     const placeholderChildren = (json: ElementJSON, element: GameElement): ElementJSON[] => {
       const placeholders: ElementJSON[] = [];
       for (const [i, childJson] of (json.children ?? []).entries()) {
+        const granted = grantedChild(element, i, childJson);
+        if (granted) {
+          placeholders.push(granted);
+          continue;
+        }
         const syntheticId = nextPlaceholderId--;
         const childElement = element._t.children[i];
         if (idRemap && childElement) {
@@ -5044,7 +5055,9 @@ export class Game<
           // explicitly-undefined key, which the true-concealment contract
           // (no `children` key at all) forbids.
           const { children: _omittedRealChildren, ...concealedJson } = ownJson;
-          return concealedJson;
+          // #758: a granted child is still sent, alone, so the zone's size stays secret.
+          const granted = (json.children ?? []).flatMap((childJson, i) => grantedChild(element, i, childJson) ?? []);
+          return granted.length > 0 ? { ...concealedJson, children: granted } : concealedJson;
         } else if (zoneVisibility.mode === 'count-only') {
           // Count-only mode: create anonymized placeholders for children.
           // This allows the UI to render the correct number and type of elements

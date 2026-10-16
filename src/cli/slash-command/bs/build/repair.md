@@ -85,11 +85,11 @@ recorded disposition is done and is not redone or clobbered by a resuming sessio
 ## A Fix Is Not Done Until `boardsmith verify` Passes
 
 A finding recorded `fixed` changed code, and code that changed is re-checked by the same policy
-gate the test step ends with. For explicit focused opt-in, apply `state-machine.md` "Focused
-Verification Policy" to this section's verify and test-step commands. Commit the round's fixes,
+gate the test step ends with. Commit the round's fixes,
 then run `npx boardsmith verify --chunk <slug>` (`state-machine.md` "Git Protocol" says what it
 measures from): by default the full suite, typecheck, build, validate, the smoke test and a mutation check of the changed
-lines, recorded for that commit. A round is not done, and the next audit round is not dispatched,
+lines, recorded for that commit. For explicit focused opt-in, apply `state-machine.md` "Focused
+Verification Policy" to this section's verify and test-step commands. A round is not done, and the next audit round is not dispatched,
 until it exits zero on a clean tree. When it fails, the failed check says what to fix and what to
 run next; that is more repair work in this round, not a new finding. Never say a fix is done or the
 suite is green on anything else: `chunk-signoff` refuses a commit with no passing result covering
