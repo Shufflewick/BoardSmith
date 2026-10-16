@@ -77,6 +77,15 @@ describe('orderedList — an ordered, repeatable list of choices (#249)', () => 
     expect(result.errors.join(' ')).toContain('at most 3');
   });
 
+  it('refuses an over-long list on its length alone, matching none of its entries (#776)', () => {
+    const { result, log } = withDevLog(() =>
+      check(repairs().selections[0], Array.from({ length: 1000 }, () => 'observatory')),
+    );
+
+    expect(result.errors).toEqual(['Selection "buildings" requires at most 3 choices, got 1000']);
+    expect(log).not.toContain('observatory');
+  });
+
   it('counts ENTRIES against min, so repeats DO satisfy a lower bound', () => {
     const action = Action.create<TestGame>('repair')
       .chooseFrom('buildings', {

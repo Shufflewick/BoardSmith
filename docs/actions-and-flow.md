@@ -639,7 +639,8 @@ Action.create('bid')
   .enterNumber('amount', {
     prompt: 'Enter your bid',
     min: 1,
-    max: (ctx) => ctx.player.coins,
+    // min and max are fixed numbers; a limit read from the game is a validate.
+    validate: (amount, _args, ctx) => amount <= ctx.player.coins || 'You cannot bid more coins than you have.',
   })
 ```
 
