@@ -915,6 +915,35 @@ describe('Serialization safety (F7)', () => {
     expect(pair.left).toEqual({ tag: 'shared-value' });
     expect(pair.right).toEqual({ tag: 'shared-value' });
   });
+
+  // #759: a class instance or Date went through Object.entries and came back
+  // a plain object, so the game broke on its first restore, far from the cause.
+  class Stats {
+    hits = 2;
+    get total() { return this.hits * 10; }
+  }
+
+  it('refuses a class instance, naming the path, its type and what to store instead', () => {
+    const card = hand.create(Card, 'classy', { suit: 'S', rank: 'A', value: 1 });
+    (card as unknown as Record<string, unknown>).meta = { s: new Stats() };
+
+    expect(() => card.toJSON()).toThrowError(/Stats at property 'meta\.s'.*plain object/s);
+  });
+
+  it('refuses a Date, naming the path and what to store instead', () => {
+    const card = hand.create(Card, 'dated', { suit: 'S', rank: 'A', value: 1 });
+    (card as unknown as Record<string, unknown>).meta = { when: new Date(5) };
+
+    expect(() => card.toJSON()).toThrowError(/Date at property 'meta\.when'.*getTime\(\)/s);
+  });
+
+  it('still encodes plain and null-prototype objects', () => {
+    const card = hand.create(Card, 'plain', { suit: 'S', rank: 'A', value: 1 });
+    const bare = Object.assign(Object.create(null) as Record<string, unknown>, { hits: 3 });
+    (card as unknown as Record<string, unknown>).meta = { plain: { hits: 2 }, bare };
+
+    expect(card.toJSON().attributes.meta).toEqual({ plain: { hits: 2 }, bare: { hits: 3 } });
+  });
 });
 
 // #149: `encodeValue` answered "is this element a player?" with a numeric
