@@ -3,7 +3,7 @@ import { Player } from '../player/player.js';
 import type { HistoryEntry } from '../action/types.js';
 import type { FlowState } from '../flow/types.js';
 import type { TutorialStepView } from '../tutorial/types.js';
-import type { RandomState } from '../../utils/random.js';
+import { SeededRandom, type RandomState } from '../../utils/random.js';
 import { getActiveTutorialStepView } from '../tutorial/gate.js';
 import { canSeatAct, availableActionsForSeat } from '../flow/seat-activity.js';
 
@@ -429,6 +429,15 @@ function snapshotFlowState(game: Game, opts: { forSeat?: number | null } | undef
 }
 
 /**
+ * The random source a snapshot holds. A seat's clone gets its own seed: the
+ * game's seed and random position would tell it every future draw (#776).
+ */
+function snapshotRandom(game: Game, seat: { reseed: string } | undefined): Pick<GameStateSnapshot, 'randomState' | 'gameOptions'> {
+  if (seat === undefined) return { randomState: game.getRandomState(), gameOptions: game.getConstructorOptions() };
+  return { randomState: new SeededRandom(seat.reseed).getState(), gameOptions: { ...game.getConstructorOptions(), seed: seat.reseed } };
+}
+
+/**
  * Create a complete game state snapshot
  */
 export function createSnapshot(
@@ -437,8 +446,9 @@ export function createSnapshot(
   actionHistory: HistoryEntry[] = [],
   seed?: string,
   /** `forSeat`: build a REDACTED clone for this seat — `null` for the spectator
-   *  (public information only). Omit for the unfiltered authoritative truth. */
-  opts?: { forSeat?: number | null }
+   *  (public information only). Omit for the unfiltered authoritative truth.
+   *  `reseed`: the clone's own random seed (see `snapshotRandom`). */
+  opts?: { forSeat: number | null; reseed: string }
 ): GameStateSnapshot {
   const flowState = snapshotFlowState(game, opts);
 
@@ -473,8 +483,7 @@ export function createSnapshot(
     actionHistory: [...actionHistory],
     seed,
     sequence: game._ctx.sequence,
-    randomState: game.getRandomState(),
-    gameOptions: game.getConstructorOptions(),
+    ...snapshotRandom(game, opts),
     ...(hiddenIdRemap && hiddenIdRemap.size > 0 && { hiddenIdRemap }),
   };
 }

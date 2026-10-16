@@ -147,6 +147,7 @@ export function createProgram(): Command {
     .description('Run this workspace\'s tests (the game\'s, or BoardSmith\'s own after a type check)')
     .option('-w, --watch', 'Watch mode - re-run tests on changes')
     .option('--coverage', 'Generate coverage report')
+    .option('--selection <path>', 'Run only the exact file and full test names in an authored-test selection')
     .option('--browser', "BoardSmith's own repository only: run the browser regressions (scripts/*-browser.mjs) in Chromium instead of the default suite, without the type check the default run does first")
     .option('--verdict-file <path>', 'When the run does not pass, also write why to <path> (for a merge gate to repeat)')
     .action(testCommand);
@@ -192,7 +193,8 @@ export function createProgram(): Command {
     .option('--base <git-ref>', 'Where the change started: its merge base with HEAD is the base (default: the main branch)')
     .option(
       '--chunk <slug>',
-      "Measure a chunk's change from the commit before its first chunk-<slug>/ commit; with --check, accept only a result that covers it",
+      "Fast checks for a chunk: only the test files it added or changed since the commit before its first chunk-<slug>/ " +
+        "commit, and typecheck; with --check, accept only that chunk's result",
     )
     .option('--check', 'Run nothing: exit 0 only when HEAD, on a clean tree, has a passing result')
     .option('--project <dir>', 'Project directory (defaults to cwd)')
@@ -204,7 +206,6 @@ export function createProgram(): Command {
     .requiredOption('--contract <text>', 'The explicit valid-input contract under which the mutation is equivalent')
     .requiredOption('--proof <text>', 'The complete argument that every valid input has the same observable behavior')
     .option('--base <git-ref>', 'Use the same mutation base as verify')
-    .option('--chunk <slug>', 'Use the same chunk as verify')
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .action(mutationEquivalenceCommand);
 

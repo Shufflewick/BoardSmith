@@ -21,6 +21,7 @@ import ElementRenderer from './ElementRenderer.vue';
 import { resolvePresentation } from '../presentation.js';
 import type { PresentationOverlay } from '../presentation.js';
 import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
+import { boardCellStates } from './board-cell-states.js';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — do NOT import from engine (module is dependency-free)
@@ -110,44 +111,15 @@ const displayLabel = computed(
 // All children passed to ElementRenderer for rendering
 const children = computed(() => props.element.children ?? []);
 
-// Element identity helper — passes notation from attributes (Pitfall 6: notation is not a top-level
-// field on GameElement in renderer context; it lives in attributes for notation-keyed elements
-// like Checkers squares). Routing all interaction calls through this helper ensures matchesRef
-// can match by notation when a boardRef specifies { notation: 'e5' }.
-function cellIdentity(cell: GameElement) {
-  return {
-    id: cell.id,
-    name: cell.name,
-    notation: cell.attributes?.notation as string | undefined,
-  };
-}
-
-// Per-cell board interaction states — all six required states (UI-SPEC Interaction Affordance Contract)
-function isCellHighlighted(cell: GameElement): boolean {
-  if (!boardInteraction) return false;
-  return boardInteraction.isHighlighted(cellIdentity(cell));
-}
-
-function isCellSelected(cell: GameElement): boolean {
-  if (!boardInteraction) return false;
-  return boardInteraction.isSelected(cellIdentity(cell));
-}
-
-function isCellActionSelectable(cell: GameElement): boolean {
-  if (!boardInteraction) return false;
-  if (isCellSelected(cell)) return false;
-  return boardInteraction.isSelectableElement(cellIdentity(cell));
-}
-
-function isCellDropTarget(cell: GameElement): boolean {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDropTarget(cellIdentity(cell));
-}
-
-function isCellDisabled(cell: GameElement): boolean {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDisabledElement(cellIdentity(cell)) !== false;
-}
+const {
+  cellIdentity,
+  isCellHighlighted,
+  isCellSelected,
+  isCellActionSelectable,
+  isCellDropTarget,
+  isCellDisabled,
+  cellStateLabel,
+} = boardCellStates(boardInteraction);
 
 // ── A11Y-01: useSelectableGrid — roving tabindex for 2D grid navigation ────
 //
@@ -211,13 +183,7 @@ function cellAriaLabel(cell: GameElement, idx: number): string {
   const r = Math.floor(idx / cols);
   // Use the cell's own name (notation) if available; fall back to computed coord
   const coord = cell.name ?? (String.fromCharCode(97 + c) + (rows - r));
-  let state: string;
-  if (isCellDisabled(cell)) state = 'unavailable';
-  else if (isCellSelected(cell)) state = 'selected';
-  else if (isCellDropTarget(cell)) state = 'drop target';
-  else if (isCellActionSelectable(cell)) state = 'selectable';
-  else state = 'empty';
-  return `${coord}, ${state}`;
+  return `${coord}, ${cellStateLabel(cell)}`;
 }
 
 function handleDragOver(event: DragEvent, cell: GameElement) {

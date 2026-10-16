@@ -1,7 +1,7 @@
 import { GameElement } from '../element/game-element.js';
 import { ElementCollection } from '../element/element-collection.js';
 import type { Game } from '../element/game.js';
-import type { ElementContext, ElementClass, ElementFinder, ElementJSON } from '../element/index.js';
+import type { ElementContext, ElementClass, ElementFinder } from '../element/index.js';
 
 /**
  * Seat liveness, as the engine understands it.
@@ -177,12 +177,6 @@ export class Player<G extends Game = any, P extends Player = any> extends GameEl
    */
   status: PlayerStatus = 'active';
 
-  /**
-   * Whether this player is currently taking their turn.
-   * @internal Use {@link isCurrent} and {@link setCurrent} instead.
-   */
-  private _isCurrent: boolean = false;
-
   constructor(ctx: Partial<ElementContext>) {
     super(ctx);
   }
@@ -223,8 +217,9 @@ export class Player<G extends Game = any, P extends Player = any> extends GameEl
   /**
    * Check if this player is the current player (whose turn it is).
    *
-   * The current player is tracked via the `_isCurrent` internal flag, which is
-   * managed by the game flow and `setCurrentPlayer()`.
+   * Read from the flow, like {@link Game.currentPlayer}: true for the seat
+   * the flow is running for, and for no seat while a simultaneous step awaits
+   * input.
    *
    * @returns `true` if this player is currently taking their turn
    *
@@ -243,31 +238,7 @@ export class Player<G extends Game = any, P extends Player = any> extends GameEl
    * @see {@link Game.currentPlayer} - Preferred way to get current player
    */
   isCurrent(): boolean {
-    return this._isCurrent;
-  }
-
-  /**
-   * Set whether this player is the current player.
-   *
-   * **Note**: Prefer using `game.setCurrentPlayer(player)` which handles clearing
-   * the previous current player automatically.
-   *
-   * @param isCurrent - Whether this player should be current
-   *
-   * @example
-   * ```typescript
-   * // Usually called via game.setCurrentPlayer() instead
-   * game.setCurrentPlayer(player);
-   *
-   * // Direct usage (must clear previous manually)
-   * previousPlayer.setCurrent(false);
-   * nextPlayer.setCurrent(true);
-   * ```
-   *
-   * @see {@link Game.setCurrentPlayer} - Preferred method for changing current player
-   */
-  setCurrent(isCurrent: boolean): void {
-    this._isCurrent = isCurrent;
+    return this.game.currentPlayer?.seat === this.seat;
   }
 
   /**
@@ -372,24 +343,6 @@ export class Player<G extends Game = any, P extends Player = any> extends GameEl
     ...finders: ElementFinder<T>[]
   ): boolean {
     return this.my(className, ...finders) !== undefined;
-  }
-
-  /**
-   * Serialize player to JSON for state persistence.
-   *
-   * Includes the `_isCurrent` flag in attributes when true, so current player
-   * state is preserved across serialization/deserialization.
-   *
-   * @returns JSON representation of this player
-   * @internal
-   */
-  override toJSON(): ElementJSON {
-    const json = super.toJSON();
-    // Include _isCurrent in serialization
-    if (this._isCurrent) {
-      json.attributes._isCurrent = true;
-    }
-    return json;
   }
 
   /** @internal */

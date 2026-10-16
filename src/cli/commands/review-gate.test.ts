@@ -63,7 +63,7 @@ describe('the gate refuses a review the verify result does not back', () => {
     expect(await refusal()).toContain('uncommitted changes');
   });
 
-  it('refuses a result that did not measure the chunk\'s whole change (a --base HEAD run)', async () => {
+  it('refuses a full result, which is not the chunk\'s fast checks (a --base HEAD run)', async () => {
     await writeFiles(project, { 'src/rules.ts': code(3, 'a') });
     commitAll(project, 'fixture: before the chunk');
     await writeFiles(project, { 'src/rules.ts': code(3, 'b') });
@@ -71,6 +71,7 @@ describe('the gate refuses a review the verify result does not back', () => {
     await writeFiles(project, { 'src/rules.ts': code(3, 'c') });
     await recordPassingVerify(project, { message: 'chunk-deal/step-test' });
 
+    expect(await refusal()).toContain('not made for chunk "deal"');
     expect(await refusal()).toContain('boardsmith verify --chunk deal');
   });
 
@@ -91,7 +92,7 @@ describe('the gate refuses a review the verify result does not back', () => {
 });
 
 describe('an open gate hands the reviewer the verify result', () => {
-  it('states the mechanical checks are done, names every check with its outcome, and says not to re-run them', async () => {
+  it('says only the fast checks ran, names each with its outcome, and that the rest run at publish, not by the reviewer (#985)', async () => {
     await writeFiles(project, { 'src/rules.ts': code(3, 'a') });
     const head = await recordPassingVerify(project, { chunk: 'deal' });
 
@@ -100,12 +101,14 @@ describe('an open gate hands the reviewer the verify result', () => {
     expect(gate.open).toBe(true);
     if (!gate.open) return;
     expect(gate.level).toBe('full');
-    expect(gate.brief).toContain(`Mechanical checks: done. \`boardsmith verify --chunk deal\` passed for commit ${head.slice(0, 12)} on a clean tree`);
-    for (const check of ['test', 'typecheck', 'build', 'validate', 'smoke', 'mutation']) {
-      expect(gate.brief).toContain(`- ${check}: ${check} passed`);
-    }
+    expect(gate.brief).toContain(`Fast checks: done. \`boardsmith verify --chunk deal\` passed for commit ${head.slice(0, 12)} on a clean tree`);
+    expect(gate.brief).toContain('- test: test passed');
+    expect(gate.brief).toContain('- typecheck: typecheck passed');
+    expect(gate.brief).not.toMatch(/^- (build|validate|smoke|mutation):/m);
     expect(gate.brief).toContain(`.boardsmith/verify/${head}.json`);
-    expect(gate.brief).toMatch(/Do not run the suite, typecheck, build, validate, the smoke test or a mutation check again/);
+    expect(gate.brief).toMatch(/Only the fast checks have run: the chunk's tests and typecheck\./);
+    expect(gate.brief).toMatch(/The full suite, build, validate, the smoke test and the mutation check run at publish/);
+    expect(gate.brief).toMatch(/Do not run any of them, or the fast checks again/);
   });
 
   it('scopes a re-review to the change since the commit the last round reviewed', async () => {
@@ -193,6 +196,6 @@ describe('the size rule: only a small mechanical change may skip or lighten revi
 
     expect(process.exitCode).toBeUndefined();
     expect(printed[0]).toMatch(/^Review level: full \(/);
-    expect(printed.join('\n')).toContain('Mechanical checks: done.');
+    expect(printed.join('\n')).toContain('Fast checks: done.');
   });
 });

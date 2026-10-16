@@ -59,11 +59,13 @@ than by asking — the gate still stops the work, and the human still decides.
 Which role does each piece of work, when review may start, and what happens when a step fails:
 `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
 
-No review step starts until `boardsmith verify` has passed for the commit under review: the
-red team, every audit round and the final-acceptance pass each run `npx boardsmith verify --chunk
-<slug>` and then `npx boardsmith review-gate <slug>`, which refuses, saying to run `boardsmith
-verify`, when there is no passing result for the current commit, and when open prints the verify
-brief every review prompt carries. A step that fails (its verify fails, a check such as
+No review step starts until the chunk's fast checks (its tests and typecheck, `state-machine.md`
+"Git Protocol") have passed for the commit under review: the red team, every audit round and the
+final-acceptance pass each run `npx boardsmith verify --chunk <slug>` and then `npx boardsmith
+review-gate <slug>`, which refuses, saying to run `boardsmith verify --chunk <slug>`, when there is
+no passing result for the current commit, and when open prints the verify brief every review
+prompt carries. The full suite, build, validate, the smoke test and the mutation check run once,
+at publish, not per chunk. A step that fails (its verify fails, a check such as
 `claim-quote-check` refuses its work, or its reviewer asks for changes) is retried once at the same
 role with the failure output; a second failure at that role goes one role up
 (`npx boardsmith agent <role> --escalate`), and a second failure at `judgement` goes to the

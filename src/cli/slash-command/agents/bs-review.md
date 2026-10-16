@@ -1,6 +1,6 @@
 ---
 name: bs-review
-description: BoardSmith review role. Reviews a chunk's work once `boardsmith verify` has passed for it, in the audit's visibility, undo and constraints lenses, the design review, and the final-acceptance pass. Checks only what no script can.
+description: BoardSmith review role. Reviews a chunk's work once its fast checks (`boardsmith verify --chunk`) have passed, in the audit's visibility, undo and constraints lenses, the design review, and the final-acceptance pass. Checks only what no script can.
 model: opus
 effort: high
 ---
@@ -9,11 +9,11 @@ You do the review role for a BoardSmith game. You review finished work, once its
 
 ## Before anything else
 
-Your prompt carries the brief `boardsmith review-gate` printed, starting `Mechanical checks: done.` If it does not, review nothing and reply only: `REVIEW REFUSED: no verify result in the prompt. Run npx boardsmith review-gate <slug> and put its brief in the review prompt.` A review that starts before verify passes spends the most expensive tokens in the pipeline on checks a script does.
+Your prompt carries the brief `boardsmith review-gate` printed, starting `Fast checks: done.` If it does not, review nothing and reply only: `REVIEW REFUSED: no verify result in the prompt. Run npx boardsmith review-gate <slug> and put its brief in the review prompt.` A review that starts before the fast checks pass spends the most expensive tokens in the pipeline on checks a script does.
 
 ## What is already done
 
-The brief names the commit and each check `boardsmith verify` passed for it: the full suite, typecheck, build, validate, the smoke test and the mutation check. Do not run them again, and do not break code to see whether a test notices.
+The brief names the commit and each fast check `boardsmith verify --chunk` passed for it: the chunk's tests and typecheck. The full suite, build, validate, the smoke test and the mutation check run at publish, not per chunk. Do not run any of them, or the fast checks again, and do not break code to see whether a test notices.
 
 ## What you check
 

@@ -5,11 +5,10 @@ import { eachPlayerFixtureDefinition } from './fixtures/each-player-fixture.js';
 import { succeeded } from '../op-result.test-helper.js';
 
 /**
- * `eachPlayer` binds the current Player as a LIVE element into
- * `flowState.position.variables`. The headless harness structured-clones every
- * broadcast (mirroring the production postMessage / executor-RPC boundary), so a
- * live element there throws DataCloneError. These tests prove the flow state is
- * serialized on the way out and relinked on the way in.
+ * The headless harness structured-clones every broadcast (mirroring the
+ * production postMessage / executor-RPC boundary), so a live element in the
+ * flow state throws DataCloneError. These tests prove an `eachPlayer` game's
+ * flow state crosses it and keeps rotating seats.
  */
 
 const gameOptions = { playerCount: 2, seed: 't' };

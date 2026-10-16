@@ -23,7 +23,8 @@ vi.mock('../../utils/dev.js', async (importOriginal) => {
 
 // ---------------------------------------------------------------------------
 // The oracle: ElementCollection._finder and finderToPredicate as they were
-// before #654, with `this` made the `roots` argument.
+// before #654, with `this` made the `roots` argument, and a backward walk
+// meeting an element after its children (#766).
 // ---------------------------------------------------------------------------
 
 type FinderOptions = { limit?: number; order?: 'asc' | 'desc' };
@@ -42,6 +43,17 @@ function oracleFinder<F extends GameElement>(
   const duplicates: Array<{ id: number; name: string; depth: number; firstPath: string; dupPath: string }> = [];
 
   const predicates = finders.map((finder) => oracleFinderToPredicate<F>(finder));
+
+  const collect = (el: GameElement, order: 'asc' | 'desc') => {
+    if (options.limit !== undefined && result.length >= options.limit) return;
+    if ((!className || el instanceof className) && predicates.every((pred) => pred(el as F))) {
+      if (order === 'desc') {
+        result.unshift(el as F);
+      } else {
+        result.push(el as F);
+      }
+    }
+  };
 
   const traverse = (elements: GameElement[], order: 'asc' | 'desc', depth: number, parentPath: string) => {
     const items = order === 'desc' ? [...elements].reverse() : elements;
@@ -64,17 +76,15 @@ function oracleFinder<F extends GameElement>(
         firstSeenUnder!.set(el.id, parentPath);
       }
 
-      if ((!className || el instanceof className) && predicates.every((pred) => pred(el as F))) {
-        if (order === 'desc') {
-          result.unshift(el as F);
-        } else {
-          result.push(el as F);
+      const intoChildren = () => {
+        if (el._t.children.length > 0) {
+          traverse(el._t.children, order, depth + 1, `${el.name ?? el.constructor.name}#${el.id}`);
         }
-      }
-
-      if (el._t.children.length > 0) {
-        traverse(el._t.children, order, depth + 1, `${el.name ?? el.constructor.name}#${el.id}`);
-      }
+      };
+      // #766: backwards, an element comes after its children (document order reversed).
+      if (order === 'desc') intoChildren();
+      collect(el, order);
+      if (order === 'asc') intoChildren();
     }
   };
 
@@ -350,10 +360,16 @@ describe('a query answers with an array of its own (#654)', () => {
     expect(order()).toEqual(['t1', 't2', 't3']);
   });
 
-  it('a backward walk answers a matching child before its matching parent', () => {
+  it('last and lastN answer the end of document order, a child after its parent (#766)', () => {
     const game = new QueryGame({ playerCount: 2, seed: 'nested-last' });
     const a = game.create(Zone, 'A');
     const b = a.create(Zone, 'B');
-    expect(game.lastN(2, Zone)).toEqual([b, a]);
+    const c = game.create(Zone, 'C');
+    const d = b.create(Zone, 'D');
+    expect(game.all(Zone)).toEqual([a, b, d, c]);
+    expect(game.last(Zone)).toBe(c);
+    expect(a.last(Zone)).toBe(d);
+    expect(game.lastN(3, Zone)).toEqual([b, d, c]);
+    expect(game.children.lastN(4, Zone)).toEqual([a, b, d, c]);
   });
 });

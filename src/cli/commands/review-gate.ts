@@ -3,18 +3,19 @@
  *
  * Model reviewers used to spend most of their tokens re-running checks that need no model: the
  * suite, typecheck, build, validate, and breaking code to see whether a test notices. So no model
- * review of a chunk's work starts until `boardsmith verify --chunk <slug>` has passed for the
- * commit under review, and the reviewer is told what verify found, from the result on file.
+ * review of a chunk's work starts until `boardsmith verify --chunk <slug>` (the chunk's tests and
+ * typecheck, #985) has passed for the commit under review, and the reviewer is told what it found,
+ * from the result on file, and that the full checks run at publish, by no reviewer.
  *
  * The command is that gate. Every review step in the bs- skills (red team, the audit lenses,
  * fidelity, final acceptance, the cross-chunk lens) runs it before dispatching a reviewer:
  *
- *   - It refuses, exit 1, unless HEAD, on a clean tree, has a passing verify result that measured
- *     the chunk's whole change (`verifiedProblem`, the question `verify --check --chunk` asks). The
- *     refusal says to run `boardsmith verify`.
+ *   - It refuses, exit 1, unless HEAD, on a clean tree, has the chunk's passing fast checks
+ *     (`verifiedProblem`, the question `verify --check --chunk` asks). The refusal says to run
+ *     `boardsmith verify --chunk <slug>`.
  *   - Open, it prints the review level and then the brief every review prompt carries verbatim:
- *     that the mechanical checks are done, each check's outcome, where the result file is, the
- *     change under review, and not to run the checks again.
+ *     that only the fast checks ran, each one's outcome, where the result file is, the change
+ *     under review, that the full checks run at publish, and not to run any check.
  *
  * THE SIZE RULE (`reviewLevel`). Only a small change made by the mechanical role may skip review or
  * have a light one; everything else is reviewed in full. A mechanical change is measured from the
@@ -101,17 +102,18 @@ function parseWorkRole(value: string | undefined): WorkRole | undefined {
   return value as WorkRole;
 }
 
-/** The text every review prompt carries: the mechanical checks are done, and what they found. */
+/** The text every review prompt carries: which checks ran, what they found, and which run at publish (#985). */
 function reviewBrief(projectDir: string, slug: string, result: VerifyResult, from: string): string {
   return [
-    `Mechanical checks: done. \`boardsmith verify --chunk ${slug}\` passed for commit ${short(result.commit)} on a clean tree ` +
+    `Fast checks: done. \`boardsmith verify --chunk ${slug}\` passed for commit ${short(result.commit)} on a clean tree ` +
       `(result: ${relative(projectDir, verifyResultPath(projectDir, result.commit))}, changes measured since ${result.base.ref} ` +
       `at ${short(result.base.commit)}):`,
     ...result.checks.map((check) => `- ${check.name}: ${check.summary}`),
     `The change under review: \`git diff ${short(from)}..${short(result.commit)}\`.`,
-    'Do not run the suite, typecheck, build, validate, the smoke test or a mutation check again, and do not break code ' +
-      'to see whether a test notices: verify did all of that for this commit. Your review is the judgement checks ' +
-      'listed in this prompt, and nothing a script can check.',
+    "Only the fast checks have run: the chunk's tests and typecheck. The full suite, build, validate, the smoke test " +
+      'and the mutation check run at publish, not per chunk. Do not run any of them, or the fast checks again, and do ' +
+      'not break code to see whether a test notices. Your review is the judgement checks listed in this prompt, and ' +
+      'nothing a script can check.',
   ].join('\n');
 }
 
@@ -142,7 +144,7 @@ export async function reviewGate(options: {
     return {
       open: false,
       refusal: [
-        `No model review may start for chunk "${options.slug}": the commit under review has no passing \`boardsmith verify\` result that covers the chunk.`,
+        `No model review may start for chunk "${options.slug}": the commit under review has no passing \`boardsmith verify --chunk ${options.slug}\` result.`,
         problem,
         `Run \`npx boardsmith verify --chunk ${options.slug}\`, fix what it names and commit until it passes, then run ` +
           `\`boardsmith review-gate ${options.slug}\` again. A failing verify goes back to the step that made the change, ` +
@@ -178,7 +180,7 @@ export async function reviewGateCommand(
   }
   console.log(`Review level: ${gate.level} (${gate.reason})`);
   if (gate.level === 'none') {
-    console.log('No model review runs for this change: verify is its whole gate. Record no review round, and continue.');
+    console.log('No model review runs for this change: its fast checks are its whole gate. Record no review round, and continue.');
     return;
   }
   console.log('');

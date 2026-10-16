@@ -27,6 +27,7 @@ import {
   type GameOptions,
 } from '../engine/index.js';
 import { GameRunner } from './runner.js';
+import { PendingActionManager } from '../session/pending-action-manager.js';
 
 class Token extends Piece<HalfwayGame, Player> {}
 class Zone extends Space<HalfwayGame, Player> {}
@@ -55,6 +56,28 @@ class HalfwayGame extends Game<HalfwayGame, Player> {
           game.message('halfway through');
           throw new Error('rules bug: undefined is not a suit');
         }),
+      // Animates for everyone and privately for seat 1, then throws (#751).
+      Action.create('animateThenFail')
+        .prompt('Animate, then fail')
+        .execute((_args, ctx) => {
+          const game = ctx.game as HalfwayGame;
+          game.animate('combat', { damage: 3 });
+          game.animateTo(1, 'private-peek', { card: 'ace' });
+          throw new Error('rules bug after animating');
+        }),
+      // The same throw, reached one pick at a time (#801).
+      Action.create('pickThenFail')
+        .prompt('Pick, then fail')
+        .chooseFrom('how', { choices: ['all'] })
+        .execute((_args, ctx) => {
+          const game = ctx.game as HalfwayGame;
+          for (const token of game.source.all(Token).slice(0, 3)) {
+            token.putInto(game.target);
+          }
+          game.message('halfway through');
+          game.animate('combat', { damage: 3 });
+          throw new Error('rules bug after a pick');
+        }),
       Action.create('cleanMove')
         .prompt('Move one')
         .execute((_args, ctx) => {
@@ -72,7 +95,7 @@ class HalfwayGame extends Game<HalfwayGame, Player> {
         root: loop({
           while: (ctx) => (ctx.get<number>('round') ?? 1) <= 20,
           maxIterations: 50,
-          do: eachPlayer({ do: actionStep({ actions: ['halfMove', 'cleanMove', 'refuse'] }) }),
+          do: eachPlayer({ do: actionStep({ actions: ['halfMove', 'animateThenFail', 'pickThenFail', 'cleanMove', 'refuse'] }) }),
         }),
         setup: (ctx) => ctx.set('round', 1),
       }
@@ -138,6 +161,61 @@ describe('an execute() that throws half-way through', () => {
     expect(snapshot.actionHistory).toHaveLength(0);
     const restored = GameRunner.fromSnapshot(snapshot, HalfwayGame);
     expect(restored.game.source.all(Token)).toHaveLength(5);
+  });
+});
+
+describe('an execute() that animates and then throws (#751)', () => {
+  it('leaves no animation event in either seat\'s view or the saved snapshot', () => {
+    const runner = makeRunner();
+    expect(runner.game.pendingAnimationEvents).toEqual([]);
+
+    expect(runner.performAction('animateThenFail', 1, {}).success).toBe(false);
+
+    expect(runner.game.pendingAnimationEvents).toEqual([]);
+    for (const seat of [1, 2]) {
+      expect(runner.getPlayerView(seat).state.animationEvents ?? []).toEqual([]);
+    }
+    expect(runner.getSnapshot().state.animationEvents ?? []).toEqual([]);
+  });
+});
+
+describe('an execute() that throws after its picks were taken one at a time (#801)', () => {
+  function expectNothingMoved(runner: GameRunner<HalfwayGame>, messagesBefore: number) {
+    expect(runner.game.source.all(Token)).toHaveLength(5);
+    expect(runner.game.target.all(Token)).toHaveLength(0);
+    expect(runner.game.messages.length).toBe(messagesBefore);
+    expect(runner.game.pendingAnimationEvents).toEqual([]);
+    expect(runner.actionHistory).toHaveLength(0);
+    const snapshot = runner.getSnapshot();
+    expect(snapshot.state.animationEvents ?? []).toEqual([]);
+    const restored = GameRunner.fromSnapshot(snapshot, HalfwayGame);
+    expect(restored.game.source.all(Token)).toHaveLength(5);
+    expect(restored.game.target.all(Token)).toHaveLength(0);
+  }
+
+  it('the runner\'s selection path leaves the game as it was', () => {
+    const runner = makeRunner();
+    const messagesBefore = runner.game.messages.length;
+    runner.startPendingAction('pickThenFail', 1);
+
+    const result = runner.processSelectionStep(1, 'how', 'all');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Nothing was changed');
+    expectNothingMoved(runner, messagesBefore);
+  });
+
+  it('the session\'s pending-action path leaves the game as it was', async () => {
+    const runner = makeRunner();
+    const messagesBefore = runner.game.messages.length;
+    const manager = new PendingActionManager(runner, 2);
+    manager.startPendingAction('pickThenFail', 1);
+
+    const result = await manager.processSelectionStep(1, 'how', 'all');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Nothing was changed');
+    expectNothingMoved(runner, messagesBefore);
   });
 });
 

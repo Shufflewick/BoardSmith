@@ -129,7 +129,7 @@ export interface EachPlayerConfig<G extends Game = Game> extends BaseFlowConfig 
   filter?: (player: PlayerOf<G>, context: FlowContext<G>) => boolean;
   /** Direction of rotation */
   direction?: 'forward' | 'backward';
-  /** Starting player (defaults to current player) */
+  /** Starting player (defaults to the first seat in `direction` order; `TurnOrder.CONTINUE` starts from the current player) */
   startingPlayer?: (context: FlowContext<G>) => PlayerOf<G>;
   /** Body to execute for each player */
   do: FlowNode<G>;

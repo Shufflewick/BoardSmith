@@ -449,11 +449,9 @@ export class Action<
    *
    * This is the place for a rule that spans selections and needs to explain
    * itself. Use it instead of:
-   * - `.condition()`, which decides whether the action is OFFERED and is also
-   *   evaluated with EMPTY args for that purpose — a predicate that reads
-   *   `ctx.args` there must special-case the empty record or the action becomes
-   *   permanently (un)available, and a failing condition cannot carry a custom
-   *   message.
+   * - `.condition()`, which decides whether the action is OFFERED and never
+   *   sees picks in `ctx.args`, at availability or at submit (#772), and a
+   *   failing condition cannot carry a custom message.
    * - a per-selection `validate`, which can only see the args collected so far,
    *   does not run when an optional selection is skipped, and has nowhere to
    *   live on an action with no selections.
@@ -1149,10 +1147,11 @@ export class Action<
    *   .enterNumber('amount', {
    *     prompt: 'How many resources to buy?',
    *     min: 1,
-   *     max: (ctx) => ctx.player.gold,
    *     integer: true,
+   *     // min and max are fixed numbers; a limit read from the game is a validate.
+   *     validate: (amount, _args, ctx) => amount <= ctx.player.gold || 'You cannot afford that many.',
    *   })
-   *   .execute(({ amount }) => {
+   *   .execute(({ amount }, ctx) => {
    *     ctx.player.gold -= amount;
    *     ctx.player.resources += amount;
    *   });

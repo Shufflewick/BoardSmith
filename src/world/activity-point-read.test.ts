@@ -482,10 +482,11 @@ describe("#423 — the read is the world's own authority, and a seat cannot forg
     ).toThrow(/the world's own clock/);
   });
 
-  it("refuses a round that names something that is not a seat", async () => {
+  // 5 is one past this world's four seats (#799): a host would answer it as an empty chair.
+  it.each([0, 1.5, 5])("refuses a round that names %p, which is not a seat", async (chair) => {
     const bad = worldClockAction<Demo>("bad")
       .needs(() => ["hall"])
-      .about(() => 1.5)
+      .about(() => chair)
       .execute(() => {});
     const runner = createWorld({
       elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
@@ -500,6 +501,6 @@ describe("#423 — the read is the world's own authority, and a seat cannot forg
     const genesis = await runner.genesis();
     await expect(
       drain(runner, { ...genesis.partitions }, { name: "bad", due: OPENED }),
-    ).rejects.toThrow(/whole seat number/);
+    ).rejects.toThrow(/which is not a seat in this world.*from 1 to 4/);
   });
 });

@@ -21,6 +21,9 @@ import {
   loop,
   eachPlayer,
   actionStep,
+  sequence,
+  execute,
+  setVar,
 } from '../index.js';
 import { GameRunner } from '../../runtime/runner.js';
 import type { TutorialDefinition, TutorialAdvanceCondition, TutorialGateContext } from './types.js';
@@ -287,6 +290,110 @@ describe('afterTurns(n)', () => {
 });
 
 // ============================================================
+// Nested loops (#781)
+// ============================================================
+
+/**
+ * The shape Go Fish and Checkers use: a turn is an inner loop the seat stays in
+ * (multi-jump, extra ask) until it plays `end`. A setup step ahead of the round
+ * loop keeps the round loop off depth 0, so a restored position (which stamps a
+ * 0 counter on every frame) cannot be read as "the outermost counter".
+ */
+class NestedLoopGame extends Game<NestedLoopGame, Player> {
+  constructor(options: { playerCount: number; playerNames?: string[]; seed?: string }) {
+    super(options);
+    this.registerActions(
+      Action.create('move').prompt('Move').execute(() => {}),
+      Action.create('end').prompt('End turn').execute(() => ({ success: true, data: { ended: true } })),
+    );
+    this.setFlow({
+      root: sequence(
+        execute(() => {}),
+        loop({
+          while: () => true,
+          maxIterations: 20,
+          do: eachPlayer({
+            do: sequence(
+              setVar('turnDone', false),
+              loop({
+                while: (ctx) => !ctx.get('turnDone'),
+                maxIterations: 20,
+                do: sequence(
+                  actionStep({ actions: ['move', 'end'], turnScope: 'continue' }),
+                  execute((ctx) => {
+                    if (ctx.lastActionResult?.data?.ended) ctx.set('turnDone', true);
+                  }),
+                ),
+              }),
+            ),
+          }),
+        }),
+      ),
+    });
+  }
+}
+
+function makeNestedRunner(): GameRunner<NestedLoopGame> {
+  const runner = new GameRunner<NestedLoopGame>({
+    GameClass: NestedLoopGame,
+    gameType: 'predicate-nested-test',
+    gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'test' },
+  });
+  runner.start();
+  return runner;
+}
+
+function nestedAct(runner: GameRunner<NestedLoopGame>, seat: number, action: 'move' | 'end'): void {
+  const result = runner.performAction(action, seat, {});
+  if (!result.success) {
+    throw new Error(`Action '${action}' for seat ${seat} failed: ${result.error}`);
+  }
+}
+
+describe('afterFirstTurn / afterTurns with nested loops (#781)', () => {
+  it('afterFirstTurn is FALSE at game start, so the intro step is not skipped', () => {
+    const runner = makeNestedRunner();
+    expect(evalCondition(afterFirstTurn(), runner.game, 1)).toBe(false);
+  });
+
+  it('moves inside one learner turn count as that one turn', () => {
+    const runner = makeNestedRunner();
+
+    nestedAct(runner, 1, 'move');
+    nestedAct(runner, 1, 'move');
+    expect(evalCondition(afterFirstTurn(), runner.game, 1)).toBe(false);
+
+    nestedAct(runner, 1, 'end');
+    expect(evalCondition(afterFirstTurn(), runner.game, 1)).toBe(true);
+    expect(evalCondition(afterTurns(2), runner.game, 1)).toBe(false);
+
+    nestedAct(runner, 2, 'move');
+    nestedAct(runner, 2, 'end');
+    nestedAct(runner, 1, 'move');
+    nestedAct(runner, 1, 'move');
+    expect(evalCondition(afterTurns(2), runner.game, 1)).toBe(false);
+
+    nestedAct(runner, 1, 'end');
+    expect(evalCondition(afterTurns(2), runner.game, 1)).toBe(true);
+    expect(evalCondition(afterTurns(3), runner.game, 1)).toBe(false);
+  });
+
+  it('counts the same after a snapshot restore', () => {
+    const runner = makeNestedRunner();
+    nestedAct(runner, 1, 'move');
+    nestedAct(runner, 1, 'end');
+    nestedAct(runner, 2, 'end');
+
+    const restored = GameRunner.fromSnapshot(runner.getSnapshot(), NestedLoopGame);
+    expect(evalCondition(afterFirstTurn(), restored.game, 1)).toBe(true);
+    expect(evalCondition(afterTurns(2), restored.game, 1)).toBe(false);
+
+    nestedAct(restored, 1, 'end');
+    expect(evalCondition(afterTurns(2), restored.game, 1)).toBe(true);
+  });
+});
+
+// ============================================================
 // whenForced tests
 // ============================================================
 
@@ -325,7 +432,49 @@ describe('whenForced(actionName)', () => {
     const condition = whenForced('move');
     expect(evalCondition(condition, runner.game, 99)).toBe(false);
   });
+
+  // #784: judged from the open step's offer, as the Action Panel is, not
+  // from every registered action whose condition holds.
+  it('is TRUE when the open step offers only the named action, though another registered action passes its condition', () => {
+    const runner = makeMoveOnlyStepRunner();
+    expect(runner.game.getAvailableActions(runner.game.getPlayer(1)!).map((a) => a.name)).toEqual(['move', 'pass']);
+    expect(evalCondition(whenForced('move'), runner.game, 1)).toBe(true);
+  });
+
+  it('is FALSE for a seat the open step is not waiting on, though only the named action passes its condition', () => {
+    const runner = makeRunner();
+    runner.game.forcedMode = true; // only 'move' passes its condition, for every seat
+    expect(evalCondition(whenForced('move'), runner.game, 2)).toBe(false);
+  });
 });
+
+/** `move` and `pass` both registered and always allowed, but the step offers only `move`. */
+class MoveOnlyStepGame extends Game<MoveOnlyStepGame, Player> {
+  constructor(options: { playerCount: number; playerNames?: string[]; seed?: string }) {
+    super(options);
+    this.registerActions(
+      Action.create('move').prompt('Move').execute(() => {}),
+      Action.create('pass').prompt('Pass').execute(() => {}),
+    );
+    this.setFlow({
+      root: loop({
+        while: () => true,
+        maxIterations: 20,
+        do: eachPlayer({ do: actionStep({ actions: ['move'] }) }),
+      }),
+    });
+  }
+}
+
+function makeMoveOnlyStepRunner(): GameRunner<MoveOnlyStepGame> {
+  const runner = new GameRunner<MoveOnlyStepGame>({
+    GameClass: MoveOnlyStepGame,
+    gameType: 'move-only-step-test',
+    gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'test' },
+  });
+  runner.start();
+  return runner;
+}
 
 // ============================================================
 // Labeled key / spread composition
