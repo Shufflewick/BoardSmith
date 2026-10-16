@@ -50,6 +50,7 @@ import {
 } from './visibility.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor, type PerformOptions } from '../action/action.js';
+import { settingsKeyVisibleTo } from '../action/helpers.js';
 import type { FlowDefinition, FlowState, FlowDebugInfo } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
 import type { MetricSink } from '../metrics.js';
@@ -1117,7 +1118,11 @@ export class Game<
    */
   messages: MessageEntry[] = [];
 
-  /** Game settings */
+  /**
+   * Game settings. Public: every seat and spectator receives them, except each
+   * seat's `actionTempState` values, which go only to that seat. Never keep a
+   * seat's secret here.
+   */
   settings: Record<string, unknown> = {};
 
   /** Registered actions */
@@ -1484,6 +1489,10 @@ export class Game<
    * this.pendingLoot.set(sectorId, options);
    * const options = this.pendingLoot.get(sectorId);
    * ```
+   *
+   * Public: the map rides in `game.settings`, which every seat and spectator
+   * receives. Never keep a seat's secret here; put it in an element that seat
+   * alone can see.
    *
    * Limitations:
    * - Keys must be serializable (strings, numbers)
@@ -5203,6 +5212,11 @@ export class Game<
         tutorialProgress: encodeValue(scoped, this._ctx, this.constructor.name, 'tutorialProgress'),
       };
     }
+
+    // #716: `settings` is public, except each seat's `actionTempState` values.
+    view.settings = Object.fromEntries(
+      Object.entries(view.settings).filter(([key]) => settingsKeyVisibleTo(key, playerSeat)),
+    );
 
     // #23: enforce `animateTo`'s audience here, the same boundary the message
     // log's is enforced at. The buffer is game-wide and rides in `toJSON()`, so
