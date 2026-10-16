@@ -130,7 +130,7 @@ export async function benchmarkBot<G extends Game>(
     ...(gameCount % 2 !== 0 ? [{ trainedPlayerIndex: 0, seed: `${seed}-extra` }] : []),
   ];
 
-  const tally = {
+  const tally: Tally = {
     win: 0, loss: 0, draw: 0, incomplete: 0,
     winsAsPlayer0: 0, gamesAsPlayer0: 0,
     winsAsPlayer1: 0, gamesAsPlayer1: 0,
@@ -149,18 +149,7 @@ export async function benchmarkBot<G extends Game>(
       reproducible,
     });
 
-    if (trainedPlayerIndex === 0) tally.gamesAsPlayer0++;
-    else tally.gamesAsPlayer1++;
-
-    tally[outcome]++;
-    if (outcome !== 'incomplete') {
-      if (trainedPlayerIndex === 0) tally.decidedAsPlayer0++;
-      else tally.decidedAsPlayer1++;
-    }
-    if (outcome === 'win') {
-      if (trainedPlayerIndex === 0) tally.winsAsPlayer0++;
-      else tally.winsAsPlayer1++;
-    }
+    recordOutcome(tally, trainedPlayerIndex, outcome);
     if (reason) failures.add(reason);
   }
 
@@ -196,6 +185,21 @@ export async function benchmarkBot<G extends Game>(
   }
 
   return result;
+}
+
+type Tally = Record<GameOutcome, number> & {
+  winsAsPlayer0: number; gamesAsPlayer0: number;
+  winsAsPlayer1: number; gamesAsPlayer1: number;
+  decidedAsPlayer0: number; decidedAsPlayer1: number;
+};
+
+/** Count one game's outcome for the seat the trained bot played. */
+function recordOutcome(tally: Tally, trainedPlayerIndex: number, outcome: GameOutcome): void {
+  const seat = trainedPlayerIndex === 0 ? 0 : 1;
+  tally[`gamesAsPlayer${seat}`]++;
+  tally[outcome]++;
+  if (outcome !== 'incomplete') tally[`decidedAsPlayer${seat}`]++;
+  if (outcome === 'win') tally[`winsAsPlayer${seat}`]++;
 }
 
 /** Each game's clock bound: none for a reproducible benchmark, which refuses one. */

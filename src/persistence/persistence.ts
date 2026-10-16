@@ -378,11 +378,15 @@ function parseCommit(raw: unknown, attributeName: string): PersistCommitResult {
     };
   }
   if (raw.entries.length === 0) return { kind: "absent" };
+  return parseEntries(raw.entries, attributeName);
+}
 
+/** Convert a commit's non-empty `entries`, refusing the first bad or repeated one. */
+function parseEntries(rawEntries: unknown[], attributeName: string): PersistCommitResult {
   const entries: PersistCommitEntry[] = [];
   const seen = new Set<string>();
-  for (let i = 0; i < raw.entries.length; i++) {
-    const converted = toCommitEntry(raw.entries[i], i, attributeName);
+  for (let i = 0; i < rawEntries.length; i++) {
+    const converted = toCommitEntry(rawEntries[i], i, attributeName);
     if (typeof converted === "string") return { kind: "invalid", reason: converted };
     const sealed = sealedKeyOnPublicChannel(converted.key, i, attributeName);
     if (sealed) return { kind: "invalid", reason: sealed };
