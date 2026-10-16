@@ -13,8 +13,8 @@ import { dirname, join, parse } from 'node:path';
  *     `<repo>/src/cli/lib/boardsmith-version.ts`
  *   - published/build: the bundle is `dist/cli.js`, so `__dirname` for the bundle is `<pkg>/dist`
  * A fixed `resolve(__dirname, '../../..')` hop count is wrong in one of those two shapes. Walk up
- * parent directories instead, stopping at the first `package.json` whose `name` is `boardsmith` —
- * the same "walk, don't hop" precedent as `install-claude-command.ts`'s root resolution.
+ * parent directories instead, stopping at the first `package.json` whose `name` is `boardsmith`.
+ * `install-claude-command.ts` once hopped and broke in every installed copy (#723).
  *
  * Reads synchronously: this runs once at CLI startup to populate Commander's `.version()` call,
  * which is itself a synchronous call site.

@@ -12,15 +12,12 @@
  */
 
 import { promises as fs } from 'node:fs';
-import { join, dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
 import chalk from 'chalk';
 import { ROLES, defaultAgentType } from '../lib/agent-roles.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
 
 interface InstallOptions {
   force?: boolean;
@@ -190,6 +187,36 @@ async function isFullyInstalled(targetDir: string): Promise<boolean> {
   return true;
 }
 
+/** Where shared dir `dirName` is copied from: `aspects/` sits beside `bs/`, the rest inside it. */
+function sharedDirSource(slashCommandDir: string, dirName: string): string {
+  return dirName === 'aspects' ? join(slashCommandDir, 'aspects') : join(slashCommandDir, 'bs', dirName);
+}
+
+/** Every file and directory under `slashCommandDir` the copy reads. */
+function skillSources(slashCommandDir: string): string[] {
+  const bsDir = join(slashCommandDir, 'bs');
+  return [
+    ...SKILL_ENTRY_POINTS.map(({ source }) => join(slashCommandDir, source)),
+    ...SHARED_DIRS.map((dirName) => sharedDirSource(slashCommandDir, dirName)),
+    ...SHARED_FILES.map((file) => join(bsDir, file)),
+    ...AGENT_FILES.map((file) => join(slashCommandDir, 'agents', file)),
+  ];
+}
+
+/** Throws, naming the first missing one, unless every skill source exists. */
+async function assertSkillSourcesExist(slashCommandDir: string): Promise<void> {
+  for (const path of skillSources(slashCommandDir)) {
+    try {
+      await fs.access(path);
+    } catch {
+      throw new Error(
+        `The BoardSmith package is missing its skill sources (${path} not found), so nothing was installed or removed. ` +
+          'Reinstall boardsmith, then run this command again.'
+      );
+    }
+  }
+}
+
 /**
  * Copy the Agent Skills tree (`SKILL_ENTRY_POINTS.length` SKILL.md entry points + shared
  * reference tree) into targetDir.
@@ -211,6 +238,9 @@ async function copySkillTree(
     return false; // Fully installed, not overwriting
   }
 
+  // The pre-clean below deletes the current install, so first prove there is something to replace it with.
+  await assertSkillSourcesExist(slashCommandDir);
+
   // Pre-clean every installer-owned path before copying so the result is authoritative:
   // fs.cp merges into an existing tree and never deletes orphans (renamed/removed upstream
   // files), so a --force reinstall (or completing a partial install) must delete first to
@@ -231,9 +261,8 @@ async function copySkillTree(
 
   // Shared reference dirs: copy recursively, excluding *.test.ts, UNDER the bs-shared/ root.
   for (const dirName of SHARED_DIRS) {
-    const srcDir = dirName === 'aspects' ? join(slashCommandDir, 'aspects') : join(bsDir, dirName);
     const destDir = join(targetDir, SHARED_ROOT, dirName);
-    await fs.cp(srcDir, destDir, { recursive: true, filter: excludeTestFiles });
+    await fs.cp(sharedDirSource(slashCommandDir, dirName), destDir, { recursive: true, filter: excludeTestFiles });
   }
 
   // Shared root-level authorities: single file copies into bs-shared/.
@@ -253,21 +282,7 @@ async function copySkillTree(
 }
 
 export async function installClaudeCommand(options: InstallOptions = {}): Promise<void> {
-  // Determine BoardSmith root (go up from packages/cli/dist/ where bundled cli.js lives)
-  const boardsmithRoot = resolve(__dirname, '../../..');
-
-  // Verify this is actually a BoardSmith installation
-  try {
-    const packageJson = await fs.readFile(join(boardsmithRoot, 'package.json'), 'utf-8');
-    const pkg = JSON.parse(packageJson);
-    if (!pkg.name?.includes('boardsmith')) {
-      throw new Error('Not a BoardSmith installation');
-    }
-  } catch {
-    console.error(chalk.red('Error: Could not find BoardSmith installation.'));
-    console.error(chalk.gray(`Looked in: ${boardsmithRoot}`));
-    process.exit(1);
-  }
+  const boardsmithRoot = boardsmithPackageRoot();
 
   // Determine target directory
   const targetDir = options.local
