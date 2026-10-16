@@ -1,31 +1,7 @@
 {
-  "ticket": "Shufflewick/BoardSmith#796",
-  "base": "d420ddea6f2a90a555fae61bc1ea94b96e1bff63",
+  "ticket": "Shufflewick/BoardSmith#797",
+  "base": "a4578eb89c270e8172c11292850910d0467cab61",
   "tests": [
-    {
-      "file": "src/world/contract.test.ts",
-      "names": [
-        "WorldEngine conformance — the reference engine applyCommand reports what changed, not a snapshot",
-        "WorldEngine conformance — the reference engine a command that touches ONE thing does not dirty everything",
-        "WorldEngine conformance — the reference engine serializePartitions returns ONLY what was asked for",
-        "WorldEngine conformance — the reference engine serializing NOTHING writes nothing",
-        "WorldEngine conformance — the reference engine SAYS WHAT A VIEW IS ABOUT, WITHOUT LOADING ANYTHING (#95)",
-        "WorldEngine conformance — the reference engine SAYS WHAT A COMMAND IS ABOUT, ONE ROUND AT A TIME, FOR A PLAYER AND FOR THE CLOCK (#121, #169)",
-        "WorldEngine conformance — the reference engine viewsFor answers a whole audience what viewFor answers each of them (ShufflewickPub #408)",
-        "WorldEngine conformance — the reference engine says which seats may be told in the same bytes, and says it honestly",
-        "WorldEngine conformance — the reference engine viewsFor refuses the seat that cannot be described and answers the rest",
-        "WorldEngine conformance — the reference engine OFFERS THIS SEAT'S ACTIONS, candidates and all, without applying anything (#85, #91, #169)",
-        "WorldEngine conformance — the reference engine onEvent runs at its SCHEDULED due, not the wall clock",
-        "WorldEngine conformance — the reference engine onEvent accepts a COALESCED catch-up rather than demanding a replay",
-        "WorldEngine conformance — the reference engine SEATS A PLAYER WHO ARRIVES AFTER THE WORLD IS RUNNING",
-        "WorldEngine conformance — the reference engine re-seating a player in the seat they already hold is free; moving them is refused",
-        "WorldEngine conformance — the reference engine refuses a seat another player holds until they are unseated (#796)",
-        "WorldEngine conformance — the reference engine reports NO ending for a command that did not declare one",
-        "WorldEngine conformance — the reference engine reports residency in a form eviction can order",
-        "WorldEngine conformance — the reference engine evicts what it is asked to, and ignores what it does not hold",
-        "WorldEngine conformance — the reference engine holds state ACROSS commands -- it is a resident instance, not a function"
-      ]
-    },
     {
       "file": "src/world/engine.test.ts",
       "names": [
@@ -120,6 +96,7 @@
         "#381 — a resident-root lookup is asked of the root table, not of the tree refuses a declaration's write through the indexed door as well (#219)",
         "#381 — a resident-root lookup is asked of the root table, not of the tree serves the RE-ADOPTED root after an eviction, never the evicted one",
         "retiring a seat's holder (ShufflewickPub #399) forgets the mapping, so a command for a retired holder is unknown-player",
+        "retiring a seat's holder (ShufflewickPub #399) does not list the seated players to an unseated caller (#797)",
         "retiring a seat's holder (ShufflewickPub #399) frees the chair for somebody else, which a live roster could not do before",
         "retiring a seat's holder (ShufflewickPub #399) lets a retired holder come back to a DIFFERENT chair",
         "retiring a seat's holder (ShufflewickPub #399) refuses a chair somebody else holds, and hands it on once they leave (#796)",
@@ -139,12 +116,6 @@
         "ShufflewickPub #411/#413 -- one body for every seat that holds the same grant projects once per group rather than once per seat",
         "ShufflewickPub #411/#413 -- one body for every seat that holds the same grant refuses to group at all around an owner-only room",
         "ShufflewickPub #411/#413 -- one body for every seat that holds the same grant tells no seat who else was granted the room"
-      ]
-    },
-    {
-      "file": "src/world/host/resident-world-seat.test.ts",
-      "names": [
-        "refuses a chair somebody else holds before the roster records it (#796)"
       ]
     }
   ]

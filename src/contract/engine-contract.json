@@ -1,7 +1,7 @@
 {
-  "revision": 207,
+  "revision": 208,
   "surfaceHash": "72c3970831e07bc0",
-  "payloadHash": "e120675dfc7aacb1",
+  "payloadHash": "d037431574c86546",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1599,6 +1599,14 @@
       "payloadHash": "e120675dfc7aacb1",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "World partition roots must be direct children of the game and registered under one name; genesis, createPartition and migration roots that are nested or aliased raise the new game-owned refusal invalid-partition-root (#795)."
+    },
+    {
+      "revision": 208,
+      "date": "2026-10-16",
+      "surfaceHash": "72c3970831e07bc0",
+      "payloadHash": "d037431574c86546",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "The world unknown-player refusal no longer lists the seated players; it says only that the player is not in this world (#797)."
     }
   ]
 }
