@@ -113,6 +113,15 @@ async function stopOwnedGroup(owned: WorkerRecord | undefined): Promise<void> {
   await vi.waitFor(() => expect(processGroup(owned.leader)).toEqual([]), { timeout: 10_000 });
 }
 
+async function groupAfterParent(pgid: number, unobservable: boolean, output: string): Promise<OwnedProcess[]> {
+  if (unobservable) {
+    // The message proves the whole group got SIGKILL, but the parent could not wait for it to finish exiting.
+    expect(output).toContain('Could not confirm that Vitest process group');
+    while (processGroup(pgid).length > 0) await delay(10);
+  }
+  return processGroup(pgid);
+}
+
 async function workerRecord(project: string): Promise<WorkerRecord | undefined> {
   try { return JSON.parse(await fs.readFile(join(project, 'tests/worker.json'), 'utf8')); }
   catch (error) {
@@ -176,12 +185,7 @@ describe('mutation verification cancellation (#712)', () => {
           await fs.writeFile(join(project, 'release'), 'released');
         }
         const end = await ended;
-        if (holdGroup === 'unreadable') {
-          // The message proves the whole group got SIGKILL, but the parent could not wait for it to finish exiting.
-          expect(output).toContain('Could not confirm that Vitest process group');
-          while (processGroup(owned.leader).length > 0) await delay(10);
-        }
-        const after = processGroup(owned.leader);
+        const after = await groupAfterParent(owned.leader, holdGroup === 'unreadable', output);
         const evidence = JSON.stringify({ parent: child.pid, signal, target, before, end, after, groupProbe: groupProbe(owned.leader) });
         expect(end, output + evidence).toEqual({ code: null, signal });
         expect(after, 'owned Vitest processes survived the interrupted parent: ' + evidence).toEqual([]);
