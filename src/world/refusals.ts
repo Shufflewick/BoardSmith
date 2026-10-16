@@ -175,7 +175,7 @@ export const WORLD_REFUSALS = {
   },
   "seat-conflict": {
     owner: "caller",
-    why: "a seating named a player who already holds a DIFFERENT seat (#150). It used to share `unknown-player`'s code, which misread a conflict about somebody who IS in the world as 'not in this world'. A seat is where a player's holdings are, so the move is refused rather than handing them somebody else's -- and the world is unaffected",
+    why: "a seating named a player who already holds a DIFFERENT seat (#150), or a seat ANOTHER player already holds (#796). It used to share `unknown-player`'s code, which misread a conflict about somebody who IS in the world as 'not in this world'. A seat is where a player's holdings are, so the move is refused rather than handing them somebody else's -- and the world is unaffected",
   },
 
   "stale-draft": {
@@ -223,7 +223,8 @@ export const WORLD_REFUSALS = {
     owner: "game",
     why:
       "ShufflewickPub #423: an `.about()` round answered something that is not a " +
-      "seat -- a fraction, a zero, a negative. GAME-owned: it is a line in the " +
+      "seat -- a fraction, a zero, a negative, or a chair above the world's seat " +
+      "count (#799). GAME-owned: it is a line in the " +
       "bundle, and the reason it is refused rather than passed to the host is " +
       "that a host asked for a chair that cannot exist answers an empty row, " +
       "which reads to the phase that asked exactly like an established empire " +

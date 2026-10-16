@@ -1147,10 +1147,11 @@ export class Action<
    *   .enterNumber('amount', {
    *     prompt: 'How many resources to buy?',
    *     min: 1,
-   *     max: (ctx) => ctx.player.gold,
    *     integer: true,
+   *     // min and max are fixed numbers; a limit read from the game is a validate.
+   *     validate: (amount, _args, ctx) => amount <= ctx.player.gold || 'You cannot afford that many.',
    *   })
-   *   .execute(({ amount }) => {
+   *   .execute(({ amount }, ctx) => {
    *     ctx.player.gold -= amount;
    *     ctx.player.resources += amount;
    *   });

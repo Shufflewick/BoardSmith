@@ -108,7 +108,7 @@ describe('SEC-04: whole-payload leak assertions for messageTo', () => {
     // `createSnapshot({forSeat})` is the MCTS search sandbox's clone — a payload
     // built precisely so a bot cannot reason over information its seat lacks.
     const seat2 = JSON.stringify(createSnapshot(narratedGame(), 'LeakGame', [], undefined, {
-      forSeat: 2,
+      forSeat: 2, reseed: 'sandbox',
     }));
 
     expect(seat2).not.toContain('SECRET-FOR-SEAT-1');
@@ -118,7 +118,7 @@ describe('SEC-04: whole-payload leak assertions for messageTo', () => {
 
   it('withholds every private line from the WHOLE spectator snapshot', () => {
     const spectator = JSON.stringify(createSnapshot(narratedGame(), 'LeakGame', [], undefined, {
-      forSeat: null,
+      forSeat: null, reseed: 'sandbox',
     }));
 
     expect(spectator).not.toContain('SECRET-FOR-SEAT-1');
@@ -141,7 +141,7 @@ describe('SEC-04: whole-payload leak assertions for messageTo', () => {
     game.messageTo(1, 'SECRET-FOR-SEAT-1');
     game.message('PUBLIC-LINE');
 
-    const log = createSnapshot(game, 'LeakGame', [], undefined, { forSeat: 2 }).messageLog;
+    const log = createSnapshot(game, 'LeakGame', [], undefined, { forSeat: 2, reseed: 'sandbox' }).messageLog;
 
     // The leaked copy carried `to: [1]` alongside the text, so a reader learned
     // both the secret AND that it was meant for someone else. Seat 2 should see

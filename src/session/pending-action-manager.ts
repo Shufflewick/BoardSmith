@@ -129,6 +129,7 @@ export class PendingActionManager<G extends Game = Game> {
 
     const refused = this.#refuseUnofferedAction(playerPosition, pendingState, actionName);
     if (refused) return refused;
+    if (pendingState) this.#runner.markStalePicks(pendingState, playerPosition);
 
     // Auto-create pending action if it doesn't exist and actionName is provided
     if (!pendingState && actionName) {
@@ -348,7 +349,7 @@ export class PendingActionManager<G extends Game = Game> {
       actionResult: {
         success: actionResult.success,
         error: actionResult.error,
-        flowState: toPublicFlowState(flowState),
+        flowState: toPublicFlowState(flowState, playerPosition),
         state: this.#seatState(playerPosition),
         data: actionResult.data,
         message: actionResult.message,

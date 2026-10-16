@@ -2174,6 +2174,19 @@ describe("retiring a seat's holder (ShufflewickPub #399)", () => {
     expect(refused).toMatchObject({ code: "unknown-player" });
   });
 
+  it("does not list the seated players to an unseated caller (#797)", async () => {
+    const { engine } = newVillageEngine([tend]);
+    let refused: { code?: string; message?: string } | undefined;
+    try {
+      engine.commandNeeds("intruder", { name: "tend", args: {} }, arrival(0), { declaredActivity: [], declaredNotices: [] });
+    } catch (error) {
+      refused = error as { code?: string; message?: string };
+    }
+    expect(refused).toMatchObject({ code: "unknown-player" });
+    expect(refused?.message).toContain('"intruder" is not in this world');
+    expect(refused?.message).not.toMatch(/\bp1\b|\bp2\b/);
+  });
+
   it("frees the chair for somebody else, which a live roster could not do before", async () => {
     // THE WHOLE POINT. `seat` refuses to MOVE a seated player, so seat 2 could
     // not be reissued while p2 still held it -- and the only way out was a
@@ -2196,7 +2209,24 @@ describe("retiring a seat's holder (ShufflewickPub #399)", () => {
     expect(() => engine.seat("p2", 3)).toThrow(/already plays seat/);
 
     engine.unseat("p2");
+    engine.unseat("p3");
     expect(() => engine.seat("p2", 3)).not.toThrow();
+  });
+
+  it("refuses a chair somebody else holds, and hands it on once they leave (#796)", () => {
+    const { engine } = newVillageEngine([tend]);
+
+    let refused: unknown;
+    try {
+      engine.seat("newcomer", 2);
+    } catch (error) {
+      refused = error;
+    }
+    expect(refused).toMatchObject({ code: "seat-conflict", message: expect.stringMatching(/"p2" holds seat 2/) });
+    expect(() => engine.seat("p2", 2)).not.toThrow();
+
+    engine.unseat("p2");
+    reissueSeatTwo(engine);
   });
 
   it("is idempotent, so a host retrying a departure is not the failure", () => {
