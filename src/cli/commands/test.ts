@@ -1,11 +1,10 @@
-import { existsSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { writeFileSync } from 'node:fs';
 import chalk from 'chalk';
 import { getProjectContext } from '../lib/project-context.js';
 import { runTool } from '../lib/run-tool.js';
 import { discardRecord, runVitestRecorded, testRunVerdict } from '../lib/vitest-run.js';
 import { requireGameProject } from '../lib/game-project.js';
-import { testRunScopeProblem } from '../lib/test-run-scope.js';
+import { gameTestRunProblem } from '../lib/test-run-scope.js';
 import { runTypecheck } from './typecheck.js';
 
 /**
@@ -124,13 +123,7 @@ async function refuseGameProjectThatCannotRun(cwd: string, options: TestOptions)
     );
   }
 
-  if (!existsSync(join(cwd, 'tests'))) {
-    console.log(chalk.yellow('No tests directory found.'));
-    console.log(chalk.dim('Create tests in the tests/ directory'));
-    process.exit(0);
-  }
-
-  const problem = await testRunScopeProblem(cwd);
+  const problem = await gameTestRunProblem(cwd);
   if (problem !== undefined) {
     console.error(chalk.red(problem));
     process.exit(1);
