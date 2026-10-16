@@ -78,8 +78,8 @@ function parseEntry(path: string, body: string): MergeSignoff {
 function validSelection(value: unknown, hash: string): value is FocusedVerificationScope['selection'] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const selection = value as Record<string, unknown>;
-  const path = (value: unknown): value is string => typeof value === 'string' && value !== '' &&
-    !value.startsWith('/') && !value.includes('\\') && value.split('/').every((part) => part !== '' && part !== '.' && part !== '..');
+  const path = (candidate: unknown): candidate is string => typeof candidate === 'string' && candidate !== '' &&
+    !candidate.startsWith('/') && !candidate.includes('\\') && candidate.split('/').every((part) => part !== '' && part !== '.' && part !== '..');
   return selection.hash === hash && path(selection.path) &&
     typeof selection.ticket === 'string' && /^[\w.-]+\/[\w.-]+#[1-9]\d*$/.test(selection.ticket) &&
     typeof selection.base === 'string' && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(selection.base) &&
