@@ -1182,14 +1182,14 @@ export class FlowEngine<G extends Game = Game> {
   /**
    * The player whose turn it is: the seat the flow is running for (an
    * `eachPlayer` seat, an action step's player). None while a simultaneous
-   * step awaits input, since every seat acts there, and none once the flow
-   * is complete.
+   * step is open (from the moment its conditions are first checked), since
+   * every seat acts there, and none once the flow is complete.
    */
   getCurrentPlayer(): PlayerOf<G> | undefined {
     flowStateRead(this.game._ctx);
-    const awaitingSimultaneous =
-      this.awaitingInput && this.stack[this.stack.length - 1]?.node.type === 'simultaneous-action-step';
-    return awaitingSimultaneous || this.complete ? undefined : this.currentPlayer;
+    const top = this.stack[this.stack.length - 1];
+    const inSimultaneous = top?.node.type === 'simultaneous-action-step' && !top.completed;
+    return inSimultaneous || this.complete ? undefined : this.currentPlayer;
   }
 
   /**

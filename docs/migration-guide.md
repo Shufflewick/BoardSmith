@@ -1,5 +1,26 @@
 # Migration Guide
 
+## `game.currentPlayer` comes from the flow (#780)
+
+`game.currentPlayer` and `player.isCurrent()` now read the seat the flow is
+running for: the `eachPlayer` seat, or the player an `actionStep` names.
+`game.setCurrentPlayer()` and `player.setCurrent()` are removed, so a game that
+called them stops type-checking. `game.currentPlayer` is `undefined` before the
+flow starts, once it is complete, and while a simultaneous step is open (its
+conditions included), since every seat acts there.
+
+Replace a hand-set current player with the flow node that names the seat:
+
+```diff
+-  game.setCurrentPlayer(game.getPlayer(2)!);
+-  // ...
+-  actionStep({ actions: ['bid'] }),
++  actionStep({ player: (ctx) => ctx.game.getPlayer(2)!, actions: ['bid'] }),
+```
+
+For a turn per seat, use `eachPlayer({ do: ... })` (with `TurnOrder.CONTINUE`
+to start from the seat the flow last ran for).
+
 ## Historical run logs keep their unrecorded routing facts (#710)
 
 The run-log template before #454 requested `Pipeline`, dispatch and finish times,

@@ -42,9 +42,8 @@ export const TurnOrder = {
 
   /**
    * Start from the current player, the seat the flow last ran for (the
-   * last seat of the previous round, or the player an `actionStep` named),
-   * wrapping around the full player list so every player gets a turn this
-   * round.
+   * last seat of the previous round), wrapping around the full player list
+   * so every player gets a turn this round.
    */
   CONTINUE: {
     startingPlayer: (ctx: FlowContext) => ctx.game.currentPlayer,

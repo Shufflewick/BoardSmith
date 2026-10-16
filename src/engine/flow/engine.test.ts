@@ -2672,6 +2672,39 @@ describe('game.currentPlayer follows the flow (#780)', () => {
     expect(game.players.some((p) => p.isCurrent())).toBe(false);
   });
 
+  it('has no current player while a simultaneous step opens', () => {
+    const seen: Array<number | undefined> = [];
+    game.registerAction(
+      Action.create('pass')
+        .condition({ 'records the current player': (ctx) => { seen.push(ctx.game.currentPlayer?.seat); return true; } })
+        .execute(() => ({ success: true })),
+    );
+    game.setFlow({
+      root: sequence(
+        eachPlayer({ filter: (p) => p.seat === 1, do: noop() }),
+        simultaneousActionStep({ actions: ['pass'] }),
+      ),
+    });
+    game.startFlow();
+
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((seat) => seat === undefined)).toBe(true);
+  });
+
+  it('keeps the eachPlayer seat as current player across a restore', () => {
+    const flow = { root: eachPlayer({ do: actionStep({ actions: ['pass'] }) }) };
+    game.registerAction(Action.create('pass').execute(() => ({ success: true })));
+    game.setFlow(flow);
+    game.startFlow();
+    game.continueFlow('pass', {});
+    const atSeat2 = game.getFlowState()!;
+    game.continueFlow('pass', {});
+
+    game.restoreFlowState(atSeat2);
+
+    expect(game.currentPlayer?.seat).toBe(2);
+  });
+
   it('has no current player before the flow starts', () => {
     expect(game.currentPlayer).toBeUndefined();
   });
