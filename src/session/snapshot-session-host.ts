@@ -116,10 +116,10 @@ export interface PersistenceErrorEntry {
  * The engine's AUTHORITATIVE answer to "whose move is it, and in which turn?",
  * carried on every broadcast's `meta`.
  *
- * **A consumer must NEVER reconstruct this from a player view.** A per-seat view
- * carries the whole-game `flowState` only because `buildViews` happens to share
- * one object across seats; reading `playerViews[0].flowState` makes that engine
- * internal into an invariant the consumer holds in a comment. Read `meta`.
+ * **A consumer must NEVER reconstruct this from a player view.** Each per-seat
+ * view carries its own cut of the flow state, holding only that seat's
+ * available actions (#778), so `playerViews[0].flowState` is seat 1's view of
+ * the turn, not the game's. Read `meta`.
  * Likewise, never derive "who is up" from `flowState.currentPlayer`: it is
  * `undefined` for the entire life of a simultaneous step, which is how a
  * simultaneous game reported "nobody is up" every round forever (BUG-006).
@@ -1033,9 +1033,19 @@ export class SnapshotSessionHost {
   }
 
   private async handle(seat: number, op: Op): Promise<OpResult> {
-    // #481: debug ops need debugging on, and a seat-view one must be for `seat`.
-    const debugRefused = debugOpRefusal(op, this.adapters.debug === true, seat);
+    // #481: debug ops need debugging on.
+    const debugRefused = debugOpRefusal(op, this.adapters.debug === true);
     if (debugRefused) return debugRefused;
+    // #738: picks are kept under `seat`, so an op acting as another player would mix two seats.
+    if ('player' in op && op.player !== seat) {
+      return {
+        success: false,
+        error:
+          `Seat ${seat} sent '${op.type}' as seat ${op.player}, and was refused. ` +
+          'A seat can act and see only as itself; switch to that seat to do this.',
+        category: 'protocol',
+      };
+    }
     // Demo lifecycle ops — handled directly in the host (NOT delegated to executeOp)
     // because they need the broadcast adapter and a cancellable async lifetime.
     // demoStart: fire-and-forget runDemoLoop; return minimal envelope immediately.
@@ -1113,34 +1123,7 @@ export class SnapshotSessionHost {
     // these ops do NOT change game state: transient hints/heatmaps are merged
     // into each seat's view after the executor built it.
     if (op.type === 'hint' || op.type === 'heatmapToggle') {
-      // RESEARCH Pitfall 3: reject concurrent bot searches while demo is running.
-      if (this.demoRunning) {
-        return {
-          success: false,
-          error: 'Cannot request hint while a demo is running — stop the demo first.',
-          category: 'protocol',
-        };
-      }
-      const res = await this.adapters.executeOp(this.snapshot, null, op);
-      if (res.success) {
-        if ('hintAnnotation' in res) {
-          // Merge with existing seat entry so hint + heatmap coexist (RESEARCH Pitfall 6).
-          const existing = this.transientTeachingState.get(res.hintAnnotation.seat) ?? {};
-          this.transientTeachingState.set(res.hintAnnotation.seat, {
-            ...existing,
-            hint: { annotation: res.hintAnnotation.annotation },
-          });
-        }
-        if ('heatmapUpdate' in res) {
-          const existing = this.transientTeachingState.get(res.heatmapUpdate.seat) ?? {};
-          this.transientTeachingState.set(res.heatmapUpdate.seat, {
-            ...existing,
-            heatmap: { visible: res.heatmapUpdate.visible, entries: res.heatmapUpdate.entries },
-          });
-        }
-        this.broadcastCurrent();
-      }
-      return res;
+      return this.applyTeachingOp(op);
     }
 
     // Read-only ops (resolveChoices + debug queries) report state without
@@ -1289,6 +1272,51 @@ export class SnapshotSessionHost {
 
     await this.apply(res, seat, pending);
     return res;
+  }
+
+  /** A hint or heatmap toggle: computed on the current snapshot, stored as transient teaching state for that seat. */
+  private async applyTeachingOp(op: Extract<Op, { type: 'hint' | 'heatmapToggle' }>): Promise<OpResultFor<'hint' | 'heatmapToggle'>> {
+    // RESEARCH Pitfall 3: reject concurrent bot searches while demo is running.
+    if (this.demoRunning) {
+      return {
+        success: false,
+        error: 'Cannot request hint while a demo is running — stop the demo first.',
+        category: 'protocol',
+      };
+    }
+    const at = this._snapshot;
+    const res = await this.adapters.executeOp(at, null, op);
+    if (!res.success) return res;
+    // Computed outside the one-at-a-time section, so a move may have landed meanwhile; turning a heatmap off does not depend on the position.
+    if (this._snapshot !== at && !('heatmapUpdate' in res && !res.heatmapUpdate.visible)) {
+      return {
+        success: false,
+        error: 'The game moved on while this was being worked out. Ask again for the position as it is now.',
+        category: 'protocol',
+      };
+    }
+    this.storeTeaching(res);
+    this.broadcastCurrent();
+    return res;
+  }
+
+  /** Store a hint or heatmap result as the seat's transient teaching state. */
+  private storeTeaching(res: OpSuccess<'hint' | 'heatmapToggle'>): void {
+    if ('hintAnnotation' in res) {
+      // Merge with existing seat entry so hint + heatmap coexist (RESEARCH Pitfall 6).
+      const existing = this.transientTeachingState.get(res.hintAnnotation.seat) ?? {};
+      this.transientTeachingState.set(res.hintAnnotation.seat, {
+        ...existing,
+        hint: { annotation: res.hintAnnotation.annotation },
+      });
+    }
+    if ('heatmapUpdate' in res) {
+      const existing = this.transientTeachingState.get(res.heatmapUpdate.seat) ?? {};
+      this.transientTeachingState.set(res.heatmapUpdate.seat, {
+        ...existing,
+        heatmap: { visible: res.heatmapUpdate.visible, entries: res.heatmapUpdate.entries },
+      });
+    }
   }
 
   /**

@@ -478,17 +478,6 @@ async function mutationFingerprints(projectDir: string, treeRef: string): Promis
   return { fingerprint: (m) => sha256Hex(JSON.stringify([CACHE_FORMAT, tools, process.version, tree, installed, linked, prefix, m.file, 'source' in m ? sha256Hex(m.source) : m.sourceHash])) };
 }
 
-/** The real staged tree during a merge; unstaged runtime inputs cannot borrow its approvals. */
-export async function currentMutationFingerprints(projectDir: string): Promise<MutationFingerprints> {
-  const root = (await git(projectDir, ['rev-parse', '--show-toplevel'])).trim();
-  const prefix = (await git(projectDir, ['rev-parse', '--show-prefix'])).trim();
-  const unstaged = await git(root, ['ls-files', '--modified', '--others', '--exclude-standard', '-z']);
-  if (unstaged.split('\0').filter(Boolean).some((path) => !isBookkeeping(prefix, path))) {
-    return uncached('Unstaged or untracked source changes are outside the reviewed execution context. Commit them and verify again.');
-  }
-  return mutationFingerprints(projectDir, (await git(projectDir, ['write-tree'])).trim());
-}
-
 /** The cache for the commit checked out in `projectDir`, as its tests run with what is installed now. */
 export async function openMutantCache(projectDir: string): Promise<MutantCache> {
   const path = await mutantCachePath(projectDir);

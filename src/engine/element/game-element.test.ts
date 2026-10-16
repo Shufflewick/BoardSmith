@@ -8,6 +8,8 @@ import {
   Player,
 } from '../index.js';
 import type { ElementJSON, PlayerViewFunction } from '../index.js';
+import { serializedRoundTrip } from './serialized-round-trip.test-helper.js';
+import { encodeValue, decodeValue, CODEC_MARKER_KEYS } from './game-element.js';
 
 // Test classes
 class TestGame extends Game<TestGame, Player> {}
@@ -85,6 +87,23 @@ describe('Element Tree', () => {
       expect(card.suit).toBe('S');
       expect(card.rank).toBe('A');
       expect(card.value).toBe(14);
+    });
+
+    it('a failed create names the element briefly, never its whole subtree (#766)', () => {
+      class Picky extends Piece<TestGame> {
+        set target(_value: unknown) {
+          throw new Error('no targets allowed');
+        }
+      }
+      const deck = game.create(Deck, 'deck');
+      deck.createMany(3, Card, 'buried-card');
+
+      const failure = () => game.create(Picky, 'picky', { target: deck } as never);
+      expect(failure).toThrow(/no targets allowed[\s\S]*Attributes: target/);
+      expect(failure).not.toThrow(/buried-card/);
+
+      expect(() => game.create(deck as never, 'oops')).toThrow(/Deck "deck"/);
+      expect(() => game.create(deck as never, 'oops')).not.toThrow(/buried-card/);
     });
   });
 
@@ -446,6 +465,46 @@ describe('ID System', () => {
   });
 });
 
+describe('branch() (#766)', () => {
+  it('finds every sibling\'s place without scanning the siblings for each one', () => {
+    const game = new TestGame({ playerCount: 2 });
+    const deck = game.create(Deck, 'deck');
+    deck.createMany(200, Card, 'card');
+    const cards = [...deck._t.children];
+    let reads = 0;
+    deck._t.children = new Proxy(cards, {
+      get(target, key, receiver) {
+        if (typeof key === 'string' && /^\d+$/.test(key)) reads++;
+        return Reflect.get(target, key, receiver);
+      },
+    });
+
+    const branches = cards.map((card) => card.branch());
+
+    expect(reads).toBeLessThan(cards.length * 3);
+    const base = deck.branch();
+    expect(branches).toEqual(cards.map((_, i) => `${base}/${i}`));
+  });
+
+  it('follows the siblings as they are reordered, added and removed', () => {
+    const game = new TestGame({ playerCount: 2, seed: 'branch' });
+    const deck = game.create(Deck, 'deck');
+    deck.createMany(5, Card, 'card');
+    const placesMatch = () =>
+      deck._t.children.every((card, i) => card.branch() === `${deck.branch()}/${i}`);
+    expect(placesMatch()).toBe(true);
+    deck.shuffle();
+    expect(placesMatch()).toBe(true);
+    deck.setOrder('stacking');
+    deck.create(Card, 'top');
+    expect(placesMatch()).toBe(true);
+    const gone = deck._t.children[2] as Card;
+    gone.remove();
+    expect(placesMatch()).toBe(true);
+    expect(gone.branch()).toBe('pile/0');
+  });
+});
+
 describe('Serialization', () => {
   let game: TestGame;
   let deck: Deck;
@@ -508,16 +567,6 @@ describe('Player', () => {
 
   beforeEach(() => {
     game = new TestGame({ playerCount: 3, playerNames: ['Alice', 'Bob', 'Charlie'] });
-  });
-
-  it('should track current player', () => {
-    expect(game.currentPlayer).toBe(game.getPlayer(1)!);
-    expect(game.getPlayer(1)!.isCurrent()).toBe(true);
-
-    game.setCurrentPlayer(2);
-    expect(game.currentPlayer).toBe(game.getPlayer(2)!);
-    expect(game.getPlayer(1)!.isCurrent()).toBe(false);
-    expect(game.getPlayer(2)!.isCurrent()).toBe(true);
   });
 
   it('should get next/previous player', () => {
@@ -665,7 +714,7 @@ describe('Game Restoration', () => {
 
   class RefTestGame extends Game<RefTestGame, Player> {}
 
-  it('should resolve element references after restoration', () => {
+  it('should resolve element references after restoration', async () => {
     // Create original game with element references
     const game = new RefTestGame({ playerCount: 2 });
     game._ctx.classRegistry.set('Squad', Squad);
@@ -687,13 +736,7 @@ describe('Game Restoration', () => {
     // With 2 players as children (indices 0, 1), then rebel (2), squad1 (3), squad2 (4)
     expect(rebelJson?.attributes.primarySquad).toEqual({ __elementRef: '3' }); // squad1 is at index 3
 
-    // Restore game
-    const classRegistry = new Map<string, any>();
-    classRegistry.set('RefTestGame', RefTestGame);
-    classRegistry.set('Squad', Squad);
-    classRegistry.set('RebelPlayer', RebelPlayer);
-
-    const restored = Game.restoreGame(json, RefTestGame, classRegistry, game.getConstructorOptions().elementIdKey as string);
+    const restored = await serializedRoundTrip(game, RefTestGame);
 
     // Verify references were resolved
     const restoredRebel = restored.first({ name: 'rebel1' }) as RebelPlayer;
@@ -706,7 +749,7 @@ describe('Game Restoration', () => {
     expect(restoredSquad2.sectorId).toBe(10);
   });
 
-  it('should resolve nested element references in objects', () => {
+  it('should resolve nested element references in objects', async () => {
     class DataHolder extends Space<TestGame> {
       data?: {
         target?: GameElement;
@@ -731,13 +774,7 @@ describe('Game Restoration', () => {
       },
     };
 
-    const json = game.toJSON();
-    const classRegistry = new Map<string, any>();
-    classRegistry.set('RefTestGame', RefTestGame);
-    classRegistry.set('DataHolder', DataHolder);
-    classRegistry.set('Squad', Squad);
-
-    const restored = Game.restoreGame(json, RefTestGame, classRegistry, game.getConstructorOptions().elementIdKey as string);
+    const restored = await serializedRoundTrip(game, RefTestGame);
     const restoredHolder = restored.first({ name: 'holder' }) as DataHolder;
     const restoredTarget1 = restored.first({ name: 'target1' }) as Squad;
     const restoredTarget2 = restored.first({ name: 'target2' }) as Squad;
@@ -746,7 +783,7 @@ describe('Game Restoration', () => {
     expect(restoredHolder.data?.nested?.anotherTarget).toBe(restoredTarget2);
   });
 
-  it('should resolve element references in arrays', () => {
+  it('should resolve element references in arrays', async () => {
     class Container extends Space<TestGame> {
       items?: Squad[];
     }
@@ -761,13 +798,7 @@ describe('Game Restoration', () => {
 
     container.items = [item1, item2];
 
-    const json = game.toJSON();
-    const classRegistry = new Map<string, any>();
-    classRegistry.set('RefTestGame', RefTestGame);
-    classRegistry.set('Container', Container);
-    classRegistry.set('Squad', Squad);
-
-    const restored = Game.restoreGame(json, RefTestGame, classRegistry, game.getConstructorOptions().elementIdKey as string);
+    const restored = await serializedRoundTrip(game, RefTestGame);
     const restoredContainer = restored.first({ name: 'container' }) as Container;
     const restoredItem1 = restored.first({ name: 'item1' }) as Squad;
     const restoredItem2 = restored.first({ name: 'item2' }) as Squad;
@@ -915,6 +946,35 @@ describe('Serialization safety (F7)', () => {
     expect(pair.left).toEqual({ tag: 'shared-value' });
     expect(pair.right).toEqual({ tag: 'shared-value' });
   });
+
+  // #759: a class instance or Date went through Object.entries and came back
+  // a plain object, so the game broke on its first restore, far from the cause.
+  class Stats {
+    hits = 2;
+    get total() { return this.hits * 10; }
+  }
+
+  it('refuses a class instance, naming the path, its type and what to store instead', () => {
+    const card = hand.create(Card, 'classy', { suit: 'S', rank: 'A', value: 1 });
+    (card as unknown as Record<string, unknown>).meta = { s: new Stats() };
+
+    expect(() => card.toJSON()).toThrowError(/Stats at property 'meta\.s'.*plain object/s);
+  });
+
+  it('refuses a Date, naming the path and what to store instead', () => {
+    const card = hand.create(Card, 'dated', { suit: 'S', rank: 'A', value: 1 });
+    (card as unknown as Record<string, unknown>).meta = { when: new Date(5) };
+
+    expect(() => card.toJSON()).toThrowError(/Date at property 'meta\.when'.*getTime\(\)/s);
+  });
+
+  it('still encodes plain and null-prototype objects', () => {
+    const card = hand.create(Card, 'plain', { suit: 'S', rank: 'A', value: 1 });
+    const bare = Object.assign(Object.create(null) as Record<string, unknown>, { hits: 3 });
+    (card as unknown as Record<string, unknown>).meta = { plain: { hits: 2 }, bare };
+
+    expect(card.toJSON().attributes.meta).toEqual({ plain: { hits: 2 }, bare: { hits: 3 } });
+  });
 });
 
 // #149: `encodeValue` answered "is this element a player?" with a numeric
@@ -941,5 +1001,28 @@ describe('a seat-tagged element is not serialized as a player reference', () => 
     const activeBoard = json.attributes.activeBoard as Record<string, unknown>;
     expect(activeBoard.__playerRef).toBeUndefined();
     expect(activeBoard.__elementRef ?? activeBoard.__elementId).toBeDefined();
+  });
+});
+
+// #760: the decoder treats these keys as tags, so a plain object holding one
+// as its own key would be misread on restore.
+describe('plain objects holding a codec marker key', () => {
+  for (const key of CODEC_MARKER_KEYS) {
+    it(`refuses ${key} as an own key, naming the path and key`, () => {
+      expect(() => encodeValue({ alice: 1, [key]: 2 }, undefined, 'test', 'scores')).toThrow(
+        new RegExp(`scores.*${key}.*rename`, "is"),
+      );
+    });
+  }
+
+  it('still round-trips a plain object without marker keys', () => {
+    const game = new Game({ playerCount: 1 });
+    const value = { alice: 1, nested: { set: [1, 2] } };
+    expect(decodeValue(encodeValue(value, game._ctx, 'test', 'scores'), game)).toEqual(value);
+  });
+
+  it('refuses a marker key beside other keys, and an __elementRef shape', () => {
+    expect(() => encodeValue({ __elementId: 5, note: 'x' }, undefined, 'test', 'scores')).toThrow(/__elementId/);
+    expect(() => encodeValue({ __elementRef: 'x' }, undefined, 'test', 'scores')).toThrow(/__elementRef/);
   });
 });

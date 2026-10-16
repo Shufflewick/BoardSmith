@@ -639,7 +639,8 @@ Action.create('bid')
   .enterNumber('amount', {
     prompt: 'Enter your bid',
     min: 1,
-    max: (ctx) => ctx.player.coins,
+    // min and max are fixed numbers; a limit read from the game is a validate.
+    validate: (amount, _args, ctx) => amount <= ctx.player.coins || 'You cannot bid more coins than you have.',
   })
 ```
 
@@ -964,10 +965,11 @@ happened and what to do next. An empty return is refused as an authoring error.
 #### `.condition()` is about availability, not arguments
 
 `.condition()` decides whether the action appears. It is evaluated **twice**:
-once at availability time with `ctx.args` as an **empty object**, and again at
-submit time with the real args. A predicate that reads `ctx.args` must therefore
-handle the empty record, or the action becomes permanently available or
-permanently hidden:
+once at availability time and again at submit time, and both times `ctx.args`
+holds **no picks** (a submitted move's picks are checked one at a time after
+the condition, #772). A predicate that reads a pick from `ctx.args` must
+therefore handle it being absent, or the action becomes permanently available
+or permanently hidden:
 
 ```typescript
 // TRAP: at availability time args is {}, so this is always false —
@@ -1012,6 +1014,22 @@ each is made in order as the seat's own step would be (#658): a required one
 left out, or a value the game does not offer, is refused, and the pending
 action is cancelled. A held follow-up's published args come from the engine,
 never from `initialArgs`, and an initial arg that names no pick is not taken.
+
+**Its earlier picks must still be on offer when it runs** (#767). A pick
+another action took after the seat made it is checked again, as a whole
+submission checks it, before the action runs: in a simultaneous step, seat 2
+grabbing the gem seat 1 picked for `draft` refuses seat 1's `draft` with the
+pick's `unavailable` sentence (or the default "That choice is no longer
+available" one). `onCancel` runs for each pick whose `onSelect` ran, and nothing
+is recorded. A pick counts as taken when it was on offer right after the
+seat's latest pick and is not on offer before its next one, whether another
+seat's action moved its element, changed what its filter reads (a gem marked
+reserved in place), or another seat's own pick claimed it. The action's own
+changes do not count: a pick its own `onSelect` took off the offer is already
+off the offer right after it, so it still completes, even when another seat
+acts in between. A repeating pick and a pick a held follow-up answered are
+never checked again. `GameRunner.markStalePicks` marks the taken picks before
+each of the seat's picks.
 
 #### Why not just refuse inside `execute`?
 

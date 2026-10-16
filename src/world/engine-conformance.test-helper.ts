@@ -441,6 +441,15 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     expect(() => engine.seat("player-d", 5)).toThrow();
   });
 
+  it("refuses a seat another player holds until they are unseated (#796)", async () => {
+    // Two holders of one chair would both command its holdings.
+    const engine = await makeEngine();
+    engine.seat("player-d", 4);
+    expect(() => engine.seat("player-e", 4)).toThrow();
+    engine.unseat("player-d");
+    expect(() => engine.seat("player-e", 4)).not.toThrow();
+  });
+
   it("reports NO ending for a command that did not declare one", async () => {
     // Silence is the default, and it must be, because the platform settles a
     // season on the strength of this field. An engine that reported an ending

@@ -244,9 +244,9 @@ headless batch simulation).
 ```bash
 boardsmith verify                    # every check, recorded for this commit
 boardsmith verify --base v1.2        # measure the change from somewhere other than main
-boardsmith verify --chunk deal       # measure a bs- chunk's change from where it began
-boardsmith verify --check            # has this commit passed? (runs nothing)
-boardsmith verify --check --chunk deal   # ...with the chunk's whole change measured?
+boardsmith verify --chunk deal       # a bs- chunk's fast checks: its own tests and typecheck
+boardsmith verify --check            # has this commit passed the full verify? (runs nothing)
+boardsmith verify --check --chunk deal   # ...or chunk deal's fast checks?
 ```
 
 `boardsmith verify` runs the full suite, `boardsmith typecheck`, `boardsmith
@@ -268,9 +268,7 @@ The interrupted command still exits by the signal, so it cannot record a pass.
 
 On the main branch itself, the merge base with main is the current commit, so
 no change would be measured: there the mutation check fails unless you pass
-`--base <commit the work started from>`. For a chunk the `bs-` skills build,
-`--chunk <slug>` finds that commit itself: the one before the chunk's first
-`chunk-<slug>/` commit. A mutant whose code, tests, repository and installed
+`--base <commit the work started from>`. A mutant whose code, tests, repository and installed
 packages have not changed since an earlier run is not run again, so verifying
 again after a commit that only touches the `bs-` skills' design records is quick.
 A package installed as a link to a folder outside the repository, such as
@@ -337,11 +335,16 @@ Commit first: a tree with uncommitted changes is refused before any check runs.
 The result is written to `.boardsmith/verify/<commit>.json`, tied to that one
 commit, to the base it measured from, and to whether the tree stayed clean while
 the checks ran. `boardsmith verify --check` exits 0 only when the current commit,
-on a clean tree, has a passing result, and otherwise says what to run. With
-`--chunk <slug>` it also requires that result to have measured the chunk's whole
-change: its base must be where the chunk began or a commit before that, so a
-`--base HEAD` run, which mutates nothing, does not count. `boardsmith
-chunk-signoff <slug>` asks the same question before it records a chunk as done.
+on a clean tree, has a passing full result, and otherwise says what to run.
+
+For a chunk the `bs-` skills build, `boardsmith verify --chunk <slug>` runs only
+the fast checks the chunk's gates need: the test files the chunk added or changed
+since the commit before its first `chunk-<slug>/` commit, and typecheck. A chunk
+that added or changed no test file fails it. The full checks above run once,
+before the game is published, not per chunk. `boardsmith verify --check --chunk
+<slug>`, `boardsmith review-gate <slug>` and `boardsmith chunk-signoff <slug>`
+accept only that chunk's passing fast checks, and every other question accepts
+only the full verify, so neither stands in for the other.
 
 ##### Reviewing an equivalent mutant
 
@@ -354,7 +357,7 @@ explicit contract, rather than a sample of passing cases.
 
 When `boardsmith verify` reports a survivor, it prints that exact mutant's ID.
 On a clean, committed tree, prepare its review record using the same `--base`
-or `--chunk` as the failed verify. For the example above:
+as the failed verify. For the example above:
 
 ```bash
 boardsmith mutation-equivalence <id> --base v1.2 \
@@ -390,23 +393,17 @@ remain in force, with no lower threshold, test exclusion or unsigned override.
 
 Source, tests, configuration, dependencies, BoardSmith or Node changes make a
 review stale: prepare, review and sign it again for the new context. Changing
-the ledger also requires a new review commit. `verify --check` and new chunk
-sign-offs recheck the current context and signature trust; chunk merge also
-checks the incoming chunk against the combined tree. Previously closed chunks
-keep their pinned trusted approvals through later unrelated work or ledger
-appends while their selected proof records remain present and unchanged.
-Removing or altering a selected record, or revoking its signing key's trust,
-invalidates that approval. If the combined merge tree changes the reviewed
-context, rebase your branch onto current main, reopen the chunk, prepare,
-review and sign the stale equivalences again, then verify and sign off again
-before retrying the merge.
+the ledger also requires a new review commit. `verify --check` rechecks the
+current context and signature trust. Equivalences belong to the full verify, so
+they are proven and checked at publish; chunk sign-offs and chunk merges neither
+record nor check them.
 
 #### Who does the work when the `bs-` skills build a game
 
 The `bs-` skills hand work to roles, never to a named model: `mechanical`
 (bulk edits, searches, summaries), `bounded` (implementation where failing tests
 say what done is), `judgement` (spec, investigate, red team, fidelity, anything
-touching a ruling), `review` (once `boardsmith verify` has passed) and
+touching a ruling), `review` (once `boardsmith verify --chunk` has passed) and
 `second-opinion` (an independent second reading, which `boardsmith validate`
 keeps on a different agent from `judgement`).
 `boardsmith claude` installs one Claude Code agent per role, `bs-mechanical`,
@@ -426,7 +423,9 @@ boardsmith review-gate deal             # may a model review of chunk deal start
 
 `boardsmith review-gate <slug>` refuses unless the current commit passed
 `boardsmith verify --chunk <slug>`, and otherwise prints the verify result every
-review prompt carries, so no reviewer spends its time re-running the checks. A
+review prompt carries: that only the chunk's tests and typecheck ran, and that
+the full suite, build, validate, the smoke test and the mutation check run at
+publish, so no reviewer spends its time running checks. A
 step that fails its verify, whose work a check such as `claim-quote-check`
 refuses, or whose reviewer asks for changes, is retried once at the same role
 with the failure output. A second failure at that role moves it one role up
@@ -448,6 +447,22 @@ separates a dev deploy from one players will see.
 boardsmith publish --prod    # the live platform
 boardsmith publish --dev     # a local platform at http://localhost:3006
 ```
+
+Publish refuses unless a full `boardsmith verify` passed for the exact commit
+being published, on a clean tree. There is no flag to skip it. The result must
+not be a focused one, must not skip a check, and its mutation check must have
+measured the change since the last published commit, or since the repository's
+first commit before the first publish. When it refuses, it names the command to
+run, for example:
+
+```bash
+boardsmith verify --base 3f2a9c1e...   # the commit publish says to measure from
+```
+
+A successful publish records the commit it published, and the base its result
+measured from, in `.boardsmith/published.json`. Like the verify results, that
+file is local and ignored by git. On a machine without it, publish measures
+from the first commit again, which asks for more coverage, never less.
 
 The first publish to a platform needs `--publisher <slug>`, naming the publisher
 that owns the game there. Afterwards `boardsmith publish` saves the ids that

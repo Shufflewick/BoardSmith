@@ -84,7 +84,7 @@ export interface ActionTempState {
   clear(): void;
 }
 
-const ACTION_TEMP_KEY = '_actionTemp';
+export const ACTION_TEMP_KEY = '_actionTemp';
 
 /** `game.settings._actionTemp`: seat, then action name, then key (#725). */
 type ActionTempStore = Record<string, Record<string, Record<string, unknown>>>;

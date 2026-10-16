@@ -121,16 +121,20 @@ describe('getSpriteStyle', () => {
     expect(getSpriteStyle(SPRITE).backgroundImage).toBe('url(/cards.png)');
   });
 
-  it('sizes the element to the requested display size', () => {
+  it('leaves the element size to the caller CSS and does not tile the sheet (#733)', () => {
     const style = getSpriteStyle(SPRITE, 60, 84);
-    expect(style.width).toBe('60px');
-    expect(style.height).toBe('84px');
+    expect(style.width).toBeUndefined();
+    expect(style.height).toBeUndefined();
+    expect(style.backgroundRepeat).toBe('no-repeat');
   });
 
-  it('defaults to a 60x84 card', () => {
-    const style = getSpriteStyle(SPRITE);
-    expect(style.width).toBe('60px');
-    expect(style.height).toBe('84px');
+  it('scales for a 60x84 card by default', () => {
+    expect(getSpriteStyle(SPRITE)).toEqual(getSpriteStyle(SPRITE, 60, 84));
+  });
+
+  it('accepts an already parsed sprite', () => {
+    const info = parseImageInfo(SPRITE)!;
+    expect(getSpriteStyle(info, 238, 333)).toEqual(getSpriteStyle(SPRITE, 238, 333));
   });
 
   it('offsets the background negatively so the requested cell shows', () => {

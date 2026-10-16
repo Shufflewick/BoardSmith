@@ -8,7 +8,8 @@ Two facts shaped it. Building a real game, about two thirds of the tokens went t
 re-running checks that need no model (the suite, typecheck, build, validate, and breaking code to
 see whether a test notices), over two to seven review rounds per chunk. And agents that reported
 "done" or "all green" were often wrong, which only a run of those checks caught. So the checks run
-as code (`boardsmith verify`), review starts only once they pass, and the reviewer is told they did.
+as code (`boardsmith verify --chunk`, the chunk's tests and typecheck), review starts only once
+they pass, and the reviewer is told which ran. The full checks run once, at publish.
 
 ## The Roles
 
@@ -19,7 +20,7 @@ The skills name roles, never models. A project decides which agent does each rol
 | `mechanical` | Bulk edits applied the same way across files (a rename, a settled ruling applied to every call site, citations updated after a renumber), searches ("where is this used"), summaries of logs or files. Work a machine can check. |
 | `bounded` | Implementation where failing tests already say what done is: a chunk's `build` step, after `spec` observed its tests failing. |
 | `judgement` | `spec`, `investigate`, the red team, the fidelity lens, the cross-chunk lens, whole chunks, and anything touching a ruling or the rulebook's meaning. |
-| `review` | The review of finished work, run once `boardsmith verify` has passed for it: the audit's visibility, undo and constraints lenses, the design review, and the final-acceptance pass. |
+| `review` | The review of finished work, run once `boardsmith verify --chunk` has passed for it: the audit's visibility, undo and constraints lenses, the design review, and the final-acceptance pass. |
 | `second-opinion` | An independent second reading of work the `judgement` role also does: `/bs-verify-game`'s second enumerator. Its value is that it is not the same agent, so `boardsmith validate` refuses a mapping that sends it and `judgement` to the same agent type, and its default agent runs on a different model family from `bs-judgement`'s. |
 
 The mechanical checks need no agent at all. The session that needs one runs it itself:
@@ -90,7 +91,8 @@ The gates where the designer decides (`ask`, `playtest`, a triage) are never dis
 
 ## No Review Before Verify
 
-No review step starts until `boardsmith verify` has passed for the commit under review. Code
+No review step starts until the chunk's fast checks, `boardsmith verify --chunk <slug>` (its tests
+and typecheck, `state-machine.md` "Git Protocol"), have passed for the commit under review. Code
 holds this line, not prose: before dispatching any reviewer, the session runs
 
 ```bash
@@ -98,23 +100,24 @@ npx boardsmith review-gate <slug> [--work-role <role>] [--since <commit>]
 ```
 
 in the chunk's checkout (the main checkout, for the cross-chunk lens). It exits non-zero unless
-the current commit, on a clean tree, has a passing `boardsmith verify --chunk <slug>` result
-that measured the chunk's whole change, and its refusal says to run `boardsmith verify`. So the
-order is always: commit, `npx boardsmith verify --chunk <slug>`, then `review-gate`. Writing the
-Step Checklist or a ledger after verify makes a new commit, which needs its own verify run; the
-mutation outcomes of unchanged code are reused, so that run is cheap.
+the current commit, on a clean tree, has a passing `boardsmith verify --chunk <slug>` result,
+and its refusal says to run it. So the order is always: commit, `npx boardsmith verify --chunk
+<slug>`, then `review-gate`. Writing the Step Checklist or a ledger after verify makes a new
+commit, which needs its own verify run; it runs only the chunk's tests and typecheck, so that run
+is cheap.
 
 - **Refused:** no review round runs. A failing verify is a failure of the step that made the
   change (below), and goes back with verify's own output, never to a reviewer.
-- **Open:** it prints `Review level: <none | light | full>` and then the verify brief: that the
-  mechanical checks are done, each check's outcome, the result file, the change under review, and
-  not to run the checks again. Every review prompt carries that brief verbatim in its
+- **Open:** it prints `Review level: <none | light | full>` and then the verify brief: that only
+  the fast checks ran (the chunk's tests and typecheck), each one's outcome, the result file, the
+  change under review, that the full suite, build, validate, the smoke test and the mutation check
+  run at publish, and not to run any of them. Every review prompt carries that brief verbatim in its
   `{verifyResult}` slot, and lists only judgement checks.
 
 **The size rule** is the command's, not a judgement made here. Work by the `bounded` or
 `judgement` role is always reviewed in full. A `mechanical` change (pass `--work-role mechanical
 --since <the commit before it began>`) is sized in changed lines: a small one needs no review
-(`none`: verify is its whole gate, and no review round is recorded), a middling one gets a light
+(`none`: its fast checks are its whole gate, and no review round is recorded), a middling one gets a light
 review, and a large one a full review. A **light** review is one agent of the step's review role,
 given the brief and the step's whole judgement checklist, reviewing only the change the brief
 names, in place of the step's full fan-out.
@@ -216,7 +219,7 @@ dispatch's.
 
 A `### Review Round N` entry records each review round: the step, `Reviewed: Dispatch N` (the
 finished dispatch whose work it reviews), the level, the verify result the round started from (the
-commit and `passed`, as `review-gate` printed it), the agents dispatched, and whether the
+commit and `passed`, as `review-gate` printed them), the agents dispatched, and whether the
 reviewers asked for changes. So the number of review rounds per chunk, and what each one started
 from, is on file.
 
