@@ -2665,7 +2665,7 @@ export class Game<
     // Intentionally skip condition check — returns schema regardless of current
     // availability. Use getActionSpace() when you need condition-filtered actions.
     const selections = actionDef.selections.map(sel =>
-      buildPickMetadata(this, player, sel)
+      buildPickMetadata(this, player, actionName, sel)
     );
     return {
       name: actionName,

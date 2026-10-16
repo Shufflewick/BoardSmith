@@ -24,6 +24,7 @@ import type { ActionDefinition, FollowUpAction, NumberSelection, PendingActionSt
 import { availableActionsForSeat, followUpForSeat } from '../flow/seat-activity.js';
 import { resolveMultiSelect, resolveOrderedList } from './resolve-multiselect.js';
 import { elementsAsIds } from './arg-builder.js';
+import { isElement } from '../element/game-element.js';
 import { numberRangeValues } from '../action/number-labels.js';
 import { MoveListTooLargeError, NotSimulableError } from '../errors.js';
 import { devWarn } from '../../utils/dev.js';
@@ -393,7 +394,7 @@ function listSelectionSteps(
       continue;
     }
     for (const value of step.values) {
-      queue.push([...steps, { selection: step.selection, value: elementsAsIds(value) }]);
+      queue.push([...steps, { selection: step.selection, value: holdElements(value) }]);
     }
   }
   return moves;
@@ -447,7 +448,7 @@ function drawSelectionSteps(
     const step = nextStep(scratch.game, actionDef, at, walk);
     if ('accepted' in step) return step.accepted ? steps : null;
     if (step.values.length === 0) return null;
-    const pick = { selection: step.selection, value: elementsAsIds(step.values[0]) };
+    const pick = { selection: step.selection, value: holdElements(step.values[0]) };
     if (!scratch.apply(at, pick)) return null;
     steps.push(pick);
   }
@@ -476,7 +477,8 @@ function nextStep(
   }
   const args = executor.resolveArgs(action, pending.collectedArgs, seatPlayer);
   const offer = selectionValues(game, action, seatPlayer, selection, args, walk.random);
-  return { selection, values: spend(walk, actionDef, selection, offer) ?? (selection.optional ? [null] : []) };
+  const tried = spend(walk, actionDef, selection, offer);
+  return { selection, values: tried?.length ? tried : selection.optional ? [null] : [] };
 }
 
 /**
@@ -501,9 +503,21 @@ function liveArgs(game: Game, steps: EnumerationStep[]): Record<string, unknown>
   return args;
 }
 
+/** The references {@link holdElements} made, so a plain choice of the same `{ id, className }` shape is never taken for an element (#774). */
+const heldElements = new WeakSet<object>();
+
+/** A pick's value with each element held as an `{ id, className }` reference, which survives a tree rebuild. */
+function holdElements(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(holdElements);
+  if (!isElement(value)) return value;
+  const ref = elementsAsIds(value) as object;
+  heldElements.add(ref);
+  return ref;
+}
+
 function liveValue(game: Game, selection: Selection, value: unknown): unknown {
   if (Array.isArray(value)) return value.map((v) => liveValue(game, selection, v));
-  if (typeof value === 'object' && value !== null && 'className' in value && 'id' in value) {
+  if (typeof value === 'object' && value !== null && heldElements.has(value)) {
     return liveElement(game, selection, value as { id: number });
   }
   return value;
@@ -768,8 +782,9 @@ function _enumerateRecursive(
   const tried = spend(walk, actionDef, selection, selectionValues(game, actionDef, player, selection, seen, walk.random));
 
   // Nothing to offer (no enabled choice, a text input, a number input that
-  // cannot be listed): skip an optional selection, block a required one.
-  if (tried === null) {
+  // cannot be listed, a multiSelect with fewer candidates than its min): skip
+  // an optional selection, block a required one.
+  if (tried === null || tried.length === 0) {
     if (selection.optional) {
       return _enumerateRecursive(game, actionDef, player, index + 1, currentArgs, walk);
     }
@@ -824,7 +839,7 @@ interface SelectionOffer<T = unknown> {
 
 /**
  * The values both enumeration paths try for one selection, or `null` when it
- * has nothing to offer: no enabled choice, a text input, or a number input
+ * has nothing to offer (an empty list means the same): no enabled choice, a text input, or a number input
  * with no value to offer (see {@link numberInputPicks}). With `random` (a
  * sampling walk), a multiSelect offers one combination drawn with it.
  */
