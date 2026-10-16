@@ -62,7 +62,7 @@ function findDragStartAction(
   dragged: ElementRef,
   availableActions: Ref<string[] | undefined>,
   actionMetadata: Ref<Record<string, EnrichedActionMetadata> | undefined>,
-): { action: EnrichedActionMetadata; firstSel: EnrichedPickMetadata } | null {
+): { action: EnrichedActionMetadata; firstSel: EnrichedPickMetadata; elementId: number | undefined } | null {
   const metas = (availableActions.value ?? [])
     .map(name => actionMetadata.value?.[name])
     .filter((m): m is EnrichedActionMetadata => !!m);
@@ -71,9 +71,8 @@ function findDragStartAction(
   for (const action of metas) {
     const firstSel = action.selections[0];
     if (firstSel?.type !== 'element') continue;
-    if (firstSel.validElements?.some(e => isChoosableElement(e, dragged))) {
-      return { action, firstSel };
-    }
+    const matched = firstSel.validElements?.find(e => isChoosableElement(e, dragged));
+    if (matched) return { action, firstSel, elementId: matched.id };
   }
 
   // Pass 2: element first selection with no static validElements to check against.
@@ -81,7 +80,7 @@ function findDragStartAction(
     const firstSel = action.selections[0];
     if (firstSel?.type !== 'element') continue;
     if (!firstSel.validElements || firstSel.validElements.length === 0) {
-      return { action, firstSel };
+      return { action, firstSel, elementId: dragged.id };
     }
   }
 
@@ -200,10 +199,9 @@ export function setupDragDropOrchestration(options: DragDropOrchestrationOptions
         return;
       }
 
-      const draggedId = dragged.id;
       try {
-        if (draggedId !== undefined) {
-          await actionController.start(match.action.name, { args: { [match.firstSel.name]: draggedId } });
+        if (match.elementId !== undefined) {
+          await actionController.start(match.action.name, { args: { [match.firstSel.name]: match.elementId } });
         } else {
           await actionController.start(match.action.name);
         }

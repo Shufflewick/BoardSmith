@@ -12,6 +12,7 @@ import {
   useActionController,
   type EnrichedActionMetadata,
 } from './useActionController.js';
+import type { EnrichedValidElement } from './useActionControllerTypes.js';
 import { setupDragDropOrchestration } from './useDragDropTargets.js';
 import { createBoardInteraction } from './useBoardInteraction.js';
 import { useBoardActionBridge } from './useBoardActionBridge.js';
@@ -77,7 +78,7 @@ async function wireAll(
 }
 
 describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND custom UIs)', () => {
-  it('NEW SHAPE: dragging an element auto-starts an element->choice (no filterBy) action and wires drop targets', async () => {
+  it('DRAG-TO-SELECT in an open action: dragging a piece of an element->choice (no filterBy) action wires its destinations', async () => {
     const pieces = [{ id: 1, refs: [{ ref: { id: 1 }, role: 'highlight' as const }] }, { id: 2, refs: [{ ref: { id: 2 }, role: 'highlight' as const }] }];
     const fetchPickChoices = answerPicks({
       piece: { validElements: pieces },
@@ -110,7 +111,7 @@ describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND cust
     expect(boardInteraction.isDropTarget({ id: 999 })).toBe(false);
   });
 
-  it('EXISTING SHAPE: dragging an element auto-starts an element->element action and wires targets', async () => {
+  it('DRAG-TO-SELECT in an open action: dragging a piece of an element->element action wires the second pick', async () => {
     const fetchPickChoices = vi.fn().mockResolvedValue({
       success: true,
       validElements: [
@@ -324,6 +325,56 @@ describe('drag-drop follows the board and the action panel (#724)', () => {
     boardInteraction.startDrag({ id: 1 });
     await flushAll();
     expect(boardInteraction.dropTargets.map(t => t.id).sort()).toEqual([100, 101]);
+  });
+
+  /** Two actions, so the bridge opens neither and a drag must start one itself. */
+  function twoActions(pieces: EnrichedValidElement[]) {
+    const fetchPickChoices = answerPicks({
+      piece: { validElements: pieces },
+      dest: {
+        choices: [
+          { value: 'a', display: 'A', refs: [{ ref: { id: 100 }, role: 'target' }] },
+          { value: 'b', display: 'B', refs: [{ ref: { id: 101 }, role: 'target' }] },
+        ],
+      },
+    });
+    const metadata: Record<string, EnrichedActionMetadata> = {
+      move: { name: 'move', selections: [{ name: 'piece', type: 'element', validElements: pieces }, { name: 'dest', type: 'choice' }] },
+      pass: { name: 'pass', selections: [] },
+    };
+    return wireAll(metadata, fetchPickChoices);
+  }
+
+  it('DRAG-TO-START: dragging an enabled piece starts the action and wires the next pick', async () => {
+    const { controller, boardInteraction, sendAction } = await twoActions([
+      { id: 1, disabled: 'pinned', refs: [{ ref: { id: 1 }, role: 'highlight' }] },
+      { id: 2, refs: [{ ref: { id: 2 }, role: 'highlight' }] },
+    ]);
+    expect(controller.currentAction.value).toBeNull();
+
+    boardInteraction.startDrag({ id: 2 });
+    await flushAll();
+    expect(controller.currentAction.value).toBe('move');
+    expect(boardInteraction.dropTargets.map(t => t.id).sort()).toEqual([100, 101]);
+
+    boardInteraction.triggerDrop({ id: 101 });
+    await flushAll();
+    expect(sendAction).toHaveBeenCalledWith('move', { piece: 2, dest: 'b' });
+  });
+
+  it('DRAG-TO-START: a drag matched by notation starts the action with the matched piece, as a click does', async () => {
+    const { controller, boardInteraction, sendAction } = await twoActions([
+      { id: 42, refs: [{ ref: { notation: 'd4' }, role: 'highlight' }] },
+      { id: 43, refs: [{ ref: { notation: 'f4' }, role: 'highlight' }] },
+    ]);
+
+    boardInteraction.startDrag({ notation: 'd4' });
+    await flushAll();
+    expect(controller.currentArgs.value).toEqual({ piece: 42 });
+
+    boardInteraction.triggerDrop({ id: 100 });
+    await flushAll();
+    expect(sendAction).toHaveBeenCalledWith('move', { piece: 42, dest: 'a' });
   });
 
   it('dragging a disabled element starts no action', async () => {
