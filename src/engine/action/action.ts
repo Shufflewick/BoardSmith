@@ -995,6 +995,9 @@ export class ActionExecutor {
       // config, or a function returning either. Mirror pick-handler.ts resolution.
       const multiSelectConfig = resolveMultiSelect(selection, context);
       if (multiSelectConfig !== undefined) {
+        if (!Array.isArray(value)) {
+          errors.push(`Selection "${selection.name}" is multi-select and expected an array, got ${typeof value}: ${JSON.stringify(value)}`);
+        }
         // Reject duplicates before the count check (WR-04): repeated
         // elements (or repeated IDs of the same element) must not satisfy
         // the min bound.
