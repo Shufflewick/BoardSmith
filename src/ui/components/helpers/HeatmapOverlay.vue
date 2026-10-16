@@ -168,6 +168,8 @@ function chipStyle(chip: ResolvedChip): Record<string, string> {
 
 let resizeObserver: ResizeObserver | null = null;
 let observedElements: Element[] = [];
+// The element the scroll listener is on, so it is removed from that one, not a re-queried one.
+let scrollRegion: Element | null = null;
 
 function rebuildObservers() {
   if (!overlayRoot.value) return;
@@ -180,6 +182,7 @@ function rebuildObservers() {
     resizeObserver.disconnect();
     observedElements = [];
   }
+  scrollRegion?.removeEventListener('scroll', onScroll);
 
   resizeObserver = new ResizeObserver(() => {
     void nextTick(measure);
@@ -201,6 +204,7 @@ function rebuildObservers() {
 
     boardRegion.addEventListener('scroll', onScroll, { passive: true });
   }
+  scrollRegion = boardRegion;
 }
 
 function onScroll() {
@@ -226,12 +230,8 @@ onUnmounted(() => {
     resizeObserver = null;
   }
 
-  const boardRegion =
-    overlayRoot.value?.closest('.boardregion') ??
-    document.querySelector('.boardregion');
-  if (boardRegion) {
-    boardRegion.removeEventListener('scroll', onScroll);
-  }
+  scrollRegion?.removeEventListener('scroll', onScroll);
+  scrollRegion = null;
   observedElements = [];
 });
 </script>

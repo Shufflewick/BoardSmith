@@ -91,7 +91,7 @@
  * ```
  */
 
-import { ref, computed, watch, onUnmounted, isRef, type Ref, type ComputedRef } from 'vue';
+import { ref, computed, watch, onUnmounted, onScopeDispose, isRef, type Ref, type ComputedRef } from 'vue';
 import { prefersReducedMotion } from './reducedMotion.js';
 import { easeOutCubic } from '../../utils/easing.js';
 import { tryUseBoardInteraction } from './useBoardInteraction.js';
@@ -870,6 +870,9 @@ export function useFlyingElements(
     isAnimating.value = false;
   }
 
+  // Frames from fly() keep running after unmount unless the owner's scope cancels them (#749).
+  onScopeDispose(cancelAll, true);
+
   // ============================================
   // Auto-watch mode implementation
   // ============================================
@@ -1175,10 +1178,7 @@ export function useFlyingElements(
     );
 
     // Cleanup on unmount
-    onUnmounted(() => {
-      stopWatcher();
-      cancelAll();
-    });
+    onUnmounted(stopWatcher);
   }
 
   return {
