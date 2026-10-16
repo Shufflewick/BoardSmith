@@ -105,6 +105,11 @@ describe("rearmAt — when the next alarm fires", () => {
     expect(rearmAt([ev(500 + 30_000, 1)], 500)).toBe(500 + 30_000);
   });
 
+  test("a queue larger than the call stack's argument limit still arms (#791)", () => {
+    const events = Array.from({ length: 130_000 }, (_, i) => ev(1_000 + i, i));
+    expect(rearmAt(events, 500)).toBe(1_000);
+  });
+
   test("an OVERDUE event is armed for NOW, whether the drain was behind or the queue is stale", () => {
     // Behind-ness is not a separate verdict any more: a drain that stopped on
     // its budget left due work, due work is overdue, and overdue arms now.

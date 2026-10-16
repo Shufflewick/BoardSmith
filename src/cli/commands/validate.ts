@@ -22,7 +22,7 @@ import {
   describeZipSizeViolation,
   encodedRulesBytes,
 } from '../lib/bundle-limits.js';
-import { readDistDir, createZip } from '../lib/zip.js';
+import { readDistDir, createZip, formatBytes } from '../lib/zip.js';
 import { requireGameProject, resolveRulesDir, tableUiState, TABLE_UI_ENTRY } from '../lib/game-project.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { runToolCapturingStdout } from '../lib/run-tool.js';
@@ -1193,12 +1193,6 @@ export async function validateRequiredFiles(cwd: string, isWorld: boolean): Prom
     message: missing.length > 0 ? 'Missing required files' : '',
     details: missing,
   };
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // ---------------------------------------------------------------------------

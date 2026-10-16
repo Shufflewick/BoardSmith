@@ -1216,8 +1216,11 @@ next one's to read. On ShufflewickPub it is also deleted when the holder's
 account is erased.
 
 A host drives all of this with one function, `applyNoticeWrites(result.notices,
-readBox)`, which applies a dispatch's sends and takes in order and answers each
-touched seat's box, so every host agrees about what a full box does. The
+readBox, { seatCount, budgets })`, which applies a dispatch's sends and takes in
+order and answers each touched seat's box, so every host agrees about what a
+full box does. The result comes from game code, so it first re-checks `perSeat`,
+the number of sends, each notice's size and every seat against the host's own
+budgets and seat count, and refuses a result they do not admit. The
 `WorldStore` interface carries `noticeBox(seat)` and a checkpoint's `notices`;
 `boardsmith dev` keeps boxes in its local store, and `TestWorld.noticeBox(seat)`
 shows a test what is waiting.
@@ -1504,6 +1507,13 @@ round asks for nothing is never asked again, so the steady state costs one round
 
 It sees the same read-only projection an action's declaration does, and an
 assignment through it is refused with `declaration-write`.
+
+**A view that throws fails for that seat only, and its text reaches the player
+only as a `PlayerFacingError`** (or a world refusal). Any other throw is a bug:
+the seat is told the view could not be shown because of an error in the game's
+rules, and the error goes to the log -- once per call, with a count of the seats
+it failed for, so one broken view in front of a large audience is one log line.
+In a dev or test run the raw text is added in brackets, as it is for actions.
 
 What the seat receives is `{ state, phase }`, where `state` is the
 engine's own per-player projection, with its fog of war already applied, **pruned
@@ -2057,7 +2067,8 @@ queue, rather than failing a check on the way in.
 - **`key`** makes it an **upsert**: it replaces the pending event with the same
   owner and key, so the count under one key never grows. This is the shape you
   should usually be writing, and it is why the cap refusal's first suggestion is
-  to use one. A key may be at most **512 UTF-8 bytes**
+  to use one. A key may not be empty (`schedule-key-empty`), since a cancel
+  must name a key. A key may be at most **512 UTF-8 bytes**
   (`WORLD_SCHEDULE_KEY_MAX_BYTES`), and a cancel's key the same. A host stores
   each event under a storage key built from it: percent-encoding makes each
   byte at most three, so 512 bytes is at most 1536 encoded, which leaves 512 of
@@ -2721,7 +2732,7 @@ your game.
 | `unknown-player` | A command named somebody this world does not seat. |
 | `clock-only-command` | A player sent a seatless action -- one built with `worldClockAction()`, which the clock reaches and nobody else does -- or a scheduled event came due naming a seated action, which has no player to act for. Since `schedule-seated-action`, a seated action is refused at the `schedule()` line, so this second case answers only an event queued before that check, in a world that already holds one. |
 | `world-full` | A seating would exceed the bundle's own `maxPlayers`. Seats are assigned once and never handed on. |
-| `seat-conflict` | A seating named a player who already holds a different seat. |
+| `seat-conflict` | A seating named a player who already holds a different seat, or a seat another player already holds. |
 | `world-catching-up` | A world declaring `ordering: "chronological"` was still behind the instant this command arrived at, so it was not applied. Sending it again is safe and is the intended response: an order's durable identity makes the repeat run exactly once, and the world is already catching up. |
 | `rate-limited` | A connection sent frames faster than the host accepts. Well-formed traffic, refused at the door. |
 | `invalid-order` | A player command arrived with no usable order identity: no id, an id past 128 characters, or no mint instant. Every player command carries one -- see [an order that survives a lost reply](#an-order-that-survives-a-lost-reply). |
@@ -2745,6 +2756,7 @@ thing next time.
 | `undecided-audience` | A seat's `world.view` could only say whether it names an event's scope by reading a partition the command did not declare. Declare it in the action, or narrow who can see the scope in the tree. |
 | `partition-missing` | A declaration named a partition this world's store does not have, and `world.createPartition` did not build one for that name either. Usually a typo, or a partition nothing has created yet. |
 | `invalid-partition-name` | A partition name a store may not hold: empty, over 128 characters, outside `A-Za-z0-9._:@/-`, one of `__proto__`, `constructor`, `prototype`, or `notice`, the scope a seat's notices are delivered live on. |
+| `invalid-partition-root` | `genesis`, `createPartition` or a migration answered a partition root that is not a direct child of the game (it sits inside another element, so it would be stored twice), or answered one element under two names. Create each root with `game.create(...)` and answer it once. |
 | `partition-too-large` | A partition serialized past `partitionMaxBytes`. The fix is to split it. See the next section. |
 | `schedule-cap` | This owner's unkeyed pending events are at the cap. Use a key. |
 | `schedule-key-cap` | This owner holds as many distinct keys as one owner may. Reuse a key rather than minting one per action. |
@@ -2753,6 +2765,7 @@ thing next time.
 | `invalid-schedule-delay` | A negative or non-finite `delayMs`. |
 | `invalid-schedule-interval` | A non-positive or non-finite `everyMs`, which is a wake that re-arms instantly forever. |
 | `invalid-schedule-command` | A schedule request that names no action, or carries an argument that is not a JSON scalar. |
+| `schedule-key-empty` | A schedule armed under an empty key, which no cancel could ever take back. |
 | `schedule-key-too-long` | A schedule or cancel key past 512 UTF-8 bytes, which no host can store as part of a storage key. |
 | `schedule-key-malformed` | A schedule or cancel key that is not well-formed Unicode (it holds a lone UTF-16 surrogate), which no host can percent-encode into a storage key. |
 | `schedule-unknown-action` | A schedule naming an action this world does not register. The refusal lists the clock actions it can schedule. |
@@ -2768,7 +2781,7 @@ thing next time.
 | `element-id-key-mismatch` | A stored partition does not hang from this world's root under the key the world was built with, so its bytes were minted under another key: the host passed a different world's key, minted a new one on a wake, or is serving bytes from before keyed ids (#482). Raised before anything is adopted. Pass the key stored with the world. Platform-owned and deterministic. |
 | `allocation-stale` | A host handed back a stamp standing below an id its own stored bytes hold, so the next id minted would collide with one already written. Raised at the adoption that proves it. A host defect with no repair: the world stops (#540). |
 | `child-timeout` | The bundle did not answer a host's call inside its deadline. |
-| `invalid-notice` | `ctx.world.notify` was handed a notice a box cannot hold: a seat outside the world, no `whenFull`, a payload JSON cannot carry, one past `noticeMaxBytes` -- or the world declares no `world.notices`. See [notices](#notices-a-lasting-line-for-one-seat-without-loading-it). |
+| `invalid-notice` | `ctx.world.notify` was handed a notice a box cannot hold: a seat outside the world, no `whenFull`, a payload that is not plain JSON (a function, `Map`, `Set`, class instance, cycle or non-finite number would be stored as something else, so it is refused), a `line` that is not a string or `{ text, type? }` with string fields, one past `noticeMaxBytes` -- or the world declares no `world.notices`. See [notices](#notices-a-lasting-line-for-one-seat-without-loading-it). |
 | `notice-batch-cap` | One dispatch sent more notices than `maxNoticesPerCommand`. |
 | `notice-box-full` | A notice sent with `whenFull: "refuse"` met a box already holding `perSeat` notices. The command is rolled back. |
 | `undeclared-notice-box` | `notices`, `takeNotices`, or a `"refuse"` notice named a seat whose box no `.noticeBox()` round declared. |
@@ -2851,6 +2864,7 @@ makes local behaviour a poor guide to published behaviour.
 | `maxPendingEvents` | derived: 16000 | The whole world's queue. `maxPlayers` times the unkeyed cap. |
 | `catchUpMaxRealIterations` | 4 | Real occurrences a late recurrence runs before the rest are coalesced into one call. |
 | `drainBatch` | 200 | Due events one drain runs. A world still behind re-arms: overload degrades to latency, never refusal. |
+| `maxResidentPartitions` | 256 | How many partitions one world keeps resident. After each checkpoint the least recently used clean ones past it are evicted (`planEviction`); a dirty one never is. |
 | `catchUpRounds` | 8 | Drain batches one command may wait behind on a `ordering: 'chronological'` world. Running out with events still due refuses the command `world-catching-up` rather than applying it over a world still behind. |
 | `maxCandidatesPerSelection` | 200 | Candidates one selection may offer, checked at enumeration. A 500-seat roster is one honest partition and one honest declaration, and enumerating it yields 500 candidates, so this is the guard the declaration itself cannot supply. |
 | `receiptRetentionMs` | 1209600000 (14 days) | How long a committed order's receipt is kept, and so how long a page may be away and still have an uncertain order answered rather than refused. |
@@ -3035,13 +3049,16 @@ const bytes = await runner.serialize([...result.dirty]);
 `runner.declareOffers(player, supplied)` and `runner.offersFor(player, stamp)`
 drive the offer path the same way, `runner.declareViews(...)` and
 `runner.viewsFor(...)` drive the read path, and `runner.evict(names)` releases
-partitions. `walkDeclaration(declare, read, readActivity, readNoticeBox)` is the
-loop itself, exported so a host writes it once rather than three times: it reads
-the partitions, seat watermarks and notice boxes each round declares, and returns
-the `WorldWalkAnswers` (`declaredActivity`, `declaredNotices`) that `apply` takes
-whole. It is host API, so it changes with the engine revision; a test that only
-wants a world to act in uses `TestWorld` below. `settleDeclaration` is the view's
-fixpoint. Every refusal on this page is reachable from a test file.
+partitions.
+`planEviction(runner.residency(), dirty, budgets.maxResidentPartitions)` says
+which, and `ResidentWorld` runs it after every checkpoint (#747).
+`walkDeclaration(declare, read, readActivity, readNoticeBox)` is the loop
+itself, exported so a host writes it once rather than three times: it reads the
+partitions, seat watermarks and notice boxes each round declares, and returns
+the `WorldWalkAnswers` (`declaredActivity`, `declaredNotices`) that `apply`
+takes whole. It is host API, so it changes with the engine revision; a test that
+only wants a world to act in uses `TestWorld` below. `settleDeclaration` is the
+view's fixpoint. Every refusal on this page is reachable from a test file.
 
 **Under `boardsmith/testing`, driven the way a host drives one.** `createWorld`
 above is the raw runner: you walk the declaration, stamp the command and write

@@ -12,6 +12,10 @@
 
 import type { AnnotationTarget } from '../../../engine/tutorial/types.js';
 
+// One empty list for every push with nothing to show: a fresh [] would change
+// the overlay's computed and rerun its measuring on every push (#748).
+export const NOTHING_TO_SHOW: readonly never[] = Object.freeze([]);
+
 // ── CSS.escape polyfill ───────────────────────────────────────────────────────
 // jsdom and some environments don't expose CSS.escape. Provide a minimal
 // fallback that escapes characters which could break an attribute selector.

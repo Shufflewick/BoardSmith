@@ -145,16 +145,19 @@ export class PersistenceStore {
    *
    * The seal is applied HERE, on the READ, because that is where the platform
    * applies it: a session is handed sealed rows only for the players it acts
-   * for, and no session is handed anybody else's.
+   * for, and no session is handed anybody else's. `dropped` names the rows
+   * that could not be read, so the caller can tell the developer.
    */
-  readForSession(sessionKey: string, players: PersistPlayer[]): PersistStartPayload | null {
+  readForSession(
+    sessionKey: string,
+    players: PersistPlayer[],
+  ): { payload: PersistStartPayload; dropped: string[] } | null {
     const tokens = actingTokens(players);
     const visible = this.rows.filter((row) => {
       const owner = sealedKeyOwner(row.key);
       return owner === null || tokens.has(owner);
     });
-    const parsed = toStartPayload({ entries: visible }, sessionKey, players);
-    return parsed === null ? null : parsed.payload;
+    return toStartPayload({ entries: visible }, sessionKey, players);
   }
 
   /**

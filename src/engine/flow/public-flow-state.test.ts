@@ -35,20 +35,67 @@ const server: FlowState = {
 
 describe('toPublicFlowState (#449)', () => {
   it('keeps exactly the fields a client reads, and no count', () => {
-    expect(toPublicFlowState(server)).toEqual({
+    expect(toPublicFlowState(server, 1)).toEqual({
       position: { path: [1, 0, 2], frameData: { __frame_1: { eligibleSeats: [2, 1] } } },
       complete: false,
       awaitingInput: true,
-      awaitingPlayers: server.awaitingPlayers,
+      awaitingPlayers: [
+        { playerIndex: 1, availableActions: ['placePack', 'done'], completed: false },
+        { playerIndex: 2, completed: false },
+      ],
       currentPhase: 'deploy',
       timeLimitMs: 30000,
     });
   });
 
   it('answers the client helpers exactly as the server state does', () => {
-    const pub = toPublicFlowState(server);
-    expect(flowBoundaryKey(pub)).toBe(flowBoundaryKey(server));
-    expect(turnSequence(pub)).toEqual(turnSequence(server));
-    expect(dueSeats(pub)).toEqual(dueSeats(server));
+    for (const seat of [0, 1, 2]) {
+      const pub = toPublicFlowState(server, seat);
+      expect(flowBoundaryKey(pub)).toBe(flowBoundaryKey(server));
+      expect(turnSequence(pub)).toEqual(turnSequence(server));
+      expect(dueSeats(pub)).toEqual(dueSeats(server));
+    }
+  });
+});
+
+// #778: a seat's available actions can reveal its hidden hand, so each viewer
+// is sent only its own.
+describe("toPublicFlowState sends no seat another seat's actions (#778)", () => {
+  const simultaneous: FlowState = {
+    position: { path: [0], iterations: {}, variables: {} },
+    complete: false,
+    awaitingInput: true,
+    awaitingPlayers: [
+      { playerIndex: 1, availableActions: ['pass', 'playTrump'], completed: false },
+      { playerIndex: 2, availableActions: ['pass'], completed: false },
+    ],
+  };
+  const sequential: FlowState = {
+    position: { path: [1], iterations: {}, variables: {} },
+    complete: false,
+    awaitingInput: true,
+    currentPlayer: 1,
+    availableActions: ['pass', 'playTrump'],
+  };
+
+  it("keeps only the viewer's own entry's actions in a simultaneous step", () => {
+    expect(toPublicFlowState(simultaneous, 2).awaitingPlayers).toEqual([
+      { playerIndex: 1, completed: false },
+      { playerIndex: 2, availableActions: ['pass'], completed: false },
+    ]);
+  });
+
+  it("keeps the sequential actions only for the acting seat", () => {
+    expect(toPublicFlowState(sequential, 1).availableActions).toEqual(['pass', 'playTrump']);
+    expect(toPublicFlowState(sequential, 2)).not.toHaveProperty('availableActions');
+    expect(toPublicFlowState(sequential, 2).currentPlayer).toBe(1);
+  });
+
+  it('sends a spectator no seat\'s actions', () => {
+    expect(toPublicFlowState(simultaneous, 0).awaitingPlayers).toEqual([
+      { playerIndex: 1, completed: false },
+      { playerIndex: 2, completed: false },
+    ]);
+    expect(toPublicFlowState(sequential, 0)).not.toHaveProperty('availableActions');
   });
 });

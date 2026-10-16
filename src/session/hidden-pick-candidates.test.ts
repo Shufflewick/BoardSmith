@@ -278,3 +278,37 @@ describe('pick candidates the seat cannot see (#715)', () => {
     expect(res.choices?.map((c) => c.value)).toEqual(['AS']);
   });
 });
+
+/** Seat 2's hand, with one card shown to seat 1 by a grant on the card itself (#758). */
+class PeekGame extends Game<PeekGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    const hand = this.create(Space, 'hand-2');
+    hand.player = this.getPlayer(2)!;
+    hand.contentsVisibleToOwner();
+    hand.create(Card, 'AS');
+    hand.create(Card, 'KH').addVisibleTo(1);
+    this.registerActions(
+      Action.create<PeekGame>('steal')
+        .chooseElement<'card', Card>('card', { elements: (ctx) => ctx.game.first(Space, 'hand-2')!.all(Card) })
+        .execute(() => ({ success: true })),
+    );
+    this.setFlow({ root: loop({ maxIterations: 10, do: eachPlayer({ do: actionStep({ actions: ['steal'] }) }) }) });
+  }
+}
+
+describe('a card granted to the seat inside a zone it cannot see (#758)', () => {
+  it('is offered under its real id and name, matching the board, while the rest stay placeholders', async () => {
+    const peek: GameDefinitionLike = { gameClass: PeekGame, gameType: 'peek', minPlayers: 2, maxPlayers: 2 };
+    const start = succeeded(await executeOp(peek, options, null, null, { type: 'start' }));
+    const res = succeeded(await executeOp(peek, options, start.snapshot, null, {
+      type: 'resolveChoices', actionName: 'steal', selectionName: 'card', player: 1, args: {},
+    }));
+
+    const board = (start.playerViews[0] as { state: { view: Node } }).state.view;
+    const shown = findByName(board, 'hand-2')!.children!;
+    expect(shown.map((c) => c.name)).toEqual([undefined, 'KH']);
+    expect(res.validElements?.map((e) => e.id)).toEqual(shown.map((c) => c.id));
+    expect(res.validElements?.map((e) => e.display)).toEqual(['Card #1', 'KH']);
+  });
+});

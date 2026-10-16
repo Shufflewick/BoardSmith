@@ -299,6 +299,48 @@ describe('enumerateLegalMoves: choices with an undefined value', () => {
   });
 });
 
+describe('enumerateLegalMoves: plain-object choices shaped like element references (#774)', () => {
+  /** A game whose one pick offers plain data carrying `id` and `className`, one naming a real element's id, and that element. */
+  function slotGame(repeat: boolean): Game {
+    class SlotGame extends Game<SlotGame, Player> {
+      constructor(options: GameOptions) {
+        super(options);
+        const board = this.create(Space<SlotGame>, 'board');
+        const choices = () => [{ id: board.id, className: 'Slot', label: 'x' }, { id: 999, className: 'Slot', label: 'y' }, board];
+        const claim = Action.create<SlotGame>('claim');
+        this.registerAction(
+          (repeat ? claim.chooseFrom('slot', { choices, repeat: { until: () => true } }) : claim.chooseFrom('slot', { choices }))
+            .execute(() => ({ success: true })),
+        );
+        this.setFlow({ root: loop({ maxIterations: 10, do: eachPlayer({ do: actionStep({ actions: ['claim'] }) }) }) });
+      }
+    }
+    const game = new SlotGame({ playerCount: 2, seed: 'slots' });
+    game.startFlow();
+    return game;
+  }
+
+  it.each([['a single pick', false], ['a repeating pick', true]] as const)(
+    'lists each plain choice of %s as the object it is and the element as the live element, and every move is accepted',
+    (_name, repeat) => {
+    const game = slotGame(repeat);
+    const board = game.first(Space)!;
+    const pick = (value: unknown) => (repeat ? [value] : value);
+
+    const moves = enumerateLegalMoves(game, 1);
+
+    expect(moves.map((move) => move.args.slot)).toEqual([
+      pick({ id: board.id, className: 'Slot', label: 'x' }),
+      pick({ id: 999, className: 'Slot', label: 'y' }),
+      pick(board),
+    ]);
+    expect([moves[2].args.slot].flat()[0]).toBe(board);
+    for (const move of moves) {
+      expect(game.performAction('claim', game.getPlayer(1)!, move.args).error).toBeUndefined();
+    }
+  });
+});
+
 // ============================================================================
 // #249 — an ordered, repeatable list is enumerated one ENTRY at a time
 // ============================================================================
@@ -707,5 +749,72 @@ describe('numberInputValues (#689)', () => {
       unlistable: expect.stringMatching(new RegExp(`${MAX_MULTISELECT_COMBINATIONS + 1} values.*at most ${MAX_MULTISELECT_COMBINATIONS}`)),
     });
     expect(values({ min: 0, max: 1e12, integer: true })).toEqual({ unlistable: expect.any(String) });
+  });
+});
+
+// An optional multiSelect with fewer candidates than its min can still be skipped (#773).
+describe('enumerateLegalMoves: optional multiSelect with too few candidates', () => {
+  for (const shape of ['chooseElements', 'chooseFrom'] as const) {
+    for (const repeating of [false, true]) {
+      it(`${shape}${repeating ? ' before a repeating pick' : ''} lists the skip move, as getAvailableActions and performAction accept it`, () => {
+        class SkipGame extends Game<SkipGame, Player> {
+          constructor(options: GameOptions) {
+            super(options);
+            const board = this.create(Space<SkipGame>, 'board');
+            const only = board.create(Piece<SkipGame>, 'only');
+            const base = Action.create<SkipGame>('keep');
+            const optional = { optional: 'Keep all', multiSelect: { min: 2 } };
+            const done = () => ({ success: true });
+            const repeat = { choices: ['x'], repeat: { until: () => true } };
+            // The two shapes build different Action types, so each is finished in its own branch.
+            if (shape === 'chooseElements') {
+              const first = base.chooseElements('cards', { ...optional, elements: () => [only] });
+              this.registerAction(repeating ? first.chooseFrom('b', repeat).execute(done) : first.execute(done));
+            } else {
+              const first = base.chooseFrom('cards', { ...optional, choices: ['a'] });
+              this.registerAction(repeating ? first.chooseFrom('b', repeat).execute(done) : first.execute(done));
+            }
+            this.setFlow({ root: loop({ maxIterations: 10, do: eachPlayer({ do: actionStep({ actions: ['keep'] }) }) }) });
+          }
+        }
+        const game = new SkipGame({ playerCount: 2, playerNames: ['A', 'B'], seed: 'bs773' });
+        game.startFlow();
+        const player = game.getPlayer(1)!;
+
+        const moves = enumerateLegalMoves(game, 1).map((m) => m.args);
+        expect(moves.length).toBeGreaterThan(0);
+        expect(moves.every((args) => !('cards' in args))).toBe(true);
+        expect(game.getAvailableActions(player).map((a) => a.name)).toContain('keep');
+        expect(game.performAction('keep', player, repeating ? { b: ['x'] } : {}).success).toBe(true);
+      });
+    }
+  }
+});
+
+class PickValidateGame extends Game<PickValidateGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    const board = this.create(Space<PickValidateGame>, 'board');
+    board.create(Piece<PickValidateGame>, 'token-a');
+    board.create(Piece<PickValidateGame>, 'token-b');
+    this.registerActions(
+      Action.create<PickValidateGame>('number')
+        .chooseFrom('n', { choices: [1, 2, 3], validate: (v) => v !== 2 || 'not 2' })
+        .execute(() => ({ success: true })),
+      Action.create<PickValidateGame>('token')
+        .chooseElement('target', { elementClass: Piece, validate: (el) => el.name !== 'token-b' || 'not b' })
+        .execute(() => ({ success: true })),
+    );
+    this.setFlow({ root: loop({ maxIterations: 10, do: eachPlayer({ do: actionStep({ actions: ['number', 'token'] }) }) }) });
+  }
+}
+
+describe("enumeration honours a pick's own validate (#768)", () => {
+  it('lists no move a choice or element pick validate refuses', () => {
+    const game = new PickValidateGame({ playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'pick-validate' });
+    game.startFlow();
+    const moves = enumerateLegalMoves(game, 1);
+    expect(moves.filter((m) => m.action === 'number').map((m) => m.args.n)).toEqual([1, 3]);
+    expect(moves.filter((m) => m.action === 'token').map((m) => (m.args.target as Piece).name)).toEqual(['token-a']);
   });
 });
