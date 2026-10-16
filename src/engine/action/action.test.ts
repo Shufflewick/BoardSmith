@@ -3146,6 +3146,20 @@ describe('whole-move submission checks each pick before a later pick reads it (#
     });
   }
 
+  // A condition is typed as seeing resolved picks or none: at submit time it gets none, as availability does.
+  for (const repeating of [false, true]) {
+    it(`takes a valid whole submission whose condition reads a pick${repeating ? ' (with a repeating pick 3)' : ''}`, () => {
+      const picks = Action.create('discard')
+        .chooseElement('card', { elements: () => [...hand.all(Card)] })
+        .chooseFrom('to', { choices: ['hand'] })
+        .condition({ 'the card is in hand': (ctx) => ctx.args.card === undefined || ctx.args.card.parent!.name === 'hand' });
+      const action = (repeating ? picks.chooseFrom('extra', { choices: ['done'], repeatUntil: 'done' }) : picks).execute(() => {});
+      const card = hand.first(Card)!;
+      const result = executor.executeAction(action, game.getPlayer(1)!, { card: card.id, to: 'hand', ...(repeating && { extra: ['done'] }) });
+      expect(result).toEqual({ success: true });
+    });
+  }
+
   it('still takes a valid whole submission', () => {
     const { action, destinationsRead } = discardAction(false);
     const card = hand.first(Card)!;

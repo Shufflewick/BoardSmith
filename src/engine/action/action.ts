@@ -1224,12 +1224,13 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): { args: Record<string, unknown> } | { error: string } {
-    // A follow-up is offered by the chain, not its condition.
-    if (!options?.followUp && action.condition && !evaluateCondition(action.condition, { game: this.game, player, args }, `action '${action.name}'`)) {
+    // A follow-up is offered by the chain, not its condition. The condition
+    // sees no picks, as availability and each pick-by-pick step see it.
+    const resolved = this.resolveNonPickArgs(action, args, this.game);
+    if (!options?.followUp && action.condition && !evaluateCondition(action.condition, { game: this.game, player, args: { ...resolved } }, `action '${action.name}'`)) {
       return { error: 'Action is not available' };
     }
 
-    const resolved = this.resolveNonPickArgs(action, args, this.game);
     for (const selection of action.selections) {
       const value = args[selection.name];
       // null = explicitly skipped (from direct API/bot calls); a skipped pick is
@@ -1363,8 +1364,8 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): ActionResult {
-    // The picks are resolved one step at a time below, so the condition sees them as sent (#772).
-    const context = { game: this.game, player, args };
+    // The condition sees no picks, as availability and each step see it; the picks are checked one at a time below (#772).
+    const context = { game: this.game, player, args: this.resolveNonPickArgs(action, args, this.game) };
     if (!options?.followUp && action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
       return { success: false, error: 'Action is not available' };
     }
