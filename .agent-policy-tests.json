@@ -1,37 +1,176 @@
 {
-  "ticket": "Shufflewick/BoardSmith#779",
+  "ticket": "Shufflewick/BoardSmith#776",
   "base": "e7da3d40e99eb989548d089002a4967d71fda62d",
   "tests": [
     {
-      "file": "src/runtime/player-helpers-restore.test.ts",
+      "file": "src/bot/determinization-choice-cache.test.ts",
       "names": [
-        "tracks and abilities on a Player survive every restore (#779) come back from a saved snapshot unchanged and still usable",
-        "tracks and abilities on a Player survive every restore (#779) come back from an undo to an earlier checkpoint and still usable",
-        "tracks and abilities on a Player survive every restore (#779) come back in the bot's search sandbox, built from the seat's view, and still usable"
+        "determinization and reused choices (#631) a pick asked before the sampler ran offers the sampled value after it"
       ]
     },
     {
-      "file": "src/engine/scoring/track-functions.test.ts",
+      "file": "src/bot/mcts-clone-options.test.ts",
       "names": [
-        "track functions (#779) a new track is plain data with its defaults filled in",
-        "track functions (#779) addToTrack records the entry and returns the points for its position",
-        "track functions (#779) addToTrack throws, naming the value and track, and leaves the track untouched when refused",
-        "track functions (#779) monotonic increasing needs each value above the last; decreasing below it",
-        "track functions (#779) monotonic allowEqual, or a special entry on a track that allows them, may repeat the last value",
-        "track functions (#779) unique accepts each value once and only inside the range",
-        "track functions (#779) unique a special entry may duplicate when the track allows it, but never leave the range",
-        "track functions (#779) counter incrementCounter scores pointsPerCount per mark and refuses once full",
-        "track functions (#779) every kind refuses everything once full",
-        "track functions (#779) trackPoints adds the completion bonus only once the track is full"
+        "MCTS Game Clone Constructor Options should preserve playerConfigs in MCTS game clones",
+        "MCTS Game Clone Constructor Options should preserve complex nested options in MCTS game clones",
+        "MCTS Game Clone Constructor Options refuses a snapshot without gameOptions instead of building the search game from the wrong seed",
+        "MCTS Game Clone Constructor Options gives the search game neither the game's seed nor its random position (#776)"
       ]
     },
     {
-      "file": "src/engine/player/ability-functions.test.ts",
+      "file": "src/bot/mcts-seeded-truncation.test.ts",
       "names": [
-        "ability functions (#779) addAbility appends an unused ability, keeping its provenance only when given",
-        "ability functions (#779) spendAbility marks one unused ability of the type used, and says whether it could",
-        "ability functions (#779) countUnusedAbilities counts one type, or every type when none is named",
-        "ability functions (#779) groupAbilities totals each type in first-earned order"
+        "MCTS seeded-search truncation is never silent warns when a seeded search is cut short by the wall-clock timeout",
+        "MCTS seeded-search truncation is never silent stays silent for an UNSEEDED search — it never promised determinism",
+        "MCTS seeded-search truncation is never silent stays silent when a seeded search completes every requested iteration",
+        "MCTS seeded-search truncation is never silent warns only once per bot, so a long game does not flood the console",
+        "parallel MCTS sub-search seeding (#329) gives an unseeded parallel bot's sub-searches independent random seeds",
+        "parallel MCTS sub-search seeding (#329) derives a seeded parallel bot's sub-searches from its seed, so the same seed searches the same way",
+        "parallel MCTS sub-search seeding (#329) picks the same move every time for the same seed, and the seed decides which",
+        "parallel MCTS sub-search seeding (#329) settles a split vote by the visits the sub-searches gave each move in total",
+        "parallel MCTS sub-search seeding (#329) does not warn about a seed when an unseeded hard bot's search is cut short"
+      ]
+    },
+    {
+      "file": "src/runtime/pile-restore.test.ts",
+      "names": [
+        "a reference to a removed element after a fresh game restored from the snapshot (#655) in an element attribute is the same element, in the pile",
+        "a reference to a removed element after a fresh game restored from the snapshot (#655) held by a removed element is the restored element or player",
+        "a reference to a removed element after a fresh game restored from the snapshot (#655) in an action arg in history is the same element, in the pile",
+        "a reference to a removed element after an undo to a checkpoint (#655) in an element attribute is the same element, in the pile",
+        "a reference to a removed element after an undo to a checkpoint (#655) held by a removed element is the restored element or player",
+        "a reference to a removed element after an undo to a checkpoint (#655) in an action arg in history is the same element, in the pile",
+        "a reference to a removed element after a failed action rolled back in place (#655) in an element attribute is the same element, in the pile",
+        "a reference to a removed element after a failed action rolled back in place (#655) held by a removed element is the restored element or player",
+        "a reference to a removed element after a failed action rolled back in place (#655) in an action arg in history is the same element, in the pile",
+        "a flow variable holding a removed element after a fresh game restored from the snapshot (#655, #679) is the same element, in the pile",
+        "a flow variable holding a removed element after an undo to a checkpoint (#655, #679) is the same element, in the pile",
+        "a flow variable holding a removed element after a failed action rolled back in place (#655, #679) is the same element, in the pile",
+        "a history whose arg is a removed element (#655) replays to the same element",
+        "the pile in a saved state (#655) saves a removed element under a pile path, never as a path into the tree",
+        "the pile in a saved state (#655) restores the pile in place without a removed element being in the tree and the pile at once",
+        "the pile in a saved state (#655) gives the same pile on an in-place restore as on a fresh one",
+        "the pile in a saved state (#655) carries none of the pile in any seat view",
+        "the pile in a saved state (#655) writes no pile position into any seat view or seat message log, and keeps it in the saved state",
+        "the pile in a saved state (#655) restores a reference to a removed element in a seat view to nothing, not to an element in the tree",
+        "the pile in a saved state (#655) writes a flow variable holding a removed element into a seat snapshot without its id, and restores it to nothing"
+      ]
+    },
+    {
+      "file": "src/session/initial-args-checked.test.ts",
+      "names": [
+        "initialArgs are checked as picks (#658) refuses initialArgs that leave out an earlier required pick",
+        "initialArgs are checked as picks (#658) refuses a step naming a pick the action does not have (#776)",
+        "initialArgs are checked as picks (#658) refuses an initial choice the game never offered",
+        "initialArgs are checked as picks (#658) refuses an initial element the game never offered",
+        "initialArgs are checked as picks (#658) runs onCancel for an earlier pick whose onSelect ran when a later initial pick is refused",
+        "initialArgs are checked as picks (#658) accepts the earlier picks the UI sends, its own pick included, and skips an absent optional one",
+        "initialArgs are checked as picks (#658) takes a held follow-up's published args from the engine, not from the client",
+        "initialArgs are checked as picks (#658) binds a held follow-up's published args when the client sends none"
+      ]
+    },
+    {
+      "file": "src/engine/action/ordered-list.test.ts",
+      "names": [
+        "orderedList — an ordered, repeatable list of choices (#249) ACCEPTS a repeated identity, which multiSelect refuses",
+        "orderedList — an ordered, repeatable list of choices (#249) leaves an ordinary multiSelect refusing the same submission, unchanged",
+        "orderedList — an ordered, repeatable list of choices (#249) counts ENTRIES against max, not distinct identities",
+        "orderedList — an ordered, repeatable list of choices (#249) refuses an over-long list on its length alone, matching none of its entries (#776)",
+        "orderedList — an ordered, repeatable list of choices (#249) counts ENTRIES against min, so repeats DO satisfy a lower bound",
+        "orderedList — an ordered, repeatable list of choices (#249) checks EVERY occurrence against the current authoritative choice set",
+        "orderedList — an ordered, repeatable list of choices (#249) refuses a repeated occurrence of a DISABLED choice, every time it appears",
+        "orderedList — an ordered, repeatable list of choices (#249) refuses a bare value: a list selection is a list, never a shorthand for one entry",
+        "orderedList — an ordered, repeatable list of choices (#249) resolves a FUNCTION form against the arguments bound so far",
+        "orderedList — an ordered, repeatable list of choices (#249) takes a number as shorthand for \"up to N entries\"",
+        "orderedList — an ordered, repeatable list of choices (#249) hands the execute handler the list in the ORDER it was submitted, repeats intact",
+        "orderedList — an ordered, repeatable list of choices (#249) REFUSES an action that declares both multiSelect and orderedList",
+        "orderedList — an ordered, repeatable list of choices (#249) puts the bounds on the pick metadata a host serializes, max omitted when unbounded"
+      ]
+    },
+    {
+      "file": "src/engine/element/message-audience.test.ts",
+      "names": [
+        "messageTo: what each seat receives gives a public message() to every seat and to the spectator",
+        "messageTo: what each seat receives withholds a private message from every seat but the addressed one",
+        "messageTo: what each seat receives withholds private messages from a spectator, who has no seat",
+        "messageTo: what each seat receives addresses several seats at once, and only those",
+        "messageTo: what each seat receives accepts Player objects as the audience, not just seat numbers",
+        "messageTo: what each seat receives substitutes {{placeholders}} in a private message like a public one",
+        "messageTo: the second payload path (createPlayerView) scopes createPlayerView messages to the receiving seat",
+        "messageTo: the log itself stays whole keeps every message in game.messages, unfiltered",
+        "messageTo: the log itself stays whole survives a snapshot round-trip with its audience intact",
+        "messageTo: the log itself stays whole restores an EMPTY log, never a stale one, when a tree arrives without it",
+        "messageTo: refuses an audience nobody is in throws on an empty audience rather than writing an unreadable message",
+        "messageTo: refuses an audience nobody is in throws on a non-seat value, naming the offending input"
+      ]
+    },
+    {
+      "file": "src/engine/element/payload-duplication.test.ts",
+      "names": [
+        "SEC-04: no top-level game field is duplicated into `attributes` holds for the game root — the structural invariant, not a field list",
+        "SEC-04: no top-level game field is duplicated into `attributes` keeps every self-serialized field out of the attribute bag",
+        "SEC-04: whole-payload leak assertions for messageTo keeps the element tree free of the log entirely",
+        "SEC-04: whole-payload leak assertions for messageTo withholds a private line from the WHOLE redacted snapshot of an unaddressed seat",
+        "SEC-04: whole-payload leak assertions for messageTo withholds every private line from the WHOLE spectator snapshot",
+        "SEC-04: whole-payload leak assertions for messageTo withholds a private line from the WHOLE broadcast player view",
+        "SEC-04: whole-payload leak assertions for messageTo does not leak the AUDIENCE either — an unaddressed seat learns of no withheld line",
+        "SEC-04: whole-payload leak assertions for messageTo persists the UNFILTERED log — a saved snapshot must not lose other seats history",
+        "SEC-05: tutorialProgress is scoped to the receiving seat gives a seat its own entry and nobody else's",
+        "SEC-05: tutorialProgress is scoped to the receiving seat does not tell one seat that another QUIT the tutorial",
+        "SEC-05: tutorialProgress is scoped to the receiving seat gives the spectator nobody's progress at all",
+        "SEC-05: tutorialProgress is scoped to the receiving seat keeps the AUTHORITATIVE tree complete — restore must not lose a seat's progress",
+        "SEC-05: tutorialProgress is scoped to the receiving seat leaves the per-seat view restorable and self-consistent",
+        "SEC-06: the game root declares an audience for every engine field classifies every engine-owned root field",
+        "SEC-06: the game root declares an audience for every engine field does not classify fields that no longer exist",
+        "SEC-06: the game root declares an audience for every engine field keeps every `self-serialized` field out of the attribute bag",
+        "SEC-06: the game root declares an audience for every engine field serves every `public` field identically to every seat",
+        "SEC-06: the game root declares an audience for every engine field actually narrows every `seat-scoped` field"
+      ]
+    },
+    {
+      "file": "src/engine/utils/enumerate-moves.test.ts",
+      "names": [
+        "enumerateLegalMoves returns one move per legal target element (full enumeration default)",
+        "enumerateLegalMoves returns element objects in args (not serialized IDs)",
+        "enumerateLegalMoves maxPerAction truncates moves per action when provided",
+        "enumerateLegalMoves returns all moves when maxPerAction exceeds available count",
+        "enumerateLegalMoves returns the same move set as the MCTSBot root enumeration on identical state",
+        "enumerateLegalMoves returns empty array when seat has no available actions",
+        "enumerateLegalMoves: function-valued multiSelect routes a function multiSelect resolving to a concrete config into generateCombinations (C(3,2) = 3 combos)",
+        "enumerateLegalMoves: duplicate-valued multiSelect choices lists each combination of values once (#776)",
+        "enumerateLegalMoves: choices with an undefined value yields NO moves for a required selection whose only choice value is undefined — never a move missing that arg",
+        "enumerateLegalMoves: plain-object choices shaped like element references (#774) lists each plain choice of a single pick as the object it is and the element as the live element, and every move is accepted",
+        "enumerateLegalMoves: plain-object choices shaped like element references (#774) lists each plain choice of a repeating pick as the object it is and the element as the live element, and every move is accepted",
+        "enumerateLegalMoves with an orderedList selection (#249) offers one single-entry list per choice, and every one is a LEGAL move",
+        "enumerateLegalMoves with an orderedList selection (#249) includes the EMPTY list when the rules allow one",
+        "a follow-up that pre-fills an optional pick as null (#627) treats the pick as answered for an ordinary action",
+        "a follow-up that pre-fills an optional pick as null (#627) treats the pick as answered for an action with a repeating pick",
+        "an action-level validate sees a pre-filled null pick as absent (#648) enumerates the move execution accepts for an ordinary action",
+        "an action-level validate sees a pre-filled null pick as absent (#648) enumerates the move execution accepts for an action with a repeating pick",
+        "a later pick's callbacks see a pre-filled null pick as absent (#659) enumerates exactly what execution accepts when b uses choices (repeating: false)",
+        "a later pick's callbacks see a pre-filled null pick as absent (#659) enumerates exactly what execution accepts when b uses choices (repeating: true)",
+        "a later pick's callbacks see a pre-filled null pick as absent (#659) enumerates exactly what execution accepts when b uses disabled (repeating: false)",
+        "a later pick's callbacks see a pre-filled null pick as absent (#659) enumerates exactly what execution accepts when b uses disabled (repeating: true)",
+        "a later pick's callbacks see a pre-filled null pick as absent (#659) enumerates exactly what execution accepts when b uses multiSelect (repeating: false)",
+        "enumeration leaves out actions the game refuses (#690) drops an action its own .disabled() rule turns off, and every listed move is accepted",
+        "enumeration leaves out actions the game refuses (#690) never lets the bot search or play a disabled action",
+        "enumeration leaves out actions the game refuses (#690) drops an action the active tutorial step gates out",
+        "a held follow-up the game refuses (#690) has no moves while its .disabled() rule turns it off, and performAction refuses it",
+        "enumeration lists a bounded whole-number input (#689) lists each whole number from min to max that the input's own validate accepts",
+        "enumeration lists a bounded whole-number input (#689) enumerates a selection that depends on the number picked before it",
+        "enumeration lists a bounded whole-number input (#689) lists a number input that follows a repeating selection",
+        "enumeration lists a bounded whole-number input (#689) lists no move for a required input without both bounds, a whole-number rule, or with more values than the cap",
+        "enumeration lists a bounded whole-number input (#689) skips an optional input it cannot list, as a player may",
+        "enumeration lists a bounded whole-number input (#689) skips an optional input whose validate refuses every value, after a repeating selection too",
+        "enumeration lists a bounded whole-number input (#689) says once why a required input it cannot list contributes no moves, after a repeating selection too",
+        "numberInputValues (#689) is every whole number in the range",
+        "numberInputValues (#689) says what an input it cannot list is missing",
+        "numberInputValues (#689) refuses a range with more values than the cap, naming it",
+        "enumerateLegalMoves: optional multiSelect with too few candidates chooseElements lists the skip move, as getAvailableActions and performAction accept it",
+        "enumerateLegalMoves: optional multiSelect with too few candidates chooseElements before a repeating pick lists the skip move, as getAvailableActions and performAction accept it",
+        "enumerateLegalMoves: optional multiSelect with too few candidates chooseFrom lists the skip move, as getAvailableActions and performAction accept it",
+        "enumerateLegalMoves: optional multiSelect with too few candidates chooseFrom before a repeating pick lists the skip move, as getAvailableActions and performAction accept it",
+        "enumeration honours a pick's own validate (#768) lists no move a choice or element pick validate refuses"
       ]
     }
   ]
