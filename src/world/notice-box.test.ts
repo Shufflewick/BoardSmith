@@ -608,4 +608,38 @@ describe("#789 — applyNoticeWrites re-checks what the child isolate returned",
     expect(after.map(({ seat }) => seat)).toEqual([1, 2, 3, 4]);
     expect(after[0]!.box.entries).toHaveLength(budgets.maxNoticesPerCommand / SEATS.size);
   });
+
+  /** A payload whose notice measures exactly `bytes` in storage. */
+  const sized = (bytes: number) =>
+    "x".repeat(bytes - JSON.stringify({ at: NOW, payload: "" }).length);
+
+  it("admits a notice of exactly noticeMaxBytes and refuses one byte more", async () => {
+    const exact = refused({ perSeat: PER_SEAT, writes: [send(2, sized(budgets.noticeMaxBytes))] });
+    await expect(exact.run).resolves.toHaveLength(1);
+    const over = refused({ perSeat: PER_SEAT, writes: [send(2, sized(budgets.noticeMaxBytes + 1))] });
+    await expect(over.run).rejects.toMatchObject({ code: "invalid-notice" });
+    expect(over.reads).toEqual([]);
+  });
+
+  it.each([
+    ["a seat outside this world", send(SEATS.size + 1)],
+    ["an oversized notice", send(3, sized(budgets.noticeMaxBytes + 1))],
+  ])("applies nothing when a valid write is followed by %s", async (_, bad) => {
+    const { run, reads } = refused({ perSeat: PER_SEAT, writes: [send(2), bad] });
+    await expect(run).rejects.toMatchObject({ code: "invalid-notice" });
+    expect(reads).toEqual([]);
+  });
+
+  it.each([
+    ["writes that are not a list", { perSeat: PER_SEAT, writes: { length: 1 } }],
+    ["a null write", { perSeat: PER_SEAT, writes: [null] }],
+    ["a send with no notice", { perSeat: PER_SEAT, writes: [{ ...send(2), notice: null }] }],
+  ])("refuses %s readably rather than crashing", async (_, notices) => {
+    const { run, reads } = refused(notices as unknown as WorldNoticeWrites);
+    await expect(run).rejects.toMatchObject({
+      code: "invalid-notice",
+      message: expect.stringMatching(/^This dispatch's result carries/),
+    });
+    expect(reads).toEqual([]);
+  });
 });

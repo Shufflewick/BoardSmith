@@ -202,6 +202,10 @@ function assertNoticeWrites(notices: WorldNoticeWrites, seatCount: number, budge
         `number from 1 to ${budgets.maxNoticesPerSeat} on this host. Nothing was changed.`,
     );
   }
+  if (!Array.isArray(notices.writes)) throw refuse("has no list of writes. Nothing was changed.");
+  if (notices.writes.some((write) => typeof write !== "object" || write === null)) {
+    throw refuse("is not an object. Nothing was changed.");
+  }
   const sends = notices.writes.filter((write) => write.kind === "send").length;
   if (sends > budgets.maxNoticesPerCommand) {
     throw worldRefusal(
