@@ -1033,9 +1033,19 @@ export class SnapshotSessionHost {
   }
 
   private async handle(seat: number, op: Op): Promise<OpResult> {
-    // #481: debug ops need debugging on, and a seat-view one must be for `seat`.
-    const debugRefused = debugOpRefusal(op, this.adapters.debug === true, seat);
+    // #481: debug ops need debugging on.
+    const debugRefused = debugOpRefusal(op, this.adapters.debug === true);
     if (debugRefused) return debugRefused;
+    // #738: picks are kept under `seat`, so an op acting as another player would mix two seats.
+    if ('player' in op && op.player !== seat) {
+      return {
+        success: false,
+        error:
+          `Seat ${seat} sent '${op.type}' as seat ${op.player}, and was refused. ` +
+          'A seat can act and see only as itself; switch to that seat to do this.',
+        category: 'protocol',
+      };
+    }
     // Demo lifecycle ops — handled directly in the host (NOT delegated to executeOp)
     // because they need the broadcast adapter and a cancellable async lifetime.
     // demoStart: fire-and-forget runDemoLoop; return minimal envelope immediately.
