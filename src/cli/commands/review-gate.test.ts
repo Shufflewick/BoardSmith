@@ -63,7 +63,7 @@ describe('the gate refuses a review the verify result does not back', () => {
     expect(await refusal()).toContain('uncommitted changes');
   });
 
-  it('refuses a result that did not measure the chunk\'s whole change (a --base HEAD run)', async () => {
+  it('refuses a full result, which is not the chunk\'s fast checks (a --base HEAD run)', async () => {
     await writeFiles(project, { 'src/rules.ts': code(3, 'a') });
     commitAll(project, 'fixture: before the chunk');
     await writeFiles(project, { 'src/rules.ts': code(3, 'b') });
@@ -71,6 +71,7 @@ describe('the gate refuses a review the verify result does not back', () => {
     await writeFiles(project, { 'src/rules.ts': code(3, 'c') });
     await recordPassingVerify(project, { message: 'chunk-deal/step-test' });
 
+    expect(await refusal()).toContain('not made for chunk "deal"');
     expect(await refusal()).toContain('boardsmith verify --chunk deal');
   });
 

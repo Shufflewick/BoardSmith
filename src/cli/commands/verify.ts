@@ -198,8 +198,8 @@ interface VerifyContext {
   /** The chunk `--chunk` named, whose fast checks run instead of the full ones (#985). */
   chunk?: string;
   changed: ChangedSince;
-  /** Mutant outcomes of earlier runs, for this commit's code and tests (`lib/mutant-cache.ts`). */
-  mutantCache: MutantCache;
+  /** Mutant outcomes of earlier runs, for this commit's code and tests (`lib/mutant-cache.ts`), opened on first ask. */
+  mutantCache: () => Promise<MutantCache>;
   earlier: ReadonlyMap<VerifyCheckName, VerifyCheckResult>;
   log: (line: string) => void;
   /**
@@ -453,7 +453,7 @@ async function mutationCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   const run = await runDiffMutationCheck({
     projectDir: ctx.projectDir,
     added: ctx.changed.code,
-    cache: ctx.mutantCache,
+    cache: await ctx.mutantCache(),
     log: ctx.log,
   });
   return mutationVerdict(since, run);
@@ -587,9 +587,13 @@ export async function runVerify(options: {
   const head = await verifiableCommit(projectDir);
   await requireResultIgnored(projectDir);
   const base = await runBase(projectDir, options);
-  const mutantCache = await openMutantCache(projectDir);
   const log = options.log ?? ((line: string) => console.error(chalk.dim(line)));
-  if (mutantCache.unavailable !== undefined) log(`${mutantCache.unavailable}; every mutant runs.`);
+  // Only the mutation check reads the cache, so a run without it (`--chunk`) never opens it.
+  let mutantCache: Promise<MutantCache> | undefined;
+  const openCache = () => (mutantCache ??= openMutantCache(projectDir).then((cache) => {
+    if (cache.unavailable !== undefined) log(`${cache.unavailable}; every mutant runs.`);
+    return cache;
+  }));
   let typeCheck: Promise<TypeCheckRun> | undefined;
   const checks = await runChecks(options.checks ?? VERIFY_CHECKS, {
     projectDir,
@@ -598,14 +602,14 @@ export async function runVerify(options: {
     base,
     chunk: options.chunk,
     changed: await changedSince(projectDir, base.commit),
-    mutantCache,
+    mutantCache: openCache,
     log,
   }, options.chunk === undefined ? VERIFY_CHECK_NAMES : CHUNK_VERIFY_CHECK_NAMES);
 
   const after = await checkoutState(projectDir);
   const cleanTree = !('problem' in after) && after.clean && after.commit === head;
   // The cache keys outcomes by the commit's files; a run whose files changed under it keeps none.
-  if (cleanTree) await mutantCache.save();
+  if (cleanTree && mutantCache !== undefined) await (await mutantCache).save();
   const result = buildVerifyResult({
     commit: head,
     cleanTree,

@@ -299,6 +299,23 @@ describe('boardsmith verify --chunk <slug>: the chunk\'s fast checks', () => {
     await expect(signoff(dir)).resolves.toMatchObject({ basis: 'designer' });
   });
 
+  it('opens no mutant cache, since it runs no mutation check', async () => {
+    const dir = await gameOnBranch(false);
+    // A linked package the cache cannot read makes opening the cache say so (#484).
+    const dep = join(dirname(dir), 'dep');
+    await write(dep, { 'index.js': 'export const rate = 2;\n', 'secret/x.js': 'export {};\n' });
+    await fs.mkdir(join(dirname(dir), 'node_modules'));
+    await fs.symlink(dep, join(dirname(dir), 'node_modules', 'dep'), 'dir');
+    await fs.chmod(join(dep, 'secret'), 0o000);
+    const lines: string[] = [];
+    try {
+      await runVerify({ projectDir: dir, chunk: 'deal', log: (l) => lines.push(l) });
+    } finally {
+      await fs.chmod(join(dep, 'secret'), 0o755);
+    }
+    expect(lines.filter((l) => /mutant cache/.test(l))).toEqual([]);
+  });
+
   it('fails a test the chunk changed, saying it is the chunk\'s', async () => {
     const dir = await gameOnBranch(false);
     await write(dir, { 'tests/fee.test.ts': FEE_TEST.replace('toBe(6)', 'toBe(7)') });
