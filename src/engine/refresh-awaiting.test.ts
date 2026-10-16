@@ -15,7 +15,8 @@
  * present but frozen, which is the state the reporting game's rules forbid
  * outright.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { _clearShownWarnings } from '../utils/dev.js';
 import {
   Game,
   Player,
@@ -358,5 +359,69 @@ describe('game.refreshAwaitingActions() finishes a step every seat is done with 
     expect(awaitingSeats(game)).toEqual([1, 2]);
     // The action was settled in the step it was taken in, not counted as a move of the next one.
     expect(game.getFlowState()?.moveCount).toBe(0);
+  });
+});
+
+/** The game's only step, held open by its `allDone` until `held` is cleared. */
+class FinalStepGame extends Game<FinalStepGame, Player> {
+  done: Record<number, boolean> = {};
+  held = false;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerActions(
+      Action.create<FinalStepGame>('finish')
+        .prompt('Finish')
+        .execute((_a, ctx) => {
+          (ctx.game as FinalStepGame).done[ctx.player.seat] = true;
+        }),
+    );
+    this.setFlow({
+      root: simultaneousActionStep({
+        name: 'last',
+        actions: ['finish'],
+        playerDone: (ctx, player) => (ctx.game as FinalStepGame).done[player.seat] === true,
+        allDone: (ctx) => {
+          const game = ctx.game as FinalStepGame;
+          return !game.held && game.done[1] === true && game.done[2] === true;
+        },
+      }),
+    });
+  }
+}
+
+describe('a refresh outside game code that closes the last step', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    _clearShownWarnings();
+  });
+
+  function seatOneFinished(held: boolean): FinalStepGame {
+    const game = new FinalStepGame({ playerCount: 2, playerNames: ['A', 'B'], seed: 'final' });
+    game.held = held;
+    game.startFlow();
+    game.continueFlow('finish', {}, 1);
+    game.done[2] = true;
+    return game;
+  }
+
+  it('finishes the game, as ending it by an action does', () => {
+    const game = seatOneFinished(false);
+
+    game.refreshAwaitingActions();
+
+    expect(game.getFlowState()?.complete).toBe(true);
+    expect(game.isFinished()).toBe(true);
+  });
+
+  it('warns when allDone holds the step open with no seat left to act', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const game = seatOneFinished(true);
+
+    game.refreshAwaitingActions();
+
+    expect(game.getFlowState()?.awaitingInput).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toMatch(/allDone/);
   });
 });

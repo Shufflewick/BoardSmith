@@ -942,8 +942,9 @@ export class FlowEngine<G extends Game = Game> {
    * running action's settling makes that check, so the flow runs on once.
    *
    * @param seat - Refresh only this seat. Omit to refresh every seat.
+   * @returns The flow's state when the refresh ended the step and ran the flow on.
    */
-  refreshAwaitingActions(seat?: number): void {
+  refreshAwaitingActions(seat?: number): FlowState | undefined {
     // A complete flow prompts no seat, so there is nothing to admit.
     if (this.complete) return;
     const frame = this.stack[this.stack.length - 1];
@@ -1002,11 +1003,14 @@ export class FlowEngine<G extends Game = Game> {
     const allDone = config.allDone
       ? config.allDone(context)
       : this.awaitingPlayers.every((p) => p.completed);
-    if (!allDone) return;
+    if (!allDone) {
+      this.warnIfDeadlockedSimultaneousStep(config);
+      return;
+    }
     this.awaitingInput = false;
     this.awaitingPlayers = [];
     frame.completed = true;
-    this.run();
+    return this.run();
   }
 
   /**
