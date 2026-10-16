@@ -173,7 +173,8 @@ describe('#793: ResidentWorld', () => {
 
   describe('a view that throws', () => {
     it('does not hand the game\'s raw error text to the player', async () => {
-      devThrow.enabled = false;
+      // Even in development: the world reads no environment (#165), so the detail is only ever logged (#982).
+      devThrow.enabled = true;
       vi.spyOn(console, 'error').mockImplementation(() => {});
       const { world } = host();
       await world.start();

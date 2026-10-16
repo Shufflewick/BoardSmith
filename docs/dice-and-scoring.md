@@ -256,100 +256,63 @@ The zoom preview provides a larger, centered view of the die for accessibility.
 
 ## Ability System
 
-The `AbilityManager` provides a reusable system for games where players earn and use special abilities/powers. Common in dice games with unlockable abilities.
+Games where players earn and spend special abilities keep them as a plain `Ability<T>[]` field on the player, and change it with a few functions. Because the list is plain data, it survives every snapshot, undo and bot move with no extra code.
 
 ### Basic Usage
 
 ```typescript
-import { AbilityManager, Player, type Ability } from 'boardsmith';
+import { Player, addAbility, hasUnusedAbility, spendAbility, type Ability } from 'boardsmith';
 
 // Define your ability types
 type MyAbility = 'reroll' | 'flip' | 'bonus' | 'skip';
 
 class MyPlayer extends Player<MyGame, MyPlayer> {
-  // Saved state must be plain data, so the manager's data is saved here.
-  abilityState?: Ability<MyAbility>[];
-  // `_` fields are not saved; the manager is rebuilt from abilityState after a restore.
-  private _abilities?: AbilityManager<MyAbility>;
+  // Every player starts with one reroll
+  abilities: Ability<MyAbility>[] = [{ type: 'reroll', used: false, earnedFrom: 'starting' }];
+}
 
-  get abilities(): AbilityManager<MyAbility> {
-    if (!this._abilities) {
-      this._abilities = new AbilityManager<MyAbility>();
-      if (this.abilityState) this._abilities.fromJSON(this.abilityState);
-      else this._abilities.add('reroll', 'starting'); // a new game's starting ability
-    }
-    return this._abilities;
-  }
-
-  override toJSON() {
-    const json = super.toJSON();
-    json.attributes.abilityState = this.abilities.toJSON();
-    return json;
-  }
+// In an action's execute():
+addAbility(player.abilities, 'flip', 'from-track');
+if (hasUnusedAbility(player.abilities, 'reroll')) {
+  spendAbility(player.abilities, 'reroll');
 }
 ```
 
-An `AbilityManager` or track stored directly in a public field makes saving the game throw: a class instance would come back from a restore as a plain object without its methods.
-
-### AbilityManager API
+### Ability functions
 
 ```typescript
-const abilities = new AbilityManager<MyAbility>();
-
-// Adding abilities
-abilities.add('reroll');                    // Add an ability
-abilities.add('reroll', 'from-track');      // With source description
-
-// Checking abilities
-abilities.hasUnused('reroll');              // Has unused ability?
-abilities.has('reroll');                    // Has any (used or unused)?
-abilities.countUnused('reroll');            // Count unused of type
-abilities.countAllUnused();                 // Total unused count
-
-// Using abilities
-if (abilities.hasUnused('reroll')) {
-  abilities.use('reroll');                  // Marks one as used
-}
-
-// Querying
-abilities.getAll();                         // All abilities
-abilities.getUnused();                      // Only unused
-abilities.getUsed();                        // Only used
-abilities.getTypes();                       // Unique types ['reroll', 'flip']
-abilities.getGrouped();                     // [{ type, total, unused }]
-
-// Management
-abilities.resetAll();                       // Reset all to unused
-abilities.clear();                          // Remove all
-
-// Serialization
-const data = abilities.toJSON();
-abilities.fromJSON(data);
-AbilityManager.fromJSON(data);              // Static factory
+addAbility(abilities, 'reroll');               // Add an unused ability
+addAbility(abilities, 'reroll', 'from-track'); // With where it came from
+hasUnusedAbility(abilities, 'reroll');         // Any unused of this type?
+spendAbility(abilities, 'reroll');             // Mark one used; false if none was unused
+countUnusedAbilities(abilities, 'reroll');     // Unused of this type
+countUnusedAbilities(abilities);               // Unused of every type
+groupAbilities(abilities);                     // [{ type, total, unused }] for display
 ```
+
+Anything else is an ordinary array operation, such as `abilities.filter((a) => a.used)`.
 
 ## Scoring Tracks
 
-BoardSmith provides abstract track classes for dice/roll-and-write games where players record values on scoring sheets.
+Roll-and-write games record values on scoring tracks. A track is a plain object you make with `monotonicTrack`, `uniqueTrack` or `counterTrack` and store on the player like any other field. The functions below read and change it.
 
 ### Track Types
 
-| Class | Use Case | Example |
+| Function | Use Case | Example |
 |-------|----------|---------|
-| `Track` | Base class | - |
-| `MonotonicTrack` | Increasing or decreasing sequences | Distillation, Fulminate |
-| `UniqueTrack` | No duplicate values allowed | Yahtzee upper section |
-| `CounterTrack` | Simple count/tally | Poison skulls, bonus boxes |
+| `monotonicTrack` | Increasing or decreasing sequences | Distillation, Fulminate |
+| `uniqueTrack` | No duplicate values allowed | Yahtzee upper section |
+| `counterTrack` | Simple count/tally | Poison skulls, bonus boxes |
 
-### MonotonicTrack
+### Monotonic tracks
 
 For tracks where values must increase or decrease:
 
 ```typescript
-import { MonotonicTrack } from 'boardsmith';
+import { monotonicTrack } from 'boardsmith';
 
 // Increasing track (values must go up)
-const fulminateTrack = new MonotonicTrack({
+const fulminateTrack = monotonicTrack({
   id: 'fulminate',
   name: 'Fulminate',
   direction: 'increasing',
@@ -359,7 +322,7 @@ const fulminateTrack = new MonotonicTrack({
 });
 
 // Decreasing track (values must go down)
-const distillTrack = new MonotonicTrack({
+const distillTrack = monotonicTrack({
   id: 'distill-1',
   name: 'Distillation Column 1',
   direction: 'decreasing',
@@ -370,35 +333,28 @@ const distillTrack = new MonotonicTrack({
 });
 ```
 
-#### API
+#### Track functions
+
+These work on every kind of track:
 
 ```typescript
-// Check if a value can be added
-track.canAdd(15);                    // Returns true/false
-track.canAdd(15, isSpecial);         // With special entry flag
+canAddToTrack(track, 15);            // true/false
+canAddToTrack(track, 15, isSpecial); // With the special-entry flag
+const points = addToTrack(track, 15); // Records it, returns the points; throws if refused
 
-// Add a value (returns points earned)
-const points = track.add(15);
-
-// Query state
-track.getEntries();                  // [{ value, points, special }]
-track.isEmpty();
-track.isComplete();
-track.calculatePoints();             // Total including completion bonus
-
-// Serialization
-const data = track.toJSON();
-track.fromJSON(data);
+track.entries;                       // [{ value, points, isSpecial }]
+isTrackComplete(track);              // Every position filled?
+trackPoints(track);                  // Total, including the completion bonus once complete
 ```
 
-### UniqueTrack
+### Unique tracks
 
 For tracks where each value can only appear once:
 
 ```typescript
-import { UniqueTrack } from 'boardsmith';
+import { uniqueTrack, canAddToTrack, addToTrack } from 'boardsmith';
 
-const upperSection = new UniqueTrack({
+const upperSection = uniqueTrack({
   id: 'ones',
   name: 'Ones',
   maxEntries: 1,
@@ -406,19 +362,19 @@ const upperSection = new UniqueTrack({
 });
 
 // Will reject if value already used
-upperSection.canAdd(3);  // true (first time)
-upperSection.add(3);
-upperSection.canAdd(3);  // false (already used)
+canAddToTrack(upperSection, 3);  // true (first time)
+addToTrack(upperSection, 3);
+canAddToTrack(upperSection, 3);  // false (already used)
 ```
 
-### CounterTrack
+### Counter tracks
 
 For simple counting/tallying:
 
 ```typescript
-import { CounterTrack } from 'boardsmith';
+import { counterTrack, incrementCounter, isTrackComplete, trackPoints } from 'boardsmith';
 
-const poisonTrack = new CounterTrack({
+const poisonTrack = counterTrack({
   id: 'poison',
   name: 'Poison',
   maxEntries: 6,
@@ -426,89 +382,61 @@ const poisonTrack = new CounterTrack({
   completionBonus: 10,     // Bonus for filling all 6
 });
 
-// Increment the counter
-poisonTrack.increment();
-poisonTrack.increment();
+incrementCounter(poisonTrack);
+incrementCounter(poisonTrack);
 
-// Query
-poisonTrack.count;         // 2
-poisonTrack.isComplete();  // false
-poisonTrack.calculatePoints();  // 4 (2 * 2)
+poisonTrack.entries.length;        // 2
+isTrackComplete(poisonTrack);      // false
+trackPoints(poisonTrack);          // 4 (2 * 2)
 ```
 
 ## Example: Dice Game Player
 
-Here's a complete example combining dice, abilities, and tracks:
+Here's a complete example combining abilities and tracks. Every field is plain data, so the player needs no `toJSON` override. The score is a getter, so it is worked out from the tracks each time and never saved.
 
+<!-- typecheck: game src/rules/game.ts -->
 ```typescript
 import {
+  Game,
   Player,
-  AbilityManager,
-  MonotonicTrack,
-  CounterTrack,
+  monotonicTrack,
+  counterTrack,
+  trackPoints,
   type Ability,
-  type TrackEntry,
+  type GameOptions,
 } from 'boardsmith';
 
 type PowerUp = 'reroll-2' | 'flip' | 'refresh' | 'adjust';
 
-class DiceGamePlayer extends Player<DiceGame, DiceGamePlayer> {
-  // Saved as plain data; the live objects in `_` fields are rebuilt from it after a restore.
-  abilityState?: Ability<PowerUp>[];
-  scoreTrackState?: { entries: TrackEntry[] };
-  bonusTrackState?: { entries: TrackEntry[] };
+export class DiceGamePlayer extends Player<DiceGame, DiceGamePlayer> {
+  abilities: Ability<PowerUp>[] = [{ type: 'reroll-2', used: false, earnedFrom: 'starting' }];
 
-  private _abilities?: AbilityManager<PowerUp>;
-  private _scoreTrack?: MonotonicTrack;
-  private _bonusTrack?: CounterTrack;
+  scoreTrack = monotonicTrack({
+    id: 'score',
+    name: 'Score',
+    direction: 'increasing',
+    maxEntries: 10,
+    pointsPerEntry: [1, 2, 3, 5, 8, 13, 21, 34, 55, 89],
+  });
 
-  get abilities(): AbilityManager<PowerUp> {
-    if (!this._abilities) {
-      this._abilities = new AbilityManager<PowerUp>();
-      if (this.abilityState) this._abilities.fromJSON(this.abilityState);
-      else this._abilities.add('reroll-2', 'starting');
-    }
-    return this._abilities;
-  }
-
-  get scoreTrack(): MonotonicTrack {
-    if (!this._scoreTrack) {
-      this._scoreTrack = new MonotonicTrack({
-        id: 'score',
-        name: 'Score',
-        direction: 'increasing',
-        maxEntries: 10,
-        pointsPerEntry: [1, 2, 3, 5, 8, 13, 21, 34, 55, 89],
-      });
-      if (this.scoreTrackState) this._scoreTrack.fromJSON(this.scoreTrackState);
-    }
-    return this._scoreTrack;
-  }
-
-  get bonusTrack(): CounterTrack {
-    if (!this._bonusTrack) {
-      this._bonusTrack = new CounterTrack({
-        id: 'bonus',
-        name: 'Bonus Stars',
-        maxEntries: 5,
-        pointsPerCount: 10,
-      });
-      if (this.bonusTrackState) this._bonusTrack.fromJSON(this.bonusTrackState);
-    }
-    return this._bonusTrack;
-  }
+  bonusTrack = counterTrack({
+    id: 'bonus',
+    name: 'Bonus Stars',
+    maxEntries: 5,
+    pointsPerCount: 10,
+  });
 
   get totalScore(): number {
-    return this.scoreTrack.calculatePoints() + this.bonusTrack.calculatePoints();
+    return trackPoints(this.scoreTrack) + trackPoints(this.bonusTrack);
   }
+}
 
-  override toJSON() {
-    const json = super.toJSON();
-    json.attributes.totalScore = this.totalScore;
-    json.attributes.abilityState = this.abilities.toJSON();
-    json.attributes.scoreTrackState = this.scoreTrack.toJSON();
-    json.attributes.bonusTrackState = this.bonusTrack.toJSON();
-    return json;
+export class DiceGame extends Game<DiceGame, DiceGamePlayer> {
+  static PlayerClass = DiceGamePlayer;
+
+  constructor(options: GameOptions) {
+    super(options);
+    // ... dice, actions and flow ...
   }
 }
 ```

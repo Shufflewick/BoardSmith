@@ -831,8 +831,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * now, or `undefined` when it may. `pending` is the seat's open pending state,
    * or `undefined` when the pick about to be processed starts the action. Every
    * pending-action path (`processSelectionStep` here, and
-   * `PendingActionManager` for the `selectionStep` op) asks this before any pick is processed, and calls `notePickTaken`
-   * after each pick that leaves the action open.
+   * `PendingActionManager` for the `selectionStep` op) asks this before any pick is processed, then calls `markStalePicks`,
+   * and calls `notePickTaken` after each pick that leaves the action open.
    *
    * First, the flow must offer the action to the seat (`refusalToAct`). Then
    * its `condition`, evaluated as hosts evaluate it to show the action (with
@@ -896,6 +896,40 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   notePickTaken(pending: PendingActionState, seat: number): void {
     pending.conditionHeld = this.failedConditionLabels(pending.actionName, seat).length === 0;
+    pending.picksOnOffer = this.picksOnOffer(pending, seat);
+  }
+
+  /**
+   * Before `seat`'s next pick of `pending`, mark each of its own picks that was
+   * on offer right after its latest pick and is not now, for
+   * `executePendingAction` to re-check (#767). Only another action can have
+   * taken it in between, so a pick the action's own `onSelect` took off the
+   * offer is never marked.
+   */
+  markStalePicks(pending: PendingActionState, seat: number): void {
+    if (!pending.picksOnOffer) return;
+    const onOffer = this.picksOnOffer(pending, seat);
+    const taken = pending.picksOnOffer.filter((name) => !onOffer.includes(name));
+    if (taken.length > 0) pending.stalePicks = [...new Set([...(pending.stalePicks ?? []), ...taken])];
+  }
+
+  /**
+   * The seat's own non-repeating picks of `pending` that a whole submission
+   * would take now. A pick a held follow-up answered is the engine's and is
+   * left out.
+   */
+  private picksOnOffer(pending: PendingActionState, seat: number): string[] {
+    const action = this.game.getAction(pending.actionName)!;
+    const executor = this.game.getActionExecutor();
+    const player = this.game.getPlayer(seat)!;
+    const bound = this.followUpArgsFor(pending.actionName, seat);
+    const args = executor.resolveArgs(action, pending.collectedArgs, player);
+    return action.selections
+      .filter((selection) => args[selection.name] !== undefined
+        && !Object.hasOwn(bound, selection.name)
+        && !executor.isRepeatingSelection(selection)
+        && executor.validateSelection(selection, args[selection.name], player, args, action.name).valid)
+      .map((selection) => selection.name);
   }
 
   /**
@@ -988,6 +1022,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
     const refusal = this.refusalToPick(pendingState.actionName, playerPosition, pendingState);
     if (refusal) return { success: false, error: refusal.error };
+    this.markStalePicks(pendingState, playerPosition);
 
     const action = this.game.getAction(pendingState.actionName);
     if (!action) {

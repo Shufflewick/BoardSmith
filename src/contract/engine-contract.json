@@ -1,7 +1,7 @@
 {
-  "revision": 207,
-  "surfaceHash": "72c3970831e07bc0",
-  "payloadHash": "e120675dfc7aacb1",
+  "revision": 213,
+  "surfaceHash": "f826367d58f23627",
+  "payloadHash": "d037431574c86546",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1599,6 +1599,54 @@
       "payloadHash": "e120675dfc7aacb1",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "World partition roots must be direct children of the game and registered under one name; genesis, createPartition and migration roots that are nested or aliased raise the new game-owned refusal invalid-partition-root (#795)."
+    },
+    {
+      "revision": 208,
+      "date": "2026-10-16",
+      "surfaceHash": "72c3970831e07bc0",
+      "payloadHash": "d037431574c86546",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "The world unknown-player refusal no longer lists the seated players; it says only that the player is not in this world (#797)."
+    },
+    {
+      "revision": 209,
+      "date": "2026-10-16",
+      "surfaceHash": "72c3970831e07bc0",
+      "payloadHash": "d037431574c86546",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Each seat's view carries only its own available actions in the public flow state; spectators get none (#778)."
+    },
+    {
+      "revision": 210,
+      "date": "2026-10-16",
+      "surfaceHash": "72c3970831e07bc0",
+      "payloadHash": "d037431574c86546",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A multi-step pending action is refused before it runs when another seat's action or pick took one of its earlier picks off the offer between the seat's picks: onCancel runs, nothing is recorded, and the error is the pick's unavailable sentence. A pick the action's own onSelect removed, a repeating pick and a held follow-up's pick are exempt. PendingActionState and SerializedPendingActionState gain picksOnOffer and stalePicks, which saved pending states must carry through unchanged (#767)."
+    },
+    {
+      "revision": 211,
+      "date": "2026-10-16",
+      "surfaceHash": "4a87ffd072485c35",
+      "payloadHash": "d037431574c86546",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "The boardsmith entry point gains plain-data scoring tracks (monotonicTrack, uniqueTrack, counterTrack, canAddToTrack, addToTrack, incrementCounter, isTrackComplete, trackPoints, TrackState types) and functions over a plain Ability[] (addAbility, hasUnusedAbility, spendAbility, countUnusedAbilities, groupAbilities), so tracks and abilities stored on a Player survive snapshot, undo and bot clone (#779)."
+    },
+    {
+      "revision": 212,
+      "date": "2026-10-16",
+      "surfaceHash": "df921086475c1773",
+      "payloadHash": "d037431574c86546",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "World clock-phase .about() refuses a chair above the world's seat count with invalid-seat-declaration (#799)."
+    },
+    {
+      "revision": 213,
+      "date": "2026-10-16",
+      "surfaceHash": "f826367d58f23627",
+      "payloadHash": "d037431574c86546",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "World resolvePick and resolveQuote answer only for an action offersFor lists for that seat (same read-only condition check after round zero); a disabled action is still listed greyed and still answers (#798)."
     }
   ]
 }

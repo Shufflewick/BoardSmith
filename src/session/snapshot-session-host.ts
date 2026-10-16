@@ -116,10 +116,10 @@ export interface PersistenceErrorEntry {
  * The engine's AUTHORITATIVE answer to "whose move is it, and in which turn?",
  * carried on every broadcast's `meta`.
  *
- * **A consumer must NEVER reconstruct this from a player view.** A per-seat view
- * carries the whole-game `flowState` only because `buildViews` happens to share
- * one object across seats; reading `playerViews[0].flowState` makes that engine
- * internal into an invariant the consumer holds in a comment. Read `meta`.
+ * **A consumer must NEVER reconstruct this from a player view.** Each per-seat
+ * view carries its own cut of the flow state, holding only that seat's
+ * available actions (#778), so `playerViews[0].flowState` is seat 1's view of
+ * the turn, not the game's. Read `meta`.
  * Likewise, never derive "who is up" from `flowState.currentPlayer`: it is
  * `undefined` for the entire life of a simultaneous step, which is how a
  * simultaneous game reported "nobody is up" every round forever (BUG-006).
