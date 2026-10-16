@@ -325,7 +325,48 @@ describe('whenForced(actionName)', () => {
     const condition = whenForced('move');
     expect(evalCondition(condition, runner.game, 99)).toBe(false);
   });
+
+  // #784: judged from the open step's offer, as the Action Panel is, not
+  // from every registered action whose condition holds.
+  it('is TRUE when the open step offers only the named action, though another registered action passes its condition', () => {
+    const runner = makeMoveOnlyStepRunner();
+    expect(runner.game.getAvailableActions(runner.game.getPlayer(1)!).map((a) => a.name)).toEqual(['move', 'pass']);
+    expect(evalCondition(whenForced('move'), runner.game, 1)).toBe(true);
+  });
+
+  it('is FALSE for a seat the open step is not waiting on', () => {
+    const runner = makeMoveOnlyStepRunner();
+    expect(evalCondition(whenForced('move'), runner.game, 2)).toBe(false);
+  });
 });
+
+/** `move` and `pass` both registered and always allowed, but the step offers only `move`. */
+class MoveOnlyStepGame extends Game<MoveOnlyStepGame, Player> {
+  constructor(options: { playerCount: number; playerNames?: string[]; seed?: string }) {
+    super(options);
+    this.registerActions(
+      Action.create('move').prompt('Move').execute(() => {}),
+      Action.create('pass').prompt('Pass').execute(() => {}),
+    );
+    this.setFlow({
+      root: loop({
+        while: () => true,
+        maxIterations: 20,
+        do: eachPlayer({ do: actionStep({ actions: ['move'] }) }),
+      }),
+    });
+  }
+}
+
+function makeMoveOnlyStepRunner(): GameRunner<MoveOnlyStepGame> {
+  const runner = new GameRunner<MoveOnlyStepGame>({
+    GameClass: MoveOnlyStepGame,
+    gameType: 'move-only-step-test',
+    gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'test' },
+  });
+  runner.start();
+  return runner;
+}
 
 // ============================================================
 // Labeled key / spread composition

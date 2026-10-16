@@ -235,7 +235,7 @@ import { afterFirstTurn, afterTurns, whenForced } from 'boardsmith';
 
 `afterTurns(n)` reads `game.getFlowState().position` (`iterations` + `playerIndex`). It assumes the learner acts first within each round and requires an outer `loop` node. If either assumption does not hold, write a custom predicate instead.
 
-`whenForced(actionName)` fires when `game.getAvailableActions(player)` returns exactly one action matching `actionName`. Do not use it as a substitute for a custom predicate that reads a specific game property (see the checkers `capture-tip` step, which uses `playerHasCaptures` directly because `move` is never the sole available action — `endTurn` is always also offered).
+`whenForced(actionName)` fires when the Action Panel would show the learner exactly one action, `actionName`: the open step offers the learner's seat only that action whose condition holds. An action the open step does not offer never counts, and it never fires while the step is waiting on another seat. Do not use it as a substitute for a custom predicate that reads a specific game property (see the checkers `capture-tip` step, which uses `playerHasCaptures` directly because `move` is never the sole available action — `endTurn` is always also offered).
 
 ### Auto-advance caveat (R-05)
 

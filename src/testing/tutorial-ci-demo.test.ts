@@ -11,8 +11,9 @@
  *     - Break #1 (gate drift):  the taught action is step-gated out → the
  *       gate-legality assertion inside `simulateTutorial` throws.
  *     - Break #2 (predicate drift): the rule that makes `capture` the only
- *       available action is removed → `whenForced('capture')` never fires and
- *       the `expectStep` assertion inside `simulateTutorial` throws.
+ *       available action is removed → `whenForced('capture')` never fires, the
+ *       tutorial stays on `capture-tip`, and the scripted capture throws naming
+ *       that step.
  *
  * The game is a minimal in-test `Game` subclass with no external package
  * dependency. It models the single mechanic needed to exercise both named
@@ -203,9 +204,10 @@ const DEMO_TUTORIAL: TutorialDefinition = {
  *
  * Turn 1 (seat 1, move):  `afterTurns(1)` fires → advances intro → capture-tip.
  * Turn 1 (seat 2, move):  required to advance the flow to round 2.
- * Turn 2 (seat 1, move):  move count reaches 2 → `whenForced('capture')` fires
- *                         → advances capture-tip → done.
- * Turn 2 (seat 2, move):  required to advance the flow to round 3.
+ * Turn 2 (seat 1, move):  move count reaches 2, but it is seat 2's turn, so
+ *                         seat 1 is offered nothing and `whenForced` waits.
+ * Turn 2 (seat 2, move):  the turn returns to seat 1 with only `capture`
+ *                         offered → `whenForced('capture')` fires → done.
  * Turn 3 (seat 1, capture): `afterTurns(3)` fires → tutorial completes.
  */
 const WALKTHROUGH: TutorialScenarioMove[] = [
@@ -213,9 +215,10 @@ const WALKTHROUGH: TutorialScenarioMove[] = [
   { action: 'move', expectStep: 'capture-tip' },
   // Seat 2 must act to advance the flow to round 2.
   { seat: 2, action: 'move' },
-  // Seat 1, turn 2: second move triggers forced-capture; advance to done.
-  { action: 'move', expectStep: 'done' },
-  // Seat 2 must act to advance the flow to round 3.
+  // Seat 1, turn 2: second move sets up the forced capture, but seat 1 is not
+  // offered anything until its next turn, so the step holds.
+  { action: 'move', expectStep: 'capture-tip' },
+  // Seat 2's move hands the turn back to seat 1 with only `capture` offered.
   { seat: 2, action: 'move' },
   // Seat 1, turn 3: perform the forced capture; afterTurns(3) fires, completes.
   { action: 'capture', expectStep: 'done' },
@@ -310,14 +313,15 @@ describe('Tutorial CI Demo — criterion #3 proof', () => {
    * RED — Break #2: forced-capture rule removed (predicate drift).
    *
    * The `DemoGameNoCaptureRule` variant has the forced-capture mechanic
-   * removed: `capture` is never registered, so `getAvailableActions` never
-   * returns `capture` as the sole available action. `whenForced('capture')`
-   * therefore never fires and the tutorial cannot advance from `capture-tip`
-   * to `done`.
+   * removed: `capture` is never registered, so the step never offers `capture`
+   * as the sole action. `whenForced('capture')` therefore never fires and the
+   * tutorial cannot advance from `capture-tip` to `done`.
    *
-   * When the scenario's third move sets `expectStep: 'done'`, the step is
-   * actually still `capture-tip`, and `simulateTutorial` throws the predicate-
-   * drift error, proving the CI test goes RED when the relied-upon rule is gone.
+   * The forced capture shows only once the turn returns to the learner, after
+   * the opponent's move, so no learner move can carry `expectStep: 'done'`.
+   * The scripted capture is what fails, and its error names `capture-tip`, the
+   * step the tutorial is stuck on, proving the CI test goes RED when the
+   * relied-upon rule is gone.
    */
   it('break #2 (predicate drift): forced-capture rule removed → simulateTutorial throws', () => {
     const brokenGame = TestGame.create(DemoGameNoCaptureRule, {
@@ -326,13 +330,11 @@ describe('Tutorial CI Demo — criterion #3 proof', () => {
       seed: 'tutorial-ci-demo-break2',
     });
 
-    // The SAME walkthrough scenario fails on step 3: `expectStep: 'done'` is
-    // not reached because `whenForced('capture')` never fires when `capture`
-    // has no game rule backing it.
+    // The SAME walkthrough fails at the capture, still on `capture-tip`.
     expect(() =>
       simulateTutorial(brokenGame, DEMO_TUTORIAL, {
         scenario: WALKTHROUGH,
       }),
-    ).toThrow(/Tutorial drift \(predicate\)/);
+    ).toThrow(/action 'capture' by seat 1 on step 'capture-tip' failed/);
   });
 });

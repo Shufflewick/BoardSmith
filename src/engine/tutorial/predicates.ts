@@ -30,6 +30,8 @@
  * ```
  */
 
+import { availableActionsForSeat } from '../flow/seat-activity.js';
+import { buildActionMetadata } from '../element/action-metadata.js';
 import type { TutorialAdvanceCondition, TutorialGateContext } from './types.js';
 
 /**
@@ -127,9 +129,10 @@ export function afterTurns(n: number): TutorialAdvanceCondition {
  * exactly one option, this predicate fires, allowing the tutorial to advance to
  * a step that explains the forced play.
  *
- * **Implementation:** delegates to `game.getAvailableActions(player)` — the
- * same source the action panel and UI consult — so tutorial state is always
- * consistent with actual game state.
+ * **Implementation:** judges from the open step's offer for the seat, narrowed
+ * to the actions whose condition holds now: the same set the Action Panel
+ * shows. An action the open step does not offer never counts, even when its
+ * condition holds, and a seat the step is not waiting on is never forced.
  *
  * Does NOT fire if multiple actions are available (even if all others are
  * tutorial-gated). Combine with a `gate` on the advanced step to restrict
@@ -143,8 +146,9 @@ export function whenForced(actionName: string): TutorialAdvanceCondition {
       const player = ctx.game.getPlayer(ctx.seat);
       if (!player) return false;
 
-      const available = ctx.game.getAvailableActions(player as Parameters<typeof ctx.game.getAvailableActions>[0]);
-      return available.length === 1 && available[0].name === actionName;
+      const offered = availableActionsForSeat(ctx.game.getFlowState(), ctx.seat);
+      const shown = Object.keys(buildActionMetadata(ctx.game, player, offered));
+      return shown.length === 1 && shown[0] === actionName;
     },
   };
 }
