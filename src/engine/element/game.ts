@@ -2,6 +2,7 @@ import { Space, type ElementEventHandler } from './space.js';
 import { mintElementIdKey, opaqueElementIds, worldElementIds } from './element-ids.js';
 import {
   GameElement,
+  decodeValue,
   encodeValue,
   forEachInSubtree,
   hasZoneVisibility,
@@ -471,7 +472,12 @@ export interface AnimationEvent {
   seatIds?: Record<string, number>;
   /** Event type (e.g., 'combat', 'score', 'cardFlip') */
   type: string;
-  /** Event-specific data payload (must be JSON-serializable) */
+  /**
+   * Event-specific data payload. Live in the game's buffer; `toJSON()` writes
+   * an element in it as `{ __elementRef }` and a player as `{ __playerRef, seat,
+   * color, name }`, so a seat's payload names an element it cannot see by the
+   * placeholder its board shows (#752).
+   */
   data: Record<string, unknown>;
   /**
    * Seats allowed to receive this event. Absent means everyone, exactly like
@@ -4459,7 +4465,11 @@ export class Game<
    * or affect game state. The UI layer registers handlers to play them back.
    *
    * @param type - Event type identifier (e.g., 'combat', 'score-item')
-   * @param data - Event-specific data payload (must be JSON-serializable)
+   * @param data - Event-specific data payload: plain data, elements and
+   *   players. Each seat receives an element as `{ __elementRef: branch }`,
+   *   its path in that seat's own view, so a card the seat cannot see arrives
+   *   as the placeholder its board shows. Pass the element, not `card.id`:
+   *   a raw id reaches every seat as it is.
    * @param callback - Optional callback to advance truth (convenience).
    *   Runs immediately as normal game code, after the event is buffered. Its
    *   mutations change the game like any other code; they are not recorded
@@ -4502,7 +4512,7 @@ export class Game<
    *   number (from 1; spectators see only `animate()`'s public events), or an
    *   array of either.
    * @param type - Event type identifier, same as `animate()`
-   * @param data - Event-specific data payload (must be JSON-serializable)
+   * @param data - Event-specific data payload, encoded as `animate()`'s is
    *
    * @example
    * ```typescript
@@ -4564,6 +4574,8 @@ export class Game<
    * the ways in. `to` lists the receiving seats; absent means everyone.
    */
   private pushAnimationEvent(eventType: string, data: Record<string, unknown>, to?: number[]): void {
+    // Encoded now only to refuse data `toJSON` cannot write inside the action that sent it, where it rolls back.
+    encodeValue(data, this._ctx, `animation event "${eventType}"`, 'data');
     this._animationEventSeq++;
     // Every recipient numbers the event in its own sequence (#489): a public
     // event goes to every seat and the spectator (0), a private one to its
@@ -4675,8 +4687,15 @@ export class Game<
       // cluttering empty snapshots with an empty array).
       ...(this._animationEvents.length > 0 && {
         // Copy the buffer (same CR-02 aliasing concern: the live array is
-        // mutated in place as later events are recorded).
-        animationEvents: this._animationEvents.map((e) => ({ ...e, ...(e.seatIds && { seatIds: { ...e.seatIds } }) })),
+        // mutated in place as later events are recorded). `data` is encoded
+        // here, not at `animate()`, so an element in it is written as a
+        // reference to where it is now, which a seat's view resolves to what
+        // its board shows (#752).
+        animationEvents: this._animationEvents.map((e) => ({
+          ...e,
+          data: encodeValue(e.data, this._ctx, `animation event "${e.type}"`, 'data') as Record<string, unknown>,
+          ...(e.seatIds && { seatIds: { ...e.seatIds } }),
+        })),
       }),
     };
   }
@@ -5530,6 +5549,8 @@ export class Game<
     // This converts { __elementRef: "path" } objects back to actual element references
     this.resolveElementReferences(this);
     this.pile.resolveElementReferences(this);
+    // `_`-prefixed, so not walked above; the buffer holds elements live, as `toJSON` expects (#752).
+    for (const event of this._animationEvents) event.data = decodeValue(event.data, this) as Record<string, unknown>;
   }
 
   /**

@@ -1479,7 +1479,7 @@ execute({ attacker, target }: { attacker: Combatant; target: Combatant }) {
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `type` | `string` | Event type identifier (e.g., 'combat', 'score', 'cardFlip') |
-| `data` | `Record<string, unknown>` | Event-specific payload (must be JSON-serializable -- use element IDs, not references) |
+| `data` | `Record<string, unknown>` | Event-specific payload: plain data, elements and players (see "Elements in event data" below) |
 | `callback` | `() => void` | Optional. Runs immediately as normal game code. Convenience for co-locating game logic with the event it describes. Mutations are NOT captured on the event. |
 
 **Pure signal events:**
@@ -1488,6 +1488,14 @@ Many events exist purely to signal the UI (e.g., score reveals, phase transition
 
 ```typescript
 game.animate('score-reveal', { playerId: player.id, total: 42 });
+```
+
+**Elements in event data:** pass the element itself, not its id. Each seat receives an element as `{ __elementRef: '<branch>' }`, the element's path in that seat's own game view, worked out when the view is built, so it names the element where it is now. A card the seat cannot see (in another player's hand, say) arrives as the placeholder that seat's board shows, never with its name or real id; in a zone whose contents the seat is not told (`contentsHidden()`) or in the pile, the reference names nothing in its view. A player arrives as `{ __playerRef, seat, color, name }`. A raw id such as `card.id` reaches every seat unchanged, so it gives away which card a hidden one is.
+
+```typescript
+game.animate('drew', { card, player });
+// The owner's handler: event.data.card -> { __elementRef: '3/1' }, the real card in its view
+// Another seat's:      event.data.card -> { __elementRef: '3/1' }, a face-down placeholder in its view
 ```
 
 **No nesting:** `animate()` throws if called inside another `animate()` callback. Each animation event must be a separate call:

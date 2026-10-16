@@ -2018,6 +2018,10 @@ export async function computePayloadHash(): Promise<string> {
   cut.remove();
   game.lastCut = cut;
 
+  // A card in an animation event's data (#752). Each view refers to it as a
+  // branch reference, never the card itself, so seat 2's names a placeholder.
+  game.animate('drew', { card: game.first(FixtureCard, 'hand-1-0') });
+
   // Start the flow so the views carry real flow state. Without this every view
   // reports `flowState: undefined` and the hash covers only board
   // serialization — which is exactly how the flow layer stayed invisible in the
