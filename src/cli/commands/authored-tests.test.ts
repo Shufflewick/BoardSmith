@@ -54,6 +54,11 @@ describe('library answer', () => {
       expect(run.code, run.stdout + run.stderr).toBe(0);
       expect(run.stdout).toContain('Type-checking with vue-tsc');
       expect(run.stdout + run.stderr).not.toContain('An undeclared test executed.');
+      const emptySelection = await spawnCli(['test', '--selection', ''], project);
+      expect(emptySelection.code, emptySelection.stdout + emptySelection.stderr).not.toBe(0);
+      expect(emptySelection.stdout + emptySelection.stderr).toContain('use a plain relative path inside the project.');
+      expect(emptySelection.stdout + emptySelection.stderr).not.toContain('An undeclared test executed.');
+      expect(emptySelection.stdout + emptySelection.stderr).not.toContain('A newline suffix ran an undeclared test.');
     } finally {
       vi.unstubAllEnvs();
     }

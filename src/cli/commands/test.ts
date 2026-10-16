@@ -52,7 +52,7 @@ interface TestOptions {
 export async function testCommand(patterns: string[], options: TestOptions): Promise<void> {
   const cwd = process.cwd();
   const context = getProjectContext(cwd);
-  if (options.selection && (patterns.length > 0 || options.watch || options.browser || options.coverage)) {
+  if (options.selection !== undefined && (patterns.length > 0 || options.watch || options.browser || options.coverage)) {
     throw new Error('Use --selection by itself, without filename filters, --watch, --browser or --coverage.');
   }
 
@@ -65,7 +65,7 @@ export async function testCommand(patterns: string[], options: TestOptions): Pro
   const label = context === 'monorepo' ? 'BoardSmith' : 'game';
   console.log(chalk.cyan(`\nRunning ${label} tests...\n`));
 
-  if (options.selection) {
+  if (options.selection !== undefined) {
     try {
       const result = await runAuthoredTests(cwd, options.selection);
       console.log(chalk.green(`\n${result.counts.passed} authored tests passed in ${result.counts.files} files.\n`));
