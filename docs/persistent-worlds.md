@@ -2732,7 +2732,7 @@ your game.
 | `unknown-player` | A command named somebody this world does not seat. |
 | `clock-only-command` | A player sent a seatless action -- one built with `worldClockAction()`, which the clock reaches and nobody else does -- or a scheduled event came due naming a seated action, which has no player to act for. Since `schedule-seated-action`, a seated action is refused at the `schedule()` line, so this second case answers only an event queued before that check, in a world that already holds one. |
 | `world-full` | A seating would exceed the bundle's own `maxPlayers`. Seats are assigned once and never handed on. |
-| `seat-conflict` | A seating named a player who already holds a different seat. |
+| `seat-conflict` | A seating named a player who already holds a different seat, or a seat another player already holds. |
 | `world-catching-up` | A world declaring `ordering: "chronological"` was still behind the instant this command arrived at, so it was not applied. Sending it again is safe and is the intended response: an order's durable identity makes the repeat run exactly once, and the world is already catching up. |
 | `rate-limited` | A connection sent frames faster than the host accepts. Well-formed traffic, refused at the door. |
 | `invalid-order` | A player command arrived with no usable order identity: no id, an id past 128 characters, or no mint instant. Every player command carries one -- see [an order that survives a lost reply](#an-order-that-survives-a-lost-reply). |
@@ -2756,6 +2756,7 @@ thing next time.
 | `undecided-audience` | A seat's `world.view` could only say whether it names an event's scope by reading a partition the command did not declare. Declare it in the action, or narrow who can see the scope in the tree. |
 | `partition-missing` | A declaration named a partition this world's store does not have, and `world.createPartition` did not build one for that name either. Usually a typo, or a partition nothing has created yet. |
 | `invalid-partition-name` | A partition name a store may not hold: empty, over 128 characters, outside `A-Za-z0-9._:@/-`, one of `__proto__`, `constructor`, `prototype`, or `notice`, the scope a seat's notices are delivered live on. |
+| `invalid-partition-root` | `genesis`, `createPartition` or a migration answered a partition root that is not a direct child of the game (it sits inside another element, so it would be stored twice), or answered one element under two names. Create each root with `game.create(...)` and answer it once. |
 | `partition-too-large` | A partition serialized past `partitionMaxBytes`. The fix is to split it. See the next section. |
 | `schedule-cap` | This owner's unkeyed pending events are at the cap. Use a key. |
 | `schedule-key-cap` | This owner holds as many distinct keys as one owner may. Reuse a key rather than minting one per action. |

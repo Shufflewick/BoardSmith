@@ -635,6 +635,19 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * wake with nothing raised anywhere.
    */
   registerResident(name: string, root: GameElement): void {
+    const taken = this.residentNames.get(root.id);
+    if (root.parent !== this.game || taken !== undefined) {
+      throw worldRefusal(
+        "invalid-partition-root",
+        taken === undefined
+          ? `Partition "${name}" is not a direct child of the game: it sits inside another ` +
+              `element, so it would be stored twice and the world could not load again. ` +
+              `Create it with \`game.create(...)\`, or leave it out of the answer and let it ` +
+              `travel inside the partition that holds it.`
+          : `Partition "${name}" is the same element as partition "${taken}". One element can ` +
+              `be one partition only; answer it under one name.`,
+      );
+    }
     this.game.definePartition(root.id);
     this.residentIds.set(name, root.id);
     this.residentNames.set(root.id, name);
@@ -1122,7 +1135,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
    */
   async offersFor(player: string, stamp: WorldOfferStamp): Promise<readonly WorldActionOffer[]> {
     const seat = this.seatFor(player);
-    const acting = this.playerFor(seat);
+    const acting = readOnlyProjection(this.playerFor(seat));
     const offers: WorldActionOffer[] = [];
 
     for (const definition of this.actions.values()) {
@@ -1363,7 +1376,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   ): Promise<T> {
     this.refuseUndeclaredArgs(definition, args);
     const seat = this.seatFor(player);
-    const acting = this.playerFor(seat);
+    const acting = readOnlyProjection(this.playerFor(seat));
     const named: string[] = [];
     // As `offerOf`: this is a seat's own read, and a seat's verb declares no chair.
     const namedSeats: number[] = [];
@@ -3397,7 +3410,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * is what a reconnect looks like from here and must be free; moving a seated
    * player to another seat is not a reconnect, and silently accepting it would
    * hand one person another person's holdings. A player who has genuinely left
-   * is retired with `unseat` first, and may then be seated anywhere.
+   * is retired with `unseat` first, and may then be seated anywhere. A seat
+   * another player holds is refused the same way, until that holder is unseated.
    */
   seat(player: string, seat: number): void {
     const held = this.seats.get(player);
@@ -3409,6 +3423,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
         `"${player}" already plays seat ${held} in this world and cannot be moved to seat ` +
           `${seat}. A seat is where a player's holdings are; moving one would hand them ` +
           `somebody else's.`,
+      );
+    }
+    const holder = this.holderOf(seat);
+    if (holder !== null && holder !== player) {
+      throw worldRefusal(
+        "seat-conflict",
+        `"${player}" cannot take seat ${seat}: "${holder}" holds seat ${seat} in this world. ` +
+          `Two holders would both command its holdings; unseat "${holder}" first.`,
       );
     }
     this.seats.set(player, seat);

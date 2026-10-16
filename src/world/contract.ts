@@ -967,6 +967,7 @@ export interface WorldEngine {
    * Re-seating a player in the seat they already hold is FREE, because that is
    * what a reconnect looks like from here. Moving a seated player to a
    * different seat is a refusal: a seat is where a player's holdings are.
+   * So is taking a seat another player holds, until that player is unseated.
    */
   seat(player: string, seat: number): void;
 

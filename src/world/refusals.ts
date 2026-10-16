@@ -175,7 +175,7 @@ export const WORLD_REFUSALS = {
   },
   "seat-conflict": {
     owner: "caller",
-    why: "a seating named a player who already holds a DIFFERENT seat (#150). It used to share `unknown-player`'s code, which misread a conflict about somebody who IS in the world as 'not in this world'. A seat is where a player's holdings are, so the move is refused rather than handing them somebody else's -- and the world is unaffected",
+    why: "a seating named a player who already holds a DIFFERENT seat (#150), or a seat ANOTHER player already holds (#796). It used to share `unknown-player`'s code, which misread a conflict about somebody who IS in the world as 'not in this world'. A seat is where a player's holdings are, so the move is refused rather than handing them somebody else's -- and the world is unaffected",
   },
 
   "stale-draft": {
@@ -357,6 +357,10 @@ export const WORLD_REFUSALS = {
   "invalid-partition-name": {
     owner: "game",
     why: "the bundle named a partition this store may not hold -- empty, over-long, illegal characters, or claimed for one player",
+  },
+  "invalid-partition-root": {
+    owner: "game",
+    why: "#795: a bundle's `genesis` hook, `createPartition` hook or migration answered a partition root that does not hang directly from the game, or an element it already answered under another name. A nested root is stored twice -- once as itself, once inside its parent -- and the next wake cannot hydrate both, on every command or view naming the two. The answer is the bundle's own, so the same bundle does it again next time",
   },
   "declaration-unsettled": {
     owner: "game",
