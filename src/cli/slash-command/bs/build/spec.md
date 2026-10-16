@@ -208,7 +208,9 @@ A chunk that introduces no new game behavior — a pure asset swap, a restyle, a
 rules change — has no claims to pin and writes no behavioral tests. Name that exemption explicitly
 as the one row in `## Spec Manifest`, written exactly `| exempt | <reason> | n/a |` so
 `boardsmith test-step-check` can read it (an exempt row on a chunk that has claims is a finding),
-the same "name the exemption explicitly rather than
+and so `boardsmith verify --chunk <slug>` can: an exempt chunk that adds or changes no test file
+passes its fast checks on typecheck alone, while any other chunk with no test of its own fails
+them (`state-machine.md` "Git Protocol"). It is the same "name the exemption explicitly rather than
 silently omitting" discipline `build/test.md` items 3(i) and 4 already use. A chunk trivial enough
 to be genuinely exempt is usually a chunk that should have been tagged `light` at proposal time
 (`state-machine.md` "Step Names (exact, light path — trivial chunks)").

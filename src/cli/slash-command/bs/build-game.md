@@ -55,14 +55,13 @@ of work you did not do (`reporting.md` "Don't Defend the Work").
 Which role does each piece of work, when review may start, and what happens when a step fails:
 `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
 
-For explicit focused opt-in, apply `state-machine.md` "Focused Verification Policy" to this
-run's verify commands, return checks and merges.
-
 Each chunk is dispatched as the `judgement` role's agent (`orchestrate/chunk-dispatch.md`). No
-review step starts until `boardsmith verify` has passed for the commit under review, in any chunk
-the run dispatches and for the cross-chunk lens the run itself sends after a merge: each runs
-`npx boardsmith verify --chunk <slug>` and then `npx boardsmith review-gate <slug>`, which refuses,
-saying to run `boardsmith verify`, without a passing result for the current commit. A chunk that
+review step starts until the chunk's fast checks (its tests and typecheck, `state-machine.md` "Git
+Protocol") have passed for the commit under review, in any chunk the run dispatches and for the
+cross-chunk lens the run itself sends after a merge: each runs `npx boardsmith verify --chunk
+<slug>` and then `npx boardsmith review-gate <slug>`, which refuses, saying to run `boardsmith
+verify --chunk <slug>`, without a passing result for the current commit. The full checks run once,
+at publish, not per chunk. A chunk that
 returns `closed` but fails its check has failed at `judgement`, the top role: it is re-dispatched
 once at `judgement` with the check's message, and a second failure goes to the designer (Step 4).
 
@@ -202,9 +201,9 @@ nothing, if there is nothing visible yet. Do not announce each dispatch.
 
 - **`closed`**: first run `npx boardsmith verify --check --chunk <slug>` (with `--project` set to
   the chunk's worktree when it was built in one), before any write (Step 3 item 5). It exits zero
-  only when the chunk's last commit, on a clean tree, passed `boardsmith verify` with the full
-  scope in "Git Protocol" or the explicitly opted-in "Focused Verification Policy". A full
-  result from `--base HEAD`, which mutates nothing, is
+  only when the chunk's last commit, on a clean tree, passed the chunk's fast checks,
+  `boardsmith verify --chunk <slug>` (`state-machine.md` "Git Protocol"). That result is enough to
+  accept the chunk as closed and merge it; a full result, such as one from `--base HEAD`, is
   refused. A non-zero exit means the claim of done is not backed by a run: treat the chunk as unfinished,
   never as closed: its dispatch failed at `judgement`, the top role. Record it `failed`. On its
   first failure there, re-dispatch the chunk once at `judgement` with the check's message in the
@@ -228,8 +227,8 @@ nothing, if there is nothing visible yet. Do not announce each dispatch.
   Gate"). A `playtest` gate's sign-off is recorded with `boardsmith chunk-signoff`, and a waiver
   with `boardsmith chunk-waiver`, only from what the designer said. First commit what the gate
   wrote and run `npx boardsmith verify --chunk <slug>` (`state-machine.md` "Git Protocol") in the
-  chunk's checkout: `chunk-signoff` refuses a commit with no passing result covering the chunk's
-  change. Then **re-dispatch the same chunk** with
+  chunk's checkout: `chunk-signoff` refuses a commit with no passing `verify --chunk <slug>`
+  result. Then **re-dispatch the same chunk** with
   the answers in its digest — the work never happens in this thread
   (`orchestrate/chunk-dispatch.md` "After the Return").
 - **`filing`** — handle it per `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/filings.md`: confirm,
