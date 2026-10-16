@@ -539,7 +539,7 @@ describe('the boardsmith verify command, as a user runs it', () => {
     const dir = await repo({ 'src/a.ts': '' });
     const run = await spawnCli(['verify', '--project', dir]);
     expect(run.code).toBe(1);
-    expect(run.stderr).toMatch(/no boardsmith\.json.*--project/s);
+    expect(run.stderr).toContain(`${dir} has no boardsmith.json, so it is not a BoardSmith game project.`);
     const both = await spawnCli(['verify', '--check', '--base', 'main', '--project', dir]);
     expect(both.code).toBe(1);
     expect(both.stderr).toMatch(/--base does not apply/);
