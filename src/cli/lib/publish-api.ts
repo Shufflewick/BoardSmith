@@ -311,7 +311,7 @@ export async function abortPublish(
   apiKey: string,
   versionId: string,
 ): Promise<void> {
-  await fetch(`${platformUrl}/api/publish/abort`, {
+  const res = await fetch(`${platformUrl}/api/publish/abort`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -319,4 +319,5 @@ export async function abortPublish(
     },
     body: JSON.stringify({ versionId }),
   });
+  if (!res.ok) await throwResponseError(res, `Abort returned HTTP ${res.status}`);
 }
