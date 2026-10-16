@@ -172,12 +172,11 @@ function redactedModeForSeat(state: VisibilityState, seat: number): VisibilityMo
  *
  * 'owner' IS THE MODE THE STATE CANNOT ANSWER FOR, and it is refused for every
  * seat it does not grant OUTRIGHT. Ownership is a fact about the ELEMENT rather
- * than about the state, and the serializer consults it twice: `canPlayerSee`
- * shows an owner-only zone to its owner alone, and an owner-only zone that
- * denies everybody still shows its children to its owner under their real ids
- * while giving everybody else synthetic ones. So a seat left to the mode and a
- * seat denied by the roster are both answered `null`; only a seat granted past
- * the mode, which never reaches ownership at all, gets an answer.
+ * than about the state: `canPlayerSee` shows an owner-only zone to its owner
+ * alone. So a seat left to the mode is answered `null`, and so, to keep the
+ * rule to one line, is a seat denied by the roster (which since #750 is shown
+ * placeholders whoever owns the zone); only a seat granted past the mode, which
+ * never reaches ownership at all, gets an answer.
  */
 export function redactedVisibilityFor(
   state: VisibilityState,

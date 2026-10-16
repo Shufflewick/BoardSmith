@@ -1325,6 +1325,7 @@ watch(actionController.errorTick, () => {
 if (isDevBuild) {
   let warned0x0 = false;
   let pending0x0Check: ReturnType<typeof setTimeout> | undefined;
+  onUnmounted(() => clearTimeout(pending0x0Check));
   watch(gameView, async (view) => {
     if (!view || warned0x0) return;
     await nextTick();

@@ -103,15 +103,21 @@ function parseWorkRole(value: string | undefined): WorkRole | undefined {
 
 /** The text every review prompt carries: the mechanical checks are done, and what they found. */
 function reviewBrief(projectDir: string, slug: string, result: VerifyResult, from: string): string {
+  const focused = result.scope;
   return [
-    `Mechanical checks: done. \`boardsmith verify --chunk ${slug}\` passed for commit ${short(result.commit)} on a clean tree ` +
+    `${focused ? 'Focused mechanical checks: authored tests and typecheck passed' : 'Mechanical checks: done'}. \`boardsmith verify --chunk ${slug}${focused ? ` --selection ${focused.selection.path}` : ''}\` passed for commit ${short(result.commit)} on a clean tree ` +
       `(result: ${relative(projectDir, verifyResultPath(projectDir, result.commit))}, changes measured since ${result.base.ref} ` +
       `at ${short(result.base.commit)}):`,
     ...result.checks.map((check) => `- ${check.name}: ${check.summary}`),
     `The change under review: \`git diff ${short(from)}..${short(result.commit)}\`.`,
-    'Do not run the suite, typecheck, build, validate, the smoke test or a mutation check again, and do not break code ' +
+    ...(focused ? [
+      `Authored tests: ${focused.selection.ticket}, selection ${focused.selection.path} (sha256 ${focused.selection.hash}).`,
+      `Record this review's provenance as "Verify: ${result.commit} passed" and "Scope: focused ${focused.selection.hash}".`,
+      'Full-suite, build, validate, smoke and mutation verification are deferred to the committed policy cadence. This result claims only the declared authored tests and typecheck.',
+      'Do not rerun the mechanical checks for this review. Review the judgement checks listed in this prompt.',
+    ] : ['Do not run the suite, typecheck, build, validate, the smoke test or a mutation check again, and do not break code ' +
       'to see whether a test notices: verify did all of that for this commit. Your review is the judgement checks ' +
-      'listed in this prompt, and nothing a script can check.',
+      'listed in this prompt, and nothing a script can check.']),
   ].join('\n');
 }
 

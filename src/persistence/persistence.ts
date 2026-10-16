@@ -378,13 +378,28 @@ function parseCommit(raw: unknown, attributeName: string): PersistCommitResult {
     };
   }
   if (raw.entries.length === 0) return { kind: "absent" };
+  return parseEntries(raw.entries, attributeName);
+}
 
+/** Convert a commit's non-empty `entries`, refusing the first bad or repeated one. */
+function parseEntries(rawEntries: unknown[], attributeName: string): PersistCommitResult {
   const entries: PersistCommitEntry[] = [];
-  for (let i = 0; i < raw.entries.length; i++) {
-    const converted = toCommitEntry(raw.entries[i], i, attributeName);
+  const seen = new Set<string>();
+  for (let i = 0; i < rawEntries.length; i++) {
+    const converted = toCommitEntry(rawEntries[i], i, attributeName);
     if (typeof converted === "string") return { kind: "invalid", reason: converted };
     const sealed = sealedKeyOnPublicChannel(converted.key, i, attributeName);
     if (sealed) return { kind: "invalid", reason: sealed };
+    // Production's wording (convex/gamePersistence.ts validateCommitShape), so the dev store refuses what Convex refuses.
+    if (seen.has(converted.key)) {
+      return {
+        kind: "invalid",
+        reason:
+          `A single commit names the key "${converted.key}" twice. One commit may write each key ` +
+          `at most once -- merge the two records, or use distinct keys.`,
+      };
+    }
+    seen.add(converted.key);
     entries.push(converted);
   }
   return { kind: "ok", entries };
@@ -420,9 +435,9 @@ function sealedKeyOnPublicChannel(
  * Checked HERE rather than left to Convex's duplicate-key rejection because
  * the message matters: Convex would say "a single commit names the key twice",
  * which sends a publisher looking for one bug in one attribute. Duplicates
- * WITHIN one channel are still Convex's to reject -- this is the failure the
- * platform introduced by adding a second channel, so it is the platform's to
- * explain.
+ * WITHIN one channel are refused in `parseCommit` with Convex's own message;
+ * this is the failure the platform introduced by adding a second channel, so
+ * it is the platform's to explain.
  */
 function crossChannelCollision(
   publicEntries: PersistCommitEntry[],
@@ -454,7 +469,7 @@ function buildCommitEntry(
   value: string | null,
   schemaTag: unknown,
 ): PersistCommitEntry {
-  return { key, value, ...(schemaTag ? { schemaTag: schemaTag as string } : {}) };
+  return { key, value, ...(schemaTag !== undefined ? { schemaTag: schemaTag as string } : {}) };
 }
 
 /** One entry, or a message saying why it is not one. */

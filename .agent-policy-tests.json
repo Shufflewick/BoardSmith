@@ -1,0 +1,16 @@
+{
+  "ticket": "Shufflewick/BoardSmith#770",
+  "base": "e7da3d40e99eb989548d089002a4967d71fda62d",
+  "tests": [
+    {
+      "file": "src/engine/action/dependent-array-pick.test.ts",
+      "names": [
+        "#770 availability with a dependent pick after an array pick chooseElements then a dependent chooseFrom",
+        "#770 availability with a dependent pick after an array pick multiSelect then a dependent chooseFrom",
+        "#770 availability with a dependent pick after an array pick orderedList then a dependent chooseFrom",
+        "#770 availability with a dependent pick after an array pick a repeating chooseFrom then a dependent chooseFrom",
+        "#770 availability with a dependent pick after an array pick is unavailable when the dependent pick has nothing for any array"
+      ]
+    }
+  ]
+}

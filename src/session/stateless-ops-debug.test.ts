@@ -367,7 +367,7 @@ describe('#481 debug op gate', () => {
         const { host, executed } = await startedHost(true);
         const res = await host.handleOp(1, op);
         expect(res.success).toBe(false);
-        expect(res.error).toMatch(/seat 1 asked for seat 2's view/i);
+        expect(res.error).toMatch(/seat 1 sent '\w+' as seat 2/i);
         expect(executed).toEqual([]);
       });
 

@@ -82,15 +82,6 @@ export function readDistDir(distDir: string): Map<string, Uint8Array> {
 
   const manifestData = JSON.parse(readFileSync(manifestPath, 'utf-8'));
 
-  // WHICH ENTRY AND WHICH SEAT COUNT ARE THE BACKEND'S TO SAY (#188).
-  //
-  // This gate was written when every game had a table, so it demanded
-  // `ui/index.html` and a `playerCount` of everything. `boardsmith build`
-  // emits `ui/world.html` for a world and deliberately omits `playerCount`,
-  // which is how a manifest says "this game has no table" -- so the whole
-  // world half of the catalogue built and validated cleanly and then died
-  // here. `validate.ts` was already backend-aware; this was the one place
-  // left that was not.
   assertBackendIsPackageable(distDir, manifestData);
 
   const fileMap = new Map<string, Uint8Array>();
@@ -257,4 +248,11 @@ export function createZip(files: Map<string, Uint8Array>): Uint8Array {
     pos += part.length;
   }
   return result;
+}
+
+/** A byte count as people read it: `512 B`, `3.4 KB`, `1.2 MB`. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
