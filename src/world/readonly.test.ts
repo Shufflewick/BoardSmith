@@ -16,6 +16,7 @@ import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-ke
 class Token extends Piece<ProjectionGame> {}
 class Room extends Space<ProjectionGame> {
   visits = 0;
+  tags: string[] = [];
 }
 class ProjectionGame extends Game<ProjectionGame, Player> {
   constructor(options: GameOptions) {
@@ -45,6 +46,16 @@ describe("readOnlyProjection", () => {
     expect(projection.name).toBe("here");
     expect(projection.first(Token)?.name).toBe("token-one");
     expect(projection.all(Token)).toHaveLength(1);
+  });
+
+  it("refuses a write through a property descriptor's value, as it refuses the direct write (#800)", () => {
+    const { here } = world();
+    here.tags = ["calm"];
+    const projection = readOnlyProjection(here);
+
+    const held = Object.getOwnPropertyDescriptor(projection, "tags")?.value as string[];
+    expect(() => held.push("leaked")).toThrow(WorldRefusal);
+    expect(here.tags).toEqual(["calm"]);
   });
 
   it("answers the SAME projection for the same element, so a declaration can compare", () => {
