@@ -56,6 +56,18 @@ describe('#770 availability with a dependent pick after an array pick', () => {
     expect(executor.isActionAvailable(action, player)).toBe(true);
   });
 
+  it('a repeating chooseFrom then a dependent chooseFrom', () => {
+    const { executor, player } = setup();
+    const action = Action.create('play')
+      .chooseFrom('tokens', { choices: ['a', 'b', 'stop'], repeatUntil: 'stop' })
+      .chooseFrom('target', {
+        dependsOn: 'tokens',
+        choices: (ctx: any) => (ctx.args.tokens ? (ctx.args.tokens as string[]).map((p) => p + '!') : []),
+      })
+      .execute(() => {});
+    expect(executor.isActionAvailable(action, player)).toBe(true);
+  });
+
   it('is unavailable when the dependent pick has nothing for any array', () => {
     const { executor, player } = setup();
     const action = Action.create('play')
