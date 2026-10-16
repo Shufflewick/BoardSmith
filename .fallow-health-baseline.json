@@ -102,11 +102,6 @@
         "count": 1
       }
     },
-    "src/cli/commands/install-claude-command.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/cli/commands/lint.ts": {
       "complexity_high": {
         "count": 1
