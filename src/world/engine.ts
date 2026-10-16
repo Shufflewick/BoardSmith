@@ -634,6 +634,19 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * wake with nothing raised anywhere.
    */
   registerResident(name: string, root: GameElement): void {
+    const taken = this.residentNames.get(root.id);
+    if (root.parent !== this.game || taken !== undefined) {
+      throw worldRefusal(
+        "invalid-partition-root",
+        taken === undefined
+          ? `Partition "${name}" is not a direct child of the game: it sits inside another ` +
+              `element, so it would be stored twice and the world could not load again. ` +
+              `Create it with \`game.create(...)\`, or leave it out of the answer and let it ` +
+              `travel inside the partition that holds it.`
+          : `Partition "${name}" is the same element as partition "${taken}". One element can ` +
+              `be one partition only; answer it under one name.`,
+      );
+    }
     this.game.definePartition(root.id);
     this.residentIds.set(name, root.id);
     this.residentNames.set(root.id, name);

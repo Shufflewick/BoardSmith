@@ -1577,29 +1577,6 @@ describe("#181 — a view carries the seat it is for, not the world's roster", (
     const holding = (state.children ?? []).find((child) => child.className === "Holding");
     expect(holding?.attributes.player).toMatchObject({ __playerRef: 7, seat: 7 });
   });
-
-  it("keeps a player that a named partition was adopted underneath", async () => {
-    // The path rule, which is the one shape a roster prune must not break: a
-    // partition living under a player element would go with the player.
-    const game = newWorldGame();
-    const roomOne = game.create(Room, "room-one");
-    const underPlayer = game.players[1].create(Room, "room-two");
-    const engine = new BoardSmithWorldEngine({
-      game,
-      seats: new Map([
-        ["player-a", 1],
-        ["player-b", 2],
-      ]),
-      store: new CountingStore(new Map()),
-      actions: ACTIONS,
-      view: () => [ROOM_ONE, ROOM_TWO],
-    });
-    engine.registerResident(ROOM_ONE, roomOne);
-    engine.registerResident(ROOM_TWO, underPlayer);
-
-    const view = (await engine.viewFor("player-a")) as { state: ElementJSON };
-    expect(JSON.stringify(view.state)).toContain("room-two");
-  });
 });
 
 describe("#186 — a world can say something a player reads", () => {

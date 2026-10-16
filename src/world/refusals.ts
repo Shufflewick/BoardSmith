@@ -354,6 +354,10 @@ export const WORLD_REFUSALS = {
     owner: "game",
     why: "the bundle named a partition this store may not hold -- empty, over-long, illegal characters, or claimed for one player",
   },
+  "invalid-partition-root": {
+    owner: "game",
+    why: "#795: a bundle's `genesis` hook, `createPartition` hook or migration answered a partition root that does not hang directly from the game, or an element it already answered under another name. A nested root is stored twice -- once as itself, once inside its parent -- and the next wake cannot hydrate both, on every command or view naming the two. The answer is the bundle's own, so the same bundle does it again next time",
+  },
   "declaration-unsettled": {
     owner: "game",
     why: "#122: a bundle's `world.view()` named a partition it had not seen on every round of declaration, so `declaration.ts`'s round ceiling stopped it. Two-phase declaration exists so a view can read an index and then name the room the index names; one that names something new every round is walking the world, which is the O(world) read the mechanism exists to prevent. A VIEW ONLY, since #169: an action's declaration is an ordered walk whose length is its own selection count, so it cannot fail this way and has no ceiling to trip. GAME-owned because the declaration is the bundle's own and the same bundle writes the same one next time",
