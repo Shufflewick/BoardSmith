@@ -12,7 +12,7 @@
  * Wall-clock time, where a host wants it, belongs at the session boundary,
  * outside the engine's state.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Game, Space, Piece, Player, Action, loop, eachPlayer, actionStep, type FlowContext } from '../engine/index.js';
 import { GameRunner } from './runner.js';
 
@@ -95,5 +95,17 @@ describe('engine-owned state carries no wall-clock time (#54)', () => {
     }
     // `id` is the ordering key the timestamp was never needed for.
     expect(events.map(e => e.id)).toEqual([...events.map(e => e.id)].sort((x, y) => x - y));
+  });
+});
+
+describe('the game instance id (#806)', () => {
+  it('is adopted from a snapshot without drawing a fresh one', () => {
+    const draws = vi.spyOn(crypto, 'getRandomValues');
+    const snapshot = playTwoActions('instance-id').getSnapshot();
+    draws.mockClear();
+    const restored = GameRunner.fromSnapshot(snapshot, ClockGame);
+    expect(restored.gameInstanceId).toBe(snapshot.gameInstanceId);
+    expect(draws).not.toHaveBeenCalled();
+    draws.mockRestore();
   });
 });
