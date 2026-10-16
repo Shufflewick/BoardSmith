@@ -4440,8 +4440,8 @@ export class Game<
         let processed = text;
         if (data) {
           for (const [key, value] of Object.entries(data)) {
-            // An element (a Player is one) is written by its own toString().
-            processed = processed.replace(new RegExp(`{{${key}}}`, 'g'), String(value));
+            // An element (a Player is one) is written by its own toString(). split/join keeps `$` codes in values literal.
+            processed = processed.split(`{{${key}}}`).join(String(value));
           }
         }
         return type === undefined ? { text: processed } : { text: processed, type };
