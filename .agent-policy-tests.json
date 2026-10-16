@@ -1,15 +1,42 @@
 {
-  "ticket": "Shufflewick/BoardSmith#770",
-  "base": "e7da3d40e99eb989548d089002a4967d71fda62d",
+  "ticket": "Shufflewick/BoardSmith#758",
+  "base": "2dbb298af0c986ac8812242b6eeaee1496794831",
   "tests": [
     {
-      "file": "src/engine/action/dependent-array-pick.test.ts",
+      "file": "src/session/hidden-pick-candidates.test.ts",
       "names": [
-        "#770 availability with a dependent pick after an array pick chooseElements then a dependent chooseFrom",
-        "#770 availability with a dependent pick after an array pick multiSelect then a dependent chooseFrom",
-        "#770 availability with a dependent pick after an array pick orderedList then a dependent chooseFrom",
-        "#770 availability with a dependent pick after an array pick a repeating chooseFrom then a dependent chooseFrom",
-        "#770 availability with a dependent pick after an array pick is unavailable when the dependent pick has nothing for any array"
+        "pick candidates the seat cannot see (#715) offers a chooseElement candidate by seat 1's board id, without its name",
+        "pick candidates the seat cannot see (#715) offers a chooseFrom element candidate the same way",
+        "pick candidates the seat cannot see (#715) steal: a submitted placeholder id takes the real card it stands for",
+        "pick candidates the seat cannot see (#715) draw: a submitted placeholder id takes the real card it stands for",
+        "pick candidates the seat cannot see (#715) a selection step with a placeholder id takes the real card it stands for",
+        "pick candidates the seat cannot see (#715) refuses a placeholder for a hidden card that is not on offer",
+        "pick candidates the seat cannot see (#715) takes every hidden card a multi-select names by placeholder",
+        "pick candidates the seat cannot see (#715) offers a repeating pick's next hidden candidates by placeholder, without names",
+        "pick candidates the seat cannot see (#715) refuses a hidden chooseFrom candidate named by its secret name as no longer available",
+        "pick candidates the seat cannot see (#715) refuses a hidden chooseFrom candidate named by a partial object as no longer available",
+        "pick candidates the seat cannot see (#715) refuses a hidden chooseFrom candidate named by names in a multi-select as no longer available",
+        "pick candidates the seat cannot see (#715) refuses a hidden chooseFrom candidate named by an absent card as no longer available",
+        "pick candidates the seat cannot see (#715) refuses a selection step naming a hidden chooseFrom candidate as no longer available",
+        "pick candidates the seat cannot see (#715) names an earlier hidden pick neutrally when a later step has nothing to choose",
+        "pick candidates the seat cannot see (#715) answers a later step from the pick the pending action holds, not a placeholder that has since moved",
+        "a card granted to the seat inside a zone it cannot see (#758) is offered under its real id and name, matching the board, while the rest stay placeholders"
+      ]
+    },
+    {
+      "file": "src/engine/element/element-grant-in-concealed-zone.test.ts",
+      "names": [
+        "element grants inside concealed zones (#758) addVisibleTo(2) on a card in a deck reveals it to seat 2 only",
+        "element grants inside concealed zones (#758) addVisibleTo(2) on a card in a hand reveals it to seat 2 only",
+        "element grants inside concealed zones (#758) showToAll on a card in an owner-only hand reveals it to every seat and spectators",
+        "element grants inside concealed zones (#758) a hideContentsFrom deck with one card granted back to the denied seat",
+        "element grants inside concealed zones (#758) a contentsHidden zone sends only the granted card, still without its size",
+        "element grants inside concealed zones (#758) the rest of a count-only deck keep their placeholders, count and order",
+        "element grants inside concealed zones (#758) isVisibleTo agrees with the view across zone and grant combinations",
+        "element grants inside concealed zones (#758) a card peeked in the deck and drawn into a hand follows the hand, plus the peeking seat",
+        "element grants inside concealed zones (#758) keeps a grant on a card with its own setting (hideFromAll, then addVisibleTo)",
+        "element grants inside concealed zones (#758) a grant survives a checkpoint round trip and still follows the zone after it",
+        "element grants inside concealed zones (#758) projection signatures tell a granted seat from one that is not"
       ]
     }
   ]
