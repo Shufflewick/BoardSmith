@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   describeAudienceMismatch,
   resolveTarget,
@@ -8,6 +8,7 @@ import {
   savedPlatformIds,
   recordPlatformIds,
   staleIdsHint,
+  abortInFlightPublish,
 } from './publish.js';
 import { getPlatformUrl, type TaxonomyAudience } from '../lib/publish-api.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
@@ -175,5 +176,30 @@ describe('per-platform ids (#704: dev and prod are separate deployments with sep
     expect(result.stderr).toContain('platforms.prod');
     expect(result.stderr).not.toMatch(/API key/);
     expect(readFileSync(join(dir, 'boardsmith.json'), 'utf-8')).toBe(configText);
+  });
+});
+
+describe('abortInFlightPublish (#745: a refused abort is reported, not silent)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it.each([401, 500])('prints the could-not-clean-up note on HTTP %i', async (status) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status })));
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await abortInFlightPublish('https://platform.example', 'key', 'version-id');
+
+    expect(errorLog).toHaveBeenCalledWith(expect.stringContaining('Could not clean up'));
+  });
+
+  it('prints nothing when the abort succeeds', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 200 })));
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await abortInFlightPublish('https://platform.example', 'key', 'version-id');
+
+    expect(errorLog).not.toHaveBeenCalled();
   });
 });

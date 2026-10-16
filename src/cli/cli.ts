@@ -147,6 +147,7 @@ export function createProgram(): Command {
     .description('Run this workspace\'s tests (the game\'s, or BoardSmith\'s own after a type check)')
     .option('-w, --watch', 'Watch mode - re-run tests on changes')
     .option('--coverage', 'Generate coverage report')
+    .option('--selection <path>', 'Run only the exact file and full test names in an authored-test selection')
     .option('--browser', "BoardSmith's own repository only: run the browser regressions (scripts/*-browser.mjs) in Chromium instead of the default suite, without the type check the default run does first")
     .option('--verdict-file <path>', 'When the run does not pass, also write why to <path> (for a merge gate to repeat)')
     .action(testCommand);
@@ -195,8 +196,9 @@ export function createProgram(): Command {
       "Measure a chunk's change from the commit before its first chunk-<slug>/ commit; with --check, accept only a result that covers it",
     )
     .option('--check', 'Run nothing: exit 0 only when HEAD, on a clean tree, has a passing result')
+    .option('--selection <path>', 'Opted-in projects: verify only declared authored tests and typecheck, recording focused scope')
     .option('--project <dir>', 'Project directory (defaults to cwd)')
-    .action((options: { base?: string; chunk?: string; check?: boolean; project?: string }) => verifyCommand(options));
+    .action((options: { base?: string; chunk?: string; check?: boolean; project?: string; selection?: string }) => verifyCommand(options));
 
   program
     .command('mutation-equivalence <id>')

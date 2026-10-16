@@ -31,6 +31,7 @@ import {
   type GameOptions,
   DEFAULT_COLOR_PALETTE,
 } from '../index.js';
+import { encodeValue, decodeValue } from './game-element.js';
 import { TEST_WORLD_ELEMENT_ID_KEY } from './world-element-id-key.test-helper.js';
 import { worldElementIds } from './element-ids.js';
 
@@ -229,6 +230,15 @@ describe('world mode: element references are id-based, not positional', () => {
   });
 });
 
+describe('world mode: marker keys in user data (#760)', () => {
+  it('refuses user data shaped like a kept ref, but re-encodes a ref decode kept', () => {
+    const game = new WorldGame({ playerCount: 2, seed: 'marker-keys', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    expect(() => encodeValue({ __elementId: 5 }, game._ctx, 'test', 'scores')).toThrow(/__elementId/);
+    const kept = decodeValue({ __elementId: 999999 }, game);
+    expect(encodeValue(kept, game._ctx, 'test', 'scores')).toEqual({ __elementId: 999999 });
+  });
+});
+
 describe('Game.adoptSubtree', () => {
   it('grafts a serialized subtree under the named parent', () => {
     const game = new WorldGame({ playerCount: 2, seed: 'adopt-basic' , worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
@@ -306,6 +316,64 @@ describe('Game.adoptSubtree', () => {
 
     token.putInto(adopted);
     expect(adopted.entered).toEqual(['spoon']);
+  });
+
+  it('does not visit the resident tree or the pile to check for an id clash (#755)', () => {
+    const game = new WorldGame({ playerCount: 2, seed: 'adopt-no-walk', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    const { roomB } = buildWorld(game);
+    const resident = game.create(Space, 'resident');
+    resident.createMany(50, Token, 'r');
+    resident.create(Token, 'gone').remove();
+    const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
+    game.evictSubtree(roomB.id);
+
+    let childReads = 0;
+    for (const element of [resident, ...resident.all(GameElement), game.pile, ...game.pile.all(GameElement)]) {
+      element._t = new Proxy(element._t, {
+        get(target, key, receiver) {
+          if (key === 'children') childReads++;
+          return Reflect.get(target, key, receiver);
+        },
+      });
+    }
+
+    game.adoptSubtree(game.id, bJson);
+    expect(childReads).toBe(0);
+  });
+
+  it('refuses an adoption carrying the id of an element in the pile', () => {
+    const game = new WorldGame({ playerCount: 2, seed: 'dupe-pile', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    const { roomB } = buildWorld(game);
+    const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
+    game.evictSubtree(roomB.id);
+    const piled = game.create(Token, 'piled', { label: 'piled' });
+    piled.remove();
+    bJson.children![0].id = piled.id;
+
+    expect(() => game.adoptSubtree(game.id, bJson)).toThrow(new RegExp(`element id ${piled.id} is already resident`));
+  });
+
+  it('refuses an adoption carrying the pile\'s own id after an in-place restore', () => {
+    const game = new WorldGame({ playerCount: 2, seed: 'dupe-pile-restore', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    const { roomB } = buildWorld(game);
+    const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
+    game.evictSubtree(roomB.id);
+    game.loadSerializedState(game.toJSON());
+    bJson.children![0].id = game.pile.id;
+
+    expect(() => game.adoptSubtree(game.id, bJson)).toThrow(new RegExp(`element id ${game.pile.id} is already resident`));
+  });
+
+  it('refuses an adoption whose ids were adopted before, then still accepts it after an eviction', () => {
+    const game = new WorldGame({ playerCount: 2, seed: 'dupe-readopt', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    const { roomB } = buildWorld(game);
+    const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
+    game.evictSubtree(roomB.id);
+    const adopted = game.adoptSubtree(game.id, bJson);
+
+    expect(() => game.adoptSubtree(game.id, bJson)).toThrow(/already resident/);
+    game.evictSubtree(adopted.id);
+    expect(game.adoptSubtree(game.id, bJson).name).toBe('roomB');
   });
 });
 

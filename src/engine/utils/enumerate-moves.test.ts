@@ -709,3 +709,31 @@ describe('numberInputValues (#689)', () => {
     expect(values({ min: 0, max: 1e12, integer: true })).toEqual({ unlistable: expect.any(String) });
   });
 });
+
+class PickValidateGame extends Game<PickValidateGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    const board = this.create(Space<PickValidateGame>, 'board');
+    board.create(Piece<PickValidateGame>, 'token-a');
+    board.create(Piece<PickValidateGame>, 'token-b');
+    this.registerActions(
+      Action.create<PickValidateGame>('number')
+        .chooseFrom('n', { choices: [1, 2, 3], validate: (v) => v !== 2 || 'not 2' })
+        .execute(() => ({ success: true })),
+      Action.create<PickValidateGame>('token')
+        .chooseElement('target', { elementClass: Piece, validate: (el) => el.name !== 'token-b' || 'not b' })
+        .execute(() => ({ success: true })),
+    );
+    this.setFlow({ root: loop({ maxIterations: 10, do: eachPlayer({ do: actionStep({ actions: ['number', 'token'] }) }) }) });
+  }
+}
+
+describe("enumeration honours a pick's own validate (#768)", () => {
+  it('lists no move a choice or element pick validate refuses', () => {
+    const game = new PickValidateGame({ playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'pick-validate' });
+    game.startFlow();
+    const moves = enumerateLegalMoves(game, 1);
+    expect(moves.filter((m) => m.action === 'number').map((m) => m.args.n)).toEqual([1, 3]);
+    expect(moves.filter((m) => m.action === 'token').map((m) => (m.args.target as Piece).name)).toEqual(['token-a']);
+  });
+});

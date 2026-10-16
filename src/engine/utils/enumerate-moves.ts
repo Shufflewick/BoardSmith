@@ -245,8 +245,10 @@ function enumerateGatedSelections(
   // never called it — so a bot enumerated moves the engine then rejected, and
   // the pump halted on the rejection with the round never closing for any
   // seat. Every move handed back must be one `performAction` would accept.
+  // A pick's own `validate` refuses a submission the same way (#768).
+  const gated = !!actionDef.validate || actionDef.selections.some((s) => s.validate);
   const accepts = (args: Record<string, unknown>) =>
-    !actionDef.validate
+    !gated
     || executor.validateAction(actionDef, player, argsCallbacksSee(actionDef, args), { followUp }).valid;
   try {
     return enumerateSelections(game, actionDef, player, start, { left: MAX_MULTISELECT_COMBINATIONS }).filter(accepts);

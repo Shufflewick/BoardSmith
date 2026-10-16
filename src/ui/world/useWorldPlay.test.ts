@@ -9,7 +9,8 @@
  * finding out.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { nextTick, ref, shallowRef } from 'vue';
+import { effectScope, nextTick, ref, shallowRef } from 'vue';
+import { flushPromises } from '@vue/test-utils';
 import { useWorldPlay } from './useWorldPlay.js';
 import type { WorldHost } from './useWorldHost.js';
 import type { WorldActionOffer, WorldNarration, WorldPlayer, WorldPhase } from './worldProtocol.js';
@@ -207,6 +208,23 @@ describe('re-asking one pick once something is bound (ShufflewickPub #378)', () 
     const asked = play(host).fetchPickChoices('deploy', 'crew', 4, { ship: 'dory' });
     host.phase.value = 'lost';
     expect((await asked).error).toMatch(/This world did not offer "deploy" to this seat/);
+  });
+
+  it('#749: stops waiting for offers when the owner unmounts, so the wait does not outlive the shell', async () => {
+    const host = fakeHost();
+    host.offersPending.value = true;
+    const scope = effectScope();
+    const seat = scope.run(() => play(host))!;
+    let answered = false;
+    void seat.fetchPickChoices('deploy', 'ship', 4, {}).then(() => { answered = true; });
+    await nextTick();
+
+    scope.stop();
+    host.actions.value = [DEPLOY];
+    host.offersPending.value = false;
+    await flushPromises();
+
+    expect(answered).toBe(false);
   });
 
   it('costs NO round trip while nothing is bound, which is most picks', async () => {
