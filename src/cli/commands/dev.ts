@@ -354,7 +354,7 @@ function normalizeColorPalette(
 /**
  * D16/DEVHOST-04: the dev `color` player option, always offered, resolved as
  * production does: the published manifest carries only `boardsmith.json`'s
- * `colorPalette`, else the lobby offers the engine palette (#814). A palette a
+ * `colorPalette`, else players are seated in the engine palette (#814). A palette a
  * game declares in code is never published, so one that differs is refused
  * here rather than shown in dev and missing live. Its choices also seed each
  * seat's colour in MultiplayerHost, so the option and the seats always agree.
@@ -368,7 +368,7 @@ export function resolveColorOption(
   for (const [where, palette] of Object.entries(codeColorPalettes(gameDefinition))) {
     if (palette && !samePalette(normalizeColorPalette(palette), option.choices)) {
       throw new Error(
-        `Your gameDefinition declares ${where} in code, but the live lobby only offers ${source} ` +
+        `Your gameDefinition declares ${where} in code, but the live lobby uses ${source} ` +
           `(${option.choices.map((c) => c.label).join(', ')}), so dev would show colours players never get. ` +
           `Declare the palette in boardsmith.json's "colorPalette", or remove ${where} from your gameDefinition.`,
       );
@@ -380,7 +380,7 @@ export function resolveColorOption(
 /** The colour lists a game declares in code, by where it declares them. */
 function codeColorPalettes(gameDefinition: Pick<GameDefinition, 'playerOptions' | 'colorPalette'>) {
   const declared = gameDefinition.playerOptions?.color;
-  // A `color` option that is not a colour list can never match, so it is refused too.
+  // A `color` option that is not a colour list (or has no choices) can never match, so it is refused too.
   const choices = declared?.type === 'color' ? declared.choices : undefined;
   return { 'playerOptions.color': declared && (choices ?? []), colorPalette: gameDefinition.colorPalette };
 }

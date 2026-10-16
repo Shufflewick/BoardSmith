@@ -14,20 +14,8 @@
  * };
  * ```
  *
- * @example Custom colors
- * ```typescript
- * import { createColorOption } from 'boardsmith/session';
- *
- * export const gameDefinition = {
- *   // ...
- *   playerOptions: {
- *     color: createColorOption([
- *       { value: '#ff0000', label: 'Red' },
- *       { value: '#00ff00', label: 'Green' },
- *     ]),
- *   },
- * };
- * ```
+ * Custom colours belong in boardsmith.json's `colorPalette`: that is the list the
+ * live lobby uses, and `boardsmith dev` refuses a code-declared list that differs (#814).
  */
 
 import { DEFAULT_COLOR_PALETTE, DEFAULT_COLOR_LABELS } from '../engine/element/game.js';
@@ -63,15 +51,8 @@ export interface ColorOptionDefinition {
  * }
  * ```
  *
- * @example Custom colors
- * ```typescript
- * playerOptions: {
- *   color: createColorOption([
- *     { value: '#ff0000', label: 'Fire' },
- *     { value: '#0000ff', label: 'Ice' },
- *   ], 'Team Color'),
- * }
- * ```
+ * A custom `colors` list must equal boardsmith.json's `colorPalette`, the list the
+ * live lobby uses; `boardsmith dev` refuses one that differs (#814).
  */
 export function createColorOption(
   colors?: readonly ColorChoice[],
