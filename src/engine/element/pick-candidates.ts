@@ -21,7 +21,8 @@
  * time a value reaches this file.
  */
 import { isDevThrowEnabled } from '../../utils/dev.js';
-import { isElement } from './game-element.js';
+import { isElement, type GameElement } from './game-element.js';
+import { placeholderIdsFor } from './seat-placeholders.js';
 import { labelOfValue } from '../action/choice-matching.js';
 import type { ElementRef } from '../../types/protocol.js';
 import type {
@@ -86,10 +87,16 @@ export function formatChoiceCandidates(
   selection: ChoiceSelection,
   ctx: CandidateContext,
   warnings: WarningEntry[],
+  live: Game,
 ): ChoiceWithRefs[] {
+  const sight = seatSight(candidates.map((c) => c.value), ctx, live);
   return candidates.map(({ value, label, disabled }) => {
-    const display = label ?? (selection.display ? selection.display(value) : labelOfValue(value));
-    const choice: ChoiceWithRefs = { value, display };
+    const neutral = sight.neutralLabel(value);
+    const display = label ?? (selection.display ? selection.display(value) : neutral ?? labelOfValue(value));
+    const choice: ChoiceWithRefs = {
+      value: neutral === undefined ? value : { id: sight.idOf(value as GameElement), className: (value as GameElement).constructor.name },
+      display,
+    };
 
     if (selection.boardRefs) {
       try {
@@ -122,14 +129,16 @@ export function formatElementCandidates(
   selection: ElementSelection | ElementsSelection,
   ctx: CandidateContext,
   warnings: WarningEntry[],
+  live: Game,
 ): ValidElement[] {
   const elements = candidates.map(({ value }) => value) as ElementLike[];
-  const labels = labelElements(elements, selection, ctx, warnings);
+  const sight = seatSight(elements, ctx, live);
+  const labels = labelElements(elements, selection, ctx, warnings, sight);
 
   return candidates.map(({ value: elementRaw, disabled }, index) => {
     const element = elementRaw as ElementLike;
-    const validElem: ValidElement = { id: element.id, display: labels[index]! };
-    validElem.refs = [{ ref: refFor(element, selection, ctx, warnings), role: 'highlight' }];
+    const validElem: ValidElement = { id: sight.idOf(element), display: labels[index]! };
+    validElem.refs = [{ ref: refFor(element, selection, ctx, warnings, sight), role: 'highlight' }];
     if (disabled !== false) validElem.disabled = disabled;
     return validElem;
   });
@@ -150,10 +159,11 @@ export function formatRepeatCandidates(
   selection: ChoiceSelection | ElementSelection | ElementsSelection,
   ctx: CandidateContext,
   warnings: WarningEntry[],
+  live: Game,
 ): ChoiceWithRefs[] {
-  if (selection.type === 'choice') return formatChoiceCandidates(candidates, selection, ctx, warnings);
-  const live = candidates.filter((c) => isElement(c.value));
-  return formatElementCandidates(live, selection, ctx, warnings).map(({ id, display, refs, disabled }) => {
+  if (selection.type === 'choice') return formatChoiceCandidates(candidates, selection, ctx, warnings, live);
+  const elements = candidates.filter((c) => isElement(c.value));
+  return formatElementCandidates(elements, selection, ctx, warnings, live).map(({ id, display, refs, disabled }) => {
     const choice: ChoiceWithRefs = { value: id, display: display!, refs };
     if (disabled !== undefined) choice.disabled = disabled;
     return choice;
@@ -162,6 +172,38 @@ export function formatRepeatCandidates(
 
 /** The little of an element these formatters read. */
 type ElementLike = { id: number; name?: string; notation?: string };
+
+/** How the asking seat's board shows each candidate. */
+interface SeatSight {
+  /** The id the seat's board carries for this element. */
+  idOf(element: ElementLike): number;
+  /** "Card #1" for an element the seat cannot see, else undefined. */
+  neutralLabel(value: unknown): string | undefined;
+}
+
+/**
+ * A candidate the seat cannot see goes out as its board shows it (#715): by
+ * the placeholder id its view carries, under a neutral label, so highlighting
+ * matches the board and the real id and name never leave the server. The view
+ * is projected only when some candidate is hidden, from the LIVE game: a
+ * world's callbacks read a projection that refuses the flag a projection sets.
+ */
+function seatSight(values: readonly unknown[], ctx: CandidateContext, live: Game): SeatSight {
+  const hidden = values.filter((v): v is GameElement => isElement(v) && !v.isVisibleTo(ctx.player.seat));
+  if (hidden.length === 0) return { idOf: (element) => element.id, neutralLabel: () => undefined };
+
+  const placeholders = placeholderIdsFor(live, ctx.player.seat);
+  const labels = new Map<unknown, string>();
+  const perClass = new Map<string, number>();
+  for (const element of hidden) {
+    const className = element.constructor.name;
+    const index = (perClass.get(className) ?? 0) + 1;
+    perClass.set(className, index);
+    labels.set(element, `${className} #${index}`);
+  }
+  // An individually hidden element keeps its real id in the view, so it has no placeholder.
+  return { idOf: (element) => placeholders.get(element.id) ?? element.id, neutralLabel: (value) => labels.get(value) };
+}
 
 /**
  * One label per element, disambiguating duplicates against their siblings.
@@ -176,6 +218,7 @@ function labelElements(
   selection: ElementSelection | ElementsSelection,
   ctx: CandidateContext,
   warnings: WarningEntry[],
+  sight: SeatSight,
 ): string[] {
   const display = selection.display as
     | ((element: never, context: CandidateContext, all: never[]) => string)
@@ -191,18 +234,21 @@ function labelElements(
           message: sanitizeCallbackError(e, 'display(...)'),
           source: 'display(...)',
         });
-        return element.name || String(element.id);
+        return sight.neutralLabel(element) ?? (element.name || String(element.id));
       }
     });
   }
 
   const counts = new Map<string, number>();
   for (const element of elements) {
+    if (sight.neutralLabel(element) !== undefined) continue;
     const name = element.name || 'Element';
     counts.set(name, (counts.get(name) || 0) + 1);
   }
   const seen = new Map<string, number>();
   return elements.map((element) => {
+    const neutral = sight.neutralLabel(element);
+    if (neutral !== undefined) return neutral;
     const baseName = element.name || 'Element';
     if ((counts.get(baseName) || 1) === 1) {
       return element.notation || element.name || String(element.id);
@@ -219,12 +265,14 @@ function refFor(
   selection: ElementSelection | ElementsSelection,
   ctx: CandidateContext,
   warnings: WarningEntry[],
+  sight: SeatSight,
 ): ElementRef {
   const boardRef = selection.boardRef as
     | ((element: never, context: CandidateContext) => ElementRef)
     | undefined;
   if (!boardRef) {
-    return { id: element.id, ...(element.notation ? { notation: element.notation } : {}) };
+    const hidden = sight.neutralLabel(element) !== undefined;
+    return { id: sight.idOf(element), ...(element.notation && !hidden ? { notation: element.notation } : {}) };
   }
   try {
     return boardRef(element as never, ctx);
@@ -235,7 +283,7 @@ function refFor(
       message: sanitizeCallbackError(e, 'boardRef(...)'),
       source: 'boardRef(...)',
     });
-    return { id: element.id };
+    return { id: sight.idOf(element) };
   }
 }
 
@@ -264,8 +312,10 @@ export function deadEndPickMessage(options: {
   pick: string;
   /** The answers bound so far, which are what narrowed this question. */
   args: Readonly<Record<string, unknown>>;
+  /** The seat being told. An element it cannot see is described without its name (#715); with no seat, every element is. */
+  seat?: number;
 }): string {
-  const narrowedBy = describeBoundArgs(options.args);
+  const narrowedBy = describeBoundArgs(options.args, options.seat);
   // The tail is the player's next move, and it differs: an answer they gave is
   // something they can give differently, and when they have given none there is
   // nothing in this action to change.
@@ -279,22 +329,28 @@ export function deadEndPickMessage(options: {
 /** The bound answers as a player would recognize them, or `undefined` when none
  *  of them has a form worth showing (an answer nobody can read is worse than
  *  saying only that the question was narrowed). */
-function describeBoundArgs(args: Readonly<Record<string, unknown>>): string | undefined {
+function describeBoundArgs(args: Readonly<Record<string, unknown>>, seat: number | undefined): string | undefined {
   const parts: string[] = [];
   for (const [name, value] of Object.entries(args)) {
-    const described = describeBoundValue(value);
+    const described = describeBoundValue(value, seat);
     if (described !== undefined) parts.push(`${name} = ${described}`);
   }
   if (parts.length === 0) return Object.keys(args).length > 0 ? 'your earlier answers' : undefined;
   return parts.join(' and ');
 }
 
-function describeBoundValue(value: unknown): string | undefined {
-  if (isElement(value)) return `"${value.name ?? `${value.constructor.name} #${value.id}`}"`;
+/** An element as the seat may know it: by name only when it can see it (#715). */
+function describeBoundElement(element: GameElement, seat: number | undefined): string {
+  if (seat === undefined || !element.isVisibleTo(seat)) return `a hidden ${element.constructor.name}`;
+  return `"${element.name ?? `${element.constructor.name} #${element.id}`}"`;
+}
+
+function describeBoundValue(value: unknown, seat: number | undefined): string | undefined {
+  if (isElement(value)) return describeBoundElement(value, seat);
   if (typeof value === 'string') return `"${value}"`;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   if (Array.isArray(value)) {
-    const described = value.map(describeBoundValue).filter((one): one is string => one !== undefined);
+    const described = value.map((one) => describeBoundValue(one, seat)).filter((one): one is string => one !== undefined);
     return described.length > 0 ? described.join(', ') : undefined;
   }
   return undefined;

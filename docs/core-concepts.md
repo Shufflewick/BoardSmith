@@ -227,6 +227,12 @@ never rode the wire for a placeholder. What the placeholder does carry stays
 known and unforgeable, so a search can still see that a card is in a
 particular hand without seeing what it is.
 
+**A pick offers a hidden element the way the board shows it (#715).** A
+`chooseElement` or `chooseFrom` candidate the asking seat cannot see goes out
+with the id that seat's board carries for it (a hidden zone's negative
+placeholder id) and a neutral label such as "Card #1", unless the selection
+has its own `display`. Submitting that placeholder id picks the real element.
+
 **The game ROOT redacts the same way.** Declare `static visibleAttributes` on
 your `Game` subclass and every root field outside the list is withheld from
 every seat, on the wire and on restore. Fields the ENGINE owns on the root
