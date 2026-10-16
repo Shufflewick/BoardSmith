@@ -1,6 +1,6 @@
 {
-  "revision": 201,
-  "surfaceHash": "aec787c2d7948d17",
+  "revision": 202,
+  "surfaceHash": "f69ab10d1603172a",
   "payloadHash": "e82681be0c7e858e",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1551,6 +1551,14 @@
       "payloadHash": "e82681be0c7e858e",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A seat named in a zone's hideContentsFrom (or a denied owner of an owner-only zone) is now shown anonymous placeholder children instead of every child's real id in true order (#750). Picks offering those children carry the same placeholder ids (#715)."
+    },
+    {
+      "revision": 202,
+      "date": "2026-10-16",
+      "surfaceHash": "f69ab10d1603172a",
+      "payloadHash": "e82681be0c7e858e",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Removed Game.performSerializedAction, which was unused and skipped the flow's turn check (#756)"
     }
   ]
 }

@@ -48,7 +48,7 @@ import {
   type VisibilityMode,
   type VisibilityState,
 } from './visibility.js';
-import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
+import type { ActionDefinition, ActionResult, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor, type PerformOptions } from '../action/action.js';
 import { hasActionTemp, settingsForSeat } from '../action/helpers.js';
 import type { FlowDefinition, FlowState, FlowDebugInfo } from '../flow/types.js';
@@ -2713,18 +2713,6 @@ export class Game<
     }
 
     return this._actionExecutor.executeAction(action, player, args, options);
-  }
-
-  /**
-   * Perform an action from serialized form (for network play)
-   */
-  performSerializedAction(serialized: SerializedAction): ActionResult {
-    const player = this.getPlayer(serialized.player);
-    if (!player) {
-      return { success: false, error: `Invalid player seat: ${serialized.player}. Expected 1 to ${this.players.length}.` };
-    }
-
-    return this.performAction(serialized.name, player as P, serialized.args);
   }
 
   // ============================================
