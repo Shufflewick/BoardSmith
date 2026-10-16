@@ -1092,12 +1092,13 @@ async function adopt(
 }
 
 /**
- * The child's half: an engine, its command table, and the two calls above.
+ * The child's half: an engine and its command table, behind the
+ * `WorldRunnerHandle` every caller holds.
  *
  * A factory over an object literal rather than a class, because there is no
  * state here beyond what is closed over and nothing to subclass -- and because
- * a `WorldRunnerHandle` is what every caller actually holds. The two names
- * below are the whole of the child's surface.
+ * a `WorldRunnerHandle` is what every caller actually holds. Its methods are
+ * the whole of the child's surface.
  *
  * Deliberately NOT a `WorldEngine`. It is the same operations with the
  * partitions made explicit, and collapsing the two would hide exactly the
