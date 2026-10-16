@@ -32,6 +32,7 @@ describe('focused game verification (#951)', () => {
     });
     linkGameModules(project);
     initRepo(project);
+    git(project, 'remote', 'add', 'origin', 'https://github.com/Shufflewick/BoardSmith.git');
     git(project, 'add', '.gitignore', 'package.json', 'boardsmith.json', 'vite.config.ts', 'tsconfig.json', 'src/rules.ts', 'tests/existing.test.ts', 'design');
     git(project, 'commit', '-qm', 'Before the deal ticket');
     const base = git(project, 'rev-parse', 'HEAD').trim();
@@ -76,6 +77,17 @@ describe('focused game verification (#951)', () => {
       expect(review.stdout).toMatch(/authored tests/i);
       expect(review.stdout).toMatch(/mutation.*deferred|deferred.*mutation/i);
       expect(review.stdout).not.toContain('verify did all of that');
+      await fs.writeFile(join(sandbox.root, 'bin', 'agent-policy'), '#!/bin/sh\nprintf \'%s\\n\' \'{"repository":"Shufflewick/BoardSmith","closedSinceFull":5,"fullEvery":5,"fullDue":true}\'\n', { mode: 0o755 });
+      for (const args of [
+        ['verify', '--chunk', 'deal', '--selection', 'authored-selection.json'],
+        ['verify', '--check', '--chunk', 'deal'],
+        ['review-gate', 'deal'],
+        ['chunk-signoff', 'deal', '--automated', 'Fixture authored-test evidence'],
+      ]) {
+        const due = await spawnCli(args, project);
+        expect(due.code, due.stdout + due.stderr).toBe(1);
+        expect(due.stdout + due.stderr).toMatch(/five.*tickets|full.run deadline/i);
+      }
     } finally {
       vi.unstubAllEnvs();
     }
