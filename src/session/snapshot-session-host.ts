@@ -1729,18 +1729,18 @@ export class SnapshotSessionHost {
    * iteration AND immediately after the delay (RESEARCH Pitfall 1). A `finally`
    * block guarantees cleanup on every exit path (stop, game-over, error, cap).
    *
-   * Fire-and-forget: called via `void this.runDemoLoop(...)` from handleOp so
-   * the demoStart response returns immediately while the loop runs asynchronously.
+   * Fire-and-forget: handleOp starts it without awaiting, so the demoStart
+   * response returns immediately, and hands any failure to `onBackgroundError`.
    */
   private async runDemoLoop(
     allSeats: Array<{ seat: number; level?: string }>,
   ): Promise<void> {
     this.demoRunning = true;
     this.demoAbort = false;
-    this.broadcastCurrent(); // clients see isDemoRunning=true before first move
 
     let moves = 0;
     try {
+      this.broadcastCurrent(); // clients see isDemoRunning=true before first move
       while (!this.demoAbort && !this.isComplete && moves < this.MAX_DEMO_MOVES) {
         // Capture the snapshot fresh EACH iteration so a 'back' rewind (which restores
         // this.snapshot) is reflected — the re-suggest then runs from the restored
