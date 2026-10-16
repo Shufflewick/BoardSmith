@@ -1,6 +1,6 @@
 {
-  "revision": 210,
-  "surfaceHash": "72c3970831e07bc0",
+  "revision": 211,
+  "surfaceHash": "4a87ffd072485c35",
   "payloadHash": "d037431574c86546",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1623,6 +1623,14 @@
       "payloadHash": "d037431574c86546",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A multi-step pending action is refused before it runs when another seat's action or pick took one of its earlier picks off the offer between the seat's picks: onCancel runs, nothing is recorded, and the error is the pick's unavailable sentence. A pick the action's own onSelect removed, a repeating pick and a held follow-up's pick are exempt. PendingActionState and SerializedPendingActionState gain picksOnOffer and stalePicks, which saved pending states must carry through unchanged (#767)."
+    },
+    {
+      "revision": 211,
+      "date": "2026-10-16",
+      "surfaceHash": "4a87ffd072485c35",
+      "payloadHash": "d037431574c86546",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "The boardsmith entry point gains plain-data scoring tracks (monotonicTrack, uniqueTrack, counterTrack, canAddToTrack, addToTrack, incrementCounter, isTrackComplete, trackPoints, TrackState types) and functions over a plain Ability[] (addAbility, hasUnusedAbility, spendAbility, countUnusedAbilities, groupAbilities), so tracks and abilities stored on a Player survive snapshot, undo and bot clone (#779)."
     }
   ]
 }
