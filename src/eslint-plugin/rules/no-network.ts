@@ -1,5 +1,5 @@
 import type { Rule } from 'eslint';
-import { isGlobalMemberCall } from './global-receiver.js';
+import { forEachGlobalReference } from './global-receiver.js';
 
 /**
  * Disallows network access in game rules code
@@ -7,6 +7,7 @@ import { isGlobalMemberCall } from './global-receiver.js';
  * - XMLHttpRequest
  * - WebSocket
  * - importing/require-ing networking modules (http, https, net, dgram, http2, tls, dns)
+ * - import() of a computed module name
  */
 const rule: Rule.RuleModule = {
   meta: {
@@ -21,6 +22,8 @@ const rule: Rule.RuleModule = {
       noWebSocket: 'Network access via WebSocket is not allowed in game rules.',
       noNetworkModule:
         "Importing the '{{module}}' module is not allowed in game rules. Games cannot perform network I/O.",
+      noDynamicImport:
+        'import() with a computed module name is not allowed in game rules, because nothing can check what it loads. Import the module by a fixed name.',
     },
     schema: [],
   },
@@ -39,31 +42,21 @@ const rule: Rule.RuleModule = {
       }
     }
 
+    const forbiddenGlobals: Record<string, string> = {
+      fetch: 'noFetch',
+      XMLHttpRequest: 'noXHR',
+      WebSocket: 'noWebSocket',
+    };
+
     return {
+      'Program:exit'() {
+        forEachGlobalReference(context.sourceCode, new Set(Object.keys(forbiddenGlobals)), (name, node) => {
+          context.report({ node, messageId: forbiddenGlobals[name] });
+        });
+      },
+
+      // Check require('http') and friends
       CallExpression(node) {
-        // Check for fetch() calls
-        if (node.callee.type === 'Identifier' && node.callee.name === 'fetch') {
-          context.report({
-            node,
-            messageId: 'noFetch',
-          });
-        }
-
-        // Check for window.fetch(), globalThis.fetch(), etc. — but ONLY on a
-        // real global receiver, so a game's own `deck.fetch()` is untouched.
-        if (
-          node.callee.type === 'MemberExpression' &&
-          node.callee.property.type === 'Identifier' &&
-          node.callee.property.name === 'fetch' &&
-          isGlobalMemberCall(node.callee)
-        ) {
-          context.report({
-            node,
-            messageId: 'noFetch',
-          });
-        }
-
-        // Check require('http') and friends
         if (
           node.callee.type === 'Identifier' &&
           node.callee.name === 'require' &&
@@ -72,24 +65,6 @@ const rule: Rule.RuleModule = {
           typeof node.arguments[0].value === 'string'
         ) {
           checkModuleName(node.arguments[0].value, node);
-        }
-      },
-
-      // Check for new XMLHttpRequest() or new WebSocket()
-      NewExpression(node) {
-        if (node.callee.type === 'Identifier') {
-          if (node.callee.name === 'XMLHttpRequest') {
-            context.report({
-              node,
-              messageId: 'noXHR',
-            });
-          }
-          if (node.callee.name === 'WebSocket') {
-            context.report({
-              node,
-              messageId: 'noWebSocket',
-            });
-          }
         }
       },
 
@@ -102,8 +77,13 @@ const rule: Rule.RuleModule = {
 
       // Check dynamic import('node:net')
       ImportExpression(node) {
-        if (node.source.type === 'Literal' && typeof node.source.value === 'string') {
-          checkModuleName(node.source.value, node);
+        const source = node.source;
+        if (source.type === 'Literal' && typeof source.value === 'string') {
+          checkModuleName(source.value, node);
+        } else if (source.type === 'TemplateLiteral' && source.expressions.length === 0) {
+          checkModuleName(source.quasis[0].value.cooked ?? '', node);
+        } else {
+          context.report({ node, messageId: 'noDynamicImport' });
         }
       },
     };
