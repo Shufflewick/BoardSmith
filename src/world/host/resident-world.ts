@@ -105,6 +105,10 @@ export function worldSeatPlayer(seat: number): string {
   return `seat-${seat}`;
 }
 
+/** How long a refused scheduled event waits before it is tried again (#721):
+ *  the platform's retry floor, so dev retries at the pace production does. */
+const RETRY_WAIT_MS = 40_000;
+
 /**
  * THE CHAIR A DISPATCH FINALIZED THE VACANCY OF, for the checkpoint (#278).
  *
@@ -303,6 +307,9 @@ export class ResidentWorld {
    */
   #revision = 0;
   #closed = false;
+  /** When overdue work may next be tried, set by a batch an event refused in
+   *  and cleared by one none did. Read by every re-arm, so they all agree. */
+  #retryAt: number | undefined;
   /** The world lock. Every entry point queues behind it. */
   #lock: Promise<unknown> = Promise.resolve();
 
@@ -1098,11 +1105,12 @@ export class ResidentWorld {
    *
    * `rearmAt` is the library's answer, so every host arms for the same instant:
    * the earliest pending event, or now when something is already overdue --
-   * overload degrades to latency, never refusal.
+   * overload degrades to latency, never refusal -- or `#retryAt` when the last
+   * batch saw an event refuse, so a broken handler is not retried at once.
    */
   rearm(): void {
     if (this.#closed) return;
-    const at = rearmAt(this.#store.pendingEvents(), this.now());
+    const at = rearmAt(this.#store.pendingEvents(), this.now(), this.#retryAt);
     this.#clock.arm(at === null ? null : at - this.now(), () => {
       void this.run(async () => {
         await this.#drain();
@@ -1150,6 +1158,7 @@ export class ResidentWorld {
    */
   async #drainBatch(now: number): Promise<number> {
     let ran = 0;
+    this.#retryAt = undefined;
     // WHAT THIS BATCH HAS ALREADY TAKEN. An event that REFUSED stays queued by
     // design, and a re-read would hand back the same refusal until the bound
     // ran out; an event that ran is gone from the queue and is here only
@@ -1205,6 +1214,7 @@ export class ResidentWorld {
       return { ended: this.completed, displaced };
     });
     if (outcome.kind === "refused") {
+      this.#retryAt = this.now() + RETRY_WAIT_MS;
       // A DUE EVENT THAT REFUSED IS SAID OUT LOUD AND LEFT QUEUED, at the
       // occurrence that refused -- which is where the last occurrence that ran
       // already re-armed it, so there is nothing more to write. Its effects
