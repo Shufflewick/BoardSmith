@@ -542,6 +542,38 @@ describe("#798 — a read answers only for an offered action", () => {
     ).rejects.toMatchObject(notOffered);
   });
 
+  /** Offered only to seat 1, and only once round zero has loaded a ship. */
+  const captains = worldAction<FleetGame>("captains")
+    .needs(() => [FLEET])
+    .condition({ "seat 1 with a ship": ({ game, player }) => player.seat === 1 && game.all(Ship).length > 0 })
+    .chooseFrom("ship", { choices: ({ game }) => game.all(Ship).map((ship) => ship.name!) })
+    .quote(() => ["captain's price"])
+    .execute(() => {});
+
+  it("decides by the asking seat, against what round zero loaded", async () => {
+    // COLD, so the fleet arrives only through the read's own round zero.
+    const engine = new BoardSmithWorldEngine({
+      game: newGame(),
+      seats: new Map([["player-a", 1], ["player-b", 2]]),
+      store: new MapStore(genesis()),
+      actions: [captains],
+      view: () => [FLEET],
+    });
+    const refused = { code: "unknown-command", message: expect.stringContaining('"captains"') as unknown };
+
+    const pick = await engine.resolvePick("player-a", "captains", "ship", {}, STAMP);
+    const quote = await engine.resolveQuote("player-a", "captains", { ship: "dory" }, STAMP);
+
+    expect(pick.choices?.map((choice) => choice.value)).toEqual(["dory", "skiff"]);
+    expect(quote).toEqual(["captain's price"]);
+    await expect(
+      engine.resolvePick("player-b", "captains", "ship", {}, STAMP),
+    ).rejects.toMatchObject(refused);
+    await expect(
+      engine.resolveQuote("player-b", "captains", { ship: "dory" }, STAMP),
+    ).rejects.toMatchObject(refused);
+  });
+
   it("still answers a disabled action, which the offer shows greyed with its picks", async () => {
     const engine = await engineFor(greyed);
 
