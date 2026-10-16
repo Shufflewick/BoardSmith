@@ -586,7 +586,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    * Get all direct children
    */
   get children(): ElementCollection<GameElement> {
-    return reachAll(this, new ElementCollection(...this._t.children));
+    return reachAll(this, ElementCollection.from(this._t.children) as ElementCollection<GameElement>);
   }
 
   /**

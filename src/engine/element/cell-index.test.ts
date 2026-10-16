@@ -67,7 +67,7 @@ class CellGame extends Game<CellGame, Player> {
 
 /** What a search of the grid finds, as `first` always answered. */
 function searched<T extends Square | Hex>(grid: Board | Hexes, cellClass: new (...args: never[]) => T, coordinates: object): T | undefined {
-  return new ElementCollection(...grid._t.children).first(cellClass as never, coordinates as never) as T | undefined;
+  return ElementCollection.from(grid._t.children).first(cellClass as never, coordinates as never) as T | undefined;
 }
 
 afterEach(() => {
