@@ -282,6 +282,9 @@ function onFrameLoad(): void {
 }
 
 function onWindowMessage(event: MessageEvent): void {
+  // Another site can frame or open this page; only our own game frame may drive it (#719).
+  const frame = frameRef.value?.contentWindow;
+  if (!frame || event.source !== frame) return;
   const data = event.data as { source?: string; type?: string; [key: string]: unknown } | undefined;
   if (!data || data.source !== WORLD_UI_SOURCE) return;
   if (data.type === 'world_ready') {

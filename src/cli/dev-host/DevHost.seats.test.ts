@@ -557,9 +557,10 @@ describe('DevHost — seat switcher', () => {
 // server_request (#525). It is a host-chrome op, like `debug:restart`: the host
 // has no handler for it, so forwarding it switched nothing.
 describe('DevHost — debug:switch-seat from the Debug panel (#525)', () => {
-  function postSwitch(seat: number): void {
+  function postSwitch(wrapper: VueWrapper, seat: number): void {
     window.dispatchEvent(
       new MessageEvent('message', {
+        source: (wrapper.find('iframe').element as HTMLIFrameElement).contentWindow,
         data: { source: 'shufflewick-game', type: 'server_request', requestId: 'req-s', op: 'debug:switch-seat', payload: { seat } },
       }),
     );
@@ -571,7 +572,7 @@ describe('DevHost — debug:switch-seat from the Debug panel (#525)', () => {
     const ws = mockWsInstance!;
     ws.send.mockClear();
 
-    postSwitch(3);
+    postSwitch(wrapper, 3);
     await wrapper.vm.$nextTick();
 
     const frames = ws.send.mock.calls.map((c) => JSON.parse(c[0] as string));

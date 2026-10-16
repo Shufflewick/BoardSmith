@@ -19,7 +19,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mkdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { createServer as createViteServer, type ViteDevServer } from 'vite';
+import { createServer as createViteServer, type InlineConfig, type ViteDevServer } from 'vite';
 import { WebSocket as WsClient } from 'ws';
 
 import { answerAlive, claimWebSocketPath, reloadOnRulesEdit, serveVite } from './dev-server.js';
@@ -63,13 +63,13 @@ function connect(port: number, headers?: Record<string, string>): Promise<string
 }
 
 /** Serve an empty project through `serveVite`, with one claimed socket path. */
-async function serveEmpty(onConnection: Parameters<typeof claimWebSocketPath>[1]) {
+async function serveEmpty(onConnection: Parameters<typeof claimWebSocketPath>[1], server: InlineConfig['server'] = {}) {
   dir = tempTree('bs-dev-server-');
   writeFileSync(join(dir, 'index.html'), '<!doctype html><title>t</title>');
   const claimed = claimWebSocketPath(TEST_WS_PATH, onConnection);
   const port = await freePort();
   const served = await serveVite({
-    config: { root: dir, configFile: false, logLevel: 'silent' },
+    config: { root: dir, configFile: false, logLevel: 'silent', server },
     port,
     host: '127.0.0.1',
     sockets: [claimed],
@@ -125,6 +125,23 @@ describe('a dev host socket answers only pages it served (#719)', () => {
   it('refuses an upgrade from another site\'s page', async () => {
     const { port } = await serveEmpty((socket) => socket.send('ours'));
     await expect(connect(port, { Origin: 'http://evil.example' })).rejects.toThrow(/socket hang up/);
+  }, 30000);
+
+  it('refuses a page whose origin is opaque', async () => {
+    const { port } = await serveEmpty((socket) => socket.send('ours'));
+    await expect(connect(port, { Origin: 'null' })).rejects.toThrow(/socket hang up/);
+  }, 30000);
+
+  it('refuses a host name Vite would refuse, which is what a DNS-rebound page connects as', async () => {
+    const { port } = await serveEmpty((socket) => socket.send('ours'));
+    const rebound = `rebind.evil:${port}`;
+    await expect(connect(port, { Host: rebound, Origin: `http://${rebound}` })).rejects.toThrow(/socket hang up/);
+  }, 30000);
+
+  it('accepts a host name the project lists in server.allowedHosts', async () => {
+    const { port } = await serveEmpty((socket) => socket.send('ours'), { allowedHosts: ['.table.example'] });
+    const named = `den.table.example:${port}`;
+    expect(await connect(port, { Host: named, Origin: `http://${named}` })).toBe('ours');
   }, 30000);
 
   it('accepts a page whose origin is the host it connected to, as a --lan browser\'s is', async () => {

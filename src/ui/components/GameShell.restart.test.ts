@@ -132,7 +132,7 @@ describe('leaving history when what it belongs to goes away (#589)', () => {
     expect(wrapper.find('.time-travel-banner').exists()).toBe(true);
 
     window.dispatchEvent(new MessageEvent('message', {
-    source: window.parent,
+      source: window.parent,
       data: { source: 'shufflewick', type: 'dev-debug-available', available: false },
     }));
     await flushPromises();

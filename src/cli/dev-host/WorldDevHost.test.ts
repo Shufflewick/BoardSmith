@@ -387,6 +387,7 @@ describe('#167: the bar bridges the socket to the world frame and back', () => {
     const wrapper = await open();
     window.dispatchEvent(
       new MessageEvent('message', {
+        source: document.querySelector('iframe')!.contentWindow,
         data: {
           source: WORLD_UI_SOURCE,
           type: 'world_command',
@@ -409,11 +410,25 @@ describe('#167: the bar bridges the socket to the world frame and back', () => {
     const wrapper = await open();
     window.dispatchEvent(
       new MessageEvent('message', {
+        source: document.querySelector('iframe')!.contentWindow,
         data: { source: 'shufflewick', type: 'world_command', requestId: 'x', command: 'say' },
       }),
     );
     await wrapper.vm.$nextTick();
     expect(frames('command')).toEqual([]);
+    wrapper.unmount();
+  });
+
+  it('ignores an action from a window other than the world frame (#719)', async () => {
+    const wrapper = await open();
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: { postMessage() {} } as unknown as MessageEventSource,
+        data: { source: WORLD_UI_SOURCE, type: 'world_command', requestId: 'wc-x', action: 'say', args: {} },
+      }),
+    );
+    await wrapper.vm.$nextTick();
+    expect(frames('action')).toEqual([]);
     wrapper.unmount();
   });
 
@@ -459,6 +474,7 @@ describe('#227: a dependent pick is re-asked THROUGH this bar, in both direction
   const askFromFrame = (overrides: Record<string, unknown> = {}): void => {
     window.dispatchEvent(
       new MessageEvent('message', {
+        source: document.querySelector('iframe')!.contentWindow,
         data: {
           source: WORLD_UI_SOURCE,
           type: 'world_pick',
@@ -591,7 +607,7 @@ describe('#245, #250: offers survive the handshake in either order, and retire w
    */
   const ready = (): void => {
     window.dispatchEvent(
-      new MessageEvent('message', { data: { source: WORLD_UI_SOURCE, type: 'world_ready' } }),
+      new MessageEvent('message', { source: document.querySelector('iframe')!.contentWindow, data: { source: WORLD_UI_SOURCE, type: 'world_ready' } }),
     );
   };
 
