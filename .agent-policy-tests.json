@@ -1,0 +1,22 @@
+{
+  "ticket": "Shufflewick/BoardSmith#767",
+  "base": "e7da3d40e99eb989548d089002a4967d71fda62d",
+  "tests": [
+    {
+      "file": "src/session/pending-action-stale-pick.test.ts",
+      "names": [
+        "GameRunner refuses a pending action once another seat's action took an earlier pick, and fires onCancel",
+        "GameRunner completes a pending action whose own onSelect took its pick off the offer",
+        "GameRunner completes a pending action whose own onSelect took its pick off the offer, when another seat acted in between",
+        "GameRunner completes a pending action whose own onSelect took a chooseFrom pick off the offer, when another seat acted in between",
+        "GameRunner refuses a pending action once another seat's pick took its chooseFrom pick off the offer",
+        "GameRunner keeps a pick another seat took marked across later picks, and refuses the last one",
+        "GameRunner refuses a pending action once another seat's action took its element pick off the offer without moving it",
+        "GameRunner does not re-check a pick a held follow-up answered, when another seat's action took it",
+        "GameRunner completes a pending action when another seat's action left its picks on offer",
+        "stateless selectionStep op refuses a pending action once another seat's action took an earlier pick",
+        "stateless selectionStep op keeps a pick another seat took marked through the pending state it returns, and refuses the last pick"
+      ]
+    }
+  ]
+}

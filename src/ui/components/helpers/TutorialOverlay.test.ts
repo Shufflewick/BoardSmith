@@ -404,4 +404,35 @@ describe('TutorialOverlay', () => {
     // Ring should render; bubble may or may not (empty text guard)
     expect(wrapper.find('.bsg-tutorial-ring').exists()).toBe(true);
   });
+
+  // #748: the overlay is always mounted, so a push that carries no tutorial
+  // must not re-measure the board (getBoundingClientRect forces a layout).
+  it('does not measure the board when a push without a tutorial arrives', async () => {
+    const { wrapper, fixture, gameState } = mountOverlay(undefined);
+    await flushPromises();
+    const measureBoard = vi.spyOn(fixture, 'getBoundingClientRect');
+
+    gameState.value = { state: { tutorial: { stepId: 'step1' } } };
+    await flushPromises();
+
+    expect(measureBoard).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+});
+
+describe('TutorialOverlay unmount (#749)', () => {
+  it('removes the scroll listener from the region it added it to, even when that region no longer matches', async () => {
+    const { wrapper, fixture } = mountOverlay(
+      [{ text: 'Move here', target: { kind: 'element', ref: { notation: 'd4' } } }],
+      '<div data-bs-el-notation="d4"></div>',
+    );
+    await nextTick();
+    await nextTick();
+    const removeSpy = vi.spyOn(fixture, 'removeEventListener');
+    // The region stops matching `.boardregion` before unmount, so a re-query cannot find it.
+    fixture.classList.remove('boardregion');
+    wrapper.unmount();
+    expect(removeSpy).toHaveBeenCalledWith('scroll', expect.any(Function));
+    fixture.remove();
+  });
 });

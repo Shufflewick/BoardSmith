@@ -218,9 +218,10 @@ npx boardsmith chunk-signoff <slug> --by "<designer's name>" --observed 1,2,3
 missing (that chunk goes to `build/revise.md` instead), when `--by` names the run rather than a
 person, or when the chunk is not `built`. Every `chunk-signoff` (designer, waiver or automated) also
 refuses unless the commit checked out, on a clean tree, passed `boardsmith verify` with this chunk's
-change measured: commit what the gate wrote (`QUESTIONS.md`, the rulings), run
-`npx boardsmith verify --chunk <slug>` (`state-machine.md` "Git Protocol"), then sign off. On
-success it records who, when and which items, writes
+change measured under its verification policy: commit what the gate wrote (`QUESTIONS.md`, the rulings), run
+`npx boardsmith verify --chunk <slug>` (`state-machine.md` "Git Protocol"), then sign off. For
+an explicitly opted-in project, use `state-machine.md` "Focused Verification Policy" to select
+the focused receipt command. On success it records who, when and which items, writes
 `Status: verified` to CHUNK.md last, then mirrors SKETCH.md's derived pointer (`state-machine.md`
 "Write Order"). Never write the `Status:` line or the `## Sign-off` block by hand.
 

@@ -74,22 +74,22 @@ const RANK_NAMES: Record<string, string> = {
 /**
  * Get the Unicode symbol for a suit.
  *
- * @param suit - Suit abbreviation ('H', 'D', 'C', 'S')
+ * @param suit - Suit abbreviation ('H', 'D', 'C', 'S'), either case
  * @returns Unicode suit symbol (♥, ♦, ♣, ♠) or the input if not recognized
  */
 export function getSuitSymbol(suit: string): string {
-  return SUIT_SYMBOLS[suit] ?? suit;
+  return SUIT_SYMBOLS[suit.toUpperCase()] ?? suit;
 }
 
 /**
  * Get the color for a suit.
  * Hearts and Diamonds are red, Clubs and Spades are dark.
  *
- * @param suit - Suit abbreviation ('H', 'D', 'C', 'S')
+ * @param suit - Suit abbreviation ('H', 'D', 'C', 'S'), either case
  * @returns CSS color string
  */
 export function getSuitColor(suit: string): string {
-  return SUIT_COLORS[suit] ?? '#2c3e50';
+  return SUIT_COLORS[suit.toUpperCase()] ?? '#2c3e50';
 }
 
 /**

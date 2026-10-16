@@ -159,3 +159,14 @@ export class MoveListTooLargeError extends Error {
     this.name = 'MoveListTooLargeError';
   }
 }
+
+/**
+ * A stored partition proves the world's id allocation stamp stale (#224). Its
+ * own class so the world engine recognises it by type, not by its sentence (#793).
+ */
+export class StaleAllocationStampError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StaleAllocationStampError';
+  }
+}

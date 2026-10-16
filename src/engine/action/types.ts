@@ -197,6 +197,18 @@ export interface PendingActionState {
    * own picks ended (allowed), and `GameRunner.notePickTaken` writes it (#493).
    */
   conditionHeld?: boolean;
+  /**
+   * This seat's own picks that were still on offer right after its latest pick
+   * that left the action open. `GameRunner.notePickTaken` writes it and
+   * `GameRunner.markStalePicks` reads it (#767).
+   */
+  picksOnOffer?: string[];
+  /**
+   * The picks another action took since this seat made them, which
+   * `executePendingAction` checks are still on offer before running.
+   * `GameRunner.markStalePicks` writes it (#767).
+   */
+  stalePicks?: string[];
 }
 
 /**
@@ -693,8 +705,8 @@ export interface ActionDefinition {
    *
    * Runs AFTER `condition` and after every selection validates, and ONLY at
    * submit time — it never affects whether the action is offered (that is
-   * `condition`'s job, which is also evaluated with EMPTY args at availability
-   * time). Set via `.validate(fn)`.
+   * `condition`'s job, which never sees picks in its args). Set via
+   * `.validate(fn)`.
    */
   validate?: (args: Record<string, unknown>, context: ActionContext) => boolean | string;
   /** The effect to execute */
