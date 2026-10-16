@@ -7,7 +7,7 @@
  * actually receives, through both projection paths.
  */
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Space, actionTempState } from '../index.js';
+import { Game, Player, Space, actionTempState, type ElementJSON } from '../index.js';
 
 class TempGame extends Game<TempGame, Player> {
   board!: Space<TempGame>;
@@ -63,5 +63,19 @@ describe('actionTempState: who receives it', () => {
 
     expect(game.toJSONForPlayer(2).settings.round).toBe(3);
     expect(game.toJSONForPlayer(null).settings.round).toBe(3);
+  });
+
+  it('drops another seat\'s value that a playerView hook puts back', () => {
+    class Hooked extends TempGame {
+      static override playerView = (state: ElementJSON): ElementJSON => ({
+        ...state,
+        settings: { ...(state as { settings: Record<string, unknown> }).settings, _actionTemp_1_peek_cardId: 'AS-of-spades' },
+      } as ElementJSON);
+    }
+    const game = new Hooked({ playerCount: 3, seed: 'action-temp-audience', elementIdKey: '00000000000000a2' });
+    game.setupBoard();
+
+    expect(tempValues(game.toJSONForPlayer(2).settings)).toEqual([]);
+    expect(tempValues(game.toJSONForPlayer(null).settings)).toEqual([]);
   });
 });

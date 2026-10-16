@@ -28,6 +28,7 @@ import {
   Piece,
   Player,
   Space,
+  actionTempState,
   type ElementJSON,
   type GameOptions,
   type VisibilityMode,
@@ -388,6 +389,14 @@ describe("#408/#411/#413 -- which seats hold the same projection", () => {
     }
     const game = new Rewriting({ playerCount: SEATS, seed: 'square' });
     game.create(Stall, 'square', { goods: 9 });
+    const { predicted, observed } = grouping(game);
+    expect(observed).toEqual([[1], [2]]);
+    expect(predicted).toBe(null);
+  });
+
+  it("refuses while a seat holds an actionTempState value (#716)", () => {
+    const game = newSquare();
+    actionTempState(game, game.getPlayer(1)!, 'peek').set('cardId', 'AS');
     const { predicted, observed } = grouping(game);
     expect(observed).toEqual([[1], [2]]);
     expect(predicted).toBe(null);

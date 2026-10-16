@@ -4774,17 +4774,12 @@ export class Game<
    *     #269), which is author code handed the seat;
    *   `static playerView`, which is author code handed the seat;
    *   any tutorial progress, which is scoped to the receiving seat (SEC-05);
+   *   any `actionTempState` value, which only its own seat receives (#716);
    *   any animation event addressed to an audience (#23), or numbered
    *     differently for two asking seats (#489).
    */
   projectionSignaturesFor(seats: readonly number[]): readonly string[] | null {
-    const GameClass = this.constructor as typeof Game;
-    if (GameClass.playerView !== undefined) return null;
-    if (this.tutorialProgress.size > 0) return null;
-    if (this._animationEvents.some((event) => event.to !== undefined)) return null;
-    // Each seat's events carry that seat's own numbers (#489), which differ
-    // between seats whenever their counters have.
-    if (this._animationEvents.some((event) => new Set(seats.map((seat) => event.seatIds?.[seat])).size > 1)) return null;
+    if (this.rootDiffersBySeat(seats)) return null;
 
     /** Every state the tree declares, in one fixed order for every seat. */
     const declared: VisibilityState[] = [];
@@ -4816,6 +4811,20 @@ export class Game<
       signatures.push(spelled.join(','));
     }
     return signatures;
+  }
+
+  /** Whether any root-level input to `projectionSignaturesFor` is seat-scoped. */
+  private rootDiffersBySeat(seats: readonly number[]): boolean {
+    const GameClass = this.constructor as typeof Game;
+    return (
+      GameClass.playerView !== undefined ||
+      this.tutorialProgress.size > 0 ||
+      Object.keys(this.settings).some((key) => !settingsKeyVisibleTo(key, null)) ||
+      this._animationEvents.some((event) => event.to !== undefined) ||
+      // Each seat's events carry that seat's own numbers (#489), which differ
+      // between seats whenever their counters have.
+      this._animationEvents.some((event) => new Set(seats.map((seat) => event.seatIds?.[seat])).size > 1)
+    );
   }
 
   /**
