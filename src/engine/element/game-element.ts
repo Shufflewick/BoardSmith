@@ -27,7 +27,8 @@ import {
   decodeTypedArray,
   encodeTypedArray,
   isEncodableTypedArray,
-  isSerializedTypedArray,
+  TYPED_ARRAY_MARKER,
+  type SerializedTypedArray,
 } from './typed-array-codec.js';
 
 /**
@@ -1867,14 +1868,12 @@ function encodeAt(
       );
     }
 
-    // World mode keeps an unresolved `{ __elementId }` verbatim on decode; it must re-encode as it is.
-    const isKeptWorldRef = ctx?._worldMode && Object.keys(value).join() === '__elementId' && typeof (value as { __elementId: unknown }).__elementId === 'number';
     const result: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {
-      if (CODEC_MARKER_KEYS.includes(k) && !isKeptWorldRef) {
+      if (CODEC_MARKER_KEYS.includes(k) && !keptWorldRefs.has(value)) {
         throw new Error(
           `Cannot serialize ${subject}: property '${path}' has the key '${k}', which the state codec reserves as a type marker. ` +
-            `Rename the key (for example drop the leading underscores).`
+            `Rename the key, or keep player-supplied keys in a Map.`
         );
       }
       result[k] = encode(v, `${path}.${k}`);
@@ -1886,9 +1885,29 @@ function encodeAt(
   }
 }
 
-// The keys decodeValue reads as tags (the typed-array one via isSerializedTypedArray); encodeAt refuses them as plain keys.
-const CODEC_MARKER_KEYS: readonly string[] = ['__elementRef', '__elementId', '__playerRef', '__map', '__set', '__typedArray'];
+// Unresolved world-mode refs decodeValue handed back as they are; only these may re-encode through encodeAt.
+const keptWorldRefs = new WeakSet<object>();
 
+// One entry per tag the encoder writes. This table is the single list of marker keys: the decoder reads it
+// and the encoder refuses a plain object holding any of its keys.
+const TAG_DECODERS: Record<string, (value: object, game: Game) => unknown> = {
+  __elementRef: (value, game) => game.atBranch((value as { __elementRef: string }).__elementRef),
+  __elementId: (value, game) => {
+    const resolved = game.getElementById((value as { __elementId: number }).__elementId);
+    if (!resolved && game._ctx._worldMode) {
+      keptWorldRefs.add(value);
+      return value;
+    }
+    return resolved;
+  },
+  __playerRef: (value, game) => game.getPlayer((value as { __playerRef: number }).__playerRef),
+  __map: (value, game) =>
+    new Map((value as { __map: [unknown, unknown][] }).__map.map(([k, v]) => [decodeValue(k, game), decodeValue(v, game)])),
+  __set: (value, game) => new Set((value as { __set: unknown[] }).__set.map((item) => decodeValue(item, game))),
+  [TYPED_ARRAY_MARKER]: (value) => decodeTypedArray(value as SerializedTypedArray),
+};
+
+export const CODEC_MARKER_KEYS: readonly string[] = Object.keys(TAG_DECODERS);
 
 /**
  * Decode a value {@link encodeValue} wrote, resolving its references against
@@ -1905,31 +1924,15 @@ export function decodeValue(value: unknown, game: Game): unknown {
   if (value === null || typeof value !== 'object') {
     return value;
   }
-  if ('__elementRef' in value) {
-    return game.atBranch((value as { __elementRef: string }).__elementRef);
-  }
-  if ('__elementId' in value) {
-    const resolved = game.getElementById((value as { __elementId: number }).__elementId);
-    if (!resolved && game._ctx._worldMode) return value;
-    return resolved;
-  }
-  if ('__playerRef' in value) {
-    return game.getPlayer((value as { __playerRef: number }).__playerRef);
-  }
   // A PersistentMap is a VIEW onto `game.settings`: rebuilding it as a plain
   // object made the first call after a restore throw "<name>.get is not a
   // function" (#139). Its contents are decoded once, with `settings` itself.
   if (isElement(value) || value instanceof PersistentMap || ArrayBuffer.isView(value)) {
     return value;
   }
-  if ('__map' in value) {
-    return new Map((value as { __map: [unknown, unknown][] }).__map.map(([k, v]) => [decodeValue(k, game), decodeValue(v, game)]));
-  }
-  if ('__set' in value) {
-    return new Set((value as { __set: unknown[] }).__set.map((item) => decodeValue(item, game)));
-  }
-  if (isSerializedTypedArray(value)) {
-    return decodeTypedArray(value);
+  const marker = CODEC_MARKER_KEYS.find((key) => key in value);
+  if (marker) {
+    return TAG_DECODERS[marker](value, game);
   }
   if (Array.isArray(value)) {
     return value.map((item) => decodeValue(item, game));
