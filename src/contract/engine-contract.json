@@ -1,6 +1,6 @@
 {
-  "revision": 211,
-  "surfaceHash": "4a87ffd072485c35",
+  "revision": 212,
+  "surfaceHash": "df921086475c1773",
   "payloadHash": "d037431574c86546",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1631,6 +1631,14 @@
       "payloadHash": "d037431574c86546",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "The boardsmith entry point gains plain-data scoring tracks (monotonicTrack, uniqueTrack, counterTrack, canAddToTrack, addToTrack, incrementCounter, isTrackComplete, trackPoints, TrackState types) and functions over a plain Ability[] (addAbility, hasUnusedAbility, spendAbility, countUnusedAbilities, groupAbilities), so tracks and abilities stored on a Player survive snapshot, undo and bot clone (#779)."
+    },
+    {
+      "revision": 212,
+      "date": "2026-10-16",
+      "surfaceHash": "df921086475c1773",
+      "payloadHash": "d037431574c86546",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "World clock-phase .about() refuses a chair above the world's seat count with invalid-seat-declaration (#799)."
     }
   ]
 }

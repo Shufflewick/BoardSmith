@@ -223,7 +223,8 @@ export const WORLD_REFUSALS = {
     owner: "game",
     why:
       "ShufflewickPub #423: an `.about()` round answered something that is not a " +
-      "seat -- a fraction, a zero, a negative. GAME-owned: it is a line in the " +
+      "seat -- a fraction, a zero, a negative, or a chair above the world's seat " +
+      "count (#799). GAME-owned: it is a line in the " +
       "bundle, and the reason it is refused rather than passed to the host is " +
       "that a host asked for a chair that cannot exist answers an empty row, " +
       "which reads to the phase that asked exactly like an established empire " +

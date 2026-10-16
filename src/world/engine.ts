@@ -1845,15 +1845,20 @@ export class BoardSmithWorldEngine implements WorldEngine {
       }),
     );
     if (box === null) return null;
-    if (!Number.isInteger(box) || box < 1 || box > this.game.players.length) {
+    return this.declaredSeat(box, "declared the notice box of", "`.noticeBox()`", action);
+  }
+
+  /** A declared seat is a whole number from 1 to this world's seat count, or a refusal. */
+  private declaredSeat(seat: number, said: string, round: string, action: string): number {
+    if (!Number.isInteger(seat) || seat < 1 || seat > this.game.players.length) {
       throw worldRefusal(
         "invalid-seat-declaration",
-        `Action "${action}" declared the notice box of "${String(box)}", which is not a seat in ` +
-          `this world. A \`.noticeBox()\` round names one seat from 1 to ` +
-          `${this.game.players.length}, or \`null\` for nobody.`,
+        `Action "${action}" ${said} "${String(seat)}", which is not a seat in this world. ` +
+          `A ${round} round names one seat from 1 to ${this.game.players.length}, or \`null\` ` +
+          "for nobody.",
       );
     }
-    return box;
+    return seat;
   }
 
   /**
@@ -1900,7 +1905,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * before the host has decided what this dispatch may change, and what it
    * merely LOOKED at must not enter the next dispatch's dirty comparison.
    *
-   * A SEAT IS A WHOLE POSITIVE NUMBER OR IT IS NOTHING. The refusal is here
+   * A SEAT IS A WHOLE NUMBER INSIDE THIS WORLD OR IT IS NOTHING. The refusal is here
    * rather than at the host because the host would have to answer a point read
    * for `1.5` to find out, and what it would answer is an empty row -- which
    * reads, to the phase that asked, exactly like a chair nobody is sitting in.
@@ -1920,15 +1925,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       }),
     );
     if (about === null) return null;
-    if (!Number.isInteger(about) || about < 1) {
-      throw worldRefusal(
-        "invalid-seat-declaration",
-        `Action "${action}" says it is about "${String(about)}", which is not a whole seat ` +
-          "number. A declared activity read names one chair -- a positive integer -- or `null` " +
-          "for a phase with nobody to ask about.",
-      );
-    }
-    return about;
+    return this.declaredSeat(about, "says it is about", "`.about()`", action);
   }
 
   /**
