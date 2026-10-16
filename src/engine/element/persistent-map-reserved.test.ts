@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Player } from '../index.js';
+import { actionTempState } from '../action/helpers.js';
+import { ENGINE_SETTINGS_KEYS } from './persistent-map.js';
 
 class MapsGame extends Game<MapsGame, Player> {
   open(name: string) {
@@ -21,5 +23,14 @@ describe('persistentMap names the engine owns (#753)', () => {
     const map = game.open('pendingLoot');
     map.set('a', 1);
     expect(map.get('a')).toBe(1);
+  });
+
+  it('lists every key the engine writes into settings', async () => {
+    const game = await new MapsGame({ playerCount: 2, playerNames: ['A', 'B'] }).ready();
+    actionTempState(game, game.players[0], 'act').set('k', 1);
+    game.finish([game.players[0]]);
+    for (const key of Object.keys(game.settings)) {
+      expect(ENGINE_SETTINGS_KEYS, `engine key "${key}" is missing from ENGINE_SETTINGS_KEYS`).toContain(key);
+    }
   });
 });
