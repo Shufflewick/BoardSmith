@@ -77,7 +77,7 @@ import {
 } from '../lib/ledger-allocation.js';
 import { describeFinding, ledgerCheck } from './ledger-check.js';
 import { type TestRunner, checkConstraints, runVitest } from './constraint-check.js';
-import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles, equivalenceSignoffProblems, unaccountedEdits } from './chunk-signoff.js';
+import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles, unaccountedEdits } from './chunk-signoff.js';
 import { verifiedAgainstIsCurrent } from './chunk-provenance.js';
 import { checkClaimQuotes } from './claim-quotes.js';
 import { parseSpecManifest } from './test-step-check.js';
@@ -422,7 +422,6 @@ async function combinedTreeProblems(ctx: MergeContext, alongside: string[], runT
     ...ledgers.findings.map(describeFinding),
     ...(await checkConstraints(ctx.projectDir, scope === undefined ? { runTests } : {})).refusals,
     ...(await signoffProblems(ctx.projectDir)),
-    ...(await equivalenceSignoffProblems(ctx.projectDir, ctx.slug)),
   ];
   if (problems.length > 0) return problems;
   if (scope !== undefined) {
@@ -811,11 +810,6 @@ async function checkStartedMerge(ctx: MergeContext, left: string[], runTests: Te
     return refused(problems);
   }
   const crossChunk = await recordCrossChunk(ctx, alongside);
-  const staleReviews = await equivalenceSignoffProblems(ctx.projectDir, ctx.slug);
-  if (staleReviews.length) {
-    await gitSucceeds(ctx.top, ['merge', '--abort']);
-    return refused(staleReviews);
-  }
   await git(ctx.top, ['commit', '-q', '-m', commitMessage(ctx, allocated, alongside)]);
   return { merged: true, refusals: [], allocated, alongside, crossChunk, vouched: shared, ...(scope === undefined ? {} : { scope }) };
 }

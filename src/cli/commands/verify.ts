@@ -418,7 +418,7 @@ function mutationVerdict(since: string, run: Awaited<ReturnType<typeof runDiffMu
         `the whole suite still passed with the code changed.${reuse}`,
       next:
         'For each one, add or tighten a test so it fails when that line is changed that way, then run `boardsmith verify` again. ' +
-        'For a demonstrated equivalent under an explicit valid-input contract, use `boardsmith mutation-equivalence <id> --contract <text> --proof <text>` with the same --base or --chunk, review the ledger and commit it with `git commit -S`.',
+        'For a demonstrated equivalent under an explicit valid-input contract, use `boardsmith mutation-equivalence <id> --contract <text> --proof <text>` with the same --base, review the ledger and commit it with `git commit -S`.',
       counts,
       findings: survivors.map((s) => ({ file: s.file, line: s.line, detail: `${s.description}: no test failed`, ...(s.id ? { mutantId: s.id } : {}) })),
       ...(equivalence ? { equivalence } : {}),

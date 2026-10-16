@@ -207,7 +207,6 @@ export function createProgram(): Command {
     .requiredOption('--contract <text>', 'The explicit valid-input contract under which the mutation is equivalent')
     .requiredOption('--proof <text>', 'The complete argument that every valid input has the same observable behavior')
     .option('--base <git-ref>', 'Use the same mutation base as verify')
-    .option('--chunk <slug>', 'Use the same chunk as verify')
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .action(mutationEquivalenceCommand);
 

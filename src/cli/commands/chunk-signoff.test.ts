@@ -287,6 +287,16 @@ describe('checkSignoff — refuses a verified status that no sign-off backs', ()
     expect(await checkSignoff(project, 'deal')).toEqual([]);
   });
 
+  it('reads no mutant-equivalence record: equivalences are proven and checked only at publish (#985)', async () => {
+    const project = await makeProject([{ slug: 'deal' }]);
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    const path = join(project, DESIGN_DIR, 'chunks', 'deal', 'CHUNK.md');
+    const text = await fs.readFile(path, 'utf-8');
+    expect(text).not.toMatch(/^Equivalence:/m);
+    await fs.writeFile(path, text.replace(/^Basis: designer$/m, 'Basis: designer\nEquivalence: {}'));
+    expect(await checkSignoff(project, 'deal')).toEqual([]);
+  });
+
   it('a sign-off copied from another chunk that cites a waiver not naming this chunk is refused', async () => {
     const project = await makeProject([{ slug: 'world-shell' }, { slug: 'combat' }]);
     await recordWaiver({ project, chunks: 'world-shell', by: 'Jane', expires: '2026-09-30', reason: 'x', now: NOW });
