@@ -1,4 +1,4 @@
-import { promises as fs } from 'node:fs';
+import { existsSync, promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
 
@@ -91,6 +91,18 @@ export async function testRunScopeProblem(projectDir: string): Promise<string | 
     `this, with any settings of its own passed in, and there is no vitest.config.*:\n${GAME_VITE_CONFIG}` +
     'Run `boardsmith doctor --fix` to rewrite it, then run this again.'
   );
+}
+
+/**
+ * Why a game's test run cannot count, as a sentence that says how to fix it, or undefined when it can:
+ * no tests/ directory (a run of nothing would pass, #728), or a config that collects too much.
+ * `boardsmith test` and `boardsmith verify` both refuse on it.
+ */
+export async function gameTestRunProblem(projectDir: string): Promise<string | undefined> {
+  if (!existsSync(join(projectDir, 'tests'))) {
+    return "This project has no tests/ directory, so nothing tests it. Write the game's tests under tests/, then run this again.";
+  }
+  return testRunScopeProblem(projectDir);
 }
 
 /** The excludes `defineGameViteConfig` adds to vitest's defaults. */
