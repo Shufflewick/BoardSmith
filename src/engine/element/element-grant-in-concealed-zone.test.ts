@@ -5,11 +5,16 @@
  * what each seat's view shows.
  */
 import { describe, it, expect } from 'vitest';
-import { Game, Piece, Player, Deck, Hand, Space, type ElementJSON } from '../index.js';
+import { Game, Piece, Player, Deck, Hand, Space, type ElementJSON, type GameOptions } from '../index.js';
 import { isHiddenPlaceholder } from './hidden-placeholder.js';
 
-class TestGame extends Game<TestGame, Player> {}
 class Card extends Piece<TestGame> {}
+class TestGame extends Game<TestGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([Card]);
+  }
+}
 
 /** Whether `seat`'s view (null: spectator) carries `card` under its real id, unhidden. */
 function revealedIn(game: TestGame, seat: number | null, card: Card): boolean {
@@ -28,8 +33,10 @@ function expectViewsAgree(game: TestGame, cards: Card[]): void {
   }
 }
 
+const options = { playerCount: 3, elementIdKey: '0000000000000758' };
+
 function setup() {
-  const game = new TestGame({ playerCount: 3 });
+  const game = new TestGame(options);
   const deck = game.create(Deck, 'deck');
   const hand = game.create(Hand, 'hand');
   hand.player = game.getPlayer(1)!;
@@ -126,5 +133,49 @@ describe('element grants inside concealed zones (#758)', () => {
         expectViewsAgree(game, cards);
       }
     }
+  });
+
+  it('a card peeked in the deck and drawn into a hand follows the hand, plus the peeking seat', () => {
+    const { game, deck, hand } = setup();
+    const [card, other] = deck.createMany(2, Card, 'card', (i) => ({ name: `c${i}` }));
+    card!.addVisibleTo(2);
+    card!.putInto(hand);
+
+    expect(card!.isVisibleTo(1)).toBe(true);
+    expect(card!.isVisibleTo(2)).toBe(true);
+    expect(card!.isVisibleTo(3)).toBe(false);
+    expectViewsAgree(game, [card!, other!]);
+  });
+
+  it('keeps a grant on a card with its own setting (hideFromAll, then addVisibleTo)', () => {
+    const { game } = setup();
+    const table = game.create(Space, 'table');
+    const card = table.create(Card, 'c0');
+    card.hideFromAll();
+    card.addVisibleTo(3);
+
+    expect([1, 2, 3].map((seat) => card.isVisibleTo(seat))).toEqual([false, false, true]);
+    expectViewsAgree(game, [card]);
+  });
+
+  it('a grant survives a checkpoint round trip and still follows the zone after it', () => {
+    const { game, deck } = setup();
+    const card = deck.create(Card, 'c0');
+    card.addVisibleTo(2);
+
+    const restored = new TestGame(options);
+    restored.loadSerializedState(game.toJSON());
+    const restoredCard = restored.first(Card, 'c0')!;
+    expect([1, 2, 3].map((seat) => restoredCard.isVisibleTo(seat))).toEqual([false, true, false]);
+    restoredCard.putInto(restored.first(Hand, 'hand')!);
+    expect([1, 2, 3].map((seat) => restoredCard.isVisibleTo(seat))).toEqual([true, true, false]);
+  });
+
+  it('projection signatures tell a granted seat from one that is not', () => {
+    const game = new TestGame(options);
+    game.create(Deck, 'deck').createMany(2, Card, 'card', (i) => ({ name: `c${i}` }))[0]!.addVisibleTo(2);
+
+    const [granted, other] = game.projectionSignaturesFor([2, 3])!;
+    expect(granted).not.toBe(other);
   });
 });

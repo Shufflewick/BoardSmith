@@ -212,14 +212,17 @@ export function resolveVisibility(
     return childVisibility;
   }
 
-  // Otherwise inherit from parent
-  if (parentVisibility) {
-    return {
-      ...parentVisibility,
-      explicit: false, // Mark as inherited
-    };
-  }
+  const inherited = parentVisibility ? { ...parentVisibility, explicit: false } : DEFAULT_VISIBILITY;
+  const granted = childVisibility?.addPlayers;
+  return granted?.length ? withGrantedSeats(inherited, granted) : inherited;
+}
 
-  // Default to visible to all
-  return DEFAULT_VISIBILITY;
+/** A grant with no setting of its own (#758): the current zone's rule, plus the granted seats. */
+function withGrantedSeats(inherited: VisibilityState, seats: readonly number[]): VisibilityState {
+  const exceptPlayers = inherited.exceptPlayers?.filter((seat) => !seats.includes(seat));
+  return {
+    ...inherited,
+    addPlayers: Array.from(new Set([...(inherited.addPlayers ?? []), ...seats])),
+    ...(exceptPlayers && { exceptPlayers }),
+  };
 }

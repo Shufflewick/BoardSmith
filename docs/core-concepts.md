@@ -219,7 +219,8 @@ visibility controls below instead.
 
 **A hidden ELEMENT withholds everything, not just the non-whitelisted.** An
 element the view cannot see (`showOnlyTo` / `hideFrom`, or any child of a
-hidden, count-only or owner-only zone) is replaced by a placeholder carrying
+hidden, count-only or owner-only zone, unless its own visibility shows it to
+that seat) is replaced by a placeholder carrying
 its `$type`, its face-down artwork and nothing else. Every game attribute it
 would have carried is withheld on restore, the whitelist included: a
 whitelisted attribute is one non-owners may see ON A VISIBLE ELEMENT, and it

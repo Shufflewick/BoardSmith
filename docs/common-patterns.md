@@ -300,11 +300,18 @@ card.setVisibility('owner');   // Only owner sees
 card.setVisibility('hidden');  // No one sees
 ```
 
-These work on a card inside a hidden deck or an opponent's hand too: the
-seats the card is shown to receive that one card face up, in its place (a
-`contentsHidden()` zone sends it alone, so its size stays secret), and the
-rest of the zone stays hidden from them. The setting moves with the card; call
-`card.clearVisibility()` when it should follow its zone again.
+These work on a card placed directly in a hidden deck or an opponent's hand
+too: the seats the card is shown to receive that one card face up, in its
+place (a `contentsHidden()` zone sends it alone, so its size stays secret), and
+the rest of the zone stays hidden from them. A card nested deeper, inside
+something else in the zone, is not sent this way yet.
+
+`addVisibleTo` on a card with no setting of its own adds seats to whatever its
+zone allows. The extra seats move with the card, and everything else follows
+the zone it is in now: a card peeked at in the deck and drawn into a hand is
+seen by the hand's owner and the peeking seat. `showToAll`, `showOnlyTo`,
+`hideFromAll` and `setVisibility` replace the zone's rule and move with the
+card as a whole. `card.clearVisibility()` drops all of it.
 
 ### Hiding a Space Itself
 

@@ -1340,14 +1340,12 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    * Internal method to add players to visibility list
    */
   addVisibleToInternal(players: number[]): void {
-    // Built on what the element inherits, so a grant inside a hidden zone reveals it to these seats only (#758).
-    const base = copyVisibilityState(this.getEffectiveVisibility());
-    const exceptPlayers = base.exceptPlayers?.filter((seat) => !players.includes(seat));
+    // Without a setting of its own the card stores only the seats and keeps following its current zone (#758);
+    // 'hidden' is what this state alone shows everyone else, which keeps projection signatures apart.
+    const own: VisibilityState = this._visibility ?? { mode: 'hidden', explicit: false };
     this._visibility = {
-      ...base,
-      addPlayers: Array.from(new Set([...(base.addPlayers ?? []), ...players])),
-      ...(exceptPlayers && { exceptPlayers }),
-      explicit: true,
+      ...own,
+      addPlayers: Array.from(new Set([...(own.addPlayers ?? []), ...players])),
     };
   }
 
@@ -1557,10 +1555,9 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       json.redacted = true;
     }
 
-    // Include visibility if explicitly set. Emit a COPY — `addVisibleTo` etc.
-    // mutate `_visibility` in place, and a snapshot/checkpoint sharing the
-    // live object would be retroactively corrupted by later mutations (CR-02).
-    if (this._visibility?.explicit) {
+    // Include visibility if set, a bare `addVisibleTo` grant included (#758). Emit a COPY — a snapshot/checkpoint
+    // sharing the live object would be retroactively corrupted by later mutations (CR-02).
+    if (this._visibility) {
       json.visibility = copyVisibilityState(this._visibility);
     }
 
