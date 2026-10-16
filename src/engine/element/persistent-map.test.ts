@@ -45,4 +45,16 @@ describe('PersistentMap built-in names (#761)', () => {
     expect(restored.map.delete('__proto__')).toBe(true);
     expect(restored.map.size).toBe(0);
   });
+
+  it('decoding a crafted __proto__ settings entry keeps Object.prototype and stores an own key', async () => {
+    const game = await newGame();
+    const json = JSON.parse(JSON.stringify(game.toJSON()));
+    json.settings.m = JSON.parse('{"__proto__": {"polluted": 1}}');
+    game.loadSerializedState(json);
+    const data = game.settings.m as Record<string, unknown>;
+    expect(Object.getPrototypeOf(data)).toBe(Object.prototype);
+    expect(Object.hasOwn(data, '__proto__')).toBe(true);
+    expect(data.polluted).toBeUndefined();
+    expect(game.map.size).toBe(1);
+  });
 });

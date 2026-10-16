@@ -1755,7 +1755,12 @@ export function withheldFromSeat(element: GameElement): boolean {
 
 /** Assignment would turn a `__proto__` key into a prototype change and lose the entry (#761). */
 function setOwnKey(target: Record<string, unknown>, key: string, value: unknown): void {
-  Object.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true });
+  // Only `__proto__` needs the slow path; defineProperty on every key made encode/decode 2.5-4x slower.
+  if (key === '__proto__') {
+    Object.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true });
+  } else {
+    target[key] = value;
+  }
 }
 
 /**

@@ -57,8 +57,12 @@ export class PersistentMap<K extends string, V> implements Map<K, V> {
 
   set(key: K, value: V): this {
     const data = this.#getData();
-    // defineProperty, not assignment: `data['__proto__'] = v` sets the prototype instead of a key.
-    Object.defineProperty(data, key, { value, writable: true, enumerable: true, configurable: true });
+    // `data['__proto__'] = v` sets the prototype instead of a key, so that name is defined as an own property.
+    if (key === '__proto__') {
+      Object.defineProperty(data, key, { value, writable: true, enumerable: true, configurable: true });
+    } else {
+      data[key] = value;
+    }
     this.#setData(data);
     return this;
   }
