@@ -389,6 +389,49 @@ describe('useZoomPreview', () => {
     });
   });
 
+  describe('cleanup per instance (#749)', () => {
+    it('two instances on the same container each remove their own listeners', () => {
+      const first = withPreview();
+      const second = withPreview();
+      const removeSpy = vi.spyOn(document.body, 'removeEventListener');
+
+      first.wrapper.unmount();
+      second.wrapper.unmount();
+
+      const removedHover = removeSpy.mock.calls.filter(([type]) => type === 'mouseover');
+      expect(removedHover).toHaveLength(2);
+      expect(removedHover[0]![1]).not.toBe(removedHover[1]![1]);
+    });
+
+    it('a second touchstart clears the first long-press timer', () => {
+      vi.useFakeTimers();
+      try {
+        const { preview, wrapper } = withPreview();
+        const element = document.createElement('div');
+        element.classList.add('card');
+        document.body.appendChild(element);
+        const touch = (type: string) => {
+          const event = new Event(type, { bubbles: true, cancelable: true });
+          Object.defineProperty(event, 'touches', { value: [{ clientX: 10, clientY: 10 }] });
+          element.dispatchEvent(event);
+        };
+
+        touch('touchstart');
+        vi.advanceTimersByTime(300);
+        touch('touchstart');
+        vi.advanceTimersByTime(50);
+        touch('touchend');
+        // Past the first press's deadline: its timer must be gone, not fire after the finger lifted.
+        vi.advanceTimersByTime(400);
+
+        expect(preview.previewState.visible).toBe(false);
+        wrapper.unmount();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   describe('custom container', () => {
     it('listens on the container it was given', async () => {
       const container = document.createElement('div');

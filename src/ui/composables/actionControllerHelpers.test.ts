@@ -5,7 +5,7 @@
  * or an execute() that can never be satisfied.
  */
 import { describe, it, expect } from 'vitest';
-import { actionNeedsWizardMode, getDisplayFromValue } from './actionControllerHelpers.js';
+import { actionNeedsWizardMode, formatActionName, getDisplayFromValue } from './actionControllerHelpers.js';
 import { formatChoiceCandidates } from '../../engine/element/pick-candidates.js';
 import type { ChoiceSelection } from '../../engine/action/types.js';
 import type { EnrichedActionMetadata, ChoiceWithRefs, EnrichedPickMetadata } from './useActionControllerTypes.js';
@@ -187,5 +187,12 @@ describe('getDisplayFromValue agrees with the server label (#509)', () => {
   it('labels a missing value as nothing', () => {
     expect(getDisplayFromValue(undefined)).toBe('');
     expect(getDisplayFromValue(null)).toBe('');
+  });
+});
+
+describe('formatActionName', () => {
+  it('turns a camelCase action name into a title-cased prompt', () => {
+    expect(formatActionName('playCard')).toBe('Play Card');
+    expect(formatActionName('pass')).toBe('Pass');
   });
 });

@@ -9,6 +9,10 @@ only the tool output the commands themselves produce.
 
 ## The Ordered Sequence (non-reorderable, stop-on-failure)
 
+For an explicitly opted-in project, apply `state-machine.md` "Focused Verification Policy"
+to the test commands and result scope below. The full-suite and mutation descriptions are the
+default path.
+
 Run the following as ONE numbered sequence immediately after `build` completes. Do not skip
 steps, do not reorder them, and do not treat an earlier step's pass as license to skip a later
 one. The type check, the whole suite, the build, `boardsmith validate` and the in-browser smoke test
@@ -43,8 +47,9 @@ here.
    existed, and `build` wrote the code that makes them pass. A row can also come later: a regression
    test `build` wrote and saw fail before its fix, or a measurement test `repair` wrote and saw fail
    before its cap (`build/spec.md` "Persistence"). This step re-runs them and requires them all
-   GREEN. Run them with `boardsmith test <pattern>`, naming
-   this chunk's test files. Generated projects carry no npm scripts on purpose: `boardsmith test`
+   GREEN. By default, run them with `boardsmith test <pattern>`, naming
+   this chunk's test files; the focused policy uses its exact authored selection instead.
+   Generated projects carry no npm scripts on purpose: `boardsmith test`
    is the one way to run a game's tests, so `npm test` will fail with "Missing script".
 
    Two failure modes here are NOT ordinary red-routes-to-`repair` and must be surfaced instead of
@@ -67,7 +72,9 @@ here.
        tests pass; it does not say they would catch a regression. Run this command once the chunk's
        tests are green. It exits non-zero on any finding, and a non-zero exit is a failure of this
        step like any other: route the chunk back per "Failures Loop Back to `build`". There is no
-       flag that skips part of it, and its findings are never argued away in prose. It enforces
+       flag that skips part of it, and its findings are never argued away in prose. The committed
+       focused policy retains the static rules and defers mutation, as "Focused Verification
+       Policy" specifies. Under the default full policy it enforces
        seven rules, each of which a real build run broke while its suite was green:
 
        - **Every Spec Manifest claim names a test that exists.** Each `## Spec Manifest` row names a
@@ -348,8 +355,9 @@ here.
 
 7. **The done gate: `boardsmith verify`**. Commit the chunk's work (`chunk-<slug>/step-test`,
    `state-machine.md` "Git Protocol"), then run `npx boardsmith verify --chunk <slug>`
-   (`state-machine.md` "Git Protocol" says what it measures from). It runs, in order and
-   without stopping at the first failure, the full suite, typecheck, build, validate, the smoke
+   (`state-machine.md` "Git Protocol" says what it measures from); for an opted-in project,
+   choose the focused receipt command in "Focused Verification Policy" instead. By default it
+   runs, in order and without stopping at the first failure, the full suite, typecheck, build, validate, the smoke
    test and a mutation check of the code changed since the chunk began, and writes the result for
    this commit to `.boardsmith/verify/<commit>.json`. The smoke test is the game's
    `tests/browser/smoke.spec.ts` (a required output of any chunk that adds an action or a UI
@@ -377,7 +385,8 @@ grep and contrast assertion, and the asset-reachability scan, sequence item 5 ab
 text, so no change to the code can make them fail, and in a manifest file the mutation check reports
 every one. They live in one guard file for the whole game, `tests/guards/a11y-floor.test.ts`: the
 first UI chunk writes it, a later chunk extends it when it adds a token pair, and never list it in
-the Spec Manifest. The full suite and `boardsmith verify` still run it on every chunk. A guard holds
+the Spec Manifest. The default full suite and `boardsmith verify` run it on every chunk; focused
+execution follows "Focused Verification Policy". A guard holds
 scans only; a test that mounts a component or cites a claim belongs in the chunk's test file. A guard
 reads the game's source with `readFileSync` or an import ending `?raw`; the one game module it may
 import is literal constants under `src/ui/`, such as the palette a contrast check reads (rule list

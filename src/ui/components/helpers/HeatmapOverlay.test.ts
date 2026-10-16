@@ -292,3 +292,17 @@ describe('HeatmapOverlay', () => {
     });
   });
 });
+
+describe('HeatmapOverlay unmount (#749)', () => {
+  it('removes the scroll listener from the region it added it to, even when that region no longer matches', async () => {
+    const { wrapper, fixture } = mountOverlay([makeEntry(1, 0.5)], true, '<div data-bs-el-id="1"></div>');
+    await nextTick();
+    await nextTick();
+    const removeSpy = vi.spyOn(fixture, 'removeEventListener');
+    // The region stops matching `.boardregion` before unmount, so a re-query cannot find it.
+    fixture.classList.remove('boardregion');
+    wrapper.unmount();
+    expect(removeSpy).toHaveBeenCalledWith('scroll', expect.any(Function));
+    fixture.remove();
+  });
+});

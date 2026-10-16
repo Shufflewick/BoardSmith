@@ -1,0 +1,13 @@
+{
+  "ticket": "Shufflewick/BoardSmith#771",
+  "base": "e7da3d40e99eb989548d089002a4967d71fda62d",
+  "tests": [
+    {
+      "file": "src/world/choose-element-default-root.test.ts",
+      "names": [
+        "chooseElement default root (#771) refuses a filter write in a world offer with `from` omitted, as with `from` named, and leaves the live game alone",
+        "chooseElement default root (#771) still finds the same elements in a table game"
+      ]
+    }
+  ]
+}
