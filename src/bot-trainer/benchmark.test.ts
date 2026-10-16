@@ -11,6 +11,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { benchmarkBot, weightedObjectives } from './benchmark.js';
 import { createBot } from '../bot/index.js';
+import { GameRunner } from '../runtime/index.js';
 import {
   Game,
   Player,
@@ -378,6 +379,42 @@ describe('benchmarkBot on a game that cannot finish (#37)', () => {
   });
 });
 
+/** Seat 1 wins every game except the one played from `stallSeed`, whose move throws. */
+class OneStallGame extends DecisiveGame {
+  static stallSeed = 'one-stall-p0-0';
+
+  constructor(options: GameOptions) {
+    super(options);
+    if (options.seed === OneStallGame.stallSeed) {
+      this.registerAction(
+        Action.create<DecisiveGame>('move')
+          .chooseFrom('value', { choices: [1, 2] })
+          .execute(() => {
+            throw new Error('this game cannot finish');
+          }),
+      );
+    }
+  }
+}
+
+describe('per-seat win rates with an unfinished game (#736)', () => {
+  it('divide by finished games, agreeing with winRate', async () => {
+    DecisiveGame.outcome = 'seat1';
+    const result = await benchmarkBot(OneStallGame, 'one-stall', undefined, noWeights, {
+      gameCount: 4,
+      mctsIterations: 1,
+      maxActions: 10,
+      seed: 'one-stall',
+      allowIncomplete: true,
+    });
+    expect(result.incomplete).toBe(1);
+    // Seat 0 finished one game and won it; seat 1 finished two and lost both.
+    expect(result.winRateAsPlayer0).toBe(1);
+    expect(result.winRateAsPlayer1).toBe(0);
+    expect(result.winRate).toBeCloseTo((1 * 1 + 0 * 2) / 3);
+  });
+});
+
 describe('a healthy benchmark reports no failures', () => {
   it('leaves the failure counters empty', async () => {
     const result = await benchmark(4, 'seat1');
@@ -590,5 +627,46 @@ describe('a reproducible benchmark is repeatable move for move (#699)', () => {
   it('refuses a game timeout on a reproducible benchmark, since a clock would make it unrepeatable', async () => {
     await expect(race({ seed: 'clock', reproducible: true, timeout: 1000 })).rejects.toThrow(/reproducible.*timeout/);
     expect(createBot).not.toHaveBeenCalled();
+  });
+});
+
+/** Each seat picks one of six options once; seat 1 wins. */
+class SixWayGame extends Game<SixWayGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(
+      Action.create<SixWayGame>('pick')
+        .chooseFrom('option', { choices: ['a', 'b', 'c', 'd', 'e', 'f'] })
+        .execute((_args, ctx) => {
+          if (ctx.player.seat === 2) (ctx.game as SixWayGame).finish([ctx.game.players[0]]);
+        }),
+    );
+    this.setFlow({ root: eachPlayer({ do: actionStep({ actions: ['pick'] }) }) });
+  }
+}
+
+describe('the baseline opponent picks at random from the legal moves (#734)', () => {
+  /** The option the baseline seat played in each game, in order. */
+  async function baselinePicks(seed: string): Promise<unknown[]> {
+    const performAction = vi.spyOn(GameRunner.prototype, 'performAction');
+    try {
+      // 20 games: the trained bot is seat 1 in the first 10, so the baseline is seat 2 there.
+      await benchmarkBot(SixWayGame, 'six-way', undefined, noWeights, {
+        gameCount: 20, mctsIterations: 1, maxActions: 4, seed, reproducible: true,
+      });
+      return performAction.mock.calls.slice(0, 20).filter((call) => call[1] === 2).map((call) => call[2].option);
+    } finally {
+      performAction.mockRestore();
+    }
+  }
+
+  it('does not always play the first listed move', async () => {
+    const picks = await baselinePicks('spread');
+    expect(picks).toHaveLength(10);
+    expect(new Set(picks).size).toBeGreaterThan(1);
+  });
+
+  it('plays the same moves for the same seed', async () => {
+    expect(await baselinePicks('again')).toEqual(await baselinePicks('again'));
   });
 });

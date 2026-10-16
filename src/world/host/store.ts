@@ -102,9 +102,10 @@ export interface WorldStore extends WorldPartitionStore, WorldPartitionWriter {
    * FORGET THAT THESE PARTITIONS WERE EVER DIRTY, because the live bytes they
    * were about are gone.
    *
-   * The only caller is a host that has just THROWN ITS RESIDENT WORLD AWAY --
+   * The callers are a host that has just THROWN ITS RESIDENT WORLD AWAY --
    * `boardsmith dev`'s answer to a checkpoint that would not land, and the
-   * platform's `discardChild` by another name. A dirty mark says "this
+   * platform's `discardChild` by another name -- and a host STARTING over a
+   * store a crashed one left marks in (#730), whose live tree died with it. A dirty mark says "this
    * partition's durable bytes are older than the live tree"; once there is no
    * live tree, that sentence is false, and a mark nobody can ever satisfy would
    * make every later checkpoint try to serialize a partition no engine holds.
@@ -112,7 +113,7 @@ export interface WorldStore extends WorldPartitionStore, WorldPartitionWriter {
    * It is NOT a way to skip a checkpoint. Discarding a mark without discarding
    * the residency it describes is exactly the corruption `writeCheckpoint`'s
    * one-transaction rule exists to prevent, which is why this is documented
-   * against that single caller and against no other.
+   * against those callers and against no other.
    */
   discardDirty(names: readonly string[]): void;
 

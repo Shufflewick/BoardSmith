@@ -23,16 +23,20 @@ interface GlobalConfig {
 export function readGlobalConfig(): GlobalConfig {
   const file = configFile();
   if (!existsSync(file)) return {};
+  const text = readFileSync(file, 'utf-8');
   try {
-    return JSON.parse(readFileSync(file, 'utf-8')) as GlobalConfig;
+    return JSON.parse(text) as GlobalConfig;
   } catch {
-    return {};
+    throw new Error(
+      `${file} is not valid JSON. Fix the typo in it, or delete it and save your keys again with boardsmith publish --api-key.`
+    );
   }
 }
 
 export function writeGlobalConfig(config: GlobalConfig): void {
-  mkdirSync(configDir(), { recursive: true });
-  writeFileSync(configFile(), JSON.stringify(config, null, 2) + '\n');
+  // Owner-only: the file holds publish API keys.
+  mkdirSync(configDir(), { recursive: true, mode: 0o700 });
+  writeFileSync(configFile(), JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
 }
 
 export function getApiKey(target: PlatformTarget): string | undefined {

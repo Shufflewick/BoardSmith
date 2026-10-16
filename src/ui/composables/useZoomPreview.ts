@@ -94,9 +94,8 @@ export interface ZoomPreviewReturn {
 // Global alt key state (shared across all instances)
 const isAltPressed = ref(false);
 
-// WeakMaps for storing cleanup functions without polluting DOM objects
+// WeakMap for storing the keyboard cleanup without polluting the window object
 const keyboardCleanupMap = new WeakMap<Window, () => void>();
-const containerCleanupMap = new WeakMap<Element, () => void>();
 
 // Track if global keyboard listeners are already attached
 let keyboardListenersAttached = false;
@@ -544,6 +543,7 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
     const cardElement = findCardElement(event.target);
 
     if (cardElement) {
+      cancelLongPress();
       touchStartPos = { x: touch.clientX, y: touch.clientY };
 
       // Start long press timer
@@ -593,6 +593,9 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
     hidePreview();
   }
 
+  // Per instance: two instances on one container must not share one cleanup (#749).
+  let removeContainerListeners: (() => void) | null = null;
+
   onMounted(() => {
     keyboardInstanceCount++;
     attachKeyboardListeners();
@@ -628,8 +631,7 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
     window.addEventListener('keydown', checkAlt);
     window.addEventListener('keyup', checkAlt);
 
-    // Store cleanup for this instance
-    containerCleanupMap.set(container, () => {
+    removeContainerListeners = () => {
       container.removeEventListener('mouseover', handleMouseOver);
       container.removeEventListener('mouseout', handleMouseOut);
       container.removeEventListener('mousemove', handleMouseMove);
@@ -640,7 +642,7 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
       window.removeEventListener('keydown', checkAlt);
       window.removeEventListener('keyup', checkAlt);
       cancelLongPress();
-    });
+    };
   });
 
   onUnmounted(() => {
@@ -649,13 +651,8 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
       detachKeyboardListeners();
     }
 
-    // Cleanup event delegation listeners
-    const container = options.containerRef?.value || document.body;
-    const containerCleanup = containerCleanupMap.get(container);
-    if (containerCleanup) {
-      containerCleanup();
-      containerCleanupMap.delete(container);
-    }
+    removeContainerListeners?.();
+    removeContainerListeners = null;
 
     // Hide preview when component unmounts
     previewState.visible = false;

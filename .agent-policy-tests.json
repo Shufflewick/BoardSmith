@@ -1,0 +1,83 @@
+{
+  "ticket": "Shufflewick/BoardSmith#769",
+  "base": "e7da3d40e99eb989548d089002a4967d71fda62d",
+  "tests": [
+    {
+      "file": "src/engine/action/choose-elements-bare-id.test.ts",
+      "names": [
+        "chooseElements sent a bare id, via a whole submission (#769) refuses a bare id as not an array, and execute never runs",
+        "chooseElements sent a bare id, via a whole submission (#769) accepts an array of ids",
+        "chooseElements sent a bare id, via a whole submission (#769) accepts a single-element array",
+        "chooseElements sent a bare id, via one selection at a time (#769) refuses a bare id as not an array, and execute never runs",
+        "chooseElements sent a bare id, via one selection at a time (#769) accepts an array of ids",
+        "chooseElements sent a bare id, via one selection at a time (#769) accepts a single-element array"
+      ]
+    },
+    {
+      "file": "src/engine/action/one-pick-path.test.ts",
+      "names": [
+        "every entry point resolves a pick the same way (#507) performAction a { value, label } choice submitted by its label",
+        "every entry point resolves a pick the same way (#507) performAction a value submitted exactly, though it is also another choice's label",
+        "every entry point resolves a pick the same way (#507) performAction a string choice submitted by display text in another case",
+        "every entry point resolves a pick the same way (#507) performAction an element choice submitted by element id",
+        "every entry point resolves a pick the same way (#507) performAction an element choice submitted as a serialized element",
+        "every entry point resolves a pick the same way (#507) performAction a choice that depends on an earlier pick, submitted by its label",
+        "every entry point resolves a pick the same way (#507) performAction a chooseElement submitted by element id",
+        "every entry point resolves a pick the same way (#507) performAction a multiSelect submitted by labels, resolved item by item",
+        "every entry point resolves a pick the same way (#507) performAction a multiSelect of element choices submitted by ids",
+        "every entry point resolves a pick the same way (#507) performAction an orderedList submitted by labels, resolved item by item in order, repeats kept (#636)",
+        "every entry point resolves a pick the same way (#507) performAction an orderedList of element choices submitted by ids (#636)",
+        "every entry point resolves a pick the same way (#507) performAction a chooseElements submitted by ids",
+        "every entry point resolves a pick the same way (#507) performAction repeating: a { value, label } choice submitted by its label",
+        "every entry point resolves a pick the same way (#507) performAction repeating: a value submitted exactly, though it is also another choice's label",
+        "every entry point resolves a pick the same way (#507) performAction repeating: a string choice submitted by display text in another case",
+        "every entry point resolves a pick the same way (#507) performAction repeating: an element choice submitted by element id",
+        "every entry point resolves a pick the same way (#507) performAction repeating: an element choice submitted as a serialized element",
+        "every entry point resolves a pick the same way (#507) performAction repeating: a choice that depends on an earlier pick, submitted by its label",
+        "every entry point resolves a pick the same way (#507) performAction repeating: a chooseElement submitted by element id",
+        "every entry point resolves a pick the same way (#507) processSelectionStep a { value, label } choice submitted by its label",
+        "every entry point resolves a pick the same way (#507) processSelectionStep a value submitted exactly, though it is also another choice's label",
+        "every entry point resolves a pick the same way (#507) processSelectionStep a string choice submitted by display text in another case",
+        "every entry point resolves a pick the same way (#507) processSelectionStep an element choice submitted by element id",
+        "every entry point resolves a pick the same way (#507) processSelectionStep an element choice submitted as a serialized element",
+        "every entry point resolves a pick the same way (#507) processSelectionStep a choice that depends on an earlier pick, submitted by its label",
+        "every entry point resolves a pick the same way (#507) processSelectionStep a chooseElement submitted by element id",
+        "every entry point resolves a pick the same way (#507) processSelectionStep a multiSelect submitted by labels, resolved item by item",
+        "every entry point resolves a pick the same way (#507) processSelectionStep a multiSelect of element choices submitted by ids",
+        "every entry point resolves a pick the same way (#507) processSelectionStep an orderedList submitted by labels, resolved item by item in order, repeats kept (#636)",
+        "every entry point resolves a pick the same way (#507) processSelectionStep an orderedList of element choices submitted by ids (#636)",
+        "every entry point resolves a pick the same way (#507) processSelectionStep a chooseElements submitted by ids",
+        "every entry point resolves a pick the same way (#507) processSelectionStep repeating: a { value, label } choice submitted by its label",
+        "every entry point resolves a pick the same way (#507) processSelectionStep repeating: a value submitted exactly, though it is also another choice's label",
+        "every entry point resolves a pick the same way (#507) processSelectionStep repeating: a string choice submitted by display text in another case",
+        "every entry point resolves a pick the same way (#507) processSelectionStep repeating: an element choice submitted by element id",
+        "every entry point resolves a pick the same way (#507) processSelectionStep repeating: an element choice submitted as a serialized element",
+        "every entry point resolves a pick the same way (#507) processSelectionStep repeating: a choice that depends on an earlier pick, submitted by its label",
+        "every entry point resolves a pick the same way (#507) processSelectionStep repeating: a chooseElement submitted by element id",
+        "every entry point resolves a pick the same way (#507) a chooseElements submitted as a list of one { id } hands execute the list",
+        "every entry point resolves a pick the same way (#507) the step path stores the value a multiSelect named, not the labels sent, for the picks after it",
+        "a repeating pick is checked by the same rule as any other pick (#507) a repeating chooseFrom refuses a value the active tutorial step gates out",
+        "a repeating pick is checked by the same rule as any other pick (#507) a whole submission of a repeating chooseFrom refuses the gated value as a non-repeating one does",
+        "a repeating pick is checked by the same rule as any other pick (#507) a refused gated repeating pick still hands back the next choices, with the enabled one selectable",
+        "a repeating pick is checked by the same rule as any other pick (#507) a repeating pick sent by label that names a gated value is refused with the gate reason",
+        "a repeating pick is checked by the same rule as any other pick (#507) repeatingPickCandidates does not list a value the tutorial step gates out",
+        "a repeating pick is checked by the same rule as any other pick (#507) a repeating pick of an unlisted value gets the standard refusal a non-repeating one gets",
+        "a repeating pick is checked by the same rule as any other pick (#507) a repeating pick of an unlisted value gets the game's own `unavailable` sentence",
+        "a repeating pick is checked by the same rule as any other pick (#507) a repeating chooseElement pick of an element not on offer gets the standard refusal",
+        "a later pick's validate sees the earlier picks resolved (#507) after a repeating chooseElement, the one-pick-at-a-time path hands validate elements, not ids",
+        "a repeating pick asks for its choices once (#507) runs the choices callback once to resolve and check a pick that ends the repeat",
+        "an element reference that names nothing (#507) a chooseElement sent { id } for a missing element is refused, and `unavailable` is handed the id",
+        "an element reference that names nothing (#507) a chooseElements sent { id } for a missing element is refused, and `unavailable` is handed the id"
+      ]
+    },
+    {
+      "file": "src/ui/composables/useActionController.autofill-list.test.ts",
+      "names": [
+        "auto-fill of a one-choice list pick (#769) pickCards sends {\"cards\":[7]}",
+        "auto-fill of a one-choice list pick (#769) pickMany sends {\"many\":[\"x\"]}",
+        "auto-fill of a one-choice list pick (#769) pickOrder sends {\"order\":[\"x\"]}",
+        "auto-fill of a one-choice list pick (#769) pickOne sends {\"one\":\"x\"}"
+      ]
+    }
+  ]
+}

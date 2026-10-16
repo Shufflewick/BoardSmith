@@ -1131,11 +1131,16 @@ export class MultiplayerHost {
     }));
     const persistence = this.opts.persistence;
     if (!persistence) return;
-    const payload = persistence.store.readForSession(
-      persistence.sessionKey,
-      this.persistPlayers,
-    );
-    if (payload !== null) startGameOptions[PERSIST_KEY] = payload;
+    const read = persistence.store.readForSession(persistence.sessionKey, this.persistPlayers);
+    if (read === null) return;
+    if (read.dropped.length > 0) {
+      console.warn(
+        `[boardsmith dev] Some saved rows could not be read and were left out of this game: ` +
+          `${read.dropped.map((key) => `"${key}"`).join(', ')}. Each row needs a string "value" ` +
+          `holding JSON and a number "writtenAt". Fix or remove these rows in .boardsmith-dev-store.json.`,
+      );
+    }
+    startGameOptions[PERSIST_KEY] = read.payload;
   }
 
   /**

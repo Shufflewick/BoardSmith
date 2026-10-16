@@ -20,6 +20,7 @@ import {
   findHeadingIndex,
   parseBuildManifest,
   resolveManifestPath,
+  stripHtmlComments,
 } from './build-manifest.js';
 import { atomicWriteFile } from './verify-run.js';
 import { checkConstraints } from './constraint-check.js';
@@ -178,17 +179,13 @@ export function designerNameProblem(by: string, flag: string): string | undefine
 // Reading a chunk and its sketch entry
 // ---------------------------------------------------------------------------------------------
 
-function stripComments(text: string): string {
-  return text.replace(/<!--[\s\S]*?-->/g, '');
-}
-
 export function readStatus(chunkText: string): string | undefined {
   return /^Status:\s*(.*)$/m.exec(chunkText)?.[1].trim();
 }
 
 /** The number of real items in `## Verified Checklist` (template placeholders excluded). */
 function countChecklistItems(chunkText: string): number {
-  const body = stripComments(extractSection(chunkText, '## Verified Checklist') ?? '');
+  const body = stripHtmlComments(extractSection(chunkText, '## Verified Checklist') ?? '');
   return body.split('\n').filter((line) => /^- \[[ xX]\]\s*\S/.test(line.trim())).length;
 }
 
@@ -196,7 +193,7 @@ const UI_VALUES = ['none', 'touches', 'major'];
 const MILESTONE_VALUES = ['none', 'core-loop', 'scoring', 'final-acceptance'];
 
 function readUi(chunkText: string, slug: string): string {
-  const body = stripComments(extractSection(chunkText, '## ui:') ?? '');
+  const body = stripHtmlComments(extractSection(chunkText, '## ui:') ?? '');
   const ui = body.trim().split('\n')[0].trim();
   if (UI_VALUES.includes(ui)) return ui;
   throw new Error(

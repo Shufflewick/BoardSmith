@@ -1,12 +1,12 @@
-import { existsSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { writeFileSync } from 'node:fs';
 import chalk from 'chalk';
 import { getProjectContext } from '../lib/project-context.js';
 import { runTool } from '../lib/run-tool.js';
 import { discardRecord, runVitestRecorded, testRunVerdict } from '../lib/vitest-run.js';
 import { requireGameProject } from '../lib/game-project.js';
-import { testRunScopeProblem } from '../lib/test-run-scope.js';
+import { gameTestRunProblem } from '../lib/test-run-scope.js';
 import { runTypecheck } from './typecheck.js';
+import { runAuthoredTests } from '../lib/authored-tests.js';
 
 /**
  * The vitest config of BoardSmith's browser regressions (`scripts/*-browser.mjs`), which
@@ -21,6 +21,7 @@ interface TestOptions {
   coverage?: boolean;
   /** A file to write the verdict of a failed run into, for a script to repeat (such as a merge gate). */
   verdictFile?: string;
+  selection?: string;
 }
 
 /**
@@ -51,6 +52,9 @@ interface TestOptions {
 export async function testCommand(patterns: string[], options: TestOptions): Promise<void> {
   const cwd = process.cwd();
   const context = getProjectContext(cwd);
+  if (options.selection !== undefined && (patterns.length > 0 || options.watch || options.browser || options.coverage)) {
+    throw new Error('Use --selection by itself, without filename filters, --watch, --browser or --coverage.');
+  }
 
   if (context === 'standalone') {
     await refuseGameProjectThatCannotRun(cwd, options);
@@ -60,6 +64,16 @@ export async function testCommand(patterns: string[], options: TestOptions): Pro
 
   const label = context === 'monorepo' ? 'BoardSmith' : 'game';
   console.log(chalk.cyan(`\nRunning ${label} tests...\n`));
+
+  if (options.selection !== undefined) {
+    try {
+      const result = await runAuthoredTests(cwd, options.selection);
+      console.log(chalk.green(`\n${result.counts.passed} authored tests passed in ${result.counts.files} files.\n`));
+    } catch (error) {
+      fail((error as Error).message, 1, options);
+    }
+    return;
+  }
 
   const args = vitestArgs(patterns, options);
 
@@ -124,13 +138,7 @@ async function refuseGameProjectThatCannotRun(cwd: string, options: TestOptions)
     );
   }
 
-  if (!existsSync(join(cwd, 'tests'))) {
-    console.log(chalk.yellow('No tests directory found.'));
-    console.log(chalk.dim('Create tests in the tests/ directory'));
-    process.exit(0);
-  }
-
-  const problem = await testRunScopeProblem(cwd);
+  const problem = await gameTestRunProblem(cwd);
   if (problem !== undefined) {
     console.error(chalk.red(problem));
     process.exit(1);

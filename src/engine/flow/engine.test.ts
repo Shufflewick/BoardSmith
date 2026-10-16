@@ -2025,6 +2025,28 @@ describe('Turn Order Presets', () => {
 
     expect(visitedPlayers).toEqual([1, 2, 3]);
   });
+
+  it.each([
+    ['ACTIVE_ONLY', TurnOrder.ACTIVE_ONLY, [3, 2, 1]],
+    ['SKIP_IF', TurnOrder.SKIP_IF(() => false), [3, 2, 1]],
+    ['ONLY', TurnOrder.ONLY([1, 3]), [3, 1]],
+    ['START_FROM', TurnOrder.START_FROM(2), [2, 1, 3]],
+  ])('keeps REVERSE when combined with %s after it', (_name, preset, expected) => {
+    const visitedPlayers: number[] = [];
+
+    const flow: FlowDefinition = {
+      root: eachPlayer({
+        ...TurnOrder.combine(TurnOrder.REVERSE, preset),
+        do: execute((ctx) => {
+          visitedPlayers.push(ctx.player!.seat);
+        }),
+      }),
+    };
+
+    new FlowEngine(game, flow).start();
+
+    expect(visitedPlayers).toEqual(expected);
+  });
 });
 
 describe('Action Chaining with followUp in FlowState', () => {

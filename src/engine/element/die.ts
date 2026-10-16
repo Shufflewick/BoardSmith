@@ -91,6 +91,14 @@ export class Die<G extends Game = any, P extends Player = any> extends Piece<G, 
     this.$type = 'die';
   }
 
+  private assertSides(): void {
+    if (!Number.isInteger(this.sides) || this.sides < 1) {
+      throw new Error(
+        `Die "${this.name}" needs sides set to a whole number of at least 1, but sides is ${this.sides}. Create it with game.create(Die, 'd6', { sides: 6 }).`
+      );
+    }
+  }
+
   /**
    * Roll the die using the game's seeded random number generator.
    * Returns the new value.
@@ -98,6 +106,7 @@ export class Die<G extends Game = any, P extends Player = any> extends Piece<G, 
    * Increments rollCount to signal the UI to animate.
    */
   roll(): number {
+    this.assertSides();
     this.rollCount++;
     this.value = Math.floor(this.game.random() * this.sides) + 1;
     return this.value;
@@ -109,7 +118,8 @@ export class Die<G extends Game = any, P extends Player = any> extends Piece<G, 
    * @param n - The value to set (1 to sides)
    */
   setValue(n: number): void {
-    if (n < 1 || n > this.sides) {
+    this.assertSides();
+    if (!Number.isInteger(n) || n < 1 || n > this.sides) {
       throw new Error(`Invalid die value ${n} for d${this.sides}`);
     }
     this.value = n;

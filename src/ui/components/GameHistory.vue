@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue';
+import { ref, computed, watch, nextTick, onUnmounted } from 'vue';
 
 interface GameMessage {
   id: number;
@@ -127,7 +127,7 @@ watch(
       });
     }
   },
-  { immediate: true, deep: true }
+  { immediate: true }
 );
 
 function formatTime(date: Date): string {
@@ -148,6 +148,8 @@ function clearHistory() {
 type CopyStatus = 'idle' | 'copied' | 'failed';
 
 const copyStatus = ref<CopyStatus>('idle');
+let copyStatusTimer: ReturnType<typeof setTimeout> | undefined;
+onUnmounted(() => clearTimeout(copyStatusTimer));
 
 const COPY_TITLES: Record<CopyStatus, string> = {
   idle: 'Copy log',
@@ -251,7 +253,8 @@ async function copyHistory() {
   // dead button — which is exactly how this surfaced: the player clicked, the
   // clipboard write was refused, and nothing on screen changed.
   copyStatus.value = copied ? 'copied' : 'failed';
-  setTimeout(() => {
+  clearTimeout(copyStatusTimer);
+  copyStatusTimer = setTimeout(() => {
     copyStatus.value = 'idle';
   }, 2000);
 }
