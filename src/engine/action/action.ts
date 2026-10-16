@@ -453,9 +453,10 @@ export class ActionExecutor {
     const resolved = { ...args, ...this.resolveNonPickArgs(action, args, game) };
 
     // Each selection's value, with the selections before it already resolved
-    // in view, so a `choices` callback that reads an earlier pick sees what it named. A skipped optional pick is ABSENT (#627): a
-    // whole submission may send it as `null`, but every callback and `execute`
-    // see it the way a player's skipped step leaves it, with no key at all.
+    // in view, so a `choices` callback that reads an earlier pick sees what it
+    // named. A skipped optional pick is ABSENT (#627): a whole submission may
+    // send it as `null`, but every callback and `execute` see it the way a
+    // player's skipped step leaves it, with no key at all.
     for (const selection of action.selections) {
       const value = args[selection.name];
       if (value === null) delete resolved[selection.name];
@@ -486,8 +487,8 @@ export class ActionExecutor {
       // the id points at an element of a different class than the caller
       // claimed, resolving by id alone would hand the handler a wrong-class
       // element (the corruption class ENG-05 removed, one step removed). On
-      // mismatch, leave the arg unresolved so it fails loudly downstream. A flow marker that does not resolve throws on
-      // restore instead (relinkFlowValue, flow/engine.ts).
+      // mismatch, leave the arg unresolved so it fails loudly downstream. A
+      // flow marker that does not resolve throws on restore instead (relinkFlowValue, flow/engine.ts).
       const serialized = value as { id: number; className: string };
       const element = game.getElementById(serialized.id);
       if (element && element.constructor.name === serialized.className) {
