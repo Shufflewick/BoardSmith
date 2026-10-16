@@ -9,7 +9,9 @@ import { describe, it, expect } from 'vitest';
 import { Game, Player, Piece, Space, Action } from '../index.js';
 import type { ActionDefinition } from './types.js';
 
-class Stone extends Piece<Yard> {}
+class Stone extends Piece<Yard> {
+  secret = 'hidden-attribute';
+}
 class Pile extends Space<Yard> {}
 
 class Yard extends Game<Yard, Player> {
@@ -50,7 +52,8 @@ describe.each(paths)('chooseElements sent a bare id, via %s (#769)', (_path, sub
   it('refuses a bare id as not an array, and execute never runs', () => {
     const { game, action, executed, ids } = setUp();
     const error = submit(game, action, ids[0]);
-    expect(error).toContain('Selection "cards" is multi-select and expected an array, got object');
+    expect(error).toBe('Selection "cards" takes a list of elements; got a single element. Send an array, such as [id].');
+    expect(error).not.toContain('hidden-attribute');
     expect(executed).toEqual([]);
   });
 
