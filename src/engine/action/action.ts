@@ -1845,8 +1845,12 @@ export class ActionExecutor {
 
     // A DECLARED dependency: re-ask the dependent step with each enabled answer
     // bound, exactly as the player's own answer will.
+    // A pick that takes several values answers with an array, so bind one as the player's would be.
+    const takesArray = this.isRepeatingSelection(selection)
+      || selection.type === 'elements'
+      || (selection.type === 'choice' && (selection.multiSelect !== undefined || selection.orderedList !== undefined));
     for (const choice of enabledChoices) {
-      const newArgs = { ...args, [selection.name]: choice.value };
+      const newArgs = { ...args, [selection.name]: takesArray ? [choice.value] : choice.value };
       if (this.hasValidSelectionPath(selections, player, newArgs, index + 1, actionName)) {
         return true;
       }
