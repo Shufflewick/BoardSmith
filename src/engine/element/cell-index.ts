@@ -21,8 +21,8 @@ import { reachPartition, type GameElement } from './game-element.js';
 import { stateChanged } from './state-version.js';
 import type { ElementClass, ElementFinder } from './types.js';
 
-/** First coordinate, then second, to the grid's first child cell at them. */
-type CellMap = Map<unknown, Map<unknown, GameElement>>;
+/** First coordinate, then second, to the grid's child cells at them, in the grid's order (layered cells share one). */
+type CellMap = Map<unknown, Map<unknown, GameElement[]>>;
 
 const cellMaps = new WeakMap<GameElement, CellMap>();
 
@@ -60,8 +60,9 @@ export function firstCell<F extends GameElement>(
   if (!coordinate || grid._ctx._pit02RecordingActive) return search();
 
   const className = classNameOrFinder as ElementClass<F>;
-  const found = cellsOf(grid, cellClass, coordinates).get(coordinate[0])?.get(coordinate[1]);
-  const cell = found instanceof className ? found : undefined;
+  const layers = cellsOf(grid, cellClass, coordinates).get(coordinate[0])?.get(coordinate[1]);
+  // The first of the requested class in the grid's order, as a search finds it.
+  const cell = layers?.find((layer): layer is F => layer instanceof className);
   if (isDevMode()) {
     const searched = search();
     if (searched !== cell) throw coordinatesChanged(grid, finders[0] as Record<string, unknown>, cell, searched);
@@ -98,8 +99,9 @@ function cellsOf(grid: GameElement, cellClass: ElementClass, [first, second]: re
     const attributes = child as unknown as Record<string, unknown>;
     let row = cells.get(attributes[first]);
     if (!row) cells.set(attributes[first], (row = new Map()));
-    // The first cell in the grid's order wins, as a search finds it first.
-    if (!row.has(attributes[second])) row.set(attributes[second], child);
+    const layers = row.get(attributes[second]);
+    if (layers) layers.push(child);
+    else row.set(attributes[second], [child]);
   }
   cellMaps.set(grid, cells);
   return cells;

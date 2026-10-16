@@ -38,6 +38,10 @@ class Square extends GridCell<CellGame> {
   file!: number;
   rank!: number;
 }
+class Fog extends GridCell<CellGame> {
+  file!: number;
+  rank!: number;
+}
 class Hexes extends HexGrid<CellGame> {}
 class Hex extends HexCell<CellGame> {
   q!: number;
@@ -52,7 +56,7 @@ class CellGame extends Game<CellGame, Player> {
   holding!: Holding;
   constructor(options: GameOptions) {
     super(options);
-    this.registerElements([Board, Square, Hexes, Hex, Stone, Holding]);
+    this.registerElements([Board, Square, Fog, Hexes, Hex, Stone, Holding]);
     this.board = this.create(Board, 'board');
     for (let rank = 1; rank <= 4; rank++) {
       for (let file = 0; file < 4; file++) this.board.create(Square, `s${file}${rank}`, { file, rank });
@@ -131,6 +135,43 @@ describe('a grid looks a cell up by coordinate', () => {
     expect(game.board.first(Stone)?.name).toBe('stone');
     expect(game.board.first(Square, (s) => s.rank === 4 && s.file === 2)?.name).toBe('s24');
   });
+});
+
+describe('a grid with layered cells at one coordinate', () => {
+  for (const dev of [false, true]) {
+    describe(dev ? 'in development' : 'in production', () => {
+      const layered = () => {
+        devMode.override = dev;
+        const game = new CellGame({ playerCount: 2 });
+        const square = game.board.first(Square, { file: 0, rank: 1 })!;
+        const fog = game.board.create(Fog, 'fog', { file: 0, rank: 1 });
+        return { game, square, fog };
+      };
+
+      it('finds each cell by its own class', () => {
+        const { game, square, fog } = layered();
+        expect(game.board.first(Fog, { file: 0, rank: 1 })).toBe(fog);
+        expect(game.board.first(Square, { file: 0, rank: 1 })).toBe(square);
+        expect(game.board.first(GridCell, { file: 0, rank: 1 })).toBe(square);
+      });
+
+      it('stays right after a layered cell moves out and back', () => {
+        const { game, square, fog } = layered();
+        square.reparent(game.holding);
+        expect(game.board.first(Square, { file: 0, rank: 1 })).toBeUndefined();
+        expect(game.board.first(Fog, { file: 0, rank: 1 })).toBe(fog);
+        square.reparent(game.board);
+        expect(game.board.first(Square, { file: 0, rank: 1 })).toBe(square);
+      });
+
+      it('stays right after a layered cell is removed', () => {
+        const { game, square, fog } = layered();
+        fog.remove();
+        expect(game.board.first(Fog, { file: 0, rank: 1 })).toBeUndefined();
+        expect(game.board.first(Square, { file: 0, rank: 1 })).toBe(square);
+      });
+    });
+  }
 });
 
 describe('a grid whose cells are reordered by a debug command', () => {
