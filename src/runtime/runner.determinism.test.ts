@@ -101,11 +101,14 @@ describe('engine-owned state carries no wall-clock time (#54)', () => {
 describe('the game instance id (#806)', () => {
   it('is adopted from a snapshot without drawing a fresh one', () => {
     const draws = vi.spyOn(crypto, 'getRandomValues');
-    const snapshot = playTwoActions('instance-id').getSnapshot();
-    draws.mockClear();
-    const restored = GameRunner.fromSnapshot(snapshot, ClockGame);
-    expect(restored.gameInstanceId).toBe(snapshot.gameInstanceId);
-    expect(draws).not.toHaveBeenCalled();
-    draws.mockRestore();
+    try {
+      const snapshot = playTwoActions('instance-id').getSnapshot();
+      draws.mockClear();
+      const restored = GameRunner.fromSnapshot(snapshot, ClockGame);
+      expect(restored.gameInstanceId).toBe(snapshot.gameInstanceId);
+      expect(draws).not.toHaveBeenCalled();
+    } finally {
+      draws.mockRestore();
+    }
   });
 });

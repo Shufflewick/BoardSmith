@@ -270,7 +270,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   restoreEpoch = 0;
 
   /**
-   * WHICH GAME THIS IS (#356). Minted when a runner begins a new game, adopted
+   * WHICH GAME THIS IS (#356). Minted the first time it is read, adopted
    * from the snapshot by `fromSnapshot`, and carried by `fromCheckpoint` — an
    * undo is the same game, and `restoreEpoch` is what says it moved.
    *
@@ -280,8 +280,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * client could not tell "New game" from an ordinary re-broadcast.
    */
   get gameInstanceId(): string {
-    // Minted on first read, so a restore that adopts the snapshot's id draws nothing (#806). Never
-    // the game's seeded RNG, so minting moves no draw.
+    // Minted on first read, so a restore that adopts the snapshot's id draws nothing (#806).
     this.#gameInstanceId ??= secureRandomHex(16, "name a new game's instance", 'restore the game from a snapshot that carries its gameInstanceId');
     return this.#gameInstanceId;
   }
