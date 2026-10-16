@@ -133,6 +133,7 @@ import { readOnlyProjection } from "./readonly.js";
 import { assertAnsweredAllocations, assertCreatedRoots } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
 import { assertMintedUnderThisKey } from "./key-check.js";
+import { StaleAllocationStampError } from "../engine/errors.js";
 
 
 /**
@@ -3347,13 +3348,13 @@ export class BoardSmithWorldEngine implements WorldEngine {
       root = this.game.adoptSubtree(stored.parentId, stored.json as ElementJSON);
     } catch (error) {
       // A STALE STAMP IS THE PLATFORM'S FAULT, AND MUST SAY SO (#224).
-      // `adoptSubtree` proves it from the bytes and throws a bare Error, and an
+      // `adoptSubtree` proves it from the bytes and throws its own class, and an
       // uncoded throw is charged to the GAME -- so a world whose host lost the
       // stamp its own command minted under refused every room-touching verb
       // while the park ladder sat still and the publisher's health score paid
       // for it. Coded here, at the seam that knows the throw is about
       // allocation rather than about the game's rules.
-      if (error instanceof Error && /id allocation stamp/.test(error.message)) {
+      if (error instanceof StaleAllocationStampError) {
         throw worldRefusal("allocation-stale", error.message);
       }
       throw error;

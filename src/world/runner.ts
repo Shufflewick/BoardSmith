@@ -94,6 +94,8 @@ import { declaredSources } from "./migration.js";
 import type { ScheduleAllowance } from "./schedule-api.js";
 import type { DeclaredNoticeBox } from "./notices.js";
 import { WorldRefusal, worldRefusal } from "./refusals.js";
+import { PlayerFacingError } from "../engine/errors.js";
+import { isDevThrowEnabled } from "../utils/dev.js";
 
 /** A scheduled event's timing, or `null` for a player's command. */
 export type WorldTiming = { readonly due: number; readonly missedCount: number } | null;
@@ -982,10 +984,14 @@ export interface WorldViews {
  *  catch writes the identical pair for a whole call, and the parent reads both
  *  the same way. */
 function viewRefusalOf(error: unknown): WorldViewRefusal {
-  return {
-    ...(error instanceof WorldRefusal ? { code: error.code } : {}),
-    message: error instanceof Error ? error.message : String(error),
-  };
+  if (error instanceof WorldRefusal) return { code: error.code, message: error.message };
+  if (error instanceof PlayerFacingError) return { message: error.message };
+  // ANY OTHER THROW IS A BUG, and its text goes to the log, not the player (#793),
+  // as an action's does (`failedExecute`).
+  console.error("[BoardSmith] A world view failed:", error);
+  const generic = "This view could not be shown because of an error in the game's rules.";
+  const detail = error instanceof Error ? error.message : String(error);
+  return { message: isDevThrowEnabled() ? `${generic} (${detail})` : generic };
 }
 
 /**

@@ -247,6 +247,22 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
     await expect(stale.serialize(["a"])).rejects.toBe(proof);
   });
 
+  it("does not call an id clash a stale stamp because of what the room is named (#793)", async () => {
+    // The stale-stamp throw used to be recognised by its sentence, so any other
+    // adoption failure whose text happened to hold the phrase was coded as one.
+    const genesis = await storedWorld();
+    const host = await hostHoldingA(genesis);
+    const a = genesis.partitions.a!;
+    const twin = { ...a, json: { ...(a.json as object), name: "id allocation stamp" } };
+
+    const refusal = await host
+      .declare(READ_A, "p1", { c: twin }, arrival(1_000), { declaredActivity: [], declaredNotices: [] })
+      .catch((error: unknown) => error);
+
+    expect((refusal as Error).message).toMatch(/already resident/);
+    expect(refusal).not.toBeInstanceOf(WorldRefusal);
+  });
+
   it("derives the stamp a world's stored bytes call for", async () => {
     // The check a test or an audit runs against a host's stamp: read what is
     // stored, read each id back to its counter value with the world's key, and

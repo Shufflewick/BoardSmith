@@ -908,7 +908,14 @@ export class ResidentWorld {
         timing: null,
         arrivedAt,
         queue: this.#store.pendingEvents(),
-        receipt: { orderId: order.id, player, at: arrivedAt },
+        // SWEPT BY THE ORDER'S OWN `at`, the instant `resolveOrder` judges a
+        // repeat by, so a page clock ahead of the host's cannot outlive its
+        // receipt (#793); capped one window ahead so a lying clock cannot pin it.
+        receipt: {
+          orderId: order.id,
+          player,
+          at: Math.min(order.at, this.#clock.now() + this.#budgets.receiptRetentionMs),
+        },
       });
       return { kind: "committed", events };
     } finally {
@@ -939,12 +946,13 @@ export class ResidentWorld {
     // drops a presence transition on an ended world the same way: nobody is
     // owed an answer, so there is nothing to refuse.
     if (this.completed) return;
+    const now = this.now();
     try {
       const { events } = await this.#dispatch({
         player: null,
         command: { name, args },
-        timing: { due: this.now(), missedCount: 0 },
-        arrivedAt: this.now(),
+        timing: { due: now, missedCount: 0 },
+        arrivedAt: now,
         queue: this.#store.pendingEvents(),
       });
       this.#onEvents(events);
@@ -1151,7 +1159,8 @@ export class ResidentWorld {
    * delay produces a busy host rather than a wedged one.
    */
   async #drain(): Promise<void> {
-    await this.#drainBatch(this.now());
+    this.#retryAt = undefined;
+    await this.#drainBatch(this.now(), new Set());
     this.rearm();
   }
 
@@ -1179,14 +1188,14 @@ export class ResidentWorld {
    * handler that re-arms itself at zero delay a slow world rather than a
    * wedged one.
    */
-  async #drainBatch(now: number): Promise<number> {
+  async #drainBatch(now: number, spent: Set<string>): Promise<number> {
     let ran = 0;
-    this.#retryAt = undefined;
-    // WHAT THIS BATCH HAS ALREADY TAKEN. An event that REFUSED stays queued by
-    // design, and a re-read would hand back the same refusal until the bound
-    // ran out; an event that ran is gone from the queue and is here only
-    // because being spent is this batch's fact, not the store's.
-    const spent = new Set<string>();
+    // `spent` IS WHAT THIS DRAIN HAS ALREADY TAKEN. An event that REFUSED stays
+    // queued by design, and a re-read would hand back the same refusal until
+    // the bound ran out; an event that ran is gone from the queue and is here
+    // only because being spent is this drain's fact, not the store's. A
+    // catch-up shares one across its rounds, so a refusal is tried and said
+    // once per catch-up rather than once per round (#793).
     for (let taken = 0; taken < this.#budgets.drainBatch; taken++) {
       // RE-ASKED BEFORE EVERY EVENT (#395): the one before may have ended the
       // world, and an ended world runs nothing else.
@@ -1315,12 +1324,14 @@ export class ResidentWorld {
       // to be overtaken, and the absence of a guarantee is not a lesser one.
       return false;
     }
+    this.#retryAt = undefined;
+    const spent = new Set<string>();
     for (let round = 0; round < this.#budgets.catchUpRounds; round++) {
       if (!this.#anythingDueAt(arrivedAt)) return false;
       // A BATCH THAT RAN NOTHING WILL RUN NOTHING NEXT ROUND EITHER: an earlier
       // event refused, said so out loud, and stays queued. The world is behind
       // it and stopping here is what keeps this from spinning.
-      if ((await this.#drainBatch(arrivedAt)) === 0) return true;
+      if ((await this.#drainBatch(arrivedAt, spent)) === 0) return true;
       // A TURN FOR EVERYTHING ELSE. The world lock is still held -- the catch-up
       // and the command it gates are one ordered unit -- but the runtime is not
       // starved, so a host under load stays answerable while it happens.
@@ -1400,11 +1411,14 @@ export class ResidentWorld {
     await this.settled();
     this.#closed = true;
     this.#clock.arm(null, () => {});
-    const dirty = this.#store.dirtyPartitions();
-    if (dirty.length > 0) {
-      await this.#store.writeCheckpoint(await this.#world.runner.serialize(dirty));
+    try {
+      const dirty = this.#store.dirtyPartitions();
+      if (dirty.length > 0) {
+        await this.#store.writeCheckpoint(await this.#world.runner.serialize(dirty));
+      }
+    } finally {
+      this.#store.close();
     }
-    this.#store.close();
   }
 
   /**

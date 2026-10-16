@@ -1690,6 +1690,21 @@ describe('#195: an uncertain order is answered from its receipt, never spent twi
     await host.close();
   });
 
+  it('replays a repeat from a page whose clock runs ahead, across the retention cutoff (#793)', async () => {
+    const clock = testClock();
+    const budgets = worldBudgets({ receiptRetentionMs: 1_000 });
+    const { host, sent } = await attached({ dir, clock, budgets });
+    const mintedAt = clock.now() + 500;
+    await chop(host, 'r1', 'o1', mintedAt);
+    clock.advance(1_200);
+    await chop(host, 'r2', 'o2', clock.now() + 500);
+
+    await chop(host, 'r3', 'o1', mintedAt);
+    expect(last(sent, 'c1', 'world_response')).toMatchObject({ ok: true, replayed: true });
+    expect(logsIn(sent)).toContain('"logs":2');
+    await host.close();
+  });
+
   it('runs a fresh order after "fire due events now" jumps the clock past the retention window (#722)', async () => {
     // The page stamps orders with its own wall clock, so the floor they are
     // judged against must not include the world's skew.

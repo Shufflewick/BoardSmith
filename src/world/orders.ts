@@ -73,7 +73,8 @@ export interface WorldReceipt {
   readonly orderId: string;
   /** The seat's durable player id, so one seat cannot replay another's order. */
   readonly player: string;
-  /** When the host committed it, on the world's clock. */
+  /** The order's own `at`, capped one retention window past the host's wall
+   *  clock: the instant the receipt is swept by, judged as `resolveOrder` judges a repeat. */
   readonly at: number;
   /** The sentence the world answered with, if it gave one. */
   readonly message?: string;
