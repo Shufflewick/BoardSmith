@@ -38,6 +38,7 @@ import { openWorldStore, worldStorePath, type LocalWorldStore } from './world-st
 import type { WorldHostClock } from './node-world-clock.js';
 import { LocalWorldHost, devWorldPlayer, type WorldDevRequest } from './world-host.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { vaultBundle } from '../../testing/test-world.test-helper.js';
 import { worldElementIds } from '../../engine/element/element-ids.js';
 
 /** Run SQL against a world store behind its back, for a state the store
@@ -476,6 +477,23 @@ describe('#167: an action is dispatched through its ordered declaration, then ru
     // ON ITS OWN FRAME, BEHIND THE VIEW (#244).
     const offers = last(sent, 'c1', 'world_offers')?.actions as Array<{ name: string }>;
     expect(offers.map((o) => o.name)).toEqual(['bank', 'chop', 'stack']);
+    await host.close();
+  });
+});
+
+describe("#717: an event in a partition only its own seat's view names", () => {
+  it('reaches that seat and nobody else', async () => {
+    const { host, sent } = await attached({ dir, definition: vaultBundle() });
+    for (const [clientId, seat] of [['c2', 2], ['c3', 3]] as const) {
+      await host.handleMessage(clientId, { type: 'hello' });
+      await host.handleMessage(clientId, { type: 'attach', seat });
+    }
+
+    await host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'stash', args: {} });
+
+    expect(last(sent, 'c1', 'world_events')?.events).toMatchObject([{ text: 'Seat 1 stashed a coin.' }]);
+    expect(last(sent, 'c2', 'world_events')).toBeUndefined();
+    expect(last(sent, 'c3', 'world_events')).toBeUndefined();
     await host.close();
   });
 });

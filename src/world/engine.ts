@@ -501,6 +501,16 @@ interface WorldSeatProjection {
   readonly named: readonly string[];
 }
 
+/**
+ * One seat's `world.view`, run against only what a command declared (#717):
+ * what it named (null if it threw), and every partition it reached for that the
+ * command did not declare.
+ */
+interface JudgedView {
+  readonly names: readonly string[] | null;
+  readonly undeclared: readonly string[];
+}
+
 export class BoardSmithWorldEngine implements WorldEngine {
   private readonly budgets: WorldBudgets;
   private readonly game: Game;
@@ -2570,6 +2580,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // `undeclared-partition` on every border draw and the command succeeded.
       if (ledger.refused !== null) throw ledger.refused;
 
+      // Each seat's view runs at most once per command, however many events it emitted.
+      const views = new Map<number, JudgedView>();
       return {
         // ROUTED HERE AND NOWHERE ELSE (#58). The action said where; this is
         // the engine saying who, once per event, while the world it is a fact
@@ -2577,7 +2589,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         events: [
           ...ledger.events.map((event) => ({
             ...event,
-            seats: this.audienceOf(command.name, event.scope),
+            seats: this.audienceOf(command.name, event.scope, named, views),
           })),
           // AND EACH NOTICE, TO ITS ONE SEAT (ShufflewickPub #521).
           ...noticeEvents(ledger.notices),
@@ -3030,17 +3042,25 @@ export class BoardSmithWorldEngine implements WorldEngine {
    *     otherwise every seat the element is visible to. Both are BoardSmith's
    *     own primitives (`getEffectiveOwner`, `isVisibleTo`) rather than a
    *     second notion of visibility invented here, so a room hidden from a
-   *     player in the tree is a room they are not told about either.
+   *     player in the tree is a room they are not told about either. And of
+   *     those, only the seats whose `world.view` names the partition (#717),
+   *     judged by `viewTells`.
    *
    * A SCOPE THAT NAMES NOTHING IS A REFUSAL, not an event delivered to nobody.
    * The silent version is invisible: the game author sees an event that never
    * arrives, and cannot tell that from nobody having been watching.
    *
-   * The whole roster is walked, which is O(seats) of a cheap predicate per
-   * event -- against the O(seats) of SERIALIZED FRAMES this replaces. The
-   * expensive half is the sending, and that is now the size of the audience.
+   * The whole roster is walked for the tree check, and each seat that passes it
+   * runs its `world.view` once per command (`views` holds the answers), so a
+   * public room costs one view per seat -- against the O(seats) of SERIALIZED
+   * FRAMES this replaces.
    */
-  private audienceOf(commandName: string, scope: string): readonly number[] {
+  private audienceOf(
+    commandName: string,
+    scope: string,
+    declared: readonly string[],
+    views: Map<number, JudgedView>,
+  ): readonly number[] {
     const all = [...this.seats.values()];
     if (scope === WORLD_SCOPE) return all;
 
@@ -3057,8 +3077,75 @@ export class BoardSmithWorldEngine implements WorldEngine {
 
     const root = this.rootOf(scope);
     const owner = root.getEffectiveOwner();
-    if (owner !== undefined) return all.filter((seat) => seat === owner.seat);
-    return all.filter((seat) => root.isVisibleTo(seat));
+    const sees =
+      owner !== undefined
+        ? (seat: number) => seat === owner.seat
+        : (seat: number) => root.isVisibleTo(seat);
+    return all.filter(
+      (seat) => sees(seat) && this.viewTells(seat, scope, commandName, declared, views),
+    );
+  }
+
+  /**
+   * WHETHER THIS SEAT'S `world.view` NAMES THE SCOPE (#717): partition fog is
+   * the whole fog rule, so a room your view does not name is a room you are not
+   * told about either.
+   *
+   * JUDGED AGAINST WHAT THE COMMAND DECLARED, never against what else happens
+   * to be resident (the rule `assertDeclared` holds a handler to). A two-step
+   * view (#122) asked against whatever is loaded names only its index when the
+   * index is absent, so a resident-world answer would let a wake or an eviction
+   * decide who hears. Three outcomes, each a function of the declared state:
+   *
+   *   it names the scope: told. A view names more as more is loaded, never
+   *     less, so nothing undeclared could take the scope back out;
+   *   it did not, and read nothing undeclared: not told, and that is exact. A
+   *     view that threw here throws identically on that seat's own view, which
+   *     refuses it there (#310), so the actor's command is not refused for it;
+   *   it did not, and reached for something undeclared: nobody can say, so the
+   *     command is refused rather than the seat silently dropped.
+   */
+  private viewTells(
+    seat: number,
+    scope: string,
+    commandName: string,
+    declared: readonly string[],
+    views: Map<number, JudgedView>,
+  ): boolean {
+    let view = views.get(seat);
+    if (view === undefined) {
+      view = this.judgeView(seat, declared);
+      views.set(seat, view);
+    }
+    if (view.names?.includes(scope)) return true;
+    if (view.undeclared.length === 0) return false;
+    const reached = view.undeclared.map((name) => `"${name}"`).join(", ");
+    throw worldRefusal(
+      "undecided-audience",
+      `Command "${commandName}" emitted an event in "${scope}", and seat ${seat}'s \`world.view\` ` +
+        `could only say whether it names "${scope}" by reading ${reached}, which "${commandName}" ` +
+        `did not declare. Who hears an event is judged against what the command declared, never ` +
+        `against whatever else happens to be loaded. Declare ${reached} in "${commandName}", or ` +
+        `narrow who can see "${scope}" in the tree (an owner, or \`addVisibleTo\`).`,
+    );
+  }
+
+  /** One seat's view run against only the partitions `declared` names (#717). */
+  private judgeView(seat: number, declared: readonly string[]): JudgedView {
+    const resident = this.residentWorld();
+    const undeclared: string[] = [];
+    const world: WorldResidency = {
+      partition: (name) => {
+        if (declared.includes(name)) return resident.partition(name);
+        if (!undeclared.includes(name)) undeclared.push(name);
+        return undefined;
+      },
+    };
+    try {
+      return { names: this.game.readingOnly(() => this.view(seat, world)), undeclared };
+    } catch {
+      return { names: null, undeclared };
+    }
   }
 
   /**

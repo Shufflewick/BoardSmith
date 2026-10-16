@@ -1655,6 +1655,90 @@ describe("#186 — a world can say something a player reads", () => {
     expect(result.events[0]?.seats).toEqual([1]);
   });
 
+  describe("#717: a partition event reaches the seats whose view names it", () => {
+    /** Names ROOM_ONE as well, the same line as `say`, and declares ROOM_TWO. */
+    const sayDeclaringBoth = worldAction<WorldFixtureGame>("sayDeclaringBoth")
+      .needs(() => [ROOM_ONE, ROOM_TWO])
+      .execute((_args, ctx) => {
+        ctx.world.emit(ROOM_ONE, {}, "Somebody swept the room.");
+      });
+
+    function twoSeats(view: (seat: number, world: { partition(name: string): unknown }) => readonly string[]) {
+      return new BoardSmithWorldEngine({
+        game: newWorldGame(),
+        seats: new Map([
+          ["player-a", 1],
+          ["player-b", 2],
+        ]),
+        store: new CountingStore(genesis()),
+        actions: [say, sayDeclaringBoth],
+        view,
+      });
+    }
+
+    /** Seat 2 names ROOM_ONE only once it has read ROOM_TWO: the two-step view of #122. */
+    const twoStep = (seat: number, world: { partition(name: string): unknown }) =>
+      seat === 1 ? [ROOM_ONE] : world.partition(ROOM_TWO) ? [ROOM_TWO, ROOM_ONE] : [ROOM_TWO];
+
+    async function refusalOf(run: Promise<unknown>): Promise<unknown> {
+      try {
+        await run;
+      } catch (error) {
+        return error;
+      }
+      return undefined;
+    }
+
+    it("tells a two-step view's seat when the command declared what the view reads", async () => {
+      for (const resident of [[ROOM_ONE], [ROOM_ONE, ROOM_TWO]]) {
+        const engine = twoSeats(twoStep);
+        await engine.hydrate(resident);
+        const result = await engine.applyCommand("player-a", { name: "sayDeclaringBoth", args: {} }, STAMP);
+        expect(result.events[0]?.seats).toEqual([1, 2]);
+      }
+    });
+
+    it("refuses, whatever else is loaded, when the view reads what the command did not declare", async () => {
+      for (const resident of [[ROOM_ONE], [ROOM_ONE, ROOM_TWO]]) {
+        const engine = twoSeats(twoStep);
+        await engine.hydrate(resident);
+        const refused = await refusalOf(engine.applyCommand("player-a", { name: "say", args: {} }, STAMP));
+        expect(refused).toMatchObject({ code: "undecided-audience" });
+        expect((refused as Error).message).toContain(`"${ROOM_TWO}"`);
+      }
+    });
+
+    it("needs nothing more loaded once a view already names the scope", async () => {
+      const engine = twoSeats((_seat, world) => [ROOM_ONE, ...(world.partition(ROOM_TWO) ? [ROOM_TWO] : [])]);
+      await engine.hydrate([ROOM_ONE]);
+      const result = await engine.applyCommand("player-a", { name: "say", args: {} }, STAMP);
+      expect(result.events[0]?.seats).toEqual([1, 2]);
+    });
+
+    it("leaves out a seat whose view throws on what was declared, which its own view then refuses", async () => {
+      const engine = twoSeats((seat) => {
+        if (seat === 2) throw new Error("seat 2's view is broken");
+        return [ROOM_ONE];
+      });
+      await engine.hydrate([ROOM_ONE]);
+      const result = await engine.applyCommand("player-a", { name: "say", args: {} }, STAMP);
+
+      expect(result.events[0]?.seats).toEqual([1]);
+      const { seats } = await engine.viewsFor(["player-b"]);
+      expect(seats[0]).toMatchObject({ refused: true, failure: new Error("seat 2's view is broken") });
+    });
+
+    it("refuses when a view throws after reading what the command did not declare", async () => {
+      const engine = twoSeats((seat, world) => {
+        if (seat === 2 && !world.partition(ROOM_TWO)) throw new Error("room two is not here");
+        return [ROOM_ONE];
+      });
+      await engine.hydrate([ROOM_ONE, ROOM_TWO]);
+      const refused = await refusalOf(engine.applyCommand("player-a", { name: "say", args: {} }, STAMP));
+      expect(refused).toMatchObject({ code: "undecided-audience" });
+    });
+  });
+
   it("carries the line's kind when the game names one", async () => {
     const engine = sayingEngine();
     await engine.hydrate([ROOM_ONE]);
