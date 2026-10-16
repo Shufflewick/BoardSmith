@@ -72,10 +72,10 @@ here.
        tests pass; it does not say they would catch a regression. Run this command once the chunk's
        tests are green. It exits non-zero on any finding, and a non-zero exit is a failure of this
        step like any other: route the chunk back per "Failures Loop Back to `build`". There is no
-       flag that skips part of it, and its findings are never argued away in prose. The committed
-       focused policy retains the static rules and defers mutation, as "Focused Verification
-       Policy" specifies. Under the default full policy it enforces
-       seven rules, each of which a real build run broke while its suite was green:
+       flag that skips part of it, and its findings are never argued away in prose. It enforces
+       seven rules, each of which a real build run broke while its suite was green (the committed
+       focused policy keeps the static rules and defers mutation, as "Focused Verification Policy"
+       specifies):
 
        - **Every Spec Manifest claim names a test that exists.** Each `## Spec Manifest` row names a
          test file on disk with `RED Observed: yes`, and for every claim the row lists, a test in
@@ -355,11 +355,11 @@ here.
 
 7. **The done gate: `boardsmith verify`**. Commit the chunk's work (`chunk-<slug>/step-test`,
    `state-machine.md` "Git Protocol"), then run `npx boardsmith verify --chunk <slug>`
-   (`state-machine.md` "Git Protocol" says what it measures from); for an opted-in project,
-   choose the focused receipt command in "Focused Verification Policy" instead. By default it
-   runs, in order and without stopping at the first failure, the full suite, typecheck, build, validate, the smoke
+   (`state-machine.md` "Git Protocol" says what it measures from). It runs, in order and
+   without stopping at the first failure, the full suite, typecheck, build, validate, the smoke
    test and a mutation check of the code changed since the chunk began, and writes the result for
-   this commit to `.boardsmith/verify/<commit>.json`. The smoke test is the game's
+   this commit to `.boardsmith/verify/<commit>.json`. That is the default; an explicitly opted-in
+   project runs the focused receipt command in "Focused Verification Policy" instead. The smoke test is the game's
    `tests/browser/smoke.spec.ts` (a required output of any chunk that adds an action or a UI
    control, `build/spec.md`), run in Chromium against `boardsmith dev` served from a fresh copy
    of the project; `npx boardsmith smoke` runs it alone while you work, and a machine without the
