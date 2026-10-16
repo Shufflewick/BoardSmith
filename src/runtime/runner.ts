@@ -9,7 +9,6 @@ import {
   availableActionsForSeat,
   followUpForSeat,
   type Game,
-  type GameElement,
   type GameOptions,
   type Player,
   isSeatExpiry,
@@ -885,45 +884,40 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   notePickTaken(pending: PendingActionState, seat: number): void {
     pending.conditionHeld = this.failedConditionLabels(pending.actionName, seat).length === 0;
-    pending.lastPick = { actions: this.actionHistory.length, places: this.pickPlaces(pending, seat) };
+    pending.picksOnOffer = this.picksOnOffer(pending, seat);
   }
 
   /**
-   * Before `seat`'s next pick of `pending`, mark each of its own picks another
-   * action took since its latest pick, for `executePendingAction` to re-check
-   * (#767): an element pick whose element moved, and any other pick once
-   * another action was applied. `lastPick` was written after the action's own
-   * `onSelect`, so a pick that took itself off the offer is not marked.
+   * Before `seat`'s next pick of `pending`, mark each of its own picks that was
+   * on offer right after its latest pick and is not now, for
+   * `executePendingAction` to re-check (#767). Only another action can have
+   * taken it in between, so a pick the action's own `onSelect` took off the
+   * offer is never marked.
    */
   markStalePicks(pending: PendingActionState, seat: number): void {
-    const last = pending.lastPick;
-    if (!last) return;
-    const places = this.pickPlaces(pending, seat);
-    const taken = Object.keys(last.places).filter((name) => last.places[name] === null
-      ? last.actions !== this.actionHistory.length
-      : last.places[name] !== places[name]);
-    pending.stalePicks = [...new Set([...(pending.stalePicks ?? []), ...taken])];
+    if (!pending.picksOnOffer) return;
+    const onOffer = this.picksOnOffer(pending, seat);
+    const taken = pending.picksOnOffer.filter((name) => !onOffer.includes(name));
+    if (taken.length > 0) pending.stalePicks = [...new Set([...(pending.stalePicks ?? []), ...taken])];
   }
 
   /**
-   * Where each of the seat's own non-repeating picks of `pending` sits now: the
-   * ids of an element pick's elements' parents, or `null` for any other pick.
-   * A pick a held follow-up answered is the engine's and is left out.
+   * The seat's own non-repeating picks of `pending` that a whole submission
+   * would take now. A pick a held follow-up answered is the engine's and is
+   * left out.
    */
-  private pickPlaces(pending: PendingActionState, seat: number): Record<string, string | null> {
+  private picksOnOffer(pending: PendingActionState, seat: number): string[] {
     const action = this.game.getAction(pending.actionName)!;
     const executor = this.game.getActionExecutor();
+    const player = this.game.getPlayer(seat)!;
     const bound = this.followUpArgsFor(pending.actionName, seat);
-    const args = executor.resolveArgs(action, pending.collectedArgs, this.game.getPlayer(seat));
-    const places: Record<string, string | null> = {};
-    for (const selection of action.selections) {
-      const value = args[selection.name];
-      if (value === undefined || Object.hasOwn(bound, selection.name) || executor.isRepeatingSelection(selection)) continue;
-      places[selection.name] = selection.type === 'element' || selection.type === 'elements'
-        ? [value].flat().map((element) => (element as GameElement).parent?.id).join(',')
-        : null;
-    }
-    return places;
+    const args = executor.resolveArgs(action, pending.collectedArgs, player);
+    return action.selections
+      .filter((selection) => args[selection.name] !== undefined
+        && !Object.hasOwn(bound, selection.name)
+        && !executor.isRepeatingSelection(selection)
+        && executor.validateSelection(selection, args[selection.name], player, args, action.name).valid)
+      .map((selection) => selection.name);
   }
 
   /**

@@ -28,21 +28,29 @@ import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { historyLabels } from './testing/history-labels.js';
 import { succeeded } from './op-result.test-helper.js';
 
+/** A gem another seat can reserve, which takes it off the offer without moving it. */
+class Gem extends Piece<GemGame> {
+  reserved = false;
+}
+
 class GemGame extends Game<GemGame, Player> {
   /** The game callbacks that ran, as `callback:seat`. */
   ran: string[] = [];
+  /** The colors claimed so far, which are no longer on offer. */
+  claimed: string[] = [];
 
   constructor(options: GameOptions) {
     super(options);
     const supply = this.create(Space, 'supply');
     this.create(Space, 'held');
     for (const player of this.all(Player)) this.create(Space, `tableau-${player.seat}`);
-    supply.create(Piece, 'gem');
-    const offered = (ctx: { game: GemGame }) => ctx.game.first(Space, 'supply')!.all(Piece);
+    supply.create(Gem, 'gem');
+    const offered = (ctx: { game: GemGame }) => ctx.game.first(Space, 'supply')!.all(Gem).filter((gem) => !gem.reserved);
+    const colors = (ctx: { game: GemGame }) => ['red', 'blue'].filter((color) => !ctx.game.claimed.includes(color));
     const tableau = (game: GemGame, player: Player) => game.first(Space, `tableau-${player.seat}`)!;
     this.registerActions(
       Action.create<GemGame>('draft')
-        .chooseElement<'gem', Piece>('gem', {
+        .chooseElement<'gem', Gem>('gem', {
           elements: offered,
           onSelect: () => { this.ran.push('onSelect'); },
           onCancel: () => { this.ran.push('onCancel'); },
@@ -53,43 +61,60 @@ class GemGame extends Game<GemGame, Player> {
           ctx.game.ran.push(`draft:${ctx.player.seat}`);
         }),
       Action.create<GemGame>('grab')
-        .chooseElement<'gem', Piece>('gem', { elements: offered })
+        .chooseElement<'gem', Gem>('gem', { elements: offered })
         .execute(({ gem }, ctx) => {
           gem.putInto(tableau(ctx.game, ctx.player));
           ctx.game.ran.push(`grab:${ctx.player.seat}`);
         }),
+      Action.create<GemGame>('reserve')
+        .chooseElement<'gem', Gem>('gem', { elements: offered })
+        .execute(({ gem }) => { gem.reserved = true; }),
       // Its own onSelect takes the gem off the offer, into `held`.
       Action.create<GemGame>('claim')
-        .chooseElement<'gem', Piece>('gem', {
+        .chooseElement<'gem', Gem>('gem', {
           elements: offered,
           onSelect: (gem) => gem.putInto(this.first(Space, 'held')!),
-          onCancel: () => this.first(Space, 'held')!.first(Piece)!.putInto(supply),
+          onCancel: () => this.first(Space, 'held')!.first(Gem)!.putInto(supply),
         })
         .chooseFrom('slot', { choices: ['left', 'right'] })
         .execute(({ gem }, ctx) => {
           gem.putInto(tableau(ctx.game, ctx.player));
           ctx.game.ran.push(`claim:${ctx.player.seat}`);
         }),
-      // Holds the gem aside and hands it to `place` as a held follow-up.
-      Action.create<GemGame>('pocket')
-        .chooseElement<'gem', Piece>('gem', { elements: offered })
-        .execute(({ gem }) => {
-          gem.putInto(this.first(Space, 'held')!);
-          return { success: true, followUp: { action: 'place', args: { gem: gem.id } } };
-        }),
-      Action.create<GemGame>('place')
-        .chooseElement<'gem', Piece>('gem', { elements: offered })
+      // Its own onSelect takes the color off the offer.
+      Action.create<GemGame>('paint')
+        .chooseFrom<'color', string>('color', {
+          choices: colors,
+          onSelect: (color) => { this.claimed.push(color); },
+          onCancel: () => { this.claimed.pop(); },
+        })
         .chooseFrom('slot', { choices: ['left', 'right'] })
+        .execute(({ color }, ctx) => { ctx.game.ran.push(`paint:${ctx.player.seat}:${color}`); }),
+      Action.create<GemGame>('dye')
+        .chooseFrom<'color', string>('color', { choices: colors })
+        .chooseFrom('slot', { choices: ['left', 'right'] })
+        .execute(({ color }, ctx) => { ctx.game.ran.push(`dye:${ctx.player.seat}:${color}`); }),
+      // Leaves the gem on offer and hands it to `stamp` as a held follow-up.
+      Action.create<GemGame>('mark')
+        .chooseElement<'gem', Gem>('gem', { elements: offered })
+        .execute(({ gem }) => ({ success: true, followUp: { action: 'stamp', args: { gem: gem.id } } })),
+      Action.create<GemGame>('stamp')
+        .chooseElement<'gem', Gem>('gem', { elements: offered })
+        .chooseFrom('slot', { choices: ['left', 'right'] })
+        .chooseFrom('side', { choices: ['up', 'down'] })
         .execute(({ gem }, ctx) => {
           gem.putInto(tableau(ctx.game, ctx.player));
-          ctx.game.ran.push(`place:${ctx.player.seat}`);
+          ctx.game.ran.push(`stamp:${ctx.player.seat}`);
         }),
       Action.create<GemGame>('rest').execute((_args, ctx) => {
         ctx.game.ran.push(`rest:${ctx.player.seat}`);
       }),
     );
     this.setFlow({
-      root: loop({ maxIterations: 10, do: simultaneousActionStep({ actions: ['draft', 'grab', 'claim', 'pocket', 'rest'] }) }),
+      root: loop({
+        maxIterations: 10,
+        do: simultaneousActionStep({ actions: ['draft', 'grab', 'reserve', 'claim', 'paint', 'dye', 'mark', 'rest'] }),
+      }),
     });
   }
 }
@@ -106,7 +131,7 @@ function runner(): GameRunner<GemGame> {
   return r;
 }
 
-const gem = (r: GameRunner<GemGame>) => r.game.first(Piece, 'gem')!;
+const gem = (r: GameRunner<GemGame>) => r.game.first(Gem, 'gem')!;
 
 describe('GameRunner', () => {
   it("refuses a pending action once another seat's action took an earlier pick, and fires onCancel", () => {
@@ -143,15 +168,53 @@ describe('GameRunner', () => {
     expect(gem(r).parent!.name).toBe('tableau-1');
   });
 
-  it('does not re-check a pick a held follow-up answered, when another seat acted in between', () => {
+  it('completes a pending action whose own onSelect took a chooseFrom pick off the offer, when another seat acted in between', () => {
     const r = runner();
-    expect(r.performAction('pocket', 1, { gem: gem(r).id }).success).toBe(true);
-    r.startPendingAction('place', 1);
-    expect(r.processSelectionStep(1, 'gem', gem(r).id).success).toBe(true);
+    r.startPendingAction('paint', 1);
+    expect(r.processSelectionStep(1, 'color', 'red').success).toBe(true);
     expect(r.performAction('rest', 2, {}).success).toBe(true);
 
     expect(r.processSelectionStep(1, 'slot', 'left')).toMatchObject({ success: true, actionComplete: true });
-    expect(gem(r).parent!.name).toBe('tableau-1');
+    expect(r.game.ran).toEqual(['rest:2', 'paint:1:red']);
+  });
+
+  it("refuses a pending action once another seat's pick took its chooseFrom pick off the offer", () => {
+    const r = runner();
+    r.startPendingAction('dye', 1);
+    expect(r.processSelectionStep(1, 'color', 'red').success).toBe(true);
+    r.startPendingAction('paint', 2);
+    expect(r.processSelectionStep(2, 'color', 'red').success).toBe(true);
+
+    const step = r.processSelectionStep(1, 'slot', 'left');
+
+    expect(step).toMatchObject({ success: false, error: NO_LONGER_AVAILABLE });
+    expect(r.game.ran).toEqual([]);
+    expect(r.actionHistory).toEqual([]);
+  });
+
+  it("refuses a pending action once another seat's action took its element pick off the offer without moving it", () => {
+    const r = runner();
+    r.startPendingAction('draft', 1);
+    expect(r.processSelectionStep(1, 'gem', gem(r).id).success).toBe(true);
+    expect(r.performAction('reserve', 2, { gem: gem(r).id }).success).toBe(true);
+
+    const step = r.processSelectionStep(1, 'slot', 'left');
+
+    expect(step).toMatchObject({ success: false, error: NO_LONGER_AVAILABLE });
+    expect(r.game.ran).toEqual(['onSelect', 'onCancel']);
+    expect(gem(r).parent!.name).toBe('supply');
+  });
+
+  it("does not re-check a pick a held follow-up answered, when another seat's action took it", () => {
+    const r = runner();
+    expect(r.performAction('mark', 1, { gem: gem(r).id }).success).toBe(true);
+    r.startPendingAction('stamp', 1);
+    expect(r.processSelectionStep(1, 'gem', gem(r).id).success).toBe(true);
+    expect(r.processSelectionStep(1, 'slot', 'left').success).toBe(true);
+    expect(r.performAction('grab', 2, { gem: gem(r).id }).success).toBe(true);
+
+    expect(r.processSelectionStep(1, 'side', 'up')).toMatchObject({ success: true, actionComplete: true });
+    expect(r.game.ran).toEqual(['grab:2', 'stamp:1']);
   });
 
   it("completes a pending action when another seat's action left its picks on offer", () => {
@@ -176,7 +239,7 @@ describe('stateless selectionStep op', () => {
     const find = (node: unknown): number | undefined => {
       if (typeof node !== 'object' || node === null) return undefined;
       const record = node as Record<string, unknown>;
-      if (record.className === 'Piece' && record.name === 'gem') return record.id as number;
+      if (record.className === 'Gem' && record.name === 'gem') return record.id as number;
       for (const value of Object.values(record)) {
         const id = find(value);
         if (id !== undefined) return id;

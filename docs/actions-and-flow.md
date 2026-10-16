@@ -1019,15 +1019,15 @@ submission checks it, before the action runs: in a simultaneous step, seat 2
 grabbing the gem seat 1 picked for `draft` refuses seat 1's `draft` with the
 pick's `unavailable` sentence (or the default "That choice is no longer
 available" one). `onCancel` runs for each pick whose `onSelect` ran, and nothing
-is recorded. An element pick counts as taken when its element moved since the
-seat's latest pick; any other pick, once another action was applied since. The
-action's own changes do not count: a pick its own `onSelect` took off the offer
-still completes, even when another seat acts in between. A repeating pick and a
-pick a held follow-up answered are never checked again. Limit: a `chooseFrom`
-(or text or number) pick its own `onSelect` took off the offer is refused when
-another action was applied after it, since nothing about the game says who
-took it. `GameRunner.markStalePicks` marks the taken picks before each of the
-seat's picks.
+is recorded. A pick counts as taken when it was on offer right after the
+seat's latest pick and is not on offer before its next one, whether another
+seat's action moved its element, changed what its filter reads (a gem marked
+reserved in place), or another seat's own pick claimed it. The action's own
+changes do not count: a pick its own `onSelect` took off the offer is already
+off the offer right after it, so it still completes, even when another seat
+acts in between. A repeating pick and a pick a held follow-up answered are
+never checked again. `GameRunner.markStalePicks` marks the taken picks before
+each of the seat's picks.
 
 #### Why not just refuse inside `execute`?
 

@@ -198,12 +198,11 @@ export interface PendingActionState {
    */
   conditionHeld?: boolean;
   /**
-   * How many actions the game's history held (`actionHistory.length`), and
-   * where each of this seat's own picks sat (`GameRunner.markStalePicks`),
-   * right after its latest pick that left the action open.
-   * `GameRunner.notePickTaken` writes it (#767).
+   * This seat's own picks that were still on offer right after its latest pick
+   * that left the action open. `GameRunner.notePickTaken` writes it and
+   * `GameRunner.markStalePicks` reads it (#767).
    */
-  lastPick?: { actions: number; places: Record<string, string | null> };
+  picksOnOffer?: string[];
   /**
    * The picks another action took since this seat made them, which
    * `executePendingAction` checks are still on offer before running.
