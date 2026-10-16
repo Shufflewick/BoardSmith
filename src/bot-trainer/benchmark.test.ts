@@ -11,6 +11,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { benchmarkBot, weightedObjectives } from './benchmark.js';
 import { createBot } from '../bot/index.js';
+import { GameRunner } from '../runtime/index.js';
 import {
   Game,
   Player,
@@ -590,5 +591,46 @@ describe('a reproducible benchmark is repeatable move for move (#699)', () => {
   it('refuses a game timeout on a reproducible benchmark, since a clock would make it unrepeatable', async () => {
     await expect(race({ seed: 'clock', reproducible: true, timeout: 1000 })).rejects.toThrow(/reproducible.*timeout/);
     expect(createBot).not.toHaveBeenCalled();
+  });
+});
+
+/** Each seat picks one of six options once; seat 1 wins. */
+class SixWayGame extends Game<SixWayGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(
+      Action.create<SixWayGame>('pick')
+        .chooseFrom('option', { choices: ['a', 'b', 'c', 'd', 'e', 'f'] })
+        .execute((_args, ctx) => {
+          if (ctx.player.seat === 2) (ctx.game as SixWayGame).finish([ctx.game.players[0]]);
+        }),
+    );
+    this.setFlow({ root: eachPlayer({ do: actionStep({ actions: ['pick'] }) }) });
+  }
+}
+
+describe('the baseline opponent picks at random from the legal moves (#734)', () => {
+  /** The option the baseline seat played in each game, in order. */
+  async function baselinePicks(seed: string): Promise<unknown[]> {
+    const performAction = vi.spyOn(GameRunner.prototype, 'performAction');
+    try {
+      // 20 games: the trained bot is seat 1 in the first 10, so the baseline is seat 2 there.
+      await benchmarkBot(SixWayGame, 'six-way', undefined, noWeights, {
+        gameCount: 20, mctsIterations: 1, maxActions: 4, seed, reproducible: true,
+      });
+      return performAction.mock.calls.slice(0, 20).filter((call) => call[1] === 2).map((call) => call[2].option);
+    } finally {
+      performAction.mockRestore();
+    }
+  }
+
+  it('does not always play the first listed move', async () => {
+    const picks = await baselinePicks('spread');
+    expect(picks).toHaveLength(10);
+    expect(new Set(picks).size).toBeGreaterThan(1);
+  });
+
+  it('plays the same moves for the same seed', async () => {
+    expect(await baselinePicks('again')).toEqual(await baselinePicks('again'));
   });
 });
