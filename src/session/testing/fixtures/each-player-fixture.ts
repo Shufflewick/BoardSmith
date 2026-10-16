@@ -1,9 +1,7 @@
 /**
- * Minimal `eachPlayer` fixture. `eachPlayer` binds the current Player as a LIVE
- * element flow variable (`variables.currentPlayer`); this fixture exists to prove
- * that a game using it survives the structured-clone broadcast/postMessage and
- * executor-RPC boundaries (where a live element would throw DataCloneError) and
- * still round-trips through a snapshot.
+ * Minimal `eachPlayer` fixture: a game using it survives the structured-clone
+ * broadcast/postMessage and executor-RPC boundaries (where a live element would
+ * throw DataCloneError) and still round-trips through a snapshot.
  */
 
 import {

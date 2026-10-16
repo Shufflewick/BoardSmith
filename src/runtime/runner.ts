@@ -1372,8 +1372,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // just loaded). restoreFlowState builds a fresh FlowEngine from the saved
     // position, so it does not require a prior start().
     //
-    // Element-valued flow variables (e.g. eachPlayer's currentPlayer, an
-    // executeForEach `as` binding) were serialized to element markers by
+    // Element-valued flow variables (e.g. a setVar value or a
+    // forEach `as` binding) were serialized to element markers by
     // getPosition; restoreFlowState relinks them to the loaded tree internally.
     if (snapshot.flowState) {
       runner.game.restoreFlowState(snapshot.flowState);
