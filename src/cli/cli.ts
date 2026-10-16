@@ -197,9 +197,8 @@ export function createProgram(): Command {
         "commit, and typecheck; with --check, accept only that chunk's result",
     )
     .option('--check', 'Run nothing: exit 0 only when HEAD, on a clean tree, has a passing result')
-    .option('--selection <path>', 'Opted-in projects: verify only declared authored tests and typecheck, recording focused scope')
     .option('--project <dir>', 'Project directory (defaults to cwd)')
-    .action((options: { base?: string; chunk?: string; check?: boolean; project?: string; selection?: string }) => verifyCommand(options));
+    .action((options: { base?: string; chunk?: string; check?: boolean; project?: string }) => verifyCommand(options));
 
   program
     .command('mutation-equivalence <id>')

@@ -65,8 +65,6 @@ import { findCodeRun, type CodeRunContext } from './test-step-code-run.js';
 import { findHandBuiltShellContext } from './test-step-shell-context.js';
 import { findChunkCommits } from '../lib/chunk-commits.js';
 import { gitOutput as git } from '../lib/git-output.js';
-import type { FocusedVerificationScope } from '../lib/authored-tests.js';
-import { focusedPolicyScope } from '../lib/focused-policy.js';
 import { chunkMdPath, relChunkMdPath } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
 
@@ -274,8 +272,6 @@ export interface TestStepCheckResult {
   findings: TestStepFinding[];
   /** Present when the static checks passed and the mutation check ran. */
   mutation?: MutationSummary;
-  scope?: FocusedVerificationScope;
-  deferred?: string;
 }
 
 /** The chunk's test files that exist, keyed by manifest path, with their absolute paths. */
@@ -739,15 +735,10 @@ export async function testStepCheckCommand(
   options: { project?: string; json?: boolean } = {},
 ): Promise<void> {
   const dir = pathResolve(options.project ?? process.cwd());
-  const scope = await focusedPolicyScope(dir);
   const { testFiles, added, ...staticResult } = await checkTestStep(dir, slug);
   const result: TestStepCheckResult = { ...staticResult };
-  if (scope) {
-    result.scope = scope;
-    result.deferred = 'Mutation checks are deferred to the required full verification.';
-  }
 
-  if (!scope && result.findings.length === 0 && testFiles.length > 0) {
+  if (result.findings.length === 0 && testFiles.length > 0) {
     const liveClaims = claimsInForce(await readChunk(dir, slug));
     const mutation = await runMutationCheck({
       projectDir: dir,
@@ -780,10 +771,6 @@ function printReport(result: TestStepCheckResult): void {
     );
   }
   if (result.findings.length === 0) {
-    if (result.scope) {
-      console.log(chalk.green(`Static checks passed for ${result.scope.selection.ticket}. ${result.deferred}`));
-      return;
-    }
     console.log(chalk.green('Passed: every claim has a test that can fail, and every verb runs through the engine.'));
     return;
   }

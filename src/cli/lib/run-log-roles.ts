@@ -1,6 +1,6 @@
 import { ESCALATION_LADDER, type WorkRole, nextRole } from './agent-roles.js';
 import { type LedgerEntry, entryField, parseLedgerEntries } from './ledger-entries.js';
-import { resultProblem, VERIFY_RESULT_FORMAT, type VerifyResult } from './verify-result.js';
+import { VERIFY_RESULT_FORMAT, type VerifyResult } from './verify-result.js';
 
 /**
  * What a work package's run log records about who did the work and how its review went (#454),
@@ -23,7 +23,6 @@ import { resultProblem, VERIFY_RESULT_FORMAT, type VerifyResult } from './verify
  *   - Reviewed: `Dispatch M`, the dispatch whose finished work the round reviews
  *   - Level: light | full, as `boardsmith review-gate` sized it
  *   - Verify: `<commit> passed`, the verify result the round started from
- *   - Scope: `focused <selection SHA-256>` for focused receipts; optional `full` for full receipts
  *   - Agents: the agent types dispatched
  *   - Outcome: pending | clean | changes requested
  *
@@ -344,7 +343,7 @@ class RunLogChecker {
     const reviewed = this.reviewedDispatch(name, entry, out);
     const round: Round = { outcome: valueOf(entry, 'Outcome'), linked: reviewed !== undefined };
     const verify = /^([0-9a-f]{7,64}) passed$/.exec(valueOf(entry, 'Verify') ?? '')?.[1];
-    const onFile = verify === undefined ? undefined : verifyOnFileProblem(name, verify, this.verifyOnFile(verify), valueOf(entry, 'Scope'));
+    const onFile = verify === undefined ? undefined : verifyOnFileProblem(name, verify, this.verifyOnFile(verify));
     if (onFile !== undefined) out.push(onFile);
     if (round.outcome === CHANGES_REQUESTED && reviewed !== undefined) {
       this.register({ name, failed: reviewed, step: valueOf(entry, 'Step') });
@@ -477,18 +476,13 @@ const ROUND_FIELDS: RoundField[] = [
 ];
 
 function reviewRoundProblems(name: string, entry: LedgerEntry): string[] {
-  const out = ROUND_FIELDS.flatMap(({ field, add, check }) => {
+  return ROUND_FIELDS.flatMap(({ field, add, check }) => {
     const value = valueOf(entry, field);
     if (value === undefined) return [missing(name, entry, field, add)];
     const wrong = check?.(value);
     if (wrong === undefined) return [];
     return [`${name} has "${field}: ${value}"${wrong.startsWith('which') ? ', ' : '. '}${wrong}`];
   });
-  const scope = valueOf(entry, 'Scope');
-  if (scope !== undefined && !/^(?:full|focused [a-f0-9]{64})$/.test(scope)) {
-    out.push(`${name} has "Scope: ${scope}". Write "full" or "focused <selection SHA-256>" as review-gate printed it.`);
-  }
-  return out;
 }
 
 /**
@@ -496,7 +490,7 @@ function reviewRoundProblems(name: string, entry: LedgerEntry): string[] {
  * undefined when it agrees or none is on file. A result written by another version of BoardSmith
  * is not read: its shape is not this one's.
  */
-function verifyOnFileProblem(name: string, commit: string, found: VerifyOnFile, scope?: string): string | undefined {
+function verifyOnFileProblem(name: string, commit: string, found: VerifyOnFile): string | undefined {
   if (found === undefined) return undefined;
   const says = `${name} says "Verify: ${commit} passed", but`;
   if ('ambiguous' in found) {
@@ -506,17 +500,6 @@ function verifyOnFileProblem(name: string, commit: string, found: VerifyOnFile, 
     return `${says} its verify result (${found.file}) could not be read. Run \`boardsmith verify\` on that commit again to rewrite it.`;
   }
   if (found.result.format !== VERIFY_RESULT_FORMAT) return undefined;
-  const expectedScope = found.result.scope?.kind === 'focused' ? `focused ${found.result.scope.selection.hash}` : 'full';
-  if (scope === undefined && found.result.scope?.kind === 'focused') {
-    return `${name} uses a focused verify result. Record "Scope: ${expectedScope}" so the review identifies its authored-test selection.`;
-  }
-  if (scope !== undefined && scope !== expectedScope) {
-    return `${name}'s recorded scope does not match the verify result (${found.file}). Record "Scope: ${expectedScope}" as review-gate printed it.`;
-  }
-  if (found.result.scope?.kind === 'focused') {
-    const problem = resultProblem(found.result, found.result.commit);
-    if (problem !== undefined) return `${says} its focused verify result (${found.file}) is invalid: ${problem}`;
-  }
   const why = !found.result.passed ? 'failed' : !found.result.cleanTree ? 'ran while the tree had uncommitted changes' : undefined;
   if (why === undefined) return undefined;
   return (

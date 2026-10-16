@@ -104,24 +104,16 @@ function parseWorkRole(value: string | undefined): WorkRole | undefined {
 
 /** The text every review prompt carries: which checks ran, what they found, and which run at publish (#985). */
 function reviewBrief(projectDir: string, slug: string, result: VerifyResult, from: string): string {
-  const focused = result.scope;
   return [
-    `${focused ? 'Focused mechanical checks: authored tests and typecheck passed' : 'Fast checks: done'}. \`boardsmith verify --chunk ${slug}${focused ? ` --selection ${focused.selection.path}` : ''}\` passed for commit ${short(result.commit)} on a clean tree ` +
+    `Fast checks: done. \`boardsmith verify --chunk ${slug}\` passed for commit ${short(result.commit)} on a clean tree ` +
       `(result: ${relative(projectDir, verifyResultPath(projectDir, result.commit))}, changes measured since ${result.base.ref} ` +
       `at ${short(result.base.commit)}):`,
     ...result.checks.map((check) => `- ${check.name}: ${check.summary}`),
     `The change under review: \`git diff ${short(from)}..${short(result.commit)}\`.`,
-    ...(focused ? [
-      `Authored tests: ${focused.selection.ticket}, selection ${focused.selection.path} (sha256 ${focused.selection.hash}).`,
-      `Record this review's provenance as "Verify: ${result.commit} passed" and "Scope: focused ${focused.selection.hash}".`,
-      'Full-suite, build, validate, smoke and mutation verification are deferred to the committed policy cadence. This result claims only the declared authored tests and typecheck.',
-      'Do not rerun the mechanical checks for this review. Review the judgement checks listed in this prompt.',
-    ] : [
-      "Only the fast checks have run: the chunk's tests and typecheck. The full suite, build, validate, the smoke test " +
-        'and the mutation check run at publish, not per chunk. Do not run any of them, or the fast checks again, and do ' +
-        'not break code to see whether a test notices. Your review is the judgement checks listed in this prompt, and ' +
-        'nothing a script can check.',
-    ]),
+    "Only the fast checks have run: the chunk's tests and typecheck. The full suite, build, validate, the smoke test " +
+      'and the mutation check run at publish, not per chunk. Do not run any of them, or the fast checks again, and do ' +
+      'not break code to see whether a test notices. Your review is the judgement checks listed in this prompt, and ' +
+      'nothing a script can check.',
   ].join('\n');
 }
 

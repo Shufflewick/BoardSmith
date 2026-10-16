@@ -5,8 +5,6 @@ import { boardsmithPackageRoot, readBoardsmithVersion } from './boardsmith-versi
 import { gitOutput as git } from './git-output.js';
 import { openMutantCache } from './mutant-cache.js';
 import { equivalenceBasisProblem, type EquivalenceBasis } from './mutation-equivalences.js';
-import type { FocusedVerificationScope } from './authored-tests.js';
-import { focusedPolicyScope } from './focused-policy.js';
 
 /**
  * The result `boardsmith verify` writes, and the one question every done claim asks of it (#452).
@@ -35,9 +33,8 @@ import { focusedPolicyScope } from './focused-policy.js';
 /** The version of the file's shape. A result in any other format is made again. */
 export const VERIFY_RESULT_FORMAT = 1;
 
-/** Every default full check, in execution order. Focused results use `FOCUSED_VERIFY_CHECK_NAMES`. */
+/** Every full check, in execution order. A chunk's result holds `CHUNK_VERIFY_CHECK_NAMES`. */
 export const VERIFY_CHECK_NAMES = ['test', 'typecheck', 'build', 'validate', 'smoke', 'mutation'] as const;
-export const FOCUSED_VERIFY_CHECK_NAMES = ['test', 'typecheck'] as const;
 /** `verify --chunk`: the chunk's own tests and typecheck. The full checks run at publish (#985). */
 export const CHUNK_VERIFY_CHECK_NAMES = ['test', 'typecheck'] as const;
 
@@ -81,7 +78,7 @@ export interface VerifyResult {
   commit: string;
   /** Whether the working tree had no uncommitted or untracked changes, before and after the run. */
   cleanTree: boolean;
-  /** Where the verified change started: the full diff base or the focused ticket's declared base. */
+  /** Where the verified change started: the full verify's base, or the chunk's verify base. */
   base: { ref: string; commit: string };
   /** The chunk `--chunk` named, whose verify base is `base`; null when the run was not for a chunk. */
   chunk: string | null;
@@ -90,8 +87,6 @@ export interface VerifyResult {
   finishedAt: string;
   passed: boolean;
   checks: VerifyCheckResult[];
-  /** Absent for the default full run; focused results claim only their authored tests and typecheck. */
-  scope?: FocusedVerificationScope;
 }
 
 /** The commit of the BoardSmith checkout this CLI runs from, or null when it is an installed copy. */
@@ -117,7 +112,6 @@ export function buildVerifyResult(input: {
   chunk?: string | null;
   checks: VerifyCheckResult[];
   boardsmithCommit?: string | null;
-  scope?: FocusedVerificationScope;
 }): VerifyResult {
   return {
     format: VERIFY_RESULT_FORMAT,
@@ -133,7 +127,6 @@ export function buildVerifyResult(input: {
     finishedAt: new Date().toISOString(),
     passed: input.checks.every((c) => c.passed),
     checks: input.checks,
-    ...(input.scope === undefined ? {} : { scope: input.scope }),
   };
 }
 
@@ -203,31 +196,13 @@ export function resultProblem(result: VerifyResult, head: string): string | unde
       `so it does not show what this commit does. ${RUN_AGAIN}`
     );
   }
-  if (result.scope !== undefined && (!result.scope || result.scope.kind !== 'focused' ||
-    !result.scope.selection || typeof result.scope.selection.path !== 'string' ||
-    !/^[a-f0-9]{64}$/.test(result.scope.selection.hash))) {
-    return 'The focused verification scope is invalid. Run `boardsmith verify --selection <path>` again.';
-  }
-  const required = result.scope?.kind === 'focused' ? FOCUSED_VERIFY_CHECK_NAMES : result.chunk !== null ? CHUNK_VERIFY_CHECK_NAMES : VERIFY_CHECK_NAMES;
+  const required = result.chunk !== null ? CHUNK_VERIFY_CHECK_NAMES : VERIFY_CHECK_NAMES;
   const missing = required.filter((name) => !result.checks.some((c) => c.name === name));
   if (missing.length > 0) {
     return (
       `The \`boardsmith verify\` result for ${short(head)} has no ${missing.join(', ')} check: it was made before ` +
       `this BoardSmith required ${missing.length === 1 ? 'it' : 'them'}. Run \`boardsmith verify\` again.`
     );
-  }
-  if (result.scope?.kind === 'focused' && (result.checks.length !== required.length ||
-    result.checks.some((check) => check.skipped || !(required as readonly string[]).includes(check.name)))) {
-    return 'A focused result must contain only executed authored-test and typecheck checks. Run `boardsmith verify --selection <path>` again.';
-  }
-  if (result.scope?.kind === 'focused') {
-    const tests = result.scope.selection.tests;
-    const counts = result.checks.find((check) => check.name === 'test')?.counts;
-    if (!Array.isArray(tests) || tests.length === 0 || tests.some((test) => !test || !Array.isArray(test.names) || test.names.length === 0) ||
-      counts?.files !== tests.length || counts.tests !== tests.reduce((total, test) => total + test.names.length, 0) ||
-      counts.passed !== counts.tests || (counts.failed ?? 0) !== 0 || (counts.skipped ?? 0) !== 0) {
-      return 'The authored-test counts do not account for every declared test passing. Run `boardsmith verify --selection <path>` again.';
-    }
   }
   const failed = result.checks.filter((c) => !c.passed);
   if (failed.length > 0 || !result.passed) {
@@ -279,27 +254,20 @@ function kindProblem(result: VerifyResult, chunk: string | undefined): string | 
   return undefined;
 }
 
-/**
- * Why HEAD in `projectDir` is not verified, or undefined when it is: the tree is clean and a
- * passing `boardsmith verify` result for HEAD, made on a clean tree, is on file. With `chunk`, the
- * result must also have measured that chunk's whole change (`chunkCoverageProblem`).
- */
+/** Why the result on file does not vouch for HEAD: `resultProblem`, then a full run's equivalence review, rechecked now. */
 async function currentResultProblem(projectDir: string, result: VerifyResult, commit: string): Promise<string | undefined> {
   const problem = resultProblem(result, commit);
   if (problem !== undefined) return problem;
-  if (result.scope?.kind === 'focused') {
-    try {
-      const current = await focusedPolicyScope(projectDir);
-      if (current === undefined || JSON.stringify(current) !== JSON.stringify(result.scope) || result.base.commit !== current.selection.base) {
-        return 'The focused result does not match the committed authored-test selection. Run `boardsmith verify --selection <path>` again.';
-      }
-    } catch (error) { return (error as Error).message; }
-  }
   const basis = result.checks.find((c) => c.name === 'mutation')?.equivalence;
   if (basis !== undefined) return equivalenceBasisProblem(projectDir, basis, await openMutantCache(projectDir));
   return undefined;
 }
 
+/**
+ * Why HEAD in `projectDir` is not verified, or undefined when it is: the tree is clean and a
+ * passing `boardsmith verify` result for HEAD, made on a clean tree, is on file. With `chunk`, it
+ * must be that chunk's fast checks; without, the full verify (`kindProblem`).
+ */
 export async function verifiedProblem(projectDir: string, chunk?: string): Promise<string | undefined> {
   const state = await checkoutState(projectDir);
   if ('problem' in state) return state.problem;
