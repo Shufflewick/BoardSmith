@@ -96,7 +96,8 @@ const stores: ReadonlyArray<[string, () => { open: () => WorldStore; reopen: (ol
   [
     'the dev SQLite store',
     () => {
-      const path = worldStorePath(tempTree('bs-leftover-dirty-'));
+      const tree = tempTree('bs-leftover-dirty-');
+      const path = worldStorePath(tree);
       return {
         open: () => openWorldStore(path, worldBudgets()),
         // The process died: its handle goes, the file stays.
