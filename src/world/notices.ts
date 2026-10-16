@@ -259,7 +259,7 @@ export function stampNotice(
     throw refuse("was not given a notice. Pass `{ payload, line?, whenFull }`.");
   }
   const { payload, line, whenFull } = request as Partial<WorldNoticeRequest>;
-  const narration = typeof line === "string" ? { text: line } : line;
+  const narration = noticeLine(action, line);
   const notice: WorldNotice = {
     at: context.now,
     payload,
@@ -293,15 +293,50 @@ function noticeWhenFull(refuse: NoticeRefusal, whenFull: unknown): NoticeWhenFul
   );
 }
 
+/** The notice's sentence in `{ text, type? }` form, or a refusal: absent is silence. */
+function noticeLine(action: string, line: unknown): { text: string; type?: string } | undefined {
+  if (line === undefined) return undefined;
+  if (typeof line === "string") return { text: line };
+  const { text, type } = (typeof line === "object" && line !== null ? line : {}) as Record<string, unknown>;
+  if (typeof text === "string" && (type === undefined || typeof type === "string")) {
+    return { text, ...(type === undefined ? {} : { type }) };
+  }
+  throw invalidNotice(
+    action,
+    'has a line that is not one. A line is a string, or `{ text, type? }` whose text and type are strings.',
+  );
+}
+
+/**
+ * Is `value` made only of what JSON stores as itself? `JSON.stringify` turns a
+ * Map into `{}`, NaN into `null` and drops a function, so it cannot be the test.
+ */
+function isPlainJson(value: unknown, ancestors: ReadonlySet<object> = new Set()): boolean {
+  if (typeof value !== "object" || value === null) return isPlainScalar(value);
+  if (ancestors.has(value)) return false;
+  const inside = new Set(ancestors).add(value);
+  if (Array.isArray(value)) return value.every((item) => isPlainJson(item, inside));
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return false;
+  // An absent key and an `undefined` one read the same, so dropping it loses nothing.
+  return Object.values(value).every((item) => item === undefined || isPlainJson(item, inside));
+}
+
+function isPlainScalar(value: unknown): boolean {
+  if (typeof value === "number") return Number.isFinite(value);
+  return value === null || typeof value === "string" || typeof value === "boolean";
+}
+
 /** Refuse a notice JSON cannot carry, or one past `noticeMaxBytes`. */
 function assertNoticeFits(refuse: NoticeRefusal, notice: WorldNotice, budgets: WorldBudgets): void {
-  const json = notice?.payload === undefined ? undefined : JSON.stringify(notice);
-  if (json === undefined) {
+  if (!isPlainJson(notice?.payload)) {
     throw refuse(
       "has a payload JSON cannot carry. A notice is stored until its seat reads it, so it has to " +
-        "be made of plain values: objects, arrays, numbers, strings, booleans and null.",
+        "be made of plain values: plain objects, arrays, finite numbers, strings, booleans and " +
+        "null -- not a function, a Map, a Set, a class instance or a cycle.",
     );
   }
+  const json = JSON.stringify(notice);
   // MEASURED AS STORAGE MEASURES IT, in UTF-8 bytes.
   const bytes = encoder.encode(json).length;
   if (bytes > budgets.noticeMaxBytes) {

@@ -133,6 +133,7 @@ import { readOnlyProjection } from "./readonly.js";
 import { assertAnsweredAllocations, assertCreatedRoots } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
 import { assertMintedUnderThisKey } from "./key-check.js";
+import { StaleAllocationStampError } from "../engine/errors.js";
 
 
 /**
@@ -634,6 +635,19 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * wake with nothing raised anywhere.
    */
   registerResident(name: string, root: GameElement): void {
+    const taken = this.residentNames.get(root.id);
+    if (root.parent !== this.game || taken !== undefined) {
+      throw worldRefusal(
+        "invalid-partition-root",
+        taken === undefined
+          ? `Partition "${name}" is not a direct child of the game: it sits inside another ` +
+              `element, so it would be stored twice and the world could not load again. ` +
+              `Create it with \`game.create(...)\`, or leave it out of the answer and let it ` +
+              `travel inside the partition that holds it.`
+          : `Partition "${name}" is the same element as partition "${taken}". One element can ` +
+              `be one partition only; answer it under one name.`,
+      );
+    }
     this.game.definePartition(root.id);
     this.residentIds.set(name, root.id);
     this.residentNames.set(root.id, name);
@@ -1121,7 +1135,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
    */
   async offersFor(player: string, stamp: WorldOfferStamp): Promise<readonly WorldActionOffer[]> {
     const seat = this.seatFor(player);
-    const acting = this.playerFor(seat);
+    const acting = readOnlyProjection(this.playerFor(seat));
     const offers: WorldActionOffer[] = [];
 
     for (const definition of this.actions.values()) {
@@ -1362,7 +1376,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   ): Promise<T> {
     this.refuseUndeclaredArgs(definition, args);
     const seat = this.seatFor(player);
-    const acting = this.playerFor(seat);
+    const acting = readOnlyProjection(this.playerFor(seat));
     const named: string[] = [];
     // As `offerOf`: this is a seat's own read, and a seat's verb declares no chair.
     const namedSeats: number[] = [];
@@ -3342,13 +3356,13 @@ export class BoardSmithWorldEngine implements WorldEngine {
       root = this.game.adoptSubtree(stored.parentId, stored.json as ElementJSON);
     } catch (error) {
       // A STALE STAMP IS THE PLATFORM'S FAULT, AND MUST SAY SO (#224).
-      // `adoptSubtree` proves it from the bytes and throws a bare Error, and an
+      // `adoptSubtree` proves it from the bytes and throws its own class, and an
       // uncoded throw is charged to the GAME -- so a world whose host lost the
       // stamp its own command minted under refused every room-touching verb
       // while the park ladder sat still and the publisher's health score paid
       // for it. Coded here, at the seam that knows the throw is about
       // allocation rather than about the game's rules.
-      if (error instanceof Error && /id allocation stamp/.test(error.message)) {
+      if (error instanceof StaleAllocationStampError) {
         throw worldRefusal("allocation-stale", error.message);
       }
       throw error;

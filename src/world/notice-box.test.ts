@@ -417,6 +417,13 @@ describe("#521 — what a notice may be", () => {
       { seat: 2, notice: { payload: "x".repeat(worldBudgets().noticeMaxBytes), whenFull: "dropOldest" } },
     ],
     ["an unknown whenFull", { seat: 2, notice: { payload: 1, whenFull: "sometimes" } }],
+    // #793: each of these used to be stored as something else, silently.
+    ["a payload holding a function", { seat: 2, notice: { payload: { go: () => 1 }, whenFull: "dropOldest" } }],
+    ["a payload that is a Map", { seat: 2, notice: { payload: new Map([["a", 1]]), whenFull: "dropOldest" } }],
+    ["a payload holding a non-finite number", { seat: 2, notice: { payload: [Number.NaN], whenFull: "dropOldest" } }],
+    ["a line whose text is not a string", { seat: 2, notice: { payload: 1, line: { text: 7 }, whenFull: "dropOldest" } }],
+    ["a line that is neither a string nor { text }", { seat: 2, notice: { payload: 1, line: 7, whenFull: "dropOldest" } }],
+    ["a line whose type is not a string", { seat: 2, notice: { payload: 1, line: { text: "hi", type: 3 }, whenFull: "dropOldest" } }],
   ])("refuses %s", async (_what, call) => {
     const { runner, bytes } = await launched();
     rawCall = call;
