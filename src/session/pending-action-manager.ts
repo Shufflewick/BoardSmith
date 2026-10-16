@@ -348,7 +348,7 @@ export class PendingActionManager<G extends Game = Game> {
       actionResult: {
         success: actionResult.success,
         error: actionResult.error,
-        flowState: toPublicFlowState(flowState),
+        flowState: toPublicFlowState(flowState, playerPosition),
         state: this.#seatState(playerPosition),
         data: actionResult.data,
         message: actionResult.message,
