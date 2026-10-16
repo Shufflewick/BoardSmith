@@ -1,5 +1,5 @@
 {
-  "revision": 202,
+  "revision": 203,
   "surfaceHash": "3aad10f70947c23a",
   "payloadHash": "45aa9d0eec3fa215",
   "formatHash": "3aff5d1f34f52ec0",
@@ -1559,6 +1559,14 @@
       "payloadHash": "45aa9d0eec3fa215",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "Game loses three methods nothing called: static Game.restoreGame, getAwaitingPlayers and debugElement; performAction no longer clears pending animation events when it refuses an unknown or disabled action; a failed restoreFlowState throws without replacing the running flow; settings.playerNames is the game's own copy filled with 'Player N' for missing seats (#757). Saved state refuses Dates and class instances instead of flattening them, and refuses plain object keys that collide with the codec's markers (#759, #760). PersistentMap treats built-in object names as ordinary keys (#761). A move refused by an exit handler leaves the element where it was, in production as well as development (#762). Grid cell lookup keeps every layered cell at a coordinate (#764). Die refuses roll and setValue when sides is not a whole number of at least 1 (#765). An element or player in animate()/animateTo() data reaches each seat as a reference instead of the whole object; an element the seat cannot see is named by the outermost container concealing it (#752). Platform: re-vendor."
+    },
+    {
+      "revision": 203,
+      "date": "2026-10-16",
+      "surfaceHash": "3aad10f70947c23a",
+      "payloadHash": "45aa9d0eec3fa215",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "applyNoticeWrites(notices, read, { seatCount, budgets }) now requires the host's seat count and budgets and refuses a dispatch's notice writes before reading any box (invalid-notice for a perSeat outside 1..maxNoticesPerSeat, a seat outside 1..seatCount, a malformed write, an unknown kind, a bad whenFull or a notice over noticeMaxBytes; notice-batch-cap for more than maxNoticesPerCommand sends) (#789). Platform: pass { seatCount, budgets } at games/src/world-session.ts and treat the throw as a refused command; re-vendor."
     }
   ]
 }
