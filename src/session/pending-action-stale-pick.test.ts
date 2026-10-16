@@ -113,7 +113,7 @@ class GemGame extends Game<GemGame, Player> {
     this.setFlow({
       root: loop({
         maxIterations: 10,
-        do: simultaneousActionStep({ actions: ['draft', 'grab', 'reserve', 'claim', 'paint', 'dye', 'mark', 'rest'] }),
+        do: simultaneousActionStep({ actions: ['draft', 'grab', 'reserve', 'claim', 'paint', 'dye', 'mark', 'stamp', 'rest'] }),
       }),
     });
   }
@@ -192,6 +192,17 @@ describe('GameRunner', () => {
     expect(r.actionHistory).toEqual([]);
   });
 
+  it('keeps a pick another seat took marked across later picks, and refuses the last one', () => {
+    const r = runner();
+    r.startPendingAction('stamp', 1);
+    expect(r.processSelectionStep(1, 'gem', gem(r).id).success).toBe(true);
+    expect(r.performAction('grab', 2, { gem: gem(r).id }).success).toBe(true);
+    expect(r.processSelectionStep(1, 'slot', 'left').success).toBe(true);
+
+    expect(r.processSelectionStep(1, 'side', 'up')).toMatchObject({ success: false, error: NO_LONGER_AVAILABLE });
+    expect(r.game.ran).toEqual(['grab:2']);
+  });
+
   it("refuses a pending action once another seat's action took its element pick off the offer without moving it", () => {
     const r = runner();
     r.startPendingAction('draft', 1);
@@ -254,9 +265,10 @@ describe('stateless selectionStep op', () => {
     pending: { pendingState: Record<string, unknown> | null } | null,
     selectionName: string,
     value: number | string,
+    actionName = 'draft',
   ) {
     return executeOp(gameDef, gameOptions, after.snapshot, pending?.pendingState ?? null, {
-      type: 'selectionStep', player: 1, selectionName, value, actionName: 'draft',
+      type: 'selectionStep', player: 1, selectionName, value, actionName,
       boundaryKey: boundaryKeyOf(after.snapshot),
     });
   }
@@ -269,6 +281,19 @@ describe('stateless selectionStep op', () => {
     }));
 
     const step = await pick(grabbed, first, 'slot', 'left');
+
+    expect(step).toMatchObject({ success: false, error: NO_LONGER_AVAILABLE });
+  });
+
+  it('keeps a pick another seat took marked through the pending state it returns, and refuses the last pick', async () => {
+    const started = await start();
+    const first = succeeded(await pick(started, null, 'gem', gemId(started), 'stamp'));
+    const grabbed = succeeded(await executeOp(gameDef, gameOptions, first.snapshot, null, {
+      type: 'action', actionName: 'grab', player: 2, args: { gem: gemId(first) }, boundaryKey: boundaryKeyOf(first.snapshot),
+    }));
+    const second = succeeded(await pick(grabbed, first, 'slot', 'left', 'stamp'));
+
+    const step = await pick(second, second, 'side', 'up', 'stamp');
 
     expect(step).toMatchObject({ success: false, error: NO_LONGER_AVAILABLE });
   });
