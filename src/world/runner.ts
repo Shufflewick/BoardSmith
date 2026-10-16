@@ -461,11 +461,17 @@ function joinSources(
 ): Readonly<Record<string, StoredPartition>> {
   if (declared === undefined) return {};
   const wanted = sourceUnion(declared);
-  const held =
-    whole === undefined
-      ? undefined
-      : Object.fromEntries(wanted.filter((name) => name in whole).map((name) => [name, whole[name]!]));
-  return assertSourceBytes(sent ?? held, wanted);
+  if (sent !== undefined || whole === undefined) return assertSourceBytes(sent, wanted);
+  const absent = wanted.filter((name) => !(name in whole));
+  if (absent.length > 0) {
+    throw worldRefusal(
+      "world-migration-unavailable",
+      `This migration's \`join.sources\` names ${absent.length === 1 ? "a root" : "roots"} this ` +
+        `world does not hold: ${absent.join(", ")}. Change \`join.sources\` to name only roots ` +
+        "the world holds when the migration begins. The world was not changed.",
+    );
+  }
+  return Object.fromEntries(wanted.map((name) => [name, whole[name]!]));
 }
 
 /**
@@ -741,7 +747,8 @@ export interface WorldMigrateContext {
    * a page whose result depends on which host ran it.
    *
    * Meaningless on a survey pass, which reads every root anyway, and on a
-   * migration that declares no `join`.
+   * migration that declares no `join`. An unpaged call may omit it: its
+   * originals are taken from the roots the call was handed (#787).
    */
   readonly sources?: Readonly<Record<string, StoredPartition>>;
 }
