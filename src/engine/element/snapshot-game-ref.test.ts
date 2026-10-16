@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Space, Piece, Player } from '../index.js';
+import { serializedRoundTrip } from './serialized-round-trip.test-helper.js';
 
 // game → board (Space) → square (Space) → checker (Piece): the checker is a
 // NESTED element, restored via fromJSON rather than the game's direct-children loop.
@@ -17,11 +18,9 @@ function buildGame(): BoardGame {
 }
 
 describe('snapshot restore preserves element.game', () => {
-  it('a nested element keeps its game back-reference after restore', () => {
+  it('a nested element keeps its game back-reference after restore', async () => {
     const game = buildGame();
-    const json = game.toJSON();
-
-    const restored = Game.restoreGame(json, BoardGame, game._ctx.classRegistry, game.getConstructorOptions().elementIdKey as string) as BoardGame;
+    const restored = await serializedRoundTrip(game, BoardGame);
     const checker = restored.first(Board)!.first(Square)!.first(Checker)!;
 
     // Before the fix this was `undefined` (fromJSON never set it), which made
@@ -29,11 +28,9 @@ describe('snapshot restore preserves element.game', () => {
     expect(checker.game).toBe(restored);
   });
 
-  it('remove() works on a nested element after restore (the checkers-capture crash)', () => {
+  it('remove() works on a nested element after restore (the checkers-capture crash)', async () => {
     const game = buildGame();
-    const json = game.toJSON();
-
-    const restored = Game.restoreGame(json, BoardGame, game._ctx.classRegistry, game.getConstructorOptions().elementIdKey as string) as BoardGame;
+    const restored = await serializedRoundTrip(game, BoardGame);
     const checker = restored.first(Board)!.first(Square)!.first(Checker)!;
 
     expect(() => checker.remove()).not.toThrow();

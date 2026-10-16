@@ -1,6 +1,6 @@
 {
-  "revision": 199,
-  "surfaceHash": "29f429bc7433b8b2",
+  "revision": 200,
+  "surfaceHash": "cd28c814923c88b1",
   "payloadHash": "9f29fb7dcae7fc03",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1535,6 +1535,14 @@
       "payloadHash": "9f29fb7dcae7fc03",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "actionTempState values now live nested in settings._actionTemp as { [seat]: { [action]: { [key]: value } } } instead of flat _actionTemp_<seat>_<action>_<key> keys, so one action's clear() can no longer delete another action's values and names cannot alias (#725). Each seat's view still carries only its own seat's entry and spectators none. Temp values saved by an older engine are not read back. Platform: re-vendor; no host change."
+    },
+    {
+      "revision": 200,
+      "date": "2026-10-16",
+      "surfaceHash": "cd28c814923c88b1",
+      "payloadHash": "9f29fb7dcae7fc03",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Game loses three methods nothing called: static Game.restoreGame (a restore goes through GameRunner.fromSnapshot, which carries the seed and RNG position), getAwaitingPlayers (read getFlowState().awaitingPlayers) and debugElement (#757). Also: performAction no longer clears the pending animation events when it refuses an unknown or disabled action; a failed restoreFlowState now throws without replacing the running flow; settings.playerNames is the game's own copy, filled with 'Player N' for seats a short list leaves out, matching the player names. Platform: re-vendor; no host change. No payload or stored format changed."
     }
   ]
 }

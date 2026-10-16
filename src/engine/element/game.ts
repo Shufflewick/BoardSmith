@@ -177,16 +177,6 @@ export const DEFAULT_COLOR_LABELS: Readonly<Record<string, string>> = {
   '#85c1e9': 'Sky',
 };
 
-/**
- * The one answer to "is this child a player?" — for a serialized child.
- *
- * The JSON counterpart of {@link isPlayerElement}. Note `$type` is serialized
- * INSIDE `attributes`, not at the top level of the child JSON.
- */
-function isPlayerJSON(child: { attributes?: Record<string, unknown> }): boolean {
-  return child.attributes?.$type === 'player';
-}
-
 /** Every element id carried by a serialized subtree, for `adoptSubtree`. */
 function collectJsonIds(json: ElementJSON, into: number[]): void {
   into.push(json.id);
@@ -1340,10 +1330,11 @@ export class Game<
 
     // Store player config in settings for snapshot restoration
     this.settings.playerCount = options.playerCount;
-    this.settings.playerNames = options.playerNames ?? Array.from(
+    const playerNames = Array.from(
       { length: options.playerCount },
-      (_, i) => `Player ${i + 1}`
+      (_, i) => options.playerNames?.[i] ?? `Player ${i + 1}`
     );
+    this.settings.playerNames = playerNames;
 
     // Register Player class for serialization
     this._ctx.classRegistry.set('Player', Player);
@@ -1388,7 +1379,6 @@ export class Game<
 
     // Create players (1-indexed: Player 1 has seat 1)
     for (let i = 0; i < options.playerCount; i++) {
-      const playerName = options.playerNames?.[i] ?? `Player ${i + 1}`;
       // Typed against the concrete `Player` first so a renamed `seat` fails
       // here, then bridged to the generic. `ElementAttributes<P>` is a mapped
       // type over an unresolved type parameter, so TypeScript cannot see that
@@ -1407,7 +1397,7 @@ export class Game<
       // `seat` is renamed.
       const player = this.create(
         PlayerClassToUse as ElementClass<P>,
-        playerName,
+        playerNames[i],
         playerAttributes as ElementAttributes<P>,
       );
       // Auto-assign color from palette (seat 1 = index 0, seat 2 = index 1, etc.).
@@ -2694,9 +2684,6 @@ export class Game<
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): ActionResult {
-    // Clear previous animation events -- new action starts a new batch
-    this._animationEvents = [];
-
     const action = this._actions.get(actionName);
     if (!action) {
       return { success: false, error: `Unknown action: ${actionName}` };
@@ -2712,6 +2699,8 @@ export class Game<
       };
     }
 
+    // A refused action is not a new batch, so only an action that runs clears the buffer.
+    this._animationEvents = [];
     return this._actionExecutor.executeAction(action, player, args, options);
   }
 
@@ -2965,68 +2954,6 @@ export class Game<
       byClass,
       maxDepth,
       summary,
-      issues,
-    };
-  }
-
-  /**
-   * Debug helper: Check if an element's parent-child relationships are consistent.
-   * Use this to diagnose tree corruption issues.
-   *
-   * @example
-   * ```typescript
-   * const info = game.debugElement(suspiciousElement);
-   * if (info.issues.length > 0) {
-   *   console.error('Tree corruption:', info.issues);
-   * }
-   * ```
-   *
-   * @returns Object with validation results and any issues found
-   */
-  debugElement(element: GameElement): {
-    id: number;
-    name: string;
-    parentId: number | undefined;
-    parentName: string | undefined;
-    childIds: number[];
-    isInParentChildren: boolean;
-    childrenPointToThis: boolean[];
-    issues: string[];
-  } {
-    const issues: string[] = [];
-
-    // Check if this element is in its parent's children
-    const parent = element._t.parent;
-    const isInParentChildren = parent
-      ? parent._t.children.includes(element)
-      : true; // No parent = OK
-
-    if (parent && !isInParentChildren) {
-      issues.push(
-        `Element "${element.name}" (id: ${element.id}) has parent "${parent.name}" (id: ${parent.id}) ` +
-        `but is NOT in parent's _t.children array`
-      );
-    }
-
-    // Check if all children point back to this element
-    const childrenPointToThis = element._t.children.map(child => child._t.parent === element);
-    const wrongParentChildren = element._t.children.filter(child => child._t.parent !== element);
-    for (const child of wrongParentChildren) {
-      const actualParent = child._t.parent;
-      issues.push(
-        `Child "${child.name}" (id: ${child.id}) is in "${element.name}"'s children ` +
-        `but _t.parent points to "${actualParent?.name}" (id: ${actualParent?.id ?? 'none'})`
-      );
-    }
-
-    return {
-      id: element.id,
-      name: element.name ?? element.constructor.name,
-      parentId: parent?.id,
-      parentName: parent?.name ?? parent?.constructor.name,
-      childIds: element._t.children.map(c => c.id),
-      isInParentChildren,
-      childrenPointToThis,
       issues,
     };
   }
@@ -3446,7 +3373,8 @@ export class Game<
   /**
    * Restore full flow state including awaiting state.
    * Used for HMR where we want to restore exactly where we were.
-   * Throws if the position is invalid (e.g., flow structure changed).
+   * Throws if the position is invalid (e.g., flow structure changed), leaving
+   * the flow that was running in place.
    *
    * @param idRemap - CR-02 (159): optional `originalId -> syntheticId` map (produced
    *   by `toJSONForPlayer`) for callers restoring a REDACTED clone. Lets an
@@ -3463,8 +3391,8 @@ export class Game<
     // creating an unregistered element class is refused (see
     // `registerCreatedElementClass`).
     this._ctx._setupComplete = true;
-    this._flowEngine = new FlowEngine(this.game, this._flowDefinition);
-    const result = this._flowEngine.restoreFullState(state, idRemap);
+    const flowEngine = new FlowEngine(this.game, this._flowDefinition);
+    const result = flowEngine.restoreFullState(state, idRemap);
 
     if (!result.success) {
       throw new Error(
@@ -3472,6 +3400,7 @@ export class Game<
         `Valid path prefix: [${result.validPath.join(', ')}]`
       );
     }
+    this._flowEngine = flowEngine;
   }
 
   /**
@@ -3565,15 +3494,6 @@ export class Game<
    */
   getFlowAvailableActions(): string[] {
     return this._flowEngine?.getState().availableActions ?? [];
-  }
-
-  /**
-   * Get awaiting players for simultaneous actions
-   * Returns undefined if not in a simultaneous action step
-   */
-  getAwaitingPlayers(): { playerIndex: number; availableActions: string[]; completed: boolean }[] | undefined {
-    const state = this._flowEngine?.getState();
-    return state?.awaitingPlayers;
   }
 
   /**
@@ -5275,8 +5195,8 @@ export class Game<
    *
    * The game's registered actions, flow definition and seeded RNG live on the
    * instance (not in the JSON) and are preserved. This is the authoritative way
-   * to adopt a serialized tree without replaying history — used both by
-   * `restoreGame()` and by state-authoritative snapshot restore, so that direct
+   * to adopt a serialized tree without replaying history — used by every
+   * state-authoritative restore (runner, bot, scratch copies), so that direct
    * tree mutations (e.g. `Piece.putInto` inside a completed pending action,
    * which is not recorded in actionHistory) survive a snapshot round-trip.
    */
@@ -5530,58 +5450,6 @@ export class Game<
     // This converts { __elementRef: "path" } objects back to actual element references
     this.resolveElementReferences(this);
     this.pile.resolveElementReferences(this);
-  }
-
-  /**
-   * Create a game from serialized JSON: the element tree and the game's own
-   * serialized state, in a game built with a FRESH SEED.
-   *
-   * The serialized state carries no seed and no RNG position, so the restored
-   * game's draws do not continue the original's. A restore that must play on
-   * from where the original stood goes through `GameRunner.fromSnapshot`,
-   * whose snapshot records the constructor options (seed and key included)
-   * and the RNG position.
-   *
-   * @param elementIdKey - The id key the serialized game was created with
-   *   (its `getConstructorOptions().elementIdKey`). A game built under any
-   *   other key could mint an id the restored tree already holds, and the
-   *   restore refuses it (#447).
-   */
-  static restoreGame<G extends Game>(
-    json: ReturnType<G['toJSON']>,
-    GameClass: new (options: GameOptions) => G,
-    classRegistry: Map<string, ElementClass>,
-    elementIdKey: string,
-  ): G {
-    // Count players from serialized children (players are part of the element
-    // tree). Matched structurally via isPlayerJSON — matching the class name
-    // 'Player' missed every game with a `static PlayerClass`, i.e. essentially
-    // every real game, and yielded playerCount: 0.
-    const playerChildren = json.children?.filter(isPlayerJSON) ?? [];
-    if (playerChildren.length === 0) {
-      throw new Error(
-        `Cannot restore ${GameClass.name}: the serialized state contains no players. ` +
-          `A game snapshot always carries its players as children of the game element, so this JSON is ` +
-          `either not a game snapshot or was truncated before it was stored.`
-      );
-    }
-    const playerCount = playerChildren.length;
-    const playerNames = playerChildren.map(p => p.name as string);
-
-    const game = constructGame(GameClass, {
-      playerCount,
-      playerNames,
-      elementIdKey,
-    });
-
-    // Merge class registry
-    for (const [name, cls] of classRegistry) {
-      game._ctx.classRegistry.set(name, cls);
-    }
-
-    game.loadSerializedState(json as ReturnType<Game['toJSON']>);
-
-    return game;
   }
 }
 
