@@ -7,7 +7,10 @@
  * references the scope manager resolved to the global scope, not call shapes.
  */
 import type { Rule, Scope, SourceCode } from 'eslint';
-import type { Identifier, MemberExpression, Node } from 'estree';
+
+// AST types come through eslint's own typings: 'estree' is not a package boardsmith declares (#380).
+type Identifier = Scope.Reference['identifier'];
+type MemberExpression = Extract<Rule.Node, { type: 'MemberExpression' }>;
 
 /** An expression that evaluates to a global: `fetch` or `globalThis.fetch`. */
 type GlobalRead = (Identifier | MemberExpression) & Rule.NodeParentExtension;
@@ -16,7 +19,7 @@ type GlobalRead = (Identifier | MemberExpression) & Rule.NodeParentExtension;
 const GLOBAL_RECEIVERS: ReadonlySet<string> = new Set(['window', 'globalThis', 'self', 'global']);
 
 /** The name in `a.b`, `a['b']`, `{ b }` or `{ 'b': x }`, or undefined when it is computed. */
-function staticName(key: Node, computed: boolean): string | undefined {
+function staticName(key: MemberExpression['property'], computed: boolean): string | undefined {
   if (!computed && key.type === 'Identifier') return key.name;
   if (key.type === 'Literal' && typeof key.value === 'string') return key.value;
   return undefined;

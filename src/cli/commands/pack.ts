@@ -10,6 +10,7 @@ import { buildCli, CLI_OUTFILE } from '../lib/build-cli.js';
 import { resolveUserPath } from '../lib/user-path.js';
 import { withCleanupAfter } from '../lib/command-build-dir.js';
 import { takeOsLock } from '../lib/os-lock.js';
+import { gitOutput } from '../lib/git-output.js';
 
 interface PackOptions {
   outDir?: string;
@@ -210,13 +211,9 @@ async function packPackage(
  * The lock file, in the checkout's own git directory, that keeps a second pack
  * from reading the first one's rewritten `package.json` as the original (#744).
  */
-function packLockFile(pkgPath: string): string {
+async function packLockFile(pkgPath: string): Promise<string> {
   try {
-    const gitDir = execFileSync('git', ['rev-parse', '--absolute-git-dir'], {
-      cwd: pkgPath,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const gitDir = await gitOutput(pkgPath, ['rev-parse', '--absolute-git-dir']);
     return join(gitDir.trim(), 'boardsmith-pack.flock');
   } catch {
     throw new Error(`${pkgPath} is not a git checkout. Run boardsmith pack from the BoardSmith repository root.`);
@@ -244,7 +241,7 @@ export async function packAll(
 
   try {
     for (const pkg of packages) {
-      const lock = await takeOsLock(packLockFile(pkg.path), 'boardsmith pack', `boardsmith pack of ${pkg.name}`);
+      const lock = await takeOsLock(await packLockFile(pkg.path), 'boardsmith pack', `boardsmith pack of ${pkg.name}`);
       if (typeof lock === 'string') throw new Error(lock);
       let version: string;
       let tarball: string;
