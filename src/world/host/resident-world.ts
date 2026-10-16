@@ -1351,7 +1351,9 @@ export class ResidentWorld {
   async fireDue(): Promise<WorldFireOutcome | null> {
     const pending = this.#store.pendingEvents();
     if (pending.length === 0) return null;
-    const earliest = Math.min(...pending.map((event) => event.due));
+    // A loop, not Math.min(...): spreading a queue past ~125k events overflows the stack (#791).
+    let earliest = Infinity;
+    for (const event of pending) if (event.due < earliest) earliest = event.due;
     const jumpMs = Math.max(0, earliest - this.now());
     // DURABLE BEFORE IT IS DRAINED. The partitions this firing settles become
     // durable at the advanced time, so the advance itself has to be on disk
