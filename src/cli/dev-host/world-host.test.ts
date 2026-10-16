@@ -1708,12 +1708,14 @@ describe('#195: an uncertain order is answered from its receipt, never spent twi
   it('keeps the receipt of an old order that reaches an idle world, so its retry replays (#793)', async () => {
     // Nothing moved the floor while the world sat idle, so an order minted more
     // than one window ago still runs; its receipt must survive the floor the
-    // same write moves.
-    const clock = testClock();
+    // same write moves. The clock moves on every read, as a real one does, so
+    // a receipt and a floor taken from two readings would disagree.
+    const base = testClock();
+    const clock = { ...base, now: () => (base.advance(1), base.now()) };
     const budgets = worldBudgets({ receiptRetentionMs: 1_000 });
     const { host, sent } = await attached({ dir, clock, budgets });
     const mintedAt = clock.now();
-    clock.advance(5_000);
+    base.advance(5_000);
     await chop(host, 'r1', 'o1', mintedAt);
     expect(logsIn(sent)).toContain('"logs":1');
 

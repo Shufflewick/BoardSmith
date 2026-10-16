@@ -85,7 +85,6 @@ import {
   type WorldRunnerOptions,
   type WorldActionOffer,
   type WorldOrder,
-  type WorldReceipt,
   type WorldTiming,
   type SettledNoticeBox,
   type WorldNoticeWrites,
@@ -877,9 +876,9 @@ export class ResidentWorld {
       };
     }
     // THE PLAYER'S OWN ARRIVAL INSTANT, taken once and used for everything
-    // below: the catch-up's ceiling, the handler's `world.now`, and the
-    // receipt. Reading the clock twice would let a long catch-up move the
-    // instant the command claims to have arrived at.
+    // below: the catch-up's ceiling and the handler's `world.now`. Reading the
+    // clock twice would let a long catch-up move the instant the command claims
+    // to have arrived at.
     const arrivedAt = this.now();
     try {
       // EVERYTHING ALREADY DUE FIRST, for a world that declared it (#380).
@@ -909,7 +908,7 @@ export class ResidentWorld {
         timing: null,
         arrivedAt,
         queue: this.#store.pendingEvents(),
-        receipt: { orderId: order.id, player, at: receiptAt(order, this.#clock.now(), this.#budgets) },
+        receipt: { order, player },
       });
       return { kind: "committed", events };
     } finally {
@@ -987,9 +986,9 @@ export class ResidentWorld {
      * request is what stays queued under its key.
      */
     occurrence?: { readonly event: PlannedEvent; readonly owedDue: number | null };
-    /** The receipt for the player order this dispatch is the effects of (#195),
-     *  committed with them or not at all. */
-    receipt?: WorldReceipt;
+    /** The player order this dispatch is the effects of (#195), whose receipt
+     *  is committed with them or not at all. */
+    receipt?: { readonly order: WorldOrder; readonly player: string };
     /**
      * WHOSE IDLENESS THIS DISPATCH IS ABOUT (ShufflewickPub #383).
      *
@@ -1062,6 +1061,9 @@ export class ResidentWorld {
     // durable bytes are older than the last command that ran.
     this.#store.recordDirty(result.dirty);
     const dirty = this.#store.dirtyPartitions();
+    // ONE WALL-CLOCK READING for the receipt and the floor this write sweeps to
+    // (#793): from two, a receipt raised to the floor lands just below it and is swept at once.
+    const wallNow = this.#clock.now();
     try {
       await this.#store.writeCheckpoint(await runner.serialize(dirty), {
         // SETTLED AND ARMED IN THE SAME WRITE AS THE EFFECTS. A crash between
@@ -1070,11 +1072,19 @@ export class ResidentWorld {
         settle,
         schedule,
         // THE ORDER'S RECEIPT LANDS WITH ITS EFFECTS (#195), or neither does.
-        ...(request.receipt === undefined ? {} : { receipt: request.receipt }),
+        ...(request.receipt === undefined
+          ? {}
+          : {
+              receipt: {
+                orderId: request.receipt.order.id,
+                player: request.receipt.player,
+                at: receiptAt(request.receipt.order, wallNow, this.#budgets),
+              },
+            }),
         // And the ledger is swept on the way past, so a world running for
         // months does not keep every answer it ever gave. Wall clock, not
         // world time: orders are stamped by the page's clock, which has no skew (#722).
-        receiptFloorAt: receiptFloor(this.#clock.now(), this.#budgets, this.#store.receiptFloorAt()),
+        receiptFloorAt: receiptFloor(wallNow, this.#budgets, this.#store.receiptFloorAt()),
         // THIS SEAT WAS HERE (ShufflewickPub #383), landing with the effects
         // it produced or not at all.
         ...this.#activityWrite(player, arrivedAt),
