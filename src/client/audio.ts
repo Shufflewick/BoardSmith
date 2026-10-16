@@ -73,6 +73,7 @@ class AudioService {
   setTurnSoundUrl(url: string): void {
     this.turnSoundUrl = url;
     if (typeof window !== 'undefined') {
+      this.audioElement?.pause();
       this.audioElement = new Audio(url);
       this.audioElement.volume = this.volume;
       this.initialized = true;
