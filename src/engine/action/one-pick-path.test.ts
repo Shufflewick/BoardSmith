@@ -223,7 +223,7 @@ describe('every entry point resolves a pick the same way (#507)', () => {
     });
   }
 
-  it('a chooseElements submitted as a single { id } hands execute the element', () => {
+  it('a chooseElements submitted as a list of one { id } hands execute the list', () => {
     const game = new Yard();
     const handed: unknown[] = [];
     game.registerAction(
@@ -233,10 +233,10 @@ describe('every entry point resolves a pick the same way (#507)', () => {
     );
     const slate = game.stone('slate');
 
-    const result = game.performAction('take', game.getPlayer(1)!, { pick: { id: slate.id } });
+    const result = game.performAction('take', game.getPlayer(1)!, { pick: [{ id: slate.id }] });
 
     expect(result.error).toBeUndefined();
-    expect(handed).toEqual([slate]);
+    expect(handed).toEqual([[slate]]);
   });
 
   it('the step path stores the value a multiSelect named, not the labels sent, for the picks after it', () => {
@@ -443,7 +443,7 @@ describe('an element reference that names nothing (#507)', () => {
     const take = Action.create('take');
     game.registerAction((many ? take.chooseElements('pick', options) : take.chooseElement('pick', options)).execute(() => {}));
 
-    const result = game.performAction('take', game.getPlayer(1)!, { pick: { id: 99_999 } });
+    const result = game.performAction('take', game.getPlayer(1)!, { pick: many ? [{ id: 99_999 }] : { id: 99_999 } });
 
     expect(result.error).toBe('That stone is gone.');
     expect(handed).toEqual([99_999]);

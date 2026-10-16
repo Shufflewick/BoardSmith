@@ -59,6 +59,9 @@ than by asking — the gate still stops the work, and the human still decides.
 Which role does each piece of work, when review may start, and what happens when a step fails:
 `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
 
+For explicit focused opt-in, apply `state-machine.md` "Focused Verification Policy" to the
+verify command and review scope below.
+
 No review step starts until `boardsmith verify` has passed for the commit under review: the
 red team, every audit round and the final-acceptance pass each run `npx boardsmith verify --chunk
 <slug>` and then `npx boardsmith review-gate <slug>`, which refuses, saying to run `boardsmith

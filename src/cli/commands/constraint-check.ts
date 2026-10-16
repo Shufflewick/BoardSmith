@@ -13,10 +13,12 @@ import {
 } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
 import { testRunScopeProblem } from '../lib/test-run-scope.js';
-import { extractSection, parseRulings } from './build-manifest.js';
+import { extractSection, parseRulings, stripHtmlComments } from './build-manifest.js';
 import { ENTRY_NUMBER, entryHeadingPattern } from '../lib/ledger-entries.js';
 import { escapeRegExp } from '../lib/regexp.js';
 import { toolCommand } from '../lib/run-tool.js';
+import { runAuthoredTests, type FocusedVerificationScope } from '../lib/authored-tests.js';
+import { focusedPolicyScope } from '../lib/focused-policy.js';
 
 /**
  * `boardsmith constraint-check [slug]`: does the project hold its own hard constraints (#288)?
@@ -95,15 +97,14 @@ interface ConstraintCheckResult {
   /** The test files a full check runs. */
   tests: string[];
   refusals: string[];
+  scope?: FocusedVerificationScope;
+  authored?: { files: number; tests: number; passed: number };
+  deferred?: string;
 }
 
 // ---------------------------------------------------------------------------------------------
 // Reading the ledger
 // ---------------------------------------------------------------------------------------------
-
-function stripComments(text: string): string {
-  return text.replace(/<!--[\s\S]*?-->/g, '');
-}
 
 /** Whitespace collapsed and emphasis markup dropped, so a quote survives re-wrapping. */
 function normalize(text: string): string {
@@ -112,7 +113,7 @@ function normalize(text: string): string {
 
 /** Splits a section into its `### <id>` entries and reads each entry's `- Field: value` lines. */
 function readEntries(section: string | undefined, prefix: 'C' | 'G'): Array<Record<string, string>> {
-  const body = stripComments(section ?? '');
+  const body = stripHtmlComments(section ?? '');
   const starts = [...body.matchAll(entryHeadingPattern(prefix, '', ENTRY_NUMBER))];
   return starts.map((match, i) => {
     const end = i + 1 < starts.length ? starts[i + 1].index : body.length;
@@ -156,7 +157,7 @@ function hardConstraintBullets(claudeMd: string | undefined): string[] {
   if (!heading) return [];
   const rest = claudeMd.slice(heading.index + heading[0].length);
   const next = /^#{1,3} /m.exec(rest);
-  const lines = stripComments(next ? rest.slice(0, next.index) : rest).split('\n');
+  const lines = stripHtmlComments(next ? rest.slice(0, next.index) : rest).split('\n');
   const bullets: string[] = [];
   for (const line of lines) {
     if (/^[-*] /.test(line)) bullets.push(line.slice(2));
@@ -245,7 +246,7 @@ function duplicateIdRefusals(entries: ReadonlyArray<{ id: string }>): string[] {
 }
 
 async function rulingNumbers(projectDir: string): Promise<Set<string>> {
-  const text = stripComments((await readOptional(designPath(projectDir, RULINGS_MD))) ?? '');
+  const text = stripHtmlComments((await readOptional(designPath(projectDir, RULINGS_MD))) ?? '');
   return new Set(parseRulings(text).map((r) => `Ruling ${r.id}`));
 }
 
@@ -327,7 +328,7 @@ interface ReviewVerdict {
 /** `- C1: held. <citation>` lines, by constraint id. */
 function parseVerdicts(section: string): Map<string, ReviewVerdict> {
   const verdicts = new Map<string, ReviewVerdict>();
-  for (const line of stripComments(section).split('\n')) {
+  for (const line of stripHtmlComments(section).split('\n')) {
     const m = new RegExp(`^- (C${ENTRY_NUMBER}):\\s*([a-z ]+?)\\.\\s*(.*)$`, 'i').exec(line.trim());
     if (m) verdicts.set(m[1], { verdict: m[2].toLowerCase(), citation: m[3].trim() });
   }
@@ -489,16 +490,17 @@ function report(result: ConstraintCheckResult, slug: string | undefined, json: b
     for (const refusal of result.refusals) console.error(`  • ${refusal}`);
     return;
   }
-  const tests = result.tests.length ? `; ${result.tests.length} measurement test file(s) passed.` : '.';
+  const tests = result.scope
+    ? `; ${result.authored?.passed ?? 0} authored tests passed. ${result.deferred}`
+    : result.tests.length ? `; ${result.tests.length} measurement test file(s) passed.` : '.';
   console.log(
     chalk.green(`✓ ${result.constraints.length} hard constraint(s) and ${result.structures.length} growing structure(s) hold${tests}`),
   );
 }
 
 /**
- * The CLI entry. Exits non-zero on any refusal. Always runs the measured tests: with no slug this
- * is the whole-tree check a merge re-runs on the combined result, and with a slug it is what the
- * audit step runs after the constraints lens has written the chunk's review.
+ * The CLI entry. Checks structure and runs measurements, or the committed authored selection
+ * under focused policy. With a slug it also checks the constraints lens's review.
  */
 export async function constraintCheckCommand(
   slug: string | undefined,
@@ -511,7 +513,13 @@ export async function constraintCheckCommand(
     return;
   }
   const projectDir = resolve(options.project ?? process.cwd());
-  const result = await checkConstraints(projectDir, { slug, runTests: options.runTests ?? runVitest });
+  const scope = await focusedPolicyScope(projectDir);
+  const result = await checkConstraints(projectDir, { slug, runTests: scope ? undefined : options.runTests ?? runVitest });
+  if (scope) {
+    result.scope = scope;
+    result.deferred = 'Other measurement tests are deferred to the required full verification.';
+    if (result.refusals.length === 0) result.authored = (await runAuthoredTests(projectDir, scope.selection.path)).counts;
+  }
   report(result, slug, options.json);
   if (result.refusals.length) process.exitCode = 1;
 }

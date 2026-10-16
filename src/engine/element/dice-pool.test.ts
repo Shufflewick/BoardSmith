@@ -108,6 +108,12 @@ describe('DicePool', () => {
         .toEqual(['second', 'first']);
     });
 
+    it('a repeated name rolls the next die of that name, not the same die twice (#766)', () => {
+      const twin = pool.create(Die, 'first', { sides: 6 });
+      const rolled = pool.rollByName('first', 'first').map(([die]) => die);
+      expect(rolled).toEqual([pool.first(Die, 'first'), twin]);
+    });
+
     it('silently skips a name that matches no die', () => {
       expect(pool.rollByName('nonexistent')).toEqual([]);
       expect(pool.rollByName('first', 'nonexistent')).toHaveLength(1);

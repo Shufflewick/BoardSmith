@@ -90,6 +90,9 @@ The gates where the designer decides (`ask`, `playtest`, a triage) are never dis
 
 ## No Review Before Verify
 
+For an explicitly opted-in project, apply `state-machine.md` "Focused Verification Policy"
+to the verify command and recorded review scope below. Full verification remains the default.
+
 No review step starts until `boardsmith verify` has passed for the commit under review. Code
 holds this line, not prose: before dispatching any reviewer, the session runs
 
@@ -99,7 +102,7 @@ npx boardsmith review-gate <slug> [--work-role <role>] [--since <commit>]
 
 in the chunk's checkout (the main checkout, for the cross-chunk lens). It exits non-zero unless
 the current commit, on a clean tree, has a passing `boardsmith verify --chunk <slug>` result
-that measured the chunk's whole change, and its refusal says to run `boardsmith verify`. So the
+with the required policy scope, and its refusal says to run `boardsmith verify`. So the
 order is always: commit, `npx boardsmith verify --chunk <slug>`, then `review-gate`. Writing the
 Step Checklist or a ledger after verify makes a new commit, which needs its own verify run; the
 mutation outcomes of unchanged code are reused, so that run is cheap.
@@ -107,7 +110,8 @@ mutation outcomes of unchanged code are reused, so that run is cheap.
 - **Refused:** no review round runs. A failing verify is a failure of the step that made the
   change (below), and goes back with verify's own output, never to a reviewer.
 - **Open:** it prints `Review level: <none | light | full>` and then the verify brief: that the
-  mechanical checks are done, each check's outcome, the result file, the change under review, and
+  recorded mechanical checks passed, each check's outcome and any deferred checks, the result
+  file, the change under review, and
   not to run the checks again. Every review prompt carries that brief verbatim in its
   `{verifyResult}` slot, and lists only judgement checks.
 
@@ -216,7 +220,8 @@ dispatch's.
 
 A `### Review Round N` entry records each review round: the step, `Reviewed: Dispatch N` (the
 finished dispatch whose work it reviews), the level, the verify result the round started from (the
-commit and `passed`, as `review-gate` printed it), the agents dispatched, and whether the
+commit and `passed`, plus the focused `Scope` field when "Focused Verification Policy" applies,
+as `review-gate` printed them), the agents dispatched, and whether the
 reviewers asked for changes. So the number of review rounds per chunk, and what each one started
 from, is on file.
 

@@ -62,6 +62,7 @@
 export {
   worldBudgets,
 } from './budgets.js';
+export { planEviction } from './eviction.js';
 export type {
   WorldBudgetOverrides,
   WorldBudgets,

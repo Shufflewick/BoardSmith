@@ -61,6 +61,11 @@ export function findHeadingIndex(text: string, heading: string): number {
   return match ? match.index : -1;
 }
 
+/** Markdown text with its HTML comments (template guidance, examples) removed. */
+export function stripHtmlComments(text: string): string {
+  return text.replace(/<!--[\s\S]*?-->/g, '');
+}
+
 /**
  * The body from just after the heading LINE to the next `^## ` line (or EOF). Bounded on `^## `
  * specifically, never `^#+ ` — a `## Interpretation` section legitimately contains

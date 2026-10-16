@@ -6,7 +6,15 @@
     { "name": "browser", "run": "node bin/boardsmith.js test --browser" },
     { "name": "catalogue", "run": "node bin/boardsmith.js catalogue --skip 'WindupWarfare=validate does not finish (Shufflewick/WindupWarfare#100)'" }
   ],
+  "focused": {
+    "selection": ".agent-policy-tests.json",
+    "fullEvery": 5,
+    "verify": [
+      { "name": "authored-tests", "run": "node bin/boardsmith.js test --selection .agent-policy-tests.json" }
+    ]
+  },
   "thread": {
+    "push": "origin",
     "workspaces": [
       { "dir": ".", "install": "npm install", "requireInstalled": "node_modules", "refreshWhenChanged": "^package(-lock)?\\.json$" }
     ],
