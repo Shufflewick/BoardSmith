@@ -84,6 +84,18 @@ export interface ActionTempState {
   clear(): void;
 }
 
+const ACTION_TEMP_PREFIX = '_actionTemp_';
+
+/**
+ * Whether a `game.settings` key may go to a seat's view (#716): an
+ * `actionTempState` key only to the seat that wrote it, every other key to all.
+ * The seat comes first in the key so an action name cannot be read as one.
+ */
+export function settingsKeyVisibleTo(key: string, seat: number | null): boolean {
+  if (!key.startsWith(ACTION_TEMP_PREFIX)) return true;
+  return seat !== null && key.startsWith(`${ACTION_TEMP_PREFIX}${seat}_`);
+}
+
 /**
  * Creates a helper for keeping a value that is not an element in game state,
  * so a later step can read it, such as from one action's `execute` to a later
@@ -92,6 +104,9 @@ export interface ActionTempState {
  * **CRITICAL**: Module-level variables (Maps, arrays, etc.) do NOT carry a
  * value between actions, because they may run in different contexts.
  * Always use this helper for temporary action state.
+ *
+ * Each value goes only to the seat that wrote it; other seats and spectators
+ * never receive it.
  *
  * Write it only from an action's `execute` or a flow step. Never write it
  * from a candidate callback (`choices`, `elements`, `from`, `filter`): those
@@ -149,16 +164,16 @@ export function actionTempState(
     actionName = maybeActionName!;
   }
 
-  const prefix = `_actionTemp_${actionName}_${playerPosition}`;
+  const prefix = `${ACTION_TEMP_PREFIX}${playerPosition}_${actionName}_`;
 
   return {
     set(key: string, value: unknown): void {
-      game.settings[`${prefix}_${key}`] = value;
+      game.settings[`${prefix}${key}`] = value;
       stateChanged(game._ctx);
     },
 
     get<T>(key: string): T | undefined {
-      return game.settings[`${prefix}_${key}`] as T | undefined;
+      return game.settings[`${prefix}${key}`] as T | undefined;
     },
 
     clear(): void {

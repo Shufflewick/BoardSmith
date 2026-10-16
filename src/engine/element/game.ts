@@ -50,6 +50,7 @@ import {
 } from './visibility.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor, type PerformOptions } from '../action/action.js';
+import { settingsKeyVisibleTo } from '../action/helpers.js';
 import type { FlowDefinition, FlowState, FlowDebugInfo } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
 import type { MetricSink } from '../metrics.js';
@@ -1117,7 +1118,11 @@ export class Game<
    */
   messages: MessageEntry[] = [];
 
-  /** Game settings */
+  /**
+   * Game settings. Public: every seat and spectator receives them, except each
+   * seat's `actionTempState` values, which go only to that seat. Never keep a
+   * seat's secret here.
+   */
   settings: Record<string, unknown> = {};
 
   /** Registered actions */
@@ -1484,6 +1489,10 @@ export class Game<
    * this.pendingLoot.set(sectorId, options);
    * const options = this.pendingLoot.get(sectorId);
    * ```
+   *
+   * Public: the map rides in `game.settings`, which every seat and spectator
+   * receives. Never keep a seat's secret here; put it in an element that seat
+   * alone can see.
    *
    * Limitations:
    * - Keys must be serializable (strings, numbers)
@@ -4765,17 +4774,12 @@ export class Game<
    *     #269), which is author code handed the seat;
    *   `static playerView`, which is author code handed the seat;
    *   any tutorial progress, which is scoped to the receiving seat (SEC-05);
+   *   any `actionTempState` value, which only its own seat receives (#716);
    *   any animation event addressed to an audience (#23), or numbered
    *     differently for two asking seats (#489).
    */
   projectionSignaturesFor(seats: readonly number[]): readonly string[] | null {
-    const GameClass = this.constructor as typeof Game;
-    if (GameClass.playerView !== undefined) return null;
-    if (this.tutorialProgress.size > 0) return null;
-    if (this._animationEvents.some((event) => event.to !== undefined)) return null;
-    // Each seat's events carry that seat's own numbers (#489), which differ
-    // between seats whenever their counters have.
-    if (this._animationEvents.some((event) => new Set(seats.map((seat) => event.seatIds?.[seat])).size > 1)) return null;
+    if (this.rootDiffersBySeat(seats)) return null;
 
     /** Every state the tree declares, in one fixed order for every seat. */
     const declared: VisibilityState[] = [];
@@ -4807,6 +4811,20 @@ export class Game<
       signatures.push(spelled.join(','));
     }
     return signatures;
+  }
+
+  /** Whether any root-level input to `projectionSignaturesFor` is seat-scoped. */
+  private rootDiffersBySeat(seats: readonly number[]): boolean {
+    const GameClass = this.constructor as typeof Game;
+    return (
+      GameClass.playerView !== undefined ||
+      this.tutorialProgress.size > 0 ||
+      Object.keys(this.settings).some((key) => !settingsKeyVisibleTo(key, null)) ||
+      this._animationEvents.some((event) => event.to !== undefined) ||
+      // Each seat's events carry that seat's own numbers (#489), which differ
+      // between seats whenever their counters have.
+      this._animationEvents.some((event) => new Set(seats.map((seat) => event.seatIds?.[seat])).size > 1)
+    );
   }
 
   /**
@@ -5203,6 +5221,11 @@ export class Game<
         tutorialProgress: encodeValue(scoped, this._ctx, this.constructor.name, 'tutorialProgress'),
       };
     }
+
+    // #716: `settings` is public, except each seat's `actionTempState` values.
+    view.settings = Object.fromEntries(
+      Object.entries(view.settings).filter(([key]) => settingsKeyVisibleTo(key, playerSeat)),
+    );
 
     // #23: enforce `animateTo`'s audience here, the same boundary the message
     // log's is enforced at. The buffer is game-wide and rides in `toJSON()`, so
