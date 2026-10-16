@@ -1,5 +1,5 @@
 {
-  "revision": 208,
+  "revision": 209,
   "surfaceHash": "72c3970831e07bc0",
   "payloadHash": "d037431574c86546",
   "formatHash": "3aff5d1f34f52ec0",
@@ -1607,6 +1607,14 @@
       "payloadHash": "d037431574c86546",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "The world unknown-player refusal no longer lists the seated players; it says only that the player is not in this world (#797)."
+    },
+    {
+      "revision": 209,
+      "date": "2026-10-16",
+      "surfaceHash": "72c3970831e07bc0",
+      "payloadHash": "d037431574c86546",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Each seat's view carries only its own available actions in the public flow state; spectators get none (#778)."
     }
   ]
 }
