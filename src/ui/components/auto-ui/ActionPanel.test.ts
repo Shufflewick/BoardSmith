@@ -871,6 +871,46 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
     expect(wrapper.findAll('.ordered-list-remove')).toHaveLength(2);
     expect(wrapper.find('.done-button').exists()).toBe(true);
   });
+
+  // #718: every candidate on the board, but few enough to list.
+  it('lets a 2-of-N multi-select on board squares be completed from the panel', async () => {
+    const toggleMultiSelect = vi.fn(async () => {});
+    const fill = vi.fn(async () => ({ valid: true }));
+    const wrapper = mountSpacePick(spaces(3), { multiSelect: { min: 2, max: 2 } }, createBoardInteraction(), {
+      multiSelectDraft: ref({ selectionName: 'space', values: ['s0'] }),
+      isMultiSelectSelected: (_name: string, value: unknown) => value === 's0',
+      toggleMultiSelect,
+      fill,
+    });
+
+    const options = wrapper.findAll('.multi-select-choice');
+    expect(options.map(o => o.text())).toEqual(['Space 0', 'Space 1', 'Space 2']);
+    expect(options[0]!.classes()).toContain('selected');
+    expect(wrapper.text()).toContain('Selected: 1/2');
+
+    await options[1]!.find('input').trigger('click');
+    expect(toggleMultiSelect).toHaveBeenCalledWith('space', 's1');
+    expect(fill).not.toHaveBeenCalled();
+  });
+
+  it('lets an ordered list on board squares be built from the panel', async () => {
+    const appendListEntry = vi.fn(async () => {});
+    const fill = vi.fn(async () => ({ valid: true }));
+    const wrapper = mountSpacePick(spaces(3), { orderedList: { min: 1, max: 3 } }, createBoardInteraction(), {
+      multiSelectDraft: ref({ selectionName: 'space', values: ['s2'] }),
+      appendListEntry,
+      fill,
+    });
+
+    const adds = wrapper.findAll('.ordered-list-add');
+    expect(adds.map(b => b.text())).toEqual(['Space 0', 'Space 1', 'Space 2']);
+    expect(wrapper.findAll('.ordered-list-entry')).toHaveLength(1);
+    expect(wrapper.find('.done-button').exists()).toBe(true);
+
+    await adds[2]!.trigger('click');
+    expect(appendListEntry).toHaveBeenCalledWith('space', 's2');
+    expect(fill).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -883,7 +883,11 @@ const offeredElements = actionController.validElements;
 // choice buttons; anchored choices render as a secondary focusable button list so
 // keyboard/SR users always have an operable control even when all picks are
 // board-anchored. splitAnchoredChoices applies only for 'choice' picks.
-const _splitChoices = computed(() => splitAnchoredChoices(offeredChoices.value, currentPick.value?.type));
+// #718: a set or list pick keeps every choice in its checkbox / Add controls, the only ones that toggle or append and show the draft.
+const _splitChoices = computed(() =>
+  (currentMultiSelect.value || currentOrderedList.value) && !deferPickToBoard.value
+    ? { primary: offeredChoices.value, anchored: [] }
+    : splitAnchoredChoices(offeredChoices.value, currentPick.value?.type));
 
 // Primary (unanchored) choices: rendered as the main choice buttons in the panel.
 const filteredChoices = computed(() => _splitChoices.value.primary);
