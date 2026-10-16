@@ -2273,7 +2273,7 @@ export class ActionExecutor {
   }
 
   /**
-   * Why the action-level `validate` gate refuses a COMPLETE pending action, or
+   * Why a stale earlier pick or the action-level `validate` gate refuses a COMPLETE pending action, or
    * `null` when it may run. Runs nothing else: move enumeration asks this of a
    * pending action it assembled so it offers only moves `executePendingAction`
    * would accept.
@@ -2287,7 +2287,8 @@ export class ActionExecutor {
       return 'Action is not complete';
     }
     const args = this.resolveArgs(action, pendingState.collectedArgs, player);
-    return this.checkActionValidate(action, { game: this.game, player, args });
+    return this.stalePickRefusal(action, player, pendingState, args)
+      ?? this.checkActionValidate(action, { game: this.game, player, args });
   }
 
   /**
@@ -2315,15 +2316,34 @@ export class ActionExecutor {
       args: resolvedArgs,
     };
 
-    const validateError = this.checkActionValidate(action, context);
-    if (validateError) {
+    const refusal = this.stalePickRefusal(action, player, pendingState, resolvedArgs)
+      ?? this.checkActionValidate(action, context);
+    if (refusal) {
       // The action never runs, so nothing it would have mutated has happened;
       // but selections that already fired onSelect must be compensated, the
       // same as any other abort before execute.
       this.fireOnCancelCallbacks(action, pendingState);
-      return { success: false, error: validateError };
+      return { success: false, error: refusal };
     }
 
     return this.runExecute(action, resolvedArgs, context);
+  }
+
+  /**
+   * Why a pick another action took (`pendingState.stalePicks`, #767) is no
+   * longer on offer, or `null` when each still is.
+   */
+  private stalePickRefusal(
+    action: ActionDefinition,
+    player: Player,
+    pendingState: PendingActionState,
+    args: Record<string, unknown>
+  ): string | null {
+    for (const selection of action.selections) {
+      if (!pendingState.stalePicks?.includes(selection.name)) continue;
+      const result = this.validateSelection(selection, args[selection.name], player, args, action.name);
+      if (!result.valid) return result.errors.join('; ');
+    }
+    return null;
   }
 }

@@ -1,5 +1,5 @@
 {
-  "revision": 209,
+  "revision": 210,
   "surfaceHash": "72c3970831e07bc0",
   "payloadHash": "d037431574c86546",
   "formatHash": "3aff5d1f34f52ec0",
@@ -1615,6 +1615,14 @@
       "payloadHash": "d037431574c86546",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "Each seat's view carries only its own available actions in the public flow state; spectators get none (#778)."
+    },
+    {
+      "revision": 210,
+      "date": "2026-10-16",
+      "surfaceHash": "72c3970831e07bc0",
+      "payloadHash": "d037431574c86546",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A multi-step pending action is refused before it runs when another seat's action or pick took one of its earlier picks off the offer between the seat's picks: onCancel runs, nothing is recorded, and the error is the pick's unavailable sentence. A pick the action's own onSelect removed, a repeating pick and a held follow-up's pick are exempt. PendingActionState and SerializedPendingActionState gain picksOnOffer and stalePicks, which saved pending states must carry through unchanged (#767)."
     }
   ]
 }

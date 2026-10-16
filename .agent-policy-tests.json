@@ -1,24 +1,21 @@
 {
-  "ticket": "Shufflewick/BoardSmith#778",
+  "ticket": "Shufflewick/BoardSmith#767",
   "base": "e7da3d40e99eb989548d089002a4967d71fda62d",
   "tests": [
     {
-      "file": "src/session/secret-action-counts.test.ts",
+      "file": "src/session/pending-action-stale-pick.test.ts",
       "names": [
-        "a seat cannot count another seat's secret actions (#449) stateless executor (platform and dev host) seat 2's view and the spectator view are the same whether seat 1 placed 0 or 2 secret packs",
-        "a seat cannot count another seat's secret actions (#449) stateless executor (platform and dev host) the undo refusal seat 2 reads does not depend on seat 1's secret actions",
-        "a seat cannot count another seat's secret actions (#449) stateless executor (platform and dev host) undo still takes back exactly the seat's own secret actions",
-        "a seat is sent only its own available actions (#778) in a simultaneous step and in the sequential step after it"
-      ]
-    },
-    {
-      "file": "src/engine/flow/public-flow-state.test.ts",
-      "names": [
-        "toPublicFlowState (#449) keeps exactly the fields a client reads, and no count",
-        "toPublicFlowState (#449) answers the client helpers exactly as the server state does",
-        "toPublicFlowState sends no seat another seat's actions (#778) keeps only the viewer's own entry's actions in a simultaneous step",
-        "toPublicFlowState sends no seat another seat's actions (#778) keeps the sequential actions only for the acting seat",
-        "toPublicFlowState sends no seat another seat's actions (#778) sends a spectator no seat's actions"
+        "GameRunner refuses a pending action once another seat's action took an earlier pick, and fires onCancel",
+        "GameRunner completes a pending action whose own onSelect took its pick off the offer",
+        "GameRunner completes a pending action whose own onSelect took its pick off the offer, when another seat acted in between",
+        "GameRunner completes a pending action whose own onSelect took a chooseFrom pick off the offer, when another seat acted in between",
+        "GameRunner refuses a pending action once another seat's pick took its chooseFrom pick off the offer",
+        "GameRunner keeps a pick another seat took marked across later picks, and refuses the last one",
+        "GameRunner refuses a pending action once another seat's action took its element pick off the offer without moving it",
+        "GameRunner does not re-check a pick a held follow-up answered, when another seat's action took it",
+        "GameRunner completes a pending action when another seat's action left its picks on offer",
+        "stateless selectionStep op refuses a pending action once another seat's action took an earlier pick",
+        "stateless selectionStep op keeps a pick another seat took marked through the pending state it returns, and refuses the last pick"
       ]
     }
   ]
