@@ -528,7 +528,7 @@ export class MyPlayer extends Player<MyGame, MyPlayer> {
 }
 ```
 
-> **Note**: Simple properties (numbers, strings, plain objects) are auto-serialized. Only override `toJSON()` when using classes with their own `toJSON()` methods (like `AbilityManager`).
+> **Note**: Simple properties (numbers, strings, arrays, plain objects) are auto-serialized. Keep player state in that form, as the [dice tracks and abilities](./dice-and-scoring.md#ability-system) do: a class instance stored in a field comes back from a restore as a bare object, without its methods.
 
 ### 3. Win Condition Checking
 

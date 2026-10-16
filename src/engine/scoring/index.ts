@@ -9,6 +9,14 @@ export {
   MonotonicTrack,
   UniqueTrack,
   CounterTrack,
+  monotonicTrack,
+  uniqueTrack,
+  counterTrack,
+  canAddToTrack,
+  addToTrack,
+  incrementCounter,
+  isTrackComplete,
+  trackPoints,
 } from './track.js';
 
 export type {
@@ -17,4 +25,8 @@ export type {
   MonotonicTrackConfig,
   UniqueTrackConfig,
   CounterTrackConfig,
+  TrackState,
+  MonotonicTrackState,
+  UniqueTrackState,
+  CounterTrackState,
 } from './track.js';
