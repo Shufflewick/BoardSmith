@@ -12,6 +12,9 @@
 import { describe, it, expect } from 'vitest';
 import { newScoreRace, scoreRaceBot } from './score-race.test-helper.js';
 
+// One `good` is 10 of the 30 points the objective counts, mapped onto its 0.8-wide range: about 0.27.
+const GAP = 0.2;
+
 describe('leaf evaluation in the score race', () => {
   it('values the scoring move above every move that does not score, with default settings', async () => {
     for (const seed of ['eval-1', 'eval-2', 'eval-3', 'eval-4', 'eval-5']) {
@@ -21,7 +24,7 @@ describe('leaf evaluation in the score race', () => {
       const others = stats.filter((s) => s.move.args.option !== 'good');
       expect(good, `seed ${seed}: the search never tried 'good'`).toBeDefined();
       for (const other of others) {
-        expect(good.value, `seed ${seed}: 'good' vs '${other.move.args.option}'`).toBeGreaterThan(other.value + 0.3);
+        expect(good.value, `seed ${seed}: 'good' vs '${other.move.args.option}'`).toBeGreaterThan(other.value + GAP);
       }
     }
   });
@@ -33,7 +36,7 @@ describe('leaf evaluation in the score race', () => {
 
     const good = stats.find((s) => s.move.args.option === 'good')!;
     for (const other of stats.filter((s) => s.move.args.option !== 'good')) {
-      expect(good.value, `'good' vs '${other.move.args.option}'`).toBeGreaterThan(other.value + 0.3);
+      expect(good.value, `'good' vs '${other.move.args.option}'`).toBeGreaterThan(other.value + GAP);
     }
   });
 });
