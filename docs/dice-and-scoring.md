@@ -261,28 +261,35 @@ The `AbilityManager` provides a reusable system for games where players earn and
 ### Basic Usage
 
 ```typescript
-import { AbilityManager, Player } from 'boardsmith';
+import { AbilityManager, Player, type Ability } from 'boardsmith';
 
 // Define your ability types
 type MyAbility = 'reroll' | 'flip' | 'bonus' | 'skip';
 
 class MyPlayer extends Player<MyGame, MyPlayer> {
-  abilities = new AbilityManager<MyAbility>();
+  // Saved state must be plain data, so the manager's data is saved here.
+  abilityState?: Ability<MyAbility>[];
+  // `_` fields are not saved; the manager is rebuilt from abilityState after a restore.
+  private _abilities?: AbilityManager<MyAbility>;
 
-  constructor(seat: number, name: string) {
-    super(seat, name);
-    // Give each player a starting ability
-    this.abilities.add('reroll', 'starting');
+  get abilities(): AbilityManager<MyAbility> {
+    if (!this._abilities) {
+      this._abilities = new AbilityManager<MyAbility>();
+      if (this.abilityState) this._abilities.fromJSON(this.abilityState);
+      else this._abilities.add('reroll', 'starting'); // a new game's starting ability
+    }
+    return this._abilities;
   }
 
-  // Override needed for AbilityManager because it has its own toJSON() method
   override toJSON() {
     const json = super.toJSON();
-    json.attributes.abilities = this.abilities.toJSON();
+    json.attributes.abilityState = this.abilities.toJSON();
     return json;
   }
 }
 ```
+
+An `AbilityManager` or track stored directly in a public field makes saving the game throw: a class instance would come back from a restore as a plain object without its methods.
 
 ### AbilityManager API
 
@@ -438,51 +445,69 @@ import {
   Player,
   AbilityManager,
   MonotonicTrack,
-  CounterTrack
+  CounterTrack,
+  type Ability,
+  type TrackEntry,
 } from 'boardsmith';
 
 type PowerUp = 'reroll-2' | 'flip' | 'refresh' | 'adjust';
 
 class DiceGamePlayer extends Player<DiceGame, DiceGamePlayer> {
-  abilities: AbilityManager<PowerUp>;
-  scoreTrack: MonotonicTrack;
-  bonusTrack: CounterTrack;
+  // Saved as plain data; the live objects in `_` fields are rebuilt from it after a restore.
+  abilityState?: Ability<PowerUp>[];
+  scoreTrackState?: { entries: TrackEntry[] };
+  bonusTrackState?: { entries: TrackEntry[] };
 
-  constructor(seat: number, name: string) {
-    super(seat, name);
+  private _abilities?: AbilityManager<PowerUp>;
+  private _scoreTrack?: MonotonicTrack;
+  private _bonusTrack?: CounterTrack;
 
-    // Initialize ability manager
-    this.abilities = new AbilityManager<PowerUp>();
-    this.abilities.add('reroll-2', 'starting');
+  get abilities(): AbilityManager<PowerUp> {
+    if (!this._abilities) {
+      this._abilities = new AbilityManager<PowerUp>();
+      if (this.abilityState) this._abilities.fromJSON(this.abilityState);
+      else this._abilities.add('reroll-2', 'starting');
+    }
+    return this._abilities;
+  }
 
-    // Initialize scoring tracks
-    this.scoreTrack = new MonotonicTrack({
-      id: 'score',
-      name: 'Score',
-      direction: 'increasing',
-      maxEntries: 10,
-      pointsPerEntry: [1, 2, 3, 5, 8, 13, 21, 34, 55, 89],
-    });
+  get scoreTrack(): MonotonicTrack {
+    if (!this._scoreTrack) {
+      this._scoreTrack = new MonotonicTrack({
+        id: 'score',
+        name: 'Score',
+        direction: 'increasing',
+        maxEntries: 10,
+        pointsPerEntry: [1, 2, 3, 5, 8, 13, 21, 34, 55, 89],
+      });
+      if (this.scoreTrackState) this._scoreTrack.fromJSON(this.scoreTrackState);
+    }
+    return this._scoreTrack;
+  }
 
-    this.bonusTrack = new CounterTrack({
-      id: 'bonus',
-      name: 'Bonus Stars',
-      maxEntries: 5,
-      pointsPerCount: 10,
-    });
+  get bonusTrack(): CounterTrack {
+    if (!this._bonusTrack) {
+      this._bonusTrack = new CounterTrack({
+        id: 'bonus',
+        name: 'Bonus Stars',
+        maxEntries: 5,
+        pointsPerCount: 10,
+      });
+      if (this.bonusTrackState) this._bonusTrack.fromJSON(this.bonusTrackState);
+    }
+    return this._bonusTrack;
   }
 
   get totalScore(): number {
     return this.scoreTrack.calculatePoints() + this.bonusTrack.calculatePoints();
   }
 
-  // Override needed for objects with toJSON() methods (AbilityManager, tracks)
   override toJSON() {
     const json = super.toJSON();
     json.attributes.totalScore = this.totalScore;
-    json.attributes.abilities = this.abilities.toJSON();
-    json.attributes.scoreTrack = this.scoreTrack.toJSON();
-    json.attributes.bonusTrack = this.bonusTrack.toJSON();
+    json.attributes.abilityState = this.abilities.toJSON();
+    json.attributes.scoreTrackState = this.scoreTrack.toJSON();
+    json.attributes.bonusTrackState = this.bonusTrack.toJSON();
     return json;
   }
 }

@@ -83,6 +83,12 @@ describe('FlyingCardsOverlay', () => {
       expect(document.querySelector('.suit')!.textContent).toBe('♥');
     });
 
+    it('draws a lowercase suit with the same symbol and colour as the zoom preview (#733)', () => {
+      overlay([flyingCard('a', { rank: 'K', suit: 'h' })]);
+      expect(document.querySelector('.suit')!.textContent).toBe('♥');
+      expect(document.querySelector('.card-front')!.getAttribute('style')).toContain('rgb(231, 76, 60)');
+    });
+
     it('draws a URL face image as an <img>', () => {
       overlay([flyingCard('a', { rank: 'A', suit: 'H', faceImage: '/ace.png' })]);
       const img = document.querySelector('.card-front img.card-image') as HTMLImageElement;

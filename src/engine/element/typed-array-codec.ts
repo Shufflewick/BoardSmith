@@ -111,9 +111,12 @@ const CODECS: Readonly<Record<string, TypedArrayCodec>> = {
   },
 };
 
+/** The key that tags a serialized typed array; the state codec's marker list reads it from here. */
+export const TYPED_ARRAY_MARKER = '__typedArray';
+
 /** The serialized shape a typed array takes in game state. */
 export type SerializedTypedArray = {
-  __typedArray: string;
+  [TYPED_ARRAY_MARKER]: string;
   data: string;
 };
 
@@ -198,11 +201,6 @@ export function isEncodableTypedArray(value: object): boolean {
   return ArrayBuffer.isView(value) && value.constructor.name in CODECS;
 }
 
-/** True for a serialized typed-array shape produced by {@link encodeTypedArray}. */
-export function isSerializedTypedArray(value: object): value is SerializedTypedArray {
-  return '__typedArray' in value;
-}
-
 /**
  * Encode a typed array as a tagged, little-endian, base64 shape.
  *
@@ -229,7 +227,7 @@ export function encodeTypedArray(value: ArrayBufferView, path: string): Serializ
     codec.write(view, i * codec.bytesPerElement, value, i);
   }
 
-  return { __typedArray: typeName, data: bytesToBase64(bytes) };
+  return { [TYPED_ARRAY_MARKER]: typeName, data: bytesToBase64(bytes) };
 }
 
 /** Rebuild the exact typed-array type {@link encodeTypedArray} recorded. */

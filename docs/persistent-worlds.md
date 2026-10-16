@@ -2851,6 +2851,7 @@ makes local behaviour a poor guide to published behaviour.
 | `maxPendingEvents` | derived: 16000 | The whole world's queue. `maxPlayers` times the unkeyed cap. |
 | `catchUpMaxRealIterations` | 4 | Real occurrences a late recurrence runs before the rest are coalesced into one call. |
 | `drainBatch` | 200 | Due events one drain runs. A world still behind re-arms: overload degrades to latency, never refusal. |
+| `maxResidentPartitions` | 256 | How many partitions one world keeps resident. After each checkpoint the least recently used clean ones past it are evicted (`planEviction`); a dirty one never is. |
 | `catchUpRounds` | 8 | Drain batches one command may wait behind on a `ordering: 'chronological'` world. Running out with events still due refuses the command `world-catching-up` rather than applying it over a world still behind. |
 | `maxCandidatesPerSelection` | 200 | Candidates one selection may offer, checked at enumeration. A 500-seat roster is one honest partition and one honest declaration, and enumerating it yields 500 candidates, so this is the guard the declaration itself cannot supply. |
 | `receiptRetentionMs` | 1209600000 (14 days) | How long a committed order's receipt is kept, and so how long a page may be away and still have an uncertain order answered rather than refused. |
@@ -3035,13 +3036,16 @@ const bytes = await runner.serialize([...result.dirty]);
 `runner.declareOffers(player, supplied)` and `runner.offersFor(player, stamp)`
 drive the offer path the same way, `runner.declareViews(...)` and
 `runner.viewsFor(...)` drive the read path, and `runner.evict(names)` releases
-partitions. `walkDeclaration(declare, read, readActivity, readNoticeBox)` is the
-loop itself, exported so a host writes it once rather than three times: it reads
-the partitions, seat watermarks and notice boxes each round declares, and returns
-the `WorldWalkAnswers` (`declaredActivity`, `declaredNotices`) that `apply` takes
-whole. It is host API, so it changes with the engine revision; a test that only
-wants a world to act in uses `TestWorld` below. `settleDeclaration` is the view's
-fixpoint. Every refusal on this page is reachable from a test file.
+partitions.
+`planEviction(runner.residency(), dirty, budgets.maxResidentPartitions)` says
+which, and `ResidentWorld` runs it after every checkpoint (#747).
+`walkDeclaration(declare, read, readActivity, readNoticeBox)` is the loop
+itself, exported so a host writes it once rather than three times: it reads the
+partitions, seat watermarks and notice boxes each round declares, and returns
+the `WorldWalkAnswers` (`declaredActivity`, `declaredNotices`) that `apply`
+takes whole. It is host API, so it changes with the engine revision; a test that
+only wants a world to act in uses `TestWorld` below. `settleDeclaration` is the
+view's fixpoint. Every refusal on this page is reachable from a test file.
 
 **Under `boardsmith/testing`, driven the way a host drives one.** `createWorld`
 above is the raw runner: you walk the declaration, stamp the command and write

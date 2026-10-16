@@ -38,12 +38,12 @@ function subtree(root: GameElement): GameElement[] {
 }
 
 /**
- * The elements in the game's tree the id index does not hold. A lookup of any
- * of them still answers right, by walking, so only this shows the index
- * falling behind.
+ * The elements in the game's tree and pile the id index does not hold. A
+ * lookup of any of them still answers right, by walking, so only this shows
+ * the index falling behind; world adoption's id-clash check relies on it (#755).
  */
 function unindexed(game: IndexGame): string[] {
-  return subtree(game)
+  return [...subtree(game), ...subtree(game.pile)]
     .filter((element) => game._ctx._elementsById.get(element._t.id) !== element)
     .map((element) => `${element.name ?? element.constructor.name}#${element._t.id}`);
 }
@@ -129,11 +129,19 @@ describe('atId after an in-place restore (the undo path)', () => {
   });
 });
 
-describe('the id index holds every element in the game tree', () => {
+describe('the id index holds every element in the game tree and the pile', () => {
   it('after elements are created and moved', () => {
     const { game, deck, hand } = table();
     for (const card of deck._t.children.slice(0, 10)) (card as Card).putInto(hand);
     hand.create(Card, 'late');
+    (deck._t.children[0] as Card).remove();
+    expect(unindexed(game)).toEqual([]);
+  });
+
+  it('after an in-place restore of a state with cards in the pile', () => {
+    const { game, deck } = table();
+    for (const card of deck._t.children.slice(0, 3)) (card as Card).remove();
+    game.loadSerializedState(game.toJSON());
     expect(unindexed(game)).toEqual([]);
   });
 

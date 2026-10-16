@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   Game,
   Player,
@@ -149,6 +149,21 @@ describe('boardsmith dev — the persistence store (#41 item 2)', () => {
     const payload = startOptions()[PERSIST_KEY] as PersistStartPayload;
     expect(payload.entries).toEqual([]);
     expect(payload.sessionKey).toBe('dev-session');
+  });
+
+  it('warns the developer about a store row it could not read (#740)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const store = new PersistenceStore({
+      rows: [{ key: 'hand-edited', value: 5 as unknown as string, writtenAt: 1 }],
+    });
+    const { host } = makeHost({ store });
+    await host.handleMessage('A', { type: 'hello' });
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    const [message] = warn.mock.calls[0] as [string];
+    expect(message).toContain('"hand-edited"');
+    expect(message).toContain('.boardsmith-dev-store.json');
+    warn.mockRestore();
   });
 
   it('hands the NEXT session what the last one committed', async () => {

@@ -19,8 +19,15 @@ ruleTester.run('no-eval', rule, {
     { code: `const result = calculator.evaluate('1+1');` },
     // Declaring a function is not constructing one from a string.
     { code: `function Function2() {}` },
+    // A game's own eval, and checking whether something is a function (#737).
+    { code: `const calc = { eval: (s) => s }; calc.eval('1');` },
+    { code: `const isFn = value instanceof Function;` },
   ],
   invalid: [
+    // Every other spelling of the same call (#737).
+    { code: `globalThis.eval('1');`, errors: [{ messageId: 'noEval' }] },
+    { code: `const run = eval; run('1');`, errors: [{ messageId: 'noEval' }] },
+    { code: `new globalThis.Function('a');`, errors: [{ messageId: 'noFunction' }] },
     { code: `eval('1 + 1');`, errors: [{ messageId: 'noEval' }] },
     { code: `const fn = new Function('a', 'return a');`, errors: [{ messageId: 'noFunction' }] },
     { code: `const fn = Function('a', 'return a');`, errors: [{ messageId: 'noFunction' }] },

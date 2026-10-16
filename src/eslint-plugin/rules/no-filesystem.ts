@@ -1,4 +1,5 @@
 import type { Rule } from 'eslint';
+import { moduleImportVisitors } from './module-imports.js';
 
 /**
  * Disallows filesystem access in game rules code
@@ -36,45 +37,10 @@ const rule: Rule.RuleModule = {
       'os': 'noOs',
     };
 
-    function checkModuleName(name: string, node: Rule.Node) {
-      const cleanName = name.replace(/^node:/, '');
-      const messageId = forbiddenModules[cleanName];
-      if (messageId) {
-        context.report({ node, messageId });
-      }
-    }
-
-    return {
-      // Check import declarations: import fs from 'fs'
-      ImportDeclaration(node) {
-        if (typeof node.source.value === 'string') {
-          checkModuleName(node.source.value, node);
-        }
-      },
-
-      // Check require() calls
-      CallExpression(node) {
-        if (
-          node.callee.type === 'Identifier' &&
-          node.callee.name === 'require' &&
-          node.arguments.length > 0 &&
-          node.arguments[0].type === 'Literal' &&
-          typeof node.arguments[0].value === 'string'
-        ) {
-          checkModuleName(node.arguments[0].value, node);
-        }
-      },
-
-      // Check dynamic import()
-      ImportExpression(node) {
-        if (
-          node.source.type === 'Literal' &&
-          typeof node.source.value === 'string'
-        ) {
-          checkModuleName(node.source.value, node);
-        }
-      },
-    };
+    return moduleImportVisitors((name, node) => {
+      const messageId = forbiddenModules[name];
+      if (messageId) context.report({ node, messageId });
+    });
   },
 };
 

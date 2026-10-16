@@ -15,7 +15,6 @@ import { PersistentMap } from './persistent-map.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE } from './hidden-placeholder.js';
 import type { VisibilityMode, VisibilityState } from './visibility.js';
 import {
-  DEFAULT_VISIBILITY,
   canPlayerSee,
   copyVisibilityState,
   resolveVisibility,
@@ -27,7 +26,8 @@ import {
   decodeTypedArray,
   encodeTypedArray,
   isEncodableTypedArray,
-  isSerializedTypedArray,
+  TYPED_ARRAY_MARKER,
+  type SerializedTypedArray,
 } from './typed-array-codec.js';
 
 /**
@@ -586,7 +586,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    * Get all direct children
    */
   get children(): ElementCollection<GameElement> {
-    return reachAll(this, new ElementCollection(...this._t.children));
+    return reachAll(this, ElementCollection.from(this._t.children) as ElementCollection<GameElement>);
   }
 
   /**
@@ -904,10 +904,12 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // World mode (#35 item 2): mark BOTH endpoints' partitions. A
     // cross-partition move dirties a destination this command's reads never
     // hydrated — the room a thrown object lands in — so marking the source
-    // alone loses it. Placed AFTER every throw above, so a REJECTED move
-    // marks nothing, and BEFORE the splice, so the source walk still sees the
-    // pre-move parent chain. In snapshot mode there are no partitions at all
-    // and this costs one undefined check.
+    // alone loses it. Placed AFTER the guard throws above, so a move they
+    // reject marks nothing, and BEFORE the splice, so the source walk still
+    // sees the pre-move parent chain. A move refused below (parent does not
+    // list the element, or an exit handler throws) leaves both marked, which
+    // only costs an extra partition write. In snapshot mode there are no
+    // partitions at all and this costs one undefined check.
     const partitionRoots = this._ctx?._partitionRoots;
     if (partitionRoots && partitionRoots.size > 0) {
       let touched = this._ctx._touchedPartitions;
@@ -925,24 +927,22 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // Remove from current parent
     if (oldParent) {
       const index = oldParent._t.children.indexOf(this);
-      if (index !== -1) {
-        oldParent._t.children.splice(index, 1);
-        childrenChanged(oldParent);
-      } else if (isDevMode()) {
-        // The element points at a parent that does not list it. Completing the
-        // move would re-parent it while leaving the stale reference in place,
-        // so it would exist in two places at once — and that tree is what the
-        // next snapshot and checkpoint capture, poisoning every later restore.
-        // Refuse rather than make it worse (#45).
+      if (index === -1) {
+        // Completing the move would leave the element in two places at once, and
+        // that tree is what the next snapshot captures (#45). The common cause is
+        // an onExit handler moving the element mid-move (#762).
+        const elementName = `"${this.name ?? this.constructor.name}" (id: ${this.id})`;
+        const parentName = `"${oldParent.name ?? oldParent.constructor.name}" (id: ${oldParent.id})`;
         throw new Error(
-          `TREE CORRUPTION in moveToInternal — refusing to move.\n` +
-          `  Element ${this.name ?? this.constructor.name} (id: ${this.id}) has a parent reference to\n` +
-          `  "${oldParent.name ?? oldParent.constructor.name}" (id: ${oldParent.id})\n` +
-          `  but is NOT in that parent's children array.\n` +
-          `  Something moved the element by writing _t.children directly. Use putInto()/moveTo(),\n` +
-          `  which keep the parent reference and the children array in step.`
+          `Cannot move ${elementName}: its parent ${parentName} does not list it among its children.\n` +
+          `  If an onExit handler on ${parentName} moved this element, it is already part way through ` +
+          `a move. Move it from the destination's onEnter handler instead, or after this move completes.\n` +
+          `  Otherwise something wrote _t.children directly. Use putInto()/moveTo(), which keep the ` +
+          `parent reference and the children array in step.`
         );
       }
+      oldParent._t.children.splice(index, 1);
+      childrenChanged(oldParent);
 
       // Trigger exit event if parent is a Space. Duck-typed (rather than
       // `instanceof Space`) to avoid a circular import between
@@ -950,7 +950,14 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       // `getParentZoneVisibility`'s duck-typed `getZoneVisibility` check
       // above and `fromJSON`'s duck-typed `_restoreZoneVisibility` call.
       if (isChildEventTarget(oldParent)) {
-        oldParent.triggerEvent('exit', this);
+        try {
+          oldParent.triggerEvent('exit', this);
+        } catch (error) {
+          // A refused exit must not leave the element listed by no parent (#762).
+          oldParent._t.children.splice(index, 0, this);
+          childrenChanged(oldParent);
+          throw error;
+        }
       }
     }
 
@@ -1341,12 +1348,13 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    * Internal method to add players to visibility list
    */
   addVisibleToInternal(players: number[]): void {
-    if (!this._visibility) {
-      this._visibility = { ...DEFAULT_VISIBILITY, explicit: true };
-    }
-    this._visibility.addPlayers = Array.from(
-      new Set([...(this._visibility.addPlayers ?? []), ...players])
-    );
+    // Without a setting of its own the card stores only the seats and keeps following its current zone (#758);
+    // 'hidden' is what this state alone shows everyone else, which keeps projection signatures apart.
+    const own: VisibilityState = this._visibility ?? { mode: 'hidden', explicit: false };
+    this._visibility = {
+      ...own,
+      addPlayers: Array.from(new Set([...(own.addPlayers ?? []), ...players])),
+    };
   }
 
   // ============================================
@@ -1490,13 +1498,15 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   /**
    * The attributes `toJSON` saves and `resolveElementReferences` decodes: own
    * keys that are not `_`-prefixed engine state or one of the class's
-   * `unserializableAttributes`, and whose value is not `undefined`.
+   * `unserializableAttributes`, and whose value is neither `undefined` nor a
+   * {@link PersistentMap}, a live view onto `settings`, which saves its data (#139).
    */
   private savedAttributeKeys(): string[] {
     const unserializable = (this.constructor as typeof GameElement).unserializableAttributes;
-    return Object.keys(this).filter(
-      (key) => !key.startsWith('_') && !unserializable.includes(key) && (this as Record<string, unknown>)[key] !== undefined,
-    );
+    return Object.keys(this).filter((key) => {
+      const value = (this as Record<string, unknown>)[key];
+      return !key.startsWith('_') && !unserializable.includes(key) && value !== undefined && !(value instanceof PersistentMap);
+    });
   }
 
   /**
@@ -1555,10 +1565,9 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       json.redacted = true;
     }
 
-    // Include visibility if explicitly set. Emit a COPY — `addVisibleTo` etc.
-    // mutate `_visibility` in place, and a snapshot/checkpoint sharing the
-    // live object would be retroactively corrupted by later mutations (CR-02).
-    if (this._visibility?.explicit) {
+    // Include visibility if set, a bare `addVisibleTo` grant included (#758). Emit a COPY — a snapshot/checkpoint
+    // sharing the live object would be retroactively corrupted by later mutations (CR-02).
+    if (this._visibility) {
       json.visibility = copyVisibilityState(this._visibility);
     }
 
@@ -1753,6 +1762,16 @@ export function withheldFromSeat(element: GameElement): boolean {
   return element._ctx?._seatView === true && element.branch().startsWith(PILE_BRANCH);
 }
 
+/** Assignment would turn a `__proto__` key into a prototype change and lose the entry (#761). */
+function setOwnKey(target: Record<string, unknown>, key: string, value: unknown): void {
+  // Only `__proto__` needs the slow path; defineProperty on every key made encode/decode 2.5-4x slower.
+  if (key === '__proto__') {
+    Object.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true });
+  } else {
+    target[key] = value;
+  }
+}
+
 /**
  * Encode a value for saved state: an element attribute, an action argument in
  * history, the game's settings or message log. The one codec for all of them
@@ -1768,9 +1787,10 @@ export function withheldFromSeat(element: GameElement): boolean {
  *   rebuilds.
  *
  * Fails loud, naming `subject` and the property path, on a circular reference,
- * nesting past {@link GameElement.MAX_SERIALIZE_DEPTH}, or a raw `ArrayBuffer`
- * or `DataView`: dropping the value silently would corrupt every snapshot,
- * undo and network payload built from it.
+ * nesting past {@link GameElement.MAX_SERIALIZE_DEPTH}, a raw `ArrayBuffer` or
+ * `DataView`, or a Date or class instance (#759): dropping or flattening the
+ * value silently would corrupt every snapshot, undo and network payload built
+ * from it.
  *
  * @param ctx - The context of the game the value belongs to; decides world
  *   mode and whether a seat's view is being written.
@@ -1780,6 +1800,28 @@ export function withheldFromSeat(element: GameElement): boolean {
  */
 export function encodeValue(value: unknown, ctx: ElementContext | undefined, subject: string, path: string): unknown {
   return encodeAt(value, ctx, subject, path, new Set(), 0);
+}
+
+function encodeElementRef(value: GameElement, ctx: ElementContext | undefined): object {
+  // #149: the one shared structural answer to "is this a player?" -- a
+  // numeric `seat` is not it, because a per-seat board carries one too and
+  // would then serialize as a `__playerRef` to a seat with no such player.
+  if (isPlayerElement(value)) {
+    const player: Player = value;
+    // The UI reads seat, color and name; `__playerRef` is what resolves.
+    return { __playerRef: player.seat, seat: player.seat, color: player.color, name: player.name };
+  }
+  // A branch is the position among the siblings that are PRESENT, so in a
+  // world, where non-resident partitions are absent, a path recorded against
+  // the full world resolves against a partial one to a different element,
+  // silently. Ids do not move.
+  if (ctx?._worldMode) {
+    return { __elementId: value.id };
+  }
+  if (withheldFromSeat(value)) {
+    return { __elementRef: WITHHELD_PILE_BRANCH };
+  }
+  return { __elementRef: value.branch() };
 }
 
 function encodeAt(
@@ -1798,25 +1840,7 @@ function encodeAt(
   // with `isElement`, not `instanceof`: an action argument can come from a
   // game bundled with its own copy of the engine.
   if (isElement(value)) {
-    // #149: the one shared structural answer to "is this a player?" -- a
-    // numeric `seat` is not it, because a per-seat board carries one too and
-    // would then serialize as a `__playerRef` to a seat with no such player.
-    if (isPlayerElement(value)) {
-      const player: Player = value;
-      // The UI reads seat, color and name; `__playerRef` is what resolves.
-      return { __playerRef: player.seat, seat: player.seat, color: player.color, name: player.name };
-    }
-    // A branch is the position among the siblings that are PRESENT, so in a
-    // world, where non-resident partitions are absent, a path recorded against
-    // the full world resolves against a partial one to a different element,
-    // silently. Ids do not move.
-    if (ctx?._worldMode) {
-      return { __elementId: value.id };
-    }
-    if (withheldFromSeat(value)) {
-      return { __elementRef: WITHHELD_PILE_BRANCH };
-    }
-    return { __elementRef: value.branch() };
+    return encodeElementRef(value, ctx);
   }
 
   if (ancestors.has(value)) {
@@ -1867,9 +1891,26 @@ function encodeAt(
       );
     }
 
+    // A Date or class instance would come back a plain object, without its
+    // methods or getters, on the first restore.
+    const proto: unknown = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) {
+      const kind = (proto as { constructor?: { name?: string } }).constructor?.name || 'class instance';
+      throw new Error(
+        `Cannot serialize ${subject}: ${kind} at property '${path}' would be restored as a plain object, losing its type and methods. ` +
+          `Store a plain object, array, Map or Set instead (for a Date, store its getTime() number).`
+      );
+    }
+
     const result: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {
-      result[k] = encode(v, `${path}.${k}`);
+      if (CODEC_MARKER_KEYS.includes(k) && !keptWorldRefs.has(value)) {
+        throw new Error(
+          `Cannot serialize ${subject}: property '${path}' has the key '${k}', which the state codec reserves as a type marker. ` +
+            `Rename the key, or keep player-supplied keys in a Map.`
+        );
+      }
+      setOwnKey(result, k, encode(v, `${path}.${k}`));
     }
     return result;
   } finally {
@@ -1877,6 +1918,30 @@ function encodeAt(
     ancestors.delete(value);
   }
 }
+
+// Unresolved world-mode refs decodeValue handed back as they are; only these may re-encode through encodeAt.
+const keptWorldRefs = new WeakSet<object>();
+
+// One entry per tag the encoder writes. This table is the single list of marker keys: the decoder reads it
+// and the encoder refuses a plain object holding any of its keys.
+const TAG_DECODERS: Record<string, (value: object, game: Game) => unknown> = {
+  __elementRef: (value, game) => game.atBranch((value as { __elementRef: string }).__elementRef),
+  __elementId: (value, game) => {
+    const resolved = game.getElementById((value as { __elementId: number }).__elementId);
+    if (!resolved && game._ctx._worldMode) {
+      keptWorldRefs.add(value);
+      return value;
+    }
+    return resolved;
+  },
+  __playerRef: (value, game) => game.getPlayer((value as { __playerRef: number }).__playerRef),
+  __map: (value, game) =>
+    new Map((value as { __map: [unknown, unknown][] }).__map.map(([k, v]) => [decodeValue(k, game), decodeValue(v, game)])),
+  __set: (value, game) => new Set((value as { __set: unknown[] }).__set.map((item) => decodeValue(item, game))),
+  [TYPED_ARRAY_MARKER]: (value) => decodeTypedArray(value as SerializedTypedArray),
+};
+
+export const CODEC_MARKER_KEYS: readonly string[] = Object.keys(TAG_DECODERS);
 
 /**
  * Decode a value {@link encodeValue} wrote, resolving its references against
@@ -1893,38 +1958,22 @@ export function decodeValue(value: unknown, game: Game): unknown {
   if (value === null || typeof value !== 'object') {
     return value;
   }
-  if ('__elementRef' in value) {
-    return game.atBranch((value as { __elementRef: string }).__elementRef);
-  }
-  if ('__elementId' in value) {
-    const resolved = game.getElementById((value as { __elementId: number }).__elementId);
-    if (!resolved && game._ctx._worldMode) return value;
-    return resolved;
-  }
-  if ('__playerRef' in value) {
-    return game.getPlayer((value as { __playerRef: number }).__playerRef);
-  }
   // A PersistentMap is a VIEW onto `game.settings`: rebuilding it as a plain
   // object made the first call after a restore throw "<name>.get is not a
   // function" (#139). Its contents are decoded once, with `settings` itself.
   if (isElement(value) || value instanceof PersistentMap || ArrayBuffer.isView(value)) {
     return value;
   }
-  if ('__map' in value) {
-    return new Map((value as { __map: [unknown, unknown][] }).__map.map(([k, v]) => [decodeValue(k, game), decodeValue(v, game)]));
-  }
-  if ('__set' in value) {
-    return new Set((value as { __set: unknown[] }).__set.map((item) => decodeValue(item, game)));
-  }
-  if (isSerializedTypedArray(value)) {
-    return decodeTypedArray(value);
+  const marker = CODEC_MARKER_KEYS.find((key) => key in value);
+  if (marker) {
+    return TAG_DECODERS[marker](value, game);
   }
   if (Array.isArray(value)) {
     return value.map((item) => decodeValue(item, game));
   }
   const result: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value)) {
-    result[k] = decodeValue(v, game);
+    setOwnKey(result, k, decodeValue(v, game));
   }
   return result;
 }

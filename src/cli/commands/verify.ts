@@ -23,6 +23,10 @@
  *                 by every worktree, so a merge reuses what a worktree ran when the merged tree is
  *                 the one it verified (main has not moved, or the branch merged main and verified).
  *
+ * An explicit `--selection <path>` in a policy-opted-in project runs only its declared authored
+ * tests and typecheck. Its receipt records focused scope and the committed selection hash;
+ * omitted full checks are deferred to agent-policy's five-ticket cadence, never reported passed.
+ *
  * The base is the merge base of HEAD with `--base`, or with the main branch (`main`, else `master`).
  * On the main branch itself that merge base is HEAD, which measures no change, so without `--base`
  * the mutation check fails there and says to pass the commit the work started from. For chunk work
@@ -41,18 +45,21 @@
  * which mutates nothing, cannot stand in for it. `chunk-signoff <slug>` asks that question, and
  * `chunk-gate-transition`, which builds no chunk, the plain one (`verifiedProblem`).
  */
-import { existsSync, promises as fs, readFileSync } from 'node:fs';
+import { promises as fs, readFileSync } from 'node:fs';
 import { join, relative, resolve as pathResolve } from 'node:path';
 import chalk from 'chalk';
 import { chunkVerifyBase } from '../lib/chunk-commits.js';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { type MutantCache, openMutantCache } from '../lib/mutant-cache.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
-import { projectUiProblem } from '../lib/game-project.js';
+import { projectUiProblem, requireGameProject } from '../lib/game-project.js';
 import { gameTestRunProblem } from '../lib/test-run-scope.js';
+import { runAuthoredTests } from '../lib/authored-tests.js';
+import { focusedPolicyScope } from '../lib/focused-policy.js';
 import { discardRecord, runVitestRecorded, testRunVerdict } from '../lib/vitest-run.js';
 import {
   VERIFY_CHECK_NAMES,
+  FOCUSED_VERIFY_CHECK_NAMES,
   type VerifyCheckName,
   type VerifyCheckOutcome,
   type VerifyCheckResult,
@@ -461,15 +468,6 @@ export const VERIFY_CHECKS: Readonly<Record<VerifyCheckName, CheckRunner>> = Obj
 // Running them
 // -------------------------------------------------------------------------------------------
 
-function requireGameProject(projectDir: string): void {
-  if (!existsSync(join(projectDir, 'boardsmith.json'))) {
-    throw new Error(
-      `boardsmith verify checks a game project, and ${projectDir} has no boardsmith.json. ` +
-        "Run it in the game's directory, or pass --project <dir>.",
-    );
-  }
-}
-
 /**
  * The result lives under `.boardsmith/`, which a game's `.gitignore` leaves out of git. Where it does
  * not, writing the result would itself make the tree dirty, and no result could ever count.
@@ -520,9 +518,10 @@ async function recordResult(projectDir: string, result: VerifyResult): Promise<s
 async function runChecks(
   checks: Readonly<Record<VerifyCheckName, CheckRunner>>,
   ctx: Omit<VerifyContext, 'earlier'>,
+  names: readonly VerifyCheckName[] = VERIFY_CHECK_NAMES,
 ): Promise<VerifyCheckResult[]> {
   const earlier = new Map<VerifyCheckName, VerifyCheckResult>();
-  for (const name of VERIFY_CHECK_NAMES) {
+  for (const name of names) {
     console.log(chalk.cyan(`\nboardsmith verify: ${name}\n`));
     let outcome: VerifyCheckOutcome;
     try {
@@ -547,6 +546,7 @@ export async function runVerify(options: {
   projectDir: string;
   base?: string;
   chunk?: string;
+  selection?: string;
   checks?: Readonly<Record<VerifyCheckName, CheckRunner>>;
   log?: (line: string) => void;
 }): Promise<{ result: VerifyResult; path: string | undefined }> {
@@ -554,12 +554,34 @@ export async function runVerify(options: {
   requireGameProject(projectDir);
   const head = await verifiableCommit(projectDir);
   await requireResultIgnored(projectDir);
-  const base = await runBase(projectDir, options);
+  const scope = options.selection === undefined ? undefined : await focusedPolicyScope(projectDir);
+  if (options.selection !== undefined && scope?.selection.path !== options.selection) {
+    throw new Error('The committed policy must explicitly opt into focused verification with this selection. Use its configured selection path.');
+  }
+  const base = scope === undefined
+    ? await runBase(projectDir, options)
+    : { ref: `authored selection ${scope.selection.path}`, commit: scope.selection.base, given: true };
+  if (scope !== undefined && (options.base !== undefined || options.chunk !== undefined)) {
+    const requested = await runBase(projectDir, options);
+    if (!await gitSucceeds(projectDir, ['merge-base', '--is-ancestor', requested.commit, base.commit])) {
+      throw new Error('The authored-test base must include the change base named by --base or --chunk. Check the committed selection.');
+    }
+  }
   const mutantCache = await openMutantCache(projectDir);
   const log = options.log ?? ((line: string) => console.error(chalk.dim(line)));
   if (mutantCache.unavailable !== undefined) log(`${mutantCache.unavailable}; every mutant runs.`);
   let typeCheck: Promise<TypeCheckRun> | undefined;
-  const checks = await runChecks(options.checks ?? VERIFY_CHECKS, {
+  const runners = options.checks ?? VERIFY_CHECKS;
+  const selectedRunners = scope === undefined ? runners : {
+    ...runners,
+    test: async (ctx: VerifyContext): Promise<VerifyCheckOutcome> => {
+      const cannot = await suiteCannotRun(ctx.projectDir);
+      if (cannot) return cannot;
+      const run = await runAuthoredTests(ctx.projectDir, scope.selection.path);
+      return { passed: true, summary: `${plural(run.counts.passed, 'authored test')} passed in ${plural(run.counts.files, 'file')}.`, counts: run.counts };
+    },
+  };
+  const checks = await runChecks(selectedRunners, {
     projectDir,
     typeCheck: () => (typeCheck ??= typeCheckProject(projectDir)),
     head,
@@ -567,7 +589,7 @@ export async function runVerify(options: {
     changed: await changedSince(projectDir, base.commit),
     mutantCache,
     log,
-  });
+  }, scope === undefined ? VERIFY_CHECK_NAMES : FOCUSED_VERIFY_CHECK_NAMES);
 
   const after = await checkoutState(projectDir);
   const cleanTree = !('problem' in after) && after.clean && after.commit === head;
@@ -579,6 +601,7 @@ export async function runVerify(options: {
     base: { ref: base.ref, commit: base.commit },
     chunk: options.chunk,
     checks,
+    scope,
     boardsmithCommit: await currentBoardsmithCommit(),
   });
   return { result, path: await recordResult(projectDir, result) };
@@ -593,6 +616,8 @@ function printVerdict(result: VerifyResult): void {
           'Commit or remove the changes (`git status` lists them), then run `boardsmith verify` again.',
       ),
     );
+  } else if (result.passed && result.scope?.kind === 'focused') {
+    console.log(chalk.green(`\nFocused verification passed for ${short(result.commit)}: authored tests and typecheck. Full verification and mutation are deferred to the policy cadence.`));
   } else if (result.passed && skippedClause(result) !== '') {
     console.log(chalk.yellow(`\nPassed for ${short(result.commit)}${skippedClause(result)}.`));
   } else if (result.passed) {
@@ -634,10 +659,12 @@ async function checkVerified(projectDir: string, chunk: string | undefined): Pro
   }
   const state = await checkoutState(projectDir);
   const head = 'commit' in state ? short(state.commit) : 'HEAD';
-  const covering = chunk === undefined ? '' : `, covering chunk "${chunk}"'s change`;
   const onFile = 'commit' in state ? await readVerifyResult(projectDir, state.commit) : undefined;
   const skipped = onFile === undefined || onFile === 'unreadable' ? '' : skippedClause(onFile);
-  console.log(chalk.green(`${head} passed \`boardsmith verify\` on a clean tree${covering}${skipped}.`));
+  const focused = onFile !== undefined && onFile !== 'unreadable' && onFile.scope?.kind === 'focused';
+  const covering = chunk === undefined ? '' : focused ? `, for chunk "${chunk}"'s declared authored tests` : `, covering chunk "${chunk}"'s change`;
+  const scope = focused ? 'focused `boardsmith verify` (authored tests and typecheck)' : '`boardsmith verify`';
+  console.log(chalk.green(`${head} passed ${scope} on a clean tree${covering}${skipped}.`));
 }
 
 /**
@@ -646,7 +673,7 @@ async function checkVerified(projectDir: string, chunk: string | undefined): Pro
  * check fails, when the tree was not clean, or, with `--check`, when HEAD is not verified.
  */
 export async function verifyCommand(
-  options: { base?: string; chunk?: string; check?: boolean; project?: string },
+  options: { base?: string; chunk?: string; check?: boolean; project?: string; selection?: string },
   checks: Readonly<Record<VerifyCheckName, CheckRunner>> = VERIFY_CHECKS,
 ): Promise<void> {
   const projectDir = pathResolve(options.project ?? process.cwd());
@@ -657,11 +684,14 @@ export async function verifyCommand(
           'Run `boardsmith verify --check`, with `--chunk <slug>` for a chunk.',
       );
     }
+    if (options.selection !== undefined) {
+      throw new Error('--check reads the committed scope from the result on file. Run `boardsmith verify --check` without --selection.');
+    }
     await checkVerified(projectDir, options.chunk);
     return;
   }
 
-  const { result, path } = await runVerify({ projectDir, base: options.base, chunk: options.chunk, checks });
+  const { result, path } = await runVerify({ projectDir, base: options.base, chunk: options.chunk, selection: options.selection, checks });
   printResult(result, path, projectDir);
   if (!result.passed || !result.cleanTree) process.exitCode = 1;
 }
