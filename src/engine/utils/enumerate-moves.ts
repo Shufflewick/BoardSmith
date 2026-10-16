@@ -766,8 +766,9 @@ function _enumerateRecursive(
   const tried = spend(walk, actionDef, selection, selectionValues(game, actionDef, player, selection, seen, walk.random));
 
   // Nothing to offer (no enabled choice, a text input, a number input that
-  // cannot be listed): skip an optional selection, block a required one.
-  if (tried === null) {
+  // cannot be listed, a multiSelect with fewer candidates than its min): skip
+  // an optional selection, block a required one.
+  if (tried === null || tried.length === 0) {
     if (selection.optional) {
       return _enumerateRecursive(game, actionDef, player, index + 1, currentArgs, walk);
     }

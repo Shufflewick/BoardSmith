@@ -709,3 +709,34 @@ describe('numberInputValues (#689)', () => {
     expect(values({ min: 0, max: 1e12, integer: true })).toEqual({ unlistable: expect.any(String) });
   });
 });
+
+// An optional multiSelect with fewer candidates than its min can still be skipped (#773).
+describe('enumerateLegalMoves: optional multiSelect with too few candidates', () => {
+  for (const shape of ['chooseElements', 'chooseFrom'] as const) {
+    it(`${shape} lists the skip move, as getAvailableActions and performAction accept it`, () => {
+      class SkipGame extends Game<SkipGame, Player> {
+        constructor(options: GameOptions) {
+          super(options);
+          const board = this.create(Space<SkipGame>, 'board');
+          const only = board.create(Piece<SkipGame>, 'only');
+          const base = Action.create<SkipGame>('keep');
+          const optional = { optional: 'Keep all', multiSelect: { min: 2 } };
+          this.registerAction(
+            (shape === 'chooseElements'
+              ? base.chooseElements('cards', { ...optional, elements: () => [only] })
+              : base.chooseFrom('cards', { ...optional, choices: ['a'] })
+            ).execute(() => ({ success: true })),
+          );
+          this.setFlow({ root: loop({ maxIterations: 10, do: eachPlayer({ do: actionStep({ actions: ['keep'] }) }) }) });
+        }
+      }
+      const game = new SkipGame({ playerCount: 2, playerNames: ['A', 'B'], seed: 'bs773' });
+      game.startFlow();
+      const player = game.getPlayer(1)!;
+
+      expect(enumerateLegalMoves(game, 1).map((m) => m.args)).toEqual([{}]);
+      expect(game.getAvailableActions(player).map((a) => a.name)).toContain('keep');
+      expect(game.performAction('keep', player, {}).success).toBe(true);
+    });
+  }
+});
