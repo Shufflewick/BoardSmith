@@ -67,7 +67,7 @@ export function afterFirstTurn(): TutorialAdvanceCondition {
  *    player's seat, signalling that the learner has contributed their turn for
  *    that round even before the round's loop counter increments.
  *
- * Completed turns ≈ `(sum(iterations) − 1) + (playerIndex !== learnerSeat ? 1 : 0)`
+ * Completed turns ≈ `(outermost loop counter − 1) + (playerIndex !== learnerSeat ? 1 : 0)`
  *
  * **Assumption:** the learner (`ctx.seat`) is the FIRST player to act within
  * each round of the flow (i.e., `eachPlayer` begins with the learner's seat).
@@ -103,9 +103,9 @@ export function afterTurns(n: number): TutorialAdvanceCondition {
       // The outermost loop's counter is the round number: 1 at game start, so
       // subtracting 1 normalises to 0 before the learner has acted. Inner loops
       // (a multi-step turn) are ignored. A restored position stamps 0 on every
-      // non-loop frame, and a loop with frames above it has always begun its body,
-      // so the outermost loop is the shallowest counter above 0 (getPosition
-      // emits the counters shallowest first).
+      // non-loop frame (#971), and a loop with frames above it has always begun
+      // its body, so the outermost loop is the shallowest counter above 0
+      // (getPosition emits the counters shallowest first).
       const roundsStarted = Object.values(iterations).find((count) => count > 0) ?? 0;
 
       // Within the current round: the learner has already acted if it is now
