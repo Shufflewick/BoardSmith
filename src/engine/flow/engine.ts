@@ -1490,10 +1490,18 @@ export class FlowEngine<G extends Game = Game> {
         }
       }
 
-      validPath.push(index);
-
       // Navigate to the child node for next iteration
       const child = resolveFlowChild(currentNode, index, frameDataAtDepth);
+      if (!child && !isLeafNode && i < path.length - 1) {
+        const nodeName = currentNode.config?.name ?? currentNode.type;
+        return {
+          valid: false,
+          error: `the save is inside a branch of ${currentNode.type} "${nodeName}" that the current rules no longer have. ` +
+            'Restore it under the rules it was saved with, or start a new game',
+          validPath,
+        };
+      }
+      validPath.push(index);
       if (child) {
         currentNode = child;
       }
