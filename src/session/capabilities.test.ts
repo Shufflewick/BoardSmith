@@ -230,8 +230,10 @@ describe('capabilityContradictions', () => {
 
 /** A deploy game whose round is timed only for some options: `blitz`, or the "rapid" `pace`. */
 class OptionTimedGame extends DeployGame {
-  constructor(options: GameOptions & { blitz?: boolean; pace?: string }) {
-    super(options, options.blitz === true || options.pace === 'rapid' ? 60_000 : undefined);
+  constructor(options: GameOptions & { blitz?: boolean; pace?: string; minutes?: number; teams?: boolean }) {
+    if (options.teams === true && options.playerCount === 3) throw new Error('teams need an even seat count');
+    const timed = options.blitz === true || options.pace === 'rapid' || options.minutes === 5;
+    super(options, timed ? 60_000 : undefined);
   }
 }
 
@@ -283,5 +285,19 @@ describe('timed steps that depend on game options (#812)', () => {
     const definition = optionTimedDefinition([blitz(true), ...many]);
     expect(capabilities('table', definition).timedSteps).toBe(true);
     expect(capabilityContradictions({ backend: 'table', definition, declared: { idleAction: { name: 'commit' } } })).toEqual([]);
+  });
+
+  it('names the seat count and options of a combination whose constructor throws', () => {
+    const definition = optionTimedDefinition([{ ...blitz(false), id: 'teams' }]);
+    expect(() => capabilityContradictions({ backend: 'table', definition, declared: {} })).toThrow(
+      'Constructing this game at 3 players with game options teams: true threw: teams need an even seat count',
+    );
+  });
+
+  it('leaves designer-only and number options at their defaults, unsearched', () => {
+    const designerBlitz = { ...blitz(false), designerOnly: true };
+    const minutes = { id: 'minutes', type: 'number', label: 'Minutes', default: 10 };
+    expect(capabilities('table', optionTimedDefinition([designerBlitz, minutes])).timedSteps).toBe(false);
+    expect(capabilities('table', optionTimedDefinition([{ ...designerBlitz, default: true }])).timedSteps).toBe(true);
   });
 });

@@ -224,14 +224,21 @@ function optionChoiceSets(declared: Record<string, GameOptionDefinition>): Array
   return sets;
 }
 
-/** The timed steps of the flow this game builds at `playerCount` with `choices` (none if it builds no flow). */
+/**
+ * The timed steps of the flow this game builds at `playerCount` with `choices`
+ * (none if it builds no flow). A constructor that throws is rethrown naming the
+ * build, since the author may never have played that combination.
+ */
 function timedStepsOf(definition: CapabilityInputs['definition'], build: FlowBuild): string[] {
   const options = selectGameOptions(declaredGameOptionsOf(definition), build.choices);
-  const root = constructGame(definition.gameClass, {
-    ...options,
-    playerCount: build.playerCount,
-    seed: 'compiled-flow',
-  }).getFlow()?.root;
+  let game;
+  try {
+    game = constructGame(definition.gameClass, { ...options, playerCount: build.playerCount, seed: 'compiled-flow' });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Constructing this game ${describeBuild(build)} threw: ${reason}`, { cause: error });
+  }
+  const root = game.getFlow()?.root;
   return root ? timedStepNames([root]) : [];
 }
 
