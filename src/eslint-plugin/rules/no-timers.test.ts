@@ -23,8 +23,16 @@ ruleTester.run('no-timers', rule, {
     // receiver is not a timer (#38) — only a known global receiver is.
     { code: `scheduler.setTimeout(turnOrder);` },
     { code: `this.clock.setInterval(4);` },
+    // A game's own function named like a timer is not the global (#737).
+    { code: `function run(setTimeout) { setTimeout(go, 1); }` },
+    // A name used only as a type runs nothing (#737).
+    { code: `let t: ReturnType<typeof setTimeout>;` },
   ],
   invalid: [
+    // Every other spelling of the same call (#737).
+    { code: `const later = setTimeout; later(go, 1);`, errors: [{ messageId: 'noSetTimeout' }] },
+    { code: `globalThis['setInterval'](go, 1);`, errors: [{ messageId: 'noSetInterval' }] },
+    { code: `setTimeout.call(null, go, 1);`, errors: [{ messageId: 'noSetTimeout' }] },
     { code: `setTimeout(() => {}, 100);`, errors: [{ messageId: 'noSetTimeout' }] },
     { code: `setInterval(() => {}, 100);`, errors: [{ messageId: 'noSetInterval' }] },
     { code: `setImmediate(() => {});`, errors: [{ messageId: 'noSetImmediate' }] },

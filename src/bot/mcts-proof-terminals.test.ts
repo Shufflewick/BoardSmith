@@ -185,3 +185,10 @@ describe('proof-number search and uncertain results', () => {
     expect(await picks(HiddenDieGame, { useRAVE: false }, seeds, strategy)).toEqual(seeds.map(() => 'safe'));
   });
 });
+
+describe('RAVE blend', () => {
+  it('keeps exploring a move whose first roll was unlucky (#732)', async () => {
+    const seeds = Array.from({ length: 60 }, (_, i) => `dice-${i}`);
+    expect(await picks(DiceGame, { useRAVE: true, usePNS: false }, seeds)).toEqual(seeds.map(() => 'safe'));
+  });
+});

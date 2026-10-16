@@ -45,6 +45,14 @@ Historical entries supply no role or retry count to the current routing ladder.
 A new retry or review cannot name one as its routing source; record the current
 work in a new dispatch under the current rules before retrying or reviewing it.
 
+## `boardsmith publish` requires a full `boardsmith verify` (#984)
+
+`boardsmith publish` now refuses unless a full `boardsmith verify` passed for
+the commit being published, on a clean tree, with its mutation check measured
+from the last published commit (the repository's first commit before any
+publish). Commit your work and run the `boardsmith verify --base <sha>` the
+refusal names, then publish again. There is no skip flag.
+
 ## `boardsmith publish` keeps ids per platform (#704)
 
 `boardsmith publish` used to keep one `gameId` and `publisherId` at the top of

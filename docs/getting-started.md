@@ -241,6 +241,10 @@ headless batch simulation).
 
 #### Before you call a change done: `boardsmith verify`
 
+The commands below describe the default full policy. A repository that explicitly opts into
+authored tests per ticket follows [Focused ticket verification](./focused-verification.md),
+including its committed selection and required full run after five confirmed ticket closures.
+
 ```bash
 boardsmith verify                    # every check, recorded for this commit
 boardsmith verify --base v1.2        # measure the change from somewhere other than main
@@ -337,8 +341,8 @@ Commit first: a tree with uncommitted changes is refused before any check runs.
 The result is written to `.boardsmith/verify/<commit>.json`, tied to that one
 commit, to the base it measured from, and to whether the tree stayed clean while
 the checks ran. `boardsmith verify --check` exits 0 only when the current commit,
-on a clean tree, has a passing result, and otherwise says what to run. With
-`--chunk <slug>` it also requires that result to have measured the chunk's whole
+on a clean tree, has a passing result, and otherwise says what to run. Under the default full
+policy, `--chunk <slug>` also requires that result to have measured the chunk's whole
 change: its base must be where the chunk began or a commit before that, so a
 `--base HEAD` run, which mutates nothing, does not count. `boardsmith
 chunk-signoff <slug>` asks the same question before it records a chunk as done.
@@ -448,6 +452,22 @@ separates a dev deploy from one players will see.
 boardsmith publish --prod    # the live platform
 boardsmith publish --dev     # a local platform at http://localhost:3006
 ```
+
+Publish refuses unless a full `boardsmith verify` passed for the exact commit
+being published, on a clean tree. There is no flag to skip it. The result must
+not be a focused one, must not skip a check, and its mutation check must have
+measured the change since the last published commit, or since the repository's
+first commit before the first publish. When it refuses, it names the command to
+run, for example:
+
+```bash
+boardsmith verify --base 3f2a9c1e...   # the commit publish says to measure from
+```
+
+A successful publish records the commit it published, and the base its result
+measured from, in `.boardsmith/published.json`. Like the verify results, that
+file is local and ignored by git. On a machine without it, publish measures
+from the first commit again, which asks for more coverage, never less.
 
 The first publish to a platform needs `--publisher <slug>`, naming the publisher
 that owns the game there. Afterwards `boardsmith publish` saves the ids that

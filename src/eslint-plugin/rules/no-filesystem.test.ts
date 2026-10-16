@@ -32,6 +32,7 @@ ruleTester.run('no-filesystem', rule, {
     },
     { code: `const fs = require('fs');`, errors: [{ messageId: 'noFs' }] },
     { code: `const mod = await import('node:fs');`, errors: [{ messageId: 'noFs' }] },
+    { code: 'const mod = await import(`node:fs`);', errors: [{ messageId: 'noFs' }] },
 
     // `os` is on the forbidden list, and the reason it is forbidden is that it
     // is nondeterministic host state — NOT that it executes child processes.

@@ -1,0 +1,50 @@
+{
+  "ticket": "Shufflewick/BoardSmith#984",
+  "base": "c7dadfec22fe4595460b86286882b06185e68601",
+  "tests": [
+    {
+      "file": "src/cli/commands/publish.test.ts",
+      "names": [
+        "describeAudienceMismatch (publish preflight) returns null for a valid audience",
+        "describeAudienceMismatch (publish preflight) names the invalid value and lists every valid audience with its helper text",
+        "describeAudienceMismatch (publish preflight) reports a missing audience (undefined) rather than crashing",
+        "resolveTarget (#36: production is never the zero-effort default) requires an explicit target rather than shipping to production",
+        "resolveTarget (#36: production is never the zero-effort default) does not offer the retired test platform (#264)",
+        "resolveTarget (#36: production is never the zero-effort default) resolves each target from its own flag",
+        "resolveTarget (#36: production is never the zero-effort default) refuses two targets at once rather than picking one",
+        "resolveTarget (#36: production is never the zero-effort default) names every flag that was passed, so the fix is obvious",
+        "platform URLs keeps the two surviving platforms pointed where they were",
+        "publish --help (what the real CLI registers) offers --dev and --prod and nothing else to name a platform",
+        "per-platform ids (#704: dev and prod are separate deployments with separate ids) reads only the target platform's ids",
+        "per-platform ids (#704: dev and prod are separate deployments with separate ids) has no ids for a platform never published to, whatever the other platform holds",
+        "per-platform ids (#704: dev and prod are separate deployments with separate ids) refuses the old top-level ids, saying where they go and what to do when unsure",
+        "per-platform ids (#704: dev and prod are separate deployments with separate ids) a prod publish writes platforms.prod and leaves platforms.dev exactly as it was",
+        "per-platform ids (#704: dev and prod are separate deployments with separate ids) a dev publish writes platforms.dev and leaves platforms.prod exactly as it was",
+        "per-platform ids (#704: dev and prod are separate deployments with separate ids) a first publish to a platform creates its block, and an unchanged republish writes nothing",
+        "per-platform ids (#704: dev and prod are separate deployments with separate ids) a stale-id hint names only the target platform's block",
+        "per-platform ids (#704: dev and prod are separate deployments with separate ids) the real CLI refuses old top-level ids before any key or network, and leaves boardsmith.json alone",
+        "abortInFlightPublish (#745: a refused abort is reported, not silent) prints the could-not-clean-up note on HTTP 401",
+        "abortInFlightPublish (#745: a refused abort is reported, not silent) prints the could-not-clean-up note on HTTP 500",
+        "abortInFlightPublish (#745: a refused abort is reported, not silent) prints nothing when the abort succeeds",
+        "publish requires a full, passing boardsmith verify for the commit on a clean tree (#984) refuses a commit with no result, naming the verify to run from the first commit",
+        "publish requires a full, passing boardsmith verify for the commit on a clean tree (#984) refuses uncommitted and untracked changes, saying to commit first",
+        "publish requires a full, passing boardsmith verify for the commit on a clean tree (#984) refuses a focused result",
+        "publish requires a full, passing boardsmith verify for the commit on a clean tree (#984) refuses a failed result, and a result made on a dirty tree",
+        "publish requires a full, passing boardsmith verify for the commit on a clean tree (#984) refuses a result with a skipped check",
+        "publish requires a full, passing boardsmith verify for the commit on a clean tree (#984) refuses a result whose base measured nothing, or started after the required base",
+        "publish requires a full, passing boardsmith verify for the commit on a clean tree (#984) accepts a passing full result measured from the first commit, on a clean tree",
+        "publish requires a full, passing boardsmith verify for the commit on a clean tree (#984) after a publish, measures the next one from the published commit",
+        "publish requires a full, passing boardsmith verify for the commit on a clean tree (#984) republishing the published commit requires the coverage it was published with, not --base HEAD",
+        "publish requires a full, passing boardsmith verify for the commit on a clean tree (#984) an older commit past the published commit's base is measured from that base",
+        "publish requires a full, passing boardsmith verify for the commit on a clean tree (#984) an older commit that is the published commit's base is measured from the first commit, not from itself",
+        "publish requires a full, passing boardsmith verify for the commit on a clean tree (#984) after history was rewritten, measures from where it left the published commit",
+        "publish requires a full, passing boardsmith verify for the commit on a clean tree (#984) refuses when the published commit is not in this repository, saying what to do",
+        "publish requires a full, passing boardsmith verify for the commit on a clean tree (#984) refuses a repository whose only commit is the one being published: there is nothing to measure",
+        "publish requires a full, passing boardsmith verify for the commit on a clean tree (#984) the real CLI refuses before any API key lookup",
+        "publishCommand records the published commit only once the publish completes (#984) a completed publish writes the commit and the base its result measured",
+        "publishCommand records the published commit only once the publish completes (#984) a failed upload leaves no record",
+        "publishCommand records the published commit only once the publish completes (#984) a failed finalize leaves no record"
+      ]
+    }
+  ]
+}

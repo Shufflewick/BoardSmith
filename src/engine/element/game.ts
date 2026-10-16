@@ -2,6 +2,7 @@ import { Space, type ElementEventHandler } from './space.js';
 import { mintElementIdKey, opaqueElementIds, worldElementIds } from './element-ids.js';
 import {
   GameElement,
+  decodeValue,
   encodeValue,
   forEachInSubtree,
   hasZoneVisibility,
@@ -15,6 +16,7 @@ import {
   registerCreatedElementClass,
 } from './game-element.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE } from './hidden-placeholder.js';
+import { concealRefsForSeat } from './concealed-refs.js';
 import { childrenChanged } from './cell-index.js';
 import { oncePerState, stateChanged } from './state-version.js';
 import { Piece } from './piece.js';
@@ -48,7 +50,7 @@ import {
   type VisibilityMode,
   type VisibilityState,
 } from './visibility.js';
-import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
+import type { ActionDefinition, ActionResult, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor, type PerformOptions } from '../action/action.js';
 import { hasActionTemp, settingsForSeat } from '../action/helpers.js';
 import type { FlowDefinition, FlowState, FlowDebugInfo } from '../flow/types.js';
@@ -63,7 +65,7 @@ import { buildActionMetadata, buildPickMetadata } from './action-metadata.js';
 import type { ActionMetadata, PickMetadata } from '../../types/protocol.js';
 import { devWarn, isDevMode } from '../../utils/dev.js';
 import { SeededRandom, mintSeed, type RandomState } from '../../utils/random.js';
-import { PlayerFacingError } from '../errors.js';
+import { PlayerFacingError, StaleAllocationStampError } from '../errors.js';
 
 // ---------------------------------------------------------------------------
 // INTRO-01 / INTRO-02 view types
@@ -176,16 +178,6 @@ export const DEFAULT_COLOR_LABELS: Readonly<Record<string, string>> = {
   '#f1948a': 'Salmon',
   '#85c1e9': 'Sky',
 };
-
-/**
- * The one answer to "is this child a player?" — for a serialized child.
- *
- * The JSON counterpart of {@link isPlayerElement}. Note `$type` is serialized
- * INSIDE `attributes`, not at the top level of the child JSON.
- */
-function isPlayerJSON(child: { attributes?: Record<string, unknown> }): boolean {
-  return child.attributes?.$type === 'player';
-}
 
 /** Every element id carried by a serialized subtree, for `adoptSubtree`. */
 function collectJsonIds(json: ElementJSON, into: number[]): void {
@@ -471,7 +463,12 @@ export interface AnimationEvent {
   seatIds?: Record<string, number>;
   /** Event type (e.g., 'combat', 'score', 'cardFlip') */
   type: string;
-  /** Event-specific data payload (must be JSON-serializable) */
+  /**
+   * Event-specific data payload. Live in the game's buffer; `toJSON()` writes
+   * an element in it as `{ __elementRef }` and a player as `{ __playerRef, seat,
+   * color, name }`, and a seat's payload names an element it cannot see by the
+   * outermost container concealing it (#752, `concealRefsForSeat`).
+   */
   data: Record<string, unknown>;
   /**
    * Seats allowed to receive this event. Absent means everyone, exactly like
@@ -1338,10 +1335,11 @@ export class Game<
 
     // Store player config in settings for snapshot restoration
     this.settings.playerCount = options.playerCount;
-    this.settings.playerNames = options.playerNames ?? Array.from(
+    const playerNames = Array.from(
       { length: options.playerCount },
-      (_, i) => `Player ${i + 1}`
+      (_, i) => options.playerNames?.[i] ?? `Player ${i + 1}`
     );
+    this.settings.playerNames = playerNames;
 
     // Register Player class for serialization
     this._ctx.classRegistry.set('Player', Player);
@@ -1386,7 +1384,6 @@ export class Game<
 
     // Create players (1-indexed: Player 1 has seat 1)
     for (let i = 0; i < options.playerCount; i++) {
-      const playerName = options.playerNames?.[i] ?? `Player ${i + 1}`;
       // Typed against the concrete `Player` first so a renamed `seat` fails
       // here, then bridged to the generic. `ElementAttributes<P>` is a mapped
       // type over an unresolved type parameter, so TypeScript cannot see that
@@ -1405,7 +1402,7 @@ export class Game<
       // `seat` is renamed.
       const player = this.create(
         PlayerClassToUse as ElementClass<P>,
-        playerName,
+        playerNames[i],
         playerAttributes as ElementAttributes<P>,
       );
       // Auto-assign color from palette (seat 1 = index 0, seat 2 = index 1, etc.).
@@ -2172,10 +2169,8 @@ export class Game<
     collectJsonIds(json, adoptedIds);
     const worldIds = this._ctx._worldIds!;
 
-    const resident = new Set<number>();
-    forEachInSubtree(this, (element) => resident.add(element._t.id));
-    forEachInSubtree(this.pile, (element) => resident.add(element._t.id));
-    const clash = adoptedIds.find((id) => resident.has(id));
+    // The id index holds every element in the tree and the pile (#755).
+    const clash = adoptedIds.find((id) => this._ctx._elementsById.has(id));
     if (clash !== undefined) {
       throw new Error(
         `Cannot adopt partition "${json.name ?? json.className}": element id ${clash} is already ` +
@@ -2206,7 +2201,7 @@ export class Game<
     }
     if (this._ctx.sequence <= maxAdoptedCursor) {
       if (this._ctx._worldIdAllocationDeclared) {
-        throw new Error(
+        throw new StaleAllocationStampError(
           `Cannot adopt partition "${json.name ?? json.className}": it holds element id ` +
             `${maxAdoptedId}, minted at or above this world's id allocation stamp of ` +
             `${this._ctx.sequence}. The stamp is stale, so the next id this world minted would ` +
@@ -2664,7 +2659,7 @@ export class Game<
     // Intentionally skip condition check — returns schema regardless of current
     // availability. Use getActionSpace() when you need condition-filtered actions.
     const selections = actionDef.selections.map(sel =>
-      buildPickMetadata(this, player, sel)
+      buildPickMetadata(this, player, actionName, sel)
     );
     return {
       name: actionName,
@@ -2688,9 +2683,6 @@ export class Game<
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): ActionResult {
-    // Clear previous animation events -- new action starts a new batch
-    this._animationEvents = [];
-
     const action = this._actions.get(actionName);
     if (!action) {
       return { success: false, error: `Unknown action: ${actionName}` };
@@ -2706,19 +2698,9 @@ export class Game<
       };
     }
 
+    // A refused action is not a new batch, so only an action that runs clears the buffer.
+    this._animationEvents = [];
     return this._actionExecutor.executeAction(action, player, args, options);
-  }
-
-  /**
-   * Perform an action from serialized form (for network play)
-   */
-  performSerializedAction(serialized: SerializedAction): ActionResult {
-    const player = this.getPlayer(serialized.player);
-    if (!player) {
-      return { success: false, error: `Invalid player seat: ${serialized.player}. Expected 1 to ${this.players.length}.` };
-    }
-
-    return this.performAction(serialized.name, player as P, serialized.args);
   }
 
   // ============================================
@@ -2959,68 +2941,6 @@ export class Game<
       byClass,
       maxDepth,
       summary,
-      issues,
-    };
-  }
-
-  /**
-   * Debug helper: Check if an element's parent-child relationships are consistent.
-   * Use this to diagnose tree corruption issues.
-   *
-   * @example
-   * ```typescript
-   * const info = game.debugElement(suspiciousElement);
-   * if (info.issues.length > 0) {
-   *   console.error('Tree corruption:', info.issues);
-   * }
-   * ```
-   *
-   * @returns Object with validation results and any issues found
-   */
-  debugElement(element: GameElement): {
-    id: number;
-    name: string;
-    parentId: number | undefined;
-    parentName: string | undefined;
-    childIds: number[];
-    isInParentChildren: boolean;
-    childrenPointToThis: boolean[];
-    issues: string[];
-  } {
-    const issues: string[] = [];
-
-    // Check if this element is in its parent's children
-    const parent = element._t.parent;
-    const isInParentChildren = parent
-      ? parent._t.children.includes(element)
-      : true; // No parent = OK
-
-    if (parent && !isInParentChildren) {
-      issues.push(
-        `Element "${element.name}" (id: ${element.id}) has parent "${parent.name}" (id: ${parent.id}) ` +
-        `but is NOT in parent's _t.children array`
-      );
-    }
-
-    // Check if all children point back to this element
-    const childrenPointToThis = element._t.children.map(child => child._t.parent === element);
-    const wrongParentChildren = element._t.children.filter(child => child._t.parent !== element);
-    for (const child of wrongParentChildren) {
-      const actualParent = child._t.parent;
-      issues.push(
-        `Child "${child.name}" (id: ${child.id}) is in "${element.name}"'s children ` +
-        `but _t.parent points to "${actualParent?.name}" (id: ${actualParent?.id ?? 'none'})`
-      );
-    }
-
-    return {
-      id: element.id,
-      name: element.name ?? element.constructor.name,
-      parentId: parent?.id,
-      parentName: parent?.name ?? parent?.constructor.name,
-      childIds: element._t.children.map(c => c.id),
-      isInParentChildren,
-      childrenPointToThis,
       issues,
     };
   }
@@ -3440,7 +3360,8 @@ export class Game<
   /**
    * Restore full flow state including awaiting state.
    * Used for HMR where we want to restore exactly where we were.
-   * Throws if the position is invalid (e.g., flow structure changed).
+   * Throws if the position is invalid (e.g., flow structure changed), leaving
+   * the flow that was running in place.
    *
    * @param idRemap - CR-02 (159): optional `originalId -> syntheticId` map (produced
    *   by `toJSONForPlayer`) for callers restoring a REDACTED clone. Lets an
@@ -3457,8 +3378,8 @@ export class Game<
     // creating an unregistered element class is refused (see
     // `registerCreatedElementClass`).
     this._ctx._setupComplete = true;
-    this._flowEngine = new FlowEngine(this.game, this._flowDefinition);
-    const result = this._flowEngine.restoreFullState(state, idRemap);
+    const flowEngine = new FlowEngine(this.game, this._flowDefinition);
+    const result = flowEngine.restoreFullState(state, idRemap);
 
     if (!result.success) {
       throw new Error(
@@ -3466,6 +3387,7 @@ export class Game<
         `Valid path prefix: [${result.validPath.join(', ')}]`
       );
     }
+    this._flowEngine = flowEngine;
   }
 
   /**
@@ -3559,15 +3481,6 @@ export class Game<
    */
   getFlowAvailableActions(): string[] {
     return this._flowEngine?.getState().availableActions ?? [];
-  }
-
-  /**
-   * Get awaiting players for simultaneous actions
-   * Returns undefined if not in a simultaneous action step
-   */
-  getAwaitingPlayers(): { playerIndex: number; availableActions: string[]; completed: boolean }[] | undefined {
-    const state = this._flowEngine?.getState();
-    return state?.awaitingPlayers;
   }
 
   /**
@@ -4365,8 +4278,8 @@ export class Game<
         let processed = text;
         if (data) {
           for (const [key, value] of Object.entries(data)) {
-            // An element (a Player is one) is written by its own toString().
-            processed = processed.replace(new RegExp(`{{${key}}}`, 'g'), String(value));
+            // An element (a Player is one) is written by its own toString(). split/join keeps `$` codes in values literal.
+            processed = processed.split(`{{${key}}}`).join(String(value));
           }
         }
         return type === undefined ? { text: processed } : { text: processed, type };
@@ -4384,7 +4297,11 @@ export class Game<
    * or affect game state. The UI layer registers handlers to play them back.
    *
    * @param type - Event type identifier (e.g., 'combat', 'score-item')
-   * @param data - Event-specific data payload (must be JSON-serializable)
+   * @param data - Event-specific data payload: plain data, elements and
+   *   players. Each seat receives an element as `{ __elementRef: branch }`, a
+   *   path in its own view: the element's, or for one the seat cannot see, the
+   *   outermost container concealing it (world mode excepted, #956). Pass the
+   *   element, not `card.id`: a raw id reaches every seat as it is.
    * @param callback - Optional callback to advance truth (convenience).
    *   Runs immediately as normal game code, after the event is buffered. Its
    *   mutations change the game like any other code; they are not recorded
@@ -4427,7 +4344,7 @@ export class Game<
    *   number (from 1; spectators see only `animate()`'s public events), or an
    *   array of either.
    * @param type - Event type identifier, same as `animate()`
-   * @param data - Event-specific data payload (must be JSON-serializable)
+   * @param data - Event-specific data payload, encoded as `animate()`'s is
    *
    * @example
    * ```typescript
@@ -4489,6 +4406,8 @@ export class Game<
    * the ways in. `to` lists the receiving seats; absent means everyone.
    */
   private pushAnimationEvent(eventType: string, data: Record<string, unknown>, to?: number[]): void {
+    // Encoded now only to refuse data `toJSON` cannot write inside the action that sent it, where it rolls back.
+    encodeValue(data, this._ctx, `animation event "${eventType}"`, 'data');
     this._animationEventSeq++;
     // Every recipient numbers the event in its own sequence (#489): a public
     // event goes to every seat and the spectator (0), a private one to its
@@ -4564,12 +4483,6 @@ export class Game<
     for (const key of GAME_SELF_SERIALIZED_FIELDS) {
       delete base.attributes[key];
     }
-    // A persistentMap field is a live view onto `settings`, which is serialized
-    // in full below. See persistentMapFields for why emitting it too broke
-    // every restore path (#139).
-    for (const key of persistentMapFields(this)) {
-      delete base.attributes[key];
-    }
 
     return {
       ...base,
@@ -4600,8 +4513,14 @@ export class Game<
       // cluttering empty snapshots with an empty array).
       ...(this._animationEvents.length > 0 && {
         // Copy the buffer (same CR-02 aliasing concern: the live array is
-        // mutated in place as later events are recorded).
-        animationEvents: this._animationEvents.map((e) => ({ ...e, ...(e.seatIds && { seatIds: { ...e.seatIds } }) })),
+        // mutated in place as later events are recorded). `data` is encoded
+        // here, not at `animate()`, so an element in it is written as a
+        // reference to where it is now (#752).
+        animationEvents: this._animationEvents.map((e) => ({
+          ...e,
+          data: encodeValue(e.data, this._ctx, `animation event "${e.type}"`, 'data') as Record<string, unknown>,
+          ...(e.seatIds && { seatIds: { ...e.seatIds } }),
+        })),
       }),
     };
   }
@@ -4821,6 +4740,12 @@ export class Game<
     // is past the safe integers and neighbouring placeholders round to one.
     let nextPlaceholderId = -1;
 
+    // #758: a child of a concealed zone whose own grant reaches this seat goes out whole.
+    const grantedChild = (element: GameElement, i: number, childJson: ElementJSON): ElementJSON | null => {
+      const child = element._t.children[i];
+      return child?.isVisibleTo(visibilityPosition) ? filterElement(childJson, child) : null;
+    };
+
     // A CONCEALED ZONE'S CHILDREN AS ANONYMOUS PLACEHOLDERS, for the count-only
     // and owner-only zone branches below. Each keeps its class and only the
     // safe layout $-keys of its attributes (identity-bearing image refs are
@@ -4834,6 +4759,11 @@ export class Game<
     const placeholderChildren = (json: ElementJSON, element: GameElement): ElementJSON[] => {
       const placeholders: ElementJSON[] = [];
       for (const [i, childJson] of (json.children ?? []).entries()) {
+        const granted = grantedChild(element, i, childJson);
+        if (granted) {
+          placeholders.push(granted);
+          continue;
+        }
         const syntheticId = nextPlaceholderId--;
         const childElement = element._t.children[i];
         if (idRemap && childElement) {
@@ -5048,7 +4978,9 @@ export class Game<
           // explicitly-undefined key, which the true-concealment contract
           // (no `children` key at all) forbids.
           const { children: _omittedRealChildren, ...concealedJson } = ownJson;
-          return concealedJson;
+          // #758: a granted child is still sent, alone, so the zone's size stays secret.
+          const granted = (json.children ?? []).flatMap((childJson, i) => grantedChild(element, i, childJson) ?? []);
+          return granted.length > 0 ? { ...concealedJson, children: granted } : concealedJson;
         } else if (zoneVisibility.mode === 'count-only') {
           // Count-only mode: create anonymized placeholders for children.
           // This allows the UI to render the correct number and type of elements
@@ -5061,17 +4993,17 @@ export class Game<
             children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
             childCount: element._t.children.length,
           };
-        } else if (zoneVisibility.mode === 'owner' && element.getEffectiveOwner()?.seat !== visibilityPosition) {
-          // Owner-only zone and this player doesn't own it - show hidden placeholders
-          // Preserve $-prefixed system attributes (like $type) for proper AutoUI rendering
-          const hiddenChildren = placeholderChildren(json, element);
-          return {
-            // ownJson (not json): the container's own attributes must stay
-            // whitelist-redacted in this early return (CR-01).
-            ...ownJson,
-            children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
-          };
         }
+        // Every other zone this seat cannot see (a non-owner of an owner zone,
+        // or a seat in `exceptPlayers` of any mode, #750) gets anonymous
+        // placeholders, which keep the ids its picks are offered by (#715).
+        const hiddenChildren = placeholderChildren(json, element);
+        return {
+          // ownJson (not json): the container's own attributes must stay
+          // whitelist-redacted in this early return (CR-01).
+          ...ownJson,
+          children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
+        };
       }
 
       // Filter children normally
@@ -5169,7 +5101,8 @@ export class Game<
                 `that did not number events per seat: start the game again under this engine.`,
             );
           }
-          return { ...event, id: own };
+          // #752: a reference into what this seat cannot see names only the container hiding it.
+          return { ...event, id: own, data: concealRefsForSeat(event.data, this, visibilityPosition) as Record<string, unknown> };
         });
       if (visible.length === 0) delete view.animationEvents;
       else view.animationEvents = visible;
@@ -5198,8 +5131,8 @@ export class Game<
    *
    * The game's registered actions, flow definition and seeded RNG live on the
    * instance (not in the JSON) and are preserved. This is the authoritative way
-   * to adopt a serialized tree without replaying history — used both by
-   * `restoreGame()` and by state-authoritative snapshot restore, so that direct
+   * to adopt a serialized tree without replaying history — used by every
+   * state-authoritative restore (runner, bot, scratch copies), so that direct
    * tree mutations (e.g. `Piece.putInto` inside a completed pending action,
    * which is not recorded in actionHistory) survive a snapshot round-trip.
    */
@@ -5297,12 +5230,9 @@ export class Game<
         }
         return { ...e, id: ++this._animationEventSeq, seatIds };
       });
-    } else if (jsonWithEvents.animationEventSeq !== undefined || jsonWithEvents.animationEvents) {
-      // Full restore (no floor supplied): adopt the persisted counters.
-      // Checked on `animationEventSeq` OR `animationEvents` (not
-      // `animationEvents` alone) because toJSON serializes the counters
-      // independently of whether the buffer happens to be empty -- a restore
-      // must still adopt them even when there is no buffer to go with it.
+    } else {
+      // Full restore (no floor supplied): always adopt the persisted counters,
+      // even when toJSON omitted them, or a rolled-back action's events survive (#751).
       // Copy the event objects too (CR-02): the snapshot may be restored again.
       this._animationEvents = (jsonWithEvents.animationEvents ?? []).map((e) => ({
         ...e,
@@ -5352,7 +5282,7 @@ export class Game<
     }
 
     // Rebuild the tree and the pile from JSON (#655), then rebuild the id index
-    // from the finished tree (#632), so nothing the restore discarded stays in
+    // from the finished tree and pile (#632), so nothing the restore discarded stays in
     // it and every rebuilt element is in it.
     for (const [container, children] of [[this, json.children], [this.pile, json.pile]] as const) {
       container._t.children = [];
@@ -5364,7 +5294,9 @@ export class Game<
       }
     }
     this._ctx._elementsById.clear();
-    forEachInSubtree(this, (element) => this._ctx._elementsById.set(element._t.id, element));
+    for (const root of [this, this.pile]) {
+      forEachInSubtree(root, (element) => this._ctx._elementsById.set(element._t.id, element));
+    }
 
     // Re-attach captured handlers to the rebuilt tree by element id
     // (RST-01/F10). Any handler that cannot be matched is dropped LOUDLY
@@ -5453,58 +5385,8 @@ export class Game<
     // This converts { __elementRef: "path" } objects back to actual element references
     this.resolveElementReferences(this);
     this.pile.resolveElementReferences(this);
-  }
-
-  /**
-   * Create a game from serialized JSON: the element tree and the game's own
-   * serialized state, in a game built with a FRESH SEED.
-   *
-   * The serialized state carries no seed and no RNG position, so the restored
-   * game's draws do not continue the original's. A restore that must play on
-   * from where the original stood goes through `GameRunner.fromSnapshot`,
-   * whose snapshot records the constructor options (seed and key included)
-   * and the RNG position.
-   *
-   * @param elementIdKey - The id key the serialized game was created with
-   *   (its `getConstructorOptions().elementIdKey`). A game built under any
-   *   other key could mint an id the restored tree already holds, and the
-   *   restore refuses it (#447).
-   */
-  static restoreGame<G extends Game>(
-    json: ReturnType<G['toJSON']>,
-    GameClass: new (options: GameOptions) => G,
-    classRegistry: Map<string, ElementClass>,
-    elementIdKey: string,
-  ): G {
-    // Count players from serialized children (players are part of the element
-    // tree). Matched structurally via isPlayerJSON — matching the class name
-    // 'Player' missed every game with a `static PlayerClass`, i.e. essentially
-    // every real game, and yielded playerCount: 0.
-    const playerChildren = json.children?.filter(isPlayerJSON) ?? [];
-    if (playerChildren.length === 0) {
-      throw new Error(
-        `Cannot restore ${GameClass.name}: the serialized state contains no players. ` +
-          `A game snapshot always carries its players as children of the game element, so this JSON is ` +
-          `either not a game snapshot or was truncated before it was stored.`
-      );
-    }
-    const playerCount = playerChildren.length;
-    const playerNames = playerChildren.map(p => p.name as string);
-
-    const game = constructGame(GameClass, {
-      playerCount,
-      playerNames,
-      elementIdKey,
-    });
-
-    // Merge class registry
-    for (const [name, cls] of classRegistry) {
-      game._ctx.classRegistry.set(name, cls);
-    }
-
-    game.loadSerializedState(json as ReturnType<Game['toJSON']>);
-
-    return game;
+    // `_`-prefixed, so not walked above; the buffer holds elements live, as `toJSON` expects (#752).
+    for (const event of this._animationEvents) event.data = decodeValue(event.data, this) as Record<string, unknown>;
   }
 }
 

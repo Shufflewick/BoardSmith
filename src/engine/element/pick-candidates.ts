@@ -208,7 +208,8 @@ function seatSight(values: readonly unknown[], ctx: CandidateContext, live: Game
 /**
  * One label per element, disambiguating duplicates against their siblings.
  *
- * Two elements with the same name are numbered, because "Holding" and
+ * An element is labelled by its notation, else its name. Two with the same
+ * label are numbered, because "Holding" and
  * "Holding" is a choice nobody can make. A `display()` the game supplied wins,
  * and receives the whole candidate list so it can disambiguate on something
  * better than an index.
@@ -239,17 +240,18 @@ function labelElements(
     });
   }
 
+  const baseNameOf = (element: ElementLike) => element.notation || element.name || 'Element';
   const counts = new Map<string, number>();
   for (const element of elements) {
     if (sight.neutralLabel(element) !== undefined) continue;
-    const name = element.name || 'Element';
+    const name = baseNameOf(element);
     counts.set(name, (counts.get(name) || 0) + 1);
   }
   const seen = new Map<string, number>();
   return elements.map((element) => {
     const neutral = sight.neutralLabel(element);
     if (neutral !== undefined) return neutral;
-    const baseName = element.name || 'Element';
+    const baseName = baseNameOf(element);
     if ((counts.get(baseName) || 1) === 1) {
       return element.notation || element.name || String(element.id);
     }

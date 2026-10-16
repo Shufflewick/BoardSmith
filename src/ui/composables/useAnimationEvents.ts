@@ -32,7 +32,7 @@
  * }
  * ```
  */
-import { ref, watch, type Ref, type InjectionKey, provide, inject } from 'vue';
+import { ref, watch, onScopeDispose, type Ref, type InjectionKey, provide, inject } from 'vue';
 import type { AnimationEvent } from '../../engine/index.js';
 
 /**
@@ -202,6 +202,10 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   let waitingForType: string | null = null;
   let waitResolve: ((handler: AnimationHandler | null) => void) | null = null;
   let waitTimer: ReturnType<typeof setTimeout> | null = null;
+  // The wait would otherwise fire and warn after the owning shell has unmounted (#749).
+  onScopeDispose(() => {
+    if (waitTimer !== null) clearTimeout(waitTimer);
+  }, true);
 
   /**
    * Wait for pause to be lifted
