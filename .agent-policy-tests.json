@@ -1,24 +1,34 @@
 {
-  "ticket": "Shufflewick/BoardSmith#799",
+  "ticket": "Shufflewick/BoardSmith#800",
   "base": "832a731aa67975c986ddd6879ad0011d2f932f47",
   "tests": [
     {
-      "file": "src/world/activity-point-read.test.ts",
+      "file": "src/world/readonly.test.ts",
       "names": [
-        "#423 — a world-owned phase declares the seat it asks about answers an EXISTING seat that will never return, with no player command anywhere",
-        "#423 — a world-owned phase declares the seat it asks about lets the round after the activity leg name the partition the seat owns",
-        "#423 — a world-owned phase declares the seat it asks about refuses a chair the handler did not declare",
-        "#423 — a world-owned phase declares the seat it asks about refuses a host that answers about a different chair",
-        "#423 — a world-owned phase declares the seat it asks about carries tenancy verbatim, so a vacated chair is not read as a silent empire",
-        "#423 — a world-owned phase declares the seat it asks about says when a chair's holder was erased, which is not the same as empty",
-        "#423 — an overdue destructive deadline rechecks the real watermark re-arms instead of destroying when activity arrived before the deadline drained",
-        "#423 — an overdue destructive deadline rechecks the real watermark destroys when the watermark still says nobody came back",
-        "#423 — a successor is elected through cold bounded continuations picks the most recently active eligible member, one member per phase",
-        "#423 — a successor is elected through cold bounded continuations passes over a member whose chair is empty, however quiet the chair looks",
-        "#423 — the read is the world's own authority, and a seat cannot forge it refuses a seated action that declares an activity round",
-        "#423 — the read is the world's own authority, and a seat cannot forge it refuses a round that names %p, which is not a seat 0",
-        "#423 — the read is the world's own authority, and a seat cannot forge it refuses a round that names %p, which is not a seat 1.5",
-        "#423 — the read is the world's own authority, and a seat cannot forge it refuses a round that names %p, which is not a seat 5"
+        "readOnlyProjection reads attributes, children and finders exactly as the live element does",
+        "readOnlyProjection refuses a write through a property descriptor's value, as it refuses the direct write (#800)",
+        "readOnlyProjection answers the SAME projection for the same element, so a declaration can compare",
+        "readOnlyProjection REFUSES an attribute write, which is the shape the issue is about",
+        "readOnlyProjection REFUSES a write through a child the projection handed back",
+        "readOnlyProjection REFUSES a mutating METHOD, which a set trap alone would not",
+        "readOnlyProjection names run() in the refusal, because that is where the write belongs",
+        "readOnlyProjection answers the SAME projection for an element reached THROUGH a method",
+        "readOnlyProjection is IDEMPOTENT: projecting a projection answers that same projection",
+        "readOnlyProjection answers the SAME wrapper for repeated reads of one method",
+        "readOnlyProjection hands a finder's own PREDICATE a read-only element",
+        "readOnlyProjection answers a finder given a PROJECTED element exactly as a live one does",
+        "readOnlyProjection charges ONE trap per ANSWER, not one per step of the walk",
+        "readOnlyProjection mints ONE projection per element however deeply it is reached",
+        "readOnlyProjection over frozen values (#247) reads a nested object off a frozen value a callback returned",
+        "readOnlyProjection over frozen values (#247) reads through a FROZEN ARRAY, whose every index is locked the same way",
+        "readOnlyProjection over frozen values (#247) reads a property locked on its own, without the whole object being frozen",
+        "readOnlyProjection over frozen values (#247) still REFUSES a write to the MUTABLE object a frozen value points at",
+        "readOnlyProjection over frozen values (#247) still REFUSES a write to a stored object read alongside a frozen one",
+        "readOnlyProjection over frozen values (#247) mints ONE projection for a frozen value, as it does for a live element",
+        "readOnlyProjection over classes (#285) answers an element's constructor as its own class",
+        "readOnlyProjection over classes (#285) lets a finder handed that constructor find by class",
+        "readOnlyProjection over classes (#285) answers a class held as a plain value as that class",
+        "readOnlyProjection over classes (#285) still wraps a method, so a mutating one is still refused"
       ]
     }
   ]
