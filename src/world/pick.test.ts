@@ -95,12 +95,14 @@ function newGame(): FleetGame {
   return new FleetGame({ playerCount: 2, seed: "fleet", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
 }
 
-/** A dock holding two ships of different hold and two operatives. */
-function genesis(): Map<string, StoredPartition> {
+/** A dock holding two ships of different hold and two operatives; `doryOwner`
+ *  gives the dory to that seat. */
+function genesis(doryOwner?: number): Map<string, StoredPartition> {
   const game = newGame();
   const dock = game.create(Dock, "dock");
   const dory = dock.create(Ship, "dory");
   dory.hold = 700;
+  if (doryOwner !== undefined) dory.player = game.players[doryOwner - 1];
   const skiff = dock.create(Ship, "skiff");
   skiff.hold = 350;
   dock.create(Operative, "ash");
@@ -123,11 +125,11 @@ function newEngine(): BoardSmithWorldEngine {
 }
 
 /** An engine running one action, with the fleet resident. */
-async function engineFor(action: ActionDefinition) {
+async function engineFor(action: ActionDefinition, doryOwner?: number) {
   const engine = new BoardSmithWorldEngine({
     game: newGame(),
     seats: new Map([["player-a", 1]]),
-    store: new MapStore(genesis()),
+    store: new MapStore(genesis(doryOwner)),
     actions: [action],
     view: () => [FLEET],
   });
@@ -403,6 +405,50 @@ describe("#384 — an offer cannot write to the world it is describing", () => {
     await expect(
       engine.resolveQuote("player-a", "meddlingQuote", { ship: "dory" }, STAMP),
     ).rejects.toThrow(/A read-only view of this world tried to write/);
+    expect(await engine.serializePartitions([FLEET])).toMatchObject({
+      [FLEET]: expect.stringContaining('"hold":700') as unknown as string,
+    });
+  });
+
+  /** Every way a callback asks "is this mine", against a seat that owns the dory:
+   *  the projected player must still be the player the projected tree names. */
+  const ownedBy = (game: FleetGame, player: Player): string[] => {
+    const dory = game.first(Ship, "dory")!;
+    if (dory.player !== player) throw new Error("the dory's player is not ctx.player");
+    if (player.my(Ship) !== dory) throw new Error("player.my(Ship) is not the dory");
+    const mine = player.allMy(Ship).map((ship) => ship.name!);
+    const byFinder = game.all(Ship, { player }).map((ship) => ship.name!);
+    const byPredicate = game.all(Ship, (ship) => ship.player === player).map((ship) => ship.name!);
+    if (byFinder.join() !== mine.join() || byPredicate.join() !== mine.join()) {
+      throw new Error(`owner reads disagree: ${mine.join()} / ${byFinder.join()} / ${byPredicate.join()}`);
+    }
+    return mine;
+  };
+
+  const sailMine = worldAction<FleetGame>("sailMine")
+    .needs(() => [FLEET])
+    .condition({ "owns a ship": ({ game, player }) => ownedBy(game, player).length > 0 })
+    .chooseFrom("ship", { choices: ({ game, player }) => ownedBy(game, player) })
+    .quote((_args, { game, player }) => [`You own ${ownedBy(game, player).join()}.`])
+    .execute(() => {});
+
+  it("still matches an owned element to ctx.player in an offer (#794)", async () => {
+    const engine = await engineFor(sailMine, 1);
+
+    const [offer] = await engine.offersFor("player-a", STAMP);
+
+    expect(offer!.name).toBe("sailMine");
+    expect(offer!.selections[0]!.choices?.map((choice) => choice.value)).toEqual(["dory"]);
+  });
+
+  it("still matches an owned element to ctx.player in a pick and a quote (#794)", async () => {
+    const engine = await engineFor(sailMine, 1);
+
+    const pick = await engine.resolvePick("player-a", "sailMine", "ship", {}, STAMP);
+    const quote = await engine.resolveQuote("player-a", "sailMine", { ship: "dory" }, STAMP);
+
+    expect(pick.choices?.map((choice) => choice.value)).toEqual(["dory"]);
+    expect(quote).toEqual(["You own dory."]);
   });
 
   it("still lets an offer READ everything its declaration named", async () => {
