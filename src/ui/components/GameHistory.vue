@@ -127,7 +127,7 @@ watch(
       });
     }
   },
-  { immediate: true, deep: true }
+  { immediate: true }
 );
 
 function formatTime(date: Date): string {

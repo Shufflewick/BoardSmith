@@ -404,4 +404,18 @@ describe('TutorialOverlay', () => {
     // Ring should render; bubble may or may not (empty text guard)
     expect(wrapper.find('.bsg-tutorial-ring').exists()).toBe(true);
   });
+
+  // #748: the overlay is always mounted, so a push that carries no tutorial
+  // must not re-measure the board (getBoundingClientRect forces a layout).
+  it('does not measure the board when a push without a tutorial arrives', async () => {
+    const { wrapper, fixture, gameState } = mountOverlay(undefined);
+    await flushPromises();
+    const measureBoard = vi.spyOn(fixture, 'getBoundingClientRect');
+
+    gameState.value = { state: { tutorial: { stepId: 'step1' } } };
+    await flushPromises();
+
+    expect(measureBoard).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
 });
