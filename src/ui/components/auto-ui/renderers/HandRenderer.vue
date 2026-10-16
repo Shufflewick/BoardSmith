@@ -17,6 +17,7 @@ import { resolvePresentation } from '../presentation.js';
 import { isHiddenPlaceholder } from '../../../../engine/element/hidden-placeholder.js';
 import type { PresentationOverlay } from '../presentation.js';
 import { GAME_CONTEXT_KEYS, injectPlayerSeat } from '../../../composables/useGameContext.js';
+import { getSpriteStyle, type ImageInfo } from '../../../utils/image.js';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — dependency-free, mirrors auto-ui-helpers.ts
@@ -29,10 +30,6 @@ interface GameElement {
   children?: GameElement[];
   childCount?: number;
 }
-
-type ImageInfo =
-  | { type: 'url'; src: string }
-  | { type: 'sprite'; sprite: string; x: number; y: number; width: number; height: number };
 
 const props = defineProps<{
   element: GameElement;
@@ -159,25 +156,6 @@ const childBackImage = computed((): ImageInfo | null => {
   }
   return defaultBackImage?.value ?? null;
 });
-
-// Helper to compute sprite style for hidden card placeholders
-function getSpriteStyle(info: ImageInfo): Record<string, string> {
-  if (info.type !== 'sprite') return {};
-  const NATIVE_CARD_WIDTH = 238;
-  const NATIVE_CARD_HEIGHT = 333;
-  const SPRITE_COLS = 13;
-  const SPRITE_ROWS = 5;
-  const displayWidth = 60;
-  const displayHeight = 84;
-  const scaleX = displayWidth / NATIVE_CARD_WIDTH;
-  const scaleY = displayHeight / NATIVE_CARD_HEIGHT;
-  return {
-    backgroundImage: `url(${info.sprite})`,
-    backgroundPosition: `-${info.x * scaleX}px -${info.y * scaleY}px`,
-    backgroundSize: `${SPRITE_COLS * NATIVE_CARD_WIDTH * scaleX}px ${SPRITE_ROWS * NATIVE_CARD_HEIGHT * scaleY}px`,
-    backgroundRepeat: 'no-repeat',
-  };
-}
 
 // ---------------------------------------------------------------------------
 // TWO-ROW HAND SORTING LOGIC — COPIED VERBATIM FROM LEGACY COMPONENT LINES 409-453

@@ -397,7 +397,7 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
       () => {
         capture();
       },
-      { deep: true, flush: 'sync' }
+      { flush: 'sync' }
     );
 
     // Post watcher: animate after DOM update.
@@ -410,7 +410,7 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
       async () => {
         await animate();
       },
-      { deep: true, flush: 'post' }
+      { flush: 'post' }
     );
 
     // Cleanup on unmount

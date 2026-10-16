@@ -197,6 +197,25 @@ describe('animate - buffer lifecycle', () => {
     expect(game.pendingAnimationEvents).toHaveLength(0);
   });
 
+  it('keeps the buffer when performAction refuses an unknown action (#757)', () => {
+    game.animate('pending', { kept: true });
+
+    const result = game.performAction('noSuchAction', game.getPlayer(1)!, {});
+
+    expect(result.success).toBe(false);
+    expect(game.pendingAnimationEvents.map((e) => e.type)).toEqual(['pending']);
+  });
+
+  it('keeps the buffer when performAction refuses a disabled action (#757)', () => {
+    game.registerAction(Action.create('locked').disabled(() => 'locked for now').execute(() => {}));
+    game.animate('pending', { kept: true });
+
+    const result = game.performAction('locked', game.getPlayer(1)!, {});
+
+    expect(result.success).toBe(false);
+    expect(game.pendingAnimationEvents.map((e) => e.type)).toEqual(['pending']);
+  });
+
   it('should only contain events from the current action after performAction', () => {
     // Emit a stale event
     game.animate('stale', { old: true });

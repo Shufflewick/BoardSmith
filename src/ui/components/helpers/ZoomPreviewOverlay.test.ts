@@ -77,6 +77,12 @@ describe('ZoomPreviewOverlay', () => {
       expect(rendered()!.textContent).toContain('K');
     });
 
+    it('shows a lowercase suit with the same symbol and colour as a flying card (#733)', () => {
+      overlay(state({ cardData: { rank: 'K', suit: 'h' } }));
+      expect(rendered()!.querySelector('.preview-suit')!.textContent).toBe('♥');
+      expect(rendered()!.querySelector('.preview-fallback')!.getAttribute('style')).toContain('rgb(231, 76, 60)');
+    });
+
     it('renders a URL face image as an <img>', () => {
       overlay(state({ cardData: { rank: 'A', suit: 'H', faceImage: '/ace.png' } }));
       const img = rendered()!.querySelector('img.preview-image') as HTMLImageElement;

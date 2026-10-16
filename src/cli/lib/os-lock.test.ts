@@ -20,7 +20,7 @@ afterEach(async () => {
 });
 
 async function take(file: string, holder: string): Promise<OsLock | string> {
-  const lock = await takeOsLock(file, holder);
+  const lock = await takeOsLock(file, 'chunk-merge', holder);
   if (typeof lock !== 'string') held.push(lock);
   return lock;
 }
@@ -37,7 +37,7 @@ async function holdInChild(dir: string): Promise<ChildProcess> {
   writeFileSync(
     program,
     `import { takeOsLock } from ${JSON.stringify(MODULE)};\n` +
-      `const lock = await takeOsLock(new URL('./merge.lock', import.meta.url).pathname, 'chunk-merge of trading');\n` +
+      `const lock = await takeOsLock(new URL('./merge.lock', import.meta.url).pathname, 'chunk-merge', 'chunk-merge of trading');\n` +
       `console.log(typeof lock === 'string' ? lock : 'locked');\n` +
       `setInterval(() => {}, 60_000);\n`,
   );
@@ -55,14 +55,14 @@ describe('takeOsLock (#441)', () => {
 
     const refused = await take(file, 'chunk-merge of quests');
     expect(typeof refused).toBe('string');
-    expect(refused).toContain(`Another chunk-merge holds the merge lock: chunk-merge of trading (branch chunk/trading), pid ${process.pid}, since `);
+    expect(refused).toContain(`Another chunk-merge holds the lock: chunk-merge of trading (branch chunk/trading), pid ${process.pid}, since `);
     expect(refused).toContain(`It is still running; check it with \`ps -p ${process.pid}\`.`);
-    expect(refused).toContain('Merges run one at a time. Wait for it to finish, then run chunk-merge again.');
+    expect(refused).toContain('Only one chunk-merge runs at a time. Wait for it to finish, then run chunk-merge again.');
   });
 
   it('is free again once released, and keeps no holder note behind', async () => {
     const file = join(tempTree('bs-os-lock-'), 'merge.lock');
-    const first = await takeOsLock(file, 'chunk-merge of trading');
+    const first = await takeOsLock(file, 'chunk-merge', 'chunk-merge of trading');
     if (typeof first === 'string') throw new Error(first);
     await first.release();
     expect(existsSync(`${file}.holder`)).toBe(false);
@@ -80,10 +80,10 @@ describe('takeOsLock (#441)', () => {
     child.kill('SIGKILL');
     await exited;
     // The helper holding the lock reads end-of-file when its parent dies; let it exit.
-    let next = await takeOsLock(file, 'chunk-merge of quests');
+    let next = await takeOsLock(file, 'chunk-merge', 'chunk-merge of quests');
     for (let tries = 0; typeof next === 'string' && tries < 100; tries++) {
       await new Promise((done) => setTimeout(done, 50));
-      next = await takeOsLock(file, 'chunk-merge of quests');
+      next = await takeOsLock(file, 'chunk-merge', 'chunk-merge of quests');
     }
     expect(typeof next).not.toBe('string');
     if (typeof next !== 'string') held.push(next);

@@ -136,6 +136,14 @@ export interface WorldBudgets {
    */
   readonly drainBatch: number;
   /**
+   * HOW MANY PARTITIONS ONE WORLD MAY KEEP RESIDENT (#747).
+   *
+   * A count, not a byte budget: pricing a live partition in bytes means
+   * serializing it, the O(world) cost residency exists to avoid. A backstop
+   * against unbounded growth, enforced by `planEviction` after each checkpoint.
+   */
+  readonly maxResidentPartitions: number;
+  /**
    * HOW MANY DRAIN BATCHES ONE PLAYER'S COMMAND MAY WAIT BEHIND
    * (ShufflewickPub #380).
    *
@@ -214,6 +222,8 @@ const BASE = {
   maxKeyedPendingPerPlayer: 64,
   catchUpMaxRealIterations: 4,
   drainBatch: 200,
+  // Far above the working set of any world one Durable Object holds today; the platform's figure.
+  maxResidentPartitions: 256,
   // Eight batches of `drainBatch` is a long catch-up for one command to sit
   // behind and a short one for a world that has been asleep for a week, which
   // is the pair this number has to sit between.
@@ -286,6 +296,10 @@ export function worldBudgets(overrides: WorldBudgetOverrides = {}): WorldBudgets
       "catchUpMaxRealIterations",
     ),
     drainBatch: positive(overrides.drainBatch ?? BASE.drainBatch, "drainBatch"),
+    maxResidentPartitions: positive(
+      overrides.maxResidentPartitions ?? BASE.maxResidentPartitions,
+      "maxResidentPartitions",
+    ),
     receiptRetentionMs: positive(
       overrides.receiptRetentionMs ?? BASE.receiptRetentionMs,
       "receiptRetentionMs",

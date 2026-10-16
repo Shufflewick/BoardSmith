@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Game, Grid, GridCell, Piece, Player, Space } from '../index.js';
+import { serializedRoundTrip } from './serialized-round-trip.test-helper.js';
 
 class Pawn extends Piece<GridGame> {}
 
@@ -123,16 +124,11 @@ describe('GridCell', () => {
     expect(json.attributes).toMatchObject({ rank: 3, file: 2, $layout: 'list' });
   });
 
-  it('survives a snapshot restore with its coordinates and contents intact', () => {
+  it('survives a snapshot restore with its coordinates and contents intact', async () => {
     const pawn = game.create(Pawn, 'pawn');
     pawn.putInto(squareAt(2, 2));
 
-    const restored = Game.restoreGame(
-      game.toJSON() as any,
-      GridGame as unknown as new (options: any) => GridGame,
-      game._ctx.classRegistry,
-      game.getConstructorOptions().elementIdKey as string,
-    );
+    const restored = await serializedRoundTrip(game, GridGame);
 
     const board = restored.first(Board)!;
     expect(board.$layout).toBe('grid');
