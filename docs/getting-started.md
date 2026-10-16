@@ -453,6 +453,22 @@ boardsmith publish --prod    # the live platform
 boardsmith publish --dev     # a local platform at http://localhost:3006
 ```
 
+Publish refuses unless a full `boardsmith verify` passed for the exact commit
+being published, on a clean tree. There is no flag to skip it. The result must
+not be a focused one, must not skip a check, and its mutation check must have
+measured the change since the last published commit, or since the repository's
+first commit before the first publish. When it refuses, it names the command to
+run, for example:
+
+```bash
+boardsmith verify --base 3f2a9c1e...   # the commit publish says to measure from
+```
+
+A successful publish records the commit it published, and the base its result
+measured from, in `.boardsmith/published.json`. Like the verify results, that
+file is local and ignored by git. On a machine without it, publish measures
+from the first commit again, which asks for more coverage, never less.
+
 The first publish to a platform needs `--publisher <slug>`, naming the publisher
 that owns the game there. Afterwards `boardsmith publish` saves the ids that
 platform gave the game under its own block in `boardsmith.json`, and later
