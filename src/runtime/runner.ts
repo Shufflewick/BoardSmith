@@ -539,6 +539,22 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     return { baseIndex: this.checkpointBaseIndex, entries: [...this.actionCheckpoints] };
   }
 
+  /** Index in `actionCheckpoints` of the checkpoint for the current action count. */
+  private get headOffset(): number {
+    return this.actionHistory.length - this.checkpointBaseIndex;
+  }
+
+  /**
+   * Capture the head checkpoint unless one already exists, so a failed action
+   * has a state to roll back to even when no snapshot was taken since the last
+   * action (#802). Hosts snapshot after every action, so there it costs nothing.
+   */
+  private ensureHeadCheckpoint(): void {
+    if (this.checkpointPolicy_.enabled && !this.actionCheckpoints[this.headOffset]) {
+      this.captureCheckpoint();
+    }
+  }
+
   /**
    * Restore the game to the state it was in before the current action ran.
    *
@@ -555,20 +571,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    *   to, and saying so is far better than reporting that nothing happened
    *   when something did.
    */
-  /**
-   * Capture the head checkpoint unless one already exists, so a failed action
-   * has a state to roll back to even when no snapshot was taken since the last
-   * action (#802). Hosts snapshot after every action, so there it costs nothing.
-   */
-  private ensureHeadCheckpoint(): void {
-    if (this.checkpointPolicy_.enabled && !this.actionCheckpoints[this.actionHistory.length - this.checkpointBaseIndex]) {
-      this.captureCheckpoint();
-    }
-  }
-
   private rollbackToPreActionState(): string | undefined {
-    const headOffset = this.actionHistory.length - this.checkpointBaseIndex;
-    const checkpoint = this.actionCheckpoints[headOffset];
+    const checkpoint = this.actionCheckpoints[this.headOffset];
     if (!checkpoint) {
       return 'The game could not be rolled back, so its state may be inconsistent — ' +
         'per-action checkpoints are disabled for this session.';

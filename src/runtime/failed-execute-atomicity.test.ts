@@ -79,6 +79,16 @@ class HalfwayGame extends Game<HalfwayGame, Player> {
           game.animate('combat', { damage: 3 });
           throw new Error('rules bug after a pick');
         }),
+      // A pick that moves a token, then an execute() that throws (#802).
+      Action.create('movingPickThenFail')
+        .prompt('Pick and move, then fail')
+        .chooseFrom('how', {
+          choices: ['all'],
+          onSelect: () => { this.source.first(Token)!.putInto(this.target); },
+        })
+        .execute(() => {
+          throw new Error('rules bug after a moving pick');
+        }),
       Action.create('cleanMove')
         .prompt('Move one')
         .execute((_args, ctx) => {
@@ -96,7 +106,7 @@ class HalfwayGame extends Game<HalfwayGame, Player> {
         root: loop({
           while: (ctx) => (ctx.get<number>('round') ?? 1) <= 20,
           maxIterations: 50,
-          do: eachPlayer({ do: actionStep({ actions: ['halfMove', 'animateThenFail', 'pickThenFail', 'cleanMove', 'refuse'] }) }),
+          do: eachPlayer({ do: actionStep({ actions: ['halfMove', 'animateThenFail', 'pickThenFail', 'movingPickThenFail', 'cleanMove', 'refuse'] }) }),
         }),
         setup: (ctx) => ctx.set('round', 1),
       }
@@ -291,6 +301,18 @@ describe('a second action that throws half-way, with no snapshot taken between (
     manager.startPendingAction('pickThenFail', 2);
 
     const result = await manager.processSelectionStep(2, 'how', 'all');
+
+    expect(result.success).toBe(false);
+    expectAfterFirstAction(runner, messagesBefore, result.error);
+  });
+
+  it('the runner\'s pending-action path also undoes what a pick changed', () => {
+    const runner = makeRunner();
+    expect(runner.performAction('cleanMove', 1, {}).success).toBe(true);
+    const messagesBefore = runner.game.messages.length;
+    runner.startPendingAction('movingPickThenFail', 2);
+
+    const result = runner.processSelectionStep(2, 'how', 'all');
 
     expect(result.success).toBe(false);
     expectAfterFirstAction(runner, messagesBefore, result.error);
