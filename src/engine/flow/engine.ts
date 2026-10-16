@@ -1306,7 +1306,7 @@ export class FlowEngine<G extends Game = Game> {
    * @throws When an element the position holds no longer resolves, naming the
    *   flow variable or step data that holds it.
    */
-  restore(position: FlowPosition, idRemap?: Map<number, number>): void {
+  private restore(position: FlowPosition, idRemap?: Map<number, number>): void {
     // Relink serialized element-valued flow variables back to live elements of
     // this game (inverse of getPosition's encodeFlowValue). Doing it here
     // means every restore path — runner.fromSnapshot, MCTS clone, and a rules
@@ -1386,7 +1386,7 @@ export class FlowEngine<G extends Game = Game> {
    * @param idRemap - See {@link restore}.
    * @returns Success or failure with the last valid path
    */
-  tryRestore(position: FlowPosition, idRemap?: Map<number, number>): { success: true } | { success: false; error: string; validPath: number[] } {
+  private tryRestore(position: FlowPosition, idRemap?: Map<number, number>): { success: true } | { success: false; error: string; validPath: number[] } {
     // Validate path before attempting restore
     const validationResult = this.validatePath(position.path, position.frameData);
 
@@ -1465,41 +1465,26 @@ export class FlowEngine<G extends Game = Game> {
 
     for (let i = 0; i < path.length; i++) {
       const index = path[i];
-      const nodeType = currentNode.type;
-      const frameDataAtDepth = frameData?.[`__frame_${i}`];
-
-      // For loop/each-player/for-each/phase nodes, index represents iteration count,
-      // not child position. These can have any non-negative index value.
-      // For leaf nodes (action-step, execute, etc.), they have no children so skip bounds check.
-      // For sequences, index represents child position and must be validated.
-      const isIteratingNode = nodeType === 'loop' || nodeType === 'repeat' || nodeType === 'each-player' ||
-                              nodeType === 'for-each' || nodeType === 'phase';
-      const isLeafNode = nodeType === 'action-step' || nodeType === 'simultaneous-action-step' ||
-                         nodeType === 'execute';
-
-      if (!isIteratingNode && !isLeafNode) {
+      const child = resolveFlowChild(currentNode, index, frameData?.[`__frame_${i}`]);
+      if (!child) {
         const childCount = flowChildCount(currentNode);
-        // For sequences: index can equal childCount (next step position after pushing child)
-        if (index > childCount) {
-          const nodeName = currentNode.config?.name ?? currentNode.type;
+        const nodeName = currentNode.config?.name ?? currentNode.type;
+        // A sequence frame's index may equal its child count: it is one past the step in progress.
+        if (childCount > 0 && index > childCount) {
           return {
             valid: false,
             error: `Path index ${index} out of bounds at depth ${i} (node "${nodeName}" has ${childCount} children)`,
             validPath,
           };
         }
-      }
-
-      // Navigate to the child node for next iteration
-      const child = resolveFlowChild(currentNode, index, frameDataAtDepth);
-      if (!child && !isLeafNode && i < path.length - 1) {
-        const nodeName = currentNode.config?.name ?? currentNode.type;
-        return {
-          valid: false,
-          error: `the save is inside a branch of ${currentNode.type} "${nodeName}" that the current rules no longer have. ` +
-            'Restore it under the rules it was saved with, or start a new game',
-          validPath,
-        };
+        if (i < path.length - 1) {
+          return {
+            valid: false,
+            error: `the save is inside a branch of ${currentNode.type} "${nodeName}" that the current rules no longer have. ` +
+              'Restore it under the rules it was saved with, or start a new game',
+            validPath,
+          };
+        }
       }
       validPath.push(index);
       if (child) {
@@ -1581,7 +1566,7 @@ export class FlowEngine<G extends Game = Game> {
       iterations,
       frameData: Object.keys(frameData).length > 0 ? frameData : undefined,
       playerIndex: this.currentPlayer?.seat,
-      // Serialize element-valued flow variables (e.g. eachPlayer's currentPlayer)
+      // Serialize element-valued flow variables (e.g. a forEach item)
       // so the position is structured-cloneable across the broadcast/RPC boundary.
       variables: encodeFlowValue({ ...this.variables }) as Record<string, unknown>,
       // Plain seat number and count, so it needs no relinking on the way back.
@@ -1876,7 +1861,6 @@ export class FlowEngine<G extends Game = Game> {
       }
 
       this.currentPlayer = player;
-      this.variables[config.name ?? 'currentPlayer'] = this.currentPlayer;
 
       this.stack.push({ node: config.do, index: 0, completed: false });
       frame.data = { ...frame.data, nextIndex };
