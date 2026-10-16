@@ -22,6 +22,7 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Space } from '../index.js';
 import { createPlayerView, createSnapshot } from '../utils/snapshot.js';
+import { snapshotTree } from '../utils/index.js';
 
 class LogGame extends Game<LogGame, Player> {
   board!: Space<LogGame>;
@@ -161,7 +162,7 @@ describe('messageTo: the log itself stays whole', () => {
       typeof createSnapshot
     >;
     const restored = newGame();
-    restored.loadSerializedState(snapshot.state, { messageLog: snapshot.messageLog });
+    restored.loadSerializedState(snapshotTree(snapshot), { messageLog: snapshot.messageLog });
 
     expect(restored.messages[0].to).toEqual([1]);
     expect(payloadMessages(restored as LogGame, 0)).toEqual([]);

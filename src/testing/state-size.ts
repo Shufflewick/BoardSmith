@@ -46,7 +46,7 @@
  */
 
 import { checkpointCount } from '../engine/index.js';
-import type { GameStateSnapshot } from '../engine/utils/index.js';
+import { snapshotTree, type GameStateSnapshot } from '../engine/utils/index.js';
 
 /** Byte length of a value's JSON encoding (UTF-8 bytes, not UTF-16 units). */
 function jsonByteLength(value: unknown): number {
@@ -57,7 +57,7 @@ function jsonByteLength(value: unknown): number {
 export interface SnapshotSizeMeasurement {
   /** Total serialized size of the snapshot, in bytes. */
   totalBytes: number;
-  /** `snapshot.state` — the element tree. The thing that gets multiplied. */
+  /** The element tree (`snapshotTree`). The thing that gets multiplied. */
   treeBytes: number;
   /** All retained per-action checkpoints, in total. */
   checkpointBytes: number;
@@ -153,7 +153,7 @@ export function measureSnapshotSize(snapshot: GameStateSnapshot): SnapshotSizeMe
   const checkpointBytes = jsonByteLength(snapshot.actionCheckpoints);
   return {
     totalBytes: jsonByteLength(snapshot),
-    treeBytes: jsonByteLength(snapshot.state),
+    treeBytes: jsonByteLength(snapshotTree(snapshot)),
     checkpointBytes,
     checkpointCount: count,
     actionHistoryBytes: jsonByteLength(snapshot.actionHistory),

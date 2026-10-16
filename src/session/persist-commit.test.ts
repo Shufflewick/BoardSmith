@@ -12,6 +12,7 @@ import { Game, Player, Action, actionStep, loop, type GameOptions, type PlayerVi
 import { executeOp, type GameDefinitionLike, type StateEnvelope } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { succeeded } from './op-result.test-helper.js';
+import { snapshotTree } from '../engine/utils/index.js';
 
 const PUBLIC_RECORD = { entries: [{ key: 'hall-of-fame', value: { winner: 'PUBLIC-WINNER' } }] };
 const SEALED_RECORD = { entries: [{ key: 'player:p1/sheet', value: { secret: 'SEALED-SECRET' } }] };
@@ -81,7 +82,7 @@ describe('the persistence commit (#527)', () => {
 
       it('stays in the snapshot, so the game keeps it across ops', async () => {
         const { done } = await finished(gameClass);
-        expect(done.snapshot.state.attributes).toMatchObject({ persist: PUBLIC_RECORD, persistPrivate: SEALED_RECORD });
+        expect(snapshotTree(done.snapshot).attributes).toMatchObject({ persist: PUBLIC_RECORD, persistPrivate: SEALED_RECORD });
       });
     });
   }

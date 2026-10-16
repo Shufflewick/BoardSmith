@@ -31,9 +31,10 @@ transmission. **There is no new format.**
 `GameStateSnapshot` is defined in `src/engine/utils/snapshot.ts` (~line 12).
 The fields that carry the actual game state are:
 
-- `state` — the full element tree, typed as `ReturnType<Game['toJSON']>`
-  (i.e. exactly `game.toJSON()`'s output shape, so restore is typed
-  end-to-end with no casts).
+- the full element tree, typed as `ReturnType<Game['toJSON']>` (exactly
+  `game.toJSON()`'s output shape). It is stored once: as the newest entry of
+  `actionCheckpoints` when the snapshot has checkpoints, otherwise as
+  `state`. Read it with `snapshotTree(snapshot)` (#804).
 - `flowState` — the flow engine's current position (which step/action a
   player is awaiting).
 - `sequence` — the element-id sequence counter, restored after the tree
@@ -72,9 +73,11 @@ STATE-AUTHORITATIVE, NO replay": it does NOT call `start()`
 or re-run `actionHistory` through `continueFlow`. Instead it:
 
 1. Constructs a fresh `GameRunner` with the snapshot's `gameOptions` (or a
-   fallback derived from `snapshot.state.settings` + `snapshot.seed`).
+   fallback derived from the tree's `settings` + `snapshot.seed`).
 2. Adopts the authoritative element tree via `Game.loadSerializedState`
-   (which fully clears and rebuilds the tree from `snapshot.state`).
+   (which fully clears and rebuilds it). The tree is read with
+   `snapshotTree(snapshot)`: it is the newest checkpoint when the snapshot
+   carries any, and `snapshot.state` only when it carries none (#804).
 3. Restores the flow position, the element-id `sequence`, and the RNG
    `randomState` directly.
 4. Preserves (but does not replay) `actionHistory` and `actionCheckpoints`

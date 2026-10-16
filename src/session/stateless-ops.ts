@@ -21,6 +21,7 @@ import {
   GameRunner,
   restoreEarlierSnapshot,
   describeCheckpointAbsence,
+  snapshotTree,
   type GameStateSnapshot,
   type CheckpointPolicy,
   type RunnerCheckpointPolicy,
@@ -657,7 +658,7 @@ function stateEnvelope(runner: GameRunner, playerCount: number): StateEnvelope {
  * one place both channels live, so the commit is the game's and no view's.
  */
 function persistCommitOf(snapshot: GameStateSnapshot): PersistCommit {
-  const attributes = snapshot.state.attributes;
+  const attributes = snapshotTree(snapshot).attributes;
   const commit: PersistCommit = {};
   if (attributes[PERSIST_KEY] !== undefined) commit.public = attributes[PERSIST_KEY];
   if (attributes[PERSIST_PRIVATE_KEY] !== undefined) commit.private = attributes[PERSIST_PRIVATE_KEY];

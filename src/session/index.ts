@@ -102,6 +102,10 @@ export { computeUndoInfo, debuggingOffMessage } from './utils.js';
 // same metadata the dev server attaches, letting the embedded UI auto-start it.
 export { buildSingleActionMetadata } from './utils.js';
 
+// The one reader of a snapshot's element tree (#804): hosts that inspect a
+// stored snapshot read the tree through it, never `snapshot.state`.
+export { snapshotTree } from '../runtime/index.js';
+
 // Pure stateless op executor — single source of truth for per-op game execution.
 export * from './stateless-ops.js';
 export { parseExecutorOp, type ParsedExecutorOp } from './parse-executor-op.js';
