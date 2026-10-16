@@ -1,7 +1,7 @@
 {
-  "revision": 201,
-  "surfaceHash": "1b1303a828bcbf65",
-  "payloadHash": "e82681be0c7e858e",
+  "revision": 202,
+  "surfaceHash": "3aad10f70947c23a",
+  "payloadHash": "45aa9d0eec3fa215",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1551,6 +1551,14 @@
       "payloadHash": "e82681be0c7e858e",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "boardsmith/world exports planEviction, the eviction rule ResidentWorld now runs after every checkpoint, and WorldBudgets gains maxResidentPartitions (default 256); the platform should read budgets.maxResidentPartitions and import planEviction instead of its own WORLD_MAX_RESIDENT_PARTITIONS and world-eviction.ts (#747). A seat named in a zone's hideContentsFrom (or a denied owner of an owner-only zone) is shown anonymous placeholder children instead of every child's real id in true order, and picks offering those children carry the same placeholder ids (#750, #715). Game.performSerializedAction is removed (#756)."
+    },
+    {
+      "revision": 202,
+      "date": "2026-10-16",
+      "surfaceHash": "3aad10f70947c23a",
+      "payloadHash": "45aa9d0eec3fa215",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Game loses three methods nothing called: static Game.restoreGame, getAwaitingPlayers and debugElement; performAction no longer clears pending animation events when it refuses an unknown or disabled action; a failed restoreFlowState throws without replacing the running flow; settings.playerNames is the game's own copy filled with 'Player N' for missing seats (#757). Saved state refuses Dates and class instances instead of flattening them, and refuses plain object keys that collide with the codec's markers (#759, #760). PersistentMap treats built-in object names as ordinary keys (#761). A move refused by an exit handler leaves the element where it was, in production as well as development (#762). Grid cell lookup keeps every layered cell at a coordinate (#764). Die refuses roll and setValue when sides is not a whole number of at least 1 (#765). An element or player in animate()/animateTo() data reaches each seat as a reference instead of the whole object; an element the seat cannot see is named by the outermost container concealing it (#752). Platform: re-vendor."
     }
   ]
 }

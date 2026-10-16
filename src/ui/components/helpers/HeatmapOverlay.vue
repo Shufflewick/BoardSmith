@@ -36,7 +36,7 @@ import {
   type Ref,
 } from 'vue';
 import type { HeatmapEntry } from '../../../session/types.js';
-import { buildSelector } from './overlay-utils.js';
+import { buildSelector, NOTHING_TO_SHOW } from './overlay-utils.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 // ── Inject ────────────────────────────────────────────────────────────────────
@@ -50,11 +50,11 @@ const gameState = inject(GAME_CONTEXT_KEYS.gameState, undefined) as
 
 // ── Derived content ───────────────────────────────────────────────────────────
 
-const entries = computed<HeatmapEntry[]>(
+const entries = computed<readonly HeatmapEntry[]>(
   () =>
     gameState?.value?.state?.heatmap?.visible
-      ? (gameState.value.state.heatmap.entries ?? [])
-      : [],
+      ? (gameState.value.state.heatmap.entries ?? NOTHING_TO_SHOW)
+      : NOTHING_TO_SHOW,
 );
 
 const hasContent = computed(() => entries.value.length > 0);

@@ -89,6 +89,27 @@ describe('GameHistory', () => {
       expect(lines[0]).toContain('Nobody has been made on this seat.');
     });
 
+    // #748: every push is a new list, so a deep watch only re-read the whole log.
+    it('appends a new line without re-reading the lines already drawn', async () => {
+      let firstLineReads = 0;
+      const first = { type: 'action' } as { text: string; type: string };
+      Object.defineProperty(first, 'text', {
+        enumerable: true,
+        get: () => {
+          firstLineReads++;
+          return 'a';
+        },
+      });
+      const wrapper = mount(GameHistory, { props: { messages: [first, 'b'] } });
+      await nextTick();
+      firstLineReads = 0;
+
+      await wrapper.setProps({ messages: [first, 'b', 'c'] });
+
+      expect(wrapper.findAll('.message')).toHaveLength(3);
+      expect(firstLineReads).toBe(0);
+    });
+
     it('still appends when the list simply grew', async () => {
       const wrapper = mount(GameHistory, { props: { messages: ['a'] } });
       await nextTick();

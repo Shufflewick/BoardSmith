@@ -31,6 +31,7 @@ import {
   type GameOptions,
   DEFAULT_COLOR_PALETTE,
 } from '../index.js';
+import { encodeValue, decodeValue } from './game-element.js';
 import { TEST_WORLD_ELEMENT_ID_KEY } from './world-element-id-key.test-helper.js';
 import { worldElementIds } from './element-ids.js';
 
@@ -226,6 +227,15 @@ describe('world mode: element references are id-based, not positional', () => {
     const reserialized = adoptedB.toJSON() as ElementJSON;
     const b2Json = reserialized.children!.find((c) => c.name === 'b2')!;
     expect(b2Json.attributes.link).toEqual({ __elementId: aId });
+  });
+});
+
+describe('world mode: marker keys in user data (#760)', () => {
+  it('refuses user data shaped like a kept ref, but re-encodes a ref decode kept', () => {
+    const game = new WorldGame({ playerCount: 2, seed: 'marker-keys', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    expect(() => encodeValue({ __elementId: 5 }, game._ctx, 'test', 'scores')).toThrow(/__elementId/);
+    const kept = decodeValue({ __elementId: 999999 }, game);
+    expect(encodeValue(kept, game._ctx, 'test', 'scores')).toEqual({ __elementId: 999999 });
   });
 });
 

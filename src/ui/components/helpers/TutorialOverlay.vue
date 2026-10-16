@@ -56,7 +56,7 @@ import BoardMessage from './BoardMessage.vue';
 import type {
   Annotation,
 } from '../../../engine/tutorial/types.js';
-import { buildSelector } from './overlay-utils.js';
+import { buildSelector, NOTHING_TO_SHOW } from './overlay-utils.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -93,8 +93,8 @@ const gameState = inject(GAME_CONTEXT_KEYS.gameState, undefined) as
 
 // ── Derived content ───────────────────────────────────────────────────────────
 
-const annotations = computed<Annotation[]>(
-  () => gameState?.value?.state?.tutorial?.content ?? [],
+const annotations = computed<readonly Annotation[]>(
+  () => gameState?.value?.state?.tutorial?.content ?? NOTHING_TO_SHOW,
 );
 
 const hasContent = computed(() => annotations.value.length > 0);
