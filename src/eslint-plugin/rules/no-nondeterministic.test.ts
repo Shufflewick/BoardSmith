@@ -27,6 +27,9 @@ ruleTester.run('no-nondeterministic', rule, {
     { code: `function roll(Math) { return Math.random(); }` },
     { code: `const Date = makeClock(); Date.now();` },
     { code: `const d = new globalThis.Date(0);` },
+    // A name used only as a type runs nothing (#737).
+    { code: `function f(d: Date) {}` },
+    { code: `type Rng = typeof Math.random;` },
   ],
   invalid: [
     // Every other spelling of the same read (#737).

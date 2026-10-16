@@ -25,6 +25,8 @@ ruleTester.run('no-timers', rule, {
     { code: `this.clock.setInterval(4);` },
     // A game's own function named like a timer is not the global (#737).
     { code: `function run(setTimeout) { setTimeout(go, 1); }` },
+    // A name used only as a type runs nothing (#737).
+    { code: `let t: ReturnType<typeof setTimeout>;` },
   ],
   invalid: [
     // Every other spelling of the same call (#737).

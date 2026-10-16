@@ -33,6 +33,10 @@ ruleTester.run('no-network', rule, {
     // A literal dynamic import names what it loads.
     { code: `const mod = await import('./rules.js');` },
     { code: 'const mod = await import(`./rules.js`);' },
+    // A name used only as a type runs nothing (#737).
+    { code: `let ws: WebSocket | null = null;` },
+    { code: `interface Link { socket: WebSocket }` },
+    { code: `type F = typeof fetch;` },
   ],
   invalid: [
     // Every other spelling of the same access (#737).

@@ -6,11 +6,11 @@
  * game's own `deck.fetch()` or a parameter named `fetch` (#38). So they match
  * references the scope manager resolved to the global scope, not call shapes.
  */
-import type { Rule, SourceCode } from 'eslint';
+import type { Rule, Scope, SourceCode } from 'eslint';
 import type { Identifier, MemberExpression, Node } from 'estree';
 
 /** An expression that evaluates to a global: `fetch` or `globalThis.fetch`. */
-export type GlobalRead = (Identifier | MemberExpression) & Rule.NodeParentExtension;
+type GlobalRead = (Identifier | MemberExpression) & Rule.NodeParentExtension;
 
 /** Identifiers that really do name the global object. */
 const GLOBAL_RECEIVERS: ReadonlySet<string> = new Set(['window', 'globalThis', 'self', 'global']);
@@ -22,10 +22,20 @@ function staticName(key: Node, computed: boolean): string | undefined {
   return undefined;
 }
 
+/** True when a reference only names a type (`x: WebSocket`, `typeof fetch` in a type), so nothing runs. */
+function isTypeOnly(reference: Scope.Reference): boolean {
+  // typescript-eslint flags type references, but counts `typeof x` inside a type as a value read.
+  if ((reference as { isTypeReference?: boolean }).isTypeReference) return true;
+  for (let n: Rule.Node | null = (reference.identifier as Rule.Node).parent; n; n = n.parent) {
+    if ((n.type as string) === 'TSTypeQuery') return true;
+  }
+  return false;
+}
+
 /**
  * Calls `visit` for every reference to one of `names` that reaches the global
  * scope: a bare name no local binding shadows, or a property read through a
- * global receiver (`globalThis.fetch`, `window['fetch']`). `node` is the
+ * global receiver (`globalThis.fetch`, `window['fetch']`), outside type positions. `node` is the
  * expression that evaluates to the global.
  */
 export function forEachGlobalReference(
@@ -39,8 +49,9 @@ export function forEachGlobalReference(
     ...globalScope.through,
     ...globalScope.variables.filter((v) => v.defs.length === 0).flatMap((v) => v.references),
   ];
-  for (const { identifier } of references) {
-    const node = identifier as Identifier & Rule.NodeParentExtension;
+  for (const reference of references) {
+    if (isTypeOnly(reference)) continue;
+    const node = reference.identifier as Identifier & Rule.NodeParentExtension;
     if (names.has(node.name)) {
       visit(node.name, node);
     } else if (GLOBAL_RECEIVERS.has(node.name)) {

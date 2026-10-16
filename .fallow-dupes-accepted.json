@@ -64,14 +64,6 @@
       ]
     },
     {
-      "content": "1d1430b9a8c002a8",
-      "lines": 18,
-      "files": [
-        "src/eslint-plugin/rules/no-filesystem.ts",
-        "src/eslint-plugin/rules/no-network.ts"
-      ]
-    },
-    {
       "content": "1d9b4d4490603442",
       "lines": 26,
       "files": [
@@ -181,14 +173,6 @@
       "lines": 12,
       "files": [
         "src/ui/composables/useGameGrid.ts"
-      ]
-    },
-    {
-      "content": "5e3317414e4d4265",
-      "lines": 9,
-      "files": [
-        "src/eslint-plugin/rules/no-filesystem.ts",
-        "src/eslint-plugin/rules/no-network.ts"
       ]
     },
     {
