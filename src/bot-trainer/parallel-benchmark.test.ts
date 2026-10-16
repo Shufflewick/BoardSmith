@@ -2,7 +2,8 @@
  * The evolution loop's work distributor. Real benchmarks spawn worker threads
  * that play hundreds of games, so the worker itself is faked here — what is
  * under test is the coordination: every individual gets a fitness, in order,
- * exactly once, and a crashed or erroring worker cannot lose or duplicate work.
+ * exactly once, a crashed worker cannot lose or duplicate work, and an erroring
+ * or exiting worker fails the run.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
