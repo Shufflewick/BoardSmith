@@ -19,6 +19,7 @@ import {
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { ErrorCode } from './types.js';
 import { succeeded } from './op-result.test-helper.js';
+import { boundaryKeyOf } from './testing/boundary-stamp.js';
 
 class SecretCard extends Card<SpyGame> {
   rank!: string;
@@ -40,7 +41,7 @@ class SpyGame extends Game<SpyGame, Player> {
       Action.create<SpyGame>('pass').execute(() => ({ success: true })),
       Action.create<SpyGame>('spy')
         .condition({ 'never': () => false })
-        .chooseElement<SecretCard>('card', {
+        .chooseElement<'card', SecretCard>('card', {
           elementClass: SecretCard,
           filter: (card, ctx) => card.parent?.name !== `hand-${ctx.player.seat}`,
           display: (card) => card.rank,
@@ -103,6 +104,7 @@ describe('resolveChoices refuses a seat that may not take the action now (#714)'
     const snapshot = await started();
     const step = succeeded(await executeOp(definition, options, snapshot, null, {
       type: 'selectionStep', player: 1, selectionName: 'spot', value: 'east', actionName: 'dig',
+      boundaryKey: boundaryKeyOf(snapshot),
     }));
     expect(step.done).toBe(false);
 
