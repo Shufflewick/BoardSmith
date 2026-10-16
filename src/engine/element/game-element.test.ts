@@ -9,6 +9,7 @@ import {
 } from '../index.js';
 import type { ElementJSON, PlayerViewFunction } from '../index.js';
 import { serializedRoundTrip } from './serialized-round-trip.test-helper.js';
+import { encodeValue, decodeValue, CODEC_MARKER_KEYS } from './game-element.js';
 
 // Test classes
 class TestGame extends Game<TestGame, Player> {}
@@ -953,5 +954,28 @@ describe('a seat-tagged element is not serialized as a player reference', () => 
     const activeBoard = json.attributes.activeBoard as Record<string, unknown>;
     expect(activeBoard.__playerRef).toBeUndefined();
     expect(activeBoard.__elementRef ?? activeBoard.__elementId).toBeDefined();
+  });
+});
+
+// #760: the decoder treats these keys as tags, so a plain object holding one
+// as its own key would be misread on restore.
+describe('plain objects holding a codec marker key', () => {
+  for (const key of CODEC_MARKER_KEYS) {
+    it(`refuses ${key} as an own key, naming the path and key`, () => {
+      expect(() => encodeValue({ alice: 1, [key]: 2 }, undefined, 'test', 'scores')).toThrow(
+        new RegExp(`scores.*${key}.*rename`, "is"),
+      );
+    });
+  }
+
+  it('still round-trips a plain object without marker keys', () => {
+    const game = new Game({ playerCount: 1 });
+    const value = { alice: 1, nested: { set: [1, 2] } };
+    expect(decodeValue(encodeValue(value, game._ctx, 'test', 'scores'), game)).toEqual(value);
+  });
+
+  it('refuses a marker key beside other keys, and an __elementRef shape', () => {
+    expect(() => encodeValue({ __elementId: 5, note: 'x' }, undefined, 'test', 'scores')).toThrow(/__elementId/);
+    expect(() => encodeValue({ __elementRef: 'x' }, undefined, 'test', 'scores')).toThrow(/__elementRef/);
   });
 });
