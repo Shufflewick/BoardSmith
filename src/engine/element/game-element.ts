@@ -925,24 +925,22 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // Remove from current parent
     if (oldParent) {
       const index = oldParent._t.children.indexOf(this);
-      if (index !== -1) {
-        oldParent._t.children.splice(index, 1);
-        childrenChanged(oldParent);
-      } else if (isDevMode()) {
-        // The element points at a parent that does not list it. Completing the
-        // move would re-parent it while leaving the stale reference in place,
-        // so it would exist in two places at once — and that tree is what the
-        // next snapshot and checkpoint capture, poisoning every later restore.
-        // Refuse rather than make it worse (#45).
+      if (index === -1) {
+        // Completing the move would leave the element in two places at once, and
+        // that tree is what the next snapshot captures (#45). The common cause is
+        // an onExit handler moving the element mid-move (#762).
+        const elementName = `"${this.name ?? this.constructor.name}" (id: ${this.id})`;
+        const parentName = `"${oldParent.name ?? oldParent.constructor.name}" (id: ${oldParent.id})`;
         throw new Error(
-          `TREE CORRUPTION in moveToInternal — refusing to move.\n` +
-          `  Element ${this.name ?? this.constructor.name} (id: ${this.id}) has a parent reference to\n` +
-          `  "${oldParent.name ?? oldParent.constructor.name}" (id: ${oldParent.id})\n` +
-          `  but is NOT in that parent's children array.\n` +
-          `  Something moved the element by writing _t.children directly. Use putInto()/moveTo(),\n` +
-          `  which keep the parent reference and the children array in step.`
+          `Cannot move ${elementName}: its parent ${parentName} does not list it among its children.\n` +
+          `  If an onExit handler on ${parentName} moved this element, it is already part way through ` +
+          `a move. Move it from the destination's onEnter handler instead, or after this move completes.\n` +
+          `  Otherwise something wrote _t.children directly. Use putInto()/moveTo(), which keep the ` +
+          `parent reference and the children array in step.`
         );
       }
+      oldParent._t.children.splice(index, 1);
+      childrenChanged(oldParent);
 
       // Trigger exit event if parent is a Space. Duck-typed (rather than
       // `instanceof Space`) to avoid a circular import between
@@ -950,7 +948,14 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       // `getParentZoneVisibility`'s duck-typed `getZoneVisibility` check
       // above and `fromJSON`'s duck-typed `_restoreZoneVisibility` call.
       if (isChildEventTarget(oldParent)) {
-        oldParent.triggerEvent('exit', this);
+        try {
+          oldParent.triggerEvent('exit', this);
+        } catch (error) {
+          // A refused exit must not leave the element listed by no parent (#762).
+          oldParent._t.children.splice(index, 0, this);
+          childrenChanged(oldParent);
+          throw error;
+        }
       }
     }
 

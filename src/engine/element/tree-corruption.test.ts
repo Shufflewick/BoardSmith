@@ -13,8 +13,22 @@
  * out of the console. These are dev/test-time checks (they cost a traversal),
  * and at dev/test time they throw.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Game, Space, Piece, Player, type GameOptions } from '../index.js';
+
+// isDevMode() is fixed at module load, so the production-mode cases override it here.
+const devModeState = vi.hoisted(() => ({ override: null as boolean | null }));
+vi.mock('../../utils/dev.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/dev.js')>();
+  return {
+    ...actual,
+    isDevMode: () => (devModeState.override !== null ? devModeState.override : actual.isDevMode()),
+  };
+});
+
+afterEach(() => {
+  devModeState.override = null;
+});
 
 class Token extends Piece<Board, Player> {}
 class Zone extends Space<Board, Player> {}
@@ -22,12 +36,14 @@ class Zone extends Space<Board, Player> {}
 class Board extends Game<Board, Player> {
   left!: Zone;
   right!: Zone;
+  far!: Zone;
 
   constructor(options: GameOptions) {
     super(options);
     this.registerElements([Token, Zone]);
     this.left = this.create(Zone, 'left');
     this.right = this.create(Zone, 'right');
+    this.far = this.create(Zone, 'far');
     this.left.createMany(3, Token, 'token');
   }
 }
@@ -47,7 +63,7 @@ describe('moveToInternal, on a parent that does not list its child', () => {
     const children = (game.left as unknown as { _t: { children: unknown[] } })._t.children;
     children.splice(children.indexOf(token as unknown as never), 1);
 
-    expect(() => token.putInto(game.right)).toThrow(/TREE CORRUPTION/);
+    expect(() => token.putInto(game.right)).toThrow(/does not list it/);
   });
 
   it('names both the element and the parent that lost track of it', () => {
@@ -64,6 +80,44 @@ describe('moveToInternal, on a parent that does not list its child', () => {
     expect(() => token.putInto(game.right)).not.toThrow();
     expect(game.right.all(Token)).toHaveLength(1);
     expect(game.left.all(Token)).toHaveLength(2);
+  });
+});
+
+describe.each([
+  ['development', true],
+  ['production', false],
+])('an onExit handler that moves the leaving element, in %s mode (#762)', (_mode, dev) => {
+  beforeEach(() => {
+    devModeState.override = dev;
+  });
+
+  it('is refused with an error that says what to do instead', () => {
+    const token = game.left.first(Token)!;
+    game.left.onExit((el: Token) => el.putInto((el.game as Board).far), Token);
+
+    expect(() => token.putInto(game.right)).toThrow(/onExit handler.*onEnter/s);
+  });
+
+  it('leaves the element where it was, listed once, in a tree that still traverses', () => {
+    const token = game.left.first(Token)!;
+    const before = game.left.all(Token).map((t) => t.id);
+    game.left.onExit((el: Token) => el.putInto((el.game as Board).far), Token);
+
+    expect(() => token.putInto(game.right)).toThrow();
+
+    expect(token.parent).toBe(game.left);
+    expect(game.left.all(Token).map((t) => t.id)).toEqual(before);
+    expect(game.right.all(Token)).toHaveLength(0);
+    expect(game.far.all(Token)).toHaveLength(0);
+    expect(game.all(Token)).toHaveLength(3);
+  });
+
+  it('refuses a move from a parent that does not list the element', () => {
+    const token = game.left.first(Token)!;
+    const children = (game.left as unknown as { _t: { children: unknown[] } })._t.children;
+    children.splice(children.indexOf(token as unknown as never), 1);
+
+    expect(() => token.putInto(game.right)).toThrow(/does not list it/);
   });
 });
 
