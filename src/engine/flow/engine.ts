@@ -1814,9 +1814,7 @@ export class FlowEngine<G extends Game = Game> {
     context: FlowContext<G>
   ): StepResult {
     const iteration = (frame.data?.iteration as number) ?? 0;
-    const times = Math.max(0, config.times);
-
-    if (iteration >= times) {
+    if (iteration >= config.times) {
       frame.completed = true;
       return { awaitingInput: false };
     }
@@ -2067,8 +2065,9 @@ export class FlowEngine<G extends Game = Game> {
     const [heldSeat] = Object.keys(this.heldFollowUps(frame)).map(Number);
     if (heldSeat !== undefined) return this.awaitHeldSeat(frame, config, context, heldSeat);
 
-    // Check skip condition
-    if (config.skipIf?.(context)) {
+    // skipIf and player are settled on entry only, so a later move can neither skip past minMoves nor change seats.
+    const entering = frame.data?.moveCount === undefined;
+    if (entering && config.skipIf?.(context)) {
       this.currentActionConfig = undefined;
       this.moveCount = 0;
       frame.completed = true;
@@ -2079,7 +2078,7 @@ export class FlowEngine<G extends Game = Game> {
     // at 0: `turnScope` decides whether this entry continues the run the same
     // seat is already on, which is what gives undo its reach across the frame
     // boundary a loop iteration or a sibling step creates.
-    if (frame.data?.moveCount === undefined) {
+    if (entering) {
       const entryPlayer = config.player ? config.player(context) : context.player;
       if (!entryPlayer) {
         throw new Error('ActionStep requires a player');
@@ -2087,9 +2086,9 @@ export class FlowEngine<G extends Game = Game> {
       // Resolved BEFORE the assignment: `entryRun` may also mark the
       // frame, and a spread evaluated first would discard that mark.
       const start = this.entryRun(config, entryPlayer, frame);
-      frame.data = { ...frame.data, moveCount: start.moves, actionCount: start.actions };
+      frame.data = { ...frame.data, moveCount: start.moves, actionCount: start.actions, seat: entryPlayer.seat };
     }
-    const moveCount = frame.data.moveCount as number;
+    const { moveCount, seat } = frame.data as { moveCount: number; seat: number };
 
     // Save previous player on first entry so we can restore after a player: override completes.
     // This prevents a player override from leaking into subsequent sibling steps.
@@ -2108,11 +2107,7 @@ export class FlowEngine<G extends Game = Game> {
 
     const minMovesMet = !config.minMoves || moveCount >= config.minMoves;
 
-    // Determine player
-    const player = config.player ? config.player(context) : context.player;
-    if (!player) {
-      throw new Error('ActionStep requires a player');
-    }
+    const player = this.game.getPlayer(seat) as PlayerOf<G>;
 
     const available = this.offeredSequentialActions(config, context, player);
 
