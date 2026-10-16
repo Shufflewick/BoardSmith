@@ -867,6 +867,16 @@ describe("planSchedules -- how long an action name may be (#603)", () => {
  * three bytes of U+FFFD), but a host that percent-encodes the key into a
  * storage key throws `URIError` on it, at the checkpoint, as an outage.
  */
+describe("planSchedules -- an empty key (#790)", () => {
+  it("refuses an arm under an empty key, which no cancel could take back", () => {
+    const result = plan([], [{ delayMs: 1000, action: "tick", key: "" }]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.refusal.code).toBe("schedule-key-empty");
+    expect(result.refusal.owner).toBe("game");
+  });
+});
+
 describe("planSchedules -- a key a host can encode (#604)", () => {
   const HIGH = "\uD83D";
   const LOW = "\uDE00";
