@@ -67,8 +67,8 @@ FIXTURES.sort((a, b) => a.exportName.localeCompare(b.exportName));
  *  otherwise the glob silently covers less than the directory holds. */
 const FIXTURE_FILES = new Set(Object.keys(fixtureModules).map((f) => f.split('/').pop()!));
 
-/** How many steps to drive each fixture. Enough for `forEach` to
- *  bind its loop variable and for a sequence to advance past its first child. */
+/** How many steps to drive each fixture. Enough for an `eachPlayer` round to
+ *  rotate seats and for a sequence to advance past its first child. */
 const STEPS = 8;
 
 /** A serialized element marker, as `encodeFlowValue` writes it. */
