@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, effectScope } from 'vue';
 
 // jsdom lacks matchMedia; modules that read it at import time would throw.
 vi.stubGlobal(
@@ -325,6 +325,54 @@ describe('useActionAnimations', () => {
       } finally {
         process.off('unhandledRejection', onUnhandled);
       }
+    });
+  });
+
+  describe('hide observer lifetime (#731)', () => {
+    const flipConfig: ActionAnimationConfig = {
+      action: 'flipCard',
+      elementSelection: 'card',
+      elementSelector: '[data-card-id="{card}"]',
+      destinationSelector: '[data-card-id="{card}"]',
+      duration: 50,
+    };
+
+    /** Show the card again, then make a DOM change a live observer would react to. */
+    async function revealAndMutate(card: HTMLElement): Promise<void> {
+      card.style.removeProperty('opacity');
+      card.className = 'changed';
+      await nextTick();
+    }
+
+    it('stops hiding the card once a refused action is followed by another action', async () => {
+      const card = makeElement('data-card-id', '7');
+      const { onBeforeAutoExecute } = useActionAnimations({
+        gameView: ref<GameElement | null>(null),
+        animations: [flipConfig],
+      });
+
+      await onBeforeAutoExecute('flipCard', { card: '7' });
+      expect(card.style.opacity).toBe('0');
+
+      // Server refused: gameView never changes, the player starts another action.
+      await onBeforeAutoExecute('pass', {});
+      await revealAndMutate(card);
+
+      expect(card.style.opacity).toBe('');
+    });
+
+    it('stops hiding the card when unmounted mid-animation', async () => {
+      const card = makeElement('data-card-id', '7');
+      const scope = effectScope();
+      const { onBeforeAutoExecute } = scope.run(() =>
+        useActionAnimations({ gameView: ref<GameElement | null>(null), animations: [flipConfig] }),
+      )!;
+
+      await onBeforeAutoExecute('flipCard', { card: '7' });
+      scope.stop();
+      await revealAndMutate(card);
+
+      expect(card.style.opacity).toBe('');
     });
   });
 });

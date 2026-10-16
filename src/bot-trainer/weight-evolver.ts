@@ -114,8 +114,7 @@ export class WeightEvolver {
     }
 
     // Every weight must name one of the game's objectives. Checked here, in
-    // this process, because a worker that refuses a candidate scores it 0
-    // and evolution would carry on tuning weights that do nothing.
+    // this process, so a bad weight fails before any worker starts.
     const bundle = await loadTrainingBundle(this.gameModulePath);
     const { gameClass, bot } = bundle.gameDefinition;
     bundle.weightedBot(gameClass, this.gameType, bot, objectives);

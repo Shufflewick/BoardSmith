@@ -52,6 +52,14 @@ describe('boardsmith test', () => {
     expect(run.stdout + run.stderr).not.toContain('wip.test.ts');
   });
 
+  it('refuses a game with no tests/ directory, since a run of nothing would pass (#728)', async () => {
+    const project = await gameProject({});
+    await fs.rm(join(project, 'tests'), { recursive: true });
+    const run = await spawnCli(['test'], project);
+    expect(run.code).toBe(1);
+    expect(run.stderr).toMatch(/This project has no tests\/ directory, so nothing tests it\./);
+  });
+
   it('runs the browser suite under --browser without type-checking again, since the default run did', async () => {
     // A filter matching no browser regression, so no Chromium starts: what is
     // asserted is that vitest was handed the browser config and no type check ran first.

@@ -553,6 +553,10 @@ export class ResidentWorld {
   async start(): Promise<WorldStartOutcome> {
     let migrated: WorldStartOutcome["migrated"] = undefined;
     await this.run(async () => {
+      // A CRASH'S LEFTOVER MARKS (#730) describe a live tree that died with the
+      // last host, and nothing here is resident to serialize for them; their
+      // changes never reached a checkpoint, so the durable bytes are already right.
+      this.#store.discardDirty(this.#store.dirtyPartitions());
       // BEFORE ANYTHING ASKS (ShufflewickPub #383). A seat's idleness is
       // measured from the instant this world began watching, and `activityOf`
       // refuses rather than invent one -- so the epoch is fixed here, on the
