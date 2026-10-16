@@ -1451,6 +1451,50 @@ describe('SnapshotSessionHost', () => {
       expect(text).toBe('Player 1: move direction=left');
     });
 
+    // ── #809: a demo loop that throws is reported, not left as an unhandled rejection ──
+
+    async function demoThatThrows(throwOn: 'botSuggest' | 'action') {
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        const { adapters, broadcastLog } = makeDemoAdapters(botGameOptions);
+        const realExecute = adapters.executeOp;
+        adapters.executeOp = (snap, pend, op) => {
+          if (op.type === throwOn) return Promise.reject(new Error('The executor did not answer in time.'));
+          return realExecute(snap, pend, op);
+        };
+        const backgroundErrors: unknown[] = [];
+        adapters.onBackgroundError = (error) => backgroundErrors.push(error);
+        const host = new SnapshotSessionHost(adapters);
+        host.setBotSeats([{ seat: 1 }]);
+        await host.start();
+        broadcastLog.length = 0;
+
+        succeeded(await host.handleOp(1, { type: 'demoStart', delay: 0 }));
+        await vi.waitFor(() => expect(host.demoRunning).toBe(false));
+        // Node reports an unhandled rejection after the microtasks of the turn it happened in.
+        for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve));
+
+        expect(unhandled).toEqual([]);
+        expect(backgroundErrors.map((e) => (e as Error).message)).toEqual(['The executor did not answer in time.']);
+        expect(String(errors.mock.calls.at(-1)?.[0])).toMatch(/the demo failed: The executor did not answer in time\..* The demo has stopped/);
+        expect(broadcastState(broadcastLog, broadcastLog.length - 1, 1).isDemoRunning).toBeUndefined();
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+        errors.mockRestore();
+      }
+    }
+
+    it('a botSuggest that rejects stops the demo, tells clients, and goes to onBackgroundError once (#809)', async () => {
+      await demoThatThrows('botSuggest');
+    });
+
+    it("a demo move whose executor call rejects stops the demo, tells clients, and goes to onBackgroundError once (#809)", async () => {
+      await demoThatThrows('action');
+    });
+
   });
 
   // ── 9. teachingDisabled host lockout (Plan 111-02) ────────────────────────
