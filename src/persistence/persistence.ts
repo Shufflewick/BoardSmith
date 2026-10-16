@@ -454,7 +454,7 @@ function buildCommitEntry(
   value: string | null,
   schemaTag: unknown,
 ): PersistCommitEntry {
-  return { key, value, ...(schemaTag ? { schemaTag: schemaTag as string } : {}) };
+  return { key, value, ...(schemaTag !== undefined ? { schemaTag: schemaTag as string } : {}) };
 }
 
 /** One entry, or a message saying why it is not one. */
