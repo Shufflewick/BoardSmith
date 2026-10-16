@@ -384,14 +384,28 @@ function choiceItemResolver(
   player: Player,
   byId: SeatIdReader,
 ): (item: unknown) => unknown {
-  const hidden = candidates.filter((c) => isElement(c.value) && !c.value.isVisibleTo(player.seat));
-  const named = hidden.length === 0 ? candidates : candidates.filter((c) => !hidden.includes(c));
+  const named = nameableBy(candidates, player);
+  const anyHidden = named.length < candidates.length;
   return (item) => {
     if (isSerializedElement(item)) return byId((item as { id: number }).id) ?? item;
-    if (hidden.length > 0 && typeof item === 'number' && item < 0) return byId(item) ?? item;
+    if (anyHidden && typeof item === 'number' && item < 0) return byId(item) ?? item;
     const match = findMatchingChoice(item, named);
     return match === undefined ? item : match.value;
   };
+}
+
+/** The candidates a player may name by shorthand: all but those it cannot see (#715). */
+function nameableBy<C extends { value: unknown }>(candidates: readonly C[], player: Player): C[] {
+  return candidates.filter((c) => !isElement(c.value) || c.value.isVisibleTo(player.seat));
+}
+
+/**
+ * The offered `chooseFrom` choice a resolved value names. A hidden candidate
+ * arrives only as the element its placeholder id resolved to, so it matches
+ * that element and never a name or partial object (#715).
+ */
+function offeredChoice<C extends { value: unknown }>(value: unknown, choices: readonly C[], player: Player): C | undefined {
+  return findMatchingChoice(value, isElement(value) ? choices : nameableBy(choices, player));
 }
 
 export class ActionExecutor {
@@ -1076,7 +1090,7 @@ export class ActionExecutor {
     actionName: string | undefined,
   ): { match: AnnotatedChoice<unknown> } | { refusal: string } {
     const match = selection.type === 'choice'
-      ? findMatchingChoice(value, choices)
+      ? offeredChoice(value, choices, context.player)
       : this.offeredElement(value, choices);
     if (match === undefined) {
       const detail = this.notOfferedDetail(selection, value, choices);

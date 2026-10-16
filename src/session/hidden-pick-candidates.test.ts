@@ -3,7 +3,7 @@
  * shows it (#715): the placeholder id its view carries and a neutral label,
  * never the real id and name. A submitted placeholder id names the real card.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   Game,
   Player,
@@ -18,6 +18,9 @@ import {
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { succeeded } from './op-result.test-helper.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
+
+/** The game callbacks a blind chooseFrom ran, so a refused pick can show none did. */
+const ran: string[] = [];
 
 class BlindGame extends Game<BlindGame, Player> {
   constructor(options: GameOptions) {
@@ -40,8 +43,17 @@ class BlindGame extends Game<BlindGame, Player> {
         .chooseElement<'card', Card>('card', { elements: theirs })
         .execute(({ card }) => take(card)),
       Action.create<BlindGame>('draw')
-        .chooseFrom<'card', Card>('card', { choices: theirs })
-        .execute(({ card }) => take(card)),
+        .chooseFrom<'card', Card>('card', { choices: theirs, onSelect: () => { ran.push('onSelect'); } })
+        .execute(({ card }) => {
+          ran.push('execute');
+          return take(card);
+        }),
+      Action.create<BlindGame>('drawTwo')
+        .chooseFrom<'cards', Card>('cards', { choices: theirs, multiSelect: { min: 1, max: 2 } })
+        .execute(() => {
+          ran.push('execute');
+          return { success: true };
+        }),
       Action.create<BlindGame>('stealFirst')
         .chooseElement<'card', Card>('card', { elements: (ctx) => [theirs(ctx)[0]!] })
         .execute(({ card }) => take(card)),
@@ -72,13 +84,16 @@ class BlindGame extends Game<BlindGame, Player> {
         maxIterations: 10,
         do: eachPlayer({
           do: actionStep({
-            actions: ['steal', 'draw', 'stealFirst', 'stealTwo', 'stealUntilTwo', 'stealAndSay', 'stealNowhere'],
+            actions: ['steal', 'draw', 'drawTwo', 'stealFirst', 'stealTwo', 'stealUntilTwo', 'stealAndSay', 'stealNowhere'],
           }),
         }),
       }),
     });
   }
 }
+
+const NO_LONGER_AVAILABLE =
+  'That choice is no longer available. Things changed while you were choosing, so please choose again.';
 
 const definition: GameDefinitionLike = { gameClass: BlindGame, gameType: 'blind', minPlayers: 2, maxPlayers: 2 };
 const options = { playerCount: 2, seed: 'bs715' };
@@ -105,6 +120,10 @@ function boardIdsOfHand2(envelope: { playerViews: unknown[] }): number[] {
 }
 
 describe('pick candidates the seat cannot see (#715)', () => {
+  beforeEach(() => {
+    ran.length = 0;
+  });
+
   it("offers a chooseElement candidate by seat 1's board id, without its name", async () => {
     const start = await started();
     const res = succeeded(await executeOp(definition, options, start.snapshot, null, {
@@ -169,6 +188,7 @@ describe('pick candidates the seat cannot see (#715)', () => {
     });
 
     expect(res.success).toBe(false);
+    expect((res as { error: string }).error).toBe(NO_LONGER_AVAILABLE);
   });
 
   it('takes every hidden card a multi-select names by placeholder', async () => {
@@ -196,15 +216,36 @@ describe('pick candidates the seat cannot see (#715)', () => {
     expect(step.nextChoices?.map((c) => [c.value, c.display])).toEqual([[-1, 'Card #1']]);
   });
 
-  it('does not take a hidden chooseFrom candidate by its secret name', async () => {
+  // A hidden card's name is refused exactly as a card that is not there, so a
+  // seat cannot probe the hand, and no callback ever sees the name.
+  it.each([
+    ['its secret name', 'draw', { card: 'AS' }],
+    ['a partial object', 'draw', { card: { name: 'AS' } }],
+    ['names in a multi-select', 'drawTwo', { cards: ['AS'] }],
+    ['an absent card', 'draw', { card: 'QQ' }],
+  ])('refuses a hidden chooseFrom candidate named by %s as no longer available', async (_, actionName, args) => {
     const start = await started();
 
     const res = await executeOp(definition, options, start.snapshot, null, {
-      type: 'action', actionName: 'draw', player: 1, args: { card: 'AS' },
+      type: 'action', actionName, player: 1, args, boundaryKey: boundaryKeyOf(start.snapshot),
+    });
+
+    expect(res.success).toBe(false);
+    expect((res as { error: string }).error).toBe(NO_LONGER_AVAILABLE);
+    expect(ran).toEqual([]);
+  });
+
+  it('refuses a selection step naming a hidden chooseFrom candidate as no longer available', async () => {
+    const start = await started();
+
+    const res = await executeOp(definition, options, start.snapshot, null, {
+      type: 'selectionStep', player: 1, selectionName: 'card', value: 'AS', actionName: 'draw',
       boundaryKey: boundaryKeyOf(start.snapshot),
     });
 
     expect(res.success).toBe(false);
+    expect((res as { error: string }).error).toBe(NO_LONGER_AVAILABLE);
+    expect(ran).toEqual([]);
   });
 
   it("names an earlier hidden pick neutrally when a later step has nothing to choose", async () => {
