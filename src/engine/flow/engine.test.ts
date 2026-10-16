@@ -1961,28 +1961,6 @@ describe('Turn Order Presets', () => {
     expect(visitedPlayers).toEqual([2, 3, 1]);
   });
 
-  it('should use CONTINUE from current player (wraps around)', () => {
-    // Set current player to position 2
-    game.setCurrentPlayer(game.getPlayer(3)!);
-
-    const visitedPlayers: number[] = [];
-
-    const flow: FlowDefinition = {
-      root: eachPlayer({
-        ...TurnOrder.CONTINUE,
-        do: execute((ctx) => {
-          visitedPlayers.push(ctx.player!.seat);
-        }),
-      }),
-    };
-
-    const engine = new FlowEngine(game, flow);
-    engine.start();
-
-    // Should start from player 3, wrap back around to players 1 and 2
-    expect(visitedPlayers).toEqual([3, 1, 2]);
-  });
-
   it.each([
     ['eliminated' as const],
     ['dormant' as const],
@@ -2620,5 +2598,81 @@ describe('Flow variable get() unset-key warning (F24)', () => {
     new FlowEngine(game, flow).start();
 
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('game.currentPlayer follows the flow (#780)', () => {
+  let game: TestGame;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 3 });
+  });
+
+  it('moves game.currentPlayer and isCurrent() to each seat eachPlayer prompts', () => {
+    game.registerAction(Action.create('pass').execute(() => ({ success: true })));
+    game.setFlow({ root: eachPlayer({ do: actionStep({ actions: ['pass'] }) }) });
+    game.startFlow();
+
+    for (const seat of [1, 2, 3]) {
+      expect(game.currentPlayer?.seat).toBe(seat);
+      expect(game.players.filter((p) => p.isCurrent()).map((p) => p.seat)).toEqual([seat]);
+      game.continueFlow('pass', {});
+    }
+    expect(game.getFlowState()?.complete).toBe(true);
+    expect(game.currentPlayer).toBeUndefined();
+  });
+
+  it('lets every seat act through a ctx.player.isCurrent() condition', () => {
+    const acted: number[] = [];
+    game.registerAction(
+      Action.create('play')
+        .condition({ 'is your turn': (ctx) => ctx.player.isCurrent() })
+        .execute((_args, ctx) => {
+          acted.push(ctx.player.seat);
+          return { success: true };
+        }),
+    );
+    game.setFlow({ root: eachPlayer({ do: actionStep({ actions: ['play'] }) }) });
+    let state = game.startFlow();
+    while (!state.complete) state = game.continueFlow('play', {});
+
+    expect(acted).toEqual([1, 2, 3]);
+  });
+
+  it('makes the seat an actionStep names current while its conditions are checked', () => {
+    game.registerAction(
+      Action.create('play')
+        .condition({ 'is your turn': (ctx) => ctx.player.isCurrent() })
+        .execute(() => ({ success: true })),
+    );
+    game.setFlow({ root: actionStep({ player: (ctx) => ctx.game.getPlayer(2)!, actions: ['play'] }) });
+
+    expect(game.startFlow().currentPlayer).toBe(2);
+  });
+
+  it('starts TurnOrder.CONTINUE from the seat the flow last ran for', () => {
+    const visited: number[] = [];
+    game.setFlow({
+      root: sequence(
+        eachPlayer({ filter: (p) => p.seat === 2, do: noop() }),
+        eachPlayer({ ...TurnOrder.CONTINUE, do: execute((ctx) => { visited.push(ctx.player!.seat); }) }),
+      ),
+    });
+    game.startFlow();
+
+    expect(visited).toEqual([2, 3, 1]);
+  });
+
+  it('has no current player while a simultaneous step awaits input', () => {
+    game.registerAction(Action.create('pass').execute(() => ({ success: true })));
+    game.setFlow({ root: simultaneousActionStep({ actions: ['pass'] }) });
+    game.startFlow();
+
+    expect(game.currentPlayer).toBeUndefined();
+    expect(game.players.some((p) => p.isCurrent())).toBe(false);
+  });
+
+  it('has no current player before the flow starts', () => {
+    expect(game.currentPlayer).toBeUndefined();
   });
 });

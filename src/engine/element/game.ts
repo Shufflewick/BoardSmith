@@ -1033,10 +1033,8 @@ export type PlayerOf<G extends Game> = G extends Game<any, infer P>
  *     // Register player actions
  *     this.registerActions(
  *       Action.create('playCard')
- *         .chooseElement('card', { filter: c => c.parent === this.currentPlayer.hand })
+ *         .chooseElement('card', { filter: (c, ctx) => c.parent === ctx.player.hand })
  *         .execute(({ card }) => card.flip()),
- *       Action.create('endTurn')
- *         .execute(() => this.setCurrentPlayer(this.nextPlayer()!))
  *     );
  *
  *     // Define game flow
@@ -1044,7 +1042,7 @@ export type PlayerOf<G extends Game> = G extends Game<any, infer P>
  *       root: loop({
  *         while: () => !this.isFinished(),
  *         do: eachPlayer({
- *           do: actionStep({ actions: ['playCard', 'endTurn'] })
+ *           do: actionStep({ actions: ['playCard'] })
  *         })
  *       }),
  *     });
@@ -1417,7 +1415,6 @@ export class Game<
       player.color = hex;
       // Human-readable name for the assigned color (e.g. "Red") for player-facing text.
       player.colorLabel = colorLabels?.[hex] ?? DEFAULT_COLOR_LABELS[hex];
-      if (i === 0) player.setCurrent(true);
     }
 
     // Store color configuration for session layer access
@@ -2415,12 +2412,9 @@ export class Game<
    *     .execute((args, ctx) => this.deck.first(Card)?.putInto(ctx.player.hand)),
    *
    *   Action.create('playCard')
-   *     .chooseElement('card', { filter: c => c.parent === this.currentPlayer.hand })
+   *     .chooseElement('card', { filter: (c, ctx) => c.parent === ctx.player.hand })
    *     .chooseElement('target', { filter: c => c instanceof Space })
    *     .execute(({ card, target }) => card.putInto(target)),
-   *
-   *   Action.create('endTurn')
-   *     .execute(() => this.setCurrentPlayer(this.nextPlayer()!))
    * );
    * ```
    */
@@ -3653,39 +3647,29 @@ export class Game<
   /**
    * Get the current player (the player whose turn it is).
    *
-   * The current player is determined by the `_isCurrent` flag on Player instances,
-   * managed via `setCurrentPlayer()` and the flow engine.
+   * Read from the flow, which moves the turn: each seat of an `eachPlayer`
+   * round in turn, or the player an `actionStep` names. Seat 1 holds it when
+   * the flow starts. There is no current player before the flow starts,
+   * after it completes, or while a `simultaneousActionStep` awaits input
+   * (every seat acts there; use `ctx.player`).
    *
    * @returns The current player, or `undefined` if no player is current
    *
    * @example
    * ```typescript
-   * // In a flow action
-   * const player = game.currentPlayer;
-   * if (player) {
-   *   player.gold += 10;
-   * }
-   *
-   * // In an eachPlayer flow, currentPlayer is automatically set
    * eachPlayer({
-   *   do: actionStep({
-   *     actions: ['takeTurn'],
-   *     // game.currentPlayer is the player whose turn it is
-   *   })
+   *   do: sequence(
+   *     execute(() => { game.currentPlayer!.gold += 10; }),
+   *     actionStep({ actions: ['takeTurn'] }),
+   *   ),
    * })
    * ```
    *
-   * @see {@link setCurrentPlayer} - Change the current player
    * @see {@link Player.isCurrent} - Check if a specific player is current
    */
   get currentPlayer(): P | undefined {
-    // Structural, via the one shared answer to "is this child a player?" --
-    // `instanceof` is unusable because bundling can create separate copies of
-    // the class, and a numeric `seat` is not the answer either (a seat-tagged
-    // board has one too).
-    return this._t.children.find(
-      (el): el is P => isPlayerElement<P>(el) && el.isCurrent()
-    );
+    const seat = this._flowEngine?.getCurrentPlayer()?.seat;
+    return seat === undefined ? undefined : this.getPlayer(seat);
   }
 
   /**
@@ -3702,8 +3686,8 @@ export class Game<
    *   player.gold += 5;
    * }
    *
-   * // Start with first player
-   * game.setCurrentPlayer(game.firstPlayer!);
+   * // Start the round with the first player
+   * eachPlayer({ startingPlayer: (ctx) => ctx.game.firstPlayer!, do: turn });
    * ```
    *
    * @see {@link getPlayer} - Get player by any seat
@@ -3737,7 +3721,7 @@ export class Game<
    * @see {@link Player.seat} - The seat property on players
    */
   getPlayer(seat: number): P | undefined {
-    // Same structural test as `currentPlayer` and `players` -- matching on a
+    // Same structural test as `players` -- matching on a
     // numeric `seat` alone used to hand back any seat-tagged child, such as a
     // per-seat board.
     return this._t.children.find(
@@ -3765,8 +3749,7 @@ export class Game<
    * targetPlayer.health -= damage;
    *
    * // In flow logic
-   * const player = game.getPlayerOrThrow(1);
-   * player.setCurrent(true);
+   * actionStep({ player: (ctx) => ctx.game.getPlayerOrThrow(1), actions: ['bid'] });
    * ```
    *
    * @see {@link getPlayer} - Returns undefined instead of throwing
@@ -3783,51 +3766,6 @@ export class Game<
   }
 
   /**
-   * Set the current player (whose turn it is).
-   *
-   * Automatically clears the previous current player before setting the new one.
-   * Accepts either a Player object or a seat number.
-   *
-   * @param playerOrSeat - Player object or seat number (1-indexed)
-   * @throws Error if seat doesn't correspond to an existing player
-   *
-   * @example
-   * ```typescript
-   * // Set by player object
-   * game.setCurrentPlayer(player);
-   *
-   * // Set by seat number
-   * game.setCurrentPlayer(1);
-   *
-   * // Advance to next player in a turn-based game
-   * game.setCurrentPlayer(game.nextPlayer()!);
-   *
-   * // In a manual turn flow
-   * Action.create('endTurn')
-   *   .execute(() => {
-   *     const next = game.nextPlayer();
-   *     if (next) game.setCurrentPlayer(next);
-   *   })
-   * ```
-   *
-   * @see {@link currentPlayer} - Get the current player
-   * @see {@link nextPlayer} - Get the next player in turn order
-   */
-  setCurrentPlayer(playerOrPosition: P | number): void {
-    // Clear previous current
-    const prev = this.currentPlayer;
-    if (prev) {
-      prev.setCurrent(false);
-    }
-
-    // Set new current
-    const player = typeof playerOrPosition === 'number'
-      ? this.getPlayerOrThrow(playerOrPosition)
-      : playerOrPosition;
-    player.setCurrent(true);
-  }
-
-  /**
    * Get the next player after the current player (circular turn order).
    *
    * Returns the player with the next-highest seat, wrapping from the last
@@ -3839,13 +3777,6 @@ export class Game<
    *
    * @example
    * ```typescript
-   * // End turn and advance to next player
-   * Action.create('endTurn')
-   *   .execute(() => {
-   *     const next = game.nextPlayer();
-   *     if (next) game.setCurrentPlayer(next);
-   *   })
-   *
    * // Check who's up next
    * const nextUp = game.nextPlayer();
    * game.message(`${nextUp?.name} is next`);
@@ -3876,15 +3807,9 @@ export class Game<
    *
    * @example
    * ```typescript
-   * // Go back to previous player (undo last turn change)
+   * // Who played just before this turn
    * const prev = game.previousPlayer();
-   * if (prev) game.setCurrentPlayer(prev);
-   *
-   * // Reverse turn order mechanic
-   * Action.create('reverseOrder')
-   *   .execute(() => {
-   *     game.setCurrentPlayer(game.previousPlayer()!);
-   *   })
+   * game.message(`${prev?.name} played last`);
    * ```
    *
    * @see {@link previousBefore} - Get previous player before any specific player
@@ -5010,7 +4935,7 @@ export class Game<
         // carries too — that read the BOARD's seat as its owner, showing its
         // restricted attributes to whichever seat the board was numbered for
         // instead of to the seat that owns it. `isPlayerElement` is the one
-        // structural answer, shared with `players`/`getPlayer`/`currentPlayer`.
+        // structural answer, shared with `players`/`getPlayer`.
         const isOwner = isPlayerElement(element)
           ? element.seat === visibilityPosition
           : element.getEffectiveOwner()?.seat === visibilityPosition;
@@ -5026,11 +4951,9 @@ export class Game<
             // to withhold: each has an audience the engine settled, and
             // sweeping one off the wire withholds no secret -- it takes an
             // opponent's name and colour off the table, or a seat's own
-            // `tutorialProgress` out of its view. `_isCurrent` is framework
-            // metadata (Player.toJSON).
+            // `tutorialProgress` out of its view.
             if (
               whitelist.has(key) ||
-              key === '_isCurrent' ||
               isPlayerIdentityAttribute(element, key) ||
               (isRoot && isEngineRootField(key))
             ) {
