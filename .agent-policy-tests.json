@@ -1,0 +1,17 @@
+{
+  "ticket": "Shufflewick/BoardSmith#982",
+  "base": "2a6bd1aad31b71b869ca9b8656ffcc172376607f",
+  "tests": [
+    {
+      "file": "src/world/host/resident-world.test.ts",
+      "names": [
+        "#793: ResidentWorld closes the store even when the final checkpoint throws",
+        "#793: ResidentWorld says a refusing event refused once per catch-up, not once per round",
+        "#793: ResidentWorld plans a clock-issued command's schedules from the instant its handler was told",
+        "#793: ResidentWorld a view that throws does not hand the game's raw error text to the player",
+        "#793: ResidentWorld a view that throws logs once for the whole audience, with how many seats failed, not once per seat",
+        "#793: ResidentWorld a view that throws passes a PlayerFacingError the game wrote through verbatim"
+      ]
+    }
+  ]
+}

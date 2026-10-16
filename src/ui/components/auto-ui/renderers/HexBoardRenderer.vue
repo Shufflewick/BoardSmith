@@ -36,6 +36,7 @@ import ElementRenderer from './ElementRenderer.vue';
 import { resolvePresentation } from '../presentation.js';
 import type { PresentationOverlay } from '../presentation.js';
 import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
+import { boardCellStates } from './board-cell-states.js';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — do NOT import from engine (module is dependency-free)
@@ -152,44 +153,15 @@ function getPieceGlyph(piece: GameElement): string {
 // Effective hex piece circle radius: 35% of hexSize (from UI-SPEC)
 const pieceRadius = computed(() => hexSize.value * 0.35);
 
-// ── Element identity helper — passes notation from attributes (Pitfall 6) ──────
-// Hex coordinates (q, r) are element attributes, not a top-level `notation` field. However,
-// a game author may declare a string `notation` attribute on hex cells for ref matching;
-// passing it ensures matchesRef works for notation-keyed board refs.
-function cellIdentity(cell: GameElement) {
-  return {
-    id: cell.id,
-    name: cell.name,
-    notation: cell.attributes?.notation as string | undefined,
-  };
-}
-
-// ── Board interaction helpers for hex cells (all six required states) ────────
-function isCellActionSelectable(cell: GameElement): boolean {
-  if (!boardInteraction) return false;
-  if (boardInteraction.isSelected(cellIdentity(cell))) return false;
-  return boardInteraction.isSelectableElement(cellIdentity(cell));
-}
-
-function isCellHighlighted(cell: GameElement): boolean {
-  if (!boardInteraction) return false;
-  return boardInteraction.isHighlighted(cellIdentity(cell));
-}
-
-function isCellBoardSelected(cell: GameElement): boolean {
-  if (!boardInteraction) return false;
-  return boardInteraction.isSelected(cellIdentity(cell));
-}
-
-function isCellDropTarget(cell: GameElement): boolean {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDropTarget(cellIdentity(cell));
-}
-
-function isCellDisabled(cell: GameElement): boolean {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDisabledElement(cellIdentity(cell)) !== false;
-}
+const {
+  cellIdentity,
+  isCellHighlighted,
+  isCellSelected,
+  isCellActionSelectable,
+  isCellDropTarget,
+  isCellDisabled,
+  cellStateLabel,
+} = boardCellStates(boardInteraction);
 
 // A `drop` only fires on an element whose `dragover` called preventDefault().
 // Without this handler the browser silently rejects every drop on a hex cell —
@@ -308,17 +280,11 @@ watch(
 function hexCellAriaLabel(cell: GameElement): string {
   const coord = cell.name
     ?? `(${cell.attributes?.[qCoordName.value] ?? '?'},${cell.attributes?.[rCoordName.value] ?? '?'})`;
-  let state: string;
-  if (isCellDisabled(cell)) state = 'unavailable';
-  else if (isCellBoardSelected(cell)) state = 'selected';
-  else if (isCellDropTarget(cell)) state = 'drop target';
-  else if (isCellActionSelectable(cell)) state = 'selectable';
-  else state = 'empty';
   const pieces = cell.children ?? [];
   const occupant = pieces.length > 0
     ? `, ${pieces.map(p => p.name ?? 'piece').join(', ')}`
     : '';
-  return `${coord}${occupant}, ${state}`;
+  return `${coord}${occupant}, ${cellStateLabel(cell)}`;
 }
 </script>
 
@@ -363,7 +329,7 @@ function hexCellAriaLabel(cell: GameElement): string {
         role="gridcell"
         :tabindex="idx === currentIdx ? '0' : '-1'"
         :aria-label="hexCellAriaLabel(cell)"
-        :aria-selected="isCellBoardSelected(cell) || undefined"
+        :aria-selected="isCellSelected(cell) || undefined"
         :aria-disabled="isCellDisabled(cell) || undefined"
         :transform="`translate(${getCellPosition(cell).x}, ${getCellPosition(cell).y})`"
         @click="handleHexActivate(cell)"
@@ -378,7 +344,7 @@ function hexCellAriaLabel(cell: GameElement): string {
             'has-children': (cell.children?.length ?? 0) > 0,
             'action-selectable': isCellActionSelectable(cell),
             'is-board-highlighted': isCellHighlighted(cell),
-            'is-board-selected': isCellBoardSelected(cell),
+            'is-board-selected': isCellSelected(cell),
             'is-drop-target': isCellDropTarget(cell),
             'is-disabled': isCellDisabled(cell),
           }"

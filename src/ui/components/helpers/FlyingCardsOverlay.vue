@@ -36,6 +36,8 @@
  */
 import type { FlyingCard } from '../../composables/useFlyingElements.js';
 import type { CSSProperties } from 'vue';
+import { isUrlImage, isSpriteImage, getImageSrc, getSpriteStyle } from '../../utils/image.js';
+import { getSuitSymbol as defaultSuitSymbol, getSuitColor as defaultSuitColor } from '../../composables/useCardDisplay.js';
 
 const props = defineProps<{
   /** Array of flying cards from useFlyingElements composable */
@@ -86,106 +88,6 @@ function getPieceStyle(cardData: Record<string, unknown>): CSSProperties {
     backgroundColor: getPlayerColor(playerSeat),
   };
 }
-
-// Type for parsed image info (either URL string or sprite with coordinates)
-type ImageInfo =
-  | { type: 'url'; src: string }
-  | { type: 'sprite'; sprite: string; x: number; y: number; width: number; height: number };
-
-// Parse image data from cardData - handles both string URLs and sprite objects
-function parseImageInfo(image: unknown): ImageInfo | null {
-  if (!image) return null;
-  if (typeof image === 'string') return { type: 'url', src: image };
-  if (typeof image === 'object' && image !== null) {
-    const spriteObj = image as { sprite?: string; x?: number; y?: number; width?: number; height?: number };
-    if (spriteObj.sprite && typeof spriteObj.x === 'number' && typeof spriteObj.y === 'number') {
-      return {
-        type: 'sprite',
-        sprite: spriteObj.sprite,
-        x: spriteObj.x,
-        y: spriteObj.y,
-        width: spriteObj.width ?? 238,
-        height: spriteObj.height ?? 333,
-      };
-    }
-    if (spriteObj.sprite) {
-      return { type: 'url', src: spriteObj.sprite };
-    }
-  }
-  return null;
-}
-
-// Helper to check if image is URL type
-function isUrlImage(image: unknown): boolean {
-  return parseImageInfo(image)?.type === 'url';
-}
-
-// Helper to check if image is sprite type
-function isSpriteImage(image: unknown): boolean {
-  return parseImageInfo(image)?.type === 'sprite';
-}
-
-// Helper to get URL src
-function getImageSrc(image: unknown): string {
-  const info = parseImageInfo(image);
-  if (info?.type === 'url') return info.src;
-  return '';
-}
-
-// Sprite sheet layout constants
-// Standard card dimensions in the sprite sheet (face cards)
-const NATIVE_CARD_WIDTH = 238;
-const NATIVE_CARD_HEIGHT = 333;
-const SPRITE_COLS = 13;
-const SPRITE_ROWS = 5;
-
-// Helper to get sprite style object with proper scaling
-// IMPORTANT: Scale based on native face card dimensions (238x333), not the individual
-// card's dimensions, because card backs may have different sizes in the sprite
-function getSpriteStyle(image: unknown, displayWidth: number = 60, displayHeight: number = 84): CSSProperties {
-  const info = parseImageInfo(image);
-  if (info?.type === 'sprite') {
-    // Scale based on standard card size, not individual card's dimensions
-    const scaleX = displayWidth / NATIVE_CARD_WIDTH;
-    const scaleY = displayHeight / NATIVE_CARD_HEIGHT;
-
-    // Total sprite sheet dimensions
-    const sheetWidth = SPRITE_COLS * NATIVE_CARD_WIDTH;
-    const sheetHeight = SPRITE_ROWS * NATIVE_CARD_HEIGHT;
-
-    // Scaled sprite sheet size
-    const scaledSheetWidth = sheetWidth * scaleX;
-    const scaledSheetHeight = sheetHeight * scaleY;
-
-    // Scale the position coordinates
-    const scaledX = info.x * scaleX;
-    const scaledY = info.y * scaleY;
-
-    return {
-      backgroundImage: `url(${info.sprite})`,
-      backgroundPosition: `-${scaledX}px -${scaledY}px`,
-      backgroundSize: `${scaledSheetWidth}px ${scaledSheetHeight}px`,
-      backgroundRepeat: 'no-repeat',
-    };
-  }
-  return {};
-}
-
-// Default suit symbols
-const defaultSuitSymbols: Record<string, string> = {
-  'H': '\u2665', // ♥
-  'D': '\u2666', // ♦
-  'C': '\u2663', // ♣
-  'S': '\u2660', // ♠
-};
-
-function getDefaultSuitSymbol(suit: string): string {
-  return defaultSuitSymbols[suit] || suit;
-}
-
-function getDefaultSuitColor(suit: string): string {
-  return suit === 'H' || suit === 'D' ? '#e74c3c' : '#2c3e50';
-}
 </script>
 
 <template>
@@ -213,7 +115,7 @@ function getDefaultSuitColor(suit: string): string {
             <div
               class="card-face card-front"
               :class="{ 'has-image': card.cardData.faceImage }"
-              :style="{ color: (getSuitColor || getDefaultSuitColor)(card.cardData.suit || '') }"
+              :style="{ color: (getSuitColor || defaultSuitColor)(card.cardData.suit || '') }"
             >
               <!-- URL image -->
               <img
@@ -230,7 +132,7 @@ function getDefaultSuitColor(suit: string): string {
               ></div>
               <template v-else>
                 <span class="rank">{{ card.cardData.rank }}</span>
-                <span class="suit">{{ (getSuitSymbol || getDefaultSuitSymbol)(card.cardData.suit || '') }}</span>
+                <span class="suit">{{ (getSuitSymbol || defaultSuitSymbol)(card.cardData.suit || '') }}</span>
               </template>
             </div>
             <!-- Back face -->

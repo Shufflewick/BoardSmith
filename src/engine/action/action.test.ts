@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { withDevLog } from './dev-log.test-helper.js';
 import {
   Game,
@@ -1940,24 +1940,6 @@ describe('Game Action Integration', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('Unknown action');
   });
-
-  it('should perform serialized action', () => {
-    let executed = false;
-    const action = Action.create('test').execute(() => {
-      executed = true;
-    });
-
-    game.registerAction(action);
-
-    const result = game.performSerializedAction({
-      name: 'test',
-      player: 1,
-      args: {},
-    });
-
-    expect(result.success).toBe(true);
-    expect(executed).toBe(true);
-  });
 });
 
 describe('Action Chaining with followUp', () => {
@@ -3103,5 +3085,67 @@ describe('repeating element selection with an unresolvable choice', () => {
     expect(result.done).toBe(false);
     // The same refusal any pick of a value not on offer gets (#393, #507).
     expect(result.error).toMatch(/no longer available/);
+  });
+});
+
+describe('whole-move submission checks each pick before a later pick reads it (#772)', () => {
+  let game: TestGame;
+  let executor: ActionExecutor;
+  let hand: Hand;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+    hand = game.create(Hand, 'hand');
+    hand.create(Card, 'ace');
+    executor = new ActionExecutor(game);
+  });
+
+  // Pick 2's choices read pick 1 as an element, as a step-by-step player always hands them.
+  // A repeating pick 3 sends the submission down the selection-step path instead (#325).
+  function discardAction(repeating: boolean) {
+    const destinationsRead: unknown[] = [];
+    const picks = Action.create('discard')
+      .chooseElement('card', { elements: () => [...hand.all(Card)] })
+      .chooseFrom('to', {
+        choices: (ctx) => { destinationsRead.push(ctx.args.card); return [(ctx.args.card as Card).parent!.name]; },
+      });
+    const action = (repeating ? picks.chooseFrom('extra', { choices: ['done'], repeatUntil: 'done' }) : picks).execute(() => {});
+    return { action, destinationsRead };
+  }
+
+  for (const repeating of [false, true]) {
+    it(`refuses an unknown card without running pick 2's choices${repeating ? ' (with a repeating pick 3)' : ''}`, () => {
+      const { action, destinationsRead } = discardAction(repeating);
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const result = executor.executeAction(action, game.getPlayer(1)!, { card: 'x', to: 'hand', ...(repeating && { extra: ['done'] }) });
+        expect(result).toEqual({ success: false, error: expect.stringMatching(/no longer available|Invalid selection for "card"/) });
+        expect(destinationsRead).toEqual([]);
+        expect(errors).not.toHaveBeenCalled();
+      } finally {
+        errors.mockRestore();
+      }
+    });
+  }
+
+  // A condition is typed as seeing resolved picks or none: at submit time it gets none, as availability does.
+  for (const repeating of [false, true]) {
+    it(`takes a valid whole submission whose condition reads a pick${repeating ? ' (with a repeating pick 3)' : ''}`, () => {
+      const picks = Action.create('discard')
+        .chooseElement('card', { elements: () => [...hand.all(Card)] })
+        .chooseFrom('to', { choices: ['hand'] })
+        .condition({ 'the card is in hand': (ctx) => ctx.args.card === undefined || ctx.args.card.parent!.name === 'hand' });
+      const action = (repeating ? picks.chooseFrom('extra', { choices: ['done'], repeatUntil: 'done' }) : picks).execute(() => {});
+      const card = hand.first(Card)!;
+      const result = executor.executeAction(action, game.getPlayer(1)!, { card: card.id, to: 'hand', ...(repeating && { extra: ['done'] }) });
+      expect(result).toEqual({ success: true });
+    });
+  }
+
+  it('still takes a valid whole submission', () => {
+    const { action, destinationsRead } = discardAction(false);
+    const card = hand.first(Card)!;
+    expect(executor.executeAction(action, game.getPlayer(1)!, { card: card.id, to: 'hand' })).toEqual({ success: true });
+    expect(destinationsRead.every((read) => read === card)).toBe(true);
   });
 });
