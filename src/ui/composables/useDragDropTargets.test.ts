@@ -1,25 +1,21 @@
 /**
  * Tests for generic drag-and-drop target derivation (audit F36).
  *
- * Proves drop targets are now derived from the action controller's CURRENT pick
- * for ANY action shape — including shapes the old ActionPanel watch silently
- * ignored (element -> choice WITHOUT filterBy, `elements` multi-picks) — while
- * the two previously-supported shapes (element -> choice WITH filterBy, and
- * element -> element) keep working identically.
+ * Proves drop targets follow the controller's CURRENT pick for any action shape,
+ * through the board's own candidates (#724), with the real controller and bridge.
  *
  * D-01 migration: uses refs: [{ ref, role }] instead of singular targetRef / ref.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ref, nextTick } from 'vue';
 import {
   useActionController,
   type EnrichedActionMetadata,
 } from './useActionController.js';
-import {
-  deriveDropTargetsForPick,
-  setupDragDropOrchestration,
-} from './useDragDropTargets.js';
+import type { EnrichedValidElement } from './useActionControllerTypes.js';
+import { setupDragDropOrchestration } from './useDragDropTargets.js';
 import { createBoardInteraction } from './useBoardInteraction.js';
+import { useBoardActionBridge } from './useBoardActionBridge.js';
 import { createMockSendAction } from './useActionController.test-helper.js';
 
 /** Flush Vue's scheduler + the async watcher's awaited start()/fetch chain. */
@@ -49,179 +45,60 @@ function makeController(
   return { controller, availableActions, actionMetadata, isMyTurn, sendAction };
 }
 
-describe('deriveDropTargetsForPick (generic derivation)', () => {
-  it('NEW SHAPE: element -> choice WITHOUT filterBy exposes drop targets', async () => {
-    const fetchPickChoices = vi.fn().mockResolvedValue({
-      success: true,
-      choices: [
-        { value: 'a1', display: 'A1', refs: [{ ref: { id: 100 }, role: 'target' }] },
-        { value: 'a2', display: 'A2', refs: [{ ref: { id: 101 }, role: 'target' }] },
-      ],
-    });
-    const metadata: Record<string, EnrichedActionMetadata> = {
-      place: {
-        name: 'place',
-        selections: [
-          { name: 'piece', type: 'element', validElements: [{ id: 1, refs: [{ ref: { id: 1 }, role: 'highlight' }] }, { id: 2, refs: [{ ref: { id: 2 }, role: 'highlight' }] }] },
-          { name: 'dest', type: 'choice' }, // no filterBy
-        ],
-      },
-    };
-    const { controller, sendAction } = makeController(metadata, fetchPickChoices);
+/** A fetchPickChoices that answers each pick by name, as the server does. */
+function answerPicks(answers: Record<string, object>) {
+  return vi.fn((_action: string, pick: string) => Promise.resolve({ success: true, ...answers[pick] }));
+}
 
-    await controller.start('place', { args: { piece: 1 } });
-    const pick = controller.currentPick.value;
-    expect(pick?.name).toBe('dest');
-
-    const derived = deriveDropTargetsForPick(controller, pick);
-    expect(derived).not.toBeNull();
-    expect(derived!.targets.map(t => t.id).sort()).toEqual([100, 101]);
-
-    // Dropping onto a target fills the choice and the action auto-executes.
-    derived!.onDrop(101);
-    await flushAll();
-    expect(sendAction).toHaveBeenCalledWith('place', { piece: 1, dest: 'a2' });
+/**
+ * The real controller, bridge and orchestration over one board, as GameShell
+ * wires them, settled: a sole action is already auto-started, as it is by the
+ * time a player can drag.
+ */
+async function wireAll(
+  metadata: Record<string, EnrichedActionMetadata>,
+  fetchPickChoices: ReturnType<typeof vi.fn>,
+  isMyTurn = true,
+) {
+  const made = makeController(metadata, fetchPickChoices);
+  made.isMyTurn.value = isMyTurn;
+  const boardInteraction = createBoardInteraction();
+  useBoardActionBridge({
+    controller: made.controller, boardInteraction, isMyTurn: made.isMyTurn, autoEndTurn: ref(true),
+    actionMetadata: made.actionMetadata, availableActions: made.availableActions,
+    disabledActions: ref(undefined), isViewingHistory: ref(false),
+    runnerIdentity: ref({ gameInstanceId: 'game-a', restoreEpoch: 0 }),
   });
-
-  it('EXISTING SHAPE: element -> choice WITH filterBy narrows targets to the selected element', async () => {
-    const fetchPickChoices = vi.fn().mockResolvedValue({
-      success: true,
-      choices: [
-        { value: { pieceId: 1, to: 'x' }, display: 'X', refs: [{ ref: { id: 100 }, role: 'target' }] },
-        { value: { pieceId: 1, to: 'z' }, display: 'Z', refs: [{ ref: { id: 101 }, role: 'target' }] },
-        { value: { pieceId: 2, to: 'y' }, display: 'Y', refs: [{ ref: { id: 200 }, role: 'target' }] },
-      ],
-    });
-    const metadata: Record<string, EnrichedActionMetadata> = {
-      move: {
-        name: 'move',
-        selections: [
-          { name: 'piece', type: 'element', validElements: [{ id: 1, refs: [{ ref: { id: 1 }, role: 'highlight' }] }, { id: 2, refs: [{ ref: { id: 2 }, role: 'highlight' }] }] },
-          { name: 'dest', type: 'choice', filterBy: { key: 'pieceId', selectionName: 'piece' } },
-        ],
-      },
-    };
-    const { controller } = makeController(metadata, fetchPickChoices);
-
-    await controller.start('move', { args: { piece: 1 } });
-    const derived = deriveDropTargetsForPick(controller, controller.currentPick.value);
-    // Only destinations belonging to piece 1 are drop targets (piece 2's id 200 is filtered out).
-    expect(derived!.targets.map(t => t.id).sort()).toEqual([100, 101]);
+  setupDragDropOrchestration({
+    boardInteraction, actionController: made.controller, availableActions: made.availableActions,
+    actionMetadata: made.actionMetadata, isMyTurn: made.isMyTurn,
   });
-
-  it('EXISTING SHAPE: element -> element exposes the second element selection as targets', async () => {
-    const fetchPickChoices = vi.fn().mockResolvedValue({
-      success: true,
-      validElements: [
-        { id: 10, display: 'Goblin', refs: [{ ref: { id: 10 }, role: 'highlight' }] },
-        { id: 11, display: 'Orc', refs: [{ ref: { id: 11 }, role: 'highlight' }] },
-      ],
-    });
-    const metadata: Record<string, EnrichedActionMetadata> = {
-      attack: {
-        name: 'attack',
-        selections: [
-          { name: 'attacker', type: 'element', validElements: [{ id: 1, refs: [{ ref: { id: 1 }, role: 'highlight' }] }] },
-          { name: 'target', type: 'element' },
-        ],
-      },
-    };
-    const { controller, sendAction } = makeController(metadata, fetchPickChoices);
-
-    await controller.start('attack', { args: { attacker: 1 } });
-    const derived = deriveDropTargetsForPick(controller, controller.currentPick.value);
-    expect(derived!.targets.map(t => t.id).sort()).toEqual([10, 11]);
-
-    derived!.onDrop(11);
-    await flushAll();
-    expect(sendAction).toHaveBeenCalledWith('attack', { attacker: 1, target: 11 });
-  });
-
-  it('NEW SHAPE: an `elements` multi-pick exposes its valid elements as drop targets', async () => {
-    const fetchPickChoices = vi.fn().mockResolvedValue({
-      success: true,
-      validElements: [
-        { id: 20, display: 'Card 20', refs: [{ ref: { id: 20 }, role: 'highlight' }] },
-        { id: 21, display: 'Card 21', refs: [{ ref: { id: 21 }, role: 'highlight' }] },
-      ],
-      multiSelect: { min: 1, max: 2 },
-    });
-    const metadata: Record<string, EnrichedActionMetadata> = {
-      stash: {
-        name: 'stash',
-        selections: [{ name: 'cards', type: 'elements', multiSelect: { min: 1, max: 2 } }],
-      },
-    };
-    const { controller } = makeController(metadata, fetchPickChoices);
-
-    await controller.start('stash');
-    const pick = controller.currentPick.value;
-    expect(pick?.type).toBe('elements');
-    const derived = deriveDropTargetsForPick(controller, pick);
-    expect(derived!.targets.map(t => t.id).sort()).toEqual([20, 21]);
-  });
-
-  it('skips disabled elements and choices without a target role ref', async () => {
-    const fetchPickChoices = vi.fn().mockResolvedValue({
-      success: true,
-      choices: [
-        { value: 'a', display: 'A', refs: [{ ref: { id: 100 }, role: 'target' }] },
-        { value: 'b', display: 'B' }, // no refs -> not droppable
-        { value: 'c', display: 'C', refs: [{ ref: { id: 102 }, role: 'target' }], disabled: 'blocked' },
-      ],
-    });
-    const metadata: Record<string, EnrichedActionMetadata> = {
-      place: {
-        name: 'place',
-        selections: [
-          { name: 'piece', type: 'element', validElements: [{ id: 1, refs: [{ ref: { id: 1 }, role: 'highlight' }] }] },
-          { name: 'dest', type: 'choice' },
-        ],
-      },
-    };
-    const { controller } = makeController(metadata, fetchPickChoices);
-
-    await controller.start('place', { args: { piece: 1 } });
-    const derived = deriveDropTargetsForPick(controller, controller.currentPick.value);
-    expect(derived!.targets.map(t => t.id)).toEqual([100]);
-  });
-
-  it('returns null for non-droppable pick types (number/text)', () => {
-    const fetchPickChoices = vi.fn();
-    const { controller } = makeController({}, fetchPickChoices);
-    expect(deriveDropTargetsForPick(controller, { name: 'qty', type: 'number' })).toBeNull();
-    expect(deriveDropTargetsForPick(controller, { name: 'note', type: 'text' })).toBeNull();
-    expect(deriveDropTargetsForPick(controller, null)).toBeNull();
-  });
-});
+  await flushAll();
+  return { ...made, boardInteraction };
+}
 
 describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND custom UIs)', () => {
-  let boardInteraction: ReturnType<typeof createBoardInteraction>;
-
-  beforeEach(() => {
-    boardInteraction = createBoardInteraction();
-  });
-
-  it('NEW SHAPE: dragging an element auto-starts an element->choice (no filterBy) action and wires drop targets', async () => {
-    const fetchPickChoices = vi.fn().mockResolvedValue({
-      success: true,
-      choices: [
-        { value: 'a1', display: 'A1', refs: [{ ref: { id: 100 }, role: 'target' }] },
-        { value: 'a2', display: 'A2', refs: [{ ref: { id: 101 }, role: 'target' }] },
-      ],
+  it('DRAG-TO-SELECT in an open action: dragging a piece of an element->choice (no filterBy) action wires its destinations', async () => {
+    const pieces = [{ id: 1, refs: [{ ref: { id: 1 }, role: 'highlight' as const }] }, { id: 2, refs: [{ ref: { id: 2 }, role: 'highlight' as const }] }];
+    const fetchPickChoices = answerPicks({
+      piece: { validElements: pieces },
+      dest: {
+        choices: [
+          { value: 'a1', display: 'A1', refs: [{ ref: { id: 100 }, role: 'target' }] },
+          { value: 'a2', display: 'A2', refs: [{ ref: { id: 101 }, role: 'target' }] },
+        ],
+      },
     });
     const metadata: Record<string, EnrichedActionMetadata> = {
       place: {
         name: 'place',
         selections: [
-          { name: 'piece', type: 'element', validElements: [{ id: 1, refs: [{ ref: { id: 1 }, role: 'highlight' }] }, { id: 2, refs: [{ ref: { id: 2 }, role: 'highlight' }] }] },
+          { name: 'piece', type: 'element', validElements: pieces },
           { name: 'dest', type: 'choice' },
         ],
       },
     };
-    const { controller, availableActions, actionMetadata, isMyTurn } = makeController(metadata, fetchPickChoices);
-
-    setupDragDropOrchestration({ boardInteraction, actionController: controller, availableActions, actionMetadata, isMyTurn });
+    const { controller, boardInteraction } = await wireAll(metadata, fetchPickChoices);
 
     // Simulate a board / custom-UI drag start.
     boardInteraction.startDrag({ id: 1 });
@@ -234,7 +111,7 @@ describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND cust
     expect(boardInteraction.isDropTarget({ id: 999 })).toBe(false);
   });
 
-  it('EXISTING SHAPE: dragging an element auto-starts an element->element action and wires targets', async () => {
+  it('DRAG-TO-SELECT in an open action: dragging a piece of an element->element action wires the second pick', async () => {
     const fetchPickChoices = vi.fn().mockResolvedValue({
       success: true,
       validElements: [
@@ -251,9 +128,7 @@ describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND cust
         ],
       },
     };
-    const { controller, availableActions, actionMetadata, isMyTurn } = makeController(metadata, fetchPickChoices);
-
-    setupDragDropOrchestration({ boardInteraction, actionController: controller, availableActions, actionMetadata, isMyTurn });
+    const { controller, boardInteraction } = await wireAll(metadata, fetchPickChoices);
 
     boardInteraction.startDrag({ id: 1 });
     await flushAll();
@@ -279,9 +154,7 @@ describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND cust
         ],
       },
     };
-    const { controller, availableActions, actionMetadata, isMyTurn } = makeController(metadata, fetchPickChoices);
-
-    setupDragDropOrchestration({ boardInteraction, actionController: controller, availableActions, actionMetadata, isMyTurn });
+    const { controller, boardInteraction } = await wireAll(metadata, fetchPickChoices);
 
     // Start the action first (attacker already chosen); current pick is now 'target'.
     await controller.start('attack', { args: { attacker: 1 } });
@@ -328,9 +201,7 @@ describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND cust
         ],
       },
     };
-    const { controller, availableActions, actionMetadata, isMyTurn, sendAction } = makeController(metadata, fetchPickChoices);
-
-    setupDragDropOrchestration({ boardInteraction, actionController: controller, availableActions, actionMetadata, isMyTurn });
+    const { controller, boardInteraction, sendAction } = await wireAll(metadata, fetchPickChoices);
 
     // Arm the action (as the "Drag & Drop" button does). Current pick is 'card'.
     await controller.start('dragDrop');
@@ -363,15 +234,165 @@ describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND cust
         ],
       },
     };
-    const { controller, availableActions, actionMetadata, isMyTurn } = makeController(metadata, fetchPickChoices);
-    isMyTurn.value = false;
-
-    setupDragDropOrchestration({ boardInteraction, actionController: controller, availableActions, actionMetadata, isMyTurn });
+    const { controller, boardInteraction } = await wireAll(metadata, fetchPickChoices, false);
 
     boardInteraction.startDrag({ id: 1 });
     await flushAll();
 
     expect(controller.currentAction.value).toBeNull();
     expect(boardInteraction.dropTargets).toEqual([]);
+  });
+});
+
+describe('drag-drop follows the board and the action panel (#724)', () => {
+  it('drops onto notation-only destination squares (Checkers)', async () => {
+    const pieces = [{ id: 42, refs: [{ ref: { notation: 'd4' }, role: 'highlight' as const }] }, { id: 43, refs: [{ ref: { notation: 'f4' }, role: 'highlight' as const }] }];
+    const fetchPickChoices = answerPicks({
+      piece: { validElements: pieces },
+      destination: {
+        choices: [
+          { value: 'm1', display: 'e5', refs: [{ ref: { notation: 'e5' }, role: 'target' }] },
+          { value: 'm2', display: 'c5', refs: [{ ref: { notation: 'c5' }, role: 'target' }] },
+        ],
+      },
+    });
+    const metadata: Record<string, EnrichedActionMetadata> = {
+      move: {
+        name: 'move',
+        selections: [
+          { name: 'piece', type: 'element', validElements: pieces },
+          { name: 'destination', type: 'choice' },
+        ],
+      },
+    };
+    const { boardInteraction, sendAction } = await wireAll(metadata, fetchPickChoices);
+
+    boardInteraction.startDrag({ id: 42 });
+    await flushAll();
+    expect(boardInteraction.isDropTarget({ id: 300, notation: 'c5' })).toBe(true);
+
+    boardInteraction.triggerDrop({ id: 300, notation: 'c5' });
+    await flushAll();
+    expect(sendAction).toHaveBeenCalledWith('move', { piece: 42, destination: 'm2' });
+  });
+
+  it('a drop onto a multi-select pick toggles it, as a click does', async () => {
+    const fetchPickChoices = vi.fn().mockResolvedValue({
+      success: true,
+      validElements: [
+        { id: 20, display: 'Card 20', refs: [{ ref: { id: 20 }, role: 'highlight' }] },
+        { id: 21, display: 'Card 21', refs: [{ ref: { id: 21 }, role: 'highlight' }] },
+      ],
+      multiSelect: { min: 1, max: 2 },
+    });
+    const metadata: Record<string, EnrichedActionMetadata> = {
+      stash: { name: 'stash', selections: [{ name: 'cards', type: 'elements', multiSelect: { min: 1, max: 2 } }] },
+    };
+    const { controller, boardInteraction } = await wireAll(metadata, fetchPickChoices);
+    await controller.start('stash');
+    await flushAll();
+
+    boardInteraction.startDrag({ id: 99 });
+    await flushAll();
+    boardInteraction.triggerDrop({ id: 21 });
+    await flushAll();
+    expect(controller.multiSelectDraft.value).toEqual({ selectionName: 'cards', values: [21] });
+  });
+
+  it('a disabled destination is not a drop target', async () => {
+    const pieces = [{ id: 1, refs: [{ ref: { id: 1 }, role: 'highlight' as const }] }, { id: 2, refs: [{ ref: { id: 2 }, role: 'highlight' as const }] }];
+    const fetchPickChoices = answerPicks({
+      piece: { validElements: pieces },
+      dest: {
+        choices: [
+          { value: 'a', display: 'A', refs: [{ ref: { id: 100 }, role: 'target' }] },
+          { value: 'b', display: 'B', refs: [{ ref: { id: 101 }, role: 'target' }] },
+          { value: 'c', display: 'C', refs: [{ ref: { id: 102 }, role: 'target' }], disabled: 'blocked' },
+        ],
+      },
+    });
+    const metadata: Record<string, EnrichedActionMetadata> = {
+      place: {
+        name: 'place',
+        selections: [
+          { name: 'piece', type: 'element', validElements: pieces },
+          { name: 'dest', type: 'choice' },
+        ],
+      },
+    };
+    const { boardInteraction } = await wireAll(metadata, fetchPickChoices);
+
+    boardInteraction.startDrag({ id: 1 });
+    await flushAll();
+    expect(boardInteraction.dropTargets.map(t => t.id).sort()).toEqual([100, 101]);
+  });
+
+  /** Two actions, so the bridge opens neither and a drag must start one itself. */
+  function twoActions(pieces: EnrichedValidElement[]) {
+    const fetchPickChoices = answerPicks({
+      piece: { validElements: pieces },
+      dest: {
+        choices: [
+          { value: 'a', display: 'A', refs: [{ ref: { id: 100 }, role: 'target' }] },
+          { value: 'b', display: 'B', refs: [{ ref: { id: 101 }, role: 'target' }] },
+        ],
+      },
+    });
+    const metadata: Record<string, EnrichedActionMetadata> = {
+      move: { name: 'move', selections: [{ name: 'piece', type: 'element', validElements: pieces }, { name: 'dest', type: 'choice' }] },
+      pass: { name: 'pass', selections: [] },
+    };
+    return wireAll(metadata, fetchPickChoices);
+  }
+
+  it('DRAG-TO-START: dragging an enabled piece starts the action and wires the next pick', async () => {
+    const { controller, boardInteraction, sendAction } = await twoActions([
+      { id: 1, disabled: 'pinned', refs: [{ ref: { id: 1 }, role: 'highlight' }] },
+      { id: 2, refs: [{ ref: { id: 2 }, role: 'highlight' }] },
+    ]);
+    expect(controller.currentAction.value).toBeNull();
+
+    boardInteraction.startDrag({ id: 2 });
+    await flushAll();
+    expect(controller.currentAction.value).toBe('move');
+    expect(boardInteraction.dropTargets.map(t => t.id).sort()).toEqual([100, 101]);
+
+    boardInteraction.triggerDrop({ id: 101 });
+    await flushAll();
+    expect(sendAction).toHaveBeenCalledWith('move', { piece: 2, dest: 'b' });
+  });
+
+  it('DRAG-TO-START: a drag matched by notation starts the action with the matched piece, as a click does', async () => {
+    const { controller, boardInteraction, sendAction } = await twoActions([
+      { id: 42, refs: [{ ref: { notation: 'd4' }, role: 'highlight' }] },
+      { id: 43, refs: [{ ref: { notation: 'f4' }, role: 'highlight' }] },
+    ]);
+
+    boardInteraction.startDrag({ notation: 'd4' });
+    await flushAll();
+    expect(controller.currentArgs.value).toEqual({ piece: 42 });
+
+    boardInteraction.triggerDrop({ id: 100 });
+    await flushAll();
+    expect(sendAction).toHaveBeenCalledWith('move', { piece: 42, dest: 'a' });
+  });
+
+  it('dragging a disabled element starts no action', async () => {
+    const fetchPickChoices = vi.fn().mockResolvedValue({ success: true, choices: [] });
+    const metadata: Record<string, EnrichedActionMetadata> = {
+      move: {
+        name: 'move',
+        selections: [
+          { name: 'piece', type: 'element', validElements: [{ id: 1, disabled: 'pinned', refs: [{ ref: { id: 1 }, role: 'highlight' }] }, { id: 2, refs: [{ ref: { id: 2 }, role: 'highlight' }] }] },
+          { name: 'dest', type: 'choice' },
+        ],
+      },
+      pass: { name: 'pass', selections: [] },
+    };
+    const { controller, boardInteraction } = await wireAll(metadata, fetchPickChoices);
+
+    boardInteraction.startDrag({ id: 1 });
+    await flushAll();
+    expect(controller.currentAction.value).toBeNull();
   });
 });

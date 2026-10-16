@@ -120,6 +120,16 @@ function elementClickRef(ve: EnrichedValidElement): ElementRef {
 }
 
 /**
+ * Is the board element `target` this valid element, and may it be chosen? The
+ * one match board clicks and drags use to start or fill a pick (#724).
+ */
+export function isChoosableElement(ve: EnrichedValidElement, target: ElementRef): boolean {
+  if (ve.disabled) return false;
+  if (target.id !== undefined && ve.id === target.id) return true;
+  return !!target.notation && elementClickRef(ve).notation === target.notation;
+}
+
+/**
  * Wire the action controller to the board-interaction substrate. Call ONCE from
  * GameShell setup; it sets up reactive watchers that live for the GameShell
  * lifetime. No-op when boardInteraction is undefined.
@@ -588,11 +598,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
       // triggerElementSelect already handled the click via onElementSelect.
       if (board.onElementSelect) return;
       if (Object.values(currentArgs.value).includes(selected.id)) return;
-      const validElem = offeredElements.value.find(e => {
-        if (selected.id !== undefined && e.id === selected.id) return true;
-        if (selected.notation && elementClickRef(e).notation === selected.notation) return true;
-        return false;
-      });
+      const validElem = offeredElements.value.find(e => isChoosableElement(e, selected));
       if (validElem) void setSelectionValue(currentPick.value.name, validElem.id);
       return;
     }
@@ -602,19 +608,11 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     const elementAction = actionsWithMetadata.value.find(action => {
       const firstSel = action.selections[0];
       if (firstSel?.type !== 'element') return false;
-      return firstSel.validElements?.some(e => {
-        if (selected.id !== undefined && e.id === selected.id) return true;
-        if (selected.notation && elementClickRef(e).notation === selected.notation) return true;
-        return false;
-      });
+      return firstSel.validElements?.some(e => isChoosableElement(e, selected));
     });
     if (!elementAction) return;
     const firstSel = elementAction.selections[0];
-    const validElem = firstSel.validElements?.find(e => {
-      if (selected.id !== undefined && e.id === selected.id) return true;
-      if (selected.notation && elementClickRef(e).notation === selected.notation) return true;
-      return false;
-    });
+    const validElem = firstSel.validElements?.find(e => isChoosableElement(e, selected));
     if (validElem) void startAction(elementAction.name, { args: { [firstSel.name]: validElem.id } });
   });
 }

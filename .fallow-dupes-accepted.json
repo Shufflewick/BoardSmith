@@ -215,13 +215,6 @@
       ]
     },
     {
-      "content": "7472981bfd7c2ddd",
-      "lines": 6,
-      "files": [
-        "src/ui/composables/useBoardActionBridge.ts"
-      ]
-    },
-    {
       "content": "75cfd652675ad8cf",
       "lines": 26,
       "files": [

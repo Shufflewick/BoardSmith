@@ -733,6 +733,38 @@ describe('useBoardActionBridge — disabled actions', () => {
 
     expect(start).not.toHaveBeenCalled();
   });
+
+  it('does NOT start an action from a click on an element that pick disables (#724)', async () => {
+    const board = createBoardInteraction();
+    const validElements: EnrichedValidElement[] = [
+      { id: 5, disabled: 'Surrounded.', refs: [{ ref: { id: 5 }, role: 'highlight' }] },
+      { id: 6, refs: [{ ref: { id: 6 }, role: 'highlight' }] },
+    ];
+    const { controller, start } = makeController({ pick: null, action: null, validElements });
+
+    useBoardActionBridge({
+      controller,
+      boardInteraction: board,
+      isMyTurn: ref(true),
+      autoEndTurn: ref(false),
+      actionMetadata: ref({
+        placeStone: { name: 'placeStone', selections: [{ ...cellPick, validElements }] },
+        pass: { name: 'pass', selections: [] },
+      }),
+      availableActions: ref(['placeStone', 'pass']),
+      disabledActions: ref(undefined),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
+    });
+
+    board.selectElement({ id: 5, name: 'A1' });
+    await nextTick();
+    expect(start).not.toHaveBeenCalled();
+
+    // The control: the enabled element in the same pick does start it.
+    board.selectElement({ id: 6, name: 'B1' });
+    await nextTick();
+    expect(start).toHaveBeenCalledWith('placeStone', { args: { cell: 6 } });
+  });
 });
 
 // ---------------------------------------------------------------------------
