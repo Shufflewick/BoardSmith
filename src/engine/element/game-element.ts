@@ -615,7 +615,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
 
     while (current._t.parent) {
       const parent: GameElement = current._t.parent;
-      path.unshift(parent._t.children.indexOf(current));
+      path.unshift(siblingIndexOf(parent._t.children, current));
       current = parent;
     }
     if (current === this.game?.pile) path.unshift(PILE_BRANCH);
@@ -707,12 +707,23 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     }
 
     if (typeof elementClass !== 'function') {
+      const given: unknown = elementClass;
       throw new Error(
         `Cannot create element: expected a class constructor, got ${typeof elementClass}.\n` +
         `Parent: ${this.constructor.name} "${this.name}"\n` +
-        `Value: ${JSON.stringify(elementClass)}`
+        (isElement(given)
+          ? `Value: the ${given.constructor.name} "${given.name}", an element; pass its class instead.`
+          : `Hint: Pass a GameElement subclass, such as Piece or Space.`)
       );
     }
+
+    // Register class for deserialization before anything is built, so a refusal
+    // (after setup if unregistered, see `registerCreatedElementClass`) leaves
+    // no element behind (#766). Routed through the shared SPACE-04/D25 collision guard (see `registerElementClass` above) — a
+    // built-in default seed is still overridden by the class actually
+    // instantiated, but a DIFFERENT custom class colliding with an
+    // already-registered custom name now throws instead of clobbering.
+    registerCreatedElementClass(this._ctx, elementClass as ElementClass);
 
     let element: T;
     try {
@@ -755,21 +766,13 @@ export class GameElement<G extends Game = any, P extends Player = any> {
         throw new Error(
           `Failed to set attributes on ${elementClass.name} "${name}":\n` +
           `  Error: ${errMsg}\n` +
-          `  Attributes: ${JSON.stringify(attributes)}`
+          `  Attributes: ${Object.keys(attributes).join(', ')}`
         );
       }
     }
 
     // Add to tree
     this.addChild(element);
-
-    // Register class for deserialization (refused after setup if unregistered,
-    // see `registerCreatedElementClass`). Routed through the shared
-    // SPACE-04/D25 collision guard (see `registerElementClass` above) — a
-    // built-in default seed is still overridden by the class actually
-    // instantiated, but a DIFFERENT custom class colliding with an
-    // already-registered custom name now throws instead of clobbering.
-    registerCreatedElementClass(this._ctx, elementClass as ElementClass);
 
     return element;
   }
@@ -1741,6 +1744,23 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   hasId(id: number): boolean {
     return this._t.id === id;
   }
+}
+
+/** Each element's last known place among its siblings: a hint, checked before it is trusted. */
+const siblingHints = new WeakMap<GameElement, number>();
+
+/**
+ * `child`'s index in `siblings`, or -1. Encoding a whole deck's references
+ * asks this once per card, so a scan per call was quadratic (#766); a stale
+ * hint re-indexes every sibling at once.
+ */
+function siblingIndexOf(siblings: readonly GameElement[], child: GameElement): number {
+  let index = siblingHints.get(child);
+  if (index === undefined || siblings[index] !== child) {
+    siblings.forEach((sibling, i) => siblingHints.set(sibling, i));
+    index = siblingHints.get(child);
+  }
+  return index !== undefined && siblings[index] === child ? index : -1;
 }
 
 /**
