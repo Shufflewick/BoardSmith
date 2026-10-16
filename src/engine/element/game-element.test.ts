@@ -8,6 +8,7 @@ import {
   Player,
 } from '../index.js';
 import type { ElementJSON, PlayerViewFunction } from '../index.js';
+import { serializedRoundTrip } from './serialized-round-trip.test-helper.js';
 
 // Test classes
 class TestGame extends Game<TestGame, Player> {}
@@ -665,7 +666,7 @@ describe('Game Restoration', () => {
 
   class RefTestGame extends Game<RefTestGame, Player> {}
 
-  it('should resolve element references after restoration', () => {
+  it('should resolve element references after restoration', async () => {
     // Create original game with element references
     const game = new RefTestGame({ playerCount: 2 });
     game._ctx.classRegistry.set('Squad', Squad);
@@ -687,13 +688,7 @@ describe('Game Restoration', () => {
     // With 2 players as children (indices 0, 1), then rebel (2), squad1 (3), squad2 (4)
     expect(rebelJson?.attributes.primarySquad).toEqual({ __elementRef: '3' }); // squad1 is at index 3
 
-    // Restore game
-    const classRegistry = new Map<string, any>();
-    classRegistry.set('RefTestGame', RefTestGame);
-    classRegistry.set('Squad', Squad);
-    classRegistry.set('RebelPlayer', RebelPlayer);
-
-    const restored = Game.restoreGame(json, RefTestGame, classRegistry, game.getConstructorOptions().elementIdKey as string);
+    const restored = await serializedRoundTrip(game, RefTestGame);
 
     // Verify references were resolved
     const restoredRebel = restored.first({ name: 'rebel1' }) as RebelPlayer;
@@ -706,7 +701,7 @@ describe('Game Restoration', () => {
     expect(restoredSquad2.sectorId).toBe(10);
   });
 
-  it('should resolve nested element references in objects', () => {
+  it('should resolve nested element references in objects', async () => {
     class DataHolder extends Space<TestGame> {
       data?: {
         target?: GameElement;
@@ -731,13 +726,7 @@ describe('Game Restoration', () => {
       },
     };
 
-    const json = game.toJSON();
-    const classRegistry = new Map<string, any>();
-    classRegistry.set('RefTestGame', RefTestGame);
-    classRegistry.set('DataHolder', DataHolder);
-    classRegistry.set('Squad', Squad);
-
-    const restored = Game.restoreGame(json, RefTestGame, classRegistry, game.getConstructorOptions().elementIdKey as string);
+    const restored = await serializedRoundTrip(game, RefTestGame);
     const restoredHolder = restored.first({ name: 'holder' }) as DataHolder;
     const restoredTarget1 = restored.first({ name: 'target1' }) as Squad;
     const restoredTarget2 = restored.first({ name: 'target2' }) as Squad;
@@ -746,7 +735,7 @@ describe('Game Restoration', () => {
     expect(restoredHolder.data?.nested?.anotherTarget).toBe(restoredTarget2);
   });
 
-  it('should resolve element references in arrays', () => {
+  it('should resolve element references in arrays', async () => {
     class Container extends Space<TestGame> {
       items?: Squad[];
     }
@@ -761,13 +750,7 @@ describe('Game Restoration', () => {
 
     container.items = [item1, item2];
 
-    const json = game.toJSON();
-    const classRegistry = new Map<string, any>();
-    classRegistry.set('RefTestGame', RefTestGame);
-    classRegistry.set('Container', Container);
-    classRegistry.set('Squad', Squad);
-
-    const restored = Game.restoreGame(json, RefTestGame, classRegistry, game.getConstructorOptions().elementIdKey as string);
+    const restored = await serializedRoundTrip(game, RefTestGame);
     const restoredContainer = restored.first({ name: 'container' }) as Container;
     const restoredItem1 = restored.first({ name: 'item1' }) as Squad;
     const restoredItem2 = restored.first({ name: 'item2' }) as Squad;
