@@ -50,7 +50,7 @@ import {
 } from './visibility.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor, type PerformOptions } from '../action/action.js';
-import { settingsKeyVisibleTo } from '../action/helpers.js';
+import { hasActionTemp, settingsForSeat } from '../action/helpers.js';
 import type { FlowDefinition, FlowState, FlowDebugInfo } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
 import type { MetricSink } from '../metrics.js';
@@ -4819,7 +4819,7 @@ export class Game<
     return (
       GameClass.playerView !== undefined ||
       this.tutorialProgress.size > 0 ||
-      Object.keys(this.settings).some((key) => !settingsKeyVisibleTo(key, null)) ||
+      hasActionTemp(this.settings) ||
       this._animationEvents.some((event) => event.to !== undefined) ||
       // Each seat's events carry that seat's own numbers (#489), which differ
       // between seats whenever their counters have.
@@ -5223,9 +5223,7 @@ export class Game<
     }
 
     // #716: `settings` is public, except each seat's `actionTempState` values.
-    view.settings = Object.fromEntries(
-      Object.entries(view.settings).filter(([key]) => settingsKeyVisibleTo(key, playerSeat)),
-    );
+    view.settings = settingsForSeat(view.settings, playerSeat);
 
     // #23: enforce `animateTo`'s audience here, the same boundary the message
     // log's is enforced at. The buffer is game-wide and rides in `toJSON()`, so

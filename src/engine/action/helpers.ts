@@ -84,16 +84,24 @@ export interface ActionTempState {
   clear(): void;
 }
 
-const ACTION_TEMP_PREFIX = '_actionTemp_';
+const ACTION_TEMP_KEY = '_actionTemp';
+
+/** `game.settings._actionTemp`: seat, then action name, then key (#725). */
+type ActionTempStore = Record<string, Record<string, Record<string, unknown>>>;
+
+/** Whether `settings` holds any `actionTempState` value, which only its own seat may see. */
+export function hasActionTemp(settings: Record<string, unknown>): boolean {
+  return settings[ACTION_TEMP_KEY] !== undefined;
+}
 
 /**
- * Whether a `game.settings` key may go to a seat's view (#716): an
- * `actionTempState` key only to the seat that wrote it, every other key to all.
- * The seat comes first in the key so an action name cannot be read as one.
+ * `settings` as a seat's view carries it (#716): every key, except that
+ * `actionTempState` values are kept only for the seat that wrote them.
  */
-export function settingsKeyVisibleTo(key: string, seat: number | null): boolean {
-  if (!key.startsWith(ACTION_TEMP_PREFIX)) return true;
-  return seat !== null && key.startsWith(`${ACTION_TEMP_PREFIX}${seat}_`);
+export function settingsForSeat(settings: Record<string, unknown>, seat: number | null): Record<string, unknown> {
+  const { [ACTION_TEMP_KEY]: store, ...rest } = settings;
+  const own = seat === null ? undefined : (store as ActionTempStore | undefined)?.[seat];
+  return own === undefined ? rest : { ...rest, [ACTION_TEMP_KEY]: { [seat!]: own } };
 }
 
 /**
@@ -164,27 +172,27 @@ export function actionTempState(
     actionName = maybeActionName!;
   }
 
-  const prefix = `${ACTION_TEMP_PREFIX}${playerPosition}_${actionName}_`;
-
   return {
     set(key: string, value: unknown): void {
-      game.settings[`${prefix}${key}`] = value;
+      const seats = (game.settings[ACTION_TEMP_KEY] ??= {}) as ActionTempStore;
+      const actions = (seats[playerPosition] ??= {});
+      (actions[actionName] ??= {})[key] = value;
       stateChanged(game._ctx);
     },
 
     get<T>(key: string): T | undefined {
-      return game.settings[`${prefix}${key}`] as T | undefined;
+      const seats = game.settings[ACTION_TEMP_KEY] as ActionTempStore | undefined;
+      return seats?.[playerPosition]?.[actionName]?.[key] as T | undefined;
     },
 
     clear(): void {
-      const keysToDelete: string[] = [];
-      for (const k of Object.keys(game.settings)) {
-        if (k.startsWith(prefix)) {
-          keysToDelete.push(k);
-        }
-      }
-      for (const k of keysToDelete) {
-        delete game.settings[k];
+      const seats = game.settings[ACTION_TEMP_KEY] as ActionTempStore | undefined;
+      const actions = seats?.[playerPosition];
+      if (actions) {
+        delete actions[actionName];
+        // Prune empty levels so an emptied store stops marking views seat-scoped.
+        if (Object.keys(actions).length === 0) delete seats[playerPosition];
+        if (Object.keys(seats).length === 0) delete game.settings[ACTION_TEMP_KEY];
       }
       stateChanged(game._ctx);
     },

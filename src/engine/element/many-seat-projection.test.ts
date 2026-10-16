@@ -402,6 +402,27 @@ describe("#408/#411/#413 -- which seats hold the same projection", () => {
     expect(predicted).toBe(null);
   });
 
+  it("groups seats again once the last actionTempState value is cleared (#725)", () => {
+    const game = newSquare();
+    actionTempState(game, game.getPlayer(1)!, 'peek').set('cardId', 'AS');
+    actionTempState(game, game.getPlayer(1)!, 'peek').clear();
+    expect(game.settings._actionTemp).toBeUndefined();
+    const { predicted, observed } = grouping(game);
+    expect(observed).toEqual([[1, 2]]);
+    expect(predicted).toEqual([[1, 2]]);
+  });
+
+  it("keeps refusing while another seat still holds a value after one clears (#725)", () => {
+    const game = newSquare();
+    actionTempState(game, game.getPlayer(1)!, 'peek').set('cardId', 'AS');
+    actionTempState(game, game.getPlayer(3)!, 'peek').set('cardId', 'KH');
+    actionTempState(game, game.getPlayer(1)!, 'peek').clear();
+    expect(game.settings._actionTemp).toEqual({ 3: { peek: { cardId: 'KH' } } });
+    const { predicted, observed } = grouping(game);
+    expect(observed).toEqual([[1, 2]]);
+    expect(predicted).toBe(null);
+  });
+
   it("refuses while an animation event is addressed to one seat", () => {
     const game = newSquare();
     game.animateTo(1, 'whisper', { to: 'seat one' });
