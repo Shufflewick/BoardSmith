@@ -3480,11 +3480,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
   private seatFor(player: string): number {
     const seat = this.seats.get(player);
     if (seat === undefined) {
-      const known = [...this.seats.keys()];
+      // Never list the roster: the message reaches the caller, who may be anyone (#797).
       throw worldRefusal(
         "unknown-player",
-        `"${player}" is not in this world: it seats ` +
-          `${known.length > 0 ? known.join(", ") : "nobody"}.`,
+        `"${player}" is not in this world. Seat the player before sending their commands.`,
       );
     }
     return seat;
