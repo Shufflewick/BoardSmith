@@ -1,6 +1,6 @@
 {
-  "revision": 203,
-  "surfaceHash": "3aad10f70947c23a",
+  "revision": 204,
+  "surfaceHash": "409ce1ca647d80f0",
   "payloadHash": "e120675dfc7aacb1",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1567,6 +1567,14 @@
       "payloadHash": "e120675dfc7aacb1",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A card's own grant (addVisibleTo, showOnlyTo, showToAll) reveals it through a hidden, count-only or owner-only zone to the granted seats only; a bare addVisibleTo follows the card's current zone (#758)."
+    },
+    {
+      "revision": 204,
+      "date": "2026-10-16",
+      "surfaceHash": "409ce1ca647d80f0",
+      "payloadHash": "e120675dfc7aacb1",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "World schedules refuse a timer armed under an empty key with the new refusal code schedule-key-empty (#790)."
     }
   ]
 }
