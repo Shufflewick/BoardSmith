@@ -246,8 +246,10 @@ function enumerateGatedSelections(
   // never called it — so a bot enumerated moves the engine then rejected, and
   // the pump halted on the rejection with the round never closing for any
   // seat. Every move handed back must be one `performAction` would accept.
+  // A pick's own `validate` refuses a submission the same way (#768).
+  const gated = !!actionDef.validate || actionDef.selections.some((s) => s.validate);
   const accepts = (args: Record<string, unknown>) =>
-    !actionDef.validate
+    !gated
     || executor.validateAction(actionDef, player, argsCallbacksSee(actionDef, args), { followUp }).valid;
   try {
     return enumerateSelections(game, actionDef, player, start, { left: MAX_MULTISELECT_COMBINATIONS }).filter(accepts);
@@ -475,7 +477,8 @@ function nextStep(
   }
   const args = executor.resolveArgs(action, pending.collectedArgs, seatPlayer);
   const offer = selectionValues(game, action, seatPlayer, selection, args, walk.random);
-  return { selection, values: spend(walk, actionDef, selection, offer) ?? (selection.optional ? [null] : []) };
+  const tried = spend(walk, actionDef, selection, offer);
+  return { selection, values: tried?.length ? tried : selection.optional ? [null] : [] };
 }
 
 /**
@@ -779,8 +782,9 @@ function _enumerateRecursive(
   const tried = spend(walk, actionDef, selection, selectionValues(game, actionDef, player, selection, seen, walk.random));
 
   // Nothing to offer (no enabled choice, a text input, a number input that
-  // cannot be listed): skip an optional selection, block a required one.
-  if (tried === null) {
+  // cannot be listed, a multiSelect with fewer candidates than its min): skip
+  // an optional selection, block a required one.
+  if (tried === null || tried.length === 0) {
     if (selection.optional) {
       return _enumerateRecursive(game, actionDef, player, index + 1, currentArgs, walk);
     }
@@ -835,7 +839,7 @@ interface SelectionOffer<T = unknown> {
 
 /**
  * The values both enumeration paths try for one selection, or `null` when it
- * has nothing to offer: no enabled choice, a text input, or a number input
+ * has nothing to offer (an empty list means the same): no enabled choice, a text input, or a number input
  * with no value to offer (see {@link numberInputPicks}). With `random` (a
  * sampling walk), a multiSelect offers one combination drawn with it.
  */

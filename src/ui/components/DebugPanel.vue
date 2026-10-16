@@ -256,6 +256,14 @@ const displayedState = computed(() => {
 /** The player view tree every derivation below walks. */
 const displayedView = computed(() => (displayedState.value as { state?: { view?: unknown } } | null)?.state?.view);
 
+/**
+ * Every tab stays mounted, so a tab is handed state only while it is the one on
+ * screen in an open drawer; otherwise a push would walk the state for each (#748).
+ */
+const shownTab = computed<TabId | null>(() => (panelExpanded.value ? activeTab.value : null));
+const stateFor = (tab: TabId) => (shownTab.value === tab ? displayedState.value : null);
+const viewFor = (tab: TabId) => (shownTab.value === tab ? displayedView.value : undefined);
+
 // ── State tab ───────────────────────────────────────────────────────────────
 
 const showRawState = ref(false);
@@ -264,7 +272,7 @@ const stateSearchQuery = ref('');
 const { expandedPaths, toggleExpand, expandAll: expandTreePaths, collapseAll } = useStateTree();
 
 /** Which rows the State tab's search box leaves standing, and what to open. */
-const stateSearch = computed(() => searchStateTree(displayedState.value, stateSearchQuery.value));
+const stateSearch = computed(() => searchStateTree(stateFor('state'), stateSearchQuery.value));
 
 /**
  * The paths the tree renders as open: what the reader opened, plus whatever the
@@ -285,7 +293,7 @@ function expandAll() {
   expandTreePaths(props.state);
 }
 
-const formattedState = computed(() => formatState(props.state));
+const formattedState = computed(() => (shownTab.value === 'state' && showRawState.value ? formatState(props.state) : ''));
 
 // Copy toast state
 const copyToastVisible = ref(false);
@@ -306,11 +314,11 @@ async function copyNodeToClipboard(value: unknown) {
 }
 
 function copyState() {
-  navigator.clipboard.writeText(formattedState.value);
+  navigator.clipboard.writeText(formatState(props.state));
 }
 
 function downloadState() {
-  const blob = new Blob([formattedState.value], { type: 'application/json' });
+  const blob = new Blob([formatState(props.state)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -434,6 +442,7 @@ async function fetchCustomDebug() {
 // ── Tab-driven refreshing ───────────────────────────────────────────────────
 // Entering a tab loads it, unless it was loaded moments ago; a new game state
 // reloads whichever tab is showing, because that state is what it describes.
+// Opening the drawer reloads it too, since pushes fetch nothing while it is shut.
 
 watch(activeTab, (tab) => {
   if (tab === 'actions' && Date.now() - tracesLastFetched.value > TAB_REFRESH_MAX_AGE_MS) {
@@ -451,15 +460,15 @@ watch(activeTab, (tab) => {
   }
 });
 
-watch(() => props.state, () => {
-  if (activeTab.value === 'actions') {
+watch([() => props.state, panelExpanded], () => {
+  if (shownTab.value === 'actions') {
     fetchActionTraces();
     fetchFlowState();
   }
-  if (activeTab.value === 'history') fetchHistory();
-  if (activeTab.value === 'logs') fetchLogs();
-  if (activeTab.value === 'elements') fetchCustomDebug();
-}, { deep: false });
+  if (shownTab.value === 'history') fetchHistory();
+  if (shownTab.value === 'logs') fetchLogs();
+  if (shownTab.value === 'elements') fetchCustomDebug();
+});
 
 /**
  * How many decks the view holds, for the Decks tab's badge.
@@ -468,7 +477,7 @@ watch(() => props.state, () => {
  * needs, and reading it here keeps the badge from depending on a tab that is
  * not mounted yet.
  */
-const deckCount = computed(() => discoverDecks(displayedView.value).length);
+const deckCount = computed(() => (panelExpanded.value ? discoverDecks(displayedView.value).length : 0));
 
 // ── Controls tab ────────────────────────────────────────────────────────────
 
@@ -542,7 +551,7 @@ function handleRestartClick() {
         <!-- State Tab -->
         <StateTab
           v-show="activeTab === 'state'"
-          :displayed-state="displayedState"
+          :displayed-state="stateFor('state')"
           :formatted-state="formattedState"
           v-model:show-raw-state="showRawState"
           v-model:state-search-query="stateSearchQuery"
@@ -565,7 +574,7 @@ function handleRestartClick() {
         <!-- Elements Tab -->
         <ElementsTab
           v-show="activeTab === 'elements'"
-          :view="displayedView"
+          :view="viewFor('elements')"
           :custom-debug-data="customDebugData"
           :copy="copyNodeToClipboard"
           @highlight-element="emit('highlight-element', $event)"
@@ -574,7 +583,7 @@ function handleRestartClick() {
         <!-- Decks Tab -->
         <DecksTab
           v-show="activeTab === 'decks'"
-          :view="displayedView"
+          :view="viewFor('decks')"
           :copy="copyNodeToClipboard"
         />
 

@@ -1294,8 +1294,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     if (snapshot.gameInstanceId !== undefined) runner.gameInstanceId = snapshot.gameInstanceId;
 
     // Adopt the authoritative element tree. loadSerializedState fully clears and
-    // rebuilds the tree from snapshot.state on its own (see Game.loadSerializedState
-    // / Game.restoreGame), so it stands alone with no prior replay.
+    // rebuilds the tree from snapshot.state on its own (see Game.loadSerializedState),
+    // so it stands alone with no prior replay.
     //
     // `animationFloor` (UNDO-04): absent for a normal full restore (adopt
     // the persisted animation-event seq, today's behavior); supplied only by

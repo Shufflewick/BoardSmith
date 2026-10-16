@@ -1,12 +1,16 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, renameSync, rmSync, copyFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
-import { execFileSync, execSync } from 'node:child_process';
+import { execFileSync, execSync, spawn, type ChildProcess } from 'node:child_process';
+import { once } from 'node:events';
 import { createHash } from 'node:crypto';
 import chalk from 'chalk';
 import ora from 'ora';
 import { getProjectContext } from '../lib/project-context.js';
 import { buildCli, CLI_OUTFILE } from '../lib/build-cli.js';
 import { resolveUserPath } from '../lib/user-path.js';
+import { withCleanupAfter } from '../lib/command-build-dir.js';
+import { takeOsLock } from '../lib/os-lock.js';
+import { gitOutput } from '../lib/git-output.js';
 
 interface PackOptions {
   outDir?: string;
@@ -139,31 +143,47 @@ function tarballsIn(dir: string): string[] {
  * `npm pack` writes into the package directory, so this owns getting the
  * tarball back out of the source tree on every path including the failing one:
  * `*.tgz` is not gitignored, and a stray one is a dirty checkout that stops
- * ShufflewickPub's `vendor:boardsmith` cold (#239).
+ * ShufflewickPub's `vendor:boardsmith` cold (#239). The same goes for the
+ * rewritten `package.json`, on a SIGINT or SIGTERM too (#744).
  */
-function packPackage(
+async function packPackage(
   pkgPath: string,
   outputDir: string,
   version: string
-): string {
+): Promise<string> {
   const pkgJsonPath = join(pkgPath, 'package.json');
   const originalContent = readFileSync(pkgJsonPath, 'utf-8');
   const pkgJson = JSON.parse(originalContent);
   // Tarballs that were already here are the caller's, not ours to move or
   // remove. Only what this pack produced is in scope either way.
   const preexisting = new Set(tarballsIn(pkgPath));
+  let npm: ChildProcess | undefined;
 
-  try {
-    // Write modified package.json with the pack version
+  const restore = (): void => {
+    writeFileSync(pkgJsonPath, originalContent);
+    for (const file of tarballsIn(pkgPath)) {
+      if (!preexisting.has(file)) rmSync(join(pkgPath, file), { force: true });
+    }
+  };
+  // 'exit', not 'close': a prepack script's own children can hold npm's output open.
+  const stopNpm = async (): Promise<void> => {
+    if (!npm || npm.exitCode !== null || npm.signalCode !== null) return;
+    const exited = once(npm, 'exit');
+    npm.kill();
+    await exited;
+  };
+
+  return withCleanupAfter(restore, async () => {
     // Note: workspace: deps are left as-is; npm overrides in target handle resolution
     pkgJson.version = version;
     writeFileSync(pkgJsonPath, JSON.stringify(pkgJson, null, 2) + '\n');
 
-    // Run npm pack in the package directory
-    execSync('npm pack', {
-      cwd: pkgPath,
-      stdio: 'pipe',
-    });
+    // Asynchronous, so a SIGINT or SIGTERM reaches the restore while npm runs.
+    npm = spawn('npm', ['pack'], { cwd: pkgPath, stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    npm.stderr!.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
+    const [code, signal] = await once(npm, 'close');
+    if (code !== 0) throw new Error(`npm pack exited with ${code ?? signal}: ${stderr.trim()}`);
 
     // Find the generated tarball (npm pack creates it in the package dir)
     const tarballName = `${pkgJson.name.replace('@', '').replace('/', '-')}-${version}.tgz`;
@@ -184,16 +204,19 @@ function packPackage(
     }
 
     return basename(destTarball);
-  } catch (error) {
-    // A failure after `npm pack` ran leaves its tarball in the package
-    // directory. Take it back out before reporting.
-    for (const file of tarballsIn(pkgPath)) {
-      if (!preexisting.has(file)) rmSync(join(pkgPath, file), { force: true });
-    }
-    throw error;
-  } finally {
-    // Always restore original package.json
-    writeFileSync(pkgJsonPath, originalContent);
+  }, stopNpm);
+}
+
+/**
+ * The lock file, in the checkout's own git directory, that keeps a second pack
+ * from reading the first one's rewritten `package.json` as the original (#744).
+ */
+async function packLockFile(pkgPath: string): Promise<string> {
+  try {
+    const gitDir = await gitOutput(pkgPath, ['rev-parse', '--absolute-git-dir']);
+    return join(gitDir.trim(), 'boardsmith-pack.flock');
+  } catch {
+    throw new Error(`${pkgPath} is not a git checkout. Run boardsmith pack from the BoardSmith repository root.`);
   }
 }
 
@@ -207,10 +230,10 @@ function packPackage(
  * Only the part of the tree this call had to create is ever removed -- a
  * directory the user already had is theirs.
  */
-export function packAll(
+export async function packAll(
   packages: PackageInfo[],
   outputPath: string,
-): PackResult[] {
+): Promise<PackResult[]> {
   // `recursive` returns the topmost directory it had to create, or undefined
   // when the whole path already existed.
   const createdRoot = mkdirSync(outputPath, { recursive: true });
@@ -218,15 +241,19 @@ export function packAll(
 
   try {
     for (const pkg of packages) {
+      const lock = await takeOsLock(await packLockFile(pkg.path), 'boardsmith pack', `boardsmith pack of ${pkg.name}`);
+      if (typeof lock === 'string') throw new Error(lock);
       let version: string;
       let tarball: string;
       try {
         version = packVersion(pkg);
-        tarball = packPackage(pkg.path, outputPath, version);
+        tarball = await packPackage(pkg.path, outputPath, version);
       } catch (error) {
         throw new Error(
           `npm pack failed for ${pkg.name}: ${error instanceof Error ? error.message : String(error)}`,
         );
+      } finally {
+        await lock.release();
       }
       results.push({ name: pkg.name, tarball, packVersion: version });
     }
@@ -488,7 +515,7 @@ export async function packCommand(options: PackOptions): Promise<void> {
   const packSpinner = ora(`Packing ${packages.map((p) => p.name).join(', ')}...`).start();
   let results: PackResult[];
   try {
-    results = packAll(packages, outputPath);
+    results = await packAll(packages, outputPath);
   } catch (error) {
     packSpinner.fail('Pack failed');
     // Rethrown rather than exited: cli.ts reports a thrown Error as one clean
