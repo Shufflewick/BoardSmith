@@ -15,7 +15,6 @@ import { PersistentMap } from './persistent-map.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE } from './hidden-placeholder.js';
 import type { VisibilityMode, VisibilityState } from './visibility.js';
 import {
-  DEFAULT_VISIBILITY,
   canPlayerSee,
   copyVisibilityState,
   resolveVisibility,
@@ -1349,12 +1348,13 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    * Internal method to add players to visibility list
    */
   addVisibleToInternal(players: number[]): void {
-    if (!this._visibility) {
-      this._visibility = { ...DEFAULT_VISIBILITY, explicit: true };
-    }
-    this._visibility.addPlayers = Array.from(
-      new Set([...(this._visibility.addPlayers ?? []), ...players])
-    );
+    // Without a setting of its own the card stores only the seats and keeps following its current zone (#758);
+    // 'hidden' is what this state alone shows everyone else, which keeps projection signatures apart.
+    const own: VisibilityState = this._visibility ?? { mode: 'hidden', explicit: false };
+    this._visibility = {
+      ...own,
+      addPlayers: Array.from(new Set([...(own.addPlayers ?? []), ...players])),
+    };
   }
 
   // ============================================
@@ -1565,10 +1565,9 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       json.redacted = true;
     }
 
-    // Include visibility if explicitly set. Emit a COPY — `addVisibleTo` etc.
-    // mutate `_visibility` in place, and a snapshot/checkpoint sharing the
-    // live object would be retroactively corrupted by later mutations (CR-02).
-    if (this._visibility?.explicit) {
+    // Include visibility if set, a bare `addVisibleTo` grant included (#758). Emit a COPY — a snapshot/checkpoint
+    // sharing the live object would be retroactively corrupted by later mutations (CR-02).
+    if (this._visibility) {
       json.visibility = copyVisibilityState(this._visibility);
     }
 
