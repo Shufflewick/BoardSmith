@@ -3407,7 +3407,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * is what a reconnect looks like from here and must be free; moving a seated
    * player to another seat is not a reconnect, and silently accepting it would
    * hand one person another person's holdings. A player who has genuinely left
-   * is retired with `unseat` first, and may then be seated anywhere.
+   * is retired with `unseat` first, and may then be seated anywhere. A seat
+   * another player holds is refused the same way, until that holder is unseated.
    */
   seat(player: string, seat: number): void {
     const held = this.seats.get(player);
@@ -3419,6 +3420,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
         `"${player}" already plays seat ${held} in this world and cannot be moved to seat ` +
           `${seat}. A seat is where a player's holdings are; moving one would hand them ` +
           `somebody else's.`,
+      );
+    }
+    const holder = this.holderOf(seat);
+    if (holder !== null && holder !== player) {
+      throw worldRefusal(
+        "seat-conflict",
+        `"${player}" cannot take seat ${seat}: "${holder}" holds seat ${seat} in this world. ` +
+          `Two holders would both command its holdings; unseat "${holder}" first.`,
       );
     }
     this.seats.set(player, seat);
@@ -3468,11 +3477,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
   private seatFor(player: string): number {
     const seat = this.seats.get(player);
     if (seat === undefined) {
-      const known = [...this.seats.keys()];
+      // Never list the roster: the message reaches the caller, who may be anyone (#797).
       throw worldRefusal(
         "unknown-player",
-        `"${player}" is not in this world: it seats ` +
-          `${known.length > 0 ? known.join(", ") : "nobody"}.`,
+        `"${player}" is not in this world. Seat the player before sending their commands.`,
       );
     }
     return seat;

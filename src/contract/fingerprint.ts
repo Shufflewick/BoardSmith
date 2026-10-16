@@ -2035,8 +2035,9 @@ export async function computePayloadHash(): Promise<string> {
   assertCoversFlowLayer(views);
 
   // The whole-game flow state at the same point. The executor hands it to the
-  // platform beside the views, the platform stores it, and the session layer
-  // sends it to every seat, where GameShell reads `availableActions` from it.
+  // platform beside the views and the platform stores it; the session layer
+  // sends each seat only its own cut of it (#778), so this hash does not see
+  // what a seat receives (#968).
   // The per-seat views above resolve turns through `awaitingPlayers` and so
   // could not see #321: a simultaneous step also published a single-seat
   // `currentPlayer` / `availableActions` left over from before it.

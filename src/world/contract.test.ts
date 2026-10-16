@@ -66,6 +66,9 @@ class ReferenceWorldEngine implements WorldEngine {
     if (held !== undefined && held !== seat) {
       throw new Error(`${player} already plays seat ${held}.`);
     }
+    for (const [other, taken] of this.seats) {
+      if (taken === seat && other !== player) throw new Error(`${other} already holds seat ${seat}.`);
+    }
     this.seats.set(player, seat);
   }
 
