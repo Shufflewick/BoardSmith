@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
 
 /** Behaviour a fake worker applies to each request it receives. */
-type WorkerBehaviour = (request: any) => { winRate: number } | { error: string } | 'crash';
+type WorkerBehaviour = (request: any) => { winRate: number } | { error: string } | 'crash' | 'exit';
 
 let behaviour: WorkerBehaviour;
 let createdWorkers: FakeWorker[];
@@ -29,6 +29,11 @@ class FakeWorker extends EventEmitter {
       const outcome = behaviour(request);
       if (outcome === 'crash') {
         this.emit('error', new Error('worker exploded'));
+        return;
+      }
+      if (outcome === 'exit') {
+        // Game code calling process.exit(0): the thread ends with no error event.
+        this.emit('exit', 0);
         return;
       }
       this.emit('message', 'error' in outcome
@@ -68,6 +73,16 @@ const run = (
   options?: { workerCount?: number },
   onProgress?: (completed: number, total: number) => void,
 ) => runParallelBenchmarks('/game.js', 'test', population, config, options, onProgress);
+
+/**
+ * The fake workers answer in microtasks, so the run has settled by the next
+ * macrotask; 'pending' there means it would hang.
+ */
+const settledBeforeNextMacrotask = (promise: Promise<number[]>) =>
+  Promise.race([
+    promise.then((value) => value, (error: unknown) => error),
+    new Promise((resolve) => setImmediate(() => resolve('pending'))),
+  ]);
 
 beforeEach(() => {
   createdWorkers = [];
@@ -159,12 +174,30 @@ describe('runParallelBenchmarks', () => {
     expect(progress).toEqual([[1, 3], [2, 3], [3, 3]]);
   });
 
-  it('scores an individual 0 when its worker reports an error', async () => {
+  it('rejects, naming the candidate and the reason, when its worker reports an error', async () => {
     behaviour = (request) => request.individualIndex === 1
       ? { error: 'benchmark blew up' }
       : { winRate: 0.5 };
-    expect(await run([objectives(10), objectives(20), objectives(30)]))
-      .toEqual([0.5, 0, 0.5]);
+    const outcome = await settledBeforeNextMacrotask(
+      run([objectives(10), objectives(20), objectives(30)], { workerCount: 3 }),
+    );
+    expect(outcome).toBeInstanceOf(Error);
+    expect((outcome as Error).message).toBe(
+      'Benchmarking candidate 2 of 3 for game "test" failed: benchmark blew up',
+    );
+    expect(terminated).toBe(3);
+  });
+
+  it('rejects instead of hanging when a worker exits without an error event', async () => {
+    behaviour = (request) => request.individualIndex === 0 ? 'exit' : { winRate: 0.5 };
+    const outcome = await settledBeforeNextMacrotask(
+      run([objectives(10), objectives(20)], { workerCount: 2 }),
+    );
+    expect(outcome).toBeInstanceOf(Error);
+    expect((outcome as Error).message).toBe(
+      'A benchmark worker for game "test" stopped (exit code 0) while benchmarking candidate 1 of 2.',
+    );
+    expect(terminated).toBe(2);
   });
 
   it('re-queues work lost to a crashed worker instead of dropping it', async () => {
