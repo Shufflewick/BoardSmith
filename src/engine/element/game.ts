@@ -2175,10 +2175,8 @@ export class Game<
     collectJsonIds(json, adoptedIds);
     const worldIds = this._ctx._worldIds!;
 
-    const resident = new Set<number>();
-    forEachInSubtree(this, (element) => resident.add(element._t.id));
-    forEachInSubtree(this.pile, (element) => resident.add(element._t.id));
-    const clash = adoptedIds.find((id) => resident.has(id));
+    // The id index holds every element in the tree and the pile (#755).
+    const clash = adoptedIds.find((id) => this._ctx._elementsById.has(id));
     if (clash !== undefined) {
       throw new Error(
         `Cannot adopt partition "${json.name ?? json.className}": element id ${clash} is already ` +
@@ -5414,7 +5412,7 @@ export class Game<
     }
 
     // Rebuild the tree and the pile from JSON (#655), then rebuild the id index
-    // from the finished tree (#632), so nothing the restore discarded stays in
+    // from the finished tree and pile (#632), so nothing the restore discarded stays in
     // it and every rebuilt element is in it.
     for (const [container, children] of [[this, json.children], [this.pile, json.pile]] as const) {
       container._t.children = [];
@@ -5426,7 +5424,9 @@ export class Game<
       }
     }
     this._ctx._elementsById.clear();
-    forEachInSubtree(this, (element) => this._ctx._elementsById.set(element._t.id, element));
+    for (const root of [this, this.pile]) {
+      forEachInSubtree(root, (element) => this._ctx._elementsById.set(element._t.id, element));
+    }
 
     // Re-attach captured handlers to the rebuilt tree by element id
     // (RST-01/F10). Any handler that cannot be matched is dropped LOUDLY
