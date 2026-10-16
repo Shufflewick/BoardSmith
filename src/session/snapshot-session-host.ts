@@ -1258,7 +1258,7 @@ export class SnapshotSessionHost {
       }
     }
 
-    if (op.type === 'undo' || op.type === 'debugRewind') this.forgetReplacedTree();
+    if (op.type === 'undo' || op.type === 'debugRewind') this.#forgetReplacedTree();
 
     await this.apply(res, seat, pending);
     return res;
@@ -1298,7 +1298,7 @@ export class SnapshotSessionHost {
    * mid-chain against a tree that no longer exists. A rules reload that restored
    * the saved tree keeps the selections: the tree they point into is unchanged.
    */
-  private forgetReplacedTree({ keepPendingSelections = false } = {}): void {
+  #forgetReplacedTree({ keepPendingSelections = false } = {}): void {
     this.transientTeachingState.clear();
     this.narrationText = null;
     if (!keepPendingSelections) this.pendingStates.clear();
@@ -1409,7 +1409,7 @@ export class SnapshotSessionHost {
         this.stopDemo();
         return outcome;
       }
-      this.forgetReplacedTree({ keepPendingSelections: outcome.kind === 'restored' });
+      this.#forgetReplacedTree({ keepPendingSelections: outcome.kind === 'restored' });
       this.demoHistory = [];
       await this.apply(outcome.result);
       return outcome;
@@ -1924,7 +1924,7 @@ export class SnapshotSessionHost {
       this.demoHistory.push(prev);
       throw new Error(`The demo could not step back a move: ${res.error}`);
     }
-    this.forgetReplacedTree();
+    this.#forgetReplacedTree();
     this.demoPaused = true;
     this.demoStepConsume = false;
     this.demoRewound = true;
