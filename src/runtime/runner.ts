@@ -884,6 +884,21 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   notePickTaken(pending: PendingActionState, seat: number): void {
     pending.conditionHeld = this.failedConditionLabels(pending.actionName, seat).length === 0;
+    this.markStalePicks(pending);
+    pending.lastPick = { actions: this.actionHistory.length, picks: pending.currentSelectionIndex };
+  }
+
+  /**
+   * When an action was applied since `pending`'s latest open-leaving pick,
+   * mark the picks made by then for `executePendingAction` to re-check (#767).
+   * The pending action's own picks never add to the history, so their changes
+   * (an `onSelect` taking its own pick off the offer) never mark a pick.
+   * Called after each pick that leaves the action open and before it runs.
+   */
+  markStalePicks(pending: PendingActionState): void {
+    if (pending.lastPick && pending.lastPick.actions !== this.actionHistory.length) {
+      pending.stalePicksBelow = pending.lastPick.picks;
+    }
   }
 
   /**
@@ -1041,6 +1056,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     playerPosition: number
   ): PendingStepResult & { actionComplete: true } {
     const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs);
+    this.markStalePicks(pendingState);
     const actionResult = executor.executePendingAction(action, player, pendingState);
     this.pendingActions.delete(playerPosition);
 

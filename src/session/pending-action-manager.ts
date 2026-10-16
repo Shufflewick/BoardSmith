@@ -327,6 +327,7 @@ export class PendingActionManager<G extends Game = Game> {
       pendingState.collectedArgs,
     );
 
+    this.#runner.markStalePicks(pendingState);
     const actionResult = executor.executePendingAction(action, player, pendingState);
     this.#pendingActions.delete(playerPosition);
 

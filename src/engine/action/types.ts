@@ -197,6 +197,18 @@ export interface PendingActionState {
    * own picks ended (allowed), and `GameRunner.notePickTaken` writes it (#493).
    */
   conditionHeld?: boolean;
+  /**
+   * How many actions the game's history held (`actionHistory.length`) and how
+   * many selections this pending action had completed, right after this seat's
+   * latest pick that left it open. `GameRunner.notePickTaken` writes it (#767).
+   */
+  lastPick?: { actions: number; picks: number };
+  /**
+   * Picks at a selection index below this were made before another action
+   * was applied, so `executePendingAction` checks each non-repeating one is
+   * still on offer before running. `GameRunner.markStalePicks` writes it (#767).
+   */
+  stalePicksBelow?: number;
 }
 
 /**

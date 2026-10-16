@@ -1013,6 +1013,20 @@ left out, or a value the game does not offer, is refused, and the pending
 action is cancelled. A held follow-up's published args come from the engine,
 never from `initialArgs`, and an initial arg that names no pick is not taken.
 
+**Its earlier picks must still be on offer when it runs** (#767). When another
+action was applied after one of the seat's picks, that pick is checked again,
+as a whole submission checks it, before the action runs: in a simultaneous
+step, seat 2 grabbing the gem seat 1 picked for `draft` refuses seat 1's
+`draft` with the pick's `unavailable` sentence (or the default "That choice is
+no longer available" one). `onCancel` runs for each pick whose `onSelect` ran,
+and nothing is recorded. Changes the action's own picks made do not count: a
+pick its own `onSelect` took off the offer still completes, and a repeating
+pick is never checked again. Limit: once another action was applied, the check
+sees the game with the action's own `onSelect` changes in it too, so a pick its
+own `onSelect` took off the offer is then refused.
+`GameRunner.markStalePicks` marks which picks to check, from the action count
+in the game's history at each pick.
+
 #### Why not just refuse inside `execute`?
 
 Returning `{ success: false, error }` from `execute` is too late: the action has

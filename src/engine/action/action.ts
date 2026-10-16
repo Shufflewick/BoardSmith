@@ -2290,7 +2290,7 @@ export class ActionExecutor {
   }
 
   /**
-   * Why the action-level `validate` gate refuses a COMPLETE pending action, or
+   * Why a stale earlier pick or the action-level `validate` gate refuses a COMPLETE pending action, or
    * `null` when it may run. Runs nothing else: move enumeration asks this of a
    * pending action it assembled so it offers only moves `executePendingAction`
    * would accept.
@@ -2304,7 +2304,8 @@ export class ActionExecutor {
       return 'Action is not complete';
     }
     const args = this.resolveArgs(action, pendingState.collectedArgs, player);
-    return this.checkActionValidate(action, { game: this.game, player, args });
+    return this.stalePickRefusal(action, player, pendingState, args)
+      ?? this.checkActionValidate(action, { game: this.game, player, args });
   }
 
   /**
@@ -2332,15 +2333,37 @@ export class ActionExecutor {
       args: resolvedArgs,
     };
 
-    const validateError = this.checkActionValidate(action, context);
-    if (validateError) {
+    const refusal = this.stalePickRefusal(action, player, pendingState, resolvedArgs)
+      ?? this.checkActionValidate(action, context);
+    if (refusal) {
       // The action never runs, so nothing it would have mutated has happened;
       // but selections that already fired onSelect must be compensated, the
       // same as any other abort before execute.
       this.fireOnCancelCallbacks(action, pendingState);
-      return { success: false, error: validateError };
+      return { success: false, error: refusal };
     }
 
     return this.runExecute(action, resolvedArgs, context);
+  }
+
+  /**
+   * Why an earlier pick another action was applied after is no longer on offer
+   * (`pendingState.stalePicksBelow`, #767), or `null` when each still is. A
+   * repeating pick is not re-checked: its own `onEach` may have spent what it
+   * picked.
+   */
+  private stalePickRefusal(
+    action: ActionDefinition,
+    player: Player,
+    pendingState: PendingActionState,
+    args: Record<string, unknown>
+  ): string | null {
+    for (const selection of action.selections.slice(0, pendingState.stalePicksBelow ?? 0)) {
+      const value = args[selection.name];
+      if (value === undefined || value === null || this.isRepeatingSelection(selection)) continue;
+      const result = this.validateSelection(selection, value, player, args, action.name);
+      if (!result.valid) return result.errors.join('; ');
+    }
+    return null;
   }
 }
