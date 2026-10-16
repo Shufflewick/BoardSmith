@@ -14,7 +14,7 @@ import {
   formatUnknownKeyWarnings,
   shouldOpenBrowser,
   resolvePlayerCount,
-  resolveColorPalette,
+  resolveColorOption,
   parseGameOptionFlags,
   resolvePreset,
 } from './dev.js';
@@ -205,26 +205,37 @@ describe('resolvePlayerCount (D14/DEVHOST-02: default --players to gameDefinitio
   });
 });
 
-describe('resolveColorPalette (D16/DEVHOST-04: gameDefinition.colorPalette -> boardsmith.json -> engine default)', () => {
-  it('honors gameDefinition.colorPalette when config has none', () => {
-    const palette = resolveColorPalette(
-      { colorPalette: [{ id: 'a', hex: '#111111', label: 'A' }] },
-      {},
+describe('resolveColorOption: a game\'s own colour option -> gameDefinition.colorPalette -> boardsmith.json -> engine default', () => {
+  it('keeps a game\'s own declared colour option, its list and its label', () => {
+    const declared = {
+      type: 'color' as const,
+      label: 'Team Colour',
+      choices: [{ value: '#111111', label: 'Coal' }, { value: '#eeeeee', label: 'Snow' }],
+    };
+    const option = resolveColorOption(
+      { playerOptions: { color: declared }, colorPalette: [{ id: 'a', hex: '#222222', label: 'A' }] },
+      { colorPalette: [{ value: '#999999', label: 'Config' }] },
     );
-    expect(palette).toEqual([{ value: '#111111', label: 'A' }]);
+    expect(option).toEqual(declared);
+  });
+
+  it('honors gameDefinition.colorPalette when config has none', () => {
+    const option = resolveColorOption({ colorPalette: [{ id: 'a', hex: '#111111', label: 'A' }] }, {});
+    expect(option).toEqual({ type: 'color', label: 'Color', choices: [{ value: '#111111', label: 'A' }] });
   });
 
   it('prefers gameDefinition.colorPalette over boardsmith.json config.colorPalette', () => {
-    const palette = resolveColorPalette(
+    const option = resolveColorOption(
       { colorPalette: [{ id: 'a', hex: '#222222', label: 'A' }] },
       { colorPalette: [{ value: '#999999', label: 'Config' }] },
     );
-    expect(palette).toEqual([{ value: '#222222', label: 'A' }]);
+    expect(option.choices).toEqual([{ value: '#222222', label: 'A' }]);
   });
 
-  it('falls back to the engine DEFAULT_COLOR_PALETTE when neither source declares a palette', () => {
-    const palette = resolveColorPalette({}, {});
-    expect(palette.map((p) => p.value)).toEqual([...DEFAULT_COLOR_PALETTE]);
+  it('falls back to the engine palette, named, when nothing declares one', () => {
+    const option = resolveColorOption({}, {});
+    expect(option.choices.map((p) => p.value)).toEqual([...DEFAULT_COLOR_PALETTE]);
+    expect(option.choices).toContainEqual({ value: '#2c3e50', label: 'Black' });
   });
 });
 

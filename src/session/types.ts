@@ -148,7 +148,8 @@ export interface GameDefinition {
    * `boardsmith validate`'s `colorPalette` check — do not diverge from it.
    *
    * Dev (`boardsmith dev`) resolves the effective palette in this order:
-   * `gameDefinition.colorPalette` -> `boardsmith.json` `colorPalette` ->
+   * a declared `playerOptions.color` -> `gameDefinition.colorPalette` ->
+   * `boardsmith.json` `colorPalette` ->
    * the engine's `DEFAULT_COLOR_PALETTE`. `publish` already writes
    * `manifest.colorPalette` from its own source; this field unifies the
    * game-authored declaration so dev matches what publish emits.
