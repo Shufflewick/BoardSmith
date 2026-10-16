@@ -56,7 +56,7 @@ describe('determinization and reused choices (#631)', () => {
     game.startFlow();
 
     // The seat's redacted sandbox, restored as the bot restores it.
-    const snapshot = createSnapshot(game, 'safe', [], undefined, { forSeat: 1 });
+    const snapshot = createSnapshot(game, 'safe', [], undefined, { forSeat: 1, reseed: 'sandbox' });
     const sandbox = new SafeGame(snapshot.gameOptions as GameOptions);
     sandbox.loadSerializedState(snapshot.state);
     sandbox.restoreFlowState(snapshot.flowState!);

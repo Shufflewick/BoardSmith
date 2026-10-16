@@ -163,7 +163,7 @@ describe('MCTS Game Clone Constructor Options', () => {
     expect(() => (bot as any).restoreGame(withoutOptions)).toThrow(/without gameOptions/);
   });
 
-  it('should include seed in gameOptions', () => {
+  it("gives the search game neither the game's seed nor its random position (#776)", () => {
     const game = new ConfigTestGame({
       playerCount: 2,
       playerNames: ['Player 1', 'Player 2'],
@@ -171,19 +171,13 @@ describe('MCTS Game Clone Constructor Options', () => {
     });
     game.startFlow();
 
-    const bot = new MCTSBot(
-      game,
-      ConfigTestGame,
-      'config-test',
-      1,
-      [],
-      { iterations: 1, playoutDepth: 1 }
-    );
-
+    const bot = new MCTSBot(game, ConfigTestGame, 'config-test', 1, [], { iterations: 1, playoutDepth: 1, seed: 'bot' });
     const snapshot = (bot as any).captureSnapshot();
+    const sandbox = (bot as any).restoreGame(snapshot) as ConfigTestGame;
 
-    // Verify seed is in gameOptions
-    expect(snapshot.gameOptions).toBeDefined();
-    expect(snapshot.gameOptions.seed).toBe('specific-seed-123');
+    // Holding either would let the search read the real game's next draws.
+    expect(snapshot.gameOptions.seed).not.toBe('specific-seed-123');
+    expect(snapshot.randomState).not.toBe(game.getRandomState());
+    expect(sandbox.random()).not.toBe(game.random());
   });
 });

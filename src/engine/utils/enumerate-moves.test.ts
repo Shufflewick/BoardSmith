@@ -238,6 +238,31 @@ describe('enumerateLegalMoves: function-valued multiSelect', () => {
   });
 });
 
+// Two equal choices are one value twice: each combination is listed once (#776).
+class CoinGame extends Game<CoinGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(
+      Action.create<CoinGame>('spend')
+        .chooseFrom('coins', { choices: ['gold', 'silver', 'gold'], multiSelect: { min: 2, max: 2 } })
+        .execute(() => ({ success: true })),
+    );
+    this.setFlow({ root: actionStep({ actions: ['spend'] }) });
+  }
+}
+
+describe('enumerateLegalMoves: duplicate-valued multiSelect choices', () => {
+  it('lists each combination of values once (#776)', () => {
+    const game = new CoinGame({ playerCount: 1, playerNames: ['Alice'], seed: 'coins' });
+    game.startFlow();
+
+    expect(enumerateLegalMoves(game, 1).map((move) => move.args.coins)).toEqual([
+      ['gold', 'gold'],
+      ['gold', 'silver'],
+    ]);
+  });
+});
+
 // ============================================================================
 // A required selection whose choices resolve to `undefined` must not produce a
 // "move". This is the 1-2 Punch stall: the second selection's `choices` closure
