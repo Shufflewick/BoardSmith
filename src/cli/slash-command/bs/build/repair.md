@@ -84,21 +84,19 @@ recorded disposition is done and is not redone or clobbered by a resuming sessio
 
 ## A Fix Is Not Done Until `boardsmith verify` Passes
 
-A finding recorded `fixed` changed code, and code that changed is re-checked by the same policy
-gate the test step ends with. Commit the round's fixes,
-then run `npx boardsmith verify --chunk <slug>` (`state-machine.md` "Git Protocol" says what it
-measures from): by default the full suite, typecheck, build, validate, the smoke test and a mutation check of the changed
-lines, recorded for that commit. For explicit focused opt-in, apply `state-machine.md` "Focused
-Verification Policy" to this section's verify and test-step commands. A round is not done, and the next audit round is not dispatched,
+A finding recorded `fixed` changed code, and code that changed is re-checked by the same gate the
+test step ends with. Commit the round's fixes, then run `npx boardsmith verify --chunk <slug>`
+(`state-machine.md` "Git Protocol" says what it measures from): the chunk's fast checks, its tests
+and typecheck, recorded for that commit. A round is not done, and the next audit round is not dispatched,
 until it exits zero on a clean tree. When it fails, the failed check says what to fix and what to
 run next; that is more repair work in this round, not a new finding. Never say a fix is done or the
-suite is green on anything else: `chunk-signoff` refuses a commit with no passing result covering
-the chunk's change, and a later step asks `npx boardsmith verify --check --chunk <slug>`. A failing
+suite is green on anything else: `chunk-signoff` refuses a commit with no passing `verify --chunk
+<slug>` result, and a later step asks `npx boardsmith verify --check --chunk <slug>`. A failing
 verify is a failure of this repair at its role, handled by the ladder in "Repair Loop Bound" above.
 
 A round that adds a new test file that runs the game's code (a measurement test, a regression test
 for the finding) adds a Spec Manifest row for it, as `build/build.md` says for a regression test,
-and runs `npx boardsmith test-step-check <slug>` before verify: under the default full policy only Spec Manifest files are
+and runs `npx boardsmith test-step-check <slug>` before verify: only Spec Manifest files are
 mutation-tested, and that command fails on a new test file left outside the manifest.
 
 ## Round-3 User Triage — Plain Language, Never Raw

@@ -112,10 +112,7 @@ async function coverageProblem(projectDir: string, result: VerifyResult, base: B
 /** The verify result that vouches for publishing HEAD, or why there is none. */
 async function publishableResult(projectDir: string, head: string, base: Base): Promise<VerifyResult | string> {
   const result = await readVerifyResult(projectDir, head);
-  // Before verifiedProblem, which accepts a focused result and refuses one for focused reasons.
-  if (typeof result === 'object' && result.scope !== undefined) {
-    return `The \`boardsmith verify\` result for ${short(head)} is a focused one: it ran only the authored tests and typecheck.`;
-  }
+  // verifiedProblem with no chunk refuses a chunk's fast checks: publish takes only the full verify.
   const problem = await verifiedProblem(projectDir);
   if (problem !== undefined) return problem;
   // verifiedProblem refuses a missing or unreadable result, so this one is readable.

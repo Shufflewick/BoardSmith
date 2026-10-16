@@ -17,8 +17,6 @@ import { extractSection, parseRulings, stripHtmlComments } from './build-manifes
 import { ENTRY_NUMBER, entryHeadingPattern } from '../lib/ledger-entries.js';
 import { escapeRegExp } from '../lib/regexp.js';
 import { toolCommand } from '../lib/run-tool.js';
-import { runAuthoredTests, type FocusedVerificationScope } from '../lib/authored-tests.js';
-import { focusedPolicyScope } from '../lib/focused-policy.js';
 
 /**
  * `boardsmith constraint-check [slug]`: does the project hold its own hard constraints (#288)?
@@ -97,9 +95,6 @@ interface ConstraintCheckResult {
   /** The test files a full check runs. */
   tests: string[];
   refusals: string[];
-  scope?: FocusedVerificationScope;
-  authored?: { files: number; tests: number; passed: number };
-  deferred?: string;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -490,17 +485,16 @@ function report(result: ConstraintCheckResult, slug: string | undefined, json: b
     for (const refusal of result.refusals) console.error(`  • ${refusal}`);
     return;
   }
-  const tests = result.scope
-    ? `; ${result.authored?.passed ?? 0} authored tests passed. ${result.deferred}`
-    : result.tests.length ? `; ${result.tests.length} measurement test file(s) passed.` : '.';
+  const tests = result.tests.length ? `; ${result.tests.length} measurement test file(s) passed.` : '.';
   console.log(
     chalk.green(`✓ ${result.constraints.length} hard constraint(s) and ${result.structures.length} growing structure(s) hold${tests}`),
   );
 }
 
 /**
- * The CLI entry. Checks structure and runs measurements, or the committed authored selection
- * under focused policy. With a slug it also checks the constraints lens's review.
+ * The CLI entry. Exits non-zero on any refusal. Always runs the measured tests: with no slug this
+ * is the whole-tree check a merge re-runs on the combined result, and with a slug it is what the
+ * audit step runs after the constraints lens has written the chunk's review.
  */
 export async function constraintCheckCommand(
   slug: string | undefined,
@@ -513,13 +507,7 @@ export async function constraintCheckCommand(
     return;
   }
   const projectDir = resolve(options.project ?? process.cwd());
-  const scope = await focusedPolicyScope(projectDir);
-  const result = await checkConstraints(projectDir, { slug, runTests: scope ? undefined : options.runTests ?? runVitest });
-  if (scope) {
-    result.scope = scope;
-    result.deferred = 'Other measurement tests are deferred to the required full verification.';
-    if (result.refusals.length === 0) result.authored = (await runAuthoredTests(projectDir, scope.selection.path)).counts;
-  }
+  const result = await checkConstraints(projectDir, { slug, runTests: options.runTests ?? runVitest });
   report(result, slug, options.json);
   if (result.refusals.length) process.exitCode = 1;
 }

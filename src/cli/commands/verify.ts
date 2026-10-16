@@ -23,29 +23,25 @@
  *                 by every worktree, so a merge reuses what a worktree ran when the merged tree is
  *                 the one it verified (main has not moved, or the branch merged main and verified).
  *
- * An explicit `--selection <path>` in a policy-opted-in project runs only its declared authored
- * tests and typecheck. Its receipt records focused scope and the committed selection hash;
- * omitted full checks are deferred to agent-policy's five-ticket cadence, never reported passed.
- *
  * The base is the merge base of HEAD with `--base`, or with the main branch (`main`, else `master`).
  * On the main branch itself that merge base is HEAD, which measures no change, so without `--base`
- * the mutation check fails there and says to pass the commit the work started from. For chunk work
- * `--chunk <slug>` sets the base to the chunk's verify base, the commit before its first
- * `chunk-<slug>/` commit (`lib/chunk-commits.ts`), wherever the chunk is built, and records the
- * chunk in the result.
+ * the mutation check fails there and says to pass the commit the work started from.
+ *
+ * `--chunk <slug>` runs only the fast checks a chunk's gates need (#985): the test files the chunk
+ * added or changed since its verify base, the commit before its first `chunk-<slug>/` commit
+ * (`lib/chunk-commits.ts`), and typecheck. It records the chunk in the result. The full checks
+ * above run once, before publish (#984), not per chunk.
  *
  * A tree with uncommitted changes is refused before any check runs: a result is tied to a commit.
  * The result goes to `.boardsmith/verify/<commit>.json` (`lib/verify-result.ts`), with whether the
  * tree stayed clean while the checks ran. The exit code is non-zero when any check failed, and also
  * when the tree changed during the run; such a run never replaces a clean passing result on file.
  *
- * `--check` runs nothing. It exits 0 only when HEAD, on a clean tree, has a passing result, and
- * otherwise says what to run. With `--chunk <slug>` the result must also have measured that chunk's
- * whole change: its base is the chunk's verify base or a commit before it, so a `--base HEAD` run,
- * which mutates nothing, cannot stand in for it. `chunk-signoff <slug>` asks that question, and
- * `chunk-gate-transition`, which builds no chunk, the plain one (`verifiedProblem`).
+ * `--check` runs nothing. It exits 0 only when HEAD, on a clean tree, has a passing full result.
+ * With `--chunk <slug>` it asks instead for that chunk's passing fast checks, the question
+ * `chunk-signoff <slug>` and `review-gate <slug>` ask too (`verifiedProblem`).
  */
-import { promises as fs, readFileSync } from 'node:fs';
+import { existsSync, promises as fs, readFileSync } from 'node:fs';
 import { join, relative, resolve as pathResolve } from 'node:path';
 import chalk from 'chalk';
 import { chunkVerifyBase } from '../lib/chunk-commits.js';
@@ -53,13 +49,12 @@ import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { type MutantCache, openMutantCache } from '../lib/mutant-cache.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { projectUiProblem, requireGameProject } from '../lib/game-project.js';
+import { chunkMdPath } from '../lib/project-paths.js';
 import { gameTestRunProblem } from '../lib/test-run-scope.js';
-import { runAuthoredTests } from '../lib/authored-tests.js';
-import { focusedPolicyScope } from '../lib/focused-policy.js';
 import { discardRecord, runVitestRecorded, testRunVerdict } from '../lib/vitest-run.js';
 import {
   VERIFY_CHECK_NAMES,
-  FOCUSED_VERIFY_CHECK_NAMES,
+  CHUNK_VERIFY_CHECK_NAMES,
   type VerifyCheckName,
   type VerifyCheckOutcome,
   type VerifyCheckResult,
@@ -72,7 +67,7 @@ import {
   verifiedProblem,
   writeVerifyResult,
 } from '../lib/verify-result.js';
-import { isChunkCode } from './test-step-check.js';
+import { isChunkCode, isTestFile, parseSpecManifest } from './test-step-check.js';
 import { runSmoke } from './smoke.js';
 import { runDiffMutationCheck } from './test-step-mutation.js';
 import { buildProject } from './build.js';
@@ -200,9 +195,11 @@ interface VerifyContext {
   projectDir: string;
   head: string;
   base: { ref: string; commit: string; given: boolean };
+  /** The chunk `--chunk` named, whose fast checks run instead of the full ones (#985). */
+  chunk?: string;
   changed: ChangedSince;
-  /** Mutant outcomes of earlier runs, for this commit's code and tests (`lib/mutant-cache.ts`). */
-  mutantCache: MutantCache;
+  /** Mutant outcomes of earlier runs, for this commit's code and tests (`lib/mutant-cache.ts`), opened on first ask. */
+  mutantCache: () => Promise<MutantCache>;
   earlier: ReadonlyMap<VerifyCheckName, VerifyCheckResult>;
   log: (line: string) => void;
   /**
@@ -259,24 +256,24 @@ function suiteCounts(report: VitestJsonReport): Record<string, number> {
   };
 }
 
-/** A failed suite whose report names the failing files, said relative to what the change touched. */
-function failedSuite(report: VitestJsonReport, failing: string[], changed: ReadonlySet<string>): VerifyCheckOutcome {
+/** A failed run whose report names the failing files, said relative to what the change touched. */
+function failedSuite(report: VitestJsonReport, failing: string[], changed: ReadonlySet<string>, suite: string): VerifyCheckOutcome {
   const tests = report.numFailedTests;
   const what = tests > 0 ? `${plural(tests, 'test')} failed` : `${plural(failing.length, 'test file')} could not run`;
   const one = failing.length === 1 && tests <= 1;
   return {
     passed: false,
-    summary: `${what} in the full suite, in ${whereTestsFailed(failing, changed)}.`,
+    summary: `${what} in ${suite}, in ${whereTestsFailed(failing, changed)}.`,
     next: `Run \`boardsmith test\` to see ${one ? 'it' : 'them'}.`,
     counts: suiteCounts(report),
   };
 }
 
-/** The full suite as `boardsmith test` runs it, plus a JSON report for the counts. */
-function runSuite(dir: string) {
+/** The suite as `boardsmith test` runs it, or only `files` when given, plus a JSON report for the counts. */
+function runSuite(dir: string, files: string[]) {
   return withCommandBuildDir(dir, 'verify', async (workDir) => {
     const reportPath = join(workDir, 'test-report.json');
-    const run = await runVitestRecorded(['--reporter=json', `--outputFile.json=${reportPath}`], dir);
+    const run = await runVitestRecorded(['--reporter=json', `--outputFile.json=${reportPath}`, ...files], dir);
     const verdict = testRunVerdict(run, run.progress, { cwd: dir, logPath: run.logPath });
     return { run, verdict, report: await readJsonReport(reportPath) };
   });
@@ -288,10 +285,11 @@ async function unpassedSuite(
   verdict: string | undefined,
   report: VitestJsonReport | undefined,
   changed: ReadonlySet<string>,
+  suite: string,
 ): Promise<VerifyCheckOutcome> {
   const root = await fs.realpath(dir);
   const failing = (report?.testResults ?? []).filter((f) => f.status === 'failed').map((f) => relative(root, f.name));
-  if (report && failing.length > 0) return failedSuite(report, failing, changed);
+  if (report && failing.length > 0) return failedSuite(report, failing, changed, suite);
   return {
     passed: false,
     summary: (verdict ?? 'vitest passed but wrote no report, so the run cannot be counted.').split('\n').join(' '),
@@ -300,15 +298,50 @@ async function unpassedSuite(
   };
 }
 
-/** 1. The full suite, run the way `boardsmith test` runs it. */
+/** The test files a chunk added or changed since its base, which `--chunk` runs instead of the suite. */
+function chunkTestFiles(ctx: VerifyContext): string[] {
+  return ctx.changed.files.filter((path) => isTestFile(path) && existsSync(join(ctx.projectDir, path)));
+}
+
+/**
+ * A chunk that added or changed no test file: it passes on typecheck alone only when its Spec
+ * Manifest marks it exempt (`build/spec.md` "Exemptions"); any other chunk must add or change a test.
+ */
+async function noChunkTests(projectDir: string, chunk: string, base: string): Promise<VerifyCheckOutcome> {
+  const text = await fs.readFile(chunkMdPath(projectDir, chunk), 'utf-8').catch(() => undefined);
+  const exemption = text === undefined ? undefined : parseSpecManifest(text).exemption;
+  if (exemption !== undefined) {
+    return {
+      passed: true,
+      summary:
+        `No test ran: chunk "${chunk}" added or changed no test file, and its Spec Manifest marks it exempt ` +
+        `("${exemption}"), so typecheck alone is its fast check.`,
+    };
+  }
+  return {
+    passed: false,
+    summary: `Chunk "${chunk}" added or changed no test file since its base (${short(base)}), so no test of its own ran.`,
+    next:
+      `Write the chunk's tests (its test step), or mark a chunk with no new game behavior exempt in its Spec Manifest ` +
+      `(build/spec.md "Exemptions"), commit, then run \`boardsmith verify --chunk ${chunk}\` again.`,
+  };
+}
+
+/** 1. The full suite, run the way `boardsmith test` runs it; with `--chunk`, the chunk's own test files. */
 async function testCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   const cannot = await suiteCannotRun(ctx.projectDir);
   if (cannot) return cannot;
-  const { run, verdict, report } = await runSuite(ctx.projectDir);
-  if (verdict !== undefined || !report) return unpassedSuite(ctx.projectDir, verdict, report, new Set(ctx.changed.files));
+  const files = ctx.chunk === undefined ? [] : chunkTestFiles(ctx);
+  if (ctx.chunk !== undefined && files.length === 0) return noChunkTests(ctx.projectDir, ctx.chunk, ctx.base.commit);
+  const suite = ctx.chunk === undefined ? 'the full suite' : "the chunk's tests";
+  // Real absolute paths, as vitest names test files, so its filename filter matches only these.
+  const root = await fs.realpath(ctx.projectDir);
+  const { run, verdict, report } = await runSuite(ctx.projectDir, files.map((path) => join(root, path)));
+  if (verdict !== undefined || !report) return unpassedSuite(ctx.projectDir, verdict, report, new Set(ctx.changed.files), suite);
   discardRecord(run);
   const counts = suiteCounts(report);
-  return { passed: true, summary: `${plural(counts.passed, 'test')} passed in ${plural(counts.files, 'file')}.`, counts };
+  const where = ctx.chunk === undefined ? plural(counts.files, 'file') : `${plural(counts.files, 'file')} the chunk added or changed`;
+  return { passed: true, summary: `${plural(counts.passed, 'test')} passed in ${where}.`, counts };
 }
 
 /** 2. vue-tsc over the project's tsconfig.json, the run `validate` reports too. */
@@ -397,7 +430,7 @@ function mutationVerdict(since: string, run: Awaited<ReturnType<typeof runDiffMu
         `the whole suite still passed with the code changed.${reuse}`,
       next:
         'For each one, add or tighten a test so it fails when that line is changed that way, then run `boardsmith verify` again. ' +
-        'For a demonstrated equivalent under an explicit valid-input contract, use `boardsmith mutation-equivalence <id> --contract <text> --proof <text>` with the same --base or --chunk, review the ledger and commit it with `git commit -S`.',
+        'For a demonstrated equivalent under an explicit valid-input contract, use `boardsmith mutation-equivalence <id> --contract <text> --proof <text>` with the same --base, review the ledger and commit it with `git commit -S`.',
       counts,
       findings: survivors.map((s) => ({ file: s.file, line: s.line, detail: `${s.description}: no test failed`, ...(s.id ? { mutantId: s.id } : {}) })),
       ...(equivalence ? { equivalence } : {}),
@@ -420,7 +453,7 @@ async function mutationCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   const run = await runDiffMutationCheck({
     projectDir: ctx.projectDir,
     added: ctx.changed.code,
-    cache: ctx.mutantCache,
+    cache: await ctx.mutantCache(),
     log: ctx.log,
   });
   return mutationVerdict(since, run);
@@ -546,7 +579,6 @@ export async function runVerify(options: {
   projectDir: string;
   base?: string;
   chunk?: string;
-  selection?: string;
   checks?: Readonly<Record<VerifyCheckName, CheckRunner>>;
   log?: (line: string) => void;
 }): Promise<{ result: VerifyResult; path: string | undefined }> {
@@ -554,54 +586,36 @@ export async function runVerify(options: {
   requireGameProject(projectDir);
   const head = await verifiableCommit(projectDir);
   await requireResultIgnored(projectDir);
-  const scope = options.selection === undefined ? undefined : await focusedPolicyScope(projectDir);
-  if (options.selection !== undefined && scope?.selection.path !== options.selection) {
-    throw new Error('The committed policy must explicitly opt into focused verification with this selection. Use its configured selection path.');
-  }
-  const base = scope === undefined
-    ? await runBase(projectDir, options)
-    : { ref: `authored selection ${scope.selection.path}`, commit: scope.selection.base, given: true };
-  if (scope !== undefined && (options.base !== undefined || options.chunk !== undefined)) {
-    const requested = await runBase(projectDir, options);
-    if (!await gitSucceeds(projectDir, ['merge-base', '--is-ancestor', requested.commit, base.commit])) {
-      throw new Error('The authored-test base must include the change base named by --base or --chunk. Check the committed selection.');
-    }
-  }
-  const mutantCache = await openMutantCache(projectDir);
+  const base = await runBase(projectDir, options);
   const log = options.log ?? ((line: string) => console.error(chalk.dim(line)));
-  if (mutantCache.unavailable !== undefined) log(`${mutantCache.unavailable}; every mutant runs.`);
+  // Only the mutation check reads the cache, so a run without it (`--chunk`) never opens it.
+  let mutantCache: Promise<MutantCache> | undefined;
+  const openCache = () => (mutantCache ??= openMutantCache(projectDir).then((cache) => {
+    if (cache.unavailable !== undefined) log(`${cache.unavailable}; every mutant runs.`);
+    return cache;
+  }));
   let typeCheck: Promise<TypeCheckRun> | undefined;
-  const runners = options.checks ?? VERIFY_CHECKS;
-  const selectedRunners = scope === undefined ? runners : {
-    ...runners,
-    test: async (ctx: VerifyContext): Promise<VerifyCheckOutcome> => {
-      const cannot = await suiteCannotRun(ctx.projectDir);
-      if (cannot) return cannot;
-      const run = await runAuthoredTests(ctx.projectDir, scope.selection.path);
-      return { passed: true, summary: `${plural(run.counts.passed, 'authored test')} passed in ${plural(run.counts.files, 'file')}.`, counts: run.counts };
-    },
-  };
-  const checks = await runChecks(selectedRunners, {
+  const checks = await runChecks(options.checks ?? VERIFY_CHECKS, {
     projectDir,
     typeCheck: () => (typeCheck ??= typeCheckProject(projectDir)),
     head,
     base,
+    chunk: options.chunk,
     changed: await changedSince(projectDir, base.commit),
-    mutantCache,
+    mutantCache: openCache,
     log,
-  }, scope === undefined ? VERIFY_CHECK_NAMES : FOCUSED_VERIFY_CHECK_NAMES);
+  }, options.chunk === undefined ? VERIFY_CHECK_NAMES : CHUNK_VERIFY_CHECK_NAMES);
 
   const after = await checkoutState(projectDir);
   const cleanTree = !('problem' in after) && after.clean && after.commit === head;
   // The cache keys outcomes by the commit's files; a run whose files changed under it keeps none.
-  if (cleanTree) await mutantCache.save();
+  if (cleanTree && mutantCache !== undefined) await (await mutantCache).save();
   const result = buildVerifyResult({
     commit: head,
     cleanTree,
     base: { ref: base.ref, commit: base.commit },
     chunk: options.chunk,
     checks,
-    scope,
     boardsmithCommit: await currentBoardsmithCommit(),
   });
   return { result, path: await recordResult(projectDir, result) };
@@ -616,8 +630,13 @@ function printVerdict(result: VerifyResult): void {
           'Commit or remove the changes (`git status` lists them), then run `boardsmith verify` again.',
       ),
     );
-  } else if (result.passed && result.scope?.kind === 'focused') {
-    console.log(chalk.green(`\nFocused verification passed for ${short(result.commit)}: authored tests and typecheck. Full verification and mutation are deferred to the policy cadence.`));
+  } else if (result.passed && result.chunk !== null) {
+    console.log(
+      chalk.green(
+        `\nFast checks passed for ${short(result.commit)}: chunk "${result.chunk}"'s tests and typecheck. ` +
+          'The full suite, build, validate, smoke and mutation checks run at publish (`boardsmith verify`).',
+      ),
+    );
   } else if (result.passed && skippedClause(result) !== '') {
     console.log(chalk.yellow(`\nPassed for ${short(result.commit)}${skippedClause(result)}.`));
   } else if (result.passed) {
@@ -661,10 +680,8 @@ async function checkVerified(projectDir: string, chunk: string | undefined): Pro
   const head = 'commit' in state ? short(state.commit) : 'HEAD';
   const onFile = 'commit' in state ? await readVerifyResult(projectDir, state.commit) : undefined;
   const skipped = onFile === undefined || onFile === 'unreadable' ? '' : skippedClause(onFile);
-  const focused = onFile !== undefined && onFile !== 'unreadable' && onFile.scope?.kind === 'focused';
-  const covering = chunk === undefined ? '' : focused ? `, for chunk "${chunk}"'s declared authored tests` : `, covering chunk "${chunk}"'s change`;
-  const scope = focused ? 'focused `boardsmith verify` (authored tests and typecheck)' : '`boardsmith verify`';
-  console.log(chalk.green(`${head} passed ${scope} on a clean tree${covering}${skipped}.`));
+  const ran = chunk === undefined ? '`boardsmith verify`' : `\`boardsmith verify --chunk ${chunk}\` (the chunk's tests and typecheck)`;
+  console.log(chalk.green(`${head} passed ${ran} on a clean tree${skipped}.`));
 }
 
 /**
@@ -673,7 +690,7 @@ async function checkVerified(projectDir: string, chunk: string | undefined): Pro
  * check fails, when the tree was not clean, or, with `--check`, when HEAD is not verified.
  */
 export async function verifyCommand(
-  options: { base?: string; chunk?: string; check?: boolean; project?: string; selection?: string },
+  options: { base?: string; chunk?: string; check?: boolean; project?: string },
   checks: Readonly<Record<VerifyCheckName, CheckRunner>> = VERIFY_CHECKS,
 ): Promise<void> {
   const projectDir = pathResolve(options.project ?? process.cwd());
@@ -684,14 +701,11 @@ export async function verifyCommand(
           'Run `boardsmith verify --check`, with `--chunk <slug>` for a chunk.',
       );
     }
-    if (options.selection !== undefined) {
-      throw new Error('--check reads the committed scope from the result on file. Run `boardsmith verify --check` without --selection.');
-    }
     await checkVerified(projectDir, options.chunk);
     return;
   }
 
-  const { result, path } = await runVerify({ projectDir, base: options.base, chunk: options.chunk, selection: options.selection, checks });
+  const { result, path } = await runVerify({ projectDir, base: options.base, chunk: options.chunk, checks });
   printResult(result, path, projectDir);
   if (!result.passed || !result.cleanTree) process.exitCode = 1;
 }

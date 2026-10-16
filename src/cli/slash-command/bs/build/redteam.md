@@ -52,9 +52,9 @@ word (see "Gate Before Dispatch" below); `{numberedClaimsList}` is the claims te
 ```
 Work package: {slug}
 
-You are reviewing a rules interpretation for {gameName}, chunk "{slug}". The mechanical checks
+You are reviewing a rules interpretation for {gameName}, chunk "{slug}". The fast checks
 are done. Every quote below was already checked, by code, to be at its cited location word for
-word, and this is what `boardsmith verify` found for the commit under review:
+word, and this is what `boardsmith verify --chunk` found for the commit under review:
 
 {verifyResult}
 
@@ -88,7 +88,7 @@ entry per claim (objection is required when verdict is 'refuted', empty otherwis
 Work package: {slug}
 
 You are reviewing a rules interpretation for {gameName}, chunk "{slug}" for COMPLETENESS, not
-correctness. The mechanical checks are done. This is what `boardsmith verify` found for the
+correctness. The fast checks are done. This is what `boardsmith verify --chunk` found for the
 commit under review:
 
 {verifyResult}
@@ -110,8 +110,8 @@ verify brief, slice paths + the numbered claims list, and no investigator ration
 
 ## Gate Before Dispatch: Verify, Then Quotes, Checked as Code
 
-No review step starts until `boardsmith verify` has passed for the commit under review
-(`routing.md` "No Review Before Verify"). Before the round's dispatch the orchestrator commits
+No review step starts until the chunk's fast checks, `boardsmith verify --chunk <slug>`, have
+passed for the commit under review (`routing.md` "No Review Before Verify"). Before the round's dispatch the orchestrator commits
 the chunk's work (`chunk-<slug>/step-investigate`), runs `npx boardsmith verify --chunk <slug>`,
 then `npx boardsmith review-gate <slug>`. A refusal means no reviewer is dispatched: fix what
 verify names and run both again. Open, the brief it prints fills `{verifyResult}` in all three

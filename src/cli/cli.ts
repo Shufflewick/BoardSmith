@@ -193,12 +193,12 @@ export function createProgram(): Command {
     .option('--base <git-ref>', 'Where the change started: its merge base with HEAD is the base (default: the main branch)')
     .option(
       '--chunk <slug>',
-      "Measure a chunk's change from the commit before its first chunk-<slug>/ commit; with --check, accept only a result that covers it",
+      "Fast checks for a chunk: only the test files it added or changed since the commit before its first chunk-<slug>/ " +
+        "commit, and typecheck; with --check, accept only that chunk's result",
     )
     .option('--check', 'Run nothing: exit 0 only when HEAD, on a clean tree, has a passing result')
-    .option('--selection <path>', 'Opted-in projects: verify only declared authored tests and typecheck, recording focused scope')
     .option('--project <dir>', 'Project directory (defaults to cwd)')
-    .action((options: { base?: string; chunk?: string; check?: boolean; project?: string; selection?: string }) => verifyCommand(options));
+    .action((options: { base?: string; chunk?: string; check?: boolean; project?: string }) => verifyCommand(options));
 
   program
     .command('mutation-equivalence <id>')
@@ -206,7 +206,6 @@ export function createProgram(): Command {
     .requiredOption('--contract <text>', 'The explicit valid-input contract under which the mutation is equivalent')
     .requiredOption('--proof <text>', 'The complete argument that every valid input has the same observable behavior')
     .option('--base <git-ref>', 'Use the same mutation base as verify')
-    .option('--chunk <slug>', 'Use the same chunk as verify')
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .action(mutationEquivalenceCommand);
 

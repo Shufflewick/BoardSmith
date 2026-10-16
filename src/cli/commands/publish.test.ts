@@ -304,17 +304,17 @@ describe('publish requires a full, passing boardsmith verify for the commit on a
     expect(await problemOf(dir)).toMatch(/uncommitted changes.*Commit your work/s);
   });
 
-  it('refuses a focused result', async () => {
+  it('refuses a chunk\'s fast checks from `verify --chunk` (#985)', async () => {
     const { dir, first, head } = await game();
     await writeVerifyResult(dir, buildVerifyResult({
       commit: head,
       cleanTree: true,
-      base: { ref: first, commit: first },
+      base: { ref: 'base of chunk-deal', commit: first },
+      chunk: 'deal',
       checks: [passed('test'), passed('typecheck')],
-      scope: { kind: 'focused', selection: { ticket: '1', base: first, tests: [{ file: 'a.test.ts', names: ['a'] }], path: 's.json', hash: 'a'.repeat(64) } },
     }));
     const problem = await problemOf(dir);
-    expect(problem).toMatch(/focused/);
+    expect(problem).toMatch(/chunk "deal"'s fast checks.*not the full verify/s);
     expect(problem).toContain(`boardsmith verify --base ${first}`);
   });
 

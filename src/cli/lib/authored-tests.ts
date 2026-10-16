@@ -1,10 +1,8 @@
 import { promises as fs } from 'node:fs';
-import { createHash } from 'node:crypto';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { JsonTestResults } from 'vitest/reporters';
 import { withCommandBuildDir } from './command-build-dir.js';
 import { discardRecord, runVitestRecorded, testRunVerdict } from './vitest-run.js';
-import { gitOutput as git, gitSucceeds } from './git-output.js';
 import { existingConfigs } from './test-run-scope.js';
 
 export interface AuthoredTest {
@@ -16,11 +14,6 @@ export interface AuthoredSelection {
   ticket: string;
   base: string;
   tests: AuthoredTest[];
-}
-
-export interface FocusedVerificationScope {
-  kind: 'focused';
-  selection: AuthoredSelection & { path: string; hash: string };
 }
 
 const object = (value: unknown): value is Record<string, unknown> =>
@@ -65,54 +58,6 @@ async function readSelection(projectDir: string, selectionPath: string): Promise
     tests.push({ file: entry.file, names });
   }
   return { ticket: raw.ticket, base: raw.base, tests };
-}
-
-/** The committed opt-in, absent only when this project has not configured focused verification. */
-export async function focusedSelectionPath(projectDir: string, revision = 'HEAD'): Promise<string | undefined> {
-  const fail = (message: string): never => { throw new Error(`.agent-policy.json: ${message}`); };
-  if ((await git(projectDir, ['ls-tree', revision, '--', '.agent-policy.json'])).trim() === '') return undefined;
-  let policy: unknown;
-  try { policy = JSON.parse(await git(projectDir, ['show', `${revision}:./.agent-policy.json`])); }
-  catch { return fail('the committed policy must contain valid JSON.'); }
-  if (!object(policy)) return fail('the committed policy must be an object.');
-  if (!Object.hasOwn(policy, 'focused')) return undefined;
-  const focused = policy.focused;
-  if (!object(focused) || !plainPath(focused.selection) || focused.fullEvery !== 5 ||
-    Object.keys(focused).some((key) => !['selection', 'fullEvery', 'verify'].includes(key)) ||
-    !Array.isArray(focused.verify) || focused.verify.length === 0 || focused.verify.some((check) =>
-      !object(check) || typeof check.name !== 'string' || check.name.trim() === '' || typeof check.run !== 'string' || check.run.trim() === '')) {
-    return fail('focused must declare a plain selection path, fullEvery: 5 and non-empty named verification commands.');
-  }
-  return focused.selection;
-}
-
-/** A focused receipt is bound to the committed opt-in and the exact committed authored selection. */
-export async function focusedVerificationScope(projectDir: string, selectionPath: string, revision = 'HEAD'): Promise<FocusedVerificationScope> {
-  const selection = await readSelection(projectDir, selectionPath);
-  const fail = (message: string): never => { throw new Error(`${selectionPath}: ${message}`); };
-  if (await focusedSelectionPath(projectDir, revision) !== selectionPath) {
-    return fail('the committed policy must explicitly opt into focused verification with this selection.');
-  }
-  let committed: string;
-  try { committed = await git(projectDir, ['show', `${revision}:./${selectionPath}`]); }
-  catch { return fail('commit the authored-test selection before running focused verification.'); }
-  if (committed !== await fs.readFile(resolve(projectDir, selectionPath), 'utf8')) {
-    return fail('the selection differs from its committed contents. Commit it before verification.');
-  }
-  if (!await gitSucceeds(projectDir, ['merge-base', '--is-ancestor', selection.base, revision])) {
-    return fail('base must name a commit in this change\'s history.');
-  }
-  for (const test of selection.tests) {
-    const mode = (await git(projectDir, ['ls-tree', revision, '--', test.file])).trim().split(/\s+/)[0];
-    if (mode !== '100644' && mode !== '100755') return fail(`${test.file} must be a committed regular file.`);
-    if ((await git(projectDir, ['diff', '--name-only', selection.base, revision, '--', test.file])).trim() === '') {
-      return fail(`${test.file} has no authored change since the declared base.`);
-    }
-  }
-  return {
-    kind: 'focused',
-    selection: { path: selectionPath, hash: createHash('sha256').update(committed).digest('hex'), ...selection },
-  };
 }
 
 /** Runs exact authored cases and accepts only the cases Vitest actually reports as passed. */

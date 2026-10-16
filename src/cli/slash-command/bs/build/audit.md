@@ -73,11 +73,8 @@ Ledger` as the four lenses above, through the orchestrator, never a separate tra
 
 ## Gate Before Dispatch: No Review Until Verify Passes
 
-For an explicitly opted-in project, use `state-machine.md` "Focused Verification Policy" for
-the verify command, deferred checks and review's `Scope` record. Keep the gate brief's scope
-in every lens prompt.
-
-No audit round starts until `boardsmith verify` has passed for the commit under review
+No audit round starts until the chunk's fast checks, `boardsmith verify --chunk <slug>`, have
+passed for the commit under review
 (`routing.md` "No Review Before Verify"). Before each round, the orchestrator commits what is
 uncommitted (the Step Checklist check-off included), runs `npx boardsmith verify --chunk <slug>`,
 then:
@@ -110,8 +107,8 @@ names it, the agents) in the chunk's run log before the lenses are dispatched.
 ```
 Work package: {slug}
 
-You are auditing built code for {gameName}, chunk "{slug}", for RULES FIDELITY. The mechanical
-checks are done. This is what `boardsmith verify` found for the commit under review:
+You are auditing built code for {gameName}, chunk "{slug}", for RULES FIDELITY. The fast
+checks are done. This is what `boardsmith verify --chunk` found for the commit under review:
 
 {verifyResult}
 
@@ -161,7 +158,7 @@ then does `repair` act on it.
 Work package: {slug}
 
 You are auditing built code for {gameName}, chunk "{slug}", for HIDDEN-INFORMATION LEAKS. The
-mechanical checks are done. This is what `boardsmith verify` found for the commit under review:
+fast checks are done. This is what `boardsmith verify --chunk` found for the commit under review:
 
 {verifyResult}
 
@@ -199,8 +196,8 @@ one entry per leak found (empty array if none).
 ```
 Work package: {slug}
 
-You are auditing built code for {gameName}, chunk "{slug}", for UNDO SANITY. The mechanical
-checks are done. This is what `boardsmith verify` found for the commit under review:
+You are auditing built code for {gameName}, chunk "{slug}", for UNDO SANITY. The fast
+checks are done. This is what `boardsmith verify --chunk` found for the commit under review:
 
 {verifyResult}
 
@@ -221,7 +218,7 @@ entry per defect found (empty array if none).
 Work package: {slug}
 
 You are auditing built code for {gameName}, chunk "{slug}", against THE PROJECT'S OWN HARD
-CONSTRAINTS. The mechanical checks are done. This is what `boardsmith verify` found for the
+CONSTRAINTS. The fast checks are done. This is what `boardsmith verify --chunk` found for the
 commit under review:
 
 {verifyResult}
@@ -271,12 +268,11 @@ orchestrator, before `repair` starts:
    every growing structure the lens reported, with the cap or ruling it has (or neither).
 2. Writes this chunk's `## Constraints Review` in CHUNK.md: one line per constraint,
    `- C1: held. <citation>` (or `not applicable` or `violated`), exactly as the lens gave it.
-3. Runs `boardsmith constraint-check {slug}`. Explicit focused opt-in follows "Focused
-   Verification Policy" for authored tests and deferred measurements. The command refuses a
+3. Runs `boardsmith constraint-check {slug}`. The command refuses a
    growing structure with no cap
    enforced in code and no RULINGS.md ruling, a cap whose measurement test never uses it, a
-   hard constraint the ledger leaves out, a missing or `violated` verdict, and, under full policy,
-   a failing measurement test. Every refusal, and every `violated` lens entry, becomes a finding in this
+   hard constraint the ledger leaves out, a missing or `violated` verdict, and a failing
+   measurement test. Every refusal, and every `violated` lens entry, becomes a finding in this
    round's `### Audit Round N` entry with `lens: 'constraints'`.
 
 `repair` fixes a constraints finding by adding the cap in code (and the test that fills it to
@@ -286,18 +282,18 @@ putting it to the designer the way `build/ask.md` puts an open question. Their a
 growing structure through: `boardsmith chunk-signoff` runs the same check and refuses to sign
 the chunk off while it fails, so an uncapped structure cannot reach `verified`.
 
-The measurement test lives in the Spec Manifest and, under the default full policy, is
+The measurement test lives in the Spec Manifest and is
 mutation-tested like the chunk's other tests. Write it before the cap and run it red (the
 structure overruns the budget), then add the cap. In a new test file it is a new Spec Manifest
 row, its Claims Covered `none (budget)` and its RED
 Observed `yes` once seen failing; a measurement test for a cap already in the code, which you cannot
 see fail, is appended to one of the chunk's existing Spec Manifest files instead. Then run
 `npx boardsmith test-step-check <slug>`, which reports a new test file outside the manifest
-(`build/test.md` item 2(c)) and, on the full path, shows the measurement test can fail.
+(`build/test.md` item 2(c)) and shows the measurement test can fail.
 
 The rules are the same for a project built from a rulebook or from existing code: the check
 reads CLAUDE.md, the ledger and the code, never the rulebook. With no slug,
-`boardsmith constraint-check` checks the whole tree and, under the default full policy, runs
+`boardsmith constraint-check` checks the whole tree and runs
 every measurement test, which is what a merge re-runs on the combined result when chunks were built on separate branches
 (`boardsmith chunk-merge` does exactly that).
 
@@ -323,7 +319,7 @@ files and names):
 Work package: {slug}
 
 Chunks {slug} and {alongside} of {gameName} were built at the same time without seeing each other,
-and have just been merged. The mechanical checks are done. This is what `boardsmith verify` found
+and have just been merged. The fast checks are done. This is what `boardsmith verify --chunk` found
 for the merged commit:
 
 {verifyResult}
