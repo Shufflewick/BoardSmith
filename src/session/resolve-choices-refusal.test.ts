@@ -60,11 +60,15 @@ class SpyGame extends Game<SpyGame, Player> {
           },
         })
         .execute(() => ({ success: true })),
+      Action.create<SpyGame>('scry')
+        .condition({ 'you have energy left': (ctx) => ctx.game.energy[ctx.player.seat] > 0 })
+        .chooseFrom('omen', { choices: ['storm', 'calm'] })
+        .execute(() => ({ success: true })),
     );
     this.setFlow({
       root: loop({
         maxIterations: 10,
-        do: eachPlayer({ do: actionStep({ actions: ['pass', 'spy', 'dig'] }) }),
+        do: eachPlayer({ do: actionStep({ actions: ['pass', 'spy', 'dig', 'scry'] }) }),
       }),
     });
   }
@@ -89,14 +93,18 @@ describe('resolveChoices refuses a seat that may not take the action now (#714)'
     expect(JSON.stringify(res)).not.toContain('ACE-of-seat-1');
   });
 
-  it('refuses the seat on turn when the action condition does not hold', async () => {
+  it('refuses the seat on turn an action the flow does not offer, its condition failing', async () => {
     const snapshot = await started();
 
     const res = await executeOp(definition, options, snapshot, null, {
       type: 'resolveChoices', actionName: 'spy', selectionName: 'card', player: 1, args: {},
     });
 
-    expect(res).toMatchObject({ success: false, errorCode: ErrorCode.ACTION_NOT_AVAILABLE });
+    expect(res).toMatchObject({
+      success: false,
+      errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
+      error: "'spy' is not one of your actions right now.",
+    });
     expect(JSON.stringify(res)).not.toContain('ACE-of-seat-2');
   });
 
@@ -113,5 +121,23 @@ describe('resolveChoices refuses a seat that may not take the action now (#714)'
     }));
 
     expect(res.choices?.map((c) => c.value)).toEqual(['east', 'stop']);
+  });
+
+  it("refuses another action whose condition the open pending action's picks ended", async () => {
+    const snapshot = await started();
+    const step = succeeded(await executeOp(definition, options, snapshot, null, {
+      type: 'selectionStep', player: 1, selectionName: 'spot', value: 'east', actionName: 'dig',
+      boundaryKey: boundaryKeyOf(snapshot),
+    }));
+
+    const res = await executeOp(definition, options, step.snapshot, step.pendingState ?? null, {
+      type: 'resolveChoices', actionName: 'scry', selectionName: 'omen', player: 1, args: {},
+    });
+
+    expect(res).toMatchObject({
+      success: false,
+      errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
+      error: "'scry' is not available to you right now: 'you have energy left' does not hold.",
+    });
   });
 });
