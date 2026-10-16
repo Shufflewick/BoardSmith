@@ -21,6 +21,8 @@ import {
   Player,
   Action,
   simultaneousActionStep,
+  sequence,
+  execute,
   type GameOptions,
 } from './index.js';
 
@@ -252,5 +254,109 @@ describe('game.refreshAwaitingActions() honours the step\'s players filter', () 
     game.refreshAwaitingActions();
 
     expect(awaitingSeats(game)).toEqual([2]);
+  });
+});
+
+/**
+ * A seat that becomes done while the step is open must not leave the step
+ * stuck (#783). Outside game code the refresh finishes the step itself; inside
+ * an action (its `execute` or a pick's `onEach`) it only re-derives the set,
+ * since settling that action re-checks `allDone` and must be what runs the
+ * flow on, exactly once.
+ */
+class DoneGame extends Game<DoneGame, Player> {
+  done: Record<number, boolean> = {};
+  afterRound = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.registerActions(
+      Action.create<DoneGame>('finish')
+        .prompt('Finish')
+        .execute((_a, ctx) => {
+          (ctx.game as DoneGame).done[ctx.player.seat] = true;
+        }),
+      Action.create<DoneGame>('finishBoth')
+        .prompt('Finish for both seats')
+        .execute((_a, ctx) => {
+          const game = ctx.game as DoneGame;
+          game.done[1] = game.done[2] = true;
+          game.refreshAwaitingActions();
+        }),
+      Action.create<DoneGame>('bump')
+        .prompt('Bump')
+        .chooseFrom('picks', {
+          choices: () => ['x'],
+          repeat: {
+            until: (ctx) => (ctx.game as DoneGame).done[2] === true,
+            onEach: (ctx) => {
+              const game = ctx.game as DoneGame;
+              game.done[1] = game.done[2] = true;
+              game.refreshAwaitingActions();
+            },
+          },
+        })
+        .execute(() => {}),
+    );
+
+    this.setFlow({
+      root: sequence(
+        simultaneousActionStep({
+          name: 'round',
+          actions: ['finish', 'finishBoth', 'bump'],
+          playerDone: (ctx, player) => (ctx.game as DoneGame).done[player.seat] === true,
+        }),
+        execute<DoneGame>((ctx) => {
+          ctx.game.afterRound++;
+          ctx.game.done = {};
+        }),
+        simultaneousActionStep({ name: 'next', actions: ['finish'] }),
+      ),
+    });
+  }
+}
+
+function startedDone(): DoneGame {
+  const game = new DoneGame({ playerCount: 2, playerNames: ['A', 'B'], seed: 'done' });
+  game.startFlow();
+  return game;
+}
+
+describe('game.refreshAwaitingActions() finishes a step every seat is done with (#783)', () => {
+  it('ends the step when the last seat becomes done outside any action', () => {
+    const game = startedDone();
+    game.continueFlow('finish', {}, 1);
+
+    game.done[2] = true;
+    game.refreshAwaitingActions();
+
+    expect(game.afterRound).toBe(1);
+    expect(awaitingSeats(game)).toEqual([1, 2]);
+    expect(game.continueFlow('finish', {}, 2).actionError).toBeUndefined();
+  });
+
+  it('runs the flow on once when an action\'s execute makes every seat done and refreshes', () => {
+    const game = startedDone();
+
+    const state = game.continueFlow('finishBoth', {}, 1);
+
+    expect(state.actionError).toBeUndefined();
+    expect(game.afterRound).toBe(1);
+    expect(awaitingSeats(game)).toEqual([1, 2]);
+    // The action was settled in the step it was taken in, not counted as a move of the next one.
+    expect(game.getFlowState()?.moveCount).toBe(0);
+  });
+
+  it('runs the flow on once when a pick\'s onEach makes every seat done and refreshes', () => {
+    const game = startedDone();
+
+    const state = game.continueFlow('bump', { picks: ['x'] }, 1);
+
+    expect(state.actionError).toBeUndefined();
+    expect(game.afterRound).toBe(1);
+    expect(awaitingSeats(game)).toEqual([1, 2]);
+    // The action was settled in the step it was taken in, not counted as a move of the next one.
+    expect(game.getFlowState()?.moveCount).toBe(0);
   });
 });

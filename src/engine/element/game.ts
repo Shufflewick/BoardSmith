@@ -2455,6 +2455,10 @@ export class Game<
    * only seats it includes are admitted; a seat already awaited stays even if
    * the filter has since dropped it. No-op when no simultaneous step is open.
    *
+   * When every seat is then done (the step's `allDone`), the step ends: at
+   * once when called from outside game code, and when the running action
+   * settles when called from inside one (its `execute`, a pick's `onEach`).
+   *
    * @param seat - Refresh only this seat (1-indexed). Omit for every seat.
    *
    * @example
