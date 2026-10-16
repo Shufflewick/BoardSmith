@@ -334,8 +334,9 @@ describe('whenForced(actionName)', () => {
     expect(evalCondition(whenForced('move'), runner.game, 1)).toBe(true);
   });
 
-  it('is FALSE for a seat the open step is not waiting on', () => {
-    const runner = makeMoveOnlyStepRunner();
+  it('is FALSE for a seat the open step is not waiting on, though only the named action passes its condition', () => {
+    const runner = makeRunner();
+    runner.game.forcedMode = true; // only 'move' passes its condition, for every seat
     expect(evalCondition(whenForced('move'), runner.game, 2)).toBe(false);
   });
 });

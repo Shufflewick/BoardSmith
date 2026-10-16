@@ -30,8 +30,6 @@
  * ```
  */
 
-import { availableActionsForSeat } from '../flow/seat-activity.js';
-import { buildActionMetadata } from '../element/action-metadata.js';
 import type { TutorialAdvanceCondition, TutorialGateContext } from './types.js';
 
 /**
@@ -131,8 +129,9 @@ export function afterTurns(n: number): TutorialAdvanceCondition {
  *
  * **Implementation:** judges from the open step's offer for the seat, narrowed
  * to the actions whose condition holds now: the same set the Action Panel
- * shows. An action the open step does not offer never counts, even when its
- * condition holds, and a seat the step is not waiting on is never forced.
+ * shows, read through `game.getActionSpace(seat)`. An action the open step
+ * does not offer never counts, even when its condition holds, and a seat the
+ * step is not waiting on is never forced.
  *
  * Does NOT fire if multiple actions are available (even if all others are
  * tutorial-gated). Combine with a `gate` on the advanced step to restrict
@@ -143,12 +142,8 @@ export function afterTurns(n: number): TutorialAdvanceCondition {
 export function whenForced(actionName: string): TutorialAdvanceCondition {
   return {
     [`${actionName} is the only available action`]: (ctx: TutorialGateContext): boolean => {
-      const player = ctx.game.getPlayer(ctx.seat);
-      if (!player) return false;
-
-      const offered = availableActionsForSeat(ctx.game.getFlowState(), ctx.seat);
-      const shown = Object.keys(buildActionMetadata(ctx.game, player, offered));
-      return shown.length === 1 && shown[0] === actionName;
+      const { actions } = ctx.game.getActionSpace(ctx.seat);
+      return actions.length === 1 && actions[0].name === actionName;
     },
   };
 }

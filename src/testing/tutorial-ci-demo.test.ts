@@ -123,9 +123,9 @@ class DemoGame extends Game<DemoGame, Player> {
  *
  * The forced-capture rule has been removed: `move` is always available and
  * `capture` is never registered. `whenForced('capture')` will never fire
- * because `getAvailableActions` never returns `capture` as the sole option.
- * Running the same tutorial walkthrough through this game should make the
- * `simulateTutorial` predicate-drift assertion throw.
+ * because the step never offers `capture` as the sole action. Running the
+ * same tutorial walkthrough through this game leaves the tutorial on
+ * `capture-tip`, so the scripted capture throws naming that step.
  */
 class DemoGameNoCaptureRule extends Game<DemoGameNoCaptureRule, Player> {
   constructor(options: GameOptions) {
