@@ -1508,6 +1508,13 @@ round asks for nothing is never asked again, so the steady state costs one round
 It sees the same read-only projection an action's declaration does, and an
 assignment through it is refused with `declaration-write`.
 
+**A view that throws fails for that seat only, and its text reaches the player
+only as a `PlayerFacingError`** (or a world refusal). Any other throw is a bug:
+the seat is told the view could not be shown because of an error in the game's
+rules, and the error goes to the log -- once per call, with a count of the seats
+it failed for, so one broken view in front of a large audience is one log line.
+In a dev or test run the raw text is added in brackets, as it is for actions.
+
 What the seat receives is `{ state, phase }`, where `state` is the
 engine's own per-player projection, with its fog of war already applied, **pruned
 to exactly the partitions this declaration named**. Pruning matters: residency is
@@ -2773,7 +2780,7 @@ thing next time.
 | `element-id-key-mismatch` | A stored partition does not hang from this world's root under the key the world was built with, so its bytes were minted under another key: the host passed a different world's key, minted a new one on a wake, or is serving bytes from before keyed ids (#482). Raised before anything is adopted. Pass the key stored with the world. Platform-owned and deterministic. |
 | `allocation-stale` | A host handed back a stamp standing below an id its own stored bytes hold, so the next id minted would collide with one already written. Raised at the adoption that proves it. A host defect with no repair: the world stops (#540). |
 | `child-timeout` | The bundle did not answer a host's call inside its deadline. |
-| `invalid-notice` | `ctx.world.notify` was handed a notice a box cannot hold: a seat outside the world, no `whenFull`, a payload JSON cannot carry, one past `noticeMaxBytes` -- or the world declares no `world.notices`. See [notices](#notices-a-lasting-line-for-one-seat-without-loading-it). |
+| `invalid-notice` | `ctx.world.notify` was handed a notice a box cannot hold: a seat outside the world, no `whenFull`, a payload that is not plain JSON (a function, `Map`, `Set`, class instance, cycle or non-finite number would be stored as something else, so it is refused), a `line` that is not a string or `{ text, type? }` with string fields, one past `noticeMaxBytes` -- or the world declares no `world.notices`. See [notices](#notices-a-lasting-line-for-one-seat-without-loading-it). |
 | `notice-batch-cap` | One dispatch sent more notices than `maxNoticesPerCommand`. |
 | `notice-box-full` | A notice sent with `whenFull: "refuse"` met a box already holding `perSeat` notices. The command is rolled back. |
 | `undeclared-notice-box` | `notices`, `takeNotices`, or a `"refuse"` notice named a seat whose box no `.noticeBox()` round declared. |

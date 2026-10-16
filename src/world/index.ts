@@ -256,6 +256,7 @@ export type {
 } from './notices.js';
 export {
   assertWorldOrder,
+  receiptAt,
   receiptFloor,
   resolveOrder,
 } from './orders.js';

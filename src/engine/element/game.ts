@@ -65,7 +65,7 @@ import { buildActionMetadata, buildPickMetadata } from './action-metadata.js';
 import type { ActionMetadata, PickMetadata } from '../../types/protocol.js';
 import { devWarn, isDevMode } from '../../utils/dev.js';
 import { SeededRandom, mintSeed, type RandomState } from '../../utils/random.js';
-import { PlayerFacingError } from '../errors.js';
+import { PlayerFacingError, StaleAllocationStampError } from '../errors.js';
 
 // ---------------------------------------------------------------------------
 // INTRO-01 / INTRO-02 view types
@@ -2204,7 +2204,7 @@ export class Game<
     }
     if (this._ctx.sequence <= maxAdoptedCursor) {
       if (this._ctx._worldIdAllocationDeclared) {
-        throw new Error(
+        throw new StaleAllocationStampError(
           `Cannot adopt partition "${json.name ?? json.className}": it holds element id ` +
             `${maxAdoptedId}, minted at or above this world's id allocation stamp of ` +
             `${this._ctx.sequence}. The stamp is stale, so the next id this world minted would ` +
