@@ -11,7 +11,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, promises as fs, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { chunkVerifyBase } from './chunk-commits.js';
-import { VERIFY_CHECK_NAMES, buildVerifyResult, writeVerifyResult } from './verify-result.js';
+import { CHUNK_VERIFY_CHECK_NAMES, VERIFY_CHECK_NAMES, buildVerifyResult, writeVerifyResult } from './verify-result.js';
 
 const IDENTITY = ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.com', '-c', 'commit.gpgsign=false'];
 
@@ -77,12 +77,12 @@ function hasCommit(dir: string): boolean {
  * Commits the project as it stands and records a passing `boardsmith verify` result for that
  * commit, the way the run the bs- skills make would:
  *
- * - with `chunk`, as `boardsmith verify --chunk <slug>` does: the commit is one of the chunk's
- *   (`chunk-<slug>/step-test` unless `message` says otherwise, after a first commit for the chunk to
- *   start from when the repository has none), and the result's base is the chunk's verify base, or
- *   `base` when given (a commit before it, say);
- * - without, as `boardsmith verify --base HEAD` does, the run before a gate transition: the base is
- *   the commit itself, which satisfies no chunk's sign-off.
+ * - with `chunk`, as `boardsmith verify --chunk <slug>` does: the chunk's fast checks (tests and
+ *   typecheck) for a commit that is one of the chunk's (`chunk-<slug>/step-test` unless `message`
+ *   says otherwise, after a first commit for the chunk to start from when the repository has none),
+ *   with the chunk's verify base, or `base` when given;
+ * - without, as `boardsmith verify --base HEAD` does, the run before a gate transition: every full
+ *   check, with the commit itself as the base. It satisfies no chunk's sign-off.
  */
 export async function recordPassingVerify(
   dir: string,
@@ -100,7 +100,7 @@ export async function recordPassingVerify(
       cleanTree: true,
       base: { ref: chunk === undefined ? 'HEAD' : `base of chunk-${chunk}`, commit: baseCommit },
       chunk: chunk ?? null,
-      checks: VERIFY_CHECK_NAMES.map((name) => ({ name, passed: true, summary: `${name} passed` })),
+      checks: (chunk === undefined ? VERIFY_CHECK_NAMES : CHUNK_VERIFY_CHECK_NAMES).map((name) => ({ name, passed: true, summary: `${name} passed` })),
     }),
   );
   return commit;

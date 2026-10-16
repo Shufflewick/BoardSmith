@@ -576,27 +576,19 @@ describe('recordSignoff: a sign-off is a done claim, and needs a passing boardsm
   });
 
   /**
-   * The result must also have measured the chunk's change: `boardsmith verify --base HEAD` passes
-   * with nothing mutated, and a sign-off on that result would be a done claim no check backs.
+   * The result must be the chunk's own fast checks (`boardsmith verify --chunk <slug>`, #985): a
+   * full result, even one that passed, is not what a chunk's sign-off takes.
    */
-  it('refuses a result made with --base HEAD, and says to run boardsmith verify --chunk <slug>', async () => {
+  it('refuses a full result, and says to run boardsmith verify --chunk <slug>', async () => {
     const project = await makeProject([{ slug: 'deal' }]);
     await recordPassingVerify(project, { chunk: 'deal' });
     await recordPassingVerify(project, { message: 'chunk-deal/step-close' });
-    await expect(signOffUnverified(project)).rejects.toThrow(/measured the change from HEAD.*Run `boardsmith verify --chunk deal`/s);
+    await expect(signOffUnverified(project)).rejects.toThrow(/not made for chunk "deal".*Run `boardsmith verify --chunk deal`/s);
   });
 
-  it('accepts a result whose base is where the chunk started', async () => {
+  it('accepts the chunk\'s own passing fast checks', async () => {
     const project = await makeProject([{ slug: 'deal' }]);
     await recordPassingVerify(project, { chunk: 'deal' });
-    await expect(signOffUnverified(project)).resolves.toMatchObject({ basis: 'designer' });
-  });
-
-  it('accepts a result whose base is a commit before the chunk started', async () => {
-    const project = await makeProject([{ slug: 'deal' }]);
-    const before = await recordPassingVerify(project, { message: 'the project, before the chunk' });
-    commitAll(project, 'setup finished');
-    await recordPassingVerify(project, { chunk: 'deal', base: before });
     await expect(signOffUnverified(project)).resolves.toMatchObject({ basis: 'designer' });
   });
 });

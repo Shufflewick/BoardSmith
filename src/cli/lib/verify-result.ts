@@ -2,8 +2,7 @@ import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { ENGINE_REVISION } from '../../contract/index.js';
 import { boardsmithPackageRoot, readBoardsmithVersion } from './boardsmith-version.js';
-import { chunkVerifyBase } from './chunk-commits.js';
-import { gitOutput as git, gitSucceeds } from './git-output.js';
+import { gitOutput as git } from './git-output.js';
 import { openMutantCache } from './mutant-cache.js';
 import { equivalenceBasisProblem, type EquivalenceBasis } from './mutation-equivalences.js';
 import type { FocusedVerificationScope } from './authored-tests.js';
@@ -16,17 +15,15 @@ import { focusedPolicyScope } from './focused-policy.js';
  * lives at `.boardsmith/verify/<commit>.json` in the project, which a game's `.gitignore` keeps out
  * of git, so writing it never dirties the tree it describes.
  *
- * `verifiedProblem` is what `boardsmith verify --check`, `chunk-signoff` and
+ * `verifiedProblem` is what `boardsmith verify --check`, `chunk-signoff`, `review-gate` and
  * `chunk-gate-transition` ask: does HEAD, on a clean tree, have a passing result? A result for
  * another commit, a result made on a dirty tree, and a dirty tree now all say no, each with what to
  * run next.
  *
- * For a chunk (`chunk-signoff <slug>`, `verify --check --chunk <slug>`) it asks one thing more: did
- * the result measure the chunk's whole change? Its base must be the chunk's verify base, the
- * commit before the chunk's first `chunk-<slug>/` commit, or a commit before that. Without this,
- * `boardsmith verify --base HEAD` (which mutates nothing, and passes) would let anyone sign a chunk
- * off. `chunk-gate-transition` builds no chunk, so it asks only the plain question, and the
- * `--base HEAD` result it accepts satisfies no chunk's sign-off.
+ * A chunk's gates (`chunk-signoff <slug>`, `review-gate <slug>`, `verify --check --chunk <slug>`)
+ * take only that chunk's fast checks: a result `verify --chunk <slug>` made, holding the chunk's
+ * tests and typecheck. Every other question (`verify --check`, `chunk-gate-transition`, publish)
+ * takes only the full verify, so a chunk's fast checks never stand in for it (#985).
  *
  * ADDING A CHECK (the in-browser smoke test, #453, was added this way): add its name to
  * `VERIFY_CHECK_NAMES` and its runner to `VERIFY_CHECKS` in `commands/verify.ts`, which the compiler
@@ -41,6 +38,8 @@ export const VERIFY_RESULT_FORMAT = 1;
 /** Every default full check, in execution order. Focused results use `FOCUSED_VERIFY_CHECK_NAMES`. */
 export const VERIFY_CHECK_NAMES = ['test', 'typecheck', 'build', 'validate', 'smoke', 'mutation'] as const;
 export const FOCUSED_VERIFY_CHECK_NAMES = ['test', 'typecheck'] as const;
+/** `verify --chunk`: the chunk's own tests and typecheck. The full checks run at publish (#985). */
+export const CHUNK_VERIFY_CHECK_NAMES = ['test', 'typecheck'] as const;
 
 export type VerifyCheckName = (typeof VERIFY_CHECK_NAMES)[number];
 
@@ -209,7 +208,7 @@ export function resultProblem(result: VerifyResult, head: string): string | unde
     !/^[a-f0-9]{64}$/.test(result.scope.selection.hash))) {
     return 'The focused verification scope is invalid. Run `boardsmith verify --selection <path>` again.';
   }
-  const required = result.scope?.kind === 'focused' ? FOCUSED_VERIFY_CHECK_NAMES : VERIFY_CHECK_NAMES;
+  const required = result.scope?.kind === 'focused' ? FOCUSED_VERIFY_CHECK_NAMES : result.chunk !== null ? CHUNK_VERIFY_CHECK_NAMES : VERIFY_CHECK_NAMES;
   const missing = required.filter((name) => !result.checks.some((c) => c.name === name));
   if (missing.length > 0) {
     return (
@@ -263,28 +262,21 @@ export async function checkoutState(projectDir: string): Promise<{ commit: strin
   return { commit, clean: status.trim() === '' };
 }
 
-/** Whether `commit` is `descendant` or one of its ancestors. A commit git does not know is neither. */
-function isAncestor(projectDir: string, commit: string, descendant: string): Promise<boolean> {
-  return gitSucceeds(projectDir, ['merge-base', '--is-ancestor', commit, descendant]);
-}
-
 /**
- * Why `result` does not cover chunk `slug`'s change, or undefined when it does: its base is the
- * chunk's verify base or a commit before it. Throws, saying what to do, when the chunk has no
- * commit yet.
+ * Why `result` is the wrong kind for the question: a chunk's gates take only that chunk's fast
+ * checks (`verify --chunk <slug>`), and every other question the full verify (#985).
  */
-async function chunkCoverageProblem(projectDir: string, slug: string, result: VerifyResult): Promise<string | undefined> {
-  const chunkBase = await chunkVerifyBase(projectDir, slug);
-  if (result.scope?.kind === 'focused' && result.chunk !== slug) {
-    return `The focused result was not made for chunk "${slug}". Run \`boardsmith verify --chunk ${slug} --selection ${result.scope.selection.path}\`.`;
+function kindProblem(result: VerifyResult, chunk: string | undefined): string | undefined {
+  if (chunk === undefined && result.chunk !== null) {
+    return (
+      `The \`boardsmith verify\` result for ${short(result.commit)} is chunk "${result.chunk}"'s fast checks (its tests and ` +
+      'typecheck), not the full verify. Run `boardsmith verify`.'
+    );
   }
-  if (result.scope?.kind === 'focused') return undefined;
-  if (await isAncestor(projectDir, result.base.commit, chunkBase)) return undefined;
-  return (
-    `The \`boardsmith verify\` result for ${short(result.commit)} measured the change from ${result.base.ref} ` +
-    `(${short(result.base.commit)}), which is not where chunk "${slug}" started (${short(chunkBase)}) or a commit before it, ` +
-    `so its mutation check did not cover the chunk's code. Run \`boardsmith verify --chunk ${slug}\`.`
-  );
+  if (chunk !== undefined && result.chunk !== chunk) {
+    return `The \`boardsmith verify\` result for ${short(result.commit)} was not made for chunk "${chunk}". Run \`boardsmith verify --chunk ${chunk}\`.`;
+  }
+  return undefined;
 }
 
 /**
@@ -324,11 +316,5 @@ export async function verifiedProblem(projectDir: string, chunk?: string): Promi
   if (result === 'unreadable') {
     return `The \`boardsmith verify\` result for ${short(state.commit)} could not be read. Run \`boardsmith verify\` again.`;
   }
-  const problem = await currentResultProblem(projectDir, result, state.commit);
-  if (problem !== undefined || chunk === undefined) return problem;
-  try {
-    return await chunkCoverageProblem(projectDir, chunk, result);
-  } catch (error) {
-    return (error as Error).message;
-  }
+  return kindProblem(result, chunk) ?? (await currentResultProblem(projectDir, result, state.commit));
 }

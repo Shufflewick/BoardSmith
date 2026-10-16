@@ -193,7 +193,8 @@ export function createProgram(): Command {
     .option('--base <git-ref>', 'Where the change started: its merge base with HEAD is the base (default: the main branch)')
     .option(
       '--chunk <slug>',
-      "Measure a chunk's change from the commit before its first chunk-<slug>/ commit; with --check, accept only a result that covers it",
+      "Fast checks for a chunk: only the test files it added or changed since the commit before its first chunk-<slug>/ " +
+        "commit, and typecheck; with --check, accept only that chunk's result",
     )
     .option('--check', 'Run nothing: exit 0 only when HEAD, on a clean tree, has a passing result')
     .option('--selection <path>', 'Opted-in projects: verify only declared authored tests and typecheck, recording focused scope')

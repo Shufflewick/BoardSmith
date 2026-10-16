@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import {
+  CHUNK_VERIFY_CHECK_NAMES,
   VERIFY_CHECK_NAMES,
   type VerifyCheckResult,
   type VerifyResult,
@@ -45,7 +46,6 @@ describe('buildVerifyResult', () => {
     expect(r.cleanTree).toBe(true);
     expect(r.base).toEqual({ ref: 'main', commit: 'b'.repeat(40) });
     expect(r.chunk).toBeNull();
-    expect(result({ chunk: 'deal' }).chunk).toBe('deal');
     expect(r.checks.map((c) => c.name)).toEqual([...VERIFY_CHECK_NAMES]);
     expect(r.boardsmith.version).toMatch(/\d+\.\d+/);
     expect(typeof r.boardsmith.engineRevision).toBe('number');
@@ -167,68 +167,60 @@ describe('verifiedProblem: the one question every done claim asks', () => {
   });
 
   /**
-   * For a chunk, the result must also have measured the chunk's whole change: its base is the
-   * chunk's verify base (the commit before its first `chunk-<slug>/` commit) or a commit before it.
-   * Otherwise `boardsmith verify --base HEAD` would give a passing result that mutated nothing.
+   * A chunk's gates (sign-off, review, close) take only that chunk's fast checks, its tests and
+   * typecheck (`verify --chunk`); everything else asks for the full verify, which runs at publish (#985).
    */
-  describe('for a chunk, the result must cover the chunk\'s change', () => {
-    /** A project whose chunk `deal` started after two commits, and whose HEAD is a bookkeeping commit. */
-    async function chunkProject(): Promise<{ dir: string; head: string; commits: Record<string, string> }> {
+  describe('a chunk takes its own fast checks, and nothing else does', () => {
+    /** A project whose chunk `deal` started after a commit, and whose HEAD is a bookkeeping commit. */
+    async function chunkProject(): Promise<{ dir: string; head: string; chunkBase: string }> {
       const dir = await project();
-      const first = git(dir, 'rev-parse', 'HEAD').trim();
       await fs.writeFile(join(dir, 'rules.ts'), 'export const x = 2;\n');
       const chunkBase = commitAll(dir, 'setup done');
       await fs.writeFile(join(dir, 'rules.ts'), 'export const x = 3;\n');
-      const spec = commitAll(dir, 'chunk-deal/step-spec');
-      await fs.writeFile(join(dir, 'rules.ts'), 'export const x = 4;\n');
       commitAll(dir, 'chunk-deal/step-build');
       const head = commitAll(dir, 'chunk-deal/step-close');
-      return { dir, head, commits: { first, chunkBase, spec } };
+      return { dir, head, chunkBase };
     }
 
-    const recorded = async (dir: string, head: string, base: string, chunk: string | null = null) => {
-      await writeVerifyResult(dir, result({ commit: head, base: { ref: chunk ? `base of chunk-${chunk}` : 'HEAD', commit: base }, chunk }));
-    };
+    const fast = (head: string, base: string, chunk: string) =>
+      result({ commit: head, base: { ref: `base of chunk-${chunk}`, commit: base }, chunk, checks: CHUNK_VERIFY_CHECK_NAMES.map(passing) });
 
-    it('accepts a result whose base is the chunk\'s verify base', async () => {
-      const { dir, head, commits } = await chunkProject();
-      await recorded(dir, head, commits.chunkBase, 'deal');
+    it('accepts the chunk\'s own passing fast checks, the tests and typecheck', async () => {
+      const { dir, head, chunkBase } = await chunkProject();
+      await writeVerifyResult(dir, fast(head, chunkBase, 'deal'));
       expect(await verifiedProblem(dir, 'deal')).toBeUndefined();
     });
 
-    it('accepts a result whose base is a commit before the chunk\'s verify base, since that covers the chunk\'s change too', async () => {
-      const { dir, head, commits } = await chunkProject();
-      await recorded(dir, head, commits.first);
-      expect(await verifiedProblem(dir, 'deal')).toBeUndefined();
+    it('refuses a full result for a chunk gate, naming the chunk\'s command', async () => {
+      const { dir, head, chunkBase } = await chunkProject();
+      await writeVerifyResult(dir, result({ commit: head, base: { ref: 'main', commit: chunkBase } }));
+      expect(await verifiedProblem(dir, 'deal')).toMatch(/not made for chunk "deal".*Run `boardsmith verify --chunk deal`/s);
     });
 
-    it('refuses a result made with --base HEAD, naming the command to run', async () => {
-      const { dir, head } = await chunkProject();
-      await recorded(dir, head, head);
-      const problem = await verifiedProblem(dir, 'deal');
-      expect(problem).toMatch(/measured the change from HEAD/);
-      expect(problem).toMatch(/not where chunk "deal" started/);
-      expect(problem).toContain('Run `boardsmith verify --chunk deal`');
+    it('refuses another chunk\'s fast checks', async () => {
+      const { dir, head, chunkBase } = await chunkProject();
+      await writeVerifyResult(dir, fast(head, chunkBase, 'combat'));
+      expect(await verifiedProblem(dir, 'deal')).toMatch(/not made for chunk "deal".*Run `boardsmith verify --chunk deal`/s);
     });
 
-    it('refuses a result whose base is inside the chunk\'s own commits', async () => {
-      const { dir, head, commits } = await chunkProject();
-      await recorded(dir, head, commits.spec);
-      expect(await verifiedProblem(dir, 'deal')).toContain('Run `boardsmith verify --chunk deal`');
+    it('refuses a chunk\'s fast checks where the full verify is asked for', async () => {
+      const { dir, head, chunkBase } = await chunkProject();
+      await writeVerifyResult(dir, fast(head, chunkBase, 'deal'));
+      expect(await verifiedProblem(dir)).toMatch(/chunk "deal"'s fast checks.*not the full verify.*Run `boardsmith verify`/s);
+    });
+
+    it('refuses fast checks that miss the typecheck', async () => {
+      const { dir, head, chunkBase } = await chunkProject();
+      await writeVerifyResult(dir, { ...fast(head, chunkBase, 'deal'), checks: [passing('test')] });
+      expect(await verifiedProblem(dir, 'deal')).toMatch(/no typecheck check/);
     });
 
     it('still asks the plain questions first: no result, a dirty tree', async () => {
-      const { dir, head } = await chunkProject();
+      const { dir, head, chunkBase } = await chunkProject();
       expect(await verifiedProblem(dir, 'deal')).toMatch(/No `boardsmith verify` result/);
-      await recorded(dir, head, head);
+      await writeVerifyResult(dir, fast(head, chunkBase, 'deal'));
       await fs.writeFile(join(dir, 'rules.ts'), 'export const x = 5;\n');
       expect(await verifiedProblem(dir, 'deal')).toMatch(/uncommitted changes/);
-    });
-
-    it('says the chunk has no commit yet, and how to name one, when no commit is the chunk\'s', async () => {
-      const { dir, head } = await chunkProject();
-      await recorded(dir, head, head);
-      expect(await verifiedProblem(dir, 'combat')).toMatch(/No commit for chunk "combat" yet.*chunk-combat\/step-<name>/s);
     });
   });
 });

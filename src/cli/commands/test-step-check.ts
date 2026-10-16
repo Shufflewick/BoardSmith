@@ -556,7 +556,7 @@ const NOT_COLLECTED = Object.freeze([
 ]);
 
 /** A file vitest collects as a test, by its default pattern and the exclusions above. */
-const isTestFile = (path: string) =>
+export const isTestFile = (path: string) =>
   /\.(test|spec)\.[cm]?[jt]sx?$/.test(path) && !NOT_COLLECTED.some((excluded) => excluded.test(path));
 
 /** Every script in the project outside `node_modules/`, with its text. */
