@@ -1662,7 +1662,7 @@
       "surfaceHash": "e031520954ec82d0",
       "payloadHash": "5bb7ce7332b154d4",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "ErrorCode loses eight values nothing produces: SEAT_ALREADY_CLAIMED, INVALID_SEAT, NOT_AUTHORIZED, GAME_ALREADY_STARTED, LOBBY_NOT_READY, COLOR_ALREADY_TAKEN, INTERNAL_ERROR and REPLAY_FAILED (#807). Platform: drop them from the vendored runner prefixes; re-vendor."
+      "summary": "ErrorCode loses eight values nothing produces: SEAT_ALREADY_CLAIMED, INVALID_SEAT, NOT_AUTHORIZED, GAME_ALREADY_STARTED, LOBBY_NOT_READY, COLOR_ALREADY_TAKEN, INTERNAL_ERROR and REPLAY_FAILED (#807). Platform: no code uses them; re-vendor."
     }
   ]
 }
