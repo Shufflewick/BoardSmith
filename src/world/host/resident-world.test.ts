@@ -70,7 +70,7 @@ function bundle(ordering: 'arrival' | 'chronological' = 'arrival') {
     gameType: 'ticker',
     displayName: 'Ticker',
     world: {
-      maxPlayers: 2,
+      maxPlayers: 3,
       ordering,
       genesis: (game: Game): Record<string, GameElement> => ({ [LOG]: game.create(Log, LOG) }),
       view: () => {
@@ -185,6 +185,20 @@ describe('#793: ResidentWorld', () => {
       expect(failure).toBeDefined();
       expect(failure!.message).not.toContain('secret');
       expect(failure!.message).toMatch(/error in the game's rules/);
+    });
+
+    it('logs once for the whole audience, with how many seats failed, not once per seat', async () => {
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { world } = host();
+      await world.start();
+      const seats = [1, 2, 3].map((seat) => worldSeatPlayer(seat));
+      seats.forEach((player, i) => world.seat(player, i + 1));
+      viewThrows = new TypeError('broken view');
+
+      const views = await world.run(() => world.viewsFor(seats));
+      expect(Object.keys(views.failed)).toHaveLength(3);
+      expect(logged).toHaveBeenCalledOnce();
+      expect(String(logged.mock.calls[0]![0])).toContain('3 seats');
     });
 
     it('passes a PlayerFacingError the game wrote through verbatim', async () => {

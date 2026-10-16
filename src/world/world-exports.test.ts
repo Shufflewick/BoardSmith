@@ -74,6 +74,7 @@ const VALUES = [
   'presenceDepartGraceMs',
   'readWorldDefinition',
   'rearmAt',
+  'receiptAt',
   'receiptFloor',
   'resolveOrder',
   'resumeDueOf',

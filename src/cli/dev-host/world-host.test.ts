@@ -1705,6 +1705,38 @@ describe('#195: an uncertain order is answered from its receipt, never spent twi
     await host.close();
   });
 
+  it('keeps the receipt of an old order that reaches an idle world, so its retry replays (#793)', async () => {
+    // Nothing moved the floor while the world sat idle, so an order minted more
+    // than one window ago still runs; its receipt must survive the floor the
+    // same write moves.
+    const clock = testClock();
+    const budgets = worldBudgets({ receiptRetentionMs: 1_000 });
+    const { host, sent } = await attached({ dir, clock, budgets });
+    const mintedAt = clock.now();
+    clock.advance(5_000);
+    await chop(host, 'r1', 'o1', mintedAt);
+    expect(logsIn(sent)).toContain('"logs":1');
+
+    await chop(host, 'r2', 'o1', mintedAt);
+    expect(last(sent, 'c1', 'world_response')).toMatchObject({ ok: true, replayed: true });
+    expect(logsIn(sent)).toContain('"logs":1');
+    await host.close();
+  });
+
+  it('caps a far-future order\'s receipt one window past the host clock, and sweeps it after (#793)', async () => {
+    const clock = testClock();
+    const budgets = worldBudgets({ receiptRetentionMs: 1_000 });
+    const { host, store } = await attached({ dir, clock, budgets });
+    const committedAt = clock.now();
+    await chop(host, 'r1', 'o1', committedAt + 1_000_000);
+    expect(store.receipt(devWorldPlayer(1), 'o1')?.at).toBe(committedAt + 1_000);
+
+    clock.advance(2_001);
+    await chop(host, 'r2', 'o2', clock.now());
+    expect(store.receipt(devWorldPlayer(1), 'o1')).toBeUndefined();
+    await host.close();
+  });
+
   it('runs a fresh order after "fire due events now" jumps the clock past the retention window (#722)', async () => {
     // The page stamps orders with its own wall clock, so the floor they are
     // judged against must not include the world's skew.

@@ -69,6 +69,7 @@ import {
   migratedArgs,
   planEviction,
   planMigration,
+  receiptAt,
   receiptFloor,
   resolveOrder,
   type PlannedEvent,
@@ -908,14 +909,7 @@ export class ResidentWorld {
         timing: null,
         arrivedAt,
         queue: this.#store.pendingEvents(),
-        // SWEPT BY THE ORDER'S OWN `at`, the instant `resolveOrder` judges a
-        // repeat by, so a page clock ahead of the host's cannot outlive its
-        // receipt (#793); capped one window ahead so a lying clock cannot pin it.
-        receipt: {
-          orderId: order.id,
-          player,
-          at: Math.min(order.at, this.#clock.now() + this.#budgets.receiptRetentionMs),
-        },
+        receipt: { orderId: order.id, player, at: receiptAt(order, this.#clock.now(), this.#budgets) },
       });
       return { kind: "committed", events };
     } finally {
