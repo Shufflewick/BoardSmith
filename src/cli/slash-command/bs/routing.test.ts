@@ -200,7 +200,7 @@ describe('no model review before verify (#454)', () => {
     }
   });
 
-  it('every review prompt starts with the work package, states the mechanical checks are done, carries the verify result, and lists only judgement checks', () => {
+  it('every review prompt starts with the work package, states the fast checks are done, carries the verify result, and lists only judgement checks', () => {
     const expected = {
       'build/redteam.md': 2,
       'build/audit.md': 5,
@@ -212,7 +212,7 @@ describe('no model review before verify (#454)', () => {
       expect(templates, `${file} must have ${count} review prompt(s) starting "Work package: {slug}"`).toHaveLength(count);
       for (const template of templates) {
         const text = flat(template);
-        expect(text, file).toContain('The mechanical checks are done.');
+        expect(text, file).toContain('The fast checks are done.');
         expect(text, file).toContain('{verifyResult}');
         expect(text, file).toMatch(/Judgement checks \(the only ones you make\):/);
         expect(text, file).not.toMatch(/\b(run|re-run) (the full suite|the suite|typecheck|boardsmith test|boardsmith verify)\b/i);

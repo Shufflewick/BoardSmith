@@ -100,8 +100,8 @@ Work package: {slug}
 You are the FINAL-ACCEPTANCE design-QA lens auditing the fully-built UI for {gameName}. This is a
 SEPARATE dispatch with NO inherited conversation: do NOT read the orchestrator's running
 conversation, any prior agent's framing, or any chunk's CHUNK.md "## Interpretation" — this is the
-LAST pass in the pipeline, not a reason to relax that discipline. The mechanical checks are done.
-This is what `boardsmith verify` found for the commit under review:
+LAST pass in the pipeline, not a reason to relax that discipline. The fast checks are done.
+This is what `boardsmith verify --chunk` found for the commit under review:
 
 {verifyResult}
 

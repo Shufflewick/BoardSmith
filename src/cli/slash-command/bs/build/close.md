@@ -179,21 +179,17 @@ dispatch that carries the designer's approval of the delta). Nothing below this 
 file. It runs before the chunk-complete line, which is a claim of done, and before any
 `outcome: closed` is returned.
 
-For an explicitly opted-in project, apply `state-machine.md` "Focused Verification Policy"
-to step 2 and its recorded scope; the last `--check` remains the same.
-
 1. **Commit everything close wrote** (`chunk-<slug>/step-close`, `state-machine.md` "Git
    Protocol"). `git status --porcelain` must then print nothing.
 2. Run `npx boardsmith verify --chunk <slug>` (`state-machine.md` "Git Protocol" says what it
-   measures from). By default it runs every check again for this commit: the full suite, typecheck, build,
-   validate, the smoke test and the mutation check. A mutant whose code and tests have not changed since an
-   earlier run is not run again, so after close's bookkeeping-only commits the mutation check
-   costs next to nothing.
+   measures from). It runs the chunk's fast checks again for this commit: its tests and
+   typecheck. The full suite, build, validate, the smoke test and the mutation check run once, at
+   publish, not at close.
 3. Run `npx boardsmith verify --check --chunk <slug>`. It is the last command close runs, and
    nothing is written or committed after it, so the commit it accepted is the commit the chunk is
    closed on and the one the orchestrator checks (`orchestrate/chunk-dispatch.md` "The Return
-   Shape"). It accepts only a current result with the required full or explicitly authorized
-   focused scope, which is what step 2 made.
+   Shape"). It accepts only a passing result step 2 made for this chunk, for this commit; that
+   is enough for the orchestrator to accept the chunk as closed and merge it.
 
 When verify fails, the chunk is not closed and nothing here may say it is done: fix what the failed
 check names, commit, and run this gate again from step 1.

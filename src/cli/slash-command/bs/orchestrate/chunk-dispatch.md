@@ -95,9 +95,7 @@ five; the last two are dispatches it is never asked about:
    designer. Its answers are written in that chunk's worktree, numbered provisionally, and its
    re-dispatch goes back to the same worktree. `RUN.md`'s `Open Gate:` lists every open gate.
 5. **Merge, one merge at a time.** When a chunk closes, run `boardsmith chunk-merge <slug>` from the
-   main checkout. For explicit focused opt-in, follow `state-machine.md` "Focused Verification
-   Policy" for combined-tree test execution and shared-file evidence; the sequence below describes
-   the default full checks. Never merge a chunk branch by hand: this command is the gate. It merges under a
+   main checkout. Never merge a chunk branch by hand: this command is the gate. It merges under a
    lock, allocates real ledger numbers on the combined tree, re-runs `ledger-check`,
    `constraint-check` with its measurement tests, every sign-off and the whole test suite on the
    combined tree, and refuses (leaving the main checkout exactly as it was) when any of them fails,
@@ -164,9 +162,10 @@ already owns:
   - `closed` — the chunk reached `close` (or the light path's equivalent) and its status is
     `verified` or `verified (user-waived)`, and close ended with `build/close.md` "The Done Gate":
     its last command was `npx boardsmith verify --check --chunk <slug>`, which exited zero, and
-    nothing was written or committed after it. So the chunk's last commit, on a clean tree, has a
-    passing `boardsmith verify` result with the scope required by `state-machine.md` "Git
-    Protocol" or its explicitly opted-in "Focused Verification Policy".
+    nothing was written or committed after it. So the chunk's last commit, on a clean tree, has
+    passed the chunk's fast checks, `boardsmith verify --chunk <slug>` (its tests and typecheck,
+    `state-machine.md` "Git Protocol"). That is enough to accept the chunk as closed and merge it;
+    the full checks run at publish.
     A subagent never returns `closed`, and never says done or green anywhere in its report, without
     that; the orchestrator runs the same check before it believes one.
   - `gate` — work stopped at a human gate. Requires `gate`.
