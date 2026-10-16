@@ -134,8 +134,12 @@ export function rearmAt(
 ): number | null {
   if (events.length === 0) return null;
   const overdueAt = Math.max(now, retryAt);
-  return Math.min(...events.map((e) => (e.due > now ? e.due : overdueAt)));
+  // A loop, not Math.min(...): spreading a queue past ~125k events overflows the stack (#791).
+  let at = Infinity;
+  for (const e of events) at = Math.min(at, e.due > now ? e.due : overdueAt);
+  return at;
 }
+
 
 /**
  * How a RECURRING event that fell behind should be run: some real iterations,

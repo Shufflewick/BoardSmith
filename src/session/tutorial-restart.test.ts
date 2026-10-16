@@ -101,7 +101,7 @@ describe('startTutorial mid-game (#546)', () => {
     await session.start();
     const before = structuredClone(session.host.snapshot);
 
-    const result = await session.send(1, { type: 'startTutorial', player: seat });
+    const result = await session.send(seat, { type: 'startTutorial', player: seat });
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/This tutorial is for seat 3, but this table has 2 seats/);

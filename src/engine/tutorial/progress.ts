@@ -190,6 +190,18 @@ export function validateTutorialDefinition(def: TutorialDefinition): void {
     );
   }
 
+  // Progress moves to the step after the FIRST step with the current id, so a repeated id loops forever (#782).
+  const seenIds = new Set<string>();
+  for (const step of def.steps) {
+    if (seenIds.has(step.id)) {
+      throw new Error(
+        `Tutorial step id '${step.id}' is used by more than one step. ` +
+        'Give every step in TutorialDefinition.steps its own id.'
+      );
+    }
+    seenIds.add(step.id);
+  }
+
   for (const step of def.steps) {
     // Validate gate: if it looks like a labeled-condition record, verify values are functions.
     // Allow-list gate has action: string — skip predicate-function validation for it.

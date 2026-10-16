@@ -1,5 +1,5 @@
 import type { Rule } from 'eslint';
-import { isGlobalMemberCall } from './global-receiver.js';
+import { forEachGlobalReference } from './global-receiver.js';
 
 /**
  * Disallows timer functions in game rules code
@@ -33,33 +33,10 @@ const rule: Rule.RuleModule = {
     };
 
     return {
-      CallExpression(node) {
-        if (node.callee.type === 'Identifier') {
-          const name = node.callee.name;
-          if (Object.hasOwn(forbiddenFunctions, name)) {
-            context.report({
-              node,
-              messageId: forbiddenFunctions[name],
-            });
-          }
-        }
-
-        // Check for window.setTimeout, global.setTimeout, etc. — but ONLY on a
-        // real global receiver, so a game's own `scheduler.setTimeout()` is
-        // untouched.
-        if (
-          node.callee.type === 'MemberExpression' &&
-          node.callee.property.type === 'Identifier' &&
-          isGlobalMemberCall(node.callee)
-        ) {
-          const name = node.callee.property.name;
-          if (Object.hasOwn(forbiddenFunctions, name)) {
-            context.report({
-              node,
-              messageId: forbiddenFunctions[name],
-            });
-          }
-        }
+      'Program:exit'() {
+        forEachGlobalReference(context.sourceCode, new Set(Object.keys(forbiddenFunctions)), (name, node) => {
+          context.report({ node, messageId: forbiddenFunctions[name] });
+        });
       },
     };
   },

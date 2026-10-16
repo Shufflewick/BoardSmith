@@ -177,6 +177,36 @@ describe('useFLIP', () => {
 
       prefersReducedMotion.value = false;
     });
+
+    // #748: every push is a new view, so a deep watch only walked every element.
+    it('animates on a new view without walking the view', async () => {
+      let elementReads = 0;
+      const element = {};
+      Object.defineProperty(element, 'name', {
+        enumerable: true,
+        get: () => {
+          elementReads++;
+          return 'card';
+        },
+      });
+
+      const container = makeContainer();
+      const child = document.createElement('div');
+      child.setAttribute('data-element-id', 'card-auto-2');
+      container.appendChild(child);
+
+      const gameViewRef = ref({ children: [element] });
+      useFLIP({ containerRef: ref(container), auto: true, gameView: () => gameViewRef.value });
+
+      enableAnimationTestMode();
+      gameViewRef.value = { children: [element] };
+      await nextTick();
+
+      expect(getAnimationTrace()).toContainEqual(
+        expect.objectContaining({ kind: 'flip', element: 'card-auto-2' })
+      );
+      expect(elementReads).toBe(0);
+    });
   });
 
   describe('real path (mocked WAAPI + distinct rects)', () => {

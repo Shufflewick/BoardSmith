@@ -590,7 +590,7 @@ describe("createWorld — one construction, every host", () => {
     }
   });
 
-  it("REFUSES an unregistered or too-long action name, or a key that is not well-formed Unicode, at the offending line, so the change unwinds (#603, #604)", async () => {
+  it("REFUSES an unregistered or too-long action name, or a key that is empty or not well-formed Unicode, at the offending line, so the change unwinds (#603, #604, #790)", async () => {
     // A registered clock action whose name is over the bound: registering a
     // name does not bound it, so the length is refused even for this one.
     const longName = "s".repeat(WORLD_SCHEDULE_ACTION_MAX_BYTES + 1);
@@ -632,6 +632,7 @@ describe("createWorld — one construction, every host", () => {
         code: "schedule-key-malformed",
       },
       { action: cancelling("raid\uD83D"), code: "schedule-key-malformed" },
+      { action: arming({ delayMs: 1, action: "sweep", key: "" }), code: "schedule-key-empty" },
     ] as const;
 
     for (const { action, code } of cases) {
@@ -827,5 +828,60 @@ describe("createWorld — one construction, every host", () => {
         declaredNotices: [],
       }),
     ).rejects.toThrow(/must name the key its timer was armed under/);
+  });
+});
+
+describe("#795 — a partition root hangs from the game and has one name", () => {
+  // Before #795 any element was accepted: a root nested in another root was
+  // stored twice, and the next wake failed hydrating both with an uncoded error.
+  function worldWith(world: Partial<WorldDefinition>) {
+    return createWorld({
+      elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
+      definition: bundle({ world: { ...bundle().world, ...world } as WorldDefinition }),
+      seed: "s",
+      seats: new Map([["p1", 1]]),
+    }).runner;
+  }
+
+  async function refusalOf(attempt: Promise<unknown>): Promise<WorldRefusal> {
+    const caught = await attempt.then(() => undefined, (error: unknown) => error);
+    expect(caught).toBeInstanceOf(WorldRefusal);
+    return caught as WorldRefusal;
+  }
+
+  it("refuses a genesis root nested inside another root", async () => {
+    const runner = worldWith({
+      genesis: (game) => {
+        const hall = game.create(Yard, "hall");
+        return { hall, closet: hall.create(Yard, "closet") } as Record<string, GameElement>;
+      },
+    });
+    const refusal = await refusalOf(runner.genesis());
+    expect(refusal.code).toBe("invalid-partition-root");
+    expect(refusal.message).toMatch(/"closet"/);
+  });
+
+  it("refuses a root createPartition builds inside an existing root", async () => {
+    const runner = worldWith({
+      createPartition: (game, name) =>
+        game.first(Yard, "yard")!.create(Yard, name) as GameElement,
+    });
+    await runner.genesis();
+    const refusal = await refusalOf(runner.createPartition("nook"));
+    expect(refusal.code).toBe("invalid-partition-root");
+    expect(refusal.message).toMatch(/"nook"/);
+  });
+
+  it("refuses one element registered under two names", async () => {
+    const runner = worldWith({
+      genesis: (game) => {
+        const hall = game.create(Yard, "hall");
+        return { hall, alias: hall } as Record<string, GameElement>;
+      },
+    });
+    const refusal = await refusalOf(runner.genesis());
+    expect(refusal.code).toBe("invalid-partition-root");
+    expect(refusal.message).toMatch(/"alias"/);
+    expect(refusal.message).toMatch(/"hall"/);
   });
 });

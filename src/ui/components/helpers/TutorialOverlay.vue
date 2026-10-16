@@ -56,7 +56,7 @@ import BoardMessage from './BoardMessage.vue';
 import type {
   Annotation,
 } from '../../../engine/tutorial/types.js';
-import { buildSelector } from './overlay-utils.js';
+import { buildSelector, NOTHING_TO_SHOW } from './overlay-utils.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -93,8 +93,8 @@ const gameState = inject(GAME_CONTEXT_KEYS.gameState, undefined) as
 
 // ── Derived content ───────────────────────────────────────────────────────────
 
-const annotations = computed<Annotation[]>(
-  () => gameState?.value?.state?.tutorial?.content ?? [],
+const annotations = computed<readonly Annotation[]>(
+  () => gameState?.value?.state?.tutorial?.content ?? NOTHING_TO_SHOW,
 );
 
 const hasContent = computed(() => annotations.value.length > 0);
@@ -241,6 +241,8 @@ function measure() {
 
 let resizeObserver: ResizeObserver | null = null;
 let observedElements: Element[] = [];
+// The element the scroll listener is on, so it is removed from that one, not a re-queried one.
+let scrollRegion: Element | null = null;
 
 function rebuildObservers() {
   if (!overlayRoot.value) return;
@@ -255,6 +257,7 @@ function rebuildObservers() {
     resizeObserver.disconnect();
     observedElements = [];
   }
+  scrollRegion?.removeEventListener('scroll', onScroll);
 
   resizeObserver = new ResizeObserver(() => {
     void nextTick(measure);
@@ -278,6 +281,7 @@ function rebuildObservers() {
 
     boardRegion.addEventListener('scroll', onScroll, { passive: true });
   }
+  scrollRegion = boardRegion;
 }
 
 function onScroll() {
@@ -305,12 +309,8 @@ onUnmounted(() => {
     resizeObserver = null;
   }
 
-  const boardRegion =
-    overlayRoot.value?.closest('.boardregion') ??
-    document.querySelector('.boardregion');
-  if (boardRegion) {
-    boardRegion.removeEventListener('scroll', onScroll);
-  }
+  scrollRegion?.removeEventListener('scroll', onScroll);
+  scrollRegion = null;
   observedElements = [];
 });
 

@@ -29,6 +29,8 @@ import type { PreviewState } from '../../composables/useZoomPreview.js';
 // present only when the game imported `boardsmith/ui/dice` (which any game
 // drawing dice already does). See dice/die-preview-registry.ts.
 import { ADD_DICE_SUPPORT_ADVICE, getDiePreviewComponent } from '../dice/die-preview-registry.js';
+import { parseImageInfo, getSpriteStyle } from '../../utils/image.js';
+import { getSuitSymbol as defaultSuitSymbol, getSuitColor as defaultSuitColor } from '../../composables/useCardDisplay.js';
 
 const props = defineProps<{
   /** Preview state from useZoomPreview */
@@ -39,46 +41,12 @@ const props = defineProps<{
   getSuitColor?: (suit: string) => string;
 }>();
 
-// Sprite sheet layout constants (same as other components)
-const NATIVE_CARD_WIDTH = 238;
-const NATIVE_CARD_HEIGHT = 333;
-const SPRITE_COLS = 13;
-const SPRITE_ROWS = 5;
-
 // Default card display size (standard playing card proportion)
 const DEFAULT_CARD_WIDTH = 60;
 const DEFAULT_CARD_HEIGHT = 84;
 
 // Scale factor for preview (how much larger than the original card)
 const PREVIEW_SCALE = 3;
-
-// Type for parsed image info
-type ImageInfo =
-  | { type: 'url'; src: string }
-  | { type: 'sprite'; sprite: string; x: number; y: number; width: number; height: number };
-
-// Parse image data
-function parseImageInfo(image: unknown): ImageInfo | null {
-  if (!image) return null;
-  if (typeof image === 'string') return { type: 'url', src: image };
-  if (typeof image === 'object' && image !== null) {
-    const spriteObj = image as { sprite?: string; x?: number; y?: number; width?: number; height?: number };
-    if (spriteObj.sprite && typeof spriteObj.x === 'number' && typeof spriteObj.y === 'number') {
-      return {
-        type: 'sprite',
-        sprite: spriteObj.sprite,
-        x: spriteObj.x,
-        y: spriteObj.y,
-        width: spriteObj.width ?? NATIVE_CARD_WIDTH,
-        height: spriteObj.height ?? NATIVE_CARD_HEIGHT,
-      };
-    }
-    if (spriteObj.sprite) {
-      return { type: 'url', src: spriteObj.sprite };
-    }
-  }
-  return null;
-}
 
 // Dynamic preview dimensions based on card data (supports any shape)
 const previewDimensions = computed(() => {
@@ -92,32 +60,6 @@ const previewDimensions = computed(() => {
   };
 });
 
-// Compute sprite styles for preview size (uses dynamic dimensions)
-function getSpriteStyle(info: ImageInfo): Record<string, string> {
-  if (info.type !== 'sprite') return {};
-
-  const { width: previewWidth, height: previewHeight } = previewDimensions.value;
-
-  const scaleX = previewWidth / NATIVE_CARD_WIDTH;
-  const scaleY = previewHeight / NATIVE_CARD_HEIGHT;
-
-  const sheetWidth = SPRITE_COLS * NATIVE_CARD_WIDTH;
-  const sheetHeight = SPRITE_ROWS * NATIVE_CARD_HEIGHT;
-
-  const scaledSheetWidth = sheetWidth * scaleX;
-  const scaledSheetHeight = sheetHeight * scaleY;
-
-  const scaledX = info.x * scaleX;
-  const scaledY = info.y * scaleY;
-
-  return {
-    backgroundImage: `url(${info.sprite})`,
-    backgroundPosition: `-${scaledX}px -${scaledY}px`,
-    backgroundSize: `${scaledSheetWidth}px ${scaledSheetHeight}px`,
-    backgroundRepeat: 'no-repeat',
-  };
-}
-
 // Get the image to show (only for data-based mode)
 const imageInfo = computed(() => {
   const cardData = props.previewState.cardData;
@@ -126,23 +68,6 @@ const imageInfo = computed(() => {
   const image = cardData.showBack ? cardData.backImage : cardData.faceImage;
   return parseImageInfo(image);
 });
-
-// Default suit symbols
-const defaultSuitSymbols: Record<string, string> = {
-  'H': '\u2665', // ♥
-  'D': '\u2666', // ♦
-  'C': '\u2663', // ♣
-  'S': '\u2660', // ♠
-};
-
-function getDefaultSuitSymbol(suit: string): string {
-  return defaultSuitSymbols[suit?.toUpperCase()] || suit;
-}
-
-function getDefaultSuitColor(suit: string): string {
-  const s = suit?.toUpperCase();
-  return s === 'H' || s === 'D' ? '#e74c3c' : '#2c3e50';
-}
 
 // Position style
 const positionStyle = computed(() => ({
@@ -261,7 +186,7 @@ const previewCardStyle = computed(() => ({
             <div
               v-else-if="imageInfo.type === 'sprite'"
               class="preview-image preview-sprite"
-              :style="getSpriteStyle(imageInfo)"
+              :style="getSpriteStyle(imageInfo, previewDimensions.width, previewDimensions.height)"
             ></div>
           </template>
           <!-- Fallback: card back or text-based card -->
@@ -274,10 +199,10 @@ const previewCardStyle = computed(() => ({
             <div
               v-else
               class="preview-fallback"
-              :style="{ color: (getSuitColor || getDefaultSuitColor)(previewState.cardData?.suit || '') }"
+              :style="{ color: (getSuitColor || defaultSuitColor)(previewState.cardData?.suit || '') }"
             >
               <span class="preview-rank">{{ previewState.cardData?.rank }}</span>
-              <span class="preview-suit">{{ (getSuitSymbol || getDefaultSuitSymbol)(previewState.cardData?.suit || '') }}</span>
+              <span class="preview-suit">{{ (getSuitSymbol || defaultSuitSymbol)(previewState.cardData?.suit || '') }}</span>
             </div>
           </template>
         </div>

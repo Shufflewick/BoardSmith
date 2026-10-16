@@ -63,7 +63,7 @@ import {
   relChunkMdPath,
 } from '../lib/project-paths.js';
 import { CHUNK_EVIDENCE_DIR, citedEvidencePaths } from '../lib/cited-evidence.js';
-import { type ChunkCommit, type PinnedCommit, chunkPins } from '../lib/chunk-commits.js';
+import { type ChunkCommit, type PinnedCommit, chunkPins, commitName } from '../lib/chunk-commits.js';
 import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem } from '../lib/line-location.js';
 import { type EntryField, type LedgerEntry, entryField, parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
 import { NUMBERED_LEDGER_SPECS, provisionalHeadings, provisionalReferences } from '../lib/ledger-allocation.js';
@@ -885,11 +885,6 @@ async function pinnedCommitOf(
     return { problem: `Cites ${written}, but ${c.rel} was not in git at ${commitName(pinned.commit)}. Pin a commit that has it.` };
   }
   return { commit: pinned.commit };
-}
-
-/** A commit of a chunk's history, as messages name it. */
-function commitName({ hash, label }: ChunkCommit): string {
-  return `${hash.slice(0, 10)} (${label})`;
 }
 
 /** The citation as a location, `path:N` or `path:N-M`, for messages. */

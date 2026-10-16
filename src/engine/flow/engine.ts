@@ -482,7 +482,7 @@ export class FlowEngine<G extends Game = Game> {
   private resetToRoot(variables: Record<string, unknown>): void {
     this.stack = [{ node: this.definition.root, index: 0, completed: false }];
     this.variables = { ...variables };
-    this.currentPlayer = this.game.currentPlayer;
+    this.currentPlayer = this.game.firstPlayer;
     this.awaitingInput = false;
     this.availableActions = [];
     this.awaitingPlayers = [];
@@ -1200,6 +1200,19 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   /**
+   * The player whose turn it is: the seat the flow is running for (an
+   * `eachPlayer` seat, an action step's player). None while a simultaneous
+   * step is open (from the moment its conditions are first checked), since
+   * every seat acts there, and none once the flow is complete.
+   */
+  getCurrentPlayer(): PlayerOf<G> | undefined {
+    flowStateRead(this.game._ctx);
+    const top = this.stack[this.stack.length - 1];
+    const inSimultaneous = top?.node.type === 'simultaneous-action-step' && !top.completed;
+    return inSimultaneous || this.complete ? undefined : this.currentPlayer;
+  }
+
+  /**
    * Get the current flow state
    */
   getState(): FlowState {
@@ -1510,10 +1523,18 @@ export class FlowEngine<G extends Game = Game> {
         }
       }
 
-      validPath.push(index);
-
       // Navigate to the child node for next iteration
       const child = resolveFlowChild(currentNode, index, frameDataAtDepth);
+      if (!child && !isLeafNode && i < path.length - 1) {
+        const nodeName = currentNode.config?.name ?? currentNode.type;
+        return {
+          valid: false,
+          error: `the save is inside a branch of ${currentNode.type} "${nodeName}" that the current rules no longer have. ` +
+            'Restore it under the rules it was saved with, or start a new game',
+          validPath,
+        };
+      }
+      validPath.push(index);
       if (child) {
         currentNode = child;
       }
@@ -2114,6 +2135,8 @@ export class FlowEngine<G extends Game = Game> {
       throw new Error('ActionStep requires a player');
     }
 
+    // Current while its conditions are checked, so `ctx.player.isCurrent()` holds for it.
+    this.currentPlayer = player;
     const available = this.offeredSequentialActions(config, context, player);
 
     // If no available actions and minMoves met, complete
@@ -2137,7 +2160,6 @@ export class FlowEngine<G extends Game = Game> {
     this.moveCount = moveCount;
 
     // Prompt for input
-    this.currentPlayer = player;
     this.availableActions = available;
 
     // Don't mark completed yet - we'll continue after input
@@ -2159,13 +2181,13 @@ export class FlowEngine<G extends Game = Game> {
     if (!player) {
       throw new Error(`Action step holds a follow-up for seat ${seat}, but this game has no seat ${seat}.`);
     }
+    this.currentPlayer = player;
     const available = this.offeredSequentialActions(config, context, player);
 
     this.warnIfFollowUpStalls(config.name ?? 'action-step', seat, this.heldFollowUp(frame, seat)!);
     this.openStepWindow(frame, config, context, 'action-step');
     this.currentActionConfig = config;
     this.moveCount = frame.data?.moveCount as number;
-    this.currentPlayer = player;
     this.availableActions = available;
     return { awaitingInput: true };
   }
