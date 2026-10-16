@@ -2107,7 +2107,10 @@ export class FlowEngine<G extends Game = Game> {
 
     const minMovesMet = !config.minMoves || moveCount >= config.minMoves;
 
-    const player = this.game.getPlayer(seat) as PlayerOf<G>;
+    const player = this.game.getPlayer(seat) as PlayerOf<G> | undefined;
+    if (!player) {
+      throw new Error(`This action step's saved state does not name a seat of this game (got ${seat}). Start the game again from a fresh state.`);
+    }
 
     const available = this.offeredSequentialActions(config, context, player);
 

@@ -36,9 +36,27 @@ describe('action step entry (#786)', () => {
       root: actionStep({ actions: ['move'], maxMoves: 2, player: (ctx) => ctx.game.getPlayer(seat)! }),
     };
     const engine = new FlowEngine(game, flow);
-    expect(engine.start().currentPlayer).toBe(1);
+    const saved = engine.start();
     seat = 2;
     expect(engine.resume('move', {}).currentPlayer).toBe(1);
+
+    // The seat survives a snapshot round-trip.
+    const restored = new FlowEngine(game, flow);
+    expect(restored.restoreFullState(saved)).toEqual({ success: true });
+    expect(restored.resume('move', {}).currentPlayer).toBe(1);
+  });
+
+  it('refuses step state that does not say which seat it is for', () => {
+    const game = gameWithMove();
+    const flow: FlowDefinition = { root: actionStep({ actions: ['move'], minMoves: 2 }) };
+    const saved = new FlowEngine(game, flow).start();
+    for (const data of Object.values(saved.position.frameData ?? {})) delete data.seat;
+
+    const restored = new FlowEngine(game, flow);
+    expect(restored.restoreFullState(saved)).toEqual({ success: true });
+    expect(() => restored.resume('move', {})).toThrow(
+      /This action step's saved state does not name a seat of this game \(got undefined\)\. Start the game again from a fresh state\./,
+    );
   });
 
   it('calls config.player once when the step is entered', () => {
