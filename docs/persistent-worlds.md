@@ -2725,7 +2725,7 @@ your game.
 | `unknown-player` | A command named somebody this world does not seat. |
 | `clock-only-command` | A player sent a seatless action -- one built with `worldClockAction()`, which the clock reaches and nobody else does -- or a scheduled event came due naming a seated action, which has no player to act for. Since `schedule-seated-action`, a seated action is refused at the `schedule()` line, so this second case answers only an event queued before that check, in a world that already holds one. |
 | `world-full` | A seating would exceed the bundle's own `maxPlayers`. Seats are assigned once and never handed on. |
-| `seat-conflict` | A seating named a player who already holds a different seat. |
+| `seat-conflict` | A seating named a player who already holds a different seat, or a seat another player already holds. |
 | `world-catching-up` | A world declaring `ordering: "chronological"` was still behind the instant this command arrived at, so it was not applied. Sending it again is safe and is the intended response: an order's durable identity makes the repeat run exactly once, and the world is already catching up. |
 | `rate-limited` | A connection sent frames faster than the host accepts. Well-formed traffic, refused at the door. |
 | `invalid-order` | A player command arrived with no usable order identity: no id, an id past 128 characters, or no mint instant. Every player command carries one -- see [an order that survives a lost reply](#an-order-that-survives-a-lost-reply). |

@@ -175,7 +175,7 @@ export const WORLD_REFUSALS = {
   },
   "seat-conflict": {
     owner: "caller",
-    why: "a seating named a player who already holds a DIFFERENT seat (#150). It used to share `unknown-player`'s code, which misread a conflict about somebody who IS in the world as 'not in this world'. A seat is where a player's holdings are, so the move is refused rather than handing them somebody else's -- and the world is unaffected",
+    why: "a seating named a player who already holds a DIFFERENT seat (#150), or a seat ANOTHER player already holds (#796). It used to share `unknown-player`'s code, which misread a conflict about somebody who IS in the world as 'not in this world'. A seat is where a player's holdings are, so the move is refused rather than handing them somebody else's -- and the world is unaffected",
   },
 
   "stale-draft": {
