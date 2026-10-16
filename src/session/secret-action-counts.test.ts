@@ -130,3 +130,26 @@ describe("a seat cannot count another seat's secret actions (#449)", () => {
     });
   });
 });
+
+// #778: a seat's available actions can reveal its hidden hand, so each view
+// carries only its own seat's actions, and the spectator view carries none.
+describe("a seat is sent only its own available actions (#778)", () => {
+  type Flow = { availableActions?: string[]; awaitingPlayers?: Array<{ playerIndex: number; availableActions?: string[] }> };
+  const flowOf = (view: unknown) => (view as { flowState: Flow }).flowState;
+  const actionsBySeat = (flow: Flow) => flow.awaitingPlayers?.map((p) => [p.playerIndex, p.availableActions]);
+
+  it('in a simultaneous step and in the sequential step after it', async () => {
+    const game = await statelessGame();
+    expect((await game.act(2, 'signal')).success).toBe(true);
+    const seatActions = ['placePack', 'burnPack', 'signal', 'done'];
+    expect(actionsBySeat(flowOf(game.last.playerViews[0]))).toEqual([[1, seatActions], [2, undefined]]);
+    expect(actionsBySeat(flowOf(game.last.playerViews[1]))).toEqual([[1, undefined], [2, seatActions]]);
+    expect(actionsBySeat(flowOf(game.last.spectatorView))).toEqual([[1, undefined], [2, undefined]]);
+
+    expect((await game.act(1, 'done')).success).toBe(true);
+    expect((await game.act(2, 'done')).success).toBe(true);
+    expect(flowOf(game.last.playerViews[0]).availableActions).toEqual(['battle']);
+    expect(flowOf(game.last.playerViews[1])).not.toHaveProperty('availableActions');
+    expect(flowOf(game.last.spectatorView)).not.toHaveProperty('availableActions');
+  });
+});

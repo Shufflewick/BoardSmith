@@ -197,6 +197,18 @@ export interface PendingActionState {
    * own picks ended (allowed), and `GameRunner.notePickTaken` writes it (#493).
    */
   conditionHeld?: boolean;
+  /**
+   * This seat's own picks that were still on offer right after its latest pick
+   * that left the action open. `GameRunner.notePickTaken` writes it and
+   * `GameRunner.markStalePicks` reads it (#767).
+   */
+  picksOnOffer?: string[];
+  /**
+   * The picks another action took since this seat made them, which
+   * `executePendingAction` checks are still on offer before running.
+   * `GameRunner.markStalePicks` writes it (#767).
+   */
+  stalePicks?: string[];
 }
 
 /**

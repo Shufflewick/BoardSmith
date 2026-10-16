@@ -528,7 +528,7 @@ export class MyPlayer extends Player<MyGame, MyPlayer> {
 }
 ```
 
-> **Note**: Simple properties (numbers, strings, arrays, plain objects, `Map`, `Set`) are auto-serialized. A `Date` or class instance (like `AbilityManager`) in a public property makes saving throw, because it would be restored as a plain object without its methods. Store a Date's `getTime()` number; for a class, keep the instance in a `_` field and save its plain data, as in [Dice and Scoring](./dice-and-scoring.md#basic-usage).
+> **Note**: Simple properties (numbers, strings, arrays, plain objects, `Map`, `Set`) are auto-serialized. A `Date` or class instance in a public property makes saving throw, because it would be restored as a plain object without its methods. Store a Date's `getTime()` number, and keep player state as plain data, as the [dice tracks and abilities](./dice-and-scoring.md#ability-system) do.
 
 ### 3. Win Condition Checking
 

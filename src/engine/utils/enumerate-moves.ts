@@ -26,6 +26,7 @@ import { resolveMultiSelect, resolveOrderedList } from './resolve-multiselect.js
 import { elementsAsIds } from './arg-builder.js';
 import { isElement } from '../element/game-element.js';
 import { numberRangeValues } from '../action/number-labels.js';
+import { choiceValueKey } from '../action/choice-matching.js';
 import { MoveListTooLargeError, NotSimulableError } from '../errors.js';
 import { devWarn } from '../../utils/dev.js';
 import type { SeededRandom } from '../../utils/random.js';
@@ -714,17 +715,38 @@ export function generateCombinations(
   limit: number = MAX_MULTISELECT_COMBINATIONS,
 ): unknown[][] {
   const results: unknown[][] = [];
+  const { grouped, keys } = groupEqualChoices(choices);
 
   if (min === max) {
-    combinationsOfSize(choices, min, [], 0, results, limit);
+    combinationsOfSize(grouped, keys, min, [], 0, results, limit);
   } else {
     for (let size = min; size <= Math.min(max, choices.length); size++) {
       if (results.length >= limit) break;
-      combinationsOfSize(choices, size, [], 0, results, limit);
+      combinationsOfSize(grouped, keys, size, [], 0, results, limit);
     }
   }
 
   return results;
+}
+
+/**
+ * `choices` with equal values side by side, and each one's identity: an
+ * element by itself, any other value by `choiceValueKey`. Combinations skip a
+ * repeat of the value just tried, so each combination of values is listed once (#776).
+ */
+function groupEqualChoices(choices: unknown[]): { grouped: unknown[]; keys: unknown[] } {
+  const groups = new Map<unknown, unknown[]>();
+  for (const choice of choices) {
+    const key = isElement(choice) ? choice : choiceValueKey(choice);
+    const group = groups.get(key);
+    if (group) group.push(choice);
+    else groups.set(key, [choice]);
+  }
+  const entries = [...groups.entries()];
+  return {
+    grouped: entries.flatMap(([, group]) => group),
+    keys: entries.flatMap(([key, group]) => group.map(() => key)),
+  };
 }
 
 /**
@@ -737,6 +759,7 @@ export function generateCombinations(
 // sentence rather than a contract.
 function combinationsOfSize(
   choices: unknown[],
+  keys: unknown[],
   size: number,
   current: unknown[],
   startIndex: number,
@@ -752,8 +775,9 @@ function combinationsOfSize(
 
   for (let i = startIndex; i < choices.length; i++) {
     if (results.length >= limit) return;
+    if (i > startIndex && keys[i] === keys[i - 1]) continue;
     current.push(choices[i]);
-    combinationsOfSize(choices, size, current, i + 1, results, limit);
+    combinationsOfSize(choices, keys, size, current, i + 1, results, limit);
     current.pop();
   }
 }
