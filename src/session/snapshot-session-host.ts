@@ -1276,33 +1276,37 @@ export class SnapshotSessionHost {
     }
     const at = this._snapshot;
     const res = await this.adapters.executeOp(at, null, op);
-    // Computed outside the one-at-a-time section: a move may have landed meanwhile.
-    if (res.success && this._snapshot !== at) {
+    if (!res.success) return res;
+    // Computed outside the one-at-a-time section, so a move may have landed meanwhile; turning a heatmap off does not depend on the position.
+    if (this._snapshot !== at && !('heatmapUpdate' in res && !res.heatmapUpdate.visible)) {
       return {
         success: false,
         error: 'The game moved on while this was being worked out. Ask again for the position as it is now.',
         category: 'protocol',
       };
     }
-    if (res.success) {
-      if ('hintAnnotation' in res) {
-        // Merge with existing seat entry so hint + heatmap coexist (RESEARCH Pitfall 6).
-        const existing = this.transientTeachingState.get(res.hintAnnotation.seat) ?? {};
-        this.transientTeachingState.set(res.hintAnnotation.seat, {
-          ...existing,
-          hint: { annotation: res.hintAnnotation.annotation },
-        });
-      }
-      if ('heatmapUpdate' in res) {
-        const existing = this.transientTeachingState.get(res.heatmapUpdate.seat) ?? {};
-        this.transientTeachingState.set(res.heatmapUpdate.seat, {
-          ...existing,
-          heatmap: { visible: res.heatmapUpdate.visible, entries: res.heatmapUpdate.entries },
-        });
-      }
-      this.broadcastCurrent();
-    }
+    this.storeTeaching(res);
+    this.broadcastCurrent();
     return res;
+  }
+
+  /** Store a hint or heatmap result as the seat's transient teaching state. */
+  private storeTeaching(res: OpSuccess<'hint' | 'heatmapToggle'>): void {
+    if ('hintAnnotation' in res) {
+      // Merge with existing seat entry so hint + heatmap coexist (RESEARCH Pitfall 6).
+      const existing = this.transientTeachingState.get(res.hintAnnotation.seat) ?? {};
+      this.transientTeachingState.set(res.hintAnnotation.seat, {
+        ...existing,
+        hint: { annotation: res.hintAnnotation.annotation },
+      });
+    }
+    if ('heatmapUpdate' in res) {
+      const existing = this.transientTeachingState.get(res.heatmapUpdate.seat) ?? {};
+      this.transientTeachingState.set(res.heatmapUpdate.seat, {
+        ...existing,
+        heatmap: { visible: res.heatmapUpdate.visible, entries: res.heatmapUpdate.entries },
+      });
+    }
   }
 
   /**
