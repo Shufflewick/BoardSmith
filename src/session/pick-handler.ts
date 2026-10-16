@@ -42,7 +42,7 @@ function deserializePendingState(s: Record<string, unknown>): PendingActionState
 }
 
 /** The picks a pending action of `actionName` already holds, resolved to real elements when made. */
-function heldPicks(pendingState: Record<string, unknown> | null, actionName: string): Record<string, unknown> {
+function picksHeldBy(pendingState: Record<string, unknown> | null, actionName: string): Record<string, unknown> {
   return pendingState?.actionName === actionName ? deserializePendingState(pendingState).collectedArgs : {};
 }
 
@@ -267,7 +267,7 @@ export class PickHandler<G extends Game = Game> {
     }
 
     const executor = this.#runner.game.getActionExecutor();
-    const asked = this.#choiceContext(action, player, currentArgs, heldPicks(pendingState, actionName));
+    const asked = this.#choiceContext(action, player, currentArgs, picksHeldBy(pendingState, actionName));
     if ('refusal' in asked) return asked.refusal;
     const { ctx } = asked;
 
