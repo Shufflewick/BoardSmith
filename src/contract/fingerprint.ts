@@ -2008,7 +2008,7 @@ export async function computePayloadHash(): Promise<string> {
   game.persistPrivate = { entries: [{ key: 'player:alice/sheet', value: { hp: 3 } }] };
 
   // One seat's actionTempState value (#716). Only that seat's view carries it,
-  // under the seat-first key, so a change to either moves `payloadHash`.
+  // nested under the seat, so a change to either moves `payloadHash`.
   engine.actionTempState(game, game.getPlayer(1), 'peek').set('cardId', 'hand-2-0');
 
   // A removed card a public attribute still refers to (#655). Every view
