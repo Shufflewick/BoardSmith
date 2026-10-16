@@ -32,7 +32,6 @@ import { randomUUID } from 'node:crypto';
 
 import {
   presenceDepartGraceMs,
-  rearmAt,
   WorldRefusal,
   type RoutedEvent,
   type WorldActionOffer,
@@ -909,7 +908,7 @@ export class LocalWorldHost {
         owner: event.owner,
         ...(event.everyMs === undefined ? {} : { everyMs: event.everyMs }),
       })),
-      nextDue: rearmAt(pending, this.#world.now()),
+      nextDue: this.#world.nextWakeAt(),
       worldNow: this.#world.now(),
       clockSkewMs: this.#world.skewMs,
       storePath: this.#store.path,

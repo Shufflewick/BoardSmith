@@ -1110,13 +1110,18 @@ export class ResidentWorld {
    */
   rearm(): void {
     if (this.#closed) return;
-    const at = rearmAt(this.#store.pendingEvents(), this.now(), this.#retryAt);
+    const at = this.nextWakeAt();
     this.#clock.arm(at === null ? null : at - this.now(), () => {
       void this.run(async () => {
         await this.#drain();
         await this.#onChanged();
       });
     });
+  }
+
+  /** The instant `rearm` arms for, which is what a host shows as "next due". */
+  nextWakeAt(): number | null {
+    return rearmAt(this.#store.pendingEvents(), this.now(), this.#retryAt);
   }
 
   /**
