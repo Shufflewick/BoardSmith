@@ -13,7 +13,7 @@ import {
 } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
 import { testRunScopeProblem } from '../lib/test-run-scope.js';
-import { extractSection, parseRulings } from './build-manifest.js';
+import { extractSection, parseRulings, stripHtmlComments } from './build-manifest.js';
 import { ENTRY_NUMBER, entryHeadingPattern } from '../lib/ledger-entries.js';
 import { escapeRegExp } from '../lib/regexp.js';
 import { toolCommand } from '../lib/run-tool.js';
@@ -101,10 +101,6 @@ interface ConstraintCheckResult {
 // Reading the ledger
 // ---------------------------------------------------------------------------------------------
 
-function stripComments(text: string): string {
-  return text.replace(/<!--[\s\S]*?-->/g, '');
-}
-
 /** Whitespace collapsed and emphasis markup dropped, so a quote survives re-wrapping. */
 function normalize(text: string): string {
   return text.replace(/[*`]/g, '').replace(/\s+/g, ' ').trim();
@@ -112,7 +108,7 @@ function normalize(text: string): string {
 
 /** Splits a section into its `### <id>` entries and reads each entry's `- Field: value` lines. */
 function readEntries(section: string | undefined, prefix: 'C' | 'G'): Array<Record<string, string>> {
-  const body = stripComments(section ?? '');
+  const body = stripHtmlComments(section ?? '');
   const starts = [...body.matchAll(entryHeadingPattern(prefix, '', ENTRY_NUMBER))];
   return starts.map((match, i) => {
     const end = i + 1 < starts.length ? starts[i + 1].index : body.length;
@@ -156,7 +152,7 @@ function hardConstraintBullets(claudeMd: string | undefined): string[] {
   if (!heading) return [];
   const rest = claudeMd.slice(heading.index + heading[0].length);
   const next = /^#{1,3} /m.exec(rest);
-  const lines = stripComments(next ? rest.slice(0, next.index) : rest).split('\n');
+  const lines = stripHtmlComments(next ? rest.slice(0, next.index) : rest).split('\n');
   const bullets: string[] = [];
   for (const line of lines) {
     if (/^[-*] /.test(line)) bullets.push(line.slice(2));
@@ -245,7 +241,7 @@ function duplicateIdRefusals(entries: ReadonlyArray<{ id: string }>): string[] {
 }
 
 async function rulingNumbers(projectDir: string): Promise<Set<string>> {
-  const text = stripComments((await readOptional(designPath(projectDir, RULINGS_MD))) ?? '');
+  const text = stripHtmlComments((await readOptional(designPath(projectDir, RULINGS_MD))) ?? '');
   return new Set(parseRulings(text).map((r) => `Ruling ${r.id}`));
 }
 
@@ -327,7 +323,7 @@ interface ReviewVerdict {
 /** `- C1: held. <citation>` lines, by constraint id. */
 function parseVerdicts(section: string): Map<string, ReviewVerdict> {
   const verdicts = new Map<string, ReviewVerdict>();
-  for (const line of stripComments(section).split('\n')) {
+  for (const line of stripHtmlComments(section).split('\n')) {
     const m = new RegExp(`^- (C${ENTRY_NUMBER}):\\s*([a-z ]+?)\\.\\s*(.*)$`, 'i').exec(line.trim());
     if (m) verdicts.set(m[1], { verdict: m[2].toLowerCase(), citation: m[3].trim() });
   }

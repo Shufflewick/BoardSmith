@@ -98,7 +98,7 @@
  * ```
  */
 
-import { watch, type Ref, type ComputedRef } from 'vue';
+import { watch, onScopeDispose, type Ref, type ComputedRef } from 'vue';
 import { useFlyingElements, type FlyingCardData, type FlyingCard } from './useFlyingElements.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
 import { isDevThrowEnabled } from '../../utils/dev.js';
@@ -362,7 +362,8 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
     actionName: string,
     args: Record<string, unknown>
   ): Promise<void> {
-    // Clear any previous pending animation
+    // Clear any previous pending animation (a refused action never consumed it)
+    pendingAnimation?.mutationObserver?.disconnect();
     pendingAnimation = null;
 
     // Find matching animation config
@@ -454,6 +455,8 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
       isFlipInPlace,
     };
   }
+
+  onScopeDispose(() => pendingAnimation?.mutationObserver?.disconnect());
 
   // Watch gameView for changes - this indicates the DOM has updated after action execution
   watch(

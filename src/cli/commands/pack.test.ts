@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { existsSync, mkdirSync, readFileSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 import { packAll, packOutputDir, pruneStaleTarballs, readContractRevision } from './pack.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
@@ -135,17 +136,19 @@ describe('packAll', () => {
       JSON.stringify({ name, version: '1.0.0', ...extra }, null, 2) + '\n',
     );
     writeFileSync(join(dir, 'index.js'), 'module.exports = {};\n');
+    // pack locks in the checkout's git directory (#744).
+    execFileSync('git', ['init', '-q'], { cwd: dir });
     return dir;
   }
 
   /** The `PackageInfo` for a fixture package, at contract revision `revision`. */
   const info = (name: string, path: string, revision = 7) => ({ name, path, version: '1.0.0', revision });
 
-  it('writes the tarball into an absolute output directory it has to create', () => {
+  it('writes the tarball into an absolute output directory it has to create', async () => {
     const pkgDir = fixturePackage('bs-fixture-ok');
     const outDir = join(root, 'elsewhere', 'nested', 'tarballs');
 
-    const [result] = packAll([info('bs-fixture-ok', pkgDir)], outDir);
+    const [result] = await packAll([info('bs-fixture-ok', pkgDir)], outDir);
 
     expect(existsSync(join(outDir, result.tarball))).toBe(true);
     // The source tree keeps nothing: `npm pack` writes into the package
@@ -153,10 +156,10 @@ describe('packAll', () => {
     expect(readdirSync(pkgDir).filter((f) => f.endsWith('.tgz'))).toEqual([]);
   });
 
-  it('names the version after the contract revision and the packed content (#434)', () => {
+  it('names the version after the contract revision and the packed content (#434)', async () => {
     const pkgDir = fixturePackage('bs-fixture-named');
 
-    const [result] = packAll([info('bs-fixture-named', pkgDir, 115)], join(root, 'out'));
+    const [result] = await packAll([info('bs-fixture-named', pkgDir, 115)], join(root, 'out'));
 
     // One prerelease identifier, not two: a dot before the hash would make an
     // all-digit hash with a leading zero an invalid semver version.
@@ -164,14 +167,14 @@ describe('packAll', () => {
     expect(result.tarball).toBe(`bs-fixture-named-${result.packVersion}.tgz`);
   });
 
-  it('packs the same tree twice into byte-identical tarballs with the same name (#434)', () => {
+  it('packs the same tree twice into byte-identical tarballs with the same name (#434)', async () => {
     // A re-vendor of unchanged sources has to be a no-op in the consumer, so
     // nothing about a pack may depend on when it ran.
     const pkgDir = fixturePackage('bs-fixture-twice');
 
-    const [first] = packAll([info('bs-fixture-twice', pkgDir)], join(root, 'first'));
+    const [first] = await packAll([info('bs-fixture-twice', pkgDir)], join(root, 'first'));
     utimesSync(join(pkgDir, 'index.js'), new Date(2030, 0, 1), new Date(2030, 0, 1));
-    const [second] = packAll([info('bs-fixture-twice', pkgDir)], join(root, 'second'));
+    const [second] = await packAll([info('bs-fixture-twice', pkgDir)], join(root, 'second'));
 
     expect(second.tarball).toBe(first.tarball);
     expect(
@@ -179,42 +182,42 @@ describe('packAll', () => {
     ).toBe(true);
   });
 
-  it('changes the name when any packed file changes (#434)', () => {
+  it('changes the name when any packed file changes (#434)', async () => {
     const pkgDir = fixturePackage('bs-fixture-edited');
 
-    const [before] = packAll([info('bs-fixture-edited', pkgDir)], join(root, 'before'));
+    const [before] = await packAll([info('bs-fixture-edited', pkgDir)], join(root, 'before'));
     writeFileSync(join(pkgDir, 'index.js'), 'module.exports = { changed: true };\n');
-    const [after] = packAll([info('bs-fixture-edited', pkgDir)], join(root, 'after'));
+    const [after] = await packAll([info('bs-fixture-edited', pkgDir)], join(root, 'after'));
 
     expect(after.tarball).not.toBe(before.tarball);
   });
 
-  it('changes the name when only the contract revision changes (#434)', () => {
+  it('changes the name when only the contract revision changes (#434)', async () => {
     const pkgDir = fixturePackage('bs-fixture-revision');
 
-    const [r7] = packAll([info('bs-fixture-revision', pkgDir, 7)], join(root, 'r7'));
-    const [r8] = packAll([info('bs-fixture-revision', pkgDir, 8)], join(root, 'r8'));
+    const [r7] = await packAll([info('bs-fixture-revision', pkgDir, 7)], join(root, 'r7'));
+    const [r8] = await packAll([info('bs-fixture-revision', pkgDir, 8)], join(root, 'r8'));
 
     expect(r8.tarball).not.toBe(r7.tarball);
   });
 
-  it('keeps the name when a file npm does not pack changes (#434)', () => {
+  it('keeps the name when a file npm does not pack changes (#434)', async () => {
     // The hash covers what ships, by npm's own file list, so editing a file
     // `files` leaves out cannot make an unchanged engine look new.
     const pkgDir = fixturePackage('bs-fixture-unpacked', { files: ['index.js'] });
     writeFileSync(join(pkgDir, 'notes.txt'), 'first\n');
 
-    const [before] = packAll([info('bs-fixture-unpacked', pkgDir)], join(root, 'before'));
+    const [before] = await packAll([info('bs-fixture-unpacked', pkgDir)], join(root, 'before'));
     writeFileSync(join(pkgDir, 'notes.txt'), 'second\n');
-    const [after] = packAll([info('bs-fixture-unpacked', pkgDir)], join(root, 'after'));
+    const [after] = await packAll([info('bs-fixture-unpacked', pkgDir)], join(root, 'after'));
 
     expect(after.tarball).toBe(before.tarball);
   });
 
-  it('restores the package version it rewrote', () => {
+  it('restores the package version it rewrote', async () => {
     const pkgDir = fixturePackage('bs-fixture-restore');
 
-    packAll([info('bs-fixture-restore', pkgDir)], join(root, 'out'));
+    await packAll([info('bs-fixture-restore', pkgDir)], join(root, 'out'));
 
     // The pack version is written into package.json only for the duration of
     // `npm pack`; a pack must not leave the source tree's version rewritten.
@@ -222,16 +225,14 @@ describe('packAll', () => {
     expect(pkgJson.version).toBe('1.0.0');
   });
 
-  it('removes the output directory it created when a pack fails', () => {
+  it('removes the output directory it created when a pack fails', async () => {
     // `prepack` runs inside `npm pack`, so a failing one is a real pack
     // failure and not a simulated one.
     const good = fixturePackage('bs-fixture-first');
     const bad = fixturePackage('bs-fixture-broken', { scripts: { prepack: 'exit 1' } });
     const outDir = join(root, 'created-by-pack', 'tarballs');
 
-    expect(() =>
-      packAll([info('bs-fixture-first', good), info('bs-fixture-broken', bad)], outDir),
-    ).toThrow(/bs-fixture-broken/);
+    await expect(packAll([info('bs-fixture-first', good), info('bs-fixture-broken', bad)], outDir)).rejects.toThrow(/bs-fixture-broken/);
 
     // Nothing survives: not the directory tree pack made, not the tarball it
     // had already written into it.
@@ -240,7 +241,7 @@ describe('packAll', () => {
     expect(readdirSync(bad).filter((f) => f.endsWith('.tgz'))).toEqual([]);
   });
 
-  it('leaves an output directory that already existed', () => {
+  it('leaves an output directory that already existed', async () => {
     // The directory is the caller's, not pack's. A failure may empty out what
     // pack put in it, but must not delete a directory pack did not create.
     const bad = fixturePackage('bs-fixture-preexisting', { scripts: { prepack: 'exit 1' } });
@@ -248,22 +249,22 @@ describe('packAll', () => {
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, 'KEEP.md'), 'mine\n');
 
-    expect(() => packAll([info('bs-fixture-preexisting', bad)], outDir)).toThrow();
+    await expect(packAll([info('bs-fixture-preexisting', bad)], outDir)).rejects.toThrow();
 
     expect(readdirSync(outDir)).toEqual(['KEEP.md']);
   });
 
-  it('removes the tarball npm pack produced when it cannot be moved', () => {
+  it('removes the tarball npm pack produced when it cannot be moved', async () => {
     // A directory standing where the tarball has to land makes the move fail
     // after `npm pack` has already written into the package directory. Without
     // cleanup that tarball stays in the source tree, which is what dirtied the
     // checkout in #239. The name is content-derived, so a first pack finds it.
     const pkgDir = fixturePackage('bs-fixture-blocked');
-    const [probe] = packAll([info('bs-fixture-blocked', pkgDir)], join(root, 'probe'));
+    const [probe] = await packAll([info('bs-fixture-blocked', pkgDir)], join(root, 'probe'));
     const outDir = join(root, 'blocked');
     mkdirSync(join(outDir, probe.tarball), { recursive: true });
 
-    expect(() => packAll([info('bs-fixture-blocked', pkgDir)], outDir)).toThrow();
+    await expect(packAll([info('bs-fixture-blocked', pkgDir)], outDir)).rejects.toThrow();
 
     expect(readdirSync(pkgDir).filter((f) => f.endsWith('.tgz'))).toEqual([]);
   });

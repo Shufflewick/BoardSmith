@@ -1,5 +1,6 @@
 /**
- * A lock the kernel releases when its holder exits, however it exits (#441), for `chunk-merge`.
+ * A lock the kernel releases when its holder exits, however it exits (#441), for `chunk-merge` and
+ * `boardsmith pack` (#744).
  *
  * `chunk-merge` used to lock with `mkdir` and remove the directory in a `finally`, so a run that was
  * killed (a timeout, a stopped background task) left the lock behind for good, and the refusal
@@ -13,7 +14,7 @@
  * The kernel decides who holds the lock; the note only says whom to ask. A killed holder leaves its
  * note behind for the next holder to overwrite.
  *
- * Use: `const lock = await takeOsLock(file, 'chunk-merge of trading (branch chunk/trading)')`. A
+ * Use: `const lock = await takeOsLock(file, 'chunk-merge', 'chunk-merge of trading (branch chunk/trading)')`. A
  * string is the refusal, ready to show; otherwise do the work and `await lock.release()`.
  */
 import { spawn } from 'node:child_process';
@@ -40,24 +41,24 @@ function isRunning(pid: number): boolean {
 }
 
 /** Who holds the lock at `file`, as its holder recorded itself, and how to check on it. */
-async function describeHolder(file: string): Promise<string> {
-  const wait = 'Merges run one at a time. Wait for it to finish, then run chunk-merge again.';
+async function describeHolder(file: string, command: string): Promise<string> {
+  const wait = `Only one ${command} runs at a time. Wait for it to finish, then run ${command} again.`;
   const note = await fs.readFile(`${file}.holder`, 'utf-8').catch(() => undefined);
   const field = (name: string) => (note === undefined ? undefined : new RegExp(`^${name}: (.*)$`, 'm').exec(note)?.[1]);
   const pid = Number(field('pid'));
   if (note === undefined || !Number.isInteger(pid) || pid <= 0) {
-    return `Another chunk-merge holds the merge lock and has not recorded itself yet. ${wait} Find it with \`lsof ${file}\`.`;
+    return `Another ${command} holds the lock and has not recorded itself yet. ${wait} Find it with \`lsof ${file}\`.`;
   }
-  const holder = `Another chunk-merge holds the merge lock: ${field('holder')}, pid ${pid}, since ${field('since')}.`;
+  const holder = `Another ${command} holds the lock: ${field('holder')}, pid ${pid}, since ${field('since')}.`;
   if (isRunning(pid)) return `${holder} It is still running; check it with \`ps -p ${pid}\`. ${wait}`;
   return (
     `${holder} But pid ${pid} is no longer running, so the lock is held by a process it left behind. ` +
-    `Find that process with \`lsof ${file}\`, stop it, then run chunk-merge again.`
+    `Find that process with \`lsof ${file}\`, stop it, then run ${command} again.`
   );
 }
 
-/** Takes the lock at `file` for `holder`, or returns why not: who holds it and what to do. */
-export async function takeOsLock(file: string, holder: string): Promise<OsLock | string> {
+/** Takes the lock at `file` for `holder`, a run of `command`, or returns why not: who holds it and what to do. */
+export async function takeOsLock(file: string, command: string, holder: string): Promise<OsLock | string> {
   const helper = spawn('perl', ['-e', HELPER, file], { stdio: ['pipe', 'pipe', 'pipe'] });
   let stderr = '';
   helper.stderr.on('data', (d: Buffer) => (stderr += d.toString()));
@@ -71,12 +72,12 @@ export async function takeOsLock(file: string, holder: string): Promise<OsLock |
     helper.once('close', () => done(out.trim()));
   });
   if (answer === 'no perl') {
-    return 'perl is not on PATH, and it is how chunk-merge takes its merge lock. Install perl, then run chunk-merge again.';
+    return `perl is not on PATH, and it is how ${command} takes its lock. Install perl, then run ${command} again.`;
   }
-  if (answer === 'held') return describeHolder(file);
+  if (answer === 'held') return describeHolder(file, command);
   if (answer !== 'locked') {
     helper.kill();
-    return `Could not take the merge lock at ${file}: ${stderr.trim() || answer || 'the lock helper exited'}. The merge was not started.`;
+    return `Could not take the lock at ${file}: ${stderr.trim() || answer || 'the lock helper exited'}. ${command} was not started.`;
   }
   const note = `${file}.holder`;
   await fs.writeFile(note, `holder: ${holder}\npid: ${process.pid}\nsince: ${new Date().toISOString()}\n`);

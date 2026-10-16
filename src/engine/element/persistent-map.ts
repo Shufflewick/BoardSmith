@@ -1,4 +1,15 @@
 import type { Game } from './game.js';
+import { ACTION_TEMP_KEY } from '../action/helpers.js';
+
+/** Every key the engine itself keeps in `game.settings`; a map of that name would overwrite it (#753). */
+export const ENGINE_SETTINGS_KEYS: ReadonlySet<string> = new Set([
+  'playerCount',
+  'playerNames',
+  'colors',
+  'colorSelectionEnabled',
+  'winners',
+  ACTION_TEMP_KEY,
+]);
 
 /**
  * A Map-like structure that persists through HMR by syncing to game.settings.
@@ -21,6 +32,11 @@ export class PersistentMap<K extends string, V> implements Map<K, V> {
   constructor(game: Game, key: string) {
     this.#game = game;
     this.#key = key;
+    if (ENGINE_SETTINGS_KEYS.has(key)) {
+      throw new Error(
+        `persistentMap("${key}") is refused: "${key}" is a setting the engine keeps for itself. Pick another name for this map.`,
+      );
+    }
     // Initialize settings entry if not exists
     if (!(key in game.settings)) {
       game.settings[key] = {};

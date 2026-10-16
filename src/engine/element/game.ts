@@ -50,7 +50,7 @@ import {
   type VisibilityMode,
   type VisibilityState,
 } from './visibility.js';
-import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
+import type { ActionDefinition, ActionResult, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor, type PerformOptions } from '../action/action.js';
 import { hasActionTemp, settingsForSeat } from '../action/helpers.js';
 import type { FlowDefinition, FlowState, FlowDebugInfo } from '../flow/types.js';
@@ -2172,10 +2172,8 @@ export class Game<
     collectJsonIds(json, adoptedIds);
     const worldIds = this._ctx._worldIds!;
 
-    const resident = new Set<number>();
-    forEachInSubtree(this, (element) => resident.add(element._t.id));
-    forEachInSubtree(this.pile, (element) => resident.add(element._t.id));
-    const clash = adoptedIds.find((id) => resident.has(id));
+    // The id index holds every element in the tree and the pile (#755).
+    const clash = adoptedIds.find((id) => this._ctx._elementsById.has(id));
     if (clash !== undefined) {
       throw new Error(
         `Cannot adopt partition "${json.name ?? json.className}": element id ${clash} is already ` +
@@ -2709,18 +2707,6 @@ export class Game<
     // A refused action is not a new batch, so only an action that runs clears the buffer.
     this._animationEvents = [];
     return this._actionExecutor.executeAction(action, player, args, options);
-  }
-
-  /**
-   * Perform an action from serialized form (for network play)
-   */
-  performSerializedAction(serialized: SerializedAction): ActionResult {
-    const player = this.getPlayer(serialized.player);
-    if (!player) {
-      return { success: false, error: `Invalid player seat: ${serialized.player}. Expected 1 to ${this.players.length}.` };
-    }
-
-    return this.performAction(serialized.name, player as P, serialized.args);
   }
 
   // ============================================
@@ -4367,8 +4353,8 @@ export class Game<
         let processed = text;
         if (data) {
           for (const [key, value] of Object.entries(data)) {
-            // An element (a Player is one) is written by its own toString().
-            processed = processed.replace(new RegExp(`{{${key}}}`, 'g'), String(value));
+            // An element (a Player is one) is written by its own toString(). split/join keeps `$` codes in values literal.
+            processed = processed.split(`{{${key}}}`).join(String(value));
           }
         }
         return type === undefined ? { text: processed } : { text: processed, type };
@@ -5071,17 +5057,17 @@ export class Game<
             children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
             childCount: element._t.children.length,
           };
-        } else if (zoneVisibility.mode === 'owner' && element.getEffectiveOwner()?.seat !== visibilityPosition) {
-          // Owner-only zone and this player doesn't own it - show hidden placeholders
-          // Preserve $-prefixed system attributes (like $type) for proper AutoUI rendering
-          const hiddenChildren = placeholderChildren(json, element);
-          return {
-            // ownJson (not json): the container's own attributes must stay
-            // whitelist-redacted in this early return (CR-01).
-            ...ownJson,
-            children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
-          };
         }
+        // Every other zone this seat cannot see (a non-owner of an owner zone,
+        // or a seat in `exceptPlayers` of any mode, #750) gets anonymous
+        // placeholders, which keep the ids its picks are offered by (#715).
+        const hiddenChildren = placeholderChildren(json, element);
+        return {
+          // ownJson (not json): the container's own attributes must stay
+          // whitelist-redacted in this early return (CR-01).
+          ...ownJson,
+          children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
+        };
       }
 
       // Filter children normally
@@ -5308,12 +5294,9 @@ export class Game<
         }
         return { ...e, id: ++this._animationEventSeq, seatIds };
       });
-    } else if (jsonWithEvents.animationEventSeq !== undefined || jsonWithEvents.animationEvents) {
-      // Full restore (no floor supplied): adopt the persisted counters.
-      // Checked on `animationEventSeq` OR `animationEvents` (not
-      // `animationEvents` alone) because toJSON serializes the counters
-      // independently of whether the buffer happens to be empty -- a restore
-      // must still adopt them even when there is no buffer to go with it.
+    } else {
+      // Full restore (no floor supplied): always adopt the persisted counters,
+      // even when toJSON omitted them, or a rolled-back action's events survive (#751).
       // Copy the event objects too (CR-02): the snapshot may be restored again.
       this._animationEvents = (jsonWithEvents.animationEvents ?? []).map((e) => ({
         ...e,
@@ -5363,7 +5346,7 @@ export class Game<
     }
 
     // Rebuild the tree and the pile from JSON (#655), then rebuild the id index
-    // from the finished tree (#632), so nothing the restore discarded stays in
+    // from the finished tree and pile (#632), so nothing the restore discarded stays in
     // it and every rebuilt element is in it.
     for (const [container, children] of [[this, json.children], [this.pile, json.pile]] as const) {
       container._t.children = [];
@@ -5375,7 +5358,9 @@ export class Game<
       }
     }
     this._ctx._elementsById.clear();
-    forEachInSubtree(this, (element) => this._ctx._elementsById.set(element._t.id, element));
+    for (const root of [this, this.pile]) {
+      forEachInSubtree(root, (element) => this._ctx._elementsById.set(element._t.id, element));
+    }
 
     // Re-attach captured handlers to the rebuilt tree by element id
     // (RST-01/F10). Any handler that cannot be matched is dropped LOUDLY

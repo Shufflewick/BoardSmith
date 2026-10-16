@@ -1,4 +1,5 @@
 import type { Game, PlayerOf } from '../element/game.js';
+import type { VisibilityState } from '../element/visibility.js';
 import { GameElement, hasZoneVisibility, withheldFromSeat, WITHHELD_PILE_BRANCH } from '../element/game-element.js';
 import { Player } from '../player/player.js';
 import { devWarn, isDevMode } from '../../utils/dev.js';
@@ -56,14 +57,14 @@ interface SerializedFlowElement {
   __flowElementId: number;
   className: string;
   /**
-   * WR-01 (163-REVIEW): the id of the element's immediate CONTAINER at
-   * serialize time, present ONLY when that container is a zone-`'hidden'`
-   * Space (D24 true concealment). `'hidden'` mode deliberately builds no
-   * per-child placeholder and registers nothing in `idRemap` (an entry per
-   * hidden child would let the map's SIZE leak the exact count) -- so this
-   * marker carries the ONE piece of already-disclosed information needed to
-   * relink safely on redacted-clone restore: the container itself, which is
-   * always visible to every viewer (only its children are concealed). This
+   * WR-01 (163-REVIEW), #726: the id of the element's outermost concealing
+   * ancestor at serialize time (see `hiddenContainerIdOf`), present ONLY when
+   * it has one. A concealed subtree builds no per-descendant placeholder below
+   * its first level and registers nothing in `idRemap` for it (for a
+   * `'hidden'` zone, an entry per child would let the map's SIZE leak the
+   * exact count) -- so this marker carries the ONE piece of already-disclosed
+   * information needed to relink safely on redacted-clone restore: that
+   * ancestor, which every viewer sees because nothing above it conceals. This
    * is a single scalar per flow-variable marker, not a structure that scales
    * with hidden-zone child count, so it cannot re-leak the count.
    */
@@ -74,20 +75,25 @@ interface SerializedFlowElement {
  *  attributes do, without its id or place, and it restores to nothing. */
 const WITHHELD_FLOW_ELEMENT = { __elementRef: WITHHELD_PILE_BRANCH } as const;
 
-/** WR-01 (163-REVIEW): the id of `element`'s immediate container, but ONLY
- *  when that container is a zone-`'hidden'` Space (D24 true concealment), so a
- *  redacted-clone restore degrades to the (already-disclosed) container, never
- *  a per-child structure whose size would leak the hidden zone's exact child
- *  count. */
+/** WR-01 (163-REVIEW), #726: the id of `element`'s OUTERMOST ancestor that may
+ *  conceal its subtree from some seat (a non-public zone, or an element some
+ *  seat cannot see), so a redacted-clone restore degrades to that
+ *  (already-disclosed) ancestor, never a per-child structure whose size would
+ *  leak a hidden zone's exact child count. Outermost, not nearest: anything
+ *  below a concealing ancestor may itself be missing from the view. */
 function hiddenContainerIdOf(element: GameElement): number | undefined {
-  const container = element.parent;
-  if (hasZoneVisibility(container)) {
-    const zoneVisibility = container.getZoneVisibility();
-    if (zoneVisibility?.mode === 'hidden') {
-      return container.id;
+  let found: number | undefined;
+  for (let ancestor = element.parent; ancestor; ancestor = ancestor.parent) {
+    const zoneVisibility = hasZoneVisibility(ancestor) ? ancestor.getZoneVisibility() : undefined;
+    if (!isPublic(ancestor.getEffectiveVisibility()) || (zoneVisibility && !isPublic(zoneVisibility))) {
+      found = ancestor.id;
     }
   }
-  return undefined;
+  return found;
+}
+
+function isPublic(visibility: VisibilityState): boolean {
+  return visibility.mode === 'all' && !visibility.exceptPlayers?.length;
 }
 
 function isSerializedFlowElement(value: unknown): value is SerializedFlowElement {
@@ -132,8 +138,8 @@ function encodeFlowValue(value: unknown): unknown {
  *   bot's search sandbox). A fungible hidden-zone child is anonymized to a
  *   synthetic id there, so a marker holding its ORIGINAL id resolves through the
  *   remap to the (still-redacted) placeholder. Failing that, a marker that
- *   recorded a zone-`'hidden'` container (WR-01) resolves to that container,
- *   which every viewer already sees.
+ *   recorded its outermost concealing ancestor (WR-01, #726) resolves to that
+ *   ancestor, which every viewer already sees.
  * @param name - The flow slot holding the marker, for the error.
  * @throws When nothing resolves: the element is gone from the game, and handing
  *   the rules a marker object where they expect an element would fail later

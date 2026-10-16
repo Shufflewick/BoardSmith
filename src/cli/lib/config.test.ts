@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getApiKey, saveApiKey } from './config.js';
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
@@ -59,12 +59,31 @@ describe('readGlobalConfig / getApiKey', () => {
     expect(readFileSync(configFile(), 'utf-8')).toBe(before);
   });
 
-  it('treats a missing or unparseable config as simply having no keys', () => {
+  it('treats a missing config as simply having no keys', () => {
     expect(existsSync(configFile())).toBe(false);
     expect(getApiKey('prod')).toBeUndefined();
+  });
 
+  it('refuses an unparseable config with a message naming the file and the fix', () => {
     mkdirSync(join(home, '.boardsmith'), { recursive: true });
     writeFileSync(configFile(), 'not json at all');
-    expect(getApiKey('prod')).toBeUndefined();
+    expect(() => getApiKey('prod')).toThrow(
+      `${configFile()} is not valid JSON. Fix the typo in it, or delete it and save your keys again with boardsmith publish --api-key.`
+    );
+  });
+
+  it('never overwrites an unparseable config when saving a key', () => {
+    mkdirSync(join(home, '.boardsmith'), { recursive: true });
+    writeFileSync(configFile(), '{ "apiKeys": { "dev": "spk_dev_key", } }');
+    expect(() => saveApiKey('prod', 'spk_prod_key')).toThrow(/is not valid JSON/);
+    expect(readFileSync(configFile(), 'utf-8')).toBe('{ "apiKeys": { "dev": "spk_dev_key", } }');
+  });
+});
+
+describe('writeGlobalConfig permissions', () => {
+  it('creates the config file readable only by its owner, in a folder only its owner can enter', () => {
+    saveApiKey('dev', 'spk_dev_key');
+    expect(statSync(configFile()).mode & 0o777).toBe(0o600);
+    expect(statSync(join(home, '.boardsmith')).mode & 0o777).toBe(0o700);
   });
 });

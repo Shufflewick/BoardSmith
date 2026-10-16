@@ -305,3 +305,20 @@ describe('a log line is nameable from outside', () => {
     expect(wrapper.findAll('[data-testid="bs-log-line"]')).toHaveLength(0);
   });
 });
+
+describe('GameHistory unmount (#749)', () => {
+  it('clears the copy-status reset timer on unmount', async () => {
+    vi.useFakeTimers();
+    try {
+      const wrapper = mount(GameHistory, { props: { messages: ['Hello'] } });
+      await (wrapper.vm as any).copyHistory();
+      expect(vi.getTimerCount()).toBe(1);
+
+      wrapper.unmount();
+
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

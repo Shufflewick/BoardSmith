@@ -120,8 +120,8 @@ export function getImageSrc(image: unknown): string {
 }
 
 /**
- * Get CSS styles for displaying a sprite at specified dimensions.
- * Handles proper scaling from native sprite dimensions.
+ * Get CSS background styles for displaying a sprite at specified dimensions.
+ * Handles proper scaling from native sprite dimensions. The element's own size is left to the caller's CSS.
  *
  * @param image - Image data (should be sprite type)
  * @param displayWidth - Target display width (default: 60)
@@ -149,8 +149,7 @@ export function getSpriteStyle(
       backgroundImage: `url(${info.sprite})`,
       backgroundPosition: `${-info.x * scaleX}px ${-info.y * scaleY}px`,
       backgroundSize: `${13 * DEFAULT_CARD_WIDTH * scaleX}px ${5 * DEFAULT_CARD_HEIGHT * scaleY}px`,
-      width: `${displayWidth}px`,
-      height: `${displayHeight}px`,
+      backgroundRepeat: 'no-repeat',
     };
   }
 

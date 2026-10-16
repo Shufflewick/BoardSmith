@@ -1,4 +1,5 @@
 import type { Rule } from 'eslint';
+import { forEachGlobalReference } from './global-receiver.js';
 
 /**
  * Disallows code evaluation in game rules
@@ -22,41 +23,18 @@ const rule: Rule.RuleModule = {
 
   create(context) {
     return {
-      CallExpression(node) {
-        // Check eval()
-        if (
-          node.callee.type === 'Identifier' &&
-          node.callee.name === 'eval'
-        ) {
-          context.report({
-            node,
-            messageId: 'noEval',
-          });
-        }
-
-        // Check Function() as a call
-        if (
-          node.callee.type === 'Identifier' &&
-          node.callee.name === 'Function'
-        ) {
-          context.report({
-            node,
-            messageId: 'noFunction',
-          });
-        }
-      },
-
-      // Check new Function()
-      NewExpression(node) {
-        if (
-          node.callee.type === 'Identifier' &&
-          node.callee.name === 'Function'
-        ) {
-          context.report({
-            node,
-            messageId: 'noFunction',
-          });
-        }
+      'Program:exit'() {
+        forEachGlobalReference(context.sourceCode, new Set(['eval', 'Function']), (name, node) => {
+          if (name === 'eval') {
+            context.report({ node, messageId: 'noEval' });
+            return;
+          }
+          // `x instanceof Function` is a type check; only calling Function builds code from text.
+          const parent = node.parent;
+          if ((parent.type === 'CallExpression' || parent.type === 'NewExpression') && parent.callee === node) {
+            context.report({ node: parent, messageId: 'noFunction' });
+          }
+        });
       },
     };
   },

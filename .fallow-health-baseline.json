@@ -358,16 +358,6 @@
         "count": 3
       }
     },
-    "src/eslint-plugin/rules/no-network.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "src/eslint-plugin/rules/no-nondeterministic.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/runtime/runner.ts": {
       "complexity_moderate": {
         "count": 5
@@ -519,7 +509,7 @@
     },
     "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue": {
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/ui/components/auto-ui/renderers/SpaceRenderer.vue": {
@@ -572,7 +562,7 @@
     },
     "src/ui/components/helpers/FlyingCardsOverlay.vue": {
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/ui/components/helpers/HintOverlay.vue": {
@@ -587,9 +577,6 @@
     },
     "src/ui/components/helpers/ZoomPreviewOverlay.vue": {
       "complexity_high": {
-        "count": 1
-      },
-      "complexity_moderate": {
         "count": 1
       }
     },

@@ -78,9 +78,30 @@ describe('#47 -- a session may seal only for a player it acts for', () => {
       { key: 'player:p1/sheet', value: 2 },
     ]);
     const payload = store.readForSession('session-1', SEATED);
-    expect(payload?.entries.map((e) => e.key).sort()).toEqual(['player:p1/sheet', 'shared']);
+    expect(payload?.payload.entries.map((e) => e.key).sort()).toEqual(['player:p1/sheet', 'shared']);
 
     const other = store.readForSession('session-1', [{ seat: 1, playerId: 'p2' }]);
-    expect(other?.entries.map((e) => e.key)).toEqual(['shared']);
+    expect(other?.payload.entries.map((e) => e.key)).toEqual(['shared']);
+  });
+});
+
+describe('#740 -- small store defects', () => {
+  it('keeps an empty-string schemaTag, which validation accepts', () => {
+    const store = new PersistenceStore();
+    commitOf(store, [{ key: 'shared', value: 1, schemaTag: '' }]);
+    expect(store.toState().rows[0]).toHaveProperty('schemaTag', '');
+  });
+
+  it('names the rows it could not read instead of dropping them silently', () => {
+    const store = new PersistenceStore({
+      rows: [
+        { key: 'good', value: '1', writtenAt: 1 },
+        // A hand-edited file row whose value is not a JSON string.
+        { key: 'hand-edited', value: 5 as unknown as string, writtenAt: 1 },
+      ],
+    });
+    const read = store.readForSession('session-1', SEATED);
+    expect(read?.payload.entries.map((e) => e.key)).toEqual(['good']);
+    expect(read?.dropped).toEqual(['hand-edited']);
   });
 });
