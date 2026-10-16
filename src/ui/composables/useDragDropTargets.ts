@@ -20,105 +20,24 @@
  * in GameShell, BOTH the Action Panel and any custom UI consume the exact same
  * drop targets through `useBoardInteraction()` / `useDragDrop()`.
  *
- * ## How targets are derived (generic, shape-agnostic)
+ * ## Where the targets come from (#724)
  *
- * Given the controller's current pick (the selection the player must still
- * fill), the drop targets are:
- *
- * - **element / elements pick** → every valid element for that pick. Dropping
- *   onto one fills the pick with that element id.
- * - **choice pick** → every choice that carries a `refs` entry with role 'target'
- *   (a board element the choice maps to, e.g. a destination square). Dropping
- *   onto it fills the pick with that choice's value. `filterBy` is already
- *   applied by the controller's `getChoices`, so destinations are correctly
- *   narrowed by the previously-selected element with no special-casing here.
- * - **number / text pick** → not a drop target (no board mapping).
- *
- * D-01 migration: uses refs: [{ ref, role }] arrays instead of singular
- * targetRef / ref fields. This module only ADDS the other shapes.
+ * The drop targets of an open pick are the board's own candidates for it
+ * (`validElements`, minus disabled ones), and a drop runs the board's own click
+ * callback (`onElementSelect`). useBoardActionBridge builds both from the
+ * controller's current pick, so a drop does exactly what a click on the same
+ * element does: notation-only targets (Checkers squares) match, a multi-select
+ * toggles, an ordered list appends, and a number/text pick has no targets.
  */
-import { watch, type Ref, type WatchStopHandle } from 'vue';
-import type { BoardInteraction, BoardTarget, ElementRef } from './useBoardInteraction.js';
+import { nextTick, watch, type Ref, type WatchStopHandle } from 'vue';
+import type { BoardInteraction, ElementRef } from './useBoardInteraction.js';
 import type {
   UseActionControllerReturn,
   EnrichedPickMetadata,
-  ChoiceWithRefs,
   EnrichedActionMetadata,
 } from './useActionControllerTypes.js';
+import { isChoosableElement } from './useBoardActionBridge.js';
 import { devWarn } from '../../utils/dev.js';
-
-/** Drop targets plus the callback to run when one is dropped onto. */
-export interface DerivedDropTargets {
-  targets: BoardTarget[];
-  onDrop: (targetId: number) => void;
-}
-
-/** Does a controller valid-element / dragged-element pair refer to the same element? */
-function matchesDragged(
-  candidate: { id?: number; ref?: ElementRef },
-  dragged: ElementRef,
-): boolean {
-  if (dragged.id !== undefined && candidate.id === dragged.id) return true;
-  if (dragged.notation && candidate.ref?.notation === dragged.notation) return true;
-  return false;
-}
-
-/**
- * Derive drop targets for an arbitrary pick from the action controller.
- *
- * Returns `null` when the pick cannot be a drop target (no pick, or a
- * number/text pick). Returns `{ targets: [], onDrop }` when the pick type CAN
- * carry targets but none are currently available (so callers can distinguish
- * "wrong shape" from "right shape, nothing to drop on").
- */
-export function deriveDropTargetsForPick(
-  controller: UseActionControllerReturn,
-  pick: EnrichedPickMetadata | null,
-): DerivedDropTargets | null {
-  if (!pick) return null;
-
-  // Element / elements pick: the valid elements ARE the drop targets.
-  if (pick.type === 'element' || pick.type === 'elements') {
-    const targets: BoardTarget[] = [];
-    for (const el of controller.getValidElements(pick)) {
-      if (el.disabled) continue;
-      const highlightRef = (el.refs ?? []).find(r => r.role === 'highlight')?.ref;
-      if (el.id === undefined || !highlightRef) continue;
-      targets.push({ id: el.id, ref: highlightRef });
-    }
-    return {
-      targets,
-      onDrop: (targetId: number) => {
-        void controller.fill(pick.name, targetId);
-      },
-    };
-  }
-
-  // Choice pick: choices that map to a board element (targetRef) are drop targets.
-  // `getChoices` applies filterBy/dependsOn, so destinations are already narrowed
-  // by any previously-selected element.
-  if (pick.type === 'choice') {
-    const targets: BoardTarget[] = [];
-    const valueByTargetId = new Map<number, unknown>();
-    for (const choice of controller.getChoices(pick) as ChoiceWithRefs[]) {
-      if (choice.disabled) continue;
-      const ref = (choice.refs ?? []).find(r => r.role === 'target')?.ref;
-      if (!ref || ref.id === undefined) continue;
-      targets.push({ id: ref.id, ref });
-      valueByTargetId.set(ref.id, choice.value);
-    }
-    return {
-      targets,
-      onDrop: (targetId: number) => {
-        const value = valueByTargetId.get(targetId);
-        if (value !== undefined) void controller.fill(pick.name, value);
-      },
-    };
-  }
-
-  // number / text picks have no board mapping — not droppable.
-  return null;
-}
 
 export interface DragDropOrchestrationOptions {
   boardInteraction: BoardInteraction;
@@ -152,7 +71,7 @@ function findDragStartAction(
   for (const action of metas) {
     const firstSel = action.selections[0];
     if (firstSel?.type !== 'element') continue;
-    if (firstSel.validElements?.some(e => matchesDragged(e, dragged))) {
+    if (firstSel.validElements?.some(e => isChoosableElement(e, dragged))) {
       return { action, firstSel };
     }
   }
@@ -187,20 +106,20 @@ function findDragStartAction(
 export function setupDragDropOrchestration(options: DragDropOrchestrationOptions): WatchStopHandle {
   const { boardInteraction, actionController, availableActions, actionMetadata, isMyTurn } = options;
 
-  /** Derive + wire drop targets for the controller's current pick. Returns true if any were wired. */
-  function wireCurrentPick(): boolean {
-    const pick = actionController.currentPick.value;
-    const derived = deriveDropTargetsForPick(actionController, pick);
-    if (!derived || derived.targets.length === 0) return false;
-    boardInteraction.setDropTargets(derived.targets, derived.onDrop);
+  /** Wire the board's candidates for the current pick as drop targets. Returns true if any were wired. */
+  async function wireCurrentPick(): Promise<boolean> {
+    // The bridge feeds the board from the controller in a watcher; let it run first.
+    await nextTick();
+    const targets = boardInteraction.validElements.filter(t => !t.disabled);
+    const onDrop = boardInteraction.onElementSelect;
+    if (targets.length === 0 || !onDrop) return false;
+    boardInteraction.setDropTargets(targets, onDrop);
     return true;
   }
 
   /** Is the dragged element one of the (enabled) valid elements for this pick? */
   function pickAcceptsDragged(pick: EnrichedPickMetadata, dragged: ElementRef): boolean {
-    return actionController
-      .getValidElements(pick)
-      .some(el => !el.disabled && matchesDragged({ id: el.id, ref: (el.refs ?? [])[0]?.ref }, dragged));
+    return actionController.getValidElements(pick).some(el => isChoosableElement(el, dragged));
   }
 
   /** Mirror the controller's current pick into board-interaction state so AutoUI boards react. */
@@ -261,11 +180,11 @@ export function setupDragDropOrchestration(options: DragDropOrchestrationOptions
           // Filling may have been the action's final input (auto-executed) — done.
           if (!actionController.currentAction.value) return;
           syncCurrentActionPick(actionName);
-          if (!wireCurrentPick()) warnNoTargets(dragged, actionName);
+          if (!(await wireCurrentPick())) warnNoTargets(dragged, actionName);
           return;
         }
 
-        const wired = wireCurrentPick();
+        const wired = await wireCurrentPick();
         // Only warn for pick types that CAN be drop targets but produced none —
         // dragging during a number/text pick is legitimately a no-op.
         if (!wired && (pick?.type === 'element' || pick?.type === 'elements' || pick?.type === 'choice')) {
@@ -301,7 +220,7 @@ export function setupDragDropOrchestration(options: DragDropOrchestrationOptions
       // auto-executed). If so there is nothing to drop onto — done.
       if (!actionController.currentAction.value) return;
 
-      if (!wireCurrentPick()) {
+      if (!(await wireCurrentPick())) {
         warnNoTargets(dragged, match.action.name);
       }
     },
