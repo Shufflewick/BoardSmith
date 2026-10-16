@@ -755,3 +755,74 @@ describe('MCTSBot flow-variable relinking over a TRUE-hidden zone (WR-01 / 163-R
     expect(restored.lastGuess).toBe(1);
   });
 });
+
+// ----------------------------------------------------------------------------
+// #726: an element below a concealing ancestor that is NOT its direct parent
+// (a child of a `showOnlyTo` room, a grandchild of a `'hidden'` zone) is also
+// dropped from the seat's view with no remap entry, so its flow variable must
+// relink to the nearest ancestor the view still holds.
+// ----------------------------------------------------------------------------
+
+abstract class ConcealedAncestorFlowVarGame extends Game<ConcealedAncestorFlowVarGame, Player> {
+  outer: Space<ConcealedAncestorFlowVarGame>;
+  lastGuess?: number;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.outer = this.buildOuter();
+    this.registerAction(
+      Action.create('guess')
+        .chooseFrom('guessedValue', { prompt: 'Guess', choices: [1, 2, 3] })
+        .execute((args, ctx) => {
+          (ctx.game as ConcealedAncestorFlowVarGame).lastGuess = args.guessedValue as number;
+          return { success: true };
+        })
+    );
+    this.setFlow({
+      root: forEach({
+        collection: (ctx) => (ctx.game as ConcealedAncestorFlowVarGame).outer.all(FlowCard),
+        as: 'currentCard',
+        do: actionStep({ actions: ['guess'], player: (ctx) => ctx.game.getPlayer(1)!, turnScope: 'restart' }),
+      }),
+    });
+  }
+
+  protected abstract buildOuter(): Space<ConcealedAncestorFlowVarGame>;
+}
+
+class HiddenRoomFlowVarGame extends ConcealedAncestorFlowVarGame {
+  protected buildOuter() {
+    const room = this.create(Space<ConcealedAncestorFlowVarGame>, 'room');
+    room.showOnlyTo(2);
+    room.create(FlowCard, 'card-a', { label: 'A' });
+    return room;
+  }
+}
+
+class NestedHiddenZoneFlowVarGame extends ConcealedAncestorFlowVarGame {
+  protected buildOuter() {
+    const zone = this.create(Space<ConcealedAncestorFlowVarGame>, 'zone');
+    zone.contentsHidden();
+    zone.create(Space<ConcealedAncestorFlowVarGame>, 'inner').create(FlowCard, 'card-a', { label: 'A' });
+    return zone;
+  }
+}
+
+describe('MCTSBot flow-variable relinking below a concealing ancestor (#726)', () => {
+  it.each([
+    ['a child of a showOnlyTo room', HiddenRoomFlowVarGame],
+    ['a grandchild of a hidden zone', NestedHiddenZoneFlowVarGame],
+  ])('a forEach-bound flow variable on %s relinks to that ancestor on redacted restore', (_label, GameClass) => {
+    const game = new GameClass({ playerCount: 2, playerNames: ['P1', 'P2'], seed: 'bs726' });
+    game.startFlow();
+    const bot: any = new MCTSBot(game, GameClass, 'concealed-ancestor-flow-var', 1, [], {
+      iterations: 5, playoutDepth: 0, seed: 'bs726', async: false, usePNS: false,
+    });
+
+    const restored = bot.restoreGame(bot.captureSnapshot()) as ConcealedAncestorFlowVarGame;
+
+    expect((restored as any)._flowEngine.variables.currentCard).toBe(restored.outer);
+    restored.continueFlow('guess', { guessedValue: 1 }, 1);
+    expect(restored.lastGuess).toBe(1);
+  });
+});
