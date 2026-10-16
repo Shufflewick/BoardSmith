@@ -1313,6 +1313,29 @@ describe('#167: scheduled events fire on their due time', () => {
     await burnsWhenArmedTimerFires(host, sent, clock);
   });
 
+  it('shows the retry time as next due while a refused event waits (#721)', async () => {
+    const smoulder = worldClockAction<Village>('burn')
+      .needs(() => [HEARTH])
+      .execute(() => {
+        throw new Error('the fire will not take');
+      });
+    const clock = testClock();
+    const { host, sent } = await attached({
+      dir,
+      clock,
+      definition: bundle({ world: worldBlock({ actions: [chop, bank, smoulder] }) }),
+    });
+    await host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'bank', args: {} });
+
+    await host.handleMessage('c1', { type: 'fire_due' });
+
+    const status = last(sent, 'c1', 'world_status');
+    expect(status?.pending).toHaveLength(1);
+    expect(status?.nextDue).toBe((status?.worldNow as number) + 40_000);
+    expect(clock.armedDelay).toBe(40_000);
+    await host.close();
+  });
+
   it('says so rather than pretending when nothing is scheduled', async () => {
     const { host, sent } = await attached({ dir });
     await host.handleMessage('c1', { type: 'fire_due' });
