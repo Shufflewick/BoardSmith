@@ -1654,7 +1654,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // that wrote would reach every watcher's frame and be reverted at the next
     // hibernation with nobody told.
     const reading = readOnlyProjection(this.game);
-    const pick = buildPickMetadata(reading, acting, selection, { ...args });
+    const pick = buildPickMetadata(reading, acting, definition.name, selection, { ...args });
     if (selection.type === "number" || selection.type === "text") return pick;
 
     const candidates = this.game

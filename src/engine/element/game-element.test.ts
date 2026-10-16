@@ -88,6 +88,23 @@ describe('Element Tree', () => {
       expect(card.rank).toBe('A');
       expect(card.value).toBe(14);
     });
+
+    it('a failed create names the element briefly, never its whole subtree (#766)', () => {
+      class Picky extends Piece<TestGame> {
+        set target(_value: unknown) {
+          throw new Error('no targets allowed');
+        }
+      }
+      const deck = game.create(Deck, 'deck');
+      deck.createMany(3, Card, 'buried-card');
+
+      const failure = () => game.create(Picky, 'picky', { target: deck } as never);
+      expect(failure).toThrow(/no targets allowed[\s\S]*Attributes: target/);
+      expect(failure).not.toThrow(/buried-card/);
+
+      expect(() => game.create(deck as never, 'oops')).toThrow(/Deck "deck"/);
+      expect(() => game.create(deck as never, 'oops')).not.toThrow(/buried-card/);
+    });
   });
 
   describe('Tree navigation', () => {
@@ -445,6 +462,46 @@ describe('ID System', () => {
 
     const found = game.getElementById(cardId);
     expect(found).toBe(card);
+  });
+});
+
+describe('branch() (#766)', () => {
+  it('finds every sibling\'s place without scanning the siblings for each one', () => {
+    const game = new TestGame({ playerCount: 2 });
+    const deck = game.create(Deck, 'deck');
+    deck.createMany(200, Card, 'card');
+    const cards = [...deck._t.children];
+    let reads = 0;
+    deck._t.children = new Proxy(cards, {
+      get(target, key, receiver) {
+        if (typeof key === 'string' && /^\d+$/.test(key)) reads++;
+        return Reflect.get(target, key, receiver);
+      },
+    });
+
+    const branches = cards.map((card) => card.branch());
+
+    expect(reads).toBeLessThan(cards.length * 3);
+    const base = deck.branch();
+    expect(branches).toEqual(cards.map((_, i) => `${base}/${i}`));
+  });
+
+  it('follows the siblings as they are reordered, added and removed', () => {
+    const game = new TestGame({ playerCount: 2, seed: 'branch' });
+    const deck = game.create(Deck, 'deck');
+    deck.createMany(5, Card, 'card');
+    const placesMatch = () =>
+      deck._t.children.every((card, i) => card.branch() === `${deck.branch()}/${i}`);
+    expect(placesMatch()).toBe(true);
+    deck.shuffle();
+    expect(placesMatch()).toBe(true);
+    deck.setOrder('stacking');
+    deck.create(Card, 'top');
+    expect(placesMatch()).toBe(true);
+    const gone = deck._t.children[2] as Card;
+    gone.remove();
+    expect(placesMatch()).toBe(true);
+    expect(gone.branch()).toBe('pile/0');
   });
 });
 

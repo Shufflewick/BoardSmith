@@ -72,7 +72,7 @@ describe('custom Skip labels on selection builders (#152)', () => {
     const player = game.getPlayer(1)!;
 
     const labels = selectionsOf(game).map(
-      (selection) => buildPickMetadata(game, player, selection).optional,
+      (selection) => buildPickMetadata(game, player, 'labelled', selection).optional,
     );
 
     expect(labels).toEqual([
@@ -92,6 +92,6 @@ describe('custom Skip labels on selection builders (#152)', () => {
       .chooseFrom('flavor', { prompt: 'Pick a flavor', choices: ['vanilla'], optional: true })
       .execute(() => ({ success: true })).selections[0]!;
 
-    expect(buildPickMetadata(game, player, plain).optional).toBe(true);
+    expect(buildPickMetadata(game, player, 'plain', plain).optional).toBe(true);
   });
 });
