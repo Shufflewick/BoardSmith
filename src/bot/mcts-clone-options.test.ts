@@ -177,7 +177,7 @@ describe('MCTS Game Clone Constructor Options', () => {
 
     // Holding either would let the search read the real game's next draws.
     expect(snapshot.gameOptions.seed).not.toBe('specific-seed-123');
-    expect(snapshot.randomState).not.toBe(game.getRandomState());
+    expect(snapshot.randomState).not.toEqual(game.getRandomState());
     expect(sandbox.random()).not.toBe(game.random());
   });
 });
