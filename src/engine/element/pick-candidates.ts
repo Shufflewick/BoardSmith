@@ -339,9 +339,14 @@ function describeBoundArgs(args: Readonly<Record<string, unknown>>, seat: number
   return parts.join(' and ');
 }
 
+/** An element as the seat may know it: by name only when it can see it (#715). */
+function describeBoundElement(element: GameElement, seat: number | undefined): string {
+  if (seat === undefined || !element.isVisibleTo(seat)) return `a hidden ${element.constructor.name}`;
+  return `"${element.name ?? `${element.constructor.name} #${element.id}`}"`;
+}
+
 function describeBoundValue(value: unknown, seat: number | undefined): string | undefined {
-  if (isElement(value) && (seat === undefined || !value.isVisibleTo(seat))) return `a hidden ${value.constructor.name}`;
-  if (isElement(value)) return `"${value.name ?? `${value.constructor.name} #${value.id}`}"`;
+  if (isElement(value)) return describeBoundElement(value, seat);
   if (typeof value === 'string') return `"${value}"`;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   if (Array.isArray(value)) {

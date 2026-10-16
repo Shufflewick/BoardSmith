@@ -374,6 +374,26 @@ export interface PerformOptions {
 /** The element an id a player sent names, or undefined. */
 type SeatIdReader = (id: number) => GameElement | undefined;
 
+/**
+ * One submitted `chooseFrom` item resolved against its candidates. A candidate
+ * the player cannot see is named only by its placeholder id, never by its name
+ * or its real id, which the player was never sent (#715).
+ */
+function choiceItemResolver(
+  candidates: readonly Candidate[],
+  player: Player,
+  byId: SeatIdReader,
+): (item: unknown) => unknown {
+  const hidden = candidates.filter((c) => isElement(c.value) && !c.value.isVisibleTo(player.seat));
+  const named = hidden.length === 0 ? candidates : candidates.filter((c) => !hidden.includes(c));
+  return (item) => {
+    if (isSerializedElement(item)) return byId((item as { id: number }).id) ?? item;
+    if (hidden.length > 0 && typeof item === 'number' && item < 0) return byId(item) ?? item;
+    const match = findMatchingChoice(item, named);
+    return match === undefined ? item : match.value;
+  };
+}
+
 export class ActionExecutor {
   private game: Game;
 
@@ -529,17 +549,7 @@ export class ActionExecutor {
     // Only a multiSelect or an orderedList is resolved per item, so a single
     // choice whose VALUE is itself an array is never taken apart.
     if (Array.isArray(value) && selection.multiSelect === undefined && selection.orderedList === undefined) return value;
-    const candidates = known ?? this.candidatesOf(selection, { game, player, args });
-    // A candidate the player cannot see is named only by its placeholder id,
-    // never by its name or its real id, which the player was never sent (#715).
-    const hidden = candidates.filter((c) => isElement(c.value) && !c.value.isVisibleTo(player.seat));
-    const named = hidden.length === 0 ? candidates : candidates.filter((c) => !hidden.includes(c));
-    const resolveItem = (item: unknown): unknown => {
-      if (isSerializedElement(item)) return byId((item as { id: number }).id) ?? item;
-      if (hidden.length > 0 && typeof item === 'number' && item < 0) return byId(item) ?? item;
-      const match = findMatchingChoice(item, named);
-      return match === undefined ? item : match.value;
-    };
+    const resolveItem = choiceItemResolver(known ?? this.candidatesOf(selection, { game, player, args }), player, byId);
     return Array.isArray(value) ? value.map(resolveItem) : resolveItem(value);
   }
 
