@@ -2347,10 +2347,8 @@ export class ActionExecutor {
   }
 
   /**
-   * Why an earlier pick another action was applied after is no longer on offer
-   * (`pendingState.stalePicksBelow`, #767), or `null` when each still is. A
-   * repeating pick is not re-checked: its own `onEach` may have spent what it
-   * picked.
+   * Why a pick another action took (`pendingState.stalePicks`, #767) is no
+   * longer on offer, or `null` when each still is.
    */
   private stalePickRefusal(
     action: ActionDefinition,
@@ -2358,10 +2356,9 @@ export class ActionExecutor {
     pendingState: PendingActionState,
     args: Record<string, unknown>
   ): string | null {
-    for (const selection of action.selections.slice(0, pendingState.stalePicksBelow ?? 0)) {
-      const value = args[selection.name];
-      if (value === undefined || value === null || this.isRepeatingSelection(selection)) continue;
-      const result = this.validateSelection(selection, value, player, args, action.name);
+    for (const selection of action.selections) {
+      if (!pendingState.stalePicks?.includes(selection.name)) continue;
+      const result = this.validateSelection(selection, args[selection.name], player, args, action.name);
       if (!result.valid) return result.errors.join('; ');
     }
     return null;

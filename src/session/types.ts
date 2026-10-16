@@ -519,8 +519,8 @@ export interface SerializedPendingActionState {
   currentSelectionIndex: number;
   onSelectFired?: number[];
   conditionHeld?: boolean;
-  lastPick?: { actions: number; picks: number };
-  stalePicksBelow?: number;
+  lastPick?: { actions: number; places: Record<string, string | null> };
+  stalePicks?: string[];
 }
 
 /**

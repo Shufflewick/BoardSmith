@@ -9,6 +9,7 @@ import {
   availableActionsForSeat,
   followUpForSeat,
   type Game,
+  type GameElement,
   type GameOptions,
   type Player,
   isSeatExpiry,
@@ -819,8 +820,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * now, or `undefined` when it may. `pending` is the seat's open pending state,
    * or `undefined` when the pick about to be processed starts the action. Every
    * pending-action path (`processSelectionStep` here, and
-   * `PendingActionManager` for the `selectionStep` op) asks this before any pick is processed, and calls `notePickTaken`
-   * after each pick that leaves the action open.
+   * `PendingActionManager` for the `selectionStep` op) asks this before any pick is processed, then calls `markStalePicks`,
+   * and calls `notePickTaken` after each pick that leaves the action open.
    *
    * First, the flow must offer the action to the seat (`refusalToAct`). Then
    * its `condition`, evaluated as hosts evaluate it to show the action (with
@@ -884,21 +885,45 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   notePickTaken(pending: PendingActionState, seat: number): void {
     pending.conditionHeld = this.failedConditionLabels(pending.actionName, seat).length === 0;
-    this.markStalePicks(pending);
-    pending.lastPick = { actions: this.actionHistory.length, picks: pending.currentSelectionIndex };
+    pending.lastPick = { actions: this.actionHistory.length, places: this.pickPlaces(pending, seat) };
   }
 
   /**
-   * When an action was applied since `pending`'s latest open-leaving pick,
-   * mark the picks made by then for `executePendingAction` to re-check (#767).
-   * The pending action's own picks never add to the history, so their changes
-   * (an `onSelect` taking its own pick off the offer) never mark a pick.
-   * Called after each pick that leaves the action open and before it runs.
+   * Before `seat`'s next pick of `pending`, mark each of its own picks another
+   * action took since its latest pick, for `executePendingAction` to re-check
+   * (#767): an element pick whose element moved, and any other pick once
+   * another action was applied. `lastPick` was written after the action's own
+   * `onSelect`, so a pick that took itself off the offer is not marked.
    */
-  markStalePicks(pending: PendingActionState): void {
-    if (pending.lastPick && pending.lastPick.actions !== this.actionHistory.length) {
-      pending.stalePicksBelow = pending.lastPick.picks;
+  markStalePicks(pending: PendingActionState, seat: number): void {
+    const last = pending.lastPick;
+    if (!last) return;
+    const places = this.pickPlaces(pending, seat);
+    const taken = Object.keys(last.places).filter((name) => last.places[name] === null
+      ? last.actions !== this.actionHistory.length
+      : last.places[name] !== places[name]);
+    pending.stalePicks = [...new Set([...(pending.stalePicks ?? []), ...taken])];
+  }
+
+  /**
+   * Where each of the seat's own non-repeating picks of `pending` sits now: the
+   * ids of an element pick's elements' parents, or `null` for any other pick.
+   * A pick a held follow-up answered is the engine's and is left out.
+   */
+  private pickPlaces(pending: PendingActionState, seat: number): Record<string, string | null> {
+    const action = this.game.getAction(pending.actionName)!;
+    const executor = this.game.getActionExecutor();
+    const bound = this.followUpArgsFor(pending.actionName, seat);
+    const args = executor.resolveArgs(action, pending.collectedArgs, this.game.getPlayer(seat));
+    const places: Record<string, string | null> = {};
+    for (const selection of action.selections) {
+      const value = args[selection.name];
+      if (value === undefined || Object.hasOwn(bound, selection.name) || executor.isRepeatingSelection(selection)) continue;
+      places[selection.name] = selection.type === 'element' || selection.type === 'elements'
+        ? [value].flat().map((element) => (element as GameElement).parent?.id).join(',')
+        : null;
     }
+    return places;
   }
 
   /**
@@ -992,6 +1017,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
     const refusal = this.refusalToPick(pendingState.actionName, playerPosition, pendingState);
     if (refusal) return { success: false, error: refusal.error };
+    this.markStalePicks(pendingState, playerPosition);
 
     const action = this.game.getAction(pendingState.actionName);
     if (!action) {
@@ -1056,7 +1082,6 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     playerPosition: number
   ): PendingStepResult & { actionComplete: true } {
     const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs);
-    this.markStalePicks(pendingState);
     const actionResult = executor.executePendingAction(action, player, pendingState);
     this.pendingActions.delete(playerPosition);
 

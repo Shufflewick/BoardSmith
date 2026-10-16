@@ -6,9 +6,10 @@
  * then `grab` the gem, and seat 1's second pick would still complete `draft`,
  * moving the gem out of seat 2's tableau: a move the history records but a
  * replay would refuse. Before it runs, a pending action now re-checks each
- * earlier pick that another action was applied after. The action's own picks
+ * earlier pick another action took off the offer. The action's own picks
  * (their `onSelect`) do not count: a pick its own `onSelect` took off the offer
- * still completes.
+ * still completes, even when another seat acts in between, and a pick a held
+ * follow-up answered is the engine's and is not checked again.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -69,12 +70,26 @@ class GemGame extends Game<GemGame, Player> {
           gem.putInto(tableau(ctx.game, ctx.player));
           ctx.game.ran.push(`claim:${ctx.player.seat}`);
         }),
+      // Holds the gem aside and hands it to `place` as a held follow-up.
+      Action.create<GemGame>('pocket')
+        .chooseElement<'gem', Piece>('gem', { elements: offered })
+        .execute(({ gem }) => {
+          gem.putInto(this.first(Space, 'held')!);
+          return { success: true, followUp: { action: 'place', args: { gem: gem.id } } };
+        }),
+      Action.create<GemGame>('place')
+        .chooseElement<'gem', Piece>('gem', { elements: offered })
+        .chooseFrom('slot', { choices: ['left', 'right'] })
+        .execute(({ gem }, ctx) => {
+          gem.putInto(tableau(ctx.game, ctx.player));
+          ctx.game.ran.push(`place:${ctx.player.seat}`);
+        }),
       Action.create<GemGame>('rest').execute((_args, ctx) => {
         ctx.game.ran.push(`rest:${ctx.player.seat}`);
       }),
     );
     this.setFlow({
-      root: loop({ maxIterations: 10, do: simultaneousActionStep({ actions: ['draft', 'grab', 'claim', 'rest'] }) }),
+      root: loop({ maxIterations: 10, do: simultaneousActionStep({ actions: ['draft', 'grab', 'claim', 'pocket', 'rest'] }) }),
     });
   }
 }
@@ -113,6 +128,27 @@ describe('GameRunner', () => {
     r.startPendingAction('claim', 1);
     expect(r.processSelectionStep(1, 'gem', gem(r).id).success).toBe(true);
     expect(gem(r).parent!.name).toBe('held');
+
+    expect(r.processSelectionStep(1, 'slot', 'left')).toMatchObject({ success: true, actionComplete: true });
+    expect(gem(r).parent!.name).toBe('tableau-1');
+  });
+
+  it('completes a pending action whose own onSelect took its pick off the offer, when another seat acted in between', () => {
+    const r = runner();
+    r.startPendingAction('claim', 1);
+    expect(r.processSelectionStep(1, 'gem', gem(r).id).success).toBe(true);
+    expect(r.performAction('rest', 2, {}).success).toBe(true);
+
+    expect(r.processSelectionStep(1, 'slot', 'left')).toMatchObject({ success: true, actionComplete: true });
+    expect(gem(r).parent!.name).toBe('tableau-1');
+  });
+
+  it('does not re-check a pick a held follow-up answered, when another seat acted in between', () => {
+    const r = runner();
+    expect(r.performAction('pocket', 1, { gem: gem(r).id }).success).toBe(true);
+    r.startPendingAction('place', 1);
+    expect(r.processSelectionStep(1, 'gem', gem(r).id).success).toBe(true);
+    expect(r.performAction('rest', 2, {}).success).toBe(true);
 
     expect(r.processSelectionStep(1, 'slot', 'left')).toMatchObject({ success: true, actionComplete: true });
     expect(gem(r).parent!.name).toBe('tableau-1');
