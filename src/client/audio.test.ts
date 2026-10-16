@@ -102,6 +102,18 @@ describe('init', () => {
     expect(constructedUrls).toEqual(['turn.mp3']);
   });
 
+  it('takes a new sound URL even once an element exists (#808)', () => {
+    audioService.init({ turnSoundUrl: 'a.mp3' });
+    audioService.init({ turnSoundUrl: 'b.mp3' });
+    expect(lastAudio().src).toBe('b.mp3');
+  });
+
+  it('keeps the element it has when given the same URL again', () => {
+    audioService.init({ turnSoundUrl: 'a.mp3' });
+    audioService.init({ turnSoundUrl: 'a.mp3' });
+    expect(constructedUrls).toEqual(['a.mp3']);
+  });
+
   it('does not save to localStorage — init is configuration, not preference', () => {
     audioService.init({ enabled: false, volume: 0.2 });
     expect(localStorage.getItem('boardsmith-audio-enabled')).toBeNull();

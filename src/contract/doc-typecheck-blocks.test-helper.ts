@@ -29,7 +29,7 @@ export interface MarkedDocBlock {
   readonly code: string;
 }
 
-const MARKER = /<!-- typecheck: ([a-z-]+)(?: (\S+))? -->\n```[a-z]*\n([\s\S]*?)```/g;
+const MARKER = /<!-- typecheck: ([a-z-]+)(?: (\S+))? -->\r?\n```[a-z]*\r?\n([\s\S]*?)```/g;
 const ANY_MARKER = /^<!-- typecheck:/gm;
 
 /** The kinds a gate compiles: `game` in docs-game-typecheck, `board` in aspect-boards-typecheck. */

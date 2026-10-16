@@ -56,15 +56,14 @@ class AudioService {
     if (options.volume !== undefined) {
       this.applyVolume(options.volume);
     }
+    const urlChanged = options.turnSoundUrl !== undefined && options.turnSoundUrl !== this.turnSoundUrl;
     if (options.turnSoundUrl !== undefined) {
       this.turnSoundUrl = options.turnSoundUrl;
     }
 
     // Pre-create audio element for faster playback
-    if (typeof window !== 'undefined' && this.turnSoundUrl && !this.audioElement) {
-      this.audioElement = new Audio(this.turnSoundUrl);
-      this.audioElement.volume = this.volume;
-      this.initialized = true;
+    if (this.turnSoundUrl && (urlChanged || !this.audioElement)) {
+      this.setTurnSoundUrl(this.turnSoundUrl);
     }
   }
 
