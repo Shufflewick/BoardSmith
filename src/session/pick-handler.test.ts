@@ -1,9 +1,12 @@
 import { describe, test, expect, beforeEach, vi } from 'vitest';
-import { Game, Player, Space, Piece, Action, actionStep, type GameOptions, type GameClass } from '../engine/index.js';
+import { Game, Player, Space, Piece, Action, actionStep, PlayerFacingError, type GameOptions, type GameClass } from '../engine/index.js';
 import { createHeadlessSession, type HeadlessSession } from '../testing/headless-session.js';
 import { succeeded } from './op-result.test-helper.js';
 import { ErrorCode } from '../types/protocol.js';
 import { rulesErrorSentence } from '../engine/action/rules-error.js';
+
+/** What a pick's choices() says when it refuses in words (#1045). */
+const CHOICES_REFUSAL = 'The market is closed until the next round.';
 
 // Lets a test run as a deployed host does, where no dev detail travels (#1045).
 const devThrow = vi.hoisted(() => ({ enabled: true }));
@@ -342,11 +345,15 @@ class BoardRefsGame extends Game<BoardRefsGame, Player> {
       Action.create('pickThrowChoices')
         // A pick of its own: a client may send only declared picks (#662).
         .chooseFrom('trigger', { choices: [false, true] })
+        .chooseFrom('refuse', { choices: [false, true] })
         .chooseFrom('option', {
           prompt: 'Choose an option',
           choices: (ctx) => {
             if (ctx.args.trigger) {
               throw new Error('choices boom');
+            }
+            if (ctx.args.refuse) {
+              throw new PlayerFacingError(CHOICES_REFUSAL);
             }
             return ['a', 'b'];
           },
@@ -530,6 +537,20 @@ describe('PickHandler structured warnings (ERR-01)', () => {
       devThrow.enabled = true;
       const dev = await pickChoices(session, 'pickThrowChoices', 'option', 1, { trigger: true });
       expect(dev.error).toBe(`${rulesErrorSentence('pickThrowChoices')} (choices boom)`);
+    } finally {
+      devThrow.enabled = true;
+      consoleSpy.mockRestore();
+    }
+  });
+
+  test('a choices() that throws a PlayerFacingError tells the player its sentence verbatim, and logs nothing (#1045)', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    devThrow.enabled = false;
+    try {
+      const result = await pickChoices(session, 'pickThrowChoices', 'option', 1, { refuse: true });
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(CHOICES_REFUSAL);
+      expect(consoleSpy.mock.calls.flat().some((arg) => String(arg).includes(CHOICES_REFUSAL))).toBe(false);
     } finally {
       devThrow.enabled = true;
       consoleSpy.mockRestore();

@@ -28,13 +28,6 @@ import { assertWorldEngineConformance } from "./engine-conformance.test-helper.j
 import { BoardSmithWorldEngine } from "./engine.js";
 import { worldAction, worldClockAction } from "./action.js";
 import type { StoredPartition, WorldPartitionSource } from "./contract.js";
-
-// Lets a test run as a deployed isolate does, where no dev detail travels (#1045).
-const devThrow = vi.hoisted(() => ({ enabled: true }));
-vi.mock("../utils/dev.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../utils/dev.js")>();
-  return { ...actual, isDevThrowEnabled: () => devThrow.enabled };
-});
 import { worldBudgets } from "./budgets.js";
 import { WorldRefusal } from "./refusals.js";
 import {
@@ -44,6 +37,13 @@ import {
   newVillageEngine,
 } from "./village.test-helper.js";
 import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
+
+// Lets a test run as a deployed isolate does, where no dev detail travels (#1045).
+const devThrow = vi.hoisted(() => ({ enabled: true }));
+vi.mock("../utils/dev.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../utils/dev.js")>();
+  return { ...actual, isDevThrowEnabled: () => devThrow.enabled };
+});
 
 /** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
  *  The clock's road passes its whole occurrence instead. */
