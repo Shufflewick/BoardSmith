@@ -891,12 +891,14 @@ export async function checkRecordedSlices(
       continue;
     }
     if (sha256Hex(bytes) !== record.sha256) {
+      const mismatch = `unit "${record.unitId}"'s recorded sha256 no longer matches ${record.slicePath} on disk (hand-edit or tamper detected)`;
       warnings.push(
-        `unit "${record.unitId}"'s recorded sha256 no longer matches ${record.slicePath} on disk — ` +
-          `treating as NOT recorded (hand-edit or tamper detected). Restore the slice's recorded text` +
-          (record.rangeId
-            ? `, or reset its range with \`verify-run-record --reset-range ${record.rangeId}\` and record it again.`
-            : '.'),
+        record.rangeId
+          ? `${mismatch} — treating as NOT recorded. Restore the slice's recorded text, or reset its range ` +
+              `with \`verify-run-record --reset-range ${record.rangeId}\` and record it again.`
+          : `${mismatch} — leaving its slice out. It was recorded without a range, so it cannot be recorded ` +
+              `again in this run. Restore the slice's recorded text, or, if that text is lost, start a new run ` +
+              `with \`boardsmith verify-run-init\` (no \`--run-id\`).`,
       );
       continue;
     }

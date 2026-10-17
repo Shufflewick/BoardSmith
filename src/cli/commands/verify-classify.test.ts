@@ -1420,6 +1420,9 @@ describe('a staged slice edited after its pair was classified (#837)', () => {
     expect(ua2Warning).toBeDefined();
     // ua2 was recorded without a range, so there is no range to reset.
     expect(ua2Warning).not.toContain('--reset-range');
+    expect(ua2Warning).not.toContain('NOT recorded');
+    expect(ua2Warning).toContain('cannot be recorded again in this run');
+    expect(ua2Warning).toContain('`boardsmith verify-run-init` (no `--run-id`)');
     const pairA = pairs.pairs.find((p) => p.pairId === pairIdA)!;
     expect(pairA.kind).toBe('paired');
     expect(pairA.stagedUnits).toEqual(['ua']);
