@@ -567,7 +567,8 @@ function createDieMaterials(numFaces: number, color: string, textColor: string =
 
 function setFaceRotation(faceNumber: number): THREE.Euler {
   const dieType = `d${props.sides}`;
-  const normal = faceNormals[faceNumber - 1];
+  // A never-rolled die (value 0) rests on face 1, dimmed by the template.
+  const normal = faceNormals[Math.max(faceNumber, 1) - 1];
 
   if (!normal) {
     console.warn(`No normal for face ${faceNumber}`);
@@ -668,7 +669,7 @@ function createDieMesh() {
   scene.add(mesh);
 
   // Set initial rotation
-  const euler = setFaceRotation(props.value || 1);
+  const euler = setFaceRotation(props.value);
   mesh.rotation.copy(euler);
   targetRotation.copy(euler);
 }
@@ -777,23 +778,18 @@ function restoreWebGL() {
 }
 
 /**
- * Regenerate snapshot with a new value without keeping WebGL active.
+ * Regenerate snapshot with the current props without keeping WebGL active.
  * Creates WebGL context, renders, snapshots, then disposes immediately.
  * Queued to avoid creating too many WebGL contexts at once.
  */
-function regenerateSnapshot(newValue: number) {
+function regenerateSnapshot() {
   queueRender(() => {
+    // A roll started since this was queued: its live scene draws and snapshots the current props.
+    if (!webglDisposed) return;
     // Temporarily restore WebGL
     webglDisposed = false;
     isShowingSnapshot.value = false;
     initScene();
-
-    // Set the new rotation
-    if (mesh) {
-      const euler = setFaceRotation(newValue);
-      targetRotation.copy(euler);
-      mesh.rotation.copy(euler);
-    }
 
     // Take snapshot and dispose immediately
     scheduleSnapshotAndDispose();
@@ -879,12 +875,18 @@ watch(() => props.rollCount, (newRollCount) => {
   }
 });
 
-// NOTE: We intentionally do NOT watch for value changes.
-// Value should only change when roll() is called, which increments rollCount.
-// The rollCount watcher handles animation. When animation completes, it snapshots
-// with the current (new) value.
-// If value changes without rollCount (e.g., flip ability), we need to handle
-// that differently - for now, just ignore it and let the component remount.
+// A value set without a roll (setValue, a flip, undo) must redraw the face too (#892).
+watch(() => props.value, (value) => {
+  // A roll arriving with this value animates to it; its watcher may run after this one.
+  if (shouldAnimateDie(props.dieId, props.rollCount)) return;
+  if (mesh && !webglDisposed) {
+    const euler = setFaceRotation(value);
+    targetRotation.copy(euler);
+    if (!isAnimating) mesh.rotation.copy(euler);
+  } else if (isShowingSnapshot.value) {
+    regenerateSnapshot();
+  }
+});
 
 // Watch for color/texture changes
 watch([() => props.color, () => props.faceLabels, () => props.faceImages, () => props.zeroIndexed], () => {
@@ -893,7 +895,7 @@ watch([() => props.color, () => props.faceLabels, () => props.faceImages, () => 
     updateTextures();
   } else if (isShowingSnapshot.value) {
     // In snapshot mode - regenerate snapshot with new colors/textures
-    regenerateSnapshot(props.value);
+    regenerateSnapshot();
   }
 }, { deep: true });
 
@@ -904,7 +906,7 @@ watch(() => props.sides, () => {
     createDieMesh();
   } else if (isShowingSnapshot.value) {
     // In snapshot mode - regenerate snapshot with new geometry
-    regenerateSnapshot(props.value);
+    regenerateSnapshot();
   }
   // If neither, onMounted will handle it
 });
@@ -915,7 +917,7 @@ watch(() => props.size, (newSize) => {
     renderer.setSize(newSize, newSize);
   } else if (isShowingSnapshot.value) {
     // In snapshot mode - regenerate snapshot at new size
-    regenerateSnapshot(props.value);
+    regenerateSnapshot();
   }
 });
 
@@ -969,6 +971,7 @@ onUnmounted(() => {
        makes the die readable to anything that is not a pair of eyes. -->
   <div
     class="die-3d-container"
+    :class="{ 'die-unrolled': value < 1 }"
     role="img"
     :aria-label="ariaLabel"
     :style="{ width: `${size}px`, height: `${size}px` }"
@@ -996,6 +999,10 @@ onUnmounted(() => {
   display: inline-block;
   cursor: pointer;
   position: relative;
+}
+
+.die-unrolled {
+  opacity: 0.4;
 }
 
 .die-canvas-container {

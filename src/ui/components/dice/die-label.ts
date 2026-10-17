@@ -11,7 +11,7 @@
  * Name a die and the face it is showing, e.g. `'d6 showing 4'`.
  *
  * @param sides - How many faces the die has
- * @param value - The face currently up, 1-indexed as the engine stores it
+ * @param value - The face currently up, 1-indexed as the engine stores it; 0 means never rolled
  * @param faceLabels - Optional custom face words, indexed from face 1
  * @param zeroIndexed - For a d10 whose faces read 0-9 rather than 1-10
  */
@@ -21,6 +21,7 @@ export function dieAriaLabel(
   faceLabels?: string[],
   zeroIndexed = false,
 ): string {
+  if (value < 1) return `d${sides} not rolled yet`;
   const custom = faceLabels?.[value - 1];
   if (custom) return `d${sides} showing ${custom}`;
 
