@@ -287,11 +287,8 @@ export function runRootDir(projectDir: string, runId: string): string {
   return dir;
 }
 
-/**
- * Every verify run's id under `<projectDir>/rulebook/.verify/`, oldest first: run-ids sort
- * lexicographically because the format is fixed-width UTC. Empty when there are none.
- */
-export async function listRunIds(projectDir: string): Promise<string[]> {
+/** Every folder under `<projectDir>/rulebook/.verify/` named like a run id, oldest first, run or not. */
+async function runIdFolders(projectDir: string): Promise<string[]> {
   let entries: Array<{ name: string; isDirectory(): boolean }>;
   try {
     entries = await fs.readdir(join(designRulebookDir(projectDir), '.verify'), { withFileTypes: true });
@@ -302,6 +299,31 @@ export async function listRunIds(projectDir: string): Promise<string[]> {
     .filter((e) => e.isDirectory() && RUN_ID_RE.test(e.name))
     .map((e) => e.name)
     .sort();
+}
+
+/**
+ * Every verify run's id under `<projectDir>/rulebook/.verify/`, oldest first: run-ids sort
+ * lexicographically because the format is fixed-width UTC. A folder counts only if it holds a
+ * RUN.md (#1003). Empty when there are none.
+ */
+export async function listRunIds(projectDir: string): Promise<string[]> {
+  const runs: string[] = [];
+  for (const id of await runIdFolders(projectDir)) {
+    if (await exists(ledgerFilePath(projectDir, id))) runs.push(id);
+  }
+  return runs;
+}
+
+/**
+ * The most recent run's id, the default for a command given no `--run-id`; `undefined` when there
+ * is none. Names each run-id folder that is not a run on stderr, so it can be removed (#1003).
+ */
+export async function latestRunId(projectDir: string): Promise<string | undefined> {
+  const runs = await listRunIds(projectDir);
+  for (const id of await runIdFolders(projectDir)) {
+    if (!runs.includes(id)) console.error(chalk.yellow(`⚠ ${await missingRunMessage(projectDir, id)}`));
+  }
+  return runs.at(-1);
 }
 
 /**
@@ -984,10 +1006,7 @@ export async function missingRunMessage(projectDir: string, runId: string): Prom
     }
     return noRun + `Remove that folder; it is not a verify run.`;
   }
-  const existing: string[] = [];
-  for (const id of await listRunIds(projectDir)) {
-    if (await exists(ledgerFilePath(projectDir, id))) existing.push(id);
-  }
+  const existing = await listRunIds(projectDir);
   return (
     `No verify run "${runId}" found in ${projectDir}.\n` +
     (existing.length > 0
@@ -1334,14 +1353,13 @@ export async function verifyRunStatusCommand(
   if (runId) {
     assertValidRunId(runId);
   } else {
-    const runIds = await listRunIds(projectDir);
-    if (runIds.length === 0) {
+    runId = await latestRunId(projectDir);
+    if (runId === undefined) {
       throw new Error(
         `No verify runs found under rulebook/.verify/ in ${projectDir}.\n` +
           `Run \`boardsmith verify-run-init\` first.`,
       );
     }
-    runId = runIds[runIds.length - 1];
   }
 
   const stagingDir = stagingSlicesDir(projectDir, runId);
