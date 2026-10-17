@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { spawnSync, execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fixtureSandbox } from '../../src/testing/fixture-sandbox.test-helper.ts';
@@ -19,6 +19,11 @@ function runHarness(sandbox, args) {
   // The driver shells out to git and node; any node it starts inherits the same write limit.
   const env = { ...sandbox.env, NODE_OPTIONS: `${sandbox.env.NODE_OPTIONS} --allow-child-process` };
   return spawnSync(process.execPath, [RUN, ...args], { cwd: sandbox.root, env, encoding: 'utf8' });
+}
+
+// The marker a real stage leaves: it names the folder it was written in.
+function writeStageMarker(workDir, stagedFor = workDir) {
+  writeFileSync(path.join(workDir, '.harness-stage-state.json'), JSON.stringify({ workDir: realpathSync(stagedFor) }));
 }
 
 function git(sandbox, args) {
@@ -43,13 +48,65 @@ describe('ingest harness work dir', () => {
     const sandbox = fixtureSandbox('bs-harness-restage-');
     const workDir = path.join(sandbox.root, 'run');
     mkdirSync(workDir);
-    writeFileSync(path.join(workDir, '.harness-stage-state.json'), '{}');
+    writeStageMarker(workDir);
     writeFileSync(path.join(workDir, 'old.txt'), 'from the last run');
 
     const res = runHarness(sandbox, ['stage', '--work-dir', workDir, '--source', path.join(sandbox.root, 'missing.pdf')]);
 
     expect(existsSync(path.join(workDir, 'old.txt'))).toBe(false);
     expect(res.stdout).toContain(`[stage] created throwaway dir: ${workDir}`);
+  });
+
+  it('refuses a folder whose state file was copied from another staged folder, and leaves it untouched', () => {
+    const sandbox = fixtureSandbox('bs-harness-copied-');
+    const staged = path.join(sandbox.root, 'staged');
+    const victim = path.join(sandbox.root, 'victim');
+    mkdirSync(staged);
+    mkdirSync(victim);
+    writeStageMarker(victim, staged);
+    writeFileSync(path.join(victim, 'keep.txt'), 'mine');
+
+    const res = runHarness(sandbox, ['stage', '--work-dir', victim]);
+
+    expect(existsSync(path.join(victim, 'keep.txt'))).toBe(true);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain(`was written for ${realpathSync(staged)}`);
+  });
+
+  it('refuses the home folder even when it holds a state file naming itself', () => {
+    const sandbox = fixtureSandbox('bs-harness-home-');
+    const home = sandbox.env.HOME;
+    writeStageMarker(home);
+    writeFileSync(path.join(home, 'keep.txt'), 'mine');
+
+    const res = runHarness(sandbox, ['stage', '--work-dir', home]);
+
+    expect(existsSync(path.join(home, 'keep.txt'))).toBe(true);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain('is your home folder');
+  });
+
+  it('refuses a folder with a .git at its top even when it holds a state file naming itself', () => {
+    const sandbox = fixtureSandbox('bs-harness-checkout-');
+    const checkout = path.join(sandbox.root, 'checkout');
+    mkdirSync(path.join(checkout, '.git'), { recursive: true });
+    writeStageMarker(checkout);
+
+    const res = runHarness(sandbox, ['stage', '--work-dir', checkout]);
+
+    expect(existsSync(path.join(checkout, '.git'))).toBe(true);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain('has a .git at its top');
+  });
+
+  it('refuses the BoardSmith checkout it runs from', () => {
+    const sandbox = fixtureSandbox('bs-harness-repo-');
+    const repoRoot = path.resolve(path.dirname(RUN), '..', '..');
+
+    const res = runHarness(sandbox, ['stage', '--work-dir', repoRoot]);
+
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain('is the BoardSmith checkout');
   });
 
   it('re-stages a --work-dir whose earlier stage failed partway, and drive says that stage did not finish', () => {
