@@ -696,7 +696,8 @@ export function createProgram(): Command {
     .command('verify-impact-apply')
     .description(
       "Write the rules-staleness marker into every affected chunk's CHUNK.md then SKETCH.md, and " +
-        "record the run's impact map (refuses while any contradiction is un-adjudicated)",
+        "record the run's impact map (refuses while any pair is unclassified or any contradiction is " +
+        'un-adjudicated)',
     )
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .option('--run-id <id>', 'Report on a specific run instead of the most recent')
