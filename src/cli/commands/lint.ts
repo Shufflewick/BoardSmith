@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join, relative } from 'node:path';
 import { styleText } from 'node:util';
+import { ESLint } from 'eslint';
 import { scanSandboxViolations } from '../lib/sandbox-scan.js';
 import { requireBoardsmithWorkspace } from '../lib/project-context.js';
 import { runTool } from '../lib/run-tool.js';
@@ -401,39 +403,59 @@ interface LintCheck {
   run: () => Promise<number>;
 }
 
-/**
- * Config filenames that mean "this workspace has opted into <tool>". Only
- * configured tools run, so `boardsmith lint` never fails a game project for
- * lacking a linter it never set up.
+/*
+ * Only configured tools run, so `boardsmith lint` never fails a game project
+ * for lacking a linter it never set up. Each check below finds a config
+ * exactly where its linter would, so lint never calls a configured project
+ * unconfigured, or the reverse (#1094).
  */
-const ESLINT_CONFIGS = [
-  'eslint.config.js',
-  'eslint.config.mjs',
-  'eslint.config.cjs',
-  'eslint.config.ts',
-  // ESLint no longer reads .eslintrc files. They stay here on purpose, so an
-  // author who has one gets ESLint's own message on how to migrate instead of
-  // a silently skipped check (#624).
-  '.eslintrc.js',
-  '.eslintrc.cjs',
-  '.eslintrc.json',
-];
 
-// Stylelint 17's own search list (`stylelint --help`), minus the parent-folder walk.
-const STYLELINT_CONFIGS = [
-  '.stylelintrc',
-  ...['cjs', 'mjs', 'js', 'ts', 'json', 'yaml', 'yml'].map((ext) => `.stylelintrc.${ext}`),
-  ...['cjs', 'mjs', 'js', 'ts'].map((ext) => `stylelint.config.${ext}`),
-];
+// ESLint no longer reads .eslintrc files. They count here on purpose, so an
+// author who has one gets ESLint's own message on how to migrate instead of a
+// silently skipped check (#624).
+const LEGACY_ESLINT_CONFIGS = ['.eslintrc.js', '.eslintrc.cjs', '.eslintrc.json'];
 
-function hasAnyConfig(cwd: string, candidates: string[]): boolean {
-  return candidates.some((name) => existsSync(join(cwd, name)));
+/** Asks boardsmith's own ESLint, the copy lint runs, whether it finds a config from this project upward. */
+async function hasEslintConfig(cwd: string): Promise<boolean> {
+  if (LEGACY_ESLINT_CONFIGS.some((name) => existsSync(join(cwd, name)))) return true;
+  return (await new ESLint({ cwd }).findConfigFile()) !== undefined;
 }
 
-function hasStylelintConfig(cwd: string): boolean {
-  if (hasAnyConfig(cwd, STYLELINT_CONFIGS)) return true;
-  const pkgPath = join(cwd, 'package.json');
-  if (!existsSync(pkgPath)) return false;
+// Stylelint 17 searches with cosmiconfig 9's 'global' strategy. These are
+// that search's file names; Stylelint's own resolveConfig() cannot be asked,
+// as it throws instead of returning undefined when there is no config, and
+// it lives in the game's install, which may not have it.
+// shortcut: a cosmiconfig meta config (a "cosmiconfig" key or .config/config.json) is not read; read it if a game uses one.
+const RC_EXTENSIONS = ['', '.json', '.yaml', '.yml', '.js', '.ts', '.cjs', '.mjs'];
+const STYLELINT_CONFIGS = [
+  ...RC_EXTENSIONS.flatMap((ext) => [`.stylelintrc${ext}`, `.config/stylelintrc${ext}`]),
+  ...['js', 'ts', 'cjs', 'mjs'].map((ext) => `stylelint.config.${ext}`),
+];
+const STYLELINT_GLOBAL_CONFIGS = RC_EXTENSIONS.map((ext) => `config${ext}`);
+
+/** The project folder and each parent, stopping after the home folder (or at the root, outside it). */
+function stylelintSearchDirs(cwd: string): string[] {
+  const home = homedir();
+  const dirs = [cwd];
+  for (let dir = cwd; dir !== home && dirname(dir) !== dir; dir = dirname(dir)) dirs.push(dirname(dir));
+  return dirs;
+}
+
+/** Stylelint's global config folder, as cosmiconfig's env-paths names it. */
+function stylelintGlobalDir(): string {
+  const home = homedir();
+  if (process.platform === 'darwin') return join(home, 'Library', 'Preferences', 'stylelint');
+  if (process.platform === 'win32') return join(process.env.APPDATA || join(home, 'AppData', 'Roaming'), 'stylelint', 'Config');
+  return join(process.env.XDG_CONFIG_HOME || join(home, '.config'), 'stylelint');
+}
+
+/** Stylelint skips an empty config file and keeps searching. */
+function isNonEmptyFile(path: string): boolean {
+  return existsSync(path) && statSync(path).isFile() && readFileSync(path, 'utf-8').trim() !== '';
+}
+
+function hasStylelintKey(pkgPath: string): boolean {
+  if (!isNonEmptyFile(pkgPath)) return false;
   let pkg: unknown;
   try {
     pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
@@ -446,7 +468,13 @@ function hasStylelintConfig(cwd: string): boolean {
         `(a "stylelint" key). Fix the JSON in that file and run lint again.`,
     );
   }
-  return 'stylelint' in pkg;
+  return (pkg as Record<string, unknown>).stylelint != null;
+}
+
+function hasStylelintConfig(cwd: string): boolean {
+  const found = stylelintSearchDirs(cwd).some((dir) =>
+    hasStylelintKey(join(dir, 'package.json')) || STYLELINT_CONFIGS.some((name) => isNonEmptyFile(join(dir, name))));
+  return found || STYLELINT_GLOBAL_CONFIGS.some((name) => isNonEmptyFile(join(stylelintGlobalDir(), name)));
 }
 
 /**
@@ -469,9 +497,10 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   });
 
   const checks: LintCheck[] = [];
+  const hasEslint = wants('eslint') && await hasEslintConfig(cwd);
   const hasCssConfig = wants('css') && hasStylelintConfig(cwd);
 
-  if (options.eslint && !hasAnyConfig(cwd, ESLINT_CONFIGS)) {
+  if (options.eslint && !hasEslint) {
     console.error(styleText('red', '\nlint --eslint: this project has no ESLint config, so ESLint cannot run.'));
     console.error(styleText('dim', 'Add an eslint.config.mjs to the project root that uses boardsmith/eslint-plugin, or drop --eslint.'));
     console.error(styleText('dim', 'How: https://github.com/Shufflewick/BoardSmith/blob/main/docs/api/eslint-plugin.md\n'));
@@ -485,7 +514,7 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     process.exit(1);
   }
 
-  if (wants('eslint') && hasAnyConfig(cwd, ESLINT_CONFIGS)) {
+  if (hasEslint) {
     const args = ['src/'];
     if (options.fix) args.push('--fix');
     checks.push({ name: 'ESLint', run: () => runTool('eslint', args, { cwd }) });

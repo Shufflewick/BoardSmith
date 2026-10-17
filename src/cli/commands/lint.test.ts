@@ -10,7 +10,7 @@
  * exists as the ESLint plugin's `no-element-identity-comparison`.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { lintCommand, lintFile } from './lint.js';
 import { runTool } from '../lib/run-tool.js';
@@ -126,5 +126,103 @@ describe('a selected check with no config fails instead of passing (#846)', () =
     const run = lintCommand({});
     await expect(run).rejects.toThrow(join(process.cwd(), 'package.json'));
     await expect(run).rejects.toThrow(/to find a Stylelint config.*Fix the JSON/s);
+  });
+});
+
+describe('lint finds a config wherever the linter itself would (#1094)', () => {
+  const originalCwd = process.cwd();
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    vi.mocked(runTool).mockClear();
+    process.chdir(originalCwd);
+  });
+
+  /** A game folder inside `root`, with lint's output silenced and exit turned into a throw. */
+  function gameIn(root: string): string {
+    const game = join(root, 'game');
+    mkdirSync(game);
+    writeFileSync(join(game, 'boardsmith.json'), '{}');
+    process.chdir(game);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(process, 'exit').mockImplementation((code) => { throw new Error(`exit ${code}`); });
+    return game;
+  }
+
+  it.each(['eslint.config.mts', 'eslint.config.cts'])('lint --eslint runs ESLint with a %s, which ESLint 10 reads', async (name) => {
+    const game = gameIn(tempTree('boardsmith-lint-ts-eslint-'));
+    writeFileSync(join(game, name), 'export default [];');
+
+    await lintCommand({ eslint: true });
+    expect(vi.mocked(runTool)).toHaveBeenCalledWith('eslint', ['src/'], { cwd: process.cwd() });
+  });
+
+  it('lint --eslint runs ESLint when the config is in a parent folder, as in a monorepo', async () => {
+    const root = tempTree('boardsmith-lint-parent-eslint-');
+    writeFileSync(join(root, 'eslint.config.mjs'), 'export default [];');
+    gameIn(root);
+
+    await lintCommand({ eslint: true });
+    expect(vi.mocked(runTool)).toHaveBeenCalledWith('eslint', ['src/'], { cwd: process.cwd() });
+  });
+
+  it.each([
+    ['a .stylelintrc.json in a parent folder', '.stylelintrc.json'],
+    ['a stylelint key in a parent folder\'s package.json', 'package.json'],
+  ])('lint --css runs Stylelint with %s', async (_label, name) => {
+    const root = tempTree('boardsmith-lint-parent-stylelint-');
+    const config = { customSyntax: 'postcss-html' };
+    writeFileSync(join(root, name), JSON.stringify(name === 'package.json' ? { stylelint: config } : config));
+    gameIn(root);
+
+    await lintCommand({ css: true });
+    expect(vi.mocked(runTool)).toHaveBeenCalledWith('stylelint', ['src/**/*.vue'], { cwd: process.cwd() });
+  });
+
+  it('lint --css runs Stylelint with a config in the project\'s .config folder', async () => {
+    const game = gameIn(tempTree('boardsmith-lint-dotconfig-stylelint-'));
+    mkdirSync(join(game, '.config'));
+    writeFileSync(join(game, '.config', 'stylelintrc.json'), '{}');
+
+    await lintCommand({ css: true });
+    expect(vi.mocked(runTool)).toHaveBeenCalledWith('stylelint', ['src/**/*.vue'], { cwd: process.cwd() });
+  });
+
+  it('lint --css ignores an empty config file, as Stylelint does', async () => {
+    const game = gameIn(tempTree('boardsmith-lint-empty-stylelint-'));
+    writeFileSync(join(game, '.stylelintrc.json'), '  \n');
+
+    await expect(lintCommand({ css: true })).rejects.toThrow('exit 1');
+    expect(vi.mocked(runTool)).not.toHaveBeenCalled();
+  });
+
+  it('lint --css does not look above the home folder, where Stylelint stops', async () => {
+    const root = tempTree('boardsmith-lint-home-stylelint-');
+    writeFileSync(join(root, '.stylelintrc.json'), '{}');
+    const home = join(root, 'home');
+    mkdirSync(home);
+    // os.homedir() reads HOME, so this moves Stylelint's stopping point (and its global config folder) into the temp tree.
+    // Real path, because Stylelint compares HOME with the real cwd and macOS's temp folder is a symlink.
+    vi.stubEnv('HOME', realpathSync(home));
+    gameIn(home);
+
+    await expect(lintCommand({ css: true })).rejects.toThrow('exit 1');
+    expect(vi.mocked(runTool)).not.toHaveBeenCalled();
+  });
+
+  it('lint --css runs Stylelint with a config in its global config folder', async () => {
+    const home = tempTree('boardsmith-lint-global-stylelint-');
+    vi.stubEnv('HOME', home);
+    vi.stubEnv('XDG_CONFIG_HOME', '');
+    const globalDir = process.platform === 'darwin'
+      ? join(home, 'Library', 'Preferences', 'stylelint')
+      : join(home, '.config', 'stylelint');
+    mkdirSync(globalDir, { recursive: true });
+    writeFileSync(join(globalDir, 'config.json'), '{}');
+    gameIn(home);
+
+    await lintCommand({ css: true });
+    expect(vi.mocked(runTool)).toHaveBeenCalledWith('stylelint', ['src/**/*.vue'], { cwd: process.cwd() });
   });
 });
