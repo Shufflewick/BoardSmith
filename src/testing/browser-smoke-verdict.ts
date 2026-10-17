@@ -59,6 +59,15 @@ function checkedSeeds(seeds: string[], from: string): string[] {
   return seeds;
 }
 
+/** The spec's `actions`, once none is blank or listed twice (#926). */
+export function smokeActions(actions: readonly string[]): string[] {
+  const from = `\`actions\` in ${SMOKE_SPEC_PATH}`;
+  if (actions.some((name) => name.trim() === '')) throw new Error(`${from} has a blank name. Name each action as its rules do, such as "greet".`);
+  const twice = actions.find((name, i) => actions.indexOf(name) !== i);
+  if (twice !== undefined) throw new Error(`${from} lists "${twice}" twice. List each action once.`);
+  return [...actions];
+}
+
 /**
  * The world seats a walk plays (#471), in order: `seats` in the spec, a count of the first seats the
  * world gives (1, 2...) or a list naming them, so a spec can choose seats the world brings together.
@@ -482,8 +491,9 @@ function inputProblems(walk: SmokeWalk): string[] {
  * blank text.
  */
 function fieldInputProblem(walk: SmokeWalk, action: string, field: string, input: SmokeInput): string | undefined {
-  const met = walk.fieldsMet.get(action);
-  if (met !== undefined && (met.size > 0 || walk.taken.has(action)) && !met.has(field)) {
+  // An action taken without the walk opening it was taken in one press: it has no fields (#926).
+  const met = walk.fieldsMet.get(action) ?? new Map<string, FieldKind>();
+  if ((met.size > 0 || walk.taken.has(action)) && !met.has(field)) {
     return (
       `${inputName(action, field)} in ${SMOKE_SPEC_PATH} names a field the walk never met in "${action}", whose fields it ` +
       `met are ${met.size === 0 ? 'none' : quoted([...met.keys()].sort())}. Name the field by the pick name its rules give it.`

@@ -164,6 +164,23 @@ export async function withinPageTime<T>(
 }
 
 /**
+ * Waits, as {@link withinPageTime} does, until any of `attempts` is met: true once one is, false
+ * when every one ran out of page time. Any other error, as a frame detached under its wait, is
+ * thrown, even when another wait ran out, so it is reported rather than taken for a quiet game (#926).
+ */
+export function anyWithinPageTime(page: object, budgetMs: number, what: string, attempts: readonly ((timeout: number) => Promise<unknown>)[]): Promise<boolean> {
+  const any = (timeout: number) =>
+    Promise.any(attempts.map((attempt) => attempt(timeout))).catch((none: AggregateError) => Promise.reject(none.errors.find((error) => !ranOut(error)) ?? none.errors[0]));
+  return withinPageTime(page, budgetMs, what, any).then(
+    () => true,
+    (error: unknown) => {
+      if (!ranOut(error)) throw error;
+      return false;
+    },
+  );
+}
+
+/**
  * Does what `act` does once, with no timeout of its own (`timeout` 0), and returns what it gives.
  * It throws {@link PageTimeOverrun}, naming `what`, when `act` has not finished in `budgetMs` of
  * `page`'s time, and
