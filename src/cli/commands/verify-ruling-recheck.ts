@@ -10,7 +10,15 @@ import { parseRulings } from './build-manifest.js';
 import { allocatedNumber } from '../lib/ledger-entries.js';
 import { readFencedJsonLedger } from '../lib/fenced-json-ledger.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
-import { atomicWriteFile, listRunIds, RUN_ID_RE, runRootDir, stagingSlicesDir } from './verify-run.js';
+import {
+  atomicWriteFile,
+  ledgerFilePath,
+  listRunIds,
+  readLedgerOrThrow,
+  RUN_ID_RE,
+  runRootDir,
+  stagingSlicesDir,
+} from './verify-run.js';
 
 /**
  * `verify-ruling-recheck.ts` — CHECK-01's mechanical half (176-CONTEXT.md decision 2): the CLI
@@ -542,6 +550,9 @@ export async function verifyRulingRecordCommand(
         `verify-ruling-recheck\` reports.`,
     );
   }
+
+  // Before anything is written: a mistyped id must not create a run folder that sorts as latest.
+  await readLedgerOrThrow(ledgerFilePath(projectDir, runId), runId, projectDir);
 
   const number = Number(options.number);
   if (!Number.isInteger(number) || number < 1) {

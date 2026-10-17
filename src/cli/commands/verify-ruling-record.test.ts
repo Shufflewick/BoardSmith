@@ -12,6 +12,7 @@ import {
   verifyRulingRecheckCommand,
   verifyRulingRecordCommand,
 } from './verify-ruling-recheck.js';
+import { ledgerFilePath } from './verify-run.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
@@ -37,6 +38,7 @@ async function makeProject(count: number, runId = RUN_ID): Promise<string> {
   const slices = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'slices');
   await fs.mkdir(slices, { recursive: true });
   await fs.writeFile(join(slices, '01-setup.md'), '# Setup\n\nFresh transcription.\n');
+  await fs.writeFile(ledgerFilePath(project, runId), '# Verify Run\n');
 
   const parts: string[] = [];
   for (let i = 1; i <= count; i++) {
@@ -314,6 +316,24 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
         json: true,
       }),
     ).rejects.toThrow(/not a valid verify run id/);
+  });
+
+  it('refuses a well-formed run id that names no run, and creates no run folder for it', async () => {
+    // A mistyped id that sorts last would otherwise become the default run (#833).
+    const project = await makeProject(3);
+    const typo = '2099-01-01T00-00-00Z';
+    const err = await verifyRulingRecordCommand({
+      project,
+      runId: typo,
+      number: 1,
+      verdict: 'still-needed',
+      reasoning: 'x',
+      json: true,
+    }).catch((e: Error) => e);
+
+    expect((err as Error).message).toMatch(/No verify run "2099-01-01T00-00-00Z" found/);
+    expect((err as Error).message).toContain(`Runs that do exist: ${RUN_ID}.`);
+    await expect(fs.access(join(project, DESIGN_DIR, 'rulebook', '.verify', typo))).rejects.toThrow();
   });
 
   it('never writes into RULINGS.md', async () => {

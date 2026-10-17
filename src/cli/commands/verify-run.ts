@@ -965,9 +965,13 @@ export async function readLedgerOrThrow(
   try {
     return await fs.readFile(ledgerFile, 'utf-8');
   } catch {
+    // Never suggest init with this id: a mistyped id would then become a real, latest run (#833).
+    const existing = await listRunIds(projectDir);
     throw new Error(
       `No verify run "${runId}" found in ${projectDir}.\n` +
-        `Run \`boardsmith verify-run-init --run-id ${runId}\` first.`,
+        (existing.length > 0
+          ? `Runs that do exist: ${existing.join(', ')}.`
+          : `No verify runs exist yet — run \`boardsmith verify-run-init\` first.`),
     );
   }
 }
