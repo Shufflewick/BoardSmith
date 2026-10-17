@@ -271,3 +271,40 @@ describe('#387: a scheduled event that comes due while the edited rules are stil
     await vi.waitFor(() => expect(world.logs()).toBe(2));
   }, 30_000);
 });
+
+/**
+ * #1040: A RELOAD NEVER LETS GO OF THE WORLD.
+ *
+ * The reload closes the store before it reopens it on the new rules, and a
+ * second `boardsmith dev` started in that moment used to take the world, so
+ * the first run's reopen was refused and it was left holding a closed host.
+ */
+describe('#1040: a second run started during a reload', () => {
+  it('is refused, naming the run that holds the world, and the reload goes on', async () => {
+    const cwd = tempTree('bs-world-reload-lock-');
+    const runOn = (port: number, reloaded: WorldRuntime) =>
+      openWorldRun({ cwd, displayName: 'Camp', port, runtime: beforeEdit, reloadRules: async () => reloaded });
+    let second: ReturnType<typeof runOn> | undefined;
+    const reopened: WorldRuntime = {
+      ...afterEdit,
+      // Called once the old store has closed and before the new one opens: the gap a second run used to take.
+      openWorldStore: (...args) => {
+        second ??= runOn(5174, beforeEdit);
+        return afterEdit.openWorldStore(...args);
+      },
+    };
+    const first = await runOn(5173, reopened);
+    closing.push(() => first.close());
+    await first.queue.saved('src/rules/index.ts');
+    const outcome = await second!.then(
+      (run) => {
+        closing.push(() => run.close());
+        return run;
+      },
+      (error: Error) => error,
+    );
+    expect(outcome).toBeInstanceOf(Error);
+    expect((outcome as Error).message).toContain(`(pid ${process.pid}, port 5173)`);
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Reloaded. The world is durable'));
+  }, 30_000);
+});

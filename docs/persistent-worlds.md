@@ -71,7 +71,8 @@ under `boardsmith dev`, and publish.
 `boardsmith dev --reset` deletes the local world and runs genesis again. Nothing
 else does: a persistent world that erased itself when its host stopped would be
 a session, and closing the laptop is the one thing an author has to be able to
-do.
+do. It refuses while another `boardsmith dev` holds the world, and names that
+run: one run holds a world from start to stop, rule reloads included.
 
 Updating BoardSmith does not erase it either. The local store stamps the layout
 it was written under, and an open that finds an older layout this BoardSmith

@@ -53,7 +53,8 @@
  * A DIRECTORY rather than the table store's single dotfile, because SQLite owns
  * more than one file: `world.db` is accompanied by `world.db-wal` while the
  * database is open, and a rollback of the last transaction is read out of it;
- * `world.db.holder` names the run holding it (#881). One directory keeps them together, makes the
+ * `world.db.holder` names the run holding it (#881), and `world.db.lock` is
+ * that run's hold (#1040). One directory keeps them together, makes the
  * ignore rule one line, and makes `boardsmith dev --reset` one removal that
  * cannot leave a sidecar behind describing a database that is gone.
  *
@@ -68,9 +69,9 @@
  * host's own answer from its open connections at the instant it asks.
  */
 
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 import type { DeclaredSeatActivityStamp, StoredPartition } from '../../world/contract.js';
 import {
@@ -132,12 +133,66 @@ export function worldStorePath(projectRoot: string): string {
  *
  * Answers whether anything was there, so the caller can say "reset" or
  * "nothing to reset" rather than guessing.
+ *
+ * Refused while another run holds the world (#1040), and done holding it, so
+ * no run can open the world while it is being deleted. The lock file stays:
+ * a run that took a new one while this one held the old would hold the world too.
  */
 export function resetWorldStore(projectRoot: string): boolean {
   const dir = worldStoreDir(projectRoot);
   if (!existsSync(dir)) return false;
-  rmSync(dir, { recursive: true, force: true });
-  return true;
+  const path = worldStorePath(projectRoot);
+  const kept = basename(lockPath(path));
+  // Asked before the lock writes its holder note, which is not a world.
+  const hadWorld = readdirSync(dir).some((name) => name !== kept);
+  const lock = takeWorldLock(path);
+  try {
+    for (const name of readdirSync(dir)) if (name !== kept) rmSync(join(dir, name), { recursive: true, force: true });
+  } finally {
+    lock.release();
+  }
+  return hadWorld;
+}
+
+/** A run's hold on its world: released by {@link WorldLock.release} or by the process ending. */
+export interface WorldLock {
+  /** Let go of the world. Releasing twice is releasing once. */
+  release(): void;
+}
+
+/**
+ * HOLD THE WORLD FOR A WHOLE RUN (#1040), refusing with the #881 message when another run holds it.
+ *
+ * The store's own connection is the lock while it is open, but a rules reload
+ * closes it before reopening, and a store in a rules worker closes when the
+ * worker stops; a second run could take the world in either gap. So the run
+ * holds this, on its own file, from before it opens the store until it stops,
+ * and `--reset` takes it before deleting anything. SQLite's exclusive mode is
+ * the lock for the store's reason: the OS drops it when the process dies.
+ */
+export function takeWorldLock(path: string, holder: { readonly port?: number } = {}): WorldLock {
+  mkdirSync(dirname(path), { recursive: true });
+  const db = new (loadSqlite().DatabaseSync)(lockPath(path));
+  try {
+    db.exec('PRAGMA locking_mode = EXCLUSIVE');
+    // Nothing is ever written here, so no journal file is needed.
+    db.exec('PRAGMA journal_mode = MEMORY');
+    // Exclusive locking mode keeps this lock after the commit, until the connection closes.
+    db.exec('BEGIN EXCLUSIVE');
+    db.exec('COMMIT');
+  } catch (error) {
+    db.close();
+    throw (error as { errcode?: number }).errcode === SQLITE_BUSY ? heldElsewhere(path) : error;
+  }
+  writeFileSync(holderPath(path), JSON.stringify({ pid: process.pid, port: holder.port }));
+  let released = false;
+  return {
+    release(): void {
+      if (released) return;
+      released = true;
+      db.close();
+    },
+  };
 }
 
 /**
@@ -1004,6 +1059,11 @@ export function prepareSchema(
 
 /** SQLite's "database is locked". */
 const SQLITE_BUSY = 5;
+
+/** The file a run holds for as long as it runs (#1040). */
+function lockPath(path: string): string {
+  return `${path}.lock`;
+}
 
 /** Where the run holding a store records who it is. */
 function holderPath(path: string): string {

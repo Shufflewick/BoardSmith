@@ -44,7 +44,7 @@ import type { LocalWorldHost } from '../dev-host/world-host.js';
 import { createRulesReloadQueue, type RulesReloadQueue } from '../dev-host/rules-reload-queue.js';
 import { createWorldConnections } from '../dev-host/world-connections.js';
 import { createNodeWorldClock, type WorldHostClock } from '../dev-host/node-world-clock.js';
-import { worldStorePath, type LocalWorldStore, type openWorldStore } from '../dev-host/world-store.js';
+import { takeWorldLock, worldStorePath, type LocalWorldStore, type openWorldStore, type WorldLock } from '../dev-host/world-store.js';
 import { announceHost, teardownInOrder, type HeldResource, type HostHoldings } from '../dev-host/shutdown.js';
 import type { WorldDevConfig } from '../dev-host/world-config-types.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
@@ -290,12 +290,28 @@ export async function openWorldRun(
     readonly clock?: WorldHostClock;
   },
 ): Promise<WorldRun> {
-  const clock = options.clock ?? createNodeWorldClock();
   // THE ONE PLACE THE BUDGETS ARE DECIDED, and they are the library's defaults
   // rather than numbers this file invents. A laptop running different ceilings
   // from production makes a game's local behaviour a poor guide to its
   // published behaviour, which is the whole reason #165 made them parameters.
   const budgets = worldBudgets();
+  // HELD FOR THE WHOLE RUN (#1040), so a reload that closes the store to reopen it never lets another run in.
+  const lock = takeWorldLock(worldStorePath(options.cwd), { port: options.port });
+  try {
+    return await openWorld(options, budgets, lock);
+  } catch (error) {
+    lock.release();
+    throw error;
+  }
+}
+
+/** The body of {@link openWorldRun}, under the run's lock; its `close` releases it. */
+async function openWorld(
+  options: Parameters<typeof openWorldRun>[0],
+  budgets: ReturnType<typeof worldBudgets>,
+  lock: WorldLock,
+): Promise<WorldRun> {
+  const clock = options.clock ?? createNodeWorldClock();
   const store = options.runtime.openWorldStore(worldStorePath(options.cwd), budgets, { port: options.port });
   const launchedBefore = store.isLaunched();
 
@@ -418,7 +434,10 @@ export async function openWorldRun(
     seatCount: worldHost.seatCount,
     storePath: store.path,
     launchedBefore,
-    close: () => worldHost.close(),
+    close: async () => {
+      await worldHost.close();
+      lock.release();
+    },
   };
 }
 

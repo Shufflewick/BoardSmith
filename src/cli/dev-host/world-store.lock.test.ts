@@ -9,12 +9,13 @@
  */
 import { describe, expect, it } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { worldBudgets } from '../../world/budgets.js';
 import { fixtureSandbox } from '../../testing/fixture-sandbox.test-helper.js';
-import { openWorldStore, worldStorePath } from './world-store.js';
+import { openWorldStore, resetWorldStore, worldStorePath } from './world-store.js';
 
 const CHILD = join(dirname(fileURLToPath(import.meta.url)), 'world-store-child.test-helper.mjs');
 const BUDGETS = worldBudgets();
@@ -57,7 +58,7 @@ describe('a world store is held by one run at a time', () => {
     const child = await holdInChild(path, sandbox.env);
     const gone = exited(child);
     try {
-      expect(() => openWorldStore(path, BUDGETS)).toThrow(`(pid ${child.pid})`);
+      expect(() => openWorldStore(path, BUDGETS)).toThrow(`(pid ${child.pid}, port 5173)`);
       expect(() => openWorldStore(path, BUDGETS)).toThrow(/Stop that run/);
     } finally {
       child.kill('SIGKILL');
@@ -66,5 +67,21 @@ describe('a world store is held by one run at a time', () => {
     const store = openWorldStore(path, BUDGETS);
     expect(store.isLaunched()).toBe(false);
     store.close();
+  });
+
+  it('refuses --reset while another run holds the world, and deletes nothing (#1040)', async () => {
+    const sandbox = fixtureSandbox('bs-world-lock-reset-');
+    const path = worldStorePath(sandbox.root);
+    const child = await holdInChild(path, sandbox.env);
+    const gone = exited(child);
+    try {
+      expect(() => resetWorldStore(sandbox.root)).toThrow(`(pid ${child.pid}, port 5173)`);
+      expect(existsSync(path)).toBe(true);
+    } finally {
+      child.kill('SIGKILL');
+    }
+    await gone;
+    expect(resetWorldStore(sandbox.root)).toBe(true);
+    expect(existsSync(path)).toBe(false);
   });
 });
