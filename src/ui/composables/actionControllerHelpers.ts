@@ -6,11 +6,8 @@
  */
 
 import type { EnrichedActionMetadata, ChoiceWithRefs, ElementRef, EnrichedPickMetadata, PickSnapshot } from './useActionControllerTypes.js';
-import { isDevMode, devWarn } from '../../utils/dev.js';
+import { devWarn } from '../../utils/dev.js';
 import { labelOfValue, valuesEqual } from '../../engine/action/choice-matching.js';
-
-// Re-export for backwards compatibility during transition
-export { isDevMode, devWarn };
 
 // ============================================
 // MultiSelect Resolution (Pit of Success — single source of truth)

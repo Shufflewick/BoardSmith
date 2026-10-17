@@ -90,7 +90,8 @@
  */
 
 import { ref, readonly, computed, watch, nextTick, getCurrentScope, onScopeDispose } from 'vue';
-import { isDevMode, devWarn, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList } from './actionControllerHelpers.js';
+import { getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList } from './actionControllerHelpers.js';
+import { devWarn } from '../../utils/dev.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 import { findMatchingChoice, oneChoiceListRefusal, oneElementListRefusal, valuesEqual } from '../../engine/action/choice-matching.js';
 
@@ -459,7 +460,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   const { enrichElementsList, enrichValidElements } = createEnrichment(gameView, currentArgs);
 
   // === Helpers ===
-  // Note: isDevMode, devWarn, getDisplayFromValue are imported from actionControllerHelpers.ts
   // Note: enrichElementsList, enrichValidElements are from useGameViewEnrichment.ts
 
   /** Clear all keys from the args object while preserving reactivity */
@@ -1781,7 +1781,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       metadata: meta ? JSON.parse(JSON.stringify(meta)) : { name: actionName, selections: [] },
       pickSnapshots: new Map(),
       collectedPicks: new Map(),
-      repeatingState: null,
       prefills: new Map(),
       choiceFetches: new Map(),
     };
@@ -1939,7 +1938,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       metadata: JSON.parse(JSON.stringify(meta)), // Deep clone
       pickSnapshots: new Map(),
       collectedPicks: new Map(),
-      repeatingState: null,
       prefills: new Map(Object.entries(prefillArgs)),
       choiceFetches: new Map(),
     };
