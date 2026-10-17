@@ -88,3 +88,16 @@ describe('#950: an op naming another seat as `seat` is refused', () => {
     expect(executed).toEqual([]);
   });
 });
+
+// #1100: botSuggest names no one seat, and answers with a bot seat's move and its args.
+describe('#1100: botSuggest through handleOp is refused', () => {
+  it("refuses a seat asking for another seat's bot move, without running it", async () => {
+    const { host, executed } = await startedHost();
+    host.setBotSeats([{ seat: 2 }]);
+    const res = await host.handleOp(1, { type: 'botSuggest', seats: [{ seat: 2 }] });
+    expect(res.success).toBe(false);
+    expect(!res.success && res.error).toMatch(/botSuggest.*only the host/i);
+    expect(!res.success && res.category).toBe('protocol');
+    expect(executed).toEqual([]);
+  });
+});

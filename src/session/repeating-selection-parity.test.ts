@@ -131,7 +131,9 @@ describe('a repeating selection is one protocol on every path (#325)', () => {
   it('a bot plays the repeat protocol: every pick runs onEach, and execute receives an array ending at the terminator', async () => {
     const host = makeHost();
     await host.start();
-    const found = succeeded(await host.handleOp(1, { type: 'botSuggest', seats: [{ seat: 1, level: 'easy' }] }));
+    const found = succeeded(
+      await executeOp(collectDef, options, host.snapshot, null, { type: 'botSuggest', seats: [{ seat: 1, level: 'easy' }] }),
+    );
     succeeded(await host.handleOp(1, suggestedMoveOp(host.snapshot, found)));
 
     const after = outcome(host);
