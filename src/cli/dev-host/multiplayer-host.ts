@@ -724,6 +724,11 @@ export class MultiplayerHost {
     clientId: string,
     msg: Extract<ClientInbound, { type: 'configure' }>,
   ): Promise<void> {
+    // The start in flight would ignore this one, so a change here would describe a game that never starts (#886).
+    if (this.starting) {
+      this.send(clientId, { type: 'error', message: 'A game is starting. Try again once it has started.' });
+      return;
+    }
     let bundle: Record<string, unknown> = {};
     let requestedPlayerCount: unknown;
     if (msg.preset !== undefined) {

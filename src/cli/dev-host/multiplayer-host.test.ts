@@ -301,6 +301,38 @@ describe('MultiplayerHost — seat stability on reconnect', () => {
   });
 });
 
+describe('MultiplayerHost — configure while a game is starting (#886)', () => {
+  it('is refused and changes nothing, so the lobby never shows seats the game does not have', async () => {
+    let release: (() => void) | null = null;
+    const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
+    const host = new MultiplayerHost({
+      playerCount: 2,
+      minPlayers: 1,
+      maxPlayers: def.maxPlayers,
+      makeSeed: () => 'mp',
+      executeOp: async (gameOptions, snap, pend, op, hostOptions) => {
+        if (op.type === 'start' && release === null && sent.length > 0) {
+          await new Promise<void>((resolve) => { release = resolve; });
+        }
+        return executeOp(def, gameOptions, snap, pend, op, hostOptions);
+      },
+      send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
+    });
+    const lastOfType = (clientId: string, type: HostOutbound['type']) =>
+      [...sent].reverse().find((e) => e.clientId === clientId && e.msg.type === type)?.msg as any;
+    await host.handleMessage('A', { type: 'hello' }); // the first start (nothing sent yet) is not held
+    const restarting = host.handleMessage('A', { type: 'restart' }); // held inside its start op
+    await host.handleMessage('A', { type: 'configure', gameOptions: { playerCount: 4 } });
+    const told = lastOfType('A', 'error');
+    release!();
+    await restarting;
+    await host.handleMessage('A', { type: 'getLobby' });
+    expect(lastOfType('A', 'lobby').seats).toHaveLength(2);
+    expect(lastOfType('A', 'lobby').playerCount).toBe(2);
+    expect(told?.message).toMatch(/game is starting.*try again/i);
+  });
+});
+
 describe('MultiplayerHost — a restart that fails (#880)', () => {
   it('leaves no dead game behind: moves are refused, every page is told why, and a reload starts a game', async () => {
     let failStart = false;
