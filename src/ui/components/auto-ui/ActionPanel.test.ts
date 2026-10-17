@@ -911,6 +911,28 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
     expect(appendListEntry).toHaveBeenCalledWith('space', 's2');
     expect(fill).not.toHaveBeenCalled();
   });
+
+  // #934: a screen reader hears the square as well as the display text.
+  const moveHere: ChoiceWithRefs[] = [
+    { value: 'e4', display: 'Move here', refs: [{ ref: { notation: 'e4' }, role: 'target' }] },
+    { value: 'pass', display: 'Pass' },
+  ];
+
+  it('names the square in a multi-select checkbox label', () => {
+    const wrapper = mountSpacePick(moveHere, { multiSelect: { min: 1, max: 2 } });
+
+    const boxes = wrapper.findAll('.multi-select-choice input');
+    expect(boxes.map(b => b.attributes('aria-label'))).toEqual(['Move here (e4)', 'Pass']);
+    expect(wrapper.findAll('.multi-select-choice').map(o => o.text())).toEqual(['Move here', 'Pass']);
+  });
+
+  it('names the square in an ordered-list Add label', () => {
+    const wrapper = mountSpacePick(moveHere, { orderedList: { min: 1, max: 2 } });
+
+    const adds = wrapper.findAll('.ordered-list-add');
+    expect(adds.map(b => b.attributes('aria-label'))).toEqual(['Add Move here (e4)', 'Add Pass']);
+    expect(adds.map(b => b.text())).toEqual(['Move here', 'Pass']);
+  });
 });
 
 // ---------------------------------------------------------------------------
