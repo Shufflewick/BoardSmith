@@ -1239,6 +1239,13 @@ export interface ChunkProvenanceStatusResult {
  * appears anywhere in this function's body — the read-only property is pinned directly by a
  * before/after whole-project byte-hash test (T-171-19).
  */
+// A Record over every `how`, so a new kind of cover fails typecheck until it has a label.
+const SHARED_EDIT_LABEL: Record<SharedEdit['how'], string> = {
+  'signed-off': 'signed off with',
+  'being-built': 'being built by',
+  merged: 'vouched for by the merge of',
+};
+
 export async function chunkProvenanceStatusCommand(
   options: { project?: string; json?: boolean; quiet?: boolean } = {},
 ): Promise<ChunkProvenanceStatusResult> {
@@ -1418,7 +1425,7 @@ export async function chunkProvenanceStatusCommand(
     );
     for (const { slug, edits } of signoffSharedEdits) {
       const described = edits.map((e) =>
-        `${e.path} (${e.how === 'signed-off' ? 'signed off with' : 'being built by'} ${e.coveredBy})`,
+        `${e.path} (${SHARED_EDIT_LABEL[e.how]} ${e.coveredBy})`,
       );
       console.log(`  • ${slug}: ${described.join(', ')}`);
     }
