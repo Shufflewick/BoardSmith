@@ -1,7 +1,7 @@
 {
-  "revision": 215,
-  "surfaceHash": "e031520954ec82d0",
-  "payloadHash": "5bb7ce7332b154d4",
+  "revision": 216,
+  "surfaceHash": "41c0e589d7f550d1",
+  "payloadHash": "d98d9c3e91308953",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1659,10 +1659,18 @@
     {
       "revision": 215,
       "date": "2026-10-16",
-      "surfaceHash": "e031520954ec82d0",
+      "surfaceHash": "41c0e589d7f550d1",
       "payloadHash": "5bb7ce7332b154d4",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "ErrorCode loses eight values nothing produces: SEAT_ALREADY_CLAIMED, INVALID_SEAT, NOT_AUTHORIZED, GAME_ALREADY_STARTED, LOBBY_NOT_READY, COLOR_ALREADY_TAKEN, INTERNAL_ERROR and REPLAY_FAILED (#807). Platform: no code uses them; re-vendor."
+      "summary": "game.refreshAwaitingActions() called outside game code ends the open simultaneous step when its allDone holds, finishing the game if that was the last step; inside an action or a pick's onEach it only updates the waiting list (#783)."
+    },
+    {
+      "revision": 216,
+      "date": "2026-10-16",
+      "surfaceHash": "41c0e589d7f550d1",
+      "payloadHash": "d98d9c3e91308953",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "eachPlayer no longer stores the current player as a flow variable named after the node, so saved flow variables no longer carry it; FlowEngine.restore/tryRestore are private; a restore path that goes deeper than a leaf is refused (#785)."
     }
   ]
 }

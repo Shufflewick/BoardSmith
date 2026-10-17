@@ -462,3 +462,38 @@ export function storablePartitionRows(
     return { name, parentId: record.parentId, json };
   });
 }
+
+/**
+ * CHECK EVERY PARTITION A WRITE REWRITES BEFORE ANY OF IT LANDS (#788).
+ *
+ * The roads that rewrite partitions the store already holds -- a checkpoint
+ * and a migration -- and the parent is read from the row, because writing an
+ * unknown name under a guessed one would graft it into the wrong place on the
+ * next wake. Shared for the reason `storablePartitionRows` is: a migration one
+ * host refused as too large and another wrote leaves a room every later
+ * checkpoint refuses.
+ */
+export function rewrittenPartitionRows(
+  written: Readonly<Record<string, string>>,
+  parentOf: (name: string) => number | undefined,
+  budgets: WorldBudgets,
+): StorableRow[] {
+  return Object.entries(written).map(([name, json]) => {
+    assertStorablePartitionName(name);
+    assertPartitionWithinBudget(name, json, budgets);
+    const parentId = parentOf(name);
+    if (parentId === undefined) throw unknownPartition(name);
+    return { name, parentId, json };
+  });
+}
+
+function unknownPartition(name: string): Error {
+  const error = new Error(
+    `The write named partition ${JSON.stringify(name)}, which this store has neither read ` +
+      `nor created, so it does not know where the subtree hangs. Something reached the world tree ` +
+      `without going through the partition store, and writing it under a guessed parent would ` +
+      `graft it into the wrong place on the next wake.`,
+  );
+  error.name = 'checkpoint-unknown-partition';
+  return error;
+}
