@@ -461,6 +461,12 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     process.exit(1);
   }
 
+  if (options.css && !hasAnyConfig(cwd, STYLELINT_CONFIGS)) {
+    console.error(chalk.red('\nlint --css: this project has no Stylelint config, so Stylelint cannot run.'));
+    console.error(chalk.dim("Add a .stylelintrc.cjs to the project root with customSyntax: 'postcss-html' (so it reads the <style> blocks in .vue files), or drop --css.\n"));
+    process.exit(1);
+  }
+
   if (wants('eslint') && hasAnyConfig(cwd, ESLINT_CONFIGS)) {
     const args = ['src/'];
     if (options.fix) args.push('--fix');

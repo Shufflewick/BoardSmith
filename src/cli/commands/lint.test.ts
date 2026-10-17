@@ -80,4 +80,19 @@ describe('a selected check with no config fails instead of passing (#846)', () =
     expect(errors.join('\n')).toContain('boardsmith/eslint-plugin');
     expect(errors.join('\n')).toContain('https://github.com/Shufflewick/BoardSmith/blob/main/docs/api/eslint-plugin.md');
   });
+
+  it('lint --css in a project with no Stylelint config exits 1 and names the missing file (#1014)', async () => {
+    const dir = tempTree('boardsmith-lint-no-stylelint-');
+    writeFileSync(join(dir, 'boardsmith.json'), '{}');
+    process.chdir(dir);
+    const errors: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args) => { errors.push(args.join(' ')); });
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(process, 'exit').mockImplementation((code) => { throw new Error(`exit ${code}`); });
+
+    await expect(lintCommand({ css: true })).rejects.toThrow('exit 1');
+    expect(errors.join('\n')).toContain('.stylelintrc.cjs');
+    // Without postcss-html Stylelint cannot read the <style> blocks of the .vue files it is pointed at.
+    expect(errors.join('\n')).toContain('postcss-html');
+  });
 });
