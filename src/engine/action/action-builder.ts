@@ -1035,7 +1035,8 @@ export class Action<
    * @param options.prompt - User-facing prompt text, or a function evaluated
    *   against the current game state each time the pick is rendered
    * @param options.pattern - `{ regex, message }`: the regex the input must
-   *   match, and the sentence the player is shown when it does not
+   *   match, and the sentence the player is shown when it does not. The g and
+   *   y flags are refused: they make the regex stateful between entries
    * @param options.minLength - Minimum required string length
    * @param options.maxLength - Maximum allowed string length. Default: {@link DEFAULT_TEXT_MAX_LENGTH}
    * @param options.maxBytes - The most UTF-8 bytes the text may add to a world
@@ -1100,6 +1101,12 @@ export class Action<
       throw new Error(
         `enterText('${name}') was given maxBytes ${String(options.maxBytes)}. maxBytes is the most ` +
           'bytes the text may take when stored, so it must be a whole number above zero.',
+      );
+    }
+    if (options.pattern && /[gy]/.test(options.pattern.regex.flags)) {
+      throw new Error(
+        `enterText('${name}') was given the pattern ${String(options.pattern.regex)}. A pattern checks the whole text, ` +
+          'so the g and y flags mean nothing here and would refuse every other valid entry. Remove them.',
       );
     }
     const selection = {

@@ -98,6 +98,7 @@ import { tryUseBoardInteraction } from './useBoardInteraction.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
 import { isDevThrowEnabled } from '../../utils/dev.js';
 import { isHiddenPlaceholder } from '../../engine/element/hidden-placeholder.js';
+import type { SpriteData } from '../utils/image.js';
 
 /**
  * Game element type for auto-watch mode
@@ -124,9 +125,9 @@ export interface FlyingCardData {
   /** Custom back color/gradient (e.g., 'var(--bsg-surface-2)' or 'linear-gradient(...)') */
   backColor?: string;
   /** Face image - URL string or sprite object */
-  faceImage?: string | { sprite: string; x: number; y: number; width?: number; height?: number };
+  faceImage?: string | SpriteData;
   /** Back image - URL string or sprite object */
-  backImage?: string | { sprite: string; x: number; y: number; width?: number; height?: number };
+  backImage?: string | SpriteData;
   /** Player seat who owns this element (for piece rendering) */
   playerSeat?: number;
   /** Any additional data for custom rendering */
@@ -1027,10 +1028,12 @@ export function useFlyingElements(
 
         const flyConfigs: FlyConfig[] = [];
         const lastDroppedElementId = boardInteraction?.consumeLastDroppedElementId() ?? null;
+        const appeared: { id: number; element: AutoWatchGameElement; container: string }[] = [];
 
         // Check for elements that moved between containers
         for (const [id, { element, container: newContainer, isHidden }] of currentElements) {
           const oldContainer = elementLocations.get(id);
+          if (!oldContainer && newContainer && !isHidden) appeared.push({ id, element, container: newContainer });
 
           if (oldContainer && newContainer && oldContainer !== newContainer) {
             // Skip the fly animation for an element that was just drag-dropped
@@ -1122,42 +1125,28 @@ export function useFlyingElements(
         }
 
         // Check for elements that appeared (hidden → visible or new)
-        for (const [id, { element, container, isHidden }] of currentElements) {
-          if (!elementLocations.has(id) && container && !isHidden) {
-            // New visible element - check count-based routes for source
-            for (const route of countBasedRoutes) {
-              if (route.to !== container) continue;
+        const flightsBetween = (from: string | null, to: string | null) =>
+          flyConfigs.filter((c) => (from === null || c.from === from) && (to === null || c.to === to)).length;
+        const gained = (name: string) => (currentCounts.get(name) ?? 0) - (containerCounts.get(name) ?? 0);
+        for (const { id, element, container } of appeared) {
+          // One flight per card gained, each from a source that lost a card not yet flown (#1027).
+          if (flightsBetween(null, container) >= gained(container)) continue;
+          const route = countBasedRoutes.find((r) => r.to === container && -gained(r.from) > flightsBetween(r.from, null));
+          const fromContainerConfig = route && getContainers().find((c) => c.name === route.from);
+          const toContainerConfig = getContainers().find((c) => c.name === container);
+          if (!route || !fromContainerConfig?.ref.value || !toContainerConfig?.ref.value) continue;
 
-              const oldCount = containerCounts.get(route.from) ?? 0;
-              const newCount = currentCounts.get(route.from) ?? 0;
-
-              if (newCount < oldCount) {
-                // Source lost children - fly from source to this element
-                const fromContainerConfig = getContainers().find((c) => c.name === route.from);
-                const toContainerConfig = getContainers().find((c) => c.name === container);
-
-                if (fromContainerConfig?.ref.value && toContainerConfig?.ref.value) {
-                  const elementData = autoWatchGetElementData(element);
-
-                  flyConfigs.push({
-                    id: `auto-fly-appear-${id}-${Date.now()}`,
-                    startRect: fromContainerConfig.ref.value.getBoundingClientRect(),
-                    endRect: () => toContainerConfig.ref.value?.getBoundingClientRect() ?? null,
-                    elementData: { ...elementData, faceUp: false },
-                    flip: route.flip ?? true,
-                    duration: autoWatchDuration,
-                    from: route.from,
-                    to: container,
-                    element: String(id),
-                  });
-                }
-              }
-            }
-
-            // Add to tracking
-            elementLocations.set(id, container);
-            elementDataCache.set(id, { element, wasHidden: isHidden });
-          }
+          flyConfigs.push({
+            id: `auto-fly-appear-${id}-${Date.now()}`,
+            startRect: fromContainerConfig.ref.value.getBoundingClientRect(),
+            endRect: () => toContainerConfig.ref.value?.getBoundingClientRect() ?? null,
+            elementData: { ...autoWatchGetElementData(element), faceUp: false },
+            flip: route.flip ?? true,
+            duration: autoWatchDuration,
+            from: route.from,
+            to: container,
+            element: String(id),
+          });
         }
 
         // Update container counts

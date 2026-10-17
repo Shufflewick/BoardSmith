@@ -358,6 +358,19 @@ export type GameClass<G extends Game = Game> = new (options: GameOptions) => G;
 export type RandomnessPolicy = 'allowed' | 'forbidden';
 
 /**
+ * How many message-log lines have been evicted, as `toJSON()` writes it; each
+ * field is absent while zero. See `docs/state-size.md` § the message log.
+ */
+export interface LogEviction {
+  /** Every evicted line (#25): what turns a checkpoint's watermark into a position. */
+  messagesEvicted?: number;
+  /** Evicted lines with no audience (#903). */
+  messagesEvictedPublic?: number;
+  /** Evicted private lines, by each seat they were addressed to (#903). */
+  messagesEvictedTo?: Record<string, number>;
+}
+
+/**
  * Where a restore must not take the animation numbering below: the live
  * game's counters, read with {@link animationFloorOf}.
  */
@@ -383,6 +396,9 @@ export function animationFloorOf(state: unknown): AnimationFloor {
  *
  * - `messagesEvicted`, the log's eviction offset (#25), is engine bookkeeping
  *   with no meaning to a client, and an ever-growing number in every payload.
+ *   `messagesEvictedPublic` and `messagesEvictedTo` count the same evictions by
+ *   audience (#903); the second holds every seat's private count, so a seat
+ *   gets only its own total, as `PlayerStateView.messageOffset`.
  * - `animationEventSeq` counts EVERY seat's events, `animateTo` ones included,
  *   so a seat watching it rise would learn another seat played a private
  *   animation, and be pushed a changed view when nothing it may see changed
@@ -400,7 +416,7 @@ export function animationFloorOf(state: unknown): AnimationFloor {
  * here is measurable in bot search time.
  */
 function withoutRestoreOnlyFields(root: ReturnType<Game['toJSON']>) {
-  const { messagesEvicted: _evicted, animationEventSeq: _seq, animationSeqBySeat: _seqBySeat, pile: _pile, ...seatView } = root;
+  const { messagesEvicted: _evicted, messagesEvictedPublic: _public, messagesEvictedTo: _to, animationEventSeq: _seq, animationSeqBySeat: _seqBySeat, pile: _pile, ...seatView } = root;
   return seatView;
 }
 
@@ -616,7 +632,7 @@ const SAFE_LAYOUT_KEYS = new Set([
   '$type', '$layout',
   '$direction', '$gap', '$overlap', '$fan', '$fanAngle', '$align',
   '$rowLabels', '$columnLabels', '$rowCoord', '$colCoord',
-  '$hexOrientation', '$coordSystem', '$qCoord', '$rCoord', '$sCoord',
+  '$hexOrientation', '$coordSystem', '$qCoord', '$rCoord',
   '$hexSize',
 ]);
 
@@ -1162,6 +1178,15 @@ export class Game<
    */
   private _messagesEvicted: number = 0;
 
+  /**
+   * The same evictions counted by audience (#903): lines with no audience, and
+   * for each seat the private lines addressed to it. A seat's log is filtered to
+   * what it may see, so `_messagesEvicted` is not its offset, and sending it
+   * would tell the seat how many private lines other seats had.
+   */
+  private _messagesEvictedPublic: number = 0;
+  private _messagesEvictedTo: Map<number, number> = new Map();
+
   /** Original constructor options (for snapshot restoration) */
   private _constructorOptions: Record<string, unknown> = {};
 
@@ -1257,6 +1282,7 @@ export class Game<
     };
 
     super(ctx);
+    this._ctx._elementsById.set(this._t.id, this);
 
     this.random = random;
     // LOAD-BEARING. `G` is the game's own concrete class (`class MyGame extends
@@ -1538,6 +1564,7 @@ export class Game<
     name: string
   ): T {
     const element = new elementClass(this._ctx);
+    this._ctx._elementsById.set(element._t.id, element);
     element.name = name;
     element.game = this;
 
@@ -4224,6 +4251,12 @@ export class Game<
   /** Drop `count` entries from the front, keeping the eviction offset in step. */
   #evictFront(count: number): void {
     if (count <= 0) return;
+    for (let i = 0; i < count; i++) {
+      const { to } = this.messages[i];
+      if (!to) this._messagesEvictedPublic++;
+      // A Set, as canSeeMessage asks "is the seat in it", not "how often".
+      else for (const seat of new Set(to)) this._messagesEvictedTo.set(seat, (this._messagesEvictedTo.get(seat) ?? 0) + 1);
+    }
     this.messages = this.messages.slice(count);
     this._messagesEvicted += count;
   }
@@ -4245,6 +4278,39 @@ export class Game<
    */
   get messagesEvicted(): number {
     return this._messagesEvicted;
+  }
+
+  /**
+   * How many of the lines `seat` may see have been evicted: the absolute
+   * position, among that seat's own lines, of the first one it still receives
+   * (#903). Same audience rule as `canSeeMessage`.
+   * @internal
+   */
+  messageOffsetFor(seat: number | null | undefined): number {
+    if (seat === null || seat === undefined) return this._messagesEvictedPublic;
+    return this._messagesEvictedPublic + (this._messagesEvictedTo.get(seat) ?? 0);
+  }
+
+  /** Adopt the eviction counts `logEviction` wrote; absent ones are zero. */
+  #restoreLogEviction(json: LogEviction): void {
+    this._messagesEvicted = json.messagesEvicted ?? 0;
+    this._messagesEvictedPublic = json.messagesEvictedPublic ?? 0;
+    this._messagesEvictedTo = new Map(
+      Object.entries(json.messagesEvictedTo ?? {}).map(([seat, n]) => [Number(seat), n] as const),
+    );
+  }
+
+  /**
+   * The eviction counts as `toJSON()` writes them, each absent while zero. A
+   * checkpoint restore takes these live values over the checkpoint's own (#803).
+   * @internal
+   */
+  get logEviction(): LogEviction {
+    return {
+      ...(this._messagesEvicted > 0 && { messagesEvicted: this._messagesEvicted }),
+      ...(this._messagesEvictedPublic > 0 && { messagesEvictedPublic: this._messagesEvictedPublic }),
+      ...(this._messagesEvictedTo.size > 0 && { messagesEvictedTo: Object.fromEntries(this._messagesEvictedTo) }),
+    };
   }
 
     /**
@@ -4466,11 +4532,9 @@ export class Game<
     animationEventSeq?: number;
     /** Each recipient's animation event counter (#489) — see AnimationEvent.seatIds. */
     animationSeqBySeat?: Record<string, number>;
-    /** Message-log front-eviction offset (#25) — see Game#messagesEvicted. */
-    messagesEvicted?: number;
     /** The elements in `game.pile`, when there are any (#655). Never in a seat's view. */
     pile?: ElementJSON[];
-  } {
+  } & LogEviction {
     // CR-02: the top-level fields below MUST be copies, never live references.
     // `createActionCheckpoint`/`createSnapshot` store this result as-is, and
     // the live-session undo/rewind/time-travel paths never JSON-round-trip it.
@@ -4514,10 +4578,10 @@ export class Game<
       ...(this._animationSeqBySeat.size > 0 && {
         animationSeqBySeat: Object.fromEntries(this._animationSeqBySeat),
       }),
-      // How many log entries have been evicted (#25). Restored below so a
-      // resumed game still resolves an old checkpoint's watermark correctly.
-      // One number for the whole game, not a field on every line.
-      ...(this._messagesEvicted > 0 && { messagesEvicted: this._messagesEvicted }),
+      // How many log entries have been evicted (#25), and by audience (#903).
+      // Restored below so a resumed game still resolves an old checkpoint's
+      // watermark, and each seat keeps its offset. Not a field on every line.
+      ...this.logEviction,
       ...savedPile(this),
       // Only include the events array if the buffer is non-empty (avoid
       // cluttering empty snapshots with an empty array).
@@ -5184,9 +5248,10 @@ export class Game<
     // tree is far worse than an honestly empty one, and reads as history
     // corruption rather than as a missing argument.
     this.messages = options?.messageLog ?? [];
-    // Resume the eviction offset, so an old checkpoint's watermark still
-    // resolves to the right boundary after a restore (#25).
-    this._messagesEvicted = (json as { messagesEvicted?: number }).messagesEvicted ?? 0;
+    // Resume the eviction counts, so an old checkpoint's watermark still
+    // resolves to the right boundary after a restore (#25), and each seat keeps
+    // its offset (#903).
+    this.#restoreLogEviction(json);
 
     // Restore animation events if present.
     //
@@ -5300,6 +5365,15 @@ export class Game<
         child.game = this;
         container._t.children.push(child);
       }
+    }
+    const builtFor = this.getConstructorOptions().playerCount;
+    if (this.players.length !== builtFor) {
+      throw new Error(
+        `This game state holds ${this.players.length} players, but this game was built for ${builtFor}. ` +
+          `The state is truncated, or belongs to a game with a different player count.\n` +
+          `  Fix: restore it into a game constructed with the options it was created with ` +
+          `(a snapshot carries them as gameOptions), or start the game again if the state is damaged.`
+      );
     }
     this._ctx._elementsById.clear();
     for (const root of [this, this.pile]) {

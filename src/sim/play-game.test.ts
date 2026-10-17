@@ -327,6 +327,14 @@ describe('playGame with policies (#556)', () => {
     expect(result.error).toMatch(/^Action 'take' rejected a move that could not be shown, chosen by policy 'dated': 'take' was sent 'when', which is not one of its picks\. It takes: value\. A simulated/);
   });
 
+  it('reports a pick the engine cannot encode as a rejected move naming the policy, not a crash (#1070)', async () => {
+    const dated: Policy = { name: 'dated', choose: () => ({ action: 'take', args: { value: new Date(0) } }) };
+    const result = await play([dated, dated], 'dated-pick');
+    expect(result.crashed).toBe(false);
+    expect(result.stuck).toBe(true);
+    expect(result.error).toMatch(/^Action 'take' rejected .*, chosen by policy 'dated': Cannot serialize action 'take': Date at property 'args\.value'/);
+  });
+
   it('refuses a player count the game does not declare', async () => {
     await expect(play([random(), random(), random(), random(), random()], 'five')).rejects.toThrow(
       /5 players.*2 to 4/,

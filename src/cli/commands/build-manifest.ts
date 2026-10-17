@@ -17,7 +17,7 @@
 import { designRecordPath } from '../lib/project-paths.js';
 import { parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
 import { resolve as pathResolve } from 'node:path';
-import { escapeRegExp } from '../lib/regexp.js';
+import { escapeRegExp } from '../../utils/regexp.js';
 
 /** The locked finding-kind enum from 172-CONTEXT.md decision 7. Never a hand-written union. */
 export const FINDING_KINDS = Object.freeze([
