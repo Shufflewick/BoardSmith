@@ -259,7 +259,25 @@ describe('scanAssetReachability', () => {
     const violations = scanWith({ 'src/ui/W.vue': '<template>\n  <div />\n</template>\n<script setup lang="ts">\nconst a = 1;\n/* never closed\n<img src="y">\n</script>\n' });
     expect(violations.map((v) => [v.line, /unterminated/.test(v.message)])).toEqual([[6, true]]);
     const html = scanWith({ 'src/ui/X.vue': '<template>\n  <div />\n  <!-- never closed\n  <img src="y">\n</template>\n<script setup lang="ts">\nconst a = 1;\n</script>\n' });
-    expect(html.map((v) => [v.line, /unterminated <!-- HTML/.test(v.message)])).toEqual([[3, true]]);
+    // Vue reads the rest of the file as that comment, so it also reports the file as malformed (#1096).
+    expect(html.map((v) => [v.line, /unterminated <!-- HTML|could not be read as a Vue file/.exec(v.message)?.[0]])).toEqual([
+      [9, 'could not be read as a Vue file'],
+      [1, 'could not be read as a Vue file'],
+      [3, 'unterminated <!-- HTML'],
+    ]);
+  });
+
+  // #1096: Vue's parser reports a malformed file in a list rather than throwing; the scan says so.
+  it('reports a .vue file Vue cannot parse, at the line of the problem', () => {
+    const violations = scanWith({ 'src/ui/V.vue': '<template>\n  <div />\n</template>\n<script setup lang="ts">\nconst a = 1;\n' });
+    expect(violations.map((v) => [v.file, v.line])).toEqual([['src/ui/V.vue', 4]]);
+    expect(violations[0].message).toMatch(/^src\/ui\/V\.vue:4 could not be read as a Vue file: Element is missing end tag\..*close/);
+  });
+
+  // Review of #1017: both script blocks of a file are scanned.
+  it('flags a live <img> in either of a .vue file\'s two script blocks', () => {
+    const content = '<script lang="ts">\nexport const a = \'<img src="x">\';\n</script>\n<script setup lang="ts">\nconst b = \'<img src="y">\';\n</script>\n';
+    expect(scanWith({ 'src/ui/V.vue': content }).map((v) => v.line)).toEqual([2, 5]);
   });
 
   // Review of #852: a comment after code on the same line is still a comment.

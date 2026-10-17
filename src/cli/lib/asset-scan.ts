@@ -49,6 +49,8 @@ interface StripCommentsResult {
    * comment opened on; `kind` distinguishes `/* *\/` from `<!-- -->`.
    */
   unterminated?: { line: number; kind: 'block' | 'html' };
+  /** #1096: what Vue's parser could not read in a `.vue` file, at 1-based lines. */
+  parseErrors?: { line: number; reason: string }[];
 }
 
 const blank = (text: string): string => text.replace(/[^\r\n]/g, ' ');
@@ -104,7 +106,8 @@ function stripScriptComments(content: string, filePath: string): StripCommentsRe
  * an `<img>`, and the rest is template, where only `<!-- -->` is a comment (F-11).
  */
 function stripVueComments(content: string, filePath: string): StripCommentsResult {
-  const { descriptor } = parseSfc(content, { filename: filePath });
+  const { descriptor, errors } = parseSfc(content, { filename: filePath });
+  const parseErrors = errors.map((error) => ({ line: 'loc' in error && error.loc ? error.loc.start.line : 1, reason: error.message }));
   const blocks = [descriptor.script, descriptor.scriptSetup, ...descriptor.styles]
     .filter((block) => block !== null)
     .sort((a, b) => a.loc.start.offset - b.loc.start.offset);
@@ -128,7 +131,26 @@ function stripVueComments(content: string, filePath: string): StripCommentsResul
     cursor = end.offset;
   }
   out += template(content.slice(cursor), cursor);
-  return { lines: out.split('\n'), unterminated };
+  return { lines: out.split('\n'), unterminated, parseErrors };
+}
+
+/** The parts of a file the scan could not read, each as a violation: a false PASS otherwise. */
+function unscannedParts(relPath: string, { unterminated, parseErrors = [] }: StripCommentsResult): AssetViolation[] {
+  const violations = parseErrors.map(({ line, reason }) => ({
+    file: relPath,
+    line,
+    message: `${relPath}:${line} could not be read as a Vue file: ${reason} Fix it so Vue can parse the file (close every tag you open, such as <template> or <script>); until then the file is not fully scanned for bare <img> tags.`,
+  }));
+  // WR-01: a comment that never closes silently blanks everything after it (including any real <img> tags).
+  if (unterminated) {
+    const commentLabel = unterminated.kind === 'block' ? '/* block' : '<!-- HTML';
+    violations.push({
+      file: relPath,
+      line: unterminated.line,
+      message: `${relPath}:${unterminated.line} has an unterminated ${commentLabel} comment that is never closed. Everything after it was NOT scanned for bare <img> tags, so this is a false PASS risk -- close the comment (or remove the stray opener).`,
+    });
+  }
+  return violations;
 }
 
 /**
@@ -146,9 +168,9 @@ export function scanAssetReachability(cwd: string): AssetViolation[] {
 
     const content = readFileSync(filePath, 'utf-8');
     const lines = content.split('\n');
-    const { lines: scanLines, unterminated } = filePath.endsWith('.vue') ? stripVueComments(content, filePath) : stripScriptComments(content, filePath);
+    const stripped = filePath.endsWith('.vue') ? stripVueComments(content, filePath) : stripScriptComments(content, filePath);
     for (let i = 0; i < lines.length; i++) {
-      if (BARE_IMG_TAG.test(scanLines[i])) {
+      if (BARE_IMG_TAG.test(stripped.lines[i])) {
         violations.push({
           file: relPath,
           line: i + 1,
@@ -156,18 +178,7 @@ export function scanAssetReachability(cwd: string): AssetViolation[] {
         });
       }
     }
-
-    // WR-01: a comment that never closes silently blanks everything after
-    // it (including any real <img> tags) -- fail loud with an actionable
-    // violation instead of a false PASS.
-    if (unterminated) {
-      const commentLabel = unterminated.kind === 'block' ? '/* block' : '<!-- HTML';
-      violations.push({
-        file: relPath,
-        line: unterminated.line,
-        message: `${relPath}:${unterminated.line} has an unterminated ${commentLabel} comment that is never closed. Everything after it was NOT scanned for bare <img> tags, so this is a false PASS risk -- close the comment (or remove the stray opener).`,
-      });
-    }
+    violations.push(...unscannedParts(relPath, stripped));
   }
 
   return violations;
