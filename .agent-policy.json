@@ -20,7 +20,7 @@
     },
     {
       "name": "catalogue",
-      "run": "node bin/boardsmith.js catalogue --skip 'WindupWarfare=validate does not finish (Shufflewick/WindupWarfare#100)' --skip 'one-two-punch=it calls player.setCurrent(), which #780 removes (Shufflewick/one-two-punch#2)' --skip 'seven=its bot-search test calls createSnapshot without the reseed #776 requires (Shufflewick/seven#2)' --skip 'sotf=its harness follows #789 on a branch that waits on its quest-forgery question (Shufflewick/sotf#75)'"
+      "run": "node bin/boardsmith.js catalogue --skip 'WindupWarfare=validate does not finish (Shufflewick/WindupWarfare#100)' --skip 'one-two-punch=it calls player.setCurrent(), which #780 removes (Shufflewick/one-two-punch#2)' --skip 'seven=its bot-search test calls createSnapshot without the reseed #776 requires (Shufflewick/seven#2)' --skip 'sotf=its harness follows #789 on a branch that waits on its quest-forgery question (Shufflewick/sotf#75)' --skip 'checkers=useSelectableGrid takes row and column after #891 (Shufflewick/checkers#4)' --skip 'hex=useSelectableGrid takes row and column after #891 (Shufflewick/hex#3)'"
     }
   ],
   "slice": {

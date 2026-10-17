@@ -487,9 +487,6 @@
       }
     },
     "src/ui/components/auto-ui/auto-ui-helpers.ts": {
-      "complexity_high": {
-        "count": 1
-      },
       "complexity_moderate": {
         "count": 1
       }

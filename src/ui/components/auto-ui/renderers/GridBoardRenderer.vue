@@ -4,7 +4,7 @@
  *
  * Delegates all grid sizing to resolveGridSize(). Never falls back to 8×8.
  * When coordinates are missing/undeclared, renders the locked error panel.
- * Provides gridCoords to child cells so they can position via grid-row/grid-column.
+ * Each cell is placed by its own coordinates (grid-row/grid-column), never by tree order.
  *
  * A11Y-01: uses useSelectableGrid() for roving-tabindex grid navigation.
  * The board-grid container is role="grid"; each cell is role="gridcell".
@@ -13,7 +13,7 @@
  * boardInteraction.selectElement() on activation (same as click).
  */
 
-import { computed, provide, watch, watchEffect, ref, inject, nextTick, type ComputedRef } from 'vue';
+import { computed, watch, watchEffect, ref, inject, nextTick, type ComputedRef } from 'vue';
 import { resolveGridSize } from '../auto-ui-helpers.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectableGrid } from '../../../composables/useSelectable.js';
@@ -22,6 +22,7 @@ import { resolvePresentation } from '../presentation.js';
 import type { PresentationOverlay } from '../presentation.js';
 import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
 import { boardCellStates } from './board-cell-states.js';
+import { toAlgebraicNotation } from '../../../composables/useGameGrid.js';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — do NOT import from engine (module is dependency-free)
@@ -55,14 +56,6 @@ watchEffect(() => {
     _lastGridError.value = result.error;
   }
 });
-
-// Provide coordinate names to child cells (inherited from parent grid provide pattern)
-// Children use these to set grid-row / grid-column from their own coordinate attributes
-const rowCoord = props.element.attributes?.$rowCoord as string | undefined;
-const colCoord = props.element.attributes?.$colCoord as string | undefined;
-if (rowCoord && colCoord) {
-  provide('gridCoords', { rowCoord, colCoord });
-}
 
 // Dynamic grid-template-columns from resolveGridSize — no hardcoded fallback
 const gridStyle = computed(() => {
@@ -121,10 +114,17 @@ const {
   cellStateLabel,
 } = boardCellStates(boardInteraction);
 
+// 0-based row and column of a cell, from the board's declared coordinates (#891).
+function cellPosition(cell: GameElement) {
+  return gridResult.value.ok ? gridResult.value.position(cell) : { row: 0, col: 0 };
+}
+
+function cellPlacement(cell: GameElement) {
+  const { row, col } = cellPosition(cell);
+  return { 'grid-row': row + 1, 'grid-column': col + 1 };
+}
+
 // ── A11Y-01: useSelectableGrid — roving tabindex for 2D grid navigation ────
-//
-// colsRef drives Arrow Up/Down row-skipping math in the composable.
-// Mirrors planning/mockups/boardsmith-chrome.html:569-618 exactly.
 const colsRef = computed(() => (gridResult.value.ok ? gridResult.value.cols : 0));
 const rowsRef = computed(() => (gridResult.value.ok ? gridResult.value.rows : 0));
 
@@ -152,7 +152,7 @@ const {
   focusFirstCandidate,
 } = useSelectableGrid(
   children,
-  colsRef,
+  cellPosition,
   cellIdentity,
   boardInteraction,
   handleCellActivate,
@@ -176,13 +176,9 @@ watch(
 );
 
 // Per-cell aria-label: coordinate notation + state, mirroring mockup:574-581
-function cellAriaLabel(cell: GameElement, idx: number): string {
-  const cols = colsRef.value;
-  const rows = rowsRef.value;
-  const c = idx % cols;
-  const r = Math.floor(idx / cols);
-  // Use the cell's own name (notation) if available; fall back to computed coord
-  const coord = cell.name ?? (String.fromCharCode(97 + c) + (rows - r));
+function cellAriaLabel(cell: GameElement): string {
+  const { row, col } = cellPosition(cell);
+  const coord = cell.name ?? toAlgebraicNotation(row, col, { rows: rowsRef.value });
   return `${coord}, ${cellStateLabel(cell)}`;
 }
 
@@ -247,9 +243,10 @@ function handleDrop(event: DragEvent, cell: GameElement) {
             :ref="(el) => registerCell(el as Element | null, idx)"
             v-bind="cellAttrs(cell)"
             class="grid-cell"
+            :style="cellPlacement(cell)"
             role="gridcell"
             :tabindex="idx === currentIdx ? '0' : '-1'"
-            :aria-label="cellAriaLabel(cell, idx)"
+            :aria-label="cellAriaLabel(cell)"
             :aria-selected="isCellSelected(cell) || undefined"
             :aria-disabled="isCellDisabled(cell) || undefined"
             :class="{
