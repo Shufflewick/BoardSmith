@@ -1,6 +1,6 @@
 {
-  "revision": 216,
-  "surfaceHash": "41c0e589d7f550d1",
+  "revision": 219,
+  "surfaceHash": "42270c2a4d03684b",
   "payloadHash": "d98d9c3e91308953",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1671,6 +1671,30 @@
       "payloadHash": "d98d9c3e91308953",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "eachPlayer no longer stores the current player as a flow variable named after the node, so saved flow variables no longer carry it; FlowEngine.restore/tryRestore are private; a restore path that goes deeper than a leaf is refused (#785)."
+    },
+    {
+      "revision": 217,
+      "date": "2026-10-17",
+      "surfaceHash": "e031520954ec82d0",
+      "payloadHash": "d98d9c3e91308953",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "ErrorCode drops eight values nothing produced: SEAT_ALREADY_CLAIMED, INVALID_SEAT, NOT_AUTHORIZED, GAME_ALREADY_STARTED, LOBBY_NOT_READY, COLOR_ALREADY_TAKEN, INTERNAL_ERROR and REPLAY_FAILED (#807)."
+    },
+    {
+      "revision": 218,
+      "date": "2026-10-17",
+      "surfaceHash": "eac42bcea41efca7",
+      "payloadHash": "d98d9c3e91308953",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "STANDARD_PLAYER_COLORS is removed from boardsmith/session and boardsmith/ui, and createColorOption() defaults to the engine's 16-colour DEFAULT_COLOR_PALETTE with its names (Black is #2c3e50) (#814)."
+    },
+    {
+      "revision": 219,
+      "date": "2026-10-17",
+      "surfaceHash": "42270c2a4d03684b",
+      "payloadHash": "d98d9c3e91308953",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "boardsmith/session no longer exports generateGameId or isPlayersTurn; nothing used them (#817)."
     }
   ]
 }

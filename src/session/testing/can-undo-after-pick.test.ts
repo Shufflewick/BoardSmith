@@ -10,11 +10,12 @@
  *
  * Each case plays a prefix of one script (single-step actions and a two-pick
  * action, a pick at a time) from a fresh session, then requires, at every step:
- * the state returned to the acting seat and the next broadcast agree on
- * `canUndo`, and the undo the seat is then offered succeeds (and one it is not
- * offered is refused). The executor is driven through `createHeadlessSession`,
- * and the public stateless `PickHandler` directly (the path whose returned
- * state went stale).
+ * the state returned to the acting seat (where the path returns one) and the
+ * next broadcast agree on `canUndo`, and the undo the seat is then offered
+ * succeeds (and one it is not offered is refused). The executor is driven
+ * through `createHeadlessSession`, and the public stateless `PickHandler`
+ * directly (the path whose returned state went stale; since #813 it returns
+ * none, so only its broadcast and undo are compared).
  */
 import { describe, expect, it } from 'vitest';
 
@@ -98,7 +99,8 @@ const SCRIPT: Step[] = [
 
 /** What one step shows the acting seat, and what the undo then does. */
 interface Observed {
-  returned: boolean;
+  /** The state returned to the acting seat; absent where the path returns none (#813). */
+  returned?: boolean;
   broadcast: boolean;
   undoSucceeded: boolean;
 }
@@ -132,10 +134,9 @@ async function observeStateless(max: number, upTo: number): Promise<Observed> {
 }
 
 /**
- * `PickHandler`, the public stateless pick API (#385's stale path): the state it
- * returns to the acting seat, the state the executor broadcasts from the same
- * runner once the op is settled, and the undo `executeOp` then takes from the
- * snapshot that op produced.
+ * `PickHandler`, the public stateless pick API (#385's stale path): the state
+ * the executor broadcasts once the op is settled, and the undo `executeOp` then
+ * takes from the snapshot that op produced. It returns no state of its own (#813).
  */
 async function observePickHandler(max: number, upTo: number): Promise<Observed> {
   const def = pickDefinition(max);
@@ -148,26 +149,20 @@ async function observePickHandler(max: number, upTo: number): Promise<Observed> 
   runner.start();
   const handler = new PickHandler(runner, 1);
   let pending: Record<string, unknown> | null = null;
-  let returned: PlayerGameState | undefined;
   for (const step of SCRIPT.slice(0, upTo)) {
     if (step.kind === 'action') {
       const res = runner.performAction(step.actionName, 1, {});
       expect(res.success, res.error).toBe(true);
-      // A single-step action returns no state of its own; what the seat sees is the envelope.
-      runner.getSnapshot();
-      returned = buildPlayerState(runner, [], 1, { includeActionMetadata: true });
-      continue;
+    } else {
+      const res = await handler.processSelectionStep(1, step.selectionName, step.value, 'pair', undefined, pending);
+      expect(res.success, res.error).toBe(true);
+      pending = res.pendingState;
     }
-    const res = await handler.processSelectionStep(1, step.selectionName, step.value, 'pair', undefined, pending);
-    expect(res.success, res.error).toBe(true);
-    pending = res.pendingState;
-    returned = res.actionComplete ? res.actionResult!.state : res.state;
-    if (res.actionComplete) expect(canUndoOf(res.state)).toBe(canUndoOf(returned));
   }
   const snapshot = runner.getSnapshot();
   const broadcast = buildPlayerState(runner, [], 1, { includeActionMetadata: true });
   const undo = await executeOp(def, { playerCount: 1, seed: 'pick-385' }, snapshot, pending, { type: 'undo', player: 1 });
-  return { returned: canUndoOf(returned), broadcast: canUndoOf(broadcast), undoSucceeded: undo.success };
+  return { broadcast: canUndoOf(broadcast), undoSucceeded: undo.success };
 }
 
 const STEPS = SCRIPT.map((_, i) => i + 1);
@@ -179,7 +174,7 @@ describe.each([
   describe.each([1, 2, 3])('checkpoints: { max: %i }', (max) => {
     it.each(STEPS)('after step %i, the returned state, the broadcast and the undo agree', async (upTo) => {
       const seen = await observe(max, upTo);
-      expect(seen.returned, 'returned vs broadcast').toBe(seen.broadcast);
+      if (seen.returned !== undefined) expect(seen.returned, 'returned vs broadcast').toBe(seen.broadcast);
       expect(seen.undoSucceeded, 'offered vs undo outcome').toBe(seen.broadcast);
     });
   });

@@ -252,11 +252,12 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
 
   // ── 7. The circuit breaker still holds ─────────────────────────────────────
 
-  it('case 7 — a conversion-started pump is still capped at MAX_BOT_MOVES', async () => {
+  it('case 7 — a conversion-started pump is still stopped at MAX_BOT_MOVES_PER_RUN', async () => {
     // Stub adapters: a bundle whose bot always finds a move would loop
     // forever if the conversion had its own pump instead of reusing the one
-    // MAX_BOT_MOVES bounds. The exact cap AND the exact log line are what prove
-    // the conversion went through `runBotTurns` and not a clone of it.
+    // MAX_BOT_MOVES_PER_RUN bounds. The exact count AND the pump's own error
+    // are what prove the conversion went through `runBotTurns` and not a clone
+    // of it; it awaits that run, so the run's failure is its own (#698, #815).
     const base = {
       success: true,
       snapshot: { flowState: {}, winners: [], actionHistory: [] },
@@ -276,19 +277,12 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
       record: () => {}, push: () => {},
     };
 
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const host = new SnapshotSessionHost(adapters);
     host.setBotSeats([{ seat: 2 }]);
     await host.start();
 
     // Must terminate, not hang.
-    const res = await host.handleOp(2, { type: 'convertSeatToBot', seat: 2 });
-
-    expect(res.success).toBe(true);
-    expect(botCallCount).toBe(500);
-    expect(errSpy).toHaveBeenCalledWith(
-      '[SnapshotSessionHost] bot pump hit MAX_BOT_MOVES cap (500); stopping to avoid runaway.',
-    );
-    errSpy.mockRestore();
+    await expect(host.handleOp(2, { type: 'convertSeatToBot', seat: 2 })).rejects.toThrow(/20000 moves in a row/);
+    expect(botCallCount).toBe(20_000);
   });
 });
