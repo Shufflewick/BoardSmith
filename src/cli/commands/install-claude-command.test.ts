@@ -321,22 +321,31 @@ describe('installClaudeCommand — retires bs-generate-bot (issue #16)', () => {
 });
 
 /**
- * #846: an install made by an older BoardSmith is complete on disk but stale. A plain install must
- * see the version stamp differs from the running BoardSmith and replace it.
+ * #846: an install whose skill sources have since changed is complete on disk but stale. A checkout
+ * keeps the same package version across pulls, so the stamp is the source tree's content hash.
  */
-describe('installClaudeCommand — refreshes skills a different BoardSmith version installed (#846)', () => {
+describe('installClaudeCommand — refreshes skills when their sources changed (#846)', () => {
   const skills = installedSkillsTree('bs-install-upgrade-');
 
-  it('a plain reinstall over an older version\'s install rewrites it and stamps the running version', async () => {
-    const stamp = join(skills.root, 'bs-shared', 'VERSION');
+  it('a plain reinstall over an install stamped with the same version but other content rewrites it', async () => {
+    const stamp = join(skills.root, 'bs-shared', 'SOURCE-HASH');
     const entry = join(skills.root, 'bs-build-bot', 'SKILL.md');
-    writeFileSync(stamp, 'an older version\n');
-    writeFileSync(entry, 'stale copy from an older version');
+    writeFileSync(stamp, `${readBoardsmithVersion()}\n`);
+    writeFileSync(entry, 'stale copy from earlier sources');
 
     await installClaudeCommand({ local: true, skipLink: true });
 
-    expect(readFileSync(entry, 'utf-8')).not.toBe('stale copy from an older version');
-    expect(readFileSync(stamp, 'utf-8').trim()).toBe(readBoardsmithVersion());
+    expect(readFileSync(entry, 'utf-8')).not.toBe('stale copy from earlier sources');
+    expect(readFileSync(stamp, 'utf-8').trim()).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('a plain reinstall over an install of the same sources leaves it alone', async () => {
+    const entry = join(skills.root, 'bs-build-bot', 'SKILL.md');
+    writeFileSync(entry, 'edited after install');
+
+    await installClaudeCommand({ local: true, skipLink: true });
+
+    expect(readFileSync(entry, 'utf-8')).toBe('edited after install');
   });
 });
 

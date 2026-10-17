@@ -2,7 +2,6 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, rename
 import { join, basename } from 'node:path';
 import { execFileSync, execSync, spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { createHash } from 'node:crypto';
 import chalk from 'chalk';
 import ora from 'ora';
 import { getProjectContext } from '../lib/project-context.js';
@@ -11,6 +10,7 @@ import { resolveUserPath } from '../lib/user-path.js';
 import { withCleanupAfter } from '../lib/command-build-dir.js';
 import { takeOsLock } from '../lib/os-lock.js';
 import { gitOutput } from '../lib/git-output.js';
+import { filesContentHash } from '../lib/hash.js';
 
 interface PackOptions {
   outDir?: string;
@@ -87,8 +87,6 @@ export function readContractRevision(root: string): number {
  *
  * The file list is npm's own (`npm pack --dry-run`), so the `files` globs in
  * `package.json` are applied by the program that applies them for real.
- * Paths are sorted, and each path and length is hashed beside its bytes so
- * moving content between files cannot collide.
  */
 function packedContentHash(pkgPath: string): string {
   const [report] = JSON.parse(
@@ -98,14 +96,7 @@ function packedContentHash(pkgPath: string): string {
       stdio: ['ignore', 'pipe', 'pipe'],
     }),
   ) as [{ files: { path: string }[] }];
-  const paths = report.files.map((file) => file.path).sort();
-  const hash = createHash('sha256');
-  for (const path of paths) {
-    const content = readFileSync(join(pkgPath, path));
-    hash.update(`${path}\0${content.length}\0`);
-    hash.update(content);
-  }
-  return hash.digest('hex').slice(0, 12);
+  return filesContentHash(pkgPath, report.files.map((file) => file.path)).slice(0, 12);
 }
 
 /**
