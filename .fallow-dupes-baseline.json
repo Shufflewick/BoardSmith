@@ -36,7 +36,7 @@
     "src/session/testing/fixtures/collect-fixture.ts:66-83|src/session/testing/fixtures/collect-turns-fixture.ts:68-81",
     "src/cli/commands/verify-classify.ts:697-715|src/cli/commands/verify-derive-check.ts:112-138",
     "src/session/testing/fixtures/simultaneous-fixture.ts:56-71|src/session/testing/fixtures/simultaneous-fixture.ts:83-93",
-    "src/ui/components/PlayShell.vue:755-767|src/ui/components/PlayShell.vue:949-961",
+    "src/ui/components/PlayShell.vue:756-768|src/ui/components/PlayShell.vue:950-962",
     "src/engine/element/game-element.ts:1087-1093|src/engine/element/game-element.ts:1148-1154",
     "src/cli/commands/verify-classify.ts:1600-1607|src/cli/commands/verify-classify.ts:815-822",
     "src/ui/composables/useFLIP.ts:334-342|src/ui/composables/useFLIP.ts:480-487",
