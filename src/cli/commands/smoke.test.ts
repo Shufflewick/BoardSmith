@@ -257,6 +257,13 @@ describe('boardsmith verify: the smoke check', () => {
     );
   });
 
+  it('#924: refuses a spec whose `steps` is not a positive whole number, which would walk no step', async () => {
+    const { outcome } = await smokeOf(false, { 'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { steps: 0 }) });
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toContain('`steps` in tests/browser/smoke.spec.ts takes a positive whole number, got "0".');
+  });
+
   it('#460: fails a world spec that names a seed, since `boardsmith dev` deals a world from its own', async () => {
     const { outcome } = await smokeOf(true, { 'tests/browser/smoke.spec.ts': smokeSpec(['tend'], undefined, { seed: '7' }) });
 
