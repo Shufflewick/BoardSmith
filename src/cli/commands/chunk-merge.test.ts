@@ -599,6 +599,57 @@ describe('chunkMerge: preconditions', () => {
     expect(refusals).toEqual([expect.stringMatching(/has no vite\.config\.ts[\s\S]*boardsmith doctor --fix/)]);
     expect([head(), status()]).toEqual([before, '']);
   });
+
+  it('refuses with git\'s own reason when git will not start the merge, leaving the index untouched (#824)', async () => {
+    await buildOnBranch('trading', 100);
+    // An untracked file where the branch adds one: git refuses before writing anything, so no MERGE_HEAD.
+    await fs.writeFile(join(main, 'src/trading.ts'), '// mine\n');
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([expect.stringMatching(/untracked working tree files would be overwritten[\s\S]*src\/trading\.ts/)]);
+    expect(result.refusals.join('\n')).not.toMatch(/not verified/);
+    expect([head(), git(main, 'status', '--porcelain')]).toEqual([before, '?? src/trading.ts\n']);
+    expect(await read(main, 'src/trading.ts')).toBe('// mine\n');
+  });
+});
+
+describe('chunkMerge: a design file one side deleted and the other edited (#825)', () => {
+  // git leaves a modify/delete conflict with no markers, so there is nothing a merge may resolve.
+  async function expectRefused(): Promise<void> {
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([expect.stringMatching(/conflicts in .*design\/rulebook\/05-market\.md/)]);
+    expect([head(), status()]).toEqual([before, '']);
+  }
+
+  it('refuses when the branch deleted it and the main line edited it', async () => {
+    const worktree = await buildOnBranch('trading', 100);
+    git(worktree, 'rm', '-q', 'design/rulebook/05-market.md');
+    git(worktree, 'commit', '-q', '-m', 'chunk-trading/drop market');
+    await fs.appendFile(join(main, 'design/rulebook/05-market.md'), 'Prices rise.\n');
+    git(main, 'commit', '-q', '-am', 'edit market');
+    await expectRefused();
+  });
+
+  it('refuses when the main line deleted it and the branch edited it', async () => {
+    const worktree = await buildOnBranch('trading', 100);
+    await fs.appendFile(join(worktree, 'design/rulebook/05-market.md'), 'Prices rise.\n');
+    git(worktree, 'commit', '-q', '-am', 'chunk-trading/edit market');
+    git(main, 'rm', '-q', 'design/rulebook/05-market.md');
+    git(main, 'commit', '-q', '-m', 'drop market');
+    await expectRefused();
+  });
+
+  it('refuses, rather than failing to read it, when both renamed it differently and git left no file there', async () => {
+    const worktree = await buildOnBranch('trading', 100);
+    git(worktree, 'mv', 'design/rulebook/05-market.md', 'design/rulebook/05-bazaar.md');
+    git(worktree, 'commit', '-q', '-m', 'chunk-trading/rename market');
+    git(main, 'mv', 'design/rulebook/05-market.md', 'design/rulebook/05-shops.md');
+    git(main, 'commit', '-q', '-m', 'rename market');
+    await expectRefused();
+  });
 });
 
 describe('chunkMerge: a source file two chunks built together both edited (#403)', () => {
