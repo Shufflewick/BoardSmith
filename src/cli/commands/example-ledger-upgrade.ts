@@ -11,6 +11,7 @@ import {
   moveUnanchoredExamples,
   partitionLedgerLines,
   readLedgerLine,
+  withExampleReplayLedgerLock,
   writeExampleReplayLedger,
   type ExampleReplayRecord,
   type ReanchorResult,
@@ -81,36 +82,37 @@ export async function exampleLedgerUpgradeCommand(
   const liveSlices = await readLiveSlices(projectDir);
   const slices = new Map(liveSlices.map((s) => [s.path, s.text]));
 
-  const raw = await readFencedJsonLedger(file, (r) => r);
-  const decisions = dropSlicesToRecordAgain(
-    dropUnplaceable(raw.map((r, i) => decide(r, i, slices)), liveSlices),
-  );
+  const upgrade = await withExampleReplayLedgerLock(projectDir, async () => {
+    const raw = await readFencedJsonLedger(file, (r) => r);
+    const decisions = dropSlicesToRecordAgain(
+      dropUnplaceable(raw.map((r, i) => decide(r, i, slices)), liveSlices),
+    );
 
-  const upgraded = decisions.flatMap((d) => (d.kind === 'upgraded' ? [d.line.exampleId] : []));
-  const dropped = decisions.flatMap((d) => (d.kind === 'dropped' ? [{ exampleId: d.exampleId, reason: d.reason }] : []));
-  const slicesToRecordAgain = [
-    ...new Set(decisions.flatMap((d) => (d.kind === 'dropped' && isUnplaceable(d.reason) ? [d.slicePath] : []))),
-  ].sort();
+    const upgraded = decisions.flatMap((d) => (d.kind === 'upgraded' ? [d.line.exampleId] : []));
+    const dropped = decisions.flatMap((d) => (d.kind === 'dropped' ? [{ exampleId: d.exampleId, reason: d.reason }] : []));
+    const slicesToRecordAgain = [
+      ...new Set(decisions.flatMap((d) => (d.kind === 'dropped' && isUnplaceable(d.reason) ? [d.slicePath] : []))),
+    ].sort();
 
-  const kept = decisions.flatMap((d) => (d.kind === 'dropped' ? [] : [d.line]));
-  const keptRecords = kept.filter((l): l is ExampleReplayRecord => 'exampleId' in l);
-  const upgradedIds = new Set(upgraded);
-  const { rewritten, moved } = moveUnanchoredExamples(
-    keptRecords,
-    findUnanchoredExamples(keptRecords, liveSlices).filter((u) => upgradedIds.has(u.exampleId)),
-  );
-  if (upgraded.length > 0 || dropped.length > 0) {
-    const withoutExamples = kept.filter((l) => !('exampleId' in l));
-    await writeExampleReplayLedger(projectDir, partitionLedgerLines([...rewritten, ...withoutExamples], ledgerPath));
-  }
-
-  const result: ExampleLedgerUpgradeResult = { ledgerPath, upgraded, reanchored: moved, dropped, slicesToRecordAgain };
+    const kept = decisions.flatMap((d) => (d.kind === 'dropped' ? [] : [d.line]));
+    const keptRecords = kept.filter((l): l is ExampleReplayRecord => 'exampleId' in l);
+    const { rewritten, moved } = moveUnanchoredExamples(
+      keptRecords,
+      findUnanchoredExamples(keptRecords, liveSlices, new Set(upgraded)),
+    );
+    if (upgraded.length > 0 || dropped.length > 0) {
+      const withoutExamples = kept.filter((l) => !('exampleId' in l));
+      await writeExampleReplayLedger(projectDir, partitionLedgerLines([...rewritten, ...withoutExamples], ledgerPath));
+    }
+    const result: ExampleLedgerUpgradeResult = { ledgerPath, upgraded, reanchored: moved, dropped, slicesToRecordAgain };
+    return { decisions, result };
+  });
   if (options.json) {
-    console.log(JSON.stringify(result, null, 2));
+    console.log(JSON.stringify(upgrade.result, null, 2));
   } else {
-    await printUpgrade(projectDir, result, decisions);
+    await printUpgrade(projectDir, upgrade.result, upgrade.decisions);
   }
-  return result;
+  return upgrade.result;
 }
 
 function isUnplaceable(reason: DropReason): boolean {
@@ -119,12 +121,14 @@ function isUnplaceable(reason: DropReason): boolean {
 
 /**
  * Drops each upgraded record the re-anchoring rule cannot place: its text is on several lines of
- * its slice, or on one another record already holds.
+ * its slice, or on one whose id another record keeps or also moves to. Only upgraded records move,
+ * so every other record keeps its id.
  */
 function dropUnplaceable(decisions: Decision[], liveSlices: { path: string; text: string }[]): Decision[] {
   const records = decisions.flatMap((d) => (d.kind === 'dropped' || !('exampleId' in d.line) ? [] : [d.line]));
+  const upgraded = new Set(decisions.flatMap((d) => (d.kind === 'upgraded' ? [d.line.exampleId] : [])));
   const unplaceable = new Set(
-    findUnanchoredExamples(records, liveSlices).flatMap((u) => (u.reason === 'moved' ? [] : [u.exampleId])),
+    findUnanchoredExamples(records, liveSlices, upgraded).flatMap((u) => (u.reason === 'moved' ? [] : [u.exampleId])),
   );
   return decisions.map((d) =>
     d.kind === 'upgraded' && unplaceable.has(d.line.exampleId) ? droppedLine(d.line, 'quote-ambiguous') : d,

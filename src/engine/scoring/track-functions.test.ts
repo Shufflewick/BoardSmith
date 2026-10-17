@@ -8,6 +8,9 @@ import {
   incrementCounter,
   isTrackComplete,
   trackPoints,
+  MonotonicTrack,
+  UniqueTrack,
+  CounterTrack,
 } from './track.js';
 
 describe('track functions (#779)', () => {
@@ -118,4 +121,21 @@ describe('track functions (#779)', () => {
     addToTrack(track, 2);
     expect(trackPoints(track)).toBe(14);
   });
+});
+
+describe('track size (#786)', () => {
+  const makers = {
+    monotonicTrack: (maxEntries: number) => monotonicTrack({ id: 't', direction: 'increasing', maxEntries, completionBonus: 5 }),
+    uniqueTrack: (maxEntries: number) => uniqueTrack({ id: 't', maxEntries, completionBonus: 5 }),
+    counterTrack: (maxEntries: number) => counterTrack({ id: 't', maxEntries, completionBonus: 5 }),
+    MonotonicTrack: (maxEntries: number) => new MonotonicTrack({ id: 't', direction: 'increasing', maxEntries, completionBonus: 5 }),
+    UniqueTrack: (maxEntries: number) => new UniqueTrack({ id: 't', maxEntries, completionBonus: 5 }),
+    CounterTrack: (maxEntries: number) => new CounterTrack({ id: 't', maxEntries, completionBonus: 5 }),
+  };
+
+  for (const [name, make] of Object.entries(makers)) {
+    it.each([0, -1, 1.5, NaN])(`${name} refuses maxEntries %s, so an empty track never earns its bonus`, (maxEntries) => {
+      expect(() => make(maxEntries)).toThrow(/Track "t" needs maxEntries of 1 or more/);
+    });
+  }
 });

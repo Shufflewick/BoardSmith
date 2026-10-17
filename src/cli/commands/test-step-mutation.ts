@@ -326,6 +326,7 @@ const reporter = {
     const report = files.map((file) => ({
       path: file.filepath,
       failed: file.result?.state === 'fail',
+      errors: (file.result?.errors ?? []).map((error) => String(error.message).split('\\n')[0]),
       tests: testsIn(file.tasks).map((test) => {
         const titles = [];
         for (let suite = test.suite; suite; suite = suite.suite) titles.unshift(suite.name);
@@ -390,6 +391,8 @@ interface ReportedFile {
   path: string;
   /** The file failed as a whole or holds a failed test. */
   failed: boolean;
+  /** The first line of each error vitest reported for the file as a whole. */
+  errors: string[];
   tests: Array<{ fullName: string; line?: number; status: Outcome['status']; errors: ReportedError[] }>;
 }
 
@@ -409,11 +412,17 @@ type RunResult =
       outcomes: Outcome[];
       filesRun: Set<string>;
       /** Test files that failed as a whole, such as one that could not be imported. */
-      failedFiles: string[];
+      failedFiles: FailedFile[];
       exitCode: number | null;
       ms: number;
     }
   | { kind: 'timed-out' };
+
+/** A test file that failed as a whole, with the first error vitest gave, project paths made relative. */
+interface FailedFile {
+  path: string;
+  reason: string | undefined;
+}
 
 /** Which tests a run runs: the named chunk test files, or everything the project's config collects. */
 type RunScope = ChunkTestFile[] | 'whole-suite';
@@ -513,8 +522,9 @@ function runVitest(
  */
 async function readReport(
   reportPath: string,
+  projectDir: string,
   pathOf: (realPath: string) => string | undefined,
-): Promise<{ outcomes: Outcome[]; filesRun: Set<string>; failedFiles: string[] }> {
+): Promise<{ outcomes: Outcome[]; filesRun: Set<string>; failedFiles: FailedFile[] }> {
   let report: { files: ReportedFile[] };
   try {
     report = JSON.parse(await fs.readFile(reportPath, 'utf-8'));
@@ -526,12 +536,14 @@ async function readReport(
   }
   const outcomes: Outcome[] = [];
   const filesRun = new Set<string>();
-  const failedFiles: string[] = [];
+  const failedFiles: FailedFile[] = [];
   for (const file of report.files) {
     const path = pathOf(realpathSync(file.path));
     if (path === undefined) continue;
     filesRun.add(path);
-    if (file.failed && !file.tests.some((t) => t.status === 'failed')) failedFiles.push(path);
+    if (file.failed && !file.tests.some((t) => t.status === 'failed')) {
+      failedFiles.push({ path, reason: file.errors[0]?.replaceAll(projectDir + sep, '') });
+    }
     for (const test of file.tests) {
       outcomes.push({
         path,
@@ -603,7 +615,7 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
       checkStopped();
       if (!finished) return { kind: 'timed-out' };
 
-      const read = await readReport(reportPath, (realPath) =>
+      const read = await readReport(reportPath, projectDir, (realPath) =>
         byRealPath.get(realPath) ??
         (scope === 'whole-suite' ? relative(projectDir, realPath).split(sep).join('/') : undefined),
       );
@@ -660,7 +672,15 @@ function baselineFindings(testFiles: ChunkTestFile[], baseline: RunResult & { ki
       subject: testKey(o),
       detail: "This test fails before anything is mutated. Make the chunk's tests pass first; mutation only means something on a green suite.",
     }));
-  return [...notRun, ...red];
+  const failedFiles = baseline.failedFiles.map(({ path, reason }) => ({
+    kind: 'suite-not-green' as const,
+    subject: path,
+    detail:
+      `${path} failed as a whole, so none of its tests passed${reason ? `: ${reason}` : ''}. ` +
+      'Something outside a test failed: a beforeAll or afterAll hook, an import, or a file with no test in it. ' +
+      'Run `boardsmith test` to see the full error, fix it, and run this check again.',
+  }));
+  return [...notRun, ...red, ...failedFiles];
 }
 
 type LocatedMutant = Mutant & { absPath: string };
@@ -921,12 +941,14 @@ function survivorFindings(
     }
   }
   const claimFindings = input.claims
-    .filter((claim) => claimTests.has(claim) && !claimTests.get(claim)!.some((o) => killed.has(testKey(o))))
+    .filter((claim) => !claimTests.get(claim)?.some((o) => killed.has(testKey(o))))
     .map((claim) => ({
       kind: 'claim-survives-mutation' as const,
       subject: `claim ${claim}`,
-      detail:
-        mutantCount === 0
+      detail: !claimTests.has(claim)
+        ? `No test citing claim ${claim} ran and passed, so nothing shows the claim is tested. ` +
+          'Check for a skipped test or a stray .only, and that a test names the claim.'
+        : mutantCount === 0
           ? `This chunk added no implementation line that could be changed, so nothing shows the tests for claim ${claim} can fail. A claim needs code that implements it.`
           : `None of the ${claimTests.get(claim)!.length} test(s) citing claim ${claim} failed under any of ${mutantCount} small breaks ` +
             "of this chunk's code. They do not pin the claim: assert on the outcome the claim describes, reached through the game.",
@@ -1060,7 +1082,7 @@ function suiteNoticed(result: RunResult & { kind: 'ran' }): boolean {
 
 /** The tests and files of an unmutated run that failed, as `file > test` and `file`. */
 function redParts(result: RunResult & { kind: 'ran' }): string[] {
-  const red = [...result.outcomes.filter((o) => o.status === 'failed').map(testKey), ...result.failedFiles];
+  const red = [...result.outcomes.filter((o) => o.status === 'failed').map(testKey), ...result.failedFiles.map((f) => f.path)];
   if (red.length === 0 && result.exitCode !== 0) {
     red.push(`vitest exited with code ${result.exitCode} with no failing test: look for "Unhandled Errors" in \`boardsmith test\``);
   }
