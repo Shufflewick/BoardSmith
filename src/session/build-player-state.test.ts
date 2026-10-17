@@ -705,3 +705,16 @@ describe('manual propagation through session build functions (AUTOEXEC-01)', () 
 });
 
 class TestManualGame extends Game<TestManualGame, Player> {}
+
+describe('buildPlayerState - a seat with no name (#906, #1044)', () => {
+  it('names it by its seat, as the shell, the lobby and the dev host do', () => {
+    const runner = new GameRunner({
+      GameClass: TestGame,
+      gameType: 'test-game',
+      gameOptions: { playerCount: 2, playerNames: ['', 'Bob'], seed: 'test' },
+    });
+    runner.start();
+    const state = buildPlayerState(runner, ['', 'Bob'], 1);
+    expect(state.players.map((p) => p.name)).toEqual(['Player 1', 'Bob']);
+  });
+});

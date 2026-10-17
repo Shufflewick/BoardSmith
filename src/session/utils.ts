@@ -5,6 +5,7 @@
 import { Player, canSeatAct, availableActionsForSeat, followUpForSeat, isSeatExpiry, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState, type FollowUpAction, type FollowUpOffer } from '../engine/index.js';
 import { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
+import { seatDisplayName } from '../engine/element/seat-defaults.js';
 import { devWarn } from '../utils/dev.js';
 import { describeCheckpointAbsence } from '../runtime/index.js';
 import { ErrorCode } from '../types/protocol.js';
@@ -670,9 +671,9 @@ export function buildPlayerState(
       // Flatten attributes to root level so UI can access p.color, p.position directly
       const flattened: { name: string; seat: number; [key: string]: unknown } = {
         ...node,
-        name: node.name ?? player.name ?? `Player ${player.seat}`,
         ...(node.attributes || {}),
-        // Ensure seat is set (use player.seat, which is the 1-indexed position)
+        // Set after the attributes, which carry the raw (possibly empty) name and seat.
+        name: seatDisplayName(player.seat, node.name ?? player.name),
         seat: player.seat,
       };
       delete flattened.attributes;
@@ -684,7 +685,7 @@ export function buildPlayerState(
     // The Player node itself was filtered out of this viewer's truthView
     // entirely (e.g. individually hidden) -- fall back to the minimal public
     // identity rather than leaking anything from the raw player object.
-    return { name: player.name ?? `Player ${player.seat}`, seat: player.seat };
+    return { name: seatDisplayName(player.seat, player.name), seat: player.seat };
   });
 
   // D26/SPACE-05: `availableActions` (raw, from the flow's action-step
