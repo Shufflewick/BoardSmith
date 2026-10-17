@@ -88,6 +88,11 @@ shares the game's engine. Its options are described in
 
 ## Rules a policy plays by
 
+- **Return only moves the action accepts.** The first move the game rejects
+  ends that game as stuck, with an error that names the action, the move and
+  the policy, followed by the action's own reason. A rejected move is never
+  retried: either the action offers a choice its validation refuses, or the
+  policy built a move outside the choices it was offered.
 - **Read the game, never change it.** A policy is handed the real game. One
   whose work changes it in a way the engine tracks (creates, moves or removes
   an element, draws from `game.random`, or writes through `actionTempState`)

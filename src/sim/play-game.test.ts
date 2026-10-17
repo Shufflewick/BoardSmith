@@ -277,6 +277,15 @@ describe('playGame with policies (#556)', () => {
     expect(new Set(lengths).size).toBeGreaterThan(1);
   });
 
+  it("keeps the action's reason when a rejected move cannot be shown (#910)", async () => {
+    // The engine encodes only the picks, so an extra arg the policy adds reaches the rejection unencoded.
+    const dated: Policy = { name: 'dated', choose: () => ({ action: 'take', args: { value: 4, when: new Date(0) } }) };
+    const result = await play([dated, dated], 'dated');
+    expect(result.crashed).toBe(false);
+    expect(result.stuck).toBe(true);
+    expect(result.error).toMatch(/^Action 'take' rejected a move that could not be shown, chosen by policy 'dated': 'take' was sent 'when', which is not one of its picks\. It takes: value\. A simulated/);
+  });
+
   it('refuses a player count the game does not declare', async () => {
     await expect(play([random(), random(), random(), random(), random()], 'five')).rejects.toThrow(
       /5 players.*2 to 4/,
