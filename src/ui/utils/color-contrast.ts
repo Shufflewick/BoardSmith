@@ -11,7 +11,7 @@
  * dependency (forbidden without discussion per CLAUDE.md). A small
  * hand-rolled parser covers hex (#rgb/#rrggbb), rgb()/rgba(), hsl()/hsla(),
  * and the standard CSS named colors (`CSS_NAMED_COLORS`) — the shapes
- * `STANDARD_PLAYER_COLORS` (hex) and `createColorOption()`-based custom game
+ * the engine's default palette (hex) and `createColorOption()`-based custom game
  * palettes (any legal CSS color string) can supply. It fails loud (throws) on
  * anything else rather than silently guessing wrong contrast. A render path
  * calls `seatInk()` instead, which degrades to a safe default ink rather than

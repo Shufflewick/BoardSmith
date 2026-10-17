@@ -82,14 +82,6 @@
   "re_export_cycles": [],
   "unused_optional_dependencies": [],
   "unused_enum_members": [
-    "src/types/protocol.ts:ErrorCode.SEAT_ALREADY_CLAIMED",
-    "src/types/protocol.ts:ErrorCode.INVALID_SEAT",
-    "src/types/protocol.ts:ErrorCode.NOT_AUTHORIZED",
-    "src/types/protocol.ts:ErrorCode.GAME_ALREADY_STARTED",
-    "src/types/protocol.ts:ErrorCode.LOBBY_NOT_READY",
-    "src/types/protocol.ts:ErrorCode.COLOR_ALREADY_TAKEN",
-    "src/types/protocol.ts:ErrorCode.INTERNAL_ERROR",
-    "src/types/protocol.ts:ErrorCode.REPLAY_FAILED"
   ],
   "unused_class_members": [
     "src/cli/commands/verify-enumerate.ts:QuoteVerifiedProvenance.covers",

@@ -15,6 +15,7 @@
  * get the same answer (#555, #594).
  */
 import type { ExecutorOp, OpOfType } from './stateless-ops.js';
+import { DIFFICULTY_PRESETS, MAX_BOT_ITERATIONS, parseBotLevel } from '../bot/index.js';
 
 /** The result of {@link parseExecutorOp}. */
 export type ParsedExecutorOp = { ok: true; op: ExecutorOp } | { ok: false; error: string };
@@ -75,8 +76,20 @@ const boundaryKey = {
     'it names the round this submission was composed in. Stamp it from the boundary key the host ' +
     'last sent this seat (meta.turnBoundary.key), and never fill it in with the current one',
 };
+/** Is `level` one `parseBotLevel` accepts, so the bot is never built from a level it refuses? */
+function isBotLevel(level: unknown): boolean {
+  if (typeof level !== 'string') return false;
+  try {
+    parseBotLevel(level);
+    return true;
+  } catch {
+    return false;
+  }
+}
 const botSeats = {
-  must: 'a list of { seat, level? }, where seat is a whole number and level a string',
+  must:
+    'a list of { seat, level? }, where seat is a whole number and level a bot level: ' +
+    `${Object.keys(DIFFICULTY_PRESETS).join(', ')}, or an iteration count from 1 to ${MAX_BOT_ITERATIONS}`,
   accepts: (value: unknown) =>
     Array.isArray(value) &&
     value.every(
@@ -84,7 +97,7 @@ const botSeats = {
         isPlainObject(entry) &&
         Object.keys(entry).every((key) => key === 'seat' || key === 'level') &&
         Number.isInteger(entry.seat) &&
-        (entry.level === undefined || typeof entry.level === 'string'),
+        (entry.level === undefined || isBotLevel(entry.level)),
     ),
 };
 
