@@ -17,7 +17,7 @@ import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
 import chalk from 'chalk';
 import { ROLES, defaultAgentType } from '../lib/agent-roles.js';
-import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
+import { boardsmithPackageRoot, readBoardsmithVersion } from '../lib/boardsmith-version.js';
 
 interface InstallOptions {
   force?: boolean;
@@ -83,6 +83,9 @@ const SHARED_DIRS = ['build', 'ingest', 'orchestrate', 'templates', 'aspects', '
  * `routing.md` (which role each piece of work is dispatched to, and when review may start).
  */
 const SHARED_FILES = ['state-machine.md', 'reporting.md', 'routing.md'];
+
+/** The BoardSmith version that wrote this install, written last so a partial copy carries none. */
+const VERSION_STAMP = join(SHARED_ROOT, 'VERSION');
 
 /**
  * A known leaf file inside each shared dir (relative to `targetDir`). A COMPLETE install
@@ -163,8 +166,8 @@ function expectedInstallPaths(targetDir: string): string[] {
 }
 
 /**
- * True only when EVERY expected install path is present AND no retired skill directory survives
- * (a complete, current, non-partial install). A tree that still carries a retired directory is
+ * True only when EVERY expected install path is present, the version stamp names the running
+ * BoardSmith, AND no retired skill directory survives (a complete, current, non-partial install). A tree that still carries a retired directory is
  * NOT complete: it must fall through to the pre-copy clean that removes it, or a designer who
  * installed an earlier version would keep the stale skill until they thought to pass `--force`.
  */
@@ -175,6 +178,12 @@ async function isFullyInstalled(targetDir: string): Promise<boolean> {
     } catch {
       return false; // Missing piece → partial/absent install
     }
+  }
+  try {
+    const stamped = await fs.readFile(join(targetDir, VERSION_STAMP), 'utf-8');
+    if (stamped.trim() !== readBoardsmithVersion()) return false; // Another BoardSmith version wrote it
+  } catch {
+    return false; // No stamp → an unstamped or partial install
   }
   for (const skillName of RETIRED_SKILL_NAMES) {
     try {
@@ -278,6 +287,7 @@ async function copySkillTree(
     await fs.copyFile(join(slashCommandDir, 'agents', file), join(agentsDir, file));
   }
 
+  await fs.writeFile(join(targetDir, VERSION_STAMP), `${readBoardsmithVersion()}\n`);
   return true;
 }
 

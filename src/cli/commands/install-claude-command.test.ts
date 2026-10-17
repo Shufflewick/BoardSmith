@@ -21,6 +21,7 @@ import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { installClaudeCommand, uninstallClaudeCommand, SKILL_NAMES } from './install-claude-command.js';
 import { installedSkillsTree, uninstalledSkillsTree } from './installed-skills.test-helper.js';
+import { readBoardsmithVersion } from '../lib/boardsmith-version.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..', '..');
@@ -316,6 +317,26 @@ describe('installClaudeCommand — retires bs-generate-bot (issue #16)', () => {
     for (const name of SKILL_NAMES) {
       expect(existsSync(join(skills.root, name))).toBe(false);
     }
+  });
+});
+
+/**
+ * #846: an install made by an older BoardSmith is complete on disk but stale. A plain install must
+ * see the version stamp differs from the running BoardSmith and replace it.
+ */
+describe('installClaudeCommand — refreshes skills a different BoardSmith version installed (#846)', () => {
+  const skills = installedSkillsTree('bs-install-upgrade-');
+
+  it('a plain reinstall over an older version\'s install rewrites it and stamps the running version', async () => {
+    const stamp = join(skills.root, 'bs-shared', 'VERSION');
+    const entry = join(skills.root, 'bs-build-bot', 'SKILL.md');
+    writeFileSync(stamp, 'an older version\n');
+    writeFileSync(entry, 'stale copy from an older version');
+
+    await installClaudeCommand({ local: true, skipLink: true });
+
+    expect(readFileSync(entry, 'utf-8')).not.toBe('stale copy from an older version');
+    expect(readFileSync(stamp, 'utf-8').trim()).toBe(readBoardsmithVersion());
   });
 });
 
