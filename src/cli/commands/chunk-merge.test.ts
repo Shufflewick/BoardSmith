@@ -307,6 +307,57 @@ describe('chunkMerge: the combined tree is checked, not the branch alone', () =>
   });
 });
 
+describe("chunkMerge: parallel-check's refusals for chunks built together (#820)", () => {
+  /** Adds `entries` to the sketch on the main line, before any branch leaves it. */
+  async function addToSketch(...entries: string[]): Promise<void> {
+    const sketch = await read(main, 'design/SKETCH.md');
+    await write(main, { 'design/SKETCH.md': sketch.replace('## Ideas Backlog', `${entries.join('\n')}## Ideas Backlog`) });
+    git(main, 'commit', '-q', '-am', 'sketch entries');
+  }
+
+  /** Merges trading, then `slug` built beside it; returns the refusals of the second merge. */
+  async function refusalsBesideTrading(slug: string): Promise<string> {
+    await buildOnBranch('trading', 100);
+    await buildOnBranch(slug, 100);
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner })).refusals).toEqual([]);
+    const before = head();
+    const result = await chunkMerge(main, slug, { runTests: budgetRunner });
+    expect(result.merged).toBe(false);
+    expect(head()).toBe(before);
+    expect(status()).toBe('');
+    return result.refusals.join('\n');
+  }
+
+  it('refuses a chunk with no rulebook citations', async () => {
+    await addToSketch(sketchEntry('bare', 'none'));
+    expect(await refusalsBesideTrading('bare')).toMatch(/bare has no rulebook citations/);
+  });
+
+  it('refuses a citation that names no rulebook slice', async () => {
+    await addToSketch(sketchEntry('ghost', 'rulebook/09-missing.md'));
+    expect(await refusalsBesideTrading('ghost')).toMatch(/ghost cites rulebook\/09-missing\.md, which names no single file/);
+  });
+
+  it('refuses the final-acceptance chunk built beside another', async () => {
+    await addToSketch(sketchEntry('finale', 'rulebook/07-quests.md', 'final-acceptance'));
+    expect(await refusalsBesideTrading('finale')).toMatch(/finale is the final-acceptance chunk.*always built on its own/);
+  });
+
+  it('refuses a chunk built alongside that has no sketch entry', async () => {
+    await buildOnBranch('trading', 100);
+    await buildOnBranch('quests', 100);
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner })).refusals).toEqual([]);
+    // The main line drops trading's sketch entry after merging it, so quests' merge cannot read it.
+    const sketch = await read(main, 'design/SKETCH.md');
+    await write(main, { 'design/SKETCH.md': sketch.replace(/### trading\n[\s\S]*?\n\n/, '') });
+    git(main, 'commit', '-q', '-am', 'drop trading from the sketch');
+    const before = head();
+    const result = await chunkMerge(main, 'quests', { runTests: budgetRunner });
+    expect(result.refusals.join('\n')).toMatch(/There is no chunk "trading" in SKETCH\.md/);
+    expect(head()).toBe(before);
+  });
+});
+
 describe('chunkMerge: ledger numbers are allocated at merge, never on a branch', () => {
   it('turns each branch\'s provisional rulings into distinct real numbers and rewrites their citations', async () => {
     await buildOnBranch('trading', 100, {

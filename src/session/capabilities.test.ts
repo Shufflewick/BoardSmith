@@ -6,8 +6,9 @@ import {
   resolveCapabilities,
   type GameBackend,
 } from './capabilities.js';
-import { Game, Player } from '../engine/index.js';
-import { FixedDeployGame, UntimedDeployGame } from './testing/fixtures/timed-step-fixture.js';
+import { Game, Player, type GameOptions } from '../engine/index.js';
+import { DeployGame, FixedDeployGame, UntimedDeployGame } from './testing/fixtures/timed-step-fixture.js';
+import { withDeclaredGameOptions } from './game-option-selection.js';
 
 /** A game class that builds no flow. */
 class PlainGame extends Game<PlainGame, Player> {}
@@ -224,5 +225,79 @@ describe('capabilityContradictions', () => {
   it('refuses a non-boolean declaration rather than reading its truthiness', () => {
     const [message] = contradictions('table', tableDefinition, { asyncPlay: 'yes' });
     expect(message).toContain('"asyncPlay" must be true or false');
+  });
+});
+
+/** A deploy game whose round is timed only for some options: `blitz`, or the "rapid" `pace`. */
+class OptionTimedGame extends DeployGame {
+  constructor(options: GameOptions & { blitz?: boolean; pace?: string; minutes?: number; teams?: boolean }) {
+    if (options.teams === true && options.playerCount === 3) throw new Error('teams need an even seat count');
+    const timed = options.blitz === true || options.pace === 'rapid' || options.minutes === 5;
+    super(options, timed ? 60_000 : undefined);
+  }
+}
+
+/** `tableDefinition` built from OptionTimedGame, carrying `gameOptions` as a loaded bundle does. */
+function optionTimedDefinition(gameOptions: unknown[]) {
+  return withDeclaredGameOptions({ ...tableDefinition, gameClass: OptionTimedGame }, gameOptions);
+}
+
+const blitz = (defaultValue: boolean) => ({ id: 'blitz', type: 'boolean', label: 'Blitz', default: defaultValue });
+const pace = {
+  id: 'pace',
+  type: 'select',
+  label: 'Pace',
+  default: 'calm',
+  choices: [{ value: 'calm', label: 'Calm' }, { value: 'rapid', label: 'Rapid' }],
+};
+
+describe('timed steps that depend on game options (#812)', () => {
+  it('builds the game with its declared defaults: a blitz that defaults on is timed', () => {
+    const definition = optionTimedDefinition([blitz(true)]);
+    expect(capabilities('table', definition).timedSteps).toBe(true);
+    const [message] = capabilityContradictions({ backend: 'table', definition, declared: {} });
+    expect(message).toContain("'deploy'");
+    expect(message).toContain('default game options');
+  });
+
+  it('finds a timer that only a non-default select choice turns on, naming that choice', () => {
+    const definition = optionTimedDefinition([blitz(false), pace]);
+    expect(capabilities('table', definition).timedSteps).toBe(true);
+    const [message] = capabilityContradictions({ backend: 'table', definition, declared: {} });
+    expect(message).toContain('"idleAction"');
+    expect(message).toContain('pace: "rapid"');
+    expect(capabilities('table', optionTimedDefinition([])).timedSteps).toBe(false);
+  });
+
+  it('refuses, by name, a game with more option combinations than it will build', () => {
+    // 2 to the 7th combinations at each of 3 seat counts is 384 builds.
+    const many = Array.from({ length: 7 }, (_, i) => ({ ...blitz(false), id: `flag${i}` }));
+    const definition = optionTimedDefinition(many);
+    const [message] = capabilityContradictions({ backend: 'table', definition, declared: {} });
+    expect(message).toContain('384');
+    expect(message).toContain('256');
+    expect(message).toContain('timeLimitMs');
+    expect(() => capabilities('table', definition)).toThrow(/384/);
+  });
+
+  it('needs no search when the default options already have a timed step', () => {
+    const many = Array.from({ length: 7 }, (_, i) => ({ ...blitz(false), id: `flag${i}` }));
+    const definition = optionTimedDefinition([blitz(true), ...many]);
+    expect(capabilities('table', definition).timedSteps).toBe(true);
+    expect(capabilityContradictions({ backend: 'table', definition, declared: { idleAction: { name: 'commit' } } })).toEqual([]);
+  });
+
+  it('names the seat count and options of a combination whose constructor throws', () => {
+    const definition = optionTimedDefinition([{ ...blitz(false), id: 'teams' }]);
+    expect(() => capabilityContradictions({ backend: 'table', definition, declared: {} })).toThrow(
+      'Constructing this game at 3 players with game options teams: true threw: teams need an even seat count',
+    );
+  });
+
+  it('leaves designer-only and number options at their defaults, unsearched', () => {
+    const designerBlitz = { ...blitz(false), designerOnly: true };
+    const minutes = { id: 'minutes', type: 'number', label: 'Minutes', default: 10 };
+    expect(capabilities('table', optionTimedDefinition([designerBlitz, minutes])).timedSteps).toBe(false);
+    expect(capabilities('table', optionTimedDefinition([{ ...designerBlitz, default: true }])).timedSteps).toBe(true);
   });
 });

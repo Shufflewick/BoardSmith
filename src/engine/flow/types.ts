@@ -159,13 +159,13 @@ export interface ForEachConfig<
  * Configuration for action step
  */
 export interface ActionStepConfig<G extends Game = Game> extends BaseFlowConfig {
-  /** Player who should act (defaults to context.player) */
+  /** Player who should act (defaults to context.player). Asked once on entry and again after each move, so the seat may change mid-step. */
   player?: (context: FlowContext<G>) => PlayerOf<G>;
   /** Actions available to the player */
   actions: string[] | ((context: FlowContext<G>) => string[]);
   /** Continue until this returns true */
   repeatUntil?: (context: FlowContext<G>) => boolean;
-  /** Skip if this returns true */
+  /** Skip the step if this returns true. Asked once, on entry, so it never cuts a step short of `minMoves`. */
   skipIf?: (context: FlowContext<G>) => boolean;
   /** Minimum number of moves required before step can complete */
   minMoves?: number;

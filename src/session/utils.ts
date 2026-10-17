@@ -32,25 +32,6 @@ function findElementJSONById(json: ElementJSON, id: number): ElementJSON | undef
 }
 
 /**
- * Generate a random 8-character game ID
- */
-export function generateGameId(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let id = '';
-  for (let i = 0; i < 8; i++) {
-    id += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return id;
-}
-
-/**
- * Check if it's a specific player's turn
- */
-export function isPlayersTurn(flowState: FlowState | undefined, playerPosition: number): boolean {
-  return canSeatAct(flowState, playerPosition);
-}
-
-/**
  * Serialize `game.getFlowDebugInfo()` into the shared plain-object shape
  * (`SerializedFlowDebugInfo`) that travels over the wire. Flow position is
  * public game structure (T-123-08) — safe to compute once and reuse across
@@ -648,7 +629,7 @@ export function buildPlayerState(
   const playerView = runner.getPlayerView(playerPosition);
   const truthView = playerView.state;
 
-  const isMyTurn = isPlayersTurn(flowState, playerPosition);
+  const isMyTurn = canSeatAct(flowState, playerPosition);
 
   // Get available actions for this seat. Handles both simultaneous steps
   // (awaitingPlayers) and sequential steps (currentPlayer); for sequential
