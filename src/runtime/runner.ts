@@ -1,3 +1,4 @@
+import { secureRandomHex } from '../utils/secure-random.js';
 import { rulesErrorSentence } from '../engine/action/rules-error.js';
 import { ActionExecutor, evaluateConditionWithTrace } from '../engine/action/action.js';
 import {
@@ -85,18 +86,6 @@ export interface RunnerCheckpointPolicy extends CheckpointPolicy {
  * inference source: the game class is the one declaration of what this game
  * accepts, and the literal is checked against it rather than widening it.
  */
-/**
- * A new game's `gameInstanceId`: 128 random bits, as hex.
- *
- * `getRandomValues` rather than `randomUUID`, because a browser offers
- * `randomUUID` only on a secure page and `boardsmith dev --lan` serves plain
- * http. It never touches the game's seeded RNG, so minting an id moves no draw.
- */
-function mintGameInstanceId(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-}
-
 export interface GameRunnerOptions<G extends Game, O extends GameOptions = GameOptions> {
   /** Game class constructor */
   GameClass: new (options: O) => G;
@@ -287,7 +276,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   restoreEpoch = 0;
 
   /**
-   * WHICH GAME THIS IS (#356). Minted when a runner begins a new game, adopted
+   * WHICH GAME THIS IS (#356). Minted the first time it is read, adopted
    * from the snapshot by `fromSnapshot`, and carried by `fromCheckpoint` — an
    * undo is the same game, and `restoreEpoch` is what says it moved.
    *
@@ -296,7 +285,17 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * new game starts at epoch 0 like the one it replaced, so without this a
    * client could not tell "New game" from an ordinary re-broadcast.
    */
-  gameInstanceId = mintGameInstanceId();
+  get gameInstanceId(): string {
+    // Minted on first read, so a restore that adopts the snapshot's id draws nothing (#806).
+    this.#gameInstanceId ??= secureRandomHex(16, "name a new game's instance", 'restore the game from a snapshot that carries its gameInstanceId');
+    return this.#gameInstanceId;
+  }
+
+  set gameInstanceId(id: string) {
+    this.#gameInstanceId = id;
+  }
+
+  #gameInstanceId: string | undefined;
 
   /**
    * Last-observed value of `game.getIrreversibleCommitCount()` (the live
