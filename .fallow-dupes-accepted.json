@@ -273,14 +273,6 @@
       ]
     },
     {
-      "content": "a36350227f9b3bcf",
-      "lines": 40,
-      "files": [
-        "src/ui/composables/useGameGrid.ts",
-        "src/ui/composables/useHexGrid.ts"
-      ]
-    },
-    {
       "content": "a65a466bf25aee08",
       "lines": 33,
       "files": [

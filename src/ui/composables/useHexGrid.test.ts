@@ -273,6 +273,16 @@ describe('useHexGrid', () => {
       expect(grid(view, { qAttr: 'q', rAttr: 'r' }).getCellAt(2, 1)?.name).toBe('2,1');
     });
 
+    it("bounds the viewBox by the board's named coordinates", () => {
+      expect(grid(colRowView).hexGridBounds.value).toEqual(grid(gameView(cells)).hexGridBounds.value);
+    });
+
+    it('refuses a non-axial board even when only cells and positions are read', () => {
+      const cube = gameView(cells, { $coordSystem: 'cube' });
+      expect(() => grid(cube).cells.value).toThrow(/\$coordSystem 'cube'.*only 'axial'/s);
+      expect(() => grid(cube).getHexPosition(0, 0)).toThrow(/\$coordSystem 'cube'.*only 'axial'/s);
+    });
+
     it('refuses a board whose coordinate system is not axial', () => {
       const offset = gameView(cells, { $coordSystem: 'offset' });
       expect(() => grid(offset).cellMap.value).toThrow(/\$coordSystem 'offset'.*only 'axial'/s);

@@ -160,7 +160,10 @@ export function useHexGrid<TCell = GameViewElement>(
   const board = computed(() => {
     const view = gameView();
     if (!view) return null;
-    return findElement(view, { className: boardClassName });
+    const found = findElement(view, { className: boardClassName });
+    // Refuse a non-axial board here, so every reader (cells, positions, lookups) is refused
+    if (found) hexCoordNames(found);
+    return found;
   });
 
   /** Helper to get typed attributes */
@@ -191,7 +194,7 @@ export function useHexGrid<TCell = GameViewElement>(
 
   // Cell attributes holding q and r: explicit options win over the board's own names
   const coordAttrs = computed(() => {
-    const names = board.value ? hexCoordNames(board.value) : { q: 'q', r: 'r' };
+    const names = hexCoordNames(board.value ?? {});
     return { q: options.qAttr ?? names.q, r: options.rAttr ?? names.r };
   });
 
