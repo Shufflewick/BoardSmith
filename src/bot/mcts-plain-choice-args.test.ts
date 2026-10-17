@@ -56,3 +56,19 @@ describe('a chooseFrom of plain objects with an id', () => {
     expect(picked).toEqual(seeds.map(() => 'gold'));
   });
 });
+
+describe('an element from another copy of the engine', () => {
+  it('is still rebound to the search game, though it fails instanceof', () => {
+    const game = new PlainChoiceGame({ playerCount: 2, seed: 'copy' });
+    game.startFlow();
+    const bot = new MCTSBot(game, PlainChoiceGame, 'plain', 1, [], { async: false, timeout: Infinity, seed: 'copy' });
+    const b = bot as any;
+    b.searchGame = b.restoreGame(b.captureSnapshot());
+
+    // A game bundling its own engine copy hands over elements of a different class (#873).
+    const gold = game.first(Space, 'gold')!;
+    const foreign = Object.assign(Object.create(null), { id: gold.id, _t: gold._t });
+    const rebound = b.rebindArgs({ target: foreign }).target;
+    expect(rebound).toBe(b.searchGame.getElementById(gold.id));
+  });
+});

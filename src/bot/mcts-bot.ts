@@ -8,7 +8,8 @@ import type {
 } from '../engine/index.js';
 import type { HistoryEntry } from '../engine/action/types.js';
 import type { GameStateSnapshot } from '../engine/utils/index.js';
-import { canSeatAct, dueSeats, availableActionsForSeat, followUpForSeat, GameElement } from '../engine/index.js';
+import { canSeatAct, dueSeats, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
+import { isElement } from '../engine/element/game-element.js';
 import { createSnapshot } from '../engine/utils/index.js';
 import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
 import { constructGame } from '../engine/element/game.js';
@@ -1152,7 +1153,7 @@ export class MCTSBot<G extends Game = Game> {
     const game = this.searchGame;
     if (!game) return args;
     const rebindOne = (v: unknown): unknown => {
-      if (v instanceof GameElement) return game.getElementById(v.id) ?? v;
+      if (isElement(v)) return game.getElementById(v.id) ?? v;
       return v;
     };
     const out: Record<string, unknown> = {};
@@ -1647,7 +1648,7 @@ export class MCTSBot<G extends Game = Game> {
     const dropped = made - scored;
     if (!isDevMode() || made === 0) return;
     if (dropped * 2 < made) {
-      if (choseAtRandom) {
+      if (choseAtRandom && firstRefusal !== undefined) {
         console.warn(
           `[BoardSmith] MCTS bot for seat ${this.playerIndex}: the game refused every move the bot tried, `
           + 'so the bot chose its move at random. The first refusal said:\n\n'
