@@ -159,7 +159,7 @@ export interface ForEachConfig<
  * Configuration for action step
  */
 export interface ActionStepConfig<G extends Game = Game> extends BaseFlowConfig {
-  /** Player who should act (defaults to context.player). Asked once, on entry; the step keeps that player for every move. */
+  /** Player who should act (defaults to context.player). Asked once on entry and again after each move, so the seat may change mid-step. */
   player?: (context: FlowContext<G>) => PlayerOf<G>;
   /** Actions available to the player */
   actions: string[] | ((context: FlowContext<G>) => string[]);

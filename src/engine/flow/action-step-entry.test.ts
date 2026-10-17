@@ -3,8 +3,8 @@ import { Game, Player, Action, FlowEngine, actionStep, repeat, noop } from '../i
 import type { FlowDefinition } from '../index.js';
 
 /**
- * An action step settles `skipIf` and `player` once, when it is entered, and
- * keeps them for every move after (#786).
+ * An action step asks `skipIf` only when it is entered, and asks `player` once
+ * per pass: once on entry, then again after each move (#786).
  */
 class TestGame extends Game<TestGame, Player> {}
 
@@ -29,34 +29,25 @@ describe('action step entry (#786)', () => {
     expect(state.movesRequired).toBe(1);
   });
 
-  it('the step stays with the player it was entered for', () => {
+  it('asks player again after each move, so a step can hand over to another seat', () => {
     const game = gameWithMove();
+    let calls = 0;
     let seat = 1;
     const flow: FlowDefinition = {
-      root: actionStep({ actions: ['move'], maxMoves: 2, player: (ctx) => ctx.game.getPlayer(seat)! }),
+      root: actionStep({
+        actions: ['move'],
+        maxMoves: 2,
+        player: (ctx) => {
+          calls++;
+          return ctx.game.getPlayer(seat)!;
+        },
+      }),
     };
     const engine = new FlowEngine(game, flow);
-    const saved = engine.start();
+    expect(engine.start().currentPlayer).toBe(1);
     seat = 2;
-    expect(engine.resume('move', {}).currentPlayer).toBe(1);
-
-    // The seat survives a snapshot round-trip.
-    const restored = new FlowEngine(game, flow);
-    expect(restored.restoreFullState(saved)).toEqual({ success: true });
-    expect(restored.resume('move', {}).currentPlayer).toBe(1);
-  });
-
-  it('refuses step state that does not say which seat it is for', () => {
-    const game = gameWithMove();
-    const flow: FlowDefinition = { root: actionStep({ actions: ['move'], minMoves: 2 }) };
-    const saved = new FlowEngine(game, flow).start();
-    for (const data of Object.values(saved.position.frameData ?? {})) delete data.seat;
-
-    const restored = new FlowEngine(game, flow);
-    expect(restored.restoreFullState(saved)).toEqual({ success: true });
-    expect(() => restored.resume('move', {})).toThrow(
-      /This action step's saved state does not name a seat of this game \(got undefined\)\. Start the game again from a fresh state\./,
-    );
+    expect(engine.resume('move', {}).currentPlayer).toBe(2);
+    expect(calls).toBe(2);
   });
 
   it('calls config.player once when the step is entered', () => {
