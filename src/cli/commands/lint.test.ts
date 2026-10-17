@@ -112,4 +112,19 @@ describe('a selected check with no config fails instead of passing (#846)', () =
     await lintCommand({ css: true });
     expect(vi.mocked(runTool)).toHaveBeenCalledWith('stylelint', ['src/**/*.vue'], { cwd: process.cwd() });
   });
+
+  it.each([
+    ['malformed', '{"name": "game" "stylelint": {}}'],
+    ['not an object', 'null'],
+  ])('lint stops with a readable message naming package.json when it is %s (#1014)', async (_label, text) => {
+    const dir = tempTree('boardsmith-lint-bad-pkg-');
+    writeFileSync(join(dir, 'boardsmith.json'), '{}');
+    writeFileSync(join(dir, 'package.json'), text);
+    process.chdir(dir);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const run = lintCommand({});
+    await expect(run).rejects.toThrow(join(process.cwd(), 'package.json'));
+    await expect(run).rejects.toThrow(/to find a Stylelint config.*Fix the JSON/s);
+  });
 });

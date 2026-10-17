@@ -433,7 +433,20 @@ function hasAnyConfig(cwd: string, candidates: string[]): boolean {
 function hasStylelintConfig(cwd: string): boolean {
   if (hasAnyConfig(cwd, STYLELINT_CONFIGS)) return true;
   const pkgPath = join(cwd, 'package.json');
-  return existsSync(pkgPath) && 'stylelint' in JSON.parse(readFileSync(pkgPath, 'utf-8'));
+  if (!existsSync(pkgPath)) return false;
+  let pkg: unknown;
+  try {
+    pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+  } catch {
+    pkg = undefined;
+  }
+  if (typeof pkg !== 'object' || pkg === null || Array.isArray(pkg)) {
+    throw new Error(
+      `${pkgPath} is not a valid JSON object. boardsmith lint reads it to find a Stylelint config ` +
+        `(a "stylelint" key). Fix the JSON in that file and run lint again.`,
+    );
+  }
+  return 'stylelint' in pkg;
 }
 
 /**
@@ -456,6 +469,7 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   });
 
   const checks: LintCheck[] = [];
+  const hasCssConfig = wants('css') && hasStylelintConfig(cwd);
 
   if (options.eslint && !hasAnyConfig(cwd, ESLINT_CONFIGS)) {
     console.error(chalk.red('\nlint --eslint: this project has no ESLint config, so ESLint cannot run.'));
@@ -464,7 +478,7 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     process.exit(1);
   }
 
-  if (options.css && !hasStylelintConfig(cwd)) {
+  if (options.css && !hasCssConfig) {
     console.error(chalk.red('\nlint --css: this project has no Stylelint config, so Stylelint cannot run.'));
     console.error(chalk.dim("Add a .stylelintrc.cjs to the project root with customSyntax: 'postcss-html' (so it reads the <style> blocks in .vue files), or drop --css."));
     console.error(chalk.dim('The game also needs both packages installed: npm install -D stylelint postcss-html\n'));
@@ -477,7 +491,7 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     checks.push({ name: 'ESLint', run: () => runTool('eslint', args, { cwd }) });
   }
 
-  if (wants('css') && hasStylelintConfig(cwd)) {
+  if (hasCssConfig) {
     const args = ['src/**/*.vue'];
     if (options.fix) args.push('--fix');
     checks.push({ name: 'Stylelint', run: () => runTool('stylelint', args, { cwd }) });
