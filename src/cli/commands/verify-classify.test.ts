@@ -1025,6 +1025,22 @@ async function ledgerBody(project: string, runId: string): Promise<string> {
 }
 
 describe('verifyClassifyRecordCommand — one verdict, atomically appended, stale/provenance derived', () => {
+  it('keeps every classification when several record calls run in parallel (#831)', async () => {
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
+    const evidence = ['one', 'two', 'three', 'four', 'five'];
+
+    await Promise.all(
+      evidence.map((e) => verifyClassifyRecordCommand({ project, runId, pairId, label: 'cosmetic', evidence: e, json: true })),
+    );
+
+    const recorded = (await ledgerBody(project, runId))
+      .split('\n')
+      .filter((l) => l.trim().length > 0)
+      .map((l) => JSON.parse(l))
+      .filter((r) => r.kind === 'classification');
+    expect(recorded.map((r) => r.evidence).sort()).toEqual([...evidence].sort());
+  });
+
   it('ledger-1: recording cosmetic appends exactly one classification line inside the fences, stale:false, provenance derived', async () => {
     const { project, runId, pairId } = await recordedSevenRunFirstPair();
 
