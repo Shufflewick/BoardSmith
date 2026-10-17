@@ -300,7 +300,7 @@ export interface ResolvedMemory {
   lastResolved: string | undefined;
   /** The actions that failed when taken: reported once, and not tried again while anything else is offered. */
   readonly failed: Set<string>;
-  /** How many numbers the game's own rules have refused in each action, so the walk types the next one up. */
+  /** How many numbers the game's own rules have refused in each action since it was last taken, so the walk types the next one up (#923). */
   readonly refused: Map<string, number>;
   /** What the game said when it refused a number, which its error toasts repeat. */
   readonly refusals: Set<string>;
@@ -331,6 +331,7 @@ export function recordResolved(resolved: readonly ResolvedAction[], walk: SmokeW
     memory.typed.delete(action);
     if (success) {
       memory.moves++;
+      memory.refused.delete(action);
       walk.taken.add(action);
       memory.resolved.set(action, (memory.resolved.get(action) ?? 0) + 1);
       memory.lastResolved = action;

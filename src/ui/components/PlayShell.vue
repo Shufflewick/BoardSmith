@@ -72,6 +72,8 @@ const props = withDefaults(defineProps<{
   // ── The log ────────────────────────────────────────────────────────────────
   /** The lines the log shows, oldest first. */
   messages: HistoryMessage[];
+  /** The line number of `messages[0]`, once a game prunes its log (#903). See `GameHistory`. */
+  messageOffset?: number;
   /** What the log says when it is empty, if "No activity yet" would be a lie.
    *  A world's log is a live tail, not a history. */
   logEmptyText?: string;
@@ -428,6 +430,7 @@ const mobileToggleLabel = computed(() => {
             v-if="isCompact || !railed"
             ref="historyPanel"
             :messages="messages"
+            :message-offset="messageOffset"
             :empty-text="logEmptyText"
             class="sidebar-history"
             data-testid="bs-log"

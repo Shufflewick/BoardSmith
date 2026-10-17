@@ -174,6 +174,35 @@ describe('the id index holds every element in the game tree and the pile', () =>
   });
 });
 
+describe('a refused create leaves nothing in the id index (#963)', () => {
+  /** Create a card whose attributes cannot be applied, and return the id it was given. */
+  function refusedCreate(game: IndexGame, parent: GameElement): number {
+    expect(() => parent.create(Card, 'bad', { id: 5 } as never)).toThrow(/reserved/i);
+    return game._ctx.ids.mint(game._ctx.sequence - 1);
+  }
+
+  it('does not hold an element whose attributes failed to apply', () => {
+    const { game, hand } = table();
+    const id = refusedCreate(game, hand);
+    expect(game._ctx._elementsById.has(id)).toBe(false);
+  });
+
+  it('lets a world adopt a partition holding that id', () => {
+    const game = new IndexGame({ playerCount: 2, seed: 'id-index-refused', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    const room = game.create(Zone, 'room');
+    const token = room.create(Card, 'token');
+    const id = refusedCreate(game, room);
+    game.definePartition(room.id);
+    const json = JSON.parse(JSON.stringify(room.toJSON())) as ElementJSON;
+    game.evictSubtree(room.id);
+    // Stored bytes holding the id the refused create was given.
+    json.children = json.children!.map((child) => (child.id === token.id ? { ...child, id } : child));
+
+    const adopted = game.adoptSubtree(game.id, json);
+    expect(game.atId(id)?._t.parent).toBe(adopted);
+  });
+});
+
 describe('atId in world mode', () => {
   function world() {
     const game = new IndexGame({ playerCount: 2, seed: 'id-index-world', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });

@@ -15,6 +15,7 @@ let constructedAudio: FakeAudio[];
 class FakeAudio {
   #volume = 1;
   currentTime = 0;
+  paused = true;
   constructor(public src: string) {
     constructedUrls.push(src);
     constructedAudio.push(this);
@@ -28,6 +29,9 @@ class FakeAudio {
   }
   get volume(): number {
     return this.#volume;
+  }
+  pause(): void {
+    this.paused = true;
   }
   play(): Promise<void> {
     played++;
@@ -100,6 +104,22 @@ describe('init', () => {
   it('pre-creates the audio element when given a sound URL', () => {
     audioService.init({ turnSoundUrl: 'turn.mp3' });
     expect(constructedUrls).toEqual(['turn.mp3']);
+  });
+
+  it('takes a new sound URL even once an element exists (#808)', () => {
+    audioService.init({ turnSoundUrl: 'a.mp3' });
+    const first = lastAudio();
+    first.paused = false;
+    audioService.init({ turnSoundUrl: 'b.mp3' });
+    expect(lastAudio().src).toBe('b.mp3');
+    // The old chime stops, so it cannot play over the new one.
+    expect(first.paused).toBe(true);
+  });
+
+  it('keeps the element it has when given the same URL again', () => {
+    audioService.init({ turnSoundUrl: 'a.mp3' });
+    audioService.init({ turnSoundUrl: 'a.mp3' });
+    expect(constructedUrls).toEqual(['a.mp3']);
   });
 
   it('does not save to localStorage — init is configuration, not preference', () => {
