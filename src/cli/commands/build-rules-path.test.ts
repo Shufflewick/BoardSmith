@@ -33,7 +33,8 @@ function rulesSource(maxPlayers: number): string {
 /** A table project whose real rules live in `custom/rules`, optionally with a decoy `src/rules`. */
 function customRulesProject(decoy: boolean): string {
   // One level down, so a test can hand build a folder holding the project that is still its own.
-  const dir = join(tempTree('boardsmith-build-rules-path-'), 'game');
+  const tree = tempTree('boardsmith-build-rules-path-');
+  const dir = join(tree, 'game');
   mkdirSync(dir);
   writeFileSync(
     join(dir, 'boardsmith.json'),
