@@ -440,18 +440,31 @@ describe('MultiplayerHost — follow active seat', () => {
     expect(lastOfType('A', 'follow')).toMatchObject({ enabled: false });
   });
 
-  it('with a SECOND human seated, the follower still borrows the active seat', async () => {
-    const { host, lastOfType, pass, clear } = makeAltHost();
+  it('#877: follow is refused while another person holds a seat, so nobody sees or plays their seat', async () => {
+    const { host, lastOfType, has, pass, clear } = makeAltHost();
     await host.handleMessage('A', { type: 'hello' }); // A = seat 1
-    await host.handleMessage('B', { type: 'hello' }); // B unseated
+    await host.handleMessage('B', { type: 'hello' });
     await host.handleMessage('B', { type: 'join', seat: 2 }); // B = seat 2 (human)
-    await host.handleMessage('A', { type: 'follow', enabled: true });
     clear();
-    await pass('A', 'r1'); // A ends seat 1's turn -> seat 2 active
-    // The follower (A) must be handed seat 2 AND seat 2's own view (isMyTurn true).
-    expect(lastOfType('A', 'init').seat).toBe(2);
-    const gs = lastOfType('A', 'game_state');
-    expect((gs.view as any).state.isMyTurn).toBe(true);
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+    expect(lastOfType('A', 'error').message).toMatch(/only person at the table/i);
+    expect(has('A', 'follow')).toBe(false);
+    await pass('A', 'r1'); // seat 2 (B) is due now; A must not be handed it
+    expect(has('A', 'init')).toBe(false);
+  });
+
+  it('#877: a second person sitting down ends follow-mode and tells the follower why', async () => {
+    const { host, lastOfType, has, pass, clear } = makeAltHost();
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+    await host.handleMessage('B', { type: 'hello' });
+    clear();
+    await host.handleMessage('B', { type: 'join', seat: 2 });
+    expect(lastOfType('A', 'follow')).toMatchObject({ enabled: false, seat: 1 });
+    expect(lastOfType('A', 'error').message).toMatch(/follow active seat ended.*someone else holds a seat/i);
+    clear();
+    await pass('A', 'r1'); // seat 2 (B) is due now; A must not be handed it
+    expect(has('A', 'init')).toBe(false);
   });
 });
 

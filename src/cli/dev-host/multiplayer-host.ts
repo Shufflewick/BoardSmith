@@ -419,6 +419,9 @@ function refusedCommit(reason: string): OpFailure {
   );
 }
 
+const FOLLOW_EXPOSES = 'Someone else holds a seat, and following would show you their hand and let you play for them.';
+const FOLLOW_SHARED = `Follow active seat ended. ${FOLLOW_EXPOSES}`;
+
 export class MultiplayerHost {
   private phase: LobbyPhase = 'lobby';
   private starting = false;
@@ -567,6 +570,7 @@ export class MultiplayerHost {
       const open = [...this.seats.values()].filter((s) => !s.clientId);
       const pick = open.find((s) => !this.opts.designatedBotSeats?.includes(s.seat)) ?? open[0];
       if (pick) this.assignSeat(clientId, pick.seat);
+      if (this.followShared()) await this.endFollow(FOLLOW_SHARED);
       await this.startGame();
       return;
     }
@@ -821,15 +825,7 @@ export class MultiplayerHost {
   ): Promise<void> {
     if (!msg.enabled) {
       // Disable: only the current follower can turn it off.
-      if (this.followerClientId !== clientId) return;
-      this.followerClientId = null;
-      this.lastFollowerSeat = null;
-      this.rebuildBotSeats();
-      const own = this.clientSeat.get(clientId);
-      this.send(clientId, { type: 'follow', enabled: false, seat: own ?? 0 });
-      if (own !== undefined && this.phase === 'playing') this.reinitSeat(clientId, own);
-      this.announceRoster();
-      await this.session?.host.runBotTurns(); // resume bot for the seats it covered
+      if (this.followerClientId === clientId) await this.endFollow();
       return;
     }
     // Enable.
@@ -841,12 +837,42 @@ export class MultiplayerHost {
       this.send(clientId, { type: 'error', message: 'Take a seat before enabling follow-active-seat.' });
       return;
     }
+    if (!this.debugOn()) {
+      this.send(clientId, {
+        type: 'error',
+        message: 'Follow active seat works only when you are the only person at the table. ' + FOLLOW_EXPOSES,
+      });
+      return;
+    }
     this.followerClientId = clientId;
     this.botSeats.length = 0; // pause bot for every seat the follower now covers
     const active = this.effectiveActiveSeat();
     this.lastFollowerSeat = active;
     this.send(clientId, { type: 'follow', enabled: true, seat: active });
     this.reinitSeat(clientId, active);
+  }
+
+  /**
+   * End follow-mode, show the follower its own seat again (with `notice`, if
+   * given, after it), and let bots resume the seats it covered.
+   */
+  private async endFollow(notice?: string): Promise<void> {
+    const clientId = this.followerClientId;
+    if (clientId === null) return;
+    this.followerClientId = null;
+    this.lastFollowerSeat = null;
+    this.rebuildBotSeats();
+    const own = this.clientSeat.get(clientId);
+    this.send(clientId, { type: 'follow', enabled: false, seat: own ?? 0 });
+    if (own !== undefined && this.phase === 'playing') this.reinitSeat(clientId, own);
+    if (notice !== undefined) this.send(clientId, { type: 'error', message: notice });
+    this.announceRoster();
+    await this.session?.host.runBotTurns();
+  }
+
+  /** Follow is for a one-person table (#877), so a second person sitting down must end it. */
+  private followShared(): boolean {
+    return this.followerClientId !== null && !this.debugOn();
   }
 
   /**
@@ -868,7 +894,7 @@ export class MultiplayerHost {
   }
 
   /** Take over a seat (works mid-game: claim an open/bot seat → it stops being bot). */
-  private handleJoin(clientId: string, msg: Extract<ClientInbound, { type: 'join' }>): void {
+  private async handleJoin(clientId: string, msg: Extract<ClientInbound, { type: 'join' }>): Promise<void> {
     this.connected.add(clientId);
     const info = this.seats.get(msg.seat);
     if (!info) {
@@ -880,6 +906,7 @@ export class MultiplayerHost {
       return;
     }
     this.assignSeat(clientId, msg.seat, msg.name, msg.color);
+    if (this.followShared()) await this.endFollow(FOLLOW_SHARED);
     this.send(clientId, { type: 'joined', seat: msg.seat });
     if (this.phase === 'playing') this.reinitSeat(clientId, msg.seat);
     this.broadcastLobby();
@@ -1034,7 +1061,8 @@ export class MultiplayerHost {
   /**
    * The seat a follower acts as / sees right now: the first seat awaiting input,
    * falling back to the follower's own seat when nothing is due (execute blocks,
-   * game over). The follower steals every active seat unconditionally.
+   * game over). Follow runs only while debugging is on (#877): at a one-person
+   * table, or under `--debug`, so the seats it takes are its own or a bot's.
    */
   private effectiveActiveSeat(): number {
     const due = this.session
