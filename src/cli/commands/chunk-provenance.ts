@@ -1421,7 +1421,7 @@ export async function chunkProvenanceStatusCommand(
     console.log('');
     console.log(
       `Shared files edited since sign-off (for information; each sign-off still stands, because ` +
-        `the chunk named signed off the edit or is building it):`,
+        `the chunk named signed off the edit or is building it, or the merge named vouched for it):`,
     );
     for (const { slug, edits } of signoffSharedEdits) {
       const described = edits.map((e) =>

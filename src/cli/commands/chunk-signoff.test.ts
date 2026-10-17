@@ -498,9 +498,9 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
       await chunkProvenanceStatusCommand({ project });
-      expect(log.mock.calls.map((c) => c.join(' ')).join('\n')).toContain(
-        'src/rules.ts (vouched for by the merge of deal, shop)',
-      );
+      const out = log.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(out).toContain('src/rules.ts (vouched for by the merge of deal, shop)');
+      expect(out).toContain('or is building it, or the merge named vouched for it):');
     } finally {
       log.mockRestore();
     }
