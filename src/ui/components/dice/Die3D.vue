@@ -777,13 +777,13 @@ function restoreWebGL() {
   initScene();
 }
 
+let rebuildQueued = false;
+
 /**
  * Regenerate snapshot with the current props without keeping WebGL active.
  * Creates WebGL context, renders, snapshots, then disposes immediately.
  * Queued to avoid creating too many WebGL contexts at once.
  */
-let rebuildQueued = false;
-
 function regenerateSnapshot() {
   // The queued rebuild reads props when it runs, so one covers every change made while it waits.
   if (rebuildQueued) return;
