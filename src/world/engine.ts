@@ -66,6 +66,7 @@
  */
 import type {
   ActionContext,
+  ActionResult,
   ActionDefinition,
   ElementJSON,
   Game,
@@ -134,7 +135,6 @@ import { assertAnsweredAllocations, assertCreatedRoots } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
 import { assertMintedUnderThisKey } from "./key-check.js";
 import { StaleAllocationStampError } from "../engine/errors.js";
-import { rulesErrorSentence } from "../engine/action/rules-error.js";
 
 
 /**
@@ -496,9 +496,9 @@ function creditsUnavailable(action: string): WorldRefusal {
  * `rules-error` (game-owned) so a caller can tell it from a refusal (#847); the
  * rules saying no stays a plain `Error` carrying the game's own sentence.
  */
-function failedResultError(action: string, error: string | undefined): Error {
-  const message = error ?? `The "${action}" action was refused and said nothing about why.`;
-  return message.startsWith(rulesErrorSentence(action)) ? worldRefusal("rules-error", message) : new Error(message);
+function failedResultError(action: string, result: ActionResult): Error {
+  const message = result.error ?? `The "${action}" action was refused and said nothing about why.`;
+  return result.rulesError === true ? worldRefusal("rules-error", message) : new Error(message);
 }
 
 /**
@@ -2586,7 +2586,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         // world is unchanged.
         //
         // THE CLASSIFIED ONE IF THERE WAS ONE, and the result's own otherwise.
-        throw ledger.refused ?? failedResultError(command.name, result.error);
+        throw ledger.refused ?? failedResultError(command.name, result);
       }
       // A REFUSAL THE RULES CAUGHT STILL REFUSES (#288). Every facility refusal
       // is a hard constraint the platform enforces -- a partition the command

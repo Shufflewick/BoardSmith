@@ -269,9 +269,11 @@ interface WorldDrive {
  * offers and re-asked picks actually carried.
  *
  * It never reports an undriven world as clean: a world in which no seat was
- * offered anything it could take is refused, and so is a move the world itself
- * refused (a `WorldRefusal`, such as a partition the action never declared).
- * An action that says no to a random answer is the rules working, and is not.
+ * offered anything it could take is refused, and so is a move the rules crashed
+ * on (`rules-error`, or a throw out of a callback such as `validate`) or the
+ * world itself refused (a `WorldRefusal`, such as a partition the action never
+ * declared). An action that says no to a random answer is the rules working,
+ * and is not.
  */
 export async function auditWorldChoiceCardinality(
   definition: TestWorldOptions['definition'],
@@ -452,23 +454,27 @@ function drawSet(bounds: { min: number; max?: number }, candidates: unknown[], r
 
 /**
  * Send one drafted command. The rules saying no to a random answer (a plain
- * Error) leaves the world as it was and is part of driving it; the rules
- * crashing on it or the WORLD refusing it is a fault in the bundle, and is
- * reported with the move that found it. Anything else is not the world's to
- * throw, and propagates as it is.
+ * Error) leaves the world as it was and is part of driving it. Anything else --
+ * the rules crashing (`rules-error`, or a callback's own throw) or the WORLD
+ * refusing it -- is a fault in the bundle, and is reported with the move that
+ * found it.
  */
 async function takeMove(world: TestWorld, seat: number, move: DraftedMove): Promise<void> {
   try {
     await world.take(seat, move.name, move.args);
   } catch (error) {
-    if (!(error instanceof WorldRefusal)) {
-      if (error instanceof Error && error.constructor === Error) return;
-      throw error;
-    }
-    const what = error.code === 'rules-error' ? 'crashed in the game\'s rules' : `was refused by the world (${error.code})`;
+    if (error instanceof Error && error.constructor === Error) return;
     throw new Error(
-      `driving the world, seat ${seat}'s '${move.name}' with ${JSON.stringify(move.args)} ` +
-        `${what}: ${error.message.replace(/\.$/, '')}`,
+      `driving the world, seat ${seat}'s '${move.name}' with ${JSON.stringify(move.args)} ${failureOf(error)}`,
     );
   }
+}
+
+/** What went wrong with a move, as the rest of a sentence. */
+function failureOf(error: unknown): string {
+  if (!(error instanceof WorldRefusal)) {
+    return error instanceof Error ? `threw ${error.name}: ${error.message}` : `threw ${String(error)}`;
+  }
+  const what = error.code === 'rules-error' ? 'crashed in the game\'s rules' : `was refused by the world (${error.code})`;
+  return `${what}: ${error.message.replace(/\.$/, '')}`;
 }

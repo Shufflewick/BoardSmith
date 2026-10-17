@@ -15,6 +15,7 @@ import {
   TypedNameGame,
   UnfinishedWideGame,
   WideGame,
+  balked,
   cardinalityWorld,
 } from './choice-cardinality.fixture.js';
 
@@ -279,10 +280,18 @@ describe('auditWorldChoiceCardinality', () => {
     );
   });
 
+  it('stops and names the move when a selection callback crashes on it (#847)', async () => {
+    await expect(auditWorldChoiceCardinality(cardinalityWorld(['sift', 'shout']), { seed: 'audit' })).rejects.toThrow(
+      /seat \d's 'sift' with \{"how":"finely"\} threw TypeError: the sieve is undefined/,
+    );
+  });
+
   it('counts the rules refusing a move as part of driving the world (#847)', async () => {
+    balked.times = 0;
     expect(await auditWorldChoiceCardinality(cardinalityWorld(['balk', 'shout']), { seed: 'audit' })).toEqual([
       { action: 'shout', selection: 'verb', maxCandidates: 40 },
     ]);
+    expect(balked.times).toBeGreaterThan(0);
   });
 
   it('stops and names the move when the world itself refuses one', async () => {

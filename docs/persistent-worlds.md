@@ -951,14 +951,16 @@ likely to be an accidental `TypeError: Cannot read properties of undefined
 (reading 'woodpile')` as a refusal, and that text leaks implementation detail
 while telling the player nothing they can act on. The engine cannot tell the two
 apart, so it asks you to. `PlayerFacingError` is how you say *this message was
-written to be read*; the log names it whenever a sentence is dropped. The replaced error carries the code `rules-error`, so a host or tool can
-tell a crash from a refusal without reading the sentence.
+written to be read*; the log names it whenever a sentence is dropped.
 
-This is deliberately **not** a `WorldRefusal`. That table is the *platform's*
-vocabulary and its codes drive a host's park ladder, so giving a game's own
-refusal one would relabel every bug in a bundle's rules as one of the platform's
-words (#169, #191). A game's refusal travels unclassified, as it always has --
-what changed is only that it travels with its sentence intact.
+The two leave the world differently. For a seated action, the replaced error is
+a `WorldRefusal` with the game-owned code `rules-error`, so a host or a tool can
+tell a crash from a refusal without reading the sentence (#847). A game's own
+refusal (a `PlayerFacingError`, or `{ success: false, error }`) is deliberately
+**not** a `WorldRefusal`: that table's codes drive a host's park ladder, and a
+refusal says nothing about the world's health (#169, #191). It travels
+unclassified, as it always has, with its sentence intact. A clock action's
+crash is not coded yet; it still travels as a plain `Error`.
 
 The bar for the message is the one `PlayerFacingError` itself states: it must
 name what to do next, and must never carry a stack trace, a file path, an
@@ -2747,7 +2749,7 @@ thing next time.
 
 | Code | What happened |
 | --- | --- |
-| `rules-error` | `execute` threw something that is not a `PlayerFacingError`, so the player was told the action "could not be completed because of an error in the game's rules" and nothing it changed was kept. The rules saying no (a `PlayerFacingError`, a failed `validate`, `{ success: false, error }`) carries no code. |
+| `rules-error` | A seated action's `execute` or `onSelect` threw something that is not a `PlayerFacingError`, so the player was told the action "could not be completed because of an error in the game's rules" and nothing it changed was kept. The rules saying no (a `PlayerFacingError`, a failed `validate`, `{ success: false, error }`) carries no code. A clock action's crash is not coded yet. |
 | `bundle-not-a-world` | The manifest declares `"backend": "world"` and the compiled rules export no `world.actions`, no `world.view`, no `world.maxPlayers`, a `world.maxPlayers` the host will not seat, a `world.stateVersion` that is not a whole number from 0 up, or a `world.migration` that is not usable (no `from`, a `from` at or past this version, a hook -- `partition`, `event`, `derive`, `create` or `finalize` -- that is not a function, a `survey` that is not `{ initial, root, maxBytes }`, or a migration declaring both `survey` and `finalize`). |
 | `world-migration-unavailable` | A world's recorded `stateVersion` and its bundle's differ, and no migration in that bundle can cross the gap: none declared, one declared from a different version, or a bundle older than the world. Also a `create` or `derive` hook whose answer is not `name -> element`, or that names a partition the world already holds; a hook that allocated a top-level element and never answered it as a partition root (#246); a survey digest past `survey.maxBytes` or past the host's own ceiling, whether it was folded on this call or carried into it as bytes (#255); and a paged survey migration run with no `pass`, or a transform pass handed no digest. The world is not changed. |
 | `invalid-world-action` | A world action the platform cannot offer or cannot bound: an action not built with `worldAction()`, an unbounded `from`/`filter`/`elementClass` element form, an element selection with no `elements:`, a candidate outside what the step declared, a selection past `maxCandidatesPerSelection`, a dependent or repeating selection, a seatless action that asks a question, or a round declared before a step the action does not have. |

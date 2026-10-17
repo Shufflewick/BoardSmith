@@ -1686,7 +1686,7 @@
       "surfaceHash": "eb4da63d186fdc00",
       "payloadHash": "d98d9c3e91308953",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "A crash in a world action's rules now throws a WorldRefusal with the new game-owned code rules-error (same message as before), so a caller can tell it from the rules saying no, which still travels as a plain Error (#847)."
+      "summary": "ActionResult gains rulesError, set by the engine when execute() or onSelect threw something that is not a PlayerFacingError; a seated world action whose result carries it now throws a WorldRefusal with the new game-owned code rules-error (same message as before), while the rules saying no still travels as a plain Error and a clock action's crash is not coded yet (#847)."
     }
   ]
 }
