@@ -6,7 +6,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ref, nextTick } from 'vue';
 import { useActionController, type ControllerActionResult } from './useActionController.js';
-import type { EnrichedActionMetadata } from './useActionControllerTypes.js';
+import type { EnrichedActionMetadata, PickStepResponse } from './useActionControllerTypes.js';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -183,5 +183,150 @@ describe('a choice fetch that answers after the action moved on (#856)', () => {
 
     expect(controller.currentAction.value).toBe('attack');
     expect(sendAction).not.toHaveBeenCalled();
+  });
+});
+
+describe('a pick step that is still awaiting the server (#854)', () => {
+  const pieces = [{ value: 'p1', display: 'Pawn 1' }, { value: 'p2', display: 'Pawn 2' }];
+  const metadata: Record<string, EnrichedActionMetadata> = {
+    move: {
+      name: 'move',
+      prompt: 'Move',
+      selections: [
+        { name: 'piece', type: 'choice', prompt: 'Piece', hasOnSelect: true, choices: pieces },
+        { name: 'to', type: 'choice', prompt: 'To', choices: [{ value: 'a', display: 'A' }, { value: 'b', display: 'B' }] },
+      ],
+    },
+    shift: {
+      name: 'shift',
+      prompt: 'Shift',
+      selections: [
+        { name: 'piece', type: 'choice', prompt: 'Piece', hasOnSelect: true, choices: pieces },
+        { name: 'bonus', type: 'choice', prompt: 'Bonus', optional: true, choices: [{ value: 'x', display: 'X' }, { value: 'y', display: 'Y' }] },
+      ],
+    },
+    collect: {
+      name: 'collect',
+      prompt: 'Collect',
+      selections: [{ name: 'gem', type: 'choice', prompt: 'Gem', repeat: { hasOnEach: false }, choices: [{ value: 'ruby', display: 'Ruby' }, { value: 'opal', display: 'Opal' }] }],
+    },
+    draw: {
+      name: 'draw',
+      prompt: 'Draw',
+      selections: [
+        { name: 'piece', type: 'choice', prompt: 'Card', choices: [{ value: 'c1', display: 'Card 1' }, { value: 'c2', display: 'Card 2' }] },
+        { name: 'pile', type: 'choice', prompt: 'Pile', choices: [{ value: 'l', display: 'Left' }, { value: 'r', display: 'Right' }] },
+      ],
+    },
+  };
+
+  function controllerWithHeldSteps() {
+    const steps = heldCalls<PickStepResponse>();
+    const sendAction = vi.fn(async () => ({ success: true }));
+    const cancelPendingAction = vi.fn(async () => {});
+    const controller = useActionController({
+      sendAction,
+      availableActions: ref(['move', 'shift', 'collect', 'draw']),
+      actionMetadata: ref(metadata),
+      isMyTurn: ref(true),
+      pickStep: steps.fn,
+      cancelPendingAction,
+      autoFill: false,
+    });
+    return { controller, sendAction, steps, cancelPendingAction };
+  }
+
+  async function cancelMidStepThenDraw(action: 'move' | 'collect', pick: string, value: string) {
+    const t = controllerWithHeldSteps();
+    await t.controller.start(action);
+    const fill = t.controller.fill(pick, value);
+    await flush();
+    t.controller.cancel();
+    await t.controller.start('draw');
+    return { ...t, fill };
+  }
+
+  it('a completing reply that arrives after cancel and a new action leaves the new action alone', async () => {
+    const t = await cancelMidStepThenDraw('move', 'piece', 'p1');
+    t.steps.reply(0, { success: true, actionComplete: true, data: { moved: 'p1' } });
+    await t.fill;
+    await flush();
+
+    expect(t.controller.currentAction.value).toBe('draw');
+    expect(t.controller.lastActionResult.value).toBeNull();
+  });
+
+  it('a continuing reply that arrives after cancel and a new action does not write into it or send its next pick', async () => {
+    const t = await cancelMidStepThenDraw('move', 'piece', 'p1');
+    t.steps.reply(0, { success: true });
+    await t.fill;
+    await flush();
+
+    expect(t.controller.currentAction.value).toBe('draw');
+    expect(t.controller.currentArgs.value).toEqual({});
+    expect(t.steps.fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('a repeating pick reply that arrives after the action was cancelled and started again leaves the new one alone', async () => {
+    const { controller, steps } = controllerWithHeldSteps();
+    await controller.start('collect');
+    const stale = controller.fill('gem', 'ruby');
+    controller.cancel();
+    await controller.start('collect');
+    const fresh = controller.fill('gem', 'opal');
+    steps.reply(0, { success: true, actionComplete: true, data: { gems: ['ruby'] } });
+    await stale;
+    await flush();
+
+    expect(controller.currentAction.value).toBe('collect');
+    expect(controller.lastActionResult.value).toBeNull();
+    steps.reply(1, { success: true });
+    await fresh;
+  });
+
+  it('cancel while the first step is out tells the server, which is holding the action by then', async () => {
+    const t = await cancelMidStepThenDraw('move', 'piece', 'p1');
+
+    expect(t.cancelPendingAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('a second fill while a step is out is refused, visibly, and sends nothing', async () => {
+    const { controller, steps } = controllerWithHeldSteps();
+    await controller.start('move');
+    const first = controller.fill('piece', 'p1');
+    const second = controller.fill('piece', 'p1');
+    await flush();
+    const sent = steps.fn.mock.calls.length;
+    steps.reply(0, { success: true });
+    if (sent > 1) steps.reply(1, { success: true });
+    await first;
+
+    expect(sent).toBe(1);
+    expect(await second).toEqual({ valid: false, error: 'Still waiting for the server to answer your last pick.' });
+    expect(controller.lastError.value).toBe('Still waiting for the server to answer your last pick.');
+  });
+
+  it('a skip while a step is out is refused, visibly', async () => {
+    const { controller, steps } = controllerWithHeldSteps();
+    await controller.start('shift');
+    const first = controller.fill('piece', 'p1');
+    controller.skip('bonus');
+    steps.reply(0, { success: true });
+    await first;
+
+    expect(controller.currentArgs.value).toEqual({ piece: 'p1' });
+    expect(controller.lastError.value).toBe('Still waiting for the server to answer your last pick.');
+  });
+
+  it('a new action can send its first pick while the cancelled action\'s step is still out', async () => {
+    const { controller, steps } = controllerWithHeldSteps();
+    await controller.start('move');
+    void controller.fill('piece', 'p1');
+    controller.cancel();
+    await controller.start('move');
+    void controller.fill('piece', 'p2');
+    await flush();
+
+    expect(steps.fn).toHaveBeenCalledTimes(2);
   });
 });

@@ -119,6 +119,7 @@ import type {
   ChoiceWithRefs,
   EnrichedValidElement,
   EnrichedPickMetadata,
+  PickStepResponse,
   ActionQuoteResult,
   PickSnapshot,
   CollectedPick,
@@ -278,6 +279,29 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    */
   function actionMovedOn(seq: number): boolean {
     return actionStartTick.value !== seq || currentAction.value === null;
+  }
+
+  // The actionStartTick of the action whose pick step is awaiting the server, if any.
+  let stepSeq: number | null = null;
+  const stepOutstanding = (): boolean => stepSeq !== null && !actionMovedOn(stepSeq);
+  const STEP_OUTSTANDING = 'Still waiting for the server to answer your last pick.';
+  // Not set as lastError: the player moved on themselves, so there is nothing to report.
+  const MOVED_ON: PickValidationResult = { valid: false, error: 'The action changed before the server answered this pick.' };
+
+  /** Send one pick step of the current action. Resolves null when the action moved on before the reply. */
+  async function sendStep(
+    stepFn: NonNullable<typeof options.pickStep>,
+    selectionName: string,
+    value: unknown,
+  ): Promise<PickStepResponse | null> {
+    const seq = actionStartTick.value;
+    stepSeq = seq;
+    try {
+      const result = await stepFn(playerSeat?.value ?? 0, selectionName, value, currentAction.value as string, buildServerArgs());
+      return actionMovedOn(seq) ? null : result;
+    } finally {
+      if (stepSeq === seq) stepSeq = null;
+    }
   }
 
   // Monotonic counter pulsed when an action FULLY completes via the selection-step
@@ -1384,26 +1408,32 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   watch(isReady, async (ready) => {
     if (ready && getAutoExecute() && currentAction.value && !isExecuting.value && !pendingOnServer.value
         && !isViewingHistoryValue()) {
-      // Call hooks before executing - allows capturing element positions for animations.
-      // Sequential await (not Promise.all) so ordering is deterministic across hooks.
-      // WR-02: each hook is isolated — with accumulation semantics, one consumer's
-      // buggy hook must not take down every other consumer, and execution must
-      // ALWAYS proceed (a throw here would leave isReady true with the watcher
-      // never re-firing: the action would be permanently wedged, with no toast).
-      // WR-03: iterate a SNAPSHOT — a one-shot hook that unregisters itself (or
-      // another hook) splices the live array mid-for...of and would silently
-      // skip the hook registered after it.
       const seq = actionStartTick.value;
-      for (const hook of [...beforeAutoExecuteHooks.value]) {
-        try {
-          await hook(currentAction.value, buildServerArgs());
-        } catch (err) {
-          console.error('[ActionController] beforeAutoExecute hook failed:', err);
-        }
-      }
+      await runBeforeAutoExecuteHooks(currentAction.value);
       if (!actionMovedOn(seq)) executeCurrentAction();
     }
   });
+
+  /**
+   * Call hooks before executing - allows capturing element positions for animations.
+   * Sequential await (not Promise.all) so ordering is deterministic across hooks.
+   * WR-02: each hook is isolated — with accumulation semantics, one consumer's
+   * buggy hook must not take down every other consumer, and execution must
+   * ALWAYS proceed (a throw here would leave isReady true with the watcher
+   * never re-firing: the action would be permanently wedged, with no toast).
+   * WR-03: iterate a SNAPSHOT — a one-shot hook that unregisters itself (or
+   * another hook) splices the live array mid-for...of and would silently
+   * skip the hook registered after it.
+   */
+  async function runBeforeAutoExecuteHooks(actionName: string): Promise<void> {
+    for (const hook of [...beforeAutoExecuteHooks.value]) {
+      try {
+        await hook(actionName, buildServerArgs());
+      } catch (err) {
+        console.error('[ActionController] beforeAutoExecute hook failed:', err);
+      }
+    }
+  }
 
   // === Tutorial-step suppression lift watch (R-04 timing fix) ===
   //
@@ -1955,6 +1985,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return { valid: false, error };
     }
 
+    if (stepOutstanding()) {
+      setError(STEP_OUTSTANDING);
+      return { valid: false, error: STEP_OUTSTANDING };
+    }
+
     const selection = currentActionMeta.value.selections.find(s => s.name === selectionName);
     if (!selection) {
       const error = `Unknown selection: "${selectionName}"`;
@@ -2015,19 +2050,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         });
       }
 
-      // Always fetch choices for the next selection (unless it's number/text)
-      const nextSel = getNextSelection(selectionName);
-      if (nextSel && (nextSel.type === 'choice' || nextSel.type === 'element' || nextSel.type === 'elements')) {
-        const seq = actionStartTick.value;
-        await fetchChoicesForPick(nextSel.name);
-        if (actionMovedOn(seq)) return validation;
-
-        // After fetch, check for auto-fill on the next selection (the watch may have
-        // fired before the cache was populated). This goes through the one auto-fill
-        // chokepoint so every suppressor applies here too: the `autoFill` knob,
-        // `.manual()` (AUTOEXEC-01), tutorial suppression, and optional picks.
-        tryAutoFillSelection(nextSel);
-      }
+      const fetching = fetchNextPick(selectionName);
+      const nextSel = fetching && await fetching;
+      if (nextSel === false) return MOVED_ON;
+      // After fetch, check for auto-fill on the next selection (the watch may have
+      // fired before the cache was populated). This goes through the one auto-fill
+      // chokepoint so every suppressor applies here too: the `autoFill` knob,
+      // `.manual()` (AUTOEXEC-01), tutorial suppression, and optional picks.
+      if (nextSel) tryAutoFillSelection(nextSel);
     } else {
       setError(validation.error || 'Validation failed');
     }
@@ -2063,19 +2093,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     repeatingState.value.awaitingServer = true;
 
     try {
-      const result = await stepFn(
-        player,
-        selection.name,
-        value,
-        currentAction.value,
-        buildServerArgs()
-      );
-
-      // Guard: repeatingState may have been cleared by startFollowUp during the await
-      if (!repeatingState.value) {
-        // State was cleared (e.g., by followUp) - just return success
-        return { valid: true };
-      }
+      const result = await sendStep(stepFn, selection.name, value);
+      if (!result || !repeatingState.value) return MOVED_ON;
 
       if (!result.success) {
         // Remove from accumulated on error
@@ -2159,17 +2178,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     const player = playerSeat?.value ?? 0;
 
-    // Build initialArgs from all previously collected args
-    const initialArgs = buildServerArgs();
-
     try {
-      const result = await stepFn(
-        player,
-        selection.name,
-        value,
-        currentAction.value,
-        initialArgs
-      );
+      const result = await sendStep(stepFn, selection.name, value);
+      if (!result) return MOVED_ON;
       if (!result.success) {
         const error = result.error || 'Selection step failed';
         setError(error);
@@ -2231,19 +2242,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         });
       }
 
-      // Fetch choices for the next selection
-      const nextSel = getNextSelection(selection.name);
-      if (nextSel && (nextSel.type === 'choice' || nextSel.type === 'element' || nextSel.type === 'elements')) {
-        await fetchChoicesForPick(nextSel.name);
-
-        // Auto-fill through the one chokepoint, so `.manual()` (AUTOEXEC-01) and
-        // tutorial suppression hold on this path too; the resolved value then goes
-        // back through the onSelect transport.
-        if (tryAutoFillSelection(nextSel)) {
-          const autoFilledValue = currentArgs.value[nextSel.name];
-          if (autoFilledValue !== undefined) {
-            return await handleOnSelectFill(nextSel, autoFilledValue);
-          }
+      const fetching = fetchNextPick(selection.name);
+      const nextSel = fetching && await fetching;
+      if (nextSel === false) return MOVED_ON;
+      // Auto-fill through the one chokepoint, so `.manual()` (AUTOEXEC-01) and
+      // tutorial suppression hold on this path too; the resolved value then goes
+      // back through the onSelect transport.
+      if (nextSel && tryAutoFillSelection(nextSel)) {
+        const autoFilledValue = currentArgs.value[nextSel.name];
+        if (autoFilledValue !== undefined) {
+          return await handleOnSelectFill(nextSel, autoFilledValue);
         }
       }
 
@@ -2253,6 +2261,18 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       setError(error);
       return { valid: false, error };
     }
+  }
+
+  /**
+   * Fetch choices for the pick after `afterName`, resolving that pick, or
+   * false when the action moved on meanwhile. Null, without waiting, when
+   * there is no next pick with choices to fetch.
+   */
+  function fetchNextPick(afterName: string): Promise<EnrichedPickMetadata | false> | null {
+    const nextSel = getNextSelection(afterName);
+    if (!nextSel || (nextSel.type !== 'choice' && nextSel.type !== 'element' && nextSel.type !== 'elements')) return null;
+    const seq = actionStartTick.value;
+    return fetchChoicesForPick(nextSel.name).then(() => (!actionMovedOn(seq) && nextSel));
   }
 
   /** Get the next selection after the given one */
@@ -2278,6 +2298,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     const selection = currentActionMeta.value.selections.find(s => s.name === selectionName);
     if (!selection?.optional) return;
+
+    if (stepOutstanding()) {
+      setError(STEP_OUTSTANDING);
+      return;
+    }
 
     // When the action is server-pending (e.g. a followUp), the auto-execute watch
     // is disabled, so skipping must actively submit. A step-wise controller
@@ -2351,8 +2376,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   function cancel(): void {
-    // If action is pending on server, cancel it there too
-    if (pendingOnServer.value && options.cancelPendingAction) {
+    // The server holds the action once a step reaches it, so a step still out counts too
+    if ((pendingOnServer.value || stepOutstanding()) && options.cancelPendingAction) {
       const player = playerSeat?.value ?? 0;
       options.cancelPendingAction(player).catch(err => {
         console.error('[ActionController] Failed to cancel pending action on server:', err);
