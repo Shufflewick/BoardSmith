@@ -13,7 +13,10 @@ class Token {
 
 const offeredToken = new Token('offered');
 
-/** Seat 1 either takes a number or stashes a token the game offers but cannot store. */
+/**
+ * Seat 1 takes a number, stashes a token the game offers but cannot store, or
+ * opens a chest whose follow-up offers that token only through its held args.
+ */
 class PickGame extends Game<PickGame, Player> {
   total = 0;
 
@@ -32,10 +35,20 @@ class PickGame extends Game<PickGame, Player> {
         .chooseFrom('token', { choices: [offeredToken] })
         .execute(() => ({ success: true })),
     );
+    this.registerAction(
+      Action.create<PickGame>('open')
+        .execute(() => ({ success: true, followUp: { action: 'loot', args: { chest: 'tokens' } } })),
+    );
+    this.registerAction(
+      Action.create<PickGame>('loot')
+        .followUpArgs<{ chest: string }>()
+        .chooseFrom('item', { choices: (ctx) => (ctx.args.chest === 'tokens' ? [offeredToken] : [1]) })
+        .execute(() => ({ success: true })),
+    );
     this.setFlow({
       root: loop({
         maxIterations: 100,
-        do: actionStep({ actions: ['take', 'stash'], player: (ctx) => ctx.game.getPlayer(1)! }),
+        do: actionStep({ actions: ['take', 'stash', 'open'], player: (ctx) => ctx.game.getPlayer(1)! }),
       }),
     });
   }
@@ -68,6 +81,15 @@ describe('a pick the engine cannot encode (#1070)', () => {
 
     expect(() => runner.performAction('stash', 1, { token: offeredToken })).toThrow(
       /Cannot serialize action 'stash'.*at property 'args\.token'/,
+    );
+  });
+
+  it('still throws when a held follow-up offered the value through its own args', () => {
+    const runner = startedRunner();
+    expect(runner.performAction('open', 1, {}).success).toBe(true);
+
+    expect(() => runner.performAction('loot', 1, { item: offeredToken })).toThrow(
+      /Cannot serialize action 'loot'.*at property 'args\.item'/,
     );
   });
 

@@ -1225,6 +1225,8 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): { args: Record<string, unknown> } | { error: string } {
+    // A held follow-up's args over the client's.
+    args = { ...args, ...options?.followUp?.args };
     // A follow-up is offered by the chain, not its condition. The condition
     // sees no picks, as availability and each pick-by-pick step see it.
     const resolved = this.resolveNonPickArgs(action, args, this.game);
@@ -1289,8 +1291,7 @@ export class ActionExecutor {
       return this.executeThroughSelectionSteps(action, player, args, options);
     }
 
-    // A held follow-up's args over the client's.
-    const checked = this.checkSubmission(action, player, { ...args, ...options?.followUp?.args }, options);
+    const checked = this.checkSubmission(action, player, args, options);
     if ('error' in checked) return { success: false, error: checked.error };
     const resolvedArgs = checked.args;
 
