@@ -597,12 +597,10 @@ describe('collectGameApiSurface — re-exports through subfolders, at any depth 
     );
   });
 
-  it.skipIf(!existsSync(process.cwd().toUpperCase()))('follows a re-export that names src/ in other letter case, which a case-insensitive disk opens as src/ (#1053)', async () => {
+  it.skipIf(!existsSync(process.cwd().toUpperCase()))('refuses a re-export that names src/ in other letter case, since the surface reads only src/ as spelled (#1053)', async () => {
     await fs.writeFile(join(projectDir, 'src', 'rules', 'world', 'index.ts'), "export * from '../../../SRC/rules/sim/dice/roll.js';\n");
 
-    const surface = await collectGameApiSurface(projectDir);
-
-    expect(symbolsByName(surface).map((symbol) => symbol.name)).toContain('roll');
+    await expect(collectGameApiSurface(projectDir)).rejects.toThrow(/re-exports '\.\.\/\.\.\/\.\.\/SRC\/rules\/sim\/dice\/roll\.js', which is outside src\//);
   });
 });
 

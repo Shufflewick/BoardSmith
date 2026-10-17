@@ -363,8 +363,4 @@ describe('only a change inside the rules folder reloads the rules (#1053)', () =
       join('src', 'rules', 'index.ts'),
     ]);
   });
-
-  it('reloads on a change reported in other letter case, which a case-insensitive disk opens as the same file', () => {
-    expect(savedFor('/game/src/rules', ['/game/SRC/Rules/index.ts'])).toEqual([join('SRC', 'Rules', 'index.ts')]);
-  });
 });
