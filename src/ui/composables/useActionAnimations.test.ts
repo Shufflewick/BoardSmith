@@ -162,6 +162,26 @@ describe('useActionAnimations', () => {
     });
   });
 
+  describe('selector templates (#868)', () => {
+    const setUp = (config: Partial<ActionAnimationConfig>) =>
+      useActionAnimations({ gameView: ref(null), animations: [{ ...moveConfig, ...config }] });
+
+    it.each([
+      ['an id selector', { elementSelector: '#card-{cardId}' }],
+      ['an unquoted attribute value', { elementSelector: '[data-card-id={cardId}]' }],
+      ['a single-quoted attribute value', { elementSelector: "[data-card-id='{cardId}']" }],
+      ['a class name after a quoted value', { elementSelector: '[data-zone="hand"] .card-{cardId}' }],
+      ['the destination selector', { destinationSelector: '.zone-{zone}' }],
+    ])('refuses a placeholder in %s, naming the action and the fix', (_label, config) => {
+      expect(() => setUp(config)).toThrow(/"moveCard".*\{(cardId|zone)\}.*\[data-attribute="\{(cardId|zone)\}"\]/s);
+    });
+
+    it('accepts placeholders inside double-quoted attribute values, including MERC\'s', () => {
+      expect(() => setUp({ elementSelector: '[data-combatant="{combatantName}"]', destinationSelector: () => null })).not.toThrow();
+      expect(() => setUp({ elementSelector: '.card[data-player="{player}"][data-piece^="{piece}"]' })).not.toThrow();
+    });
+  });
+
   describe('real path (fake timers)', () => {
     it('drives the setTimeout-based lifecycle to completion with source+destination in the DOM', async () => {
       vi.useFakeTimers({

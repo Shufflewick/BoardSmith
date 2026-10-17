@@ -138,7 +138,8 @@ export interface ActionAnimationConfig {
 
   /**
    * CSS selector to find the element to animate.
-   * Use {selectionName} placeholders for dynamic values from action args.
+   * Use {selectionName} placeholders for dynamic values from action args, only
+   * inside double-quoted attribute values (anything else is refused at setup).
    *
    * @example
    * // Static selector
@@ -318,6 +319,21 @@ function interpolateSelector(selector: string, args: Record<string, unknown>): s
 }
 
 /**
+ * Refuse a selector template whose {placeholder} sits outside a double-quoted
+ * attribute value: interpolateSelector escapes for that context only.
+ */
+function assertPlaceholdersQuoted(action: string, field: string, selector: string): void {
+  const outsideQuotedValues = selector.replace(/=\s*"(?:[^"\\]|\\.)*"/g, '=""');
+  const stray = /\{(\w+)\}/.exec(outsideQuotedValues);
+  if (!stray) return;
+  throw new Error(
+    `[useActionAnimations] The "${action}" animation's ${field} '${selector}' puts ${stray[0]} ` +
+    `outside a double-quoted attribute value, where its value cannot be escaped safely. ` +
+    `Mark the element with a data attribute and select it as [data-attribute="${stray[0]}"].`
+  );
+}
+
+/**
  * Default element data extractor.
  * Captures innerHTML and className for basic rendering.
  */
@@ -349,6 +365,12 @@ let animationCounter = 0;
  */
 export function useActionAnimations(options: UseActionAnimationsOptions): UseActionAnimationsReturn {
   const { gameView, animations } = options;
+  for (const config of animations) {
+    assertPlaceholdersQuoted(config.action, 'elementSelector', config.elementSelector);
+    if (typeof config.destinationSelector === 'string') {
+      assertPlaceholdersQuoted(config.action, 'destinationSelector', config.destinationSelector);
+    }
+  }
 
   // Use the flying elements system for rendering
   const { flyingElements, fly, cancelAll } = useFlyingElements();
